@@ -1,36 +1,54 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage passif PikaQian
 // @namespace    rat-market
-// @version      1.1
-// @description  Un bouton « Apprendre cette page » sur les pages de set que TU ouvres. Au clic seulement, envoie l'adresse et le HTML de la page au récepteur LOCAL (127.0.0.1). Ne navigue jamais, ne clique rien, ne télécharge rien.
+// @version      2.0
+// @description  Un bouton « Apprendre cette page » sur les pages de set que TU ouvres. Au clic seulement, envoie la page, puis les images que ton navigateur affiche (avec la carte et le numéro), au récepteur LOCAL (127.0.0.1). Ne navigue jamais, ne défile jamais, ne clique rien.
 // @match        https://pikaqian.com/sets/*
 // @grant        GM_xmlhttpRequest
 // @connect      127.0.0.1
+// @connect      images.pikaqian.com
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
 
 // ============================================================
-// PASSIF PAR CONSTRUCTION (décision du testeur, 2026-10-12)
+// PASSIF PAR CONSTRUCTION (décisions du testeur, 2026-10-12 puis 2026-10-13)
 // ============================================================
-// « Un bouton sur les pages de set que J'OUVRE MOI-MÊME, aucune navigation automatique. »
+// « Un bouton sur les pages de set que J'OUVRE MOI-MÊME, aucune navigation automatique. » (2026-10-12)
+// « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker ne touche jamais le CDN. Mêmes preuves
+//   exigées (numéro, nom, set) ; un doute est un trou. » (2026-10-13)
 // · Au chargement, ce script ne fait qu'AJOUTER un bouton à la page. Aucune requête ne part.
-// · Au clic, et SEULEMENT au clic : une requête, vers le récepteur local (recepteur-pikaqian.js, 127.0.0.1), avec deux choses — l'adresse de la page
-//   (sans requête ni ancre) et son HTML tel que le navigateur l'a. Ni cookie, ni stockage, ni en-tête du site.
-// · Aucune requête vers pikaqian.com ni vers aucun autre hôte (@connect 127.0.0.1 seulement). Aucune image téléchargée.
-// · Le script ne navigue jamais, ne clique rien, n'ouvre aucune fenêtre, ne programme aucune action différée.
-// · Il pose deux en-têtes : Content-Type application/json et X-Rat-Market: rat-market-passif (le récepteur exige les deux ; ni l'un ni l'autre ne peut être posé par
-//   une page web vers un autre site sans prévol, et il ne dépend d'AUCUN en-tête Origin que Tampermonkey pourrait ne pas transmettre).
-// Ce que la page ouverte porte en dehors de ses tuiles (les adresses officielles, rares) est lu PAR LE RÉCEPTEUR, avec les fonctions de la production.
-// Le test statique (test-userscript-pikaqian.js) refuse toute adresse autre que 127.0.0.1 dans ce fichier.
+// · Au clic, et SEULEMENT au clic : (1) l'adresse de la page (sans requête ni ancre) et son HTML, au récepteur local ; (2) pour chaque tuile dont l'image est DÉJÀ chargée
+//   par le navigateur, le code du set (de l'adresse), le nom et le numéro que la page affiche, et les octets de l'image, au récepteur local, par lots bornés.
+// · Aucune navigation, aucun défilement, aucune minuterie, aucune fenêtre. Les tuiles dont l'image n'est pas encore chargée (page paresseuse, pas défilée) NE SONT PAS
+//   forcées : le panneau les COMPTE et le dit ; c'est à TOI de faire défiler la page, puis de recliquer.
+// COMMENT LES OCTETS SONT LUS — trois voies, DANS CET ORDRE, et ce que chacune fait RÉELLEMENT sur le réseau (chaque image dit par quelle voie elle a été lue) :
+//   1. « canvas » : l'image affichée est dessinée dans un canvas puis relue (PNG, sans perte : les pixels affichés). AUCUNE requête. Mais un canvas qui a reçu une image
+//      d'une AUTRE origine (images.pikaqian.com depuis pikaqian.com) est « taché » et refuse la relecture, sauf si la page a chargé l'image en mode CORS : le plus souvent,
+//      cette voie échoue sans rien envoyer — et on passe à la suivante.
+//   2. « cache » : fetch de la même adresse avec `cache: 'force-cache'` DEPUIS LA PAGE. Le navigateur réutilise l'entrée du cache HTTP de la page (celle que l'affichage a
+//      remplie) s'il y en a une, sans requête ; sinon il REQUÊTE, depuis TON navigateur, pendant TA visite. La lecture exige que le serveur autorise le CORS : sans cela,
+//      la réponse est illisible et on passe à la suivante.
+//   3. « navigateur » : GM_xmlhttpRequest vers la même adresse (images.pikaqian.com seulement, @connect). Ce n'est PAS le cache de la page : l'extension a son propre
+//      contexte, donc le navigateur REQUÊTE l'image (anonyme, sans cookie), depuis TON navigateur, pendant TA visite — une requête par image, comme l'affichage de la page
+//      en a fait une. C'est tout ce qui est permis : jamais le worker, jamais une autre adresse que celle de la tuile.
+// · Il pose deux en-têtes au récepteur : Content-Type application/json et X-Rat-Market: rat-market-passif (le récepteur exige les deux).
+// Le test statique (test-userscript-pikaqian.js) refuse toute adresse autre que 127.0.0.1 dans ce fichier et tout nom d'hôte autre que HOTE_IMAGES.
 (function () {
     'use strict';
     // LE PORT du récepteur : la valeur de `--port` de recepteur-pikaqian.js (défaut 8765). Les deux changent ENSEMBLE (un test les compare).
     var PORT = 8765;
     var RECEPTEUR = 'http://127.0.0.1:' + PORT + '/apprendre';
+    var RECEPTEUR_IMAGES = 'http://127.0.0.1:' + PORT + '/images';
     // le motif de code de set : celui de CODE_PK (collecte-cartes/pikaqian.js) ; un test les compare
     var CODE_DE_SET = '[a-z0-9][a-z0-9.-]{0,30}';
     var PAGE_DE_SET = new RegExp('^/sets/' + CODE_DE_SET + '$');
+    // les images ne se demandent QU'À cet hôte (celui de @connect) ; plafonds = ceux du récepteur (un test les compare)
+    var HOTE_IMAGES = 'images.pikaqian.com';
+    var IMAGE_MAX_OCTETS = 2 * 1024 * 1024;
+    var LOT_IMAGES_MAX = 10;
+    var LOT_B64_MAX = 1500000;
+    var UUID = /^\/cards\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
     var panneau = document.createElement('div');
     panneau.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483647;max-width:340px;font:13px/1.4 sans-serif;color:#111;background:#fff;border:1px solid #888;border-radius:6px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
@@ -44,42 +62,172 @@
     panneau.appendChild(etat);
     document.body.appendChild(panneau);
 
+    // Un POST JSON vers le récepteur local. Résout { status, json } (json null si illisible) ; rejette { reseau: 'erreur' | 'delai' }.
+    function poster(adresse, objet) {
+        return new Promise(function (resoudre, rejeter) {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: adresse,
+                headers: { 'Content-Type': 'application/json', 'X-Rat-Market': 'rat-market-passif' },
+                data: JSON.stringify(objet),
+                anonymous: true,
+                timeout: 30000,
+                onload: function (r) {
+                    var j = null;
+                    try { j = JSON.parse(r.responseText); } catch (e) { j = null; }
+                    resoudre({ status: r.status, json: j });
+                },
+                onerror: function () { rejeter({ reseau: 'erreur' }); },
+                ontimeout: function () { rejeter({ reseau: 'delai' }); }
+            });
+        });
+    }
+
+    function normaliser(t) { return String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); }
+
+    // Les tuiles TELLES QUE LA PAGE LES AFFICHE : l'identifiant (de l'adresse de la carte), le nom (h2), le numéro (p « code · numéro »), l'image et son état de chargement.
+    function lireTuilesDuDom() {
+        var sortie = [];
+        var ancres = document.querySelectorAll('a[href^="/cards/"]');
+        for (var i = 0; i < ancres.length; i++) {
+            var a = ancres[i];
+            var m = UUID.exec(a.getAttribute('href') || '');
+            if (!m) continue;
+            var img = a.querySelector('img'), h2 = a.querySelector('h2'), p = a.querySelector('p');
+            var ref = p ? String(p.textContent || '').split('·') : [];
+            sortie.push({
+                id: m[1],
+                nom: h2 ? normaliser(h2.textContent) : '',
+                numero: ref.length > 1 ? String(ref[1]).trim() : '',
+                img: img || null,
+                src: img ? (img.currentSrc || img.src || '') : '',
+                chargee: !!(img && img.complete && img.naturalWidth > 0)
+            });
+        }
+        return sortie;
+    }
+
+    // l'adresse d'une image à lire : https, l'hôte des images, rien d'autre
+    function adresseAutorisee(src) {
+        try { var u = new URL(src); return u.protocol === 'https:' && u.hostname === HOTE_IMAGES && !u.username && !u.password && !u.search && !u.hash; } catch (e) { return false; }
+    }
+    function enBase64(buffer) {
+        var o = new Uint8Array(buffer), s = '';
+        for (var i = 0; i < o.length; i += 0x8000) s += String.fromCharCode.apply(null, o.subarray(i, i + 0x8000));
+        return btoa(s);
+    }
+    var B64_MAX = Math.ceil(IMAGE_MAX_OCTETS * 4 / 3) + 4;
+
+    // voie 1 : le canvas — aucune requête ; échoue (SecurityError) sur une image d'une autre origine non CORS
+    function depuisCanvas(img) {
+        try {
+            var c = document.createElement('canvas');
+            c.width = img.naturalWidth; c.height = img.naturalHeight;
+            c.getContext('2d').drawImage(img, 0, 0);
+            var u = c.toDataURL('image/png');
+            var b64 = u.slice(u.indexOf(',') + 1);
+            return b64 && b64.length <= B64_MAX ? b64 : null;
+        } catch (e) { return null; }
+    }
+    // voie 2 : le cache HTTP de la page ; sinon le navigateur requête (voir l'en-tête). Illisible sans CORS.
+    function depuisLeCache(src) {
+        return fetch(src, { method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' }).then(function (r) {
+            if (!r.ok) return null;
+            return r.arrayBuffer().then(function (ab) { return ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? enBase64(ab) : null; });
+        }).catch(function () { return null; });
+    }
+    // voie 3 : GM_xmlhttpRequest, anonyme, vers la seule adresse de la tuile — le navigateur du testeur requête, pendant sa visite
+    function depuisLeNavigateur(src) {
+        return new Promise(function (resoudre) {
+            GM_xmlhttpRequest({
+                method: 'GET', url: src, responseType: 'arraybuffer', anonymous: true, timeout: 30000,
+                onload: function (r) {
+                    var ab = r.response;
+                    resoudre(r.status === 200 && ab && ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? enBase64(ab) : null);
+                },
+                onerror: function () { resoudre(null); },
+                ontimeout: function () { resoudre(null); }
+            });
+        });
+    }
+    // Les octets d'UNE tuile : { b64, voie } ou null (illisible). Jamais une adresse hors HOTE_IMAGES.
+    function lireImage(t) {
+        if (!adresseAutorisee(t.src)) return Promise.resolve(null);
+        var b = depuisCanvas(t.img);
+        if (b) return Promise.resolve({ b64: b, voie: 'canvas' });
+        return depuisLeCache(t.src).then(function (c) {
+            if (c) return { b64: c, voie: 'cache' };
+            return depuisLeNavigateur(t.src).then(function (n) { return n ? { b64: n, voie: 'navigateur' } : null; });
+        });
+    }
+
+    async function apprendre() {
+        var url = location.origin + location.pathname;
+        var html = document.documentElement.outerHTML;
+        etat.textContent = 'Envoi de la page au récepteur local…';
+        var rep = await poster(RECEPTEUR, { url: url, html: html });
+        var j = rep.json;
+        if (!(j && j.ok)) {
+            etat.textContent = 'Refusé (HTTP ' + rep.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur');
+            return;
+        }
+        var entete = 'Appris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
+            j.officielles + ' adresse(s) officielle(s) déclarée(s) par la page (flux ' + j.flux + ')\nfichier ' + j.fichier + (j.anomalie ? '\n⚠ ' + j.anomalie : '');
+        var tuiles = lireTuilesDuDom();
+        var pretes = tuiles.filter(function (t) { return t.chargee; });
+        var sansImage = tuiles.length - pretes.length;
+        entete += '\nImages : ' + pretes.length + ' tuile(s) chargée(s) sur ' + tuiles.length + (sansImage ? ' — ' + sansImage + ' SANS image chargée (je ne défile pas : fais défiler la page, puis reclique)' : '');
+        etat.textContent = entete;
+        var voies = { canvas: 0, cache: 0, navigateur: 0 }, illisibles = 0, recues = 0, refusees = 0, premierMotif = '', lot = [], tailleLot = 0, faites = 0;
+        async function envoyerLot() {
+            if (!lot.length) return;
+            var corps = { fichier: j.fichier, images: lot, sansImage: sansImage };
+            lot = []; tailleLot = 0;
+            var r = await poster(RECEPTEUR_IMAGES, corps);
+            if (!(r.json && r.json.ok)) throw { refus: 'HTTP ' + r.status + ' : ' + ((r.json && r.json.motif) || 'réponse illisible du récepteur') };
+            recues += r.json.recues; refusees += r.json.refusees.length;
+            if (r.json.refusees.length && !premierMotif) premierMotif = r.json.refusees[0].motif;
+        }
+        try {
+            for (var i = 0; i < pretes.length; i++) {
+                var t = pretes[i];
+                var lue = await lireImage(t);
+                faites++;
+                if (!lue) { illisibles++; }
+                else {
+                    voies[lue.voie]++;
+                    lot.push({ id: t.id, src: t.src, nom: t.nom, numero: t.numero, voie: lue.voie, b64: lue.b64 });
+                    tailleLot += lue.b64.length;
+                    if (lot.length >= LOT_IMAGES_MAX || tailleLot >= LOT_B64_MAX) await envoyerLot();
+                }
+                etat.textContent = entete + '\nLecture ' + faites + '/' + pretes.length + ' (canvas ' + voies.canvas + ', cache ' + voies.cache + ', navigateur ' + voies.navigateur + ', illisibles ' + illisibles + ')';
+            }
+            await envoyerLot();
+            if (!pretes.length) {   // aucune image à envoyer : le récepteur retient quand même combien de tuiles n'avaient pas d'image
+                etat.textContent = entete + '\nAucune image chargée à envoyer.';
+                return;
+            }
+            etat.textContent = entete + '\nImages envoyées : ' + recues + ' reçues par le récepteur, ' + refusees + ' refusée(s)' + (premierMotif ? ' (« ' + premierMotif + ' »)' : '') +
+                '\nVoies : canvas ' + voies.canvas + ', cache ' + voies.cache + ', navigateur ' + voies.navigateur + ' · illisibles ' + illisibles + ' · tuiles sans image ' + sansImage;
+        } catch (e) {
+            if (e && e.refus) etat.textContent = entete + '\nLe récepteur a refusé un lot d\'images (' + e.refus + ') : arrêt.';
+            else if (e && e.reseau) etat.textContent = entete + '\nLe récepteur ne répond plus (' + e.reseau + ') pendant l\'envoi des images : arrêt.';
+            else throw e;
+        }
+    }
+
     bouton.addEventListener('click', function () {
         if (!PAGE_DE_SET.test(location.pathname)) {
             etat.textContent = 'Cette page n\'est pas la page d\'un set (/sets/<code>) : rien n\'est envoyé.';
             return;
         }
-        var url = location.origin + location.pathname;
-        var html = document.documentElement.outerHTML;
         bouton.disabled = true;
-        etat.textContent = 'Envoi au récepteur local…';
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: RECEPTEUR,
-            headers: { 'Content-Type': 'application/json', 'X-Rat-Market': 'rat-market-passif' },
-            data: JSON.stringify({ url: url, html: html }),
-            anonymous: true,
-            timeout: 30000,
-            onload: function (r) {
-                bouton.disabled = false;
-                var j = null;
-                try { j = JSON.parse(r.responseText); } catch (e) { j = null; }
-                if (j && j.ok) {
-                    etat.textContent = 'Appris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
-                        j.officielles + ' adresse(s) officielle(s) déclarée(s) par la page (flux ' + j.flux + ')\nfichier ' + j.fichier +
-                        (j.anomalie ? '\n⚠ ' + j.anomalie : '');
-                } else {
-                    etat.textContent = 'Refusé (HTTP ' + r.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur');
-                }
-            },
-            onerror: function () {
-                bouton.disabled = false;
-                etat.textContent = 'Le récepteur ne répond pas : lance-le sur ce poste (voir le mode d\'emploi), puis recommence.';
-            },
-            ontimeout: function () {
-                bouton.disabled = false;
-                etat.textContent = 'Le récepteur ne répond pas (délai dépassé) : vérifie qu\'il tourne, puis recommence.';
-            }
+        apprendre().then(function () { bouton.disabled = false; }, function (e) {
+            bouton.disabled = false;
+            if (e && e.reseau) etat.textContent = e.reseau === 'delai'
+                ? 'Le récepteur ne répond pas (délai dépassé) : vérifie qu\'il tourne, puis recommence.'
+                : 'Le récepteur ne répond pas : lance-le sur ce poste (voir le mode d\'emploi), puis recommence.';
+            else etat.textContent = 'Erreur du script : ' + (e && e.message ? e.message : String(e));
         });
     });
 })();

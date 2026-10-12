@@ -1,5 +1,5 @@
-// node test-userscript-pikaqian.js — le userscript PASSIF de PikaQian (userscript-pikaqian.js) : test STATIQUE (aucune adresse hors 127.0.0.1, aucune navigation,
-// l'envoi dans le seul gestionnaire du bouton) et test de COMPORTEMENT dans un bac `vm` (faux document, faux GM_xmlhttpRequest : aucune requête réelle).
+// node test-userscript-pikaqian.js — le userscript PASSIF de PikaQian (userscript-pikaqian.js, v2.0) : test STATIQUE (aucune adresse hors 127.0.0.1, un seul hôte d'images,
+// aucune navigation ni défilement ni minuterie, un seul fetch) et test de COMPORTEMENT dans un bac `vm` (faux document, faux GM_xmlhttpRequest, faux fetch : aucune requête réelle).
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -24,93 +24,184 @@ const sansCommentaires = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\
 // ── STATIQUE
 verifier('@match : les pages de set de pikaqian.com, rien d\'autre', valeurs('match'), ['https://pikaqian.com/sets/*']);
 verifier('@grant : GM_xmlhttpRequest seulement (ni cookie, ni stockage, ni GM_openInTab)', valeurs('grant'), ['GM_xmlhttpRequest']);
-verifier('@connect : 127.0.0.1 SEULEMENT', valeurs('connect'), ['127.0.0.1']);
+verifier('@connect : 127.0.0.1 ET l\'hôte des images, rien d\'autre', valeurs('connect'), ['127.0.0.1', P.HOTE_IMAGES]);
 const adresses = [...sansCommentaires.matchAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`)]*/gi)].map(x => x[0]);
-verifier('dans le code : toute adresse est http://127.0.0.1:<port> (le port vient de la constante PORT)', adresses.every(a => /^http:\/\/127\.0\.0\.1:$/.test(a)) && adresses.length >= 1, true);
+verifier('dans le code : toute adresse écrite est http://127.0.0.1:<port> (le port vient de la constante PORT)', adresses.every(a => /^http:\/\/127\.0\.0\.1:$/.test(a)) && adresses.length >= 2, true);
 const PORT_US = /^\s*var PORT = (\d{4,5});/m.exec(code);
-verifier('PORT : une constante unique en tête du script, égale au port par défaut du récepteur', [!!PORT_US, Number(PORT_US?.[1]) === R.PORT_DEFAUT, (code.match(/\bPORT\b/g) || []).length >= 2, code.indexOf('var PORT') < code.indexOf('GM_xmlhttpRequest')], [true, true, true, true]);
+verifier('PORT : une constante unique en tête du script, égale au port par défaut du récepteur', [!!PORT_US, Number(PORT_US?.[1]) === R.PORT_DEFAUT, (code.match(/\bPORT\b/g) || []).length >= 3, sansCommentaires.indexOf('var PORT') < sansCommentaires.indexOf('GM_xmlhttpRequest')], [true, true, true, true]);
 const CODE_US = /var CODE_DE_SET = '([^']+)';/.exec(code);
 verifier('le motif de code de set du script est celui de CODE_PK (pikaqian.js)', `^${CODE_US?.[1]}$`, P.CODE_PK.source);
 const ENTETE_US = /'X-Rat-Market':\s*'([^']+)'/.exec(code);
 verifier('l\'en-tête fixe du script est celui que le récepteur exige', [R.ENTETE_MARQUE, ENTETE_US?.[1]], ['x-rat-market', R.VALEUR_MARQUE]);
 verifier('le script ne pose PAS d\'en-tête Origin (la garde n\'en dépend pas)', /['"]Origin['"]/i.test(sansCommentaires), false);
-verifier('aucun nom d\'hôte de pikaqian, de son CDN ou du CDN officiel dans le code exécutable', /pikaqian|pokemon-tcg|pokemon\.cn|localhost/i.test(sansCommentaires), false);
+// le SEUL nom d'hôte du code exécutable est celui des images, une fois ; le CDN officiel, localhost et le site lui-même n'y figurent pas
+const hotes = [...sansCommentaires.matchAll(/['"]([a-z0-9-]+(?:\.[a-z0-9-]+)+)['"]/gi)].map(x => x[1]).filter(h => /\.(com|cn|net|org|fr)$/i.test(h));
+verifier('hôtes écrits dans le code : exactement HOTE_IMAGES (celui de pikaqian.js), une fois', hotes, [P.HOTE_IMAGES]);
+verifier('HOTE_IMAGES du script = celui de pikaqian.js ; aucun pokemon-tcg / pokemon.cn / localhost dans le code', [/var HOTE_IMAGES = '([^']+)'/.exec(code)?.[1], /pokemon-tcg|pokemon\.cn|localhost/i.test(sansCommentaires)], [P.HOTE_IMAGES, false]);
+const num = (nom) => { const r = new RegExp(`var ${nom} = ([^;]+);`).exec(code); return r ? Function(`return (${r[1]})`)() : null; };
+verifier('plafonds : IMAGE_MAX_OCTETS = celui de pikaqian.js, lot d\'images et de base64 sous ceux du récepteur', [num('IMAGE_MAX_OCTETS') === P.IMAGE_MAX_OCTETS, num('LOT_IMAGES_MAX') <= R.IMAGES_PAR_LOT_MAX, num('LOT_B64_MAX') * 3 / 4 <= R.LOT_OCTETS_MAX], [true, true, true]);
 const interdits = [
     ['location.href =', /location\s*\.\s*href\s*=[^=]/], ['location.assign/replace', /location\s*\.\s*(assign|replace)\s*\(/], ['location = ', /\blocation\s*=[^=]/],
-    ['.click()', /\.\s*click\s*\(/], ['window.open', /window\s*\.\s*open\s*\(/], ['fetch(', /\bfetch\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/],
+    ['.click()', /\.\s*click\s*\(/], ['window.open', /window\s*\.\s*open\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/],
     ['document.cookie', /document\s*\.\s*cookie/], ['localStorage/sessionStorage/indexedDB', /localStorage|sessionStorage|indexedDB/], ['GM_getValue/GM_setValue/GM_cookie', /GM_(getValue|setValue|cookie|openInTab|download)/],
     ['new Image / new WebSocket / EventSource', /new\s+(Image|WebSocket|EventSource)\b/], ['dispatchEvent dans la page', /dispatchEvent/], ['innerHTML (injection)', /\.\s*innerHTML\s*=/],
-    ['setInterval / setTimeout (aucune action différée)', /\bset(Interval|Timeout)\s*\(/], ['MutationObserver', /MutationObserver/], ['eval / Function', /\beval\s*\(|new\s+Function\b/]
+    ['setInterval / setTimeout (aucune action différée)', /\bset(Interval|Timeout)\s*\(/], ['MutationObserver / IntersectionObserver', /(Mutation|Intersection)Observer/], ['eval / Function', /\beval\s*\(|new\s+Function\b/],
+    ['AUCUN DÉFILEMENT : scroll / scrollTo / scrollBy / scrollIntoView / requestAnimationFrame', /\bscroll(To|By|IntoView|Top)?\s*[(=]|requestAnimationFrame|\.focus\s*\(/],
+    ['forcer le chargement paresseux (loading = eager, lazy)', /\.\s*loading\s*=|setAttribute\s*\(\s*['"]loading/], ['changer le src d\'une image de la page', /\.\s*src\s*=[^=]|setAttribute\s*\(\s*['"]src/]
 ];
 for (const [nom, re] of interdits) verifier(`interdit absent : ${nom}`, re.test(sansCommentaires), false);
-verifier('GM_xmlhttpRequest est appelé UNE seule fois dans le code', (sansCommentaires.match(/GM_xmlhttpRequest\s*\(/g) || []).length, 1);
-// l'envoi n'a lieu que dans le gestionnaire du bouton : l'appel est DANS le corps de la fonction passée à addEventListener('click', …)
-{
+verifier('GM_xmlhttpRequest est appelé DEUX fois dans le code : le récepteur local (poster) et l\'image de la tuile (depuisLeNavigateur)', (sansCommentaires.match(/GM_xmlhttpRequest\s*\(/g) || []).length, 2);
+verifier('fetch est appelé UNE seule fois, en lecture du cache de la page : GET, force-cache, sans identifiants, sans redirection', [(sansCommentaires.match(/\bfetch\s*\(/g) || []).length, /fetch\(src, \{ method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' \}\)/.test(sansCommentaires)], [1, true]);
+verifier('un seul addEventListener dans tout le code (le clic), et apprendre() n\'est appelée que depuis lui', [(sansCommentaires.match(/addEventListener\s*\(/g) || []).length, (sansCommentaires.match(/(?<!function\s)\bapprendre\s*\(\s*\)/g) || []).length, (() => {
     const i = sansCommentaires.search(/addEventListener\(\s*'click'/);
     let debut = sansCommentaires.indexOf('{', i), prof = 0, fin = -1;
     for (let k = debut; k < sansCommentaires.length; k++) { if (sansCommentaires[k] === '{') prof++; else if (sansCommentaires[k] === '}' && --prof === 0) { fin = k; break; } }
-    const appel = sansCommentaires.search(/GM_xmlhttpRequest\s*\(/);
-    verifier('l\'appel à GM_xmlhttpRequest est dans le gestionnaire du clic', i >= 0 && appel > debut && appel < fin, true);
-    verifier('un seul addEventListener dans tout le code', (sansCommentaires.match(/addEventListener\s*\(/g) || []).length, 1);
-}
-verifier('le script n\'envoie ni cookie ni en-tête du site (corps = url + html seulement)', /JSON\.stringify\(\s*\{\s*url\s*,\s*html\s*\}\s*\)|JSON\.stringify\(\s*\{\s*url:[^}]*html:[^}]*\}\s*\)/.test(sansCommentaires), true);
+    const appel = sansCommentaires.indexOf('apprendre()', debut);
+    return appel > debut && appel < fin;
+})()], [1, 1, true]);
+verifier('la page part telle quelle : poster(RECEPTEUR, { url: url, html: html }) — rien d\'autre (ni cookie ni en-tête du site)', /poster\(RECEPTEUR,\s*\{\s*url:\s*url,\s*html:\s*html\s*\}\)/.test(sansCommentaires), true);
+verifier('un lot d\'images ne porte que fichier, images et sansImage ; chaque image id, src, nom, numero, voie, b64', [/\{\s*fichier:\s*j\.fichier,\s*images:\s*lot,\s*sansImage:\s*sansImage\s*\}/.test(sansCommentaires), /lot\.push\(\{\s*id:\s*t\.id,\s*src:\s*t\.src,\s*nom:\s*t\.nom,\s*numero:\s*t\.numero,\s*voie:\s*lue\.voie,\s*b64:\s*lue\.b64\s*\}\)/.test(sansCommentaires)], [true, true]);
 
 // ── COMPORTEMENT, dans un bac vm
-function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', tuilesLues: 315, tuilesAuCode: 315, officielles: 1, natives: 1, fichier: 'cs1bc--x.json' }) }, erreur = null } = {}) {
-    const elements = [], appels = [];
+/**
+ * Un monde fabriqué. `tuiles` : [{ id, nom, numero, src, chargee, canvas: 'ok'|'taché', fetch: 'ok'|'refus', gm: 'ok'|'echec' }] ; rien de réel : GM_xmlhttpRequest, fetch et canvas sont des faux qui enregistrent.
+ */
+function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', tuilesLues: 315, tuilesAuCode: 315, officielles: 1, natives: 1, fichier: 'cs1bc--x.json' }) }, erreur = null, tuiles = [], reponseImages = null } = {}) {
+    const elements = [], appels = [], fetches = [], defilements = [];
     const el = tag => { const e = { tag, style: {}, children: [], ecouteurs: {}, textContent: '', addEventListener(t, f) { this.ecouteurs[t] = f; }, appendChild(c) { this.children.push(c); return c; }, setAttribute() { } }; elements.push(e); return e; };
-    const document = { body: el('body'), documentElement: { outerHTML: '<html><body>PAGE-DU-NAVIGATEUR</body></html>' }, createElement: el, querySelector: () => null };
+    const parSrc = new Map(tuiles.map(t => [t.src, t]));
+    const ancres = tuiles.map(t => {
+        const img = { complete: t.chargee !== false, naturalWidth: t.chargee === false ? 0 : 300, naturalHeight: 416, currentSrc: t.src, src: t.src, _t: t };
+        return {
+            getAttribute: n => (n === 'href' ? `/cards/${t.id}` : null),
+            querySelector: s => (s === 'img' ? img : s === 'h2' ? { textContent: `  ${t.nom}\n` } : s === 'p' ? { textContent: `cs1bc · ${t.numero} ` } : null)
+        };
+    });
+    const canvasFaux = () => { const c = { width: 0, height: 0, _img: null, getContext: () => ({ drawImage: i => { c._img = i; } }), toDataURL: () => { if (c._img?._t?.canvas !== 'ok') throw new Error('SecurityError: canvas taché'); return 'data:image/png;base64,Q0FOVkFT'; } }; return c; };
+    const document = { body: el('body'), documentElement: { outerHTML: '<html><body>PAGE-DU-NAVIGATEUR</body></html>' }, createElement: tag => (tag === 'canvas' ? canvasFaux() : el(tag)), querySelector: () => null, querySelectorAll: s => (s === 'a[href^="/cards/"]' ? ancres : []) };
     const location = { href: 'https://pikaqian.com/sets/cs1bc?x=1#h', origin: 'https://pikaqian.com', pathname: '/sets/cs1bc', search: '?x=1', hash: '#h' };
-    const GM_xmlhttpRequest = o => { appels.push(o); setTimeout(() => (erreur ? o.onerror?.({ error: erreur }) : o.onload?.(reponse)), 0); };
-    const bac = { document, location, GM_xmlhttpRequest, window: { location, document }, console, JSON, setTimeout, Date, String, Number, Math };
+    const GM_xmlhttpRequest = o => {
+        appels.push(o);
+        setTimeout(() => {
+            if (erreur && /^http:\/\/127\.0\.0\.1/.test(o.url)) return o.onerror?.({ error: erreur });
+            if (/\/apprendre$/.test(o.url)) return o.onload?.(reponse);
+            if (/\/images$/.test(o.url)) {
+                const corps = JSON.parse(o.data);
+                return o.onload?.(reponseImages ? reponseImages(corps) : { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', recues: corps.images.length, nouvelles: corps.images.length, deja: 0, refusees: [] }) });
+            }
+            const t = parSrc.get(o.url);
+            if (t && t.gm !== 'echec') return o.onload?.({ status: 200, response: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer });
+            return o.onerror?.({});
+        }, 0);
+    };
+    const fetchFaux = (url, opts) => { fetches.push({ url, opts }); const t = parSrc.get(url); return t && t.fetch === 'ok' ? Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([9, 9, 9, 9]).buffer) }) : Promise.reject(new TypeError('Failed to fetch (CORS)')); };
+    const bac = { document, location, GM_xmlhttpRequest, fetch: fetchFaux, btoa, URL, Uint8Array, window: { location, document }, console, JSON, setTimeout, Date, String, Number, Math };
     bac.window.window = bac.window;
-    return { bac, elements, appels };
+    return { bac, elements, appels, fetches, defilements };
 }
+const attendre = ms => new Promise(r => setTimeout(r, ms));
+const texte = w => w.elements.map(e => e.textContent).join(' | ');
+const hotesDes = appels => appels.map(a => new URL(a.url).host);
+
 (async () => {
     let w = fabriquerMonde();
     vm.runInNewContext(SRC, w.bac, { filename: 'userscript-pikaqian.js' });
     const bouton = w.elements.find(e => e.ecouteurs.click);
-    verifier('au chargement : un bouton, et AUCUNE requête', [!!bouton, w.appels.length], [true, 0]);
+    verifier('au chargement : un bouton, et AUCUNE requête (ni GM_xmlhttpRequest ni fetch)', [!!bouton, w.appels.length, w.fetches.length], [true, 0, 0]);
     verifier('le bouton s\'appelle « Apprendre cette page »', /Apprendre cette page/.test(bouton?.textContent || ''), true);
-    await new Promise(r => setTimeout(r, 30));
-    verifier('… toujours aucune requête après attente (rien ne part seul)', w.appels.length, 0);
+    await attendre(30);
+    verifier('… toujours aucune requête après attente (rien ne part seul)', [w.appels.length, w.fetches.length], [0, 0]);
     bouton.ecouteurs.click({});
-    await new Promise(r => setTimeout(r, 30));
-    verifier('au clic : UNE requête', w.appels.length, 1);
+    await attendre(30);
+    verifier('au clic, page sans tuile : UNE requête (la page)', w.appels.length, 1);
     const a = w.appels[0] || {};
     verifier('POST vers http://127.0.0.1:<port>/apprendre', [a.method, /^http:\/\/127\.0\.0\.1:\d{4,5}\/apprendre$/.test(a.url || '')], ['POST', true]);
     const corps = JSON.parse(a.data || '{}');
     verifier('corps : exactement url (sans requête ni ancre) et html (outerHTML tel que le navigateur l\'a)', [Object.keys(corps).sort(), corps.url, corps.html], [['html', 'url'], 'https://pikaqian.com/sets/cs1bc', '<html><body>PAGE-DU-NAVIGATEUR</body></html>']);
     verifier('en-têtes : Content-Type JSON et l\'en-tête fixe, rien d\'autre', [Object.keys(a.headers || {}).sort(), a.headers?.['Content-Type'], a.headers?.['X-Rat-Market']], [['Content-Type', 'X-Rat-Market'], 'application/json', R.VALEUR_MARQUE]);
     verifier('aucun cookie demandé (anonymous / pas de withCredentials)', [a.anonymous === true || a.anonymous === undefined, a.withCredentials === undefined || a.withCredentials === false], [true, true]);
-    const affiche = w.elements.map(e => e.textContent).join(' | ');
-    verifier('la réponse du récepteur s\'affiche : tuiles lues, au code du set, adresses officielles', /315/.test(affiche) && /officiel/i.test(affiche) && /1/.test(affiche), true);
+    verifier('la réponse du récepteur s\'affiche : tuiles lues, au code du set, adresses officielles', /315/.test(texte(w)) && /officiel/i.test(texte(w)) && /1/.test(texte(w)), true);
     // l'anomalie « flux absent » est montrée au testeur
     w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', ancres: 315, tuilesLues: 315, tuilesAuCode: 315, flux: 'absent', officielles: 0, fichier: 'x.json', anomalie: 'FLUX DE DONNÉES ABSENT : test' }) } });
     vm.runInNewContext(SRC, w.bac);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
-    await new Promise(r => setTimeout(r, 30));
-    verifier('flux absent : l\'anomalie est affichée', /FLUX DE DONNÉES ABSENT/.test(w.elements.map(e => e.textContent).join(' | ')), true);
-
-    // un refus du récepteur : son motif est affiché
-    w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: '3 tuiles sur 9 portent le code cs1bc : la page ne désigne pas ce set' }) } });
+    await attendre(30);
+    verifier('flux absent : l\'anomalie est affichée', /FLUX DE DONNÉES ABSENT/.test(texte(w)), true);
+    // un refus du récepteur : son motif est affiché, AUCUNE image n'est lue ni envoyée
+    w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: '3 tuiles sur 9 portent le code cs1bc : la page ne désigne pas ce set' }) }, tuiles: [{ id: '00000000-0000-4000-8000-000000000001', nom: 'A', numero: '001', src: `https://${P.HOTE_IMAGES}/cs1bc/00000000-0000-4000-8000-000000000001.webp`, canvas: 'ok' }] });
     vm.runInNewContext(SRC, w.bac);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
-    await new Promise(r => setTimeout(r, 30));
-    verifier('refus du récepteur (422) : la raison est affichée', /ne désigne pas ce set/.test(w.elements.map(e => e.textContent).join(' | ')), true);
+    await attendre(30);
+    verifier('page refusée (422) : la raison est affichée, une seule requête (la page), aucune image lue', [/ne désigne pas ce set/.test(texte(w)), w.appels.length, w.fetches.length], [true, 1, 0]);
     // récepteur éteint
     w = fabriquerMonde({ erreur: 'connexion refusée' });
     vm.runInNewContext(SRC, w.bac);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
-    await new Promise(r => setTimeout(r, 30));
-    verifier('récepteur injoignable : un message qui dit de le lancer, aucune autre requête', [/récepteur/i.test(w.elements.map(e => e.textContent).join(' | ')), w.appels.length], [true, 1]);
+    await attendre(30);
+    verifier('récepteur injoignable : un message qui dit de le lancer, aucune autre requête', [/récepteur/i.test(texte(w)), w.appels.length], [true, 1]);
     // une page qui n'est pas /sets/<code> : le script ne l'envoie pas
     w = fabriquerMonde();
     w.bac.location.pathname = '/cards/abc'; w.bac.window.location.pathname = '/cards/abc';
     vm.runInNewContext(SRC, w.bac);
     const b2 = w.elements.find(e => e.ecouteurs.click);
-    if (b2) { b2.ecouteurs.click({}); await new Promise(r => setTimeout(r, 30)); }
+    if (b2) { b2.ecouteurs.click({}); await attendre(30); }
     verifier('hors d\'une page /sets/<code> : rien n\'est envoyé', w.appels.length, 0);
+
+    // ── LES IMAGES : les trois voies, dans l'ordre, et ce que chacune fait sur le réseau
+    const H = `https://${P.HOTE_IMAGES}/cs1bc/`;
+    const ID = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    w = fabriquerMonde({ tuiles: [
+        { id: ID(1), nom: 'Pikachu', numero: '001', src: `${H}${ID(1)}.webp`, canvas: 'ok' },
+        { id: ID(2), nom: 'Raichu', numero: '002', src: `${H}${ID(2)}.webp`, canvas: 'taché', fetch: 'ok' },
+        { id: ID(3), nom: 'Pichu', numero: '003', src: `${H}${ID(3)}.webp`, canvas: 'taché', fetch: 'refus', gm: 'ok' },
+        { id: ID(4), nom: 'Pas encore', numero: '004', src: `${H}${ID(4)}.webp`, chargee: false },
+        { id: ID(5), nom: 'Ailleurs', numero: '005', src: `https://exemple.test/cs1bc/${ID(5)}.webp`, canvas: 'taché', fetch: 'ok', gm: 'ok' },
+        { id: ID(6), nom: 'Illisible', numero: '006', src: `${H}${ID(6)}.webp`, canvas: 'taché', fetch: 'refus', gm: 'echec' }
+    ] });
+    vm.runInNewContext(SRC, w.bac);
+    verifier('page à 6 tuiles, avant le clic : toujours rien (ni requête ni fetch)', [w.appels.length, w.fetches.length], [0, 0]);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(120);
+    const adressesRecepteur = w.appels.filter(x => /127\.0\.0\.1/.test(x.url));
+    const lotsImages = adressesRecepteur.filter(x => /\/images$/.test(x.url)).map(x => JSON.parse(x.data));
+    verifier('requêtes de GM_xmlhttpRequest : la page, UN lot d\'images, et UNE seule image (celle de la tuile 3, voie navigateur + celle de la 6 qui échoue = 2) — jamais l\'hôte étranger', [hotesDes(w.appels).filter(h => !/^127\.0\.0\.1/.test(h)).sort(), w.appels.filter(x => /exemple\.test/.test(x.url)).length], [[P.HOTE_IMAGES, P.HOTE_IMAGES], 0]);
+    verifier('les requêtes vers l\'hôte des images sont des GET anonymes en arraybuffer, vers l\'adresse EXACTE de la tuile', w.appels.filter(x => x.url.startsWith(H)).map(x => [x.method, x.anonymous, x.responseType, x.url.startsWith(H) && x.url.endsWith('.webp')]), [['GET', true, 'arraybuffer', true], ['GET', true, 'arraybuffer', true]]);
+    verifier('fetch : appelé pour les tuiles 2, 3 et 6 (canvas échoué), jamais pour la 1 (canvas réussi), la 4 (non chargée) ni la 5 (hôte étranger) ; toujours force-cache, sans identifiants', [w.fetches.map(f => f.url.slice(-41, -5)), w.fetches.every(f => f.opts.cache === 'force-cache' && f.opts.credentials === 'omit' && f.opts.method === 'GET' && f.opts.redirect === 'error')], [[ID(2), ID(3), ID(6)], true]);
+    verifier('UN lot envoyé à /images : fichier, images, sansImage = 1 (la tuile 4 non chargée) ; clés exactes', [lotsImages.length, Object.keys(lotsImages[0] || {}).sort(), lotsImages[0]?.fichier, lotsImages[0]?.sansImage, lotsImages[0]?.images.map(i => Object.keys(i).sort().join(','))], [1, ['fichier', 'images', 'sansImage'], 'cs1bc--x.json', 1, ['b64,id,nom,numero,src,voie', 'b64,id,nom,numero,src,voie', 'b64,id,nom,numero,src,voie']]);
+    verifier('les trois images lues : voies canvas, cache, navigateur ; nom et numéro tels que le DOM les affiche (espaces normalisés)', lotsImages[0]?.images.map(i => [i.id.slice(-1), i.nom, i.numero, i.voie]), [['1', 'Pikachu', '001', 'canvas'], ['2', 'Raichu', '002', 'cache'], ['3', 'Pichu', '003', 'navigateur']]);
+    verifier('les octets partent en base64 : le PNG du canvas, l\'arraybuffer du cache, celui du navigateur', lotsImages[0]?.images.map(i => i.b64), ['Q0FOVkFT', Buffer.from([9, 9, 9, 9]).toString('base64'), Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).toString('base64')]);
+    verifier('le panneau DIT les tuiles sans image chargée, les voies et les illisibles', [/1 SANS image chargée/.test(texte(w)), /fais défiler/.test(texte(w)), /canvas 1, cache 1, navigateur 1/.test(texte(w)), /illisibles 2/.test(texte(w))], [true, true, true, true]);
+    verifier('… et le résultat du récepteur', /3 reçues par le récepteur, 0 refusée/.test(texte(w)), true);
+
+    // ── des lots BORNÉS : 23 tuiles à canvas → 10 + 10 + 3
+    w = fabriquerMonde({ tuiles: Array.from({ length: 23 }, (_, i) => ({ id: ID(i + 1), nom: `N${i}`, numero: String(i + 1).padStart(3, '0'), src: `${H}${ID(i + 1)}.webp`, canvas: 'ok' })) });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(250);
+    verifier('23 images → trois lots de 10, 10 et 3, jamais plus de LOT_IMAGES_MAX ; aucun fetch (le canvas a lu)', [w.appels.filter(x => /\/images$/.test(x.url)).map(x => JSON.parse(x.data).images.length), w.fetches.length], [[10, 10, 3], 0]);
+    // des images lourdes : le lot part avant LOT_IMAGES_MAX quand LOT_B64_MAX est atteint
+    const lourdes = Array.from({ length: 4 }, (_, i) => ({ id: ID(i + 1), nom: `N${i}`, numero: String(i + 1).padStart(3, '0'), src: `${H}${ID(i + 1)}.webp`, canvas: 'taché', fetch: 'ok' }));
+    w = fabriquerMonde({ tuiles: lourdes });
+    const grosB = new Uint8Array(900000).buffer;                       // 1,2 million de caractères base64 par image : deux images dépassent LOT_B64_MAX
+    w.bac.fetch = (url, opts) => { w.fetches.push({ url, opts }); return Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(grosB) }); };
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(400);
+    verifier('images lourdes : le lot part dès LOT_B64_MAX (2 images par lot), jamais plus', w.appels.filter(x => /\/images$/.test(x.url)).map(x => JSON.parse(x.data).images.length), [2, 2]);
+    // un lot refusé par le récepteur : arrêt, aucun lot de plus, le motif est dit
+    w = fabriquerMonde({ tuiles: Array.from({ length: 25 }, (_, i) => ({ id: ID(i + 1), nom: `N${i}`, numero: String(i + 1).padStart(3, '0'), src: `${H}${ID(i + 1)}.webp`, canvas: 'ok' })), reponseImages: () => ({ status: 413, responseText: JSON.stringify({ ok: false, motif: 'lot trop gros (test)' }) }) });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(200);
+    verifier('un lot refusé par le récepteur : arrêt net (page + un seul lot), le motif est affiché', [w.appels.filter(x => /\/images$/.test(x.url)).length, /lot trop gros \(test\)/.test(texte(w)), /arrêt/.test(texte(w))], [1, true, true]);
+    // des images refusées une à une : comptées et le premier motif est montré
+    w = fabriquerMonde({ tuiles: [{ id: ID(1), nom: 'A', numero: '001', src: `${H}${ID(1)}.webp`, canvas: 'ok' }], reponseImages: () => ({ status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', recues: 0, nouvelles: 0, deja: 0, refusees: [{ id: ID(1), motif: 'octets qui ne se décodent pas en image' }] }) }) });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(100);
+    verifier('une image refusée par le récepteur : le panneau le compte et cite le motif', [/0 reçues par le récepteur, 1 refusée/.test(texte(w)), /ne se décodent pas/.test(texte(w))], [true, true]);
+    // aucun défilement : le monde fabriqué n'offre aucun scroll ; le script n'en cherche pas — le test statique l'interdit déjà
+    verifier('le monde fabriqué n\'offre aucun scroll, et le test a tourné : aucune erreur', w.defilements.length, 0);
 
     console.log(`\n${ok} réussis, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

@@ -1,5 +1,18 @@
 # PikaQian passif — mode d'emploi (préparé le 2026-10-12, jamais lancé)
 
+## ➕ 2026-10-13 (lot P2) — le worker ne touche plus PikaQian ; le script envoie les IMAGES que ton navigateur affiche
+Décision du testeur : « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker ne touche jamais le CDN. Mêmes preuves exigées
+(numéro, nom, set) ; un doute est un trou. Arrête les tentatives automatiques depuis le worker : la source n'est plus interrogée que par mes visites. »
+- **Worker** : PikaQian est PASSIVE (`collecte-cartes/source-passive.js`, retirée de `SOURCES_EN_SERVICE`) : aucune unité ne s'insère ni ne se reprend, une unité en file se clôt (`refuse-source-passive`,
+  « source passive : visites du testeur seulement »), le réessai espacé et la sonde du CDN ne partent plus, le transport réel du client est fermé. Banc : `test-source-passive.js`.
+- **Userscript 2.0** : au clic, la page part comme avant ; puis, pour chaque tuile dont l'image est DÉJÀ chargée (le script ne défile pas, ne force rien : les autres sont comptées et dites), il envoie à
+  `POST /images` du récepteur, par lots de 10 au plus, le nom et le numéro que le DOM affiche et les octets. Trois voies, dans l'ordre : `canvas` (aucune requête, mais refuse les images d'une autre origine
+  non CORS), `cache` (`fetch` en `force-cache` depuis la page : cache HTTP de la page s'il y a une entrée, sinon une requête de TON navigateur), `navigateur` (`GM_xmlhttpRequest`, anonyme, vers l'adresse de la tuile
+  seulement : une requête de TON navigateur par image, pendant TA visite). Chaque image dit sa voie. `@connect` ajoute `images.pikaqian.com`.
+- **Récepteur** : `--dossier-images=<chemin>` (défaut `C:\Users\Yung\rat-market-travail\catalogue\pikaqian-passif`, hors dépôt) ; une image par fichier `<codePk>\<idTuile>--<sha12>.<ext>`, jamais écrasée ; un fichier de page
+  `page--<fiche>.json` par visite (tuiles, reçues avec empreinte et dimensions, refusées avec motif, tuiles sans image).
+- **Import** : `importer-pikaqian-passif.js` (simulation par défaut, `--ecrire` sous `lot-additif.js`), voir son en-tête.
+
 Décision du testeur : pas d'arrêt définitif de PikaQian ; un bouton « Apprendre cette page » sur les pages de set que **tu ouvres toi-même**, aucune navigation
 automatique, aucun navigateur automatisé, aucun cookie réutilisé. Ce lot capture ce que la page ouverte porte et mesure ce que cela donnerait. Il ne télécharge rien.
 
@@ -36,4 +49,4 @@ Deux faits mesurés bornent le lot, et la décision revient au testeur :
 1. La page de set porte, par tuile, l'image `images.pikaqian.com/<code>/<uuid>.webp` (300 × 419), mais l'adresse **officielle** `cdn.pokemon-tcg.cn/cards/<32 hex>.png` n'y est embarquée que pour **une carte sur 315** (mesuré le 2026-10-11 sur cs1bc).
 2. `cdn.pokemon-tcg.cn/robots.txt` répond **403** (serveur Tengine) au worker (sonde du 2026-10-12, 18 h 54 UTC) : nos règles s'arrêtent là pour ce CDN.
 
-En conséquence, ce lot ne télécharge aucune image et n'est branché sur aucun worker (aucun de ses fichiers n'est dans `REGLES` de `remettre-en-file.js`). Les adresses capturées et la mesure sont disponibles ; ce qu'on en fait est à décider, avec ces deux faits.
+En conséquence, le lot d'origine (2026-10-12) ne téléchargeait aucune image. Depuis le 2026-10-13 les images viennent du navigateur du testeur (voir en tête) ; le worker n'est branché à rien de ce lot.
