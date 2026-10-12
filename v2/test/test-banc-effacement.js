@@ -558,7 +558,7 @@ async function section(nom, f) {
         const monter = async deps => {
             const app = express(); app.set('trust proxy', true); app.use(require('../transport/cors').middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
             pret.armer(M.verifierIndex);
-            app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: nouvellePurge(client), ...deps, ...(enLot ? { identifierLot } : {}) }));
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: nouvellePurge(client), ...deps, ...(enLot ? { identifierLot } : {}) }));
             return H.serveur(app);
         };
         const avecDet = await monter({ detection });

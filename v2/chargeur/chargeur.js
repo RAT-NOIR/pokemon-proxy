@@ -109,6 +109,9 @@ function creerChargeur(opts = {}) {
             if (!v || comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`);
             if (comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`);
             const prev = etat.version();
+            // JUMEAU-V2 : une version sans la colonne des jumeaux ne remplace jamais une version qui l'a (la route n'affirmerait plus rien) ; sans version en place, elle s'installe (visuels servis, aucune affirmation)
+            if (prev && prev.colonneJumeaux && !v.colonneJumeaux) throw new Echec(`la version chargée n'a pas la colonne des jumeaux alors que celle en place l'a — ${dit}`);
+            if (!v.colonneJumeaux) journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des jumeaux : la route n\'affirmera aucun produit tant qu\'une archive récente ne l\'aura pas apportée');
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
                 if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);

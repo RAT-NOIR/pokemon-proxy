@@ -124,7 +124,7 @@ function chargerFixtures() {
     const appFabrique = async (cfgApp, deps = {}) => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(require('../modeles').verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaineFabriquee, ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, ...deps }));
         return H.serveur(app);
     };
     const jouer = async (sv, c, vm) => { chaine = c; voisinsMode = vm; appelsG = 0; appelsVoisins = 0; const x = await inst(3); const r = await poster(sv.url, x.jeton); await attendre(50); return { ...x, r, j: r.json || {} }; };

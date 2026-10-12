@@ -150,7 +150,7 @@ async function parcourir() {
     const monter = async (deps = {}, c = cfg) => {
         const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(c)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter')], c, { gererIdentifier: chaine, ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter')], c, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, ...deps }));
         return H.serveur(app);
     };
     const sv = await monter();

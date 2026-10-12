@@ -373,7 +373,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
     const monter = async deps => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
         return H.serveur(app);
     };
     const sv = await monter({}), svLot = await monter({ identifierLot });

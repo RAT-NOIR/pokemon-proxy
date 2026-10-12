@@ -70,7 +70,7 @@ const consentement = () => ({ version: cfg.banc.versionsTexte[0], le: new Date()
     for (const l of LOTS) l.enTete(app, cfg);
     app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(M.verifierIndex);
-    app.use(assembler(LOTS, cfg, { gererIdentifier: chaine, detection }));
+    app.use(assembler(LOTS, cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, detection }));
     const sv = await H.serveur(app), V = sv.url;
 
     async function compte() {

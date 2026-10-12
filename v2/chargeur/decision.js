@@ -87,10 +87,19 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
     const entrees = [];
+    // JUMEAU-V2 : le créneau (expansion, numéro de fiche) et la langue de tirage de CHAQUE produit du catalogue, avec sa métacarte — le producteur de la colonne que la route lit pour ne jamais
+    // affirmer un produit qui a un jumeau. Émis AVANT les écartements ci-dessous (un produit sans visuel ou sans fiche du site a quand même des jumeaux). Un produit du catalogue sans ligne :
+    // créneau et langue INCONNUS (jamais devinés) ; un champ inconnu reste un jumeau côté route. Sans `sink`, la liste est rendue (les bancs).
+    const jumeaux = [], emis = new Set();
+    const emettre = j => { if (sink) { if (typeof sink.jumeau === 'function') sink.jumeau(j); } else jumeaux.push(j); };
+    const metaDe = id => (entier(metacarte.get(id)) ? metacarte.get(id) : null);
     n = 0;
     for (const l of lignes) {
         if (++n % 2000 === 0) await pause();
         const { s, f, plusieurs } = choisir(l), c = carteDe.get(l.carteId);
+        emis.add(l.idProduct);
+        emettre({ idProduct: l.idProduct, idMetacard: metaDe(l.idProduct), idExpansion: entier(l.idExpansion) ? l.idExpansion : null,
+            numero: l.numeroFiche == null ? null : texte(regle.normaliserNumero(l.numeroFiche)), tirage: s ? texte(s.tirage ?? s.region) : null });
         if (plusieurs) d.plusieursSets++;
         if (!c) { d.aucun++; d.aucunDetail['carte absente']++; continue; }
         if (!s) { d.aucun++; d.aucunDetail['aucun set candidat']++; continue; }
@@ -124,8 +133,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (sink) sink.entree(e); else entrees.push(e);
         d.ecrites++;
     }
+    for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);
-    return { entrees, denominateurs: d, liens };
+    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux }) };
 }
 
 module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE };

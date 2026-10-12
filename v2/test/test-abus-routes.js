@@ -150,7 +150,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        const routeur = assembler(LOTS, cfgApp, { gererIdentifier: chaine, gererRetourLive: retourLive, ...deps });
+        const routeur = assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: retourLive, ...deps });
         app.use(routeur); app.use(gestionnaireFinal);
         const s = await H.serveur(app);
         return { ...s, routeur };

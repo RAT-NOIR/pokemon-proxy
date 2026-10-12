@@ -102,7 +102,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     const monter = async (cfgApp, deps) => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(require('../modeles').verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
         return H.serveur(app);
     };
     const sv = await monter(cfg, { identifierLot });

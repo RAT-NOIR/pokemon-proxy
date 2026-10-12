@@ -256,7 +256,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const appFabrique = async (cfgApp, deps = {}) => {
             const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
             pret.armer(require('../modeles').verifierIndex);
-            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaineFabriquee, ...deps }));
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, ...deps }));
             return H.serveur(app);
         };
         const sv = await appFabrique(cfg);
@@ -308,6 +308,34 @@ async function semer(mode) {                                  // 'double' | 'sim
         // un seul candidat : pas de question possible -> introuvable, et le crédit est RENDU (le remboursement différé n'est jamais perdu)
         mode = 'refus-egalite-seul'; const un = await inst(3); const ru = await poster(sv.url, un.jeton, corps(), { nom: 'fab-refus-seul' });
         H.v('   refus à UN seul candidat : introuvable, crédit rendu (essai 3), motif introuvable', [ru.json.analyse.statut, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['introuvable', true, 'introuvable', 3]);
+        // ── JUMEAU-V2 : une AFFIRMATION de la chaîne dont le produit a un jumeau devient une question RÉSERVÉE (comme une ambiguë) ; au-delà de 3 produits, ou sans colonne, un
+        //    introuvable REMBOURSÉ au motif distinct, écrit dans `analyses` (jamais servi : le contrat public ne change pas). Chemin de PRODUCTION : deps.jumeaux est lu par la route.
+        {
+            const serveurJ = async jumeaux => appFabrique(cfg, { jumeaux });
+            const svJ = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B] : [] }));
+            mode = 'affirmee'; const xj = await inst(3); const rj = await poster(svJ.url, xj.jeton, corps(), { nom: 'jumeau-question' }), jj = rj.json || {};
+            H.v('JUMEAU-V2 : produit affirmé avec UN jumeau : a-trancher à 2 candidats (le produit et son jumeau), { debite:0, reserve:1, motif:question }, essai 3 -> 2',
+                [jj.analyse && jj.analyse.statut, jj.analyse && jj.analyse.cartes[0].candidats.map(c => c.idProduct), jj.facturation, (await solde(xj.i._id)).essais],
+                ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+            const qj = await raw('questions').findOne({ _id: `${jj.scanId}:0` });
+            H.v('   la question est écrite en attente avec les choix du contrat (choixPour)', [qj && qj.etat, qj && qj.choix], ['en-attente', choixPour([ID_A, ID_B])]);
+            await svJ.fermer();
+            const svZ = await serveurJ(() => ({ conclu: true, ids: [] }));
+            const xz = await inst(3); const rz = await poster(svZ.url, xz.jeton, corps(), { nom: 'jumeau-aucun' }), jz = rz.json || {};
+            H.v('   un produit SANS jumeau : affirmé comme avant (identifiee, debite 1, essai 3 -> 2)', [jz.analyse && jz.analyse.statut, jz.facturation && jz.facturation.motif, jz.solde && jz.solde.essai], ['identifiee', 'affirmee', 2]);
+            await svZ.fermer();
+            const refusJ = async (jumeaux, nom, motifAttendu) => {
+                const s = await serveurJ(jumeaux); const x = await inst(3); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
+                const an = j.scanId ? await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) }) : null;
+                H.v(`   ${nom} : introuvable / photo-illisible REMBOURSÉ (essai 3), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
+                    [j.analyse && j.analyse.statut, j.analyse && j.analyse.raison, j.facturation && j.facturation.rembourse, (await solde(x.i._id)).essais, an && an.motifJumeaux, JSON.stringify(j).includes('jumeaux-')],
+                    ['introuvable', 'photo-illisible', true, 3, motifAttendu, false]);
+                await s.fermer();
+            };
+            await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
+            await refusJ(() => ({ conclu: false, ids: [] }), 'colonne absente (le fournisseur ne conclut pas)', 'jumeaux-indisponibles');
+            await refusJ(undefined, 'aucun fournisseur injecté ET aucune version en mémoire (le défaut de PRODUCTION)', 'jumeaux-indisponibles');
+        }
         // ── n°5b : debiter qui LÈVE après avoir pris la poche (l'écriture du mouvement échoue) ne laisse RIEN de pris
         {
             const colOrig = db.col; let armee = true;

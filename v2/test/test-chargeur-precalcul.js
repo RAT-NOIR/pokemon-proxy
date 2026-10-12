@@ -76,6 +76,10 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     H.v('rien d\'admissible (aucune image) : AUCUN fichier produit, motif nommé', /0 visuel.*aucun fichier/.test(m0 || ''), true);
     let m1 = null; try { await fabriquerFichier({ source: source(donnees(5)), catalogue, secret: SECRET, decider: async ({ sink }) => { sink.entree({ idProduct: 1001, visuel: 'du-set', mention: null, idMetacard: 5000, numero: '001', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: null, grande: null, vignette: { cle: 'v/1.webp', w: 1, h: 1 } }); return { denominateurs: { setsAvecLiens: 0, produitsLies: 0 } }; } }); } catch (e) { m1 = e.motif; }
     H.v('0 lien fiche → produits (des entrées, aucun lien) : AUCUN fichier produit, motif nommé', /0 lien.*aucun fichier/.test(m1 || ''), true);
+    // JUMEAU-V2 : le fichier porte la colonne des jumeaux (relue à l'identique) ; un producteur qui ne l'émet pas ne publie rien
+    H.v('JUMEAU-V2 : l\'archive porte la colonne des jumeaux, relue à l\'identique du calcul en ligne (jumeaux de chaque produit)', [viaFichier.version.colonneJumeaux, ids.every(id => JSON.stringify(viaFichier.version.jumeauxDe(id)) === JSON.stringify(enLigne.version.jumeauxDe(id)))], [true, true]);
+    let m2 = null; try { await fabriquerFichier({ source: source(donnees(5)), catalogue, secret: SECRET, decider: a => require('../chargeur/decision').decider({ ...a, sink: { entree: a.sink.entree, lien: a.sink.lien } }) }); } catch (e) { m2 = e.motif; }
+    H.v('   un producteur qui n\'émet pas les jumeaux : AUCUN fichier produit, motif nommé', /colonne des jumeaux.*aucun fichier/.test(m2 || ''), true);
 
     // ── 3. le chargeur sur archive scellée : bascule, refus d'une archive abîmée, version gardée
     E.vider();

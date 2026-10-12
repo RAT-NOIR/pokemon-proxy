@@ -822,7 +822,7 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 ## 2. Les règles du contrat
 
 1. **Additif.** Sans `contrat: 2` dans la requête, la réponse d'aujourd'hui, octet pour octet : la 1.0.x publiée continue de marcher.
-2. **Trois issues par carte** : `identifiee` · `a-trancher` · `introuvable`. Jamais « sous réserve » en sortie. (`lot` est un statut d'ENSEMBLE, jamais d'une carte.)
+2. **Trois issues par carte** : `identifiee` · `a-trancher` · `introuvable`. Jamais « sous réserve » en sortie. (`lot` est un statut d'ENSEMBLE, jamais d'une carte.) Une carte n'est `identifiee` que si son produit n'a aucun jumeau (§3.2).
 3. **Listes fermées** pour tout ce qui pilote un comportement (§3). Une valeur inconnue d'un client tombe sur un défaut **qui n'affirme rien**.
 4. **Aucun score, aucune confiance chiffrée.** `etat.confiance` est une chaîne de liste fermée.
 5. **`null` = « on ne sait pas »**, jamais zéro ni non. Un prix à 0 n'existe pas ; une variante inconnue est `null`, jamais `normale` deviné.
@@ -885,6 +885,21 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 **Taille d'un lot : 20 cartes au plus** (`V2_LOT_CARTES_MAX`, entier de 2 à 100 ; au-delà, la configuration est invalide). `POST /api/banc/correction` suit la même borne (`carte` de 0 à taille − 1 ; `maximum: 99` du schéma est le plafond absolu). `carte` (`/api/identifier/reponse`, `/api/retour-live`) va de 0 à 19 (même variable : une seule source). Un lot de plus de 20 cartes est **refusé, jamais tronqué** : `400 ENTREE` + `detail: "lot-trop-grand-taille"` (le supplément impayable reste `429 QUOTA` + `detail: "lot-trop-grand"`). Dans les deux cas : crédit initial rendu jusqu'à 10 refus par jour et par compte, `facturation { debite: 0, rembourse: true, motif: "lot" }` ; au 11e, `facturation { debite: 1, rembourse: false, motif: "lot", raisonNonRembourse: "plafond-jour" }`, le refus restant la réponse.
 
 `solde.total` compte déjà les réserves en moins. Le solde se débite dans l'ordre `essai` → `accueil` → `hebdo` → `abonnement` → `achete` (réglable côté serveur). Une installation non liée n'a que ses 3 essais ; un compte **vérifié** reçoit 25 analyses offertes une seule fois, plus 2 par semaine ISO (non cumulables).
+
+### 3.2 Quand une carte est affirmée — et quand elle ne l'est PAS (lot JUMEAU-V2)
+
+Une carte n'est `identifiee` que si le produit désigné n'a **aucun jumeau** : aucun autre produit de même métacarte, de même langue de tirage, d'un autre créneau (expansion, numéro). Un champ que le catalogue ne connaît pas compte comme « même ». Le serveur ne devine jamais : la lecture du code et du numéro sur la photo peut désigner un vrai produit qui n'est pas celui de la carte (même fiche de jeu, autre set).
+
+| le produit désigné a… | issue | `statut` | `raison` | facturation |
+|---|---|---|---|---|
+| aucun jumeau | affirmée | `identifiee` | — | `affirmee`, `debite: 1` |
+| 1 ou 2 jumeaux (3 produits au plus) | question de départage entre le produit et ses jumeaux | `a-trancher` | — | `question`, `reserve: 1` (comme toute question) |
+| plus de 3 produits avec ses jumeaux | introuvable | `introuvable` | `photo-illisible` | rembourse (`introuvable`), `debite: 0` |
+| une colonne de jumeaux absente ou illisible (le catalogue chargé est plus ancien, ou ne couvre pas le produit) | introuvable | `introuvable` | `photo-illisible` | rembourse (`introuvable`), `debite: 0` |
+
+- Le serveur ne tronque **jamais** les candidats (« 3 parmi N ») : la question pourrait exclure la vraie carte.
+- Les trois ensembles (affirmée, question, introuvable) restent ceux du §3 : **aucune valeur nouvelle** dans les listes fermées. Le motif précis d'un introuvable de cette garde (`jumeaux-trop-nombreux` ou `jumeaux-indisponibles`, ou `jumeaux-incomplets` quand un jumeau n'a pas de ligne au catalogue de l'API) est **interne** : il n'est pas servi ; il est écrit côté serveur (`analyses.motifJumeaux`) et compté.
+- Conséquence pour les clients : une carte qui s'affirmait auparavant peut désormais revenir en `a-trancher` (2 ou 3 choix) ou en `introuvable`. Rien d'autre ne change dans la forme des réponses.
 
 ---
 

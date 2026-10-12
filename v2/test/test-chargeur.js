@@ -66,6 +66,11 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
     H.v('perte de 10 % pile (10 → 9) : admise, la nouvelle version remplace', [ok9.ok, E.version().comptes.visuels], [true, 9]);
     const grandit = await fabriquer(source(donnees(30))).charger();
     H.v('un gain n\'est pas un échec (9 → 30)', [grandit.ok, E.version().comptes.visuels], [true, 30]);
+    // JUMEAU-V2 : la colonne des jumeaux vient du VRAI decider (tous les produits du catalogue, 100 ici) ; une version sans colonne ne remplace jamais une version qui l'a
+    const vCol = E.version();
+    H.v('JUMEAU-V2 : la version chargée porte la colonne des jumeaux (100 produits du catalogue, dont ceux sans ligne)', [vCol.colonneJumeaux, vCol.comptes.jumeaux, vCol.jumeauxDe(1001), vCol.jumeauxDe(1100)], [true, 100, [], []]);
+    const sansColonne = await fabriquer(source(donnees(30)), { decider: a => require('../chargeur/decision').decider({ ...a, sink: { entree: a.sink.entree, lien: a.sink.lien } }) }).charger();
+    H.v('   une version SANS colonne ne remplace pas une version qui l\'a : ÉCHEC nommé, version en place gardée', [sansColonne.ok, /colonne des jumeaux/.test(sansColonne.motif || ''), E.version() === vCol], [false, true, true]);
 
     // ── 5. des entrées invalides sont REFUSÉES une à une (motif compté), les autres servies
     const d = donnees(5);

@@ -11,7 +11,7 @@ const HOTE = 'https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/';
 const ligne = (id, o = {}) => ({ idProduct: id, nomCardmarket: 'Eevee', set: { slug: 's' + id, nom: 'Set ' + id }, numero: '12', total: '100', langue: 'EN', variante: null,
     rarete: 'Rare', prixGuide: { trend: 5, low: 4, avg30: 4.5, guideDu: new Date('2026-10-04') }, visuel: { url: `${HOTE}${id}.webp`, w: 255, h: 356 }, ...o });
 const produits = new Map([700, 701, 702, 703, 704, 650].map(i => [i, ligne(i)]));
-const ctx = (o = {}) => ({ produits, langueInterface: 'fr', cfg, ...o });
+const ctx = (o = {}) => ({ produits, langueInterface: 'fr', cfg, jumeaux: () => ({ conclu: true, ids: [] }), ...o });     // JUMEAU-V2 : sans fournisseur qui conclut, l'adaptateur n'affirme rien (test-jumeaux.js)
 const etatH = { estimeIA: 'EX', confianceIA: 'haute', defautsVus: ['coins blanchis'], declareVendeur: 'Bon état', declareCardmarket: 'GD', retenu: 'GD' };
 const succes = (o = {}) => ({ success: true, scanId: 's1', question: null, carte: { idProduct: 700, ambigu: false, niveauReserve: null, raisonReserve: null, concurrent: null, nbExAequo: null },
     etat: etatH, candidats: [{ idProduct: 700, score: 9 }], classement: [{ idProduct: 700, score: 9 }], reverse: { attendue: false, strategie: null }, codeLangue: 2, ...o });

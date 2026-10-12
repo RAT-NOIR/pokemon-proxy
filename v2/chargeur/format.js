@@ -8,12 +8,15 @@ const crypto = require('crypto'); const zlib = require('zlib'); const os = requi
 const { depuisPaquet } = require('./version');
 
 const MAGIE = Buffer.from('RMV1'), FORMAT = 1;
-const SECTIONS = Object.freeze([
+const SECTIONS_BASE = Object.freeze([
     ...['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 'rar', 'tot', 'variante', 'set', 'lien'].map(n => ({ nom: n, t: 'i32' })),
     { nom: 'meta.cle', t: 'i32' }, { nom: 'meta.produit', t: 'i32' },
     ...['carte', 'num', 'debut', 'fin', 'produits'].map(n => ({ nom: `fiches.${n}`, t: 'i32' })),
     { nom: 'texte.off', t: 'u32' }, { nom: 'texte.octets', t: 'u8' }, { nom: 'liens.off', t: 'u32' }, { nom: 'liens.octets', t: 'u8' }
 ]);
+// JUMEAU-V2 : la colonne des jumeaux est une extension FACULTATIVE (mêmes numéro de format et magie) : un fichier d'avant la colonne (SECTIONS_BASE seules) reste lisible, SANS la colonne ;
+// toute autre liste de sections est refusée. La liste complète est la base + la colonne, dans CET ordre.
+const SECTIONS = Object.freeze([...SECTIONS_BASE, ...['meta', 'id', 'exp', 'num', 'tir', 'ordre'].map(n => ({ nom: `jum.${n}`, t: 'i32' }))]);
 const TAILLE = { i32: 4, u32: 4, u8: 1 }, CLASSE = { i32: Int32Array, u32: Uint32Array, u8: Uint8Array };
 // PLAFONDS, écrits par ce qu'ils protègent : la mémoire de l'instance (512 Mio dont ~110 à 150 Mo de base de serveur, offre gratuite, ~11 réveils par jour sans version en mémoire : un dépassement
 // serait un redémarrage en boucle). L'archive réelle fait 2,8 Mo compressée et 11 Mo décompressée : 16 Mo (×5,7) et 48 Mo (×4,4). Dépassement = échec de chargement, jamais un redémarrage.
@@ -25,7 +28,7 @@ const refuser = m => { throw new FormatInvalide(m); };
 const aligner = n => (n + 3) & ~3;
 const hache = b => crypto.createHash('sha256').update(b).digest();
 
-function cible(d, nom) { const [a, b] = nom.split('.'); return b === undefined ? d.cols[a] : d[a === 'meta' ? 'meta' : a][b]; }
+function cible(d, nom) { const [a, b] = nom.split('.'); return b === undefined ? d.cols[a] : d[a][b]; }
 function sceller(corps) { return Buffer.concat([corps, hache(corps)]); }
 
 function assemblerFichier(entete, regions) {
@@ -39,7 +42,7 @@ function serialiser(version, { entree = null } = {}) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { donnees } = version.paquet();
     const regions = [], descr = [];
-    for (const s of SECTIONS) {
+    for (const s of donnees.jum ? SECTIONS : SECTIONS_BASE) {
         const a = cible(donnees, s.nom), oct = Buffer.from(a.buffer, a.byteOffset, a.byteLength);
         descr.push({ nom: s.nom, t: s.t, n: a.length }); regions.push(oct); const pad = aligner(oct.length) - oct.length; if (pad) regions.push(Buffer.alloc(pad));
     }
@@ -72,9 +75,10 @@ function deserialiser(buf) {
     const { entete, debut } = ouvrirEntete(buf);
     if (!hache(buf.subarray(0, buf.length - 32)).equals(buf.subarray(buf.length - 32))) refuser('hachage faux : fichier abîmé ou tronqué');
     if (entete.format !== FORMAT) refuser(`numéro de format inconnu (${String(entete.format).slice(0, 10)})`);
-    if (!Array.isArray(entete.sections) || entete.sections.length !== SECTIONS.length) refuser('liste de sections incomplète');
-    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {} };
-    SECTIONS.forEach((s, i) => {
+    if (!Array.isArray(entete.sections) || ![SECTIONS_BASE.length, SECTIONS.length].includes(entete.sections.length)) refuser('liste de sections incomplète');
+    const attendues = entete.sections.length === SECTIONS.length ? SECTIONS : SECTIONS_BASE;       // sans la colonne des jumeaux : un fichier d'avant elle
+    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(attendues === SECTIONS ? { jum: {} } : {}) };
+    attendues.forEach((s, i) => {
         const x = entete.sections[i];
         if (!x || x.nom !== s.nom || x.t !== s.t || !Number.isInteger(x.n) || x.n < 0) refuser(`section « ${s.nom} » absente ou mal décrite`);
         const octets = x.n * TAILLE[s.t];
@@ -82,7 +86,7 @@ function deserialiser(buf) {
         const copie = buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + octets);           // COPIE alignée : le tampon du fichier est libéré ensuite
         const a = new CLASSE[s.t](copie);
         const [p, q] = s.nom.split('.');
-        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
+        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
         o += aligner(octets);
     });
     if (o !== buf.length - 32) refuser('octets en trop entre la dernière section et le hachage');

@@ -14,9 +14,12 @@
 //                         pas de choix ; plus de 3 : jamais tronqué) => introuvable « photo-illisible » (nom-contredit-*) ou
 //                         « hors-catalogue » (egalite-parfaite sans aucun candidat). nom-contredit-sans-repli IGNORE ces candidats :
 //                         pas d'égalité (r.scores vide, index.js:4840), toujours introuvable « photo-illisible ».
+//   ctx.jumeaux           JUMEAU-V2 : (idProduct) => { conclu, ids } — les jumeaux du produit (jumeaux.js). ABSENT ou qui ne conclut pas : AUCUNE affirmation (introuvable, motif distinct
+//                         rendu en `motif` à la racine du résultat, jamais dans le contrat public) ; le contexte doit aussi porter dans ctx.produits les lignes des jumeaux.
 const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
+const { garde } = require('./jumeaux');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -85,7 +88,13 @@ function traduire(statutHttp, corps, ctx) {
             if (!Number.isInteger(c.idProduct)) panne('SERVEUR', 'identifiée sans idProduct');
             const premier = entiers(corps.candidats)[0];
             if (premier !== undefined && premier !== c.idProduct) panne('SERVEUR', `carte.idProduct ${c.idProduct} != candidats[0] ${premier}`);
-            const produit = construireProduit(source(ctx, c.idProduct), pctx(ctx));
+            // JUMEAU-V2 : P n'est affirmé que s'il n'a AUCUN jumeau (jumeaux.js : un seul chemin mène à « affirmer »). Sinon une question de départage entre P et ses jumeaux,
+            // ou un introuvable au motif distinct. La source de P est lue d'abord : un P absent du catalogue de l'API reste la panne SERVEUR d'avant.
+            const sourceP = source(ctx, c.idProduct);
+            const g = garde(ctx, c.idProduct);
+            if (g.action === 'question') return question(g.ids, etat, ctx);
+            if (g.action === 'introuvable') return { ...introuvable('photo-illisible'), motif: g.motif };
+            const produit = construireProduit(sourceP, pctx(ctx));
             return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
         }
         const ids = entiers(corps.candidats);
