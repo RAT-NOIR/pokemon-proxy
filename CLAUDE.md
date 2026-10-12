@@ -29,7 +29,11 @@ renégocie pas en cours de route.
 - 🔴 **LES DOSSIERS D'APPORTS MANUELS NE SONT JAMAIS DÉPLACÉS NI SUPPRIMÉS** (règle du testeur, 2026-10-13) : `Logo FR`, `apport-manuel`, `Desktop\LOGO`, et tout dossier que le testeur a rempli lui-même. Par aucun agent, ni par un sous-agent.
   - L'incident qui l'a fait écrire : le 2026-10-12 à 21:54:14 UTC, un de mes relecteurs a retiré une copie de mutation par `git worktree remove --force`, comme mon brief le lui disait. La copie avait des jonctions vers `Logo FR` et `apport-manuel` ; la suppression les a traversées et a vidé les deux dossiers. 208 fichiers ont été restaurés depuis R2, 147 restent à redéposer par le testeur.
   - Un banc de l'API ne lit JAMAIS ces dossiers : ses données de test vivent dans le dépôt (images générées, jamais des copies de logos tiers).
-  - Aucune jonction vers un dossier de données. Une copie ou un worktree se retire ainsi : `cmd /c rmdir` sur chaque jonction, vérification qu'il n'en reste aucune, puis `git worktree remove --force`. Jamais `Remove-Item -Recurse`.
+- 🔴 **RETIRER UN WORKTREE OU UNE COPIE — RÈGLE COMMUNE À TOUS LES AGENTS** (testeur, 2026-10-13) :
+  1. Jamais de `git worktree remove --force`, ni de suppression récursive (`Remove-Item -Recurse`, `rmdir /s`, `rm -rf`, `fs.rmSync(…, { recursive: true })`), sur un dossier qui contient des jonctions ou des liens symboliques.
+  2. Pour retirer un worktree : lister ses jonctions et ses liens ; retirer chaque LIEN seul, sans suivre sa cible (`cmd /c rmdir "<lien>"`, sans `/s`) ; vérifier que les cibles sont intactes (nombre de fichiers avant et après) ; seulement ensuite, retirer le worktree.
+  3. Aucune jonction vers un dossier d'apports manuels (`Logo FR`, `apport-manuel`, `Desktop\LOGO`, ou tout dossier que le testeur remplit lui-même), jamais.
+  - Chez l'agent API, cette procédure est appliquée par UN SEUL outil, `outils/retirer-worktree.js`, qui REFUSE de continuer si une cible change de taille. Les sous-agents n'utilisent que lui. Tant qu'il n'est pas fusionné, aucun sous-agent ne retire de copie : il la laisse en place et le dit.
 
 ---
 
