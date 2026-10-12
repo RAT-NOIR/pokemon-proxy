@@ -50,6 +50,20 @@ const e = (sid, n) => ({ sourceSetId: sid, n, titre: `x${n}` });
         assert.strictEqual(clesPartagees(rs).size, 0, 'avant : inchangé');
         assert.deepStrictEqual([...clesPartagees(rs, { numerotes: true })], ['5|005']);
     });
+    await t('(tour 2) image SANS sourceSetId pour une ligne à sous-section : refusée (une garde qui ne peut pas conclure bloque) ; sans déclaration, comme avant', () => {
+        const r = jointureSousSection({ sourceSetId: null, nomEn: 'Alpha' }, [{ nomEn: 'Alpha' }], 'numero', [176], x => x, { sousSection: 648 });
+        assert.deepStrictEqual(r.cands, []); assert.ok(/ne peut pas conclure/.test(r.raison), r.raison);
+        assert.strictEqual(jointureSousSection({ sourceSetId: null, nomEn: 'Alpha' }, [{ nomEn: 'Alpha' }], 'numero', [176], x => x).cands.length, 1);
+    });
+    await t('(tour 2) le prédicat « même sous-section » est UN : memeSousSection (null refusé, nombre/chaîne égaux), partagé par la sélection et la jointure', () => {
+        const { memeSousSection } = require('./collecte-cartes/echantillon-mesure');
+        assert.ok(memeSousSection('649', 649)); assert.ok(!memeSousSection(null, 649)); assert.ok(!memeSousSection(648, 649)); assert.ok(memeSousSection(1, null));
+        assert.deepStrictEqual(entreesDeMesure([{ sourceSetId: null, n: 1 }, e(649, 2)], { sousSection: 649 }).map(x => x.n), [2]);
+    });
+    await t('(tour 2) clesPartagees numerotes : un numéro absent ne forme jamais de clé « null »', () => {
+        const rs = [{ carteId: 5, im: { numero: null, sha256: 'a' } }, { carteId: 5, im: { numero: '', sha256: 'b' } }, { carteId: 5, im: { numero: undefined, sha256: 'c' } }];
+        assert.strictEqual(clesPartagees(rs, { numerotes: true }).size, 0);
+    });
     // ── 4. de bout en bout, par la fonction de production ──
     const cartes = [
         { _id: 1, nomEn: 'Alpha', nomJa: null, sets: ['S1'], images: [], impressions: [{ tirage: 'jp', expansion: 'X', deck: 'D1', numero: '001' }] },

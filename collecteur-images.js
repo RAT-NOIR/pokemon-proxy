@@ -362,6 +362,10 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // `simuler` (2026-10-05) : la passe 1 (quelle carte pour chaque image) tourne, RIEN ne s'écrit — ni image, ni carte, ni reste, ni
     // complétude, ni rapport. C'est la mesure d'une règle de jointure AVANT de la rejouer : `preuves` et `resolues` disent ce qu'elle ferait.
     const code = L.code;
+    // 🔑 V8 tour 2 (B-I1, §21 bis) : LA SÉLECTION « entrées de la sous-section de la ligne » se fait ICI, dans la fonction que TOUS les appelants traversent (collecterSet, le
+    // rejeu `--rejouer-jointure` qui relit la liste d'état NON filtrée, le banc) — pas dans chacun. Sans elle le rejeu écrivait `entreesSource` 28 pour DHD, `emplacements` vrai
+    // et `concordance` fausse dans `sets.completImages`. Idempotent : une liste déjà filtrée ressort identique.
+    entrees = Object.fromEntries(Object.entries(entrees || {}).map(([id, es]) => [id, entreesDeLaLigne(es, S)]));
     const dire = (...a) => { if (!silencieux) console.log(...a); };
     // ---- 4. jointure image -> carte --------------------------------------------------------
     const cartes = await M.Carte.find({ sets: slug }).lean();
@@ -609,7 +613,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
 
 // ➕ 2026-10-12 : `joindreImages` s'exporte pour le banc de bout en bout (`test-jointure-basse-definition.js`) ; requis, ce fichier ne lance RIEN
 // (ni lecture de la ligne de commande, ni connexion) — le worker et les outils le lancent en ligne de commande, où `require.main === module`.
-module.exports = { joindreImages };
+module.exports = { joindreImages, collecterSet };   // `collecterSet` : pour le banc de bout en bout de V8 (test-collecte-sous-section-v8.js), client et base FAUX
 if (require.main !== module) return;
 
 // 🔴 LA LIGNE DE COMMANDE DU REJEU S'ÉCRIT PAR CE QU'ELLE AUTORISE (relecture du 2026-10-05, §54) : `--simuler` n'est qu'un drapeau ;

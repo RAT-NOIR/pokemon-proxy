@@ -50,6 +50,19 @@ for (const [code, a] of Object.entries(ATTENDU)) {
         assert.strictEqual(v.le, '2026-10-12');
     });
 }
+t('(tour 2, A-I1) les largeurs ne sont citées que pour la sous-section où elles ont été lues ; le numéro imprimé hors pages lues est dit MODÉLISÉ', () => {
+    for (const c of ['DHD', 'MED']) { const n = sourceDe(c).note, v = ligne(c).verifie.note; assert.ok(/non mesurées/.test(n) && /non mesurées/i.test(v), c); assert.ok(!/originaux 500 px|originaux 444-500 px/.test(n), c); }
+    for (const c of ['CLL', 'CLK']) assert.ok(/une seule largeur lue/.test(sourceDe(c).note) && /UNE seule largeur lue/.test(ligne(c).verifie.note), c);
+    for (const c of ['MSM', 'DHD', 'GHD', 'MED', 'CLL', 'CLK']) assert.ok(/MODÉLISÉS?/.test(ligne(c).verifie.note) || /modélisé/.test(sourceDe(c).note), c);
+    for (const c of ['MSM', 'DHD', 'GHD', 'MED', 'CLL', 'CLK']) assert.ok(!/(?<!prévue )\b\d+ numéros ET noms concordants/.test(ligne(c).verifie.note), `${c} : « N concordants » sans dire que c'est une prévision`);
+});
+t('(tour 2, A-I2) tout module de la jointure artofpkm est dans REGLES (la garde du commit du worker)', () => {
+    const txt = fs.readFileSync(path.join(__dirname, 'remettre-en-file.js'), 'utf8');
+    const bloc = txt.slice(txt.indexOf('const REGLES'), txt.indexOf('];', txt.indexOf('const REGLES')));
+    for (const f of ['echantillon-mesure', 'sous-section-image', 'images-cle-partagee', 'image-fiche-simple', 'jointure', 'artofpkm', 'schemas', 'verrou-source', 'alimentateur']) assert.ok(bloc.includes(`collecte-cartes/${f}.js`), f);
+    const src = fs.readFileSync(path.join(__dirname, 'collecteur-images.js'), 'utf8');
+    for (const m of ['echantillon-mesure', 'sous-section-image', 'images-cle-partagee', 'image-fiche-simple']) assert.ok(src.includes(`./collecte-cartes/${m}`) && fs.existsSync(path.join(__dirname, 'collecte-cartes', `${m}.js`)), m);
+});
 t('une liste lue par plusieurs lignes porte setDeBase sur toutes (176 : DHD, GHD ; 545 : CLL, CLK)', () => {
     for (const c of ['DHD', 'GHD', 'CLL', 'CLK']) assert.ok(sourceDe(c).setDeBase, c);
 });

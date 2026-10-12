@@ -21,7 +21,9 @@ function clesPartagees(resolues, { numerotes = false } = {}) {
     // numéro ET au même nom dans un deck : Metagross 005, 643/5 et 643/6 — la dernière lue n'est pas une preuve). Hors déclaration : portée d'avant, inchangée.
     const parCle = new Map();
     for (const { carteId, im } of resolues) {
-        if (!numerotes && !numeroSansChiffre(im.numero)) continue;
+        // `numerotes` : un numéro ABSENT (null, vide) ne forme jamais de clé — sans cela « null » deviendrait une clé partagée par toutes les images sans numéro et les
+        // refuserait en bloc. Une image sans numéro n'est pas touchée par cette règle (elle se joint, ou non, par son nom comme avant).
+        if (numerotes ? (im.numero == null || String(im.numero).trim() === '') : !numeroSansChiffre(im.numero)) continue;
         const k = `${carteId}|${String(im.numero).trim()}`;
         (parCle.get(k) || parCle.set(k, new Set()).get(k)).add(im.sha256);
     }
