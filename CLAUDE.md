@@ -5,6 +5,30 @@ renégocie pas en cours de route.
 
 ---
 
+## MÉTHODE OBLIGATOIRE — À RELIRE APRÈS TOUTE REPRISE OU COUPURE
+
+- Au démarrage et après toute coupure :
+  - recharger les skills Superpowers ;
+  - relire la fin de RAPPORT-API.md et l'entrée la plus récente de `.superpowers/sdd/PLAN-API-V2/progress.md`, sans relire le reste.
+- Rôles :
+  - un coordinateur seul ;
+  - des sous-agents Sonnet pour coder et relire ;
+  - Haiku pour le mécanique : mesures, inventaires, lecture de journaux.
+- Relectures :
+  - toujours par un relecteur DISTINCT de l'implémenteur ;
+  - en nombre proportionné au risque : 1 passe (faible), 2 (moyen), 3 (argent, production, sécurité) ;
+  - 3 tours de correction au plus par lot, puis arrêt et rapport.
+- Tests :
+  - TDD, avec le rouge vu avant le correctif ;
+  - bancs sur une base EN MÉMOIRE (`mongodb-memory-server`), jamais sur une grappe ;
+  - mutations sur une COPIE, jamais dans le dossier de travail ;
+  - suite complète sous Node 22 ET Node 24 après chaque FUSION seulement, pas à chaque tour.
+- Processus : 🔴 arrêt par PID seulement, celui de ce qu'on a lancé soi-même. Jamais par nom d'image (`taskkill /IM`, `Stop-Process -Name`, `Get-Process node | Stop-Process`) : d'autres agents écrivent en base sur ce poste.
+- Rien n'est poussé, et les dossiers de travail vont dans `C:\Users\Yung\rat-market-travail\api\`.
+- RAPPORT-API.md est tenu à jour après CHAQUE lot : en cas de coupure, c'est lui le rapport.
+
+---
+
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
 
 > # **L'OBJECTIF EST FIXÉ (2026-09-23) : chaque produit qui a une fiche et un visuel chez Cardmarket doit avoir chez nous la BONNE fiche et la BONNE image.**
