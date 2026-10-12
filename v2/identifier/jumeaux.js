@@ -23,25 +23,46 @@ const NE_CONCLUT_PAS = (motif = null) => () => ({ conclu: false, ids: [], ...(mo
 
 /**
  * Le fournisseur de la route : { conclu, ids } pour un produit, lu dans UNE version (celle de la requête). Ne conclut jamais sans colonne.
- * `empreinteCatalogue` { n, max } : le catalogue de la route AUJOURD'HUI (nombre de produits, plus grand idProduct). La colonne décrit celui d'une archive plus ancienne ; si les deux diffèrent
- * (un produit ajouté depuis : il peut être le jumeau qu'elle ne connaît pas), elle ne conclut plus — motif `jumeaux-perimes`. `undefined` = pas de contrôle (le fournisseur est injecté par un banc) ;
- * `null` ou illisible = le catalogue n'a pas pu être lu : on ne peut pas savoir, motif `jumeaux-indisponibles`.
+ * `verdicts` : Map idProduct → 'ok' | 'perime' | 'indisponible', établi AVANT l'adaptation par fournisseurParDefaut (la garde de l'adaptateur est synchrone). La colonne décrit un catalogue plus
+ * ancien : un produit PLUS RÉCENT qu'elle, de la MÊME métacarte que le produit affirmé, est peut-être son jumeau qu'elle ne connaît pas → pour CE produit seulement, `jumeaux-perimes`.
+ * `undefined` = pas de contrôle (le fournisseur est celui d'un banc ou d'un rejeu) ; une Map : tout produit qui n'y figure pas ne conclut pas (jamais un défaut passant).
  */
-function fournisseurDe(version, empreinteCatalogue) {
+function fournisseurDe(version, verdicts) {
     if (!version || version.colonneJumeaux !== true || typeof version.jumeauxDe !== 'function') return NE_CONCLUT_PAS('jumeaux-indisponibles');
-    if (empreinteCatalogue !== undefined) {
-        if (!empreinteValide(empreinteCatalogue)) return NE_CONCLUT_PAS('jumeaux-indisponibles');
-        const e = typeof version.empreinteJumeaux === 'function' ? version.empreinteJumeaux() : null;
-        if (!empreinteValide(e) || e.n !== empreinteCatalogue.n || e.max !== empreinteCatalogue.max) return NE_CONCLUT_PAS('jumeaux-perimes');
-    }
-    return id => { const j = version.jumeauxDe(id); return j === null || j === undefined ? { conclu: false, ids: [], motif: 'jumeaux-indisponibles' } : { conclu: true, ids: j }; };
+    if (verdicts !== undefined && !(verdicts instanceof Map)) return NE_CONCLUT_PAS('jumeaux-indisponibles');
+    return id => {
+        if (verdicts !== undefined) {
+            const v = verdicts.get(id);
+            if (v === 'perime') return { conclu: false, ids: [], motif: 'jumeaux-perimes' };
+            if (v !== 'ok') return { conclu: false, ids: [], motif: 'jumeaux-indisponibles' };
+        }
+        const j = version.jumeauxDe(id);
+        return j === null || j === undefined ? { conclu: false, ids: [], motif: 'jumeaux-indisponibles' } : { conclu: true, ids: j };
+    };
 }
 
-/** Le fournisseur de PRODUCTION : la version EN PLACE et l'empreinte du catalogue lue maintenant (`catalogue.empreinte`, absente ou en échec → null : on ne conclut pas). */
-async function fournisseurParDefaut(catalogue, version) {
-    let e = null;
-    try { if (catalogue && typeof catalogue.empreinte === 'function') e = await catalogue.empreinte(); } catch { e = null; }
-    return fournisseurDe(version, empreinteValide(e) ? e : null);
+/** Les produits qu'une réponse de la chaîne AFFIRME (success et ambigu faux) : les seuls pour lesquels la garde est consultée, donc les seuls à vérifier. */
+function idsAffirmes(corps) {
+    const c = corps && typeof corps === 'object' ? corps.carte : null;
+    return corps && corps.success === true && c && c.ambigu === false && Number.isInteger(c.idProduct) ? [c.idProduct] : [];
+}
+
+/**
+ * Le fournisseur de PRODUCTION : la version EN PLACE, et, pour chacun des produits que la chaîne AFFIRME, UNE requête indexée dans le catalogue de la route — « existe-t-il un produit PLUS RÉCENT que
+ * l'archive (idProduct > maxArchive) de la même métacarte ? ». Oui → ce produit-là seul ne conclut pas (`jumeaux-perimes`) ; non → la colonne s'applique ; la requête échoue, la méthode manque, la
+ * métacarte du produit est inconnue → il ne conclut pas non plus (on échoue fermé). Sans colonne, le catalogue n'est même pas interrogé.
+ */
+async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
+    if (!version || version.colonneJumeaux !== true || typeof version.empreinteJumeaux !== 'function' || typeof version.metacarteJumeaux !== 'function') return NE_CONCLUT_PAS('jumeaux-indisponibles');
+    const verdicts = new Map();
+    const e = version.empreinteJumeaux();
+    for (const id of [...new Set(Array.isArray(idsAffirmes) ? idsAffirmes : [])]) {
+        const meta = version.metacarteJumeaux(id);
+        if (!empreinteValide(e) || meta === null || !catalogue || typeof catalogue.plusRecentDansMetacarte !== 'function') { verdicts.set(id, 'indisponible'); continue; }
+        try { const r = await catalogue.plusRecentDansMetacarte(e.max, meta); verdicts.set(id, r === false ? 'ok' : r === true ? 'perime' : 'indisponible'); }   // « ok » seulement sur un FAUX franc
+        catch { verdicts.set(id, 'indisponible'); }
+    }
+    return fournisseurDe(version, verdicts);
 }
 
 /** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux, seulement s'ils tiennent dans une question (au plus 2). */
@@ -80,4 +101,4 @@ function garde(ctx, idProduct) {
     return { action: 'question', ids: [idProduct, ...jumeaux] };
 }
 
-module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsACharger, compteurs, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS };
+module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, compteurs, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS };

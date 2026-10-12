@@ -327,22 +327,38 @@ async function semer(mode) {                                  // 'double' | 'sim
             // C2 de la relecture 1 : le refus de la garde est NOTRE refus, pas un échec du client — remboursé SANS compter dans le plafond de pannes. Le plafond du jour est PLEIN avant le scan :
             // le remboursement doit quand même partir, et le compteur ne bouge pas (le 6e de la journée est encore rendu).
             const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
-            const compteurPanne = async x => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type: 'panne' }) || {}).count;
+            const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
+            const compteurPanne = x => compteurDe(x, 'panne');
             const refusJ = async (jumeaux, nom, motifAttendu) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
                 const an = j.scanId ? await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) }) : null;
-                H.v(`   ${nom} : introuvable / impression-indeterminee REMBOURSÉ MÊME PLAFOND PLEIN (essai 3, compteur de pannes inchangé), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
-                    [j.analyse && j.analyse.statut, j.analyse && j.analyse.raison, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, (await solde(x.i._id)).essais, await compteurPanne(x), an && an.motifJumeaux, JSON.stringify(j).includes('jumeaux-')],
-                    ['introuvable', 'impression-indeterminee', true, 0, 3, cfg.plafonds.panne, motifAttendu, false]);
+                H.v(`   ${nom} : introuvable / impression-indeterminee REMBOURSÉ, plafond de pannes PLEIN mais compteur DÉDIÉ jumeaux à 1 (essai 3, compteur de pannes inchangé), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
+                    [j.analyse && j.analyse.statut, j.analyse && j.analyse.raison, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux'), an && an.motifJumeaux, JSON.stringify(j).includes('jumeaux-')],
+                    ['introuvable', 'impression-indeterminee', true, 0, 3, cfg.plafonds.panne, 1, motifAttendu, false]);
                 await s.fermer();
             };
+            // C1 de la passe 2 : le 21e refus de la journée n'est plus remboursé quand le plafond de pannes ordinaire est plein aussi (jamais gratuit sans limite)
+            {
+                const s = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] })); const x = await inst(3); await plafondPlein(x);
+                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                const r = await poster(s.url, x.jeton, corps(), { nom: 'jumeau-21e' }), j = r.json || {};
+                H.v('   le 21e refus de la journée (compteur jumeaux plein ET pannes plein) : PAS remboursé — { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }, essai 2, les deux compteurs inchangés',
+                    [j.analyse && j.analyse.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
+                    ['introuvable', 1, false, 'plafond-jour', 2, cfg.plafonds.panne, cfg.plafonds.jumeaux]);
+                // compteur dédié plein mais plafond de pannes libre : le refus est jugé comme un introuvable ORDINAIRE (rendu, et c'est le compteur de pannes qui monte)
+                const y = await inst(3); await raw('plafonds').insertOne({ porteur: `installation:${y.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                const r2 = await poster(s.url, y.jeton, corps(), { nom: 'jumeau-21e-repli' }), j2 = r2.json || {};
+                H.v('   compteur jumeaux plein mais pannes libre : rendu comme un introuvable ordinaire (essai 3), le compteur de pannes monte à 1, celui des jumeaux reste plein',
+                    [j2.facturation && j2.facturation.rembourse, (await solde(y.i._id)).essais, await compteurPanne(y), await compteurDe(y, 'jumeaux')], [true, 3, 1, cfg.plafonds.jumeaux]);
+                await s.fermer();
+            }
             await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
             // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi sans plafond, pas un introuvable
             const panneJ = async (jumeaux, nom) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
-                H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE même plafond plein (essai 3, compteur de pannes inchangé), aucune analyse`,
-                    [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, (await solde(x.i._id)).essais, await compteurPanne(x)],
-                    [503, 'INDISPONIBLE', undefined, true, 'panne', 3, cfg.plafonds.panne]);
+                H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE dans le compteur dédié jumeaux (1) alors que le plafond de pannes est plein et inchangé (essai 3), aucune analyse`,
+                    [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
+                    [503, 'INDISPONIBLE', undefined, true, 'panne', 3, cfg.plafonds.panne, 1]);
                 await s.fermer();
             };
             await panneJ(() => ({ conclu: false, ids: [] }), 'colonne absente (le fournisseur ne conclut pas)');

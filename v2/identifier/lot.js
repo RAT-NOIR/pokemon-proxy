@@ -13,7 +13,7 @@
 //     jusqu'à 10 cartes : un prix manquant sur l'une n'annule pas la lecture des autres — c'est aussi pourquoi `sans-prix` ne rembourse rien sur un lot, retour-live.js).
 const { dansUnScan } = require('../../sources');
 const { adapter, codeLangueDe } = require('./adaptateur');
-const { fournisseurParDefaut, idsACharger } = require('./jumeaux');
+const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const etatChargeur = require('../chargeur/etat');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -96,7 +96,7 @@ async function executerLot(p) {
     const corpsDe = r => (r && r.corps && typeof r.corps === 'object' ? r.corps : {});
     let produits;
     // JUMEAU-V2 : la même garde que la route d'une carte (une version de la colonne pour tout le lot) ; les jumeaux d'une affirmation qui tient dans une question sont chargés avec elle
-    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version());
+    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), resultats.flatMap(r => idsAffirmes(corpsDe(r))));
     try { produits = await catalogue.lire(resultats.flatMap(r => { const c = corpsDe(r); return [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)]; })); }
     catch (e) { journal('catalogue', e); return panne('INDISPONIBLE'); }
     // 3. une carte par résultat, dans l'ordre d'ENTRÉE ; une carte illisible devient « introuvable / panne-lecture » (comptée vue : la lecture a eu lieu)
@@ -112,8 +112,10 @@ async function executerLot(p) {
         return { ...c, index: i, zone: zoneValide(corpsDe(r).zone) };
     });
     const lectures = resultats.map(r => ({ codeLangue: codeLangueDe(corpsDe(r)), reverseStrategie: corpsDe(r).reverse && typeof corpsDe(r).reverse.strategie === 'string' ? corpsDe(r).reverse.strategie : null }));
-    // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), le crédit est rendu hors plafond de pannes
-    if (pannes.length === cartes.length) return panne(pannes[0], false, motifs.every(Boolean) ? { sansPlafond: true } : {});
+    // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), le crédit est rendu dans le compteur DÉDIÉ `jumeaux`, UNE unité par carte
+    // (`every`, jamais `some` : une seule carte refusée par la garde ne fait pas rendre tout un lot hors de son plafond ordinaire)
+    const toutesParLaGarde = motifs.length === cartes.length && motifs.every(Boolean);
+    if (pannes.length === cartes.length) return panne(pannes[0], false, toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});
     const lotInfo = compterLot(cartes, cfg);
     // 4. le supplément : max(1, ceil(N/10)) - 1 unités, TOUT OU RIEN (un administrateur ne paie rien)
     const cout = argent.coutDuLot(cartes.length), supplement = cout - 1;
@@ -136,7 +138,7 @@ async function executerLot(p) {
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un seul identifié ou une seule question et il ne l'est jamais
     let facturation;
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
-        const r = await rendre('introuvable', motifs.some(Boolean) ? { sansPlafond: true } : {});          // un refus de la garde des jumeaux est le NÔTRE : hors plafond de pannes
+        const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : compteur dédié, une unité par carte ; un lot mixte reste jugé au plafond de pannes ordinaire
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
         if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
     } else facturation = admin ? fabriquerFacturation({ motif: 'administrateur', rembourse: false }) : fabriquerFacturation({ debite: cout, motif: 'lot' });

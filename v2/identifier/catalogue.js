@@ -23,20 +23,13 @@ function creerCatalogue(opts = {}) {
     const cfg = opts.cfg || lireConfig();
     const visuels = opts.visuels || creerVisuels({ cfg });
 
-    // JUMEAU-V2 : l'EMPREINTE du catalogue d'aujourd'hui — { n: nombre de produits, max: plus grand idProduct } — comparée à celle que porte la colonne des jumeaux (jumeaux.js : une colonne
-    // dont le catalogue a bougé ne conclut plus). Deux lectures O(1)/O(log n) (compte estimé + tête de l'index idProduct), gardées 30 s : jamais une lecture par scan. Une lecture qui échoue LÈVE
-    // (l'appelant en fait « on ne peut pas conclure »), et rien n'est gardé.
-    const DUREE_EMPREINTE_MS = 30 * 1000;
-    let empreinteGardee = null;
-    async function empreinte() {
-        const maintenant = (opts.maintenant || Date.now)();
-        if (empreinteGardee && maintenant - empreinteGardee.le < DUREE_EMPREINTE_MS) return empreinteGardee.valeur;
-        const c = colLue('catalogue_produits');
-        const n = await c.estimatedDocumentCount();
-        const tete = await c.find({}, { projection: { idProduct: 1 } }).sort({ idProduct: -1 }).limit(1).toArray();
-        const valeur = { n, max: tete.length ? tete[0].idProduct : 0 };
-        empreinteGardee = { le: maintenant, valeur };
-        return valeur;
+    // JUMEAU-V2 : y a-t-il, dans le catalogue d'AUJOURD'HUI, un produit PLUS RÉCENT que l'archive (idProduct > maxArchive) de la MÊME métacarte ? C'est le seul cas où la colonne des jumeaux
+    // (fabriquée plus tôt) peut ignorer un jumeau du produit que la route s'apprête à affirmer. Une requête INDEXÉE (l'index unique sur idProduct borne le balayage aux produits plus récents que
+    // l'archive : quelques dizaines), une par produit affirmé, jamais une lecture globale. Rend true / false ; une lecture qui échoue LÈVE (l'appelant en fait « on ne peut pas conclure »).
+    async function plusRecentDansMetacarte(maxArchive, idMetacard) {
+        if (!Number.isInteger(maxArchive) || !Number.isInteger(idMetacard)) throw new Error('plusRecentDansMetacarte : entiers attendus');
+        const trouves = await colLue('catalogue_produits').find({ idProduct: { $gt: maxArchive }, idMetacard }, { projection: { idProduct: 1 } }).limit(1).toArray();
+        return trouves.length > 0;
     }
 
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
@@ -69,6 +62,6 @@ function creerCatalogue(opts = {}) {
         }
         return table;
     }
-    return { lire, empreinte };
+    return { lire, plusRecentDansMetacarte };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };

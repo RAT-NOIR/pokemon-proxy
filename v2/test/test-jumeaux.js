@@ -119,19 +119,32 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     H.v('fournisseurDe(version) : conclu + ids ; un produit hors colonne : ne conclut pas', [four(740794), four(424242)], [{ conclu: true, ids: [805556, 900003, 900004] }, { conclu: false, ids: [], motif: 'jumeaux-indisponibles' }]);
     H.v('fournisseurDe(null) : ne conclut jamais', C.fournisseurDe(null)(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
     H.v('fournisseurDe(version sans colonne) : ne conclut jamais', C.fournisseurDe(sansColonne)(1), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
-    // I2 de la relecture 1 : la colonne décrit UN catalogue ; si le catalogue de la route a bougé (produit ajouté), elle ne conclut plus
-    const live = { n: 15, max: 900004 };
-    H.v('fournisseurDe(version, empreinte du catalogue identique) : conclut', C.fournisseurDe(v, live)(740794).conclu, true);
-    H.v('   un produit AJOUTÉ au catalogue depuis l\'archive (n différent) : ne conclut plus, motif jumeaux-perimes', C.fournisseurDe(v, { n: 16, max: 900004 })(740794), { conclu: false, ids: [], motif: 'jumeaux-perimes' });
-    H.v('   un autre plus grand idProduct (même n) : périmée aussi', C.fournisseurDe(v, { n: 15, max: 900005 })(740794).motif, 'jumeaux-perimes');
-    H.v('   l\'empreinte du catalogue illisible (null) : ne conclut pas, motif jumeaux-indisponibles', C.fournisseurDe(v, null)(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
-    H.v('   une empreinte de forme inconnue : ne conclut pas', C.fournisseurDe(v, { n: 'x' })(740794).conclu, false);
-    H.v('   la colonne absente reste « ne conclut pas », empreinte ou non', [C.fournisseurDe(sansColonne, live)(1).conclu, C.fournisseurDe(null, live)(1).conclu], [false, false]);
-    // le fournisseur de PRODUCTION lit l'empreinte du catalogue lui-même ; tout ce qui n'est pas une empreinte valide empêche de conclure
-    const pd = async cat => (await C.fournisseurParDefaut(cat, v))(740794);
-    H.v('fournisseurParDefaut : empreinte identique → conclut ; différente → périmée ; qui lève, absente ou illisible → indisponible',
-        [(await pd({ empreinte: async () => live })).conclu, (await pd({ empreinte: async () => ({ n: 99, max: 900004 }) })).motif, (await pd({ empreinte: async () => { throw new Error('mongo muet'); } })).motif, (await pd({})).motif, (await pd({ empreinte: async () => ({ n: 0, max: 0 }) })).motif],
-        [true, 'jumeaux-perimes', 'jumeaux-indisponibles', 'jumeaux-indisponibles', 'jumeaux-indisponibles']);
+    // Passe 2 (I1, N1) : la colonne décrit UN catalogue, le plus grand idProduct qu'elle couvre est `maxArchive`. Un produit PLUS RÉCENT, de la MÊME métacarte que le produit affirmé, est peut-être son jumeau
+    // inconnu de la colonne : pour CE produit seulement, la garde ne conclut pas. Un produit ajouté ailleurs ne bloque rien.
+    H.v('l\'archive porte le plus grand idProduct qu\'elle couvre et la métacarte de chaque produit', [v.empreinteJumeaux().max, v.metacarteJumeaux(740794), v.metacarteJumeaux(1), v.metacarteJumeaux(424242), v.metacarteJumeaux(70)], [900004, 426438, 111, null, null]);
+    const verdicts = new Map([[740794, 'ok'], [1, 'perime'], [2, 'indisponible']]);
+    const fv = C.fournisseurDe(v, verdicts);
+    H.v('fournisseurDe(version, verdicts) : ok → conclut ; périmé → motif jumeaux-perimes ; indisponible → jumeaux-indisponibles ; produit non vérifié → ne conclut pas (jamais un défaut passant)',
+        [fv(740794).conclu, fv(1), fv(2), fv(424242), fv(3)],
+        [true, { conclu: false, ids: [], motif: 'jumeaux-perimes' }, { conclu: false, ids: [], motif: 'jumeaux-indisponibles' }, { conclu: false, ids: [], motif: 'jumeaux-indisponibles' }, { conclu: false, ids: [], motif: 'jumeaux-indisponibles' }]);
+    H.v('   la colonne absente reste « ne conclut pas », verdicts ou non', [C.fournisseurDe(sansColonne, new Map([[1, 'ok']]))(1).conclu, C.fournisseurDe(null, new Map([[1, 'ok']]))(1).conclu], [false, false]);
+    // le fournisseur de PRODUCTION : une requête indexée par produit affirmé (idProduct > maxArchive ET même métacarte), pour CE scan seulement
+    const appels = [];
+    const cat = (nouveaux) => ({ plusRecentDansMetacarte: async (max, meta) => { appels.push([max, meta]); if (nouveaux === 'leve') throw new Error('mongo muet'); return nouveaux.includes(meta); } });
+    const pd = async (c, ids, ver = v) => C.fournisseurParDefaut(c, ver, ids);
+    const sansNouveau = await pd(cat([]), [740794, 1]);
+    H.v('fournisseurParDefaut : aucun produit plus récent sous leur métacarte → les deux conclut ; la requête reçoit (maxArchive, métacarte du produit)', [sansNouveau(740794).conclu, sansNouveau(1).conclu, appels.sort().join('|')], [true, true, [[900004, 111], [900004, 426438]].join('|')]);
+    const ailleurs = await pd(cat([999]), [740794, 1]);
+    H.v('   un produit ajouté sous UNE AUTRE métacarte ne bloque rien', [ailleurs(740794).conclu, ailleurs(1).conclu], [true, true]);
+    const sousP = await pd(cat([426438]), [740794, 1]);
+    H.v('   un produit ajouté sous la métacarte de 740794 bloque 740794 SEUL (jumeaux-perimes) ; 1 conclut', [sousP(740794), sousP(1).conclu], [{ conclu: false, ids: [], motif: 'jumeaux-perimes' }, true]);
+    const casseCat = await pd(cat('leve'), [740794]);
+    H.v('   la requête échoue : la garde ne conclut pas (jumeaux-indisponibles), on échoue fermé', casseCat(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
+    H.v('   un catalogue sans la méthode : ne conclut pas', (await pd({}, [740794]))(740794).motif, 'jumeaux-indisponibles');
+    H.v('   un produit hors colonne (métacarte inconnue) ou non annoncé comme affirmé : ne conclut pas', [(await pd(cat([]), [70]))(70).motif, (await pd(cat([]), [740794]))(1).motif], ['jumeaux-indisponibles', 'jumeaux-indisponibles']);
+    const n0 = appels.length;
+    H.v('   sans colonne : ne conclut pas, et le catalogue n\'est même pas interrogé', [(await pd(cat([]), [1], sansColonne))(1).motif, appels.length - n0], ['jumeaux-indisponibles', 0]);
+    H.v('idsAffirmes : seulement le produit d\'une affirmation de la chaîne (success, ambigu false)', [C.idsAffirmes({ success: true, carte: { idProduct: 7, ambigu: false } }), C.idsAffirmes({ success: true, carte: { idProduct: 7, ambigu: true } }), C.idsAffirmes({ success: false }), C.idsAffirmes(null)], [[7], [], [], []]);
     H.v('idsACharger : les jumeaux de l\'affirmation, seulement s\'ils tiennent dans une question (au plus 2)', [
         C.idsACharger({ success: true, carte: { idProduct: 740794, ambigu: false }, candidats: [{ idProduct: 740794 }] }, C.fournisseurDe(relue)),
         C.idsACharger({ success: true, carte: { idProduct: 1, ambigu: false }, candidats: [] }, four),

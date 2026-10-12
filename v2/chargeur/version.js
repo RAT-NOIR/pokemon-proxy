@@ -92,8 +92,10 @@ function assembler(d) {
         },
         /** La colonne des jumeaux est-elle chargée ? (un fichier d'avant la colonne : non — aucune affirmation ne peut alors être conclue.) */
         colonneJumeaux: Boolean(jum),
-        /** Le catalogue que la colonne décrit : { n: nombre de produits, max: plus grand idProduct } — la route le compare à celui d'aujourd'hui (une colonne périmée ne conclut pas). null sans colonne. */
+        /** Ce que la colonne couvre : { n: nombre de produits, max: le plus grand idProduct qu'elle connaît }. La route cherche, pour un produit qu'elle s'apprête à affirmer, un produit PLUS RÉCENT (> max) de sa métacarte. null sans colonne. */
         empreinteJumeaux() { return jum && jum.id.length ? { n: jum.id.length, max: jum.id[jum.ordre[jum.id.length - 1]] } : null; },
+        /** La métacarte d'un produit selon la colonne, ou null (colonne absente, produit hors colonne, métacarte inconnue). */
+        metacarteJumeaux(id) { if (!jum || !Number.isInteger(id)) return null; const r = plusPetitOrdre(jum, id); return r < 0 || jum.meta[r] < 0 ? null : jum.meta[r]; },
         /** Les jumeaux d'un produit (idProduct triés), ou null quand on ne peut PAS conclure : colonne absente, produit hors colonne, métacarte inconnue. [] = conclu, aucun jumeau. */
         jumeauxDe(id) {
             if (!jum || !Number.isInteger(id)) return null;

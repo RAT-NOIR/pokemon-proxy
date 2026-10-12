@@ -104,6 +104,7 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_ESSAIS` / `V2_ACCUEIL` / `V2_HEBDO` / `V2_ABO_MENSUEL` | 3 / 25 / 2 / 100 | défauts | invalide (non entier, négatif) | oui ; `0` = aucune dotation |
 | `V2_PLAFOND_PANNES` / `V2_PLAFOND_QUESTIONS` | 5 / 30 | défauts | invalide | oui ; `0` refuse tout remboursement (le client paie) |
 | `V2_SANS_PRIX_JOUR` / `V2_LOT_TROP_GRAND_JOUR` | 5 / 10 | défauts | invalide | oui ; `0` refuse tout remboursement (le client paie) |
+| `V2_JUMEAUX_REMBOURSES_JOUR` | 20 | 20 refus de la garde des jumeaux remboursés par jour et par porteur, une unité par carte, **posé SANS mesure d'usage réel** ; plein, le refus retombe sur le plafond de pannes ordinaire | invalide | oui ; `0` renvoie tout au plafond de pannes |
 | `V2_LOT_CARTES_MAX` | 20 | 20 | invalide (non entier, < 2 ou > 100) | oui |
 | `V2_LECTURE_LIVE_MAX` | 5 | 5 | invalide | oui |
 | `V2_ESSAIS_GLOBAUX_JOUR` | 500 | 500 (au-delà, une installation neuve naît avec 0 essai) | invalide | oui |

@@ -60,7 +60,10 @@ function lireConfig(env = process.env) {
         // Remboursements par JOUR UTC et par PORTEUR (le compte quand il y en a un, sinon l'installation) : panne 5, question 30, et deux compteurs PROPRES (lot PLAFONDS, 2026-10-11) —
         // sansPrix : « prix illisible, définitif » déclaré par le client (5) ; lotTropGrand : refus `lot-trop-grand`, taille ou quota (10). Au-delà : pas de remboursement.
         plafonds: { panne: entier('V2_PLAFOND_PANNES', env.V2_PLAFOND_PANNES, 5), question: entier('V2_PLAFOND_QUESTIONS', env.V2_PLAFOND_QUESTIONS, 30),
-                    sansPrix: entier('V2_SANS_PRIX_JOUR', env.V2_SANS_PRIX_JOUR, 5), lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
+                    sansPrix: entier('V2_SANS_PRIX_JOUR', env.V2_SANS_PRIX_JOUR, 5), lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10),
+                    // jumeaux : les refus de la garde des jumeaux (impression indéterminée, colonne indisponible) — NOS refus, remboursés dans un compteur dédié, UNE unité par carte (20 par jour et par porteur
+                    // par défaut, POSÉ SANS MESURE D'USAGE RÉEL) ; plein, le refus retombe sur le plafond de pannes ordinaire.
+                    jumeaux: entier('V2_JUMEAUX_REMBOURSES_JOUR', env.V2_JUMEAUX_REMBOURSES_JOUR, 20) },
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).

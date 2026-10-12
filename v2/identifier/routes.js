@@ -92,7 +92,7 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe } = require('./adaptateur');
-const { fournisseurParDefaut, idsACharger } = require('./jumeaux');
+const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
@@ -256,7 +256,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null;
-        const rembourserMoi = (motif, sansPlafond = false) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne', ...(sansPlafond ? { sansPlafond: true } : {}) });
+        // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → compteur DÉDIÉ `jumeaux`, une unité (une carte) ; plein, le ledger le juge au plafond de pannes ordinaire
+        const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
@@ -297,7 +298,8 @@ function traiterIdentifier(cfg, deps = {}) {
                     // B1b.5 : ce que /reponse ne pourra pas relire (la langue lue et la stratégie reverse) pour fabriquer le prixLive d'une carte tranchée
                     lecture = { codeLangue: codeLangueDe(c), reverseStrategie: c.reverse && typeof c.reverse.strategie === 'string' ? c.reverse.strategie : null };
                     // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
-                    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version());
+                    // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
+                    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), idsAffirmes(c));
                     const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)];
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
@@ -345,7 +347,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 }
                 // le filet : une panne ou un « introuvable » sont TOUJOURS rendus ; si la chaîne ne l'a pas tenté, c'est ici (annule aussi une question réservée)
                 if (!admin && credit && (resultat.issue === 'panne' || resultat.issue === 'introuvable') && !reqH.scanRembourse) {
-                    // un refus de la garde des jumeaux (resultat.motif) est NOTRE refus : rendu hors plafond de pannes (l'unicité par scan reste)
+                    // un refus de la garde des jumeaux (resultat.motif) est NOTRE refus : rendu dans le compteur dédié `jumeaux` (l'unicité par scan reste)
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };

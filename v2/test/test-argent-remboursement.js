@@ -195,5 +195,32 @@ const plaf = async(p, jour, type) => (await db.col('plafonds').findOne({ porteur
         [Array(4).fill([false, 'erreur']), 4, 0, 0]);
     const n19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: null, maintenant: t }, cfg);
     H.v('    compteur null : refusé aussi ; le défaut (sans compteur) reste « panne »', [n19.rendu, (await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', maintenant: t }, cfg)).rendu, (await plaf(p19, '2026-10-08', 'panne')).count], [false, true, 1]);
+    // 20. JUMEAU-V2 (C1 de la passe 2) : les refus de la garde des jumeaux ont un compteur DÉDIÉ `jumeaux` (20 par jour et par porteur, V2_JUMEAUX_REMBOURSES_JOUR), UNE unité par carte ;
+    //     au-delà, le refus retombe sur le plafond de pannes ORDINAIRE (mêmes règles de facturation) : jamais gratuit sans limite.
+    H.v('20. plafond par défaut du compteur jumeaux : 20 ; variable V2_JUMEAUX_REMBOURSES_JOUR', [cfg.plafonds.jumeaux, lireConfig({ MONGODB_BASE: 'test_scratch', V2_JUMEAUX_REMBOURSES_JOUR: '3' }).plafonds.jumeaux], [20, 3]);
+    const p20 = await compte({ solde: { accueil: 0, achete: 100 } }); const c20 = [];
+    for (let i = 0; i < 22; i++) c20.push(await prendre(p20, `jm${i}`));
+    const r20 = []; for (let i = 0; i < 20; i++) r20.push((await Lg.rembourser(p20, c20[i], 'introuvable', { scanId: `jm${i}`, compteur: 'jumeaux', maintenant: t }, cfg)).rendu);
+    H.v('   20 refus de la garde : 20 rendus, compteur jumeaux à 20, compteur de pannes INTACT', [r20.every(Boolean), (await plaf(p20, '2026-10-08', 'jumeaux')).count, (await plaf(p20, '2026-10-08', 'panne'))?.count ?? 0], [true, 20, 0]);
+    const r21 = await Lg.rembourser(p20, c20[20], 'introuvable', { scanId: 'jm20', compteur: 'jumeaux', maintenant: t }, cfg);
+    H.v('   le 21e : le compteur dédié est plein, il retombe sur le plafond de pannes ordinaire (rendu, pannes à 1, jumeaux resté à 20)', [r21.rendu, (await plaf(p20, '2026-10-08', 'panne')).count, (await plaf(p20, '2026-10-08', 'jumeaux')).count], [true, 1, 20]);
+    await db.col('plafonds').updateOne({ porteur: `compte:${p20.id}`, jour: '2026-10-08', type: 'panne' }, { $set: { count: cfg.plafonds.panne } });
+    const r22 = await Lg.rembourser(p20, c20[21], 'introuvable', { scanId: 'jm21', compteur: 'jumeaux', maintenant: t }, cfg);
+    H.v('   pannes aussi pleines : le refus n\'est PAS remboursé (plafond-jour), le crédit reste débité, le claim est libéré, les deux compteurs inchangés',
+        [r22, (await plaf(p20, '2026-10-08', 'panne')).count, (await plaf(p20, '2026-10-08', 'jumeaux')).count, await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|jm21' }), (await mouvDebit(p20, 'jm21')).etat],
+        [{ rendu: false, raisonNonRembourse: 'plafond-jour' }, cfg.plafonds.panne, 20, 0, 'debite']);
+    // une unité PAR CARTE : un lot de 3 cartes refusées consomme 3 unités du compteur dédié
+    const p20b = await compte({ solde: { accueil: 0, achete: 20 } }); const l20 = await lotDe(p20b, 'lotJ', 3);
+    const rl20 = await Lg.rembourser(p20b, l20[0], 'introuvable', { scanId: 'lotJ', compteur: 'jumeaux', unites: 3, maintenant: t }, cfg);
+    H.v('   un lot de 3 cartes refusées : rendu en entier, 3 unités du compteur dédié (pas 1), pannes intact', [rl20.rendu, (await plaf(p20b, '2026-10-08', 'jumeaux')).count, (await plaf(p20b, '2026-10-08', 'panne'))?.count ?? 0], [true, 3, 0]);
+    // 19 + 3 unités dépasse 20 : le compteur dédié est rendu à 19 et c'est le plafond de pannes ordinaire qui juge (une unité)
+    await db.col('plafonds').updateOne({ porteur: `compte:${p20b.id}`, jour: '2026-10-08', type: 'jumeaux' }, { $set: { count: 19 } });
+    const l20b = await lotDe(p20b, 'lotK', 3);
+    const rk = await Lg.rembourser(p20b, l20b[0], 'introuvable', { scanId: 'lotK', compteur: 'jumeaux', unites: 3, maintenant: t }, cfg);
+    H.v('   19 déjà pris + 3 unités > 20 : le compteur dédié reste à 19 (rollback complet), le plafond de pannes ordinaire juge (rendu, pannes 1)', [rk.rendu, (await plaf(p20b, '2026-10-08', 'jumeaux')).count, (await plaf(p20b, '2026-10-08', 'panne')).count], [true, 19, 1]);
+    // des unités mal formées sont refusées (jamais 0, négatif ou fractionnaire : un compteur qui ne monte pas serait gratuit sans limite)
+    const p20c = await compte({ solde: { accueil: 0, achete: 9 } }); const c20c = await prendre(p20c, 'u0');
+    const mal = []; for (const u of [0, -1, 1.5, '2', NaN]) mal.push((await Lg.rembourser(p20c, c20c, 'introuvable', { scanId: 'u0', compteur: 'jumeaux', unites: u, maintenant: t }, cfg)).raisonNonRembourse);
+    H.v('   unites 0, -1, 1.5, « 2 », NaN : toutes refusées (erreur), rien d\'écrit, crédit resté débité', [mal, await db.col('plafonds').countDocuments({ porteur: `compte:${p20c.id}` }), (await lire(p20c)).solde.achete], [Array(5).fill('erreur'), 0, 8]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
