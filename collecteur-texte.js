@@ -34,6 +34,7 @@ const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
 const { gardeNomSeul } = require('./collecte-cartes/garde-nom-seul');
+const { ecrirePageDeCarte } = require('./collecte-cartes/page-de-carte');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -349,34 +350,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
             await M.Etat.updateOne({ _id: slug }, { $push: { pages: { titre: t, pageid: null, revid: null, etat: 'manquant' } } });
         }
         for (const pg of pages) {
-            const epure = epurer(pg.content, D.epure);
-            const cle = r2.cleWikitext(pg.pageid, pg.revid);
-            const depot = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, cle, epure);   // R2 AVANT la ligne
-            if (depot.ecrit) r2Ecrits++;
-            const faits = faitsDeCarte(pg.content, pg.title);
-            compter(faits);
-            const impCible = impressionCible(faits);
-            const { champsNuls, ...champs } = faits;
-            // 🔴 une page déjà en base porte des illustrateurs POSÉS APRÈS le parseur : le `$set` du tableau les effaçait
-            // (2 179 perdus le 2026-09-24, recollectes de xASC et HSP). Ils se reportent par la clé de l'impression.
-            const P = reporterChampsPoses((await M.Carte.findById(pg.pageid).select('impressions').lean())?.impressions, champs.impressions);
-            champs.impressions = P.impressions; D.posesReportes = (D.posesReportes || 0) + P.reportes; D.posesPerdus = (D.posesPerdus || 0) + P.perdus;
-            await M.Carte.updateOne({ _id: pg.pageid }, {
-                $set: {
-                    ...champs, rarete: impCible?.rarete ?? null, champsNuls,
-                    bulba: { titre: pg.title, pageid: pg.pageid, revid: pg.revid, redirigeDepuis: redirigeDepuisTout.get(pg.title) || [], cleR2: cle },
-                    collecteLe: new Date()
-                },
-                $addToSet: { sets: slug }, $setOnInsert: { version: 1, liens: { idProduct: [], idMetacards: [] } }
-            }, { upsert: true });
-            ecrites++;
-            textesEpures.set(pg.pageid, epure);
-            // l'état APRÈS l'unité : les titres du lot qui ont mené à cette page (cible + redirigés)
-            const titresDeCettePage = [pg.title, ...(redirigeDepuisTout.get(pg.title) || [])].filter(t => lot.includes(t));
-            await M.Etat.updateOne({ _id: slug }, {
-                $push: { pages: { $each: titresDeCettePage.map(t => ({ titre: t, pageid: pg.pageid, revid: pg.revid, etat: 'ok' })) } },
-                $set: { phase: 'texte', derniereRequete: new Date(), requetes: bulba.compteRequetes() }
-            });
+            // 🔑 R4 : une page n'est écrite comme carte (et inscrite dans `cartes.sets`) que si collecte-cartes/page-de-carte.js l'autorise —
+            // une page d'homonymie ({{disambig}}, {{tcgdisambig}}) devient un reste et un état, jamais une carte (banc test-page-de-carte.js).
+            const r = await ecrirePageDeCarte({ M, r2, bucket: process.env.R2_BUCKET_BRUT, pg, slug, lot, redirigeDepuisTout, D, textesEpures, compter, impressionCible, compteRequetes: bulba.compteRequetes });
+            if (r.ecrite) { ecrites++; if (r.r2Ecrit) r2Ecrits++; }
+            else console.warn(`   ⚠️ « ${pg.title} » n'est pas une carte (${r.motif}) : ni écrite ni inscrite dans ${slug}`);
         }
         console.log(`   lot ${Math.floor(i / 50) + 1} : ${pages.length} pages, ${redirections.size} redirections, ${manquantes.length} manquantes`);
     }
