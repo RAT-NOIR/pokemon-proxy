@@ -134,6 +134,8 @@ function creerPage(dossierImages, nomFiche, fiche) {
     fs.mkdirSync(path.join(dossierImages, fiche.code), { recursive: true });
     const page = { schema: 2, code: fiche.code, url: fiche.url, le: fiche.le, fiche: nomFiche, sha256Html: fiche.sha256,
         tuiles: fiche.tuiles.map(t => ({ id: t.id, nom: t.nom, numero: t.numero, code: t.code, img: t.img })),
+        // ce que la page déclare de l'ORIGINE des visuels (lireOrigines) et le dénominateur de la lecture : l'import n'a pas besoin d'une autre pièce pour la provenance
+        origines: fiche.origines, ancres: fiche.ancres, flux: fiche.flux,
         sansImageDansLeNavigateur: null, lots: 0, recues: {}, refusees: {} };
     ecrireFichier(cheminPage(dossierImages, fiche.code, nomFiche), JSON.stringify(page));
     return page;
