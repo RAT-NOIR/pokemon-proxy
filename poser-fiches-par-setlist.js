@@ -63,7 +63,7 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
         if (!v.ok) {
             log(`   🔴 CALIBRATION INSUFFISANTE : ${v.refus.join(' · ')}`);
             if (ecrire) { err('❌ ARRÊT : la garde de calibration refuse — rien n\'est écrit'); return 1; }
-        } else log('   ✅ la calibration passe (0 faux sur A et sur D-A, cas atteints >= minimums ; D-C non concluante, hors de la décision)');
+        } else log('   ✅ la calibration passe (0 faux sur A, B, C, D-A et D-C ; cas atteints >= minimums pour A et D-A)');
 
         // ── le plan ──
         const exp = chargerExport(EXPORT);
