@@ -340,7 +340,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 if (resultat.issue === 'question' && reqH.questionId) {
                     let ok = false;
                     try {
-                        const r = await col('questions').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { choix: resultat.question.choix.map(x => ({ id: x.id, idProduct: x.idProduct })) } });
+                        const r = await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { choix: resultat.question.choix.map(x => ({ id: x.id, idProduct: x.idProduct })) } });
                         ok = r.matchedCount === 1;
                     } catch (e) { journalErreur('choix de la question', e); }
                     if (!ok) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
@@ -477,7 +477,7 @@ function traiterReponse(cfg, deps = {}) {
             // « scan d'un autre porteur » et ferait abandonner à tort. 503 INDISPONIBLE, réessayable, question intacte (le balayage la rend à 24 h si rien ne revient).
             // Sans question non plus : le scan n'existe pas pour ce porteur => 404.
             let q = null;
-            try { q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id }, { projection: { _id: 1 } }); }
+            try { q = await col('questions_v2').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id }, { projection: { _id: 1 } }); }
             catch (e) { journalErreur('question', e); return repondreErreur(res, 'INDISPONIBLE'); }
             if (q) { console.error(`🔴 [v2 reponse] scan ${scanId} (${porteur.type}:${porteur.id}) : question présente, ligne analyses ABSENTE — réponse refusée en 503, question intacte`); return repondreErreur(res, 'INDISPONIBLE', undefined, { detail: 'analyse-absente' }); }
             return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');

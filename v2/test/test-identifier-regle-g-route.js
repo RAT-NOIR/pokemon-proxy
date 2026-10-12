@@ -170,7 +170,7 @@ function chargerFixtures() {
         H.v('3a. G affirme, la chaîne affirme le même produit : identifiee, facturation affirmee { debite:1 }, essai 3 -> 2, aucun désaccord', [a.j.analyse.statut, a.j.analyse.cartes[0].carte.idProduct, a.j.facturation.motif, a.j.facturation.debite, await essaisDe(a.i._id), (await analyseDe(a.j)).desaccordRegleG], ['identifiee', P, 'affirmee', 1, 2, undefined]);
         // G pose une question sur Q, la chaîne pose la même question : accord => a-trancher, crédit réservé
         const b = await jouer(svOn, { mode: 'ambigue', ids: Q }, 'question');
-        const qb = await raw('questions').findOne({ _id: `${b.j.scanId}:0` });
+        const qb = await raw('questions_v2').findOne({ _id: `${b.j.scanId}:0` });
         H.v('3b. G pose une question, la chaîne pose la même : a-trancher, facturation { debite:0, reserve:1, motif:question }, aucun désaccord', [b.j.analyse.statut, b.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort(), b.j.facturation, (await analyseDe(b.j)).desaccordRegleG], ['a-trancher', [...Q].sort(), { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, undefined]);
         H.v('   la question existe, en-attente, ses choix = choixPour(candidats)', [qb && qb.etat, qb && qb.choix], ['en-attente', choixPour(Q.slice(0, 3))]);
         // JUMEAU-V2 (C1 de la relecture 1) : la règle G, quand elle est d'accord avec une affirmation de la chaîne, ne la RESTAURE jamais — le produit a un jumeau, la réponse reste une question (crédit réservé)
@@ -199,7 +199,7 @@ function chargerFixtures() {
         const net = async x => (await mouvements(x.i._id)).reduce((s, m) => s + m.delta, 0);
         const ouverts = async x => (await mouvements(x.i._id)).filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat);
         H.v('4a. chaîne affirme / G question : a-trancher avec les candidats de G, facturation reserve (celle de l\'issue RETENUE, pas de l\'affirmation)', [a.j.analyse.statut, a.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort((x, y) => x - y), a.j.facturation], ['a-trancher', [...Q].slice(0, 3).sort((x, y) => x - y), reserve]);
-        H.v('   essai 3 -> 2, net -1, un seul débit RÉSERVÉ, question en-attente avec ses choix', [await essaisDe(a.i._id), await net(a), await ouverts(a), (await raw('questions').findOne({ _id: `${a.j.scanId}:0` })).etat], [2, -1, ['reserve'], 'en-attente']);
+        H.v('   essai 3 -> 2, net -1, un seul débit RÉSERVÉ, question en-attente avec ses choix', [await essaisDe(a.i._id), await net(a), await ouverts(a), (await raw('questions_v2').findOne({ _id: `${a.j.scanId}:0` })).etat], [2, -1, ['reserve'], 'en-attente']);
         const anA = await analyseDe(a.j);
         H.v('   desaccordRegleG écrit : chaîne affirmee, G question, retenue a-trancher, produits des deux côtés', anA.desaccordRegleG, { chaine: 'affirmee', regleG: 'question', retenue: 'a-trancher', produitsChaine: [ID_A], produitsRegleG: Q.slice(0, 3) });
         H.v('4b. chaîne question / G affirme : la question de la chaîne reste (2 candidats), facturation reserve', [b.j.analyse.statut, b.j.analyse.cartes[0].candidats.map(c => c.idProduct), b.j.facturation, await essaisDe(b.i._id), await ouverts(b)], ['a-trancher', [ID_A, ID_B], reserve, 2, ['reserve']]);
@@ -212,7 +212,7 @@ function chargerFixtures() {
         // la question née du désaccord se RÉPOND comme n'importe quelle autre : débit unique
         const argentReg = registre.obtenir('argent');
         const porteurA = { type: 'installation', id: a.i._id, compte: null, installation: a.i, surface: 'extension', administrateur: false };
-        const idChoix = (await raw('questions').findOne({ _id: `${a.j.scanId}:0` })).choix[0].id;
+        const idChoix = (await raw('questions_v2').findOne({ _id: `${a.j.scanId}:0` })).choix[0].id;
         await argentReg.repondreQuestion(porteurA, { scanId: new mongoose.Types.ObjectId(a.j.scanId), carte: 0, choix: idChoix });
         H.v('   répondre à la question du désaccord 4a : débitée UNE fois (essai 2, net -1, débit « debite »)', [await essaisDe(a.i._id), await net(a), await ouverts(a)], [2, -1, ['debite']]);
         const abandon = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
@@ -244,7 +244,7 @@ function chargerFixtures() {
         await raw('catalogue_produits').deleteOne({ idProduct: Q[1] });
         const un = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
         H.v('4bis-i. G pose {Q0,Q1}, Q1 absent du catalogue : question entre la chaîne et Q0 (jamais identifiee), facturation reserve, essai 2, un débit RÉSERVÉ', [un.r.statut, un.j.analyse.statut, un.j.analyse.cartes[0].candidats.map(x => x.idProduct).sort((x, y) => x - y), un.j.facturation, await essaisDe(un.i._id), await ouvertsDe(un)], [200, 'a-trancher', [ID_A, Q[0]].sort((x, y) => x - y), reserve, 2, ['reserve']]);
-        H.v('      net -1 (un crédit réservé, aucun perdu) ; desaccordRegleG.retenue a-trancher ; la question existe, en-attente', [await netDe(un), (await analyseDe(un.j)).desaccordRegleG.retenue, (await raw('questions').findOne({ _id: `${un.j.scanId}:0` })).etat], [-1, 'a-trancher', 'en-attente']);
+        H.v('      net -1 (un crédit réservé, aucun perdu) ; desaccordRegleG.retenue a-trancher ; la question existe, en-attente', [await netDe(un), (await analyseDe(un.j)).desaccordRegleG.retenue, (await raw('questions_v2').findOne({ _id: `${un.j.scanId}:0` })).etat], [-1, 'a-trancher', 'en-attente']);
         // (ii) aucun candidat de G n'est présent : {A} seul => introuvable, crédit rendu
         await raw('catalogue_produits').deleteOne({ idProduct: Q[0] });
         const aucun = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
@@ -283,7 +283,7 @@ function chargerFixtures() {
             const repondre = (x, choix) => H.appel(svOn.url, '/api/identifier/reponse', { methode: 'POST', corps: { scanId: x.j.scanId, carte: 0, choix }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}` } });
             const viaG = await jouerAdmin({ mode: 'affirmee', ids: [ID_A] }, 'question');
             const viaChaine = await jouerAdmin({ mode: 'ambigue', ids: Q }, 'nul');
-            const ligneQ = async x => Boolean(await raw('questions').findOne({ _id: `${x.j.scanId}:0` }));
+            const ligneQ = async x => Boolean(await raw('questions_v2').findOne({ _id: `${x.j.scanId}:0` }));
             const forme = async x => [x.r.statut, x.j.analyse.statut, x.j.facturation.motif, x.j.analyse.cartes[0].candidats.length, await ligneQ(x)];
             H.v('3b. administrateur : la question née de G a la MÊME forme que celle de la chaîne (statut, a-trancher, motif administrateur, nb de candidats, ligne questions)', await forme(viaG), await forme(viaChaine));
             console.log(`   (comportement préexistant : ligne « questions » pour une question d'administrateur de la chaîne = ${await ligneQ(viaChaine)}, pour celle de G = ${await ligneQ(viaG)})`);

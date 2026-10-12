@@ -192,7 +192,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await repondre(U, 'le scan d\'un AUTRE porteur', 404, autre.jeton, { scanId: a.scanId, choix: 'a' });
         await repondre(U, 'scan inconnu', 404, a.jeton, { scanId: String(new mongoose.Types.ObjectId()), choix: 'a' });
         const d = await scanAmbigu(U, 3, 'a-trancher à 2 pour une question expirée');
-        await raw('questions').updateOne({ _id: `${d.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
+        await raw('questions_v2').updateOne({ _id: `${d.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
         await repondre(U, 'question abandonnée après 24 h', 410, d.jeton, { scanId: d.scanId, choix: 'a' });
         const e = await scanAmbigu(U, 3, 'a-trancher à 2 pour une clé réutilisée'), k = cle();
         await repondre(U, 'première réponse avec clé', 200, e.jeton, { scanId: e.scanId, choix: 'a' }, { cleIdem: k });
@@ -354,7 +354,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         H.v('   … a-trancher, facturation { debite:0, reserve:1, motif:question }', r3.json && [r3.json.analyse.statut, r3.json.facturation.debite, r3.json.facturation.reserve, r3.json.facturation.motif], ['a-trancher', 0, 1, 'question']);
         // repli de question : la question n'a pas pu être écrite
         const colOrig = db.col;
-        const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
+        const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
         const journalMute = console.error; console.error = () => { };
         try {
             const p4 = await inst(3); sansEcritureQuestion();
@@ -592,7 +592,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         mode = 'affirmee';
         await rep('choix « aucune »', 200, c, rb.json.scanId, { choix: 'aucune' });
         await rep('choix « ne-sait-pas »', 200, c, rc.json.scanId, { choix: 'ne-sait-pas' });
-        await raw('questions').updateOne({ _id: `${rd.json.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
+        await raw('questions_v2').updateOne({ _id: `${rd.json.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
         await rep('question abandonnée après 24 h', 410, c, rd.json.scanId, { choix: 'a' });
         const k2 = cle(); await claimEnCours(`compte:${c.c._id}`, 'reponse-scanner', k2, { choix: 'a', scanId: rb.json.scanId });
         await rep('même Idempotency-Key encore en cours (DEBIT)', 429, c, rb.json.scanId, { choix: 'a' }, siteH(c.cookie, { 'idempotency-key': k2 }));

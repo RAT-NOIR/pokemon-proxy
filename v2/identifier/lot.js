@@ -153,7 +153,7 @@ async function executerLot(p) {
             } catch (e) { journal('question', e); }
             if (r && r.etat === 'en-attente') { posees.push(c.index); continue; }
             // une question qui n'existe pas n'est répondable par personne : tout le lot devient une panne (jamais un a-trancher sans question)
-            try { await col('questions').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, etat: 'en-attente' },
+            try { await col('questions_v2').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, etat: 'en-attente' },
                 { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: new Date() } }); } catch (e) { journal('annulation des questions', e); }
             return panne('SERVEUR', Boolean(r && r.etat === 'remboursee'));
         }

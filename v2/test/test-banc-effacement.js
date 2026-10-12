@@ -487,7 +487,7 @@ async function section(nom, f) {
 
     // ═══ RULING 3 — l'abandon à 24 h exactes ═══
     await section('abandon 24 h', async () => {
-        await db.col('questions').deleteMany({});
+        await db.col('questions_v2').deleteMany({});
         const p = await compte({ solde: { accueil: 0, achete: 9 } });
         const t = new Date('2026-10-08T10:00:00Z'); let n = 0;
         const poser = async lot => { const scanId = `scQ${++n}x`; const d = await Lg.debiter(p, { scanId, cleIdempotence: `d|${scanId}`, maintenant: t }, cfg);
@@ -521,7 +521,7 @@ async function section(nom, f) {
         H.v('   banc absent du registre : le balayage réussit quand même', r4, true);
         const r5 = await monterId.balayerQuestionsUneFois({ etatMongo: () => 1, argent: () => ({ balayerQuestions: async () => ({}) }), banc: () => fauxBanc });
         H.v('   un bilan sans `abandonnees` ({}) : rien appelé, pas d\'erreur', r5, true);
-        await db.col('questions').deleteMany({});
+        await db.col('questions_v2').deleteMany({});
     });
 
     // ═══ (7)(8) le crochet câblé, de bout en bout par HTTP ═══
@@ -723,7 +723,7 @@ async function section(nom, f) {
         H.v('(8) corps de /api/identifier/reponse identiques avec et sans banc (3 variantes)', [reps.every(r => r[2] === 200), reps.filter(r => r[1] !== reps[0][1]).map(r => r[0])], [true, []]);
         await reset();
         await avecDet.fermer(); await avecLot.fermer(); await sansDet.fermer();
-        await db.col('installations').deleteMany({}); await raw('analyses').deleteMany({}); await raw('questions').deleteMany({});
+        await db.col('installations').deleteMany({}); await raw('analyses').deleteMany({}); await raw('questions_v2').deleteMany({});
     });
 
     monterBanc.arreterPurge();

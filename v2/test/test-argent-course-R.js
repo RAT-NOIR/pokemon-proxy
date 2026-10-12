@@ -22,7 +22,7 @@ const t = new Date('2026-10-08T10:00:00Z');
         } });
     };
     let r; try { r = await Lg.rembourser(p, d.credit, 'ia-echec', { scanId: 'courseR', maintenant: t }, cfg); } finally { db.col = colReel; }
-    const q = await db.col('questions').findOne({ _id: 'courseR:0' }), solde = (await lire(p)).solde.achete;
+    const q = await db.col('questions_v2').findOne({ _id: 'courseR:0' }), solde = (await lire(p)).solde.achete;
     H.v('la réponse du candidat a bien été écrite pendant le remboursement (l\'entrelacement est réel)', [reponse && reponse.statut, q.etat], [200, 'repondue']);
     H.v('INVARIANT : un résultat livré n\'est jamais remboursé (repondue => crédit gardé, solde 2 ; sinon rendu, solde 3)', [q.etat, r.rendu, solde], ['repondue', false, 2]);
     await H.fermerBac(); H.bilan();

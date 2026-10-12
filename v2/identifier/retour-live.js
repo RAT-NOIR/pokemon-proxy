@@ -38,7 +38,7 @@ async function carteIdentifiee(porteur, scanId, carte) {
     if (!['identifiee', 'a-trancher'].includes(an.statut)) return false;
     if (e.statut === 'identifiee') return true;
     if (e.statut !== 'a-trancher') return false;
-    const q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id });
+    const q = await col('questions_v2').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id });
     if (q) return q.etat === 'repondue' && q.lot !== true && Boolean(q.reponse) && q.reponse.aucune === false && Number.isInteger(q.reponse.idProduct);
     // pas de question réservée : seul un administrateur (rien débité) est dans ce cas — sa réponse par un candidat est écrite sur la ligne analyses
     return Boolean(porteur.administrateur) && Boolean(e.reponse) && Number.isInteger(e.reponse.idProduct);
