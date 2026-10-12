@@ -26,7 +26,8 @@ function monde() {
             deleteMany: async f => { for (let i = lignes.length - 1; i >= 0; i--) if (dedans(f, lignes[i])) lignes.splice(i, 1); },
             find: f => ({ select: () => ({ lean: async () => lignes.filter(l => l.carteId === f.carteId).map(l => ({ ...l })) }) })
         },
-        Carte: { updateOne: async (f, u) => { const c = cartes.get(f._id); for (const [k, v] of Object.entries(u.$set || {})) { const p = k.split('.'); c[p[0]][p[1]] = v; } for (const k of Object.keys(u.$unset || {})) delete c.liens[k.split('.')[1]]; } }
+        Carte: { findOne: f => ({ select: () => ({ lean: async () => structuredClone(cartes.get(f._id)) }) }),
+            updateOne: async (f, u) => { const c = cartes.get(f._id); for (const [k, v] of Object.entries(u.$set || {})) { const p = k.split('.'); c[p[0]][p[1]] = v; } for (const k of Object.keys(u.$unset || {})) delete c.liens[k.split('.')[1]]; } }
     } };
 }
 
@@ -73,6 +74,24 @@ function monde() {
         verifier(`   ${fichier} : sa PREUVE exportée est « ${attendue} », classée gardée, absente de la liste effaçable, hors du filtre d'effacement`, [preuve, (P.PREUVES_D_OUTILS_GARDEES || []).includes(preuve), PREUVES_DE_JOINDRE.includes(preuve), P.filtreDeRegeneration([1], [5]).preuve.$in.includes(preuve)], [attendue, true, false, false]);
     }
     verifier('   le rejeu GARDE une ligne metacarte+freres (le faux modèle l\'efface seulement si elle est refabricable)', await (async () => { const w2 = monde(); w2.lignes.push({ _id: 'z', carteId: 1, idProduct: 99, idExpansion: 5, preuve: 'metacarte+freres' }); await effacerRefabricables(w2.M, [1, 2], [5]); return w2.lignes.some(l => l._id === 'z'); })(), true);
+    // ── tour 1 du lot M2 : l'ORDRE de liens.idProduct se conserve (le repère d'adresse [0] du site) ──
+    {
+        const lignes = [
+            { _id: 'a', carteId: 7, idProduct: 100, idExpansion: 5, preuve: 'set+numero' }, { _id: 'b', carteId: 7, idProduct: 200, idExpansion: 5, preuve: 'set+numero' },
+            { _id: 'c', carteId: 7, idProduct: 501, idExpansion: 5, preuve: 'metacarte+freres' }];
+        const cartes = new Map([[7, { _id: 7, liens: { idProduct: [100, 200, 501], idMetacards: [9] } }]]);
+        const M3 = { CarteProduit: { deleteMany: async f => { for (let i = lignes.length - 1; i >= 0; i--) if (f.carteId.$in.includes(lignes[i].carteId) && f.idExpansion.$in.includes(lignes[i].idExpansion) && f.preuve.$in.includes(lignes[i].preuve)) lignes.splice(i, 1); },
+            find: f => ({ select: () => ({ lean: async () => lignes.filter(l => l.carteId === f.carteId).map(l => ({ ...l })) }) }) },
+            Carte: { findOne: f => ({ select: () => ({ lean: async () => structuredClone(cartes.get(f._id)) }) }),
+                updateOne: async (f, u) => { const c = cartes.get(f._id); for (const [k, v] of Object.entries(u.$set || {})) { const p = k.split('.'); c[p[0]][p[1]] = v; } for (const k of Object.keys(u.$unset || {})) delete c.liens[k.split('.')[1]]; } } };
+        const regen = await effacerRefabricables(M3, [7], [5]);
+        for (const id of [100, 200]) if (!cartes.get(7).liens.idProduct.includes(id)) cartes.get(7).liens.idProduct.push(id);   // joindre() : $addToSet en fin
+        verifier('le rejeu AJOUTE en fin ce qu\'il refait : sans correction, [100,200,501] devient [501,100,200] (le repère [0] bouge)', cartes.get(7).liens.idProduct, [501, 100, 200]);
+        verifier('   restaurerOrdreLiens remet l\'ordre d\'AVANT (les ids présents gardent leur place, un id neuf s\'ajoute en fin)', await (async () => { cartes.get(7).liens.idProduct.push(777); await P.restaurerOrdreLiens(M3, regen.ordreAvant); return cartes.get(7).liens.idProduct; })(), [100, 200, 501, 777]);
+        verifier('   un id d\'avant que le rejeu ne refait PAS disparaît (pas de lien sans ligne)', await (async () => { cartes.get(7).liens.idProduct = [501, 100]; await P.restaurerOrdreLiens(M3, regen.ordreAvant); return cartes.get(7).liens.idProduct; })(), [100, 501]);
+    }
+    // le câblage : collecteur-texte.js restaure l'ordre APRÈS la jointure
+    verifier('collecteur-texte.js appelle restaurerOrdreLiens après la jointure', /if \(ordreAvant\) \{ const R = await restaurerOrdreLiens\(M, ordreAvant\)/.test(fs.readFileSync(path.join(DIR, 'collecteur-texte.js'), 'utf8')), true);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

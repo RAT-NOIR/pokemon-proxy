@@ -12,7 +12,7 @@ const { numeroDeLaFiche } = require('./numero-fiche-freres');
  * @param {object} o.clone  lireClone(...) de variantes-tcgdex.js
  * @returns {{retenus: Array<{p, d, num, freresLignes}>, refus: Array<{p, raison, niveau}>}}
  */
-function planDuSet({ produits, jointsIds, ctx, clone }) {
+function planDuSet({ produits, jointsIds, ctx, clone, tirage = null, expansions = [] }) {
     const retenus = [], refus = [];
     for (const p of produits.filter(x => !jointsIds.has(x.idProduct))) {
         const d = K.designerParFreres(ctx, p);
@@ -20,9 +20,24 @@ function planDuSet({ produits, jointsIds, ctx, clone }) {
         // les lignes des frères JOINTS (leur numeroFiche), lues dans le même index que la désignation
         const groupe = ctx.freres.get(`${p.idMetacard}|${p.idExpansion}`) || new Map();
         const freresLignes = [...groupe].filter(([id]) => id !== p.idProduct).flatMap(([id, ls]) => ls.map(l => ({ idProduct: id, numeroFiche: l.numeroFiche ?? null })));
-        retenus.push({ p, d, num: numeroDeLaFiche({ p, clone, freres: freresLignes }), freresLignes });
+        const num = numeroDeLaFiche({ p, clone, freres: freresLignes });
+        // 🔴 LA RÈGLE DU TOUR 1, sur la donnée DURABLE : une carte qui n'a qu'UN numéro (ou aucun) dans le set n'a qu'une fiche, et le site y place TOUT produit sans
+        // numéro — le premier scan collecté à ce numéro lui serait servi, sans preuve de variante (MEP, Pikachu 093). Le numéro n'est pas posé (pas de preuve) : la
+        // ligne n'est pas écrite, sauf preuve de variante SANS tampon (TCGdex nomme le produit). Aucune lecture de l'état des images du jour.
+        if (num.numeroFiche == null && num.statut !== 'sans-tampon-prouve') {
+            const nums = numerosDuSet(d.carte, tirage, expansions);
+            if (nums.length <= 1) { refus.push({ p, niveau: 4, raison: `la carte ${d.carte._id} n'a qu'un numéro (${nums[0] ?? 'aucun'}) dans le set : le site y placerait ce produit et lui servirait le scan de la carte, sans preuve de variante (numéro non posé : ${num.motif})` }); continue; }
+        }
+        retenus.push({ p, d, num, freresLignes });
     }
     return { retenus, refus };
+}
+
+/** Les numéros distincts (cleNumero de la production) des impressions de la carte dans CE set (tirage et noms d'expansion de la ligne). */
+function numerosDuSet(carte, tirage, expansions) {
+    const { cleNumero } = require('./jointure');
+    const ns = (carte.impressions || []).filter(i => i && i.tirage === tirage && expansions.includes(i.expansion) && i.numero != null && String(i.numero).trim() !== '').map(i => cleNumero(i.numero));
+    return [...new Set(ns)];
 }
 
 /**

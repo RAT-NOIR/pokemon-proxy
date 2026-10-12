@@ -48,8 +48,10 @@ const attaquesDe = i => [`Aa${i}`, `Bb${i}`];
 const nomP = i => `Mon${i} [${attaquesDe(i).join(' | ')}]`;
 const SET = { _id: 'SetX', code: 'X', idExpansion: [7], tirage: 'intl', region: 'intl', bulba: { expansion: 'X Expansion' } };
 const SETJ = { _id: 'SetJ', code: 'J', idExpansion: [8], tirage: 'jp', region: 'jp', bulba: { expansion: 'J' } };
-function monde({ veriteFausse = false, exportDecale = false, carteSansRepere = false, imageCarte2 = false } = {}) {
-    const cartes = [1, 2, 3, 4].map(i => ({ _id: 1000 + i, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), niveau: null, sets: ['SetX'], impressions: [], images: [], liens: { idProduct: [100 + i, 200 + i, 300 + i], idMetacards: [10 + i] } }));
+function monde({ veriteFausse = false, exportDecale = false, carteSansRepere = false, imageCarte2 = false, carteUnNumero = false } = {}) {
+    // Mon1 : un seul tirage (n°1, le numéro des frères) ; Mon2 et Mon4 : DEUX numéros dans le set (le site ne place pas un produit sans numéro sur une carte à deux fiches)
+    const imp = (...ns) => ns.map(numero => ({ tirage: 'intl', expansion: 'X Expansion', numero }));
+    const cartes = [1, 2, 3, 4].map(i => ({ _id: 1000 + i, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), niveau: null, sets: ['SetX'], impressions: i === 2 || i === 4 ? (carteUnNumero && i === 2 ? imp('2') : imp(String(i), String(100 + i))) : imp(String(i)), images: [], liens: { idProduct: [100 + i, 200 + i, 300 + i], idMetacards: [10 + i] } }));
     cartes[0].images.push({ set: 'SetX', numero: '1', cleR2: 'k1', source: 'bulbapedia' });
     if (imageCarte2) cartes[1].images.push({ set: 'SetX', numero: '2', cleR2: 'k2', source: 'bulbapedia' });
     if (veriteFausse) cartes[1].attaques = attaquesDe(1).map(nom => ({ nom }));
@@ -95,7 +97,7 @@ const A = ['--codes=X'], ECR = ['--codes=X', '--attendu=X:3', '--avec-numero=X:1
     r = await lancer(w, ECR);
     verifier('écriture : exit 0, relue ("écrit et relu"), 3 lignes metacarte+freres, numeroFiche = celui des frères pour 501, null pour 502 et 504', [r.code, /écrit et relu/.test(r.sorties), posees(w).map(l => `${l.idProduct}:${l.numeroFiche}`).sort()], [0, true, ['501:1', '502:null', '504:null']]);
     verifier('   additive : les lignes d\'avant sont inchangées, aucune impression ni image ajoutée, liens.idProduct ajoutés EN FIN, l\'ordre d\'avant conservé', [JSON.stringify(w.db.brut('cartes_produits').filter(l => l.preuve !== PREUVE)) === JSON.stringify(ancien),
-        w.db.brut('cartes').every(c => c.impressions.length === 0), w.db.brut('cartes').find(c => c._id === 1001).liens.idProduct, w.db.brut('cartes').find(c => c._id === 1001).images.length], [true, true, [101, 201, 301, 501], 1]);
+        w.db.brut('cartes').map(c => c.impressions.length).join() === '1,2,1,2', w.db.brut('cartes').find(c => c._id === 1001).liens.idProduct, w.db.brut('cartes').find(c => c._id === 1001).images.length], [true, true, [101, 201, 301, 501], 1]);
     verifier('   la ligne porte sa preuve, sa route, le set et la variante dans `detail`', [posees(w).every(l => l.route === 'X' && l.slugSet === 'SetX' && l.tirage === 'intl' && l.slug === null), /tampon/.test(posees(w).find(l => l.idProduct === 504).detail), /SANS numéro/.test(posees(w).find(l => l.idProduct === 502).detail)], [true, true, true]);
     const apres = instantane(w);
     r = await lancer(w, ECR);
@@ -109,6 +111,19 @@ const A = ['--codes=X'], ECR = ['--codes=X', '--attendu=X:3', '--avec-numero=X:1
     verifier('   --attendu 3 (le plan d\'avant la garde) est refusé : le compte attendu est celui du plan GARDÉ', [r.code, /rend 2 lignes, attendu 3/.test(r.erreurs), posees(w).length], [1, true, 0]);
     r = await lancer(w, ['--codes=X', '--attendu=X:2', '--avec-numero=X:1', '--ecrire'], { site: siteFake({ unSeulVisuel: true }) });
     verifier('   --attendu 2 : écrit et relu, sans la ligne 502', [r.code, posees(w).map(l => l.idProduct).sort()], [0, [501, 504]]);
+
+    // ── tour 1 : la règle s'écrit sur la donnée DURABLE (les numéros du set), pas sur l'état des images du jour ──
+    w = monde({ carteUnNumero: true }); avant = instantane(w);
+    r = await lancer(w, A);   // AUCUNE image à Mon2 : le site ne servirait rien aujourd'hui, le premier scan collecté à son numéro lui serait servi
+    verifier('la carte de 502 n\'a qu\'UN numéro dans le set (n°2), numéro non posé, aucune preuve de variante : la ligne est RETIRÉE du plan même si le site ne la sert PAS aujourd\'hui', [r.code, /2 lignes · 2 cartes · avec numeroFiche 1 · sans 1 · 2 refusés/.test(r.sorties), /la carte \d+ n'a qu'un numéro/.test(r.sorties), instantane(w) === avant], [0, true, true, true]);
+
+    // … sauf PREUVE de variante sans tampon : TCGdex nomme 502 sans tampon (à un numéro qui n'est pas celui des frères : numéro non posé), la ligne reste
+    {
+        const cl = cloneFake(); cl.parProduit.set(502, [{ setId: 'sm3', localId: '9', variante: { type: 'reverse', foil: null, stamp: [], cardmarket: 502 } }]);
+        w = monde({ carteUnNumero: true });
+        r = await lancer(w, A, { clone: cl });
+        verifier('   une carte à un numéro, mais TCGdex nomme le produit SANS tampon : la ligne reste (3 lignes, numéro non posé)', [r.code, /3 lignes · 3 cartes · avec numeroFiche 1/.test(r.sorties)], [0, true]);
+    }
 
     // ── refus avant toute écriture ──
     for (const [titre, argv, opt, attendu] of [

@@ -6,7 +6,9 @@
 // calibration sont les mêmes (leçon SEA-2) : c'est la fonction de production `designerParFreres`, appelée telle quelle.
 // Trois épreuves, chacune avec ses cas ATTEINTS (la clé a dû CHOISIR) à côté des justes / faux / silences :
 //   A  vérité présente : la clé doit rendre la MÊME carte, ou se taire ;
-//   B  vraie carte RETIRÉE des frères ET du set (§67, sur la population ENTIÈRE, pas sur les désignations justes) : elle ne doit désigner personne ;
+//   B' (tour 1 : B ne pouvait pas échouer sur le réel, retirer la vraie carte retirait aussi ses frères = 0 atteint sur 23 249) : les frères du produit sont
+//      joints À TORT à une carte DÉCOY du set, la vraie carte est RETIRÉE du set, sur la population ENTIÈRE (§67). Plus rien n'est juste : TOUTE désignation est
+//      fausse. Ce que prouve 0 faux : la clé ne s'appuie pas sur la seule cohérence des frères, elle exige que le NOM du produit soit celui de la carte ;
 //   D  LE DANGER, deux populations isolées :
 //      D-nom     les frères s'accordent sur une carte DONT LE NOM EST PORTÉ PAR UNE AUTRE CARTE DU SET : la clé doit se taire (nom non unique) ;
 //      D-frères  les frères (>= 2 joints) se partagent entre DEUX cartes ou plus : la clé doit se taire.
@@ -27,10 +29,10 @@ const PREUVES_VERITE = ['set+numero', 'setlist+numero'];
  * population n'existe pas à 100. Ces deux gardes sont des REFUS PAR CONSTRUCTION (nom non unique dans le set ; frères sur plusieurs cartes), pas une décision
  * statistique : la règle de trois n'a pas de sens pour un code qui refuse sans seuil, et ce que le minimum doit prouver est que la garde a SERVI sur des cas
  * réels (population non vide, §41). Plancher posé à 10 pour les deux — décision à confirmer par le coordinateur, écrite ici et dans le rapport (§23 : un
- * minimum ne se baisse pas en silence). B n'a aucun minimum : sa population atteinte est vide par construction (retirer la vraie carte retire aussi ses
- * frères : 0 atteint sur 23 249) ; il reste dans la décision parce qu'UN seul faux y bloquerait l'écriture, et le banc fabrique le monde où il en compte.
+ * minimum ne se baisse pas en silence). B' (tour 1, il remplace B dont la population atteinte était VIDE sur le réel) : 300 comme A — c'est une population
+ * naturelle (les vérités à >= 2 frères), la règle de trois s'y applique.
  */
-const MINIMUMS = Object.freeze({ A: 300, D_NOM: 10, D_FRERES: 10 });
+const MINIMUMS = Object.freeze({ A: 300, BP: 300, D_NOM: 10, D_FRERES: 10 });
 
 const vide = () => ({ cas: 0, atteints: 0, justes: 0, fauxCarte: 0, silences: 0, faux: [] });
 function compter(acc, { atteint, etat, detail }) {
@@ -75,11 +77,21 @@ function calibrer({ lignes, cartes, export: exp, sets, ecrits = [], log = () => 
     if (!verites.length) throw new Error(`🔴 CALIBRATION VIDE : 0 produit de vérité dans un set intl sur ${parProduit.size} produits joints par le numéro (${hors} hors set intl) — un zéro sur une population non vide est un filtre faux (sets.tirage ? mauvais export ?), pas un résultat.`);
 
     const res = { denominateurs: { eligibles: eligibles.length, verites: verites.length, retrouvees, horsIntl: hors, ambigues }, veriteContredite: { total: 0, exemples: [] },
-        total: { A: vide(), B: vide() }, danger: { nom: vide(), freres: vide() }, parSet: {}, minimums: MINIMUMS };
+        total: { A: vide(), Bp: vide() }, danger: { nom: vide(), freres: vide() }, parSet: {}, minimums: MINIMUMS };
     const ecritsPar = new Map(ecrits.map(e => [e.slugSet, e.code]));
-    for (const e of ecrits) res.parSet[e.code] = { A: vide(), B: vide() };
+    for (const e of ecrits) res.parSet[e.code] = { A: vide(), Bp: vide() };
     const prepares = new Map();
     const setDe = slug => prepares.get(slug) || prepares.set(slug, K.preparerSet(cartesParSet.get(slug) || [], { slugSet: slug })).get(slug);
+    // le décoy d'une vraie carte : la carte suivante du set (par _id, circulaire) qui ne porte PAS son nom — déterministe, sans hasard
+    const trie = new Map(), cleDe = c => J.clesNom(J.nomJointDe(c));
+    const decoyDe = (slug, vraieId) => {
+        if (!trie.has(slug)) trie.set(slug, [...(cartesParSet.get(slug) || [])].sort((a, b) => a._id - b._id));
+        const cs = trie.get(slug), i = cs.findIndex(c => c._id === vraieId);
+        if (i < 0) return null;
+        const kv = cleDe(cs[i]);
+        for (let d = 1; d < cs.length; d++) { const c = cs[(i + d) % cs.length]; if (!cleDe(c).some(k => kv.includes(k))) return c._id; }
+        return null;
+    };
     for (const v of verites) {
         const p = produit(v.id); if (!p) continue;
         const vraie = carteParId.get(v.carteId);
@@ -90,11 +102,19 @@ function calibrer({ lignes, cartes, export: exp, sets, ecrits = [], log = () => 
         const rA = K.designerParFreres({ freres, set }, p);
         const etatA = !rA.carte ? 'silence' : rA.carte._id === v.carteId ? 'juste' : 'fauxCarte';
         const eA = { atteint: rA.atteint, etat: etatA, detail: `${nom} : carte ${rA.carte?._id} (vérité ${v.carteId})` };
-        const rB = K.designerParFreres({ freres, set: K.preparerSet(cartesParSet.get(v.slugSet) || [], { slugSet: v.slugSet, sauf: v.carteId }) }, p, { sauf: v.carteId });
-        const eB = { atteint: rB.atteint, etat: rB.carte ? 'fauxCarte' : 'silence', detail: `${nom} : ${rB.carte?._id} désignée, la vraie carte ${v.carteId} étant retirée` };
-        compter(res.total.A, eA); compter(res.total.B, eB);
+        // B' : les frères sont joints à tort à une carte DÉCOY du set (une autre carte, d'un autre nom), la vraie carte n'existe plus : toute désignation est fausse
+        const decoy = decoyDe(v.slugSet, v.carteId);
+        compter(res.total.A, eA);
         const code = ecritsPar.get(v.slugSet);
-        if (code) { compter(res.parSet[code].A, eA); compter(res.parSet[code].B, eB); }
+        if (code) compter(res.parSet[code].A, eA);
+        if (decoy != null) {
+            const cle = `${p.idMetacard}|${p.idExpansion}`;
+            const faux = new Map([[cle, new Map([...(freres.get(cle) || new Map())].filter(([id]) => id !== v.id).map(([id, ls]) => [id, ls.map(l => ({ ...l, carteId: decoy }))]))]]);
+            const rB = K.designerParFreres({ freres: faux, set: K.preparerSet(cartesParSet.get(v.slugSet) || [], { slugSet: v.slugSet, sauf: v.carteId }) }, p, { sauf: v.carteId });
+            const eB = { atteint: rB.atteint, etat: rB.carte ? 'fauxCarte' : 'silence', detail: `${nom} : ${rB.carte?._id} désignée (frères remappés sur le décoy ${decoy}), la vraie carte ${v.carteId} étant retirée` };
+            compter(res.total.Bp, eB);
+            if (code) compter(res.parSet[code].Bp, eB);
+        }
         // D-nom : les frères s'accordent sur une carte, et le set en porte une autre au même nom
         if (rA.niveau >= 2 && rA.carteDesFreres != null) {
             const cf = set.parId.get(rA.carteDesFreres);
@@ -112,9 +132,10 @@ function calibrer({ lignes, cartes, export: exp, sets, ecrits = [], log = () => 
 /** Le verdict de la garde : 0 faux partout ET assez de cas atteints. @returns {{ok: boolean, refus: string[]}} */
 function verdict(cal, minimums = MINIMUMS) {
     const refus = [];
-    for (const [nom, e] of [['A (vérité présente)', cal.total.A], ['B (vraie carte retirée)', cal.total.B], ['D-nom (homonyme dans le set)', cal.danger.nom], ['D-frères (frères partagés)', cal.danger.freres]])
+    for (const [nom, e] of [['A (vérité présente)', cal.total.A], ["B' (frères sur un décoy, vraie carte retirée)", cal.total.Bp], ['D-nom (homonyme dans le set)', cal.danger.nom], ['D-frères (frères partagés)', cal.danger.freres]])
         if (e.fauxCarte) refus.push(`${nom} : ${e.fauxCarte} faux de carte`);
     if (cal.total.A.atteints < minimums.A) refus.push(`A : ${cal.total.A.atteints} cas atteints < minimum ${minimums.A}`);
+    if (cal.total.Bp.atteints < minimums.BP) refus.push(`B' : ${cal.total.Bp.atteints} cas atteints < minimum ${minimums.BP}`);
     if (cal.danger.nom.atteints < minimums.D_NOM) refus.push(`D-nom : ${cal.danger.nom.atteints} cas atteints < minimum ${minimums.D_NOM}`);
     if (cal.danger.freres.atteints < minimums.D_FRERES) refus.push(`D-frères : ${cal.danger.freres.atteints} cas atteints < minimum ${minimums.D_FRERES}`);
     return { ok: refus.length === 0, refus };
@@ -122,12 +143,12 @@ function verdict(cal, minimums = MINIMUMS) {
 
 function imprimer(cal, log) {
     const ligne = (nom, e) => `   ${nom.padEnd(30)} cas ${String(e.cas).padStart(6)} · ATTEINTS ${String(e.atteints).padStart(6)} · justes ${String(e.justes).padStart(6)} · faux ${e.fauxCarte} · silences ${e.silences}`;
-    log(ligne('A  vérité présente', cal.total.A)); log(ligne('B  vraie carte retirée', cal.total.B));
+    log(ligne('A  vérité présente', cal.total.A)); log(ligne("B' frères sur décoy, vraie retirée", cal.total.Bp));
     log(ligne('D-nom  homonyme dans le set', cal.danger.nom)); log(ligne('D-frères  frères partagés', cal.danger.freres));
     log(`   vérités CONTREDITES par les attaques du produit, écartées de la population : ${cal.veriteContredite.total}${cal.veriteContredite.exemples.slice(0, 3).map(x => `\n      · ${x}`).join('')}`);
-    for (const [code, s] of Object.entries(cal.parSet)) log(`      set ${code.padEnd(8)} A : ${s.A.cas} cas, ${s.A.atteints} atteints, ${s.A.justes} justes, faux ${s.A.fauxCarte} · B : ${s.B.atteints} atteints, faux ${s.B.fauxCarte}`);
-    for (const e of ['total.A', 'total.B', 'danger.nom', 'danger.freres']) { const x = e.split('.').reduce((o, k) => o[k], cal); for (const f of x.faux.slice(0, 5)) log(`      🔴 ${e} : ${f}`); }
-    log(`   minimums de cas atteints : A ${cal.minimums.A}, D-nom ${cal.minimums.D_NOM}, D-frères ${cal.minimums.D_FRERES} (B : aucun, 0 faux exigé)`);
+    for (const [code, s] of Object.entries(cal.parSet)) log(`      set ${code.padEnd(8)} A : ${s.A.cas} cas, ${s.A.atteints} atteints, ${s.A.justes} justes, faux ${s.A.fauxCarte} · B' : ${s.Bp.cas} cas, ${s.Bp.atteints} atteints, faux ${s.Bp.fauxCarte}`);
+    for (const e of ['total.A', 'total.Bp', 'danger.nom', 'danger.freres']) { const x = e.split('.').reduce((o, k) => o[k], cal); for (const f of x.faux.slice(0, 5)) log(`      🔴 ${e} : ${f}`); }
+    log(`   minimums de cas atteints : A ${cal.minimums.A}, D-nom ${cal.minimums.D_NOM}, D-frères ${cal.minimums.D_FRERES}, B' ${cal.minimums.BP} (0 faux exigé partout)`);
 }
 
 module.exports = { calibrer, verdict, imprimer, chargerExport: require('./calibration-setlist-metacarte').chargerExport, MINIMUMS, PREUVES_VERITE };

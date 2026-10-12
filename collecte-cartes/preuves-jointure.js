@@ -34,6 +34,10 @@ const filtreDeRegeneration = (idsCartes, expsDeCeSet) => ({ carteId: { $in: idsC
  * @param {{CarteProduit: object, Carte: object}} M  modèles mongoose (ou faux modèles du banc)
  */
 async function effacerRefabricables(M, idsCartes, expsDeCeSet) {
+    // L'ORDRE de liens.idProduct d'AVANT (tour 1 de M2) : le site lit `liens.idProduct[0]` comme repère d'adresse. La recomposition ci-dessous le réordonne
+    // (les lignes gardées d'abord), puis joindre() AJOUTE en fin : `restaurerOrdreLiens` remet l'ordre d'avant une fois la jointure réécrite.
+    const ordreAvant = new Map();
+    for (const id of idsCartes) { const c = await M.Carte.findOne({ _id: id }).select('liens.idProduct').lean(); if (Array.isArray(c?.liens?.idProduct)) ordreAvant.set(id, [...c.liens.idProduct]); }
     await M.CarteProduit.deleteMany(filtreDeRegeneration(idsCartes, expsDeCeSet));
     let gardees = 0;
     for (const id of idsCartes) {
@@ -44,7 +48,24 @@ async function effacerRefabricables(M, idsCartes, expsDeCeSet) {
             ? { $set: { 'liens.idProduct': restantes.map(x => x.idProduct) } }
             : { $set: { 'liens.idProduct': restantes.map(x => x.idProduct), 'liens.idMetacards': [] }, $unset: { 'liens.idMetacard': 1 } });
     }
-    return { gardees };
+    return { gardees, ordreAvant };
 }
 
-module.exports = { PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES, PREUVES_D_OUTILS_GARDEES, filtreDeRegeneration, effacerRefabricables };
+/**
+ * Après la jointure réécrite : l'ordre d'AVANT, restreint à ce qui existe encore (un id que le rejeu ne refait pas disparaît : pas de lien sans ligne), puis
+ * les ids neufs dans leur ordre actuel, EN FIN. Ne touche que les cartes dont l'ordre diffère.
+ */
+async function restaurerOrdreLiens(M, ordreAvant) {
+    let remis = 0;
+    for (const [id, avant] of ordreAvant) {
+        const c = await M.Carte.findOne({ _id: id }).select('liens.idProduct').lean();
+        const cur = Array.isArray(c?.liens?.idProduct) ? c.liens.idProduct : [];
+        const vus = new Set(cur), dansAvant = new Set(avant);
+        const ordre = [...avant.filter(x => vus.has(x)), ...cur.filter(x => !dansAvant.has(x))];
+        if (ordre.length === cur.length && ordre.every((x, i) => x === cur[i])) continue;
+        await M.Carte.updateOne({ _id: id }, { $set: { 'liens.idProduct': ordre } }); remis++;
+    }
+    return { remis };
+}
+
+module.exports = { PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES, PREUVES_D_OUTILS_GARDEES, filtreDeRegeneration, effacerRefabricables, restaurerOrdreLiens };

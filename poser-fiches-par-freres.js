@@ -100,7 +100,7 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
         for (const Li of L) {
             const docs = parSet.get(Li.slugSet) || [];
             const produits = [...exp].filter(([id, e]) => Li.exps.includes(e.idExpansion) && !estCarteCode(e.name)).map(([id, e]) => ({ idProduct: id, name: e.name, ...decomposerNomCardmarket(e.name), idMetacard: e.idMetacard, idExpansion: e.idExpansion }));
-            const P = planDuSet({ produits, jointsIds, ctx: { freres, set: K.preparerSet(docs, { slugSet: Li.slugSet }) }, clone });
+            const P = planDuSet({ produits, jointsIds, ctx: { freres, set: K.preparerSet(docs, { slugSet: Li.slugSet }) }, clone, tirage: Li.doc.tirage ?? Li.doc.region, expansions: [].concat(Li.doc.bulba?.expansion ?? []) });
             // ── la simulation du SITE ──
             const site = await chargerSite();
             const ids = new Set(docs.map(d => d._id));

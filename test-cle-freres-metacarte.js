@@ -38,6 +38,10 @@ r = K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)], [C2]), prod(10, 'Mon1'
 verifier('la carte des frères n\'est pas parmi les cartes du set : refus', [r.carte, /hors du set/.test(r.raison)], [null, true]);
 r = K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), prod(10, 'Mon2', ['Aa2', 'Bb2']));
 verifier('TÉMOIN DU NOM : le produit porte le nom d\'une AUTRE carte du set (Mon2) alors que les frères désignent Mon1 : refus', [r.carte, /nom/.test(r.raison)], [null, true]);
+r = K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), prod(10, 'Mon9'));
+verifier('LE NOM DU PRODUIT ÉGALE CELUI DE LA CARTE (condition de la clé, tour 1) : « Mon9 » sans attaque, aucune carte du set à ce nom — un témoin négatif se tairait, la clé REFUSE', [r.carte, /n'est pas celui de la carte/.test(r.raison), r.niveau], [null, true, 2]);
+verifier('   « Mon1 » égale « Mon1 » : désignée (normalisation de la production : casse et ponctuation ne comptent pas)', [K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), prod(10, 'Mon1')).carte?._id, K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), prod(10, 'MON-1')).carte?._id], [1, 1]);
+verifier('   l\'alias Cardmarket -> Bulbapedia de la production compte dans l\'égalité (« EXP. ALL » = « Exp. Share »)', K.designerParFreres(ctx([ligne(11, 5), ligne(12, 5)], [carte(5, 'Exp. Share')]), prod(10, 'EXP. ALL')).carte?._id, 5);
 r = K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), prod(10, 'Mon1', ['Zz', 'Yy']));
 verifier('TÉMOIN DES ATTAQUES : les attaques du produit contredisent celles de la carte : refus', [r.carte, /attaques/.test(r.raison)], [null, true]);
 r = K.designerParFreres(ctx([ligne(11, 1), ligne(12, 1)]), { ...prod(10, 'Mon1'), idMetacard: null });
@@ -60,7 +64,7 @@ const lgB = [ligne(11, 1), ligne(12, 1), ligne(13, 2), ligne(14, 2)];
 const fB = K.indexerFreres(lgB, metaB), pB = { idProduct: 10, nom: 'Mon1', attaques: [], idMetacard: 100, idExpansion: 7 };
 const rA = K.designerParFreres({ freres: fB, set: K.preparerSet([C1, C2], { slugSet: 'SetX' }) }, pB);
 const rB = K.designerParFreres({ freres: fB, set: K.preparerSet([C2], { slugSet: 'SetX', sauf: 1 }) }, pB, { sauf: 1 });
-verifier('le danger de l\'épreuve B existe : désaccord (refus) vraie carte présente, désignation de la voisine vraie carte retirée', [rA.carte, rB.carte?._id], [null, 2]);
+verifier('frères en désaccord (refus) vraie carte présente ; vraie carte retirée, la voisine (Mon2) n\'est PAS désignée pour un produit « Mon1 » : l\'égalité du nom la refuse (tour 1)', [rA.carte, rB.carte, /n'est pas celui de la carte/.test(rB.raison)], [null, null, true]);
 let leve = null; try { K.designerParFreres({ freres: fB, set: K.preparerSet([C2], { slugSet: 'SetX', sauf: 1 }) }, pB); } catch (e) { leve = e.message; }
 verifier('un set préparé avec `sauf` mais une désignation SANS `sauf` (ou l\'inverse) LÈVE : la calibration ne peut pas mélanger', /sauf/.test(leve || ''), true);
 

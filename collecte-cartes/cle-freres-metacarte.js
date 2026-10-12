@@ -7,12 +7,12 @@
 //   (1) >= 2 FRÈRES (autres produits de même idMetacard ET de même idExpansion) joints, chacun dans le set demandé, tous à des cartes À PAGE (_id > 0) ;
 //   (2) tous ces frères sur la MÊME carte ;
 //   (3) cette carte est dans le set, et elle est la SEULE du set à porter ce nom (clesNom(nomJointDe), les fonctions de la jointure) ;
-//   (4) deux TÉMOINS hors de la clé : le nom du produit (`temoinDuNom` de joindre()) et ses attaques (`cleAttaque`/`memeAttaque` de la production) ne
-//       contredisent pas la carte. La clé ne lit PAS le nom du produit : c'est ce qui en fait un témoin.
+//   (4) le NOM du produit ÉGALE celui de la carte (condition POSITIVE, tour 1 : normalisation et alias de la production) ;
+//   (5) un témoin hors de la clé : les attaques du produit (`cleAttaque`/`memeAttaque` de la production) ne contredisent pas la carte.
 // Tout le reste refuse et dit pourquoi. La calibration (calibration-freres-metacarte.js) est rejouée sur LA MÊME fonction — une clé ne doit accepter aucun cas
 // que sa calibration ne mesure pas (leçon SEA-2) : les lignes posées par cet outil (`PREUVE`) ne sont jamais des frères (pas de preuve circulaire).
 const { clesNom, nomJointDe } = require('./jointure');
-const { temoinDuNom } = require('./jointure');
+const { ALIAS_CARDMARKET_VERS_BULBAPEDIA } = require('./alias-noms');
 const { temoinAttaques } = require('./cle-setlist-metacarte');
 
 const PREUVE = 'metacarte+freres';
@@ -43,9 +43,7 @@ function preparerSet(cartes, { slugSet, sauf = null }) {
         parId.set(c._id, c);
         for (const k of clesNom(nomJointDe(c))) (parCle.get(k) || parCle.set(k, []).get(k)).push(c);
     }
-    // le témoin du nom ne se construit que si une désignation arrive jusqu'à lui (la calibration prépare un set par vraie carte retirée)
-    let temoin = null;
-    return { slugSet, sauf: sauf ?? null, cartes: gardees, parId, parCle, get temoin() { return temoin ||= temoinDuNom(gardees); } };
+    return { slugSet, sauf: sauf ?? null, cartes: gardees, parId, parCle };
 }
 
 /**
@@ -80,12 +78,15 @@ function designerParFreres({ freres, set }, p, { sauf = null } = {}) {
     niveau = 2; carteDesFreres = cartes[0];
     const c = set.parId.get(cartes[0]);
     if (!c) return non(`la carte ${cartes[0]} des frères est hors du set ${set.slugSet}`, ids);
+    // 🔴 LE NOM DU PRODUIT ÉGALE CELUI DE LA CARTE (tour 1) : une condition POSITIVE. Le témoin négatif (`temoinDuNom`) se tait quand la vraie carte manque
+    // du set — frères joints à tort à une carte décoy, vraie carte absente : « Pikachu » désigné comme « Bill », 1 057 faux sur 2 719 cas atteints (épreuve B').
+    // La comparaison est celle de la production : clesNom (normaliserNom), plus l'alias Cardmarket -> Bulbapedia que temoinDuNom lit aussi.
+    const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom], kp = [...new Set([...clesNom(p.nom), ...(alias ? clesNom(alias) : [])])], kc = clesNom(nomJointDe(c));
+    if (!kp.some(k => kc.includes(k))) return non(`le nom du produit « ${p.nom} » n'est pas celui de la carte ${c._id} « ${c.nomEn} » (condition de la clé : l'égalité des noms, à la normalisation de la production)`, ids);
     const homonymes = homonymesDe(set, c);
     if (homonymes.length) return non(`la carte ${c._id} n'est pas la seule du set à ce nom (homonyme : ${homonymes.slice(0, 4).map(x => x._id).join(', ')})`, ids);
     niveau = 3;
-    // les témoins, indépendants de la clé (qui n'a lu ni le nom du produit ni ses attaques)
-    const autres = set.temoin(c, p);
-    if (autres) return non(`le nom du produit « ${p.nom} » désigne une autre carte du set (${autres.slice(0, 3).map(x => x._id).join(', ')}) que celle des frères (${c._id})`, ids);
+    // le témoin des attaques, indépendant de la clé
     if (temoinAttaques(c, p) === 'contredit') return non(`les attaques du produit contredisent celles de la carte ${c._id}`, ids);
     return { carte: c, raison: null, niveau, atteint: true, freres: ids, carteDesFreres };
 }

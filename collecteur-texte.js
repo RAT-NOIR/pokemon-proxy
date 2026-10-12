@@ -27,7 +27,7 @@ const { champsDeNaissance } = require('./collecte-cartes/set-nomme');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
 const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
-const { effacerRefabricables } = require('./collecte-cartes/preuves-jointure');
+const { effacerRefabricables, restaurerOrdreLiens } = require('./collecte-cartes/preuves-jointure');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = require('./collecte-cartes/jointure');
@@ -179,6 +179,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // ---- 1. la page du set -------------------------------------------------------------
     // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
     const reparser = process.argv.includes('--reparser');
+    let ordreAvant = null;   // l'ordre de liens.idProduct d'avant l'effacement d'un rejeu (restauré après la jointure)
     const setDeja = reparser ? await M.Set.findById(slug).lean() : null;
     // UNE condition pour lire la page sur R2 ET pour le dire dans l'état (`lectureSetlist.source`) — §21 bis.
     const pageDuSetSurR2 = !!setDeja?.bulba?.cleR2;
@@ -338,6 +339,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         // (collecte-cartes/preuves-jointure.js). Les lignes posées par un autre outil (metacarte+setlist, metacarte+nom+attaques, wcd…, fiches
         // simples) et leurs liens survivent au rejeu ; les liens dénormalisés se recomposent depuis ce qui RESTE.
         const regen = await effacerRefabricables(M, idsCartes, expsDeCeSet);
+        ordreAvant = regen.ordreAvant;
         if (regen.gardees) console.log(`   --reparser : ${regen.gardees} ligne(s) posée(s) par un autre outil que joindre() GARDÉE(S) (preuve hors de la liste que la jointure refabrique)`);
     }
     for (let i = 0; i < aFaire.length && !arretDemande; i += 50) {
@@ -409,6 +411,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         intlLignes += Ji.lignes.length;
         console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${cartesJumelles.length} cartes sur ${cartesDuSet.length} déclarent ce jumeau → ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
     }
+    if (ordreAvant) { const R = await restaurerOrdreLiens(M, ordreAvant); console.log(`   --reparser : ordre de liens.idProduct rétabli sur ${R.remis} carte(s) (le repère d'adresse du site, liens.idProduct[0], ne bouge pas)`); }
     await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'jointure' } });
 
     // ---- 5. complétude ----------------------------------------------------------------------
