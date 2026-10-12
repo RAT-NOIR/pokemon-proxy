@@ -51,9 +51,9 @@ function verdictDe(rep) {
 }
 
 /** Le client direct : UNE requête vers robots.txt, en-tête User-Agent seul, redirection jamais suivie, ni file ni verrou. `url` : par défaut celui de Bulbapedia. */
-function fabriquerClientDirect(fetchImpl = fetch, url = `${HOTE}/robots.txt`) {
+function fabriquerClientDirect(fetchImpl = fetch, url = `${HOTE}/robots.txt`, agent = UA) {
     return async () => {
-        const r = await fetchImpl(url, { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) });
+        const r = await fetchImpl(url, { headers: { 'User-Agent': agent }, redirect: 'manual', signal: AbortSignal.timeout(45000) });
         return { status: r.status, headers: r.headers, texte: await r.text() };
     };
 }

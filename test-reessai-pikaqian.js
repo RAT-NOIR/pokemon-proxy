@@ -93,10 +93,46 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
     });
 
     console.log('si elle passe');
-    await t('SERVI : l\'alerte est levée, l\'historique des blocages gardé, le compteur repart à zéro', async () => {
+    await t('SERVI : l\'alerte est levée, mais le COMPTE des blocages survit (I2)', async () => {
         const b = banc([SERVI]); const r = await b.essai.essayer();
         assert.strictEqual(r.verdict, 'SERVI'); const d = b.etat.doc;
-        assert.strictEqual(d.active, false); assert.strictEqual(d.suspendue, false); assert.deepStrictEqual(d.blocages, []); assert.strictEqual(d.historiqueBlocages.length, 1); assert.strictEqual(d.historiqueBlocages[0].le, T1);
+        assert.strictEqual(d.active, false); assert.strictEqual(d.suspendue, false); assert.strictEqual(d.blocages.length, 1); assert.strictEqual(d.blocages[0].le, T1);
+    });
+    function fausseColl(doc) {
+        const docs = new Map(doc ? [[doc._id, structuredClone(doc)]] : []);
+        const corr = (d, f) => Object.entries(f).every(([k, v]) => (v && typeof v === 'object' && '$exists' in v ? (k in d) === v.$exists : d[k] === v));
+        return { docs, findOne: async f => { const d = docs.get(f._id); return d ? structuredClone(d) : null; },
+            insertOne: async d => { if (docs.has(d._id)) throw new Error('E11000'); docs.set(d._id, structuredClone(d)); },
+            updateOne: async (f, u, o) => { let d = docs.get(f._id); if (!d) { if (!o?.upsert) return { matchedCount: 0 }; d = { _id: f._id }; docs.set(f._id, d); } Object.assign(d, structuredClone(u.$set)); return { matchedCount: 1 }; },
+            findOneAndUpdate: async (f, u) => { const d = docs.get(f._id); if (!d || !corr(d, f)) return null; Object.assign(d, structuredClone(u.$set)); return structuredClone(d); } };
+    }
+    await t('I2 : robots OK puis pages bloquées, trois fois de suite → SUSPENDUE (le compte survit aux levées)', async () => {
+        const c = fausseColl(null); let now = T1; let reqs = 0;
+        const essai = () => R.fabriquerEssai({ client: async () => { reqs++; return SERVI; }, magasin: R.magasinMongo(c), maintenant: () => now });
+        await R.noterBlocage(c, { status: 403, url: 'https://pikaqian.com/sets/cs1bc', motif: 'm' }, now);            // blocage n°1 (page)
+        now += 6 * HEURE; assert.strictEqual((await essai().essayer()).verdict, 'SERVI'); assert.strictEqual(c.docs.get(P.ID_ALERTE).active, false);
+        await R.noterBlocage(c, { status: 403, url: 'https://pikaqian.com/sets/cs1bc', motif: 'm' }, now);            // n°2 : la page rebloque
+        assert.strictEqual(c.docs.get(P.ID_ALERTE).blocages.length, 2); assert.strictEqual(c.docs.get(P.ID_ALERTE).suspendue, false);
+        now += 24 * HEURE; assert.strictEqual((await essai().essayer()).verdict, 'SERVI');
+        await R.noterBlocage(c, { status: 403, url: 'https://pikaqian.com/sets/cs1bc', motif: 'm' }, now);            // n°3
+        const d = c.docs.get(P.ID_ALERTE); assert.strictEqual(d.blocages.length, 3); assert.strictEqual(d.suspendue, true); assert.strictEqual(d.active, true);
+        const avant = reqs; for (let i = 0; i < 100; i++) { now += 7 * 24 * HEURE; assert.strictEqual((await essai().essayer()).envoye, false); } assert.strictEqual(reqs, avant);
+    });
+    await t('I2 : une collecte réussie remet le compte à zéro (seule) ; sans effet sur une alerte active', async () => {
+        const c = fausseColl({ _id: P.ID_ALERTE, active: false, blocages: [{ le: 1 }, { le: 2 }] });
+        assert.strictEqual((await R.reinitialiserBlocages(c, 9)).remis, true); assert.deepStrictEqual(c.docs.get(P.ID_ALERTE).blocages, []); assert.strictEqual(c.docs.get(P.ID_ALERTE).historiqueBlocages.length, 2);
+        const a = fausseColl({ _id: P.ID_ALERTE, active: true, blocages: [{ le: 1 }] }); assert.strictEqual((await R.reinitialiserBlocages(a, 9)).remis, false); assert.strictEqual(a.docs.get(P.ID_ALERTE).blocages.length, 1);
+        const src = fs.readFileSync(require.resolve('./collecteur-images-pikaqian.js'), 'utf8'); assert.ok(/telecharges > 0\) await reinitialiserBlocages\(E\)/.test(src));
+    });
+    await t('I1 : une source RETIRÉE par décision (retrait: true) ne se retente JAMAIS, avec ou sans tableau', async () => {
+        const retiree = { _id: P.ID_ALERTE, active: true, retrait: true, depuis: new Date(T1), constateLe: new Date(T1), motif: 'retrait en un lot des visuels pikaqian' };
+        for (const doc of [retiree, { ...retiree, blocages: [{ le: T1 }], status: 403 }, { ...retiree, status: 403 }]) {
+            const b = banc([SERVI], { doc, t0: T1 + 400 * 24 * HEURE }); const r = await b.essai.essayer(); assert.strictEqual(r.envoye, false); assert.strictEqual(b.etat.requetes, 0);
+        }
+        assert.strictEqual(R.blocagesDe(retiree), null);
+    });
+    await t('I1 : seule une alerte portant le STATUT d\'une réponse est un blocage ancien', () => {
+        assert.strictEqual(R.blocagesDe({ active: true, depuis: new Date(T1), motif: 'x' }), null); assert.strictEqual(R.blocagesDe(LEGACY()).length, 1);
     });
     await t('SERVI : `surServi` (la remise en file des unités) part AVANT l\'écriture de l\'état', async () => {
         const ordre = []; const b = banc([SERVI], { surServi: async () => { ordre.push('remise'); assert.strictEqual(b.etat.doc.active, true); } });
@@ -155,6 +191,8 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
         await c();
         assert.strictEqual(appels.length, 1); assert.strictEqual(appels[0].url, 'https://pikaqian.com/robots.txt');
         assert.deepStrictEqual(Object.keys(appels[0].opts.headers), ['User-Agent']); assert.strictEqual(appels[0].opts.redirect, 'manual');
+        // I3 : la VALEUR envoyée est l'identité de PikaQian, celle dont robots.txt est jugé — pas le défaut de Bulbapedia
+        assert.strictEqual(appels[0].opts.headers['User-Agent'], P.UA); assert.notStrictEqual(appels[0].opts.headers['User-Agent'], require('./collecte-cartes/bulba').UA);
         assert.ok(!('credentials' in appels[0].opts) && !('cookie' in appels[0].opts.headers));
     });
     await t('le User-Agent est celui du dépôt (nom + contact), et n\'imite aucun navigateur', () => {

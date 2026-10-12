@@ -166,6 +166,14 @@ async function banc({ adresses = [A(1), A(2), A(3)], reponses = {}, robots = ROB
         assert.ok(/headers: \{ 'User-Agent': UA, Accept:/.test(src)); assert.ok(/redirect: 'manual'/.test(src)); assert.ok(!/cookie|Authorization|Referer|puppeteer|playwright|process\.env|proxy/i.test(src));
         assert.ok(!/browser|Mozilla|Chrome|Safari/i.test(P.UA));
     });
+    await t('I3 : le transport par défaut envoie, sur robots.txt ET sur l\'image, le User-Agent honnête P.UA (valeur testée, fetch simulé)', async () => {
+        const vus = []; const vrai = global.fetch;
+        global.fetch = async (url, opts) => { vus.push({ url, h: opts.headers, redirect: opts.redirect }); const h = new Map([['content-type', url.endsWith('robots.txt') ? 'text/plain' : 'image/png']]); const corps = url.endsWith('robots.txt') ? Buffer.from('User-agent: *\n') : await png(4, 4);
+            return { status: 200, ok: true, headers: { get: k => h.get(k) ?? null }, arrayBuffer: async () => corps }; };
+        try { const E = fausseCollection(); await S.fabriquerSonde({ E, trouverAdresses: async () => [A(1)], pause: async () => { } }).executer(); } finally { global.fetch = vrai; }
+        assert.strictEqual(vus.length, 2); for (const v of vus) { assert.strictEqual(v.h['User-Agent'], P.UA); assert.strictEqual(v.redirect, 'manual'); }
+        assert.ok(/rat-market-catalogue\/\d/.test(P.UA) && !/mozilla|chrome|safari|axios/i.test(P.UA));
+    });
     await t('formater imprime l\'état, le robots et chaque image ; un document absent se dit', async () => {
         const b = await banc(); await b.sonde.executer(); const txt = S.formater(b.E.docs.get(S.ID_SONDE));
         assert.ok(/faite/.test(txt) && /robots\.txt : HTTP 200/.test(txt) && /300×419 png/.test(txt)); assert.ok(/jamais lancée/.test(S.formater(null)));

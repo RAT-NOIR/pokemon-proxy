@@ -52,7 +52,8 @@ function blocagesDe(etat) {
         }
         return sortie;
     }
-    if (etat.active !== true) return null;
+    // une alerte ancienne n'est un BLOCAGE que si elle porte le statut d'une réponse : la fermeture par retrait n'en a pas (et porte `retrait: true`)
+    if (etat.active !== true || etat.retrait === true || !Number.isFinite(etat.status)) return null;
     const le = enMs(etat.depuis);
     if (!Number.isFinite(le)) return null;
     return [{ le, url: /https:\/\/\S+?(?=\s|$)/.exec(String(etat.motif ?? ''))?.[0] ?? null, status: etat.status ?? null, motif: etat.motif ?? null, origine: 'ancien' }];
@@ -63,6 +64,8 @@ const POLITIQUE = Object.freeze({
     autoriser(etat, now) {
         if (!etat || typeof etat !== 'object' || Array.isArray(etat) || typeof etat.active !== 'boolean') return { ok: false, raison: 'état illisible (active non booléen) : on ne peut pas conclure' };
         if (etat.active === false) return { ok: false, raison: 'alerte levée : rien à retenter' };
+        // une source RETIRÉE par décision (retirer-visuels-pikaqian.js) ne se retente JAMAIS, quel que soit le reste de l'état
+        if (etat.retrait === true) return { ok: false, raison: 'source retirée par décision (retrait: true) : jamais retentée' };
         const bl = blocagesDe(etat);
         if (!bl || !bl.length) return { ok: false, raison: 'alerte active sans blocage daté lisible : on ne peut pas conclure' };
         if (etat.suspendue === true || bl.length >= BLOCAGES_MAX) return { ok: false, raison: `SUSPENDUE (${bl.length} blocages, dernier le ${new Date(Math.max(...bl.map(b => b.le))).toISOString()}) : plus aucune tentative sans décision du testeur` };
@@ -79,7 +82,9 @@ const POLITIQUE = Object.freeze({
         const retardMs = (v.retryAfterS || 0) * 1000;
         const commun = { dernierEssai: now, verdict: v.verdict, motif: v.motif, constateLe: now };
         if (v.verdict === 'SERVI') {
-            return { doc: { ...commun, active: false, suspendue: false, blocages: [], historiqueBlocages: bl, pasAvant: null, levee: now }, retour: { envoye: true, verdict: 'SERVI', motif: v.motif } };
+            // 🔴 le compte SURVIT à la levée : robots.txt servi ne prouve pas que les pages le sont. Il ne revient à zéro que par `reinitialiserBlocages`
+            // (une collecte réellement réussie : page lue ET image téléchargée), sinon la boucle robots OK → pages bloquées ne suspendrait jamais.
+            return { doc: { ...commun, active: false, suspendue: false, blocages: bl, pasAvant: null, levee: now }, retour: { envoye: true, verdict: 'SERVI', motif: v.motif } };
         }
         if (v.verdict === 'DEFI') {
             const tous = [...bl, { le: now, url: URL_ROBOTS, status: v.status ?? null, motif: v.motif, origine: 'worker' }];
@@ -111,7 +116,8 @@ function verdictDe(rep) {
 }
 
 /** Le client direct : UNE requête vers le robots.txt de pikaqian.com, `User-Agent` seul, redirection jamais suivie. */
-const fabriquerClientDirect = fetchImpl => B.fabriquerClientDirect(fetchImpl, URL_ROBOTS);
+// 🔴 l'identité envoyée est CELLE DE PIKAQIAN (`P.UA`), la même que celle dont robots.txt est jugé — pas le défaut de Bulbapedia
+const fabriquerClientDirect = fetchImpl => B.fabriquerClientDirect(fetchImpl, URL_ROBOTS, UA);
 
 /** La machine de Bulbapedia, avec la politique de PikaQian. `allume` ne vaut que s'il est EXACTEMENT true (défaut : true — décision du testeur). */
 function fabriquerEssai({ client, magasin, maintenant = Date.now, allume = true, surServi = null }) {
@@ -126,13 +132,22 @@ const magasinMongo = collection => B.magasinMongo(collection, ID_ETAT);
  */
 async function noterBlocage(collection, { unite = null, motif = null, status = null, url = null, requetes = null, nature = 'defi' } = {}, now = Date.now()) {
     const lu = await collection.findOne({ _id: ID_ETAT });
-    const avant = lu && lu.active === true ? (blocagesDe(lu) ?? []) : [];
+    // le compte vient du tableau en base, alerte active OU levée (I2) ; une alerte ancienne sans tableau compte comme un blocage
+    const avant = lu ? (blocagesDe(lu) ?? []) : [];
     const tous = [...avant, { le: now, url, status, motif, origine: 'collecteur', nature }];
     const suspendue = tous.length >= BLOCAGES_MAX;
     const pasAvant = suspendue ? null : now + DELAIS_MS[tous.length - 1];
-    const depuis = avant.length && lu?.depuis ? lu.depuis : new Date(now);
+    const depuis = lu?.active === true && lu.depuis ? lu.depuis : new Date(now);   // posée à chaque transition vers « active »
     await collection.updateOne({ _id: ID_ETAT }, { $set: { active: true, depuis, constateLe: new Date(now), motif, status, unite, requetes, suspendue, blocages: tous, pasAvant } }, { upsert: true });
     return { n: tous.length, suspendue, pasAvant };
+}
+
+/** Une collecte réellement réussie (page de set lue ET au moins une image téléchargée) remet le compte à zéro — et seulement elle. Sans effet sur une alerte active. */
+async function reinitialiserBlocages(collection, now = Date.now()) {
+    const lu = await collection.findOne({ _id: ID_ETAT });
+    if (!lu || lu.active !== false || !Array.isArray(lu.blocages) || !lu.blocages.length) return { remis: false };
+    await collection.updateOne({ _id: ID_ETAT }, { $set: { blocages: [], historiqueBlocages: lu.blocages, reinitialiseLe: now } });
+    return { remis: true };
 }
 
 /** Les unités pikaqian refusées POUR BLOCAGE repassent en attente, en QUEUE et dans leur ordre ; aucune autre source, aucun autre refus. Idempotent. */
@@ -168,4 +183,4 @@ async function passerLesTaches(db, { journal = console, enService = require('./s
     return sortie;
 }
 
-module.exports = { ID_ETAT, URL_ROBOTS, UA, DELAIS_MS, BLOCAGES_MAX, ESSAI_MIN_MS, POLITIQUE, blocagesDe, verdictDe, fabriquerClientDirect, fabriquerEssai, magasinMongo, noterBlocage, remettreEnFile, passerLesTaches };
+module.exports = { ID_ETAT, URL_ROBOTS, UA, DELAIS_MS, BLOCAGES_MAX, ESSAI_MIN_MS, POLITIQUE, blocagesDe, verdictDe, fabriquerClientDirect, fabriquerEssai, magasinMongo, noterBlocage, reinitialiserBlocages, remettreEnFile, passerLesTaches };

@@ -29,7 +29,7 @@ const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jo
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, lignePikaqian } = require('./collecte-cartes/pikaqian-sets');
-const { noterBlocage } = require('./collecte-cartes/reessai-pikaqian');
+const { noterBlocage, reinitialiserBlocages } =require('./collecte-cartes/reessai-pikaqian');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;                 // consigne de l'éditeur : au-delà de 400 Mo (plafond M0 512), STOP
@@ -191,6 +191,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         }
         if (bloque) await conclureBloque(E, unite, bloque, client, { seulementAlerte: true });
         else if (arretClient && !arretClient.plafond) await conclureBloque(E, unite, arretClient, client, { seulementAlerte: true });   // l'erreur répétée pose l'alerte aussi
+        // une collecte réellement réussie (page lue + au moins une image téléchargée) remet le compte des blocages à zéro
+        if (!bloque && !arretClient && telecharges > 0) await reinitialiserBlocages(E);
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
