@@ -25,10 +25,12 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { marqueDe } = require('./collecte-cartes/basse-definition');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, lignePikaqian } = require('./collecte-cartes/pikaqian-sets');
+const { noterBlocage, reinitialiserBlocages } =require('./collecte-cartes/reessai-pikaqian');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;                 // consigne de l'éditeur : au-delà de 400 Mo (plafond M0 512), STOP
@@ -162,6 +164,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                 const cleR2 = `${P.SOURCE}/${slug}/${cleNum(p.numero)}-${p.carteId}-${P.LANGUE}.webp`;
                 await deposer(bucket, cleR2, webp.data, 'image/webp');                   // R2 AVANT la ligne
+                const marque = marqueDe({ wOriginal: meta.width });                      // 2026-10-12 : basse définition d'après l'ORIGINAL (collecte-cartes/basse-definition.js)
                 const origine = origines.get(p.tuile.id) ?? null;
                 await M.Image.updateOne({ _id }, {
                     $set: {
@@ -172,8 +175,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est la langue de la page
                         langueSource: P.LANGUE, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: P.LANGUE })),
-                        attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok'
-                    }, $unset: { erreur: 1 }
+                        attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
+                    }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
                 }, { upsert: true });
                 telecharges++;
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
@@ -190,6 +193,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         }
         if (bloque) await conclureBloque(E, unite, bloque, client, { seulementAlerte: true });
         else if (arretClient && !arretClient.plafond) await conclureBloque(E, unite, arretClient, client, { seulementAlerte: true });   // l'erreur répétée pose l'alerte aussi
+        // une collecte réellement réussie (page lue + au moins une image téléchargée) remet le compte des blocages à zéro
+        if (!bloque && !arretClient && telecharges > 0) await reinitialiserBlocages(E);
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
@@ -210,7 +215,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
                     numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
-                    provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, jointeLe: new Date() };
+                    provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
@@ -254,7 +259,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
 
 /** Une source qui bloque : l'ALERTE s'écrit (lue par file-a-l-arret.js), on s'arrête. Elle ne se rouvre que par une décision (l'alerte désactivée à la main). */
 async function conclureBloque(E, unite, err, client, { seulementAlerte = false } = {}) {
-    await E.updateOne({ _id: P.ID_ALERTE }, { $set: { active: true, constateLe: new Date(), motif: err.message, status: err.status ?? null, unite: unite._id, requetes: client.compteRequetes() }, $setOnInsert: { depuis: new Date() } }, { upsert: true });
+    // le blocage se COMPTE en base (collecte-cartes/reessai-pikaqian.js) : date, adresse, statut — le worker retente à 6 h puis 24 h, et suspend au 3e
+    await noterBlocage(E, { unite: unite._id, motif: err.message, status: err.status ?? null, url: /https:\/\/\S+/.exec(err.message)?.[0] ?? null, requetes: client.compteRequetes(), nature: err.bloque ? 'defi' : 'erreur-repetee' });
     console.error(`⛔ ${unite._id} : ${err.message}`);
     if (seulementAlerte) return null;
     return { code: unite._id, etat: 'refuse-source-bloquee', erreur: err.message, status: err.status ?? null, sansJointure: true };
