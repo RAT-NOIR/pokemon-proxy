@@ -47,9 +47,11 @@ const ALERTE_ECHUE = () => ({ _id: P.ID_ALERTE, active: true, depuis: new Date(T
         assert.strictEqual(lectures, 0);
     });
     await t('même si on la déclare EN SERVICE de force (enService injecté) : la machine ne part pas et la sonde du CDN non plus', async () => {
-        const db = { collection: () => ({ findOne: async () => ALERTE_ECHUE(), findOneAndUpdate: async () => ({ _id: 'x' }), updateOne: async () => { throw new Error('écriture'); }, find: () => ({ sort: () => ({ limit: () => ({ toArray: async () => [] }) }), toArray: async () => [] }) }) };
+        let lectures = 0;
+        const db = { collection: () => { lectures++; return { findOne: async () => ALERTE_ECHUE(), findOneAndUpdate: async () => ({ _id: 'x' }), updateOne: async () => { throw new Error('écriture'); }, find: () => ({ sort: () => ({ limit: () => ({ toArray: async () => [] }) }), toArray: async () => [] }) }; } };
         const r = await R.passerLesTaches(db, { enService: () => true, journal: { log() { }, error() { } }, maintenant: () => ECHUE });
         assert.strictEqual(appelsInterdits.length, 0, appelsInterdits.join(','));
+        assert.strictEqual(lectures, 0, 'estPassive de passerLesTaches : aucune lecture de base non plus');
         assert.strictEqual(r.pikaqian.envoye, false); assert.strictEqual(r.sonde.envoye, false);
     });
     await t('la machine d\'espacement, fabriquée SANS `allume`, ne part pas sur une alerte échue (fermée par défaut)', async () => {
@@ -62,8 +64,17 @@ const ALERTE_ECHUE = () => ({ _id: P.ID_ALERTE, active: true, depuis: new Date(T
     await t('noterBlocage ne programme plus aucune tentative : pasAvant reste null, aux trois blocages comme au premier', async () => {
         const docs = new Map();
         const c = { findOne: async f => (docs.get(f._id) ? structuredClone(docs.get(f._id)) : null), updateOne: async (f, u) => { const d = docs.get(f._id) ?? { _id: f._id }; Object.assign(d, structuredClone(u.$set)); docs.set(f._id, d); } };
-        for (let i = 0; i < 3; i++) await R.noterBlocage(c, { motif: 'm', status: 403 }, T1 + i * HEURE);
-        assert.strictEqual(docs.get(P.ID_ALERTE).pasAvant, null);
+        for (let i = 0; i < 3; i++) { await R.noterBlocage(c, { motif: 'm', status: 403 }, T1 + i * HEURE); assert.strictEqual(docs.get(P.ID_ALERTE).pasAvant, null, `après le blocage n°${i + 1}`); }
+        assert.strictEqual(docs.get(P.ID_ALERTE).blocages.length, 3);
+    });
+    await t('la sonde du CDN ferme son transport : sans transport injecté, une adresse en base ne produit AUCUN appel (robots.txt compris)', async () => {
+        const S2 = require('./collecte-cartes/sonde-cdn-pokemon-tcg');
+        const docs = new Map();
+        const E = { findOne: async f => docs.get(f._id) ?? null, insertOne: async d => { docs.set(d._id, structuredClone(d)); }, updateOne: async (f, u) => { Object.assign(docs.get(f._id), structuredClone(u.$set)); }, findOneAndUpdate: async () => null };
+        const sonde = S2.fabriquerSonde({ E, trouverAdresses: async () => ['https://cdn.pokemon-tcg.cn/cards/0123456789abcdef0123456789abcdef.png'], pause: async () => { } });
+        const r = await sonde.executer();
+        assert.strictEqual(appelsInterdits.length, 0, appelsInterdits.join(','));
+        assert.ok(/passive/.test(JSON.stringify(r) + JSON.stringify([...docs.values()])), 'la fermeture est écrite : ' + JSON.stringify(r));
     });
 
     console.log('l\'alerte n\'annonce plus de « prochaine tentative »');

@@ -14,6 +14,7 @@
 // (en-tête ET octets lus), dimensions, serveur, défi. Elle NE STOCKE PAS l'image (aucun dépôt R2, aucune écriture hors de ce document) et ne la joint à rien.
 const P = require('./pikaqian');
 const T = require('./tpc');
+const SP = require('./source-passive');
 
 const HOTE = 'cdn.pokemon-tcg.cn';
 const ID_SONDE = 'etat/sonde-cdn-pokemon-tcg';
@@ -49,6 +50,8 @@ function verdictRobots(rep, chemin = '/cards/x.png') {
 // ── LE TRANSPORT : une requête, `User-Agent` seul, redirection jamais suivie, corps borné ─────────────────────────────────────────────────────────────
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
+        // ➖ 2026-10-13 : le worker ne touche jamais ce CDN (source PikaQian passive, décision du testeur) — le transport réel est fermé comme celui de pikaqian.js
+        if (SP.estPassive(P.SOURCE)) throw Object.assign(new Error(`${HOTE} : ${SP.motifPassif(P.SOURCE)} — aucune requête partie (${url})`), { passive: true, arret: true });
         let r;
         try { r = await fetch(url, { headers: { 'User-Agent': UA, Accept: binaire ? 'image/*;q=0.9,*/*;q=0.5' : 'text/plain,*/*;q=0.5' }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
         catch (e) { throw Object.assign(new Error(`${e.name === 'TimeoutError' ? 'ETIMEDOUT' : e.cause?.code || 'ERR_NETWORK'} ${url}`), { reseau: true }); }
