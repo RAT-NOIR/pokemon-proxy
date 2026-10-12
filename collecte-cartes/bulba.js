@@ -29,19 +29,41 @@ const dodo = ms => new Promise(r => setTimeout(r, ms));
  * hors du `/w/` interdit) DANS LA MÊME FILE que `api` : un seul débit pour tout Bulbagarden. Deux
  * files, une par hôte, doubleraient la cadence chez le même opérateur — la faute du §17, en plus discret.
  */
-function telecharger(url) {
+// LES REDIRECTIONS (§75, le défaut du client TPC) : jamais suivies par le transport (`maxRedirects: 0`) ; ce client les suit lui-même, chaque saut recontrôlé —
+// https, et l'hôte de départ OU la liste fermée Bulbagarden ci-dessous, 3 sauts au plus. Tout autre cas est un REFUS NOMMÉ (`refusRedirection`), ni un succès ni un défi.
+const HOTES_BULBAGARDEN = Object.freeze(['archives.bulbagarden.net', 'bulbapedia.bulbagarden.net']);
+const SAUTS_MAX = 3;
+const transportAxios = url => axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000, maxRedirects: 0, validateStatus: s => s < 400 });
+const refusRedirection = m => Object.assign(new Error(m), { refusRedirection: true });
+
+function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, attendre = dodo } = {}) {
     const tache = _file.then(async () => {
-        const attente = _derniere + DELAI_MS - Date.now();
-        if (attente > 0) await dodo(attente);
+        const attendreFile = async () => { const a = _derniere + delaiMs - Date.now(); if (a > 0) await attendre(a); };
+        await attendreFile();
         for (let essai = 0; ; essai++) {
-            _derniere = Date.now();
-            _compte++;
             try {
-                const r = await axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000 });
-                return { buffer: Buffer.from(r.data), type: r.headers['content-type'] || null };
+                let courant = url;
+                const hoteDepart = new URL(url).hostname;
+                for (let saut = 0; ; saut++) {
+                    if (saut > 0) await attendreFile();
+                    _derniere = Date.now();
+                    _compte++;
+                    const r = await transport(courant);
+                    if (r.status >= 300 && r.status < 400) {
+                        if (saut >= SAUTS_MAX) throw refusRedirection(`Bulbagarden redirection refusée sur ${url} : plus de ${SAUTS_MAX} sauts`);
+                        const loc = r.headers?.location;
+                        if (!loc) throw refusRedirection(`Bulbagarden redirection refusée sur ${url} : réponse ${r.status} sans destination`);
+                        let cible; try { cible = new URL(loc, courant); } catch { throw refusRedirection(`Bulbagarden redirection refusée sur ${url} : destination illisible`); }
+                        if (cible.protocol !== 'https:' || !(cible.hostname === hoteDepart || HOTES_BULBAGARDEN.includes(cible.hostname))) throw refusRedirection(`Bulbagarden redirection refusée sur ${url} : vers ${cible.protocol}//${cible.hostname} (hôte hors de la liste fermée)`);
+                        courant = cible.href;
+                        continue;
+                    }
+                    return { buffer: Buffer.from(r.data), type: r.headers?.['content-type'] || null };
+                }
             } catch (e) {
+                if (e.refusRedirection) throw e;
                 const statut = e.response?.status;
-                if (essai === 0 && (!statut || statut >= 500)) { console.warn(`   ↻ Bulbagarden ${statut ?? e.code} sur ${url} — un seul réessai dans 60 s`); await dodo(60000); continue; }
+                if (essai === 0 && (!statut || statut >= 500)) { console.warn(`   ↻ Bulbagarden ${statut ?? e.code} sur ${url} — un seul réessai dans 60 s`); await attendre(60000); continue; }
                 throw new Error(`Bulbagarden ${statut ?? e.code ?? ''} sur ${url} (après ${essai + 1} essai(s))`);
             }
         }
@@ -145,4 +167,4 @@ async function imageinfoDe(fichiers) {
     return infos;
 }
 
-module.exports = { api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS };
+module.exports = { api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS, HOTES_BULBAGARDEN, SAUTS_MAX };
