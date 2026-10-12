@@ -16,4 +16,13 @@ const E = require('./collecte-cartes/bulba-espacement');
     console.log(`début du corps   : ${JSON.stringify(rep.texte.slice(0, 120))}`);
     const v = E.verdictDe(rep);
     console.log(`VERDICT          : ${v.verdict} — ${v.motif}`);
+    // --noter : écrit le verdict dans l'état que lit la route B des logos (collecte-cartes/logos-bulba.js : feuVertSonde) — même machine d'état que le worker.
+    // Sans cet argument la sonde n'écrit rien (comportement d'origine). Un DEFI ou un AUTRE suspend (7 jours / 24 h) : la route B reste fermée.
+    if (process.argv.includes('--noter')) {
+        require('dotenv').config();
+        const { ouvrirConnexions } = require('./collecte-cartes/garde');
+        const cx = await ouvrirConnexions({ production: false, buckets: [] });
+        try { const r = await require('./collecte-cartes/logos-bulba').noterVerdict(cx.cartes.db.collection('collecte_images_etat'), v, Date.now()); console.log(`ÉTAT NOTÉ        : ${E.ID_ETAT} → ${JSON.stringify(r)}`); }
+        finally { await cx.fermer(); }
+    }
 })();
