@@ -150,6 +150,36 @@ const carte = (...docs) => new Map(docs.map(d => [d._id, d]));
             verifier('A : un sets.logo posé par collecter-logos-demande.js (source Bulbagarden, liste fermée) est une provenance valable', r.parRoute.A.length, 1);
         }
 
+        // ───── 4 bis. LA SECONDE PREUVE DU SET (route A seulement) : la page archivée du set nomme le fichier
+        {
+            const nonSur = L({ setSur: false, cache: bonne.cache });
+            const pages = new Map([['p/xy2', '{{TCGExpansionInfobox\n|setname=Wild Blaze\n|setlogo=XY2 Logo.png\n}}'], ['p/autre', '{{TCGExpansionInfobox\n|setname=Autre\n|setlogo=Autre Logo.png\n}}'], ['p/sanslogo', '{{TCGExpansionInfobox\n|setname=Wild Blaze\n}}']]);
+            const lirePage = async cle => { if (!pages.has(cle)) throw new Error('absent'); return pages.get(cle); };
+            const essai = async (nom, docSet, ligne, attendu, opts = {}, octets = A) => {
+                await S.deleteMany({}); magasin.clear(); magasin.set('bulbapedia/logos/xy2logopng.png', octets);
+                await S.insertOne({ ...docSet });
+                const n0 = copies;
+                const r = await Bu.collecterA({ lignes: [ligne], setsParId: await sets(), lireOctets: lire, S, r2, bucket: 'b', ecrire: true, lirePage: 'lirePage' in opts ? opts.lirePage : lirePage });
+                const w = await S.findOne({ _id: docSet._id });
+                verifier(nom, [r.parRoute.A.length, r.ecrits.length, !!w.logoOfficiel?.ja, copies - n0, r.parRoute.B.length], attendu);
+                return { r, w };
+            };
+            const avecPage = (cle, o = {}) => SET({ bulba: { cleR2: cle, titre: 'Wild Blaze (TCG)' }, logo: leLogo(A), ...o });
+            const ok1 = await essai('SECONDE PREUVE : la page archivée du set nomme le fichier de sets.logo, octets égaux : écrite par la route A', avecPage('p/xy2'), nonSur, [1, 1, true, 2, 0]);
+            verifier('… la preuve est écrite sur le logo (page, fichier) et la ligne garde son set d\'origine', [/setlogo/.test(ok1.w.logoOfficiel.ja.preuve.setConfirmeParPage ?? ''), ok1.w.logoOfficiel.ja.preuve.setDeLaLigne], [true, 'Wild-Blaze']);
+            await essai('sans lirePage (aucun accès à l\'archive) : NON', avecPage('p/xy2'), nonSur, [0, 0, false, 0, 0], { lirePage: undefined });
+            await essai('la page nomme un AUTRE fichier : NON', avecPage('p/xy2', { logo: leLogo(A, { fichier: 'XY2 Logo bis.png' }) }), nonSur, [0, 0, false, 0, 0]);
+            await essai('la page du set est celle d\'un autre set (autre setlogo) : NON', avecPage('p/autre'), nonSur, [0, 0, false, 0, 0]);
+            await essai('la page n\'a pas de setlogo : NON', avecPage('p/sanslogo'), nonSur, [0, 0, false, 0, 0]);
+            await essai('archive absente (le set n\'a pas de bulba.cleR2) : NON', SET({ logo: leLogo(A) }), nonSur, [0, 0, false, 0, 0]);
+            await essai('archive illisible (objet absent) : NON', avecPage('p/inconnu'), nonSur, [0, 0, false, 0, 0]);
+            await essai('octets différents du candidat : NON, et pas de route B pour un set non sûr', avecPage('p/xy2', { logo: leLogo(B) }), nonSur, [0, 0, false, 0, 0], {}, B);
+            await essai('provenance de sets.logo inconnue (manuel) : NON, pas de route B pour un set non sûr', avecPage('p/xy2', { logo: leLogo(A, { source: 'manuel' }) }), nonSur, [0, 0, false, 0, 0]);
+            await essai('la langue d\'aujourd\'hui refuse (suffixe EN) malgré la page : NON', avecPage('p/xy2', { logo: leLogo(A, { fichier: 'XY2 Logo EN.png' }) }), nonSur, [0, 0, false, 0, 0]);
+            await essai('set non identifié du tout (set null) : NON', avecPage('p/xy2'), L({ set: null, setSur: false, cache: bonne.cache }), [0, 0, false, 0, 0]);
+            verifier('route B : un set « ? » reste écarté par le plan (la seconde preuve ne vaut que pour A)', Bu.planifierBulba(nonSur, carte(avecPage('p/xy2'))).action, 'ecartee');
+        }
+
         // ───── 5. ROUTE B : faux client, aucune requête réelle
         const ROBOTS_OK = { status: 200, texte: 'User-agent: *\nDisallow: /w/\n' };
         const mkPlan = async (n = 3) => {

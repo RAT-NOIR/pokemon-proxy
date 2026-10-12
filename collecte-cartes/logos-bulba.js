@@ -11,7 +11,8 @@
 const crypto = require('crypto');
 const M = require('../collecter-logos-officiels');
 const E = require('./bulba-espacement');
-const { deciderLangue, refusDuCouple, refusGenerique } = require('./langue-logo');
+const { deciderLangue, refusDuCouple, refusGenerique, cle } = require('./langue-logo');
+const { gabarits } = require('./wikitext');
 const { autoriseParRobots, delaiDesRobots } = require('./tpc');
 
 const LOT_BULBA = 'logos-officiels-bulba-2026-10';
@@ -112,6 +113,23 @@ function planifierBulba(ligne, setsParId) {
 }
 
 // ───────────────────────── ROUTE A
+/**
+ * LA SECONDE PREUVE DU SET : la page Bulbapedia ARCHIVÉE de CE set (`sets.bulba.cleR2`, bucket brut) nomme, dans son infobox, le fichier de `sets.logo`.
+ * Lue dans l'archive, pas supposée depuis la provenance écrite. `lirePage(cleR2)` → texte. Une condition non lisible → { ok:false, raison }.
+ */
+async function preuveParPage({ setDoc, logo, lirePage }) {
+    if (typeof lirePage !== 'function') return { ok: false, raison: 'aucun accès à l\'archive des pages' };
+    const cleR2 = setDoc?.bulba?.cleR2;
+    if (typeof cleR2 !== 'string' || !cleR2) return { ok: false, raison: 'le set n\'a pas de page archivée (bulba.cleR2)' };
+    let txt; try { txt = await lirePage(cleR2); } catch (e) { return { ok: false, raison: `page archivée illisible (${e.message})` }; }
+    if (typeof txt !== 'string' || !txt) return { ok: false, raison: 'page archivée vide' };
+    const box = gabarits(txt).find(g => /infobox/i.test(g.nom));
+    const nomme = String(box?.params?.setlogo ?? box?.params?.logo ?? '').trim().replace(/-->\s*$/, '');
+    if (!nomme) return { ok: false, raison: 'la page archivée ne porte aucun setlogo dans son infobox' };
+    if (!logo?.fichier || cle(nomme) !== cle(logo.fichier)) return { ok: false, raison: `la page archivée nomme « ${nomme} », pas le fichier de sets.logo « ${logo?.fichier ?? '∅'} »` };
+    return { ok: true, preuve: `la page archivée « ${setDoc.bulba.titre ?? cleR2} » nomme setlogo « ${nomme} » = le fichier de sets.logo (octets égaux au candidat)` };
+}
+
 const refusDeLangueDe = (setDoc, nom) => ligne => {
     if (ligne.cible !== 'ja') return `cible « ${ligne.cible} » : un logo Bulbapedia ne prouve pas cette langue`;
     const c = refusDuCouple(nom); if (c) return c;
@@ -123,12 +141,17 @@ const refusDeLangueDe = (setDoc, nom) => ligne => {
  * Trie les lignes entre la route A (octets déjà chez nous), la route B (à télécharger), les refus. `lireOctets(cleR2)` lit NOTRE R2.
  * Rend { parRoute: { A: [items], B: [{ligne, plan, raison}] }, refus, deja, doublons, ecrits, copiesR2 }. N'écrit que si `ecrire`.
  */
-async function collecterA({ lignes, setsParId, lireOctets, S, r2, bucket, ecrire = false, le = new Date() }) {
+async function collecterA({ lignes, setsParId, lireOctets, S, r2, bucket, ecrire = false, le = new Date(), lirePage = null }) {
     const sortie = { parRoute: { A: [], B: [] }, refus: [], deja: [], doublons: [], ecrits: [], copiesR2: 0 };
     const items = [];
-    for (const ligne of lignes) {
+    for (const ligne0 of lignes) {
+        // SECONDE PREUVE DU SET (décision du coordinateur, 2026-10-12) : un set « ? » (code seulement) n'est écrit QUE par cette route, et seulement si la page
+        // archivée du set nomme le fichier de sets.logo (preuveParPage) ; il n'est JAMAIS envoyé à la route B. Toute autre issue le laisse écarté, raison dite.
+        const nonSur = !!ligne0.set && !ligne0.setSur;
+        const ligne = nonSur ? { ...ligne0, setSur: true } : ligne0;
         const nomLigne = `${ligne.cible} ${ligne.set ?? '∅'} (${ligne.fichier})`;
-        const refuser = (action, raison) => sortie.refus.push({ ligne, action, raison });
+        const refuser = (action, raison) => sortie.refus.push({ ligne: ligne0, action, raison: nonSur ? `set « ${ligne.set} » identifié par le code seulement, non confirmé (${raison})` : raison });
+        const versB = (plan, raison) => nonSur ? refuser('ecartee', `${raison} : la seconde preuve ne vaut pas pour la route B`) : sortie.parRoute.B.push({ ligne, plan, raison });
         const p = planifierBulba(ligne, setsParId);
         if (p.action !== 'eligible') { refuser(p.action, p.raison); continue; }
         const setDoc = setsParId.get(ligne.set);
@@ -138,11 +161,11 @@ async function collecterA({ lignes, setsParId, lireOctets, S, r2, bucket, ecrire
             continue;
         }
         const logo = setDoc.logo;
-        if (!logo?.cleR2) { sortie.parRoute.B.push({ ligne, plan: p, raison: 'le set n\'a pas de sets.logo : à télécharger' }); continue; }
-        if (!SOURCES_BULBAGARDEN.has(logo.source)) { sortie.parRoute.B.push({ ligne, plan: p, raison: `sets.logo de source « ${logo.source ?? '∅'} » : pas de provenance Bulbagarden, à télécharger` }); continue; }
+        if (!logo?.cleR2) { versB(p, 'le set n\'a pas de sets.logo : à télécharger'); continue; }
+        if (!SOURCES_BULBAGARDEN.has(logo.source)) { versB(p, `sets.logo de source « ${logo.source ?? '∅'} » : pas de provenance Bulbagarden, à télécharger`); continue; }
         let buf; try { buf = await lireOctets(logo.cleR2); } catch (e) { refuser('refus', `objet R2 de sets.logo illisible (${e.message}) : je ne sais pas`); continue; }
         if (!Buffer.isBuffer(buf) || !buf.length) { refuser('refus', 'objet R2 de sets.logo vide'); continue; }
-        if (sha256(buf) !== ligne.cache?.sha256) { sortie.parRoute.B.push({ ligne, plan: p, raison: 'sets.logo n\'est pas le même fichier que le candidat (sha256) : à télécharger' }); continue; }
+        if (sha256(buf) !== ligne.cache?.sha256) { versB(p, 'sets.logo n\'est pas le même fichier que le candidat (sha256) : à télécharger'); continue; }
         // la collecte d'origine, rejugée par les règles d'AUJOURD'HUI, sur le nom de fichier de NOTRE sets.logo
         const urlOrigine = urlDirecte(logo.urlOriginal);
         if (!urlOrigine) { refuser('refus', 'provenance de sets.logo illisible (urlOriginal absent ou hors Bulbagarden Archives)'); continue; }
@@ -153,7 +176,13 @@ async function collecterA({ lignes, setsParId, lireOctets, S, r2, bucket, ecrire
         if (gen) { refuser('refus', gen); continue; }
         const j = await M.juger(ligne, buf, { pokecardexBuf: null });
         if (!j.ok) { refuser('refus', j.raison); continue; }
-        items.push({ ligne, set: ligne.set, setDoc, logo, nomLogo, d: deciderLangue(setDoc, nomLogo), sha256: j.sha256, fichier: { buf, sha256: j.sha256, ext: j.format === 'jpeg' ? 'jpg' : j.format, url: urlOrigine, via: 'identique-sets.logo', corr: null } });
+        let confirmationPage = null;
+        if (nonSur) {
+            const pr = await preuveParPage({ setDoc, logo, lirePage });
+            if (!pr.ok) { refuser('ecartee', `seconde preuve : ${pr.raison}`); continue; }
+            confirmationPage = pr.preuve;
+        }
+        items.push({ ligne: ligne0, confirmationPage, set: ligne.set, setDoc, logo, nomLogo, d: deciderLangue(setDoc, nomLogo), sha256: j.sha256, fichier: { buf, sha256: j.sha256, ext: j.format === 'jpeg' ? 'jpg' : j.format, url: urlOrigine, via: 'identique-sets.logo', corr: null } });
     }
     const dd = M.reduireDoublons(items);
     items.forEach((it, i) => {
@@ -178,7 +207,7 @@ async function ecrireA({ S, r2, bucket, item, le = new Date() }) {
         S, r2, bucket, ligne, set: ligne.set, fichier: item.fichier, le, lot: LOT_BULBA, refusDeLangue: refusDeLangueDe(setDoc, nomLogo),
         ajout: {
             entree: { copieR2: true, origine: { route: 'A', cleR2Source: logo.cleR2, fichier: logo.fichier, source: logo.source, urlOriginal: logo.urlOriginal, collecteLe: logo.le ?? null, preuveLangueCollecte: logo.preuve ?? null } },
-            preuve: { route: 'A', langueLogo: d.preuve, fichierLangue: nomLogo, regleLangue: 'collecte-cartes/langue-logo.js deciderLangue' }
+            preuve: { route: 'A', ...(item.confirmationPage ? { setConfirmeParPage: item.confirmationPage } : {}), langueLogo: d.preuve, fichierLangue: nomLogo, regleLangue: 'collecte-cartes/langue-logo.js deciderLangue' }
         }
     });
 }

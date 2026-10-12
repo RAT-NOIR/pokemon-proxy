@@ -30,11 +30,12 @@ if (require.main === module) (async () => {
     const r2 = require('./collecte-cartes/r2');
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const table = JSON.parse(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'logos-officiels-table.json'), 'utf8'));
-    const cx = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
+    const cx = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES', 'R2_BUCKET_BRUT'] });
     const bucket = process.env.R2_BUCKET_IMAGES;
     await r2.verifierBucket(bucket);
+    await r2.verifierBucket(process.env.R2_BUCKET_BRUT);   // l'archive des pages (lecture seule) : seconde preuve du set, route A
     const S = cx.cartes.db.collection('sets');
-    const docs = await S.find({}, { projection: { tirage: 1, region: 1, code: 1, nomJa: 1, nomEn: 1, nomAffichage: 1, nomJaTraduit: 1, 'bulba.titre': 1, logo: 1, logoOfficiel: 1 } }).toArray();
+    const docs = await S.find({}, { projection: { tirage: 1, region: 1, code: 1, nomJa: 1, nomEn: 1, nomAffichage: 1, nomJaTraduit: 1, 'bulba.titre': 1, 'bulba.cleR2': 1, logo: 1, logoOfficiel: 1 } }).toArray();
     if (!docs.length) throw new Error('collection sets vide : base fausse');
     const setsParId = new Map(docs.map(d => [d._id, d]));
     const tcgdexJa = (await cx.cartes.db.collection('tcgdex_sets').findOne({ _id: 'ja/__liste__' }))?.sets ?? null;
@@ -42,10 +43,10 @@ if (require.main === module) (async () => {
     console.log(`DÉNOMINATEUR : ${table.lignes.length} lignes dans la table · ${lignes.length} candidats Bulbapedia (OFFICIEL + À REGARDER promus) · ${nonPromues.length} À REGARDER Bulbapedia non promus · ${docs.length} sets en base · lot ${B.LOT_BULBA}`);
     for (const n of nonPromues) console.log(`   ⚪ ${n.ligne.fichier} : ${n.raison}`);
 
-    const A = await B.collecterA({ lignes, setsParId, lireOctets: cle => r2.lireBinaire(bucket, cle), S, r2, bucket, ecrire: ECRIRE && ROUTE === 'A' });
+    const A = await B.collecterA({ lignes, setsParId, lireOctets: cle => r2.lireBinaire(bucket, cle), lirePage: cle => r2.lireTexte(process.env.R2_BUCKET_BRUT, cle), S, r2, bucket, ecrire: ECRIRE && ROUTE === 'A' });
     const ligneDe = x => `${x.ligne.cible} ${x.ligne.set ?? '∅'} (${x.ligne.fichier})`;
     console.log(`\nROUTE A (zéro requête) : ${A.parRoute.A.length} à poser (octets déjà chez nous) · ${A.deja.length} déjà posés au même sha256 · ${A.doublons.length} doublons · ${A.parRoute.B.length} pour la route B · ${A.refus.length} refusés/écartés`);
-    for (const it of A.parRoute.A) console.log(`   ✅ A  ${ligneDe(it)} ← sets.logo « ${it.logo.fichier} » (${it.logo.cleR2}) · ${it.d.preuve}`);
+    for (const it of A.parRoute.A) console.log(`   ✅ A  ${ligneDe(it)} ← sets.logo « ${it.logo.fichier} » (${it.logo.cleR2}) · ${it.d.preuve}${it.confirmationPage ? ` · SET CONFIRMÉ : ${it.confirmationPage}` : ''}`);
     for (const x of A.deja) console.log(`   ♻️  deja ${ligneDe(x)}`);
     for (const x of A.doublons) console.log(`   ♻️  doublon ${ligneDe(x)} = ${x.meme}`);
     for (const x of A.parRoute.B) console.log(`   ⏭️  B  ${ligneDe(x)} : ${x.raison}`);
