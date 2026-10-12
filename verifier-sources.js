@@ -152,8 +152,15 @@ function verifierImports(fichier) {
     }
     const locaux = new Set();
     for (const m of source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) locaux.add(m[1]);
-    // `\s*(?:=|;|,)` : `let nom;` (sans initialiseur) déclare aussi un nom local (R8 : test-jeton-api.js, `let creerVerifierJeton;` puis `({ creerVerifierJeton } = require(…))`)
-    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=|;|,)/g)) locaux.add(m[1]);
+    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) locaux.add(m[1]);
+    // `let nom;` (sans initialiseur) ne vaut « local » QUE si `nom` est ASSIGNÉ ailleurs dans le fichier (R8 : test-jeton-api.js, `let creerVerifierJeton;` puis
+    // `({ creerVerifierJeton } = require(…))`). Déclaré et jamais assigné, un appel reste un oubli d'import (A-I1) : on n'exempte pas une déclaration vide.
+    for (const m of source.matchAll(/(?:let|var)\s+([A-Za-z_$][\w$]*)\s*(?:;|,)/g)) {
+        const n = m[1];
+        const simple = new RegExp(`(?<![\\w$.])${n.replace(/\$/g, '\\$')}\\s*=(?![=>])`);
+        const destruct = new RegExp(`\\{[^}]*(?<![\\w$.])${n.replace(/\$/g, '\\$')}(?![\\w$])[^}]*\\}\\s*\\)?\\s*=(?![=>])`);
+        if (simple.test(source) || destruct.test(source)) locaux.add(n);
+    }
     // Les déstructurations posent aussi des noms locaux (`const { a, b } = x`).
     for (const m of source.matchAll(/(?:const|let|var)\s*\{([^}]+)\}\s*=/g)) {
         for (const n of m[1].split(',')) {

@@ -46,4 +46,22 @@ function jetonOuRefus(env = process.env) {
     return { ok: true, jeton: j };
 }
 
-module.exports = { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus };
+// ── L'ENVIRONNEMENT DU CLIQUET (R8 B-I). Ses suites ouvrent chacune leur propre banc (ouvrirBanc) : elles ont besoin de l'environnement d'ORIGINE pour JUGER la grappe
+// (hôtes de MONGODB_URI / MONGODB_CARTES_URI) et exiger des URI de lecture distinctes — pas des IDENTIFIANTS d'écriture. Écrit par ce qu'il autorise : on garde les URI
+// de LECTURE (liste fermée de deux noms) ; toute autre variable MONGODB_*URI garde son HÔTE mais reçoit un identifiant inerte (« neutre »), jamais le vrai ; les clés R2 de
+// production sont vidées (les suites n'utilisent que R2_BANC_*, garde-banc.clesR2). Un hôte illisible LÈVE : doute = refus.
+const URI_LECTURE = new Set(['MONGODB_LECTURE_URI', 'MONGODB_CARTES_LECTURE_URI']);
+function environnementDuCliquet(origine = process.env) {
+    const e = { ...origine };
+    for (const [nom, v] of Object.entries(origine)) {
+        if (!/^MONGODB_.*URI$/.test(nom) || typeof v !== 'string' || !v.trim() || URI_LECTURE.has(nom)) continue;
+        const m = /^(mongodb(?:\+srv)?):\/\/(?:[^@/]*@)?([^/?#]+)/i.exec(v.trim());
+        if (!m) throw new Error(`🔴 CLIQUET REFUSÉ — ${nom} est illisible : je ne peux pas la neutraliser, doute = refus.`);
+        e[nom] = `${m[1]}://neutre:neutre@${m[2]}/`;
+    }
+    if (typeof origine.MONGODB_URI !== 'string' || !origine.MONGODB_URI.trim()) throw new Error('🔴 CLIQUET REFUSÉ — MONGODB_URI est absente : les suites ne pourraient pas juger la grappe.');
+    for (const k of ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) e[k] = '';
+    return e;
+}
+
+module.exports = { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus, environnementDuCliquet };

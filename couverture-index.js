@@ -142,7 +142,9 @@ function mesurer(listeSuites, bavard) {
             }
         }
     }
-    fs.rmSync(dossier, { recursive: true, force: true });
+    // R8 : un processus fils de suite peut encore déposer sa couverture au moment du nettoyage (ENOTEMPTY, vu 1 fois sur 3 le 2026-10-12) : on réessaie, et un dossier
+    // temporaire qu'on n'arrive pas à vider ne doit pas faire échouer une mesure DÉJÀ lue (le compteur est calculé plus haut).
+    try { fs.rmSync(dossier, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); } catch (e) { console.log(`  ⚠️ dossier temporaire non vidé (${e.code}) : ${dossier}`); }
     return compteur;
 }
 

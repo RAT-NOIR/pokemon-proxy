@@ -67,7 +67,46 @@ verifier('la garde passe APRÈS appliquer() et AVANT la tranche et le serveur fi
 // Héritant de l'environnement déjà remplacé par appliquer(), smoke-test.js refusait « hôte = production » (MONGODB_TEST_URI = MONGODB_URI = le banc du verrou) : rouge du 2026-10-12.
 const iOrigine = src.indexOf('envOrigine = { ...process.env }');
 verifier('l\'environnement d\'origine est copié AVANT banc.appliquer()', iOrigine > -1 && iOrigine < iBanc);
-verifier('le cliquet reçoit l\'environnement d\'origine (chaque suite ouvre son propre banc)', /couverture-index\.js'[\s\S]{0,200}env:\s*envOrigine/.test(src));
+verifier('le cliquet reçoit l\'environnement ÉPURÉ de l\'origine (pas l\'origine brute)', /couverture-index\.js'[\s\S]{0,200}env:\s*environnementDuCliquet\(envOrigine\)/.test(src) && !/env:\s*envOrigine\b/.test(src));
+
+console.log('--- R8 B-I : l\'environnement du cliquet ne porte AUCUN identifiant d\'écriture de production ---');
+{
+    const { environnementDuCliquet } = require('./verrou/environnement-banc');
+    const { jugerLecture } = require('./collecte-cartes/base-banc');
+    const origine = {
+        MONGODB_URI: 'mongodb+srv://ecrit:MOTDEPASSE-ECRITURE@cluster0.prodx.mongodb.net/test?retryWrites=true',
+        MONGODB_CARTES_URI: 'mongodb+srv://ecrit2:MOTDEPASSE-CARTES@cluster1.cartx.mongodb.net/cartes',
+        MONGODB_LECTURE_URI: 'mongodb+srv://lecteur:MDP-LECTURE@cluster0.prodx.mongodb.net/test',
+        MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://lecteur2:MDP-LECTURE2@cluster1.cartx.mongodb.net/cartes',
+        MONGODB_AUTRE_URI: 'mongodb://autre:MDP-AUTRE@hote.autre.example:27017/x', MONGODB_BASE: 'test',
+        R2_ACCESS_KEY_ID: 'CLE-R2-ID', R2_SECRET_ACCESS_KEY: 'CLE-R2-SECRET', R2_BUCKET_IMAGES: 'bucket-prod', R2_BANC_ACCESS_KEY_ID: 'banc-id', R2_BANC_SECRET_ACCESS_KEY: 'banc-secret', R2_BUCKET_BANC: 'bucket-banc',
+        JETON_API: 'jeton', OPENROUTER_API_KEY: 'x'
+    };
+    const copie = JSON.stringify(origine);
+    const e = environnementDuCliquet(origine);
+    verifier('l\'environnement d\'origine n\'est pas modifié', JSON.stringify(origine) === copie);
+    const vu = JSON.stringify(e);
+    for (const secret of ['MOTDEPASSE-ECRITURE', 'MOTDEPASSE-CARTES', 'MDP-AUTRE', 'CLE-R2-ID', 'CLE-R2-SECRET', 'ecrit:', 'ecrit2:']) verifier(`aucune trace de « ${secret.slice(0, 6)}… » dans l'environnement du cliquet`, !vu.includes(secret));
+    verifier('les URI de LECTURE sont conservées', e.MONGODB_LECTURE_URI === origine.MONGODB_LECTURE_URI && e.MONGODB_CARTES_LECTURE_URI === origine.MONGODB_CARTES_LECTURE_URI);
+    verifier('MONGODB_URI / MONGODB_CARTES_URI gardent leur HÔTE (pour que les suites jugent la grappe) mais plus d\'identifiant valide',
+        /cluster0\.prodx\.mongodb\.net/.test(e.MONGODB_URI) && /cluster1\.cartx\.mongodb\.net/.test(e.MONGODB_CARTES_URI) && e.MONGODB_URI !== origine.MONGODB_URI);
+    verifier('une variable MONGODB_*URI inconnue est neutralisée (liste fermée : on garde ce qui est sûr)', !/MDP-AUTRE|autre:/.test(e.MONGODB_AUTRE_URI || ''));
+    verifier('R2 : clés de production vidées, bucket et clés de BANC conservés', e.R2_ACCESS_KEY_ID === '' && e.R2_SECRET_ACCESS_KEY === '' && e.R2_BUCKET_IMAGES === 'bucket-prod' && e.R2_BANC_ACCESS_KEY_ID === 'banc-id' && e.R2_BUCKET_BANC === 'bucket-banc');
+    verifier('MONGODB_BASE et le jeton passent', e.MONGODB_BASE === 'test' && e.JETON_API === 'jeton');
+    verifier('une suite qui ouvre son banc juge encore la lecture sur cet environnement (jugerLecture ok)', jugerLecture(e, 'production').ok === true && jugerLecture(e, 'cartes').ok === true);
+    let leve = false; try { environnementDuCliquet({ ...origine, MONGODB_URI: 'pas-une-uri' }); } catch (_) { leve = true; }
+    verifier('MONGODB_URI illisible : LÈVE (doute = refus)', leve);
+}
+
+console.log('--- R8 A-I2 : verrou-charges.js applique la même garde et le même refus de jeton ---');
+{
+    const sc = fs.readFileSync(path.join(__dirname, 'verrou-charges.js'), 'utf8');
+    verifier('verrou-charges.js : plus de repli de jeton en dur', !/JETON_API\s*\|\|/.test(sc) && !/'jeton-verrou'/.test(sc));
+    verifier('verrou-charges.js : plus aucune ouverture directe de process.env.MONGODB_URI', !/process\.env\.MONGODB_URI/.test(sc));
+    verifier('verrou-charges.js : la garde et le refus de jeton sont appelés', /verifierEnvironnementBanc\(/.test(sc) && /uriDuBanc\(/.test(sc) && /jetonOuRefus\(/.test(sc));
+    const jc = sc.indexOf('jetonOuRefus('), ob = sc.indexOf('await ouvrirBanc('), ap = sc.indexOf('banc.appliquer()'), gu = sc.indexOf('verifierEnvironnementBanc('), cp = sc.indexOf('connexionProduction(mongoose');
+    verifier('verrou-charges.js : jeton refusé AVANT ouvrirBanc ; garde APRÈS appliquer() et AVANT toute connexion', jc > -1 && jc < ob && ap > ob && gu > ap && gu < cp);
+}
 
 // Le cliquet ne doit lister que des suites qui DÉMARRENT : test-setcode-numero.js refuse depuis le 2026-10-08 (marqueur « REFUS DE DÉMARRER ») et faisait échouer le verrou à chaque passage.
 const cliquetSrc = fs.readFileSync(path.join(__dirname, 'couverture-index.js'), 'utf8');
