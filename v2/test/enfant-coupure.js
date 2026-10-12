@@ -47,7 +47,7 @@ const mort = () => { try { require('fs').writeSync(1, `COUPURE=${process.env.COU
     app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(M.verifierIndex);
     app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg,
-        { identifierLot, gererIdentifier: async (req, res) => res.json({ ...aff.corps, scanId: String(req.scanIdImpose) }), gererRetourLive: async (q, s) => s.json({ success: true }),
+        { jumeaux: () => ({ conclu: true, ids: [] }), identifierLot, gererIdentifier: async (req, res) => res.json({ ...aff.corps, scanId: String(req.scanIdImpose) }), gererRetourLive: async (q, s) => s.json({ success: true }),
           rattrapage: { differeMs: Number(process.env.COUPURE_DIFFERE_MS ?? 600000), intervalleMs: 60000 } }));
     const s = app.listen(0, '127.0.0.1', () => console.log(`PORT=${s.address().port}`));
 })().catch(e => { console.error('❌ enfant-coupure :', (e && e.code) || (e && e.name)); process.exit(1); });

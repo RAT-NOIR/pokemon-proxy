@@ -55,7 +55,7 @@ const REQUISES = ['identifiee', 'a-trancher-2', 'a-trancher-3', 'lot', 'panne-ia
     'cle-reutilisee-identifier', 'cle-reutilisee-reponse', 'cle-reutilisee-retour-live', 'debit', 'cle-en-cours-reponse', 'cle-en-cours-retour-live',
     'question-repondue', 'question-abandonnee-aucune', 'question-abandonnee-ne-sait-pas', 'solde-installation-non-liee', 'solde-installation-liee', 'solde-compte-non-verifie', 'solde-abonnement'];
 H.v('états demandés présents', REQUISES.filter(n => !fichiers.includes(`${n}.json`)), []);
-const motsRaisons = ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture'];
+const motsRaisons = ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture', 'impression-indeterminee'];
 H.v('une fausse introuvable par valeur de la liste fermée des raisons', motsRaisons.filter(r => !fichiers.includes(`introuvable-${r}.json`)), []);
 const tout = fichiers.map(f => JSON.stringify(lire(f))).join('\n');
 const motifs = S.Facturation.properties.motif.enum;

@@ -3254,7 +3254,8 @@
               "pas-une-carte",
               "hors-catalogue",
               "plusieurs-cartes-non-separees",
-              "panne-lecture"
+              "panne-lecture",
+              "impression-indeterminee"
             ]
           },
           "etat": {
@@ -3594,6 +3595,7 @@
                   "hors-catalogue",
                   "plusieurs-cartes-non-separees",
                   "panne-lecture",
+                  "impression-indeterminee",
                   null
                 ]
               }

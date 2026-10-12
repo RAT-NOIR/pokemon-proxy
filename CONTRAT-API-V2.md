@@ -822,7 +822,7 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 ## 2. Les règles du contrat
 
 1. **Additif.** Sans `contrat: 2` dans la requête, la réponse d'aujourd'hui, octet pour octet : la 1.0.x publiée continue de marcher.
-2. **Trois issues par carte** : `identifiee` · `a-trancher` · `introuvable`. Jamais « sous réserve » en sortie. (`lot` est un statut d'ENSEMBLE, jamais d'une carte.)
+2. **Trois issues par carte** : `identifiee` · `a-trancher` · `introuvable`. Jamais « sous réserve » en sortie. (`lot` est un statut d'ENSEMBLE, jamais d'une carte.) Une carte n'est `identifiee` que si son produit n'a aucun jumeau (§3.2).
 3. **Listes fermées** pour tout ce qui pilote un comportement (§3). Une valeur inconnue d'un client tombe sur un défaut **qui n'affirme rien**.
 4. **Aucun score, aucune confiance chiffrée.** `etat.confiance` est une chaîne de liste fermée.
 5. **`null` = « on ne sait pas »**, jamais zéro ni non. Un prix à 0 n'existe pas ; une variante inconnue est `null`, jamais `normale` deviné.
@@ -843,7 +843,7 @@ Toutes sont des `enum` du schéma, comparées au code du serveur par `test-opena
 |---|---|
 | issue d'une carte (`CarteAnalysee.statut`) | `identifiee` · `a-trancher` · `introuvable` |
 | statut d'analyse (`analyse.statut`) | `identifiee` · `a-trancher` · `introuvable` · `lot` |
-| `raison` d'un introuvable | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` |
+| `raison` d'un introuvable | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` · `impression-indeterminee` |
 | `question.code` | `reverse` · `symbole` · `numero` · `langue` · `premiere-edition` · `visuel` |
 | `choix[].id` | `a` · `b` · `c` |
 | `variante` (nullable) | `normale` · `reverse` · `holo` · `premiere-edition` · `tampon` · `jumbo` |
@@ -859,7 +859,7 @@ Toutes sont des `enum` du schéma, comparées au code du serveur par `test-opena
 | code d'erreur (`erreur.code`) | voir §6 |
 
 `code-maitre` **n'existe plus** : le motif `administrateur` le remplace (rôle tenu en base sur le compte de l'éditeur, `debite: 0`).
-Le serveur ne produit pas encore les raisons `pas-une-carte`, `plusieurs-cartes-non-separees` et `panne-lecture` (la chaîne actuelle ne lit qu'une carte et distingue une panne d'une absence) ; elles restent dans la liste pour que les clients aient un texte prêt.
+Le serveur ne produit pas encore les raisons `pas-une-carte`, `plusieurs-cartes-non-separees` et `panne-lecture` (la chaîne actuelle ne lit qu'une carte et distingue une panne d'une absence) ; elles restent dans la liste pour que les clients aient un texte prêt. `impression-indeterminee` (additive, JUMEAU-V2) est, elle, PRODUITE : voir §3.2.
 La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de la configuration du serveur (`V2_MARCHES`) ; un marché hors liste reçoit `422 MARCHE`.
 
 ### 3.1 Ce que chaque issue coûte (`facturation`)
@@ -885,6 +885,30 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 **Taille d'un lot : 20 cartes au plus** (`V2_LOT_CARTES_MAX`, entier de 2 à 100 ; au-delà, la configuration est invalide). `POST /api/banc/correction` suit la même borne (`carte` de 0 à taille − 1 ; `maximum: 99` du schéma est le plafond absolu). `carte` (`/api/identifier/reponse`, `/api/retour-live`) va de 0 à 19 (même variable : une seule source). Un lot de plus de 20 cartes est **refusé, jamais tronqué** : `400 ENTREE` + `detail: "lot-trop-grand-taille"` (le supplément impayable reste `429 QUOTA` + `detail: "lot-trop-grand"`). Dans les deux cas : crédit initial rendu jusqu'à 10 refus par jour et par compte, `facturation { debite: 0, rembourse: true, motif: "lot" }` ; au 11e, `facturation { debite: 1, rembourse: false, motif: "lot", raisonNonRembourse: "plafond-jour" }`, le refus restant la réponse.
 
 `solde.total` compte déjà les réserves en moins. Le solde se débite dans l'ordre `essai` → `accueil` → `hebdo` → `abonnement` → `achete` (réglable côté serveur). Une installation non liée n'a que ses 3 essais ; un compte **vérifié** reçoit 25 analyses offertes une seule fois, plus 2 par semaine ISO (non cumulables).
+
+### 3.2 Quand une carte est affirmée — et quand elle ne l'est PAS (lots JUMEAU-V2)
+
+Une carte n'est `identifiee` que si le produit désigné n'a **aucun jumeau** : aucun autre produit de même métacarte, de même langue de tirage, d'un autre créneau (expansion, numéro). Un champ que le catalogue ne connaît pas compte comme « même ». Le serveur ne devine jamais : la lecture du code et du numéro sur la photo peut désigner un vrai produit qui n'est pas celui de la carte (même fiche de jeu, autre set).
+
+| le produit désigné a… | issue | `statut` | `raison` / `erreur.code` | facturation |
+|---|---|---|---|---|
+| aucun jumeau | affirmée | `identifiee` | — | `affirmee`, `debite: 1` |
+| 1 ou 2 jumeaux (3 produits au plus) | question de départage entre le produit et ses jumeaux | `a-trancher` | — | `question`, `reserve: 1` (comme toute question) |
+| plus de 3 produits avec ses jumeaux | introuvable | `introuvable` | `impression-indeterminee` | rembourse (`introuvable`), `debite: 0`, dans la limite du compteur des jumeaux (ci-dessous) |
+| la liste des jumeaux ne peut pas être établie pour CE produit (colonne absente, produit plus récent que l'archive sous sa métacarte, jumeau sans ligne au catalogue, démarrage à froid) | **panne** | — | `erreur.code: INDISPONIBLE` (503) | rembourse (`panne`), `debite: 0`, dans la limite du compteur des jumeaux (ci-dessous) |
+
+- **`impression-indeterminee`** est une valeur **additive** de la liste fermée des `raison` d'un introuvable. Ce que le client doit afficher : *« plusieurs impressions de cette carte existent ; la photo ne permet pas de dire laquelle »* (et inviter à photographier le bas de la carte, code du set et numéro). Elle ne veut **pas** dire « photo illisible » : la carte est reconnue, c'est son impression qui ne se tranche pas. Un client qui ne la connaît pas la traite comme toute raison inconnue (repli sur un texte générique d'introuvable).
+- La panne `INDISPONIBLE` est un échec de NOTRE côté (la photo n'y est pour rien) : le client peut réessayer plus tard.
+- **Le compteur des jumeaux.** Ces deux refus sont NOS refus, pas des échecs du client : ils se remboursent dans un compteur DÉDIÉ, séparé du plafond de pannes, par jour UTC et par porteur, à raison d'**UNE unité par carte refusée** (un lot de 3 cartes toutes refusées consomme 3 unités). Plafond par défaut : **20** (`V2_JUMEAUX_REMBOURSES_JOUR`) ; ce chiffre est posé **sans mesure d'usage réel** et se règle à la lumière du trafic. Compteur plein, le refus est jugé comme un introuvable ordinaire au plafond de pannes (§3.1), avec les mêmes règles de facturation : `facturation { debite: 1, rembourse: false, raisonNonRembourse: "plafond-jour" }`. Un refus de la garde n'est donc jamais gratuit sans limite. L'unicité par scan reste (un scan ne se rembourse qu'une fois).
+- Le serveur ne tronque **jamais** les candidats (« 3 parmi N ») : la question pourrait exclure la vraie carte.
+- **La péremption se juge par produit.** La colonne des jumeaux porte le plus grand `idProduct` qu'elle connaît. Pour un produit que la chaîne affirme, le serveur cherche, par une requête indexée, un produit **plus récent que l'archive** de **la même métacarte** : s'il en existe un, ce produit-là ne conclut pas pour ce scan (panne `INDISPONIBLE`) ; un produit ajouté sous une autre métacarte ne bloque rien. Si la requête échoue, la garde ne conclut pas.
+- Les motifs internes précis (`jumeaux-trop-nombreux`, `jumeaux-indisponibles`, `jumeaux-perimes`, `jumeaux-incomplets`) ne sont **pas servis** ; ils sont écrits côté serveur (`analyses.cartes[i].motifJumeaux`, par carte, y compris dans un lot) et comptés. Une panne n'écrit pas d'analyse : sa trace est le journal et le compteur.
+- Dans un **lot**, la garde s'applique carte par carte : une carte à jumeaux devient une question de lot, une carte à plus de 3 produits est `introuvable / impression-indeterminee`, une carte dont la liste de jumeaux ne s'établit pas est `introuvable / panne-lecture`. Le lot est remboursé en entier seulement si **toutes** ses cartes sont des refus de la garde (compteur des jumeaux, une unité par carte) ou si aucune carte n'est lue ; un lot **mixte** (une carte refusée par la garde parmi d'autres introuvables) suit les règles ordinaires du plafond de pannes. Une carte refusée par la garde dans un lot partiellement lu est facturée avec le lot.
+- Limite connue de la donnée : un produit dont la métacarte n'est pas renseignée au catalogue ne peut pas être affirmé (le client reçoit la panne `INDISPONIBLE`, pas un introuvable), et il ne peut être le jumeau de personne.
+- Conséquence pour les clients : une carte qui s'affirmait auparavant peut désormais revenir en `a-trancher` (2 ou 3 choix), en `introuvable`, ou le scan peut répondre `503 INDISPONIBLE`. Rien d'autre ne change dans la forme des réponses.
+- **Ordre de déploiement.** L'archive des visuels **avec la colonne des jumeaux** doit être publiée AVANT le code qui la lit : sans elle, toute affirmation répond `503 INDISPONIBLE` (remboursée). L'API réessaie le chargement de l'archive toutes les 5 minutes tant que la colonne manque (au lieu d'attendre le réveil suivant), et écrit une alerte en base (`alertes`, document `alerte/archive-visuels`) quand il n'y a aucune archive, qu'elle n'a pas la colonne, ou qu'elle a plus de 48 h. **Au premier démarrage de l'allumage, vérifier** que la voie « fichier » est ouverte (les variables de lecture de l'archive privée et son secret HMAC sont présents) et que la colonne des jumeaux est chargée : une voie fermée par défaut ne démarre pas le chargeur et ne pose AUCUNE alerte, toute affirmation répond alors `503 INDISPONIBLE` sans reprise.
+- **Limite de la garde de péremption, et ce qui la rend acceptable.** La garde ne voit un produit ajouté depuis l'archive que si son `idProduct` est supérieur au plus grand `idProduct` de l'archive (`maxArchive`) : un produit ajouté avec un identifiant plus petit, sous la métacarte du produit affirmé, passerait sans être vu. **Mesure** (`products_singles_6.json` du 12/07, 62 579 produits datés) : sur les 60 derniers jours, aucun des 5 467 produits ajoutés n'a un identifiant inférieur à celui d'un ajout antérieur ; les identifiants croissent avec la date d'ajout. Cette hypothèse n'est pas gardée par un contrôle : elle est mesurée, pas prouvée.
+- **Durée et ampleur du refus de péremption.** Un produit refusé pour cette raison l'est (panne `INDISPONIBLE`, remboursée, jamais une affirmation) jusqu'au chargement par l'API d'une archive refabriquée : environ **12 h en moyenne, 24 h au pire** pour une instance éveillée en continu (rechargement quotidien), jusqu'au prochain réveil après le dépôt pour une instance qui dort. La reprise toutes les 5 minutes ne couvre que « colonne absente », pas « colonne en retard ». **Ampleur**, par métacarte touchée : pour 30 à 100 produits neufs, **0,4 à 0,5 %** du catalogue (269 à 358 produits anciens sur 70 975) ; pour 300 produits neufs, **1,5 %** (1 058). Ces produits sont des réimpressions de cartes courantes : la part du trafic est plus grande que la part du catalogue, sans que ce soit chiffré.
 
 ---
 
@@ -1165,7 +1189,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 |---|---|---|---|
 | X1 | `GET /api/compte` · `200` · `$.historique.lignes[]` | **trou du contrat, pas du serveur** : le contrat n'a pas de motif de crédit pour une poche `abonnement` ni `essai`. Ces lignes sont **omises de l'historique, jamais inventées sous un autre motif**, et le banc compte celles qu'il omet. De même une analyse ancienne sans `facturation` complète ou sans `surface` est omise (rien n'est fabriqué). | ajouter des motifs (`abonnement`, `essai`) au contrat si le site veut les montrer |
 | X2 | `POST /api/creer-recharge` · `501` · `404` | **servie, jamais publiée** : montée derrière un aiguilleur dont le prédicat exige un porteur v2 que rien ne résout sur cette route ; elle passe donc toujours la main à la route héritée (404 dans le banc, qui n'en a pas). Son `501 INDISPONIBLE` / `paiement-non-branche` est **inatteignable en l'état**. Publiée quand elle sera implémentée ; l'alignement 501 / `INDISPONIBLE` est parqué pour la tâche de paiement. | publier avec le paiement |
-| X4 | `POST /api/identifier` · `200` · `pas-une-carte` | listée au contrat, **jamais produite** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` sortent) | les clients ne comptent pas dessus |
+| X4 | `POST /api/identifier` · `200` · `pas-une-carte` | listée au contrat, **jamais produite** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` et `impression-indeterminee` sortent) | les clients ne comptent pas dessus |
 | X4 | `POST /api/identifier` · `200` · `plusieurs-cartes-non-separees` | idem | idem |
 | X4 | `POST /api/identifier` · `200` · `$.analyse.cartes[].carte.set.tirage` | `Produit.set.tirage` est **toujours `null`** (le catalogue ne porte pas le tirage) | les clients ne comptent pas dessus |
 | X5 | `DELETE /api/compte` · `400` | documenté, jamais rendu : aucun chemin de `v2/comptes/routes.js` l.117-125 ne le produit | laisser documenté (inoffensif) ou retirer |
@@ -1201,7 +1225,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 |---|---|
 | identifiée | `identifiee`, `identifiee-impressions`, `identifiee-hors-euro`, `identifiee-sans-taux`, `identifiee-administrateur`, `identifiee-scanner` |
 | à trancher (2 et 3 candidats), lot | `a-trancher-2`, `a-trancher-3`, `lot` |
-| introuvable (une par raison) | `introuvable-photo-illisible`, `introuvable-pas-une-carte`, `introuvable-hors-catalogue`, `introuvable-plusieurs-cartes-non-separees`, `introuvable-panne-lecture` |
+| introuvable (une par raison) | `introuvable-photo-illisible`, `introuvable-pas-une-carte`, `introuvable-hors-catalogue`, `introuvable-plusieurs-cartes-non-separees`, `introuvable-panne-lecture`, `introuvable-impression-indeterminee` |
 | pannes | `panne-ia`, `panne-indisponible`, `panne-serveur`, `panne-plafond-jour` |
 | refus | `quota-compte`, `quota-installation`, `verification`, `debit`, `cle-reutilisee-identifier`, `cle-reutilisee-reponse`, `cle-reutilisee-retour-live`, `cle-en-cours-reponse`, `cle-en-cours-retour-live`, `jeton`, `version`, `marche`, `entree`, `image` |
 | questions | `question-repondue`, `question-abandonnee-aucune`, `question-abandonnee-ne-sait-pas`, `question-plafond` |

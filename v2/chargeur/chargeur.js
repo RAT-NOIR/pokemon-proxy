@@ -15,6 +15,8 @@ const { sourceCartes, PROJECTIONS } = require('./source');
 
 const JOUR_MS = 24 * 3600 * 1000;
 const PERTE_MAX = 0.10;
+const REPRISE_MS = 5 * 60 * 1000;                       // JUMEAU-V2 : la reprise tant que la colonne des jumeaux manque
+const AGE_ALERTE_HEURES = 48;                           // JUMEAU-V2 : au-delà, l'archive en place est signalée en base
 const FIL = path.join(__dirname, 'fil.js');
 // plafonds du fil : un dépassement tue LE FIL (ERR_WORKER_OUT_OF_MEMORY), jamais le processus principal
 const LIMITES_FIL = Object.freeze({ maxOldGenerationSizeMb: 192, maxYoungGenerationSizeMb: 24, codeRangeSizeMb: 16, stackSizeMb: 4 });
@@ -89,7 +91,7 @@ function creerChargeur(opts = {}) {
     const executer = opts.executer || (opts.source ? executerEnLigne({ source: opts.source, regle: opts.regle, decider: opts.decider }) : executerDansUnFil({ env: opts.env || process.env }));
     const pret = opts.pret || attendreBase;
     const journal = opts.journal || (m => (/^(✅|ℹ️)/.test(m) ? console.log(m) : console.error(m)));
-    const T = opts.minuteurs || { setInterval, clearInterval };
+    const T = opts.minuteurs || { setInterval, clearInterval, setTimeout, clearTimeout };
     const planifier = opts.planifier || (fn => setImmediate(fn));
     let enCours = false, jour = null, vivant = false;
 
@@ -109,6 +111,9 @@ function creerChargeur(opts = {}) {
             if (!v || comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`);
             if (comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`);
             const prev = etat.version();
+            // JUMEAU-V2 : une version sans la colonne des jumeaux ne remplace jamais une version qui l'a (la route n'affirmerait plus rien) ; sans version en place, elle s'installe (visuels servis, aucune affirmation)
+            if (prev && prev.colonneJumeaux && !v.colonneJumeaux) throw new Echec(`la version chargée n'a pas la colonne des jumeaux alors que celle en place l'a — ${dit}`);
+            if (!v.colonneJumeaux) journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des jumeaux : la route n\'affirmera aucun produit tant qu\'une archive récente ne l\'aura pas apportée');
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
                 if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);
@@ -126,11 +131,32 @@ function creerChargeur(opts = {}) {
         } finally { enCours = false; }
     }
 
-    /** Un essai du cycle : attendre la base de l'API (bornée), puis UN chargement. Jamais de reprise. */
+    // JUMEAU-V2 (passe 2, I3) — l'ALERTE : écrite en base (v2/chargeur/alerte-archive.js, comme `alerte/file-vide` du worker) quand il n'y a aucune archive, que l'archive en place n'a pas la colonne des
+    // jumeaux, ou qu'elle a plus de 48 h : sans elle, la route répond 503 sur toute affirmation et seul un journal le dit. Évaluée à la fin de CHAQUE essai du cycle ; une écriture qui échoue ne casse rien.
+    const maintenant = opts.maintenant || Date.now;
+    async function surveillerArchive() {
+        if (typeof opts.alerte !== 'function') return;
+        const v = etat.version(), age = v ? (maintenant() - v.chargeLe.getTime()) / 3600000 : null;
+        const raison = !v ? 'sans-archive' : !v.colonneJumeaux ? 'sans-colonne' : age > AGE_ALERTE_HEURES ? 'ancienne' : null;
+        try { await opts.alerte({ actif: raison !== null, raison, ageHeures: age === null ? null : Math.round(age), chargeLe: v ? v.chargeLe : null, maintenant: new Date(maintenant()) }); }
+        catch (e) { journal(`❌ [v2 chargeur] l'alerte de l'archive n'a pas pu être écrite (${nom(e)})`); }
+    }
+    // JUMEAU-V2 (passe 2, I2) — LA SEULE REPRISE : tant que la colonne des jumeaux MANQUE (aucune version, ou une version d'avant la colonne), un essai est repris dans REPRISE_MS au lieu d'attendre le
+    // réveil suivant (l'instance gratuite dort ~11 fois par jour ; chaque réveil repart d'une mémoire vide). Dès que la colonne est là, plus aucune reprise : la règle « aucun nouvel essai après un échec » reprend.
+    let reprise = null;
+    const colonnePresente = () => { const v = etat.version(); return Boolean(v && v.colonneJumeaux); };
+    function armerReprise() {
+        if (!vivant || reprise || colonnePresente() || typeof T.setTimeout !== 'function') return;
+        reprise = T.setTimeout(() => { reprise = null; essai(); }, REPRISE_MS);
+        if (reprise && reprise.unref) reprise.unref();
+    }
+    /** Un essai du cycle : attendre la base de l'API (bornée), puis UN chargement ; puis l'alerte, puis la reprise si la colonne manque. */
     async function essai() {
         if (!vivant) return;
-        if (!(await pret())) { journal('❌ [v2 chargeur] la base de l\'API n\'est pas prête : pas de chargement, prochain essai au rechargement quotidien'); return; }
-        await charger();
+        try {
+            if (!(await pret())) { journal('❌ [v2 chargeur] la base de l\'API n\'est pas prête : pas de chargement, prochain essai au rechargement quotidien'); return; }
+            await charger();
+        } finally { await surveillerArchive(); armerReprise(); }
     }
     /** Ne lit RIEN : le premier chargement est différé, le minuteur est quotidien. Idempotent (un seul minuteur vivant). */
     function demarrer() {
@@ -140,7 +166,7 @@ function creerChargeur(opts = {}) {
         jour = T.setInterval(() => { essai(); }, JOUR_MS);
         if (jour && jour.unref) jour.unref();
     }
-    function arreter() { vivant = false; if (jour) { T.clearInterval(jour); jour = null; } }
+    function arreter() { vivant = false; if (jour) { T.clearInterval(jour); jour = null; } if (reprise) { if (typeof T.clearTimeout === 'function') T.clearTimeout(reprise); reprise = null; } }
     return { charger, demarrer, arreter };
 }
 

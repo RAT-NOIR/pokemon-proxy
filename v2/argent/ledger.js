@@ -155,23 +155,26 @@ async function rendrePoche(porteur, credit, cfg, now) {
     }
     return { rendu, raison: rendu ? null : raison };
 }
-async function incPlafond(porteurCle, jour, type, now) {   // même schéma que incrementerHebdo ; expire 2 jours après la fin du jour compté
+async function incPlafond(porteurCle, jour, type, now, pas = 1) {   // même schéma que incrementerHebdo ; expire 2 jours après la fin du jour compté
     const filtre = { porteur: porteurCle, jour, type };
-    const maj = { $inc: { count: 1 }, $setOnInsert: { expireLe: new Date(new Date(`${jour}T00:00:00Z`).getTime() + 3 * 86400e3) } };
+    const maj = { $inc: { count: pas }, $setOnInsert: { expireLe: new Date(new Date(`${jour}T00:00:00Z`).getTime() + 3 * 86400e3) } };
     try { return await col('plafonds').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
-    catch (e) { if (e.code !== 11000) throw e; return col('plafonds').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
+    catch (e) { if (e.code !== 11000) throw e; return col('plafonds').findOneAndUpdate(filtre, { $inc: { count: pas } }, { returnDocument: 'after' }); }
 }
 // rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique, rendu, trace) → si rien rendu, libérer claim ET compteur.
-async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, maintenant = new Date() } = {}, cfg) {
+async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, unites = 1, maintenant = new Date() } = {}, cfg) {
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    // `unites` : combien d'unités du compteur ce remboursement consomme (JUMEAU-V2 : UNE par carte refusée par la garde). Un entier >= 1, sinon refus : un compteur qui ne monterait pas serait gratuit sans limite.
+    if (!Number.isInteger(unites) || unites < 1) { console.error('❌ [v2 rembourser] unites invalides : refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let cle = `rb|${scanId}`;
     const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
     // Quatre compteurs, un par nature de remboursement (jour UTC, par porteur) : `panne` (défaut quand aucun n'est nommé), `question`, et les deux PROPRES du lot PLAFONDS — `sans-prix`
     // (« prix illisible, définitif » déclaré par le client) et `lot-trop-grand` (refus d'un lot trop grand ou impayable). Le plafond se lit dans la configuration, jamais en dur.
-    const COMPTEURS = { panne: cfg.plafonds.panne, question: cfg.plafonds.question, 'sans-prix': cfg.plafonds.sansPrix, 'lot-trop-grand': cfg.plafonds.lotTropGrand };
+    // Le cinquième, `jumeaux` (JUMEAU-V2) : les refus de la garde des jumeaux (nôtres, pas ceux du client), UNE unité par carte ; plein, le refus retombe sur `panne` (voir plus bas), jamais gratuit sans limite.
+    const COMPTEURS = { panne: cfg.plafonds.panne, question: cfg.plafonds.question, 'sans-prix': cfg.plafonds.sansPrix, 'lot-trop-grand': cfg.plafonds.lotTropGrand, jumeaux: cfg.plafonds.jumeaux };
     // Une garde s'écrit par ce qu'elle AUTORISE : un compteur qui n'est pas dans la table est REFUSÉ (jamais rabattu sur `panne`, qui imputerait en silence une faute de frappe)
     if (!Object.hasOwn(COMPTEURS, compteur)) { console.error(`❌ [v2 rembourser] compteur inconnu (${typeof compteur === 'string' ? compteur.slice(0, 30) : typeof compteur}) : refusé`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
-    const type = compteur, plafond = COMPTEURS[type], porteurCle = `${porteur.type}:${porteur.id}`;
+    const type = compteur, plafond = COMPTEURS[type], porteurCle = `${porteur.type}:${porteur.id}`, pas = type === 'jumeaux' ? unites : 1;
     // « ne rend jamais plus que ce qui a été pris » : on juge sur les DÉBITS enregistrés pour ce scan et CE porteur, jamais sur un objet `credit` présenté par l'appelant
     let pendantes;
     try {
@@ -190,7 +193,7 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 0, poche: null, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }
     catch (e) { if (e.code === 11000) return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; console.error(`❌ [v2 rembourser] claim : ${codeErr(e)}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let compteurPris = false;
-    const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -1 } }); };
+    const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -pas } }); };
     const rendus = [];
     let premiereRaison = null;
     // P — remboursement PARTIEL : la ligne-claim est la trace de la 1re unité rendue ; on la renomme pour libérer `rb|…`, afin que les unités restituées « debite » restent remboursables.
@@ -201,9 +204,11 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         // une unité n'est rendue qu'une fois (le passage de son débit à « rembourse » est la prise atomique), et tout le scan compte pour UN seul remboursement au plafond.
         pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (!sansPlafond) {
-            const c = await incPlafond(porteurCle, jour, type, maintenant); compteurPris = true;
+            const c = await incPlafond(porteurCle, jour, type, maintenant, pas); compteurPris = true;
             if (c.count > plafond) {
                 await liberer();
+                // le compteur DÉDIÉ des jumeaux est plein : le refus de la garde est jugé comme un introuvable ORDINAIRE, au plafond de pannes (mêmes règles, même facturation en cas de refus)
+                if (type === 'jumeaux') return rendreLeScan(porteur, motif, { scanId, compteur: 'panne', jourDe, sansPlafond: false, maintenant }, cfg);
                 // les deux compteurs propres se journalisent à CHAQUE refus : ni message d'erreur ni identifiant de porteur (type seulement), le scan permet de remonter
                 if (type === 'sans-prix' || type === 'lot-trop-grand') console.warn(`⚠️ [v2 plafond] ${type} : plafond du jour atteint (${plafond}) — remboursement refusé, porteur ${porteur.type}, scan ${scanId}, jour ${jour}`);
                 return { rendu: false, raisonNonRembourse: 'plafond-jour' };

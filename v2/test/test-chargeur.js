@@ -66,6 +66,11 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
     H.v('perte de 10 % pile (10 → 9) : admise, la nouvelle version remplace', [ok9.ok, E.version().comptes.visuels], [true, 9]);
     const grandit = await fabriquer(source(donnees(30))).charger();
     H.v('un gain n\'est pas un échec (9 → 30)', [grandit.ok, E.version().comptes.visuels], [true, 30]);
+    // JUMEAU-V2 : la colonne des jumeaux vient du VRAI decider (tous les produits du catalogue, 100 ici) ; une version sans colonne ne remplace jamais une version qui l'a
+    const vCol = E.version();
+    H.v('JUMEAU-V2 : la version chargée porte la colonne des jumeaux (100 produits du catalogue, dont ceux sans ligne)', [vCol.colonneJumeaux, vCol.comptes.jumeaux, vCol.jumeauxDe(1001), vCol.jumeauxDe(1100)], [true, 100, [], []]);
+    const sansColonne = await fabriquer(source(donnees(30)), { decider: a => require('../chargeur/decision').decider({ ...a, sink: { entree: a.sink.entree, lien: a.sink.lien } }) }).charger();
+    H.v('   une version SANS colonne ne remplace pas une version qui l\'a : ÉCHEC nommé, version en place gardée', [sansColonne.ok, /colonne des jumeaux/.test(sansColonne.motif || ''), E.version() === vCol], [false, true, true]);
 
     // ── 5. des entrées invalides sont REFUSÉES une à une (motif compté), les autres servies
     const d = donnees(5);
@@ -127,6 +132,81 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
     H.v('base de l\'API jamais prête : aucun chargement, une seule attente, aucune reprise', [essais, appelsPret], [0, 1]);
     basePasPrete.arreter();
     global.setTimeout = vraiSetTimeout;
+
+    // ── 8 bis. (passe 2, I2) LA SEULE EXCEPTION à « aucune reprise » : tant que la colonne des jumeaux MANQUE (aucune version, ou une version d'avant la colonne), la route réessaie toutes les 5 minutes
+    //    au lieu d'attendre le réveil suivant — sans elle, toute affirmation est un 503 jusque-là. Horloge INJECTÉE : aucune attente réelle. Dès que la colonne est là, plus aucune reprise.
+    {
+        E.vider();
+        const posees = []; let horloge = 1_000_000;
+        const T3 = { setInterval: (fn, ms) => ({ fn, ms, unref() { return this; } }), clearInterval() { },
+            setTimeout: (fn, ms) => { const t = { fn, ms, annule: false, unref() { return this; } }; posees.push(t); return t; }, clearTimeout: t => { t.annule = true; } };
+        let tentatives = 0;
+        const flaky = fabriquer({ source: async () => { tentatives++; if (tentatives < 3) throw new Error('R2 muet'); return { ok: true, ...donnees(10), fermer: async () => { } }; } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge });
+        flaky.demarrer(); await attendre(60);
+        H.v('JUMEAU-V2 reprise : un échec au démarrage sans colonne en place arme UNE reprise à 5 min (300 000 ms), unref', [tentatives, posees.length, posees[0] && posees[0].ms], [1, 1, 300000]);
+        posees[0].fn(); await attendre(60);
+        H.v('   la reprise fait UN nouvel essai ; il échoue encore : une autre reprise est armée', [tentatives, posees.length, posees[1] && posees[1].ms], [2, 2, 300000]);
+        posees[1].fn(); await attendre(60);
+        H.v('   3e essai : la version avec colonne s\'installe ; plus AUCUNE reprise armée', [tentatives, E.version() && E.version().colonneJumeaux, posees.length], [3, true, 2]);
+        flaky.arreter();
+        // une version d'avant la colonne en place : la reprise tourne aussi (le chargement suivant peut apporter la colonne)
+        E.vider();
+        const { creerConstructeur } = require('../chargeur/version');
+        const ancienne = (() => { const b = creerConstructeur(); b.entree({ idProduct: 1, vignette: { cle: 'v/1.webp', w: 1, h: 1 }, grande: null, visuel: 'du-set', mention: null, idMetacard: null, numero: null, rarete: null, total: null, variante: null, setNom: null, lien: null }); return b.finir(); })();
+        E.installer(ancienne);
+        posees.length = 0;
+        const sansCol = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge });
+        sansCol.demarrer(); await attendre(60);
+        H.v('   une version SANS colonne en place + un échec : reprise armée ; arreter() l\'annule', [posees.length, (sansCol.arreter(), posees[0].annule)], [1, true]);
+        // la colonne est là : un échec ultérieur n'arme rien (la règle « aucun nouvel essai » reprend)
+        E.vider(); await fabriquer(source(donnees(10))).charger();
+        posees.length = 0;
+        const avecCol = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge });
+        avecCol.demarrer(); await attendre(60);
+        H.v('   la colonne est en place : un échec ne pose AUCUNE reprise', posees.length, 0);
+        avecCol.arreter();
+
+        // ── (passe 2, I3) l'alerte « archive trop ancienne » : écrite en base (comme alerte/file-vide), jamais seulement un journal
+        const docs = []; const alerte = async d => { docs.push(d); };
+        E.vider();
+        const surveille = fabriquer(source(donnees(10)), { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte });
+        await fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte }).charger();   // charger() seul n'écrit rien : c'est le cycle qui surveille
+        H.v('JUMEAU-V2 alerte : charger() seul n\'écrit rien (le cycle d\'essai surveille)', docs.length, 0);
+        const aucune = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte });
+        aucune.demarrer(); await attendre(60); aucune.arreter();
+        H.v('   aucune archive en mémoire après l\'essai : alerte ACTIVE, raison sans-archive', [docs.at(-1).actif, docs.at(-1).raison], [true, 'sans-archive']);
+        surveille.demarrer(); await attendre(60);
+        const frais = docs.at(-1);
+        H.v('   archive fraîche avec colonne : alerte RÉSOLUE (actif faux)', [frais.actif, frais.raison], [false, null]);
+        horloge = Date.now() + 49 * 3600 * 1000;
+        const tardif = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte });
+        tardif.demarrer(); await attendre(60); tardif.arreter();
+        H.v('   la même archive à 49 h (l\'essai échoue, elle reste en place) : alerte ACTIVE, raison ancienne, âge 49 h', [docs.at(-1).actif, docs.at(-1).raison, docs.at(-1).ageHeures], [true, 'ancienne', 49]);
+        horloge = Date.now() + 47 * 3600 * 1000;
+        const limite = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte });
+        limite.demarrer(); await attendre(60); limite.arreter();
+        H.v('   à 47 h : pas d\'alerte (le seuil est 48 h)', docs.at(-1).actif, false);
+        E.vider(); E.installer(ancienne); horloge = Date.now();
+        const sansColonneAlerte = fabriquer({ source: async () => { throw new Error('x'); } }, { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte });
+        sansColonneAlerte.demarrer(); await attendre(60); sansColonneAlerte.arreter();
+        H.v('   une archive SANS colonne (récente) : alerte ACTIVE, raison sans-colonne', [docs.at(-1).actif, docs.at(-1).raison], [true, 'sans-colonne']);
+        const casse = fabriquer(source(donnees(10)), { minuteurs: T3, planifier: fn => fn(), maintenant: () => horloge, alerte: async () => { throw new Error('base muette'); } });
+        const j0 = journal.length; E.vider(); casse.demarrer(); await attendre(60); casse.arreter();
+        H.vrai('   une alerte qui ne s\'écrit pas ne casse JAMAIS le chargement (version installée) et se DIT au journal', E.version() && journal.slice(j0).some(m => /alerte/.test(m)));
+        // l'écriture elle-même (collection de l'API) : le début d'un épisode se garde, la résolution est datée, un nouvel épisode repart de son propre début
+        const { ecrireAlerteArchive } = require('../chargeur/alerte-archive');
+        const memoire = new Map();
+        const col = { findOne: async f => memoire.get(f._id) || null, updateOne: async (f, m) => { memoire.set(f._id, { ...(memoire.get(f._id) || { _id: f._id }), ...m.$set }); } };
+        const t = h => new Date(`2026-10-12T${h}:00Z`);
+        await ecrireAlerteArchive(col, { actif: true, raison: 'ancienne', ageHeures: 49, chargeLe: t('01:00'), maintenant: t('10:00') });
+        await ecrireAlerteArchive(col, { actif: true, raison: 'ancienne', ageHeures: 52, chargeLe: t('01:00'), maintenant: t('13:00') });
+        const a = memoire.get('alerte/archive-visuels');
+        H.v('   alerte écrite : un épisode qui dure garde son début, son âge se met à jour', [a.active, a.depuis.toISOString(), a.constateLe.toISOString(), a.ageHeures, a.raison], [true, t('10:00').toISOString(), t('13:00').toISOString(), 52, 'ancienne']);
+        await ecrireAlerteArchive(col, { actif: false, maintenant: t('20:00') });
+        H.v('   résolue : inactive, résolution datée', [memoire.get('alerte/archive-visuels').active, memoire.get('alerte/archive-visuels').resolueLe.toISOString()], [false, t('20:00').toISOString()]);
+        await ecrireAlerteArchive(col, { actif: true, raison: 'sans-colonne', ageHeures: 1, chargeLe: t('19:00'), maintenant: t('22:00') });
+        H.v('   un NOUVEL épisode repart de son propre début', memoire.get('alerte/archive-visuels').depuis.toISOString(), t('22:00').toISOString());
+    }
 
     // ── 9. le FIL plafonné : sa mort ne touche pas le serveur ; le résultat revient en tampons transférés
     const ENV = { MONGODB_CARTES_LECTURE_URI: `mongodb+srv://lecteur:${SECRET}@h.exemple.net/cartes`, MONGODB_CARTES_URI: `mongodb+srv://ecrivain:${SECRET}@h.exemple.net/cartes` };

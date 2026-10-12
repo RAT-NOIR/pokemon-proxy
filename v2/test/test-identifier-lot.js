@@ -102,7 +102,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     const monter = async (cfgApp, deps) => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(require('../modeles').verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
         return H.serveur(app);
     };
     const sv = await monter(cfg, { identifierLot });
@@ -185,6 +185,113 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         const y = await inst(); lot([...nIntro(4), aff(P5)]);
         const r2 = await poster(sv.url, y.jeton);
         H.v('   4 introuvables + 1 identifiée : pas de remboursement (essai 2), motif lot', [r2.json.facturation.motif, r2.json.facturation.rembourse, await essais(y)], ['lot', false, 2]);
+    }
+    // ── JUMEAU-V2 (C1 de la relecture 1) : la garde des jumeaux du LOT. Chaque carte affirmée par la chaîne passe par elle ; sans elle (un lot « tout affirmé »), ces assertions rougissent.
+    {
+        const aujourdhui = new Date().toISOString().slice(0, 10);
+        const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        const compteurPanne = async x => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type: 'panne' }) || {}).count;
+        const parIndex = j => Object.fromEntries(((j.analyse || {}).cartes || []).map(c => [c.index, c]));
+        const analyseDe = async j => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
+        const avec = async (jumeaux, f) => { const s = await monter(cfg, { identifierLot, jumeaux }); try { await f(s); } finally { await s.fermer(); } };
+        const J1 = id => ({ conclu: true, ids: id === P5 ? [POOL[0]] : [] });                         // P5 a UN jumeau
+        const J3 = id => ({ conclu: true, ids: id === P5 ? [POOL[0], POOL[1], POOL[2]] : [] });       // P5 a TROIS jumeaux : 4 produits, trop pour une question
+
+        await avec(J1, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A), aff(P1)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j);
+            H.v('JUMEAU-V2 lot : la carte dont le produit a UN jumeau devient une QUESTION (a-trancher à 2 candidats : le produit et son jumeau), les deux autres restent identifiées',
+                [r.statut, [0, 1, 2].map(i => c[i] && c[i].statut), c[0] && c[0].candidats.map(p => p.idProduct).sort((a, b) => a - b)], [200, ['a-trancher', 'identifiee', 'identifiee'], [P5, POOL[0]].sort((a, b) => a - b)]);
+            const q = await raw('questions_v2').findOne({ _id: `${j.scanId}:0` });
+            H.v('   la question du lot est RÉSERVÉE (lot: true, en attente), les choix sont ceux du contrat ; un crédit pris pour le lot (essai 3 -> 2), jamais remboursé',
+                [q && q.etat, q && q.lot, q && q.choix.map(y => y.idProduct).sort((a, b) => a - b), await essais(x), j.facturation && j.facturation.rembourse], ['en-attente', true, [P5, POOL[0]].sort((a, b) => a - b), 2, false]);
+        });
+        await avec(J3, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j), an = await analyseDe(j);
+            H.v('JUMEAU-V2 lot : la carte à plus de 3 produits (elle et ses 3 jumeaux) est INTROUVABLE « impression-indeterminee » (jamais 3 parmi N), l\'autre reste identifiée, le lot n\'est pas remboursé',
+                [[0, 1].map(i => c[i] && c[i].statut), c[0] && c[0].raison, c[0] && c[0].candidats, await essais(x), j.facturation && j.facturation.rembourse], [['introuvable', 'identifiee'], 'impression-indeterminee', [], 2, false]);
+            H.v('   I4 : le motif de la garde est tracé PAR CARTE dans analyses (champ interne, jamais servi) : la carte 0 le porte, la carte 1 non',
+                [an && an.cartes[0].motifJumeaux, an && an.cartes[1].motifJumeaux, JSON.stringify(j).includes('jumeaux-')], ['jumeaux-trop-nombreux', undefined, false]);
+        });
+        const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
+        const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await avec(J3, async s => {
+            const x = await inst(); await plafondPlein(x); lot([aff(P5), aff(P5)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot ENTIÈREMENT refusé par la garde (2 cartes) : remboursé dans le compteur DÉDIÉ jumeaux, UNE unité par carte (2), plafond de pannes plein et inchangé (essai 3, debite 0)',
+                [r.statut, (j.analyse || {}).lot && j.analyse.lot.introuvables, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, 2, true, 0, 3, cfg.plafonds.panne, 2]);
+        });
+        // C1 de la passe 2 (M2) : UNE seule carte refusée par la garde dans un lot de déchets ne fait pas rendre tout le lot (`every`, pas `some`) — la sonde du relecteur, [200, true, 3, 5], doit changer
+        await avec(J3, async s => {
+            const x = await inst(); await plafondPlein(x); lot([aff(P5), intro(), intro(), intro(), intro()]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot MIXTE (1 carte refusée par la garde + 4 introuvables de la chaîne), plafond de pannes PLEIN : PAS remboursé (plafond-jour, essai 2), le compteur dédié n\'est pas touché',
+                [r.statut, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, false, 1, 'plafond-jour', 2, cfg.plafonds.panne, 0]);
+        });
+        await avec(J3, async s => {
+            const x = await inst(); lot([aff(P5), aff(P5), intro()]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot mixte, plafond de pannes LIBRE : remboursé comme un lot introuvable ordinaire (une unité du plafond de pannes, rien dans le compteur dédié)',
+                [j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [true, 3, 1, 0]);
+        });
+        // le 21e : compteur dédié à 19 + un lot de 2 cartes refusées (19 + 2 > 20) et plafond de pannes plein : PAS remboursé, jamais gratuit sans limite
+        await avec(J3, async s => {
+            const x = await inst(); await plafondPlein(x); await poserCompteur(x, 'jumeaux', 19); lot([aff(P5), aff(P5)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot de 2 cartes refusées, compteur dédié à 19 (19 + 2 > 20) et pannes plein : PAS remboursé { debite:1, plafond-jour, essai 2 }, compteur dédié resté à 19',
+                [j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurDe(x, 'jumeaux')], [false, 1, 'plafond-jour', 2, 19]);
+        });
+        await avec(() => ({ conclu: false, ids: [] }), async s => {
+            const x = await inst(); await plafondPlein(x); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot dont aucune carte n\'a de colonne : PANNE 503 INDISPONIBLE (jamais un lot d\'introuvables), remboursée dans le compteur dédié (2 cartes = 2 unités), pannes inchangé (essai 3)',
+                [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [503, 'INDISPONIBLE', undefined, true, 3, cfg.plafonds.panne, 2]);
+        });
+        await avec(undefined, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {};
+            H.v('JUMEAU-V2 lot, DÉFAUT DE PRODUCTION (aucun fournisseur injecté, aucune colonne en mémoire) : aucune affirmation, panne INDISPONIBLE remboursée',
+                [r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse, await essais(x)], [503, 'INDISPONIBLE', true, 3]);
+        });
+        await avec(id => (id === P5 ? { conclu: false, ids: [] } : { conclu: true, ids: [] }), async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j), an = await analyseDe(j);
+            H.v('JUMEAU-V2 lot, une carte sans colonne et une autre sans jumeau : la 1re est illisible (introuvable panne-lecture), la 2e identifiée ; le lot n\'est pas remboursé ; le motif est tracé par carte',
+                [[0, 1].map(i => c[i] && c[i].statut), c[0] && c[0].raison, await essais(x), j.facturation && j.facturation.rembourse, an && an.cartes[0].motifJumeaux], [['introuvable', 'identifiee'], 'panne-lecture', 2, false, 'jumeaux-indisponibles']);
+        });
+    }
+    {
+        // Passe 2 (I1, N1) : la disponibilité. Le catalogue de la route, ET la colonne d'une archive plus ancienne : un produit PLUS RÉCENT que l'archive sous la métacarte du produit affirmé
+        // bloque CE produit seul ; un produit ajouté sous une autre métacarte ne bloque rien. Chemin de PRODUCTION (aucun fournisseur injecté), version et catalogue réels du banc.
+        const parIndex = j => Object.fromEntries(((j.analyse || {}).cartes || []).map(c => [c.index, c]));
+        const analyseDe = async j => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
+        const avec = async (jumeaux, f) => { const s = await monter(cfg, { identifierLot, jumeaux }); try { await f(s); } finally { await s.fermer(); } };
+        const { creerCatalogue } = require('../identifier/catalogue');
+        const cat = creerCatalogue({ cfg });
+        const META_P5 = 990200 + (P5 % 1000);
+        H.v('JUMEAU-V2 : catalogue.plusRecentDansMetacarte(max, métacarte) : aucun produit plus récent → false ; une métacarte non entière → lève',
+            [await cat.plusRecentDansMetacarte(910139, META_P5), await cat.plusRecentDansMetacarte(910139, 12345), await cat.plusRecentDansMetacarte(910139, 'x').then(() => 'ne lève pas', () => 'lève')], [false, false, 'lève']);
+        await raw('catalogue_produits').insertOne({ idProduct: 910998, name: 'Nouveau (PBL 099)', idExpansion: EXP, idMetacard: META_P5 });
+        H.v('   un produit plus récent sous la métacarte → true ; sous une AUTRE métacarte → false ; pas plus récent que max → false',
+            [await cat.plusRecentDansMetacarte(910139, META_P5), await cat.plusRecentDansMetacarte(910139, META_P5 + 1), await cat.plusRecentDansMetacarte(910998, META_P5)], [true, false, false]);
+        const E = require('../chargeur/etat'), { creerConstructeur } = require('../chargeur/version');
+        const b = creerConstructeur(); b.entree(VB.doc(P5, { idMetacard: META_P5, setNom: 'Banc Lot' }));
+        for (const id of [P5, P20A, P1]) b.jumeau({ idProduct: id, idMetacard: 990200 + (id % 1000), idExpansion: EXP, numero: '1', tirage: 'intl' });
+        E.installer(b.finir());
+        await avec(undefined, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j), an = await analyseDe(j);
+            H.v('JUMEAU-V2 lot, colonne CHARGÉE et un produit plus récent sous la métacarte de P5 : P5 seul ne conclut pas (carte illisible, motif jumeaux-perimes tracé), P20A (autre métacarte) est identifiée',
+                [[0, 1].map(i => c[i] && c[i].statut), c[0] && c[0].raison, an && an.cartes[0].motifJumeaux, an && an.cartes[1].motifJumeaux], [['introuvable', 'identifiee'], 'panne-lecture', 'jumeaux-perimes', undefined]);
+        });
+        await raw('catalogue_produits').deleteOne({ idProduct: 910998 });
+        await avec(undefined, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j);
+            H.v('   le produit plus récent retiré : les deux cartes sont identifiées par la colonne (aucun jumeau), chemin de PRODUCTION', [[0, 1].map(i => c[i] && c[i].statut), await essais(x)], [['identifiee', 'identifiee'], 2]);
+        });
+        VB.installer(VIS);                                                    // la version du banc d'avant (sans colonne), pour la suite
     }
     // ── (7) les questions d'un lot
     {

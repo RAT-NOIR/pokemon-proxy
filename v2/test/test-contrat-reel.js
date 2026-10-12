@@ -309,7 +309,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler(LOTS, cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
         return H.serveur(app);
     };
     const sv = await monter();
@@ -793,7 +793,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const express2 = require('express');
     const servies = (function () {
         const out = new Set(); const app = express2(); for (const l of LOTS) { l.enTete(app, cfg); }
-        app.use(assembler(LOTS, cfg, { gererIdentifier: chaine }));
+        app.use(assembler(LOTS, cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine }));
         (function lire(pile) { for (const l of pile || []) { if (l.route) for (const m of Object.keys(l.route.methods)) out.add(`${m.toUpperCase()} ${l.route.path.replace(/:([A-Za-z]+)/g, '{$1}')}`); else if (l.name === 'router' && l.handle && l.handle.stack) lire(l.handle.stack); } })(app._router && app._router.stack);
         return out;
     })();
