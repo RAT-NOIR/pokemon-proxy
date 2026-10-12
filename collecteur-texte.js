@@ -431,7 +431,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         return a + Math.max(1, new Set(imps.map(i => i.numero ?? '')).size);
     }, 0);
     const complet = {
-        setlist: entreesSetlist.length, impressions: impressionsDuSet, infobox: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, titresLies: titres.length, titresManquants: manquants, pagesDistinctes, cartesEcrites,
+        setlist: entreesSetlist.length, impressions: impressionsDuSet, infobox: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, titresLies: titres.length, titresManquants: manquants, pagesHomonymie: D.pagesHomonymie || 0, pagesSansNom: D.pagesSansNom || 0, pagesDistinctes, cartesEcrites,
         produits: produits.length, produitsJoints: J.compte.produitsJoints, lignesJointure: J.lignes.length, restes: restesParType,
         preuves: J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}),
         concordance: manquants === 0 && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
@@ -448,6 +448,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     console.log(`   entrées de la Setlist (tirages) : ${entreesSetlist.length}  ·  impressions du set sur les pages : ${impressionsDuSet}${impressionsDuSet !== entreesSetlist.length ? '  ⚠️ diffèrent' : ''}  (infobox ${TIRAGE === 'jp' ? 'jacards' : 'encards'} : ${complet.infobox ?? '—'})`);
     console.log(`   pages distinctes = cartes    : ${pagesDistinctes} = ${cartesEcrites}${entreesSetlist.length !== pagesDistinctes ? `   (${complet.tiragesParCarte} tirage(s) par carte : normal quand une carte porte plusieurs numéros)` : ''}`);
     console.log(`   titres manquants             : ${manquants}`);
+    console.log(`   pages d'homonymie écartées   : ${D.pagesHomonymie || 0}   (jamais une carte, jamais dans ${slug} ; comptées sur ce lancement)`);
+    console.log(`   pages SANS NOM, non cartes   : ${D.pagesSansNom || 0}   (wikitext sur R2, titre redemandé à la prochaine collecte)`);
     console.log(`   produits = joints + restes   : ${produits.length} = ${J.compte.produitsJoints} + ${produitsRestes}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
     console.log(`   lignes de jointure (${TIRAGE})    : ${J.lignes.length}  ·  preuves : ${JSON.stringify(J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}))}  ·  bonus intl : ${intlLignes}`);
     console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);

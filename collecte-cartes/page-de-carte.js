@@ -35,8 +35,17 @@ async function ecrirePageDeCarte({ M, r2, bucket, pg, slug, lot, redirigeDepuisT
     // l'état APRÈS l'unité : les titres du lot qui ont mené à cette page (cible + redirigés)
     const titresDeCettePage = [pg.title, ...(redirigeDepuisTout.get(pg.title) || [])].filter(t => lot.includes(t));
     const decision = decisionDePage(pg.content, pg.title);
+    if (decision.motif === 'sans-nom') {
+        // RÉCUPÉRABLE : une page sans nom qui n'est pas une homonymie (ébauche, gabarit neuf) ne devient pas une carte, mais rien n'en est perdu —
+        // son wikitext est déposé sur R2 comme les autres, et son titre n'est PAS marqué « fait » dans l'état : la prochaine collecte le redemande.
+        D.pagesSansNom = (D.pagesSansNom || 0) + 1;
+        await r2.deposerTexte(bucket, r2.cleWikitext(pg.pageid, pg.revid), epurer(pg.content, D.epure));
+        await M.Reste.updateOne({ set: slug, type: 'page-sans-carte', detail: pg.title }, { $set: { motif: 'sans-nom', le: new Date() } }, { upsert: true });
+        return { ecrite: false, motif: 'sans-nom' };
+    }
     if (!decision.carte) {
-        D.pagesNonCartes = (D.pagesNonCartes || 0) + 1;
+        // HOMONYMIE PROUVÉE ({{disambig}}, {{tcgdisambig}}) : jamais une carte, jamais dans `sets` ; le titre est marqué fait (rien à redemander).
+        D.pagesHomonymie = (D.pagesHomonymie || 0) + 1;
         await M.Reste.updateOne({ set: slug, type: 'page-sans-carte', detail: pg.title }, { $set: { motif: decision.motif, le: new Date() } }, { upsert: true });
         await M.Etat.updateOne({ _id: slug }, {
             $push: { pages: { $each: titresDeCettePage.map(t => ({ titre: t, pageid: pg.pageid, revid: pg.revid, etat: decision.motif })) } },

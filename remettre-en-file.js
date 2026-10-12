@@ -84,7 +84,12 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-06 : les sources en service (Bulbapedia suspendu) — une unité enfilée sous un worker qui ne la connaît pas frapperait Bulbagarden
     'collecte-cartes/sources-en-service.js',
     // ➕ 2026-10-08 : le témoin du nom dans la jointure des images artofpkm — un worker qui ne l'a pas joindrait encore sans témoin
-    'collecte-cartes/temoin-images-artofpkm.js'];
+    'collecte-cartes/temoin-images-artofpkm.js',
+    // ➕ 2026-10-12 (R7) : collecteur-images-bulba.js charge tirage-image.js, qui ôte désormais les commentaires HTML du wikitext avant de lire
+    // les fichiers et les paires jp/occidental (wikitext.js : sansCommentaires, qui charge corrections-impressions.js) — un worker sans eux relirait le texte commenté
+    'collecte-cartes/tirage-image.js',
+    'collecte-cartes/wikitext.js',
+    'collecte-cartes/corrections-impressions.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma

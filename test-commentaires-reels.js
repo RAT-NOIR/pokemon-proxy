@@ -38,5 +38,14 @@ const synth = '{{PokémoncardInfobox\n|cardname=Truc\n|image=TrucA.jpg\n|caption
 verifier('tirage-image : un fichier commenté (reprint1) n\'est pas une image de la page', TI.fichiersDeLaPage(synth, [{ tirage: 'intl', expansion: 'Set A', numero: '1' }]).map(f => f.fichier), ['TrucA.jpg']);
 verifier('tirage-image : la paire jp commentée ne crée pas de jumeau', [...TI.pairesJaponaisOccidental(synth).jumeaux.keys()], []);
 
+// La garde du commit du worker : tout module que collecteur-images-bulba.js charge, directement ou non, pour lire les commentaires (I1)
+const { REGLES } = require('./remettre-en-file');
+const lire = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
+const requisLocaux = f => [...lire(f).matchAll(/require\('\.\/([^']+)'\)/g)].map(m => path.posix.join(path.posix.dirname(f), m[1]).replace(/(\.js)?$/, '.js'));
+const fermeture = (f, vus = new Set()) => { for (const d of requisLocaux(f)) if (!vus.has(d) && fs.existsSync(path.join(__dirname, d))) { vus.add(d); fermeture(d, vus); } return vus; };
+const chaine = fermeture('collecte-cartes/tirage-image.js');
+verifier('REGLES surveille tirage-image.js et toute sa fermeture locale', ['collecte-cartes/tirage-image.js', ...chaine].filter(f => !REGLES.includes(f)), []);
+verifier('la fermeture de tirage-image.js contient wikitext.js (sansCommentaires)', chaine.has('collecte-cartes/wikitext.js'), true);
+
 console.log(`${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

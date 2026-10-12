@@ -65,6 +65,25 @@ const contexte = (f, pg) => ({
     verifier('Oddish : numéro propre écrit (102), aucun jp', up[0][3].$set.impressions.map(i => [i.tirage, i.numero]), [['intl', '102']]);
     verifier('Oddish : déposée sur R2', f.depots.length, 1);
 
+    // 3 bis (I2). une page SANS NOM qui n'est PAS une homonymie : jamais une carte, mais RÉCUPÉRABLE
+    const ebauche = '{{Project TCG notice\n}}\n{{TCG\n|Truc\n}}';
+    verifier('décision : l\'ébauche est sans-nom, pas une homonymie', [P.estPageDHomonymie(ebauche), P.decisionDePage(ebauche, 'Truc (Promo 1)')], [false, { carte: false, motif: 'sans-nom' }]);
+    const fs2 = faux(), ctx2 = contexte(fs2, { title: 'Truc (Promo 1)', pageid: 777, revid: 8, content: ebauche });
+    const r2n = await P.ecrirePageDeCarte(ctx2);
+    verifier('sans-nom : rendue non écrite', [r2n.ecrite, r2n.motif], [false, 'sans-nom']);
+    verifier('sans-nom : aucune écriture sur cartes', fs2.appels.filter(a => a[0] === 'Carte'), []);
+    verifier('sans-nom : wikitext DÉPOSÉ sur R2 (récupérable)', fs2.depots, ['bulba/777/8.wikitext']);
+    verifier('sans-nom : le titre n\'est PAS marqué fait (aucune écriture d\'état) -> redemandé', fs2.appels.filter(a => a[0] === 'Etat'), []);
+    verifier('sans-nom : un reste nomme la page, motif sans-nom', fs2.appels.filter(a => a[0] === 'Reste').map(a => [a[2].type, a[2].detail, a[3].$set.motif]), [['page-sans-carte', 'Truc (Promo 1)', 'sans-nom']]);
+    verifier('sans-nom : compté à part dans D', [ctx2.D.pagesSansNom, ctx2.D.pagesHomonymie ?? 0], [1, 0]);
+    const fh = faux(), ctxh = contexte(fh, { title: 'Eevee (S-P Promo 23)', pageid: 5, revid: 6, content: fx('homonymie-tcg') });
+    await P.ecrirePageDeCarte(ctxh);
+    verifier('homonymie : comptée à part dans D', [ctxh.D.pagesHomonymie, ctxh.D.pagesSansNom ?? 0], [1, 0]);
+    // les deux comptes sont imprimés et nommés dans `complet`
+    const srcC = fs.readFileSync(path.join(__dirname, 'collecteur-texte.js'), 'utf8');
+    verifier('complet nomme pagesHomonymie et pagesSansNom', /complet = \{[\s\S]*?pagesHomonymie: D\.pagesHomonymie[\s\S]*?pagesSansNom: D\.pagesSansNom/.test(srcC), true);
+    verifier('le résumé imprime les deux comptes', [/console\.log\(`[^`]*pages d'homonymie écartées[^`]*D\.pagesHomonymie/.test(srcC), /console\.log\(`[^`]*pages SANS NOM[^`]*D\.pagesSansNom/.test(srcC)], [true, true]);
+
     // 4. la source : collecteur-texte.js passe par cette fonction et ne garde pas l'upsert en direct
     const src = fs.readFileSync(path.join(__dirname, 'collecteur-texte.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     verifier('collecteur-texte.js appelle ecrirePageDeCarte', /ecrirePageDeCarte\(/.test(src), true);
