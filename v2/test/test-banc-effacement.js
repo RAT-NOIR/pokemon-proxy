@@ -21,15 +21,21 @@ let Lg, Q;
 const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
 const ORIGINE = cfg.origines.extension;
 const BUCKET = 'bucket-banc-test', SEL = 'sel-de-banc-A';
-// T0 = maintenant (et non une date figée) : le consentement du banc porte `le: new Date()`, et une horloge figée au 2026-10-10 12:00Z le refusait dès le 2026-10-11 12:00Z (bombe à retardement du banc, sans rapport avec O5).
-const T0 = new Date(), H1 = 3600e3, JOUR = 86400e3;
+// Horloge du scénario : INJECTÉE et FIXÉE sur une HEURE choisie du jour UTC courant, jamais `new Date()` brut. Le jour reste celui d'aujourd'hui (le consentement du banc est daté de T0 et la
+// fenêtre de validité du consentement se compte contre l'horloge réelle : une date figée au 2026-10-10 le refusait dès le 2026-10-11, bombe n° 1), mais l'HEURE ne dépend plus de l'heure du lancement
+// (bombe n° 2 : la règle « plus de 24 h » se lit AU JOUR UTC, donc un lancement entre 23 h et minuit changeait le résultat). Par défaut 23:30:00 UTC = le pire cas, la frontière du jour est TOUJOURS exercée ;
+// `BANC_T0_HEURE=HH:MM:SS` rejoue le banc à une autre heure simulée (la preuve « à toute heure »).
+const HEURE_T0 = process.env.BANC_T0_HEURE || '23:30:00';
+if (!/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(HEURE_T0)) throw new Error('BANC_T0_HEURE doit être HH:MM:SS');
+const T0 = new Date(`${new Date().toISOString().slice(0, 10)}T${HEURE_T0}.000Z`), H1 = 3600e3, JOUR = 86400e3;
+const JOUR0 = new Date(Date.UTC(T0.getUTCFullYear(), T0.getUTCMonth(), T0.getUTCDate()));      // le jour UTC de T0 : la valeur de `le` des lignes écrites par le banc
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const jusque = async (cond, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await cond()) return true; await attendre(25); } return false; };
 const empreinte = j => crypto.createHash('sha256').update(j).digest('hex');
 const raw = n => mongoose.connection.db.collection(n);
 const lignes = () => db.col('banc_lignes').find({}).toArray();
 const vider = () => db.col('banc_lignes').deleteMany({});
-const consentement = (jeton = 'jeton-test-abcdefghij1234') => ({ consentementBanc: { version: '2026-10-07-v1', le: new Date().toISOString(), jeton } });
+const consentement = (jeton = 'jeton-test-abcdefghij1234') => ({ consentementBanc: { version: '2026-10-07-v1', le: T0.toISOString(), jeton } });
 const carteImg = () => sharp({ create: { width: 640, height: 894, channels: 3, background: { r: 30, g: 120, b: 60 } } }).jpeg().toBuffer();
 const hex = () => crypto.randomBytes(16).toString('hex');
 const scanHex = n => `6500000000000000000${String(n).padStart(5, '0')}`;
@@ -237,10 +243,14 @@ async function section(nom, f) {
         H.v('   expireLe <= maintenant : une milliseconde avant ⇒ garde (1) ; pile à expireLe ⇒ supprime (0)', [reste, (await lignes()).length], [1, 0]);
         // attente : 24 h au jour (cf. balayerAttente)
         await ecrireLigne(banc, image, { jeton: 'jeton-P5-abcdefghij1234', issue: 'question' });
-        await purge.purgerBanc(new Date(T0.getTime() + 25 * H1));
-        const garde25 = (await lignes()).length;
-        await purge.purgerBanc(new Date(T0.getTime() + 49 * H1));
-        H.v('   ligne en attente : à 25 h elle reste (le jour n\'a pas 24 h d\'avance), à 49 h elle part avec son objet', [garde25, (await lignes()).length, client.objets.size], [1, 0, 0]);
+        // `le` est tronqué au jour UTC (JOUR0) et « plus de 24 h » se lit AU JOUR : la ligne part quand jourUTC(maintenant − 24 h) > JOUR0, soit à JOUR0 + 48 h pile, QUELLE QUE SOIT l'heure d'écriture.
+        // Les bornes se calculent donc depuis JOUR0, jamais depuis T0 + n h (qui dépendait de l'heure du lancement : à 23 h 30, T0 + 25 h était déjà au-delà).
+        await purge.purgerBanc(new Date(T0.getTime() + 23 * H1));
+        const garde23 = (await lignes()).length;
+        await purge.purgerBanc(new Date(JOUR0.getTime() + 48 * H1 - 1));
+        const garde48moins = (await lignes()).length;
+        await purge.purgerBanc(new Date(JOUR0.getTime() + 48 * H1));
+        H.v('   ligne en attente : à T0 + 23 h et à JOUR0 + 48 h − 1 ms elle reste (le jour n\'a pas 24 h d\'avance), à JOUR0 + 48 h pile elle part avec son objet — à toute heure de T0', [garde23, garde48moins, (await lignes()).length, client.objets.size], [1, 1, 0, 0]);
         // objets d'abord, lignes ensuite, et un objet qui ne part pas garde sa ligne
         await ecrireLigne(banc, image, { jeton: 'jeton-P6-abcdefghij1234' });
         let vue = null; client.avantSuppression = async () => { vue = (await lignes()).length; };
@@ -566,7 +576,7 @@ async function section(nom, f) {
         await reset(); mode = 'affirmee';
         let x = await mkInst(); let r = await identifier(avecDet, x, null); await attendre(150);
         H.v('(7) sans consentement : 200 identifiée ; zéro ligne, zéro objet, zéro appel du détecteur', [r.statut, r.json.analyse.statut, (await lignes()).length, client.objets.size, appelsDetection], [200, 'identifiee', 0, 0, 0]);
-        r = await identifier(avecDet, x, { consentementBanc: { version: 'inconnue', le: new Date().toISOString(), jeton: 'jeton-test-abcdefghij1234' } }); await attendre(150);
+        r = await identifier(avecDet, x, { consentementBanc: { version: 'inconnue', le: T0.toISOString(), jeton: 'jeton-test-abcdefghij1234' } }); await attendre(150);
         H.v('   consentement invalide (version inconnue) : idem', [(await lignes()).length, appelsDetection], [0, 0]);
         // production d'aujourd'hui : pas de crochet detection
         r = await identifier(sansDet, x, consentement()); await attendre(150);
