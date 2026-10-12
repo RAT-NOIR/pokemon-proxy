@@ -74,6 +74,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-11 : PIKAQIAN. Le collecteur, le client/la preuve (que seuils-images.js charge : la liste des sources à 300 px en vient) et la table des sets
     // (la garde de l'unité la lit mot pour mot) : un worker qui n'a pas ces trois-là sortirait l'unité `refuse-table` / `source-inconnue`.
     'collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json',
+    // ➕ 2026-10-12 : le RÉESSAI ESPACÉ de PikaQian bloqué et la sonde du serveur d'images officiel (le worker les appelle à chaque tour), avec la machine
+    // d'espacement qu'ils partagent avec Bulbapedia : un worker qui ne les a pas ne retenterait jamais, et laisserait les 91 unités refusées sous une alerte levée
+    'collecte-cartes/reessai-pikaqian.js', 'collecte-cartes/bulba-espacement.js', 'collecte-cartes/sonde-cdn-pokemon-tcg.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
