@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
-const { effacerRefabricables, PREUVES_DE_JOINDRE } = require(path.join(DIR, 'collecte-cartes', 'preuves-jointure'));
+const { effacerRefabricables, PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES } = require(path.join(DIR, 'collecte-cartes', 'preuves-jointure'));
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
@@ -41,6 +41,29 @@ function monde() {
     // le câblage : collecteur-texte.js appelle effacerRefabricables et ne contient plus l'effacement nu
     const src = fs.readFileSync(path.join(DIR, 'collecteur-texte.js'), 'utf8');
     verifier('collecteur-texte.js --reparser passe par effacerRefabricables (pas de deleteMany nu sur cartes_produits)', [/effacerRefabricables\(M, idsCartes, expsDeCeSet\)/.test(src), /CarteProduit\.deleteMany\(\{ carteId: \{ \$in: idsCartes \}, idExpansion/.test(src)], [true, false]);
+    // ── tour 3 : la liste est LIÉE à jointure.js (§21 bis) — lue dans le SOURCE (non modifié : le worker le lit) ──
+    // Les `preuve` que jointure.js produit : les littéraux « a+b[+c] » des lignes qui parlent de `preuve`, plus le gabarit `${source}+nom[+attaques]` avec les
+    // valeurs de `source`. Si l'extraction ne trouve rien, le test échoue (un zéro sur un source non vide est un extracteur faux, §41).
+    function preuvesProduites(texte) {
+        const lignesPreuve = texte.split(/\r?\n/).filter(l => /preuve/.test(l));
+        const litteraux = new Set(lignesPreuve.flatMap(l => [...l.matchAll(/'([a-z]+(?:\+[a-z]+)+)'/g)].map(m => m[1])));
+        const sources = new Set([...(texte.match(/const source = [^;]*;/) || [''])[0].matchAll(/'([a-z]+)'/g)].map(m => m[1]));
+        if (/`\$\{source\}\+nom\$\{[^`]*'\+attaques'[^`]*\}`/.test(texte)) for (const s of sources) { litteraux.add(`${s}+nom`); litteraux.add(`${s}+nom+attaques`); }
+        return litteraux;
+    }
+    function classer(produites, effacables, gardees) {
+        const problemes = [];
+        for (const p of produites) if (!effacables.includes(p) && !gardees.includes(p)) problemes.push(`produite par jointure.js et classée nulle part : ${p}`);
+        for (const e of effacables) if (!produites.has(e)) problemes.push(`effaçable mais jointure.js ne la produit plus : ${e}`);
+        return problemes;
+    }
+    const jointureSrc = fs.readFileSync(path.join(DIR, 'collecte-cartes', 'jointure.js'), 'utf8');
+    const produites = preuvesProduites(jointureSrc);
+    verifier('l\'extracteur lit jointure.js : au moins les 6 preuves attendues (sinon l\'extracteur est faux, pas le fichier)', [...produites].sort(), ['set+nom', 'set+nom+attaques', 'set+numero', 'setlist+nom', 'setlist+nom+attaques', 'setlist+numero']);
+    verifier('LIAISON : la liste effaçable (+ gardées explicites) est EXACTEMENT ce que jointure.js produit', classer(produites, PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES), []);
+    verifier('   une preuve FICTIVE dans la liste effaçable est détectée', classer(produites, [...PREUVES_DE_JOINDRE, 'fictive+x'], PREUVES_GARDEES_PRODUITES), ['effaçable mais jointure.js ne la produit plus : fictive+x']);
+    verifier('   une preuve NEUVE produite par jointure.js et non classée est détectée', classer(new Set([...produites, 'neuve+preuve']), PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES), ['produite par jointure.js et classée nulle part : neuve+preuve']);
+    verifier('   … classée explicitement GARDÉE, elle est acceptée', classer(new Set([...produites, 'neuve+preuve']), PREUVES_DE_JOINDRE, ['neuve+preuve']), []);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

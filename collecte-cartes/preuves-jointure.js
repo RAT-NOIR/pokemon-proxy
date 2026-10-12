@@ -11,6 +11,12 @@
 // comprises). Une preuve neuve que joindre() produirait demain doit être AJOUTÉE ICI, sinon elle survit au rejeu au lieu de se refaire.
 const PREUVES_DE_JOINDRE = Object.freeze(['set+numero', 'setlist+numero', 'set+nom', 'set+nom+attaques', 'setlist+nom', 'setlist+nom+attaques']);
 
+/**
+ * Les preuves que jointure.js produit et qu'une régénération GARDE explicitement (aucune aujourd'hui). Le banc test-reparser-filtre.js lit jointure.js : toute
+ * preuve qu'elle produit doit être classée ICI ou dans PREUVES_DE_JOINDRE, et toute preuve effaçable doit encore être produite (§21 bis).
+ */
+const PREUVES_GARDEES_PRODUITES = Object.freeze([]);
+
 /** Le filtre d'effacement d'un rejeu : les lignes des cartes du set, de ses expansions, ET d'une preuve que joindre() refabrique. */
 const filtreDeRegeneration = (idsCartes, expsDeCeSet) => ({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet }, preuve: { $in: [...PREUVES_DE_JOINDRE] } });
 
@@ -33,4 +39,4 @@ async function effacerRefabricables(M, idsCartes, expsDeCeSet) {
     return { gardees };
 }
 
-module.exports = { PREUVES_DE_JOINDRE, filtreDeRegeneration, effacerRefabricables };
+module.exports = { PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES, filtreDeRegeneration, effacerRefabricables };

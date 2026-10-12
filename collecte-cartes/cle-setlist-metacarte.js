@@ -40,6 +40,11 @@ function designerParSetlist({ parMeta, metacarteDe, setlist }, p, { sauf = null 
     for (const [id, cs] of parMeta.get(m) || []) if (id !== p.idProduct) for (const c of cs) if (c > 0 && c !== sauf) cartesMeta.add(c);
     if (!cartesMeta.size) return non('métacarte : aucun autre produit joint à une carte à page');
     if (cartesMeta.size > 1) return non(`métacarte : ${cartesMeta.size} cartes`);
+    // TOUR 3 : la clé ne désigne que ce que sa calibration MESURE. La population D (le danger) exige une métacarte à >= 2 frères joints à une carte à page ;
+    // à un seul frère la relecture A' a mesuré 1 264 cas dont 1 faux de carte (Poncho Pikachu SM-P) que la calibration ne voyait pas.
+    let freres = 0;
+    for (const [id, cs] of parMeta.get(m) || []) if (id !== p.idProduct && [...cs].some(c => c > 0 && c !== sauf)) freres++;
+    if (freres < 2) return non(`métacarte : ${freres} frère(s) joint(s), il en faut 2 (la calibration du danger ne mesure pas moins)`);
     // (2) la Setlist du set
     const kp = clesDuProduit(p);
     const entrees = (setlist || []).filter(e => e.carte._id !== sauf && clesNom(nomJointDe(e.carte)).some(k => kp.includes(k)) && compatible(e.carte, p, 'incluses'));

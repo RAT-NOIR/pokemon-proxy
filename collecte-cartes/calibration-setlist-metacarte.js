@@ -27,7 +27,7 @@ const PREUVES_VERITE = ['set+numero', 'setlist+numero'];
  * site, et la barre est de ne pas dépasser ~3 % sur le cas craint. Sur A (les sets qui écrivent) : 100 cas atteints. Les minimums ne se baissent pas pour
  * faire passer un lot (§23) : s'ils ne sont pas atteints, la garde refuse et le dit.
  */
-const MINIMUMS = Object.freeze({ A: 100, D_A: 100, D_C: 100 });
+const MINIMUMS = Object.freeze({ A: 100, D_A: 100 });
 
 const vide = () => ({ cas: 0, atteints: 0, justes: 0, fauxCarte: 0, fauxNumero: 0, formes: 0, silences: 0, faux: [] });
 
@@ -146,11 +146,12 @@ async function calibrer({ db, exportPath, lignesEcrites, lignesDanger = null, li
 function verdict(cal, minimums = MINIMUMS) {
     const refus = [];
     const T = cal.total, D = cal.danger;
-    // LA DÉCISION : 0 faux sur A (les sets qui écrivent) ET sur D-A (le danger, tous tirages), avec >= minimum de cas atteints. D-C (la carte retirée de la
-    // Setlist) n'entre PAS dans la décision : sa population est insuffisante dans toute la base (décision du coordinateur, tour 2) — imprimée « non concluante ».
+    // LA DÉCISION : 0 faux sur A (les sets qui écrivent) ET sur D-A (le danger, tous tirages), avec >= minimum de cas atteints ; ET 0 faux sur B, C et D-C
+    // (« vraie carte retirée ») SANS minimum (tour 3) : leurs populations sont petites (B 0 atteint, C 9, D-C 47), donc rien n'est exigé de leur taille — mais un
+    // seul faux y BLOQUE l'écriture. Coût nul aujourd'hui (0 faux), et l'épreuve entre enfin dans la décision.
     for (const [nom, e] of [['A (sets qui écrivent)', T.A], ['A danger (homonymes)', D.A]]) if (e.fauxCarte || e.fauxNumero) refus.push(`${nom} : ${e.fauxCarte} faux de carte, ${e.fauxNumero} faux de numéro`);
     if (T.A.formes) refus.push(`A (sets qui écrivent) : ${T.A.formes} numéro(s) écrit(s) d'une autre FORME que la jointure (préfixe) — le numeroFiche posé ne serait pas celui que le site compare`);
-    for (const [nom, e] of [['B (vraie carte retirée)', T.B], ['C (retirée de la Setlist)', T.C]]) if (e.fauxCarte) refus.push(`${nom} : ${e.fauxCarte} désignation(s) d'une autre carte`);
+    for (const [nom, e] of [['B (vraie carte retirée)', T.B], ['C (retirée de la Setlist)', T.C], ['D-C (danger, retirée de la Setlist)', D.C]]) if (e.fauxCarte) refus.push(`${nom} : ${e.fauxCarte} désignation(s) d'une autre carte`);
     if (T.A.atteints < minimums.A) refus.push(`A : ${T.A.atteints} cas atteints < minimum ${minimums.A}`);
     if (D.A.atteints < minimums.D_A) refus.push(`danger A : ${D.A.atteints} cas atteints < minimum ${minimums.D_A}`);
     return { ok: refus.length === 0, refus };
@@ -162,9 +163,9 @@ function imprimer(cal, log) {
     log(`   D  DANGER : ${cal.danger.sets} sets lus (${cal.danger.illisibles} illisibles), ${cal.danger.evalues} produits évalués, ${cal.danger.isoles} isolés (métacarte >= 2 frères ET homonyme dans la Setlist)`);
     log(`   vérités CONTREDITES par les attaques du produit, écartées de la population : ${cal.veriteContredite?.total ?? 0}${(cal.veriteContredite?.exemples || []).slice(0, 3).map(x => `\n      · ${x}`).join('')}`);
     log(ligne('D-A danger, vérité', cal.danger.A));
-    log(ligne('D-C danger, retirée', cal.danger.C) + (cal.danger.C.atteints < cal.minimums.D_C ? `  → population insuffisante (${cal.danger.C.atteints} < ${cal.minimums.D_C}), NON CONCLUANTE, hors de la décision` : ''));
+    log(ligne('D-C danger, retirée', cal.danger.C) + '  → 0 faux exigé, sans minimum de cas atteints (population petite : un seul faux bloque, un zéro ne prouve que ce qu\'il atteint)');
     for (const [t, x] of Object.entries(cal.danger.parTirage).sort()) log(`      danger, tirage ${t.padEnd(8)} A : ${x.A.cas} isolés, ${x.A.atteints} atteints, ${x.A.justes} justes, faux ${x.A.fauxCarte} carte / ${x.A.fauxNumero} numéro · C : ${x.C.atteints} atteints, faux ${x.C.fauxCarte}`);
-    log(`   minimums de cas atteints : A ${cal.minimums.A}, D-A ${cal.minimums.D_A}, D-C ${cal.minimums.D_C}`);
+    log(`   minimums de cas atteints : A ${cal.minimums.A}, D-A ${cal.minimums.D_A} (B, C, D-C : aucun minimum, 0 faux)`);
 }
 
 module.exports = { calibrer, verdict, imprimer, evaluer, chargerExport, comparerNumeros, MINIMUMS };

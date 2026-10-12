@@ -8,6 +8,7 @@ const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 const { executer } = require(path.join(DIR, 'poser-fiches-par-setlist.js'));
 const { decomposerNomCardmarket } = require(path.join(DIR, 'collecte-cartes', 'jointure'));
+const { verdict, MINIMUMS } = require(path.join(DIR, 'collecte-cartes', 'calibration-setlist-metacarte'));
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
@@ -15,7 +16,7 @@ const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b
 // ── la fausse base ──
 function fakeDb(init) {
     const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, structuredClone(d)]))]));
-    const stats = { upserts: 0, ecritures: 0, panneAvantCartes: false };
+    const stats = { upserts: 0, ecritures: 0, panneAvantCartes: false, perdreDerniereLigne: false, perdreImpressions: false };
     const get = (o, p) => p.split('.').reduce((x, k) => x?.[k], o);
     const set = (o, p, v) => { const ks = p.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] ??= {}; x[ks.at(-1)] = v; };
     const correspond = (d, f) => Object.entries(f).every(([k, v]) => {
@@ -32,9 +33,10 @@ function fakeDb(init) {
     const col = nom => { const m = cols.get(nom) || cols.set(nom, new Map()).get(nom); return {
         find: f => ({ toArray: async () => [...m.values()].filter(d => correspond(d, f || {})).map(d => structuredClone(d)) }),
         countDocuments: async () => m.size,
-        async updateOne(f, u, o = {}) { const d = [...m.values()].find(x => correspond(x, f)); if (!d) return { matchedCount: 0, modifiedCount: 0 }; appliquer(d, u, false); stats.ecritures++; return { matchedCount: 1, modifiedCount: 1 }; },
+        async updateOne(f, u, o = {}) { if (stats.perdreImpressions && u.$push) return { matchedCount: 0, modifiedCount: 0 }; const d =[...m.values()].find(x => correspond(x, f)); if (!d) return { matchedCount: 0, modifiedCount: 0 }; appliquer(d, u, false); stats.ecritures++; return { matchedCount: 1, modifiedCount: 1 }; },
         async bulkWrite(ops) {
             if (nom === 'cartes' && stats.panneAvantCartes) { stats.panneAvantCartes = false; throw new Error('PANNE simulée avant l\'écriture des cartes'); }
+            if (nom === 'cartes_produits' && stats.perdreDerniereLigne) ops = ops.slice(0, -1);   // une écriture qui perd une ligne SANS erreur
             for (const { updateOne: { filter, update, upsert } } of ops) {
                 let d = m.get(filter._id), cree = false;
                 if (!d) { if (!upsert) continue; d = { _id: filter._id }; m.set(d._id, d); cree = true; stats.upserts++; }
@@ -138,6 +140,23 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     w = monde({ impressionSansNumero: true });
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:1', '--ecrire']);
     verifier('impression du parseur au même set SANS numéro : la carte est écartée (fiche mélangée), pas d\'impression en double', [r.code, lignesPosees(w).map(l => l.idProduct), w.db.brut('cartes').find(c => c._id === 1002).impressions.length], [0, [301], 1]);
+
+    // ── tour 3 : la RELECTURE en base après l'écriture ──
+    w = monde(); w.db.stats.perdreDerniereLigne = true;
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('relecture : une écriture qui PERD une ligne sans erreur → la relecture en base ne retrouve pas le compte → exit 1 (et le dit)', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /RELECTURE : lignes 1\/2/.test(r.sorties)], [1, true, true]);
+    w = monde(); w.db.stats.perdreImpressions = true;
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('relecture : des impressions non posées (sans erreur) → exit 1', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /impressions « setlist » 0\/2/.test(r.sorties)], [1, true, true]);
+
+    // ── tour 3 : le verdict, sur des états FABRIQUÉS en mémoire ──
+    const sain = () => ({ total: { A: { fauxCarte: 0, fauxNumero: 0, formes: 0, atteints: 200 }, B: { fauxCarte: 0, atteints: 0 }, C: { fauxCarte: 0, atteints: 9 } }, danger: { A: { fauxCarte: 0, fauxNumero: 0, atteints: 200 }, C: { fauxCarte: 0, atteints: 47 } } });
+    const v = (mod, mins = MINIMUMS) => { const c = sain(); mod(c); return verdict(c, mins); };
+    verifier('verdict : un état sain (A et D-A à 200 atteints, B, C et D-C à 0 faux et peu de cas) PASSE — B, C, D-C n\'ont aucun minimum', v(() => { }).ok, true);
+    verifier('verdict : 1 faux sur D-C SEUL → REFUSE (la vraie carte retirée entre dans la décision)', [v(c => { c.danger.C.fauxCarte = 1; }).ok, /D-C/.test(v(c => { c.danger.C.fauxCarte = 1; }).refus.join())], [false, true]);
+    verifier('verdict : 1 faux sur C seul → REFUSE ; 1 faux sur B seul → REFUSE', [v(c => { c.total.C.fauxCarte = 1; }).ok, v(c => { c.total.B.fauxCarte = 1; }).ok], [false, false]);
+    verifier('verdict : D-A à 99 cas atteints → REFUSE (minimum 100) ; à 100 → passe', [v(c => { c.danger.A.atteints = 99; }).ok, v(c => { c.danger.A.atteints = 100; }).ok], [false, true]);
+    verifier('verdict : A à 99 cas atteints → REFUSE ; 1 faux de numéro sur D-A → REFUSE', [v(c => { c.total.A.atteints = 99; }).ok, v(c => { c.danger.A.fauxNumero = 1; }).ok], [false, false]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     try { for (const f of fs.readdirSync(os.tmpdir())) if (f.startsWith(`export-test-poser-fiches-${process.pid}`)) fs.unlinkSync(path.join(os.tmpdir(), f)); } catch { }
