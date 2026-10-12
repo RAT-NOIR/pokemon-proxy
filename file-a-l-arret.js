@@ -63,7 +63,8 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/(source-bloquee\/|taille-base)/, active: true }).toArray())
         console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : ${al.motif}`
             // le réessai espacé (collecte-cartes/reessai-pikaqian.js) : le compte des blocages et la prochaine tentative, ou la SUSPENSION
-            + (al.suspendue ? ' · ⛔ SUSPENDUE : plus aucune tentative sans décision du testeur' : al.pasAvant ? ` · prochaine tentative au plus tôt ${new Date(al.pasAvant).toISOString()}` : '')
+            + (require('./collecte-cartes/source-passive').phraseAlerte(al)
+                ?? (al.suspendue ? ' · ⛔ SUSPENDUE : plus aucune tentative sans décision du testeur' : al.pasAvant ? ` · prochaine tentative au plus tôt ${new Date(al.pasAvant).toISOString()}` : ''))
             + (Array.isArray(al.blocages) ? ` · ${al.blocages.length} blocage(s)` : ''));
 
     const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS) || importEnCours;

@@ -16,6 +16,7 @@
 // collecteur-images.js (l'aiguillage). L'alerte « source-bloquee/pikaqian » (défi, retrait) interdit d'enfiler : l'arrêt ne se lève que par une décision.
 require('dotenv').config();
 const P = require('./collecte-cartes/pikaqian');
+const { estPassive, motifPassif } = require('./collecte-cartes/source-passive');
 const { TABLE_PIKAQIAN, uniteDeLaLigne } = require('./collecte-cartes/pikaqian-sets');
 
 const SET_TEST = 'Dynamax-Clash-Flame';                 // CS1bC, 199 produits, une page : le set test de la décision du 2026-10-11
@@ -26,8 +27,11 @@ const ARRETS = new Set(['refuse-source-bloquee', 'refuse-taille-base']);
  * Pur. Quelles unités insérer, lesquelles reprendre, lesquelles écarter (et pourquoi).
  * @param {{table: object[], unites: Map<string, object>, voulus: string[]|null, reprendre?: boolean, bloquee?: boolean}} o  `voulus` null = toute la table
  */
-function choisirUnitesPikaqian({ table = TABLE_PIKAQIAN, unites, voulus, reprendre = false, bloquee = false }) {
+function choisirUnitesPikaqian({ table = TABLE_PIKAQIAN, unites, voulus, reprendre = false, bloquee = false, passive = estPassive(P.SOURCE) }) {
     const inserer = [], repris = [], ecartes = [];
+    // ➖ 2026-10-13 : SOURCE PASSIVE — aucune unité ne s'insère ni ne se reprend, quoi qu'on demande (decision du testeur ; collecte-cartes/source-passive.js).
+    // `passive` n'est surchargé que par le banc, pour garder la mécanique d'enfilage testée le jour où la source serait rouverte par une décision.
+    if (passive) return { inserer, repris, ecartes: [{ slug: '*', raison: `${motifPassif(P.SOURCE)} : aucune unité ne s'enfile (les visites du testeur envoient les images à recepteur-pikaqian.js)` }] };
     if (bloquee) return { inserer, repris, ecartes: [{ slug: '*', raison: `la source est bloquée ou retirée (alerte ${P.ID_ALERTE} active) : aucune unité ne s'enfile` }] };
     const lignes = (voulus ? voulus.map(s => table.find(l => l.slug === s) ?? { slug: s, inconnue: true }) : [...table].sort((a, b) => (b.trous ?? 0) - (a.trous ?? 0)));
     for (const L of lignes) {
@@ -52,12 +56,12 @@ async function setTestPasse(db) {
  * @param {object} db  la base `cartes`
  * @param {{ecrire?: boolean, voulus?: string[]|null, reprendre?: boolean, worker: {bloque: boolean, phrase: string}, maintenant?: Date}} o
  */
-async function enfiler(db, { ecrire = false, voulus = null, reprendre = false, worker, maintenant = new Date() }) {
+async function enfiler(db, { ecrire = false, voulus = null, reprendre = false, worker, maintenant = new Date(), passive = estPassive(P.SOURCE) }) {
     const F = db.collection('file_images'), E = db.collection('collecte_images_etat');
     const bloquee = !!(await E.findOne({ _id: P.ID_ALERTE, active: true }));
     const existantes = await F.find({}).toArray();
     const unites = new Map(existantes.map(u => [u._id, u]));
-    const C = choisirUnitesPikaqian({ unites, voulus, reprendre, bloquee });
+    const C = choisirUnitesPikaqian({ unites, voulus, reprendre, bloquee, passive });
     const rapport = { ...C, ecrit: false, refus: null, worker: worker.phrase };
     if (!ecrire) return rapport;
     // ── les gardes de l'ÉCRITURE : chacune bloque et le dit ──

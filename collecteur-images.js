@@ -66,6 +66,7 @@ const balise = require('./collecte-cartes/balise-worker');           // « quel 
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { estPassive, motifPassif, cloreUnitePassive } = require('./collecte-cartes/source-passive');                 // PikaQian passive depuis le 2026-10-13
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
 const SOURCE = arg('source') || 'artofpkm';
@@ -837,6 +838,13 @@ if (require.main !== module) return;
             if (SOURCES_SUSPENDUES[sourceDuSet]) {
                 console.error(`⏸️ ${suivant._id} : source ${sourceDuSet} SUSPENDUE — remise en attente 24 h, aucune requête.`);
                 await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-suspendue', pasAvant: new Date(Date.now() + 24 * 3600 * 1000), erreur: `${sourceDuSet} ${SOURCES_SUSPENDUES[sourceDuSet]}` }, $unset: { pris: 1 } });
+                continue;
+            }
+            // ➖ 2026-10-13 — SOURCE PASSIVE (décision du testeur : « le worker ne touche jamais le CDN… la source n'est plus interrogée que par mes visites »).
+            // Une unité pikaqian encore en file se CLÔT ici, motif écrit, avant toute prise de verrou, toute lecture de base ou requête (collecte-cartes/source-passive.js).
+            if (estPassive(sourceDuSet)) {
+                console.error(`⏸️ ${suivant._id} : ${motifPassif(sourceDuSet)} — unité close, aucune requête.`);
+                await cloreUnitePassive(File, suivant);
                 continue;
             }
             if (sourceDuSet === 'bulbapedia') {

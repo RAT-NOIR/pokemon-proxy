@@ -17,6 +17,7 @@
 // numéro est un AUTRE produit ; deux tuiles sans foil au même numéro ne désignent rien ; un nom qui diverge est un trou. Un doute est un trou.
 const T = require('./tpc');
 const { cleNumero } = require('./jointure');
+const { estPassive, motifPassif } = require('./source-passive');
 
 const SOURCE = 'pikaqian';
 const HOTE_PAGES = 'pikaqian.com';
@@ -147,6 +148,8 @@ const CHEMINS = {
 // ── LE CLIENT ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
+        // ➖ 2026-10-13 : le SEUL appel réseau réel vers PikaQian est fermé — la source est passive (source-passive.js). Les bancs injectent leur propre transport.
+        if (estPassive(SOURCE)) throw Object.assign(new Error(`${SOURCE} : ${motifPassif(SOURCE)} — aucune requête partie (${url})`), { passive: true, arret: true });
         let r;
         // `manual` : une redirection n'est JAMAIS suivie par fetch — le client la juge (même hôte, robots.txt, trois sauts au plus)
         try { r = await fetch(url, { headers: { 'User-Agent': UA, Accept: binaire ? 'image/webp,image/*;q=0.8' : 'text/html,*/*;q=0.5' }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }

@@ -11,7 +11,9 @@
 // rien de protégé, robots.txt respecté, cadence lente, arrêt au premier blocage — collecte-cartes/tpc.js). TPC Chine reste fermé.
 // ➕ 2026-10-11 — PIKAQIAN, sur décision du testeur (basse priorité, à ses risques, retirable en un lot — collecte-cartes/pikaqian.js). Elle est EN SERVICE pour le
 // worker, mais l'alimentateur n'en insère AUCUNE unité (zh-hans reste « sans source légale » pour lui) : ses unités viennent de enfiler-pikaqian.js.
-const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex', 'tpc-asie', 'pokemon-card-com', 'pikaqian']));
+// ➖ 2026-10-13 — PIKAQIAN EN EST SORTIE (décision du testeur : « le worker ne touche jamais le CDN… la source n'est plus interrogée que par mes
+// visites »). Elle est PASSIVE (collecte-cartes/source-passive.js) : le worker ne la contacte plus, ne l'enfile plus, ne retente plus.
+const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex', 'tpc-asie', 'pokemon-card-com']));
 const SOURCES_SUSPENDUES = Object.freeze({ bulbapedia: 'suspendu depuis le 2026-10-04 (403 Cloudflare, défi anti-robot) : plus aucune requête' });
 const enService = source => SOURCES_EN_SERVICE.has(source);
 module.exports = { SOURCES_EN_SERVICE, SOURCES_SUSPENDUES, enService };

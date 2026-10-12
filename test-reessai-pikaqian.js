@@ -26,7 +26,8 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
         reserver: async (lu, now) => { etat.doc = { ...etat.doc, dernierEssai: now, reserve: true }; return true; },
         ecrire: async ({ _id, ...d }) => { etat.ecritures++; etat.doc = { ...etat.doc, ...d }; }
     };
-    const essai = R.fabriquerEssai({ client, magasin, maintenant: () => etat.now, surServi });
+    // 2026-10-13 : la machine est FERMÉE par défaut (PikaQian passive, test-source-passive.js) ; ce banc l'allume pour garder son calendrier testé
+    const essai = R.fabriquerEssai({ client, magasin, maintenant: () => etat.now, surServi, allume: true });
     return { etat, essai };
 }
 
@@ -73,7 +74,7 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
     await t('le compteur vit en base : un redéploiement (nouvelle machine, même magasin) ne le remet pas à zéro', async () => {
         const b = banc([DEFI]); await b.essai.essayer();
         const memeMagasin = { lire: async () => structuredClone(b.etat.doc), reserver: async (l, now) => { b.etat.doc = { ...b.etat.doc, dernierEssai: now }; return true; }, ecrire: async ({ _id, ...d }) => { b.etat.doc = { ...b.etat.doc, ...d }; } };
-        const neuve = R.fabriquerEssai({ client: async () => { b.etat.requetes++; return DEFI; }, magasin: memeMagasin, maintenant: () => b.etat.now });
+        const neuve = R.fabriquerEssai({ client: async () => { b.etat.requetes++; return DEFI; }, magasin: memeMagasin, maintenant: () => b.etat.now, allume: true });
         b.etat.now += 23 * HEURE; assert.strictEqual((await neuve.essayer()).envoye, false);
         b.etat.now += 1 * HEURE; await neuve.essayer(); assert.strictEqual(b.etat.doc.suspendue, true);
     });
@@ -108,7 +109,7 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
     }
     await t('I2 : robots OK puis pages bloquées, trois fois de suite → SUSPENDUE (le compte survit aux levées)', async () => {
         const c = fausseColl(null); let now = T1; let reqs = 0;
-        const essai = () => R.fabriquerEssai({ client: async () => { reqs++; return SERVI; }, magasin: R.magasinMongo(c), maintenant: () => now });
+        const essai = () => R.fabriquerEssai({ client: async () => { reqs++; return SERVI; }, magasin: R.magasinMongo(c), maintenant: () => now, allume: true });
         await R.noterBlocage(c, { status: 403, url: 'https://pikaqian.com/sets/cs1bc', motif: 'm' }, now);            // blocage n°1 (page)
         now += 6 * HEURE; assert.strictEqual((await essai().essayer()).verdict, 'SERVI'); assert.strictEqual(c.docs.get(P.ID_ALERTE).active, false);
         await R.noterBlocage(c, { status: 403, url: 'https://pikaqian.com/sets/cs1bc', motif: 'm' }, now);            // n°2 : la page rebloque
@@ -160,7 +161,7 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
         assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
     });
     await t('réservation refusée (un autre worker a pris l\'essai) : aucune requête', async () => {
-        let n = 0; const e = R.fabriquerEssai({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => LEGACY(), reserver: async () => false, ecrire: async () => { } }, maintenant: () => T1 + 7 * HEURE });
+        let n = 0; const e = R.fabriquerEssai({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => LEGACY(), reserver: async () => false, ecrire: async () => { } }, maintenant: () => T1 + 7 * HEURE, allume: true });
         assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
     });
     await t('une réservation sans réponse (crash après la prise) : pas de nouvel essai avant 6 h', async () => {
@@ -216,12 +217,12 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
         const c = fausseCollection(LEGACY()); const now = T1 + 7 * HEURE;
         const r = await R.noterBlocage(c, { unite: 'pikaqian/X', motif: 'BLOQUÉ', status: 403, url: 'https://pikaqian.com/sets/cs1bc', requetes: 2 }, now);
         const d = c.docs.get(P.ID_ALERTE); assert.strictEqual(d.blocages.length, 2); assert.strictEqual(d.blocages[0].le, T1); assert.strictEqual(d.blocages[1].le, now); assert.strictEqual(d.blocages[1].url, 'https://pikaqian.com/sets/cs1bc');
-        assert.strictEqual(d.active, true); assert.strictEqual(d.suspendue, false); assert.strictEqual(d.pasAvant, now + 24 * HEURE); assert.strictEqual(r.n, 2);
+        assert.strictEqual(d.active, true); assert.strictEqual(d.suspendue, false); assert.strictEqual(d.pasAvant, null /* 2026-10-13 : plus rien de programmé */); assert.strictEqual(r.n, 2);
     });
     await t('sans alerte : n°1, retentable 6 h plus tard ; au troisième : suspendue', async () => {
         const c = fausseCollection(null); const now = T1;
         await R.noterBlocage(c, { unite: 'u', motif: 'm', status: 403 }, now);
-        assert.strictEqual(c.docs.get(P.ID_ALERTE).pasAvant, now + 6 * HEURE);
+        assert.strictEqual(c.docs.get(P.ID_ALERTE).pasAvant, null /* 2026-10-13 : plus rien de programmé */);
         await R.noterBlocage(c, { unite: 'u', motif: 'm', status: 403 }, now + 7 * HEURE); await R.noterBlocage(c, { unite: 'u', motif: 'm', status: 403 }, now + 31 * HEURE);
         const d = c.docs.get(P.ID_ALERTE); assert.strictEqual(d.suspendue, true); assert.strictEqual(d.pasAvant, null); assert.strictEqual(d.blocages.length, 3);
     });
@@ -269,10 +270,10 @@ function banc(reponses, { doc = LEGACY(), t0 = T1 + 6 * HEURE, surServi = null }
         const src = fs.readFileSync(require.resolve('./collecteur-images.js'), 'utf8');
         assert.ok(/reessai-pikaqian/.test(src)); assert.ok(/try \{ await passerLesTachesSources\(/.test(src));
     });
-    await t('la tâche ne part que si pikaqian est EN SERVICE (sources-en-service.js)', async () => {
-        const S = require('./collecte-cartes/sources-en-service'); assert.strictEqual(S.enService('pikaqian'), true);
+    await t('la tâche ne part JAMAIS : pikaqian est passive (source-passive.js), plus en service (sources-en-service.js)', async () => {
+        const S = require('./collecte-cartes/sources-en-service'); assert.strictEqual(S.enService('pikaqian'), false);
         let n = 0; const r = await R.passerLesTaches({ collection: () => { n++; return {}; } }, { enService: () => false, journal: { log() { }, error() { } } });
-        assert.strictEqual(n, 0); assert.ok(/service/.test(r.pikaqian.raison));
+        assert.strictEqual(n, 0); assert.ok(/passive/.test(r.pikaqian.raison));
     });
     await t('la garde du commit du worker (REGLES) porte les fichiers neufs', () => {
         const { REGLES } = require('./remettre-en-file');

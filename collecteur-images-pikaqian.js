@@ -31,6 +31,7 @@ const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, lignePikaqian } = require('./collecte-cartes/pikaqian-sets');
 const { noterBlocage, reinitialiserBlocages } =require('./collecte-cartes/reessai-pikaqian');
+const { estPassive, motifPassif } = require('./collecte-cartes/source-passive');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;                 // consigne de l'éditeur : au-delà de 400 Mo (plafond M0 512), STOP
@@ -94,9 +95,12 @@ function provenanceDe(origine) {
  *                        `stopOctets`, `ligneDe`, `vignetter`.
  */
 async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = lignePikaqian, vignetter = vignetterApresJointure } = {}) {
+    const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
+    // ➖ 2026-10-13 : SOURCE PASSIVE (décision du testeur). Sans client injecté — c'est la voie du worker et celle de la ligne de commande — rien ne part :
+    // ni lecture de base, ni requête. Seul un banc injecte un client (faux transport) ; le client réel est de toute façon fermé (pikaqian.js, transportFetch).
+    if (!clientInjecte && estPassive(P.SOURCE)) return refus('refuse-source-passive', motifPassif(P.SOURCE));
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
-    const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
     const G = releve(unite, ligneDe);
     if (!G.ok) return refus(G.etat, G.motif);
     const { L } = G;

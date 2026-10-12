@@ -93,6 +93,8 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/issue-unite.js',
     // ➕ 2026-10-06 : les sources en service (Bulbapedia suspendu) — une unité enfilée sous un worker qui ne la connaît pas frapperait Bulbagarden
     'collecte-cartes/sources-en-service.js',
+    // ➕ 2026-10-13 : PikaQian PASSIVE — source-passive.js (la clôture des unités, le transport fermé) : un worker qui ne la porte pas enverrait encore des requêtes vers le CDN
+    'collecte-cartes/source-passive.js',
     // ➕ 2026-10-08 : le témoin du nom dans la jointure des images artofpkm — un worker qui ne l'a pas joindrait encore sans témoin
     'collecte-cartes/temoin-images-artofpkm.js',
     // ➕ 2026-10-12 (R7) : collecteur-images-bulba.js charge tirage-image.js, qui ôte désormais les commentaires HTML du wikitext avant de lire

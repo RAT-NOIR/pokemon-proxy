@@ -39,30 +39,32 @@ const SET = E.SET_TEST;
     verifier('codes pikaqian : minuscules, promos sous promo-*', [TABLE_PIKAQIAN.find(l => l.code === 'CSV10C').codePk, TABLE_PIKAQIAN.find(l => l.code === 'CSM2.5C').codePk, TABLE_PIKAQIAN.find(l => l.code === 'SV-P/CS').codePk, TABLE_PIKAQIAN.find(l => l.code === '30th-P').codePk, TABLE_PIKAQIAN.find(l => l.code === '151C').codePk],
         ['csv10c', 'csm2.5c', 'promo-sv-p', 'promo-30th-p', '151c']);
 
+    // 2026-10-13 : PikaQian est PASSIVE (le défaut refuse tout enfilage — test-source-passive.js). Ce banc garde la MÉCANIQUE de l'enfilage testée, source « rouverte » par le banc seul.
+    const enf = (db, o) => E.enfiler(db, { passive: false, ...o });
     // ── la mesure par défaut n'écrit rien ───────────────────────────────────────────────────────────────────────────
     let B = fausseBase();
-    let r = await E.enfiler(B.db, { worker: BON });
+    let r = await enf(B.db, { worker: BON });
     verifier('défaut = mesure : 91 à insérer, rien écrit', [r.inserer.length, r.ecrit, B.col('file_images').size], [91, false, 0]);
 
     // ── --ecrire sans le set test passé : REFUS (sauf le set test lui-même) ────────────────────────────────────────────
-    r = await E.enfiler(B.db, { ecrire: true, voulus: null, worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: null, worker: BON });
     verifier('--tous sans bilan du set test → refusé, rien écrit', [!!r.refus, /set test/.test(r.refus), B.col('file_images').size], [true, true, 0]);
-    r = await E.enfiler(B.db, { ecrire: true, voulus: ['Collect-151'], worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: ['Collect-151'], worker: BON });
     verifier('un autre set sans bilan du set test → refusé', [!!r.refus, B.col('file_images').size], [true, 0]);
     for (const [nom, bilan] of [['non concordant', bilanTest({ concordance: false })], ['garde rouge', bilanTest({ garde: { ok: false } })], ['0 prouvé', bilanTest({ prouves: 0 })], ['concordance « true » en chaîne', bilanTest({ concordance: 'true' })]]) {
         B = fausseBase(); B.col('sets').set(SET, { _id: SET, visuelsPikaqian: bilan });
-        r = await E.enfiler(B.db, { ecrire: true, voulus: ['Collect-151'], worker: BON });
+        r = await enf(B.db, { ecrire: true, voulus: ['Collect-151'], worker: BON });
         verifier(`bilan du set test ${nom} → refusé`, [!!r.refus, B.col('file_images').size], [true, 0]);
     }
     B = fausseBase(); B.col('sets').set(SET, { _id: SET, visuelsPikaqian: bilanTest() });
-    r = await E.enfiler(B.db, { ecrire: true, voulus: ['Collect-151'], worker: MAUVAIS });
+    r = await enf(B.db, { ecrire: true, voulus: ['Collect-151'], worker: MAUVAIS });
     verifier('la garde du commit du worker bloque → refusé, rien écrit', [!!r.refus, /worker/.test(r.refus), B.col('file_images').size], [true, true, 0]);
 
     // ── l'écriture : en QUEUE, la forme exacte de l'unité, idempotente ───────────────────────────────────────────────────
     B = fausseBase(); B.col('sets').set(SET, { _id: SET, visuelsPikaqian: bilanTest() });
     B.col('file_images').set('tpc-asie/X', { _id: 'tpc-asie/X', source: 'tpc-asie', etat: 'attente', ordre: 40 });
     const maintenant = new Date('2026-10-11T12:00:00Z');
-    r = await E.enfiler(B.db, { ecrire: true, voulus: null, worker: BON, maintenant });
+    r = await enf(B.db, { ecrire: true, voulus: null, worker: BON, maintenant });
     const unites = [...B.col('file_images').values()].filter(u => u.source === 'pikaqian');
     verifier('--tous : 91 unités insérées, état « attente »', [r.ecrit, r.inseres, unites.length, unites.every(u => u.etat === 'attente')], [true, 91, 91, true]);
     verifier('   en QUEUE de file (ordre > 40, distincts, plus gros d\'abord)', [unites.every(u => u.ordre > 40), new Set(unites.map(u => u.ordre)).size, unites.sort((a, b) => a.ordre - b.ordre)[0]._id, unites.sort((a, b) => a.ordre - b.ordre)[0].trous >= unites[90].trous], [true, 91, 'pikaqian/Shining-Synergy-GX-Starter-Deck', true]);
@@ -71,27 +73,27 @@ const SET = E.SET_TEST;
     verifier('   la forme de l\'unité = uniteDeLaLigne (celle que la garde du collecteur accepte mot pour mot) + ordre, état, date, motif', [{ ...u, ordre: undefined, etat: undefined, ajouteLe: undefined, motif: undefined }, !!u.motif, u.ajouteLe.toISOString()],
         [{ ...uniteDeLaLigne(L), ordre: undefined, etat: undefined, ajouteLe: undefined, motif: undefined }, true, '2026-10-11T12:00:00.000Z']);
     verifier('   l\'unité d\'une autre source n\'a pas bougé', B.col('file_images').get('tpc-asie/X'), { _id: 'tpc-asie/X', source: 'tpc-asie', etat: 'attente', ordre: 40 });
-    r = await E.enfiler(B.db, { ecrire: true, voulus: null, worker: BON, maintenant });
+    r = await enf(B.db, { ecrire: true, voulus: null, worker: BON, maintenant });
     verifier('   un second --tous : rien à écrire (déjà en file), 91 unités toujours', [r.inserer.length, !!r.refus, [...B.col('file_images').values()].filter(x => x.source === 'pikaqian').length], [0, true, 91]);
     // une unité déjà passée ne revient pas d'elle-même
     B.col('file_images').get(`pikaqian/${SET}`).etat = 'fait';
-    r = await E.enfiler(B.db, { ecrire: true, voulus: [SET], worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: [SET], worker: BON });
     verifier('   une unité « fait » n\'est pas remise en file', [B.col('file_images').get(`pikaqian/${SET}`).etat, r.ecartes[0]?.slug], ['fait', SET]);
 
     // ── le set test seul s'enfile sans bilan (pour un worker qui le ferait) ──────────────────────────────────────────────
     B = fausseBase();
-    r = await E.enfiler(B.db, { ecrire: true, voulus: [SET], worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: [SET], worker: BON });
     verifier('le set test lui-même : pas de bilan exigé, une unité insérée', [r.ecrit, r.inseres, B.col('file_images').size], [true, 1, 1]);
-    r = await E.enfiler(B.db, { ecrire: true, voulus: ['Set-Inexistant'], worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: ['Set-Inexistant'], worker: BON });
     verifier('un set absent de la table : écarté, rien écrit', [r.ecartes[0]?.slug, !!r.refus], ['Set-Inexistant', true]);
 
     // ── la source BLOQUÉE ou retirée : plus aucune unité ──────────────────────────────────────────────────────────────────
     B = fausseBase(); B.col('sets').set(SET, { _id: SET, visuelsPikaqian: bilanTest() });
     B.col('collecte_images_etat').set('alerte/source-bloquee/pikaqian', { _id: 'alerte/source-bloquee/pikaqian', active: true });
-    r = await E.enfiler(B.db, { ecrire: true, voulus: null, worker: BON });
+    r = await enf(B.db, { ecrire: true, voulus: null, worker: BON });
     verifier('alerte « source bloquée » active → 0 unité, refusé', [r.inserer.length, !!r.refus, B.col('file_images').size], [0, true, 0]);
     B.col('collecte_images_etat').set('alerte/source-bloquee/pikaqian', { _id: 'alerte/source-bloquee/pikaqian', active: false });
-    r = await E.enfiler(B.db, { voulus: null, worker: BON });
+    r = await enf(B.db, { voulus: null, worker: BON });
     verifier('alerte désactivée (décision) → l\'enfilage redevient possible', r.inserer.length, 91);
 
     // ── la reprise : les ARRÊTS seulement, par décision ───────────────────────────────────────────────────────────────────
@@ -101,7 +103,7 @@ const SET = E.SET_TEST;
     f.set('pikaqian/Stellar-Crystal', { _id: 'pikaqian/Stellar-Crystal', source: 'pikaqian', etat: 'refuse', resultat: 'refuse-liste', ordre: 2 });
     f.set('pikaqian/Chasing-Glory-Together', { _id: 'pikaqian/Chasing-Glory-Together', source: 'pikaqian', etat: 'refuse', resultat: 'incomplet-transitoire', ordre: 3 });
     f.set('pikaqian/Terastal-Gathering', { _id: 'pikaqian/Terastal-Gathering', source: 'pikaqian', etat: 'fait', resultat: 'verifie', ordre: 4 });
-    r = await E.enfiler(B.db, { ecrire: true, reprendre: true, voulus: ['Collect-151', 'Stellar-Crystal', 'Chasing-Glory-Together', 'Terastal-Gathering'], worker: BON });
+    r = await enf(B.db, { ecrire: true, reprendre: true, voulus: ['Collect-151', 'Stellar-Crystal', 'Chasing-Glory-Together', 'Terastal-Gathering'], worker: BON });
     verifier('reprise : source bloquée et transitoire épuisé reviennent ; un refus de page (refuse-liste) et un « fait » non', [r.remises, f.get('pikaqian/Collect-151').etat, f.get('pikaqian/Chasing-Glory-Together').etat, f.get('pikaqian/Stellar-Crystal').etat, f.get('pikaqian/Terastal-Gathering').etat],
         [2, 'attente', 'attente', 'refuse', 'fait']);
     verifier('   la reprise écrit son motif, passe en queue, et retire l\'erreur', [!!f.get('pikaqian/Collect-151').remisEnFileMotif, f.get('pikaqian/Collect-151').ordre > 4, f.get('pikaqian/Collect-151').erreur ?? null], [true, true, null]);
