@@ -334,7 +334,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
-    verifier('langue : la preuve écrite en base porte le VRAI compte (70 témoins, 78 images ouvertes) et plus « 42 »', [/70 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /78 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 70]);
+    verifier('langue : la preuve écrite en base porte le VRAI compte (82 témoins, 90 images ouvertes) et plus « 42 »', [/82 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /90 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 82]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
     // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
@@ -342,7 +342,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('jeton d\'URL : un préfixe et une largeur donnent « TG05 », « SM246 », « SWSH301 » ; sans jeton, l\'entier nu', [P.urlHires('swsh9tg', 5, JT), P.urlHires('smp', 246, { prefixe: 'SM', largeur: 2 }), P.urlHires('swshp', 301, { prefixe: 'SWSH', largeur: 3 }), P.urlHires('mcd12', 6)],
         ['https://images.pokemontcg.io/swsh9tg/TG05_hires.png', 'https://images.pokemontcg.io/smp/SM246_hires.png', 'https://images.pokemontcg.io/swshp/SWSH301_hires.png', 'https://images.pokemontcg.io/mcd12/6_hires.png']);
     verifier('jeton d\'URL : un préfixe hors de la liste énumérée LÈVE (rien ne se construit sur un préfixe inconnu)', (() => { try { P.urlHires('x1', 5, { prefixe: 'FOO', largeur: 2 }); return 'passe'; } catch (e) { return 'leve'; } })(), 'leve');
-    verifier('jeton d\'URL : les préfixes autorisés sont énumérés', P.JETONS_URL, ['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG']);
+    verifier('jeton d\'URL : les préfixes autorisés sont énumérés', P.JETONS_URL, ['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG', 'H']);
     tr = reseau(normal); c = client(tr);
     for (const u of ['https://images.pokemontcg.io/smp/FOO01_hires.png', 'https://images.pokemontcg.io/smp/sm01_hires.png', 'https://images.pokemontcg.io/smp/SM1234_hires.png', 'https://images.pokemontcg.io/smp/SMSM01_hires.png', 'https://images.pokemontcg.io/smp/SM01.png']) {
         err = null; try { await c.image(u); } catch (e) { err = e.message; }
@@ -388,6 +388,41 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         verifier('collecteur : l\'entrée du numéro doublé (Mew 011) porte la note, celle du numéro seul (Pikachu 005) ne la porte pas', [e(2), e(1)], [[NOTE], [null]]);
         verifier('collecteur : le document images porte la même note (Mew) et les entrées des autres sources ne bougent pas', [Bv.col('images').get(P.idImagePtcgio(SLUG, 2, '011')).noteVariante, Bv.col('cartes').get(1).images.filter(x => x.source !== 'pokemontcg.io').map(x => Object.keys(x).sort().join())], [NOTE, ['cleR2,numero,set,source']]);
     }
+
+    // ── 11. T7b (2026-10-12) : les holos « H » de Skyridge (ecard3) et d'Aquapolis (ecard2) — la source numérote « H1 »…« H32 » ───────────────────────
+    verifier('T7b jeton « H » : urlHires donne …/ecard3/H1_hires.png et …/ecard2/H32_hires.png', [P.urlHires('ecard3', 1, { prefixe: 'H', largeur: 1 }), P.urlHires('ecard2', 32, { prefixe: 'H', largeur: 1 })], ['https://images.pokemontcg.io/ecard3/H1_hires.png', 'https://images.pokemontcg.io/ecard2/H32_hires.png']);
+    tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: png }); c = client(tr);
+    await c.image(P.urlHires('ecard3', 1, { prefixe: 'H', largeur: 1 }));
+    verifier('T7b client : « H1 » est accepté (hôte et chemin énumérés)', tr.appels.map(u => u.replace('https://images.pokemontcg.io', '')), ['/robots.txt', '/ecard3/H1_hires.png']);
+    tr = reseau(normal); c = client(tr);
+    for (const u of ['https://images.pokemontcg.io/ecard3/HH1_hires.png', 'https://images.pokemontcg.io/ecard3/h1_hires.png', 'https://images.pokemontcg.io/ecard3/H1234_hires.png', 'https://images.pokemontcg.io/ecard3/SMH1_hires.png', 'https://images.pokemontcg.io/ecard3/H_hires.png']) {
+        err = null; try { await c.image(u); } catch (e) { err = e.message; }
+        verifier(`T7b client : une adresse hors de la forme « H<n> » est refusée sans requête (${u.slice(30)})`, [!!err, tr.appels.length], [true, 0]);
+    }
+    const SKY = L('Skyridge', 'ecard3'), AQU = L('Aquapolis', 'ecard2');
+    verifier('T7b : les deux lignes existent, avec jeton H sur un seul chiffre', [!!SKY, !!AQU, SKY?.jeton, AQU?.jeton], [true, true, { prefixe: 'H', largeur: 1 }, { prefixe: 'H', largeur: 1 }]);
+    verifier('T7b Skyridge : « H1 » → 1, « H32 » → 32 ; « H0 », « H33 », « 2 » (l\'impression ORDINAIRE), « SK2 », « h1 » → rien', ['H1', 'H32', 'H0', 'H33', '2', 'SK2', 'h1', null].map(n => P.adresseDe(SKY, n)), [1, 32, null, null, null, null, null, null]);
+    verifier('T7b Aquapolis : « H7 » → 7, « H32 » → 32 ; « H6 » (sous le segment prouvé), « H33 », « 8 », « 50b » → rien', ['H7', 'H32', 'H6', 'H33', '8', '50b'].map(n => P.adresseDe(AQU, n)), [7, 32, null, null, null, null]);
+    // correction 1 : les jumeaux de même nom (Magcargo H16/H17, Magneton H18/H19) ne se séparent que par le numéro de l'adresse : leurs 4 images ont été ouvertes et comparées aux attaques/PV/illustrateur de la fiche
+    verifier('T7b jumeaux : H16, H17, H18, H19 de Skyridge ont chacun leur témoin', [16, 17, 18, 19].map(n => SKY.temoins.some(w => w.n === n && w.imprime === `H${n}/H32`)), [true, true, true, true]);
+    {   // aucun nom ne se répète dans un segment sans que CHAQUE numéro du couple porte un témoin (noms = mesure du 2026-10-12, couverture\T7b\mesure.txt)
+        const NOMS = { ecard3: { 1: 'Alakazam', 2: 'Arcanine', 3: 'Articuno', 4: 'Beedrill', 5: 'Crobat', 6: 'Dewgong', 7: 'Flareon', 8: 'Forretress', 9: 'Gengar', 10: 'Gyarados', 11: 'Houndoom', 12: 'Jolteon', 13: 'Kabutops', 14: 'Ledian', 15: 'Machamp', 16: 'Magcargo', 17: 'Magcargo', 18: 'Magneton', 19: 'Magneton', 20: 'Moltres', 21: 'Nidoqueen', 22: 'Piloswine', 23: 'Politoed', 24: 'Poliwrath', 25: 'Raichu', 26: 'Raikou', 27: 'Rhydon', 28: 'Starmie', 29: 'Steelix', 30: 'Umbreon', 31: 'Vaporeon', 32: 'Xatu' },
+            ecard2: { 7: 'Electrode', 8: 'Entei', 9: 'Espeon', 10: 'Exeggutor', 11: 'Houndoom', 12: 'Hypno', 13: 'Jumpluff', 14: 'Kingdra', 15: 'Lanturn', 16: 'Magneton', 17: 'Muk', 18: 'Nidoking', 19: 'Ninetales', 20: 'Octillery', 21: 'Scizor', 22: 'Slowking', 23: 'Steelix', 24: 'Sudowoodo', 25: 'Suicune', 26: 'Tentacruel', 27: 'Togetic', 28: 'Tyranitar', 29: 'Umbreon', 30: 'Victreebel', 31: 'Vileplume', 32: 'Zapdos' } };
+        const sansTemoin = [];
+        for (const l of [SKY, AQU]) {
+            const parNom = {};
+            for (const [n, nom] of Object.entries(NOMS[l.id])) if (l.segments.some(([a, b]) => Number(n) >= a && Number(n) <= b)) (parNom[nom] ||= []).push(Number(n));
+            for (const [nom, ns] of Object.entries(parNom)) if (ns.length > 1) for (const n of ns) if (!l.temoins.some(w => w.n === n)) sansTemoin.push(`${l.id} ${nom} H${n}`);
+        }
+        verifier('T7b jumeaux : aucun nom répété dans un segment (Skyridge H1-H32, Aquapolis H7-H32) n\'a un numéro sans témoin', sansTemoin, []);
+    }
+    verifier('T7b verdict : Skyridge et Aquapolis sont prouvés', [P.verdictDuSet('Skyridge').verdict, P.verdictDuSet('Aquapolis').verdict], ['prouve', 'prouve']);
+    const pH = P.planifierPtcgio({ slug: 'Skyridge', trous: [t(carte(71, 'Alakazam'), 'H1', 901, 'H1'), t(carte(72, 'Alakazam'), 'H1', 902, '2'), t(carte(73, 'Xatu'), '35', 903, '35'), t(carte(74, 'Xatu'), 'H33', 904, 'H33')] });
+    verifier('T7b plan : H1 → …/ecard3/H1_hires.png ; une fiche « 2 » face à H1 est contradictoire ; le numéro ordinaire 35 est hors set ; H33 non couvert',
+        [pH.plan.map(p => [p.carteId, p.url, p.numero]), pH.restes.map(r => [r.carteId, r.motif])], [[[71, 'https://images.pokemontcg.io/ecard3/H1_hires.png', 'H1']], [[72, 'numero-contradictoire'], [73, 'numero-hors-set'], [74, 'non-couvert-par-un-temoin']]]);
+    const pA = P.planifierPtcgio({ slug: 'Aquapolis', tousNumerosCm: ['H25', 'H25', 'H7'], trous: [t(carte(75, 'Suicune'), 'H25', 905, 'H25'), t(carte(76, 'Electrode'), 'H7', 906, 'H7')] });
+    verifier('T7b Aquapolis : H25 porte deux produits (V1, V3) → noteVariante ; H7 seul → aucune note', pA.plan.map(p => [p.carteId, p.url, p.noteVariante ?? null]),
+        [[75, 'https://images.pokemontcg.io/ecard2/H25_hires.png', NOTE], [76, 'https://images.pokemontcg.io/ecard2/H7_hires.png', null]]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

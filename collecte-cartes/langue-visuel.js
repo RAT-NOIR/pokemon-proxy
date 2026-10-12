@@ -44,7 +44,7 @@ function langueDuVisuel(im) {
     }
     // ➕ 2026-10-10 — images.pokemontcg.io : un serveur de cartes ANGLAISES (le set est celui d'un tirage occidental, prouvé à l'œil par
     // set, collecte-cartes/ptcgio.js `temoins`) ; la collecte n'écrit que sous un set dont le tirage est `intl`.
-    if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (70 témoins écrits dans la table, 78 images ouvertes à l\'œil les 2026-10-08, 2026-10-10 et 2026-10-12, toutes en anglais)' };
+    if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (82 témoins écrits dans la table, 90 images ouvertes à l\'œil les 2026-10-08, 2026-10-10 et 2026-10-12, toutes en anglais)' };
     // ➕ 2026-10-11 — pikaqian.com : des copies des scans officiels CHINOIS (texte en sinogrammes simplifiés lisible sur les 3 images ouvertes à l'œil
     // le 2026-10-10, MESURE-PIKAQIAN.md §5) ; la collecte n'écrit que sous un set au tirage `zh-hans`. Par ce qu'elle autorise : une autre langue source n'a pas de règle.
     if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'

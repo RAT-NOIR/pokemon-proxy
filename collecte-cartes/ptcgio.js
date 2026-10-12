@@ -66,7 +66,14 @@ const TABLE_PTCGIO = Object.freeze([
     { slug: 'HGSS-Black-Star-Promos', id: 'hsp', jeton: { prefixe: 'HGSS', largeur: 2 }, segments: [[17, 25]], marque: 'étoile noire « Black Star » des promos HeartGold SoulSilver, numéro imprimé « HGSSnn », ©2010',
       temoins: [t(17, 'Minun', 'HGSS17'), t(24, 'Hitmonchan', 'HGSS24'), t(25, 'Hitmonlee', 'HGSS25')], lu: '2026-10-12' },
     { slug: 'McDonalds-Collection-25th-Anniversary', id: 'mcd21', segments: [[1, 25]], marque: 'collection de 25 cartes ©2021 ; logo « 25 » de la célébration sur l\'illustration et symbole McDonald\'s près du dénominateur /25',
-      temoins: [t(1, 'Bulbasaur', '1/25'), t(13, 'Tepig', '13/25'), t(17, 'Squirtle', '17/25'), t(25, 'Pikachu', '25/25')], lu: '2026-10-12' }
+      temoins: [t(1, 'Bulbasaur', '1/25'), t(13, 'Tepig', '13/25'), t(17, 'Squirtle', '17/25'), t(25, 'Pikachu', '25/25')], lu: '2026-10-12' },
+    // ── T7b (2026-10-12) : les holos « H » des séries e-Card. Notre fiche H<n> est l'impression HOLO ; l'image ordinaire (n°2, n°8…) en serait un substitut (§19).
+    // `prefixe: 'H'` (forme du numéro Cardmarket « H7 ») : l'entier nu — l'impression ordinaire — n'a PAS d'adresse ici. 8 images ouvertes à l'œil, « Hn/H32 » imprimé.
+    { slug: 'Skyridge', id: 'ecard3', prefixe: 'H', jeton: { prefixe: 'H', largeur: 1 }, segments: [[1, 32]], marque: 'symbole Skyridge (silhouette) et logo « e » e-Card, ©2003, numéro imprimé « Hn/H32 » avec étoile holo',
+      // H16/H17 (Magcargo) et H18/H19 (Magneton) : jumeaux de même nom, séparés par les attaques, les PV, le type et l'illustrateur lus sur l'image (Kusajima / Arita ; Kusajima 80 PV / Saitou 70 PV), pas par le nom
+      temoins: [t(1, 'Alakazam', 'H1/H32'), t(9, 'Gengar', 'H9/H32'), t(16, 'Magcargo', 'H16/H32'), t(17, 'Magcargo', 'H17/H32'), t(18, 'Magneton', 'H18/H32'), t(19, 'Magneton', 'H19/H32'), t(20, 'Moltres', 'H20/H32'), t(32, 'Xatu', 'H32/H32')], lu: '2026-10-12' },
+    { slug: 'Aquapolis', id: 'ecard2', prefixe: 'H', jeton: { prefixe: 'H', largeur: 1 }, segments: [[7, 32]], marque: 'symbole Aquapolis (vague) et logo « e » e-Card, ©2002, numéro imprimé « Hn/H32 » avec étoile holo (segment à partir de H7, le premier témoin ; H1 à H6 sont déjà servis)',
+      temoins: [t(7, 'Electrode', 'H7/H32'), t(14, 'Kingdra', 'H14/H32'), t(24, 'Sudowoodo', 'H24/H32'), t(32, 'Zapdos', 'H32/H32')], lu: '2026-10-12' }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l })));
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
@@ -90,7 +97,7 @@ function adresseDe(ligne, numeroFiche) {
 }
 // 🔑 T2 (2026-10-12) : certains sets numérotent leurs fichiers « SM246 », « TG05 » (promos, Trainer Gallery) — pas l'entier nu. Le jeton d'URL d'une ligne
 // (`jeton: { prefixe, largeur }`) s'écrit par ce qu'il AUTORISE : un préfixe de cette liste ÉNUMÉRÉE, sinon rien ne se construit.
-const JETONS_URL = Object.freeze(['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG']);
+const JETONS_URL = Object.freeze(['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG', 'H']);   // T7b : « H » = les holos des séries e-Card (Skyridge ecard3, Aquapolis ecard2), fichiers « H1 »…« H32 »
 function urlHires(id, n, jeton = null) {
     if (!jeton) return `${HOTE}/${id}/${n}_hires.png`;
     if (!JETONS_URL.includes(jeton.prefixe) || !Number.isInteger(jeton.largeur) || jeton.largeur < 1 || jeton.largeur > 3) throw new Error(`${SOURCE} : jeton d'URL « ${jeton.prefixe} » hors de ce que le client autorise (${JETONS_URL.join(', ')})`);
