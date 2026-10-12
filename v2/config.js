@@ -19,6 +19,8 @@ function lireConfig(env = process.env) {
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'];
     for (const p of ordre) if (!POCHES.includes(p)) throw new Error(`configuration invalide : poche inconnue "${p}"`);
     if (new Set(ordre).size !== ordre.length) throw new Error('configuration invalide : doublon dans V2_ORDRE_POCHES');
+    // O2 : une garde s'écrit par ce qu'elle AUTORISE. Les deux poches PAYÉES doivent figurer dans l'ordre, sinon un compte qui a des crédits achetés ou un abonnement reçoit QUOTA (ses poches deviennent inutilisables).
+    for (const payee of ['achete', 'abonnement']) if (!ordre.includes(payee)) throw new Error(`configuration invalide : V2_ORDRE_POCHES doit contenir la poche payée "${payee}"`);
     const base = (env.MONGODB_BASE || '').trim() || null;
     const actif = env.RM_API_V2 === '1';
     // B8 (tour 1, m4) — le MODE BANC (secret de bac, Turnstile off, cookie sans Secure, origine d'extension de développement) exige DEUX témoins : le nom `test_scratch` (une étiquette,
@@ -71,7 +73,11 @@ function lireConfig(env = process.env) {
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),
                    connexionIpHeure: entier('V2_CONNEXION_IP_HEURE', env.V2_CONNEXION_IP_HEURE, 30, 1), suppressionParCompteHeure: entier('V2_SUPPRESSION_COMPTE_HEURE', env.V2_SUPPRESSION_COMPTE_HEURE, 10, 1),
                    renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1),
-                   collectionEcrituresParCompteHeure: 1000 },
+                   collectionEcrituresParCompteHeure: 1000,
+                   // MOYENS-B1 (O4) : un plafond horaire PAR PORTEUR (compte ou installation) sur quatre routes qui n'en avaient pas. Valeurs posées SANS mesure d'usage réelle ;
+                   // coût si elles sont fausses : des 429 à un client très actif, et une valeur à relever (variable d'environnement).
+                   compteParPorteurHeure: entier('V2_COMPTE_HEURE', env.V2_COMPTE_HEURE, 600, 1), soldeParPorteurHeure: entier('V2_SOLDE_HEURE', env.V2_SOLDE_HEURE, 1200, 1),
+                   reponseParPorteurHeure: entier('V2_REPONSE_HEURE', env.V2_REPONSE_HEURE, 600, 1), retourLiveParPorteurHeure: entier('V2_RETOUR_LIVE_HEURE', env.V2_RETOUR_LIVE_HEURE, 600, 1) },
         // « Ma collection » (COLLECTION-COMPACTE) : bornes écrites par ce qu'elles protègent. Pas de variable d'environnement : une borne qu'on desserre se décide.
         //   · clesParCompte = le CATALOGUE COMPLET avec une MARGE : 100 000 pour le plus grand compte MESURÉ le 2026-10-11 (68 792 fiches par la règle du site sur la sauvegarde du 10/10 — 64 858 fiches liées de
         //     l'archive plus 3 934 fiches sans produit ; le contrat annonçait 39 648, un dénominateur qui ne contenait pas ces fiches), soit +45 % : le catalogue grandit (141 fiches simples au lot 6, un set récent compte

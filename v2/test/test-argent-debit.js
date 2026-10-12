@@ -71,7 +71,9 @@ const lire = async p => p.type === 'compte' ? db.col('comptes').findOne({ _id: p
     H.v('   mouvement delta 0, motif administrateur', [mv.delta, mv.motif], [0, 'administrateur']);
     // 10. un ordre configuré consomme dans CET ordre
     const po = await compte({ solde: { accueil: 1, achete: 1 } });
-    H.v('V2_ORDRE_POCHES=achete,accueil', (await Lg.debiter(po, { cleIdempotence: 'or', maintenant: t }, lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'achete,accueil' }))).credit.poche, 'achete');
+    // MOYENS-B1 (O2) : ce banc figeait `achete,accueil`, un SOUS-ENSEMBLE — une spécification dangereuse (un ordre sans `abonnement` rend QUOTA à un abonné). L'ordre configuré doit maintenant contenir les deux poches payées ;
+    // l'assertion garde son sens (l'ordre configuré est suivi : `achete` passe avant `accueil`) avec un ordre COMPLET. Le refus du sous-ensemble est prouvé dans test-config.js.
+    H.v('V2_ORDRE_POCHES=achete,abonnement,accueil', (await Lg.debiter(po, { cleIdempotence: 'or', maintenant: t }, lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'achete,abonnement,accueil' }))).credit.poche, 'achete');
     // 11. garde : un porteur de type inconnu ne débite rien (refus, pas d'invention)
     H.v('porteur de type inconnu : QUOTA, aucun mouvement', [(await Lg.debiter({ type: 'x', id: 'z', compte: null, installation: null, surface: 'scanner', administrateur: false }, { cleIdempotence: 'inconnu', maintenant: t }, cfg)).code,
         await db.col('mouvements').countDocuments({ cleIdempotence: 'inconnu' })], ['QUOTA', 0]);
