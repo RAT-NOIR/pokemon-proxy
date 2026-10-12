@@ -6,9 +6,8 @@ echo   Demarrage du serveur Pokemon Vinted
 echo ========================================
 echo.
 
-REM Tuer toute ancienne instance qui occuperait le port 3000 (evite l'erreur EADDRINUSE)
-taskkill /F /IM node.exe >nul 2>&1
-if not errorlevel 1 echo Ancienne instance fermee.
+REM Arreter UNIQUEMENT l'ancienne instance de ce serveur (node.exe lancant index.js qui ecoute sur le port), jamais les autres node
+node arreter-instance-port.js
 
 echo Lancement du serveur...
 echo.
