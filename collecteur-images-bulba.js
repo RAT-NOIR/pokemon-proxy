@@ -41,6 +41,7 @@ const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-imag
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { numerosServisParRemplacement } = require('./collecte-cartes/jumeau-en');
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
 const SOURCE = 'bulbapedia';
@@ -142,7 +143,9 @@ async function joindreImagesBulba(M, slug, images) {
         // ANGLAIS, prouvé ; le fichier Bulbapedia du même tirage est peut-être le jumeau japonais. Le rejoindre ici
         // referait deux visuels pour un tirage — le remplacement se défait au premier rejeu. Même règle, deux côtés (§21 bis).
         const avant = await M.Carte.findById(carteId).select('images').lean();
-        const servisParTcgdex = new Set((avant?.images || []).filter(e => e.set === slug && e.source === 'tcgdex').map(e => e.numero));
+        // ➕ R5 (2026-10-12) : la même préséance vaut pour le scan ANGLAIS de pokemontcg.io qui a remplacé un jumeau japonais (lot de remplacement) —
+        // une seule définition, collecte-cartes/jumeau-en.js ; le lot additif n'en fait pas partie. Ces numéros sont filtrés AVANT `remplacerBasseDefinition`.
+        const servisParTcgdex = numerosServisParRemplacement(avant?.images, slug);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — un rejeu fait $pull puis $push d'une entrée neuve,
         // et sans elle la marque posée par le rattrapage serait effacée (le site agrandirait l'image)
         const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), jointeLe: new Date() }));

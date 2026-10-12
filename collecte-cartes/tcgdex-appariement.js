@@ -102,4 +102,4 @@ function filtreCartesDuSet(slugSet, expansions, tirage = 'intl') {
 /** Les seules cartes qui reçoivent un scan sous le slug d'une unité : celles qui le portent dans `cartes.sets` (`.select(... sets)`). */
 const recevantsDuSet = slugSet => c => Array.isArray(c.sets) && c.sets.includes(slugSet);
 
-module.exports = { apparierExpansion, filtreCartesDuSet, recevantsDuSet, nomPourTemoin };
+module.exports = { apparierExpansion, filtreCartesDuSet, recevantsDuSet, nomPourTemoin, cleNumero };   // ➕ R5 : `cleNumero` exportée pour que le remplacement du jumeau lise LA MÊME clé que l'appariement (§21 bis)
