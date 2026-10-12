@@ -144,7 +144,7 @@ const RAISON_HESITATION = 'même texte japonais et même dessin ; le fichier de 
 REGARDES_2026_10_11.push(
     { part: 'JP', fichier: 'Logo JP/OR4.png', planche: 1, set: 'Rocket-Gang', candidatSha256: '3bc3bc6f0943f1243750cf528efc64ba22fd39946ecca4b85a02a8d5a07e62ef', regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 1 (hésitation)', raison: RAISON_HESITATION },
     { part: 'JP', fichier: 'Logo JP/SM11B.png', planche: 2, set: 'Dream-League', candidatSha256: '16d093d3695b881a190338352ad11867ba11a31b9e8845b0731718a76b315068', confirmeNomJa: { set: 'Dream-League', nomJa: 'ドリームリーグ' }, regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 2 (hésitation)', raison: RAISON_HESITATION },
-    { part: 'JP', fichier: 'Logo JP/SV11W.png', planche: 3, set: 'White-Flare-JP', candidatSha256: '14feeb8b34297db018eb2417356528b910d5bf9cccb4939f57e4c04f0a2c46fe', regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 3 (hésitation)', raison: RAISON_HESITATION },
+    { part: 'JP', fichier: 'Logo JP/SV11W.png', planche: 3, set: 'White-Flare-JP', candidatSha256: '14feeb8b34297db018eb2417356528b910d5bf9cccb4939f57e4c04f0a2c46fe', confirmeTcgdexJa: { set: 'White-Flare-JP', code: 'sv11W', nomJa: 'ホワイトフレア' }, regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 3 (hésitation)', raison: RAISON_HESITATION },
     { part: 'JP', fichier: 'Logo JP/SM5P.png', planche: 3, set: null, candidatSha256: 'a0c2007da8593f7aa47f020621c067aa274d52de3b38e2035e03ef1efffc0c78', etablitSet: { set: 'Ultra-Force', nomJa: 'ウルトラフォース' }, regardePar: 'coordinateur 2026-10-12, planche 3 (set établi par le code du fichier ET le texte japonais du logo)', raison: 'logo « ウルトラフォース » lu à l\'œil ; le fichier SM5Plus_Logo.png porte le code sm5+ du set Ultra-Force ; ce nomJa n\'est porté que par ce set de tirage jp (poser-nomja-sets.js) — set établi par deux éléments, 2026-10-12' }
 );
 // Ce que le coordinateur a regardé et NE promeut PAS : rien aujourd'hui (les quatre exclus du 2026-10-11 sont promus ci-dessus).
@@ -154,7 +154,7 @@ const EXCLUS_2026_10_11 = [];
  * region, nomJa } (la base, en lecture). Ne touche à rien d'autre que le verdict, setSur (seulement sur confirmation du nomJa) et bulbapediaSeule (une source
  * Bulbapedia est reportée comme les 32 autres).
  */
-function promouvoir(ligne, setsParId, { regardes = REGARDES_2026_10_11, exclus = EXCLUS_2026_10_11 } = {}) {
+function promouvoir(ligne, setsParId, { regardes = REGARDES_2026_10_11, exclus = EXCLUS_2026_10_11, tcgdexJa = null } = {}) {
     if (ligne?.verdict !== 'À REGARDER') return { raison: 'pas une ligne À REGARDER : aucune promotion' };
     const cle = x => x.part === ligne.part && x.fichier === ligne.fichier;
     const e = regardes.find(cle);
@@ -164,8 +164,23 @@ function promouvoir(ligne, setsParId, { regardes = REGARDES_2026_10_11, exclus =
     let setSur = ligne.setSur, setId = ligne.set;
     // un set « ? » : confirmé par le nomJa de la base ; un fichier sans set (SM5P) : ÉTABLI par DEUX éléments — le CODE (le fichier du candidat commence par le code du set)
     // ET le texte japonais du logo égal au nomJa d'un set, et d'un seul, de tirage jp
-    const c = ligne.set ? e.confirmeNomJa : e.etablitSet;
+    let c = ligne.set ? e.confirmeNomJa : e.etablitSet;
     if (!ligne.set && (!c || e.set !== null)) return { raison: 'aucun set sur la ligne et aucun établissement par deux éléments dans la liste : non promue' };
+    // SECONDE VOIE, à liste fermée (SV11W seule, 2026-10-12) : le nomJa de la base est partagé par 4 sets. Deux éléments indépendants : (1) l'identifiant du set TCGdex ja
+    // (cache `ja/__liste__`) est le CODE de NOTRE set, lu en base ; (2) le nom japonais de ce set TCGdex est égal au texte du logo regardé. Jugée sur le cache, 0 requête.
+    if (!setSur && ligne.set && e.confirmeTcgdexJa) {
+        const t = e.confirmeTcgdexJa;
+        if (t.set !== ligne.set) return { raison: 'confirmation TCGdex ja écrite pour un autre set : non promue' };
+        const s = setsParId.get(t.set);
+        if (!s) return { raison: `set « ${t.set} » absent de la base (confirmation TCGdex ja non établie)` };
+        if ((s.tirage ?? s.region) !== 'jp') return { raison: `set « ${t.set} » de tirage ${s.tirage ?? s.region}, pas jp (confirmation TCGdex ja non établie)` };
+        if (String(s.code ?? '').toLowerCase() !== t.code.toLowerCase()) return { raison: `le code de la base (${s.code ?? 'null'}) n'est pas « ${t.code} » (confirmation TCGdex ja non établie)` };
+        if (!Array.isArray(tcgdexJa) || !tcgdexJa.length) return { raison: 'cache TCGdex ja/__liste__ absent ou vide : confirmation TCGdex ja impossible (je ne sais pas)' };
+        const m = tcgdexJa.filter(x => String(x.id).toLowerCase() === t.code.toLowerCase());
+        if (m.length !== 1) return { raison: `${m.length} set(s) TCGdex ja d'identifiant « ${t.code} » (un seul attendu) : confirmation TCGdex ja non établie` };
+        if (m[0].name !== t.nomJa) return { raison: `TCGdex ja ${m[0].id} se nomme « ${m[0].name} » ≠ texte du logo « ${t.nomJa} » (confirmation TCGdex ja non établie)` };
+        setSur = true; c = { ...t, voie: 'tcgdex-ja' };
+    }
     if (!setSur || !ligne.set) {
         if (!c || (ligne.set && c.set !== ligne.set)) return { raison: 'set non sûr et aucune confirmation par nomJa dans la liste : non promue' };
         const s = setsParId.get(c.set);
@@ -381,7 +396,8 @@ if (require.main === module) (async () => {
     const S = cx.cartes.db.collection('sets');
     const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1, code: 1 } }).toArray()).map(s => [s._id, s]));
     if (!sets.size) throw new Error('collection sets vide : base fausse');
-    const regardes = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets) }));
+    const tcgdexJa = (await cx.cartes.db.collection('tcgdex_sets').findOne({ _id: 'ja/__liste__' }))?.sets ?? null;   // le cache TCGdex ja (0 requête) : la seconde voie de SV11W
+    const regardes = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets, { tcgdexJa }) }));
     const officiels = [...table.lignes.filter(l => l.verdict === 'OFFICIEL'), ...regardes.filter(r => r.p.ligne).map(r => r.p.ligne)];
     console.log(`DÉNOMINATEUR : ${table.lignes.length} lignes dans la table · ${officiels.length} OFFICIEL · ${sets.size} sets en base · lot ${LOT}`);
     const verdicts = [...officiels.map(l => ({ l, ...planifier(l, sets) })), ...regardes.filter(r => !r.p.ligne).map(r => ({ l: r.l, action: 'ecartee', raison: r.p.raison }))];

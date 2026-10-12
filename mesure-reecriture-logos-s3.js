@@ -16,9 +16,10 @@ const h = s => crypto.createHash('sha256').update(Buffer.from(s)).digest('hex');
     const coll = rapport.lignes.filter(r => r.action === 'collectable');
     const res = { collectables: coll.length, neufs: [], deja: [], refuses: [], doublonsDansLeLot: 0 };
     const vus = new Set();
+    const tcgdexJa = (await cx.db.collection('tcgdex_sets').findOne({ _id: 'ja/__liste__' }))?.sets ?? null;
     for (const r of coll) {
         let l = table.lignes.find(x => x.fichier === r.fichier);
-        if (l.verdict === 'À REGARDER') l = M.promouvoir(l, sets).ligne;
+        if (l.verdict === 'À REGARDER') l = M.promouvoir(l, sets, { tcgdexJa }).ligne;
         const j = JSON.parse(fs.readFileSync(path.join(cache, h(l.urlChoisie)) + '.json', 'utf8'));
         const doc = await S.findOne({ _id: l.set }, { projection: { logoOfficiel: 1 } });
         const deja = doc?.logoOfficiel?.[l.cible];

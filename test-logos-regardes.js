@@ -56,11 +56,31 @@ const plan = l => { const p = M.promouvoir(l, sets); return p.ligne ? M.planifie
     apres.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm5+' });
     const combine = 'ブラックボルト•ホワイトフレア';
     for (const id of ['White-Flare-JP', 'Black-Bolt-JP', 'White-Flare-JP-Additionals', 'Black-Bolt-JP-Additionals']) apres.set(id, { _id: id, tirage: 'jp', nomJa: combine });
-    const planA = l => { const p = M.promouvoir(l, apres); return p.ligne ? M.planifier(p.ligne, apres) : { action: 'ecartee', raison: p.raison }; };
+    apres.set('White-Flare-JP', { _id: 'White-Flare-JP', tirage: 'jp', nomJa: combine, code: 'sv11W' });   // la base réelle : code « sv11W »
+    // le cache TCGdex ja tel qu'en base (ja/__liste__, lu le 2026-10-12) : SV11W « ホワイトフレア », SV11B « ブラックボルト »
+    const LISTE_JA = [{ id: 'SV11B', name: 'ブラックボルト' }, { id: 'SV11W', name: 'ホワイトフレア' }, { id: 'SM11b', name: 'ドリームリーグ' }];
+    const planB = (l, s, opts) => { const p = M.promouvoir(l, s, opts); return p.ligne ? M.planifier(p.ligne, s) : { action: 'ecartee', raison: p.raison }; };
+    const planA = l => planB(l, apres, { tcgdexJa: LISTE_JA });
+    const sv = ligne('SV11W');
+    verifier('SV11W + cache TCGdex ja réel (code sv11W = SV11W, « ホワイトフレア » = texte du logo) : collecter', [planA(sv).action, M.promouvoir(sv, apres, { tcgdexJa: LISTE_JA }).ligne?.confirmationSet?.voie], ['collecter', 'tcgdex-ja']);
+    verifier('SV11W SANS cache TCGdex : écartée, la raison le dit', [planB(sv, apres).action, /cache TCGdex/.test(planB(sv, apres).raison)], ['ecartee', true]);
+    verifier('SV11W : cache TCGdex vide → écartée', planB(sv, apres, { tcgdexJa: [] }).action, 'ecartee');
+    verifier('SV11W : TCGdex SV11W porte un autre nom → écartée', planB(sv, apres, { tcgdexJa: LISTE_JA.map(x => x.id === 'SV11W' ? { ...x, name: 'ブラックボルト' } : x) }).action, 'ecartee');
+    verifier('SV11W : aucun set TCGdex SV11W (le code désigne autre chose) → écartée', planB(sv, apres, { tcgdexJa: LISTE_JA.filter(x => x.id !== 'SV11W') }).action, 'ecartee');
+    verifier('SV11W : deux sets TCGdex au code sv11W → écartée', planB(sv, apres, { tcgdexJa: [...LISTE_JA, { id: 'sv11w', name: 'ホワイトフレア' }] }).action, 'ecartee');
+    const autreCode = new Map(apres); autreCode.set('White-Flare-JP', { _id: 'White-Flare-JP', tirage: 'jp', nomJa: combine, code: 'sv11B' });
+    verifier('SV11W : notre set porte le code sv11B (le code TCGdex désigne un autre set) → écartée', planB(sv, autreCode, { tcgdexJa: LISTE_JA }).action, 'ecartee');
+    const sansCodeW = new Map(apres); sansCodeW.set('White-Flare-JP', { _id: 'White-Flare-JP', tirage: 'jp', nomJa: combine });
+    verifier('SV11W : notre set n\'a pas de code → écartée', planB(sv, sansCodeW, { tcgdexJa: LISTE_JA }).action, 'ecartee');
+    const intlW = new Map(apres); intlW.set('White-Flare-JP', { _id: 'White-Flare-JP', tirage: 'intl', nomJa: combine, code: 'sv11W' });
+    verifier('SV11W : set de tirage intl → écartée', planB(sv, intlW, { tcgdexJa: LISTE_JA }).action, 'ecartee');
+    verifier('la seconde voie ne s\'applique à aucune autre ligne : S10A (nomJa null) avec cache → écartée', planB(ligne('S10A'), sets, { tcgdexJa: [{ id: 'S10a', name: 'ダークファンタズマ' }] }).action, 'ecartee');
+    verifier('… ni SM11B', planB(ligne('SM11B'), sets, { tcgdexJa: LISTE_JA }).action, 'ecartee');
+    verifier('seule SV11W porte confirmeTcgdexJa', M.REGARDES_2026_10_11.filter(e => e.confirmeTcgdexJa).map(e => e.fichier), ['Logo JP/SV11W.png']);
     for (const c of ['S10A', 'S11A', 'S1A', 'SM11B']) verifier(`${c} : nomJa posé en base → collecter`, planA(ligne(c)).action, 'collecter');
     verifier('SM6B : nomJa posé → promue, mais Bulbapedia reportée', planA(ligne('SM6B')).action, 'reportee');
     verifier('SM5P : set ÉTABLI par le code ET le nomJa → promue sous Ultra-Force, Bulbapedia reportée', [M.promouvoir(ligne('SM5P'), apres).ligne?.set, planA(ligne('SM5P')).action], ['Ultra-Force', 'reportee']);
-    verifier('SV11W : le nomJa du logo n\'est pas celui d\'un set unique (4 sets au même nom) → reste écartée, nomJa non confirmé', [planA(ligne('SV11W')).action], ['ecartee']);
+    verifier('SV11W : le nomJa de la base (4 sets) ne confirme rien ; seule la voie TCGdex ja la promeut (collecter)', planA(ligne('SV11W')).action, 'collecter');
     const deuxUltra = new Map(apres); deuxUltra.set('Ultra-Force-bis', { _id: 'Ultra-Force-bis', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm5p' });
     verifier('SM5P : deux sets portent le nomJa → pas établi', M.promouvoir(ligne('SM5P'), deuxUltra).ligne, undefined);
     const mauvaisCode = new Map(apres); mauvaisCode.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm6' });
@@ -108,7 +128,7 @@ const plan = l => { const p = M.promouvoir(l, sets); return p.ligne ? M.planifie
     const compte = {}; tous.forEach(p => compte[p.action] = (compte[p.action] || 0) + 1);
     verifier('les 41 À REGARDER, base actuelle (4 sets sans nomJa) : 30 collecter (les 29 écrits + OR4) · 4 reportée · 7 écartée', compte, { collecter: 30, reportee: 4, ecartee: 7 });
     const comptA = {}; table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => planA(l)).forEach(p => comptA[p.action] = (comptA[p.action] || 0) + 1);
-    verifier('les 41, nomJa des 6 sets posé : 34 collecter · 6 reportée · 1 écartée (SV11W)', comptA, { collecter: 34, reportee: 6, ecartee: 1 });
+    verifier('les 41, nomJa des 6 sets posé + cache TCGdex ja : 35 collecter · 6 reportée · 0 écartée', comptA, { collecter: 35, reportee: 6 });
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
