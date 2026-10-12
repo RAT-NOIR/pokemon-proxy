@@ -96,7 +96,9 @@ const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const SCRATCH = 'test_scratch';
 const SORTIE = path.join(__dirname, 'verrou', 'charges.json');
 const SORTIE_TCGDEX = path.join(__dirname, 'verrou', 'tcgdex.json');
-const JETON = process.env.JETON_API || 'jeton-verrou';
+const { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus } = require('./verrou/environnement-banc');
+// Jeton de l'environnement du banc, AUCUN repli en dur (R8 A-I2) : absent, refus avant de démarrer quoi que ce soit.
+let JETON = null;
 const USER_VERROU = 'verrou-avant-push';
 
 // ⚠️ NOMMER LA BASE OU REFUSER. La base de production s'appelle « test » : une commande
@@ -261,8 +263,14 @@ const SONDE_MAX_CANDIDATES = 6;
     // (journal des scans, vecteurs d'image, tranche à copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose
     // vers elle est refusée (garde d'écriture de base-banc.js). Sans base de banc, ce verrou REFUSE de démarrer.
     // LECTURE SEULE (2026-10-08) : la production se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const jeton = jetonOuRefus();
+    if (!jeton.ok) { console.error(jeton.raison); process.exit(1); }
+    JETON = jeton.jeton;
     const banc = await ouvrirBanc({ lit: { production: 'le journal des scans et les vecteurs d\'image de la base « test » de la production' } });
     banc.appliquer();
+    // R8 A-I2 : appliquer() est CONSTATÉ avant toute connexion (même garde que verrou-avant-push.js) ; MONGODB_URI ne sert plus qu'à travers uriDuBanc().
+    const sur = verifierEnvironnementBanc();
+    if (!sur.ok) { console.error(sur.raison); await banc.arreter().catch(() => { }); process.exit(1); }
     const prod = await banc.connexionProduction(mongoose, BASE);
     console.log(`lecture  : ${prod.db.databaseName} (aucune écriture)`);
     if (prod.db.databaseName === SCRATCH) {
@@ -478,7 +486,7 @@ const SONDE_MAX_CANDIDATES = 6;
     // vrais codes. Élargie au GAGNANT de chaque charge et à toute son expansion — sans
     // ça, le produit que la production avait retenu peut manquer du vivier.
     console.log('\n── tranche de catalogue -> test_scratch ──');
-    const bac = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: SCRATCH }).asPromise();
+    const bac = await mongoose.createConnection(uriDuBanc(), { dbName: SCRATCH }).asPromise();
     if (bac.db.databaseName !== SCRATCH) {
         console.error(`❌ ARRÊT : écriture visée sur "${bac.db.databaseName}" au lieu de ${SCRATCH}.`);
         process.exit(1);

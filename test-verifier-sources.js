@@ -66,6 +66,23 @@ ok('7. un alias NE vaut PAS import : `{ apparier: autreNom }` puis appel à `app
 ok('8. une chaîne NON TERMINÉE ne mange pas le reste du fichier',
     oublis('t8', `const { champ } = ${M};\nconst s = 'texte';\napparier([1], [1]);\n`).includes('apparier'));
 
+// R8 : `let nom;` (déclaration SANS initialiseur) pose un nom local, puis `({ nom } = require(...))` l'importe — le cas de test-jeton-api.js, que le contrôle signalait à tort.
+ok('9. `let apparier;` puis `({ apparier } = require(...))` dans un try : importé, pas un oubli',
+    !oublis('t9', `let apparier;\ntry { ({ apparier } = ${M}); } catch (e) { }\napparier([1], [1]);\n`).includes('apparier'));
+
+ok('10. sans la déclaration `let`, le même appel RESTE signalé',
+    oublis('t10', `const { champ } = ${M};\ntry { apparier([1], [1]); } catch (e) { }\n`).includes('apparier'));
+
+// R8 A-I1 : `let nom;` ne vaut « local » que si `nom` est ASSIGNÉ dans le fichier ; déclaré puis jamais assigné, un appel reste un oubli.
+ok('11. `let apparier;` JAMAIS assigné, puis appelé : RESTE signalé',
+    oublis('t11', `const { champ } = ${M};\nlet apparier;\napparier([1], [1]);\n`).includes('apparier'));
+
+ok('12. `let apparier;` puis `apparier = …` (assignation simple) puis appel : local, pas un oubli',
+    !oublis('t12', `const { champ } = ${M};\nlet apparier;\napparier = (a) => a;\napparier([1], [1]);\n`).includes('apparier'));
+
+ok('13. `let apparier;` mais seulement COMPARÉ (`apparier == 1`) puis appelé : RESTE signalé',
+    oublis('t13', `const { champ } = ${M};\nlet apparier;\nif (apparier == 1) { }\napparier([1], [1]);\n`).includes('apparier'));
+
 fs.rmSync(dossier, { recursive: true, force: true });
 console.log(`\n════ ${passes} passés · ${echecs} en échec ════`);
 process.exit(echecs ? 1 : 0);
