@@ -60,7 +60,7 @@ if (process.argv.includes('--figer')) {
     verifier('le plan de trois lignes existantes (SV-P, MA5, SM-P à numéros préfixés) est identique, octet pour octet, à celui d\'avant le lot', JSON.stringify(rejouerLigneSimple(TP_REJEU)), JSON.stringify(JSON.parse(fs.readFileSync(GOLDEN, 'utf8'))));
     verifier('   la ligne à numéros préfixés : SM001 et SM002 prouvés, « a005 » face à une fiche « 005 » = trou', [rejouerLigneSimple(TP_REJEU).smp.plan.map(x => x.numero), rejouerLigneSimple(TP_REJEU).smp.restes.map(r => `${r.numero}:${r.motif}`)], [['SM001', 'SM002'], ['a005:absente-de-la-source']]);
     const sans = S.TABLE_TPC.filter(l => !l.listes);
-    verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
+    verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'Tag-Team-Collection'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
     verifier('listesDe(ligne existante) = UNE liste, sans préfixe, au code et au compte de la ligne',
         S.TABLE_TPC.filter(l => !l.listes).every(l => { const x = S.listesDe(l); return x.length === 1 && x[0].prefixe === null && x[0].code === l.code && x[0].cartes === l.cartes; }), true);
 
@@ -99,7 +99,25 @@ if (process.argv.includes('--figer')) {
         verifier(`${slug} : site tpc-asie id, code ${code}, tirage idth, listes a/b aux totaux mesurés`, [L?.langue, L?.code, L?.tirage, x.map(l => `${l.prefixe}:${l.code}:${l.cartes}`)], ['id', code, 'idth', [`a:${code}a:${ta}`, `b:${code}b:${tb}`]]);
         verifier(`   ${slug} : l'unité de file porte le code de la ligne`, L && S.uniteDeLaLigne(L).code, code);
     }
-    verifier('Tag-Team-Collection (AC3, non calibré) : PAS de ligne', S.ligneTpc('tpc-asie', 'Tag-Team-Collection'), null);
+    // AC3 (Tag Team Collection) : calibré le 2026-10-12 (lot SEA, lecture réelle sous le verrou global tpc-asie) — AC3a/AC3b portent les
+    // numéros 001… au MÊME numéro que notre préfixe a/b : a001 « Venusaur & Snivy GX », a002 « Rowlet & Alolan Exeggutor GX », a003
+    // « Pheromosa & Buzzwole GX », a014 « VenomothGX » (Pokédex 49), b001 « Reshiram & Charizard GX » — 5 sur 5, nom ET PV d'accord.
+    // Totaux lus : AC3a 205 (11 pages), AC3b 204 (11 pages). Le tirage est celui du SET en base (`id`), pas celui de la famille idth.
+    const AC3 = S.ligneTpc('tpc-asie', 'Tag-Team-Collection');
+    verifier('Tag-Team-Collection : site tpc-asie id, code AC3, tirage id (celui du set), listes a/b aux totaux mesurés (205 / 204)',
+        [AC3?.langue, AC3?.code, AC3?.tirage, AC3 ? S.listesDe(AC3).map(l => `${l.prefixe}:${l.code}:${l.cartes}`) : null], ['id', 'AC3', 'id', ['a:AC3a:205', 'b:AC3b:204']]);
+    verifier('   Tag-Team-Collection : l\'unité de file porte le code de la ligne', AC3 && S.uniteDeLaLigne(AC3).code, 'AC3');
+    // le plan rejoué sur les fiches RÉELLEMENT lues (sea-vivant.json) et nos cartes réelles (ndex null, PV d'après la base) : 5 prouvés
+    const fAC3 = (p, n, nom, pv, id) => ({ idFiche: id, nom, numero: n, denominateur: p === 'a' ? '205' : '204', pv, dex: nom === 'VenomothGX' ? 49 : null, categorie: 'pokemon', prefixe: p, listeCode: `AC3${p}` });
+    const fichesAC3 = [fAC3('a', '001', 'Venusaur & Snivy GX', 270, 2007), fAC3('a', '002', 'Rowlet & Alolan Exeggutor GX', 270, 2008), fAC3('a', '003', 'Pheromosa & Buzzwole GX', 260, 2009),
+        fAC3('a', '014', 'VenomothGX', 200, 2180), fAC3('b', '001', 'Reshiram & Charizard GX', 270, 2196)];
+    const cAC3 = (id, nomEn, pv) => ({ _id: id, nomEn, categorie: 'pokemon', ndex: null, pv });
+    const trousAC3 = [['a1', cAC3(239077, 'Venusaur & Snivy-GX', 270)], ['a2', cAC3(236991, 'Rowlet & Alolan Exeggutor-GX', 270)], ['a3', cAC3(234905, 'Pheromosa & Buzzwole-GX', 260)],
+        ['a14', cAC3(234656, 'Venomoth-GX', 200)], ['b1', cAC3(235767, 'Reshiram & Charizard-GX', 270)],
+        ['a213', cAC3(239077, 'Venusaur & Snivy-GX', 270)], ['b208', cAC3(235767, 'Reshiram & Charizard-GX', 270)]].map(([n, carte], i) => ({ carte, numeroFiche: n, idProduct: 9000 + i }));
+    P = T.planifierTpc({ trous: trousAC3, fiches: fichesAC3, code: 'AC3', site: 'tpc-asie', prefixes: ['a', 'b'] });
+    verifier('AC3 : a1, a2, a3, a14, b1 prouvés (numéro + nom + PV) ; a213 et b208 (au-delà des listes de 205 / 204) = « absente-de-la-source », jamais la fiche voisine',
+        [P.plan.map(x => x.numero), P.restes.map(r => `${r.numero}:${r.motif}`)], [['a1', 'a2', 'a3', 'a14', 'b1'], ['a213:absente-de-la-source', 'b208:absente-de-la-source']]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
