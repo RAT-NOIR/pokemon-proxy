@@ -93,4 +93,14 @@ t('passe « - » : refus sans le séparateur (Burmy Trash Cloak), autre numéro,
     assert.strictEqual(D.declarantePrefixeMemeNumero([boss, { ...boss, _id: 9 }], 'Boss\'s Orders - Giovanni', { numero: '029' }, SET_CL), null);
     assert.strictEqual(D.declarantePrefixeMemeNumero([boss], 'Boss\'s Orders - Giovanni', { numero: null }, SET_CL), null);
 });
+// ── T4b fix1 : l'ALIAS de nom d'expansion (Conductive Quarry déclare « Giratina vs Dialga », sans « Deck Kit ») ─────────────────────────
+t('alias : une impression au nom d\'expansion ALIAS, du bon tirage et du bon deck, compte ; un autre deck ou un autre tirage non', () => {
+    const cq = { _id: 58456, nomEn: 'Conductive Quarry', impressions: [{ tirage: 'jp', expansion: 'Giratina vs Dialga', deck: 'Dialga Half Deck', numero: '014' }] };
+    const set = { tirage: 'jp', expansion: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck', alias: ['Giratina vs Dialga'] };
+    assert.deepStrictEqual(D.declarantesDuSet([cq], set).map(c => c._id), [58456]);
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, deck: 'Giratina Half Deck' }), [], 'autre deck');
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, tirage: 'intl' }), [], 'autre tirage');
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, alias: undefined }), [], 'sans alias déclaré, rien ne change (les autres sets)');
+    assert.deepStrictEqual(D.numerosDeclares(cq, set), ['14']);
+});
 console.log(process.exitCode ? `\n${ok} ok, ÉCHECS ci-dessus` : `\n${ok}/${ok} passés, 0 échec`);

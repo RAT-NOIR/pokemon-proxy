@@ -43,9 +43,10 @@ const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { lisible } = require('./collecte-cartes/nom-affichage');
-const { declarantesDuProduit, declarantesDuSet, numeroContredit, declarantePrefixeMemeNumero, numerosDeclares } = require('./collecte-cartes/declarantes');
+const { declarantesDuProduit, declarantesDuSet, numeroContredit, declarantePrefixeMemeNumero, numerosDeclares, impressionsDuSetDeclare } = require('./collecte-cartes/declarantes');
 const { verifierTirages } = require('./collecte-cartes/preuves-tirage');
 const { numerosFichesDuPlan } = require('./collecte-cartes/numero-fiche');
+const { champsDeck } = require('./collecte-cartes/set-deck');
 
 // LE TIRAGE DE CHAQUE EXPANSION, AVEC SA PREUVE (2026-10-04). Les preuves admises, et elles seules :
 //   codes_set — la région que codes_set écrit (japonais / occidental), quand rien ne la contredit ;
@@ -108,13 +109,16 @@ const TIRAGES = {
     4354: ['jp', 'declarations : 3 cartes déclarent « T Promotional cards » en jp (jpexpansion), aucun autre tirage ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base'],
     // (2026-10-12, T4b : « les 8 sets qui se prouvent », mesure T4a) — la preuve `declarations` RESTREINTE AU DECK (DECLARANTES : { nom, deck }) ;
     // `page` : copies Wayback déjà lues, citées par leur horodatage ; aucune preuve de type nouveau.
-    5527: ['jp', 'declarations : 32 impressions déclarent « Pokémon Card Game Classic » (deck « Venusaur & Lugia ex Deck ») en jp (jpexpansion), 32 numéros, aucun autre tirage sous ce nom exact'],
-    5528: ['jp', 'declarations : 32 impressions déclarent « Pokémon Card Game Classic » (deck « Charizard & Ho-Oh ex Deck ») en jp (jpexpansion), 32 numéros, aucun autre tirage sous ce nom exact'],
-    5529: ['jp', 'declarations : 32 impressions déclarent « Pokémon Card Game Classic » (deck « Blastoise & Suicune ex Deck ») en jp (jpexpansion), 32 numéros, aucun autre tirage sous ce nom exact'],
+    // (T4b fix1) Classic : DEUX DONNÉES — le nom exact déclaré en jp (aucun autre tirage sous ce nom : l'occidental s'écrit « Trading Card Game Classic »)
+    // ET la concordance de numérotation avec l'impression jp du deck, CALCULÉE à chaque exécution (« (calculé à l'exécution) » : le plan remplace ce
+    // segment par les nombres réels et re-vérifie le texte ; une concordance non totale REFUSE le set). L'absence de déclaration zh-hant/ko est un contexte, pas une preuve.
+    5527: ['jp', 'declarations : le nom exact « Pokémon Card Game Classic » (deck « Venusaur & Lugia ex Deck ») est déclaré en jp (jpexpansion), aucun autre tirage sous ce nom exact (calculé à l\'exécution) ; complément : aucune déclaration zh-hant ou ko dans la base (contexte, pas une preuve)'],
+    5528: ['jp', 'declarations : le nom exact « Pokémon Card Game Classic » (deck « Charizard & Ho-Oh ex Deck ») est déclaré en jp (jpexpansion), aucun autre tirage sous ce nom exact (calculé à l\'exécution) ; complément : aucune déclaration zh-hant ou ko dans la base (contexte, pas une preuve)'],
+    5529: ['jp', 'declarations : le nom exact « Pokémon Card Game Classic » (deck « Blastoise & Suicune ex Deck ») est déclaré en jp (jpexpansion), aucun autre tirage sous ce nom exact (calculé à l\'exécution) ; complément : aucune déclaration zh-hant ou ko dans la base (contexte, pas une preuve)'],
     4319: ['jp', 'page : « Japanese-exclusive Half Deck » (copie Wayback 20260525123546) ; declarations : 6 cartes déclarent « Movie Commemoration VS Pack: Sea\'s Manaphy » en jp (jpexpansion), aucun autre tirage ; citation nomme le produit : « Movie Commemoration VS Pack: Sea\'s Manaphy » (019 entrées de la page = les 19 produits, noms et numéros)'],
     4267: ['jp', 'declarations : 14 impressions déclarent « Leafeon vs Metagross Expert Deck » (deck « Metagross Deck ») en jp (jpexpansion), 14 numéros, aucun autre tirage ; set : Leafeon-vs-Metagross-Expert-Deck (LED) existe (jp)'],
-    4300: ['jp', 'page : « Japanese-exclusive Half Deck Deck Kit » (copie Wayback 20260615150011) ; declarations : 13 impressions déclarent « Giratina vs Dialga Deck Kit » (deck « Dialga Half Deck ») en jp (jpexpansion), 13 numéros, aucun autre tirage'],
-    4301: ['jp', 'page : « Japanese-exclusive Half Deck Deck Kit » (copie Wayback 20260615150011) ; declarations : 13 impressions déclarent « Giratina vs Dialga Deck Kit » (deck « Giratina Half Deck ») en jp (jpexpansion), 13 numéros, aucun autre tirage']
+    4300: ['jp', 'page : « Japanese-exclusive Half Deck Deck Kit » (copie Wayback 20260615150011) ; declarations : le nom « Giratina vs Dialga Deck Kit » (et son écriture « Giratina vs Dialga » par la page de Conductive Quarry) (deck « Dialga Half Deck ») est déclaré en jp (jpexpansion), aucun autre tirage (calculé à l\'exécution)'],
+    4301: ['jp', 'page : « Japanese-exclusive Half Deck Deck Kit » (copie Wayback 20260615150011) ; declarations : le nom « Giratina vs Dialga Deck Kit » (deck « Giratina Half Deck ») est déclaré en jp (jpexpansion), aucun autre tirage (calculé à l\'exécution)']
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
 // pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
@@ -127,7 +131,9 @@ const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs',
     5527: { nom: 'Pokémon Card Game Classic', deck: 'Venusaur & Lugia ex Deck' }, 5528: { nom: 'Pokémon Card Game Classic', deck: 'Charizard & Ho-Oh ex Deck' }, 5529: { nom: 'Pokémon Card Game Classic', deck: 'Blastoise & Suicune ex Deck' },
     4319: 'Movie Commemoration VS Pack: Sea\'s Manaphy',
     4267: { nom: 'Leafeon vs Metagross Expert Deck', deck: 'Metagross Deck' },
-    4300: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck' }, 4301: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Giratina Half Deck' } };
+    // ALIAS (T4b fix1) : la carte 58456 (Conductive Quarry) déclare « Giratina vs Dialga » (sans « Deck Kit »), deck Dialga Half Deck, 014/014. Mesuré sur toute
+    // la base (T4\s14-alias.js) : cette écriture n'existe que sur CETTE impression (jp, ce deck) ; l'alias est nommé pour ces deux sets seulement.
+    4300: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck', alias: ['Giratina vs Dialga'] }, 4301: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Giratina Half Deck', alias: ['Giratina vs Dialga'] } };
 // LES RÈGLES T4b, PAR LISTE FERMÉE (aucun « par défaut » : une expansion absente de ces listes se comporte exactement comme avant) :
 //   TEMOIN_NUMERO — la jointure par le nom est contrôlée par le numéro ; une contradiction (Sceptile 78071) n'est PAS écrite, elle est listée ;
 //   DEPARTAGE_NUMERO — les Arceus Lv.100 se départagent par le numéro d'impression (declarantes.js, test-declarantes.js) ;
@@ -135,6 +141,10 @@ const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs',
 const TEMOIN_NUMERO = new Set([5527, 5528, 5529, 4279, 4267, 4300, 4301, 4319]);
 const DEPARTAGE_NUMERO = new Set([4279]);
 const PASSE_PREFIXE = new Set([5527, 5528, 5529]);
+//   CONCORDANCE_TOTALE — la preuve porte la concordance de numérotation (produit = impression du deck), calculée ; non totale => le set n'est pas créé, il est listé ;
+//   PAS_DE_SIMPLE — un produit sans déclarante n'est PAS une fiche simple (elle doublerait peut-être une page) : un TROU listé.
+const CONCORDANCE_TOTALE = new Set([5527, 5528, 5529, 4300, 4301]);
+const PAS_DE_SIMPLE = new Set([4300, 4301]);
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
@@ -175,7 +185,9 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         if (existant && (existant.tirage ?? existant.region) !== tirage) { refus.push({ exp, raison: `le set existant est en ${existant.tirage ?? existant.region}, la table dit ${tirage}`, resume }); continue; }
         const D0 = DECLARANTES[exp] ?? null;
         const nomDecl = D0 ? (typeof D0 === 'string' ? D0 : D0.nom) : null, deckDecl = D0 && typeof D0 !== 'string' ? D0.deck : null;
-        const setDecl = nomDecl ? { tirage, expansion: nomDecl, deck: deckDecl } : null;   // (T4b) le set vu par ses déclarantes : tirage, nom d'expansion, deck
+        let preuveT = preuveTirage;   // (T4b fix1) la preuve écrite : le texte de la table, ses nombres CALCULÉS ici quand il le dit
+        const aliasDecl = D0 && typeof D0 !== 'string' ? D0.alias ?? null : null;
+        const setDecl = nomDecl ? { tirage, expansion: nomDecl, deck: deckDecl, alias: aliasDecl } : null;   // (T4b) le set vu par ses déclarantes : tirage, nom d'expansion, deck
         const nomExp = existant ? (Array.isArray(existant.bulba?.expansion) ? existant.bulba.expansion[0] : existant.bulba?.expansion) ?? null : (nomDecl ?? lisible(slug));
         const aJoindre = P.filter(p => !dejaJoints.has(p.idProduct) && !estCarteCode(p.name ?? ''));
         const designes = [], simples = new Map();
@@ -184,6 +196,7 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         const declarantes = nomDecl ? declarantesDuSet(cartes, setDecl) : [];   // (T4b) restreintes au deck quand le set en est un
         let ambiguDecl = null;
         const contredits = [];   // (T4b) jointure par le nom contredite par le numéro : listée, jamais écrite
+        const trous = [];        // (T4b fix1) produit d'un set PAS_DE_SIMPLE sans déclarante : un TROU listé, jamais une fiche simple
         const optNom = DEPARTAGE_NUMERO.has(exp) ? { set: setDecl } : null;
         const nomDe = p => (p.nom || decomposerNomCardmarket(p.name ?? '').nom || '').trim();
         // les déclarantes déjà prises PAR LE NOM : la passe « - » ne voit que les restantes
@@ -203,6 +216,7 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
                     const c2 = declarantePrefixeMemeNumero(declarantes.filter(c => !prisesParNom.has(c._id)), nomP, p, setDecl);
                     if (c2) { prisesParNom.add(c2._id); designes.push({ p, carte: c2, declarante: true, parPrefixe: true }); continue; }
                 }
+                if (PAS_DE_SIMPLE.has(exp)) { trous.push(p); continue; }
             }
             const d = designerCroise(ctx, p, { tirage });
             if (d.carte) { designes.push({ p, carte: d.carte }); continue; }
@@ -243,6 +257,15 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
             const couvertes = new Set([...designes.filter(d => d.declarante).map(d => d.carte._id), ...contredits.map(x => x.carte._id)]);   // une contredite est LISTÉE, pas « sans produit »
             const seules = declarantes.filter(c => !couvertes.has(c._id));
             if (seules.length) { refus.push({ exp, raison: `carte(s) déclarante(s) sans produit : ${seules.map(c => `${c._id} « ${c.nomEn} »`).join(', ')}`, resume }); continue; }
+            // (T4b fix1) LA PREUVE CALCULÉE : les nombres de la preuve viennent de la base d'aujourd'hui, jamais d'un texte écrit à la main. Une concordance
+            // de numérotation (numéro du produit = numéro de l'impression du deck, sur CHAQUE désigné) non totale refuse le set : il est listé, pas créé.
+            if (/\(calculé à l'exécution\)/.test(preuveTirage)) {
+                const imps = declarantes.flatMap(c => impressionsDuSetDeclare(c, setDecl)), nums = new Set(imps.map(i => nuNum(i.numero)).filter(Boolean));
+                const joints = designes.filter(d => d.declarante), concord = joints.filter(d => nuNum(d.p.numero) && numerosDeclares(d.carte, setDecl).includes(nuNum(d.p.numero)));
+                if (CONCORDANCE_TOTALE.has(exp) && (!joints.length || concord.length !== joints.length || contredits.length)) { refus.push({ exp, raison: `concordance de numérotation non totale : ${concord.length}/${joints.length} désignés portent le numéro de l'impression jp du deck, ${contredits.length} contredit(s) — le set n'est pas créé`, resume }); continue; }
+                preuveT = preuveTirage.replace("(calculé à l'exécution)", `— calculé : ${imps.length} impressions déclarent ce nom dans ce deck, ${nums.size} numéros, numérotation Cardmarket = impressions jp du deck : ${concord.length}/${joints.length} désignés`);
+                try { verifierTirages({ [exp]: [tirage, preuveT] }); } catch (e) { refus.push({ exp, raison: `preuve calculée refusée par la liste fermée : ${e.message}`, resume }); continue; }
+            }
             // (T4b) un set DECK partage le nom d'expansion avec ses frères (LED, les trois Classic) par construction : le contrôle porte alors sur l'idExpansion
             const autreSet = [...setsBase.values()].find(s => (s.tirage ?? s.region) === tirage && [].concat(s.bulba?.expansion ?? []).includes(nomDecl) && (deckDecl == null || [].concat(s.idExpansion).includes(exp)));
             if (autreSet) { refus.push({ exp, raison: `« ${nomDecl} » est déjà l'expansion du set ${autreSet._id}`, resume }); continue; }
@@ -262,7 +285,7 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         // détachés de leur fiche. La forme se calibre sur le set ENTIER (collecte-cartes/numero-fiche.js) ; sans forme, null — jamais un faux.
         const fiches = existant ? null : numerosFichesDuPlan(designes, { tirage, bulba: { expansion: nomExp }, deck: deckDecl });
         if (fiches?.enDefaut) console.log(`   numeroFiche ${slug} : ${fiches.enDefaut} ligne(s) dont le numéro Cardmarket ne désigne aucune impression · forme calibrée ${fiches.forme?.id ?? `AUCUNE (${fiches.raison})`}`);
-        plan.push({ exp, slug, existant: !!existant, tirage, preuveTirage, region: tirage === 'jp' ? 'jp' : 'intl', code: codes[0]?.[0] ?? null, nomExp, produits: P.length, deja: P.filter(p => dejaJoints.has(p.idProduct)).length, designes, simples: [...simples.values()], sansFiche, fiches, deck: deckDecl, contredits });
+        plan.push({ exp, slug, existant: !!existant, tirage, preuveTirage: preuveT, region: tirage === 'jp' ? 'jp' : 'intl', code: codes[0]?.[0] ?? null, nomExp, produits: P.length, deja: P.filter(p => dejaJoints.has(p.idProduct)).length, designes, simples: [...simples.values()], sansFiche, fiches, deck: deckDecl, contredits, trous });
     }
     const nLignes = plan.reduce((s, x) => s + x.designes.length + x.simples.reduce((t, g) => t + g.produits.length, 0), 0);
     console.log(`DÉNOMINATEUR : ${liste.length} expansions dans la liste du site · dans la table TIRAGES ${liste.filter(e => TIRAGES[e.idExpansion]).length} · au plan ${plan.length} (dont ${plan.filter(x => x.existant).length} sets existants) · refusées ${refus.length}`);
@@ -272,6 +295,9 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
     // (T4b) LES LIGNES REFUSÉES PAR LE TÉMOIN DU NUMÉRO : listées, jamais écrites (ni jointes, ni fiche simple)
     const contreditsTous = plan.flatMap(x => (x.contredits || []).map(c => ({ x, ...c })));
     console.log(`LIGNES REFUSÉES PAR LE TÉMOIN DU NUMÉRO (${contreditsTous.length}) :`); for (const c of contreditsTous) console.log(`   ${c.x.slug} produit ${c.p.idProduct} « ${c.p.name} » n°${c.p.numero} ≠ carte ${c.carte._id} « ${c.carte.nomEn} » (numéros déclarés : ${numerosDeclares(c.carte, { tirage: c.x.tirage, expansion: c.x.nomExp, deck: c.x.deck }).join(', ')})`);
+    const trousTous = plan.flatMap(x => (x.trous || []).map(p => ({ x, p })));
+    console.log(`TROUS LISTÉS — produits sans déclarante dans un set PAS_DE_SIMPLE, ni jointure ni fiche simple (${trousTous.length}) :`); for (const { x, p } of trousTous) console.log(`   ${x.slug} produit ${p.idProduct} « ${p.name} » n°${p.numero}`);
+    console.log(`PREUVES DE TIRAGE ÉCRITES (calculées) :`); for (const x of plan.filter(x => /calculé :/.test(x.preuveTirage))) console.log(`   ${x.slug} : ${x.preuveTirage}`);
     // 20 réimpressions tirées au sort, pour les regarder
     let g = 20261004; const hasard = () => (g = (g * 1103515245 + 12345) % 2147483648) / 2147483648;
     const tous = plan.flatMap(x => x.designes.map(d => ({ ...d, x })));
@@ -287,7 +313,7 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         code: x.code ?? x.slug, idExpansion: [x.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: x.region, tirage: x.tirage, totalImprime: null,
         creeDepuis: { le, source: 'export Cardmarket du 24/09 + numeros_cartes (apprentissage)', tirage: x.preuveTirage, demande: 'testeur 2026-10-04 : « crée-les à partir de l\'export Cardmarket et de nos apprentissages »' },
         bulba: { titre: null, expansion: x.simples.length ? x.nomExp : null, motifTitres: `aucune page de set chez nous : réimpressions jointes par la désignation croisée, autres produits en fiches simples (nom et numéro Cardmarket) — à enrichir` },
-        collecteLe: le, version: 1 });
+        collecteLe: le, version: 1, ...champsDeck(x) });   // (T4b fix1) le deck, sur le set NEUF seulement : relu par corriger-numero-fiche.js
     let nommes;
     try { nommes = await nommerLesNouveaux(cx.db, prod.db, plan.filter(x => !x.existant).map(docDe)); } catch (e) { console.error(`❌ ARRÊT : ${e.message}`); await fermer(); process.exit(1); }
     for (const x of plan) {

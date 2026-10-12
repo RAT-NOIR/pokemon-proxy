@@ -42,7 +42,8 @@ function verifierTirages(T) {
         });
         segments.forEach((seg, i) => {
             const ty = types[i];
-            if (ty === 'declarations' && /^declarations/.test(seg) &&!/\d+ (cartes?|impressions?)/.test(seg)) throw new Error(`exp ${exp} : declarations sans le nombre de cartes ou d'impressions : « ${seg.slice(0, 80)} »`);
+            // (T4b fix1) un nombre CALCULÉ à l'exécution le dit en toutes lettres ; creer-sets-sans-page.js re-vérifie alors le texte avec les nombres réels
+            if (ty === 'declarations' && /^declarations/.test(seg) && !/\d+ (cartes?|impressions?)/.test(seg) && !/\(calculé à l'exécution\)/.test(seg)) throw new Error(`exp ${exp} : declarations sans le nombre de cartes ou d'impressions : « ${seg.slice(0, 80)} »`);
             if (ty === 'page') {
                 const citee = /«[^»]+»/.test(seg) && /copie Wayback \d{14}/.test(seg);
                 const seconde = types.some((t, j) => j !== i && t && t !== 'page'), nomme = segments.some(s => /^citation nomme le produit\s*:\s*«[^»]+»/.test(s));

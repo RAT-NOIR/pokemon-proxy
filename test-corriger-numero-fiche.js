@@ -24,6 +24,16 @@ t('Quick : « G002 » → « 002 », forme préfixe, calibrée PAR SET (les deux
     const p = base([L(10, 1, 'GB', '007L'), L(12, 3, 'QC', 'G002')]);
     assert.deepStrictEqual(p.parSet.map(s => [s.slug, s.forme]), [['GB', 'suffixe-lettres'], ['QC', 'prefixe-lettres']]);
 });
+t('T4b : un set DECK lit les numéros de SON deck — relancer la réparation ne mélange pas les decks (le champ `deck` du set)', () => {
+    const impD = (d, n) => ({ tirage: 'jp', expansion: 'Classic', deck: d, numero: n });
+    const cs = new Map([[7, { _id: 7, impressions: [impD('Venusaur Deck', '022'), impD('Charizard Deck', '023')] }]]);
+    const noms2 = new Map([[70, 'Rare Candy']]), cds2 = new Map([['CLF', [carteDoc(7, 'Rare Candy')]]]);
+    const run = set => planifier({ lignes: [L(70, 7, 'CLF', 'G023', 'carte-declarante')], sets: new Map([['CLF', set]]), cartes: cs, nomsProduits: noms2, cartesDuSet: cds2 });
+    const sansDeck = run({ _id: 'CLF', tirage: 'jp', bulba: { expansion: 'Classic' } });
+    assert.deepStrictEqual(sansDeck.reparations.map(r => r.apres), ['023'], 'sans le champ, le numéro du AUTRE deck est pris (le défaut)');
+    const avecDeck = run({ _id: 'CLF', tirage: 'jp', bulba: { expansion: 'Classic' }, deck: 'Venusaur Deck' });
+    assert.strictEqual(avecDeck.reparations.length, 0, 'avec le champ, aucune réparation vers un autre deck');
+});
 t('une ligne déjà juste n\'est pas touchée et compte dans le dénominateur', () => {
     const p = base([L(10, 1, 'GB', '007L'), L(11, 2, 'GB', '3')]);
     assert.strictEqual(p.denominateur.justes, 1); assert.strictEqual(p.reparations.length, 1);

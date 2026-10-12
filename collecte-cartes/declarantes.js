@@ -33,8 +33,11 @@ const nu2 = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g,
 const nn = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
 
 /** Les impressions d'une carte qui sont CELLES du set : tirage, nom d'expansion déclaré et, si le set est un deck, ce deck (égalité normalisée). */
-function impressionsDuSetDeclare(c, { tirage, expansion, deck = null }) {
-    return (c.impressions || []).filter(i => i && i.tirage === tirage && i.expansion === expansion && (deck == null || nu2(i.deck) === nu2(deck)));
+// `alias` (T4b fix1) : des noms d'expansion ÉCRITS autrement par une page de carte (« Giratina vs Dialga » pour « Giratina vs Dialga Deck Kit »),
+// NOMMÉS par l'appelant pour un set précis ; sans `alias`, l'égalité exacte d'avant.
+function impressionsDuSetDeclare(c, { tirage, expansion, deck = null, alias = null }) {
+    const noms = [expansion, ...(alias || [])];
+    return (c.impressions || []).filter(i => i && i.tirage === tirage && noms.includes(i.expansion) && (deck == null || nu2(i.deck) === nu2(deck)));
 }
 
 /** Les cartes déclarantes d'un set : une impression (tirage, expansion, deck) — `deck` absent = tout le nom d'expansion (le comportement d'avant). */

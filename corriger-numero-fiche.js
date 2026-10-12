@@ -22,6 +22,9 @@ const T0_COMPTE = 105;   // le relevé de T0 (normaliserNumero, sans la coupure 
 
 const { numeroComparable, CAS_COMPARABLE, numerosDuSet, enDefaut, calibrerForme, numeroReparé } = require('./collecte-cartes/numero-fiche');
 const { temoinDuNom, decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+const { CHAMP_DECK } = require('./collecte-cartes/set-deck');
+// La projection des sets lus : le DECK en fait partie (T4b fix1) — un set deck ne lit que les numéros de son deck (numerosDuSet), pas ceux des decks frères.
+const PROJECTION_SETS = { tirage: 1, region: 1, 'bulba.expansion': 1, [CHAMP_DECK]: 1 };
 
 /**
  * Le PLAN, sans aucune connexion. @param {{lignes, sets: Map, cartes: Map, nomsProduits: Map<number,string>, cartesDuSet: Map<string, object[]>}} o
@@ -72,7 +75,7 @@ async function appliquer(CP, reparations) {
     return n;
 }
 
-module.exports = { planifier, appliquer, PREUVES_ADMISES };
+module.exports = { planifier, appliquer, PREUVES_ADMISES, PROJECTION_SETS };
 
 if (require.main === module) (async () => {
     const path = require('path'), { pathToFileURL } = require('url');
@@ -101,7 +104,7 @@ if (require.main === module) (async () => {
         if (!(await cx.db.listCollections({}, { nameOnly: true }).toArray()).length) throw new Error('base cartes vide : grappe fausse ?');
     }
     const lignes = await cx.db.collection('cartes_produits').find({ numeroFiche: { $ne: null } }, { projection: { carteId: 1, idProduct: 1, slugSet: 1, numeroFiche: 1, preuve: 1 } }).toArray();
-    const sets = new Map((await cx.db.collection('sets').find({}, { projection: { tirage: 1, region: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
+    const sets = new Map((await cx.db.collection('sets').find({}, { projection: PROJECTION_SETS }).toArray()).map(s => [s._id, s]));
     const cartes = new Map((await cx.db.collection('cartes').find({}, { projection: { impressions: 1 } }).toArray()).map(c => [c._id, c]));
     console.log(`DÉNOMINATEUR LU : ${lignes.length} lignes à numeroFiche · ${sets.size} sets · ${cartes.size} cartes`);
     if (!lignes.length || !sets.size || !cartes.size) throw new Error('une population de lecture est vide : sonde cassée');
