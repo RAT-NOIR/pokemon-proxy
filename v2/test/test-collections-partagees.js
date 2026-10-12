@@ -42,6 +42,33 @@ function citations(racine) {
     return sortie;
 }
 
+// ── LECTURE SEULE sur toute collection partagée, sauf les couples (collection, fichier, opérations) déclarés à l'audit §13. Garde écrite par ce qu'elle AUTORISE.
+const LECTURES = Object.freeze(['find', 'findOne', 'countDocuments', 'distinct', 'aggregate']);    // `aggregate` n'est une lecture que sans $out ni $merge ; collStats passe par db.command, jamais par une méthode de collection
+const ECRITURES_PERMISES = Object.freeze([
+    { nom: 'credits', fichier: 'argent/heritage.js', ops: ['findOneAndUpdate'] },          // migration des crédits hérités (A0), un document par userId / _id
+    { nom: 'journal_scans', fichier: 'identifier/retour-live.js', ops: ['updateOne'] },     // douteux / douteuxGuide / lectureRatee sur la ligne du scan, filtrée par _id ET userId
+    { nom: 'credits', fichier: 'migrations/rejouer-migration-credits.js', ops: ['insertMany'] }  // outil de rejeu (--base=test_scratch) : il écrit une sauvegarde dans un bac, jamais en production
+]);
+const SANS_ECRITURE = ['test', 'mesures'];                                       // les bancs et les outils de mesure (lecture) ne sont pas du code de production
+function operations(racine) {
+    const sortie = [];
+    const fichiers = (function lister(d, a = []) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!SANS_ECRITURE.includes(e.name) && e.name !== 'node_modules') lister(p, a); } else if (/\.js$/.test(e.name)) a.push(p); } return a; })(racine);
+    for (const f of fichiers) {
+        const src = fs.readFileSync(f, 'utf8'), fichier = path.relative(racine, f).replace(/\\/g, '/');
+        for (const nom of HERITEES) {
+            const re = new RegExp(`(?:col|colFn|colLue|collection)\\(\\s*(['"\`])${nom}\\1\\s*\\)\\s*\\.\\s*(\\w+)`, 'g'); let m;
+            while ((m = re.exec(src))) {
+                const fenetre = src.slice(m.index, m.index + 900);
+                const sortant = m[2] === 'aggregate' && /\$out|\$merge/.test(fenetre);
+                sortie.push({ nom, fichier, op: sortant ? 'aggregate($out/$merge)' : m[2], lecture: LECTURES.includes(m[2]) && !sortant });
+            }
+        }
+        if (/\bmongoose\.model\(|\.model\(\s*['"]/.test(src)) sortie.push({ nom: '(modèle mongoose)', fichier, op: 'model', lecture: false });
+    }
+    return sortie;
+}
+const ecrituresRefusees = ops => ops.filter(o => !o.lecture && !ECRITURES_PERMISES.some(p => p.nom === o.nom && p.fichier === o.fichier && p.ops.includes(o.op)));
+
 (async () => {
     await H.ouvrirBac('test-collections-partagees.js'); await M.creerIndex();
     const physique = nom => db.base().collection(db.prefixeCourant() + nom);         // le nom NU du code hérité (sous le préfixe du banc)
@@ -87,11 +114,35 @@ function citations(racine) {
     fs.writeFileSync(fab, "module.exports = (db) => db.col('questions');\n");
     let vue; try { vue = citations(racine).some(c => c.nom === 'questions' && c.fichier === '_fabrique-garde.js'); } finally { fs.unlinkSync(fab); }
     H.v('   la garde sait dire non : une citation fabriquée de \'questions\' est vue', vue, true);
+    // LECTURE SEULE : toute opération qui n'est pas une lecture, sur une collection partagée, doit être un couple (collection, fichier, opération) permis
+    const ops = operations(racine), refusees = ecrituresRefusees(ops);
+    console.log(`   lecture seule : ${ops.length} opérations directes sur une collection partagée (dont ${ops.filter(o => o.lecture).length} lectures, ${ops.filter(o => !o.lecture).length} écritures), ${ECRITURES_PERMISES.length} couples d'écriture permis`);
+    H.v('GARDE LECTURE SEULE : aucune écriture v2 sur une collection partagée hors des couples permis', refusees.map(o => `${o.nom} ${o.op} (${o.fichier})`), []);
+    H.v('   chaque couple permis est réellement utilisé (un couple devenu inutile se retire)', ECRITURES_PERMISES.filter(p => !ops.some(o => o.nom === p.nom && o.fichier === p.fichier && p.ops.includes(o.op))).map(p => `${p.nom} (${p.fichier})`), []);
+    // elle SAIT dire non : des écritures fabriquées (celles de la passe 2 : guide_prix, numeros_cartes, catalogue_produits, credits hors de heritage.js) + les autres formes
+    const fabEcr = path.join(racine, '_fabrique-ecritures.js');
+    fs.writeFileSync(fabEcr, [
+        "module.exports = async (db) => {",
+        "  await db.col('guide_prix').insertOne({});", "  await db.col('numeros_cartes').updateMany({}, {});", "  await db.col('catalogue_produits').deleteMany({});",
+        "  await db.col('credits').updateOne({}, {});", "  await db.col('journal_scans').insertOne({});", "  await db.col('codes_set').findOneAndDelete({});",
+        "  await db.col('guide_prix').createIndex({ a: 1 });", "  await db.col('guide_prix').bulkWrite([]);", "  await db.col('numeros_cartes').drop();",
+        "  await db.col('catalogue_produits').aggregate([{ $match: {} }, { $merge: 'x' }]);",
+        "  await db.col('guide_prix').find({}); await db.col('guide_prix').aggregate([{ $match: {} }]);", "};\n"].join('\n'));
+    let vues; try { vues = ecrituresRefusees(operations(racine)).filter(o => o.fichier === '_fabrique-ecritures.js').map(o => `${o.nom} ${o.op}`).sort(); } finally { fs.unlinkSync(fabEcr); }
+    H.v('   la garde sait dire non : 10 écritures fabriquées sont vues, les 2 lectures fabriquées non', vues, ['guide_prix insertOne', 'numeros_cartes updateMany', 'catalogue_produits deleteMany', 'credits updateOne', 'journal_scans insertOne', 'codes_set findOneAndDelete', 'guide_prix createIndex', 'guide_prix bulkWrite', 'numeros_cartes drop', 'catalogue_produits aggregate($out/$merge)'].sort());
+    // un couple permis ne vaut que pour SON fichier et SES opérations
+    const fabCredits = path.join(racine, 'argent', '_fabrique-credits.js');
+    fs.writeFileSync(fabCredits, "module.exports = async (col) => { await col('credits').updateMany({}, {}); };\n");
+    let vuC; try { vuC = ecrituresRefusees(operations(racine)).filter(o => o.fichier === 'argent/_fabrique-credits.js').map(o => `${o.nom} ${o.op}`); } finally { fs.unlinkSync(fabCredits); }
+    H.v('   `credits` écrit hors de heritage.js : vu', vuC, ['credits updateMany']);
+    // chaque couple permis est déclaré à l'audit §13
     // chaque partage voulu est déclaré à l'audit, dans le tableau
     const auditTout = fs.readFileSync(path.join(__dirname, '..', '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
     const debut = auditTout.indexOf('## 13. Les collections partagées');
     const audit = debut >= 0 ? auditTout.slice(debut) : '';                       // seul le §13 compte : un nom cité ailleurs dans l'audit ne déclare rien
     H.v('chaque partage VOULU figure au tableau de l\'audit', VOULUS.filter(n => !new RegExp('^\\|[^\\n]*`' + n + '`', 'm').test(audit)), []);
+
+    H.v('chaque couple d\'écriture permis (collection, fichier, opération) figure à la liste des couples du §13', ECRITURES_PERMISES.filter(p => !new RegExp('^\\|[^\\n]*`' + p.nom + '`[^\\n]*`' + p.fichier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '`[^\\n]*`' + p.ops.join('`[^\\n]*`') + '`', 'm').test(audit)).map(p => `${p.nom} ${p.fichier}`), []);
 
     await physique('questions').deleteMany({});
     await H.fermerBac(); H.bilan();

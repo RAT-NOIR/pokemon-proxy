@@ -286,4 +286,14 @@ Verdicts : **corrigé** (avec son test), **vérifié** (preuve jouée), **O-n** 
 | `codes_set`, `guide_prix_meta`, `references_image`, `cardprices` | LIT seulement, et seulement des tailles (`collStats`) par l'outil de mesure `mesures/instantane-2a.js` (hors serveur) | oui : mesure en lecture |
 | `sets`, `cartes`, `cartes_produits` | LIT (base `cartes`, par l'accès de lecture seule : `chargeur/source.js`, `migrations/`) | oui : décision du testeur du 2026-10-11 (un seul accès, lecture) |
 
+**Lecture seule sur tout nom partagé, sauf trois couples (tour 1, 2026-10-12).** La garde de `test-collections-partagees.js` écrit ce qu'elle AUTORISE : sur une collection partagée, le code de production de la v2 (tout `v2/` hors `test/` et `mesures/`) ne fait que `find`, `findOne`, `countDocuments`, `distinct`, `aggregate` sans `$out` ni `$merge` (`collStats` passe par `db.command`, jamais par une méthode de collection). Toute autre opération — `insert*`, `update*`, `replace*`, `delete*`, `findOneAnd*`, `bulkWrite`, `drop*`, `createIndex`, `aggregate` avec `$out`/`$merge` — et tout modèle mongoose lié fait échouer le banc, sauf ces couples (collection, fichier, opération), chacun utilisé (le banc échoue sur un couple devenu inutile) :
+
+| collection | fichier | opération permise |
+|---|---|---|
+| `credits` | `argent/heritage.js` | `findOneAndUpdate` (migration par `userId` / `_id`, en transaction) |
+| `journal_scans` | `identifier/retour-live.js` | `updateOne` (filtré `_id` ET `userId`) |
+| `credits` | `migrations/rejouer-migration-credits.js` | `insertMany` (outil de rejeu sur `test_scratch`, pas du serveur) |
+
+Mutations jouées sur une copie, toutes rouges : écritures v2 dans `guide_prix` (`insertOne`, `createIndex`, `bulkWrite`), `numeros_cartes` (`updateMany`, `drop`), `catalogue_produits` (`deleteMany`, `aggregate` avec `$merge`), `codes_set` (`findOneAndDelete`), `journal_scans` (`insertOne`, hors de `updateOne`), `credits` (`updateOne` hors de `heritage.js`, `updateMany` dans un autre fichier). **Ce que cette garde ne voit pas :** un nom construit à l'exécution, et un appel indirect (la collection rangée dans une variable, passée à une fonction, puis écrite ailleurs) ; elle lit le texte `col('nom').méthode(` d'une seule traite, et les bancs métier de chaque module restent la seconde ligne de défense.
+
 **Les autres collections de la v2** (`comptes`, `installations`, `sessions`, `mouvements`, `hebdo`, `plafonds`, `analyses`, `annonces`, `idempotence`, `limites`, `taux`, `scans_en_cours`, `banc_*`, `collection_*`, `compteurs`, `adresses_octroyees`, `liens_email`, `codes_liaison`) ne portent le nom d'AUCUNE collection héritée connue : pas de collision. Autre collision non voulue : **aucune**.
