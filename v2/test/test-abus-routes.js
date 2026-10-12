@@ -659,7 +659,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // `mesures` : outillage lancé à la main (comme migrations/ et admin/), JAMAIS chargé par le serveur — l'assertion « aucun require de mesures/ » plus bas garde cette exclusion de devenir un trou
         const REPERTOIRES_CLI = ['migrations', 'admin', 'test', 'mesures'];       // outils en ligne de commande : ils écrivent sur le terminal de l'opérateur, pas dans un journal de serveur
         const fichiers = [];
-        (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!REPERTOIRES_CLI.includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);
+        (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!(REPERTOIRES_CLI.includes(e.name) && (e.name !== 'mesures' || path.relative(racine, p).replace(/\\/g, '/') === 'mesures'))) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);   // `mesures` n'est exclu QU'au chemin exact v2/mesures/ (jamais un homonyme plus profond)
         // la règle, en fonction pure : les lignes (hors commentaire de fin de ligne) qui portent `.message` sans exception nommée
         // Une règle statique est un FILET, pas une preuve (audit §6) : elle voit les formes ci-dessous, pas un `e` passé tel quel à une fonction tierce. Formes vues : `.message`, `['message']`,
         // `catch ({ message })`, et, sur chaque variable de `catch (x)` du fichier : `${x}`, `String(x)`, `x.stack`, `x.toString(`, `'' + x`.
@@ -811,7 +811,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // m2 + dérive : TOUT nom de variable d'environnement lu par la production de v2/ (et par le client R2 que le banc réel charge) figure, en NOM, dans la table de AUDIT-SECURITE-V2.md
         {
             const racine = path.join(__dirname, '..'), noms = new Set(), fichiers = [path.join(racine, '..', 'collecte-cartes', 'r2.js')];
-            (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!['test', 'migrations', 'admin', 'mesures'].includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);   // mesures/ : outillage manuel, jamais chargé par le serveur (voir l'assertion « aucun require de mesures/ »)
+            (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!(['test', 'migrations', 'admin', 'mesures'].includes(e.name) && (e.name !== 'mesures' || path.relative(racine, p).replace(/\\/g, '/') === 'mesures'))) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);   // mesures/ : outillage manuel, jamais chargé par le serveur (voir l'assertion « aucun require de mesures/ »)
             for (const f of fichiers) { const s = fs.readFileSync(f, 'utf8'); for (const re of [/process\.env\.([A-Z][A-Z0-9_]{2,})/g, /\benv\.([A-Z][A-Z0-9_]{2,})/g, /'((?:R2|V2|MONGODB|TURNSTILE|BREVO|BANC|JETON|RM)_[A-Z0-9_]+)'/g]) for (const m of s.matchAll(re)) noms.add(m[1]); }
             const doc = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
             const absents = [...noms].sort().filter(n => !doc.includes('`' + n + '`'));
@@ -820,7 +820,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // L'EXCLUSION de v2/mesures/ des deux contrôles ci-dessus ne doit pas devenir un trou : AUCUN fichier de v2/ hors mesures/ et test/ ne fait `require` (ni `import()`) d'un fichier de v2/mesures/.
         {
             const racine = path.join(__dirname, '..'), liste = [];
-            (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!['test', 'mesures'].includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) liste.push(p); } })(racine);
+            (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!(['test', 'mesures'].includes(e.name) && (e.name !== 'mesures' || path.relative(racine, p).replace(/\\/g, '/') === 'mesures'))) parcourir(p); } else if (e.name.endsWith('.js')) liste.push(p); } })(racine);
+            // aucun AUTRE dossier `mesures` sous v2/ (à toute profondeur, test/ compris) : l'exclusion ne vaut que pour v2/mesures/
+            const homonymes = []; (function chercher(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) if (e.isDirectory()) { const p = path.join(d, e.name), rel = path.relative(racine, p).replace(/\\/g, '/'); if (e.name === 'mesures' && rel !== 'mesures') homonymes.push(rel); chercher(p); } })(racine);
+            H.v('mesures : aucun autre dossier « mesures » sous v2/ que v2/mesures/', homonymes, []);
             const RE_MESURES = /\b(?:require|import)\s*\(\s*['"`][^'"`]*\bmesures\b[^'"`]*['"`]\s*\)/;
             const lierMesures = source => source.split(/\r?\n/).some(l => RE_MESURES.test(l.replace(/\s\/\/.*$/, '')));
             const fautifs = liste.filter(f => lierMesures(fs.readFileSync(f, 'utf8'))).map(f => path.relative(racine, f).replace(/\\/g, '/'));
