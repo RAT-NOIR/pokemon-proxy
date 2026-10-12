@@ -152,7 +152,8 @@ function verifierImports(fichier) {
     }
     const locaux = new Set();
     for (const m of source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) locaux.add(m[1]);
-    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) locaux.add(m[1]);
+    // `\s*(?:=|;|,)` : `let nom;` (sans initialiseur) déclare aussi un nom local (R8 : test-jeton-api.js, `let creerVerifierJeton;` puis `({ creerVerifierJeton } = require(…))`)
+    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=|;|,)/g)) locaux.add(m[1]);
     // Les déstructurations posent aussi des noms locaux (`const { a, b } = x`).
     for (const m of source.matchAll(/(?:const|let|var)\s*\{([^}]+)\}\s*=/g)) {
         for (const n of m[1].split(',')) {

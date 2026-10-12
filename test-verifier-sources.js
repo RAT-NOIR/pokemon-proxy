@@ -66,6 +66,13 @@ ok('7. un alias NE vaut PAS import : `{ apparier: autreNom }` puis appel à `app
 ok('8. une chaîne NON TERMINÉE ne mange pas le reste du fichier',
     oublis('t8', `const { champ } = ${M};\nconst s = 'texte';\napparier([1], [1]);\n`).includes('apparier'));
 
+// R8 : `let nom;` (déclaration SANS initialiseur) pose un nom local, puis `({ nom } = require(...))` l'importe — le cas de test-jeton-api.js, que le contrôle signalait à tort.
+ok('9. `let apparier;` puis `({ apparier } = require(...))` dans un try : importé, pas un oubli',
+    !oublis('t9', `let apparier;\ntry { ({ apparier } = ${M}); } catch (e) { }\napparier([1], [1]);\n`).includes('apparier'));
+
+ok('10. sans la déclaration `let`, le même appel RESTE signalé',
+    oublis('t10', `const { champ } = ${M};\ntry { apparier([1], [1]); } catch (e) { }\n`).includes('apparier'));
+
 fs.rmSync(dossier, { recursive: true, force: true });
 console.log(`\n════ ${passes} passés · ${echecs} en échec ════`);
 process.exit(echecs ? 1 : 0);
