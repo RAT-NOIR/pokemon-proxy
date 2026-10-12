@@ -18,10 +18,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { LOGOS_COPIES } = require('./collecte-cartes/langue-logo');
+const { wcdDepuisLaTable } = require('./collecte-cartes/wcd-logos-table');
 const { cleNumero } = require('./collecte-cartes/jointure');
 
-// l'année LUE sur chaque logo (planche du 2026-10-07) — jamais déduite du numéro du fichier
-const WCD = [[2004, 76], [2005, 77], [2006, 78], [2007, 79], [2008, 80], [2009, 81], [2010, 82], [2011, 83], [2012, 84], [2013, 85], [2014, 86], [2015, 87], [2016, 88], [2017, 89], [2018, 90], [2019, 91], [2022, 92], [2023, 93], [2024, 94], [2025, 95]];
+// (2026-10-13) les WCD se lisent dans la TABLE DES DÉCISIONS (LOGOS_COPIES + logos-manuels-lus.json), jamais dans la présence des copies
+// Pokécardex (non restaurées après la perte du 2026-10-12) : voir collecte-cartes/wcd-logos-table.js. Deux options, pour rejouer l'export sans
+// toucher au fichier de production : --racine=<dossier> (où vivent apport-manuel, le site voisin et l'export précédent) et --sortie=<fichier>.
 // les vrais logos partagés (table des logos apportés, lue à l'œil le 2026-10-07 : collecte-cartes/logos-apport-manuel-lus.json)
 const PARTAGES = { 'Dialga-DPt-Half-Deck': 'EPDIA', 'Giratina-DPt-Half-Deck': 'EPGIR', 'Palkia-DPt-Half-Deck': 'EPPAL', 'Chimchar-DPt-Half-Deck': 'GBCHIM', 'Pikachu-DPt-Half-Deck': 'GBPIKA',
     'Piplup-DPt-Half-Deck': 'GBPIPL', 'Turtwig-DPt-Half-Deck': 'GBTURT', 'Gift-Box-Latias-ex': 'GBLAHD', 'Gift-Box-Latios-ex': 'GBLOHD', 'Intro-Pack-Bulbasaur': 'IPB', 'Intro-Pack-Squirtle': 'IPS',
@@ -73,8 +75,8 @@ function visuelAutreTirage(images, set, setsBase) {
 // de l'impression : une impression du set SANS numéro (vieux sets japonais, Expansion Pack) excluait tous ses produits, alors que le site
 // les sert sur une fiche « n° ? » (`fichesDuDocument`, `produitsDeLaFiche` : une fiche sans numéro garde ses produits). Node 24 lit le
 // TypeScript du dépôt voisin ; une fonction absente lève (une règle qui manque n'est pas une règle vide).
-const SITE_LIB = path.join(__dirname, '..', 'rat-market-site', 'lib');
-async function regleDuSite() {
+async function regleDuSite(racine = __dirname) {
+    const SITE_LIB = path.join(racine, '..', 'rat-market-site', 'lib');
     const { pathToFileURL } = require('url');
     const lire = f => import(pathToFileURL(path.join(SITE_LIB, f)).href);
     const [I, C, L, N] = await Promise.all([lire('impressionsDuSet.ts'), lire('cardmarket.ts'), lire('langueDuVisuel.ts'), lire('imageDeLImpression.ts')]);
@@ -143,13 +145,15 @@ function logosOfficielsDesSets(sets) {
 module.exports = { logosOfficielsDesSets, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE, noterRaretesHorsTable, messageRaretesHorsTable };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
-    const fichier = async rel => { const b = fs.readFileSync(path.join(__dirname, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(__dirname, rel), sha1: sha1(b), w: m.width, h: m.height }; };
-    const copies = new Map([...LOGOS_COPIES]);
-    const wcd = [];
-    for (const [annee, n] of WCD) {
-        const f = await fichier(`Logo FR/WCD/jap_0${n}.png`);
-        wcd.push({ set: `WCD-${annee}`, annee, anneeLueSurLeLogo: true, ...f, copiePokecardex: copies.has(f.sha1), refus: copies.has(f.sha1) ? 'logo COPIÉ de Pokécardex, retiré (décision du testeur, 2026-10-04) — son emploi est une décision du testeur' : null });
-    }
+    const argv = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
+    const inconnus = process.argv.slice(2).filter(a => !/^--(racine|sortie)=.+$/.test(a));
+    if (inconnus.length) throw new Error(`argument inconnu : ${inconnus.join(' ')} — autorisés : --racine=<dossier>, --sortie=<fichier>`);
+    const RACINE = argv('racine') ? path.resolve(argv('racine')) : __dirname;
+    const SORTIE = argv('sortie') ? path.resolve(argv('sortie')) : path.join(__dirname, 'donnees-site', 'logos-composes-donnees.json');
+    const fichier = async rel => { const b = fs.readFileSync(path.join(RACINE, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(RACINE, rel), sha1: sha1(b), w: m.width, h: m.height }; };
+    // les WCD : la table des décisions, SANS ouvrir un seul fichier (un WCD absent de la table lève)
+    const TL = JSON.parse(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'logos-manuels-lus.json'), 'utf8'));
+    const wcd = wcdDepuisLaTable({ racine: RACINE, copies: LOGOS_COPIES, lus: Array.isArray(TL) ? TL : TL.lignes });
     // (2026-10-07, soir) le DECK CHAMPION de l'année et sa vedette (wcd-decks-champions.js, pages de decks en copie Wayback) — le portrait
     // du site, en attendant un logo officiel des Mondiaux de source légale. Les fichiers Pokécardex ci-dessus ne s'emploient pas (éditeur).
     const CH = path.join(__dirname, 'collecte-cartes', 'wcd-decks-champions.json');
@@ -168,15 +172,15 @@ if (require.main === module) (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const meta = await prod.db.collection('guide_prix_meta').findOne({ _id: 'dernier' });
     const setsBase = new Map((await cx.db.collection('sets').find({}, { projection: { idExpansion: 1, nomAffichage: 1, 'logoCompose.famille': 1, tirage: 1, region: 1, code: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
-    const regle = await regleDuSite();
+    const regle = await regleDuSite(RACINE);
     const familles = [...setsBase.values()].filter(s => typeof s.nomAffichage === 'string' && (['promos', 'pop', 'mcdonalds'].includes(s.logoCompose?.famille) || /(-Promos$|^POP-Series-|McDonald)/.test(s._id)));
     if (!familles.length) throw new Error('aucun set promos/POP/McDonald\'s : base fausse');
     // les 41 « autres » : ceux que le site attend (lib/logos-composes.json, `enAttente`, raison « liste des cartes phares du serveur absente »)
-    const SITE = path.join(__dirname, '..', 'rat-market-site', 'lib', 'logos-composes.json');
+    const SITE = path.join(RACINE, '..', 'rat-market-site', 'lib', 'logos-composes.json');
     // (2026-10-07, soir) le site RÉGÉNÈRE ce fichier en lisant notre classement : ses raisons changent (« aucune carte montrable dans les N
     // du serveur… »). La liste des « autres » se garde donc d'un export à l'autre : ceux de l'export précédent, plus tout set en attente dont
     // la raison cite le serveur.
-    const SORTIE_PREC = path.join(__dirname, 'donnees-site', 'logos-composes-donnees.json');
+    const SORTIE_PREC = path.join(RACINE, 'donnees-site', 'logos-composes-donnees.json');
     const precedents = fs.existsSync(SORTIE_PREC) ? Object.entries(JSON.parse(fs.readFileSync(SORTIE_PREC, 'utf8')).vedettes || {}).filter(([, v]) => v.autres === true || v.famille === 'autres').map(([k]) => k) : [];
     const enAttente = [...new Set([...precedents, ...Object.entries(JSON.parse(fs.readFileSync(SITE, 'utf8')).enAttente || {}).filter(([, v]) => /serveur/.test(v.raison || '')).map(([k]) => k)])];
     if (!enAttente.length) throw new Error(`${SITE} et ${SORTIE_PREC} : aucun set « autres » — clé fausse ?`);
@@ -252,12 +256,12 @@ if (require.main === module) (async () => {
     await fermer();
     if (Object.keys(raretesHorsTable).length) throw new Error(messageRaretesHorsTable(raretesHorsTable));
     const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, logosOfficiels, vedettes };
-    fs.mkdirSync(path.join(__dirname, 'donnees-site'), { recursive: true });
-    fs.writeFileSync(path.join(__dirname, 'donnees-site', 'logos-composes-donnees.json'), JSON.stringify(sortie, null, 1));
+    fs.mkdirSync(path.dirname(SORTIE), { recursive: true });
+    fs.writeFileSync(SORTIE, JSON.stringify(sortie, null, 1));
     const v = Object.entries(vedettes);
     const parVisuel = c => c.reduce((o, x) => (o[x.visuel] = (o[x.visuel] || 0) + 1, o), {});
     console.log(`WCD ${wcd.length} (copies Pokécardex ${wcd.filter(x => x.copiePokecardex).length}) · logos partagés ${partages.length} · sets classés ${v.length} : ≥ 10 Pokémon ${v.filter(([, x]) => x.classement.length >= 10).length}, ≥ 3 ${v.filter(([, x]) => x.classement.length >= 3).length}, aucun ${v.filter(([, x]) => !x.classement.length).map(([k]) => k).join(', ') || '—'}`);
     console.log(`   visuels du classement : ${JSON.stringify(parVisuel(v.flatMap(([, x]) => x.classement)))} · top3 du set complets ${v.filter(([, x]) => x.top3.length === 3).length}`);
     for (const [k, x] of v.slice(0, 6)) console.log(`   ${k} : ${x.classement.slice(0, 5).map(t => `${t.carte} n°${t.numero ?? '—'} ${t.prix ? `${t.prix.valeur} €` : 'sans prix'} (${t.visuel})`).join(' · ')}`);
-    console.log('→ donnees-site/logos-composes-donnees.json');
+    console.log(`→ ${SORTIE}`);
 })().catch(e => { console.error(e); process.exit(1); });
