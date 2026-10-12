@@ -91,7 +91,10 @@ const { copierTranche, viderTranche } = require('./verrou/tranche');
 const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
-const JETON = process.env.JETON_API || 'jeton-verrou';
+const { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus } = require('./verrou/environnement-banc');
+
+// Le jeton vient de l'environnement du banc ; AUCUN repli en dur (R8, 2026-10-12) : absent, le verrou refuse avant de démarrer quoi que ce soit.
+let JETON = null;
 const USER_VERROU = 'verrou-avant-push';
 const FICHIER_CHARGES = path.join(__dirname, 'verrou', 'charges.json');
 // Dossier stable plutôt que temporaire : il est inspectable, et `--poser-plancher` peut
@@ -119,8 +122,15 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose vers elle est refusée (base-banc.js). Sans base de banc,
     // ce verrou REFUSE de démarrer. Les serveurs lancés plus bas héritent de l'environnement du banc.
     // LECTURE SEULE (2026-10-08) : la tranche de catalogue se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const jeton = jetonOuRefus();
+    if (!jeton.ok) { console.error(jeton.raison); process.exit(1); }
+    JETON = jeton.jeton;
     const banc = await ouvrirBanc({ lit: { production: 'la tranche de catalogue de la base « test » de la production' } });
     banc.appliquer();
+    // R8 : appliquer() est CONSTATÉ, pas supposé. Les trois ouvertures de test_scratch plus bas (tranche, journal de la 7e cellule, nettoyage) et le serveur fils
+    // lisent MONGODB_URI ; si elle ne mène pas au banc, le verrou REFUSE ici, avant toute connexion. (test-verrou-banc.js la fait dire NON sur des environnements fabriqués.)
+    const sur = verifierEnvironnementBanc();
+    if (!sur.ok) { console.error(sur.raison); await banc.arreter().catch(() => { }); process.exit(1); }
 
     if (!fs.existsSync(FICHIER_CHARGES)) {
         console.log(`\n❌ ${FICHIER_CHARGES} absent.`);
@@ -226,7 +236,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     let bacTranche = null;
     try {
         const prodT = await banc.connexionProduction(mongooseT, 'test');   // LECTURE de la production (garde d'écriture installée)
-        bacTranche = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+        bacTranche = await mongooseT.createConnection(uriDuBanc(), { dbName: 'test_scratch' }).asPromise();
         if (bacTranche.db.databaseName !== 'test_scratch') {
             console.error(`❌ ARRÊT : écriture visée sur "${bacTranche.db.databaseName}" au lieu de test_scratch.`);
             process.exit(1);
@@ -471,7 +481,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         // l'enquête du 2026-08-15 à chaque fois.
         try {
             const mongoose7 = require('mongoose');
-            const bac7 = await mongoose7.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+            const bac7 = await mongoose7.createConnection(uriDuBanc(), { dbName: 'test_scratch' }).asPromise();
             const ligne = await bac7.collection('journal_scans')
                 .findOne({ userId: USER_VERROU }, { sort: { le: -1 } });
             verifier('[7e] la ligne de journal porte `sourcesEnPanne`',
@@ -529,7 +539,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // ---- Nettoyage du bac à sable ----
     try {
         const mongoose = require('mongoose');
-        const bac = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+        const bac = await mongoose.createConnection(uriDuBanc(), { dbName: 'test_scratch' }).asPromise();
         if (bac.db.databaseName === 'test_scratch') {
             const n = await bac.collection('credits').deleteMany({ userId: USER_VERROU });
             const j = await bac.collection('journal_scans').deleteMany({ userId: USER_VERROU });
