@@ -12,10 +12,11 @@ const sets = new Map();
 for (const l of table.lignes) if (l.set) sets.set(l.set, { _id: l.set, tirage: l.cible === 'fr' ? 'intl' : 'jp', nomJa: null });
 sets.get('Ninja-Spinner').nomJa = 'ニンジャスピナー';
 sets.get('The-Glory-of-Team-Rocket').nomJa = 'ロケット団の栄光';
+sets.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: null, code: 'sm5+' });   // aucune ligne de la table ne le nomme (SM5P n'a pas de set) : il existe en base, nomJa null
 const plan = l => { const p = M.promouvoir(l, sets); return p.ligne ? M.planifier(p.ligne, sets) : { action: 'ecartee', raison: p.raison }; };
 
 (async () => {
-    verifier('la liste fermée existe : 37 entrées, toutes À REGARDER dans la table', [Array.isArray(M.REGARDES_2026_10_11), M.REGARDES_2026_10_11?.length, M.REGARDES_2026_10_11?.every(e => reg.some(l => l.part === e.part && l.fichier === e.fichier))], [true, 37, true]);
+    verifier('la liste fermée existe : 41 entrées, toutes À REGARDER dans la table', [Array.isArray(M.REGARDES_2026_10_11), M.REGARDES_2026_10_11?.length, M.REGARDES_2026_10_11?.every(e => reg.some(l => l.part === e.part && l.fichier === e.fichier))], [true, 41, true]);
     verifier('chaque entrée porte planche, raison et le sha256 du candidat regardé', M.REGARDES_2026_10_11.every(e => [1, 2, 3].includes(e.planche) && e.raison && /^[0-9a-f]{64}$/.test(e.candidatSha256)), true);
 
     // 1. une ligne promue passe le verdict
@@ -35,9 +36,41 @@ const plan = l => { const p = M.promouvoir(l, sets); return p.ligne ? M.planifie
     // le set de la ligne a changé → pas promue
     verifier('set différent de celui regardé : pas promue', M.promouvoir({ ...ligne('ADV3'), set: 'Autre-Set' }, sets).ligne, undefined);
 
-    // 3. une hésitation reste refusée (OR4, SM11B, SV11W : couleur nettement différente) — et SM5P : set non identifié, rien à confirmer
-    for (const c of ['OR4', 'SM11B', 'SV11W', 'SM5P']) verifier(`${c} : jamais promue`, [M.promouvoir(ligne(c), sets).ligne, plan(ligne(c)).action], [undefined, 'ecartee']);
-    verifier('les hésitations sont nommées dans EXCLUS_2026_10_11', M.EXCLUS_2026_10_11.map(e => e.fichier.replace(/^Logo JP\//, '')).sort(), ['OR4.png', 'SM11B.png', 'SM5P.png', 'SV11W.png']);
+    // 3. LES TROIS HÉSITATIONS (décision du 2026-10-12) et SM5P sont PROMUES, chacune sous les mêmes gardes que les autres
+    verifier('plus aucune ligne exclue : EXCLUS_2026_10_11 est vide', M.EXCLUS_2026_10_11, []);
+    const o = M.promouvoir(ligne('OR4'), sets);
+    verifier('OR4 (Rocket-Gang) : promue, raison de l\'arbitrage du coordinateur écrite telle quelle', [o.ligne?.verdict, /seule la couleur du rendu diffère \(contour \/ teinte\) — tranché par le coordinateur sur délégation du testeur, 2026-10-12$/.test(o.ligne?.raisonRegarde ?? ''), /2026-10-12/.test(o.ligne?.regardePar ?? '')], ['OFFICIEL', true, true]);
+    verifier('OR4 : set sûr (la base porte déjà ce fichier), Bill\'s ja → collecter', plan(ligne('OR4')).action, 'collecter');
+    verifier('OR4 : sha256 du candidat changé → pas promue', M.promouvoir({ ...ligne('OR4'), cache: { ...ligne('OR4').cache, sha256: 'f'.repeat(64) } }, sets).ligne, undefined);
+    verifier('OR4 : set changé → pas promue', M.promouvoir({ ...ligne('OR4'), set: 'Autre-Set' }, sets).ligne, undefined);
+    verifier('SM11B : sha256 changé → pas promue', M.promouvoir({ ...ligne('SM11B'), cache: { ...ligne('SM11B').cache, sha256: 'f'.repeat(64) } }, sets).ligne, undefined);
+    verifier('SV11W : set changé → pas promue', M.promouvoir({ ...ligne('SV11W'), set: 'Autre-Set' }, sets).ligne, undefined);
+    // SM11B et SV11W sont des sets « ? » : promus, mais écrits seulement si leur nomJa est confirmé EN BASE (aucune garde contournée)
+    verifier('SM11B (nomJa null en base) : écartée, la raison dit nomJa', [plan(ligne('SM11B')).action, /nomJa/.test(plan(ligne('SM11B')).raison)], ['ecartee', true]);
+    verifier('SV11W (nomJa null en base) : écartée', plan(ligne('SV11W')).action, 'ecartee');
+    verifier('SM5P (fichier sans set, Ultra-Force sans nomJa) : écartée, la raison dit nomJa', [plan(ligne('SM5P')).action, /nomJa/.test(plan(ligne('SM5P')).raison)], ['ecartee', true]);
+    // la base APRÈS poser-nomja-sets.js (6 sets) et telle qu'elle est pour White-Flare-JP (4 sets au même nomJa combiné)
+    const apres = new Map(sets);
+    const NOMJA = { 'Dark-Phantasma': 'ダークファンタズマ', 'Incandescent-Arcana': '白熱のアルカナ', 'VMAX-Rising': 'VMAXライジング', 'Champion-Road': 'チャンピオンロード', 'Dream-League': 'ドリームリーグ' };
+    for (const [id, nj] of Object.entries(NOMJA)) apres.set(id, { ...sets.get(id), nomJa: nj });
+    apres.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm5+' });
+    const combine = 'ブラックボルト•ホワイトフレア';
+    for (const id of ['White-Flare-JP', 'Black-Bolt-JP', 'White-Flare-JP-Additionals', 'Black-Bolt-JP-Additionals']) apres.set(id, { _id: id, tirage: 'jp', nomJa: combine });
+    const planA = l => { const p = M.promouvoir(l, apres); return p.ligne ? M.planifier(p.ligne, apres) : { action: 'ecartee', raison: p.raison }; };
+    for (const c of ['S10A', 'S11A', 'S1A', 'SM11B']) verifier(`${c} : nomJa posé en base → collecter`, planA(ligne(c)).action, 'collecter');
+    verifier('SM6B : nomJa posé → promue, mais Bulbapedia reportée', planA(ligne('SM6B')).action, 'reportee');
+    verifier('SM5P : set ÉTABLI par le code ET le nomJa → promue sous Ultra-Force, Bulbapedia reportée', [M.promouvoir(ligne('SM5P'), apres).ligne?.set, planA(ligne('SM5P')).action], ['Ultra-Force', 'reportee']);
+    verifier('SV11W : le nomJa du logo n\'est pas celui d\'un set unique (4 sets au même nom) → reste écartée, nomJa non confirmé', [planA(ligne('SV11W')).action], ['ecartee']);
+    const deuxUltra = new Map(apres); deuxUltra.set('Ultra-Force-bis', { _id: 'Ultra-Force-bis', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm5p' });
+    verifier('SM5P : deux sets portent le nomJa → pas établi', M.promouvoir(ligne('SM5P'), deuxUltra).ligne, undefined);
+    const mauvaisCode = new Map(apres); mauvaisCode.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: 'ウルトラフォース', code: 'sm6' });
+    verifier('SM5P : le fichier du candidat ne porte pas le code du set → pas établi', M.promouvoir(ligne('SM5P'), mauvaisCode).ligne, undefined);
+    const sansCode = new Map(apres); sansCode.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'jp', nomJa: 'ウルトラフォース' });
+    verifier('SM5P : le set n\'a pas de code → pas établi', M.promouvoir(ligne('SM5P'), sansCode).ligne, undefined);
+    const intlUltra = new Map(apres); intlUltra.set('Ultra-Force', { _id: 'Ultra-Force', tirage: 'intl', nomJa: 'ウルトラフォース', code: 'sm5+' });
+    verifier('SM5P : set de tirage intl → pas établi', M.promouvoir(ligne('SM5P'), intlUltra).ligne, undefined);
+    verifier('SM5P : sha256 changé → pas promue', M.promouvoir({ ...ligne('SM5P'), cache: { ...ligne('SM5P').cache, sha256: 'f'.repeat(64) } }, apres).ligne, undefined);
+    verifier('SM5P : une ligne qui a maintenant un autre set n\'est pas promue', M.promouvoir({ ...ligne('SM5P'), set: 'Ultra-Moon', setSur: false }, apres).ligne, undefined);
 
     // 4. un set « ? » sans nomJa confirmé reste écarté ; avec nomJa ÉGAL (un seul set), il passe
     verifier('S10A (nomJa null en base) : écartée', plan(ligne('S10A')).action, 'ecartee');
@@ -73,7 +106,9 @@ const plan = l => { const p = M.promouvoir(l, sets); return p.ligne ? M.planifie
     // 7. la table entière : combien se collectent, combien se reportent
     const tous = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => plan(l));
     const compte = {}; tous.forEach(p => compte[p.action] = (compte[p.action] || 0) + 1);
-    verifier('les 41 À REGARDER : 29 collecter · 4 reportée · 8 écartée', compte, { collecter: 29, reportee: 4, ecartee: 8 });
+    verifier('les 41 À REGARDER, base actuelle (4 sets sans nomJa) : 30 collecter (les 29 écrits + OR4) · 4 reportée · 7 écartée', compte, { collecter: 30, reportee: 4, ecartee: 7 });
+    const comptA = {}; table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => planA(l)).forEach(p => comptA[p.action] = (comptA[p.action] || 0) + 1);
+    verifier('les 41, nomJa des 6 sets posé : 34 collecter · 6 reportée · 1 écartée (SV11W)', comptA, { collecter: 34, reportee: 6, ecartee: 1 });
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const sharp = require('sharp');
+const { logoCommenceParCode } = require('./poser-nomja-sets');
 
 const LOT = 'logos-officiels-2026-10';
 const MENTION = '© Pokémon / The Pokémon Company';
@@ -136,13 +137,18 @@ const REGARDES_2026_10_11 = [
     { part: 'JP', fichier: 'Logo JP/XY1R.png', planche: 3, set: 'Collection-Y', candidatSha256: '99c8eac08db8527c41a418483fc48540a7e4b493f4aeab4703e4fe26b2706a7c', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.304' },
     { part: 'JP', fichier: 'Logo JP/XY5G.png', planche: 3, set: 'Tidal-Storm', candidatSha256: '5958e87d0b7ae9ec4de2b1773f9171376806df4a08b4fc531bfa0d5363028978', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.88' },
 ];
-// Ce que le coordinateur a regardé et NE promeut PAS : couleur nettement différente (même dessin) → au testeur ; ou aucun set à confirmer.
-const EXCLUS_2026_10_11 = [
-    { part: 'JP', fichier: 'Logo JP/OR4.png', planche: 1, raison: 'hésitation : contour rouge contre noir (Rocket-Gang, rangée 13) — au testeur' },
-    { part: 'JP', fichier: 'Logo JP/SM11B.png', planche: 2, raison: 'hésitation : arc-en-ciel contre bleu (Dream-League, rangée 28) — au testeur' },
-    { part: 'JP', fichier: 'Logo JP/SV11W.png', planche: 3, raison: 'hésitation : teinte beige contre blanc/rouge (White-Flare-JP, rangée 38) — au testeur' },
-    { part: 'JP', fichier: 'Logo JP/SM5P.png', planche: 3, raison: 'set non identifié (aucun set ne porte ce fichier) : rien à confirmer par nomJa' }
-];
+// 2026-10-12 — LES TROIS HÉSITATIONS (OR4, SM11B, SV11W) SONT PROMUES, par le coordinateur sur délégation du testeur (« tranche toi-même ») ; SM5P (fichier sans set)
+// est promu AVEC un set établi par deux éléments (`etablitSet`). Elles passent toutes les gardes de planifier/juger comme les autres : un set « ? » (SM11B, SV11W)
+// n'est écrit que si son nomJa est confirmé en base ; SM5P que si Ultra-Force porte le nomJa du logo ET que le fichier du candidat porte son code ; et Bulbapedia reste reportée.
+const RAISON_HESITATION = 'même texte japonais et même dessin ; le fichier de Bill\'s Archive nomme le set ; seule la couleur du rendu diffère (contour / teinte) — tranché par le coordinateur sur délégation du testeur, 2026-10-12';
+REGARDES_2026_10_11.push(
+    { part: 'JP', fichier: 'Logo JP/OR4.png', planche: 1, set: 'Rocket-Gang', candidatSha256: '3bc3bc6f0943f1243750cf528efc64ba22fd39946ecca4b85a02a8d5a07e62ef', regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 1 (hésitation)', raison: RAISON_HESITATION },
+    { part: 'JP', fichier: 'Logo JP/SM11B.png', planche: 2, set: 'Dream-League', candidatSha256: '16d093d3695b881a190338352ad11867ba11a31b9e8845b0731718a76b315068', confirmeNomJa: { set: 'Dream-League', nomJa: 'ドリームリーグ' }, regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 2 (hésitation)', raison: RAISON_HESITATION },
+    { part: 'JP', fichier: 'Logo JP/SV11W.png', planche: 3, set: 'White-Flare-JP', candidatSha256: '14feeb8b34297db018eb2417356528b910d5bf9cccb4939f57e4c04f0a2c46fe', regardePar: 'coordinateur sur délégation du testeur 2026-10-12, planche 3 (hésitation)', raison: RAISON_HESITATION },
+    { part: 'JP', fichier: 'Logo JP/SM5P.png', planche: 3, set: null, candidatSha256: 'a0c2007da8593f7aa47f020621c067aa274d52de3b38e2035e03ef1efffc0c78', etablitSet: { set: 'Ultra-Force', nomJa: 'ウルトラフォース' }, regardePar: 'coordinateur 2026-10-12, planche 3 (set établi par le code du fichier ET le texte japonais du logo)', raison: 'logo « ウルトラフォース » lu à l\'œil ; le fichier SM5Plus_Logo.png porte le code sm5+ du set Ultra-Force ; ce nomJa n\'est porté que par ce set de tirage jp (poser-nomja-sets.js) — set établi par deux éléments, 2026-10-12' }
+);
+// Ce que le coordinateur a regardé et NE promeut PAS : rien aujourd'hui (les quatre exclus du 2026-10-11 sont promus ci-dessus).
+const EXCLUS_2026_10_11 = [];
 /**
  * Promeut UNE ligne « À REGARDER » de la liste fermée, ou dit pourquoi non. Rend { ligne } (copie promue OFFICIEL) ou { raison }. `setsParId` : Map slug → { tirage,
  * region, nomJa } (la base, en lecture). Ne touche à rien d'autre que le verdict, setSur (seulement sur confirmation du nomJa) et bulbapediaSeule (une source
@@ -155,19 +161,23 @@ function promouvoir(ligne, setsParId, { regardes = REGARDES_2026_10_11, exclus =
     if (!e) { const x = exclus.find(cle); return { raison: x ? `regardée, non promue : ${x.raison}` : 'À REGARDER non listée dans la liste fermée des regardés : non promue' }; }
     if (ligne.set !== e.set) return { raison: `le set de la ligne (${ligne.set}) n'est plus celui qui a été regardé (${e.set})` };
     if (ligne.cache?.sha256 !== e.candidatSha256) return { raison: 'le candidat de la ligne n\'est plus celui qui a été regardé (sha256)' };
-    let setSur = ligne.setSur;
-    if (!setSur) {
-        const c = e.confirmeNomJa;
-        if (!c || c.set !== ligne.set) return { raison: 'set non sûr et aucune confirmation par nomJa dans la liste : non promue' };
+    let setSur = ligne.setSur, setId = ligne.set;
+    // un set « ? » : confirmé par le nomJa de la base ; un fichier sans set (SM5P) : ÉTABLI par DEUX éléments — le CODE (le fichier du candidat commence par le code du set)
+    // ET le texte japonais du logo égal au nomJa d'un set, et d'un seul, de tirage jp
+    const c = ligne.set ? e.confirmeNomJa : e.etablitSet;
+    if (!ligne.set && (!c || e.set !== null)) return { raison: 'aucun set sur la ligne et aucun établissement par deux éléments dans la liste : non promue' };
+    if (!setSur || !ligne.set) {
+        if (!c || (ligne.set && c.set !== ligne.set)) return { raison: 'set non sûr et aucune confirmation par nomJa dans la liste : non promue' };
         const s = setsParId.get(c.set);
         if (!s || s.nomJa !== c.nomJa) return { raison: `set « ${c.set} » non confirmé : nomJa de la base (${s?.nomJa ?? 'null'}) ≠ texte du logo « ${c.nomJa} » (nomJa non confirmé)` };
         const porteurs = [...setsParId.values()].filter(x => x.nomJa === c.nomJa);
         if (porteurs.length !== 1) return { raison: `nomJa « ${c.nomJa} » porté par ${porteurs.length} sets : ambigu (nomJa non confirmé)` };
         if ((s.tirage ?? s.region) !== 'jp') return { raison: `set « ${c.set} » de tirage ${s.tirage ?? s.region}, pas jp (nomJa non confirmé)` };
-        setSur = true;
+        if (!ligne.set && !logoCommenceParCode(ligne.cache?.fichier, s.code)) return { raison: `le fichier du candidat (« ${ligne.cache?.fichier ?? '∅'} ») ne porte pas le code « ${s.code ?? '∅'} » du set « ${c.set} » : set non établi (code non confirmé)` };
+        setSur = true; setId = c.set;
     }
-    return { ligne: { ...ligne, verdict: 'OFFICIEL', setSur, bulbapediaSeule: !!(ligne.bulbapediaSeule || ligne.source === 'bulbapedia'),
-        regardePar: `coordinateur 2026-10-11, planche ${e.planche}`, raisonRegarde: e.raison, confirmationSet: e.confirmeNomJa ?? null } };
+    return { ligne: { ...ligne, set: setId, verdict: 'OFFICIEL', setSur, bulbapediaSeule: !!(ligne.bulbapediaSeule || ligne.source === 'bulbapedia'),
+        regardePar: e.regardePar ?? `coordinateur 2026-10-11, planche ${e.planche}`, raisonRegarde: e.raison, confirmationSet: c ?? null } };
 }
 
 /**
@@ -369,7 +379,7 @@ if (require.main === module) (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const cx = await ouvrirConnexions({ production: false, buckets: ECRIRE ? ['R2_BUCKET_IMAGES'] : [] });
     const S = cx.cartes.db.collection('sets');
-    const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1 } }).toArray()).map(s => [s._id, s]));
+    const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1, code: 1 } }).toArray()).map(s => [s._id, s]));
     if (!sets.size) throw new Error('collection sets vide : base fausse');
     const regardes = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets) }));
     const officiels = [...table.lignes.filter(l => l.verdict === 'OFFICIEL'), ...regardes.filter(r => r.p.ligne).map(r => r.p.ligne)];
