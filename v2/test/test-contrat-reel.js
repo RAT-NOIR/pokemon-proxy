@@ -868,7 +868,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             ['15. success en chaîne', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.success = 'true'; }],
             ['16. une image Cardmarket', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].carte.visuel.url = 'https://www.cardmarket.com/img/x.jpg'; }],
             ['17. une raison d\'introuvable hors liste', trouver('POST /api/identifier', 'introuvable / hors-catalogue'), j => { j.analyse.cartes[0].raison = 'trop-flou'; }],
-            ['18. un a-trancher à un seul candidat', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].candidats.length = 1; }],
+            ['18. un a-trancher sans candidat (UN-CANDIDAT : un seul est permis, zéro non)', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].candidats.length = 0; }],
             ['19. un a-trancher à quatre candidats', trouver('POST /api/identifier', 'a-trancher à 3'), j => { const c = j.analyse.cartes[0]; c.candidats.push(clone(c.candidats[0])); }],
             ['20. un identifiant de choix inconnu', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].question.choix[0].id = 'z'; }],
             ['21. une erreur sans facturation', trouver('POST /api/identifier', 'QUOTA installation'), j => { delete j.facturation; }],

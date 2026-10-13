@@ -442,7 +442,7 @@ function carteRepondue(an, entree, index, choix, idProduct) {
     if (choix === 'ne-sait-pas') {
         const ids = ((entree.question && entree.question.choix) || []).map(c => c.idProduct);
         const cands = produitsDe(an, ids);
-        if (!entree.question || cands.length !== ids.length || cands.length < 2) return null;
+        if (!entree.question || cands.length !== ids.length || cands.length < 1) return null;     // UN-CANDIDAT (D1) : une question de confirmation a UN candidat, `ne-sait-pas` la laisse posée
         return { index, statut: 'a-trancher', carte: null, candidats: cands, question: entree.question, raison: null, etat: entree.etat ?? null, prixLive: null, zone: entree.zone ?? null };
     }
     const produit = produitsDe(an, [idProduct])[0];

@@ -16,7 +16,7 @@ const prod = (o = {}) => {
 const Q = (c, l = 'fr') => construireQuestion(c, { langueInterface: l });
 const leve = f => { try { f(); return false; } catch { return true; } };
 const toutesPhrases = q => [q.texte, q.aide, ...q.choix.map(c => c.libelle)].filter(Boolean);
-v('liste fermée des codes', [...CODES_QUESTION], ['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel']);
+v('liste fermée des codes', [...CODES_QUESTION], ['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel', 'confirmation']);
 
 // (1) reverse / normale
 {
@@ -127,7 +127,8 @@ v('liste fermée des codes', [...CODES_QUESTION], ['reverse', 'symbole', 'numero
     vrai('3 candidats reverse/normale/holo : jamais deux libellés pour trois', qt.code !== 'reverse' && verifierBijection(qt, tro));
 }
 // (8) 1 ou 4 candidats lèvent
-vrai('1 candidat -> lève', leve(() => Q([prod()])));
+vrai('0 candidat -> lève', leve(() => Q([])));
+v('1 candidat -> la question de confirmation (UN-CANDIDAT, D1) : code, un choix', (q => [q.code, q.choix.length])(Q([prod()])), ['confirmation', 1]);
 vrai('4 candidats -> lève', leve(() => Q([prod(), prod(), prod(), prod()])));
 vrai('0 candidat -> lève', leve(() => Q([])));
 vrai('non-tableau -> lève', leve(() => Q(null)));

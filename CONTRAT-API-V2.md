@@ -205,7 +205,7 @@ La réponse a **trois issues par carte**, jamais une quatrième. Une carte ident
 }
 ```
 
-Une carte à trancher : 2 ou 3 candidats **sans ordre de classement** (rangés par `idProduct`), une question dont **chaque choix désigne exactement un candidat**, et un crédit **réservé** (`debite: 0, reserve: 1`) :
+Une carte à trancher : 1 à 3 candidats **sans ordre de classement** (rangés par `idProduct`), une question dont **chaque choix désigne exactement un candidat**, et un crédit **réservé** (`debite: 0, reserve: 1`). Un candidat UNIQUE est une question de confirmation (§3.3, fausse `a-trancher-1.json`) ; ci-dessous, la forme à deux candidats :
 
 ```json schema=ReponseAnalyse
 {
@@ -424,7 +424,7 @@ Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candida
 
 ### 1.3 Répondre à une question
 
-`choix` est l'`id` d'un choix (`a`, `b` ou `c`), `aucune` ou `ne-sait-pas`.
+`choix` est l'`id` d'un choix (`a`, `b` ou `c`), `aucune` ou `ne-sait-pas`. Sur une question de confirmation (un seul candidat, §3.3), `a` est OUI et `aucune` est NON.
 
 ```json schema=RequeteReponse
 { "scanId": "fausse-question-0003", "carte": 0, "choix": "b" }
@@ -844,7 +844,7 @@ Toutes sont des `enum` du schéma, comparées au code du serveur par `test-opena
 | issue d'une carte (`CarteAnalysee.statut`) | `identifiee` · `a-trancher` · `introuvable` |
 | statut d'analyse (`analyse.statut`) | `identifiee` · `a-trancher` · `introuvable` · `lot` |
 | `raison` d'un introuvable | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` · `impression-indeterminee` |
-| `question.code` | `reverse` · `symbole` · `numero` · `langue` · `premiere-edition` · `visuel` |
+| `question.code` | `reverse` · `symbole` · `numero` · `langue` · `premiere-edition` · `visuel` · `confirmation` (additive, UN-CANDIDAT, §3.3) |
 | `choix[].id` | `a` · `b` · `c` |
 | `variante` (nullable) | `normale` · `reverse` · `holo` · `premiere-edition` · `tampon` · `jumbo` |
 | `etat.confiance` (nullable) | `haute` · `moyenne` · `basse` |
@@ -906,9 +906,28 @@ Une carte n'est `identifiee` que si le produit désigné n'a **aucun jumeau** : 
 - Dans un **lot**, la garde s'applique carte par carte : une carte à jumeaux devient une question de lot, une carte à plus de 3 produits est `introuvable / impression-indeterminee`, une carte dont la liste de jumeaux ne s'établit pas est `introuvable / panne-lecture`. Le lot est remboursé en entier seulement si **toutes** ses cartes sont des refus de la garde (compteur des jumeaux, une unité par carte) ou si aucune carte n'est lue ; un lot **mixte** (une carte refusée par la garde parmi d'autres introuvables) suit les règles ordinaires du plafond de pannes. Une carte refusée par la garde dans un lot partiellement lu est facturée avec le lot.
 - Limite connue de la donnée : un produit dont la métacarte n'est pas renseignée au catalogue ne peut pas être affirmé (le client reçoit la panne `INDISPONIBLE`, pas un introuvable), et il ne peut être le jumeau de personne.
 - Conséquence pour les clients : une carte qui s'affirmait auparavant peut désormais revenir en `a-trancher` (2 ou 3 choix), en `introuvable`, ou le scan peut répondre `503 INDISPONIBLE`. Rien d'autre ne change dans la forme des réponses.
-- **Ordre de déploiement.** L'archive des visuels **avec la colonne des jumeaux** doit être publiée AVANT le code qui la lit : sans elle, toute affirmation répond `503 INDISPONIBLE` (remboursée). L'API réessaie le chargement de l'archive toutes les 5 minutes tant que la colonne manque (au lieu d'attendre le réveil suivant), et écrit une alerte en base (`alertes`, document `alerte/archive-visuels`) quand il n'y a aucune archive, qu'elle n'a pas la colonne, ou qu'elle a plus de 48 h. **Au premier démarrage de l'allumage, vérifier** que la voie « fichier » est ouverte (les variables de lecture de l'archive privée et son secret HMAC sont présents) et que la colonne des jumeaux est chargée : une voie fermée par défaut ne démarre pas le chargeur et ne pose AUCUNE alerte, toute affirmation répond alors `503 INDISPONIBLE` sans reprise.
+- **Ordre de déploiement (JUMEAU-V2).** L'archive des visuels **avec la colonne des jumeaux** doit être publiée AVANT le code qui la lit : sans elle, toute affirmation répond `503 INDISPONIBLE` (remboursée). L'API réessaie le chargement de l'archive toutes les 5 minutes tant que la colonne manque (au lieu d'attendre le réveil suivant), et écrit une alerte en base (`alertes`, document `alerte/archive-visuels`) quand il n'y a aucune archive, qu'elle n'a pas la colonne, ou qu'elle a plus de 48 h. **Au premier démarrage de l'allumage, vérifier** que la voie « fichier » est ouverte (les variables de lecture de l'archive privée et son secret HMAC sont présents) et que la colonne des jumeaux est chargée : une voie fermée par défaut ne démarre pas le chargeur et ne pose AUCUNE alerte, toute affirmation répond alors `503 INDISPONIBLE` sans reprise.
 - **Limite de la garde de péremption, et ce qui la rend acceptable.** La garde ne voit un produit ajouté depuis l'archive que si son `idProduct` est supérieur au plus grand `idProduct` de l'archive (`maxArchive`) : un produit ajouté avec un identifiant plus petit, sous la métacarte du produit affirmé, passerait sans être vu. **Mesure** (`products_singles_6.json` du 12/07, 62 579 produits datés) : sur les 60 derniers jours, aucun des 5 467 produits ajoutés n'a un identifiant inférieur à celui d'un ajout antérieur ; les identifiants croissent avec la date d'ajout. Cette hypothèse n'est pas gardée par un contrôle : elle est mesurée, pas prouvée.
 - **Durée et ampleur du refus de péremption.** Un produit refusé pour cette raison l'est (panne `INDISPONIBLE`, remboursée, jamais une affirmation) jusqu'au chargement par l'API d'une archive refabriquée : environ **12 h en moyenne, 24 h au pire** pour une instance éveillée en continu (rechargement quotidien), jusqu'au prochain réveil après le dépôt pour une instance qui dort. La reprise toutes les 5 minutes ne couvre que « colonne absente », pas « colonne en retard ». **Ampleur**, par métacarte touchée : pour 30 à 100 produits neufs, **0,4 à 0,5 %** du catalogue (269 à 358 produits anciens sur 70 975) ; pour 300 produits neufs, **1,5 %** (1 058). Ces produits sont des réimpressions de cartes courantes : la part du trafic est plus grande que la part du catalogue, sans que ce soit chiffré.
+
+### 3.3 Un seul candidat : la question « est-ce cette carte ? » (lot UN-CANDIDAT, décision D1 du testeur, 2026-10-13)
+
+**Règle : ce qui n'est pas affirmé devient une question, jamais un « sous réserve ».** Quand la chaîne désigne UN SEUL produit sans l'affirmer (une ambiguë à un candidat, ou une égalité dont les candidats se réduisent à un), le serveur ne répond plus `introuvable` : il passe d'abord ce produit par la garde des jumeaux (§3.2), puis :
+
+| la garde dit… | issue | `candidats` / `question` |
+|---|---|---|
+| aucun jumeau | `a-trancher` | UN candidat ; question de code `confirmation`, UN choix `a` (« Oui, c'est cette carte »), `zone: null` |
+| 1 ou 2 jumeaux | `a-trancher` | la question de départage ordinaire à 2 ou 3 (§3.2) |
+| plus de 3 produits | `introuvable` / `impression-indeterminee` | comme avant |
+| ne peut pas conclure | panne `INDISPONIBLE` (503), remboursée | jamais une question ni une affirmation |
+
+Exception inchangée : `nom-contredit-sans-repli` reste `introuvable` / `photo-illisible` (le nom CONTREDIT les candidats). Zéro candidat reste `introuvable`.
+
+- **Ce que l'extension affiche** : la fiche du candidat (`candidats[0]` : visuel, nom, set, numéro) et DEUX boutons : OUI (réponse `choix: "a"`, l'`id` du seul choix) et NON (réponse `choix: "aucune"`, qui existe déjà : aucune valeur nouvelle dans `RequeteReponse`). Le texte de la question (`texte`, `aide`) est fourni dans la langue de l'interface.
+- **OUI** : la carte est `identifiee` (le candidat), facturée comme toute question répondue (`debite: 1, motif: "question"`). **NON** : la carte est `introuvable` / `hors-catalogue`, le crédit réservé est rendu (`debite: 0, rembourse: true`), une seule fois par scan. **Abandon** (`ne-sait-pas`, ou sans réponse sous 24 h) : crédit rendu, la carte reste à trancher.
+- **L'argent est celui de toute question** : crédit RÉSERVÉ à l'émission (`debite: 0, reserve: 1`), même claim d'unicité par scan, même balayage à 24 h. Le remboursement d'un NON ou d'un abandon passe par le compteur existant des abandons de questions (30 par jour et par porteur, `V2_PLAFOND_QUESTIONS`, §3.1) : aucun compteur nouveau. Avant D1 ces scans étaient des `introuvable` remboursés sous le plafond de pannes (5 par jour) : un client ne paie donc jamais plus qu'avant.
+- **Dans un lot**, une carte à candidat unique est une question de lot comme les autres (`lot: true`) : répondre OUI ou NON ne coûte ni ne rend rien, le lot ayant été payé d'un seul bloc (§3.1). Un lot dont aucune carte n'est identifiée ni à trancher reste remboursé ; **un lot dont les cartes étaient toutes à candidat unique cesse donc d'être rendu** (elles sont désormais à trancher). C'est la règle des questions de lot, étendue à ces cartes.
+- Il n'existe **aucune** issue « sous réserve » dans le contrat 2 : trois issues par carte (§2), listes fermées (§3).
 
 ---
 
