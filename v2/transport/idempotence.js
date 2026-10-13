@@ -14,11 +14,7 @@ function canonique(x) {
     if (x && typeof x === 'object') return `{${Object.keys(x).sort().map(k => `${JSON.stringify(k)}:${canonique(x[k])}`).join(',')}}`;
     return JSON.stringify(x === undefined ? null : x);
 }
-// PHOTO-EXTENSION : le champ `photoBase64` (identifier/photo-extension.js) n'entre PAS dans l'empreinte : le même scan rejoué avec ou sans l'image (ou une image d'une autre taille) reste la même requête.
-const empreinteDuCorps = corps => {
-    if (corps && typeof corps === 'object' && !Array.isArray(corps) && 'photoBase64' in corps) { const { photoBase64, ...reste } = corps; corps = reste; }
-    return crypto.createHash('sha256').update(canonique(corps === undefined ? {} : corps)).digest('hex');
-};
+const empreinteDuCorps = corps => crypto.createHash('sha256').update(canonique(corps === undefined ? {} : corps)).digest('hex');
 const journal = (e, ou) => console.error(`❌ [v2 idempotence ${ou}] ${e && (e.code || e.name) || 'erreur'}`);   // jamais e.message : une erreur E11000 cite la clé
 
 function porteurDe(req) {

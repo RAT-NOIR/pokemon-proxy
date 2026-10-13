@@ -158,8 +158,7 @@ app.use((req, res, next) => dansUnScan(next));
 // middlewares est garanti sans éparpiller le code Stripe en haut du fichier.
 app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gererWebhookStripe);
 
-// PHOTO-EXTENSION : v2 allumée, l'analyseur JSON accepte 4 Mio pour le seul scan v2 (POST /api/identifier avec Bearer : l'image de l'extension) ; tout le reste garde les 100 ko d'avant. Éteinte : inchangé.
-app.use(V2 ? V2.corpsJson() : express.json());
+app.use(express.json());
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
 // se contourne en changeant d'identifiant). Ne s'applique QU'aux routes IA coûteuses —

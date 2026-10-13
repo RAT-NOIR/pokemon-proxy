@@ -1,38 +1,26 @@
 'use strict';
-// PHOTO-EXTENSION — l'image que l'extension affiche déjà, envoyée avec le scan (champ OPTIONNEL `photoBase64` de POST /api/identifier) : le serveur n'a plus à la télécharger chez Vinted.
-// Forme : le JSON du scan porte `photoBase64`, du base64 standard SANS préfixe `data:`, de 2 Mio décodés au plus (config.images.photoExtensionOctetsMax), JPEG, PNG ou WebP.
-// 🔑 JAMAIS UNE ERREUR DE SCAN : un champ absent, mal formé, trop gros, illisible ou hors format est traité comme ABSENT — le scan, sa facturation et sa réponse sont les mêmes avec ou sans lui.
-// La CAUSE est comptée (un code, jamais l'image, jamais l'URL) et journalisée en une ligne.
-// Ce que le serveur en fait : `req.entree.imageOctets` (un Buffer en MÉMOIRE de la requête, rien d'autre). Un administrateur : banc/photo-admin.js la conserve (mêmes traitements que la photo téléchargée).
-// Tout autre porteur : elle est passée à la seconde lecture sous `image` SI celle-ci est branchée (V2_SECONDE_LECTURE=1 et un fournisseur) ; sinon elle n'est même pas décodée (cause « inutilisee »).
-// Jamais conservée (ni base, ni bucket, ni disque), jamais journalisée, jamais dans la réponse. L'analyse d'image est CELLE DU SCANNER (scanner/routes.js::analyserImage) : jamais un second analyseur.
+// PHOTO-EXTENSION (recadrage du 2026-10-13 soir) — la validation de l'image que l'extension envoie à POST /api/banc/photo (corps BINAIRE, jamais dans POST /api/identifier).
+// `evaluerOctets` juge des octets déjà lus : taille, format (par les OCTETS, cohérent avec le Content-Type annoncé), dimensions, une seule page, décodage entier réduit à 64 px.
+// L'analyse d'image est CELLE DU SCANNER (scanner/routes.js::analyserImage) : jamais un second analyseur. Elle ne lève jamais : elle rend { octets } ou { cause }.
+// Causes : 'trop-grosse' · 'format' (hors JPEG/PNG/WebP, ou octets qui ne sont pas ce que le Content-Type annonce) · 'illisible' (tronquée, corrompue, animée) · 'dimensions' · 'occupe' (déjà 2 décodages en cours) · 'erreur'.
 const { typeDesOctets } = require('../scanner/multipart');
 
-// TOUR 1 (relecture 1, I2) : 12 millions de pixels et 4 096 px de côté. Une photo d'annonce affichée (f800) fait ~1 Mpx ; 12 Mpx est la photo d'un téléphone (4000 × 3000), 4 096 px le côté d'un écran 4K.
-// À 50 Mpx un PNG entrelacé ou un JPEG progressif coûtait +180 Mo de mémoire et 1,4 s de CPU au décodage (mesuré par la relecture) : la mémoire est proportionnelle aux pixels, et l'en-tête est jugé AVANT le décodage.
-// Au plus 2 décodages simultanés (DECODAGES_MAX) : le suivant est refusé tout de suite (cause « occupe », traitée comme absente), jamais une attente qui retiendrait la requête. Une seule page : pas d'image animée.
+// 12 millions de pixels et 4 096 px de côté. Une photo d'annonce affichée (f800) fait ~1 Mpx ; 12 Mpx est la photo d'un téléphone (4000 × 3000), 4 096 px le côté d'un écran 4K. À 50 Mpx un PNG entrelacé ou un
+// JPEG progressif coûtait +180 Mo de mémoire et 1,4 s de CPU au décodage (mesuré par la relecture 1) : la mémoire est proportionnelle aux pixels, et l'en-tête est jugé AVANT le décodage.
+// Au plus 2 décodages simultanés (DECODAGES_MAX) : le suivant est refusé tout de suite (cause « occupe »), jamais une attente qui retiendrait la requête. Une seule page : pas d'image animée.
 const PIXELS_MAX = 12e6, COTE_MAX = 4096, DECODAGES_MAX = 2;
 let decodages = 0;
-const FORME_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const FORMATS = Object.freeze({ 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp' });
-const CAUSES = Object.freeze(['absente', 'type-invalide', 'base64-invalide', 'trop-grosse', 'format', 'illisible', 'dimensions', 'occupe', 'inutilisee', 'erreur', 'ok']);
+const TYPES = Object.freeze(Object.keys(FORMATS));
 
-let compte = {};
-const noter = (cause) => { const c = CAUSES.includes(cause) ? cause : 'erreur'; compte[c] = (compte[c] || 0) + 1; };
-const compteurs = () => ({ ...compte });
-const reinitialiser = () => { compte = {}; };
-
-/** @returns {Promise<{octets: Buffer}|{cause: string}>} — ne lève jamais. */
-async function evaluer(valeur, { octetsMax }) {
+/** @param {Buffer} octets  @param {{octetsMax: number, typeAnnonce?: string}} o  @returns {Promise<{octets: Buffer}|{cause: string}>} — ne lève jamais. */
+async function evaluerOctets(octets, { octetsMax, typeAnnonce }) {
     try {
-        if (valeur === undefined || valeur === null) return { cause: 'absente' };
-        if (typeof valeur !== 'string') return { cause: 'type-invalide' };
-        if (valeur.length > 4 * Math.ceil(octetsMax / 3)) return { cause: 'trop-grosse' };      // jugée sur la CHAÎNE : rien n'est décodé au-delà de la borne
-        if (valeur.length % 4 !== 0 || !FORME_BASE64.test(valeur)) return { cause: 'base64-invalide' };
-        const octets = Buffer.from(valeur, 'base64');
+        if (!Buffer.isBuffer(octets) || octets.length === 0) return { cause: 'format' };
         if (octets.length > octetsMax) return { cause: 'trop-grosse' };
         const type = typeDesOctets(octets);                                                     // le format se juge sur les OCTETS, jamais sur une déclaration
         if (!type || !FORMATS[type]) return { cause: 'format' };
+        if (typeAnnonce !== undefined && typeAnnonce !== type) return { cause: 'format' };      // le Content-Type annoncé doit être ce que les octets sont
         const { analyserImage } = require('../scanner/routes');                                // chargé à l'appel : routes.js du scanner requiert l'identifier (pas de cycle au chargement)
         if (decodages >= DECODAGES_MAX) return { cause: 'occupe' };
         decodages++;                                                                           // la place est prise de façon synchrone (aucun await entre le test et l'incrément) et rendue quoi qu'il arrive
@@ -43,30 +31,9 @@ async function evaluer(valeur, { octetsMax }) {
     } catch { return { cause: 'erreur' }; }
 }
 
-/** Middleware, APRÈS validerEntree et AVANT traiterIdentifier. Ne répond jamais, ne passe jamais d'erreur à next : le scan continue quoi qu'il arrive. */
-function lirePhotoExtension(cfg, deps = {}) {
-    return async function lirePhotoExtensionV2(req, res, next) {
-        let cause = 'absente';
-        try {
-            const corps = req.body && typeof req.body === 'object' ? req.body : null;
-            const valeur = corps ? corps.photoBase64 : undefined;
-            if (corps && 'photoBase64' in corps) delete corps.photoBase64;                      // la chaîne ne reste pas accrochée à la requête
-            if (valeur !== undefined && valeur !== null) {
-                const porteur = req.v2 && req.v2.porteur;
-                const admin = Boolean(porteur && porteur.type === 'compte' && porteur.administrateur === true);
-                const seconde = cfg.secondeLecture === true && typeof deps.secondeLecture === 'function';
-                if (!admin && !seconde) cause = 'inutilisee';
-                else {
-                    const r = await evaluer(valeur, { octetsMax: cfg.images.photoExtensionOctetsMax });
-                    if (r.octets && req.entree) { req.entree.imageOctets = r.octets; cause = 'ok'; }
-                    else cause = r.cause || 'erreur';
-                }
-            }
-        } catch { cause = 'erreur'; }
-        noter(cause);
-        if (cause !== 'absente') console.log(`📷 [v2 photo-extension] ${cause}`);                 // un code, jamais l'image ni l'URL
-        return next();
-    };
-}
+let compte = {};
+const noter = (cause) => { compte[cause] = (compte[cause] || 0) + 1; };
+const compteurs = () => ({ ...compte });
+const reinitialiser = () => { compte = {}; };
 
-module.exports = { evaluer, lirePhotoExtension, noter, compteurs, reinitialiser, CAUSES, PIXELS_MAX, COTE_MAX };
+module.exports = { evaluerOctets, noter, compteurs, reinitialiser, PIXELS_MAX, COTE_MAX, DECODAGES_MAX, TYPES };

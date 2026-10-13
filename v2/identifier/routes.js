@@ -5,9 +5,6 @@ const { repondreErreur } = require('../erreurs');
 const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');   // la liste blanche de la production, pas une copie
 
 const TITRE_MAX = 300, DESCRIPTION_MAX = 4000;
-// TOUR 1 (relecture 1, M1) : une URL (image ou annonce) fait au plus 2 048 caractères. Une URL réelle de Vinted en compte ~100 à 250 (images1.vinted.net/t/…/f800/….jpeg ; vinted.fr/items/<id>-<titre>) ; 2 048 est la
-// borne usuelle des navigateurs et laisse ~8 fois la marge. Avant, rien : le corps de 4 Mio pouvait porter une URL de 4 Mio, transmise à la chaîne héritée.
-const URL_LONGUEUR_MAX = 2048;
 
 // Comparaison numérique `a.b.c` ('2.0.10' > '2.0.9'). Illisible => null (jamais un ordre inventé) : 'v2.0.0' et '2.0.0-beta' sont refusés (400 version).
 function comparerVersions(a, b) {
@@ -49,7 +46,6 @@ function verifierEntree(corps, cfg) {
     if (prix !== null && devise === null) return refus('ENTREE', 'devise manquante', 'devise');
     let vintedUrl = corps.vintedUrl ?? null;
     if (vintedUrl !== null) {
-        if (typeof vintedUrl === 'string' && vintedUrl.length > URL_LONGUEUR_MAX) return refus('ENTREE', 'vintedUrl invalide', 'vinted-url');
         const h = hoteHttps(vintedUrl);
         if (!h || !cfg.marches.includes(h.replace(/^www\./, ''))) return refus('ENTREE', 'vintedUrl invalide', 'vinted-url');
     }
@@ -58,7 +54,6 @@ function verifierEntree(corps, cfg) {
     if (Array.isArray(urls) && urls.length > cfg.images.imageUrlsMax) return refus('ENTREE', `au plus ${cfg.images.imageUrlsMax} images`, 'image-urls');
     for (const u of urls || []) {
         if (typeof u !== 'string') return refus('ENTREE', 'imageUrls : chaîne attendue', 'image-url');
-        if (u.length > URL_LONGUEUR_MAX) return refus('ENTREE', 'imageUrls : URL trop longue', 'image-url');
         const h = hoteHttps(u);
         if (!h) return refus('ENTREE', 'imageUrls : URL https attendue', 'image-url');
         if (!HOTES_PHOTO_AUTORISES.some(re => re.test(h))) return refus('ENTREE', 'imageUrls : hôte non autorisé', 'image-hote');
@@ -190,9 +185,7 @@ async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, co
     if (!SL.premiereFois(String(scanId))) return { trace: { declenchee: false, appels: 0, issue: 'deja-tentee', raison: 'ce scan a déjà eu sa seconde lecture' } };
     SL.noter('declenchees');
     // TOUR 1 (coût exact) : le compteur ÉCRIT au compteur global à chaque appel, au moment où il part — un appel tardif d'un fournisseur sourd au signal est donc compté lui aussi ; le signal d'abandon
-    // tombe au délai, et le fournisseur n'envoie plus d'appel après lui. Aucun téléchargement (décision 4) : les OCTETS de l'image viennent de l'appelant (entree.imageOctets : le champ `photoBase64` de l'extension, validé par photo-extension.js), jamais d'une URL.
-    // ⚠️ PHOTO-EXTENSION : c'est le SEUL endroit où l'image peut changer la réponse. Sans image, le fournisseur rend `sansImage` et la question de la garde reste ; avec une image valide il peut CONFIRMER, et la question
-    // devient une affirmation facturée comme telle. La réponse et la facturation sont donc identiques avec ou sans image TANT QUE cette seconde lecture est éteinte ou neutre (contrat §1.2 bis).
+    // tombe au délai, et le fournisseur n'envoie plus d'appel après lui. Aucun téléchargement (décision 4) : les OCTETS de l'image viennent de l'appelant (entree.imageOctets, un jour l'extension), jamais d'une URL.
     let appels = 0;
     const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { SL.noter('appels', v - appels); appels = v; } } };
     const abandon = new AbortController();

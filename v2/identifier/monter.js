@@ -10,7 +10,6 @@ const L = require('../transport/limites');
 const { idempotente } = require('../transport/idempotence');
 const { validerEntree, traiterIdentifier, traiterReponse } = require('./routes');
 const { traiterRetourLive } = require('./retour-live');
-const { lirePhotoExtension } = require('./photo-extension');
 
 // Sans `Authorization: Bearer`, la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
 const siBearer = aiguilleur(req => /^Bearer /.test(String((req.headers && req.headers.authorization) || '')));
@@ -85,7 +84,7 @@ module.exports = {
         const parPorteur = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/identifier',
             aiguilleur(req => Boolean(req.body && typeof req.body === 'object' && req.body.contrat === 2)),
-            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), lirePhotoExtension(cfg, deps), traiterIdentifier(cfg, deps));
+            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.

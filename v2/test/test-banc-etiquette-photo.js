@@ -17,7 +17,7 @@ const { creerCatalogue } = require('../identifier/catalogue');
 const registre = require('../registre');
 const { supprimerCompte } = require('../comptes/service');
 
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_PHOTO_ADMIN_INTERVALLE_S: '0', V2_PHOTO_ADMIN_MAX_JOUR: '100000' });   // PHOTO-EXTENSION : le repli de téléchargement n'est ni espacé ni plafonné ici (ce banc joue des dizaines de scans d'affilée)
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_PHOTO_ADMIN_DELAI_S: '0', V2_PHOTO_ADMIN_INTERVALLE_S: '0', V2_PHOTO_ADMIN_MAX_JOUR: '100000' });   // PHOTO-EXTENSION : le repli de téléchargement n'est ni espacé ni plafonné ici (ce banc joue des dizaines de scans d'affilée)
 const oid = () => new mongoose.Types.ObjectId();
 const BUCKET = 'bucket-banc-test', SEL = 'sel-etiquette-b';
 const ENV = { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL };
