@@ -20,7 +20,7 @@ const charges = require(CHARGES).charges;
 const IMAGE = charges.find(c => c.cellule === 'occidentale').imageUrl;      // Tropius PBL 001 : la lecture rejouée par le faux réseau
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le service de lecture « tombe »
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });
 const ORIGINE = cfg.origines.extension;
 let nIp = 0;
 const ip = () => { nIp++; return { 'x-forwarded-for': `10.7.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -92,7 +92,7 @@ async function semer(mode) {                                  // 'double' | 'sim
     // (la référence d'A0.5 se rejoue sur un catalogue réel de test_scratch ; ici la base est en mémoire et fabriquée : la référence ne se rejoue pas, on compare
     //  DEUX serveurs vivants — v2 éteinte / allumée — sur les mêmes requêtes. Un écart d'un octet, scanId normalisé, échoue.)
     const srvOff = await demarrer(FAUX, { ...base, RM_API_V2: '' });
-    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1' });
+    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
     if (!await srvOff.attendreMongo() || !await srvOn.attendreMongo()) throw new Error('Mongo non connecté');
     const urlOn = `http://127.0.0.1:${srvOn.port}`;
     const { appeler } = require('../../verrou/serveur');
@@ -130,6 +130,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const an = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         const t = JSON.stringify(an);
         H.vrai('14. analyses : ni le titre, ni la description, ni l\'IP', an && !/secret 4242|XYZ-777|10\.9\.9\.9/.test(t));
+        H.v('   ETIQUETAGE-A : analyses garde le code (12 hex du commit) et le modèle qui ont répondu — interne, jamais servi dans la réponse', [an.versionChaine, an.versionModele, JSON.stringify(j).includes('0123456789ab'), JSON.stringify(j).includes('modele-test.1')], ['0123456789ab', 'modele-test.1', false, false]);
         const ann = await raw('annonces').findOne({ _id: j.scanId });
         const att = preparerAnnonce({ title: 'Tropius secret 4242 PBL', description: 'Description secrète XYZ-777' }, cfg);
         H.v('   annonces : titre et description EXPURGÉS (ceux de preparerAnnonce)', ann && [ann.titre, ann.description], [att.titre, att.description]);

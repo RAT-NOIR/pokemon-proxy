@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Ce rev porte déjà un autre contenu",
+    "detail": "rev-contredit"
+  },
+  "facturation": null
+}

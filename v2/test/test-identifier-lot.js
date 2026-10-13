@@ -162,6 +162,34 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
             cs.map(c => c.index), [1, 3, 0, 4, 2, 5, 6]);
         H.v('   chaque carte porte l\'index de SA position d\'entrée', cs.filter(c => c.carte).map(c => [c.index, c.carte.idProduct]), [[1, P20A], [3, P20B], [0, P5], [4, P1], [2, PNOG]]);
     }
+    // ── ETIQUETAGE-A (tour 2, C-2) : `carte` de POST /api/banc/etiquette est le champ `index` de la carte DANS LA RÉPONSE (ordre d'entrée), jamais sa position dans `analyse.cartes`,
+    // que le lot range par valeur. Un lot de 3 cartes rangé autrement que l'entrée : chaque étiquette tombe sur la bonne carte.
+    {
+        const banc = require('../banc/monter');
+        const stubBanc = { apresVerdict: async () => { }, apresReponse: async () => { }, apresAbandon: async () => { }, corriger: async () => { } };
+        const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        pret.armer(require('../modeles').verifierIndex);
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), banc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), identifierLot, banc: stubBanc, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) } }));
+        const svE = await H.serveur(app);
+        try {
+            const adm = await compteLie({ accueil: 0, achete: 10 }, 'administrateur');
+            const ENTREE = [P5, P20A, P1];                                                    // l'ordre d'ENTRÉE ; la réponse les range par valeur (20, 5, 1)
+            lot([aff(P5), aff(P20A), aff(P1)]);
+            const r = await poster(svE.url, adm.jeton); const cs = (r.json.analyse || {}).cartes || [];
+            H.v('ETIQUETAGE-A C-2 : la réponse range le lot autrement que l\'entrée (index 1, 0, 2) — sinon ce banc ne prouve rien', [r.statut, cs.map(c => c.index), cs.some((c, p) => c.index !== p)], [200, [1, 0, 2], true]);
+            const etiqueter = (carte, corps) => H.appel(svE.url, '/api/banc/etiquette', { methode: 'POST', corps: { scanId: r.json.scanId, carte, rev: 1, ...corps }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${adm.jeton}` } });
+            const statuts = [];
+            for (const c of cs) statuts.push((await etiqueter(c.index, { verdict: 'juste' })).statut);       // dans l'ordre de la RÉPONSE, avec le champ `index`
+            const an = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(r.json.scanId) });
+            H.v('   « juste » envoyé avec l\'`index` de chaque carte de la réponse : 3 × 200, et l\'étiquette de analyses.cartes[i] porte l\'idProduct de la carte d\'ENTRÉE i (origine intacte)',
+                [statuts, an.cartes.map(c => c.idProduct), an.cartes.map(c => c.etiquetteAdmin && c.etiquetteAdmin.idProduct)], [[200, 200, 200], ENTREE, ENTREE]);
+            H.v('   chaque étiquette est celle de la carte de la réponse qui porte cet index (idProduct de la réponse = idProduct étiqueté)', cs.map(c => [c.index, c.carte.idProduct, an.cartes[c.index].etiquetteAdmin.idProduct]), [[1, P20A, P20A], [0, P5, P5], [2, P1, P1]]);
+            const e2 = await etiqueter(1, { verdict: 'corrige', idProduct: POOL[7], rev: 2 });
+            const an2 = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(r.json.scanId) });
+            H.v('   « corrige » sur l\'index 1 (la carte de valeur 20, 1re de la réponse) : seule analyses.cartes[1] change ; les cartes 0 et 2 gardent leur étiquette',
+                [e2.statut, an2.cartes.map(c => c.etiquetteAdmin.idProduct)], [200, [P5, POOL[7], P1]]);
+        } finally { await svE.fermer(); banc.arreterPurge(); }
+    }
     // ── (5) supplément non payable : 25 cartes, solde 1
     {
         const x = await inst({ essais: 1, achete: 0 }); lot(nAff(25));
