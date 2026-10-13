@@ -130,6 +130,19 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
     const octets = new Map([...L.octets].map(([id, o]) => [id, o.ok && partagesEntreCodes.has(o.sha256) ? { ok: false, motif: 'octets-partages' } : o]));
     const origines = new Map(Array.isArray(derniere.origines) ? derniere.origines : []);
     const sansImage = derniere.sansImageDansLeNavigateur;
+    // 🔴 UNE SEULE REQUÊTE PAR CODE contre `images` (tour 3) : aucun index sur sha256 ni sha256Octets, donc chaque `find` est un balayage complet de la collection, sur une grappe que le site lit aussi.
+    // On calcule d'abord les deux empreintes de chaque tuile reçue, on lit en UNE fois (projection stricte), puis le jugement se fait en mémoire, à l'identique.
+    const webpShaDe = new Map();
+    for (const [id, o] of octets) if (o.ok) webpShaDe.set(id, sha256(await sharp(o.octets).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer()));
+    const parOctets = new Map(), parWebp = new Map();
+    const shaOctets = [...new Set([...octets.values()].filter(o => o.ok).map(o => o.sha256))], shaWebp = [...new Set(webpShaDe.values())];
+    if (shaOctets.length) {
+        const docs = await db.collection('images').find({ $or: [{ sha256Octets: { $in: shaOctets } }, { sha256: { $in: shaWebp } }] }, { projection: { sha256: 1, sha256Octets: 1, carteId: 1, set: 1 } }).toArray();   // PREUVE:une-requete-images
+        for (const d of docs) {
+            if (d.sha256Octets) (parOctets.get(d.sha256Octets) || parOctets.set(d.sha256Octets, []).get(d.sha256Octets)).push(d);
+            if (d.sha256) (parWebp.get(d.sha256) || parWebp.set(d.sha256, []).get(d.sha256)).push(d);
+        }
+    }
     for (const ligne of lignes) {
         const unite = uniteDeLaLigne(ligne), slug = ligne.slug;
         // LES GARDES DU COLLECTEUR, par ses fonctions : la ligne de table, le tirage du set en base, des produits joints
@@ -151,8 +164,8 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
             const _id = P.idImagePikaqian(slug, p.carteId, p.numero);
             // 🔴 LES MÊMES OCTETS DÉJÀ EN BASE (relecture Y, réserve b), toutes sources : le sha256 des octets reçus (documents de l'import) ET celui du WebP que nous servirions (documents de toutes les sources). Un document
             // qui désigne UNE AUTRE carte ou un autre set est un trou ; la même carte dans le même set (réimport du même lot, ou autre source) n'en est pas un (le _id encode déjà carte et set).
-            const webpSha = sha256(await sharp(o.octets).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer());
-            const memes = [...await db.collection('images').find({ sha256Octets: o.sha256 }).toArray(), ...await db.collection('images').find({ sha256: webpSha }).toArray()];
+            const webpSha = webpShaDe.get(p.tuile.id);
+            const memes = (parOctets.get(o.sha256) || []).concat(parWebp.get(webpSha) || []);
             if (memes.some(d => (d.carteId !== p.carteId || d.set !== slug))) { entrees.push({ p, statut: 'trou', motif: 'octets-deja-en-base' }); compte('octets-deja-en-base'); continue; }   // PREUVE:octets-deja-en-base
             const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal seuilApplique').lean();
             // les états que le collecteur du worker juge pareil : retiré = jamais repris ; ok à la même adresse = déjà là ; jugé trop petit à la même adresse = pas rejugé

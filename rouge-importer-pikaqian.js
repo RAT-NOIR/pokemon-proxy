@@ -32,8 +32,10 @@ const MUTANTS = [
     { nom: 'mêmes octets sur deux PAGES : l\'ensemble partagé n\'est pas appliqué', de: "o.ok && partagesEntreCodes.has(o.sha256) ?", vers: "false ?" },
     { nom: 'octets déjà en base non vérifiés', de: "if (memes.some(", vers: "if (false && memes.some(" },
     { nom: 'octets déjà en base : la même carte dans le même set devient un trou', de: "(d.carteId !== p.carteId || d.set !== slug)", vers: "true" },
-    { nom: 'octets déjà en base : le sha256 du WebP servi n\'est plus cherché', de: "find({ sha256: webpSha })", vers: "find({ sha256: 'rien' })" },
-    { nom: 'octets déjà en base : le sha256 des octets reçus n\'est plus cherché', de: "find({ sha256Octets: o.sha256 })", vers: "find({ sha256Octets: 'rien' })" }
+    { nom: 'octets déjà en base : le sha256 du WebP servi n\'est plus cherché', de: "{ sha256: { $in: shaWebp } }", vers: "{ sha256: { $in: [] } }" },
+    { nom: 'octets déjà en base : le sha256 des octets reçus n\'est plus cherché', de: "{ sha256Octets: { $in: shaOctets } }", vers: "{ sha256Octets: { $in: [] } }" },
+    { nom: 'octets déjà en base : la projection stricte est retirée (charge)', de: "{ projection: { sha256: 1, sha256Octets: 1, carteId: 1, set: 1 } }", vers: "{}" },
+    { nom: 'octets déjà en base : le WebP servi n\'est pas rapproché des documents', de: "(parOctets.get(o.sha256) || []).concat(parWebp.get(webpSha) || [])", vers: "(parOctets.get(o.sha256) || [])" }
 ];
 // (la garde `cle-partagee` est RETIRÉE de l'import : vide par construction, elle ne pouvait pas échouer — relecture C)
 

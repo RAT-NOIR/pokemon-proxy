@@ -22,11 +22,11 @@ const silencieux = () => { const l = console.log, w = console.warn, e = console.
 
 // ── une base en mémoire : les seules formes de requête que le collecteur et l'import emploient (la même que test-collecteur-pikaqian.js) ──
 function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
-    const cols = new Map();
+    const cols = new Map(), requetes = [];
     const col = n => cols.get(n) || cols.set(n, new Map()).get(n);
     const lire = (o, k) => k.split('.').reduce((x, p) => Array.isArray(x) ? x.map(y => y?.[p]) : x?.[p], o);
     const ecrireChamp = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
-    const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+    const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => k === '$or' ? v.some(g => accepte(d, g)) : v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
         ? ('$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
         : (Array.isArray(lire(d, k)) && !Array.isArray(v) ? lire(d, k).includes(v) : lire(d, k) === v));
     const appliquer = (d, u) => {
@@ -38,7 +38,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const tous = (n, f) => [...col(n).values()].filter(d => accepte(d, f));
     const collection = n => ({
         async findOne(f) { return structuredClone(tous(n, f)[0] ?? null); },
-        find(f) { return { toArray: async () => structuredClone(tous(n, f)) }; },
+        find(f, opts) { requetes.push({ col: n, f, opts }); return { toArray: async () => structuredClone(tous(n, f)) }; },
         async countDocuments(f) { return tous(n, f).length; },
         async updateOne(f, u, o = {}) {
             let d = tous(n, f)[0];
@@ -53,7 +53,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         find: f => ({ lean: async () => structuredClone(tous(n, f)) }),
         updateOne: (f, u, o) => collection(n).updateOne(f, u, o)
     });
-    return { cols, col, db, M: { Carte: modele('cartes'), Image: modele('images'), Set: modele('sets'), EtatImages: modele('collecte_images_etat') } };
+    return { cols, col, db, requetes, M: { Carte: modele('cartes'), Image: modele('images'), Set: modele('sets'), EtatImages: modele('collecte_images_etat') } };
 }
 
 const SLUG = 'Dynamax-Clash-Flame';
@@ -246,6 +246,16 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         verifier('en base : un document d\'une AUTRE source/carte au sha256 du WebP qu\'on servirait → Pikachu « octets-deja-en-base », Sylveon s\'écrit', [motifDe(jBaseB, 1).motif, motifDe(jBaseB, 12).statut, jBaseB.sets[0].aEcrire], ['octets-deja-en-base', 'a-ecrire', 1]);
         verifier('RÉIMPORT du même lot (même _id, même carte, même set, même source) : PAS un trou', [motifDe(jBaseC, 1).statut, jBaseC.sets[0].aEcrire], ['a-ecrire', 2]);
         verifier('la même carte dans le même set sous une AUTRE source (autre _id) : PAS un trou', [motifDe(jBaseD, 1).statut, jBaseD.sets[0].aEcrire], ['a-ecrire', 2]);
+        // ── TOUR 3 : la CHARGE sur `images` (aucun index sur sha256 / sha256Octets : chaque find est un balayage complet). UNE requête par code, projection stricte, pas une par tuile.
+        {
+            const B = fausseBase(); semer(B);
+            B.col('images').set('z1', { _id: 'z1', source: 'pikaqian', set: 'Autre-Set', carteId: 777, sha256Octets: shaDe(b11), gros: 'x' });
+            const jc = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: B.db, M: B.M, attendu });
+            const surImages = B.requetes.filter(r => r.col === 'images');
+            const nTuilesJugees = jc.sets[0].entrees.filter(e => e.o).length;
+            verifier(`charge sur « images » : ${nTuilesJugees} tuiles jugées avec octets, UNE seule requête (pas 2 par tuile), avec projection stricte et sans index requis`, [nTuilesJugees >= 3, surImages.length, Object.keys(surImages[0]?.opts?.projection ?? {}).sort().join(',')], [true, 1, 'carteId,set,sha256,sha256Octets']);
+            verifier('… et le verdict est inchangé sur ce cas (Sylveon : octets-deja-en-base)', jc.sets[0].entrees.find(e => e.p.carteId === 12)?.motif, 'octets-deja-en-base');
+        }
 
         // ── TOUR 2 (relecture Y, mineur) : un set dont le PREMIER import n'a rien à écrire écrit son bilan (0) UNE fois, puis ne le réécrit plus
         const base5 = fausseBase(); semer(base5);
