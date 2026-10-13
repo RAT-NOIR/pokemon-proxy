@@ -73,13 +73,23 @@ const oid = () => new mongoose.Types.ObjectId();
         let r = await post(null, { scanId: S, verdict: 'juste', rev: 1 });
         H.v('1. sans Bearer ⇒ 401', r.statut, 401);
         r = await post(USR, { scanId: SU, verdict: 'juste', rev: 1 });
-        H.v('1. compte non administrateur ⇒ 404 CODE_INVALIDE, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, 'CODE_INVALIDE', true]);
+        H.v('1. compte non administrateur ⇒ 404 (celui d\'une route inexistante : corps non JSON), rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, undefined, true]);
         r = await post(SEUL, { scanId: SS, verdict: 'juste', rev: 1 });
-        H.v('1. installation sans compte ⇒ 404, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, 'CODE_INVALIDE', true]);
+        H.v('1. installation sans compte ⇒ 404, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, undefined, true]);
         r = await post(NON_LIE, { scanId: SN, verdict: 'juste', rev: 1 });
-        H.v('1. installation NON LIÉE à un compte administrateur ⇒ 404, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, 'CODE_INVALIDE', true]);
+        H.v('1. installation NON LIÉE à un compte administrateur ⇒ 404, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === avant], [404, undefined, true]);
         r = await post(USR, { n_importe: 'quoi' });
-        H.v('1. un non-administrateur au corps invalide reçoit aussi 404 (la route n\'existe pas pour lui, jamais 400)', [r.statut, code(r)], [404, 'CODE_INVALIDE']);
+        H.v('1. un non-administrateur au corps invalide reçoit aussi 404 (la route n\'existe pas pour lui, jamais 400)', [r.statut, code(r)], [404, undefined]);
+        // F-1 : EXACTEMENT la réponse d'une route réellement inexistante (chemin normalisé : le corps natif cite le chemin demandé)
+        {
+            const brut = async (a, chemin) => { const x = await fetch(srv.url + chemin, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${a.jeton}` }, body: JSON.stringify({ scanId: S, verdict: 'juste', rev: 1 }) }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte: texte.split(chemin).join('<CHEMIN>'), h }; };
+            const vraie = await brut(USR, '/api/banc/route-inexistante');
+            for (const [nom, a] of [['compte non administrateur', USR], ['installation seule', SEUL], ['installation non liée', NON_LIE]]) {
+                const m = await brut(a, '/api/banc/etiquette');
+                H.v(`1. F-1 ${nom} : même statut, même corps, mêmes en-têtes qu'une route inexistante`, m, vraie);
+            }
+            H.vrai('1. F-1 instrument : la route inexistante rend bien un 404 non JSON qui cite le chemin (le test compare quelque chose)', vraie.statut === 404 && vraie.texte.includes('<CHEMIN>'));
+        }
         // rôle retiré ENTRE deux requêtes : le drapeau du porteur est relu en base à chaque requête
         const A2 = await acteur({ role: 'administrateur' }); const S2 = await semer(A2);
         r = await post(A2, { scanId: S2, verdict: 'juste', rev: 1 });
@@ -87,7 +97,7 @@ const oid = () => new mongoose.Types.ObjectId();
         await db.col('comptes').updateOne({ _id: A2.c._id }, { $unset: { role: '' } });
         const mid = await snapAnalyses();
         r = await post(A2, { scanId: S2, verdict: 'corrige', idProduct: 4343, rev: 2 });
-        H.v('1. rôle retiré entre deux requêtes ⇒ 404 et rien d\'écrit', [r.statut, code(r), await snapAnalyses() === mid], [404, 'CODE_INVALIDE', true]);
+        H.v('1. rôle retiré entre deux requêtes ⇒ 404 et rien d\'écrit', [r.statut, code(r), await snapAnalyses() === mid], [404, undefined, true]);
     }
 
     // ═══ 2. le scan : du MÊME porteur, la carte existe ═══
@@ -244,8 +254,12 @@ const oid = () => new mongoose.Types.ObjectId();
         H.vrai('10.    Retry-After présent et égal à reessayerDans', Number(r601.entetes['retry-after']) >= 1 && r601.json.erreur.reessayerDans === Number(r601.entetes['retry-after']));
         const rb = await post(L2, corps);
         H.v('10.    un AUTRE administrateur n\'est pas touché', rb.statut, 400);
-        const rn = await post(USR, corps);
-        H.v('10.    un non-administrateur ne voit jamais 429 (la garde de rôle passe avant le limiteur) : 404', rn.statut, 404);
+        // I-1 : le limiteur est par porteur, donc c'est le NON-administrateur lui-même qui doit dépasser 600 : 601 requêtes, toutes 404, aucune 429 (sinon la route se révèle)
+        for (const [nom, a] of [['compte non administrateur', USR], ['installation sans compte', SEUL]]) {
+            const statuts = new Map();
+            for (let i = 0; i < 601; i++) { const r = await post(a, corps); statuts.set(r.statut, (statuts.get(r.statut) || 0) + 1); }
+            H.v(`10.    ${nom} : 601 requêtes ⇒ 601 × 404, aucune 429 (la garde de rôle passe avant le limiteur)`, [...statuts], [[404, 601]]);
+        }
     }
 
     await srv.fermer(); monterBanc.arreterPurge();

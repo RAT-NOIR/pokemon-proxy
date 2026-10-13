@@ -303,13 +303,13 @@
     "route": "POST /api/banc/etiquette",
     "statut": 404,
     "schema": "ReponseErreur",
-    "description": "Le porteur n'est pas administrateur, ou le scan/la carte n'est pas à lui : jamais distingués."
+    "description": "Scan inconnu, d'un autre porteur, en panne (aucune analyse) ou carte absente : jamais distingués. (Un non-administrateur reçoit, lui, le 404 natif non JSON d'une route inexistante.)"
   },
   "etiquette-juste-sans-affirmation.json": {
     "route": "POST /api/banc/etiquette",
     "statut": 409,
     "schema": "ReponseErreur",
-    "description": "« juste » sur une question, un introuvable ou une panne : corriger est exigé."
+    "description": "« juste » sur une question ou un introuvable : corriger est exigé (une panne n'écrit pas d'analyse : 404)."
   },
   "etiquette-rev-contredit.json": {
     "route": "POST /api/banc/etiquette",

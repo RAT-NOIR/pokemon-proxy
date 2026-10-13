@@ -694,7 +694,11 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await jouer(V, R, 'idProduct inconnu du catalogue', 422, CH, { corps: { scanId: aff.json.scanId, verdict: 'corrige', idProduct: 999999999, rev: 3 }, entetes: extH(xa.jeton) });
             await jouer(V, R, 'scanId mal formé', 400, CH, { corps: { scanId: 'x', verdict: 'juste', rev: 1 }, entetes: extH(xa.jeton) });
             await jouer(V, R, 'sans Authorization', 401, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(null) });
-            await jouer(V, R, 'installation sans compte administrateur (la route n\'existe pas pour elle)', 404, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(x.jeton) });
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await H.appel(V, CH, { methode: 'POST', corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(x.jeton) });
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
             await jouer(V, R, 'scan d\'un autre administrateur', 404, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa2.jeton) });
             const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);      // un compteur neuf : celui d'adm2 existe déjà (sa requête de 404 l'a ouvert)
             await plafonner('banc-etiquette', 'compte', adm3.c._id, 600);

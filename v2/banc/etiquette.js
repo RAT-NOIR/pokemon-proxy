@@ -18,14 +18,16 @@ const FORME_ID = /^[0-9a-f]{24}$/i;
 const ESSAIS_MAX = 3;
 const journal = (quoi, e) => console.error(`❌ [v2 banc-etiquette] ${quoi} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : il peut citer une clé ou un identifiant
 
-/** 404 pour tout ce qui n'est pas un compte administrateur CONFIRMÉ par la base à l'instant de la requête (rôle retiré depuis, installation non liée, simple installation). */
+/** Tout ce qui n'est pas un compte administrateur CONFIRMÉ par la base à l'instant de la requête (rôle retiré depuis, installation non liée, simple installation) reçoit EXACTEMENT
+ *  la réponse d'une route qui n'existe pas : `next('route')` sort de cette route et laisse le serveur répondre son 404 natif (mêmes corps et en-têtes ; prouvé par le banc).
+ *  (M-2 : `resoudrePorteur` a déjà relu le rôle ; cette seconde lecture est volontaire, défense en profondeur — fenêtre de course réduite, comme `ledger.js`.) */
 async function exigerAdministrateur(req, res, next) {
     const p = req.v2 && req.v2.porteur;
-    if (!p || p.type !== 'compte' || p.administrateur !== true) return repondreErreur(res, 'CODE_INVALIDE', 'Introuvable');
+    if (!p || p.type !== 'compte' || p.administrateur !== true) return next('route');
     let n;
     try { n = await db.col('comptes').countDocuments({ _id: p.id, role: 'administrateur' }); }
     catch (e) { journal('rôle', e); return repondreErreur(res, 'INDISPONIBLE'); }
-    return n > 0 ? next() : repondreErreur(res, 'CODE_INVALIDE', 'Introuvable');
+    return n > 0 ? next() : next('route');
 }
 
 /** { detail } si le corps est refusé, sinon { entree }. Pure. */
