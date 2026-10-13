@@ -10,22 +10,39 @@ const fs = require('fs'); const path = require('path'); const crypto = require('
 const DOSSIER = path.join(__dirname, 'regle-site');
 const SITE_LIB = path.join(__dirname, '..', '..', '..', 'rat-market-site', 'lib');
 // la fermeture TRANSITIVE des imports des quatre modules dont la décision a besoin (fichesDuDocument/setParImpression, produitsDeLaFiche/cardmarketUrl, visuelAdmisPourLaRegion, normaliserNumero)
-const TS = Object.freeze(['imageDeLImpression.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts']);
+const TS = Object.freeze(['imageDeLImpression.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts', 'expressionsSures.ts']);
 const JSONS = Object.freeze(['visuels-japonais-sur-sets-intl.json', 'visuels-anglais-regardes.json']);
 const SOURCES = Object.freeze([...TS, ...JSONS]);
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const sortie = nom => nom.replace(/\.ts$/, '.mjs');
 
-/** Produit la copie en mémoire : { sources: {nom: sha}, fichiers: {nomSortie: Buffer} }. Lève si une source manque ou si le retrait des types n'existe pas. */
-function produire(siteLib = SITE_LIB) {
+// GARDE DE FERMETURE, écrite par ce qu'elle AUTORISE : une importation relative n'est admise que si elle vise, dans le même dossier, un fichier de la liste des sources
+// (avec son extension .ts/.json, ou sans extension = un .ts). Tout le reste lève en nommant l'importeur et le fichier visé. Les importations non relatives (node:, paquets) sont hors du champ.
+const IMPORT_RELATIF = /(?:\bfrom|\bimport)\s*\(?\s*["'](\.{1,2}\/[^"']*)["']/g;
+function fermeture(nom, code, sources = SOURCES) {
+    for (const m of code.matchAll(IMPORT_RELATIF)) {
+        const spec = m[1];
+        const visee = spec.startsWith('./') ? spec.slice(2) : null;
+        // sans extension : le réécrivain ne touche que « .ts », la copie .mjs ne se résoudrait pas — refusé même si le fichier est dans la liste
+        const fichier = visee === null ? null : (/\.(ts|json)$/.test(visee) ? visee : visee + '.ts');
+        const admis = visee !== null && /\.(ts|json)$/.test(visee) && !visee.includes('/') && sources.includes(visee);
+        if (!admis)
+            throw new Error(`fermeture : ${nom} importe « ${spec} » (${fichier === null ? 'hors du dossier' : fichier}), absent de la liste des sources ou sans extension — l'ajouter à TS/JSONS dans copier-regle-site.js, ou la copie embarquée serait cassée`);
+    }
+}
+
+/** Produit la copie en mémoire : { sources: {nom: sha}, fichiers: {nomSortie: Buffer} }. Lève si une source manque, si une importation relative sort de la liste (fermeture) ou si le retrait des types n'existe pas. */
+function produire(siteLib = SITE_LIB, liste = SOURCES) {
     const { stripTypeScriptTypes } = require('node:module');
     if (typeof stripTypeScriptTypes !== 'function') throw new Error('node:module.stripTypeScriptTypes absent (Node 23.2+ requis pour REFAIRE la copie ; l\'exécution de la copie n\'en a pas besoin)');
     const sources = {}, fichiers = {};
-    for (const nom of SOURCES) {
+    for (const nom of liste) {
         const brut = fs.readFileSync(path.join(siteLib, nom));
         sources[nom] = sha(brut);
         if (nom.endsWith('.json')) { fichiers[nom] = brut; continue; }
-        const code = stripTypeScriptTypes(brut.toString('utf8'), { mode: 'strip' }).replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.mjs$2');
+        const nu = stripTypeScriptTypes(brut.toString('utf8'), { mode: 'strip' });
+        fermeture(nom, nu, liste);
+        const code = nu.replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.mjs$2');
         fichiers[sortie(nom)] = Buffer.from(code, 'utf8');
     }
     return { sources, fichiers };
@@ -58,7 +75,7 @@ function verifier({ siteLib = SITE_LIB, dossier = DOSSIER } = {}) {
     return derives.length ? { etat: 'derive', derives } : { etat: 'ok', derives: [] };
 }
 
-module.exports = { produire, ecrire, verifier, DOSSIER, SITE_LIB, SOURCES };
+module.exports = { produire, ecrire, verifier, fermeture, DOSSIER, SITE_LIB, SOURCES };
 
 if (require.main === module) {
     if (process.argv.includes('--verifier')) {

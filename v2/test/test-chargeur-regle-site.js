@@ -9,7 +9,7 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 (async () => {
     const dossier = C.DOSSIER;
     const emp = JSON.parse(fs.readFileSync(path.join(dossier, 'empreintes.json'), 'utf8'));
-    H.v('les six sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'imageDeLImpression.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
+    H.v('les sept sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
     // la copie n'a pas été retouchée à la main : chaque fichier produit porte l'empreinte écrite
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : empreinte de la copie conforme au fichier`, sha(fs.readFileSync(path.join(dossier, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts (imports réécrits en .mjs)', Object.keys(emp.produits).filter(n => n.endsWith('.mjs')).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(dossier, n), 'utf8'))), []);
@@ -41,6 +41,25 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
         H.v('un fichier du site manquant (dossier présent) : DÉRIVE, pas « absent »', [C.verifier({ siteLib: tmp }).etat, C.verifier({ siteLib: tmp }).derives.includes('cardmarket.ts')], ['derive', true]);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     H.v('dossier du site absent : « site-absent », ni ok ni dérive', C.verifier({ siteLib: path.join(os.tmpdir(), 'nexiste-pas-' + process.pid) }).etat, 'site-absent');
+
+    // la GARDE DE FERMETURE : toute importation relative d'un fichier copié doit viser un fichier de la liste des sources (écrite par ce qu'elle autorise)
+    const leve1 = (f) => { try { f(); return null; } catch (e) { return e.message; } };
+    const SANS_EXPR = C.SOURCES.filter(n => n !== 'expressionsSures.ts');
+    if (etat.etat !== 'site-absent') {
+        const m = leve1(() => C.produire(siteLib, SANS_EXPR));
+        H.vrai('garde : le site d\'aujourd\'hui sans expressionsSures.ts dans la liste → produire() LÈVE en nommant le fichier manquant et l\'importeur', m && /expressionsSures/.test(m) && /impressionsDuSet/.test(m));
+        H.v('   la liste réelle (avec expressionsSures.ts) produit sans lever', leve1(() => C.produire(siteLib)), null);
+    }
+    const L = ['a.ts', 'c.json'];
+    H.v('garde : import relatif d\'un fichier de la liste (.ts) : accepté', leve1(() => C.fermeture('a.ts', 'import { x } from "./a.ts";', L)), null);
+    H.v('garde : import relatif d\'un JSON de la liste : accepté', leve1(() => C.fermeture('a.ts', 'import c from "./c.json" with { type: "json" };', L)), null);
+    H.vrai('garde : import relatif sans extension, même d\'un fichier de la liste : LÈVE (la copie .mjs ne se résoudrait pas)', /a\.ts/.test(leve1(() => C.fermeture('a.ts', "import { x } from './a';", L)) || ''));
+    H.vrai('garde : import relatif .ts absent de la liste : LÈVE, nomme le fichier', /b\.ts/.test(leve1(() => C.fermeture('a.ts', 'import { y } from "./b.ts";', L)) || ''));
+    H.vrai('garde : import relatif sans extension absent de la liste : LÈVE', /b\.ts/.test(leve1(() => C.fermeture('a.ts', "import { y } from './b';", L)) || ''));
+    H.vrai('garde : import relatif remontant (../) : LÈVE, nomme l\'import', /\.\.\/a\.ts/.test(leve1(() => C.fermeture('a.ts', 'import { y } from "../a.ts";', L)) || ''));
+    H.vrai('garde : import dynamique relatif absent : LÈVE, nomme le fichier', /b\.ts/.test(leve1(() => C.fermeture('a.ts', 'const m = await import("./b.ts");', L)) || ''));
+    H.vrai('garde : réexport relatif absent : LÈVE, nomme le fichier', /b\.ts/.test(leve1(() => C.fermeture('a.ts', 'export * from "./b.ts";', L)) || ''));
+    H.v('garde : import NON relatif (module de Node, paquet) : hors du champ, accepté', leve1(() => C.fermeture('a.ts', 'import fs from "node:fs"; import z from "zod"; import q from "b.ts";', L)), null);
 
     // la règle embarquée se charge, a ses six fonctions, et dit la même chose que celle du site (.ts) sur des cas fabriqués
     const R = require('../chargeur/regle-site');
