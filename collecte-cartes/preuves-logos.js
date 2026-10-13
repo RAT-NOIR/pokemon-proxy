@@ -8,7 +8,7 @@
 // UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE (§51) : un set et un fichier de la liste fermée ci-dessous ; une entrée dont le niveau est EXACTEMENT `inconnu`, la source et le fichier attendus,
 // le sha1 stocké ET le sha256 des octets de R2 (lus par l'appelant) égaux à ceux de la preuve ; une preuve (a) dont la copie archive.org a le MÊME sha256, ou (b) regardée à l'œil, ≥ 15 inliers
 // et ≥ 3 fois le meilleur négatif. Tout le reste refuse et le dit — jamais deviné.
-// Les preuves (a) ont été obtenues le 2026-10-13 par l'API CDX d'archive.org (S5\LOGOS-ECR\a3-res.json) : la copie `id_` du fichier Bulbagarden, téléchargée, a le sha256 de notre objet R2.
+// Les preuves (a) ont été obtenues le 2026-10-13 par l'API CDX d'archive.org (S5\LOGOS-ECR\a3-res.json ; S6\LOGOS-BG\b1-res.json pour les 8 jp) : la copie `id_` du fichier Bulbagarden, téléchargée, a le sha256 de notre objet R2.
 const LOT = 'logos-preuves-provenance-2026-10';
 const DECISION = 'testeur 2026-10-13 (règle des logos déposés : a, source légale retrouvée ; b, source indépendante) — réversible (poser-preuves-logos.js --retirer)';
 const SOURCE = 'bulbagarden:demande-site';
@@ -16,8 +16,8 @@ const BILLS_TOT = 'https://billsarchive.com/assets/articles/trick-or-trade-histo
 
 const a = (set, fichier, sha1, sha256, horodatage, urlOrigine) => ({ set, champ: 'logo', fichier, sourceAttendue: SOURCE, sha1, sha256, type: 'a', archive: { url: `https://web.archive.org/web/${horodatage}id_/${urlOrigine}`, horodatage, sha256 } });
 const BG = 'https://archives.bulbagarden.net/media/upload/';
-// LISTE FERMÉE (13 champs : 12 preuves a, 1 preuve b). Les 18 autres champs « bulbagarden:demande-site » n'ont pas de preuve aujourd'hui : copie archive.org absente (Classic ×3, Prize Pack Six/Seven/Eight,
-// Trick or Trade 2024 en (a), 25th Anniversary, SV11B ×2) ou fichier non interrogé (plafond de requêtes : 8 jp) — ils restent « inconnu » et attendent le 15/10.
+// LISTE FERMÉE (21 champs : 20 preuves a, 1 preuve b). Les 9 autres champs « bulbagarden:demande-site » n'ont pas de preuve aujourd'hui : aucune copie archive.org trouvée le 2026-10-13 par les instruments
+// de S6\LOGOS-BG (Classic ×3, Prize Pack Six/Seven/Eight, 25th Anniversary, SV11B ×2) — décision du testeur : sans preuve, ils restent non posés (« inconnu »). Trick or Trade 2024 est en (b).
 const PREUVES = [
     a('Play-Pokemon-Prize-Pack-Series-One', 'Play! Pokémon Prize Pack Series One logo.png', 'd53a989d6b921c90b79736a6e19cf9ff939b4c5d', 'a9df3089394d8c5ac45ec682a4b7b88cb19e7d109d06e81e07340646987d86e7', '20250427202304', BG + '5/53/Play%21_Pok%C3%A9mon_Prize_Pack_Series_One_logo.png'),
     a('Play-Pokemon-Prize-Pack-Series-Two', 'Play! Pokémon Prize Pack Series Two logo.png', '70ca1c3d337249fb23d2ad43625f607da1f416ab', '1e5325d3c4e6443ec67c7b220da082b251c4907c2e56f0cbaf3947f8d2aebe84', '20251116013419', BG + '6/6e/Play%21_Pok%C3%A9mon_Prize_Pack_Series_Two_logo.png'),
@@ -34,7 +34,16 @@ const PREUVES = [
     a('White-Flare-JP', 'SV11W Logo JP.png', '96e5a84dab22a9f23b333d12ebd19aec76b2d5d6', '33fda420884b854c448aa1acf884e4a3a03a9b94f6fa7eb739948f4bce1ebe31', '20250725091102', BG + '5/51/SV11W_Logo_JP.png'),
     a('White-Flare-JP-Additionals', 'SV11W Logo JP.png', '96e5a84dab22a9f23b333d12ebd19aec76b2d5d6', '33fda420884b854c448aa1acf884e4a3a03a9b94f6fa7eb739948f4bce1ebe31', '20250725091102', BG + '5/51/SV11W_Logo_JP.png'),
     a('30th-Celebration-JP', '30th Celebration Logo JP.png', 'ec81cef9a9dd57b10d6c2b878b311e5a5527bd6a', 'f2ef89d25bd71fd69d15047ea43eec35fa04afc888a7176f926e9210ffc24264', '20260711154448', BG + '1/1f/30th_Celebration_Logo_JP.png'),
-    a('Dragon-Selection', 'Dragon Selection Logo.png', '193ae4b6e138b7e5b2785898ee479cda32f94937', '589b787e98879c8d2aecc57aa07c8a335f34878b5257858033470c740285b90d', '20220123102304', BG + '0/08/Dragon_Selection_Logo.png')
+    a('Dragon-Selection', 'Dragon Selection Logo.png', '193ae4b6e138b7e5b2785898ee479cda32f94937', '589b787e98879c8d2aecc57aa07c8a335f34878b5257858033470c740285b90d', '20220123102304', BG + '0/08/Dragon_Selection_Logo.png'),
+    // Lot LOGOS-BG (décision 5 du testeur, 2026-10-13) : 8 logos jp prouvés par l'API CDX d'archive.org (prefixe <dossier md5>/<nom>) puis copie `id_` au MÊME sha256 que l'objet R2 (S6\LOGOS-BG\b1-res.json).
+    a('VSTAR-Universe', 'S12a VSTAR Universe Logo.png', '52f85ea7452900de5050380a55d77010c0adcc89', '48eb1d9c1cb2db2036828057e77a35e6937dd2628c967ab6ddf32d7ecb7affe5', '20251114170311', BG + '4/42/S12a_VSTAR_Universe_Logo.png'),
+    a('Ruler-of-the-Black-Flame', 'SV3 Logo JP.png', '6e3594d1d439e4bc6d451338e606dbe2049edb5d', '868dd05bee47bd48f02f54ef0a98d2b59b3300e4681798f92dbbbcedc154e664', '20251231055135', BG + 'a/aa/SV3_Logo_JP.png'),
+    a('Stellar-Miracle', 'SV7 Logo JP.png', 'aab4c5ef090f8532998194400e943aa7eb55a783', '0d8812d4195eea7fb821f8aae7ce4a40e15c9d04711754e0a48fbd5971215754', '20240903145525', BG + '6/69/SV7_Logo_JP.png'),
+    a('EX-Battle-Boost', 'EX Battle Boost Logo.png', '812ab600c7a800035bedeaa1ba37ddfcb8580ef3', '6c1fc5c513ba5543056a76de204d37af90bbaf1a15a00148d5ff6b2c3e496dc7', '20220105151145', BG + 'b/bb/EX_Battle_Boost_Logo.png'),
+    a('Scarlet-ex', 'SV1S Logo JP.png', 'bef2bf3f3ad5fdcbde1a4e1a159ee3dd21fcb95e', 'dc1166717c943ec86670a4791f7809677d714e4dc9873e948fa294fc901818a0', '20260309024920', BG + 'f/fb/SV1S_Logo_JP.png'),
+    a('Violet-ex', 'SV1V Logo JP.png', '09382857b4ca04e0b4ce44f866ae6055b0a6352d', 'f0c7d8db17f02f13622b95ff45b7508d6015bc7a90803d2fe076145da9cac739', '20230207011646', BG + 'a/a6/SV1V_Logo_JP.png'),
+    a('Mega-Symphonia', 'M1S Logo JP.png', 'c396f48dc2f3cab5c7bd03d96af67471ec3bf13a', 'a7af9f9975b9296a4ae521234b7d7f10b4b17102c541844b0648cd8c4a78bd5f', '20260301035259', BG + 'd/d7/M1S_Logo_JP.png'),
+    a('Mega-Brave', 'M1L Logo JP.png', '62fcafe90008a831bcdf0182c5bfcfdad42fc8a3', '5bdb0d42e28ca65ed5577e954c06dd53004125aeb456054a78abbcfbe8bc290e', '20250725082618', BG + '7/79/M1L_Logo_JP.png')
 ];
 
 const refus = raison => ({ action: 'refus', raison });
