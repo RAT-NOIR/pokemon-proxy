@@ -72,11 +72,43 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
 
 // Règle une question PRISE (en-reglement) : rend le crédit (compteur QUESTION, au jour de pose) puis pose l'état final. Lève si l'état final ne s'écrit pas : la question reste en-reglement, comptée « bloquée ».
 async function regler(q, motif, cfg, maintenant) {
-    if (q.lot) return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' }, { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: maintenant } }, { returnDocument: 'after' });
     const porteur = { type: q.porteur.type, id: q.porteur.id, surface: q.surface };
+    if (q.lot) {
+        const fin = await col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' }, { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: maintenant } }, { returnDocument: 'after' });
+        await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);      // l'abandon d'une confirmation peut être la DERNIÈRE du lot
+        return fin;
+    }
     const r = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'question', jourDe: q.poseeLe, maintenant }, cfg);
     return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' },
         { $set: { etat: r.rendu ? 'remboursee' : 'non-remboursee', rembourse: r.rendu, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse, regleeLe: maintenant } }, { returnDocument: 'after' });
+}
+// UN-CANDIDAT, tour 1 — un LOT est rendu UNE fois si, une fois tout réglé, CHACUNE de ses cartes est un `introuvable` OU une question de CONFIRMATION (un seul choix) non confirmée
+// (NON = `aucune`, `ne-sait-pas`, ou abandonnée au balayage). Avant D1 ces cartes étaient des introuvables : un lot qui n'avait que cela était rendu ; le client ne paie jamais plus qu'avant.
+// Toute carte affirmée, toute confirmation OUI, toute question à 2 ou 3 candidats : pas rendu par cette règle (règle des lots inchangée). Appelée quand une question de LOT vient d'être réglée ;
+// le remboursement est le MÊME que celui d'un lot entièrement introuvable (ledger.rembourser, compteur `panne`, claim `rb|scanId` : jamais deux fois). Tout ce qui est douteux ne rend rien.
+const REGLEE = ['repondue', 'remboursee', 'non-remboursee'];
+async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, maintenant) {
+    try {
+        if (!credit || !scanId) return { rendu: false };
+        const an = await col('analyses').findOne({ _id: scanId }, { projection: { cartes: 1 } });
+        if (!an || !Array.isArray(an.cartes) || !an.cartes.length) return { rendu: false };
+        const qs = await col('questions_v2').find({ scanId, lot: true }).toArray();
+        let confirmations = 0;
+        for (let i = 0; i < an.cartes.length; i++) {
+            const c = an.cartes[i];
+            if (c && c.statut === 'introuvable') continue;
+            const q = qs.find(x => x.carte === i);
+            if (!c || c.statut !== 'a-trancher' || !q || !Array.isArray(q.choix) || q.choix.length !== 1 || !REGLEE.includes(q.etat)) return { rendu: false };
+            if (q.reponse && q.reponse.aucune !== true) return { rendu: false };     // OUI : une carte reconnue, le lot est payé
+            confirmations++;
+        }
+        if (!confirmations) return { rendu: false };
+        const r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
+        return { rendu: Boolean(r && r.rendu) };
+    } catch (e) {
+        console.error(`🔴 [v2 lot-confirmations] ${scanId} : ${(e && (e.code || e.name)) || 'erreur'} — le lot n'a pas pu être jugé, à la réconciliation`);
+        return { rendu: false };
+    }
 }
 const limiteDe = (maintenant, cfg) => new Date(maintenant.getTime() - cfg.questionDelaiMs);
 
@@ -93,7 +125,11 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     const reponse = { choix, idProduct: cand ? cand.idProduct : null, aucune: abandon, le: maintenant };
     if (q0.lot) {
         const q = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $gt: limite } }, { $set: { etat: 'repondue', reponse, regleeLe: maintenant } }, { returnDocument: 'after' });
-        if (q) return corps(q);                                                           // un lot : on n'enregistre que la vérité, aucun mouvement, aucun remboursement
+        if (q) {                                                                          // un lot : on n'enregistre que la vérité ; seul le LOT ENTIER peut être rendu (confirmations refusées)
+            const lot = await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);
+            const c = corps(q);
+            return lot.rendu ? { ...c, facturation: facturation({ rembourse: 1, motif: 'lot' }) } : c;
+        }
     } else if (cand) {
         const q = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $gt: limite } }, { $set: { etat: 'repondue', reponse, regleeLe: maintenant } }, { returnDocument: 'after' });
         if (q) {

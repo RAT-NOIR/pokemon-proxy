@@ -250,6 +250,87 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         H.v('   NON : rendu une fois (essai 3, net 0)', [nu.json.carte.statut, await livre(y)], ['introuvable', { essais: 3, net: 0, mouvements: 2, ouverts: [], remboursements: 1 }]);
         await svU.fermer();
     }
+    // ── 13. TOUR 1 : un lot est rendu UNE fois quand CHACUNE de ses cartes est un introuvable ou une confirmation non confirmée (NON / abandon). Le client ne paie jamais plus qu'avant.
+    {
+        const intro = () => ({ statutHttp: 200, corps: { success: false, natureRefus: 'refus-delibere', motifRefus: 'aucun-prix' } });
+        const conf = id => ({ statutHttp: 200, corps: qst([id]) });
+        const deux = () => ({ statutHttp: 200, corps: qst([ID_A, ID_B]) });
+        const affirmee = id => ({ statutHttp: 200, corps: { success: true, question: null, carte: carteCorps(id, false), etat: ETAT, candidats: [cand(id)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 } });
+        let liste = [];
+        const svL = await monter({ identifierLot: async () => liste });
+        const lanceLot = async (l) => { liste = l; const x = await inst(3); const r = await poster(svL.url, x.jeton), j = r.json || {}; return { ...x, j, cartes: (j.analyse && j.analyse.cartes) || [] }; };
+        const carteDe = (L, id) => L.cartes.find(c => c.candidats.length && c.candidats[0].idProduct === id);
+        const non = (L, id) => repondre(svL.url, L.jeton, { scanId: L.j.scanId, carte: carteDe(L, id).index, choix: 'aucune' });
+        const oui = (L, id) => repondre(svL.url, L.jeton, { scanId: L.j.scanId, carte: carteDe(L, id).index, choix: 'a' });
+        const RENDU = { essais: 3, net: 0, mouvements: 2, ouverts: [], remboursements: 1 }, PAYE = { essais: 2, net: -1, mouvements: 1, ouverts: ['debite'], remboursements: 0 };
+        // le coût d'AVANT (62111b4a) : un candidat unique était un introuvable ; la règle des lots (inchangée) rend un lot sans carte identifiée ni à trancher
+        const coutAvant = types => (types.some(t => t === 'affirmee' || t === 'deux') ? 1 : 0);
+        const coutApres = async L => -(await livre(L)).net;
+        const cas = [];                                                  // la comparaison, imprimée
+        const noter = (nom, types, apres, avecOui) => { const avant = coutAvant(types); cas.push({ nom, avant, apres, avecOui }); H.vrai(`   coût du client : avant ${avant}, après ${apres}${avecOui ? ' (une confirmation OUI : une carte reconnue, le lot est payé — décision du coordinateur)' : ''}`, avecOui ? apres >= avant : apres <= avant); };
+        const balayer = () => argentReg().balayerQuestions({ maintenant: new Date(Date.now() + 25 * 3600e3), max: 500 });
+
+        const a = await lanceLot([conf(ID_A), conf(ID_B), conf(ID_C)]);
+        H.v('13a. lot de 3 confirmations : payé à l\'émission (net -1, un débit)', await livre(a), PAYE);
+        await non(a, ID_A); const apresUn = await livre(a); await non(a, ID_B); const apresDeux = await livre(a);
+        H.v('   après 1 NON puis 2 NON : rien n\'est rendu (carte par carte, un NON ne rend toujours rien)', [apresUn, apresDeux], [PAYE, PAYE]);
+        const r3 = await non(a, ID_C);
+        H.v('   3e NON (la dernière confirmation) : le LOT est rendu, UNE fois (essai 3, net 0, 1 remboursement) ; la réponse le dit', [await livre(a), r3.json.facturation && r3.json.facturation.rembourse], [RENDU, true]);
+        const rr = await non(a, ID_C); await non(a, ID_A);
+        H.v('   rejeu d\'un NON : rien de plus (toujours 1 remboursement, net 0)', [rr.statut, await livre(a)], [200, RENDU]);
+        noter('3 confirmations, 3 NON', ['conf', 'conf', 'conf'], await coutApres(a), false);
+        await balayer();
+        H.v('   un balayage ultérieur ne rend rien de plus', (await livre(a)).remboursements, 1);
+
+        const b = await lanceLot([conf(ID_A), conf(ID_B), conf(ID_C)]);
+        await non(b, ID_A); await non(b, ID_B);
+        H.v('13b. deux NON, la 3e confirmation encore en attente : payé', await livre(b), PAYE);
+        await balayer();
+        H.v('   le balayage à +25 h abandonne la 3e : lot rendu UNE fois', await livre(b), RENDU);
+        noter('2 NON + 1 abandon', ['conf', 'conf', 'conf'], await coutApres(b), false);
+
+        const c = await lanceLot([conf(ID_A), conf(ID_B), conf(ID_C)]);
+        await non(c, ID_A); await non(c, ID_B); await oui(c, ID_C);
+        H.v('13c. deux NON et un OUI : le lot n\'est PAS rendu', await livre(c), PAYE);
+        await balayer();
+        H.v('   (le balayage ne change rien : toutes les questions sont réglées)', await livre(c), PAYE);
+        noter('2 NON + 1 OUI', ['conf', 'conf', 'conf'], await coutApres(c), true);
+
+        const d = await lanceLot([intro(), conf(ID_A), conf(ID_B)]);
+        await non(d, ID_A);
+        H.v('13d. 1 introuvable + 2 confirmations, un NON : pas encore rendu', await livre(d), PAYE);
+        await non(d, ID_B);
+        H.v('   le 2e NON : lot rendu UNE fois', await livre(d), RENDU);
+        noter('1 introuvable + 2 NON', ['intro', 'conf', 'conf'], await coutApres(d), false);
+
+        const e = await lanceLot([conf(ID_A), conf(ID_B), deux()]);
+        const q2 = e.cartes.find(c2 => c2.candidats.length === 2);
+        await non(e, ID_A); await non(e, ID_B);
+        await repondre(svL.url, e.jeton, { scanId: e.j.scanId, carte: q2.index, choix: 'aucune' });
+        H.v('13e. 2 confirmations NON + une question à 2 candidats répondue NON : le lot n\'est PAS rendu', await livre(e), PAYE);
+        await balayer();
+        H.v('   ni après le balayage', await livre(e), PAYE);
+        noter('2 confirmations + 1 question à 2', ['conf', 'conf', 'deux'], await coutApres(e), false);
+
+        const f = await lanceLot([affirmee(ID_D), conf(ID_A)]);
+        await non(f, ID_A);
+        H.v('13f. 1 carte affirmée + 1 confirmation NON : le lot n\'est PAS rendu', await livre(f), PAYE);
+        noter('1 affirmée + 1 NON', ['affirmee', 'conf'], await coutApres(f), false);
+
+        const g = await lanceLot([conf(ID_A), conf(ID_B), conf(ID_C)]);
+        await non(g, ID_A);
+        await Promise.all([non(g, ID_B), non(g, ID_C)]);
+        H.v('13g. deux NON simultanés sur les deux dernières : UN seul remboursement du lot (net 0)', await livre(g), RENDU);
+        noter('NON simultanés', ['conf', 'conf', 'conf'], await coutApres(g), false);
+        const lots = []; for (let k = 0; k < 4; k++) lots.push(await lanceLot([conf(ID_A), conf(ID_B)]));
+        await Promise.all(lots.flatMap(L => [non(L, ID_A), non(L, ID_B)]));
+        H.v('13h. 4 lots de 2 confirmations, NON simultanés dans chacun : chaque lot rendu exactement UNE fois', await Promise.all(lots.map(async L => (await livre(L)).remboursements)), [1, 1, 1, 1]);
+
+        console.log('   comparaison coût du client (crédits) — avant 62111b4a / après :');
+        for (const k of cas) console.log(`     ${k.nom.padEnd(36)} avant ${k.avant}   après ${k.apres}`);
+        H.vrai(`   ${cas.length} cas comparés ; le seul surcoût est celui d'une confirmation OUI`, cas.every(k => k.apres <= k.avant || k.avecOui));
+        await svL.fermer();
+    }
     H.v(`dénominateur : ${reponsesValidees} réponses de la route validées contre le contrat, ${ecartsContrat} écart(s)`, ecartsContrat, 0);
     H.vrai('   le banc a bien validé des réponses (un contrôle qui ne valide rien ne dit rien)', reponsesValidees >= 20);
     await sv.fermer();
