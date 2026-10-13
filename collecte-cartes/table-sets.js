@@ -157,7 +157,13 @@ const TABLE = [
     // d'écrire (joindre() de production sur les cartes du parent, zéro écriture) : 2 lignes set+numero (063 → carte 358695 Mewtwo, 116 → carte 358473 Eevee),
     // 0 ambigu ; même idMetacard que 30C063 (907670) et 30C116 (907723), mêmes attaques que la carte. ⚠️ Deux lignes `fiche-simple` du même produit existent
     // déjà dans ce set : elles doivent être retirées AVANT la collecte, sinon le site compte deux fiches par produit (simulé : fiches 2 -> 0).
-    { code: 'x30C', exp: 6767, prod: 9, nom: '30th Celebration Additionals', slugSet: '30th-Celebration-Additionals', region: 'occidental', bulba: { titre: '30th Celebration (TCG)', tirage: 'intl', expansion: '30th Celebration', setlist: ['30th Celebration'], sectionOccurrence: 1 }, attendu: 9, additionalsDe: '30C', verifie: { le: '2026-10-13', page: '30th Celebration (TCG)', entrees: { '30th Celebration': 161 }, note: 'même page que 30C ; 2 numéros sur 2 (063, 116) sont ceux de la base, même métacarte que 30C063 et 30C116 ; les 7 autres produits sont des cartes-code' } },
+    // 🔴 2026-10-13 (lot X30C) `imagesRefusees` : la page de set de Bulbapedia (section « Additional Cards », copie archivée bulba/357032/4631303) dit ce que sont ces deux produits —
+    // Mewtwo 063 : « Holofoil "What's Your Favorite?" Stamped » (cadeau à l'achat GameStop, Best Buy, Hot Topic…, 82 € au guide contre 0,02 pour 30C063), Eevee 116 : holofoil exclusif
+    // des coffrets Two Pack Blister / Knock Out Collection. Le scan TCGdex du parent (30th-063 / 116) est celui de l'impression NON tamponnée : « les réimpressions tamponnées ne
+    // reçoivent jamais l'image d'une autre impression ». Aucune source ne collecte d'image pour cette ligne (alimentateur, TCGdex, Bulbapedia : collecte-cartes/images-refusees.js).
+    { code: 'x30C', exp: 6767, prod: 9, nom: '30th Celebration Additionals', slugSet: '30th-Celebration-Additionals', region: 'occidental', bulba: { titre: '30th Celebration (TCG)', tirage: 'intl', expansion: '30th Celebration', setlist: ['30th Celebration'], sectionOccurrence: 1 }, attendu: 9, additionalsDe: '30C',
+      imagesRefusees: 'Mewtwo 063 est une impression TAMPONNÉE (holofoil « What\'s Your Favorite? ») et Eevee 116 un holofoil de coffret : le scan TCGdex du parent est celui d\'une autre impression, jamais servi à un produit tamponné',
+      verifie: { le: '2026-10-13', page: '30th Celebration (TCG)', entrees: { '30th Celebration': 161 }, note: 'même page que 30C ; 2 numéros sur 2 (063, 116) sont ceux de la base, même métacarte que 30C063 et 30C116 ; les 7 autres produits sont des cartes-code' } },
 
     // ════ LES DECKS JAPONAIS QU'AUCUN GÉNÉRATEUR NE POUVAIT APPARIER — 2026-09-23 (§48, « 31 japonais numérotés ») ════
     // 🔴 LE FILTRE N'ÉTAIT PAS UNE EXCLUSION, C'ÉTAIT L'ÉGALITÉ DU NOM. `generer-table-sans-page.js` apparie le slug
