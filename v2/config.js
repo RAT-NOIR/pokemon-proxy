@@ -132,7 +132,13 @@ function lireConfig(env = process.env) {
         // `fichierBanc` : une archive LOCALE, honorée SEULEMENT en mode banc (comme extensionDev) — c'est ce qui permet aux bancs de semer des visuels sans toucher `cartes`.
         visuels: { source: (() => { const s = env.V2_VISUELS_SOURCE; if (s === undefined || s === '') return 'fichier'; if (s === 'fichier' || s === 'calcul') return s; throw new Error(`configuration invalide : V2_VISUELS_SOURCE="${s}" (attendu fichier ou calcul)`); })(),
                    fichierBanc: banc ? (env.V2_VISUELS_BANC_FICHIER || null) : null },
-        images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
+        // PHOTO-EXTENSION : `photoExtensionOctetsMax` = la borne du corps BINAIRE de POST /api/banc/photo (les octets de l'image telle que Vinted la sert) : 2 Mio. Une photo d'annonce affichée (f800, ~800 px de large)
+        // pèse 100 à 300 ko : la marge est de 7 à 20 fois. Plus grande : 413 avant toute lecture (Content-Length).
+        images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024, photoExtensionOctetsMax: 2 * 1024 * 1024 },
+        // PHOTO-EXTENSION : le téléchargement serveur de la photo d'un scan d'ADMINISTRATEUR n'est plus qu'un REPLI (quand l'extension n'envoie pas l'image à POST /api/banc/photo) : il attend `delaiS` secondes
+        // (défaut 15) après la réponse du scan pour laisser l'extension envoyer sa photo, puis au plus un téléchargement toutes les `intervalleS` secondes (défaut 10) et au plus `maxJour` par jour UTC
+        // (défaut 400, la décision du testeur du 2026-10-13), comptés dans la base (banc/photo-repli.js). maxJour 0 coupe le repli.
+        photoAdmin: { delaiS: entier('V2_PHOTO_ADMIN_DELAI_S', env.V2_PHOTO_ADMIN_DELAI_S, 15, 0, 300), intervalleS: entier('V2_PHOTO_ADMIN_INTERVALLE_S', env.V2_PHOTO_ADMIN_INTERVALLE_S, 10, 0, 3600), maxJour: entier('V2_PHOTO_ADMIN_MAX_JOUR', env.V2_PHOTO_ADMIN_MAX_JOUR, 400, 0, 100000) },
         // BANC-12 : le LIEN entre une contribution du banc et un compte dure bancLienMois (12 au plus) ; l'IMAGE reste bancMois (24 au plus). `analysesMois` (la ligne qui porte le scanId et le compte)
         // s'aligne sur le lien : une seule source. `mouvementsMois` reste 24 (somme des deltas = solde) mais le scanId des mouvements est retiré au bout de bancLienMois (v2/banc/anonymisation.js).
         retention: { octroiJours: 730, annonceJours: 90, analysesMois: bancLienMois, mouvementsMois: 24, bancMois: BANC_MOIS, bancLienMois, bancGraceJours, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },

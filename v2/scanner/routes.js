@@ -47,15 +47,20 @@ async function decoderHeicParDefaut(buffer) {
 }
 // M6 : une image aux octets magiques valides doit AUSSI se lire (en-tête décodable, format reconnu, dimensions raisonnables) avant le moindre débit.
 // N3 : l'en-tête ne suffit pas — un DÉCODAGE réduit (64 px, à bas coût) lit l'image entière ; une image tronquée ou corrompue (avertissement du décodeur compris) est refusée.
-async function imageLisible(buffer, formats = ['jpeg', 'png', 'webp']) {
+// PHOTO-EXTENSION : UN SEUL analyseur pour le scanner du site ET l'image de l'extension. `analyserImage` rend `null` (lisible) ou la CAUSE : 'dimensions' (format connu mais trop grand : pixels ou côté),
+// 'illisible' (tout le reste). Les bornes par défaut sont celles du scanner ; l'extension passe les siennes (12 millions de pixels, 4 096 px de côté, une seule page : identifier/photo-extension.js).
+async function analyserImage(buffer, { formats = ['jpeg', 'png', 'webp'], pixelsMax = PIXELS_MAX, coteMax = Infinity, pagesMax = Infinity } = {}) {
     try {
         const sharp = require('sharp');
         const m = await sharp(buffer, { failOn: 'error' }).metadata();
-        if (!(formats.includes(m.format) && m.width > 0 && m.height > 0 && m.width * m.height <= PIXELS_MAX)) return false;
-        await sharp(buffer, { limitInputPixels: PIXELS_MAX }).resize({ width: 64, height: 64, fit: 'inside' }).toBuffer();
-        return true;
-    } catch { return false; }
+        if (!(formats.includes(m.format) && m.width > 0 && m.height > 0)) return 'illisible';
+        if (m.pages > pagesMax) return 'illisible';                              // une image animée (plusieurs pages) : refusée là où l'appelant n'en veut pas
+        if (m.width * m.height > pixelsMax || m.width > coteMax || m.height > coteMax) return 'dimensions';
+        await sharp(buffer, { limitInputPixels: pixelsMax }).resize({ width: 64, height: 64, fit: 'inside' }).toBuffer();
+        return null;
+    } catch { return 'illisible'; }
 }
+async function imageLisible(buffer, formats = ['jpeg', 'png', 'webp']) { return (await analyserImage(buffer, { formats })) === null; }
 const estJpeg = b => Buffer.isBuffer(b) && b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF;
 
 function routesScanner(router, cfg, deps = {}) {
@@ -243,4 +248,4 @@ function routesScanner(router, cfg, deps = {}) {
         resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), scanIdDuChemin, idempotente('reponse-scanner', { obligatoire: false }, cfg), reponseAuScanner, traiterReponse(cfg, depsScanner));
 }
 
-module.exports = { routesScanner, etatPorte, PORTE_MAX, decoderHeicParDefaut, repondreEtFermer };   // repondreEtFermer : exporté pour que les bancs appellent la fermeture de production au lieu de la recopier (B8)
+module.exports = { routesScanner, analyserImage, etatPorte, PORTE_MAX, decoderHeicParDefaut, repondreEtFermer };   // repondreEtFermer : exporté pour que les bancs appellent la fermeture de production au lieu de la recopier (B8)
