@@ -24,7 +24,13 @@ const mutants = [...nomsDesGardes.map(n => ({ nom: n, gardes: [n] })), { nom: 't
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-recepteur-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));
 let anormaux = 0;
-const lance = fichier => spawnSync(process.execPath, [path.join(__dirname, 'test-recepteur-pikaqian.js')], { encoding: 'utf8', timeout: 180000, env: { ...process.env, PK_RECEPTEUR: fichier } });
+// 2026-10-13 : DEUX bancs (les pages, puis les images de /images) ; un mutant « échoue » si l'un des deux échoue
+const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js'];
+const lance = fichier => {
+    const rs = BANCS.map(b => spawnSync(process.execPath, [path.join(__dirname, b)], { encoding: 'utf8', timeout: 180000, env: { ...process.env, PK_RECEPTEUR: fichier } }));
+    const rate = rs.find(r => r.status !== 0);
+    return { status: rate ? rate.status || 1 : 0, stdout: rs.map(r => r.stdout).join('\n') };
+};
 
 const temoin = lance(path.join(__dirname, 'recepteur-pikaqian.js'));
 console.log(`témoin (récepteur intact) : ${temoin.status === 0 ? '✅ passe' : '❌ ÉCHOUE — le rouge ne prouve rien'}`);
@@ -36,7 +42,7 @@ for (const m of mutants) {
         if (!g || !m.gardes.includes(g)) return l;
         touchees++;
         return neutraliser(l);
-    }).map(l => l.replace("require('./collecte-cartes/pikaqian')", `require(${absolu('collecte-cartes/pikaqian')})`).replace("require('./collecte-cartes/pikaqian-sets')", `require(${absolu('collecte-cartes/pikaqian-sets')})`));
+    }).map(l => l.replace("require('./collecte-cartes/pikaqian')", `require(${absolu('collecte-cartes/pikaqian')})`).replace("require('./collecte-cartes/pikaqian-sets')", `require(${absolu('collecte-cartes/pikaqian-sets')})`).replace("require('sharp')", `require(${absolu('node_modules/sharp')})`));
     const fichier = path.join(dossier, `mutant-${m.nom.replace(/\W+/g, '-')}.js`);
     fs.writeFileSync(fichier, lignes.join('\n'));
     const r = lance(fichier);

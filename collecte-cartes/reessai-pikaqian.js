@@ -24,6 +24,7 @@
 const B = require('./bulba-espacement');
 const T = require('./tpc');
 const P = require('./pikaqian');
+const { estPassive, motifPassif } = require('./source-passive');
 
 const HEURE = 3600 * 1000;
 const DELAIS_MS = Object.freeze([6 * HEURE, 24 * HEURE]);       // après le blocage n°1 puis n°2
@@ -120,7 +121,9 @@ function verdictDe(rep) {
 const fabriquerClientDirect = fetchImpl => B.fabriquerClientDirect(fetchImpl, URL_ROBOTS, UA);
 
 /** La machine de Bulbapedia, avec la politique de PikaQian. `allume` ne vaut que s'il est EXACTEMENT true (défaut : true — décision du testeur). */
-function fabriquerEssai({ client, magasin, maintenant = Date.now, allume = true, surServi = null }) {
+// ➖ 2026-10-13 : FERMÉE PAR DÉFAUT (`allume = false`) — PikaQian est passive (source-passive.js), le worker ne retente plus rien. Seuls les bancs
+// l'allument, pour garder la machine d'espacement testée ; aucun appelant de production ne passe `allume`.
+function fabriquerEssai({ client, magasin, maintenant = Date.now, allume = false, surServi = null }) {
     return B.fabriquerEssaiEspace({ client, magasin, maintenant, allume, politique: POLITIQUE, verdict: verdictDe, id: ID_ETAT, surServi });
 }
 const magasinMongo = collection => B.magasinMongo(collection, ID_ETAT);
@@ -136,7 +139,8 @@ async function noterBlocage(collection, { unite = null, motif = null, status = n
     const avant = lu ? (blocagesDe(lu) ?? []) : [];
     const tous = [...avant, { le: now, url, status, motif, origine: 'collecteur', nature }];
     const suspendue = tous.length >= BLOCAGES_MAX;
-    const pasAvant = suspendue ? null : now + DELAIS_MS[tous.length - 1];
+    // ➖ 2026-10-13 : plus aucune tentative n'est PROGRAMMÉE (source passive) — le blocage s'écrit, daté, et c'est tout
+    const pasAvant = null;
     const depuis = lu?.active === true && lu.depuis ? lu.depuis : new Date(now);   // posée à chaque transition vers « active »
     await collection.updateOne({ _id: ID_ETAT }, { $set: { active: true, depuis, constateLe: new Date(now), motif, status, unite, requetes, suspendue, blocages: tous, pasAvant } }, { upsert: true });
     return { n: tous.length, suspendue, pasAvant };
@@ -168,7 +172,8 @@ async function remettreEnFile(F, maintenant = new Date()) {
  * Chaque tâche est isolée : une panne de l'une ne coupe pas l'autre, ni la boucle. Rien ne part si pikaqian n'est pas EN SERVICE.
  */
 async function passerLesTaches(db, { journal = console, enService = require('./sources-en-service').enService, fetchImpl = fetch, maintenant = Date.now } = {}) {
-    if (!enService(P.SOURCE)) return { pikaqian: { envoye: false, raison: 'pikaqian n\'est pas en service (sources-en-service.js)' }, sonde: { envoye: false, raison: 'pikaqian n\'est pas en service (sources-en-service.js)' } };
+    // ➖ 2026-10-13 : la source est PASSIVE (decision du testeur) — ni la tentative espacée ni la sonde du CDN ne partent, quoi que dise `enService` (bancs)
+    if (estPassive(P.SOURCE) || !enService(P.SOURCE)) { const raison = estPassive(P.SOURCE) ? motifPassif(P.SOURCE) : 'pikaqian n\'est pas en service (sources-en-service.js)'; return { pikaqian: { envoye: false, raison }, sonde: { envoye: false, raison } }; }
     const sortie = {};
     try {
         const E = db.collection('collecte_images_etat'), F = db.collection('file_images');

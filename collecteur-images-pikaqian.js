@@ -31,6 +31,7 @@ const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, lignePikaqian } = require('./collecte-cartes/pikaqian-sets');
 const { noterBlocage, reinitialiserBlocages } =require('./collecte-cartes/reessai-pikaqian');
+const { estPassive, motifPassif } = require('./collecte-cartes/source-passive');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;                 // consigne de l'éditeur : au-delà de 400 Mo (plafond M0 512), STOP
@@ -88,15 +89,83 @@ function provenanceDe(origine) {
 }
 
 /**
+ * Pose UNE image obtenue (téléchargée par le collecteur, ou lue par le navigateur du testeur — importer-pikaqian-passif.js) : le seuil de largeur, le WebP, R2 AVANT la ligne,
+ * le document `images`. UNE fonction pour les deux (§21 bis : deux exemplaires d'une règle divergent toujours). `extra` : des champs de plus pour le document (la voie de lecture).
+ * @returns {{etat: 'ok'|'trop-petit', meta: object}}
+ */
+async function poserOriginal({ M, deposer, bucket, slug, p, buffer, deja, origine, _id, extra = {} }) {
+    const meta = await sharp(buffer).metadata();
+    if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) {
+        // un visuel DÉJÀ prouvé et servi (« ok ») ne se dégrade pas : l'ancien reste, l'essai est noté à côté
+        if (deja?.etat === 'ok') await M.Image.updateOne({ _id }, { $set: { dernierEssai: { le: new Date(), url: p.url, resultat: `trop-petit (${meta.width} px)` } } });
+        else await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(P.SOURCE), lot: P.LOT, ...extra } }, { upsert: true });
+        return { etat: 'trop-petit', meta };
+    }
+    const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
+    const cleR2 = `${P.SOURCE}/${slug}/${cleNum(p.numero)}-${p.carteId}-${P.LANGUE}.webp`;
+    await deposer(bucket, cleR2, webp.data, 'image/webp');                   // R2 AVANT la ligne
+    const marque = marqueDe({ wOriginal: meta.width });                      // 2026-10-12 : basse définition d'après l'ORIGINAL (collecte-cartes/basse-definition.js)
+    await M.Image.updateOne({ _id }, {
+        $set: {
+            source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
+            idTuile: p.tuile.id, nomSource: p.tuile.nom, numeroSource: p.tuile.numero, preuve: p.preuve, voie: p.voie, urlOriginal: p.url,
+            provenance: provenanceDe(origine), urlOfficielle: origine?.officielle ?? null, urlOrigineDeclaree: origine?.native ?? null,
+            wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
+            cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
+            // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est la langue de la page
+            langueSource: P.LANGUE, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: P.LANGUE })),
+            attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque, ...extra
+        }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
+    }, { upsert: true });
+    return { etat: 'ok', meta };
+}
+
+/**
+ * La JOINTURE ADDITIVE d'un set, sous sa garde : les documents `images` « ok » du lot deviennent des entrées de `cartes.images` ; les entrées des AUTRES sources sont comptées avant
+ * et après (elles ne doivent pas bouger d'un octet). Partagée par le collecteur et l'import passif. @returns les comptes et la garde.
+ */
+async function joindreAdditif(db, M, slug, nom = slug) {
+    const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
+    const avant = await compterEntrees(db, carteIds, slug);
+    const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: P.LOT }).lean();
+    let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+    try {
+        for (const im of images) {
+            const c = await M.Carte.findById(im.carteId).select('images').lean();
+            if (!c) { cartesAbsentes++; continue; }                                   // une image sans sa carte : comptée, elle fait tomber la concordance
+            const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero));
+            if (T.dejaServi({ images: autres }, slug, im.numero)) {
+                // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
+                dejaParAutre++;
+                await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
+                continue;
+            }
+            const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
+                numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
+                provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date() };
+            await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
+            await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
+            joints++;
+        }
+    } catch (e) { erreurJointure = e.message; console.error(`🔴 ${nom} : jointure interrompue — ${e.message}`); }
+    const apres = await compterEntrees(db, carteIds, slug);
+    const garde = avant.autres === apres.autres && apres.siennes === joints;
+    return { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages: images.length, carteIds };
+}
+
+/**
  * @param {object} unite  l'unité de file (`pikaqian/<slug>`, source, slugSet, code, codePk, langue)
  * @param {object} M      les modèles de la base `cartes`
  * @param {object} o      `verrou` : le verrou global, LIÉ au client. Les autres options n'existent que pour le banc : `client`, `deposer` (R2), `fabriquerVerrouSet`,
  *                        `stopOctets`, `ligneDe`, `vignetter`.
  */
 async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = lignePikaqian, vignetter = vignetterApresJointure } = {}) {
+    const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
+    // ➖ 2026-10-13 : SOURCE PASSIVE (décision du testeur). Sans client injecté — c'est la voie du worker et celle de la ligne de commande — rien ne part :
+    // ni lecture de base, ni requête. Seul un banc injecte un client (faux transport) ; le client réel est de toute façon fermé (pikaqian.js, transportFetch).
+    if (!clientInjecte && estPassive(P.SOURCE)) return refus('refuse-source-passive', motifPassif(P.SOURCE));
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
-    const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
     const G = releve(unite, ligneDe);
     if (!G.ok) return refus(G.etat, G.motif);
     const { L } = G;
@@ -165,31 +234,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 // le fichier illisible par sharp est un ÉCHEC pour le client (il compte dans les « deux de suite »), pas un succès
                 const buffer = await client.image(p.url, async b => { const m = await sharp(b).metadata(); if (!m.width) throw new Error('largeur illisible'); });
                 if (!buffer) { absents++; continue; }                                   // 404 : l'image listée n'existe pas, le trou reste (et se compte)
-                const meta = await sharp(buffer).metadata();
-                if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) {
-                    tropPetits++;
-                    // un visuel DÉJÀ prouvé et servi (« ok ») ne se dégrade pas : l'ancien reste, l'essai est noté à côté
-                    if (deja?.etat === 'ok') await M.Image.updateOne({ _id }, { $set: { dernierEssai: { le: new Date(), url: p.url, resultat: `trop-petit (${meta.width} px)` } } });
-                    else await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(P.SOURCE), lot: P.LOT } }, { upsert: true });
-                    continue;
-                }
-                const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
-                const cleR2 = `${P.SOURCE}/${slug}/${cleNum(p.numero)}-${p.carteId}-${P.LANGUE}.webp`;
-                await deposer(bucket, cleR2, webp.data, 'image/webp');                   // R2 AVANT la ligne
-                const marque = marqueDe({ wOriginal: meta.width });                      // 2026-10-12 : basse définition d'après l'ORIGINAL (collecte-cartes/basse-definition.js)
-                const origine = origines.get(p.tuile.id) ?? null;
-                await M.Image.updateOne({ _id }, {
-                    $set: {
-                        source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
-                        idTuile: p.tuile.id, nomSource: p.tuile.nom, numeroSource: p.tuile.numero, preuve: p.preuve, voie: p.voie, urlOriginal: p.url,
-                        provenance: provenanceDe(origine), urlOfficielle: origine?.officielle ?? null, urlOrigineDeclaree: origine?.native ?? null,
-                        wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
-                        cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
-                        // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est la langue de la page
-                        langueSource: P.LANGUE, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: P.LANGUE })),
-                        attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
-                    }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
-                }, { upsert: true });
+                const pose = await poserOriginal({ M, deposer, bucket, slug, p, buffer, deja, origine: origines.get(p.tuile.id) ?? null, _id });
+                if (pose.etat === 'trop-petit') { tropPetits++; continue; }
                 telecharges++;
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
             } catch (err) {
@@ -210,31 +256,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
-        const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
-        const avant = await compterEntrees(db, carteIds, slug);
-        const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: P.LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
-        try {
-            for (const im of images) {
-                const c = await M.Carte.findById(im.carteId).select('images').lean();
-                if (!c) { cartesAbsentes++; continue; }                                   // une image sans sa carte : comptée, elle fait tomber la concordance
-                const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero));
-                if (T.dejaServi({ images: autres }, slug, im.numero)) {
-                    // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
-                    dejaParAutre++;
-                    await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
-                    continue;
-                }
-                const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
-                    provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date() };
-                await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
-                await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
-                joints++;
-            }
-        } catch (e) { erreurJointure = e.message; console.error(`🔴 ${unite._id} : jointure interrompue — ${e.message}`); }
-        const apres = await compterEntrees(db, carteIds, slug);
-        const garde = avant.autres === apres.autres && apres.siennes === joints;
+        const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages } = await joindreAdditif(db, M, slug, unite._id);
         if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes`);
         // ---- LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que le worker (§21 bis) ----
         const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
@@ -248,7 +270,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, arret: arretClient ? arretClient.message : null, erreurJointure,
             concordance: garde && !erreurJointure && !bloque && !arretClient && vignettesOk && echecs === 0 && cartesAbsentes === 0
-                && telecharges + sautes + tropPetits + retires + absents === Pl.plan.length && joints + dejaParAutre === images.length,
+                && telecharges + sautes + tropPetits + retires + absents === Pl.plan.length && joints + dejaParAutre === nImages,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { visuelsPikaqian: complet } });
@@ -300,7 +322,7 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
     return { code, resultats };
 }
 
-module.exports = { collecterSet, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
+module.exports = { collecterSet, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, poserOriginal, joindreAdditif, compterEntrees, sha, cleNum, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;

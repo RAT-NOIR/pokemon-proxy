@@ -97,7 +97,7 @@ verifier('aucun collecteur ne compare un nombre lui-même à 350 : aucune « < 3
     ['collecteur-images-tpc.js', 'collecteur-images-pikaqian.js', 'collecte-cartes/basse-definition.js'].map(f => /<\s*350\b/.test(sansCommentaires(lire(f)))), [false, false, false]);
 verifier('REGLES surveille le collecteur, le client/la preuve, la table (et son JSON) de pikaqian', ['collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json'].map(x => (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes(`'${x}'`)), [true, true, true, true]);
 verifier('REGLES surveille la table des unités TPC (tpc-sets.js : refuse-table si le commit du worker ne la porte pas)', (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes("'collecte-cartes/tpc-sets.js'"), true);
-verifier('sources-en-service : pikaqian est en service, bulbapedia suspendu', [require('./collecte-cartes/sources-en-service').enService('pikaqian'), require('./collecte-cartes/sources-en-service').enService('bulbapedia')], [true, false]);
+verifier('sources-en-service : pikaqian est PASSIVE (2026-10-13, plus en service pour le worker), bulbapedia suspendu', [require('./collecte-cartes/sources-en-service').enService('pikaqian'), require('./collecte-cartes/sources-en-service').enService('bulbapedia')], [false, false]);
 
 // §44 — « si la règle changeait demain, quel fichier bougerait ? » : tout fichier que seuils-images.js charge (donc dont dépend
 // largeurMinDe : la liste des sites TPC vient de tpc.js) doit figurer dans REGLES, sinon la garde du commit ne le voit pas.

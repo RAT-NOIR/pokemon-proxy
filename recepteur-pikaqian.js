@@ -30,8 +30,27 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
+const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN } = require('./collecte-cartes/pikaqian-sets');
+
+// ── LES IMAGES (lot P2, 2026-10-13) ───────────────────────────────────────────────────────────────────────────────────────────
+// 🔑 DÉCISION DU TESTEUR (2026-10-13) : « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker
+// ne touche jamais le CDN. Mêmes preuves exigées (numéro, nom, set) ; un doute est un trou. » Un SECOND chemin, POST /images, reçoit par lots bornés les octets que le
+// navigateur du testeur a lus pour les tuiles de la page qu'il vient d'apprendre. Même garde que /apprendre (méthode, Host, Origin, en-tête fixe, Content-Type, taille) ;
+// puis, PAR IMAGE : la tuile existe dans la fiche de la page, son adresse est celle que la page déclare ET celle que pikaqian.js calcule (`urlImage`), le nom et le numéro que
+// le DOM de la page affiche sont ceux que `lireTuiles` a lus dans le HTML (deux témoins), l'image se DÉCODE (sharp), son format est webp/png/jpeg, ses dimensions sont sensées,
+// son empreinte sha256 est calculée. Chaque image part dans `<dossierImages>/<codePk>/<id>--<sha12>.<ext>` — JAMAIS écrasée — et le fichier de PAGE
+// (`page--<fiche>.json`) dit ce qui est reçu, ce qui est refusé et pourquoi. Rien en base, rien sur R2, aucune requête sortante.
+const DOSSIER_PASSIF_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pikaqian-passif';
+const IMAGES_PAR_LOT_MAX = 25;
+const LOT_OCTETS_MAX = 4 * 1024 * 1024;                       // octets DÉCODÉS d'un lot ; le corps (base64) reste sous PAGE_MAX_OCTETS
+const IMAGE_OCTETS_MAX = P.IMAGE_MAX_OCTETS;                  // 2 Mo par image (une image réelle : ~35 Ko)
+const DIMENSION_MAX = 4096;
+const EXTENSIONS = Object.freeze({ webp: 'webp', png: 'png', jpeg: 'jpg' });
+const VOIES = new Set(['canvas', 'cache', 'navigateur']);   // d'où le navigateur du testeur a lu les octets (userscript-pikaqian.js)
+const NOM_FICHE = /^([a-z0-9][a-z0-9.-]{0,30})--(\d{8}T\d{6}Z)(-\d+)?\.json$/;
+const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const HOTE = '127.0.0.1';
 const PORT_DEFAUT = 8765;          // = PORT du userscript (userscript-pikaqian.js, en tête) : les deux changent ensemble
@@ -43,10 +62,31 @@ const PREFIXE_URL = `https://${P.HOTE_PAGES}/sets/`;
 // ce que la page de Remix hydratée porte de son flux de données : s'il manque, `lireOrigines` ne peut rien lire (PIKAQIAN-PASSIF.md)
 const MARQUEURS_FLUX = /__reactRouterContext|__remixContext|streamController\s*\.\s*enqueue|"loaderData"/;
 
-const dansLeDepot = dossier => {
-    const rel = path.relative(__dirname.toLowerCase(), path.resolve(dossier).toLowerCase());
+/** Le chemin RÉEL (jonctions et liens résolus) du plus long préfixe existant, suivi du reste : un dossier à créer sous une jonction pointe où la jonction pointe. */
+const cheminReel = p => {
+    let courant = path.resolve(p), reste = '';
+    for (let i = 0; i < 64; i++) {
+        try { return path.join(fs.realpathSync.native(courant), reste); } catch { /* n'existe pas encore : on remonte */ }
+        const parent = path.dirname(courant);
+        if (parent === courant) break;
+        reste = path.join(path.basename(courant), reste); courant = parent;
+    }
+    return path.resolve(p);
+};
+const sousLe = (dossier, racine) => {
+    const rel = path.relative(cheminReel(racine).toLowerCase(), cheminReel(dossier).toLowerCase());
     return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
+/** Dans le dépôt (par défaut celui de ce fichier) : jonctions résolues. `depot` n'est surchargé que par les bancs. */
+const dansLeDepot = (dossier, depot = __dirname) => sousLe(dossier, depot);
+// 🔑 LA GARDE PRINCIPALE, ÉCRITE PAR CE QU'ELLE AUTORISE (CLAUDE.md, en-tête des règles de sécurité ; relecture X, tour 1) : le récepteur n'écrit, et l'import ne lit, QUE sous UNE racine —
+// les dossiers de travail du chantier. Tout le reste est refusé, y compris les dossiers que le testeur remplit lui-même sans qu'on les ait jamais énumérés. Le chemin RÉEL est jugé
+// (jonctions et liens résolus). `racine` n'est surchargé que par les bancs, pour leur dossier temporaire.
+const RACINE_AUTORISEE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue';
+const dansRacineAutorisee = (dossier, racine = RACINE_AUTORISEE) => sousLe(dossier, racine);
+// SECOND FILET seulement (jamais la garde principale) : les trois dossiers d'APPORTS MANUELS connus (CLAUDE.md : « Logo FR », « apport-manuel », « Desktop\LOGO »), même s'ils se trouvaient sous la racine.
+const APPORTS_MANUELS = [/(^|[\\/])logo fr([\\/]|$)/i, /(^|[\\/])apport-manuel([\\/]|$)/i, /[\\/]desktop[\\/]logo([\\/]|$)/i];
+const dansApportsManuels = dossier => { const reel = cheminReel(dossier), brut = path.resolve(dossier); return APPORTS_MANUELS.some(r => r.test(reel) || r.test(brut)); };
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
 /** Le nombre de tuiles que la mesure du set a relevé (pikaqian-sets.json, `tuiles`), ou null quand la table ne le connaît pas. */
@@ -100,14 +140,110 @@ function jugerPage(brut, { attendu = attenduParTable } = {}) {
     return { statut: 200, fiche, corps: { ok: true, code, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, flux, officielles, natives: origines.filter(([, v]) => v.native).length, ...(anomalie ? { anomalie } : {}) } };
 }
 
+// ── LES IMAGES : le fichier de page, puis le jugement d'un lot ─────────────────────────────────────────────────────────────────
+const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
+const cheminPage = (dossierImages, code, nomFiche) => path.join(dossierImages, code, `page--${nomFiche.replace(/\.json$/, '')}.json`);
+/** Écrit un fichier de façon atomique (tmp puis renommage) ; `ecraser: false` = jamais d'écrasement (EEXIST remonte). */
+function ecrireFichier(cible, contenu, { ecraser = false } = {}) {
+    const tmp = `${cible}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, contenu, { flag: 'w' });
+    try { if (ecraser) fs.renameSync(tmp, cible); else fs.linkSync(tmp, cible); }
+    finally { if (!ecraser) fs.rmSync(tmp, { force: true }); }
+}
+/** Le fichier de PAGE d'une visite : ce que la page portait (code, date, tuiles), puis ce que les lots d'images y ajoutent. Créé avec la fiche, jamais deux fois. */
+function creerPage(dossierImages, nomFiche, fiche) {
+    fs.mkdirSync(path.join(dossierImages, fiche.code), { recursive: true });
+    const page = { schema: 2, code: fiche.code, url: fiche.url, le: fiche.le, fiche: nomFiche, sha256Html: fiche.sha256,
+        tuiles: fiche.tuiles.map(t => ({ id: t.id, nom: t.nom, numero: t.numero, code: t.code, img: t.img })),
+        // ce que la page déclare de l'ORIGINE des visuels (lireOrigines) et le dénominateur de la lecture : l'import n'a pas besoin d'une autre pièce pour la provenance
+        origines: fiche.origines, ancres: fiche.ancres, flux: fiche.flux,
+        sansImageDansLeNavigateur: null, lots: 0, recues: {}, refusees: {} };
+    ecrireFichier(cheminPage(dossierImages, fiche.code, nomFiche), JSON.stringify(page));
+    return page;
+}
+
+/**
+ * Le JUGEMENT d'un lot d'images : asynchrone (décodage), écrit les images valides et met à jour le fichier de page. Rend { statut, corps }.
+ * Un lot mal formé est refusé en bloc ; une IMAGE refusée ne refuse pas les autres (elle est rendue avec son motif et écrite dans le fichier de page).
+ */
+async function jugerImages(brut, { dossier, dossierImages, maintenant = () => new Date() }) {
+    let o;
+    try { o = JSON.parse(brut); } catch { return { statut: 400, corps: { ok: false, motif: 'corps illisible : ce n\'est pas du JSON' } }; }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return { statut: 400, corps: { ok: false, motif: 'le corps doit être un objet JSON' } };
+    const cles = Object.keys(o).sort().join(',');
+    if (cles !== 'fichier,images,sansImage') return { statut: 400, corps: { ok: false, motif: `clés reçues « ${cles} » : seules fichier, images et sansImage sont acceptées` } };   // GARDE:images-cles
+    const nom = typeof o.fichier === 'string' ? NOM_FICHE.exec(o.fichier) : null;
+    if (!nom) return { statut: 422, corps: { ok: false, motif: 'fichier : le nom d\'une fiche apprise (<code>--<date>.json) est exigé' } };   // GARDE:images-fichier
+    if (!Number.isInteger(o.sansImage) || o.sansImage < 0) return { statut: 400, corps: { ok: false, motif: 'sansImage doit être un entier positif ou nul' } };
+    if (!Array.isArray(o.images) || o.images.length < 1 || o.images.length > IMAGES_PAR_LOT_MAX) return { statut: 413, corps: { ok: false, motif: `un lot porte de 1 à ${IMAGES_PAR_LOT_MAX} images` } };   // GARDE:images-lot
+    let fiche;
+    try { fiche = JSON.parse(fs.readFileSync(path.join(dossier, o.fichier), 'utf8')); } catch { return { statut: 404, corps: { ok: false, motif: `la fiche ${o.fichier} n'existe pas : apprendre la page d'abord` } }; }
+    const code = fiche.code;
+    if (code !== nom[1] || !P.CODE_PK.test(code) || !Array.isArray(fiche.tuiles)) return { statut: 422, corps: { ok: false, motif: 'la fiche ne désigne pas le set de son nom' } };
+    const parId = new Map(fiche.tuiles.map(t => [t.id, t]));
+    const refusees = [], recues = [];
+    let decodes = 0, nouvelles = 0, deja = 0;
+    const refus = (id, motif) => refusees.push({ id: typeof id === 'string' ? id.slice(0, 40) : null, motif });
+    const decoder = [];
+    for (const im of o.images) {
+        if (!im || typeof im !== 'object' || Object.keys(im).sort().join(',') !== 'b64,id,nom,numero,src,voie' || Object.values(im).some(v => typeof v !== 'string')) { refus(im?.id, 'image mal formée : id, src, nom, numero, voie et b64 (chaînes) exigés, rien d\'autre'); continue; }   // GARDE:image-forme
+        const t = parId.get(im.id);
+        if (!t) { refus(im.id, 'tuile inconnue de la page apprise'); continue; }   // GARDE:image-tuile
+        if (!(im.src === t.img && t.img === P.urlImage(code, t.id) && t.code === code)) { refus(im.id, `adresse « ${im.src.slice(0, 100)} » : ce n'est pas celle que la page déclare pour cette tuile (${t.img}) dans le dossier du set`); continue; }   // GARDE:image-adresse
+        if (!(im.nom === t.nom && im.numero === t.numero)) { refus(im.id, `le DOM affiche « ${im.nom.slice(0, 60)} » n° ${im.numero.slice(0, 20)}, le HTML de la page « ${t.nom} » n° ${t.numero} : deux lectures qui se contredisent`); continue; }   // GARDE:image-nom-numero
+        if (!VOIES.has(im.voie)) { refus(im.id, `voie « ${im.voie.slice(0, 20)} » inconnue`); continue; }   // GARDE:image-voie
+        if (im.b64.length > Math.ceil(IMAGE_OCTETS_MAX * 4 / 3) + 4 || !B64.test(im.b64)) { refus(im.id, `octets illisibles ou au-delà de ${IMAGE_OCTETS_MAX} octets`); continue; }   // GARDE:image-octets
+        const octets = Buffer.from(im.b64, 'base64');
+        if (octets.length > IMAGE_OCTETS_MAX) { refus(im.id, `image de ${octets.length} octets, au-delà de ${IMAGE_OCTETS_MAX}`); continue; }
+        decodes += octets.length;
+        decoder.push({ im, t, octets });
+    }
+    if (decodes > LOT_OCTETS_MAX) return { statut: 413, corps: { ok: false, motif: `lot de ${decodes} octets décodés : au-delà de ${LOT_OCTETS_MAX}` } };   // GARDE:images-lot-octets
+    fs.mkdirSync(path.join(dossierImages, code), { recursive: true });
+    const cheminP = cheminPage(dossierImages, code, o.fichier);
+    let page; try { page = JSON.parse(fs.readFileSync(cheminP, 'utf8')); } catch { page = creerPage(dossierImages, o.fichier, fiche); }
+    const le = maintenant().toISOString();
+    for (const { im, t, octets } of decoder) {
+        let meta = null;
+        // 1. l'EN-TÊTE d'abord (sharp(...).metadata() ne décode aucun pixel) : le format et les dimensions se jugent AVANT toute allocation de pixels — un PNG de 420 Ko peut se décoder en 12000 × 12000 (432 Mo)
+        try { meta = await sharp(octets).metadata(); } catch { meta = null; }
+        if (!meta) { refus(im.id, 'octets qui ne se décodent pas en image'); continue; }   // GARDE:image-decodage
+        if (!EXTENSIONS[meta.format]) { refus(im.id, `format « ${meta.format} » : webp, png ou jpeg seulement`); continue; }   // GARDE:image-format
+        if (!(meta.width >= 1 && meta.height >= 1 && meta.width <= DIMENSION_MAX && meta.height <= DIMENSION_MAX)) { refus(im.id, `dimensions ${meta.width}×${meta.height} hors de 1…${DIMENSION_MAX}`); continue; }   // GARDE:image-dimensions
+        // 2. puis le DÉCODAGE complet (un fichier tronqué ou truqué n'est pas une image), borné par limitInputPixels : un décodage ne dépasse jamais DIMENSION_MAX² pixels
+        let decode = true;
+        try { await sharp(octets, { limitInputPixels: DIMENSION_MAX * DIMENSION_MAX }).raw().toBuffer(); } catch { decode = false; }
+        if (!decode) { refus(im.id, 'octets qui ne se décodent pas en image'); continue; }   // GARDE:image-decodage-complet
+        const empreinte = sha256(octets);
+        const fichier = `${t.id}--${empreinte.slice(0, 12)}.${EXTENSIONS[meta.format]}`;
+        const cible = path.join(dossierImages, code, fichier);
+        if (fs.existsSync(cible)) deja++;
+        else { ecrireFichier(cible, octets); nouvelles++; }
+        const lues = page.recues[t.id] ?? (page.recues[t.id] = []);
+        if (!lues.some(x => x.sha256 === empreinte)) lues.push({ fichier, sha256: empreinte, octets: octets.length, w: meta.width, h: meta.height, fmt: meta.format, voie: im.voie, le });
+        delete page.refusees[t.id];
+        recues.push(t.id);
+    }
+    for (const r of refusees) if (r.id) page.refusees[r.id] = { motif: r.motif, le };
+    page.sansImageDansLeNavigateur = o.sansImage; page.lots++;
+    ecrireFichier(cheminP, JSON.stringify(page), { ecraser: true });
+    return { statut: 200, corps: { ok: true, code, recues: recues.length, nouvelles, deja, refusees, page: path.basename(cheminP) } };
+}
+
 /**
  * Démarre le récepteur. `port: 0` = éphémère (les bancs). `hote` n'existe pas : 127.0.0.1 seulement. `attendu` n'existe que pour les bancs.
  * @returns {Promise<{port:number, adresse:string, fermer:()=>Promise<void>}>}
  */
-async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, maxOctets = P.PAGE_MAX_OCTETS, attendu = attenduParTable, journal = m => console.log(m) } = {}) {
+async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierImages = null, racine = RACINE_AUTORISEE, maxOctets = P.PAGE_MAX_OCTETS, attendu = attenduParTable, journal = m => console.log(m) } = {}) {
     if (!Number.isFinite(maxOctets) || maxOctets <= 0) throw new Error(`plafond de corps illisible (${maxOctets}) : PAGE_MAX_OCTETS de pikaqian.js doit être un nombre`);
     if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les pages apprises n'y entrent jamais`);
+    // les images et les fichiers de page : le dossier de production par défaut, SEULEMENT quand les fiches vont au leur ; sinon un voisin du dossier donné (les bancs)
+    if (!dossierImages) dossierImages = path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`;
+    if (dansLeDepot(dossierImages)) throw new Error(`le dossier « ${dossierImages} » est dans le dépôt : les images reçues n'y entrent jamais`);
+    for (const d of [dossier, dossierImages]) if (!dansRacineAutorisee(d, racine)) throw new Error(`le dossier « ${d} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);   // GARDE:racine
+    for (const d of [dossier, dossierImages]) if (dansApportsManuels(d)) throw new Error(`le dossier « ${d} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     fs.mkdirSync(dossier, { recursive: true });
+    let serie = Promise.resolve();                                // les lots d'images sont jugés UN À LA FOIS (le fichier de page se réécrit)
     const serveur = http.createServer((req, res) => {
         const repondre = (statut, corps) => {
             const t = JSON.stringify(corps);
@@ -118,7 +254,8 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, maxOctet
         const { port: portReel } = serveur.address() || {};
         const origine = req.headers.origin;
         if (req.method !== 'POST') return refuser(405, 'seule la méthode POST est acceptée');   // GARDE:methode
-        if (req.url !== '/apprendre') return refuser(404, 'seul le chemin /apprendre existe');   // GARDE:chemin
+        if (req.url !== '/apprendre' && req.url !== '/images') return refuser(404, 'seuls les chemins /apprendre et /images existent');   // GARDE:chemin
+        const route = req.url;
         if (req.headers.host !== `${HOTE}:${portReel}` && req.headers.host !== `localhost:${portReel}`) return refuser(403, 'Host refusé');   // GARDE:host
         if (!(origine === undefined || origine === ORIGINE_ATTENDUE || ORIGINE_EXTENSION.test(origine))) return refuser(403, `Origin « ${String(origine).slice(0, 60)} » refusée (seules ${ORIGINE_ATTENDUE}, l'absence d'Origin et une origine d'extension passent)`);   // GARDE:origine
         if (req.headers[ENTETE_MARQUE] !== VALEUR_MARQUE) return refuser(403, `en-tête ${ENTETE_MARQUE} absent ou différent de ${VALEUR_MARQUE}`);   // GARDE:entete
@@ -135,10 +272,23 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, maxOctet
         req.on('error', () => { /* coupure : rien à écrire */ });
         req.on('end', () => {
             if (trop) return;
+            if (route === '/images') {
+                const brut = Buffer.concat(morceaux).toString('utf8');
+                serie = serie.then(async () => {
+                    try {
+                        const j = await jugerImages(brut, { dossier, dossierImages });
+                        if (j.statut !== 200) { journal(`⛔ ${j.statut} lot d'images refusé : ${j.corps.motif}`); return repondre(j.statut, j.corps); }
+                        journal(`🖼️ ${j.corps.code} : ${j.corps.recues} image(s) reçue(s) (${j.corps.nouvelles} nouvelle(s), ${j.corps.deja} déjà là), ${j.corps.refusees.length} refusée(s)${j.corps.refusees.length ? ` — ${j.corps.refusees.slice(0, 3).map(r => r.motif).join(' | ')}` : ''}`);
+                        repondre(200, j.corps);
+                    } catch (e) { journal(`🔴 erreur interne (images) : ${e.message}`); repondre(500, { ok: false, motif: 'erreur interne du récepteur' }); }
+                });
+                return;
+            }
             try {
                 const j = jugerPage(Buffer.concat(morceaux).toString('utf8'), { attendu });
                 if (j.statut !== 200) { journal(`⛔ ${j.statut} page refusée : ${j.corps.motif}${j.corps.ancres != null ? ` (ancres ${j.corps.ancres}, tuiles ${j.corps.tuilesLues ?? '?'})` : ''}`); return repondre(j.statut, j.corps); }
                 const nom = ecrireFiche(dossier, j.fiche);
+                creerPage(dossierImages, nom, j.fiche);
                 journal(`✅ ${j.fiche.code} : ${j.fiche.ancres} ancres, ${j.fiche.tuilesLues} tuiles lues, ${j.fiche.tuilesAuCode} au code du set, flux ${j.fiche.flux}, ${j.fiche.officielles} adresse(s) officielle(s) déclarée(s) → ${nom}${j.corps.anomalie ? `\n   ⚠️ ${j.corps.anomalie}` : ''}`);
                 repondre(200, { ...j.corps, fichier: nom });
             } catch (e) { journal(`🔴 erreur interne : ${e.message}`); repondre(500, { ok: false, motif: 'erreur interne du récepteur' }); }
@@ -150,13 +300,13 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, maxOctet
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerPage, ecrireFiche, dansLeDepot, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT };
+module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, DIMENSION_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main === module) {
     // La ligne de commande s'écrit par ce qu'elle AUTORISE : un argument inconnu refuse avant d'écouter.
     const args = process.argv.slice(2);
-    const AUTORISES = [/^--port=(\d{4,5})$/, /^--dossier=.+$/];
+    const AUTORISES = [/^--port=(\d{4,5})$/, /^--dossier=.+$/, /^--dossier-images=.+$/];
     const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
     const port = Number(args.find(a => a.startsWith('--port='))?.slice(7) ?? PORT_DEFAUT);
     if (inconnus.length || !(port >= 1024 && port <= 65535)) {
@@ -164,7 +314,8 @@ if (require.main === module) {
         process.exit(2);
     }
     const dossier = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? DOSSIER_DEFAUT;
-    demarrer({ port, dossier }).then(s => {
-        console.log(`Récepteur PikaQian : http://${s.adresse}:${s.port}/apprendre — dossier ${dossier} — Ctrl+C pour arrêter. Aucune requête sortante.`);
+    const dossierImages = args.find(a => a.startsWith('--dossier-images='))?.slice(17) ?? null;
+    demarrer({ port, dossier, dossierImages }).then(s => {
+        console.log(`Récepteur PikaQian : http://${s.adresse}:${s.port}/apprendre et /images — fiches ${dossier} — images ${dossierImages ?? (path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`)} — Ctrl+C pour arrêter. Aucune requête sortante.`);
     }).catch(e => { console.error('❌', e.message); process.exit(1); });
 }

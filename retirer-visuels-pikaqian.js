@@ -51,6 +51,8 @@ async function retirerLot(db, { ecrire = false, effacerR2 = false, supprimer = n
     // les bilans : celui des sets (`visuelsPikaqian`) et celui des unités (`bilan.lot`) décrivent un lot qui n'existe plus
     const setsNettoyes = [];
     for (const s of await S.find({ visuelsPikaqian: { $exists: true } }).toArray()) { await S.updateOne({ _id: s._id }, { $unset: { visuelsPikaqian: 1 } }); setsNettoyes.push(s._id); }
+    // ➕ 2026-10-13 : le bilan de l'import des images reçues du navigateur du testeur (importer-pikaqian-passif.js) décrit le même lot (mêmes source et lot sur les entrées et les documents)
+    for (const s of await S.find({ visuelsPikaqianPassif: { $exists: true } }).toArray()) { await S.updateOne({ _id: s._id }, { $unset: { visuelsPikaqianPassif: 1 } }); if (!setsNettoyes.includes(s._id)) setsNettoyes.push(s._id); }
     for (const u of await E.find({ 'bilan.lot': P.LOT }).toArray()) await E.updateOne({ _id: u._id }, { $set: { phase: 'retire' }, $unset: { bilan: 1, restes: 1 } });
     // les unités pikaqian encore en attente sont fermées (un retrait n'est pas un arrêt passager) ; celles des autres sources ne bougent pas
     for (const u of await F.find({ source: P.SOURCE, etat: 'attente' }).toArray()) await F.updateOne({ _id: u._id }, { $set: { etat: 'refuse', resultat: 'retire-en-un-lot', fini: le, erreur: motif } });

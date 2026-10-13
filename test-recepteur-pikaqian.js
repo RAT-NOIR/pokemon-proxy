@@ -50,7 +50,7 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
 
 (async () => {
     const journal = [];
-    const srv = await R.demarrer({ port: 0, dossier: dossierTmp, attendu: () => null, journal: m => journal.push(m) });
+    const srv = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, attendu: () => null, journal: m => journal.push(m) });
     const port = srv.port;
     try {
         verifier('le serveur écoute 127.0.0.1 et nulle autre adresse', srv.adresse, '127.0.0.1');
@@ -116,14 +116,14 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         const part = await refus('page partielle (ancres non lues)', { entetes: BON, corps: { url: URL_BONNE, html: partielle } }, 422, /page partielle ou forme changée : 4 ancres, 3 tuiles/);
         verifier('… la réponse renvoie les deux comptes', [part.json?.ancres, part.json?.tuilesLues], [4, 3]);
         // PAGE INCOMPLÈTE : la mesure du set (pikaqian-sets.json) connaît le nombre de tuiles, la table de production par défaut le dit pour cs1bc (315)
-        const srvTable = await R.demarrer({ port: 0, dossier: dossierTmp, journal: () => { } });
+        const srvTable = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, journal: () => { } });
         const inc = await envoyer(srvTable.port, { entetes: BON, corps: corpsBon });
         verifier('table de production : cs1bc = 315 tuiles relevées, une page de 3 est « incomplète » (422), rien d\'écrit', [inc.status, /page incomplète : 3 tuiles lues, 315 relevées/.test(inc.json?.motif || ''), fichiers().length === avant], [422, true, true]);
         await srvTable.fermer();
-        const srv5 = await R.demarrer({ port: 0, dossier: dossierTmp, attendu: c => (c === 'cs1bc' ? 5 : null), journal: () => { } });
+        const srv5 = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, attendu: c => (c === 'cs1bc' ? 5 : null), journal: () => { } });
         const inc5 = await envoyer(srv5.port, { entetes: BON, corps: corpsBon });
         verifier('attendu 5, tuiles 3 : « page incomplète »', [inc5.status, /page incomplète/.test(inc5.json?.motif || '')], [422, true]);
-        const srv3 = await R.demarrer({ port: 0, dossier: dossierTmp, attendu: c => (c === 'cs1bc' ? 3 : null), journal: () => { } });
+        const srv3 = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, attendu: c => (c === 'cs1bc' ? 3 : null), journal: () => { } });
         const exact = await envoyer(srv3.port, { entetes: BON, corps: corpsBon });
         verifier('attendu 3, tuiles 3 : acceptée', exact.status, 200);
         await srv5.fermer(); await srv3.fermer();
@@ -153,7 +153,7 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
     } finally { await srv.fermer(); }
 
     // ── le plafond est une option : un petit plafond refuse un corps réel qui le dépasse
-    const petit = await R.demarrer({ port: 0, dossier: dossierTmp, maxOctets: 500, attendu: () => null, journal: () => { } });
+    const petit = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, maxOctets: 500, attendu: () => null, journal: () => { } });
     const nPetit = fichiers().length;
     const gros2 = Buffer.byteLength(JSON.stringify(corpsBon)) > 500;
     const p = await envoyer(petit.port, { entetes: BON, corps: corpsBon });
@@ -169,10 +169,10 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
     await petit.fermer();
 
     // ── l'hôte d'écoute n'est pas réglable : aucune option pour sortir de 127.0.0.1
-    verifier('demarrer ignore une option « hote » (jamais 0.0.0.0)', await (async () => { const s = await R.demarrer({ port: 0, dossier: dossierTmp, hote: '0.0.0.0', journal: () => { } }); const a = s.adresse; await s.fermer(); return a; })(), '127.0.0.1');
+    verifier('demarrer ignore une option « hote » (jamais 0.0.0.0)', await (async () => { const s = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, hote: '0.0.0.0', journal: () => { } }); const a = s.adresse; await s.fermer(); return a; })(), '127.0.0.1');
     // ── le dossier ne doit jamais être dans le dépôt
     if (!process.env.PK_RECEPTEUR) {
-        let leve = null; try { await R.demarrer({ port: 0, dossier: path.join(__dirname, 'apprises-test'), journal: () => { } }); } catch (e) { leve = e.message; }
+        let leve = null; try { await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: path.join(__dirname, 'apprises-test'), journal: () => { } }); } catch (e) { leve = e.message; }
         verifier('un dossier DANS le dépôt : démarrage refusé', /dépôt/.test(leve || ''), true);
         verifier('… et rien n\'a été créé', fs.existsSync(path.join(__dirname, 'apprises-test')), false);
     }

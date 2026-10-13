@@ -167,10 +167,12 @@ async function banc({ adresses = [A(1), A(2), A(3)], reponses = {}, robots = ROB
         assert.ok(!/browser|Mozilla|Chrome|Safari/i.test(P.UA));
     });
     await t('I3 : le transport par défaut envoie, sur robots.txt ET sur l\'image, le User-Agent honnête P.UA (valeur testée, fetch simulé)', async () => {
+        // 2026-10-13 : le transport réel est FERMÉ (source passive). Le banc le rouvre le temps du test pour garder l'identification testée.
+        const SPm = require('./collecte-cartes/source-passive'), vraiPassif = SPm.estPassive; SPm.estPassive = () => false;
         const vus = []; const vrai = global.fetch;
         global.fetch = async (url, opts) => { vus.push({ url, h: opts.headers, redirect: opts.redirect }); const h = new Map([['content-type', url.endsWith('robots.txt') ? 'text/plain' : 'image/png']]); const corps = url.endsWith('robots.txt') ? Buffer.from('User-agent: *\n') : await png(4, 4);
             return { status: 200, ok: true, headers: { get: k => h.get(k) ?? null }, arrayBuffer: async () => corps }; };
-        try { const E = fausseCollection(); await S.fabriquerSonde({ E, trouverAdresses: async () => [A(1)], pause: async () => { } }).executer(); } finally { global.fetch = vrai; }
+        try { const E = fausseCollection(); await S.fabriquerSonde({ E, trouverAdresses: async () => [A(1)], pause: async () => { } }).executer(); } finally { global.fetch = vrai; SPm.estPassive = vraiPassif; }
         assert.strictEqual(vus.length, 2); for (const v of vus) { assert.strictEqual(v.h['User-Agent'], P.UA); assert.strictEqual(v.redirect, 'manual'); }
         assert.ok(/rat-market-catalogue\/\d/.test(P.UA) && !/mozilla|chrome|safari|axios/i.test(P.UA));
     });

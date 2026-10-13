@@ -66,6 +66,7 @@ const balise = require('./collecte-cartes/balise-worker');           // « quel 
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { estPassive, motifPassif, cloreUnitePassive } = require('./collecte-cartes/source-passive');                 // PikaQian passive depuis le 2026-10-13
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
 const SOURCE = arg('source') || 'artofpkm';
@@ -789,8 +790,8 @@ if (require.main !== module) return;
             // boucle (la file déjà pleine continue de tourner) — mais il crie.
             try { await alimenter(cx.db, { journal: console, M }); }   // M : le manque réel lit les cartes par le plan du collecteur TCGdex
             catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
-            // 🔑 PIKAQIAN BLOQUÉ (décision du testeur, 2026-10-12) : la tentative espacée (6 h, puis 24 h, suspendue au 3e blocage) et la sonde UNIQUE du serveur d'images
-            // officiel. Chacune ne part que si son état en base l'y autorise ; une panne ici ne tue pas la boucle (collecte-cartes/reessai-pikaqian.js).
+            // ➖ 2026-10-13 : PIKAQIAN EST PASSIVE (décision du testeur) — cet appel ne fait plus aucune requête (ni tentative espacée, ni sonde du CDN) tant que la source est
+            // passive (collecte-cartes/source-passive.js) ; il reste câblé pour que rouvrir la source soit une décision écrite, pas du code à réécrire.
             try { await passerLesTachesSources(cx.db, { journal: console }); }
             catch (e) { console.error(`🔴 tâches des sources bloquées en échec : ${e.message}`); }
             // 🔑 LES IMPORTS QUOTIDIENS (testeur, 2026-10-06 : « sans cron Render payant, le worker lance lui-même, une fois par jour vers
@@ -849,6 +850,13 @@ if (require.main !== module) return;
             if (SOURCES_SUSPENDUES[sourceDuSet]) {
                 console.error(`⏸️ ${suivant._id} : source ${sourceDuSet} SUSPENDUE — remise en attente 24 h, aucune requête.`);
                 await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-suspendue', pasAvant: new Date(Date.now() + 24 * 3600 * 1000), erreur: `${sourceDuSet} ${SOURCES_SUSPENDUES[sourceDuSet]}` }, $unset: { pris: 1 } });
+                continue;
+            }
+            // ➖ 2026-10-13 — SOURCE PASSIVE (décision du testeur : « le worker ne touche jamais le CDN… la source n'est plus interrogée que par mes visites »).
+            // Une unité pikaqian encore en file se CLÔT ici, motif écrit, avant toute prise de verrou, toute lecture de base ou requête (collecte-cartes/source-passive.js).
+            if (estPassive(sourceDuSet)) {
+                console.error(`⏸️ ${suivant._id} : ${motifPassif(sourceDuSet)} — unité close, aucune requête.`);
+                await cloreUnitePassive(File, suivant);
                 continue;
             }
             if (sourceDuSet === 'bulbapedia') {

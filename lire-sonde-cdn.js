@@ -18,7 +18,7 @@ const { blocagesDe } = require('./collecte-cartes/reessai-pikaqian');
     if (!al) console.log(`\npikaqian : aucun document ${P.ID_ALERTE}`);
     else {
         const bl = blocagesDe(al);
-        console.log(`\npikaqian : alerte ${al.active ? 'ACTIVE' : 'levée'}${al.suspendue ? ' — SUSPENDUE (plus aucune tentative sans décision du testeur)' : ''} · ${bl ? bl.length : '?'} blocage(s) · dernier essai ${al.dernierEssai ? new Date(al.dernierEssai).toISOString() : 'aucun'} · prochaine tentative au plus tôt ${al.pasAvant ? new Date(al.pasAvant).toISOString() : '—'}`);
+        console.log(`\npikaqian : alerte ${al.active ? 'ACTIVE' : 'levée'}${al.suspendue ? ' — SUSPENDUE (plus aucune tentative sans décision du testeur)' : ''} · ${bl ? bl.length : '?'} blocage(s) · dernier essai ${al.dernierEssai ? new Date(al.dernierEssai).toISOString() : 'aucun'} · source passive : aucune tentative automatique (échéance écrite en base, non lue : ${al.pasAvant ? new Date(al.pasAvant).toISOString() : '—'})`);
         for (const b of bl ?? []) console.log(`   - ${new Date(b.le).toISOString()} · HTTP ${b.status ?? '?'} · ${b.url ?? '?'} · ${b.origine ?? ''}`);
     }
     await fermer();
