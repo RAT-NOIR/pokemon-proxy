@@ -51,9 +51,9 @@ const ULTRA = [[701604, 'Ultra-Ball-V1-PRBRS-150'], [707850, 'Ultra-Ball-V2-PRBR
 function monde(o = {}) {
     const lignesUltra = ULTRA.map(([id, slug]) => LIGNE(id, 148517, slug, { origine: { code: /BRS/.test(slug) ? 'BRS' : 'MEG', numero: /BRS/.test(slug) ? '150' : '131' } }));
     return fakeDb({
-        sets: [SET(o.set)],
+        sets: [SET(o.set), ...(o.pps3 ? [SET({ _id: 'PPS3', code: 'PPS3', idExpansion: [5431], nomAffichage: 'PPS3' })] : [])],
         cartes: [
-            { _id: 148517, nomEn: 'Ultra Ball', sets: ['Brilliant-Stars', 'Promos'], impressions: [IMP('Brilliant Stars', '150/172'), ...(o.impUltra || [])], images: o.imagesUltra || [], liens: { idProduct: [999, 861240, 701604, 707850, 707851, 873099, 873102], idMetacards: [218103] } },
+            { _id: 148517, nomEn: 'Ultra Ball', sets: ['Brilliant-Stars', 'Promos', ...(o.pps3 ? ['PPS3'] : [])], impressions: [IMP('Brilliant Stars', '150/172'), ...(o.impUltra || [])], images: o.imagesUltra || [], liens: { idProduct: [999, 861240, 701604, 707850, 707851, 873099, 873102], idMetacards: [218103] } },
             { _id: 7, nomEn: 'Pidgey', sets: ['Promos'], impressions: [IMP('Pokemon 151', '016/165')], images: [], liens: { idProduct: [5001], idMetacards: [] } },
             { _id: 8, nomEn: 'Eevee', sets: ['Promos'], impressions: [], images: [], liens: { idProduct: [5002, 5003], idMetacards: [] } },
             ...(o.cartes || [])
@@ -63,6 +63,8 @@ function monde(o = {}) {
             LIGNE(5001, 7, 'Pidgey-PRMEW-016'),
             LIGNE(5002, 8, 'Eevee-V1-PRSVI-167'), LIGNE(5003, 8, 'Eevee-PRMEW-133'),
             { _id: '1|1', carteId: 1, idProduct: 1, idExpansion: 99, slug: 'Autre-X-1', slugSet: 'Autre' },
+            // la MÊME carte (Ultra Ball) dans un second set du même lot : CRZ n°146 et SVI n°196
+            ...(o.pps3 ? [LIGNE(728247, 148517, 'Ultra-Ball-PPS3CRZ-146', { idExpansion: 5431, slugSet: 'PPS3', route: 'PPS3' }), LIGNE(728279, 148517, 'Ultra-Ball-V1-PPS3SVI-196', { idExpansion: 5431, slugSet: 'PPS3', route: 'PPS3' })] : []),
             ...(o.lignes || [])
         ]
     });
@@ -135,6 +137,14 @@ const NOM = FM.expansionDe('Promos');
         verifier('sans bulba.expansion, ni une impression a expansion nulle ni une impression au nom du set ne cree de fiche numerotee (les 6 produits restent sur UNE fiche sans numero)', [f1.get(701604).numero, f1.get(861240).numero, f2.get(701604).numero, f2.get(861240).numero], [null, null, null, null]);
         verifier('   avec bulba.expansion = le nom : 701604 -> 150, 861240 -> 131', [f3.get(701604).numero, f3.get(861240).numero], ['150', '131']);
     }
+
+    // ── TOUR 2 : une carte COMMUNE a deux sets du meme lot (Ultra Ball : Promos puis PPS3) se relit JUSTE ──
+    // (lot reel du 2026-10-13 : la relecture de PPS3 comparait la carte a l'instantane d'AVANT LE LOT, sans les impressions que Promos venait d'ajouter)
+    db = monde({ pps3: true });
+    R = await FM.executer({ db, deps, sets: ['Promos', 'PPS3'], attendu: 3, ecrire: true, log: () => {}, err: () => {} });
+    verifier('carte commune a deux sets du lot : 3 fiches (Ultra Ball x2, Eevee), exit 0, relecture sans ecart', [R.code, R.rapport.totalAEcrire, R.rapport.ecarts, R.rapport.erreur], [0, 3, [], null]);
+    verifier('   la carte porte les 4 impressions neuves a la FIN (Promos 131/150 puis PPS3 146/196), les anciennes intactes en tete', [CARTE(db)(148517).impressions.slice(0, 1).map(i => i.expansion), CARTE(db)(148517).impressions.slice(1).map(i => `${i.expansion}|${i.numero}`)], [['Brilliant Stars'], [`${NOM}|131`, `${NOM}|150`, `${FM.expansionDe('PPS3')}|146`, `${FM.expansionDe('PPS3')}|196`]]);
+    verifier('   les deux sets portent leur nom ; la regle du site sur la base ecrite sert les produits des deux sets', [db.brut('sets').map(s => s.bulba.expansion), X.fichesDesProduits(regle, db.brut('sets')[1], db.brut('cartes').filter(c => c.sets.includes('PPS3')), db.brut('cartes_produits').filter(l => l.idExpansion === 5431)).fiche.size], [[NOM, FM.expansionDe('PPS3')], 2]);
 
     // ── rejouer : rien a faire, rien ne bouge ──
     av = etat(db); R = await FM.executer({ db, deps, sets: ['Promos'], attendu: 0, ecrire: true, log: () => {}, err: () => {} });
