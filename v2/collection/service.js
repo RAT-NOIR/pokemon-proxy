@@ -85,8 +85,17 @@ let initialisation = null;
 /** Lancé au MONTAGE du lot. Un échec (base pas encore prête) n'est pas définitif : la première écriture le rejoue. */
 function initialiser(cfg) {
     initialisation = recompter(cfg).catch(e => { initialisation = null; throw e; });
+    dernierRecompte = initialisation;
     return initialisation;
 }
+// B2b tour 2 : la promesse du DERNIER recompte lancé (réussi, en cours ou en échec), exposée aux bancs par `monter.pret` — jamais attendue en production (le démarrage de l'API n'attend pas le recompte ; la première
+// écriture le rejoue en cas d'échec). `avecDelai` : une attente qui expire LÈVE, un échec remonte (aucune sortie silencieuse).
+let dernierRecompte = null;
+function avecDelai(promesse, ms, nom) {
+    let minuteur; const expire = new Promise((_, ko) => { minuteur = setTimeout(() => ko(new Error(`${nom} : pas abouti en ${ms} ms`)), ms); });
+    return Promise.race([promesse, expire]).finally(() => clearTimeout(minuteur));
+}
+const attendreInitialisation = (ms = 30000) => (dernierRecompte ? avecDelai(dernierRecompte, ms, 'recompte du compteur de la collection') : Promise.resolve(null));
 const assurer = cfg => initialisation || initialiser(cfg);
 
 // ── le registre
@@ -332,5 +341,5 @@ async function supprimerDuCompte(compteId, cfg) {
     await rendre(rendu);
     return n;
 }
-module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser };
+module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
 // Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.

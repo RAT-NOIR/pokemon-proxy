@@ -69,6 +69,20 @@ const H = require('./_harnais'); const M = require('../modeles'); const L = requ
         const dg = (await require('../db').col('limites').findOne({ cle: new RegExp(`^fantome:g\\|`) }));
         H.vrai('   deux horloges défaites dans le désordre : aucune horloge fantôme (le limiteur lit l\'heure réelle, pas la première fixée)', dg && Math.abs(Number(dg.cle.split('|')[1]) - Math.floor(Date.now() / MIN) * MIN) <= MIN);
     }
+    // Tour 2 (M-3) : défaire la PLUS ANCIENNE seulement laisse en place la plus récente (la mutation « pop() » retire l'autre et rend l'ancienne)
+    {
+        const resH = () => ({ s: null, setHeader() { }, status(x) { this.s = x; return this; }, json() { return this; } });
+        const vieille = new Date(milieuMinute - 10 * 3600e3), recente = new Date(milieuMinute + 1e3);
+        const g1 = L.fixerHorloge(() => vieille), g2 = L.fixerHorloge(() => recente);
+        g1();                                                    // la plus ancienne seulement
+        await L.limiteur({ nom: 'ancienne', max: 5, fenetreMs: MIN, cle: () => 'h' })({ ip: '203.0.113.11' }, resH(), () => { });
+        const dh = await require('../db').col('limites').findOne({ cle: /^ancienne:h\|/ });
+        H.v('deux horloges empilées, la plus ANCIENNE défaite : le limiteur lit encore la plus récente (pas l\'ancienne, pas l\'heure réelle)', dh && Number(dh.cle.split('|')[1]), Math.floor(recente.getTime() / MIN) * MIN);
+        g2();
+        const ri = resH(); await L.limiteur({ nom: 'ancienne2', max: 5, fenetreMs: MIN, cle: () => 'h' })({ ip: '203.0.113.11' }, ri, () => { });
+        const di = await require('../db').col('limites').findOne({ cle: /^ancienne2:h\|/ });
+        H.vrai('   puis la plus récente défaite : l\'heure réelle', di && Math.abs(Number(di.cle.split('|')[1]) - Math.floor(Date.now() / MIN) * MIN) <= MIN);
+    }
     // Tour 1 (M-3) : l'horloge par DÉFAUT est l'instant courant, à la milliseconde près (sans option ni fixerHorloge). Fenêtre d'1 ms : la clé du compteur porte l'instant lu.
     {
         const mwD = L.limiteur({ nom: 'defaut', max: 100, fenetreMs: 1, cle: () => 'd' }), resH = () => ({ s: null, setHeader() { }, status(x) { this.s = x; return this; }, json() { return this; } });

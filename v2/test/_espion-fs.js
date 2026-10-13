@@ -40,7 +40,8 @@ function perimetre({ racine = path.resolve(__dirname, '..', '..'), nomBanc = '',
     ajouter(path.join(racine, '.banc-local', 'cache-mongod'));
     const dl = env && env.MONGOMS_DOWNLOAD_DIR ? norm(env.MONGOMS_DOWNLOAD_DIR) : null;
     if (dl && dl.endsWith('/.banc-local/cache-mongod')) ajouter(env.MONGOMS_DOWNLOAD_DIR);
-    for (const nm of [path.join(racine, 'node_modules'), path.join(racine, '.banc-local', 'node_modules')]) ajouter(nm);   // cibles de jonctions : le chargeur lit le fichier RÉEL
+    // cibles de jonctions : le chargeur lit le fichier RÉEL ; tour 2 (M-2) : en LECTURE seule (une écriture ou une suppression par la jonction toucherait les modules de main — le geste de l'incident du 2026-10-12)
+    for (const nm of [path.join(racine, 'node_modules'), path.join(racine, '.banc-local', 'node_modules')]) ajouter(nm, true);
     // les exceptions sont écrites depuis le Bureau ; un banc trouve ses voisins depuis la racine du checkout (`..`), qui est le Bureau pour le dépôt principal mais le dossier PARENT d'une copie de travail :
     // chaque exception est donc permise sous le Bureau ET sous le parent de la racine — le même chemin nommé, jamais le dossier parent lui-même.
     const parents = [path.join(os.homedir(), 'Desktop'), path.dirname(path.resolve(racine))];
@@ -55,11 +56,16 @@ function autorise(chemin, p, { ecriture = false } = {}) {
 
 const violations = [];
 let armee = false;
+// Tour 2 (M-1) : un chemin peut être une chaîne, un Buffer, n'importe quelle vue d'octets (Uint8Array, même sur un tampon plus grand), une URL file: — tous jugés. Un descripteur (nombre), un FileHandle (objet
+// à `fd` numérique) et l'absence de valeur ne sont pas des chemins. Tout AUTRE objet est refusé (écrit par ce qu'on reconnaît : on n'en devine pas le sens).
+const INCONNU = Symbol('argument-non-reconnu');
 const cheminDe = a => {
     if (typeof a === 'string') return a;
-    if (Buffer.isBuffer(a)) return a.toString();
-    if (a && typeof a === 'object' && a.protocol === 'file:' && typeof a.pathname === 'string') { try { return fileURLToPath(a); } catch { return null; } }
-    return null;                                           // un descripteur, un FileHandle, undefined : pas un chemin
+    if (a === undefined || a === null || typeof a === 'number' || typeof a === 'boolean' || typeof a === 'bigint') return null;
+    if (ArrayBuffer.isView(a) && !(a instanceof DataView)) return Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString();
+    if (typeof a === 'object' && typeof a.fd === 'number') return null;                       // un FileHandle
+    if (a instanceof URL) { if (a.protocol !== 'file:') return INCONNU; try { return fileURLToPath(a); } catch { return INCONNU; } }
+    return INCONNU;
 };
 const lecteSeule = flags => flags === undefined || flags === null || (typeof flags === 'string' ? /^r(s)?$/.test(flags) : flags === 0);   // « r » / « rs » / O_RDONLY seuls ; tout le reste modifie
 const META = /[*?[\]{}()!]/;
@@ -71,6 +77,7 @@ function armer({ racine, nomBanc } = {}) {
     const P = perimetre({ racine, nomBanc: banc });
     const verifier = (op, a, ecriture = false) => {
         const c = cheminDe(a);
+        if (c === INCONNU) { violations.push({ op, chemin: `(argument qui n'est pas un chemin reconnu : ${Object.prototype.toString.call(a)})` }); const e = new Error(`ESPION-FS : ${op} : argument qui n'est pas un chemin reconnu (hors périmètre)`); e.code = 'ESPION_FS'; throw e; }
         if (c === null || c === '') return;
         const r = autorise(c, P, { ecriture });
         if (r.ok) return;

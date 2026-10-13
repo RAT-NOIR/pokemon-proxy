@@ -349,7 +349,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             const mod = charger(rel, rempl);
             const ctxM = rel === 'routes.js' ? { sv: await serveur(cfgG, mod), svc: svcReel, cfg: cfgG } : { sv: null, svc: mod, cfg: cfgG };
             let vu; try { vu = await g.scene(ctxM); } catch (e) { vu = `exception ${(e && e.name) || 'erreur'}`; }
-            H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
+            H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON [scène : ${g.nom.slice(0, 70)} ; vu ${JSON.stringify(vu)}]`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
         }
     }
     H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes : 100 000 clés par compte (le catalogue complet + 45 %), 6 000 hors catalogue, 10 000 quantités, 1 000 sets par compte ; budget du service 10 485 760 o', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.quantitesParCompte, cfg.collection.setsParCompte, cfg.collection.octetsService], [1000, 100000, 6000, 10000, 1000, 10485760]);

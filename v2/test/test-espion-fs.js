@@ -40,9 +40,15 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
     const leve = (ex, ls = {}) => { try { V.valider(ex, ls); return false; } catch (e) { return /exception/i.test(e.message); } };
     H.vrai('   _apports-exceptions.js exporte valider', typeof V.valider === 'function');
     if (typeof V.valider === 'function') {
-        const mal = { '(vide)': '', '(blancs)': '  ', '.': '.', '..': '..', 'a/../..': 'a/../..', '/': '/', '\\': '\\', 'lecteur': 'C:/', 'absolu': ['C:', 'Users', 'x', 'Desk' + 'top', 'y'].join('/'), 'le Bureau': 'Desk' + 'top', 'sous le Bureau': 'Desk' + 'top/x', 'dans le dossier du testeur': `pokemon-proxy/${BAS}/x`, 'dossier des apports manuels': ['apport', 'manuel'].join('-'), 'photos du verrou': ['verrou', 'photos'].join('/'), 'segment vide': 'a//b', 'finit par /': 'a/' };
+        const mal = { '(vide)': '', '(blancs)': '  ', '.': '.', '..': '..', 'a/../..': 'a/../..', '/': '/', '\\': '\\', 'lecteur': 'C:/', 'absolu': ['C:', 'Users', 'x', 'Desk' + 'top', 'y'].join('/'), 'le Bureau': 'Desk' + 'top', 'sous le Bureau': 'Desk' + 'top/x', 'dans le dossier du testeur': `pokemon-proxy/${BAS}/x`, 'dossier des apports manuels': ['apport', 'manuel'].join('-'), 'photos du verrou': ['verrou', 'photos'].join('/'), 'segment vide': 'a//b', 'finit par /': 'a/',
+            // Tour 2 (I-A) : un ANCÊTRE d'un dossier d'apports ouvre le dossier d'apports lui-même (le dépôt du testeur contient les dossiers du testeur)
+            'ancêtre : le dépôt principal': 'pokemon-proxy', 'ancêtre : casse': 'Pokemon-Proxy', 'ancêtre : verrou': 'pokemon-proxy/verrou', 'ancêtre : le dépôt de l\'API': 'pokemon-proxy-api-v2', 'ancêtre : verrou de l\'API': 'pokemon-proxy-api-v2/verrou',
+            'égal à un dossier d\'apports : LOGO': 'LOGO', 'égal : logo': 'logo', 'nom court 8.3': 'LOGOFR~1', 'joker': 'Logo*', 'point final': 'rat-market-site/lib.', 'espace final': 'rat-market-site/lib ' };
         H.v('   valider REFUSE (ligne par ligne) : ' + Object.keys(mal).join(' · '), Object.fromEntries(Object.entries(mal).map(([n, k]) => [n, leve({ 'test-x.js': { [k]: 'raison' } })])), Object.fromEntries(Object.keys(mal).map(n => [n, true])));
         H.v('   valider accepte les clés légitimes et exige une raison écrite', [leve({ 'test-x.js': { 'rat-market-site/lib': 'r', 'extension v2/src/fond/fausses': 'r' } }), leve({ 'test-x.js': { 'rat-market-site/lib': '' } })], [false, true]);
+        H.v('   valider accepte les clés PRÉCISES déjà en usage (sauvegarde de lot, cache mongod, journal du plan, labo)', leve({ 'test-x.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'r', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'r', 'pokemon-proxy/.banc-local/cache-mongod': 'r', 'labo-embedding/rm/fixtures-g': 'r' } }), false);
+        H.v('   MUTATION M1 de la relecture 2 : la liste réelle + « pokemon-proxy » ajouté à un banc chargeur est refusée au chargement ; idem « LOGO »',
+            [leve({ ...V.EXCEPTIONS, 'test-chargeur-decision.js': { ...V.EXCEPTIONS['test-chargeur-decision.js'], 'pokemon-proxy': 'r' } }, V.LECTURE_SEULE), leve({ ...V.EXCEPTIONS, 'test-chargeur-decision.js': { ...V.EXCEPTIONS['test-chargeur-decision.js'], LOGO: 'r' } }, V.LECTURE_SEULE)], [true, true]);
         H.v('   la liste réelle passe valider (sinon le module ne se chargerait pas)', leve(V.EXCEPTIONS, V.LECTURE_SEULE), false);
         H.v('   une entrée LECTURE_SEULE qui ne désigne aucune exception du fichier est refusée', (() => { try { V.valider(V.EXCEPTIONS, { 'test-x.js': ['rat-market-site/lib'] }); return false; } catch { return true; } })(), true);
     }
@@ -140,6 +146,33 @@ try {
         Object.fromEntries(Object.entries(dispo).map(([k, v]) => [k, v === 'absent' ? 'ESPION_FS' : v])),
         Object.fromEntries(Object.keys(dispo).map(k => [k, 'ESPION_FS'])));
     H.vrai('   au moins 9 de ces 11 opérations existent dans ce Node (le test éprouve quelque chose)', Object.values(dispo).filter(v => v !== 'absent').length >= 9);
+
+    // Tour 2 (M-1) : un chemin donné autrement qu'en chaîne est jugé aussi — Uint8Array, Buffer, URL file: ; un objet qui n'est pas un chemin (ni descripteur) est refusé
+    const formes = rouler('suite-formes.js', ENTETE + `
+        const cible = path.join(HORS, 'a.txt'), { pathToFileURL } = require('url');
+        await essai('uint8array', () => fs.readFileSync(new Uint8Array(Buffer.from(cible))));
+        await essai('vue-sur-un-tampon', () => { const b = Buffer.from('xx' + cible); return fs.readFileSync(new Uint8Array(b.buffer, b.byteOffset + 2, b.length - 2)); });
+        await essai('buffer', () => fs.readFileSync(Buffer.from(cible)));
+        await essai('url-file', () => fs.readFileSync(pathToFileURL(cible)));
+        await essai('promesse-uint8array', () => fs.promises.readFile(new Uint8Array(Buffer.from(cible))));
+        await essai('objet-inconnu', () => fs.readFileSync({ toString: () => cible }));
+        await essai('descripteur-numerique', () => fs.closeSync(fs.openSync(path.join(R, 'package.json'), 'r')));` + FIN);
+    H.v('un chemin en Uint8Array (même vue sur un tampon plus grand), Buffer, URL file: ou objet quelconque hors périmètre : ESPION_FS ; un descripteur numérique reste permis',
+        formes.res, { uint8array: 'ESPION_FS', 'vue-sur-un-tampon': 'ESPION_FS', buffer: 'ESPION_FS', 'url-file': 'ESPION_FS', 'promesse-uint8array': 'ESPION_FS', 'objet-inconnu': 'ESPION_FS', 'descripteur-numerique': 'passe' });
+    // Tour 2 (M-2) : les cibles des jonctions node_modules d'une copie de travail sont en LECTURE seule
+    {
+        const reelNm = (() => { try { return fs.realpathSync(path.join(RACINE, 'node_modules')); } catch { return null; } })();
+        const jonction = reelNm !== null && path.relative(RACINE, reelNm).startsWith('..');
+        if (jonction) {
+            const nm = rouler('suite-node-modules.js', ENTETE + `
+                await essai('lit-node-modules', () => fs.readFileSync(path.join(R, 'node_modules', '.package-lock.json')));
+                await essai('ecrit-node-modules', () => fs.writeFileSync(path.join(R, 'node_modules', '_inexistant-dossier-b2b', 'x.txt'), 'a'));
+                await essai('supprime-node-modules', () => fs.rmSync(path.join(R, 'node_modules', '_inexistant-b2b'), { recursive: true, force: true }));
+                await essai('ecrit-banc-local-nm', () => fs.writeFileSync(path.join(R, '.banc-local', 'node_modules', '_inexistant-dossier-b2b', 'x.txt'), 'a'));` + FIN);
+            H.v('la copie de travail (node_modules est une jonction vers main) : la LECTURE par la jonction passe, toute ÉCRITURE ou suppression est ESPION_FS',
+                [nm.res && ['passe', 'ENOENT'].includes(nm.res['lit-node-modules']), nm.res && nm.res['ecrit-node-modules'], nm.res && nm.res['supprime-node-modules'], nm.res && nm.res['ecrit-banc-local-nm']], [true, 'ESPION_FS', 'ESPION_FS', 'ESPION_FS']);
+        } else console.log('   (node_modules n\'est pas une jonction hors du dépôt dans ce checkout : le cas « copie de travail » n\'est pas joué ici)');
+    }
 
     // exceptions LECTURE SEULE (I-3) : les bancs chargeur ne lisent que rat-market-site/lib
     const site = `const SITE = path.join(os.homedir(), 'Desktop', 'rat-market-site');

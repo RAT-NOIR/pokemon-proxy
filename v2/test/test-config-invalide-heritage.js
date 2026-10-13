@@ -70,7 +70,10 @@ async function jouer(nom, envSup, avecJeton) {
     await H.arreterBanc();
     // les textes disent la condition (tour 1, I-1)
     const contrat = fs.readFileSync(path.join(RACINE, 'CONTRAT-API-V2.md'), 'utf8'), audit = fs.readFileSync(path.join(RACINE, 'AUDIT-SECURITE-V2.md'), 'utf8');
-    H.vrai('le contrat (ligne O2) dit que le 401 héritée suppose JETON_API et que sans elle la réponse est un 400', /Configuration invalide, chemin par chemin[^\n]*JETON_API[^\n]*400/.test(contrat));
-    H.vrai('l\'audit dit la même condition (JETON_API absente : 400, toujours sans débit)', /Configuration v2 invalide : quatre chemins[^\n]*JETON_API[^\n]*400/.test(audit));
+    // Tour 2 (M-4) : regex STRICTES sur la phrase exacte (la ligne O2 est une ligne de table énorme qui contient d'autres « 400 » : une regex lâche passerait même sans la condition)
+    const PH_CONTRAT = /\bConfiguration invalide, chemin par chemin\b[^\n]*?`JETON_API` est posée sur le serveur, sinon `400`/, PH_AUDIT = /SI `JETON_API` est posée sur le serveur ; sans elle `verifierJeton` laisse tout passer et c'est le 400 « userId manquant »/;
+    H.vrai('le contrat (ligne O2) dit : « si la variable héritée `JETON_API` est posée sur le serveur, sinon `400` »', PH_CONTRAT.test(contrat));
+    H.vrai('l\'audit dit : « SI `JETON_API` est posée sur le serveur ; sans elle `verifierJeton` laisse tout passer et c\'est le 400 « userId manquant » »', PH_AUDIT.test(audit));
+    H.vrai('   la mutation « retirer sinon `400` » du contrat est vue (la même regex rend faux), de même « retirer la condition » de l\'audit', !PH_CONTRAT.test(contrat.replace('sinon `400`', '')) && !PH_AUDIT.test(audit.replace('SI `JETON_API` est posée sur le serveur ; ', '')));
     H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

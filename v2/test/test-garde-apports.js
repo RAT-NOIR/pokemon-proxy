@@ -58,4 +58,8 @@ H.v('un fichier sain passe', juger('x.js', "path.join(__dirname, 'fixtures', 'a.
 const { valider } = require('./_apports-exceptions');
 const refuse = ex => { try { valider(ex, {}); return false; } catch { return true; } };
 H.v('une exception à clé vide, « . » ou « .. » est refusée (elle ouvrirait le Bureau entier) ; une clé nommée et raisonnée passe', [refuse({ 'x.js': { '': 'raison' } }), refuse({ 'x.js': { '.': 'raison' } }), refuse({ 'x.js': { '..': 'raison' } }), refuse({ 'x.js': { 'rat-market-site/lib': 'raison' } })], [true, true, true, false]);
+// Tour 2 (I-A) : un ANCÊTRE d'un dossier d'apports est refusé comme le dossier lui-même (la mutation M1 de la relecture 2 : « pokemon-proxy » ajouté à un banc chargeur, et « LOGO » seul)
+H.v('une exception qui est un ANCÊTRE d\'un dossier d\'apports (le dépôt du testeur, son verrou, le dépôt de l\'API) ou « LOGO » est refusée ; la liste réelle ajoutée de l\'une d\'elles est refusée',
+    [refuse({ 'x.js': { 'pokemon-proxy': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy/verrou': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy-api-v2': 'raison' } }), refuse({ 'x.js': { LOGO: 'raison' } }),
+        refuse({ ...require('./_apports-exceptions').EXCEPTIONS, 'test-chargeur-decision.js': { 'rat-market-site/lib': 'r', 'pokemon-proxy': 'r' } })], [true, true, true, true, true]);
 H.bilan();

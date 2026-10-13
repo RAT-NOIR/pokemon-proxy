@@ -33,6 +33,13 @@ const LECTURE_SEULE = {
  */
 function valider(exceptions = EXCEPTIONS, lectureSeule = LECTURE_SEULE) {
     const faute = (nom, cle, pourquoi) => { throw new Error(`exception refusée (${nom} : « ${cle} ») : ${pourquoi}`); };
+    // Tour 2 (I-A) : une exception désigne un dossier ou un fichier PRÉCIS qui ne CONTIENT aucun dossier protégé. Les chemins protégés (relatifs au Bureau, en minuscules) : chaque dossier d'apports, nu et sous les
+    // deux dépôts du testeur (le principal et celui de l'API), plus le jeu de photos du verrou sous les deux. Une clé égale à l'un d'eux OU qui en est l'ANCÊTRE (« pokemon-proxy » contient « Logo FR ») est refusée.
+    const path = require('path'), fs = require('fs');
+    const protegesRel = [];
+    for (const i of INTERDITS) { const n = i.toLowerCase().replace(/^desktop\//, ''); protegesRel.push(n, `pokemon-proxy/${n}`, `pokemon-proxy-api-v2/${n}`); }
+    const bureau = path.join(require('os').homedir(), 'Desktop');
+    const reel = p => { let abs = path.resolve(p); const reste = []; for (;;) { try { return path.join(fs.realpathSync.native(abs), ...reste.reverse()).replace(/[\\/]+/g, '/').toLowerCase(); } catch { const parent = path.dirname(abs); if (parent === abs) return path.resolve(p).replace(/[\\/]+/g, '/').toLowerCase(); reste.push(path.basename(abs)); abs = parent; } } };
     for (const [nom, ex] of Object.entries(exceptions)) {
         for (const [cle, raison] of Object.entries(ex || {})) {
             if (typeof cle !== 'string' || cle.trim() === '') faute(nom, cle, 'clé vide');
@@ -41,8 +48,13 @@ function valider(exceptions = EXCEPTIONS, lectureSeule = LECTURE_SEULE) {
             const segments = cle.split('/');
             if (segments.some(s => s.trim() === '' || s === '.' || s === '..')) faute(nom, cle, 'segment vide, « . » ou « .. »');
             if (['desktop', 'bureau'].includes(segments[0].toLowerCase())) faute(nom, cle, 'désigne le Bureau lui-même, pas un chemin nommé en dessous');
+            if (segments.some(s => /[~*?<>|"]/.test(s) || /[. ]$/.test(s))) faute(nom, cle, 'segment avec un joker, un nom court 8.3 (~), un caractère interdit ou un point ou espace final');
             const bas = cle.toLowerCase();
             for (const i of INTERDITS) if (bas.includes(i.toLowerCase())) faute(nom, cle, `tombe dans un dossier d'apports (${i})`);
+            for (const p of protegesRel) if (p === bas || p.startsWith(`${bas}/`)) faute(nom, cle, `est, ou CONTIENT, le dossier protégé « ${p} » (une exception nomme un chemin précis qui n'en contient aucun)`);
+            // le chemin RÉEL (jonctions suivies) : la clé résolue sous le Bureau ne doit contenir aucun dossier protégé résolu de même
+            const kr = reel(path.join(bureau, cle));
+            for (const p of protegesRel) { const pr = reel(path.join(bureau, p)); if (pr === kr || pr.startsWith(`${kr}/`)) faute(nom, cle, `son chemin réel contient « ${p} »`); }
             if (typeof raison !== 'string' || raison.trim() === '') faute(nom, cle, 'raison écrite exigée');
         }
     }
