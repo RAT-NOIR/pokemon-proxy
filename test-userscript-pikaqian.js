@@ -12,7 +12,8 @@ const verifier = (nom, obtenu, attendu) => {
     if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
 };
 
-const SRC = fs.readFileSync(path.join(__dirname, 'userscript-pikaqian.js'), 'utf8');
+// PK_USERSCRIPT (rouge-userscript-pikaqian.js) : un script MUTANT à tester à la place du vrai
+const SRC = fs.readFileSync(process.env.PK_USERSCRIPT ? path.resolve(process.env.PK_USERSCRIPT) : path.join(__dirname, 'userscript-pikaqian.js'), 'utf8');
 const m = /^\/\/ ==UserScript==\r?\n([\s\S]*?)\r?\n\/\/ ==\/UserScript==/.exec(SRC);
 verifier('l\'en-tête ==UserScript== existe', !!m, true);
 const entete = m ? m[1] : '';
@@ -45,20 +46,22 @@ const interdits = [
     ['.click()', /\.\s*click\s*\(/], ['window.open', /window\s*\.\s*open\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/],
     ['document.cookie', /document\s*\.\s*cookie/], ['localStorage/sessionStorage/indexedDB', /localStorage|sessionStorage|indexedDB/], ['GM_getValue/GM_setValue/GM_cookie', /GM_(getValue|setValue|cookie|openInTab|download)/],
     ['new Image / new WebSocket / EventSource', /new\s+(Image|WebSocket|EventSource)\b/], ['dispatchEvent dans la page', /dispatchEvent/], ['innerHTML (injection)', /\.\s*innerHTML\s*=/],
-    ['setInterval / setTimeout (aucune action différée)', /\bset(Interval|Timeout)\s*\(/], ['MutationObserver / IntersectionObserver', /(Mutation|Intersection)Observer/], ['eval / Function', /\beval\s*\(|new\s+Function\b/],
+    ['setInterval (aucune action répétée ; setTimeout n\'existe que dans pause(), vérifié plus bas)', /\bsetInterval\s*\(/], ['MutationObserver / IntersectionObserver', /(Mutation|Intersection)Observer/], ['eval / Function', /\beval\s*\(|new\s+Function\b/],
     ['AUCUN DÉFILEMENT : scroll / scrollTo / scrollBy / scrollIntoView / requestAnimationFrame', /\bscroll(To|By|IntoView|Top)?\s*[(=]|requestAnimationFrame|\.focus\s*\(/],
     ['forcer le chargement paresseux (loading = eager, lazy)', /\.\s*loading\s*=|setAttribute\s*\(\s*['"]loading/], ['changer le src d\'une image de la page', /\.\s*src\s*=[^=]|setAttribute\s*\(\s*['"]src/]
 ];
 for (const [nom, re] of interdits) verifier(`interdit absent : ${nom}`, re.test(sansCommentaires), false);
 verifier('GM_xmlhttpRequest est appelé DEUX fois dans le code : le récepteur local (poster) et l\'image de la tuile (depuisLeNavigateur)', (sansCommentaires.match(/GM_xmlhttpRequest\s*\(/g) || []).length, 2);
 verifier('fetch est appelé UNE seule fois, en lecture du cache de la page : GET, force-cache, sans identifiants, sans redirection', [(sansCommentaires.match(/\bfetch\s*\(/g) || []).length, /fetch\(src, \{ method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' \}\)/.test(sansCommentaires)], [1, true]);
-verifier('un seul addEventListener dans tout le code (le clic), et apprendre() n\'est appelée que depuis lui', [(sansCommentaires.match(/addEventListener\s*\(/g) || []).length, (sansCommentaires.match(/(?<!function\s)\bapprendre\s*\(\s*\)/g) || []).length, (() => {
+verifier('setTimeout : UNE seule fois, dans pause() (la cadence, attendue dans le flux du clic) ; la cadence est de 500 ms au moins', [(sansCommentaires.match(/\bsetTimeout\s*\(/g) || []).length, /function pause\(ms\) \{ return new Promise\(function \(resoudre\) \{ setTimeout\(resoudre, ms\); \}\); \}/.test(sansCommentaires), num('PAUSE_MS') >= 500], [1, true, true]);
+verifier('redirections refusées : redirect \'error\' sur le POST local, sur la lecture GM de l\'image et sur le fetch', (sansCommentaires.match(/redirect: 'error'/g) || []).length, 3);
+verifier('deux addEventListener : le clic et le survol du panneau (qui ne fait que rafraîchir l\'annonce, sans requête) ; apprendre() n\'est appelée que depuis le clic', [(sansCommentaires.match(/addEventListener\s*\(/g) || []).length, (sansCommentaires.match(/(?<!function\s)\bapprendre\s*\(\s*\)/g) || []).length, (() => {
     const i = sansCommentaires.search(/addEventListener\(\s*'click'/);
     let debut = sansCommentaires.indexOf('{', i), prof = 0, fin = -1;
     for (let k = debut; k < sansCommentaires.length; k++) { if (sansCommentaires[k] === '{') prof++; else if (sansCommentaires[k] === '}' && --prof === 0) { fin = k; break; } }
     const appel = sansCommentaires.indexOf('apprendre()', debut);
     return appel > debut && appel < fin;
-})()], [1, 1, true]);
+})()], [2, 1, true]);
 verifier('la page part telle quelle : poster(RECEPTEUR, { url: url, html: html }) — rien d\'autre (ni cookie ni en-tête du site)', /poster\(RECEPTEUR,\s*\{\s*url:\s*url,\s*html:\s*html\s*\}\)/.test(sansCommentaires), true);
 verifier('un lot d\'images ne porte que fichier, images et sansImage ; chaque image id, src, nom, numero, voie, b64', [/\{\s*fichier:\s*j\.fichier,\s*images:\s*lot,\s*sansImage:\s*sansImage\s*\}/.test(sansCommentaires), /lot\.push\(\{\s*id:\s*t\.id,\s*src:\s*t\.src,\s*nom:\s*t\.nom,\s*numero:\s*t\.numero,\s*voie:\s*lue\.voie,\s*b64:\s*lue\.b64\s*\}\)/.test(sansCommentaires)], [true, true]);
 
@@ -90,14 +93,18 @@ function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify(
                 return o.onload?.(reponseImages ? reponseImages(corps) : { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', recues: corps.images.length, nouvelles: corps.images.length, deja: 0, refusees: [] }) });
             }
             const t = parSrc.get(o.url);
+            if (t?.gmStatut) return o.onload?.({ status: t.gmStatut, response: new ArrayBuffer(0) });       // 403, 429, 503, 404… : une réponse HTTP sans image
             if (t && t.gm !== 'echec') return o.onload?.({ status: 200, response: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer });
             return o.onerror?.({});
         }, 0);
     };
-    const fetchFaux = (url, opts) => { fetches.push({ url, opts }); const t = parSrc.get(url); return t && t.fetch === 'ok' ? Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([9, 9, 9, 9]).buffer) }) : Promise.reject(new TypeError('Failed to fetch (CORS)')); };
-    const bac = { document, location, GM_xmlhttpRequest, fetch: fetchFaux, btoa, URL, Uint8Array, window: { location, document }, console, JSON, setTimeout, Date, String, Number, Math };
+    const fetchFaux = (url, opts) => { fetches.push({ url, opts }); const t = parSrc.get(url); if (t?.fetchStatut) return Promise.resolve({ ok: false, status: t.fetchStatut }); return t && t.fetch === 'ok' ? Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([9, 9, 9, 9]).buffer) }) : Promise.reject(new TypeError('Failed to fetch (CORS)')); };
+    // la cadence : le faux setTimeout du script ENREGISTRE chaque attente et rend la main aussitôt (le banc ne dort pas)
+    const pauses = [];
+    const setTimeoutScript = (f, ms) => { pauses.push(ms); Promise.resolve().then(f); };
+    const bac = { document, location, GM_xmlhttpRequest, fetch: fetchFaux, btoa, URL, Uint8Array, ArrayBuffer, window: { location, document }, console, JSON, setTimeout: setTimeoutScript, Date, String, Number, Math };
     bac.window.window = bac.window;
-    return { bac, elements, appels, fetches, defilements };
+    return { bac, elements, appels, fetches, defilements, pauses };
 }
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const texte = w => w.elements.map(e => e.textContent).join(' | ');
@@ -202,6 +209,56 @@ const hotesDes = appels => appels.map(a => new URL(a.url).host);
     verifier('une image refusée par le récepteur : le panneau le compte et cite le motif', [/0 reçues par le récepteur, 1 refusée/.test(texte(w)), /ne se décodent pas/.test(texte(w))], [true, true]);
     // aucun défilement : le monde fabriqué n'offre aucun scroll ; le script n'en cherche pas — le test statique l'interdit déjà
     verifier('le monde fabriqué n\'offre aucun scroll, et le test a tourné : aucune erreur', w.defilements.length, 0);
+
+    // ── TOUR 1 (passe B) : l'annonce AVANT le clic, la cadence, l'arrêt au premier 403/429/5xx
+    const T = (n, extra = {}) => ({ id: ID(n), nom: `N${n}`, numero: String(n).padStart(3, '0'), src: `${H}${ID(n)}.webp`, canvas: 'taché', fetch: 'refus', ...extra });
+    // tout lisible au canvas : l'annonce dit 0 requête, rien n'est parti
+    w = fabriquerMonde({ tuiles: [T(1, { canvas: 'ok' }), T(2, { canvas: 'ok' })] });
+    vm.runInNewContext(SRC, w.bac);
+    verifier('AVANT le clic, canvas lisible partout : le panneau dit « canvas », 0 requête, et rien n\'est parti', [/Voie prévue : canvas — 0 requête/.test(texte(w)), /Rien n'est envoyé avant ton clic/.test(texte(w)), w.appels.length, w.fetches.length], [true, true, 0, 0]);
+    // canvas refusé : l'annonce nomme la voie et le MAXIMUM (par image et au total), la cadence et l'arrêt
+    w = fabriquerMonde({ tuiles: [T(1), T(2), T(3), T(4, { chargee: false })] });
+    vm.runInNewContext(SRC, w.bac);
+    const annonce = texte(w);
+    verifier('AVANT le clic, canvas refusé : voie « cache puis navigateur », au plus 2 requêtes par image, au plus 6 pour 3 images, 500 ms, arrêt 403/429/5xx, sans réessai', [/Voie prévue : cache puis navigateur pour 3 image/.test(annonce), /Au plus 2 requêtes par image/.test(annonce), /au plus 6 pour 3 image/.test(annonce), /au moins 500 ms/.test(annonce), /arrêt au premier 403, 429 ou 5xx, sans réessai/.test(annonce), /les 1 autres ne seront pas lues/.test(annonce)], Array(6).fill(true));
+    verifier('… toujours aucune requête avant le clic', [w.appels.length, w.fetches.length, w.pauses.length], [0, 0, 0]);
+    // la cadence : 3 images, cache refusé (CORS), navigateur lisible → 500 ms avant CHAQUE requête sauf la première ; la voie cache est abandonnée après 2 échecs
+    w = fabriquerMonde({ tuiles: [T(1, { gm: 'ok' }), T(2, { gm: 'ok' }), T(3, { gm: 'ok' })] });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(150);
+    const requetesImages = w.appels.filter(x => x.url.startsWith(H)).length + w.fetches.length;
+    verifier('cadence : 5 requêtes vers l\'hôte des images (2 caches, 3 navigateurs), 4 pauses de 500 ms exactement — jamais deux requêtes sans pause', [w.fetches.length, w.appels.filter(x => x.url.startsWith(H)).length, requetesImages, w.pauses.length, w.pauses.every(p => p === 500)], [2, 3, 5, 4, true]);
+    verifier('la voie cache est abandonnée après 2 échecs de suite (la 3e image ne la tente plus) ; les GM refusent les redirections', [w.fetches.map(f => f.url.slice(-41, -5)), w.appels.filter(x => x.url.startsWith(H)).every(x => x.redirect === 'error')], [[ID(1), ID(2)], true]);
+    verifier('le panneau affiche le compte RÉEL après l\'envoi', [/Requêtes vers images\.pikaqian\.com : navigateur 3 · cache 2 lecture/.test(texte(w)), /voie cache abandonnée/.test(texte(w))], [true, true]);
+    // canvas lisible : aucune pause, aucune requête
+    w = fabriquerMonde({ tuiles: Array.from({ length: 5 }, (_, i) => T(i + 1, { canvas: 'ok' })) });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(100);
+    verifier('canvas lisible : 0 pause, 0 fetch, 0 requête vers l\'hôte des images', [w.pauses.length, w.fetches.length, w.appels.filter(x => x.url.startsWith(H)).length], [0, 0, 0]);
+    // L'ARRÊT : premier 403 / 429 / 5xx, sur CHAQUE voie, sans réessai ; les images déjà lues partent au récepteur ; une 404 n'arrête pas
+    for (const [nom, tuiles, voie, statut] of [
+        ['403 sur le navigateur', [T(1, { gm: 'ok' }), T(2, { gmStatut: 403 }), T(3, { gm: 'ok' }), T(4, { gm: 'ok' })], 'navigateur', 403],
+        ['429 sur le navigateur', [T(1, { gm: 'ok' }), T(2, { gmStatut: 429 }), T(3, { gm: 'ok' })], 'navigateur', 429],
+        ['503 sur le navigateur', [T(1, { gm: 'ok' }), T(2, { gmStatut: 503 }), T(3, { gm: 'ok' })], 'navigateur', 503],
+        ['429 sur le cache', [T(1, { gm: 'ok' }), T(2, { fetchStatut: 429 }), T(3, { gm: 'ok' })], 'cache', 429]
+    ]) {
+        w = fabriquerMonde({ tuiles });
+        vm.runInNewContext(SRC, w.bac);
+        w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+        await attendre(150);
+        const tuileFautive = tuiles[1].src;
+        const lots = w.appels.filter(x => /\/images$/.test(x.url)).map(x => JSON.parse(x.data));
+        const apresFaute = w.appels.filter(x => x.url.startsWith(H)).map(x => x.url).concat(w.fetches.map(f => f.url));
+        verifier(`ARRÊT — ${nom} : le panneau l'affiche, aucune requête vers la tuile suivante, aucun réessai de la fautive, l'image déjà lue est envoyée`, [new RegExp(`ARRÊT : HTTP ${statut} \\(voie ${voie}\\)`).test(texte(w)), apresFaute.some(u => u.includes(ID(3))) && tuiles.length >= 3 && !apresFaute.some(u => u.includes(ID(3)) && false), apresFaute.filter(u => u === tuileFautive).length <= 2, lots.length, lots[0]?.images.map(i => i.id.slice(-1))],
+            [true, false, true, 1, ['1']]);
+    }
+    w = fabriquerMonde({ tuiles: [T(1, { gm: 'ok' }), T(2, { gmStatut: 404 }), T(3, { gm: 'ok' })] });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(150);
+    verifier('une 404 n\'est PAS un arrêt : la lecture continue (2 images envoyées, 1 illisible)', [/ARRÊT/.test(texte(w)), w.appels.filter(x => /\/images$/.test(x.url)).flatMap(x => JSON.parse(x.data).images).length, /illisibles 1/.test(texte(w))], [false, 2, true]);
 
     console.log(`\n${ok} réussis, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

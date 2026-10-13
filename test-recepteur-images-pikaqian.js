@@ -100,10 +100,21 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
         await refusImage('au-delà de 2 Mo (déclaration par la longueur)', entree(1, 'Pikachu', '001', gros), /illisibles ou au-delà de/);
         await refusImage('octets qui ne sont pas une image', entree(1, 'Pikachu', '001', Buffer.from('<html>Just a moment</html>')), /ne se décodent pas/);
         await refusImage('image tronquée (l\'en-tête seul se lit)', entree(1, 'Pikachu', '001', imPng.subarray(0, 60)), /ne se décodent pas/);
+        const bruitPng = await sharp(crypto.randomBytes(100 * 100 * 3), { raw: { width: 100, height: 100, channels: 3 } }).png({ compressionLevel: 0 }).toBuffer();
+        await refusImage('image tronquée EN PLEIN CORPS (l\'en-tête se lit, les pixels non : seul le décodage complet le voit)', entree(1, 'Pikachu', '001', bruitPng.subarray(0, Math.floor(bruitPng.length / 2))), /ne se décodent pas/);
         const gif = await sharp(couleur(1, 2, 3, 20, 20)).gif().toBuffer();
         await refusImage('format gif', entree(1, 'Pikachu', '001', gif), /format « gif »/);
         const large = await sharp(couleur(1, 2, 3, 4097, 1)).png().toBuffer();
         await refusImage('dimensions hors bornes (4097 × 1)', entree(1, 'Pikachu', '001', large), /dimensions 4097×1/);
+        // TOUR 1 (passe B, important 3) : un PNG de quelques centaines de Ko qui se décoderait en 12000 × 12000 est refusé sur son EN-TÊTE, avant tout décodage de pixels
+        const geant = await sharp({ create: { width: 12000, height: 12000, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png({ compressionLevel: 9 }).toBuffer();
+        verifier('le PNG géant tient sous le plafond de 2 Mo (donc passe les contrôles de taille)', geant.length < P.IMAGE_MAX_OCTETS, true);
+        await refusImage('PNG de moins de 2 Mo qui se décoderait en 12000 × 12000 (refusé sur l\'en-tête)', entree(1, 'Pikachu', '001', geant), /dimensions 12000×12000/);
+        {
+            const src = fs.readFileSync(process.env.PK_RECEPTEUR ? path.resolve(process.env.PK_RECEPTEUR) : path.join(__dirname, 'recepteur-pikaqian.js'), 'utf8');
+            const j = src.slice(src.indexOf('async function jugerImages'));
+            verifier('ordre dans le code : metadata() et les dimensions AVANT le décodage complet, et le décodage est borné par limitInputPixels', [j.indexOf('.metadata()') < j.indexOf('.raw()'), j.indexOf('GARDE:image-dimensions') < j.indexOf('.raw()'), /limitInputPixels: DIMENSION_MAX \* DIMENSION_MAX/.test(j)], [true, true, true]);
+        }
         // un lot qui mêle bonne et mauvaise image : la bonne passe, la mauvaise est refusée avec son motif
         const bonne2 = await sharp(couleur(77, 77, 77)).webp().toBuffer();
         r = await envoyer(port, { corps: lot([entree(2, 'Raichu', '002', bonne2), entree(3, 'Faux', '003', imJpg)]) });
@@ -152,6 +163,22 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
         if (!process.env.PK_RECEPTEUR) {
             let leve = null; try { await R.demarrer({ port: 0, dossier, dossierImages: path.join(__dirname, 'images-test'), journal: () => { } }); } catch (e) { leve = e.message; }
             verifier('un dossier d\'images DANS le dépôt : démarrage refusé, rien de créé', [/dépôt/.test(leve || ''), fs.existsSync(path.join(__dirname, 'images-test'))], [true, false]);
+            // TOUR 1 (passe B, mineurs) : les dossiers d'apports manuels, et les jonctions qui mènent au dépôt
+            for (const nom of ['Logo FR', 'apport-manuel', path.join('Desktop', 'LOGO')]) {
+                let l = null; const cible = path.join(racine, nom, 'sous', 'dossier');
+                try { await R.demarrer({ port: 0, dossier: cible, dossierImages: path.join(racine, 'ok-images'), journal: () => { } }); } catch (e) { l = e.message; }
+                verifier(`un dossier dans « ${nom} » : démarrage refusé (apports manuels), rien de créé`, [/apports manuels/.test(l || ''), fs.existsSync(path.join(racine, nom))], [true, false]);
+            }
+            let l2 = null; try { await R.demarrer({ port: 0, dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(racine, 'Logo FR'), journal: () => { } }); } catch (e) { l2 = e.message; }
+            verifier('le dossier d\'IMAGES dans un dossier d\'apports manuels : refusé aussi', /apports manuels/.test(l2 || ''), true);
+            const jonction = path.join(racine, 'jonction-vers-le-depot');
+            const retirerJonction = () => require('child_process').spawnSync('cmd', ['/c', 'rmdir', jonction]);   // une jonction se retire par rmdir, jamais par une suppression récursive
+            fs.symlinkSync(__dirname, jonction, 'junction');
+            try {
+                let l3 = null; try { await R.demarrer({ port: 0, dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(jonction, 'images-test'), journal: () => { } }); } catch (e) { l3 = e.message; }
+                verifier('une JONCTION qui mène au dépôt est résolue : dansLeDepot vrai, démarrage refusé, rien créé dans le dépôt', [R.dansLeDepot(path.join(jonction, 'x')), /dépôt/.test(l3 || ''), fs.existsSync(path.join(__dirname, 'images-test'))], [true, true, false]);
+            } finally { retirerJonction(); }
+            verifier('la jonction est retirée sans toucher à sa cible', [fs.existsSync(jonction), fs.existsSync(path.join(__dirname, 'recepteur-pikaqian.js'))], [false, true]);
             verifier('le dossier par défaut est HORS dépôt et nomme pikaqian-passif', [R.dansLeDepot(R.DOSSIER_PASSIF_DEFAUT), /pikaqian-passif$/.test(R.DOSSIER_PASSIF_DEFAUT)], [false, true]);
         }
     } finally { await srv.fermer(); }

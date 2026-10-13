@@ -62,10 +62,24 @@ const PREFIXE_URL = `https://${P.HOTE_PAGES}/sets/`;
 // ce que la page de Remix hydratée porte de son flux de données : s'il manque, `lireOrigines` ne peut rien lire (PIKAQIAN-PASSIF.md)
 const MARQUEURS_FLUX = /__reactRouterContext|__remixContext|streamController\s*\.\s*enqueue|"loaderData"/;
 
+/** Le chemin RÉEL (jonctions et liens résolus) du plus long préfixe existant, suivi du reste : un dossier à créer sous une jonction pointe où la jonction pointe. */
+const cheminReel = p => {
+    let courant = path.resolve(p), reste = '';
+    for (let i = 0; i < 64; i++) {
+        try { return path.join(fs.realpathSync.native(courant), reste); } catch { /* n'existe pas encore : on remonte */ }
+        const parent = path.dirname(courant);
+        if (parent === courant) break;
+        reste = path.join(path.basename(courant), reste); courant = parent;
+    }
+    return path.resolve(p);
+};
 const dansLeDepot = dossier => {
-    const rel = path.relative(__dirname.toLowerCase(), path.resolve(dossier).toLowerCase());
+    const rel = path.relative(cheminReel(__dirname).toLowerCase(), cheminReel(dossier).toLowerCase());
     return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
+// Les dossiers d'APPORTS MANUELS du testeur (CLAUDE.md : « Logo FR », « apport-manuel », « Desktop\LOGO ») : ni ce dossier ni un dossier DEDANS ne reçoit jamais rien d'un outil.
+const APPORTS_MANUELS = [/(^|[\\/])logo fr([\\/]|$)/i, /(^|[\\/])apport-manuel([\\/]|$)/i, /[\\/]desktop[\\/]logo([\\/]|$)/i];
+const dansApportsManuels = dossier => { const reel = cheminReel(dossier), brut = path.resolve(dossier); return APPORTS_MANUELS.some(r => r.test(reel) || r.test(brut)); };
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
 /** Le nombre de tuiles que la mesure du set a relevé (pikaqian-sets.json, `tuiles`), ou null quand la table ne le connaît pas. */
@@ -184,11 +198,15 @@ async function jugerImages(brut, { dossier, dossierImages, maintenant = () => ne
     const le = maintenant().toISOString();
     for (const { im, t, octets } of decoder) {
         let meta = null;
-        // le DÉCODAGE complet (pas seulement l'en-tête) : un fichier tronqué ou truqué n'est pas une image
-        try { meta = await sharp(octets).metadata(); await sharp(octets).raw().toBuffer(); } catch { meta = null; }
+        // 1. l'EN-TÊTE d'abord (sharp(...).metadata() ne décode aucun pixel) : le format et les dimensions se jugent AVANT toute allocation de pixels — un PNG de 420 Ko peut se décoder en 12000 × 12000 (432 Mo)
+        try { meta = await sharp(octets).metadata(); } catch { meta = null; }
         if (!meta) { refus(im.id, 'octets qui ne se décodent pas en image'); continue; }   // GARDE:image-decodage
         if (!EXTENSIONS[meta.format]) { refus(im.id, `format « ${meta.format} » : webp, png ou jpeg seulement`); continue; }   // GARDE:image-format
         if (!(meta.width >= 1 && meta.height >= 1 && meta.width <= DIMENSION_MAX && meta.height <= DIMENSION_MAX)) { refus(im.id, `dimensions ${meta.width}×${meta.height} hors de 1…${DIMENSION_MAX}`); continue; }   // GARDE:image-dimensions
+        // 2. puis le DÉCODAGE complet (un fichier tronqué ou truqué n'est pas une image), borné par limitInputPixels : un décodage ne dépasse jamais DIMENSION_MAX² pixels
+        let decode = true;
+        try { await sharp(octets, { limitInputPixels: DIMENSION_MAX * DIMENSION_MAX }).raw().toBuffer(); } catch { decode = false; }
+        if (!decode) { refus(im.id, 'octets qui ne se décodent pas en image'); continue; }   // GARDE:image-decodage-complet
         const empreinte = sha256(octets);
         const fichier = `${t.id}--${empreinte.slice(0, 12)}.${EXTENSIONS[meta.format]}`;
         const cible = path.join(dossierImages, code, fichier);
@@ -215,6 +233,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
     // les images et les fichiers de page : le dossier de production par défaut, SEULEMENT quand les fiches vont au leur ; sinon un voisin du dossier donné (les bancs)
     if (!dossierImages) dossierImages = path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`;
     if (dansLeDepot(dossierImages)) throw new Error(`le dossier « ${dossierImages} » est dans le dépôt : les images reçues n'y entrent jamais`);
+    for (const d of [dossier, dossierImages]) if (dansApportsManuels(d)) throw new Error(`le dossier « ${d} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     fs.mkdirSync(dossier, { recursive: true });
     let serie = Promise.resolve();                                // les lots d'images sont jugés UN À LA FOIS (le fichier de page se réécrit)
     const serveur = http.createServer((req, res) => {
@@ -273,7 +292,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
+module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main === module) {

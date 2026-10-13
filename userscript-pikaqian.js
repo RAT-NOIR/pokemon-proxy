@@ -32,6 +32,8 @@
 //   3. « navigateur » : GM_xmlhttpRequest vers la même adresse (images.pikaqian.com seulement, @connect). Ce n'est PAS le cache de la page : l'extension a son propre
 //      contexte, donc le navigateur REQUÊTE l'image (anonyme, sans cookie), depuis TON navigateur, pendant TA visite — une requête par image, comme l'affichage de la page
 //      en a fait une. C'est tout ce qui est permis : jamais le worker, jamais une autre adresse que celle de la tuile.
+//   CADENCE ET ARRÊT (§17, §38) : le panneau DIT, avant le clic, la voie prévue et le nombre maximal de requêtes (2 par image, ou 0 si le canvas lit). Les voies 2 et 3 attendent au moins
+//   500 ms avant chaque requête, s'ARRÊTENT au premier 403, 429 ou 5xx sans réessai (et le panneau l'affiche), et la voie 2 est abandonnée après deux échecs de suite. Redirections refusées.
 // · Il pose deux en-têtes au récepteur : Content-Type application/json et X-Rat-Market: rat-market-passif (le récepteur exige les deux).
 // Le test statique (test-userscript-pikaqian.js) refuse toute adresse autre que 127.0.0.1 dans ce fichier et tout nom d'hôte autre que HOTE_IMAGES.
 (function () {
@@ -72,6 +74,7 @@
                 data: JSON.stringify(objet),
                 anonymous: true,
                 timeout: 30000,
+                redirect: 'error',
                 onload: function (r) {
                     var j = null;
                     try { j = JSON.parse(r.responseText); } catch (e) { j = null; }
@@ -129,41 +132,87 @@
             return b64 && b64.length <= B64_MAX ? b64 : null;
         } catch (e) { return null; }
     }
-    // voie 2 : le cache HTTP de la page ; sinon le navigateur requête (voir l'en-tête). Illisible sans CORS.
-    function depuisLeCache(src) {
-        return fetch(src, { method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' }).then(function (r) {
-            if (!r.ok) return null;
-            return r.arrayBuffer().then(function (ab) { return ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? enBase64(ab) : null; });
-        }).catch(function () { return null; });
+    // ── LA CADENCE ET L'ARRÊT (passe B, tour 1 : §17 et §38 appliqués au navigateur du testeur) ─────────────────────────────────────────────────────
+    // Une voie qui peut RÉÉMETTRE une requête (cache sans entrée, navigateur) attend au moins PAUSE_MS avant chaque requête qu'elle émet (sauf la toute première de la page), et
+    // S'ARRÊTE au premier 403, 429 ou 5xx — sans réessai. La voie cache, qui échoue deux fois de suite sans rien lire (CORS refusé), est abandonnée pour la suite de la page.
+    var PAUSE_MS = 500;
+    var lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false };
+    function pause(ms) { return new Promise(function (resoudre) { setTimeout(resoudre, ms); }); }
+    function estArret(statut) { return statut === 403 || statut === 429 || statut >= 500; }
+    function avantRequete() {
+        var attente = lecture.emises > 0 ? pause(PAUSE_MS) : Promise.resolve();
+        lecture.emises++;
+        return attente;
     }
-    // voie 3 : GM_xmlhttpRequest, anonyme, vers la seule adresse de la tuile — le navigateur du testeur requête, pendant sa visite
+    // voie 2 : le cache HTTP de la page ; sinon le navigateur requête (voir l'en-tête). Illisible sans CORS. Résout { b64 } ou { echec, statut } (0 = pas de réponse lisible).
+    function depuisLeCache(src) {
+        return avantRequete().then(function () {
+            lecture.cacheTentatives++;
+            return fetch(src, { method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' }).then(function (r) {
+                if (!r.ok) return { echec: true, statut: r.status };
+                return r.arrayBuffer().then(function (ab) { return ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? { b64: enBase64(ab) } : { echec: true, statut: 0 }; });
+            }).catch(function () { return { echec: true, statut: 0 }; });
+        });
+    }
+    // voie 3 : GM_xmlhttpRequest, anonyme, vers la seule adresse de la tuile (redirections refusées) — le navigateur du testeur requête, pendant sa visite
     function depuisLeNavigateur(src) {
-        return new Promise(function (resoudre) {
-            GM_xmlhttpRequest({
-                method: 'GET', url: src, responseType: 'arraybuffer', anonymous: true, timeout: 30000,
-                onload: function (r) {
-                    var ab = r.response;
-                    resoudre(r.status === 200 && ab && ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? enBase64(ab) : null);
-                },
-                onerror: function () { resoudre(null); },
-                ontimeout: function () { resoudre(null); }
+        return avantRequete().then(function () {
+            lecture.navigateurRequetes++;
+            return new Promise(function (resoudre) {
+                GM_xmlhttpRequest({
+                    method: 'GET', url: src, responseType: 'arraybuffer', anonymous: true, timeout: 30000, redirect: 'error',
+                    onload: function (r) {
+                        var ab = r.response;
+                        if (r.status === 200 && ab && ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS) resoudre({ b64: enBase64(ab) });
+                        else resoudre({ echec: true, statut: r.status });
+                    },
+                    onerror: function () { resoudre({ echec: true, statut: 0 }); },
+                    ontimeout: function () { resoudre({ echec: true, statut: 0 }); }
+                });
             });
         });
     }
-    // Les octets d'UNE tuile : { b64, voie } ou null (illisible). Jamais une adresse hors HOTE_IMAGES.
+    // Les octets d'UNE tuile : { b64, voie } ou null (illisible). Jamais une adresse hors HOTE_IMAGES. Lève { arret } au premier 403, 429 ou 5xx.
     function lireImage(t) {
         if (!adresseAutorisee(t.src)) return Promise.resolve(null);
         var b = depuisCanvas(t.img);
         if (b) return Promise.resolve({ b64: b, voie: 'canvas' });
-        return depuisLeCache(t.src).then(function (c) {
-            if (c) return { b64: c, voie: 'cache' };
-            return depuisLeNavigateur(t.src).then(function (n) { return n ? { b64: n, voie: 'navigateur' } : null; });
+        var etapeCache = lecture.cacheMorte ? Promise.resolve({ echec: true, statut: 0 }) : depuisLeCache(t.src);
+        return etapeCache.then(function (c) {
+            if (c.b64) { lecture.cacheEchecs = 0; return { b64: c.b64, voie: 'cache' }; }
+            if (!lecture.cacheMorte && ++lecture.cacheEchecs >= 2) lecture.cacheMorte = true;
+            if (estArret(c.statut)) throw { arret: { statut: c.statut, voie: 'cache', src: t.src } };
+            return depuisLeNavigateur(t.src).then(function (n) {
+                if (n.b64) return { b64: n.b64, voie: 'navigateur' };
+                if (estArret(n.statut)) throw { arret: { statut: n.statut, voie: 'navigateur', src: t.src } };
+                return null;
+            });
         });
     }
+    // le compte RÉEL après coup : les requêtes vers l'hôte des images (cache : 0 ou 1 chacune, selon une entrée de cache ; navigateur : 1 chacune)
+    function compteReel() {
+        return '\nRequêtes vers ' + HOTE_IMAGES + ' : navigateur ' + lecture.navigateurRequetes + ' · cache ' + lecture.cacheTentatives + ' lecture(s) (0 ou 1 requête chacune, au plus ' + (lecture.navigateurRequetes + lecture.cacheTentatives) + ' au total)' + (lecture.cacheMorte ? ' · voie cache abandonnée après 2 échecs' : '');
+    }
+    // CE QUI PARTIRA, dit AVANT le clic (aucune requête pour le dire : un essai de canvas est local). Se rafraîchit quand la souris passe sur le panneau.
+    function annonce() {
+        var tuiles = lireTuilesDuDom();
+        var pretes = tuiles.filter(function (t) { return t.chargee && adresseAutorisee(t.src); });
+        var n = pretes.length;
+        var t = 'Rien n\'est envoyé avant ton clic.\nTuiles : ' + tuiles.length + ', dont ' + n + ' avec une image chargée (les ' + (tuiles.length - n) + ' autres ne seront pas lues : je ne défile pas).\n';
+        if (!n) return t + 'Aucune image à lire : seule la page partira vers le récepteur local (127.0.0.1).';
+        // chaque image chargée est essayée au canvas (local, sans requête) : la voie prévue est celle de CHACUNE, pas celle de la première
+        var parCanvas = pretes.filter(function (p) { return depuisCanvas(p.img); }).length, reste = n - parCanvas;
+        if (!reste) return t + 'Voie prévue : canvas — 0 requête vers ' + HOTE_IMAGES + ' (les pixels déjà affichés).';
+        return t + 'Voie prévue : ' + (parCanvas ? 'canvas pour ' + parCanvas + ' image(s) (0 requête), puis ' : '') + 'cache puis navigateur pour ' + reste + ' image(s) — le canvas est refusé (image d\'une autre origine). Au plus 2 requêtes par image vers ' + HOTE_IMAGES +
+            ', soit au plus ' + (2 * reste) + ' pour ' + reste + ' image(s), depuis TON navigateur ; au moins ' + PAUSE_MS + ' ms entre deux ; arrêt au premier 403, 429 ou 5xx, sans réessai ; la voie cache est abandonnée après 2 échecs de suite (alors 1 requête par image, au plus ' + reste + ').';
+    }
+    etat.textContent = annonce();
+    panneau.addEventListener('mouseover', function () { if (!bouton.disabled) etat.textContent = annonce(); });
 
     async function apprendre() {
         var url = location.origin + location.pathname;
         var html = document.documentElement.outerHTML;
+        lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false };   // les comptes et la cadence repartent à zéro à chaque clic
         etat.textContent = 'Envoi de la page au récepteur local…';
         var rep = await poster(RECEPTEUR, { url: url, html: html });
         var j = rep.json;
@@ -208,9 +257,14 @@
                 return;
             }
             etat.textContent = entete + '\nImages envoyées : ' + recues + ' reçues par le récepteur, ' + refusees + ' refusée(s)' + (premierMotif ? ' (« ' + premierMotif + ' »)' : '') +
-                '\nVoies : canvas ' + voies.canvas + ', cache ' + voies.cache + ', navigateur ' + voies.navigateur + ' · illisibles ' + illisibles + ' · tuiles sans image ' + sansImage;
+                '\nVoies : canvas ' + voies.canvas + ', cache ' + voies.cache + ', navigateur ' + voies.navigateur + ' · illisibles ' + illisibles + ' · tuiles sans image ' + sansImage + compteReel();
         } catch (e) {
-            if (e && e.refus) etat.textContent = entete + '\nLe récepteur a refusé un lot d\'images (' + e.refus + ') : arrêt.';
+            if (e && e.arret) {
+                // premier 403, 429 ou 5xx : plus AUCUNE requête, aucun réessai ; ce qui a été lu avant part quand même au récepteur
+                try { await envoyerLot(); } catch (e2) { /* le récepteur ne répond plus : rien de plus à faire */ }
+                etat.textContent = entete + '\n⛔ ARRÊT : HTTP ' + e.arret.statut + ' (voie ' + e.arret.voie + ') — plus aucune requête vers ' + HOTE_IMAGES + ', aucun réessai. Reçues par le récepteur : ' + recues + '.' + compteReel();
+            }
+            else if (e && e.refus) etat.textContent = entete + '\nLe récepteur a refusé un lot d\'images (' + e.refus + ') : arrêt.';
             else if (e && e.reseau) etat.textContent = entete + '\nLe récepteur ne répond plus (' + e.reseau + ') pendant l\'envoi des images : arrêt.';
             else throw e;
         }
