@@ -15,6 +15,8 @@ const INDEX = Object.freeze([
     I('sessions', 'sessions_token', { tokenEmpreinte: 1 }, { unique: true }), TTL('sessions'),
     I('liens_email', 'liens_empreinte', { empreinte: 1 }, { unique: true }), TTL('liens_email'),
     I('mouvements', 'mouvements_cle', { cleIdempotence: 1 }, { unique: true, partialFilterExpression: { cleIdempotence: { $type: 'string' } } }),
+    // MOYENS-B2a tour 2 : la trace +1 d'un débit est UNIQUE, quelle que soit sa clé (`rl|…`, `rp|…`, `rb|…#id`, claim) — deux chemins qui rendent le même débit ne peuvent pas écrire deux crédits tracés
+    I('mouvements', 'mouvements_debit_trace', { debitId: 1 }, { unique: true, partialFilterExpression: { debitId: { $type: 'objectId' } } }),
     I('mouvements', 'mouvements_compte', { compteId: 1, le: -1 }), I('mouvements', 'mouvements_installation', { installationId: 1, le: -1 }), TTL('mouvements'),
     I('hebdo', 'hebdo_cle', { compteId: 1, semaine: 1 }, { unique: true }), TTL('hebdo'),
     I('plafonds', 'plafonds_cle', { porteur: 1, jour: 1, type: 1 }, { unique: true }), TTL('plafonds'),
