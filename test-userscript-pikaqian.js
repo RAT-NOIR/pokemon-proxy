@@ -70,11 +70,12 @@ verifier('un lot d\'images ne porte que fichier, images et sansImage ; chaque im
  * Un monde fabriqué. `tuiles` : [{ id, nom, numero, src, chargee, canvas: 'ok'|'taché', fetch: 'ok'|'refus', gm: 'ok'|'echec' }] ; rien de réel : GM_xmlhttpRequest, fetch et canvas sont des faux qui enregistrent.
  */
 function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', tuilesLues: 315, tuilesAuCode: 315, officielles: 1, natives: 1, fichier: 'cs1bc--x.json' }) }, erreur = null, tuiles = [], reponseImages = null } = {}) {
-    const elements = [], appels = [], fetches = [], defilements = [];
+    const elements = [], appels = [], fetches = [], defilements = [], snaps = [], imgs = new Map();
     const el = tag => { const e = { tag, style: {}, children: [], ecouteurs: {}, textContent: '', addEventListener(t, f) { this.ecouteurs[t] = f; }, appendChild(c) { this.children.push(c); return c; }, setAttribute() { } }; elements.push(e); return e; };
     const parSrc = new Map(tuiles.map(t => [t.src, t]));
     const ancres = tuiles.map(t => {
         const img = { complete: t.chargee !== false, naturalWidth: t.chargee === false ? 0 : 300, naturalHeight: 416, currentSrc: t.src, src: t.src, _t: t };
+        imgs.set(t.id, img);
         return {
             getAttribute: n => (n === 'href' ? `/cards/${t.id}` : null),
             querySelector: s => (s === 'img' ? img : s === 'h2' ? { textContent: `  ${t.nom}\n` } : s === 'p' ? { textContent: `cs1bc · ${t.numero} ` } : null)
@@ -85,6 +86,7 @@ function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify(
     const location = { href: 'https://pikaqian.com/sets/cs1bc?x=1#h', origin: 'https://pikaqian.com', pathname: '/sets/cs1bc', search: '?x=1', hash: '#h' };
     const GM_xmlhttpRequest = o => {
         appels.push(o);
+        snaps.push(elements.map(e => e.textContent).join(' | '));      // ce que le panneau DISAIT au moment de la requête
         setTimeout(() => {
             if (erreur && /^http:\/\/127\.0\.0\.1/.test(o.url)) return o.onerror?.({ error: erreur });
             if (/\/apprendre$/.test(o.url)) return o.onload?.(reponse);
@@ -93,18 +95,24 @@ function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify(
                 return o.onload?.(reponseImages ? reponseImages(corps) : { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', recues: corps.images.length, nouvelles: corps.images.length, deja: 0, refusees: [] }) });
             }
             const t = parSrc.get(o.url);
-            if (t?.gmStatut) return o.onload?.({ status: t.gmStatut, response: new ArrayBuffer(0) });       // 403, 429, 503, 404… : une réponse HTTP sans image
-            if (t && t.gm !== 'echec') return o.onload?.({ status: 200, response: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer });
+            const finalUrl = t && 'gmFinal' in t ? t.gmFinal : o.url;      // l'URL finale rendue par le gestionnaire (`undefined` = illisible)
+            if (t?.gmStatut) return o.onload?.({ status: t.gmStatut, response: new ArrayBuffer(0), finalUrl });       // 403, 429, 503, 404… : une réponse HTTP sans image
+            if (t && t.gm !== 'echec') return o.onload?.({ status: 200, response: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer, finalUrl });
             return o.onerror?.({});
         }, 0);
     };
-    const fetchFaux = (url, opts) => { fetches.push({ url, opts }); const t = parSrc.get(url); if (t?.fetchStatut) return Promise.resolve({ ok: false, status: t.fetchStatut }); return t && t.fetch === 'ok' ? Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new Uint8Array([9, 9, 9, 9]).buffer) }) : Promise.reject(new TypeError('Failed to fetch (CORS)')); };
+    const fetchFaux = (url, opts) => {
+        fetches.push({ url, opts }); const t = parSrc.get(url);
+        const urlRep = t && 'fetchFinal' in t ? t.fetchFinal : url;
+        if (t?.fetchStatut) return Promise.resolve({ ok: false, status: t.fetchStatut, url: urlRep });
+        return t && t.fetch === 'ok' ? Promise.resolve({ ok: true, status: 200, url: urlRep, arrayBuffer: () => Promise.resolve(new Uint8Array([9, 9, 9, 9]).buffer) }) : Promise.reject(new TypeError('Failed to fetch (CORS)'));
+    };
     // la cadence : le faux setTimeout du script ENREGISTRE chaque attente et rend la main aussitôt (le banc ne dort pas)
     const pauses = [];
     const setTimeoutScript = (f, ms) => { pauses.push(ms); Promise.resolve().then(f); };
     const bac = { document, location, GM_xmlhttpRequest, fetch: fetchFaux, btoa, URL, Uint8Array, ArrayBuffer, window: { location, document }, console, JSON, setTimeout: setTimeoutScript, Date, String, Number, Math };
     bac.window.window = bac.window;
-    return { bac, elements, appels, fetches, defilements, pauses };
+    return { bac, elements, appels, fetches, defilements, pauses, snaps, imgs };
 }
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const texte = w => w.elements.map(e => e.textContent).join(' | ');
@@ -190,7 +198,7 @@ const hotesDes = appels => appels.map(a => new URL(a.url).host);
     const lourdes = Array.from({ length: 4 }, (_, i) => ({ id: ID(i + 1), nom: `N${i}`, numero: String(i + 1).padStart(3, '0'), src: `${H}${ID(i + 1)}.webp`, canvas: 'taché', fetch: 'ok' }));
     w = fabriquerMonde({ tuiles: lourdes });
     const grosB = new Uint8Array(900000).buffer;                       // 1,2 million de caractères base64 par image : deux images dépassent LOT_B64_MAX
-    w.bac.fetch = (url, opts) => { w.fetches.push({ url, opts }); return Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(grosB) }); };
+    w.bac.fetch = (url, opts) => { w.fetches.push({ url, opts }); return Promise.resolve({ ok: true, status: 200, url, arrayBuffer: () => Promise.resolve(grosB) }); };
     vm.runInNewContext(SRC, w.bac);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
     await attendre(400);
@@ -259,6 +267,52 @@ const hotesDes = appels => appels.map(a => new URL(a.url).host);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
     await attendre(150);
     verifier('une 404 n\'est PAS un arrêt : la lecture continue (2 images envoyées, 1 illisible)', [/ARRÊT/.test(texte(w)), w.appels.filter(x => /\/images$/.test(x.url)).flatMap(x => JSON.parse(x.data).images).length, /illisibles 1/.test(texte(w))], [false, 2, true]);
+
+    // ── TOUR 2 : le maximum se recalcule AU CLIC et s'affiche AVANT l'envoi
+    w = fabriquerMonde({ tuiles: [T(1, { gm: 'ok' }), T(2, { gm: 'ok' }), T(3, { gm: 'ok' }), T(4, { chargee: false, gm: 'ok' })] });
+    vm.runInNewContext(SRC, w.bac);
+    verifier('au CHARGEMENT : 3 images annoncées (au plus 6)', /au plus 6 pour 3 image/.test(texte(w)), true);
+    const img4 = w.imgs.get(ID(4)); img4.complete = true; img4.naturalWidth = 300;      // la 4e image se charge ENTRE le chargement et le clic (sans survol)
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(250);
+    verifier('AU CLIC le maximum est RECALCULÉ (4 images, au plus 8) et le panneau le DIT avant la première requête (celle de la page)', [/au plus 8 pour 4 image/.test(w.snaps[0] || ''), /\/apprendre$/.test(w.appels[0]?.url || ''), /Envoi de la page/.test(w.snaps[0] || '')], [true, true, true]);
+    verifier('… et la lecture ne dépasse jamais l\'annoncé : 4 images lues, au plus 8 requêtes vers l\'hôte des images', [w.appels.filter(x => x.url.startsWith(H)).length + w.fetches.length <= 8, w.appels.filter(x => x.url.startsWith(H)).length], [true, 4]);
+
+    // ── TOUR 2 : l'URL FINALE de la réponse (on ne compte pas sur redirect:'error' seul)
+    const AUTRE_CHEMIN = `${H}autre-chemin.webp`;
+    for (const [nom, tuiles, voie] of [
+        ['GM : URL finale sur un AUTRE HÔTE', [T(1, { gm: 'ok' }), T(2, { gm: 'ok', gmFinal: `https://exemple.test/cs1bc/${ID(2)}.webp` }), T(3, { gm: 'ok' })], 'navigateur'],
+        ['GM : URL finale sur le bon hôte mais un AUTRE CHEMIN', [T(1, { gm: 'ok' }), T(2, { gm: 'ok', gmFinal: AUTRE_CHEMIN }), T(3, { gm: 'ok' })], 'navigateur'],
+        ['GM : URL finale ILLISIBLE (le gestionnaire ne la rend pas)', [T(1, { gm: 'ok' }), T(2, { gm: 'ok', gmFinal: undefined }), T(3, { gm: 'ok' })], 'navigateur'],
+        ['fetch : response.url sur un AUTRE CHEMIN', [T(1, { fetch: 'ok' }), T(2, { fetch: 'ok', fetchFinal: AUTRE_CHEMIN }), T(3, { fetch: 'ok' })], 'cache']
+    ]) {
+        w = fabriquerMonde({ tuiles });
+        vm.runInNewContext(SRC, w.bac);
+        w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+        await attendre(200);
+        const tousLesUrls = w.appels.filter(x => x.url.startsWith(H)).map(x => x.url).concat(w.fetches.map(f => f.url));
+        const lots2 = w.appels.filter(x => /\/images$/.test(x.url)).map(x => JSON.parse(x.data));
+        verifier(`URL FINALE — ${nom} : ARRÊT « redirection » (voie ${voie}), la tuile suivante n'est pas demandée, l'image déjà lue part`, [new RegExp(`ARRÊT : redirection.*\\(voie ${voie}\\)`).test(texte(w)), tousLesUrls.some(u => u.includes(ID(3))), lots2.flatMap(l => l.images).map(i => i.id.slice(-1))], [true, false, ['1']]);
+    }
+
+    // ── TOUR 2 : trois 404 de suite arrêtent la lecture ; une 404 isolée reste un trou
+    for (const [nom, tuiles, voie] of [
+        ['navigateur : 3 réponses 404 de suite', [T(1, { gmStatut: 404 }), T(2, { gmStatut: 404 }), T(3, { gmStatut: 404 }), T(4, { gm: 'ok' })], 'navigateur'],
+        ['cache puis navigateur : 404, 404, 404 (cache d\'abord)', [T(1, { fetchStatut: 404, gmStatut: 404 }), T(2, { fetchStatut: 404, gmStatut: 404 }), T(3, { gm: 'ok' })], 'cache']
+    ]) {
+        w = fabriquerMonde({ tuiles });
+        vm.runInNewContext(SRC, w.bac);
+        w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+        await attendre(200);
+        const dernier = tuiles.at(-1);
+        const urls404 = w.appels.filter(x => x.url.startsWith(H)).map(x => x.url).concat(w.fetches.map(f => f.url));
+        verifier(`404 — ${nom} : ARRÊT « trois réponses 404 de suite » (voie ${voie}), le panneau le dit, la tuile d'après n'est pas demandée`, [new RegExp(`ARRÊT : trois réponses 404 de suite.*\\(voie ${voie}\\)`).test(texte(w)), urls404.some(u => u.includes(dernier.id.slice(-12)))], [true, false]);
+    }
+    w = fabriquerMonde({ tuiles: [T(1, { gmStatut: 404 }), T(2, { gm: 'ok' }), T(3, { gmStatut: 404 }), T(4, { gmStatut: 404 }), T(5, { gm: 'ok' }), T(6, { gmStatut: 404 }), T(7, { gmStatut: 404 })] });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(250);
+    verifier('404 ISOLÉES ou par deux (interrompues par une image lue) : pas d\'arrêt, des trous nommés « illisibles » (5), 2 images envoyées', [/ARRÊT/.test(texte(w)), /illisibles 5/.test(texte(w)), w.appels.filter(x => /\/images$/.test(x.url)).flatMap(x => JSON.parse(x.data).images).length], [false, true, 2]);
 
     console.log(`\n${ok} réussis, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

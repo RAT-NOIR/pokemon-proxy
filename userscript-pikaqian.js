@@ -34,6 +34,8 @@
 //      en a fait une. C'est tout ce qui est permis : jamais le worker, jamais une autre adresse que celle de la tuile.
 //   CADENCE ET ARRÊT (§17, §38) : le panneau DIT, avant le clic, la voie prévue et le nombre maximal de requêtes (2 par image, ou 0 si le canvas lit). Les voies 2 et 3 attendent au moins
 //   500 ms avant chaque requête, s'ARRÊTENT au premier 403, 429 ou 5xx sans réessai (et le panneau l'affiche), et la voie 2 est abandonnée après deux échecs de suite. Redirections refusées.
+//   TOUR 2 : le maximum annoncé se recalcule AU CLIC et s'affiche avant l'envoi ; l'URL FINALE de chaque réponse (finalUrl / response.url) doit être l'hôte exact des images et le même chemin,
+//   sinon la lecture s'arrête (on ne compte pas sur `redirect: 'error'` seul) ; trois réponses 404 de suite arrêtent aussi la lecture (un CDN qui bloque peut répondre 404).
 // · Il pose deux en-têtes au récepteur : Content-Type application/json et X-Rat-Market: rat-market-passif (le récepteur exige les deux).
 // Le test statique (test-userscript-pikaqian.js) refuse toute adresse autre que 127.0.0.1 dans ce fichier et tout nom d'hôte autre que HOTE_IMAGES.
 (function () {
@@ -136,9 +138,25 @@
     // Une voie qui peut RÉÉMETTRE une requête (cache sans entrée, navigateur) attend au moins PAUSE_MS avant chaque requête qu'elle émet (sauf la toute première de la page), et
     // S'ARRÊTE au premier 403, 429 ou 5xx — sans réessai. La voie cache, qui échoue deux fois de suite sans rien lire (CORS refusé), est abandonnée pour la suite de la page.
     var PAUSE_MS = 500;
-    var lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false };
+    var lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false, suite404: 0 };
     function pause(ms) { return new Promise(function (resoudre) { setTimeout(resoudre, ms); }); }
     function estArret(statut) { return statut === 403 || statut === 429 || statut >= 500; }
+    // L'URL FINALE de la réponse, écrite par ce qu'elle AUTORISE : https, l'hôte exact des images, le MÊME chemin que la tuile, rien d'autre. Ne pas compter sur `redirect: 'error'` seul (un
+    // gestionnaire de userscript peut l'ignorer) : une URL finale différente — ou illisible — fait de la tuile un trou et ARRÊTE la lecture.
+    function urlFinaleOk(finale, src) {
+        try { var u = new URL(finale), s = new URL(src); return u.protocol === 'https:' && u.hostname === HOTE_IMAGES && u.pathname === s.pathname && !u.search && !u.hash && !u.port && !u.username && !u.password; } catch (e) { return false; }
+    }
+    // 404 : une réponse isolée reste un trou nommé, mais TROIS de suite arrêtent la lecture comme un 403 (un CDN qui bloque peut répondre 404)
+    var SUITE_404_MAX = 3;
+    function arretDe(res, voie, src) {
+        if (res.redirige) return { motif: 'redirection : l\'URL finale « ' + res.finale + ' » n\'est pas l\'adresse de la tuile', voie: voie, src: src };
+        if (res.b64) lecture.suite404 = 0;
+        else if (res.statut === 404) lecture.suite404++;
+        else if (res.statut > 0) lecture.suite404 = 0;          // une AUTRE réponse HTTP interrompt la suite ; l'absence de réponse (0) ne la modifie pas
+        if (lecture.suite404 >= SUITE_404_MAX) return { motif: 'trois réponses 404 de suite (un CDN qui bloque peut répondre 404)', voie: voie, src: src };
+        if (estArret(res.statut)) return { statut: res.statut, voie: voie, src: src };
+        return null;
+    }
     function avantRequete() {
         var attente = lecture.emises > 0 ? pause(PAUSE_MS) : Promise.resolve();
         lecture.emises++;
@@ -149,6 +167,7 @@
         return avantRequete().then(function () {
             lecture.cacheTentatives++;
             return fetch(src, { method: 'GET', mode: 'cors', cache: 'force-cache', credentials: 'omit', redirect: 'error' }).then(function (r) {
+                if (!urlFinaleOk(r.url, src)) return { redirige: true, finale: String(r.url) };
                 if (!r.ok) return { echec: true, statut: r.status };
                 return r.arrayBuffer().then(function (ab) { return ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS ? { b64: enBase64(ab) } : { echec: true, statut: 0 }; });
             }).catch(function () { return { echec: true, statut: 0 }; });
@@ -163,7 +182,8 @@
                     method: 'GET', url: src, responseType: 'arraybuffer', anonymous: true, timeout: 30000, redirect: 'error',
                     onload: function (r) {
                         var ab = r.response;
-                        if (r.status === 200 && ab && ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS) resoudre({ b64: enBase64(ab) });
+                        if (!urlFinaleOk(r.finalUrl, src)) resoudre({ redirige: true, finale: String(r.finalUrl) });
+                        else if (r.status === 200 && ab && ab.byteLength > 0 && ab.byteLength <= IMAGE_MAX_OCTETS) resoudre({ b64: enBase64(ab) });
                         else resoudre({ echec: true, statut: r.status });
                     },
                     onerror: function () { resoudre({ echec: true, statut: 0 }); },
@@ -179,12 +199,14 @@
         if (b) return Promise.resolve({ b64: b, voie: 'canvas' });
         var etapeCache = lecture.cacheMorte ? Promise.resolve({ echec: true, statut: 0 }) : depuisLeCache(t.src);
         return etapeCache.then(function (c) {
-            if (c.b64) { lecture.cacheEchecs = 0; return { b64: c.b64, voie: 'cache' }; }
+            if (c.b64) { lecture.cacheEchecs = 0; lecture.suite404 = 0; return { b64: c.b64, voie: 'cache' }; }
             if (!lecture.cacheMorte && ++lecture.cacheEchecs >= 2) lecture.cacheMorte = true;
-            if (estArret(c.statut)) throw { arret: { statut: c.statut, voie: 'cache', src: t.src } };
+            var ac = arretDe(c, 'cache', t.src);
+            if (ac) throw { arret: ac };
             return depuisLeNavigateur(t.src).then(function (n) {
+                var an = arretDe(n, 'navigateur', t.src);
+                if (an) throw { arret: an };
                 if (n.b64) return { b64: n.b64, voie: 'navigateur' };
-                if (estArret(n.statut)) throw { arret: { statut: n.statut, voie: 'navigateur', src: t.src } };
                 return null;
             });
         });
@@ -194,8 +216,8 @@
         return '\nRequêtes vers ' + HOTE_IMAGES + ' : navigateur ' + lecture.navigateurRequetes + ' · cache ' + lecture.cacheTentatives + ' lecture(s) (0 ou 1 requête chacune, au plus ' + (lecture.navigateurRequetes + lecture.cacheTentatives) + ' au total)' + (lecture.cacheMorte ? ' · voie cache abandonnée après 2 échecs' : '');
     }
     // CE QUI PARTIRA, dit AVANT le clic (aucune requête pour le dire : un essai de canvas est local). Se rafraîchit quand la souris passe sur le panneau.
-    function annonce() {
-        var tuiles = lireTuilesDuDom();
+    function annonce(releve) {
+        var tuiles = releve || lireTuilesDuDom();
         var pretes = tuiles.filter(function (t) { return t.chargee && adresseAutorisee(t.src); });
         var n = pretes.length;
         var t = 'Rien n\'est envoyé avant ton clic.\nTuiles : ' + tuiles.length + ', dont ' + n + ' avec une image chargée (les ' + (tuiles.length - n) + ' autres ne seront pas lues : je ne défile pas).\n';
@@ -212,17 +234,19 @@
     async function apprendre() {
         var url = location.origin + location.pathname;
         var html = document.documentElement.outerHTML;
-        lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false };   // les comptes et la cadence repartent à zéro à chaque clic
-        etat.textContent = 'Envoi de la page au récepteur local…';
+        lecture = { emises: 0, cacheTentatives: 0, navigateurRequetes: 0, cacheEchecs: 0, cacheMorte: false, suite404: 0 };   // les comptes et la cadence repartent à zéro à chaque clic
+        // LE MAXIMUM SE RECALCULE AU CLIC (relecture X, tour 1) sur l'état de la page À CET INSTANT, s'affiche AVANT l'envoi, et c'est ce même relevé de tuiles qui sera lu : jamais plus que l'annoncé
+        var tuiles = lireTuilesDuDom();
+        var annonceDuClic = annonce(tuiles);
+        etat.textContent = annonceDuClic + '\nEnvoi de la page au récepteur local…';
         var rep = await poster(RECEPTEUR, { url: url, html: html });
         var j = rep.json;
         if (!(j && j.ok)) {
             etat.textContent = 'Refusé (HTTP ' + rep.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur');
             return;
         }
-        var entete = 'Appris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
+        var entete = annonceDuClic + '\n— — —\nAppris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
             j.officielles + ' adresse(s) officielle(s) déclarée(s) par la page (flux ' + j.flux + ')\nfichier ' + j.fichier + (j.anomalie ? '\n⚠ ' + j.anomalie : '');
-        var tuiles = lireTuilesDuDom();
         var pretes = tuiles.filter(function (t) { return t.chargee; });
         var sansImage = tuiles.length - pretes.length;
         entete += '\nImages : ' + pretes.length + ' tuile(s) chargée(s) sur ' + tuiles.length + (sansImage ? ' — ' + sansImage + ' SANS image chargée (je ne défile pas : fais défiler la page, puis reclique)' : '');
@@ -262,7 +286,7 @@
             if (e && e.arret) {
                 // premier 403, 429 ou 5xx : plus AUCUNE requête, aucun réessai ; ce qui a été lu avant part quand même au récepteur
                 try { await envoyerLot(); } catch (e2) { /* le récepteur ne répond plus : rien de plus à faire */ }
-                etat.textContent = entete + '\n⛔ ARRÊT : HTTP ' + e.arret.statut + ' (voie ' + e.arret.voie + ') — plus aucune requête vers ' + HOTE_IMAGES + ', aucun réessai. Reçues par le récepteur : ' + recues + '.' + compteReel();
+                etat.textContent = entete + '\n⛔ ARRÊT : ' + (e.arret.motif || 'HTTP ' + e.arret.statut) + ' (voie ' + e.arret.voie + ') — plus aucune requête vers ' + HOTE_IMAGES + ', aucun réessai. Reçues par le récepteur : ' + recues + '.' + compteReel();
             }
             else if (e && e.refus) etat.textContent = entete + '\nLe récepteur a refusé un lot d\'images (' + e.refus + ') : arrêt.';
             else if (e && e.reseau) etat.textContent = entete + '\nLe récepteur ne répond plus (' + e.reseau + ') pendant l\'envoi des images : arrêt.';
