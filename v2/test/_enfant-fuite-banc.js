@@ -21,13 +21,15 @@ function octets(d) { let t = 0; for (const n of fs.readdirSync(d)) { const p = p
     console.log(`PRET ${banc.dossier || 'inconnu'} ${typeof banc.pidMongod === 'function' ? banc.pidMongod() : 'inconnu'}`);
     if (action === 'reussit') { await banc.arreter(); return; }
     if (action === 'taille') {
-        const mongoose = require('mongoose');
-        await mongoose.connect(banc.uri, { dbName: 'x' });
-        for (let i = 0; i < 20; i++) await mongoose.connection.db.collection('c' + i).insertMany(Array.from({ length: 200 }, (_, k) => ({ k, t: 'x'.repeat(200) })));
-        const session = await mongoose.connection.startSession();
-        await session.withTransaction(async () => { await mongoose.connection.db.collection('c0').insertOne({ tx: 1 }, { session }); });   // les transactions restent permises
+        // pilote natif, sur l'URI de CE banc (jamais .env, jamais une autre grappe)
+        const { MongoClient } = require('mongodb');
+        const client = await new MongoClient(banc.uri).connect();
+        const base = client.db('x');
+        for (let i = 0; i < 20; i++) await base.collection('c' + i).insertMany(Array.from({ length: 200 }, (_, k) => ({ k, t: 'x'.repeat(200) })));
+        const session = client.startSession();
+        await session.withTransaction(async () => { await base.collection('c0').insertOne({ tx: 1 }, { session }); });   // les transactions restent permises
         await session.endSession();
-        await mongoose.disconnect();
+        await client.close();
         await new Promise(r => setTimeout(r, 1500));
         const dossiers = fs.readdirSync(os.tmpdir()).filter(n => /^mongo-mem-/.test(n));   // TEMP est la racine privée de ce banc
         console.log(`TAILLE ${dossiers.length === 1 ? octets(path.join(os.tmpdir(), dossiers[0])) : -1}`);
