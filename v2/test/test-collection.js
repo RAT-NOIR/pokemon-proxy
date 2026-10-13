@@ -34,6 +34,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
     await connecterMongo({ script: 'test-collection.js', ecrit: true });
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : « 3 écritures par heure » est une fenêtre FIXE ; l'horloge des limiteurs est fixée au milieu de l'heure
     const pret = require('../pret'); const v2 = require('../index'); const { assembler, LOTS } = v2; const transport = require('../transport/monter');
     const svcReel = require('../collection/service'); const routesReel = require('../collection/routes');
 
@@ -306,7 +307,9 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 return [[r.refus, r.borne], nSets, dans.possedees, !libre.refus];
             } },
         // ── I-2 : la garde de course du `deleteOne` d'un document vide. PUT false de la dernière clé EN MÊME TEMPS qu'un PUT true d'une autre clé du même set : aucune clé perdue.
-        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (200 itérations) ne perd aucune clé', mut: [['service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]]], attendu: [0],
+        // Tour 3 : la garde « le mutant meurt » ne repose PLUS sur cette boucle (le mutant n'y perd une clé que si l'entrelacement se produit : ≈ 1 % d'échec par exécution, mesuré à 51 exécutions par la relecture 3).
+        // Elle reste comme test de CHARGE du code réel (mut vide). La garde déterministe est la scène à barrière qui suit.
+        { nom: 'course (charge) : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (200 itérations) ne perd aucune clé', mut: [], attendu: [0],
             async scene({ svc, cfg }) {
                 const A = await compte(), id = A.c._id; let perdues = 0;
                 for (let i = 0; i < 200; i++) {
@@ -318,6 +321,24 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                     if (!d || !d.hors.includes('2|1')) perdues++;
                 }
                 return [perdues];
+            } },
+        // ── TOUR 3 — la même garde, DÉTERMINISTE : une BARRIÈRE sur le `findOneAndDelete` de la suppression du document vide. A retire la dernière clé ; quand sa mise à jour est faite et que A atteint la suppression, la barrière
+        // le retient ; B pose `2|1` (elle ATTERRIT, par construction) ; on libère A. Code réel : la suppression est gardée par VIDE, le document vide n'en est plus un, `2|1` survit (0 perdue). Copie mutée (VIDE retiré) :
+        // le document est supprimé, `2|1` est perdue (1 perdue) — À CHAQUE FOIS, sans dépendre de l'ordonnancement.
+        { nom: 'barrière : A atteint la suppression du document vide, B pose une autre clé, A est libéré : la clé de B n\'est jamais perdue', mut: [['service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]]], attendu: [0],
+            async scene({ svc, cfg }) {
+                const A = await compte(), id = A.c._id, slug = 'S-Barriere'; const a = (cle, possedee) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
+                await a('1|1', true);
+                let atteinte; const arrivee = new Promise(r => { atteinte = r; }); let liberer; const barriere = new Promise(r => { liberer = r; });
+                dbInjecte({ [NOM]: c => { const w = Object.create(c); w.findOneAndDelete = async (...args) => { atteinte(); await barriere; return c.findOneAndDelete(...args); }; return w; } });
+                try {
+                    const pa = a('1|1', false);
+                    await Promise.race([arrivee, attendre(5000).then(() => { throw new Error('A n\'a pas atteint la suppression du document vide'); })]);
+                    await a('2|1', true);                              // B : atterrit pendant que A est retenu à la barrière
+                    liberer(); await pa;
+                } finally { liberer(); dbInjecte(null); }
+                const d = await raw(NOM).findOne({ compteId: id, set: slug });
+                return [!d || !d.hors.includes('2|1') ? 1 : 0];
             } },
         // ── le recompte au montage ferme les écritures s'il échoue, et les écritures l'ATTENDENT (le détail du budget est dans test-collection-compacte.js, section 8). Une copie neuve du service, la base enveloppée par injection.
         { nom: 'un recompte en échec FERME les écritures (rien d\'écrit, l\'erreur remonte : 503), il n\'est pas avalé ; la panne passée, l\'écriture suivante rejoue le recompte',
@@ -348,7 +369,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             const mod = charger(rel, rempl);
             const ctxM = rel === 'routes.js' ? { sv: await serveur(cfgG, mod), svc: svcReel, cfg: cfgG } : { sv: null, svc: mod, cfg: cfgG };
             let vu; try { vu = await g.scene(ctxM); } catch (e) { vu = `exception ${(e && e.name) || 'erreur'}`; }
-            H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
+            H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON [scène : ${g.nom.slice(0, 70)} ; vu ${JSON.stringify(vu)}]`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
         }
     }
     H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes : 100 000 clés par compte (le catalogue complet + 45 %), 6 000 hors catalogue, 10 000 quantités, 1 000 sets par compte ; budget du service 10 485 760 o', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.quantitesParCompte, cfg.collection.setsParCompte, cfg.collection.octetsService], [1000, 100000, 6000, 10000, 1000, 10485760]);

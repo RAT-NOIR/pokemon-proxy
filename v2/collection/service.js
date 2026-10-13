@@ -85,7 +85,22 @@ let initialisation = null;
 /** Lancé au MONTAGE du lot. Un échec (base pas encore prête) n'est pas définitif : la première écriture le rejoue. */
 function initialiser(cfg) {
     initialisation = recompter(cfg).catch(e => { initialisation = null; throw e; });
+    dernierRecompte = initialisation;
     return initialisation;
+}
+// B2b tour 2 : la promesse du DERNIER recompte lancé (réussi, en cours ou en échec), exposée aux bancs par `monter.pret` — jamais attendue en production (le démarrage de l'API n'attend pas le recompte ; la première
+// écriture le rejoue en cas d'échec). `avecDelai` : une attente qui expire LÈVE, un échec remonte (aucune sortie silencieuse).
+let dernierRecompte = null;
+function avecDelai(promesse, ms, nom) {
+    let minuteur; const expire = new Promise((_, ko) => { minuteur = setTimeout(() => ko(new Error(`${nom} : pas abouti en ${ms} ms`)), ms); });
+    return Promise.race([promesse, expire]).finally(() => clearTimeout(minuteur));
+}
+// Tour 3 (M-C) : « prêt » seulement si le recompte a abouti ET n'a pas été remis à rejouer depuis (une écriture qui constate le compteur absent remet `initialisation` à null : la promesse déjà résolue ne dit plus la vérité).
+async function attendreInitialisation(ms = 30000) {
+    if (!dernierRecompte) return null;
+    const n = await avecDelai(dernierRecompte, ms, 'recompte du compteur de la collection');
+    if (initialisation === null) throw new Error('recompte à rejouer : une écriture a constaté le compteur global absent (la prochaine écriture le rejoue)');
+    return n;
 }
 const assurer = cfg => initialisation || initialiser(cfg);
 
@@ -332,5 +347,5 @@ async function supprimerDuCompte(compteId, cfg) {
     await rendre(rendu);
     return n;
 }
-module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser };
+module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
 // Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.

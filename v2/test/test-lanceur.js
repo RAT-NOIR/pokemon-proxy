@@ -12,7 +12,8 @@ const FIX = path.join(__dirname, 'fixtures-lanceur');
 
 if (process.env.RM_LANCEUR_IMBRIQUE) { H.vrai('imbrication évitée (lanceur ancien qui ignore --dossier)', true); H.bilan(); return; }
 
-const env = { ...process.env, RM_LANCEUR_IMBRIQUE: '1' };
+// RM_LANCEUR_SANS_ESPION=1 : seul ce banc le pose, pour jouer des COPIES du lanceur qui n'ont pas l'armeur de l'espion à côté (tour 1, M-4 : sinon l'absence de l'armeur FAIT ÉCHOUER le lanceur)
+const env = { ...process.env, RM_LANCEUR_IMBRIQUE: '1', RM_LANCEUR_SANS_ESPION: '1' };
 // cwd = le dossier du script : un chemin vide ou relatif ne peut jamais viser la racine du dépôt (ses test-*.js écrivent dans Mongo).
 const lancer = (script, ...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env, timeout: 120000, cwd: path.dirname(script) });
 const jetable = () => fs.mkdtempSync(path.join(__dirname, '.jetable-lanceur-'));   // DANS v2/test : l'unique racine permise
@@ -51,6 +52,10 @@ for (const nom of ['test-suspens.js', 'test-zero-reussite.js', 'test-echec-et-re
         H.v(`${nom} : refus, code 1`, r.status, 1);
         H.vrai(`${nom} : refusé AVANT de lancer un banc (aucun « === »)`, !/===/.test(r.stdout || ''));
     }
+    // M-4 : sans l'armeur de l'espion à côté ET sans la variable posée par ce banc, le lanceur REFUSE (une suppression ou un renommage de l'armeur ne désarme pas les suites en silence)
+    const nu = { ...env }; delete nu.RM_LANCEUR_SANS_ESPION;
+    const sansArmeur = spawnSync(process.execPath, [copie], { encoding: 'utf8', env: nu, timeout: 120000, cwd: path.dirname(copie) });
+    H.v('lanceur sans l\'armeur de l\'espion et sans la variable de banc : refus, code 1, avant de lancer un banc', [sansArmeur.status, /espion/i.test(`${sansArmeur.stdout}${sansArmeur.stderr}`), !/===/.test(sansArmeur.stdout || '')], [1, true, true]);
     nettoyer(dehors); nettoyer(bac);
 }
 H.bilan();

@@ -77,6 +77,8 @@ async function semer(mode) {                                  // 'double' | 'sim
     H.v('0. vintedEtat est borné à 100 caractères (mineur reporté de B1b.1)', longue.entree && longue.entree.vintedEtat.length, 100);
 
     await H.ouvrirBancV2();
+    // B2b point 6 : compteurs du JOUR (pannes, questions) et de la SEMAINE (quota) semés puis lus par la route avec `new Date()` : minuit ou le lundi 00:00 UTC entre les deux changerait de compteur.
+    await H.eviterFrontieres({ jour: true, semaine: true });
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-identifier-v2.js', ecrit: true });
@@ -355,7 +357,7 @@ async function semer(mode) {                                  // 'double' | 'sim
                 await s.fermer();
             }
             await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
-            // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi sans plafond, pas un introuvable
+            // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi dans le compteur des jumeaux (puis au plafond de pannes quand il est plein), pas un introuvable
             const panneJ = async (jumeaux, nom) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
                 H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE dans le compteur dédié jumeaux (1) alors que le plafond de pannes est plein et inchangé (essai 3), aucune analyse`,

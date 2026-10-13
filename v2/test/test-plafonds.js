@@ -80,6 +80,8 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
     }
 
     await H.ouvrirBancV2();
+    // B2b point 6 : les plafonds sont comptés par JOUR UTC ; le banc sème un compteur du jour PUIS fait la requête, que la route date avec `new Date()` : minuit entre les deux ferait lire un autre jour.
+    await H.eviterFrontieres({ jour: true });
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-plafonds.js', ecrit: true });

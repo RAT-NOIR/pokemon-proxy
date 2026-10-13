@@ -112,6 +112,9 @@ async function parcourir() {
 
 (async () => {
     await H.ouvrirBancV2();
+    // B2b point 6 : (9) « 120 par heure » est une fenêtre FIXE du limiteur -> horloge fixée au milieu de l'heure ; la poche hebdo (l.189, semaine ISO) et les plafonds du jour sont lus par la route avec `new Date()`
+    // -> si minuit ou le lundi 00:00 UTC est à moins de 4 minutes, on l'attend avant de jouer. (L'enfant lancé plus bas garde l'horloge réelle : il ne joue aucune série de fenêtre.)
+    H.fixerHorlogeMilieu(); await H.eviterFrontieres({ jour: true, semaine: true });
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-scanner-routes.js', ecrit: true });
