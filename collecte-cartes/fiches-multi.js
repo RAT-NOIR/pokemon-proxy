@@ -199,6 +199,19 @@ async function ecrireSet(db, S) {
     }
 }
 
+/**
+ * 🔑 (tour 2, 2026-10-13) L'état « d'AVANT » d'un set se relit JUSTE AVANT son écriture, jamais depuis l'instantané du début du lot : une carte qui
+ * appartient à deux sets du même lot (Ultra Ball : Promos puis PPS3) porte déjà les impressions du premier — la comparer à l'instantané d'origine
+ * fabriquait un faux rouge (lot réel du 2026-10-13 : PPS3 écrit, relecture 🔴 sur 148517 et 244868).
+ */
+async function rafraichirAvant(db, S) {
+    const R = await lireSet(db, S.slug);
+    if (!R) throw new Error(`le set ${S.slug} a disparu avant son écriture — arrêt`);
+    const ids = new Set(R.docs.map(d => d._id));
+    for (const p of S.plans) if (!ids.has(p.carteId)) throw new Error(`la carte ${p.carteId} n'est plus dans ${S.slug} avant son écriture — arrêt`);
+    S.L = R;
+}
+
 /** La relecture : l'état attendu AU CHAMP PRÈS, puis la règle du site sur la base écrite. Rend la liste des écarts ([] = juste). */
 async function relire(db, deps, S) {
     const e = [], { regle, fichesDesProduits } = deps, nom = S.nom;
@@ -259,6 +272,7 @@ async function executer({ db, deps, sets, attendu = null, ecrire = false, log = 
     if (!ecrire) { log(`(simulation — rien n'est écrit ; relancer avec --attendu=${rapport.totalAEcrire} --ecrire, sous lot-additif.js)`); return { code: 0, rapport }; }
     try {
         for (const S of rapport.sets.filter(x => x.statut === 'ok' && x.aEcrire)) {
+            await rafraichirAvant(db, S);
             await ecrireSet(db, S);
             const ecarts = await relire(db, deps, S);
             rapport.ecarts.push(...ecarts);
