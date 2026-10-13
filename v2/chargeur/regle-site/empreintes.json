@@ -2,17 +2,19 @@
   "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
   "sources": {
     "imageDeLImpression.ts": "e6f06c44d7eb98a18be7cc56929b3c0253123ac460853b99db2dfdf3a1de89ed",
-    "impressionsDuSet.ts": "d42a002794d0f328834b4eec64b6297194357943d59ca3841c63f57f5df89a34",
-    "cardmarket.ts": "12cfb71b65c1d31e5c36d365f317791ff0732fc900fda870e97c7aa7b947ea2a",
+    "impressionsDuSet.ts": "3137aad3306d3c461d8a4902831cd6deed37eda681a19b4eda938819ba414137",
+    "cardmarket.ts": "b370aeeecbc26d7dc2a8fcc361782b926630e40848d9336e2188386c551ba586",
     "langueDuVisuel.ts": "c7a95ee600f5972bdf3a5155b4dfddcb45a6b6fd77c0c03dfa0b8699c34dc026",
+    "expressionsSures.ts": "9399cb9db0b3aa59d0cd32a8d85fb1fecc8d0ffab47b4ed5261ef6a5920b9ae0",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
     "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4"
   },
   "produits": {
     "imageDeLImpression.mjs": "13bd64c51f228a299d54c6be0a8e7c51c6eb17c60a8dda5dc362569f3ea89591",
-    "impressionsDuSet.mjs": "02564917f8d03cb7287bb85211fdc1271f7de91cad6a86be8b91f51feb35e4ed",
-    "cardmarket.mjs": "cfdd02c7af9044a363ea4111e60e015bea32c8b5ad8a0031b300bd668476f4aa",
+    "impressionsDuSet.mjs": "05d9d24ab4c43bf662a61e6c2ac918dda7f62ce3b53610314c4f4bb8e0a1b4a5",
+    "cardmarket.mjs": "3ee05f71cca97934711f135eefc452ab65c8c2aba6261df0fb89c42b846d4fbd",
     "langueDuVisuel.mjs": "de700461c90cfd0863a39b4f02a550d17a5476b260440cbeeaeab22ddefe16bb",
+    "expressionsSures.mjs": "39db4059c95e8556abd95740f45c397ad7d7a30e70b931de7bedc6a112879c0d",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
     "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4"
   }

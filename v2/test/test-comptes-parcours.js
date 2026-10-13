@@ -21,12 +21,12 @@ const { lireConfig } = require('../config'); const { creerCourrierMemoire } = re
     const inst = await post('/api/installation', { versionExtension: '2.0.0', libelle: 'Chrome · Windows' });
     H.v('1. installation : 3 essais annoncés', [inst.statut, inst.json.solde.essai], [201, 3]);
     const jeton0 = inst.json.jetonInstallation;
-    const i1 = await post('/api/compte/inscription', { email: 'A.B+promo@Gmail.com', motDePasse: MDP, turnstile: 't' }, A.SITE);
+    const i1 = await post('/api/compte/inscription', { email: 'A.B+promo@Gmail.com', turnstile: 't' }, A.SITE);
     H.v('2. inscription : 202', i1.statut, 202);
-    const i2 = await post('/api/compte/inscription', { email: 'ab@gmail.com', motDePasse: MDP, turnstile: 't' }, A.SITE);
+    const i2 = await post('/api/compte/inscription', { email: 'ab@gmail.com', turnstile: 't' }, A.SITE);
     H.v('CRITÈRE : le même e-mail sous une autre écriture est refusé (202 neutre, UN seul compte, un seul courrier)', [i2.texte === i1.texte, await db.col('comptes').countDocuments({}), courrier.envoyes.length], [true, 1, 1]);
     const jetonLien = new URL(courrier.envoyes[0].lien).searchParams.get('jeton');
-    const clicks = await Promise.all([1, 2, 3, 4, 5].map(() => post('/api/compte/verification', { jeton: jetonLien }, A.SITE)));
+    const clicks = await Promise.all([1, 2, 3, 4, 5].map(() => post('/api/compte/verification', { jeton: jetonLien, motDePasse: MDP }, A.SITE)));   // D6 : le mot de passe se choisit au clic
     const compte = await db.col('comptes').findOne({});
     H.v('3. CRITÈRE : un compte vérifié reçoit 25 une fois quel que soit le nombre de clics (5 clics)', [clicks.filter(x => x.statut === 200).length, compte.verifie, compte.solde.accueil, await db.col('mouvements').countDocuments({ motif: 'octroi-accueil' })], [1, true, 25, 1]);
     const conn = await post('/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP }, A.SITE);

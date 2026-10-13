@@ -13,7 +13,9 @@ const HEURE = 3600e3;
     const srv = await A.demarrer(cfg); let n = 0;
     const MDP = 'mot-de-passe-du-tiers', MDP_VICTIME = 'mot-de-passe-de-la-victime';
     const post = (chemin, corps, entetes = {}) => H.appel(srv.url, chemin, { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(++n), ...entetes } });
-    const ins = async (email, mdp = MDP) => { const r = await post('/api/compte/inscription', { email, motDePasse: mdp, turnstile: 'ok' }); await A.attendre(); return r; };
+    // D6 : l'inscription ne prend plus de mot de passe (un 2e argument éventuel est ignoré par le banc lui-même : aucun mot de passe n'est envoyé) ; `verif` porte le mot de passe choisi AU CLIC.
+    const ins = async (email) => { const r = await post('/api/compte/inscription', { email, turnstile: 'ok' }); await A.attendre(); return r; };
+    const verif = (jeton, mdp = MDP_VICTIME) => post('/api/compte/verification', { jeton, motDePasse: mdp });
     const renv = async email => { const r = await post('/api/compte/renvoyer-verification', { email }); await A.attendre(); return r; };
     const conn = (email, mdp) => post('/api/compte/connexion', { email, motDePasse: mdp });
     const compteDe = email => db.col('comptes').findOne({ emailCle: email.toLowerCase() });
@@ -34,7 +36,7 @@ const HEURE = 3600e3;
     H.v('1b. connexion d\'un compte non confirmé AVEC LE BON mot de passe : 401 IDENTIFIANTS', [bon.statut, bon.json && bon.json.erreur && bon.json.erreur.code], [401, 'IDENTIFIANTS']);
     H.v('1c. réponse identique à l\'octet à celle d\'un mauvais mot de passe et d\'une adresse inconnue (statut, en-têtes sans date, corps)', [sansDate(bon) === sansDate(faux), sansDate(bon) === sansDate(inconnu)], [true, true]);
     H.vrai('1d. aucun Set-Cookie sur le refus d\'un compte non confirmé', !bon.entetes['set-cookie']);
-    H.v('1e. même calcul scrypt : non confirmé = verifier (pas de factice), faux = verifier, inconnu = factice', espion, ['verifier', 'verifier', 'factice']);
+    H.v('1e. même calcul scrypt (D6 : un compte non confirmé n\'a pas de mot de passe) : non confirmé = factice, mauvais mot de passe du même compte = factice, inconnu = factice (jamais de sortie rapide)', espion, ['factice', 'factice', 'factice']);
     H.v('1f. aucune session créée', await db.col('sessions').countDocuments({}), 0);
 
     // tous les chemins qui donnent un porteur à un compte
@@ -102,7 +104,7 @@ const HEURE = 3600e3;
     H.v('7b. non confirmé à 47 h 59 : jamais purgé', [(await compteDe('victime@exemple.fr')) !== null, p47.purges], [true, 0]);
     // confirmé à 47 h 59 puis bien plus tard : jamais purgé
     const jc = jetonDe(courrier.envoyes.filter(e => e.type === 'verification').pop());
-    H.v('7c. le clic à 47 h 59 active le compte et accorde les 25', [(await post('/api/compte/verification', { jeton: jc })).statut, (await compteDe('victime@exemple.fr')).solde.accueil], [200, 25]);
+    H.v('7c. le clic à 47 h 59 active le compte et accorde les 25', [(await verif(jc)).statut, (await compteDe('victime@exemple.fr')).solde.accueil], [200, 25]);
     await vieillir(nv._id, 24 * 30);
     const pc = await purger();
     H.v('7d. compte CONFIRMÉ de 30 jours : jamais purgé', [(await compteDe('victime@exemple.fr')) !== null, pc.purges], [true, 0]);
@@ -132,20 +134,20 @@ const HEURE = 3600e3;
     // l'adresse redevient libre, les offertes sont accordées à la confirmation suivante
     H.v('9a. aucune empreinte d\'octroi pour l\'adresse du compte purgé (il n\'a jamais rien reçu)', await db.col('adresses_octroyees').countDocuments({ empreinte: svc.empreinteAdresse('jamais@exemple.fr', cfg) }), 0);
     courrier.envoyes.length = 0; await liberer();
-    const re = await ins('jamais@exemple.fr', MDP_VICTIME);
+    const re = await ins('jamais@exemple.fr');
     const j2 = await compteDe('jamais@exemple.fr');
     H.v('9b. nouvelle inscription après purge : 202, nouveau compte, courrier de confirmation', [re.statut, j2 && !j2._id.equals(j._id), courrier.envoyes.length], [202, true, 1]);
-    const rc = await post('/api/compte/verification', { jeton: jetonDe(courrier.envoyes[0]) });
+    const rc = await verif(jetonDe(courrier.envoyes[0]));
     H.v('9c. la confirmation suivante reçoit les 25 offertes', [rc.statut, (await compteDe('jamais@exemple.fr')).solde.accueil, (await conn('jamais@exemple.fr', MDP_VICTIME)).statut], [200, 25, 200]);
 
     // fenêtre entre 48 h et le prochain balayage : l'adresse est libre « à l'usage », sans attendre la passe
     courrier.envoyes.length = 0; await liberer();
-    await ins('perimee@exemple.fr', MDP); const pm = await compteDe('perimee@exemple.fr'); const lienPm = jetonDe(courrier.envoyes[0]);
+    await ins('perimee@exemple.fr'); const pm = await compteDe('perimee@exemple.fr'); const lienPm = jetonDe(courrier.envoyes[0]);
     await vieillir(pm._id, 49); await liberer();
-    const clicPm = await post('/api/compte/verification', { jeton: lienPm }); const apresPm = await db.col('comptes').findOne({ _id: pm._id });
+    const clicPm = await verif(lienPm); const apresPm = await db.col('comptes').findOne({ _id: pm._id });
     H.v('10a. un lien de confirmation reçu avant 48 h, cliqué après : refusé (404), compte non activé', [clicPm.statut, !(apresPm && apresPm.verifie)], [404, true]);
-    await ins('perimee3@exemple.fr', MDP); const pm3 = await compteDe('perimee3@exemple.fr'); await vieillir(pm3._id, 49); await liberer(); courrier.envoyes.length = 0;
-    await ins('perimee3@exemple.fr', MDP_VICTIME);
+    await ins('perimee3@exemple.fr'); const pm3 = await compteDe('perimee3@exemple.fr'); await vieillir(pm3._id, 49); await liberer(); courrier.envoyes.length = 0;
+    await ins('perimee3@exemple.fr');
     const pm2 = await compteDe('perimee3@exemple.fr');
     H.v('10b. inscription sur une adresse dont le compte a plus de 48 h (balayage pas encore passé) : le compte périmé est remplacé par le nouveau, qui reçoit son courriel', [pm2 && !pm2._id.equals(pm3._id), pm2 && pm2.verifie, courrier.envoyes.length, (await conn('perimee3@exemple.fr', MDP_VICTIME)).statut], [true, false, 1, 401]);
     await vieillir(pm2._id, 49); await liberer(); courrier.envoyes.length = 0;
@@ -167,7 +169,7 @@ const HEURE = 3600e3;
         const email = `course${i}@exemple.fr`; await ins(email); const c = await compteDe(email);
         const lienC = jetonDe(courrier.envoyes[courrier.envoyes.length - 1]);
         await vieillir(c._id, 47.99); const t = new Date();
-        const [rep] = await Promise.all([svc.verifierAdresse({ jeton: lienC, cfg, maintenant: t }), purger(new Date(t.getTime() + 5 * 60e3))]);
+        const [rep] = await Promise.all([svc.verifierAdresse({ jeton: lienC, motDePasse: MDP_VICTIME, cfg, maintenant: t }), purger(new Date(t.getTime() + 5 * 60e3))]);
         const apres = await db.col('comptes').findOne({ _id: c._id });
         if (apres && apres.verifie && rep.statut === 200) confirmesEtPresents++;
         else if (!apres && rep.statut !== 200) purgesEtNonConfirmes++;
@@ -180,7 +182,7 @@ const HEURE = 3600e3;
         await ins('fenetre@exemple.fr'); const c = await compteDe('fenetre@exemple.fr'); const lienF = jetonDe(courrier.envoyes[courrier.envoyes.length - 1]);
         const proto = Object.getPrototypeOf(db.col('comptes')); const orig = proto.updateOne; let frappe = 0;
         proto.updateOne = async function (filtre, ...r) { if (this.collectionName.endsWith('comptes') && filtre && filtre.offertesAccordeesLe === null && !frappe) { frappe++; await this.deleteOne({ _id: filtre._id }); } return orig.call(this, filtre, ...r); };
-        let rep; try { rep = await svc.verifierAdresse({ jeton: lienF, cfg }); } finally { proto.updateOne = orig; }
+        let rep; try { rep = await svc.verifierAdresse({ jeton: lienF, motDePasse: MDP_VICTIME, cfg }); } finally { proto.updateOne = orig; }
         H.v('11b. compte supprimé entre la lecture et l\'octroi : la vérification répond « lien invalide », jamais 200', [frappe, rep.statut], [1, 404]);
         void c;
     }
@@ -188,11 +190,11 @@ const HEURE = 3600e3;
     {
         await ins('ordre1@exemple.fr'); const c = await compteDe('ordre1@exemple.fr'); const l = jetonDe(courrier.envoyes[courrier.envoyes.length - 1]);
         await vieillir(c._id, 47.99); const t = new Date();
-        const r = await svc.verifierAdresse({ jeton: l, cfg, maintenant: t }); const p = await purger(new Date(t.getTime() + 5 * 60e3));
+        const r = await svc.verifierAdresse({ jeton: l, motDePasse: MDP_VICTIME, cfg, maintenant: t }); const p = await purger(new Date(t.getTime() + 5 * 60e3));
         H.v('11c. clic PUIS purge : compte confirmé et présent', [r.statut, p.purges, (await db.col('comptes').findOne({ _id: c._id })).verifie], [200, 0, true]);
         await ins('ordre2@exemple.fr'); const d = await compteDe('ordre2@exemple.fr'); const l2 = jetonDe(courrier.envoyes[courrier.envoyes.length - 1]);
         await vieillir(d._id, 47.99); const t2 = new Date();
-        const p2 = await purger(new Date(t2.getTime() + 5 * 60e3)); const r2 = await svc.verifierAdresse({ jeton: l2, cfg, maintenant: t2 });
+        const p2 = await purger(new Date(t2.getTime() + 5 * 60e3)); const r2 = await svc.verifierAdresse({ jeton: l2, motDePasse: MDP_VICTIME, cfg, maintenant: t2 });
         H.v('11d. purge PUIS clic : compte absent, clic refusé', [p2.purges, r2.statut, await db.col('comptes').findOne({ _id: d._id })], [1, 404, null]);
     }
     // la purge n'efface que ce qu'elle peut prouver vierge
@@ -266,24 +268,30 @@ const HEURE = 3600e3;
 
     // ============================ ruling 5 : le premier inscrit garde la place ============================
     {
-        await ins('place@exemple.fr', 'premier-mot-de-passe'); const avant = await compteDe('place@exemple.fr'); await liberer();
-        const m0 = courrier.envoyes.length; await ins('place@exemple.fr', 'second-mot-de-passe');
+        await ins('place@exemple.fr'); const avant = await compteDe('place@exemple.fr'); await liberer();
+        const m0 = courrier.envoyes.length; await ins('place@exemple.fr');
         const apres = await compteDe('place@exemple.fr');
         H.v('15a. réinscription d\'une adresse en attente : ni le mot de passe, ni rien d\'autre ne change (document identique)', JSON.stringify(apres), JSON.stringify(avant));
         H.v('15b. … un courriel part si la limite le permet (ici oui : dernier courriel > 24 h), vers le premier inscrit', [courrier.envoyes.length - m0, courrier.envoyes[courrier.envoyes.length - 1].email], [1, 'place@exemple.fr']);
-        H.v('15c. le mot de passe du second inscrit ne fonctionne pas, même après confirmation', await (async () => { await post('/api/compte/verification', { jeton: jetonDe(courrier.envoyes[courrier.envoyes.length - 1]) }); return [(await conn('place@exemple.fr', 'second-mot-de-passe')).statut, (await conn('place@exemple.fr', 'premier-mot-de-passe')).statut]; })(), [401, 200]);
+        H.v('15c. (D6) le compte du premier inscrit s\'ouvre avec le SEUL mot de passe choisi au clic par le titulaire de la boîte', await (async () => { await verif(jetonDe(courrier.envoyes[courrier.envoyes.length - 1]), 'choisi-au-clic-par-le-titulaire'); return [(await conn('place@exemple.fr', 'second-mot-de-passe')).statut, (await conn('place@exemple.fr', 'premier-mot-de-passe')).statut, (await conn('place@exemple.fr', 'choisi-au-clic-par-le-titulaire')).statut]; })(), [401, 401, 200]);
     }
 
     // ============================ ruling 7 : le risque résiduel, CARACTÉRISÉ (non corrigé) ============================
     {
         courrier.envoyes.length = 0; await liberer();
-        await ins('cible@exemple.fr', 'mot-de-passe-de-l-attaquant');                      // le tiers s'inscrit avec l'adresse de la victime
+        // D6 (O3 résiduel FERMÉ) : le tiers ne peut plus poser de secret à l'inscription ; seul le titulaire de la boîte choisit le mot de passe, au clic.
+        const tentative = await post('/api/compte/inscription', { email: 'cible@exemple.fr', motDePasse: 'mot-de-passe-de-l-attaquant', turnstile: 'ok' }); await A.attendre();
+        await ins('cible@exemple.fr');                                                         // le tiers s'inscrit avec l'adresse de la victime (sans mot de passe)
         const lien1 = jetonDe(courrier.envoyes[0]);
-        const clic = (await post('/api/compte/verification', { jeton: lien1 })).statut, cx = await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant');
-        H.v('16a. RÉSIDUEL : la victime clique le lien du courriel de l\'inscription du tiers -> compte actif, mot de passe du TIERS', [clic, cx.statut], [200, 200]);
+        const clic = (await verif(lien1)).statut, cx0 = await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant'), cxV = await conn('cible@exemple.fr', MDP_VICTIME);
+        H.v('16a. FERMÉ (D6) : le tiers n\'a pu poser aucun mot de passe (422) ; la victime clique et choisit le sien -> le mot de passe du tiers échoue (401), celui de la victime ouvre (200)', [tentative.statut, clic, cx0.statut, cxV.statut], [422, 200, 401, 200]);
+        // la suite rejoue la réinitialisation sur un compte dont le mot de passe FUIT (session volée, mot de passe deviné) : elle ferme tout accès, comme avant D6
+        await liberer(); courrier.envoyes.length = 0;
+        await ins('cible-fuite@exemple.fr'); await verif(jetonDe(courrier.envoyes[0]), 'mot-de-passe-de-l-attaquant');
+        const cx = await conn('cible-fuite@exemple.fr', 'mot-de-passe-de-l-attaquant');
         // le tiers, connecté, s'installe : un code de liaison, une installation LIÉE, un second code laissé vivant
         A.registre.fournir('argent', { solde: async () => ({}), fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele([]) });   // forme RÉELLE exigée (tour 2, I-B)
-        const ckT = `rm_session=${/rm_session=([^;]+)/.exec(cx.entetes['set-cookie'])[1]}`, cible = await compteDe('cible@exemple.fr');
+        const ckT = `rm_session=${/rm_session=([^;]+)/.exec(cx.entetes['set-cookie'])[1]}`, cible = await compteDe('cible-fuite@exemple.fr');
         const code = () => H.appel(srv.url, '/api/compte/code', { methode: 'POST', corps: {}, entetes: { ...A.SITE, ...A.ip(++n), cookie: ckT } });
         const c1 = await code(), c2 = await code();
         const tokT = J.genererJeton(); await db.col('installations').insertOne(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(tokT), essais: 3, libelle: 'tiers' }));
@@ -291,10 +299,10 @@ const HEURE = 3600e3;
         const tokT2 = lT.json.jetonInstallation;
         const avantP = (await resoudre({ authorization: `Bearer ${tokT2}` })).porteur;
         H.v('16b0. (avant) le tiers a une session, une installation liée qui résout un porteur COMPTE, et un code vivant', [await db.col('sessions').countDocuments({ compteId: cible._id }) > 0, avantP && avantP.type, await db.col('codes_liaison').countDocuments({ compteId: cible._id, utiliseLe: null })], [true, 'compte', 1]);
-        const rr = await post('/api/compte/mot-de-passe-oublie', { email: 'cible@exemple.fr' }); await A.attendre();
+        const rr = await post('/api/compte/mot-de-passe-oublie', { email: 'cible-fuite@exemple.fr' }); await A.attendre();
         const rein = courrier.envoyes.filter(e => e.type === 'reinit').pop();
         await post('/api/compte/reinitialiser', { jeton: jetonDe(rein), motDePasse: MDP_VICTIME });
-        H.v('16b. la réinitialisation ferme TOUT accès : sessions 0, son mot de passe ne marche plus, le nouveau marche', [rr.statut, await db.col('sessions').countDocuments({ compteId: cible._id }), (await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut, (await conn('cible@exemple.fr', MDP_VICTIME)).statut], [202, 0, 401, 200]);
+        H.v('16b. la réinitialisation ferme TOUT accès : sessions 0, son mot de passe ne marche plus, le nouveau marche', [rr.statut, await db.col('sessions').countDocuments({ compteId: cible._id }), (await conn('cible-fuite@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut, (await conn('cible-fuite@exemple.fr', MDP_VICTIME)).statut], [202, 0, 401, 200]);
         const apresP = await resoudre({ authorization: `Bearer ${tokT2}` });
         H.v('16b1. … le jeton d\'installation du tiers ne résout plus aucun porteur COMPTE (installation seule), aucune installation liée au compte', [apresP.porteur && apresP.porteur.type, apresP.porteur && apresP.porteur.compte, await db.col('installations').countDocuments({ compteId: cible._id })], ['installation', null, 0]);
         const autreInst = J.genererJeton(); await db.col('installations').insertOne(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(autreInst), essais: 0, libelle: 'autre' }));
@@ -302,16 +310,16 @@ const HEURE = 3600e3;
         H.v('16b2. … et son code de liaison resté vivant est mort : 0 code, la liaison est refusée (404)', [await db.col('codes_liaison').countDocuments({ compteId: cible._id }), lMort.statut], [0, 404]);
         // chemin 2 : le renvoi demandé par la victime elle-même
         courrier.envoyes.length = 0; await liberer();
-        await ins('cible2@exemple.fr', 'mot-de-passe-de-l-attaquant'); await liberer(); courrier.envoyes.length = 0;
+        await ins('cible2@exemple.fr'); await liberer(); courrier.envoyes.length = 0;
         await renv('cible2@exemple.fr');
-        H.v('16c. RÉSIDUEL : la victime demande elle-même un renvoi puis clique -> compte actif, mot de passe du TIERS', [courrier.envoyes.length, (await post('/api/compte/verification', { jeton: jetonDe(courrier.envoyes[0]) })).statut, (await conn('cible2@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut], [1, 200, 200]);
+        H.v('16c. FERMÉ (D6) : la victime demande elle-même un renvoi puis clique et choisit son mot de passe -> seul le sien ouvre le compte', [courrier.envoyes.length, (await verif(jetonDe(courrier.envoyes[0]))).statut, (await conn('cible2@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut, (await conn('cible2@exemple.fr', MDP_VICTIME)).statut], [1, 200, 401, 200]);
     }
 
     // ============================ tour 1 (relecture r0) ============================
     {   // I-2a : la validation de l'adresse est écrite par ce qu'elle AUTORISE
-        const neutre = await post('/api/compte/inscription', { email: 'pas-une-adresse', motDePasse: MDP, turnstile: 'ok' });
+        const neutre = await post('/api/compte/inscription', { email: 'pas-une-adresse', turnstile: 'ok' });
         const formes = ['victime@gmail.com.', 'victime@gmail.com..', 'victime@.gmail.com', 'victime@gmail..com', 'victime@-gmail.com', 'victime@gmail-.com', 'victime@gmail.c'];
-        const reps = []; for (const f of formes) reps.push(await post('/api/compte/inscription', { email: f, motDePasse: MDP, turnstile: 'ok' }));
+        const reps = []; for (const f of formes) reps.push(await post('/api/compte/inscription', { email: f, turnstile: 'ok' }));
         H.v('T1a. un domaine terminé par un point, doublé, vide, en tiret de bordure ou à extension d\'une lettre est refusé avec la réponse d\'une adresse invalide (422 adresse-invalide, mêmes octets)',
             reps.map(r => r.statut === 422 && r.texte === neutre.texte), formes.map(() => true));
         H.v('T1b. aucun compte pour ces formes', await db.col('comptes').countDocuments({ emailCle: { $regex: /^victime@(\.|-|gmail)/ } }), 0);
@@ -320,7 +328,7 @@ const HEURE = 3600e3;
         H.v('T1d. emailCle : domaines IDN (comparés en Punycode : une SEULE clé) et à tirets admis, formes douteuses nulles', [E.emailCle('a@bücher.example'), E.emailCle('a@xn--bcher-kva.example'), E.emailCle('a@mon-site.co.uk'), E.emailCle('a@exemple.fr.'), E.emailCle('a@exemple..fr')], ['a@xn--bcher-kva.example', 'a@xn--bcher-kva.example', 'a@mon-site.co.uk', null, null]);
         // O3 tour 2 (M-1) : la partie locale n'admet aucun caractère invisible, de format ou d'espacement (U+200B, U+00AD, U+2060, U+200E, U+0007, U+2003)
         const invisibles = ['victime​@outlook.com', 'vic­time@outlook.com', 'victime⁠@outlook.com', '‎victime@outlook.com', 'vic\u0007time@outlook.com', 'vic time@outlook.com'];
-        const avantN = await db.col('comptes').countDocuments({}), ri = []; for (const f of invisibles) ri.push(await post('/api/compte/inscription', { email: f, motDePasse: MDP, turnstile: 'ok' }));
+        const avantN = await db.col('comptes').countDocuments({}), ri = []; for (const f of invisibles) ri.push(await post('/api/compte/inscription', { email: f, turnstile: 'ok' }));
         H.v('T1e. un caractère invisible / de format / d\'espacement dans la partie locale : refusé comme toute adresse invalide (422, mêmes octets), emailCle nul, aucun compte', [ri.map(r => r.statut === 422 && r.texte === neutre.texte), invisibles.map(f => E.emailCle(f)), (await db.col('comptes').countDocuments({})) - avantN], [invisibles.map(() => true), invisibles.map(() => null), 0]);
     }
     {   // I-2b : la limite d'un courriel de confirmation se compte par BOÎTE

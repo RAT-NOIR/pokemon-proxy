@@ -1,3 +1,4 @@
+import { tableauOuVide, texteSur } from "./expressionsSures.mjs";
 import { normaliserNumero,                     } from "./imageDeLImpression.mjs";
 
 /**
@@ -123,7 +124,7 @@ export function documentAmbigu(fiches                            , images       
 /** normaliserNumero en Mongo : « 006 », « 6 » et 6 sont le même numéro ; sans numéro → "". */
 const normalise = (champ        ) => ({
   $let: {
-    vars: { s: { $toUpper: { $trim: { input: { $toString: { $ifNull: [champ, ""] } } } } } },
+    vars: { s: { $toUpper: { $trim: { input: texteSur(champ) } } } },
     in: {
       $cond: [
         { $regexMatch: { input: "$$s", regex: "^0+[0-9]" } },
@@ -195,7 +196,7 @@ export function expressionsFichesParSet(
         $map: {
           input: {
             $filter: {
-              input: { $ifNull: ["$impressions", []] },
+              input: tableauOuVide("$impressions"),
               as: "i",
               cond: {
                 $and: [{ $eq: ["$$i.tirage", region] }, { $in: ["$$i.expansion", expansionsDuSet] }],
@@ -210,7 +211,7 @@ export function expressionsFichesParSet(
   };
   const imagesSansNumero = {
     $filter: {
-      input: { $ifNull: ["$images", []] },
+      input: tableauOuVide("$images"),
       as: "m",
       cond: {
         $and: [

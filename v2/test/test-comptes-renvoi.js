@@ -20,7 +20,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const liens = await db.col('liens_email').find({}).toArray();
     H.v('un lien de vérification, +24 h, empreinte seule', [liens.length, liens[0].type, liens[0].compteId.equals(nv._id), Math.abs(liens[0].expireLe.getTime() - (Date.now() + 864e5)) < 5000], [1, 'verification', true, true]);
     const jeton = new URL(courrier.envoyes[0].lien).searchParams.get('jeton');
-    H.v('le lien renvoyé vérifie le compte et accorde les 25', [(await H.appel(srv.url, '/api/compte/verification', { methode: 'POST', corps: { jeton }, entetes: { ...A.SITE, ...A.ip(++n) } })).statut, (await db.col('comptes').findOne({ _id: nv._id })).solde.accueil], [200, 25]);
+    H.v('le lien renvoyé vérifie le compte et accorde les 25', [(await H.appel(srv.url, '/api/compte/verification', { methode: 'POST', corps: { jeton, motDePasse: 'un-mot-de-passe-choisi-au-clic' }, entetes: { ...A.SITE, ...A.ip(++n) } })).statut, (await db.col('comptes').findOne({ _id: nv._id })).solde.accueil], [200, 25]);
     // plafond par compte : 3 par heure
     const nv2 = await creer('insiste@exemple.fr', false); courrier.envoyes.length = 0;
     for (let i = 0; i < 6; i++) { await renvoyer('insiste@exemple.fr'); await A.attendre(); }

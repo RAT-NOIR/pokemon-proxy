@@ -6,7 +6,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
     const srv = await A.demarrer(cfg);
     let n = 0;
-    const verif = (jeton, s = srv, entetes = {}) => H.appel(s.url, '/api/compte/verification', { methode: 'POST', corps: { jeton }, entetes: { ...A.SITE, ...A.ip(++n), ...entetes } });
+    const verif = (jeton, s = srv, entetes = {}) => H.appel(s.url, '/api/compte/verification', { methode: 'POST', corps: { jeton, motDePasse: 'mot-de-passe-choisi-au-clic' }, entetes: { ...A.SITE, ...A.ip(++n), ...entetes } });
     const nouveauCompte = async (email = `u${++n}@exemple.fr`) => { const c = M.nouveauCompte({ email, emailCle: email, motDePasse: {} }); await db.col('comptes').insertOne(c); return c; };
     const lien = async (c, type = 'verification', decalageMs = 24 * 3600e3) => {
         const jeton = J.genererJeton();
@@ -36,7 +36,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const j2b = await lien(c2);
     const r2b = await verif(j2b);
     const a2b = await db.col('comptes').findOne({ _id: c2._id });
-    H.v('second lien : 200 mais aucun octroi de plus', [r2b.statut, a2b.solde.accueil, await db.col('mouvements').countDocuments({ compteId: c2._id })], [200, 25, 1]);
+    H.v('second lien d\'un compte DÉJÀ vérifié (D6) : 404, aucun octroi de plus, mot de passe inchangé', [r2b.statut, a2b.solde.accueil, await db.col('mouvements').countDocuments({ compteId: c2._id })], [404, 25, 1]);
     // 4 : expiré
     const c4 = await nouveauCompte(); const j4 = await lien(c4, 'verification', -1000);
     const r4 = await verif(j4);
@@ -64,6 +64,6 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     // garde au niveau du COMPTE : 10 liens différents consommés ensemble
     const cm = await nouveauCompte(); const liensM = []; for (let i = 0; i < 10; i++) liensM.push(await lien(cm));
     const rm = await Promise.all(liensM.map(j => verif(j)));
-    H.v('10 liens différents simultanés (10 requêtes) : accueil 25, 1 mouvement', [rm.filter(x => x.statut === 200).length, (await db.col('comptes').findOne({ _id: cm._id })).solde.accueil, await db.col('mouvements').countDocuments({ compteId: cm._id })], [10, 25, 1]);
+    H.v('10 liens différents simultanés (10 requêtes) : UNE seule activation (D6 : un seul mot de passe posé), accueil 25, 1 mouvement', [rm.filter(x => x.statut === 200).length, (await db.col('comptes').findOne({ _id: cm._id })).solde.accueil, await db.col('mouvements').countDocuments({ compteId: cm._id })], [1, 25, 1]);
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

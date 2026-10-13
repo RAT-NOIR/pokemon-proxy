@@ -796,7 +796,7 @@
           "comptes"
         ],
         "summary": "Inscription (202 TOUJOURS quand l'entrée est valide)",
-        "description": "La réponse ne dit jamais si l'adresse existe déjà.",
+        "description": "La réponse ne dit jamais si l'adresse existe déjà. CHANGEMENT D6 (site : formulaire d'inscription) : plus de mot de passe ici ; il se choisit au clic de confirmation (POST /api/compte/verification). Un champ `motDePasse` est refusé (422 ENTREE `mot-de-passe-non-attendu`), jamais lu ni stocké.",
         "security": [],
         "parameters": [
           {
@@ -824,16 +824,6 @@
               }
             }
           },
-          "400": {
-            "description": "Entrée invalide (ENTREE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReponseErreur"
-                }
-              }
-            }
-          },
           "403": {
             "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
             "content": {
@@ -845,7 +835,7 @@
             }
           },
           "422": {
-            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "description": "ENTREE avec detail `adresse-invalide`, `adresse-refusee`, `defi-anti-robot` ou (D6) `mot-de-passe-non-attendu` (un champ `motDePasse` est refusé à l'inscription : il se choisit à la confirmation).",
             "content": {
               "application/json": {
                 "schema": {
@@ -891,7 +881,8 @@
         "tags": [
           "comptes"
         ],
-        "summary": "Confirme l'adresse par le jeton du lien (24 h, usage unique) ; accorde les 25 offertes une fois",
+        "summary": "Confirme l'adresse par le jeton du lien (24 h, usage unique) ET fixe le mot de passe choisi à ce moment ; accorde les 25 offertes une fois",
+        "description": "CHANGEMENT D6 (site : page /fr/verification). Le compte inscrit n'a aucun mot de passe : il est activé ICI, avec le mot de passe présenté avec le lien. Un refus de politique (422) ne brûle pas le lien. Le lien d'un compte déjà vérifié est refusé (404) et ne change jamais son mot de passe. Un lien ne sert qu'une fois : le premier clic gagne, les autres reçoivent 404.",
         "security": [],
         "parameters": [
           {
@@ -915,6 +906,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseVerification"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : corps illisible ou `motDePasse` absent ou qui n'est pas une chaîne.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MOT_DE_PASSE_FAIBLE (detail `trop-court`, `trop-long`, `egal-a-l-adresse` ou `espaces-seulement`) : le lien n'est pas consommé, on peut réessayer avec un autre mot de passe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
                 }
               }
             }
@@ -4630,13 +4641,10 @@
       },
       "RequeteInscription": {
         "type": "object",
+        "description": "D6 : l'inscription ne prend AUCUN mot de passe (il se choisit au clic de confirmation, voir RequeteVerification). Un champ `motDePasse`, quelle que soit sa valeur, est refusé : 422 ENTREE, detail `mot-de-passe-non-attendu`.",
         "properties": {
           "email": {
             "type": "string"
-          },
-          "motDePasse": {
-            "type": "string",
-            "minLength": 10
           },
           "turnstile": {
             "type": "string"
@@ -4644,19 +4652,24 @@
         },
         "required": [
           "email",
-          "motDePasse",
           "turnstile"
         ]
       },
       "RequeteVerification": {
         "type": "object",
+        "description": "D6 : le lien reçu par courriel ET le mot de passe choisi à ce moment (mêmes règles que la réinitialisation : 10 à 200 caractères, différent de l'adresse).",
         "properties": {
           "jeton": {
             "type": "string"
+          },
+          "motDePasse": {
+            "type": "string",
+            "minLength": 10
           }
         },
         "required": [
-          "jeton"
+          "jeton",
+          "motDePasse"
         ]
       },
       "RequeteConnexion": {
