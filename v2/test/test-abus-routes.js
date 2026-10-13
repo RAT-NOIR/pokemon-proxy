@@ -830,7 +830,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             const racine = path.join(__dirname, '..'), noms = new Set(), fichiers = [path.join(racine, '..', 'collecte-cartes', 'r2.js')];
             (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!(['test', 'migrations', 'admin', 'mesures'].includes(e.name) && (e.name !== 'mesures' || path.relative(racine, p).replace(/\\/g, '/') === 'mesures'))) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);   // mesures/ : outillage manuel, jamais chargé par le serveur (voir l'assertion « aucun require de mesures/ »)
             for (const f of fichiers) { const s = fs.readFileSync(f, 'utf8'); for (const re of [/process\.env\.([A-Z][A-Z0-9_]{2,})/g, /\benv\.([A-Z][A-Z0-9_]{2,})/g, /'((?:R2|V2|MONGODB|TURNSTILE|BREVO|BANC|JETON|RM)_[A-Z0-9_]+)'/g]) for (const m of s.matchAll(re)) noms.add(m[1]); }
-            const doc = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            const audit = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            // tour 3 (F-1) : la variable doit figurer DANS LA TABLE §4 (de « ## 4. » à « ## 5. »), pas n'importe où dans le document (une ligne de table perdue passait si le nom était cité ailleurs)
+            const i4 = audit.indexOf('## 4. Table des valeurs par défaut'), i5 = audit.indexOf('\n## 5.', i4);
+            H.vrai('m2 instrument : la table §4 est bien délimitée (début trouvé, fin après lui)', i4 >= 0 && i5 > i4);
+            const doc = i4 >= 0 && i5 > i4 ? audit.slice(i4, i5) : '';
             const absents = [...noms].sort().filter(n => !doc.includes('`' + n + '`'));
             H.v(`m2 : ${noms.size} noms de variables lus par la production (${fichiers.length} fichiers) — tous dans la table des valeurs par défaut de AUDIT-SECURITE-V2.md (noms seulement)`, absents, []);
         }

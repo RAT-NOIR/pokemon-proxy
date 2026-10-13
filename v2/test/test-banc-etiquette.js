@@ -188,6 +188,14 @@ const oid = () => new mongoose.Types.ObjectId();
         H.v('6. même rev 4, même verdict `corrige`, autre idProduct ⇒ 409 (sans concurrence), l\'étiquette garde 4343', [r.statut, code(r), (await etiq(S)).idProduct], [409, 'CONFLIT', 4343]);
         r = await post(ADM, { scanId: S, verdict: 'corrige', idProduct: 4343, rev: 4 });
         H.v('6. même rev 4, même idProduct ⇒ rejoue', [r.statut, r.json.etat], [200, 'rejoue']);
+        // M-2 (tour 3) : la comparaison porte aussi sur `aucune` — même rev, autre `aucune` ⇒ 409 ; identique ⇒ rejoue
+        const SN = await semer(ADM);
+        r = await post(ADM, { scanId: SN, carte: 2, verdict: 'corrige', aucune: 'pas-une-carte', rev: 1 });
+        H.v('6. corrige `pas-une-carte` rev 1 ⇒ ecrit', [r.statut, r.json.etat], [200, 'ecrit']);
+        r = await post(ADM, { scanId: SN, carte: 2, verdict: 'corrige', aucune: 'hors-catalogue', rev: 1 });
+        H.v('6. même rev 1, même verdict, `aucune` DIFFÉRENT ⇒ 409 rev-contredit, l\'étiquette garde `pas-une-carte`', [r.statut, r.json.erreur.detail, (await etiq(SN, 2)).aucune], [409, 'rev-contredit', 'pas-une-carte']);
+        r = await post(ADM, { scanId: SN, carte: 2, verdict: 'corrige', aucune: 'pas-une-carte', rev: 1 });
+        H.v('6. même rev 1, même `aucune` ⇒ rejoue', [r.statut, r.json.etat], [200, 'rejoue']);
         // C-6 : la borne haute du rev (1 000 000) passe, 1 000 001 est refusé (plus haut)
         const SB = await semer(ADM);
         r = await post(ADM, { scanId: SB, verdict: 'juste', rev: 1000000 });
@@ -289,6 +297,41 @@ const oid = () => new mongoose.Types.ObjectId();
             for (let i = 0; i < 601; i++) { const r = await post(a, corps); statuts.set(r.statut, (statuts.get(r.statut) || 0) + 1); }
             H.v(`10.    ${nom} : 601 requêtes ⇒ 601 × 404, aucune 429 (la garde de rôle passe avant le limiteur)`, [...statuts], [[404, 601]]);
         }
+    }
+
+    // ═══ 11. M-1 / I-2 (tour 3) : ce que `analyses` garde d'une question de CONFIRMATION (un seul candidat), produite par la VRAIE route /api/identifier (chaîne fabriquée) ═══
+    // La base « Gemini seul » de la mesure d'une question se lit dans `cartes[i].question` (code + choix[].idProduct), pas dans `cartes[i].idProduct` (nul : rien n'est affirmé).
+    {
+        const path = require('path'), pret = require('../pret'), { dansUnScan } = require('../../sources'), { assembler } = require('../index');
+        const IMAGE = require(path.join(__dirname, '..', '..', 'verrou', 'charges.json')).charges.find(c => c.cellule === 'occidentale').imageUrl;
+        const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+        const chaine = async (req, res) => {
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [4242] });
+            return res.json({ success: true, question: { etat: 'en-attente', delaiHeures: 24 }, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: true }, etat: ETAT,
+                candidats: [{ idProduct: 4242, nom: 'Pikachu', numero: '58', set: 'Base Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) });
+        };
+        const app2 = express(); app2.set('trust proxy', true); app2.use(express.json()); app2.use((q, s, n) => dansUnScan(n));
+        pret.armer(M.verifierIndex);
+        app2.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc: {}, purge: purgeStub, catalogue }));
+        const sv2 = await H.serveur(app2);
+        try {
+            const A = await acteur({ role: 'administrateur' });
+            const ent = { origin: cfg.origines.extension, authorization: `Bearer ${A.jeton}` };
+            const sc = await H.appel(sv2.url, '/api/identifier', { methode: 'POST', corps: { contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr' }, entetes: { ...ent, 'x-forwarded-for': '10.7.7.7', 'idempotency-key': 'etiq-confirmation-0001' } });
+            const c0 = sc.json && sc.json.analyse && sc.json.analyse.cartes[0];
+            H.v('11. la route rend une question de confirmation : a-trancher, un candidat, code `confirmation`', [sc.statut, c0 && c0.statut, c0 && c0.candidats.length, c0 && c0.question.code], [200, 'a-trancher', 1, 'confirmation']);
+            const an = await lire(sc.json.scanId);
+            H.v('11. analyses FIGE la donnée d\'origine de la question : statut a-trancher, idProduct nul, question.code `confirmation`, question.choix[0] = le candidat', [an.cartes[0].statut, an.cartes[0].idProduct, an.cartes[0].question && an.cartes[0].question.code, an.cartes[0].question && an.cartes[0].question.choix.map(c => c.idProduct)], ['a-trancher', null, 'confirmation', [4242]]);
+            const etiqueter = corps => H.appel(sv2.url, '/api/banc/etiquette', { methode: 'POST', corps: { scanId: sc.json.scanId, ...corps }, entetes: { ...ent, 'x-forwarded-for': '10.7.7.8' } });
+            let r = await etiqueter({ verdict: 'juste', rev: 1 });
+            H.v('11. « juste » sur la confirmation ⇒ 409 (la réponse d\'origine n\'est pas une affirmation)', [r.statut, r.json.erreur.detail], [409, 'juste-sans-affirmation']);
+            const oui = await H.appel(sv2.url, '/api/identifier/reponse', { methode: 'POST', corps: { scanId: sc.json.scanId, carte: 0, choix: 'a' }, entetes: { ...ent, 'x-forwarded-for': '10.7.7.9' } });
+            r = await etiqueter({ verdict: 'juste', rev: 1 });
+            H.v('11. I-2 : après un OUI (la réponse rendue est `identifiee`), « juste » rend TOUJOURS 409 : l\'étiquette juge la réponse d\'ORIGINE', [oui.statut, oui.json.carte.statut, r.statut, (await lire(sc.json.scanId)).cartes[0].statut], [200, 'identifiee', 409, 'a-trancher']);
+            r = await etiqueter({ verdict: 'corrige', idProduct: 4242, rev: 1 });
+            const fin = (await lire(sc.json.scanId)).cartes[0];
+            H.v('11. « corrige » avec l\'idProduct du candidat ⇒ ecrit ; la proposition d\'origine (question.choix) et le choix de l\'administrateur (reponse) restent à côté', [r.statut, r.json.etat, fin.etiquetteAdmin.idProduct, fin.question.choix.map(c => c.idProduct), fin.reponse && fin.reponse.idProduct], [200, 'ecrit', 4242, [4242], 4242]);
+        } finally { await sv2.fermer(); }
     }
 
     await srv.fermer(); monterBanc.arreterPurge();
