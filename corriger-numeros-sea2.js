@@ -26,7 +26,99 @@ const LISTE = Object.freeze([
     Object.freeze({ idProduct: 860034, carteId: 342068, nomEn: 'Pawmi', slug: 'Pawmi-M-PID035', numeroFaux: '17', numeroOfficiel: '35', impressionSea2: true }),
     Object.freeze({ idProduct: 860035, carteId: 339431, nomEn: 'Gastly', slug: 'Gastly-M-PID036', numeroFaux: '18', numeroOfficiel: '36', impressionSea2: false })
 ]);
-const AUTORISES = [/^--ecrire$/];
+const AUTORISES = [/^--ecrire$/, /^--restantes$/];
+// COURTS2 (option --restantes, décision 8 du testeur, 2026-10-13) : « les impressions thaïes « 017 » et « 018 » de Pawmi et Gastly, et l'impression
+// id « 018 » de Gastly : même règle que la voie b) (preuve TPC, sinon on retire le numéro, les fiches restent) ». LISTE FERMÉE : trois impressions,
+// toutes de source setlist, antérieures à SEA-2. Pour CHACUNE : la fiche TPC de SA langue à SON numéro (cache complet, planifierTpc — la règle de la
+// production, jamais une copie) désigne-t-elle la même carte (n° de Pokédex + PV + set, §75) ? Oui : preuve écrite, rien ne bouge. Non ou pas de
+// fiche : l'IMPRESSION part (`$pull` ciblé de cette seule impression, la fiche reste) — sauf si une image est jointe à ce numéro dans ce set :
+// elle a été jointe par une preuve, on ne retire jamais une image juste, l'outil s'ARRÊTE et le dit.
+const RESTANTES = Object.freeze([
+    Object.freeze({ nomEn: 'Pawmi', carteId: 342068, tirage: 'th', langue: 'th', etat: 'tpc-asie/M-P-Thai-Promos', set: 'M-P-Thai-Promos', numero: '017' }),
+    Object.freeze({ nomEn: 'Gastly', carteId: 339431, tirage: 'th', langue: 'th', etat: 'tpc-asie/M-P-Thai-Promos', set: 'M-P-Thai-Promos', numero: '018' }),
+    Object.freeze({ nomEn: 'Gastly', carteId: 339431, tirage: 'id', langue: 'id', etat: ETAT, set: SLUGSET, numero: '018' })
+]);
+const estImpR = (i, r) => i && i.tirage === r.tirage && i.expansion === IMP.expansion && i.source === IMP.source && memeNumero(i.numero, r.numero);
+
+/** La liste TPC d'un cache (complète, toutes les fiches lues) ; sinon { erreur } — un cache incomplet ne prouve ni l'absence ni la présence. */
+async function lireFichesTpc(db, etatId, langue) {
+    const etat = (await db.collection('collecte_images_etat').find({ _id: etatId }).toArray())[0];
+    const liste = etat?.liste;
+    if (!liste?.complete || liste.code !== CODE || liste.langue !== langue || !Array.isArray(liste.ids) || !liste.ids.length || liste.total !== liste.ids.length) return { erreur: `❌ la liste TPC ${etatId} du cache n'est pas complète (${JSON.stringify({ complete: liste?.complete, total: liste?.total, ids: liste?.ids?.length })}) — l'absence d'une fiche ne se conclurait pas ; rien n'est écrit` };
+    const docs = await db.collection('tpc_fiches').find({ _id: { $in: liste.ids.map(i => `${SITE}/${langue}/${i}`) } }).toArray();
+    if (docs.length !== liste.ids.length) return { erreur: `❌ ${docs.length} fiches en cache sur ${liste.ids.length} de la liste — rien n'est écrit` };
+    return { liste, fiches: docs.map(d => ({ ...d.fiche, idFiche: d.idFiche, urlFiche: d.url })) };
+}
+
+async function executerRestantes({ argv, ouvrir, log, err }) {
+    const ecrire = argv.includes('--ecrire');
+    const { db, fermer } = await ouvrir();
+    try {
+        const cartes = new Map();
+        for (const r of RESTANTES) {
+            if (cartes.has(r.carteId)) continue;
+            const c = (await db.collection('cartes').find({ _id: r.carteId }).toArray())[0];
+            if (!c || c.nomEn !== r.nomEn) { err(`❌ la carte ${r.carteId} n'est pas « ${r.nomEn} » — rien n'est écrit`); return 1; }
+            cartes.set(r.carteId, c);
+        }
+        const caches = new Map();
+        for (const [etatId, langue] of [...new Set(RESTANTES.map(r => `${r.etat}|${r.langue}`))].map(s => s.split('|'))) {
+            const l = await lireFichesTpc(db, etatId, langue);
+            if (l.erreur) { err(l.erreur); return 1; }
+            log(`TPC ${etatId} : liste complète ${l.liste.ids.length}/${l.liste.total}, ${l.fiches.length} fiches lues (cache), lue le ${new Date(l.liste.luLe).toISOString().slice(0, 10)}`);
+            caches.set(etatId, l.fiches);
+        }
+        const decisions = [];
+        for (const r of RESTANTES) {
+            const c = cartes.get(r.carteId);
+            const imps = (c.impressions || []).filter(i => estImpR(i, r));
+            const fichesAuNumero = caches.get(r.etat).filter(f => memeNumero(f.numero, r.numero));
+            const lue = fichesAuNumero.length ? fichesAuNumero.map(f => `fiche TPC ${f.idFiche} « ${f.nom} » (Pokédex ${f.dex ?? '—'}, PV ${f.pv ?? '—'})`).join(' ; ') : `AUCUNE fiche TPC au n° ${r.numero}`;
+            if (imps.length > 1) { err(`❌ ${r.nomEn} ${r.tirage} « ${r.numero} » : ${imps.length} impressions de source setlist, attendu 0 ou 1 — rien n'est écrit`); return 1; }
+            const { plan, restes } = T.planifierTpc({ trous: [{ carte: c, numeroFiche: r.numero, idProduct: 0 }], fiches: caches.get(r.etat), code: CODE, site: SITE });
+            const prouvee = plan.length === 1, motif = restes[0] ? `${restes[0].motif}${restes[0].detail ? ` (${restes[0].detail})` : ''}` : null;
+            const images = (c.images || []).filter(e => e && e.set === r.set && memeNumero(e.numero, r.numero));
+            const d = { ...r, exact: imps[0]?.numero ?? null, dejaRetiree: imps.length === 0, prouvee, retrait: !prouvee && imps.length === 1 };
+            if (imps.length === 0) log(`■ ${r.nomEn} ${r.tirage} « ${r.numero} » : impression DÉJÀ retirée — ${lue}`);
+            else if (prouvee) log(`■ ${r.nomEn} ${r.tirage} « ${r.numero} » : ${lue} — PROUVÉE, rien ne bouge : ${plan[0].preuve}`);
+            else log(`■ ${r.nomEn} ${r.tirage} « ${r.numero} » : ${lue} — la preuve manque : ${motif} ⇒ RETIRER l'impression (la fiche reste)`);
+            if (d.retrait && images.length) { err(`❌ ${r.nomEn} ${r.tirage} « ${r.numero} » : une image est jointe à ce numéro (${images.map(e => e.cleR2).join(', ')}) alors que la preuve manque — elle avait été jointe par une preuve : on ne retire jamais une image juste, RE-VÉRIFIER avant tout ; rien n'est écrit`); return 1; }
+            decisions.push(d);
+        }
+        const aFaire = decisions.filter(d => d.retrait);
+        if (!aFaire.length) { err('❌ rien à faire : aucune impression à retirer (prouvées ou déjà retirées)'); return 1; }
+        const annonce = {};
+        for (const d of aFaire) { const k = `impressions imp:${d.tirage}|${IMP.expansion}`; annonce[k] = (annonce[k] || 0) + 1; }
+        log(`   annonce de lot-additif : ${JSON.stringify(annonce)}`);
+        const avant = new Map([...cartes].map(([id, c]) => [id, { n: (c.impressions || []).filter(Boolean).length, images: JSON.stringify(c.images ?? null), liens: JSON.stringify(c.liens?.idProduct ?? null), sets: JSON.stringify([...(c.sets || [])].sort()) }]));
+        if (!ecrire) { log('(simulation — rien n\'est écrit)'); return 0; }
+        for (const d of aFaire) {
+            const cond = { tirage: d.tirage, expansion: IMP.expansion, source: IMP.source, numero: d.exact };
+            const r = await db.collection('cartes').updateOne({ _id: d.carteId, impressions: { $elemMatch: cond } }, { $pull: { impressions: cond } });
+            if (r.modifiedCount !== 1) { err(`❌ ${d.nomEn} ${d.tirage} : l'impression n'a pas été retirée (${r.modifiedCount}) — la base a bougé depuis le plan ; arrêt`); return 1; }
+        }
+        let faux = 0;
+        for (const id of cartes.keys()) {
+            const c = (await db.collection('cartes').find({ _id: id }).toArray())[0], a = avant.get(id), e = [];
+            const retraits = aFaire.filter(d => d.carteId === id);
+            for (const d of decisions.filter(x => x.carteId === id)) {
+                const reste = (c.impressions || []).filter(i => estImpR(i, d)).length;
+                if (d.retrait && reste !== 0) e.push(`impression ${d.tirage} « ${d.numero} » encore là`);
+                if (!d.retrait && !d.dejaRetiree && reste !== 1) e.push(`impression ${d.tirage} « ${d.numero} » : ${reste}, attendu 1 (prouvée, intacte)`);
+            }
+            const n = (c.impressions || []).filter(Boolean).length;
+            if (n !== a.n - retraits.length) e.push(`impressions : ${n}, attendu ${a.n - retraits.length}`);
+            if (JSON.stringify(c.images ?? null) !== a.images) e.push('images a changé');
+            if (JSON.stringify(c.liens?.idProduct ?? null) !== a.liens) e.push('liens.idProduct a changé');
+            if (JSON.stringify([...(c.sets || [])].sort()) !== a.sets) e.push('sets a changé');
+            log(`   RELECTURE ${c.nomEn} : ${e.length ? '🔴 ' + e.join(' ; ') : '✅ comme attendu'}`);
+            faux += e.length;
+        }
+        if (faux) { err('❌ la relecture ne retrouve pas l\'état attendu'); return 1; }
+        log('   ✅ écrit et relu');
+        return 0;
+    } finally { await fermer(); }
+}
 const memeNumero = (a, b) => a != null && b != null && cleNumero(a) === cleNumero(b);
 const estImpSea2 = (i, numero) => i && i.tirage === IMP.tirage && i.expansion === IMP.expansion && i.source === IMP.source && memeNumero(i.numero, numero);
 
@@ -118,6 +210,7 @@ function ecartsApres(d, ligne, carte, avant) {
 async function executer({ argv, ouvrir, log = console.log, err = console.error }) {
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) { err(`❌ argument inconnu : ${inconnus.join(' ')} — seul --ecrire existe (la liste est fermée : Pawmi 860034 et Gastly 860035)`); return 2; }
+    if (argv.includes('--restantes')) return executerRestantes({ argv, ouvrir, log, err });
     const ecrire = argv.includes('--ecrire');
     const { db, fermer } = await ouvrir();
     try {
@@ -186,7 +279,7 @@ async function executer({ argv, ouvrir, log = console.log, err = console.error }
     } finally { await fermer(); }
 }
 
-module.exports = { executer, decider, operations, ecartsApres, LISTE, IMP };
+module.exports = { executer, decider, operations, ecartsApres, LISTE, RESTANTES, IMP };
 
 if (require.main === module) {
     (async () => {
