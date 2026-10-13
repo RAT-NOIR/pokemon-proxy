@@ -208,7 +208,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         }
         if (html == null) return refus('refuse-liste', `la page /sets/${L.codePk} n'existe plus chez pikaqian (404) : la table du 2026-10-10 la listait`);
         const tuiles = P.lireTuiles(html);
-        const V = P.verdictDePage({ tuiles, code: L.codePk });
+        const V = P.verdictDePage({ tuiles, code: L.codePk, titre: P.titreLu(html) });
         if (!V.ok) { await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif: V.motif } }, { upsert: true }); return refus('refuse-liste', V.motif); }
         const origines = P.lireOrigines(html);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
@@ -367,7 +367,7 @@ if (inconnus.length || modes.length !== 1 || (modes[0] !== '--verrou' && !voulus
                 const htmlOpt = args.find(a => a.startsWith('--html='))?.slice(7);
                 if (htmlOpt) require('fs').writeFileSync(htmlOpt, html);
                 const tuiles = P.lireTuiles(html);
-                const V = P.verdictDePage({ tuiles, code: L.codePk });
+                const V = P.verdictDePage({ tuiles, code: L.codePk, titre: P.titreLu(html) });
                 if (!V.ok) { console.log(`${slug.padEnd(42)} page refusée : ${V.motif}`); continue; }
                 const Pl = await planifier(cx.db, slug, L, tuiles);
                 trous += Pl.trous; prouves += Pl.plan.length; produits += Pl.produits;

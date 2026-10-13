@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const SRC = fs.readFileSync(path.join(__dirname, 'userscript-pikaqian.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(__dirname, 'userscript-pikaqian.js'), 'utf8').replace(/\r\n/g, '\n');   // un checkout en CRLF (core.autocrlf) ne doit pas faire manquer les motifs à retour de ligne
 const MUTANTS = [
     { nom: 'plus de pause entre deux requêtes', de: 'var attente = lecture.emises > 0 ? pause(PAUSE_MS) : Promise.resolve();', vers: 'var attente = Promise.resolve();' },
     { nom: 'pause de 100 ms au lieu de 500', de: 'var PAUSE_MS = 500;', vers: 'var PAUSE_MS = 100;' },
@@ -26,6 +26,10 @@ const MUTANTS = [
     { nom: 'redirections du navigateur suivies', de: "timeout: 30000, redirect: 'error',", vers: 'timeout: 30000,' },
     { nom: 'annonce muette avant le clic', de: 'etat.textContent = annonce();\n', vers: '\n' },
     { nom: 'annonce sans le maximum de requêtes', de: "', soit au plus ' + (2 * reste) + ' pour '", vers: "' pour '" },
+    { nom: 'le refus n\'affiche plus le diagnostic de la page', de: "|| 'réponse illisible du récepteur') + lignesDeDiagnostic(j);", vers: "|| 'réponse illisible du récepteur');" },
+    { nom: 'le diagnostic affiche autre chose que des chaînes', de: ".filter(function (x) { return typeof x === 'string'; })", vers: '' },
+    { nom: 'le diagnostic n\'est plus borné à 8 lignes', de: '.slice(0, 8);', vers: ';' },
+    { nom: 'une ligne de diagnostic n\'est plus tronquée à 300 caractères', de: 'gardees[i].slice(0, 300)', vers: 'gardees[i]' },
     { nom: 'le panneau n\'affiche pas le compte réel', de: "' · tuiles sans image ' + sansImage + compteReel();", vers: "' · tuiles sans image ' + sansImage;" }
 ];
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-us-'));
