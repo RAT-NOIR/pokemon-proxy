@@ -35,6 +35,7 @@ const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
 const { gardeNomSeul } = require('./collecte-cartes/garde-nom-seul');
+const { refusDeCollecte } = require('./collecte-cartes/nom-synthetique');
 const { ecrirePageDeCarte } = require('./collecte-cartes/page-de-carte');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -79,6 +80,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // identifiant.
     const slug = L.slugSet || L.code;          // l'IDENTITÉ : verrou, `sets._id`, `collecte_etat._id`, `cartes.sets`, `restes.set`
     const slugCardmarket = L.slugSet || null;  // le vrai slug de la SOURCE, ou rien — jamais un substitut
+    // 🔑 (MULTI, 2026-10-13) UN SET DONT `bulba.expansion` EST UN NOM SYNTHÉTIQUE (`reimpressions/…`, completer-fiches-multi.js) N'EST JAMAIS RÉÉCRIT PAR LA COLLECTE :
+    // les deux `$set` de `bulba` ci-dessous (page de set, sans page) remplaceraient le nom, et les impressions d'origine posées sous lui perdraient leur set.
+    // La collecte le dit et s'arrête pour ce set, avant tout verrou et toute écriture.
+    const refusSynth = refusDeCollecte(await M.Set.findOne({ _id: slug }).select('bulba.expansion').lean(), slug);
+    if (refusSynth) { console.error(`❌ ARRÊT : ${refusSynth}.`); await fermer(); process.exit(1); }
     // 🔑 LE VERROU GLOBAL PROTÈGE UNE PROMESSE FAITE À BULBAPEDIA (1 requête / 5 s) : il n'a de sens que
     // pour un traitement qui SORT de chez nous. `--reparser` relit R2, et une ligne `sansPage` prend ses
     // cartes dans notre propre base — aucun des deux ne frappe Bulbapedia, aucun des deux ne prend le

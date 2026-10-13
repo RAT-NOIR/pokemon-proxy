@@ -19,7 +19,9 @@ const CHAMPS_POSES_APRES = ['illustrateur', 'illustrateurPreuve'];
 // les refabriquer : elles portent la marque de leur conservation, posée dans le même geste que l'écriture.
 // ➕ 2026-10-06 : `numero-cardmarket` (poser-impressions-par-numero.js) — une impression par numéro Cardmarket confirmé par une seconde
 // source, posée pour qu'une fiche ne mélange plus plusieurs impressions. Le parseur ne la refabrique pas non plus.
-const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket'];
+// ➕ 2026-10-13 : `origine-slug` (completer-fiches-multi.js, lot MULTI) — une impression par numéro d'ORIGINE lu dans le slug Cardmarket d'une réimpression,
+// sous le nom d'expansion synthétique du set. Aucune page de carte ne la déclare : sans cette marque, une recollecte l'effacerait (§59).
+const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket', 'origine-slug'];
 const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
 
 /**

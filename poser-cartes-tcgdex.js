@@ -51,6 +51,7 @@ if (require.main === module) {
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { decomposerNomCardmarket, estCarteCode, cleNumero, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
+const { nomsBulbapedia } = require('./collecte-cartes/nom-synthetique');
 const DEX = JSON.parse(fs.readFileSync(path.join(__dirname, 'pokedex-dexids.json'), 'utf8'));
 const cleDex = s => String(s || '').toLowerCase().replace(/[^a-z0-9δ]+/g, '');
 const RESTES_EXCLUS = new Set(['fiche-contredite-par-le-nom', 'fiche-contredite-par-la-metacarte', 'fiche-contredite-par-les-attaques', 'produit-vers-plusieurs-cartes', 'nom-ambigu', 'carte-sans-nom', 'idproduct-contredit-par-tcgdex']);
@@ -92,7 +93,7 @@ function decider(p, ctx) {
     const nom = nomDuProduit(p);
     const sets = ctx.setDe(p.idExpansion);
     if (sets.length !== 1) return { refus: sets.length ? `${sets.length} sets portent l'expansion ${p.idExpansion}` : `aucun set ne porte l'expansion ${p.idExpansion}` };
-    const S = sets[0], T = S.tirage ?? S.region, E = [].concat(S.bulba?.expansion ?? []).filter(x => typeof x === 'string');
+    const S = sets[0], T = S.tirage ?? S.region, E = nomsBulbapedia(S);   // (MULTI) un nom synthétique n'est pas une expansion Bulbapedia : sauté, comme avant qu'il existe
     if (!E.length) return { refus: `le set ${S._id} n'a pas de nom d'expansion (bulba.expansion)` };
     const lies = ctx.lie(p.idExpansion);
     // la désignation

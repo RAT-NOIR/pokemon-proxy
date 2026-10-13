@@ -29,6 +29,7 @@ const r2 = require('./collecte-cartes/r2');
 const W = require('./collecte-cartes/wikitext');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 const { mesurer, numeroComparable, normaliserNumero } = require('./mesurer-fiches-melangees');
+const { estNomSynthetique, nomsBulbapedia } = require('./collecte-cartes/nom-synthetique');
 const TIRAGES = new Set(['jp', 'intl', 'zh-hans', 'zh-hant', 'id', 'th', 'idth', 'ko']);
 
 const AUTORISES = [/^--ecrire$/, /^--set=.+$/, /^--completer-numero-fiche$/, /^--retirer-expansion-nulle$/];
@@ -110,7 +111,8 @@ async function nomsSoeurs({ cx, prod, slugs, setsTous }) {
     for (const slug of slugs) {
         const s = setsTous.get(slug); if (!s) continue;
         const tirage = s.tirage ?? s.region, propres = [].concat(s.bulba?.expansion ?? []);
-        if (!propres.length || !propres.every(e => typeof e === 'string' && e)) continue;
+        // (MULTI) un nom synthétique (`reimpressions/…`) n'est PAS un nom d'expansion Bulbapedia : ce set est sauté, comme avant qu'il ait un nom
+        if (!propres.length || !propres.every(e => typeof e === 'string' && e) || estNomSynthetique(propres)) continue;
         const lignes = await cx.db.collection('cartes_produits').find({ slugSet: slug }, { projection: { _id: 0, carteId: 1, idProduct: 1, preuve: 1 } }).toArray();
         const NC = new Map((await prod.db.collection('numeros_cartes').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { _id: 0, idProduct: 1, numero: 1 } }).toArray()).map(n => [n.idProduct, n.numero]));
         const tous = lignes.map(l => ({ c: l.carteId, n: NC.get(l.idProduct), simple: l.preuve === 'fiche-simple' || !(l.carteId > 0) })).filter(x => x.n != null && /\d/.test(String(x.n))).map(x => ({ ...x, k: cleSource(x.n) }));
@@ -209,7 +211,7 @@ async function completerNumeroFiche({ cx, prod, ecrire }) {
     return n === aPoser.length && reste === 0 ? 0 : 1;
 }
 
-(async () => {
+async function principal() {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_BRUT'] });
     if (COMPLETER) { const code = await completerNumeroFiche({ cx, prod, ecrire: ECRIRE }); await fermer(); process.exit(code); }
     if (RETIRER_NULLE) { const code = await retirerExpansionNulle({ cx, ecrire: ECRIRE }); await fermer(); process.exit(code); }
@@ -238,6 +240,7 @@ async function completerNumeroFiche({ cx, prod, ecrire }) {
         const groupe = `${x.carteId}|${x.tirage}|${x.expansion}`;
         const refuser = (cause, detail = ex) => { note(`${classe} · refusé : ${cause}`, detail); groupesRefuses.add(groupe); };
         // une garde s'écrit par ce qu'elle autorise : un tirage connu et un NOM d'expansion
+        if (estNomSynthetique(x.expansion)) { refuser('le nom d\'expansion du set est synthétique (reimpressions/…, completer-fiches-multi.js), pas une expansion Bulbapedia : ce set n\'est pas le sien'); continue; }
         if (typeof x.expansion !== 'string' || !x.expansion) { refuser('le set n\'a pas de nom d\'expansion (une impression s\'y afficherait dans tous les sets sans nom)'); continue; }
         if (!TIRAGES.has(x.tirage)) { refuser(`tirage « ${x.tirage} » inconnu`); continue; }
         if (x.imagesSansNumero > 0) { refuser('une image du set sans numéro sur le document (le set entier basculerait)'); continue; }
@@ -335,6 +338,9 @@ async function completerNumeroFiche({ cx, prod, ecrire }) {
     console.log(`\n   ✅ cartes écrites : ${nc}/${aPoser.size} · impressions « numero-cardmarket » relues : ${relues[0]?.n ?? 0} (attendu ≥ ${nImp}) · numeroFiche posés : ${nl}/${numerosFiche.length}`);
     await fermer();
     if (nc !== aPoser.size || (relues[0]?.n ?? 0) < nImp || nl !== numerosFiche.length) process.exit(1);
-})().catch(e => { console.error('❌', e.message); process.exit(1); });
+}
+// (MULTI) importable par un banc (test-nom-synthetique.js) : la mesure ne démarre que lancée en ligne de commande
+module.exports = { nomsSoeurs };
+if (require.main === module) principal().catch(e => { console.error('❌', e.message); process.exit(1); });
 
 function JSON_SORTIE() { return process.env.RM_JSON_SORTIE || null; }
