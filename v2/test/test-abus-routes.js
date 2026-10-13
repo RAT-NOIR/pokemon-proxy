@@ -63,7 +63,16 @@ function fuite(texte, reponse = {}) {
     return null;
 }
 const protoSain = () => Object.keys(Object.prototype).length === 0 && ({}).role === undefined && ({}).x === undefined && !Object.prototype.hasOwnProperty.call(Object.prototype, 'x') && Object.getPrototypeOf(Object.prototype) === null;
+// Le compteur de la collection (`compteurs`, clé collection-octets) est créé par un RECOMPTE lancé au MONTAGE du lot, sans que personne l'attende (collection/service.js : initialiser). Sous charge
+// (lancer-tout), il peut aboutir APRÈS le premier instantané : « ÉCART … écriture en base (compteurs 0→1) » sur une requête hostile qui n'a rien écrit (« 85 réussis, 2 échoués », vu en B1 puis au tour 1 de
+// B2b). Le premier instantané attend donc ce compteur (au plus 15 s, une seule fois).
+let compteurAttendu = false;
+async function attendreCompteur() {
+    if (compteurAttendu) return; compteurAttendu = true;
+    for (let i = 0; i < 150; i++) { if (await raw('compteurs').countDocuments({ cle: 'collection-octets' }) > 0) return; await new Promise(r => setTimeout(r, 100)); }
+}
 async function instantane() {
+    await attendreCompteur();
     const noms = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name).filter(n => !n.startsWith('system.'));
     const o = {}; for (const n of noms) o[n] = await raw(n).countDocuments({});
     return o;
