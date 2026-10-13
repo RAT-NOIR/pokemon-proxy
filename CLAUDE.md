@@ -47,6 +47,25 @@ fichiers, rien ne les rendait : 208 récupérés depuis R2, 63 + 84 à redépose
 
 ---
 
+## 🏷️ RÈGLE PERMANENTE DES LOGOS — HIÉRARCHIE STRICTE, POUR TOUS LES SETS (testeur, 2026-10-13)
+
+> 1. **Logo OFFICIEL** : le logo du set publié par The Pokémon Company ou ses partenaires, tel quel. Toujours la priorité.
+> 2. **Logo SEMI-OFFICIEL** : un visuel officiel qui n'est pas le logo du set lui-même, mais qui le représente sur du matériel officiel (logo de l'événement ou de l'opération : les Championnats du monde
+>    pour un deck WCD, l'opération McDonald's de l'année, Trick or Trade sur l'emballage), pris d'une source légale. Jamais une recréation de fan, jamais une copie Pokécardex.
+> 3. **Logo COMPOSÉ par le site** : DERNIER RECOURS seulement, quand ni 1 ni 2 n'existent dans une source légale.
+>
+> Un logo composé déjà en place est remplacé automatiquement dès qu'un officiel ou un semi-officiel est trouvé. **Chaque logo porte son niveau (officiel, semi-officiel, composé) et sa source.**
+> Un logo identique trouvé sur une autre source est officiel, et se prend depuis cette autre source.
+> **cardcodex.com** (concurrent) : consultation SEULEMENT, comme un visiteur (robots.txt relu, peu de pages, cadence lente) — pour SAVOIR quel logo officiel existe ; aucune image téléchargée, aucun
+> fichier copié, aucune donnée reprise. Le logo se récupère ensuite dans une source LÉGALE déjà ouverte (TCGdex, Bill's Archive, sites TPC par région, Bulbapedia).
+
+## 🇫🇷 PRIORITÉ DU CATALOGUE : L'OCCIDENTAL À QUASI 100 % (testeur, 2026-10-13)
+
+> Le public sera surtout français : le catalogue OCCIDENTAL (intl) doit atteindre quasi 100 % en fiches, visuels et logos — **avant tout nouveau visuel chinois, japonais ou d'Asie du Sud-Est** (les
+> collectes déjà en file continuent seules). Les réimpressions tamponnées ne reçoivent jamais l'image d'une autre impression.
+
+---
+
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
 
 > # **L'OBJECTIF EST FIXÉ (2026-09-23) : chaque produit qui a une fiche et un visuel chez Cardmarket doit avoir chez nous la BONNE fiche et la BONNE image.**
