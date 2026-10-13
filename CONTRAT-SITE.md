@@ -239,6 +239,10 @@ Le classement est `collecte-cartes/niveau-logos.js` (table fermée) ; il est pos
 
 **`sets.logoSemiOfficiel.<langue>`** — même forme que `logoOfficiel` (clé R2 `logos-semi-officiels/…`, lot `logos-semi-officiels-2026-10`) plus `niveau: "semi-officiel"` et **`represente`** (une phrase : « logo de l'opération McDonald's Match Battle 2022-2023 »), exigée à l'écriture et à l'export. Une exception à la garde « logo générique » ne vaut QUE pour ce champ et QUE si `represente` est écrit. Exporté sous la clé **`logosSemiOfficiels`** (`{ <set>: { <langue>: entrée } }`) ; le site ne la lit pas encore. Rang attendu : après `logoOfficiel`, avant tout composé.
 
+## `sets.bulba.expansion = "reimpressions/<slug>"` — fiches par carte d'origine des sets de réimpressions (2026-10-13, lot MULTI)
+
+Promos, Professor-Program, Prize Pack Series Three/Four/Five, Southeast-Asia-Promos et WCD 2008/2011/2012/2022/2023 (11 sets, 28 fiches) ont désormais un nom d'expansion SYNTHÉTIQUE et, sur les cartes réimprimées à plusieurs numéros d'origine, une impression par numéro d'origine (`source: 'origine-slug'`, `preuveNumero` = le slug) et `numeroFiche` sur leurs lignes : chaque lien Cardmarket va sur la fiche de SA carte. Le nom se compare par égalité et ne s'affiche jamais. ⚠️ Ces sets passent « par impression » : une image SANS `numero` posée sur l'un de leurs documents à plusieurs fiches (`documentAmbigu`, `impressionsDuSet.ts:99`) les ferait basculer en bloc en « une fiche par document » — le serveur ne le fait pas (son outil refuse), le site le subirait. Les URL de ces 28 fiches changent (le slug porte le numéro).
+
 ---
 
 ## Dettes connues, à ne pas rediagnostiquer

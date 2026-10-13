@@ -11,11 +11,12 @@
 // Une écriture exige `--attendu=N` (le nombre de fiches de la simulation) ; il ne colle plus → rien ne s'écrit.
 require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { ouvrirSimulation } = require('./collecte-cartes/ouvrir-lecture');
 const FM = require('./collecte-cartes/fiches-multi');
 const X = require('./exporter-donnees-logos-site');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
-const INCONNUS = process.argv.slice(2).filter(a => !/^--(sets|attendu)=.+$/.test(a) && a !== '--ecrire');
+const INCONNUS = process.argv.slice(2).filter(a => !/^--(sets|attendu)=.+$/.test(a) && a !== '--ecrire' && a !== '--lecture-via-ecriture');
 
 (async () => {
     if (INCONNUS.length) { console.error(`❌ argument inconnu : ${INCONNUS.join(' ')} — usage : [--sets=a,b] [--attendu=N] [--ecrire]`); process.exit(2); }
@@ -26,7 +27,8 @@ const INCONNUS = process.argv.slice(2).filter(a => !/^--(sets|attendu)=.+$/.test
     const hors = sets.filter(s => !FM.SETS_AUTORISES.includes(s));
     if (hors.length) { console.error(`❌ set(s) hors de la liste fermée : ${hors.join(', ')} — autorisés : ${FM.SETS_AUTORISES.join(', ')}`); process.exit(2); }
     const regle = await X.regleDuSite(process.env.RACINE_SITE || __dirname);
-    const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    // la SIMULATION lit par la connexion de LECTURE SEULE (ouvrir-lecture.js : refus sans URI de lecture, aucune connexion ouverte) ; seule l'écriture ouvre l'autre
+    const { cartes: cx, fermer } = ecrire ? await ouvrirConnexions({ production: false, buckets: [] }) : await ouvrirSimulation({ viaEcriture: process.argv.includes('--lecture-via-ecriture'), ouvrirConnexions });
     try {
         const { code } = await FM.executer({ db: cx.db, deps: { regle, fichesDesProduits: X.fichesDesProduits }, sets, attendu, ecrire });
         process.exitCode = code;

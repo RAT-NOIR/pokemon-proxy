@@ -154,6 +154,7 @@ const NOM = FM.expansionDe('Promos');
     db = monde({ imagesUltra: [{ set: 'Promos', numero: null, cleR2: 'x/y.webp' }] }); av = etat(db);
     R = await FM.executer({ db, deps, sets: ['Promos'], attendu: null, ecrire: false, log: () => {}, err: () => {} });
     verifier('image du set sans numero sur Ultra Ball : le set est REFUSE par la simulation, 0 a ecrire', [R.rapport.sets[0].statut, R.rapport.sets[0].aEcrire, etat(db) === av], ['refuse-simulation', 0, true]);
+    verifier('   documentAmbigu (site, importe) est calcule avant/apres : par impression true -> false, le detail le DIT', [R.rapport.sets[0].parImpressionAvant, R.rapport.sets[0].parImpressionApres, /documentAmbigu/.test(R.rapport.sets[0].detail)], [true, false, true]);
     // (b) une autre carte declare DEJA le nom d'expansion : poser bulba.expansion lui ferait gagner des fiches
     db = monde({ cartes: [{ _id: 9, nomEn: 'Intrus', sets: ['Promos'], impressions: [IMP(NOM, '1')], images: [], liens: { idProduct: [], idMetacards: [] } }] });
     R = await FM.executer({ db, deps, sets: ['Promos'], attendu: null, ecrire: false, log: () => {}, err: () => {} });

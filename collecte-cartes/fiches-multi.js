@@ -34,12 +34,15 @@ const { isDeepStrictEqual } = require('util');
 const { cleNumero } = require('./jointure');
 const { decoderOrigine } = require('./set-partiel');
 const { numeroComparable } = require('./numero-fiche');
+const { expansionSynthetiqueDe } = require('./nom-synthetique');
 
+// 🔑 La marque de CONSERVATION (§59) : 'origine-slug' est dans SOURCES_POSEES_APRES (impressions-posees.js), posée dans le MÊME commit que l'écriture —
+// sinon toute réécriture de `impressions` (page-de-carte.js, collecteur-texte.js, rejouer-impressions.js) effacerait ces impressions.
 const SOURCE = 'origine-slug';
 /** La liste FERMÉE des sets de cette forme (DATES-enquete.md § 2, p2-liste-detail.json). */
 const SETS_AUTORISES = ['Promos', 'Professor-Program', 'Play-Pokemon-Prize-Pack-Series-Three', 'Play-Pokemon-Prize-Pack-Series-Four', 'Play-Pokemon-Prize-Pack-Series-Five', 'Southeast-Asia-Promos', 'WCD-2008', 'WCD-2011', 'WCD-2012', 'WCD-2022', 'WCD-2023', 'WCD-2025'];
 /** Le nom d'expansion synthétique de CE set : aucune page de carte ne l'écrit. */
-const expansionDe = slug => `reimpressions/${slug}`;
+const expansionDe = expansionSynthetiqueDe;   // UNE fonction pour tous (nom-synthetique.js : estNomSynthetique, nomsBulbapedia, refusDeCollecte)
 const clesDe = n => [cleNumero(n), numeroComparable(n)].filter(Boolean);
 const vide = v => v == null || String(v).trim() === '';
 
@@ -117,6 +120,16 @@ async function lireSet(db, slug) {
     return { set, exps, docs, lignes };
 }
 
+/**
+ * `setParImpression` du site (impressionsDuSet.ts:244, TOUT OU RIEN par set : un seul document AMBIGU — plusieurs fiches ET une image du set sans
+ * numero, `documentAmbigu` — repasse le set ENTIER en « une fiche par document ») pour les documents et le set donnés. Même construction que
+ * exporter-donnees-logos-site.js:98-99, dont elle appelle les fonctions du site IMPORTÉES.
+ */
+function parImpressionDe(regle, set, docs) {
+    const tir = set.tirage ?? set.region, noms = [].concat(set.bulba?.expansion ?? []);
+    return regle.setParImpression(docs.map(d => ({ fiches: regle.fichesDuDocument((d.impressions || []).filter(i => i && i.tirage === tir && noms.includes(i.expansion))), images: (d.images || []).filter(m => m && m.set === set._id) })));
+}
+
 /** La simulation d'UN set : plans, contrôle de l'ensemble par la règle du site importée. */
 async function analyserSet({ db, deps, slug }) {
     const L = await lireSet(db, slug);
@@ -150,6 +163,7 @@ async function analyserSet({ db, deps, slug }) {
     const set2 = { ...set, bulba: { ...(set.bulba || {}), expansion: nom } };
     const apres = fichesDesProduits(regle, set2, docs2, lignes2);
     S.servisApres = apres.fiche.size; S.doublesApres = apres.doubles;
+    S.parImpressionAvant = parImpressionDe(regle, set, docs); S.parImpressionApres = parImpressionDe(regle, set2, docs2);
     S.perdus = [...avant.fiche.keys()].filter(id => !apres.fiche.has(id)).length;
     S.autreCarte = [...avant.fiche].filter(([id, f]) => apres.fiche.has(id) && apres.fiche.get(id).carteId !== f.carteId).length;
     S.multiApres = fichesMultiOrigine(apres.fiche, lignesParId, set.code).length;
@@ -158,9 +172,11 @@ async function analyserSet({ db, deps, slug }) {
         const f = apres.fiche.get(idProduct);
         if (f && f.carteId === p.carteId && numeroComparable(f.numero) === numeroComparable(num)) S.surLaBonneFiche++; else S.mauvaiseFiche++;
     }
-    if (S.perdus || S.doublesApres > S.doublesAvant || S.autreCarte || S.mauvaiseFiche) {
+    const bascule = S.parImpressionAvant && !S.parImpressionApres;
+    if (bascule || S.perdus || S.doublesApres > S.doublesAvant || S.autreCarte || S.mauvaiseFiche) {
         S.statut = 'refuse-simulation';
-        S.detail = `la règle du site rejouée : ${S.perdus} produit(s) perdu(s), doubles ${S.doublesAvant}→${S.doublesApres}, ${S.autreCarte} sur la fiche d'une autre carte, ${S.mauvaiseFiche} produit(s) qui ne tombent pas sur la fiche de leur numéro d'origine`;
+        S.detail = `la règle du site rejouée : ${bascule ? 'documentAmbigu — le set BASCULERAIT de « une fiche par impression » à « une fiche par document » (un document à plusieurs fiches porte une image du set sans numero) ; ' : ''}`
+            + `${S.perdus} produit(s) perdu(s), doubles ${S.doublesAvant}→${S.doublesApres}, ${S.autreCarte} sur la fiche d'une autre carte, ${S.mauvaiseFiche} produit(s) qui ne tombent pas sur la fiche de leur numéro d'origine`;
         S.aEcrireBrut = S.aEcrire; S.aEcrire = 0;
     }
     return S;
@@ -227,6 +243,7 @@ async function executer({ db, deps, sets, attendu = null, ecrire = false, log = 
         for (const r of S.refus) log(`   refus [${r.raison}] carte ${r.carteId} « ${r.nomEn} » : ${r.detail}`);
         if (S.servisApres != null) {
             log(`   la règle du site (importée) : produits servis ${S.servisAvant} → ${S.servisApres} · perdus ${S.perdus} · doublés ${S.doublesAvant} → ${S.doublesApres} · sur la fiche d'une autre carte ${S.autreCarte} · produits de la forme sur la fiche de leur numéro d'origine ${S.surLaBonneFiche} (hors place ${S.mauvaiseFiche})`);
+            log(`   documentAmbigu (site, tout ou rien par set) : « une fiche par impression » ${S.parImpressionAvant} → ${S.parImpressionApres}${S.parImpressionAvant && !S.parImpressionApres ? ' — BASCULE, set refusé' : ''}`);
             log(`   CONTRÔLE TRANSVERSAL (§32) « aucune fiche n'ouvre deux cartes d'origine » : fiches qui en ouvrent plusieurs ${S.multiAvant} → ${S.multiApres}`);
         } else log(`   (avant : produits servis ${S.servisAvant}, fiches multi-origine ${S.multiAvant} — la simulation d'après n'est pas faite pour un set refusé avant elle)`);
         for (const p of S.plans) log(`   + carte ${p.carteId} : ${p.impressions.map(i => i.numero).join(' + ')} (${p.numeros.size} ligne(s) reçoivent numeroFiche)`);

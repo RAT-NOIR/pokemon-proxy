@@ -35,6 +35,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { estCarteCode, cleNumero, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { lireClone, nomDuProduit } = require('./poser-cartes-tcgdex');
+const { nomsBulbapedia } = require('./collecte-cartes/nom-synthetique');   // (MULTI) un nom synthétique n'est pas une expansion Bulbapedia
 const ROUTE = 'tcgdex-nom:2026-10-07';
 const RESTES_EXCLUS = new Set(['fiche-contredite-par-le-nom', 'fiche-contredite-par-la-metacarte', 'fiche-contredite-par-les-attaques', 'produit-vers-plusieurs-cartes', 'nom-ambigu', 'carte-sans-nom', 'idproduct-contredit-par-tcgdex']);
 const aCle = (a, b) => { const A = clesNom(a); return clesNom(b).some(k => A.includes(k)); };
@@ -82,7 +83,7 @@ if (require.main === module) (async () => {
     for (const c of cartesB) if (!c.ficheSimple && c._id > 0 && c.nomEn) for (const i of c.impressions || []) if (i?.tirage && typeof i.expansion === 'string' && i.numero) {
         const k = `${i.tirage}|${i.expansion}`; (parTE.get(k) || parTE.set(k, []).get(k)).push({ carte: c, numero: i.numero });
     }
-    const cartesDuSet = S => [].concat(S.bulba?.expansion ?? []).filter(e => typeof e === 'string').flatMap(e => parTE.get(`${S.tirage ?? S.region}|${e}`) || []);
+    const cartesDuSet = S => nomsBulbapedia(S).flatMap(e => parTE.get(`${S.tirage ?? S.region}|${e}`) || []);
     const ctx = { lies: e => lies.get(e) || new Set(), parDossier, setDe: e => setDe.get(e) || [], cartesDuSet };
     const exps = new Set(lies.keys());
     // ── LA CALIBRATION : produits de ces expansions joints à UNE carte, numéro connu ; le numéro caché

@@ -27,6 +27,7 @@ if (ECRIRE && !Number.isInteger(ATTENDU)) { console.error('❌ --ecrire exige --
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
+const { nomsBulbapedia } = require('./collecte-cartes/nom-synthetique');
 
 const FORME = /^([A-Z!?])-(\d+)$/i;
 const plat = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -53,7 +54,7 @@ const plat = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z
         const aJoindre = P.filter(p => FORME.test(String(p.numero ?? '')) && (!lignes.has(p.idProduct) || nosLignes.has(p.idProduct)));
         if (!aJoindre.length) continue;
         if (S.length !== 1) { for (const p of aJoindre) refus.push(`${p.idProduct} exp ${exp} : ${S.length} set(s) portent l'expansion`); continue; }
-        const s = S[0], T = s.tirage ?? s.region, noms = [].concat(s.bulba?.expansion ?? []).filter(Boolean);
+        const s = S[0], T = s.tirage ?? s.region, noms = nomsBulbapedia(s);   // (MULTI) un nom synthétique n'est pas une expansion Bulbapedia : set sauté
         if (!T || !noms.length) { for (const p of aJoindre) refus.push(`${p.idProduct} ${s._id} : set sans tirage ou sans bulba.expansion`); continue; }
         for (const p of aJoindre) {
             const [, L, total] = String(p.numero).match(FORME); const lettre = L.toUpperCase();
