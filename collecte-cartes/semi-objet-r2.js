@@ -14,6 +14,8 @@ const MENTION = '© Pokémon / The Pokémon Company';
 const OBJET = {
     cleR2: 'bulbapedia/logos/matchbattlelogopng.png', fichier: 'Match Battle logo.png', source: 'bulbapedia:setlogo',
     sha1: 'da4e941e5fdcff642bed1c478e7ea59d42fe16fb', sha256: '09e2af9c09a5cf62b468cfbe4d8ca915d1dc8c05c50e14042f32fe7f2b8121f9', octets: 30521, w: 340, h: 115, format: 'png',
+    // la vignette EXISTE déjà dans R2 (cleVignette de l'objet, 340×115 WebP 9 736 octets, vérifiée en lecture le 2026-10-13) : réemployée, jamais écrite ni supprimée par ce lot
+    vignette: { cleR2: 'vignettes/bulbapedia/logos/matchbattlelogopng.webp', w: 340, h: 115 },
     cible: 'en', langue: 'en',
     represente: 'Logo « MATCH BATTLE » de l\'opération McDonald\'s Match Battle (Pokémon TCG), commun aux McDonald\'s Collection 2022 et McDonald\'s Match Battle 2023 : il représente l\'opération, pas un set en particulier.'
 };
@@ -32,8 +34,9 @@ function planifier({ id, set, mesure, le = new Date() }) {
     if (!r || r.cleR2 !== OBJET.cleR2 || r.sha1 !== OBJET.sha1) return refus(`${id} ne porte pas le logoRefus de l'objet ${OBJET.cleR2} (sha1 ${OBJET.sha1.slice(0, 10)}) : je ne le réemploie pas`);
     if (!mesure?.sha256) return refus('octets de R2 illisibles : sha256 inconnu (je ne sais pas)');
     if (mesure.sha256 !== OBJET.sha256) return refus(`sha256 des octets de R2 (${mesure.sha256.slice(0, 10)}) ≠ attendu (${OBJET.sha256.slice(0, 10)})`);
+    if (mesure.vignette?.w !== OBJET.vignette.w || mesure.vignette?.h !== OBJET.vignette.h) return refus(`la vignette ${OBJET.vignette.cleR2} est absente de R2 ou n'a pas les dimensions attendues (${OBJET.vignette.w}×${OBJET.vignette.h}) : je n'en invente pas`);
     const entree = {
-        niveau: 'semi-officiel', represente: OBJET.represente, cleR2: OBJET.cleR2, vignette: null, w: OBJET.w, h: OBJET.h, octets: OBJET.octets, sha256: OBJET.sha256, format: OBJET.format,
+        niveau: 'semi-officiel', represente: OBJET.represente, cleR2: OBJET.cleR2, vignette: { ...OBJET.vignette }, w: OBJET.w, h: OBJET.h, octets: OBJET.octets, sha256: OBJET.sha256, format: OBJET.format,
         langue: OBJET.langue, source: OBJET.source, urlSource: null, lot: LOT, mention: MENTION, le,
         preuve: { verifie: 'reemploi-objet-r2', fichierBulbagarden: OBJET.fichier, logoRefusLe: r.le ?? null, sha1: OBJET.sha1, decision: 'testeur 2026-10-13 (décision 3 : logos communs d\'une opération = semi-officiels)' }
     };

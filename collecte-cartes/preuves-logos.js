@@ -71,7 +71,7 @@ function planifier({ preuve, set, sha256Octets, le = new Date() }) {
     if (e.niveau !== 'inconnu') return refus(`${preuve.set} : niveau « ${e.niveau ?? '∅'} » (seule la valeur « inconnu » se modifie)`);
     if (e.niveauPreuve) return refus(`${preuve.set} porte déjà un niveauPreuve d'un autre lot : rien n'est remplacé`);
     if (e.source !== preuve.sourceAttendue) return refus(`${preuve.set} : source « ${e.source ?? '∅'} » ≠ « ${preuve.sourceAttendue} »`);
-    if (e.fichier !== undefined && e.fichier !== preuve.fichier) return refus(`${preuve.set} : fichier « ${e.fichier} » ≠ « ${preuve.fichier} »`);
+    if (e.fichier !== preuve.fichier) return refus(`${preuve.set} : fichier « ${e.fichier} » ≠ « ${preuve.fichier} »`);
     if (e.sha1 !== preuve.sha1) return refus(`${preuve.set} : sha1 de l'entrée (${String(e.sha1).slice(0, 10)}) ≠ celui de la preuve (${preuve.sha1.slice(0, 10)})`);
     if (!sha256Octets) return refus(`${preuve.set} : octets de R2 illisibles, sha256 inconnu (je ne sais pas)`);
     if (sha256Octets !== preuve.sha256) return refus(`${preuve.set} : sha256 des octets (${sha256Octets.slice(0, 10)}) ≠ celui de la preuve (${preuve.sha256.slice(0, 10)})`);

@@ -23,8 +23,9 @@ if (require.main === module) (async () => {
     if (!bucket) throw new Error('R2_BUCKET_IMAGES absente');
     await r2.verifierBucket(bucket);
     let mesure = null;
-    if (!A.retirer) { try { const buf = await r2.lireBinaire(bucket, M.OBJET.cleR2); const m = await sharp(buf).metadata(); mesure = { sha256: crypto.createHash('sha256').update(buf).digest('hex'), octets: buf.length, w: m.width, h: m.height, format: m.format }; } catch { mesure = null; } }
-    console.log(`DÉNOMINATEUR : ${total} sets en base · ${Object.keys(M.SETS).length} sets dans la liste fermée · mode ${A.retirer ? 'RETRAIT' : 'POSE'}${mesure ? ` · objet R2 ${mesure.octets} octets ${mesure.w}×${mesure.h} ${mesure.format}` : ''}`);
+    if (!A.retirer) { try { const buf = await r2.lireBinaire(bucket, M.OBJET.cleR2); const m = await sharp(buf).metadata(); mesure = { sha256: crypto.createHash('sha256').update(buf).digest('hex'), octets: buf.length, w: m.width, h: m.height, format: m.format, vignette: null };
+        try { const vb = await r2.lireBinaire(bucket, M.OBJET.vignette.cleR2); const vm = await sharp(vb).metadata(); mesure.vignette = { w: vm.width, h: vm.height, octets: vb.length }; } catch { /* vignette absente : le plan refuse */ } } catch { mesure = null; } }
+    console.log(`DÉNOMINATEUR : ${total} sets en base · ${Object.keys(M.SETS).length} sets dans la liste fermée · mode ${A.retirer ? 'RETRAIT' : 'POSE'}${mesure ? ` · objet R2 ${mesure.octets} octets ${mesure.w}×${mesure.h} ${mesure.format} · vignette ${mesure.vignette ? `${M.OBJET.vignette.cleR2} ${mesure.vignette.w}×${mesure.vignette.h} ${mesure.vignette.octets} octets (EXISTANTE, rien à écrire)` : 'ABSENTE'}` : ''}`);
     const lire = id => S.findOne({ _id: id });
     const plans = [];
     for (const id of Object.keys(M.SETS)) {

@@ -5,7 +5,7 @@ let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
 const E = M.OBJET;
-const mesure = { sha256: E.sha256, octets: E.octets, w: E.w, h: E.h, format: E.format };
+const mesure = { sha256: E.sha256, octets: E.octets, w: E.w, h: E.h, format: E.format, vignette: { w: E.vignette?.w, h: E.vignette?.h } };
 const refus = { motif: 'logo GÉNÉRIQUE refusé', fichier: E.fichier, cleR2: E.cleR2, sha1: E.sha1, le: '2026-10-03T16:30:09.241Z', source: 'bulbapedia:setlogo' };
 const set = (id = 'McDonalds-Collection-2022', plus = {}) => ({ _id: id, tirage: 'intl', region: 'intl', logoRefus: { ...refus }, logoCompose: 'x', ...plus });
 const LE = new Date('2026-10-14T00:00:00Z');
@@ -19,7 +19,10 @@ verifier('le $set : UN seul champ, logoSemiOfficiel.en', Object.keys(p0.set), ['
 const e = p0.set['logoSemiOfficiel.en'];
 verifier('l\'entrée : niveau semi-officiel, phrase, objet R2 réemployé (même cleR2), langue en, lot propre', [e.niveau, e.represente.length >= 20, e.cleR2, e.langue, e.lot], ['semi-officiel', true, E.cleR2, 'en', M.LOT]);
 verifier('le lot n\'est PAS celui du lot semi de collecter-logos-officiels (son retrait supprime des objets R2 : jamais le nôtre)', M.LOT !== 'logos-semi-officiels-2026-10', true);
-verifier('l\'entrée porte sha256, w, h, octets, mention ; pas de vignette inventée', [e.sha256, e.w, e.h, e.octets, /Pokémon/.test(e.mention), e.vignette], [E.sha256, E.w, E.h, E.octets, true, null]);
+verifier('l\'entrée porte sha256, w, h, octets, mention', [e.sha256, e.w, e.h, e.octets, /Pokémon/.test(e.mention)], [E.sha256, E.w, E.h, E.octets, true]);
+verifier('la vignette EXISTANTE de R2 est réemployée (clé sous vignettes/, w, h)', [e.vignette, /^vignettes\//.test(e.vignette?.cleR2 ?? '')], [{ cleR2: 'vignettes/bulbapedia/logos/matchbattlelogopng.webp', w: 340, h: 115 }, true]);
+verifier('vignette absente de R2 (mesure sans vignette) : refus', plan('McDonalds-Collection-2022', set(), { ...mesure, vignette: null }).action, 'refus');
+verifier('vignette de R2 aux dimensions différentes : refus', plan('McDonalds-Collection-2022', set(), { ...mesure, vignette: { w: 1, h: 1 } }).action, 'refus');
 verifier('le filtre n\'écrit que si logoSemiOfficiel.en est ABSENT', [p0.filtre._id, p0.filtre['logoSemiOfficiel.en']], ['McDonalds-Collection-2022', { $exists: false }]);
 // refus par ce qu'on n'autorise pas
 verifier('set hors liste fermée : refus', plan('McDonalds-Collection-2012', set('McDonalds-Collection-2012')).action, 'refus');

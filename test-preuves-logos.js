@@ -40,6 +40,9 @@ verifier('preuve b sous 15 inliers : refus', plan({ ...pb, emballage: { ...pb.em
 verifier('preuve b sans le triple du meilleur négatif : refus', plan({ ...pb, emballage: { ...pb.emballage, inliers: 30, contreExemple: 11 } }, set(pb)).action, 'refus');
 verifier('type inconnu : refus', plan({ ...pa, type: 'c' }, set(pa)).action, 'refus');
 verifier('chemin hors de la liste fermée des champs (logoOfficiel.fr) : refus', plan({ ...pa, champ: 'logoOfficiel.fr' }, { _id: 'Set-A', logoOfficiel: { fr: { ...set(pa).logo } } }).action, 'refus');
+verifier('niveauPreuve d\'un AUTRE lot déjà présent (niveau inconnu) : refus, rien n\'est remplacé', plan(pa, set(pa, { niveauPreuve: { lot: 'autre-lot' } })).action, 'refus');
+verifier('champ hors liste (logoFr) sur un set qui le porte, entrée par ailleurs conforme : refus', plan({ ...pa, champ: 'logoFr' }, { _id: 'Set-A', logoFr: { ...set(pa).logo } }).action, 'refus');
+verifier('entrée SANS `fichier` : refus (la garde du fichier ne passe pas par absence)', plan(pa, set(pa, { fichier: undefined })).action, 'refus');
 // déjà fait
 const posé = set(pa, { niveau: 'officiel', niveauPreuve: { lot: P.LOT, type: 'a' } });
 verifier('déjà posé par ce lot : « deja »', plan(pa, posé).action, 'deja');
@@ -47,6 +50,7 @@ verifier('déjà posé par ce lot : « deja »', plan(pa, posé).action, 'deja')
 const r0 = P.planifierRetrait({ preuve: pa, set: posé });
 verifier('retrait : filtre sur le lot ET le sha1 ET le niveau officiel ; remet inconnu, retire la preuve', [r0.action, r0.filtre['logo.niveauPreuve.lot'], r0.filtre['logo.sha1'], r0.filtre['logo.niveau'], r0.set['logo.niveau'], Object.keys(r0.unset)], ['retirer', P.LOT, SHA1, 'officiel', 'inconnu', ['logo.niveauPreuve']]);
 verifier('retrait refusé sur un set qui ne porte pas notre preuve', P.planifierRetrait({ preuve: pa, set: set(pa) }).action, 'refus');
+verifier('retrait refusé si le niveauPreuve est d\'un AUTRE lot (même sha1, même niveau)', P.planifierRetrait({ preuve: pa, set: set(pa, { niveau: 'officiel', niveauPreuve: { lot: 'autre-lot' } }) }).action, 'refus');
 verifier('retrait refusé si le sha1 a changé', P.planifierRetrait({ preuve: pa, set: set(pa, { niveau: 'officiel', sha1: 'f'.repeat(40), niveauPreuve: { lot: P.LOT } }) }).action, 'refus');
 
 // la liste fermée écrite dans le code
