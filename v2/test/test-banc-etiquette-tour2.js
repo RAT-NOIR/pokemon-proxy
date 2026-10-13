@@ -167,14 +167,21 @@ const JOUR = 86400e3;
         H.v('M4. déchu : la photo de son scan non étiqueté quitte l\'analyse et le bucket ; celle d\'un administrateur en exercice reste', [(await lire(S1)).photoBanc, mem.cles().includes(cle), (await lire(S2)).photoBanc && mem.cles().includes(cle2), b.deches >= 1], [undefined, false, true, true]);
     }
 
-    // ═══ M6. la durée de 24 mois se compte depuis le SCAN ═══
+    // ═══ M6 / N1 (tour 3). la durée se compte depuis le SCAN, et l'échéance est le PREMIER JOUR du mois du scan + bancMois mois CIVILS (BANC-12 I-5), jamais « jour + 732 jours » ═══
     {
-        const A = await acteur(); const creeLe = new Date(Date.now() - 150 * JOUR);
+        const A = await acteur(); const creeLe = new Date(Date.UTC(2026, 8, 3, 10, 30));          // un scan du 3 septembre 2026
         const S1 = await semer(A, { creeLe }); await scanner(A, S1);
         await post(A, { scanId: S1, verdict: 'juste', rev: 1 });
         const l = await ligneDe(S1);
-        const jourScan = new Date(Date.UTC(creeLe.getUTCFullYear(), creeLe.getUTCMonth(), creeLe.getUTCDate()));
-        H.v('M6. `expireLe` = jour du SCAN + bancMois (et non le jour de l\'étiquetage + bancMois)', [l.expireLe.getTime() === jourScan.getTime() + cfg.retention.bancMois * 30.5 * JOUR, l.le.getTime() > jourScan.getTime()], [true, true]);
+        const attendu = Date.UTC(2026, 8 + cfg.retention.bancMois, 1);                              // le 1er septembre 2028 pour 24 mois
+        H.v('N1. `expireLe` d\'une ligne = le 1er du mois du SCAN + bancMois mois civils (2028-09-01), pas le jour du scan + 732 jours (2028-09-04)', [l.expireLe.getTime() === attendu, l.expireLe.toISOString().slice(0, 10), l.le.getTime() > Date.UTC(2026, 8, 3)], [true, '2028-09-01', true]);
+        // la copie anonyme garde cette échéance : le 1er d'un mois, jamais au-delà de bancMois mois civils après le mois du scan
+        const T = new Date(); const vieux = new Date(T.getTime() - 14 * 31 * JOUR);
+        await db.col('banc_lignes').updateOne({ _id: l._id }, { $set: { le: new Date(Date.UTC(vieux.getUTCFullYear(), vieux.getUTCMonth(), vieux.getUTCDate())) } });
+        const avant = new Set((await lignes()).filter(x => x.anonyme === true).map(x => String(x._id)));
+        await creerPurge({ cfg, env: ENV, stockage, horloge: () => T }).anonymiserLiens(T);
+        const copie = (await lignes()).find(x => x.anonyme === true && x.source === 'etiquette-admin' && !avant.has(String(x._id)));
+        H.v('N1. la copie anonyme porte la même échéance : le 1er du mois, au plus bancMois mois civils après le mois du scan', [Boolean(copie), copie && copie.expireLe.getUTCDate(), copie && copie.expireLe.getTime() <= attendu], [true, 1, true]);
     }
 
     await srv.fermer(); monterBanc.arreterPurge();

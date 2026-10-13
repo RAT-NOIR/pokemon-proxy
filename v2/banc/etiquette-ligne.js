@@ -13,7 +13,7 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const S = require('./stockage');
-const { JOUR_MS, jourUTC, creerBorner, codeDe, autresLignesPortent } = require('./commun');
+const { JOUR_MS, jourUTC, creerBorner, codeDe, autresLignesPortent, debutMois } = require('./commun');
 const FILTRES = require('./filtres');
 
 const CLES_DOC_ADMIN = Object.freeze(['_id', 'aucune', 'cleR2', 'etat', 'expireLe', 'le', 'rev', 'reponse', 'sha256', 'source', 'verite', 'versionChaine', 'versionModele']);
@@ -103,7 +103,7 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
                     // `le` = le jour de l'étiquetage (le LIEN se compte depuis lui) ; `expireLe` = le jour du SCAN + bancMois : la photo existe depuis le scan, les 24 mois se comptent depuis la capture
                     const now = jourUTC(horloge());
                     const scan = an.creeLe instanceof Date && Number.isFinite(+an.creeLe) ? jourUTC(an.creeLe) : now;
-                    const doc = { _id: id, source: SOURCE, etat: 'confirmee', ...contenu, ...(aucune ? { aucune } : {}), reponse: reponseDOrigine(origine), cleR2: cle, le: now, expireLe: new Date(scan.getTime() + cfg.retention.bancMois * 30.5 * JOUR_MS) };
+                    const doc = { _id: id, source: SOURCE, etat: 'confirmee', ...contenu, ...(aucune ? { aucune } : {}), reponse: reponseDOrigine(origine), cleR2: cle, le: now, expireLe: debutMois(scan, cfg.retention.bancMois) };
                     try { await borner(col().insertOne(doc)); return fin('ecrit'); }
                     catch (e) { if (e && e.code === 11000) continue; throw e; }       // deux étiquettes simultanées : la seconde met à jour
                 }

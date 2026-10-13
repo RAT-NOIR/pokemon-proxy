@@ -180,6 +180,30 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
             const ecrits = fs.existsSync(path.join(cible, 'photos')) ? fs.readdirSync(path.join(cible, 'photos')).length : 0;
             H.v('M1. course : le dossier devient (à ses yeux) un dossier d\'apports PENDANT l\'export — refusé avant l\'écriture suivante (une seule photo écrite, pas toutes)', [r, ecrits], ['DOSSIER-REFUSE', 1]);
         }
+        // ── N2 (tour 3) : la garde juge la SORTIE RÉELLE complète, la racine temporaire par les mêmes règles que la racine nommée, et l'export crée LUI-MÊME un dossier neuf ──
+        // Tout est FABRIQUÉ sous la lettre `Z:` (rien n'existe : un défaut ne peut rien écrire chez le testeur) avec `realpath` et `lstat` injectés.
+        {
+            const Z = (...seg) => ['Z:\\Users\\Yung', ...seg].join('\\');
+            const dans = (extra, dossier) => X.exporterBancAdmin({ ...base, ...identite, tmpdir: () => path.join(racine, 'pas-ce-temporaire'), ...extra, dossier });
+            const NOMMEE = { env: { V2_EXPORT_RACINE: 'Z:\\Users\\Yung' } };
+            H.v('N2. racine nommée = le profil : une sortie sous le Bureau est refusée, nom innocent ou non', [await code(() => dans(NOMMEE, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export'))), await code(() => dans(NOMMEE, Z('Desktop', 'export')))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
+            H.v('N2. idem pour un Bureau « Bureau » et pour un dossier OneDrive', [await code(() => dans(NOMMEE, Z('Bureau', 'export'))), await code(() => dans(NOMMEE, Z('OneDrive - Perso', 'Documents', 'export')))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
+            H.v('N2. le TEMPORAIRE du système valant le Bureau : refusé', await code(() => dans({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'export'))), 'DOSSIER-REFUSE');
+            H.v('N2. le TEMPORAIRE valant un Bureau, sortie sous un sous-dossier de nom innocent : refusé (la racine temporaire est jugée comme la racine nommée)', await code(() => dans({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export'))), 'DOSSIER-REFUSE');
+            H.v('N2. le TEMPORAIRE valant la racine d\'un disque : refusé', await code(() => dans({ tmpdir: () => 'Z:\\' }, 'Z:\\export')), 'DOSSIER-REFUSE');
+            H.v('N2. le TEMPORAIRE valant un dossier d\'apports : refusé', await code(() => dans({ tmpdir: () => Z(LF, 'tmp') }, Z(LF, 'tmp', 'export'))), 'DOSSIER-REFUSE');
+            H.v('N2. le TEMPORAIRE trop large ne referme pas pour autant la racine nommée valide (la garde juge, elle ne casse pas tout)', await code(() => dans({ tmpdir: () => 'Z:\\', env: { V2_EXPORT_RACINE: N } }, path.join(N, 'export-temp-large'))), null);
+            // le chemin RÉEL complet : un ancêtre innocent dont la résolution traverse un Bureau
+            const traverse = p => p.replace('\\innocent', '\\Desktop\\innocent');
+            H.v('N2. un ancêtre dont le chemin RÉEL traverse un Bureau (résolution injectée) : refusé', await code(() => dans({ ...NOMMEE, realpath: traverse }, Z('innocent', 'out'))), 'DOSSIER-REFUSE');
+            // la création exclusive : un dossier de sortie qui existe déjà, même vide, est refusé et reste intact ; un parent absent aussi ; un dossier neuf est créé par l'export
+            const vide = path.join(T, 'deja-la'); fs.mkdirSync(vide);
+            H.v('N2. un dossier de sortie qui existe déjà, même VIDE : refusé, rien n\'y est écrit', [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: vide })), fs.readdirSync(vide)], ['DOSSIER-REFUSE', []]);
+            const sansParent = path.join(T, 'parent-absent', 'out');
+            H.v('N2. un dossier dont le PARENT n\'existe pas : refusé (aucune chaîne de dossiers créée)', [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: sansParent })), fs.existsSync(path.join(T, 'parent-absent'))], ['DOSSIER-REFUSE', false]);
+            const neuf = path.join(T, 'cree-par-l-export');
+            H.v('N2. un chemin absent : l\'export crée lui-même le dossier et n\'écrit que dedans', [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: neuf })), fs.readdirSync(neuf).sort()], [null, ['lignes.json', 'manifeste.json', 'photos']]);
+        }
     }
 
     // ═══ 5. la ligne de commande : écrite par ce qu'elle AUTORISE ═══

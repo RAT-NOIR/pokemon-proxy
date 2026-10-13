@@ -8,7 +8,8 @@
 //   photos/<32 hexadécimaux>.webp
 // Écrit par ce qu'il AUTORISE :
 //   · la base : un nom de TEXTE non vide, différent de `test` (la production), que la connexion confirme ;
-//   · le dossier : absolu, ni la racine d'un disque, ni DANS un dossier d'apports (Logo FR, apport-manuel, LOGO, Logo JP, Logo ZH) ou de photos du verrou, JUGÉ SUR SON CHEMIN RÉEL (un lien vers un tel dossier est refusé, une cible qui est un lien aussi) ; vide ou inexistant (jamais par-dessus un ancien export) ;
+//   · le dossier : absolu, ni la racine d'un disque, ni DANS un dossier d'apports (Logo FR, apport-manuel, LOGO, Logo JP, Logo ZH) ou de photos du verrou, ni sous un Bureau, JUGÉ SUR SON CHEMIN RÉEL COMPLET (ancêtres compris ; un lien vers un tel dossier est refusé, une cible qui est un lien aussi) ; la racine temporaire est jugée par les mêmes règles ;
+//     le dossier de sortie N'EXISTE PAS : l'export le crée lui-même (création exclusive, le parent doit exister) et n'écrit que dedans ;
 //   · chaque écriture passe par `ecrireDans`, qui résout le chemin et le refuse s'il sort du dossier ; un nom de photo ne vient que d'une clé de la forme du banc (jamais d'un texte libre) ;
 //   · la base et le bucket ne reçoivent AUCUNE écriture : cet outil n'appelle que find et lire.
 // Aucune valeur de variable, d'URI ni de clé n'est jamais journalisée.
@@ -35,6 +36,7 @@ function refusDeDossier(dossier) {
     const segments = norm.split('\\').filter(Boolean).map(segmentNorm);
     if (segments.length < 2) return 'racine d\'un disque';
     if (segments.some(s => APPORTS.includes(s))) return 'dossier d\'apports manuels';
+    if (segments.some(s => s === 'desktop' || s === 'bureau' || s.startsWith('onedrive'))) return 'sous un Bureau (ou un dossier synchronisé)';
     if (segments.some(s => /~\d+(\..*)?$/.test(s))) return 'nom court 8.3 (non développé)';
     for (let i = 0; i < segments.length - 1; i++) if (segments[i] === 'verrou' && segments[i + 1] === 'photos') return 'dossier de photos du verrou';
     return null;
@@ -92,7 +94,8 @@ const sous = (p, base) => p === base || p.startsWith(`${base}/`);
  */
 function racinesPermises({ env, realpath, tmpdir }) {
     const racines = [];
-    try { racines.push(comparable(realpath(tmpdir()))); } catch { /* pas de temporaire lisible : pas de racine temporaire */ }
+    // N2 : la racine temporaire est jugée par les MÊMES règles que la racine nommée (un TEMP trop large — un Bureau, la racine d'un disque, un dossier d'apports — n'est PAS une racine permise)
+    try { const t = String(realpath(tmpdir())).replace(/^\\\\\?\\/, ''); if (!refusDeDossier(t)) racines.push(comparable(t)); } catch { /* pas de temporaire lisible : pas de racine temporaire */ }
     const v = env && env.V2_EXPORT_RACINE;
     if (v !== undefined && v !== '') {
         if (typeof v !== 'string' || !v.trim() || (!path.isAbsolute(v) && !/^[A-Za-z]:[\\/]/.test(v))) throw erreur('DOSSIER-REFUSE', 'racine nommée absente ou relative');
@@ -116,11 +119,13 @@ function jugerSortie(dossier, { realpath, lstat, env, tmpdir }) {
     return reel;
 }
 
-/** M5 — l'export n'écrit que dans un dossier VIDE ou inexistant : jamais par-dessus un ancien export (ses photos survivraient à une purge). */
-function verifierDossierLibre(dossier) {
-    if (!fs.existsSync(dossier)) return;
-    if (!fs.statSync(dossier).isDirectory()) throw erreur('DOSSIER-REFUSE', 'ce n\'est pas un dossier');
-    if (fs.readdirSync(dossier).length) throw erreur('DOSSIER-REFUSE', 'dossier non vide : un export va dans un dossier vide ou neuf');
+/**
+ * N2 — l'export CRÉE LUI-MÊME son dossier de sortie : création exclusive, non récursive. Un dossier qui existe déjà (même vide), un parent absent ou toute autre erreur REFUSE :
+ * l'export n'ajoute jamais un fichier dans un dossier existant du testeur, et n'écrit que dans ce qu'il vient de créer.
+ */
+function creerDossierNeuf(dossier) {
+    try { fs.mkdirSync(dossier); }
+    catch (e) { throw erreur('DOSSIER-REFUSE', e && e.code === 'EEXIST' ? 'le dossier de sortie existe déjà : un export crée un dossier neuf' : 'dossier de sortie non créable (le dossier parent doit exister)'); }
 }
 
 /**
@@ -131,9 +136,10 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     if (typeof base !== 'string' || !base.trim() || base.trim().toLowerCase() === 'test') throw erreur('BASE-REFUSEE', 'base absente ou de production');
     // le dossier de sortie est jugé ICI, puis JUSTE AVANT chaque écriture (la course : un dossier vide au premier jugement qui devient un lien pendant l'export)
     const juge = () => jugerSortie(dossier, { realpath, lstat, env, tmpdir });
-    juge();
-    verifierDossierLibre(dossier);
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
+    juge();
+    creerDossierNeuf(dossier);
+    juge();
     const brutes = await colFn('banc_lignes').find({ source: 'etiquette-admin', etat: 'confirmee' }).sort({ _id: 1 }).toArray();
     const lues = new Map();        // clé -> true (écrite) | false (illisible)
     const lignes = [];
