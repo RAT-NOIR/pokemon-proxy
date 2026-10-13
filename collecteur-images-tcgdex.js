@@ -85,6 +85,8 @@ const surPerte = () => { arretDemande = true; process.exitCode = 1; };
 function releve(unite, sets) {
     const L = ligne(unite?.code);
     if (!L) return { ok: false, etat: 'refuse-table', motif: `« ${unite?.code} » absent de la table` };
+    const refus = require('./collecte-cartes/images-refusees').imagesRefusees(L);   // ➕ 2026-10-13 (X30C) : impressions tamponnées d'un Additionals
+    if (refus) return { ok: false, etat: 'refuse-images', motif: `images refusées par la ligne : ${refus}` };
     const langue = unite.langue ?? 'en';
     if (langue !== 'en') {
         const tirages = TIRAGES_DE_LA_LANGUE[langue];

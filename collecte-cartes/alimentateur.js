@@ -24,6 +24,7 @@
 // à la main, set par set (décision du testeur, trois sets mesurés). Un set idth reste ici « sans source légale » pour l'alimentateur.
 const TIRAGES_SOURCES = { jp: 'artofpkm', intl: 'tcgdex+bulbapedia' };
 const { manqueTcgdex, choisirManqueReel } = require('./manque-reel');
+const { imagesRefusees } = require('./images-refusees');
 const { SOURCES_EN_SERVICE } = require('./sources-en-service');   // injectable dans choisirUnites et alimenter (les bancs)
 // 🔑 LE MANQUE RÉEL (2026-09-26, soir, collecte-cartes/manque-reel.js) : quand la règle par SET ne remplit pas la file, on
 // demande à la SOURCE ce qu'elle sert et que nous n'avons jamais tenté, carte par carte. La mesure lit les cartes de chaque
@@ -46,6 +47,9 @@ function choisirUnites({ manques, ligneDe, sourceArtofpkm, setTcgdex, unites, te
         if (inserer.length + reprendre.length >= max) break;
         const L = ligneDe(m.slug);
         if (!L) { ecartes.push({ slug: m.slug, raison: 'aucune ligne de table' }); continue; }
+        // ➕ 2026-10-13 (X30C) : une ligne qui REFUSE toute image (impressions tamponnées d'un Additionals) n'enfile rien, quelle que soit la source
+        const refus = imagesRefusees(L);
+        if (refus) { ecartes.push({ slug: m.slug, raison: `images refusées par la ligne (${refus})` }); continue; }
         const tirage = tirageDe(L);
         if (!TIRAGES_SOURCES[tirage]) { ecartes.push({ slug: m.slug, raison: `sans source légale (tirage ${tirage})` }); continue; }
         const candidats = [];

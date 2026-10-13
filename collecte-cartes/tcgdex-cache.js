@@ -81,6 +81,8 @@ function fabriquerAppariement(sets) {
 
 /** Le set TCGdex d'une LIGNE de table : tous ses noms d'expansion doivent désigner le MÊME set, sinon rien. */
 function setDeLaLigne(L, apparier) {
+    const refus = require('./images-refusees').imagesRefusees(L);
+    if (refus) return { motif: `images refusées par la ligne : ${refus}` };
     const noms = [].concat(L?.bulba?.expansion || []);
     if (!noms.length) return { motif: 'la ligne ne nomme aucune expansion' };
     const r = noms.map(n => ({ n, a: apparier(n) }));

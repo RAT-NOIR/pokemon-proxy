@@ -125,6 +125,8 @@ async function relireCache(M, idEtat) {
  */
 function relevedeCeCollecteur(L) {
     if (!L) return { ok: false, etat: 'refuse-table', motif: 'absent de la table' };
+    const refus = require('./collecte-cartes/images-refusees').imagesRefusees(L);   // ➕ 2026-10-13 (X30C) : impressions tamponnées d'un Additionals
+    if (refus) return { ok: false, etat: 'refuse-images', motif: `images refusées par la ligne : ${refus}` };
     const S = sourceDe(L.code);
     if (S) return { ok: false, etat: 'refuse-region', motif: `ses images viennent d'artofpkm (source déclarée : ${S.noms?.[0] ?? S.code})` };
     if (!L.bulba?.expansion) return { ok: false, etat: 'refuse-region', motif: 'la ligne ne nomme aucune expansion Bulbapedia — rien à résoudre sur les pages de cartes' };
@@ -274,7 +276,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
     }
 }
 
-module.exports = { collecterSet, joindreImagesBulba, resoudreSet, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
+module.exports = { collecterSet, joindreImagesBulba, resoudreSet, relevedeCeCollecteur, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE (2026-09-19). Le worker Render `collecteur-images.js --boucle`
 // importe `collecterSet` et prend LUI-MÊME le verrou global de cette source : sans cette garde, un simple
