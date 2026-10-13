@@ -8,6 +8,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const fusions = []; let fusionCasse = false;
     A.registre.fournir('argent', {
         solde: async p => ({ total: p.installation ? p.installation.essais : 0, compte: Boolean(p.compte) }),
+        offre: p => require('../argent/offre').offre(p, cfg),      // OFFRE-QUOTA : la VRAIE fonction (le faux ne ment pas sur l'offre), appelée par lier / délier
         // O3 tour 2 (I-B) : faux FIDÈLE à la signature réelle (`{ compteId, installationId }`) ; panne par exception OU par `{ ok:false }` comme le vrai module
         fusionnerALaLiaison: async o => { if (fusionCasse === true) throw new Error('boum'); if (fusionCasse === 'ok-faux') return { ok: false, raison: 'compte-inconnu' }; return require('./_fusion-fidele').fusionFidele(fusions)(o); }
     });

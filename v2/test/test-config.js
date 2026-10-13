@@ -9,7 +9,8 @@ H.v('interrupteur éteint par défaut', c.actif, false);
 H.v('essais', c.quotas.essai, 3);
 H.v('accueil', c.quotas.accueil, 25);
 H.v('hebdo', c.quotas.hebdo, 2);
-H.v('ordre des poches par défaut', c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
+H.v('ordre des poches par défaut (OFFRE-QUOTA : la seule poche débitable est le quota du jour)', c.ordrePoches, ['jour']);
+H.v('quotas quotidiens par défaut : sans compte 3, gratuit 10, plafond technique Pro 200', [c.quotas.sansCompte, c.quotas.gratuit, c.quotas.proPlafond], [3, 10, 200]);
 H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30, sansPrix: 5, lotTropGrand: 10, jumeaux: 20 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
 H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
@@ -44,17 +45,16 @@ H.v('V2_ACCUEIL=10 s\'applique', lireConfig({ V2_ACCUEIL: '10' }).quotas.accueil
 // une valeur INVALIDE LÈVE (on n'allume pas la v2 sur une configuration qu'on ne comprend pas)
 let l1 = null; try { lireConfig({ V2_ACCUEIL: 'beaucoup' }); } catch (e) { l1 = e.message; }
 H.vrai('V2_ACCUEIL invalide lève', /configuration invalide/.test(l1 || ''));
-let l2 = null; try { lireConfig({ V2_ORDRE_POCHES: 'essai,gratuit' }); } catch (e) { l2 = e.message; }
+// OFFRE-QUOTA (2026-10-13, décision du testeur) : la seule poche débitable est `jour`. Les anciennes ne sont plus nommables dans l'ordre (leurs soldes restent lisibles) ; l'ordre doit contenir `jour`.
+let l2 = null; try { lireConfig({ V2_ORDRE_POCHES: 'jour,gratuit' }); } catch (e) { l2 = e.message; }
 H.vrai('poche inconnue dans l\'ordre lève', /poche inconnue/.test(l2 || ''));
-let l3 = null; try { lireConfig({ V2_ORDRE_POCHES: 'essai,accueil,accueil' }); } catch (e) { l3 = e.message; }
+let l3 = null; try { lireConfig({ V2_ORDRE_POCHES: 'jour,jour' }); } catch (e) { l3 = e.message; }
 H.vrai('doublon dans l\'ordre lève', /doublon/.test(l3 || ''));
-// O2 (MOYENS-B1) : l'ordre doit contenir `achete` ET `abonnement` — un sous-ensemble rendrait QUOTA à qui a des crédits payés
+// O2 réécrite : au lieu d'exiger les poches payées, la garde exige `jour` (sinon plus aucun porteur ne serait débitable) et refuse toute ancienne poche
 const refusOrdre = o => { try { lireConfig({ V2_ORDRE_POCHES: o }); return null; } catch (e) { return e.message; } };
-H.vrai('O2 : `essai` seul est refusé (configuration invalide, nomme achete)', /configuration invalide/.test(refusOrdre('essai') || '') && /achete/.test(refusOrdre('essai')));
-H.vrai('O2 : `essai,accueil,hebdo,achete` (sans abonnement) est refusé et nomme abonnement', /configuration invalide/.test(refusOrdre('essai,accueil,hebdo,achete') || '') && /abonnement/.test(refusOrdre('essai,accueil,hebdo,achete')));
-H.vrai('O2 : `essai,accueil,hebdo,abonnement` (sans achete) est refusé', /configuration invalide/.test(refusOrdre('essai,accueil,hebdo,abonnement') || ''));
-H.v('O2 : l\'ordre complet est accepté, dans un autre ordre aussi', [refusOrdre('essai,accueil,hebdo,abonnement,achete'), lireConfig({ V2_ORDRE_POCHES: 'achete,abonnement,hebdo,accueil,essai' }).ordrePoches], [null, ['achete', 'abonnement', 'hebdo', 'accueil', 'essai']]);
-H.v('O2 : `achete,abonnement` suffit (essai, accueil, hebdo peuvent manquer)', refusOrdre('achete,abonnement'), null);
+H.vrai('O2 : une ancienne poche (essai, accueil, hebdo, abonnement, achete) est refusée et dit qu\'elle n\'est plus débitée', ['essai', 'accueil', 'hebdo', 'abonnement', 'achete', 'jour,achete'].every(o => /n'est plus débitée/.test(refusOrdre(o) || '')));
+H.vrai('O2 : un ordre sans `jour` est refusé (configuration invalide)', /configuration invalide/.test(refusOrdre(',') || ''));
+H.v('O2 : `jour` est accepté, c\'est aussi le défaut', [refusOrdre('jour'), lireConfig({ V2_ORDRE_POCHES: 'jour' }).ordrePoches], [null, ['jour']]);
 // l'origine "extension de développement" n'est lue QUE sur test_scratch
 H.v('extension dev ignorée en production', lireConfig({ V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abc', MONGODB_BASE: 'test' }).origines.extensionDev, null);
 H.v('extension dev lue sur test_scratch', lireConfig({ V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abc', MONGODB_BASE: 'test_scratch' }).origines.extensionDev, 'chrome-extension://abc');

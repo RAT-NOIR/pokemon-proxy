@@ -9,6 +9,7 @@ const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const { creerBanc, traiterCorrection } = require('./routes');
 const { creerPurge, FORME_JETON } = require('./purge');
 const { traiterEtiquette, exigerAdministrateur } = require('./etiquette');
+const { traiterPhoto, exigerAdministrateurPhoto } = require('./photo');
 const L = require('../transport/limites');
 const { idempotente } = require('../transport/idempotence');
 
@@ -75,6 +76,10 @@ module.exports = {
         // ETIQUETAGE-A : la garde de rôle (404 sinon) AVANT le limiteur — un non-administrateur ne voit jamais un 429 qui révélerait la route. Même mécanisme de limiteur que /api/identifier/reponse.
         const parPorteur = L.limiteur({ nom: 'banc-etiquette', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/banc/etiquette', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteur, idempotente('banc-etiquette', { obligatoire: false }, cfg), traiterEtiquette(cfg, { ...deps, banc }));
+        // PHOTO-EXTENSION (recadrage) : l'image que l'extension de l'administrateur affiche, en octets bruts. MÊME garde de rôle que l'étiquette (404 natif sinon), AVANT toute lecture du corps ; pas de middleware d'idempotence
+        // (le corps est binaire, la clé en hacherait un objet vide) : la même photo pour le même scan rend `deja`.
+        const parPorteurPhoto = L.limiteur({ nom: 'banc-photo', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+        router.post('/api/banc/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhoto(cfg, { ...deps, banc }));
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge, undefined, undefined, { banc });
     },

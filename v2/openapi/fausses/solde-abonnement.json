@@ -19,5 +19,10 @@
       "quotaMensuel": 100,
       "renouvelleLe": "2026-11-01"
     }
+  },
+  "offre": {
+    "nom": "pro",
+    "restant": null,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }

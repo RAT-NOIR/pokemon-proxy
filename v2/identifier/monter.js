@@ -94,10 +94,10 @@ module.exports = {
         router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('retour-live', cfg.limites.retourLiveParPorteurHeure), idempotente('retour-live', { obligatoire: false }, cfg), traiterRetourLive(cfg, deps));
         // Le solde : avec Bearer seulement (lecture pure, aucun débit).
         router.post('/api/solde', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('solde', cfg.limites.soldeParPorteurHeure), async (req, res) => {
-            let solde;
-            try { solde = await registre.obtenir('argent').solde(req.v2.porteur); }
+            let solde, offre;
+            try { const argent = registre.obtenir('argent'); solde = await argent.solde(req.v2.porteur); offre = await argent.offre(req.v2.porteur); }
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }
-            return res.status(200).json({ success: true, solde });
+            return res.status(200).json({ success: true, solde, offre });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
         });
         demarrerBalayage();
         demarrerPurge();

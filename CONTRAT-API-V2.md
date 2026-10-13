@@ -33,6 +33,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/banc/correction` | extension | Bearer | non | `RequeteCorrectionBanc` → `ReponseSimple` (200 quoi qu'il arrive après les contrôles) |
 | `DELETE /api/banc/contributions` | extension | Bearer | non | `RequeteEffacementBanc` → `ReponseEffacementBanc` |
 | `POST /api/banc/etiquette` | extension | Bearer (compte ADMINISTRATEUR seulement) | facultative | `RequeteEtiquetteBanc` → `ReponseEtiquetteBanc` |
+| `POST /api/banc/photo` | extension | Bearer (compte ADMINISTRATEUR seulement) | non (la même photo pour le même scan rend `deja`) | octets bruts JPEG/PNG/WebP + `?scanId=` → `ReponsePhotoBanc` (§1.7 ter) |
 | `POST /api/compte/code` | site | cookie | non | rien → `ReponseCodeLiaison` |
 | `GET /api/compte` | site | cookie | non | rien → `ReponseCompte` |
 | `DELETE /api/compte` | site | cookie | non | `RequeteSuppressionCompte` → `ReponseSimple` |
@@ -202,6 +203,11 @@ La réponse a **trois issues par carte**, jamais une quatrième. Une carte ident
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -360,6 +366,11 @@ Une carte à trancher : 1 à 3 candidats **sans ordre de classement** (rangés p
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -417,6 +428,11 @@ Une carte introuvable (remboursée, `motif: introuvable`) :
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -515,6 +531,11 @@ Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candida
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -558,6 +579,11 @@ Une lecture ratée **définitive** (aucun prix lisible) est remboursée une fois
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -584,6 +610,11 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -641,6 +672,11 @@ Le mot de passe ne se donne PAS à l'inscription (décision D6, voir §1.6 ter) 
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -820,6 +856,17 @@ Décision du testeur : « le compte reste inactif jusqu'au clic de confirmation.
   - **Une requête vers l'hébergeur de l'annonce (tour 1).** La route v2 ne tient aucun octet de la photo (la chaîne reçoit l'URL) : le serveur fait donc **un seul `GET` de `imageUrls[0]`** par scan d'administrateur, **après la réponse, jamais attendu par le client**, vers un hôte de la liste blanche de la production, en `https`, sans suivre de redirection, au plus **8 s** (corps compris) et **5 Mo**, type `image/*` ; un échec n'est pas réessayé et ne change rien à la réponse. **La photo stockée peut différer de celle que la chaîne a analysée** si l'URL a changé entre-temps : son `sha256` est écrit sur l'analyse et sur la ligne du banc (`sha256`) pour savoir de quelle image il s'agit.
   - **Reprise (tour 1).** `banc: "en-attente"` n'est répondu que s'il existe une reprise : l'étiquette est écrite avec une marque de reprise dans la MÊME écriture, et la passe quotidienne réécrit la ligne à la `rev` de l'étiquette. Une carte sort de l'attente par `ecrit`, `sans-photo` (aucune photo 24 h après le scan) ou `role-retire` (le compte n'est plus administrateur : la photo n'est plus gardée). Pendant l'attente, l'export du banc le DIT (`etiquettesEnAttente` dans son manifeste) : une ligne peut porter une vérité plus ancienne que l'étiquette.
 
+#### 1.7 ter Envoyer la photo d'un scan (administrateur) — lot PHOTO-EXTENSION, recadrage du 2026-10-13
+
+**Décision du testeur.** `POST /api/identifier` n'a **aucun champ d'image** : son corps garde sa limite de 100 ko, et la route héritée est inchangée. L'image que l'extension de l'administrateur affiche déjà part par une route à part, réservée à l'administrateur, où l'identité et le rôle sont jugés **avant** la lecture du moindre octet du corps. La seconde lecture pour tous les clients attendra un autre contrat.
+
+- `POST /api/banc/photo?scanId=<24 hexadécimaux>&photo=0`, `Authorization: Bearer <jeton d'installation liée à un compte administrateur>`, `Content-Type: image/jpeg | image/png | image/webp`, `Content-Length` obligatoire, **corps = les octets bruts de l'image** (ni base64, ni JSON, ni préfixe `data:`). `photo` = l'index dans les `imageUrls` du scan, **0 par défaut et seule valeur admise** (le banc ne garde que la première photo de l'annonce ; `photo=1` rend `400 photo`). Aucun autre paramètre (`400 champ-inconnu`).
+- **Ordre des gardes, tous AVANT de lire un octet du corps** (prouvé par un compteur d'octets lus : moins de 100 ko lus sur plusieurs centaines annoncés) : (1) identité : `401 JETON` ; (2) rôle `administrateur` relu en base : **tout autre porteur** (compte ordinaire, installation seule ou non liée) reçoit **le 404 natif d'une route inexistante** (même statut, même corps non JSON, mêmes en-têtes que `/api/banc/etiquette` : prouvé par comparaison avec une route inexistante) ; (3) plafond horaire par porteur (le même que l'étiquette, 600 par heure, `429 DEBIT`) ; (4) la requête (`400 scan-id | photo | champ-inconnu`) ; (5) `Content-Type` (`415 type`) ; (6) `Content-Length` entier, non nul (`400 content-length`), ≤ **2 Mio** (`413 trop-lourde`) — une photo d'annonce affichée (`f800`) pèse 100 à 300 ko ; (7) le scan existe ET est de **ce** porteur (`404 CODE_INVALIDE`, un scan inconnu et le scan d'un autre ne se distinguent pas) ; si le scan a déjà sa photo : `200 deja`, rien lu, rien réécrit ; (8) une place de lecture : **4 au total, 1 par porteur** (`429 DEBIT` + `Retry-After: 2`) ; (9) un **délai de lecture de 15 s** (une connexion lente est coupée, la place rendue). Un refus décidé avant la lecture laisse le serveur vider le corps comme pour une route inexistante (bande passante identique à n'importe quelle route, ni place ni mémoire) ; le corps n'est jamais gardé.
+- **Le contenu** (après lecture, une seule analyse d'image : celle du scanner) : les octets doivent être ce que le `Content-Type` annonce (`415 type`) ; l'image doit se décoder entièrement (`422 illisible`), tenir en **12 millions de pixels et 4 096 px de côté** (`422 dimensions` ; une photo de téléphone de 4000 × 3000 passe) et n'avoir qu'une page (une image animée est `422 illisible`) ; **au plus 2 décodages simultanés** dans le service, le suivant reçoit `429 DEBIT` (réessayer), jamais une attente. Ces bornes sont refusées sur l'en-tête de l'image, avant le décodage complet.
+- **L'effet.** La photo est conservée comme celle que le serveur télécharge lui-même : WebP sans métadonnées, 1 600 px au plus, `sha256` sur `analyses.photoBanc` ; les cartes du scan en attente de photo (`banc: "en-attente"`, §1.7 bis) en sortent et **leur ligne du banc naît**. Réponse : `200 { success: true, etat: "ecrit" | "deja", photo: 0, banc?: "ecrit" | "en-attente" }` (`banc` seulement si une carte attendait). **Idempotente** : la même photo pour le même scan rend `deja`, rien de plus (pas d'`Idempotency-Key`). Aucune erreur ne débite ni ne rembourse rien (la route est hors argent). Autres réponses : `503 INDISPONIBLE` (base ou bucket injoignable, rien de conservé). Les erreurs ont l'enveloppe v2 (`success: false, erreur: { code, message, detail }`).
+- **Le repli : le téléchargement serveur.** Pour un scan d'**administrateur** seulement, le serveur attend **15 s** après avoir répondu au scan (`V2_PHOTO_ADMIN_DELAI_S`, de 0 à 300) que l'extension ait envoyé sa photo ; si `analyses.photoBanc` existe alors, **rien n'est téléchargé**. Sinon il télécharge `imageUrls[0]` (§1.7 bis), **espacé** (`V2_PHOTO_ADMIN_INTERVALLE_S`, défaut 10 s) et **plafonné** (`V2_PHOTO_ADMIN_MAX_JOUR`, défaut 400 par jour UTC), comptés dans la base ; au-delà, pas de photo (`banc: "en-attente"`). Le délai vit en mémoire du processus : un redémarrage pendant l'attente perd ce repli (la carte sort `sans-photo` à 24 h).
+- **Pour l'extension.** (1) **Obtenir les octets** : `fetch` de la même adresse que celle de l'`<img>` affichée (`imageUrls[0]`), lu en `arrayBuffer()` — servi **en pratique par le cache du navigateur, sans garantie**. Si le `fetch` échoue (réseau, CORS, hors cache), **n'envoyer rien** : le repli serveur prend le relais ; l'extension ne doit jamais, de son côté, lancer une requête nouvelle vers Vinted si elle s'y refuse (son manifeste promet « rien n'est requêté vers Vinted »). Un canvas ne convient pas si le CDN n'envoie pas les en-têtes CORS (image souillée). (2) **Jamais de préfixe `data:`** et pas de base64 : le corps est binaire (`fetch(url, { method: 'POST', headers: { 'Content-Type': <le type de la réponse>, Authorization }, body: blob })` — le navigateur pose `Content-Length`). (3) **Mesurer avant d'envoyer** : ≤ 2 Mio, ≤ 4 096 px de côté, ≤ 12 millions de pixels, non animée ; sinon ne rien envoyer. (4) **Quand** : après la réponse du scan, **dans les 15 s** (le repli serveur part ensuite) ; l'extension connaît le `scanId` par la réponse de `POST /api/identifier`. Elle sait être administrateur par `facturation.motif === "administrateur"` d'une réponse précédente ; un non-administrateur qui appelle la route reçoit un 404 natif et ne doit pas réessayer. (5) **Réponses** : `200` (`ecrit` ou `deja`) = fini ; `429` = réessayer après `Retry-After` ; `413`, `415`, `422`, `400`, `404` = ne pas réessayer (le repli serveur couvre) ; `503` = réessayer une fois.
+
 ### 1.8 Ma collection (site) — lot COLLECTION
 
 Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la session du compte** (cookie, comme le scanner). La forme est celle que le site a proposée (`DEMANDE-COLLECTION.md`, `collectionContrat.ts`) ; les écarts sont listés plus bas.
@@ -952,7 +999,7 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 
 **Taille d'un lot : 20 cartes au plus** (`V2_LOT_CARTES_MAX`, entier de 2 à 100 ; au-delà, la configuration est invalide). `POST /api/banc/correction` suit la même borne (`carte` de 0 à taille − 1 ; `maximum: 99` du schéma est le plafond absolu). `carte` (`/api/identifier/reponse`, `/api/retour-live`) va de 0 à 19 (même variable : une seule source). Un lot de plus de 20 cartes est **refusé, jamais tronqué** : `400 ENTREE` + `detail: "lot-trop-grand-taille"` (le supplément impayable reste `429 QUOTA` + `detail: "lot-trop-grand"`). Dans les deux cas : crédit initial rendu jusqu'à 10 refus par jour et par compte, `facturation { debite: 0, rembourse: true, motif: "lot" }` ; au 11e, `facturation { debite: 1, rembourse: false, motif: "lot", raisonNonRembourse: "plafond-jour" }`, le refus restant la réponse.
 
-`solde.total` compte déjà les réserves en moins. Le solde se débite dans l'ordre `essai` → `accueil` → `hebdo` → `abonnement` → `achete` (réglable côté serveur). Une installation non liée n'a que ses 3 essais ; un compte **vérifié** reçoit 25 analyses offertes une seule fois, plus 2 par semaine ISO (non cumulables).
+**OFFRE-QUOTA (décision du testeur, 2026-10-13) : plus de scans payants, plus de poches de crédits.** Chaque porteur a un QUOTA QUOTIDIEN d'analyses selon son offre, servi dans l'objet `offre` `{ nom: "sans-compte"|"gratuit"|"pro", restant: entier ≥ 0 (null pour Pro), remiseAZero: ISO 8601 avec décalage du prochain minuit de Paris }` : installation sans compte 3 par jour (`V2_QUOTA_SANS_COMPTE`), compte gratuit **vérifié** 10 par jour (`V2_QUOTA_GRATUIT`), Pro (abonnement actif et `jusquAu` futur) illimité en apparence (`restant: null`) avec un plafond technique invisible (`V2_QUOTA_PRO_PLAFOND`, 200). Un compte non vérifié, un compte ou une installation inconnus, une installation liée n'ont AUCUNE offre plus large : le refus d'avant. L'administrateur est inchangé (débit 0, motif `administrateur`). Ce qui compte : une analyse RENDUE (carte affirmée ou question = 1 ; lot = ⌈N/10⌉) ; un introuvable, une panne et un prix illisible définitif sont RENDUS au quota du jour où ils ont été pris. La remise à zéro est à minuit, heure de Paris (jours de 23 h et 25 h compris). `offre` est servi par la MÊME fonction sur : `POST /api/solde`, toute réponse de `POST /api/identifier` (succès, question, introuvable, refus `QUOTA` avec `restant: 0`, sauf `detail: "lot-trop-grand"` qui sert le VRAI restant : les unités du lot sont rendues), `POST /api/identifier/reponse` (y compris le `410 CODE_EXPIRE`), `POST /api/retour-live`, `POST /api/compte/lier` et `/api/compte/delier`. **Un prix illisible définitif ne compte pas** : `POST /api/retour-live` avec `lectureRatee.definitive` rend l'unité au jour où elle a été prise et sert l'`offre` relue APRÈS ce rendu. **L'administrateur** reçoit `nom: "pro"` et `restant: null` (débit 0). **`offre` peut manquer** dans un 200 si sa lecture échoue côté serveur (l'erreur est journalisée, l'analyse n'est pas perdue) : l'extension garde alors la dernière `offre` connue sans la décrémenter et la relit par `POST /api/solde` ; elle n'invente jamais un `restant`. `Solde` garde ses champs mais n'est plus débité : les anciens crédits achetés sont en LECTURE SEULE (ni débités, ni remboursés, ni effacés). `solde.total` compte déjà les réserves en moins pour ces anciens crédits.
 
 ### 3.2 Quand une carte est affirmée — et quand elle ne l'est PAS (lots JUMEAU-V2)
 
@@ -1039,13 +1086,13 @@ La clé est conservée **24 h**, par porteur et par route : elle vaut par l'une 
 
 ## 6. Les erreurs, et ce que chaque client doit faire
 
-Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, message, detail?, reessayerDans? }, facturation, solde?, achat? }`. `facturation` est toujours présent (`null` quand rien n'a été analysé). `solde` accompagne `QUOTA` et `VERIFICATION`, et les pannes remboursées. `achat.url` accompagne `QUOTA` pour un compte.
+Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, message, detail?, reessayerDans? }, facturation, solde?, offre? }`. `facturation` est toujours présent (`null` quand rien n'a été analysé). `solde` et `offre` accompagnent `QUOTA` et `VERIFICATION`, et les pannes remboursées. `achat` n'est plus servi (la vente est arrêtée).
 
 | code | statut | quand | ce que le client doit faire |
 |---|---|---|---|
 | `JETON` | 401 | Bearer absent, inconnu ou révoqué | extension : recréer une installation (`POST /api/installation`) |
 | `VERIFICATION` | 403 | compte lié dont l'adresse n'est pas confirmée | afficher « **confirmez votre adresse** » (pas « crédits épuisés ») |
-| `QUOTA` | 429 | plus aucune analyse disponible | **proposer un compte** (installation non liée) ou la recharge (`achat.url`, compte) ; afficher le jour du retour de l'hebdomadaire (`solde.prochainHebdo`) |
+| `QUOTA` | 429 | plus aucune analyse disponible | **proposer un compte** (installation non liée) ou l'offre Pro (compte gratuit) ; afficher le retour du quota à `offre.remiseAZero` (minuit de Paris). Plus de recharge |
 | `DEBIT` | 429 | trop vite, ou requête identique en cours | **attendre `reessayerDans` secondes** (en-tête `Retry-After` aussi), puis rejouer avec la MÊME `Idempotency-Key` |
 | `INDISPONIBLE` | 503 | base, catalogue ou index injoignables | rien n'est débité (remboursé) ; réessayer plus tard |
 | `IMAGE` | 200 | aucune image exploitable | statut 200 conservé comme la route héritée ; au scanner, `detail` : `trop-lourde` (413) · `format` (415) · `aucune-carte` (422) |
@@ -1095,8 +1142,10 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     "partage": true,
     "abonnement": null
   },
-  "achat": {
-    "url": "https://rat-market.fr/fr/compte#recharge"
+  "offre": {
+    "nom": "gratuit",
+    "restant": 0,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1124,6 +1173,11 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 0,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1157,6 +1211,11 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1253,6 +1312,7 @@ Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre l
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
+| E13 | `POST /api/identifier` 200 | `$.offre` | absent | clé requise : `{ nom, restant, remiseAZero }` (OFFRE-QUOTA, §1.5) | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels.js | l'extension (B5 de sa `DEMANDE-SERVEUR-EXTENSION.md`) |
 | E11 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.set.slug` | `null` (set sans slug) | chaîne : le slug du set est toujours connu | reels.js | l'extension |
 
 Non mesuré par cette lecture de forme (aucune faute de FORME, la faute est de sens) : E9 (`variante` et `liens.cardmarket` remplis alors que le serveur rend `null` quand l'édition ou le numéro est inconnu — les valeurs `normale` / une adresse sont de forme valide), E10 (codes d'erreur : le fichier `quota.json` n'en porte qu'un). `lectures.json` n'est pas une réponse du serveur (les grilles de la lecture live simulée ne sont jamais envoyées : le serveur ne reçoit que `prixLive` et `prixLiveEtat`) ; ses états `MT`…`PO` et ses prix (`null` ou > 0) tiennent la liste fermée du contrat.
@@ -1266,7 +1326,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 | # | route · statut · chemin | constat | décision à prendre |
 |---|---|---|---|
 | X1 | `GET /api/compte` · `200` · `$.historique.lignes[]` | **trou du contrat, pas du serveur** : le contrat n'a pas de motif de crédit pour une poche `abonnement` ni `essai`. Ces lignes sont **omises de l'historique, jamais inventées sous un autre motif**, et le banc compte celles qu'il omet. De même une analyse ancienne sans `facturation` complète ou sans `surface` est omise (rien n'est fabriqué). | ajouter des motifs (`abonnement`, `essai`) au contrat si le site veut les montrer |
-| X2 | `POST /api/creer-recharge` · `501` · `404` | **servie, jamais publiée** : montée derrière un aiguilleur dont le prédicat exige un porteur v2 que rien ne résout sur cette route ; elle passe donc toujours la main à la route héritée (404 dans le banc, qui n'en a pas). Son `501 INDISPONIBLE` / `paiement-non-branche` est **inatteignable en l'état**. Publiée quand elle sera implémentée ; l'alignement 501 / `INDISPONIBLE` est parqué pour la tâche de paiement. | publier avec le paiement |
+| X2 | `POST /api/creer-recharge` · `501` · `404` · `410` | **OFFRE-QUOTA : la vente de scans est arrêtée.** Le `501 INDISPONIBLE` / `paiement-non-branche` d'avant est RETIRÉ (jamais rendu) ; dans le montage du banc, sans route héritée, la route passe la main (`404`). `index.js` répond `410 { success:false, error:"La vente de scans est arrêtée" }` sans créer de session Stripe ; le chemin v2 (`creerRecharge`) répond `410 INDISPONIBLE` (detail `vente-arretee`). Le crédit Stripe (`crediterAchat`) et le rattachement des achats (`rattacherAchats`) refusent et journalisent. | rien : la route disparaît quand le site n'y appelle plus |
 | X4 | `POST /api/identifier` · `200` · `pas-une-carte` | listée au contrat, **jamais produite** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` et `impression-indeterminee` sortent) | les clients ne comptent pas dessus |
 | X4 | `POST /api/identifier` · `200` · `plusieurs-cartes-non-separees` | idem | idem |
 | X4 | `POST /api/identifier` · `200` · `$.analyse.cartes[].carte.set.tirage` | `Produit.set.tirage` est **toujours `null`** (le catalogue ne porte pas le tirage) | les clients ne comptent pas dessus |

@@ -20,7 +20,8 @@ function corpsErreur(code, message, extra = {}) {
     if (extra.reessayerDans !== undefined) erreur.reessayerDans = extra.reessayerDans;
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };
     if (extra.solde !== undefined) corps.solde = extra.solde;
-    if (extra.achat !== undefined) corps.achat = extra.achat;
+    // OFFRE-QUOTA : `achat` n'existe plus (la vente est arrêtée) — un appelant qui en passerait un est ignoré, aucun lien de vente ne sort jamais d'un corps d'erreur
+    if (extra.offre !== undefined) corps.offre = extra.offre;   // OFFRE-QUOTA : { nom, restant, remiseAZero } — le refus QUOTA joint l'offre (restant 0)
     return corps;
 }
 function repondreErreur(res, code, message, extra = {}, statut) {

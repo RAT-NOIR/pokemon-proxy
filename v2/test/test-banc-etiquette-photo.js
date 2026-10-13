@@ -17,7 +17,7 @@ const { creerCatalogue } = require('../identifier/catalogue');
 const registre = require('../registre');
 const { supprimerCompte } = require('../comptes/service');
 
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_PHOTO_ADMIN_DELAI_S: '0', V2_PHOTO_ADMIN_INTERVALLE_S: '0', V2_PHOTO_ADMIN_MAX_JOUR: '100000' });   // PHOTO-EXTENSION : le repli de téléchargement n'est ni espacé ni plafonné ici (ce banc joue des dizaines de scans d'affilée)
 const oid = () => new mongoose.Types.ObjectId();
 const BUCKET = 'bucket-banc-test', SEL = 'sel-etiquette-b';
 const ENV = { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL };
@@ -328,7 +328,7 @@ const lire = async id => db.col('analyses').findOne({ _id: new mongoose.Types.Ob
             const sc = await H.appel(sv2.url, '/api/identifier', { methode: 'POST', corps, entetes: { ...ent(A), 'x-forwarded-for': '10.7.7.7', 'idempotency-key': 'etiq-photo-0000001' } });
             await jusque(async () => (await lire(sc.json.scanId)).photoBanc);
             const photo = (await lire(sc.json.scanId)).photoBanc;
-            H.v('11. administrateur : /api/identifier répond comme avant (aucun champ nouveau), puis la photo est conservée, hors de la réponse', [sc.statut, sc.json.analyse.cartes[0].statut, Object.keys(sc.json).sort(), photo ? true : false, mem.cles().length - avant, JSON.stringify(sc.json).includes('photoBanc')], [200, 'identifiee', ['analyse', 'contrat', 'facturation', 'scanId', 'success'].concat(sc.json.solde !== undefined ? ['solde'] : []).sort(), true, 1, false]);
+            H.v('11. administrateur : /api/identifier répond comme avant (aucun champ nouveau hors `offre`, OFFRE-QUOTA : le même objet que pour tout porteur), puis la photo est conservée, hors de la réponse', [sc.statut, sc.json.analyse.cartes[0].statut, Object.keys(sc.json).sort(), photo ? true : false, mem.cles().length - avant, JSON.stringify(sc.json).includes('photoBanc')], [200, 'identifiee', ['analyse', 'contrat', 'facturation', 'scanId', 'success'].concat(sc.json.solde !== undefined ? ['solde'] : []).concat(sc.json.offre !== undefined ? ['offre'] : []).sort(), true, 1, false]);
             const r = await H.appel(sv2.url, '/api/banc/etiquette', { methode: 'POST', corps: { scanId: sc.json.scanId, verdict: 'juste', rev: 1 }, entetes: { ...ent(A), 'x-forwarded-for': '10.7.7.8' } });
             H.v('11. puis « juste » : banc: ecrit, une ligne `etiquette-admin` avec la vérité de la réponse', [r.statut, r.json.banc, (await lignes()).filter(x => x.cleR2 === photo.cle).map(x => [x.source, x.verite])], [200, 'ecrit', [['etiquette-admin', 4242]]]);
             // un client ordinaire : même route, aucune photo

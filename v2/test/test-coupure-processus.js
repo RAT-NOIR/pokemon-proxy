@@ -24,7 +24,8 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
     await connecterMongo({ script: 'test-coupure-processus.js', ecrit: true });
     const db = require('../db'); db.brancher(mongoose.connection.db);
     const M = require('../modeles'); const J = require('../comptes/jetons'); const { lireConfig } = require('../config'); const R = require('../argent/reconcilier');
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' });   // ce banc joue des lots de 25 cartes (le défaut 20 les refuserait : test-plafonds.js)
+    const QA = require('./_aide-quota'); await QA.eviterMinuit();
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100', V2_QUOTA_SANS_COMPTE: '1000' });   // ce banc joue des lots de 25 cartes (le défaut 20 les refuserait : test-plafonds.js)
     await M.creerIndex();
     const raw = n => mongoose.connection.db.collection(n);
     const EXP = 990801, PID = 990901;
@@ -49,16 +50,18 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
     }
     const porteurs = [];
     async function instal(essais, achete) {
-        const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais, libelle: 'coupure' }), { achete, essaisInitiaux: essais });
+        const jeton = J.genererJeton(); const i = M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'coupure' });
         await db.col('installations').insertOne(i); const p = { type: 'installation', id: i._id }; porteurs.push(p);
-        // les crédits achetés ont leur ligne d'achat (sinon la réconciliation y verrait un écart : le solde acheté se prouve par les mouvements)
-        if (achete) await db.col('mouvements').insertOne({ installationId: i._id, le: new Date(), surface: 'extension', type: 'achat', delta: achete, poche: 'achete', motif: 'achat', scanId: null, etat: 'debite', cleIdempotence: `achat|${i._id}`, expireLe: new Date(Date.now() + 365 * 86400e3) });
-        return { i, jeton, p, essais0: essais };
+        // OFFRE-QUOTA : plus de poches essai/achete. L'ancien stock (essais + achete) devient « autant d'analyses devant l'installation aujourd'hui » (quota sans compte porté à 1000 par jour, ici et dans l'enfant).
+        await QA.poserRestant(`installation:${i._id}`, essais + achete);
+        return { i, jeton, p, total: essais + achete };
     }
     let nIp = 0; const ipH = () => ({ 'x-forwarded-for': `10.13.0.${++nIp}` });
     const corps = () => ({ contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr' });
     const poster = (url, jeton, k) => H.appel(url, '/api/identifier', { methode: 'POST', corps: corps(), entetes: { origin: cfg.origines.extension, ...ipH(), authorization: `Bearer ${jeton}`, 'idempotency-key': k } });
-    const poche = async x => { const d = await db.col('installations').findOne({ _id: x.i._id }); return [d.essais, d.achete]; };
+    // ce qui reste à l'installation, en nombre d'analyses ; présenté en paire [essai, acheté] comme avant (la dotation de 1 « essai » se consommait d'abord) pour que chaque attente garde sa forme
+    const restant = x => QA.restantDe({ type: 'installation', id: x.i._id }, cfg);
+    const poche = async x => { const r = await restant(x); return [Math.max(0, r - 5), Math.min(r, 5)]; };
     const mouv = x => db.col('mouvements').find({ installationId: x.i._id }).sort({ _id: 1 }).toArray();
     const debits = async x => (await mouv(x)).filter(m => m.type === 'debit');
     const rembs = async x => (await mouv(x)).filter(m => m.type === 'remboursement' && m.delta === 1);
@@ -68,9 +71,8 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
     const jusquaFin = async x => jusqua(async () => { const m = await marqueDe(x); return m && !['en-suspens', 'en-reprise'].includes(m.etat) ? m : null; });
     // somme(delta) = solde poche par poche : le solde réel vaut la dotation initiale + la somme des delta de chaque poche (réconciliation, lue ici ET par reconcilier)
     async function conserve(x) {
-        const par = (await mouv(x)).reduce((t, m) => { t[m.poche] = (t[m.poche] || 0) + m.delta; return t; }, {});
-        const [e, a] = await poche(x);
-        return [x.essais0 + (par.essai || 0) === e, (par.achete || 0) === a];       // essai : dotation initiale + deltas ; acheté : les deltas (achat compris)
+        const somme = (await mouv(x)).reduce((t, m) => t + m.delta, 0);
+        return [x.total + somme === await restant(x), (await mouv(x)).every(m => m.poche === 'jour' || m.poche == null)];       // dotation du jour + deltas = restant ; toutes les lignes sont du compteur du jour
     }
     let n = 0; const cle = () => `coupure-${Date.now().toString(36)}-${++n}`;
 

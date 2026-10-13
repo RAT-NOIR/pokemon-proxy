@@ -13,7 +13,7 @@ const mongoose = require('mongoose');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
 const { lireConfig } = require('../config');
 const { CODES } = require('../erreurs');
-const A = require('./_contrat-reel-aide');
+const A = require('./_contrat-reel-aide'); const Q = require('./_aide-quota');
 const { SCHEMA, ref, OPERATIONS, STATUTS_DOCUMENTES, grandLivre, consigner, consignerHorsContrat } = A;
 const { valider } = require('../openapi/valider');
 const R = path.join(__dirname, '..', '..');
@@ -45,6 +45,36 @@ async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes,
     consigner(route, etat, r, { garde });
     if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
     return r;
+}
+
+// PHOTO-EXTENSION : un corps BINAIRE (une image) avec son Content-Type
+async function jouerBinaire(url, route, etat, attendu, chemin, octets, type, entetes, { garde = false, longueurAnnoncee = null } = {}) {
+    let r;
+    if (longueurAnnoncee !== null) {
+        // un refus décidé sur les EN-TÊTES : le client annonce une longueur et n'écrit que 16 octets, puis attend la réponse (un client qui écrit 2 Mio pendant qu'on lui répond peut perdre la réponse dans une
+        // réinitialisation de la connexion : de la plomberie de socket, pas le sujet du contrat)
+        r = await new Promise((resolve, reject) => {
+            const u = new URL(url + chemin);
+            const req = require('http').request({ host: u.hostname, port: u.port, path: u.pathname + u.search, method: 'POST', agent: false, headers: { ...(type ? { 'content-type': type } : {}), ...entetes, 'content-length': String(longueurAnnoncee) } }, res => {
+                const m = []; res.on('data', c => m.push(c));
+                res.on('end', () => { const texte = Buffer.concat(m).toString('utf8'); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ } resolve({ statut: res.statusCode, json, texte, entetes: res.headers }); req.destroy(); });
+            });
+            req.on('error', reject); req.write(octets.subarray(0, 16));
+        });
+    } else {
+        const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { ...(type ? { 'content-type': type } : {}), ...entetes } });
+        const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+        r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+    }
+    consigner(route, etat, r, { garde });
+    if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
+    return r;
+}
+
+async function jouerBinaireBrut(url, chemin, octets, type, entetes) {
+    const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { 'content-type': type, ...entetes } });
+    const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+    return { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
 }
 
 // ── porteurs
@@ -100,7 +130,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     // état non joué, comptes différents d'une exécution à l'autre (constat du tour 1, M3). On attend donc la frontière avant de commencer quand elle est à moins de 4 minutes.
     // B2b point 6 : la garde couvre aussi la SEMAINE (poche hebdo semée à la semaine ISO courante, l.168 et l.559) et le MOIS (abonnement `moisCle`, l.501) — lus par le serveur enfant avec son horloge réelle.
     // Une horloge de limiteur ne peut pas atteindre un serveur enfant : la garde d'attente reste le seul moyen ici (harnais : H.eviterFrontieres, marge 4 minutes).
-    await H.eviterFrontieres({ heure: true, jour: true, semaine: true, mois: true }, 240e3);
+    await H.eviterFrontieres({ heure: true, jour: true, semaine: true, mois: true }, 240e3); await Q.eviterMinuit();
     await H.ouvrirBancV2();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
@@ -153,7 +183,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const y = await inst(3), k2 = cle();
         await claimEnCours(`installation:${y.i._id}`, 'identifier', k2, corpsId());
         await ident(U, 'même clé encore en cours de traitement', 429, y.jeton, corpsId(), { cleIdem: k2 });
-        const z = await inst(0);
+        const z = await inst(0); await Q.poserRestant(`installation:${z.i._id}`, 0, { limite: 3 });      // OFFRE-QUOTA : les 3 analyses du jour sont déjà prises
         await ident(U, 'QUOTA installation (plus d\'essai)', 429, z.jeton);
         await ident(U, 'sans Authorization', 401, null);
         await ident(U, 'jeton inconnu', 401, 'a'.repeat(32));
@@ -163,12 +193,12 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await ident(U, 'marché non pris en charge', 422, x.jeton, corpsId({ marche: 'amazon.fr' }));
         await ident(U, 'extension trop ancienne', 426, x.jeton, corpsId({ versionExtension: '1.0.0' }));
         const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } }); const il = await instLiee(nv);
-        await ident(U, 'compte non vérifié (O3 : plus un porteur, l\'installation liée redevient une installation seule sans essai)', 429, il.jeton);
+        await ident(U, 'compte non vérifié (O3 : plus un porteur, l\'installation liée redevient une installation seule sans essai ; OFFRE-QUOTA : une installation liée n\'a pas de quota propre, aucune offre plus large)', 429, il.jeton);
         const ad = await compte({ role: 'administrateur', solde: { accueil: 25, achete: 0 } }); const ia = await instLiee(ad);
         await ident(U, 'administrateur (a-trancher, rien débité)', 200, ia.jeton);
         const ex = await compte({ solde: { accueil: 0, achete: 0 } }); const ie = await instLiee(ex);
-        await raw('hebdo').insertOne({ compteId: ex.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });
-        await ident(U, 'QUOTA compte (achat.url)', 429, ie.jeton);
+        await Q.poserRestant(`compte:${ex.c._id}`, 0, { limite: 10 });      // OFFRE-QUOTA : les 10 analyses du jour du compte gratuit sont déjà prises (plus de recharge : pas d'`achat`)
+        await ident(U, 'QUOTA compte (offre restant 0)', 429, ie.jeton);
         // la panne de lecture est une panne, jamais un introuvable
         const p = await inst(3);
         await ident(U, 'panne de lecture (IA)', 200, p.jeton, corpsId({ imageUrls: [IMAGE_INCONNUE] }));
@@ -311,9 +341,11 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc: BANC_MEMOIRE, ...deps }));
         return H.serveur(app);
     };
+    // PHOTO-EXTENSION : un banc à stockage MÉMOIRE (sans lui `POST /api/banc/photo` ne pourrait jamais rendre 200 : pas de bucket)
+    const BANC_MEMOIRE = require('../banc/routes').creerBanc({ cfg, env: { V2_BANC_BUCKET: 'bucket-banc-test', V2_BANC_SEL: 'sel-contrat-reel' }, stockage: require('../banc/stockage').creerStockageMemoire() });
     const sv = await monter();
     const V = sv.url;
     // identifier : les états que SEULE la chaîne fabriquée sait produire
@@ -334,7 +366,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         retardLot = async () => [...nAff(2), { statutHttp: 500, corps: null }];
         await ident(svLot.url, 'lot dont une photo est illisible (panne-lecture)', 200, (await inst(3)).jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
         retardLot = async () => nAff(25);
-        await ident(svLot.url, 'lot trop grand pour le solde (QUOTA lot-trop-grand)', 429, (await inst(1, { achete: 0 })).jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        const unSeul = await inst(1, { achete: 0 }); await Q.poserRestant(`installation:${unSeul.i._id}`, 1, { limite: 3 });      // OFFRE-QUOTA : une seule analyse devant lui, le lot en demande 3
+        await ident(svLot.url, 'lot trop grand pour le solde (QUOTA lot-trop-grand)', 429, unSeul.jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
         retardLot = null;
         // le scanner sur un lot (la clé de lot passe par le même traiterIdentifier)
         const cl = await compte();
@@ -349,7 +382,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     }
     // ── (tour 1, section 3) les états de FACTURATION que le premier jeu ne jouait pas
     {
-        const aujourdhui = new Date().toISOString().slice(0, 10), exp = new Date(Date.now() + 3 * 86400e3);
+        const aujourdhui = Q.jourCourant(), exp = new Date(Date.now() + 3 * 86400e3);
         const plafond = async (x, type) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count: cfg.plafonds[type], expireLe: exp });
         // introuvable NON remboursé : le plafond des pannes du jour est atteint, l'utilisateur PAIE (debite 1, motif plafond-jour, raisonNonRembourse)
         mode = 'introuvable:aucun-prix'; const p1 = await inst(3); await plafond(p1, 'panne');
@@ -490,7 +523,10 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(V, 'POST /api/compte/lier', 'plafond par installation atteint', 429, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
         // lecture du compte : de VRAIES analyses (par l'installation liée, chaîne fabriquée) et le VRAI mouvement d'octroi de la vérification
         mode = 'affirmee';
+        // OFFRE-QUOTA : 22 analyses dépassent les 10 du jour du compte gratuit — le compte est Pro (abonnement actif, plafond technique 200) le temps de cette série, puis redevient gratuit.
+        await raw('comptes').updateOne({ _id: compteC._id }, { $set: { abonnement: { actif: true, jusquAu: new Date(Date.now() + 30 * 86400e3) } } });
         for (let k = 0; k < 22; k++) await ident(V, 'analyse pour l\'historique du compte', 200, jetonLie);
+        await raw('comptes').updateOne({ _id: compteC._id }, { $unset: { abonnement: '' } });
         const g1 = await jouer(V, 'GET /api/compte', 'compte vérifié, installation liée, historique PAGINÉ (page 1)', 200, '/api/compte', { entetes: siteH(cookie) });
         const g1l = (g1.json && g1.json.historique.lignes) || [];
         H.v('GET /api/compte page 1 : 20 lignes, suite non nulle ; au moins UNE ligne analyse et (sur l\'ensemble des pages) UNE ligne credits', [g1l.length, typeof g1.json.historique.suite, g1l.some(l => l.genre === 'analyse')], [20, 'string', true]);
@@ -561,8 +597,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await scan('partie image vide', 422, c, { form: formulaire({ image: Buffer.alloc(0) }) });
         await scan('source hors liste', 400, c, { form: formulaire({ source: 'url' }) });
         const vide = await compte({ solde: { accueil: 0, achete: 0 } });
-        await raw('hebdo').insertOne({ compteId: vide.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });
-        await scan('QUOTA compte (achat.url)', 429, vide);
+        await Q.poserRestant(`compte:${vide.c._id}`, 0, { limite: 10 });      // OFFRE-QUOTA : les 10 analyses du jour sont déjà prises
+        await scan('QUOTA compte (offre restant 0)', 429, vide);
         // une clé déjà en cours (429 DEBIT) : l'empreinte du corps est celle que le serveur calcule (source + sha256 de l'image)
         const k = cle(); await claimEnCours(`compte:${c.c._id}`, 'scanner', k, { source: 'camera', image: crypto.createHash('sha256').update(JPEG).digest('hex') });
         await scan('même Idempotency-Key encore en cours (DEBIT)', 429, c, { entetes: siteH(c.cookie, { 'idempotency-key': k }) });
@@ -709,6 +745,34 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await plafonner('banc-etiquette', 'compte', adm3.c._id, 600);
             await jouer(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa3.jeton) });
         }
+        // PHOTO-EXTENSION (recadrage) : la photo d'un administrateur sur SON scan ; tous les statuts documentés sont joués par un état réel (hors 503 : garde d'index)
+        {
+            const R = 'POST /api/banc/photo', CH = '/api/banc/photo';
+            const sharp = require('sharp');
+            const JPG = await sharp(crypto.randomBytes(120 * 160 * 3), { raw: { width: 120, height: 160, channels: 3 } }).jpeg().toBuffer();
+            const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm), adm2 = await compte({ role: 'administrateur' }), xa2 = await instLiee(adm2);
+            mode = 'affirmee';
+            const aff = await ident(V, 'analyse affirmée de l\'administrateur (pour la photo)', 200, xa.jeton);
+            const q = `${CH}?scanId=${aff.json.scanId}`;
+            await jouerBinaire(V, R, 'photo conservée (ecrit)', 200, q, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'la photo existe déjà (deja)', 200, q, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'scanId mal formé', 400, `${CH}?scanId=x`, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'sans Authorization', 401, q, JPG, 'image/jpeg', extH(null));
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await jouerBinaireBrut(V, q, JPG, 'image/jpeg', extH(x.jeton));
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
+            await jouerBinaire(V, R, 'scan d\'un autre administrateur', 404, q, JPG, 'image/jpeg', extH(xa2.jeton));
+            const aff2 = await ident(V, 'seconde analyse de l\'administrateur (pour la photo)', 200, xa.jeton);
+            const q2 = `${CH}?scanId=${aff2.json.scanId}`;
+            await jouerBinaire(V, R, 'plus de 2 Mio (413)', 413, q2, JPG, 'image/jpeg', extH(xa.jeton), { longueurAnnoncee: 2 * 1024 * 1024 + 1 });
+            await jouerBinaire(V, R, 'Content-Type hors JPEG/PNG/WebP (415)', 415, q2, JPG, 'text/plain', extH(xa.jeton));
+            await jouerBinaire(V, R, 'image tronquée (422)', 422, q2, JPG.subarray(0, 60), 'image/jpeg', extH(xa.jeton));
+            const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);
+            await plafonner('banc-photo', 'compte', adm3.c._id, 600);
+            await jouerBinaire(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, q2, JPG, 'image/jpeg', extH(xa3.jeton));
+        }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
@@ -735,6 +799,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/compte/renvoyer-verification': { chemin: '/api/compte/renvoyer-verification', corps: { email: 'a@exemple.fr' } },
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
             'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'POST /api/banc/photo': { chemin: `/api/banc/photo?scanId=${fauxId}`, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },

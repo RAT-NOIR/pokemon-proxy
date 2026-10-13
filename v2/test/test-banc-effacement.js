@@ -18,7 +18,8 @@ const { compte } = require('./_aide-argent');
 // chargés APRÈS creerIndex (comme les bancs voisins) : ces modules tirent du code hérité qui crée ses propres index
 let Lg, Q;
 
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
+// OFFRE-QUOTA : « essais: 50 » (assez pour toutes les requêtes d'un scénario) devient un quota sans compte de 1000 par jour — le stock de départ du banc, comme les 50 essais d'avant
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000' });
 const ORIGINE = cfg.origines.extension;
 const BUCKET = 'bucket-banc-test', SEL = 'sel-de-banc-A';
 // Horloge du scénario : INJECTÉE et FIXÉE sur une HEURE choisie du jour UTC courant, jamais `new Date()` brut. Le jour reste celui d'aujourd'hui (le consentement du banc est daté de T0 et la

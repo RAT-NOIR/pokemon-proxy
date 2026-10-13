@@ -1804,6 +1804,165 @@
         }
       }
     },
+    "/api/banc/photo": {
+      "post": {
+        "operationId": "envoyerPhotoBanc",
+        "tags": [
+          "banc"
+        ],
+        "summary": "Administrateur seulement : envoie, en octets bruts, l'image que l'extension affiche pour un de SES scans (aucune requête serveur vers Vinted)",
+        "description": "Route réservée à un compte ADMINISTRATEUR (rôle relu en base). Le corps est BINAIRE (JPEG, PNG ou WebP tels que Vinted les sert), jamais du base64 ni du JSON. Ordre des gardes, tous jugés AVANT de lire un octet du corps : identité (401), rôle (tout autre porteur reçoit le 404 natif d'une route inexistante), plafond horaire par porteur (429), requête (`scanId` de 24 hexadécimaux, `photo` absent ou 0, aucun autre paramètre : 400), `Content-Type` (415), `Content-Length` entier, non nul, ≤ 2 Mio (400 / 413), scan de CE porteur (404 CODE_INVALIDE, jamais distingué d'un scan inconnu), photo déjà conservée (200 `deja`, rien lu), une place de lecture (4 au total, 1 par porteur : 429 DEBIT avec Retry-After), un délai de lecture de 15 s (connexion coupée). Puis le contenu : les octets doivent être ce que le Content-Type annonce (415), l'image doit se décoder (422 `illisible`), tenir en 12 millions de pixels et 4 096 px de côté (422 `dimensions`), être fixe (une animation est `illisible`) ; au plus 2 décodages simultanés dans le service (429 DEBIT). La photo est conservée comme le fait le serveur pour sa propre copie : WebP sans métadonnées, 1 600 px au plus, `sha256` sur l'analyse ; les cartes du scan qui attendaient leur photo (`banc: en-attente`) sortent de l'attente. Idempotente : la même photo pour le même scan rend `deja`, rien n'est réécrit. Aucune erreur ne débite ni ne rembourse rien. Sans photo reçue, le serveur télécharge la photo lui-même après un délai (15 s), espacé et plafonné. Les corps d'erreur sont l'enveloppe v2 (`ReponseErreur`), hors 404 natif.",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "query",
+            "required": true,
+            "description": "Le scan DE CE porteur (`scanId` de la réponse de `POST /api/identifier`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{24}$"
+            }
+          },
+          {
+            "name": "photo",
+            "in": "query",
+            "required": false,
+            "description": "L'index de la photo dans les `imageUrls` du scan. Seule la première (`0`, valeur par défaut) est gardée par le banc ; toute autre valeur est un 400.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`ecrit` : la photo est conservée (et, si des cartes l'attendaient, `banc` dit si leur ligne est écrite). `deja` : une photo existait pour ce scan, rien n'est lu ni réécrit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponsePhotoBanc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` : scan-id, photo, champ-inconnu, content-length).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "CODE_INVALIDE (corps JSON) : scan inconnu ou d'un autre porteur. Pour un porteur qui n'est pas administrateur : le 404 natif d'une route inexistante, corps NON JSON (hors ce schéma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMAGE (`detail` trop-lourde) : plus de 2 Mio annoncés ou reçus. Rendu avant toute lecture quand `Content-Length` l'annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "IMAGE (`detail` type) : `Content-Type` hors JPEG, PNG, WebP, ou octets qui ne sont pas ce qu'il annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMAGE (`detail` illisible ou dimensions) : image tronquée, corrompue, animée, de plus de 12 millions de pixels ou de 4 096 px de côté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plafond horaire du porteur, une photo déjà en cours d'envoi pour ce porteur, 4 lectures en cours dans le service, ou 2 décodages en cours (avec `reessayerDans`, en-tête `Retry-After` aussi). Rien n'est lu pour les trois premiers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : base ou bucket du banc injoignable (rien de conservé ; réessayer).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/banc/etiquette": {
       "post": {
         "operationId": "etiqueterBanc",
@@ -3575,6 +3734,39 @@
         ],
         "additionalProperties": false
       },
+      "Offre": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ]
+          },
+          "restant": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Analyses restantes aujourd'hui (jour de Paris), jamais négatif. `null` pour Pro : illimité, son plafond technique anti-abus ne se montre jamais."
+          },
+          "remiseAZero": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T00:00:00[+-]\\d{2}:\\d{2}$",
+            "description": "Le prochain minuit de Paris, ISO 8601 AVEC son décalage (+01:00 l'hiver, +02:00 l'été)."
+          }
+        },
+        "required": [
+          "nom",
+          "restant",
+          "remiseAZero"
+        ],
+        "additionalProperties": false,
+        "description": "L'offre du porteur et son quota quotidien (OFFRE-QUOTA). Une analyse RENDUE compte 1 (un lot : 1 par tranche de 10 cartes) ; un introuvable, une panne et un prix illisible définitif sont rendus au quota. Sans compte : 3 par jour ; compte gratuit (vérifié) : 10 ; Pro : illimité. Un compte non vérifié se voit `gratuit` avec `restant: 0`."
+      },
       "Solde": {
         "type": "object",
         "properties": {
@@ -3742,6 +3934,9 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
@@ -3750,7 +3945,8 @@
           "scanId",
           "analyse",
           "facturation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -3772,13 +3968,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
           "carte",
           "facturation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -3847,17 +4047,8 @@
           "solde": {
             "$ref": "#/components/schemas/Solde"
           },
-          "achat": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "url"
-            ],
-            "additionalProperties": false
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
@@ -4086,11 +4277,15 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -4368,13 +4563,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
           "compte",
           "jetonInstallation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -4396,13 +4595,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
-          "success"
+          "success",
+          "offre"
         ],
         "additionalProperties": false,
-        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true) et `solde`, une fois par scan."
+        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
       },
       "ReponsePing": {
         "type": "object",
@@ -4766,6 +4969,36 @@
           "scanId",
           "verdict",
           "rev"
+        ],
+        "additionalProperties": false
+      },
+      "ReponsePhotoBanc": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "etat": {
+            "enum": [
+              "ecrit",
+              "deja"
+            ]
+          },
+          "photo": {
+            "const": 0
+          },
+          "banc": {
+            "enum": [
+              "ecrit",
+              "en-attente"
+            ],
+            "description": "Présent seulement quand au moins une carte du scan attendait sa photo."
+          }
+        },
+        "required": [
+          "success",
+          "etat",
+          "photo"
         ],
         "additionalProperties": false
       },

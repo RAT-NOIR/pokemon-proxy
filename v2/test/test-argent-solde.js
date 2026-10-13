@@ -27,8 +27,9 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     const s3 = await S.solde(pn, cfg, t);
     H.v('compte NON vérifié : accueil 0, hebdo 0, achetés gardés', sous(s3, { total: 0, accueil: 0, hebdo: 0, achete: 0 }), { total: 4, accueil: 0, hebdo: 0, achete: 4 });
     // 5. total = somme des poches utilisables, réserves déjà retirées
+    // OFFRE-QUOTA : un débit prend une unité du quota DU JOUR ; les anciens soldes ne se débitent plus, le Solde les montre intacts (lecture seule) et l'offre dit ce qui reste.
     const pd = await compte({ solde: { accueil: 2, achete: 0 } }); await Lg.debiter(pd, { scanId: 'x', cleIdempotence: 'x1', maintenant: t }, cfg0);
-    H.v('après un débit, le total est en moins (2 → 1)', (await S.solde(pd, cfg0, t)).total, 1);
+    H.v('après un débit, le Solde ancien est INCHANGÉ (2, lecture seule) et l\'offre a perdu une unité (gratuit : 10 → 9)', [(await S.solde(pd, cfg0, t)).total, (await require('../argent/offre').offre(pd, cfg0, t)).restant], [2, 9]);
     // 6. abonnement
     const pa = await compte({ solde: { accueil: 0, achete: 0 }, abonnement: { actif: true, quotaMensuel: 100, moisCle: '2026-10', restant: 40, jusquAu: new Date('2027-01-01') } });
     const s6 = await S.solde(pa, cfg0, t);
@@ -159,26 +160,30 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
         H.v('9bis M-2 : raison hors liste ⇒ ligne omise et comptée (2 servies dont plafond-jour, 1 omise)', [rg.lignes.length, rg.omises, rg.lignes.map(l => l.facturation.raisonNonRembourse)], [2, 1, [null, 'plafond-jour']]);
     }
     // 10. debiterSupplement
-    const p10 = await compte({ solde: { accueil: 5, achete: 0 } });
+    // OFFRE-QUOTA : la « réserve » est le quota du jour. Un compte gratuit (10 par jour) dont 5 sont déjà prises : il en reste 5 (même arithmétique que les 5 crédits d'accueil d'avant).
+    const JOUR = '2026-10-08', cnt = async p => { const d = await db.col('quota_jour').findOne({ porteur: `${p.type}:${p.id}`, jour: JOUR }); return d ? d.count : null; };
+    const p10 = await compte({ solde: { accueil: 0, achete: 0 } });
+    await db.col('quota_jour').insertOne({ porteur: `compte:${p10.id}`, jour: JOUR, count: 5, expireLe: new Date('2026-12-01') });
     const d1 = await Lot.debiterSupplement(p10, { scanId: 'lot1', unites: 2, cleIdempotence: 'lotc1', maintenant: t }, cfg0);
-    H.v('supplément de 2 unités : ok, 2 crédits, solde 3', [d1.ok, d1.credits.length, (await lire(p10)).solde.accueil], [true, 2, 3]);
+    H.v('supplément de 2 unités : ok, 2 crédits, compteur du jour 7 (restant 3)', [d1.ok, d1.credits.length, await cnt(p10)], [true, 2, 7]);
     const d1b = await Lot.debiterSupplement(p10, { scanId: 'lot1', unites: 2, cleIdempotence: 'lotc1', maintenant: t }, cfg0);
-    H.v('   rejoué avec la même clé : aucun débit de plus', [d1b.ok, (await lire(p10)).solde.accueil, await db.col('mouvements').countDocuments({ compteId: p10.id, type: 'debit' })], [true, 3, 2]);
+    H.v('   rejoué avec la même clé : aucun débit de plus', [d1b.ok, await cnt(p10), await db.col('mouvements').countDocuments({ compteId: p10.id, type: 'debit' })], [true, 7, 2]);
     const d2 = await Lot.debiterSupplement(p10, { scanId: 'lot2', unites: 4, cleIdempotence: 'lotc2', maintenant: t }, cfg0);
-    H.v('   4 unités sur 3 crédits : tout ou rien, QUOTA', [d2.ok, d2.code, (await lire(p10)).solde.accueil], [false, 'QUOTA', 3]);
+    H.v('   4 unités sur 3 restantes : tout ou rien, QUOTA, le compteur revient à 7', [d2.ok, d2.code, await cnt(p10)], [false, 'QUOTA', 7]);
     H.v('   le journal garde les débits annulés ET leurs rendus : somme(delta) = -2', (await db.col('mouvements').aggregate([{ $match: { compteId: p10.id } }, { $group: { _id: null, s: { $sum: '$delta' } } }]).toArray())[0].s, -2);
     const d2b = await Lot.debiterSupplement(p10, { scanId: 'lot2', unites: 3, cleIdempotence: 'lotc2', maintenant: t }, cfg0);
-    H.v('   la même clé, rejouée après un échec, peut aboutir (un échec n\'est pas un succès)', [d2b.ok, (await lire(p10)).solde.accueil], [true, 0]);
-    // 10 bis. concurrence : 30 appels de 2 unités sur 25 crédits
-    const pk = await compte({ solde: { accueil: 25, achete: 0 } });
-    const res = await Promise.all(Array.from({ length: 30 }, (_, i) => Lot.debiterSupplement(pk, { scanId: `cc${i}`, unites: 2, cleIdempotence: `ccc${i}`, maintenant: t }, cfg0)));
-    const succes = res.filter(r => r.ok).length, finl = (await lire(pk)).solde.accueil;
-    H.v(`30 appels de 2 unités sur 25 crédits : ${succes} succès, au plus 12`, succes <= 12, true);
+    H.v('   la même clé, rejouée après un échec, peut aboutir (un échec n\'est pas un succès) : compteur 10', [d2b.ok, await cnt(p10)], [true, 10]);
+    // 10 bis. concurrence : 30 appels de 2 unités sur un quota de 25 (Pro, plafond technique 25 pour ce banc)
+    const cfg25 = lireConfig({ MONGODB_BASE: 'test_scratch', V2_QUOTA_PRO_PLAFOND: '25' });
+    const pk = await compte({ abonnement: { actif: true, quotaMensuel: 100, moisCle: '2026-10', restant: 100, jusquAu: new Date('2027-01-01') } });
+    const res = await Promise.all(Array.from({ length: 30 }, (_, i) => Lot.debiterSupplement(pk, { scanId: `cc${i}`, unites: 2, cleIdempotence: `ccc${i}`, maintenant: t }, cfg25)));
+    const succes = res.filter(r => r.ok).length, finl = await cnt(pk);
+    H.v(`30 appels de 2 unités sur 25 unités : ${succes} succès, au plus 12`, succes <= 12, true);
     H.v('   et au moins un (pas de livelock : sans file, 30 prennent chacun leur 1re unité et se rendent tout)', succes >= 1, true);
-    H.v(`   CONSERVATION : solde final ${finl} = 25 - 2 x ${succes}, jamais négatif`, [finl, finl >= 0], [25 - 2 * succes, true]);
-    H.v('   somme(delta des mouvements) = solde final - 25', (await db.col('mouvements').aggregate([{ $match: { compteId: pk.id } }, { $group: { _id: null, s: { $sum: '$delta' } } }]).toArray())[0].s, finl - 25);
+    H.v(`   CONSERVATION : compteur final ${finl} = 2 x ${succes}, jamais au-dessus de 25`, [finl, finl <= 25], [2 * succes, true]);
+    H.v('   somme(delta des mouvements) = -(compteur final)', (await db.col('mouvements').aggregate([{ $match: { compteId: pk.id } }, { $group: { _id: null, s: { $sum: '$delta' } } }]).toArray())[0].s, -finl);
     H.v('   les refus sont des QUOTA (dénominateur 30)', res.filter(r => !r.ok && r.code === 'QUOTA').length, 30 - succes);
-    let leve4 = null; try { await Lot.debiterSupplement(pk, { scanId: 'z', unites: 0.5, cleIdempotence: 'z', maintenant: t }, cfg0); } catch (e) { leve4 = e.message; }
+    let leve4 = null; try { await Lot.debiterSupplement(pk, { scanId: 'z', unites: 0.5, cleIdempotence: 'z', maintenant: t }, cfg25); } catch (e) { leve4 = e.message; }
     H.v('unités non entières : lève', typeof leve4, 'string');
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

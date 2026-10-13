@@ -225,6 +225,9 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'DELETE /api/banc/contributions': { auth: 'bearer', base: () => ({ jeton: 'jeton-de-banc-abcdefghij9999' }), nullables: [] },
         // ETIQUETAGE-A : réservée à l'administrateur (404 pour tout autre) — l'acteur est donc un compte ADMINISTRATEUR avec son installation liée, jamais une installation seule (elle ne verrait que des 404 : la validation ne serait jamais jouée)
         'POST /api/banc/etiquette': { auth: 'admin', base: () => ({ scanId: new mongoose.Types.ObjectId().toHexString(), verdict: 'corrige', idProduct: ID_A, rev: 1 }), nullables: [], idem: true },
+        // PHOTO-EXTENSION (recadrage) : réservée à l'administrateur, corps BINAIRE (une image) et paramètres dans l'URL : aucun champ texte à injecter (la cellule (a) est « sans objet », dite) ; (b), (c), (f) sont refusées
+        // par les gardes d'entrée communes avant la route ; (e) rejoue le scan de la victime avec un AUTRE administrateur (404)
+        'POST /api/banc/photo': { auth: 'admin', base: () => ({}), nullables: [] },
         'POST /api/scanner/analyses': { auth: 'session', multipart: true, idem: true, base: () => ({ source: 'camera' }), nullables: [] },
         'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` },
         // lot COLLECTION : le corps est un booléen (aucun champ texte à injecter : la cellule (a) est « sans objet », dite) ; le compte de l'acteur est vérifié ; la clé et le slug sont ceux d'une fiche plausible
@@ -471,6 +474,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         else if (r.cle === 'POST /api/retour-live') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, prixLive: 5 } }); attendu = [404]; }
         else if (r.cle === 'POST /api/banc/correction') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, idProduct: ID_A } }); attendu = [404]; }
         else if (r.cle === 'POST /api/banc/etiquette') { const ad = await acteur(cible); rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: ad.entetes, corps: { scanId: scanA, verdict: 'corrige', idProduct: ID_B, rev: 1 } }); attendu = [404]; }   // un AUTRE administrateur, le scan de la victime A
+        else if (r.cle === 'POST /api/banc/photo') { const ad = await acteur(cible); rep = await envoyer(V, { methode: 'POST', chemin: `${r.chemin}?scanId=${scanA}`, entetes: ad.entetes, brut: JPEG, type: 'image/jpeg' }); attendu = [404]; }   // un AUTRE administrateur, le scan de la victime A
         else if (r.cle === 'DELETE /api/banc/contributions') { rep = await envoyer(V, { methode: 'DELETE', chemin: r.chemin, entetes: extH(B.jeton), corps: { jeton: 'jeton-banc-autrui-abcdefghij34' } }); attendu = [200]; }
         else if (r.cle === 'DELETE /api/compte/installations/:id') { rep = await envoyer(V, { methode: 'DELETE', chemin: `/api/compte/installations/${CAinst.i._id}`, entetes: siteH(CB.cookie) }); attendu = [404]; }
         else if (r.cle === 'PUT /api/collection/sets/:slug/fiches/:cle') {
@@ -768,7 +772,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const entier = (c, ...cle) => cle.reduce((o, k) => o[k], c);
         // [lecture, défaut attendu, valeur mal formée, issue : 'leve' (la configuration est invalide : v2 répond 503, jamais mal configurée) | 'ignore' (retombe sur le défaut) | { ferme: prédicat }, base de l'essai]
         const T = {
-            V2_ORDRE_POCHES: [c => c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'], 'essai,gratuit', 'leve'],
+            V2_ORDRE_POCHES: [c => c.ordrePoches, ['jour'], 'essai,gratuit', 'leve'],      // OFFRE-QUOTA : la seule poche débitable est le quota du jour
+            V2_QUOTA_SANS_COMPTE: [c => c.quotas.sansCompte, 3, 'abc', 'leve'], V2_QUOTA_GRATUIT: [c => c.quotas.gratuit, 10, 'abc', 'leve'], V2_QUOTA_PRO_PLAFOND: [c => c.quotas.proPlafond, 200, 'abc', 'leve'],      // OFFRE-QUOTA : quotas quotidiens (3 / 10 / plafond technique Pro 200)
             MONGODB_BASE: [c => c.base, null, '   ', 'ignore', {}],
             RM_API_V2: [c => c.actif, false, 'true', 'ignore', {}],
             V2_SECRET_EMPREINTE: [c => c.empreinte.secret, null, 'trop-court', 'leve', {}],
@@ -796,7 +801,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
-            V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
+            V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
+            V2_PHOTO_ADMIN_DELAI_S: [c => c.photoAdmin.delaiS, 15, '301', 'leve'], V2_PHOTO_ADMIN_INTERVALLE_S: [c => c.photoAdmin.intervalleS, 10, '-1', 'leve'], V2_PHOTO_ADMIN_MAX_JOUR: [c => c.photoAdmin.maxJour, 400, '-1', 'leve']     // PHOTO-EXTENSION : le repli du téléchargement serveur (entiers, 0 à 3 600 et 0 à 100 000)
         };
         H.v('step 6 : chaque variable lue par v2/config.js a une ligne de la table (et réciproquement)', [noms.filter(n => !T[n]), Object.keys(T).filter(n => !noms.includes(n))], [[], []]);
         const echecs = [];

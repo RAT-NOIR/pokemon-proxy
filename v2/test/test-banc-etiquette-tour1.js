@@ -19,7 +19,7 @@ const registre = require('../registre');
 const X = require('../mesures/exporter-banc-admin');
 const fs = require('fs'), os = require('os'), path = require('path');
 
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_PHOTO_ADMIN_DELAI_S: '0', V2_PHOTO_ADMIN_INTERVALLE_S: '0', V2_PHOTO_ADMIN_MAX_JOUR: '100000' });   // PHOTO-EXTENSION : repli ni espacé ni plafonné dans ce banc
 const oid = () => new mongoose.Types.ObjectId();
 const BUCKET = 'bucket-banc-test', SEL = 'sel-tour1', ENV = { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL };
 const URL_PHOTO = 'https://images1.vinted.net/t/01_00000_abcdef/f800/1700000000.jpeg';

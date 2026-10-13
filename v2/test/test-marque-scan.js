@@ -21,14 +21,16 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
 async function jusqua(f, delaiMs = 10000) { const t0 = Date.now(); for (;;) { if (await f()) return true; if (Date.now() - t0 > delaiMs) return false; await attendre(20); } }
 const marques = () => db.col('scans_en_cours');
 const lireMarque = id => marques().findOne({ _id: id });
-const essais = async p => (await db.col('installations').findOne({ _id: p.id })).essais;
+const QJ = require('./_aide-quota');
+// OFFRE-QUOTA : les « essais » d'une installation sont ce qui lui reste aujourd'hui de son quota sans compte (3 par jour, jour de Paris) ; `achete` reste le solde ANCIEN, que plus rien ne débite.
+const essais = p => QJ.restantDe(p, cfg, new Date());
 const achete = async p => (await db.col('installations').findOne({ _id: p.id })).achete;
 const mouvements = p => db.col('mouvements').find(p.type === 'compte' ? { compteId: p.id } : { installationId: p.id }).sort({ _id: 1 }).toArray();
 const somme = async p => (await mouvements(p)).reduce((t, m) => t + m.delta, 0);
 const rembs = async p => (await mouvements(p)).filter(m => m.type === 'remboursement' && m.delta === 1).length;
 
 (async () => {
-    await H.ouvrirBac('test-marque-scan.js'); await M.creerIndex();
+    await H.ouvrirBac('test-marque-scan.js'); await M.creerIndex(); await QJ.eviterMinuit();
     const express = require('express');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret');
     const MS = (() => { try { return require('../argent/marque-scan'); } catch (e) { return { erreur: e }; } })();
@@ -87,11 +89,11 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
 
     // ═══════════ 3. un scan mort depuis plus de 15 min est rendu, sans plafond, motif arret-serveur
     {
-        const s = await scanMort({ unites: 3, essaisInit: 1, acheteInit: 4 });          // 1 essai + 2 achetés pris
+        const s = await scanMort({ unites: 3, acheteInit: 4 });          // 3 unités du quota du jour prises (le solde acheté ancien, 4, n'y est pour rien)
         const avant = [await essais(s.p), await achete(s.p)];
         const b = await MS.rattraper(sec);
         const m = await lireMarque(s.scanId);
-        H.v('3. lot de 3 unités mort : toutes rendues poche par poche (essai 1, acheté 4), somme des delta 0, 1 rendu au bilan', [avant, [await essais(s.p), await achete(s.p)], await somme(s.p), b.rendues], [[0, 2], [1, 4], 0, 1]);
+        H.v('3. lot de 3 unités mort : toutes rendues (restant 0 puis 3), le solde acheté ancien (4) jamais touché, somme des delta 0, 1 rendu au bilan', [avant, [await essais(s.p), await achete(s.p)], await somme(s.p), b.rendues], [[0, 4], [3, 4], 0, 1]);
         H.v('   marque rendu, motif de la trace arret-serveur, plafonds de pannes du porteur NON consommés (sansPlafond)', [m.etat, (await mouvements(s.p)).filter(x => x.type === 'remboursement').every(x => x.motif === 'arret-serveur'), (await db.col('plafonds').find({ porteur: `installation:${s.p.id}` }).toArray()).reduce((t, x) => t + x.count, 0)], ['rendu', true, 0]);
         H.vrai('   priseLe et closLe posées, expireLe ≤ 30 jours', m.priseLe instanceof Date && m.closLe instanceof Date && (m.expireLe - m.closLe) <= 30 * 86400e3);
     }
@@ -212,11 +214,11 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
     // un échec qui ne passera pas (la poche ne peut pas être rendue) : 'echec' listé, pas de boucle
     {
         const s = await scanMort({ essaisInit: 3 });
-        await db.col('installations').updateOne({ _id: s.p.id }, { $set: { essais: 99 } });   // essais au-dessus du plafond de la poche : rendrePoche refuse (« poche-introuvable »)
+        await db.col('quota_jour').deleteMany({ porteur: `installation:${s.p.id}` });   // le compteur du jour a disparu : rendrePoche refuse (« poche-introuvable »)
         const e0 = console.error; console.error = () => { };
         let b; try { b = await MS.rattraper(sec); } finally { console.error = e0; }
         const m = await lireMarque(s.scanId);
-        H.v('10b. rendu impossible (poche au plafond) : marque en echec (raison écrite), ligne de débit restituée, jamais de boucle (2e passe : 0 examen)', [m.etat, typeof m.issue, (await MS.rattraper(sec)).examinees], ['echec', 'string', 0]);
+        H.v('10b. rendu impossible (compteur du jour disparu) : marque en echec (raison écrite), ligne de débit restituée, jamais de boucle (2e passe : 0 examen)', [m.etat, typeof m.issue, (await MS.rattraper(sec)).examinees], ['echec', 'string', 0]);
         void b;
         // 10c. (mutant « enSuspens sans les echec ») : un echec est LISTÉ par la réconciliation et le verdict n'est pas propre — sans limite d'âge
         const rec = await R.reconcilier(s.p);
@@ -261,20 +263,20 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
 
     // ═══════════ 11c. un remboursement INTERROMPU par la mort de la passe (ou du scan) : le claim `rb|scanId` est là, les unités sont encore prises — la passe les REPREND (jamais « deja-rembourse » pris pour une preuve)
     {
-        const s = await scanMort({ unites: 3, essaisInit: 1, acheteInit: 4 });                // 1 essai + 2 achetés pris
+        const s = await scanMort({ unites: 3, acheteInit: 4 });                // 3 unités du quota du jour prises
         await db.col('mouvements').insertOne({ installationId: s.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: s.scanId, etat: 'rembourse', cleIdempotence: `rb|${s.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
         const b = await MS.rattraper(sec);
         const m = await lireMarque(s.scanId);
-        H.v('11c. claim rb|scanId orphelin (3 unités encore prises) : les 3 unités sont reprises une à une — essai 1, acheté 4, 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [[await essais(s.p), await achete(s.p)], await rembs(s.p), await somme(s.p), m.etat, m.issue, b.reprises], [[1, 4], 3, 0, 'rendu', 'repris', 3]);
+        H.v('11c. claim rb|scanId orphelin (3 unités encore prises) : les 3 unités sont reprises une à une — restant 3, acheté ancien 4, 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [[await essais(s.p), await achete(s.p)], await rembs(s.p), await somme(s.p), m.etat, m.issue, b.reprises], [[3, 4], 3, 0, 'rendu', 'repris', 3]);
         const b2 = await MS.rattraper(sec);
-        H.v('   jouée de nouveau : rien de plus (chaque unité ne se rend qu\'une fois)', [b2.examinees, await rembs(s.p), await essais(s.p)], [0, 3, 1]);
+        H.v('   jouée de nouveau : rien de plus (chaque unité ne se rend qu\'une fois)', [b2.examinees, await rembs(s.p), await essais(s.p)], [0, 3, 3]);
         // reprise PARTIELLE : une unité déjà rendue par le scan avant sa mort, deux encore prises
-        const t = await scanMort({ unites: 3, essaisInit: 1, acheteInit: 4 });
+        const t = await scanMort({ unites: 3, acheteInit: 4 });
         await db.col('mouvements').insertOne({ installationId: t.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: t.scanId, etat: 'rembourse', cleIdempotence: `rb|${t.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
         const premiere = (await db.col('mouvements').find({ installationId: t.p.id, type: 'debit', scanId: t.scanId }).sort({ _id: 1 }).toArray())[0];
         const une = await argent.rembourserLigne(t.p, premiere.cleIdempotence, 'arret-serveur');
         const b3 = await MS.rattraper(sec);
-        H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [1, 4], 0]);
+        H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [3, 4], 0]);
     }
 
     // 11c bis. m3 — une unité rendue ENTRE la lecture et la reprise (par le scan lui-même) répond `deja-rembourse` à la reprise : c'est une unité rendue, pas un échec
@@ -336,7 +338,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const sup = await argent.debiterSupplement(p, { scanId, unites: 3, cleIdempotence: `${cleDebit}|supplement` });       // plus d'unités que le solde : tout ou rien, la 1re est ANNULÉE
         const r0 = await argent.rembourser(p, { poche: 'essai' }, 'lot-trop-grand', { scanId, compteur: 'panne', sansPlafond: true });
         const b2 = await MS.rattraper(sec); const m2 = await lireMarque(scanId);
-        H.v('   contrôle : supplément annulé + remboursement propre du scan, puis passe : « rendu/deja-rembourse », pas de fausse alerte (essais 1, acheté 1)', [sup.ok, r0.rendu, m2.etat, m2.issue, b2.echecs, await essais(p), await achete(p)], [false, true, 'rendu', 'deja-rembourse', 0, 1, 1]);
+        H.v('   contrôle : supplément annulé + remboursement propre du scan, puis passe : « rendu/deja-rembourse », pas de fausse alerte (restant 3, acheté ancien 1)', [sup.ok, r0.rendu, m2.etat, m2.issue, b2.echecs, await essais(p), await achete(p)], [false, true, 'rendu', 'deja-rembourse', 0, 3, 1]);
     }
 
     // ═══════════ 11g. la suppression d'un compte purge ses marques ; celles d'une installation (qui survit) et d'un autre compte restent
@@ -399,7 +401,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.v('   claim d\'idempotence expiré, même clé : DEBIT « en cours » (429), ni lecture gratuite ni 2e débit ; la marque ouverte avant ce débit est RETIRÉE (1 marque au total)', [rej2.statut, rej2.json.erreur.code, (await mouvements(x.p)).filter(m => m.type === 'debit').length, await marques().countDocuments({ 'porteur.id': x.i._id })], [429, 'DEBIT', 1, 1]);
     }
     {
-        const q = await instJ({ essais: 0, achete: 0 });
+        const q = await instJ({ essais: 0, achete: 0 }); await QJ.poserRestant(`installation:${q.i._id}`, 0, { limite: 3 });      // OFFRE-QUOTA : les 3 analyses du jour sont déjà prises
         const r = await poster(sv.url, q.jeton);
         await attendre(100);
         H.v('13. débit refusé (QUOTA) : 429, aucune marque ne survit (rien n\'a été pris), aucun mouvement', [r.statut, r.json.erreur.code, await marques().countDocuments({ 'porteur.id': q.i._id }), (await mouvements(q.p)).length], [429, 'QUOTA', 0, 0]);
@@ -428,7 +430,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         await attendre(150);
         const ms = await marques().find({ 'porteur.id': x.i._id }).toArray();
         H.v('15. lot de 25 (3 unités : initiale + supplément) : UNE marque pour le scan entier, close livre', [r.statut, ms.length, ms[0] && ms[0].etat, (await mouvements(x.p)).filter(m => m.type === 'debit').length], [200, 1, 'livre', 3]);
-        const y = await instJ({ essais: 1, achete: 0 });
+        const y = await instJ({ essais: 1, achete: 0 }); await QJ.poserRestant(`installation:${y.i._id}`, 1, { limite: 3 });      // OFFRE-QUOTA : une seule analyse devant lui
         const r2 = await poster(svLot.url, y.jeton);
         await attendre(150);
         H.v('   lot trop grand pour le solde (QUOTA lot-trop-grand, crédit initial rendu par la route) : marque close livre, la passe ne rend rien de plus', [r2.statut, (await marques().findOne({ 'porteur.id': y.i._id })).etat, await essais(y.p)], [429, 'livre', 1]);

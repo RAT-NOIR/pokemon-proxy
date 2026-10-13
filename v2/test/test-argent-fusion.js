@@ -59,12 +59,14 @@ const wallet = async (userId, o = {}) => { await db.col('credits').insertOne({ u
     // 5. rattachement des achats par l'adresse Stripe
     await wallet('uS160', { soldeScans: 160, email: 'Acheteur.Un+stripe@Gmail.com' });
     const pv = await compte({ solde: { accueil: 25, achete: 0 }, email: 'acheteurun@gmail.com', emailCle: 'acheteurun@gmail.com' });
+    // OFFRE-QUOTA (2026-10-13) : le grand livre des achats est en LECTURE SEULE — rattacher les achats de l'ancien portefeuille créditerait la poche `achete` : REFUSÉ, journalisé, aucune écriture.
+    const mv5 = await nMv();
     const a1 = await He.rattacherAchats({ compteId: pv.id }, cfg, { emailCle });
-    H.v('compte vérifié, même adresse (après emailCle) : 160 rattachés', [a1.ok, a1.total, (await lire(pv)).solde.achete, (await db.col('credits').findOne({ userId: 'uS160' })).soldeScans], [true, 160, 160, 0]);
-    H.v('   achatsMigresVers posé, mouvement migration +160 à clé migration-stripe|<empreinte>', [String((await db.col('credits').findOne({ userId: 'uS160' })).achatsMigresVers) === String(pv.id),
-        (await db.col('mouvements').findOne({ cleIdempotence: `migration-stripe|${sha('uS160')}` }))?.delta], [true, 160]);
+    H.v('compte vérifié, même adresse (après emailCle) : rattachement REFUSÉ (vente-arretee), ni le compte (0) ni le portefeuille ancien (160) ne bougent', [a1.ok, a1.raison, a1.total, (await lire(pv)).solde.achete, (await db.col('credits').findOne({ userId: 'uS160' })).soldeScans], [false, 'vente-arretee', 0, 0, 160]);
+    H.v('   achatsMigresVers NON posé, aucun mouvement migration-stripe, aucun mouvement du tout', [(await db.col('credits').findOne({ userId: 'uS160' })).achatsMigresVers === undefined,
+        await db.col('mouvements').countDocuments({ cleIdempotence: `migration-stripe|${sha('uS160')}` }), await nMv() - mv5], [true, 0, 0]);
     const a2 = await He.rattacherAchats({ compteId: pv.id }, cfg, { emailCle });
-    H.v('   rejoué : rien (160 reste 160)', [a2.total, (await lire(pv)).solde.achete], [0, 160]);
+    H.v('   rejoué : refusé encore, rien ne bouge (160 reste 160 sur l\'ancien, 0 sur le compte)', [a2.total, (await lire(pv)).solde.achete, (await db.col('credits').findOne({ userId: 'uS160' })).soldeScans], [0, 0, 160]);
     await wallet('uNV', { soldeScans: 30, email: 'nonverifie@exemple.fr' });
     const pnv = await compte({ verifie: false, email: 'nonverifie@exemple.fr', emailCle: 'nonverifie@exemple.fr' });
     H.v('compte NON vérifié : rien, le portefeuille ancien intact', [(await He.rattacherAchats({ compteId: pnv.id }, cfg, { emailCle })).total, (await db.col('credits').findOne({ userId: 'uNV' })).soldeScans, (await lire(pnv)).solde.achete], [0, 30, 0]);
@@ -78,7 +80,7 @@ const wallet = async (userId, o = {}) => { await db.col('credits').insertOne({ u
     await wallet('uCourseA', { soldeScans: 40, email: 'course@exemple.fr' });
     const pco = await compte({ email: 'course@exemple.fr', emailCle: 'course@exemple.fr' });
     await Promise.all(Array.from({ length: 10 }, () => He.rattacherAchats({ compteId: pco.id }, cfg, { emailCle })));
-    H.v('10 rattachements simultanés : 40 crédités une seule fois', (await lire(pco)).solde.achete, 40);
+    H.v('10 rattachements simultanés : tous refusés, 0 crédité, 40 intacts sur l\'ancien portefeuille', [(await lire(pco)).solde.achete, (await db.col('credits').findOne({ userId: 'uCourseA' })).soldeScans], [0, 40]);
     // 7. le portefeuille à 160 d'une copie fabriquée : 160 sur le compte, 0 sur l'ancien (c'est (5) ; ici par le script de rejeu sur une SAUVEGARDE)
     const docs = [{ userId: 'bk1', soldeGratuit: 12, soldeScans: 160, email: 'bk.un@exemple.fr' }, { userId: 'bk2', soldeGratuit: 400, soldeScans: 0, email: null }, { userId: 'bk3', soldeGratuit: 0, soldeScans: 20, email: 'sans.compte@exemple.fr' }];
     const fich = path.join(os.tmpdir(), `credits-fabriques-${Date.now()}.json`); fs.writeFileSync(fich, EJSON.stringify(docs, { relaxed: true }));

@@ -43,9 +43,10 @@ function routesLiaison(router, cfg, deps) {
             const r = await liaison.lier({ installation: inst, code: req.body && req.body.code, argent });
             if (!r.ok) return repondreErreur(res, r.code, nom[r.code]);
             const apres = await col('installations').findOne({ _id: inst._id });
-            const solde = await argent.solde({ type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' });
+            const porteurLie = { type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' };
+            const solde = await argent.solde(porteurLie), offre = await argent.offre(porteurLie);      // OFFRE-QUOTA : l'offre du COMPTE lié (gratuit, ou pro), relue en base
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde });
+            return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde, offre });
         } catch (e) { console.error(`❌ [v2 lier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
     router.post('/api/compte/delier', ...base, async (req, res) => {
@@ -54,9 +55,10 @@ function routesLiaison(router, cfg, deps) {
             const inst = req.v2.porteur.installation;
             await liaison.delier(inst);
             const apres = await col('installations').findOne({ _id: inst._id });
-            const solde = await argent.solde({ type: 'installation', id: apres._id, compte: null, installation: apres, surface: 'extension', administrateur: false });
+            const porteurSeul = { type: 'installation', id: apres._id, compte: null, installation: apres, surface: 'extension', administrateur: false };
+            const solde = await argent.solde(porteurSeul), offre = await argent.offre(porteurSeul);      // OFFRE-QUOTA : déliée, l'installation redevient « sans-compte »
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, solde });
+            return res.status(200).json({ success: true, solde, offre });
         } catch (e) { console.error(`❌ [v2 delier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
 }

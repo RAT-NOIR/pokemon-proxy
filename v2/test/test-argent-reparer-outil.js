@@ -15,8 +15,11 @@ const muet = async f => { const e0 = console.error; console.error = () => { }; t
     const base = [`--base=test_scratch`, `--prefixe=${prefixe}`];
     const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'reparer-banc-'));
     const p = await inst({ essais: 3 }); await db.col('installations').updateOne({ _id: p.id }, { $set: { essaisInitiaux: 3 } });
-    const scanId = new ObjectId(); await Lg.debiter(p, { scanId, cleIdempotence: 'k-outil', maintenant: t }, cfg);
-    await db.col('mouvements').updateOne({ scanId, type: 'debit' }, { $set: { etat: 'rembourse' } });                // l'ancien état : « rembourse », ni crédit ni trace
+    // OFFRE-QUOTA (2026-10-13) : l'« ancien état » (« rembourse », ni crédit ni trace, jugé par l'écart de poche) n'existe que pour les ANCIENNES poches : le débit est fabriqué sur la poche `essai`
+    // comme le grand livre d'avant la bascule l'écrivait (l'outil sait toujours le réparer ; le quota du jour a le protocole actuel, voir test-argent-tour1.js à tour4.js).
+    const scanId = new ObjectId();
+    await db.col('installations').updateOne({ _id: p.id }, { $inc: { essais: -1 } });
+    await db.col('mouvements').insertOne({ installationId: p.id, le: t, surface: 'extension', type: 'debit', delta: -1, poche: 'essai', credit: { poche: 'essai' }, motif: null, scanId, etat: 'rembourse', cleIdempotence: 'k-outil', expireLe: new Date('2028-01-01') });
     const args = [...base, `--porteur=installation:${p.id}`, `--scan=${scanId}`];
     const etat = async () => [(await lire(p)).essais, await db.col('mouvements').countDocuments({ scanId, type: 'remboursement', delta: 1 })];
 

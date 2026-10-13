@@ -11,10 +11,13 @@ const lire = p => db.col('comptes').findOne({ _id: p.id });
 (async () => {
     await H.ouvrirBac('test-argent-course-rejeu.js'); await M.creerIndex();
     const t = new Date('2026-10-10T10:00:00Z');
-    const p = await compte({ solde: { accueil: 0, achete: 1 } });
+    // OFFRE-QUOTA : « la dernière poche » est la DERNIÈRE unité du quota du jour (compte gratuit : 10, dont 9 déjà prises)
+    const p = await compte();
+    const cnt = async () => (await db.col('quota_jour').findOne({ porteur: `compte:${p.id}`, jour: '2026-10-10' })).count;
+    await db.col('quota_jour').insertOne({ porteur: `compte:${p.id}`, jour: '2026-10-10', count: 9, expireLe: new Date('2026-12-01') });
     const x1 = await Lg.debiter(p, { scanId: 'cr', cleIdempotence: 'cle-cr', maintenant: t }, cfg);
     await Lg.rembourser(p, x1.credit, 'ia-echec', { scanId: 'cr', maintenant: t }, cfg);
-    H.v('départ : débit remboursé, une seule poche en base', (await lire(p)).solde.achete, 1);
+    H.v('départ : débit remboursé, une seule unité devant soi (compteur 9 sur 10)', await cnt(), 9);
     // le crochet : la 1re insertion d'un mouvement « retry » est retenue jusqu'à la 1re lecture de cette clé par un AUTRE appel
     const colReel = db.col; let retenue = false, lectures = 0, ouvrir; const porte = new Promise(r => { ouvrir = r; });
     db.col = nom => {
@@ -29,6 +32,6 @@ const lire = p => db.col('comptes').findOne({ _id: p.id });
     H.v('le crochet a bien ordonné la course (insertion retenue, perdant a lu la clé), dénominateur 2', [retenue, lectures >= 1, rs.length], [true, true, 2]);
     H.v('2 rejeux simultanés, dernière poche : les 2 ok (dénominateur 2)', rs.map(r => r.ok), [true, true]);
     H.v('   exactement UN nouveau débit (reessaye) et UN rejeu', [rs.filter(r => r.reessaye).length, rs.filter(r => r.rejoue).length], [1, 1]);
-    H.v('   solde 0 (ni poche en trop ni rendue en trop), un seul débit « debite »', [(await lire(p)).solde.achete, await db.col('mouvements').countDocuments({ compteId: p.id, type: 'debit', etat: 'debite' })], [0, 1]);
+    H.v('   compteur 10 (ni unité en trop ni rendue en trop), un seul débit « debite »', [await cnt(), await db.col('mouvements').countDocuments({ compteId: p.id, type: 'debit', etat: 'debite' })], [10, 1]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error(e); process.exit(1); });

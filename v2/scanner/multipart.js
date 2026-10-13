@@ -144,4 +144,4 @@ async function lireMultipart(req, { octetsMax = lireConfig().images.scannerOctet
     return { champs: { source }, image: { buffer: Buffer.from(img), type } };
 }
 
-module.exports = { lireMultipart, SOURCES, ErreurMultipart, PARTIES_MAX, MARGE_ENTETES_OCTETS, DELAI_LECTURE_MS };
+module.exports = { lireMultipart, typeDesOctets, SOURCES, ErreurMultipart, PARTIES_MAX, MARGE_ENTETES_OCTETS, DELAI_LECTURE_MS };

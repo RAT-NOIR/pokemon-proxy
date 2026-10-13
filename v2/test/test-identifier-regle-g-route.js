@@ -8,7 +8,7 @@
 const H = require('./_harnais');
 const fs = require('fs'), path = require('path');
 const mongoose = require('mongoose');
-const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const QA = require('./_aide-quota');
 const { lireConfig } = require('../config');
 const { choixPour } = require('../choix');
 const G = require('../../ratmarket/decision-g');
@@ -32,7 +32,8 @@ async function inst(essais = 3) {
 async function poster(url, jeton) {
     return H.appel(url, '/api/identifier', { methode: 'POST', corps: corps(), entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': cle() } });
 }
-const essaisDe = async id => (await raw('installations').findOne({ _id: id })).essais;
+// OFFRE-QUOTA : « essai » = ce qui reste aujourd'hui au porteur (3 par jour sans compte), relu par la fonction même des routes.
+const essaisDe = id => QA.restantDe({ type: 'installation', id }, cfgOff);
 const mouvements = id => raw('mouvements').find({ installationId: id }).toArray();
 const ID_A = 895789, ID_B = 895790, EXP = 990001;
 const semerProduit = async id => {
@@ -72,6 +73,7 @@ function chargerFixtures() {
     console.log(`   fixtures : ${fx.n} lignes jouées avant de trouver un affirmé (produit ${P}) et une question (candidats ${JSON.stringify(Q)})`);
 
     await H.ouvrirBancV2();
+    await QA.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-identifier-regle-g-route.js', ecrit: true });

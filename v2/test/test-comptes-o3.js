@@ -290,7 +290,7 @@ const HEURE = 3600e3;
         await ins('cible-fuite@exemple.fr'); await verif(jetonDe(courrier.envoyes[0]), 'mot-de-passe-de-l-attaquant');
         const cx = await conn('cible-fuite@exemple.fr', 'mot-de-passe-de-l-attaquant');
         // le tiers, connecté, s'installe : un code de liaison, une installation LIÉE, un second code laissé vivant
-        A.registre.fournir('argent', { solde: async () => ({}), fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele([]) });   // forme RÉELLE exigée (tour 2, I-B)
+        A.registre.fournir('argent', { solde: async () => ({}), offre: p => require('../argent/offre').offre(p, cfg), fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele([]) });   // forme RÉELLE exigée (tour 2, I-B) ; OFFRE-QUOTA : la vraie fonction d'offre
         const ckT = `rm_session=${/rm_session=([^;]+)/.exec(cx.entetes['set-cookie'])[1]}`, cible = await compteDe('cible-fuite@exemple.fr');
         const code = () => H.appel(srv.url, '/api/compte/code', { methode: 'POST', corps: {}, entetes: { ...A.SITE, ...A.ip(++n), cookie: ckT } });
         const c1 = await code(), c2 = await code();
