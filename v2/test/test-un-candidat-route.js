@@ -558,9 +558,14 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         // Mineur : une claim rb|scanId orpheline n'est jamais reprise par le ledger (aucun mécanisme existant) : elle est LISTÉE avec son âge
         {
             const L = await lance([ID_A, ID_B]);
-            await raw('mouvements').insertOne({ installationId: L.i._id, le: plus(-40 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-orpheline', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}` });
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: plus(-90 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-orpheline', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}` });
             const rc = await reconcilier(porteurDe(L), { cfg: cfgY });
-            H.v('16d. une claim rb|scanId sans aucune unité rendue depuis 40 min : listée avec son âge, propre = false', [(rc.claimsOrphelines || []).map(c => [String(c.scanId), c.ageMinutes >= 39]), rc.propre], [[[String(sid(L)), true]], false]);
+            H.v('16d. une claim rb|scanId sans aucune unité rendue depuis 90 min : listée avec son âge, propre = false', [(rc.claimsOrphelines || []).map(c => [String(c.scanId), c.ageMinutes >= 89]), rc.propre], [[[String(sid(L)), true]], false]);
+            // TOUR 1 : le seuil des orphelines est SA variable (minimum 60 min) : une valeur basse de la reprise des « en-reglement » ne fait plus lister une claim vivante
+            const cfgBas = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REGLEMENT_REPRISE_MIN: '1' });
+            const L3 = await lance([ID_A, ID_B]);
+            await raw('mouvements').insertOne({ installationId: L3.i._id, le: plus(-40 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-40', scanId: sid(L3), etat: 'rembourse', cleIdempotence: `rb|${L3.j.scanId}` });
+            H.v('   TOUR 1 : une claim de 40 min n\'est PAS listée, même si la reprise des « en-reglement » est réglée à 1 minute (seuil des orphelines : ≥ 60 min, sa propre variable)', ((await reconcilier(porteurDe(L3), { cfg: cfgBas })).claimsOrphelines || []).length, 0);
             const L2 = await lance([ID_A, ID_B]);
             await raw('mouvements').insertOne({ installationId: L2.i._id, le: plus(-2 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-vivante', scanId: sid(L2), etat: 'rembourse', cleIdempotence: `rb|${L2.j.scanId}` });
             H.v('   une claim de 2 minutes (remboursement vivant) n\'est PAS listée', ((await reconcilier(porteurDe(L2), { cfg: cfgY })).claimsOrphelines || []).length, 0);
@@ -610,6 +615,77 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             H.v('16g. la 1re réponse date de 30 min, la DERNIÈRE de maintenant : le jugement immédiat peut encore avoir lieu, le lot n\'est pas listé',
                 (await reconcilier(porteurDe(L), { cfg: cfgY })).lotsNonJuges.length, 0);
             H.v('   20 minutes après la dernière réponse, il est listé', (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).lotsNonJuges.length, 1);
+        }
+        // ── TOUR 1 (relecture 1)
+        const propo = (x, f) => raw('plafonds').updateOne({ porteur: `installation:${x.i._id}`, jour: jourJ, type: 'panne' }, { $set: { count: f, expireLe: plus(3 * 86400e3) } }, { upsert: true });
+        // S1 : arrêt du processus ENTRE deux unités d'un grand lot — la claim reste `rb|scan` (delta 1), jamais renommée « …|fait|… »
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
+            const colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            try { for (const c of L.cartes) await repI(L, c.index, 'aucune'); } finally { armee = false; db.col = colOrig; }
+            H.v('17a. arrêt entre deux unités : 1 unité rendue, la claim reste rb|scan (delta 1), jamais « fait »',
+                [await unitesRendues(L), await raw('mouvements').countDocuments({ cleIdempotence: `rb|${L.j.scanId}`, delta: 1 }), await raw('mouvements').countDocuments({ cleIdempotence: { $regex: '\\|fait\\|' }, scanId: sid(L) })], [1, 1, 0]);
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            await balayer(plus(5 * 60e3));
+            H.v('   avant le délai de reprise (5 min), le balayage ne touche pas à la claim : toujours 1 unité', await unitesRendues(L), 1);
+            await balayer(plus(20 * 60e3));
+            H.v('   au-delà du délai, le balayage CONTINUE le remboursement : 2 unités rendues (une par unité), net 0, lotIssue rendu, propre', [await unitesRendues(L), (await livre(L)).net, await lignesQ(L, { 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).propre], [2, 0, 11, true]);
+            H.v('   le plafond de pannes n\'a pas été recompté (toujours 5)', await compteurDe(L, 'panne'), 5);
+        }
+        // S3 : « rendu » se juge sur les MOUVEMENTS — le perdant d'une course qui rejoue le NON pendant que le crédit du gagnant échoue
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            const d = await debitsDe(L); await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { credit: { poche: 'accueil' } } });          // le crédit du gagnant ÉCHOUERA
+            const colOrig = db.col; let entre; const dedans = new Promise(fin => { entre = fin; });
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'comptes') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (...a) => { entre(); await new Promise(fin => setTimeout(fin, 400)); return t.updateOne(...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let gagnant, perdant;
+            try { const pg = repI(L, L.cartes[1].index, 'aucune'); await dedans; perdant = await repI(L, L.cartes[0].index, 'aucune'); gagnant = await pg; } finally { db.col = colOrig; }
+            H.v('17b. le crédit du gagnant échoue pendant que le perdant rejoue : jamais « rendu » à tort — ni lotIssue rendu, ni rembourse: true, argent intact (net -1)',
+                [perdant.json.facturation.rembourse, gagnant.json.facturation.rembourse, await lignesQ(L, { 'lotIssue.rendu': true }), (await livre(L)).net, (await livre(L)).remboursements], [false, false, 0, -1, 0]);
+            const rc = await reconcilier(porteurDe(L), { cfg: cfgY });
+            H.v('   le lot est LISTÉ « à rendre », propre = false', [rc.lotsARendre.length, rc.propre], [1, false]);
+        }
+        // un débit « rembourse » SANS mouvement correspondant est AMBIGU : listé (catégorie nommée), jamais libéré
+        {
+            const L = await lance([ID_A, ID_B]); const d = await debitsDe(L);
+            await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rembourse' } });
+            H.v('17c. débit « rembourse » sans mouvement : pas listé tant qu\'il est récent (un rendu vivant), listé ensuite avec son âge, propre = false',
+                [((await reconcilier(porteurDe(L), { cfg: cfgY })).debitsRembourseSansMouvement || []).length, ((await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) })).debitsRembourseSansMouvement || []).map(x => [String(x.scanId), x.debits, x.mouvements]), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) })).propre],
+                [0, [[String(sid(L)), 1, 0]], false]);
+        }
+        // M5 / M5b : la dispense du plafond ne vaut que pour une claim « …|fait|… » DE CE SCAN
+        {
+            const x = await inst(20); await propo({ i: x.i }, 5);
+            const autre = new mongoose.Types.ObjectId();
+            await raw('mouvements').insertOne({ installationId: x.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-autre-scan', scanId: autre, etat: 'rembourse', cleIdempotence: `rb|${autre}|fait|x` });
+            const L = await lance([ID_A, ID_B], x); await repI(L, L.cartes[0].index, 'aucune'); const r = await repI(L, L.cartes[1].index, 'aucune');
+            H.v('17d. une claim « fait » d\'un AUTRE scan ne dispense pas du plafond : plafond atteint, refus définitif et dit', [r.json.facturation.rembourse, r.json.facturation.motif, await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'panne')], [false, 'plafond-jour', 2, 5]);
+            const y = await inst(20); await propo({ i: y.i }, 5);
+            const L2 = await lance([ID_A, ID_B], y);
+            await raw('mouvements').insertOne({ installationId: y.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-sans-fait', scanId: sid(L2), etat: 'rembourse', cleIdempotence: `rb|${L2.j.scanId}|autre` });
+            await repI(L2, L2.cartes[0].index, 'aucune'); const r2 = await repI(L2, L2.cartes[1].index, 'aucune');
+            H.v('   une claim de ce scan SANS « fait » ne dispense pas non plus : refus définitif et dit', [r2.json.facturation.rembourse, r2.json.facturation.motif, await lignesQ(L2, { 'lotIssue.raison': 'plafond-jour' })], [false, 'plafond-jour', 2]);
+        }
+        // un scan à `cleOrigine` (nouvelle tentative après remboursement) : la clé de la claim change après un partiel — la reprise ne recompte pas le plafond
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
+            const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
+            for (const c of L.cartes) await repI(L, c.index, 'aucune');
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            await balayer();
+            H.v('17e. scan à cleOrigine, partiel puis reprise : 2 unités rendues, net 0, plafond compté UNE fois (5), jamais plafond-jour', [await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' })], [2, 0, 5, 0]);
+        }
+        // M3 : la reprise d'un « en-reglement » qui ÉCHOUE rafraîchit priseLe — jamais deux essais dans le même passage, ni au passage suivant avant le délai
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            await raw('questions_v2').updateOne({ _id: `${L.j.scanId}:${L.cartes[1].index}` }, { $set: { etat: 'en-reglement', priseLe: plus(-40 * 60e3), reponse: { choix: 'aucune', idProduct: null, aucune: true, le: plus(-40 * 60e3) } } });
+            const colOrig = db.col; let essais = 0;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'findOneAndUpdate') return async (f, ...a) => { if (f && f._id && f.etat === 'en-reglement') { essais++; throw new Error('panne simulée'); } return t.findOneAndUpdate(f, ...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let b1, b2; try { b1 = await balayer(); b2 = await balayer(plus(60e3)); } finally { db.col = colOrig; }
+            H.v('17f. un règlement repris qui échoue : UN essai (pas deux dans le même passage, pas de re-essai une minute après), compté en échec', [essais, b1.lotsReglementsEnEchec, b2.lotsReglementsEnEchec, b1.bloquees], [1, 1, 0, 0]);
         }
         await svT.fermer();
     }

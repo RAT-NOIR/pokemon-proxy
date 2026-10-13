@@ -187,7 +187,10 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         if (pendantes[0].cleOrigine) cle = `rb|${scanId}|${pendantes[0]._id}`;
         // UN-CANDIDAT-2 : la REPRISE d'un remboursement déjà commencé (une claim `…|fait|…` existe pour ce scan : un partiel antérieur a rendu des unités et compté la panne) ne recompte JAMAIS le plafond —
         // sinon un partiel repris près du plafond devenait un « plafond-jour » définitif, après que le client avait été rendu en partie. Le plafond a été compté une fois, à la première tentative.
-        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(m => typeof m.cleIdempotence === 'string' && m.cleIdempotence.startsWith(`${cle}|fait|`))) sansPlafond = true;
+        // TOUR 1 : pour un scan à `cleOrigine`, la clé de la claim porte l'id de la 1re unité OUVERTE et change après un partiel (cette unité n'est plus ouverte) : la claim « fait » de CETTE tentative se retrouve
+        // par les ids des débits du même groupe (même `cleOrigine`), jamais par le préfixe de la clé courante seule. Une claim d'un autre scan, d'un autre groupe ou sans « fait » ne dispense de rien.
+        const groupe = pendantes[0].cleOrigine ? debits.filter(d => d.cleOrigine === pendantes[0].cleOrigine).map(d => `rb|${scanId}|${d._id}|fait|`) : [`rb|${scanId}|fait|`];
+        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(m => typeof m.cleIdempotence === 'string' && groupe.some(p => m.cleIdempotence.startsWith(p)))) sansPlafond = true;
         // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
         // `sans-prix` est du côté des QUESTIONS (comme avant le lot PLAFONDS) : il rembourse justement une carte tranchée par une réponse, dont le prix est illisible
         if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions_v2').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
