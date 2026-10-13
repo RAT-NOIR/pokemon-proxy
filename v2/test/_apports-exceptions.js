@@ -31,7 +31,8 @@ const LECTURE_SEULE = {
 // ce fichier seulement, les dossiers dont le nom commence par ce préfixe et ce qu'ils contiennent, dans le dossier parent du temporaire seulement ; ni un dossier existant, ni un dossier d'apports, ni une clé large.
 const VOISINS_DU_TEMP = { 'test-retirer-worktree.js': ['rm-retrait-horstemp-'] };
 // Idem : l'outil de retrait cherche git en LISTANT %LOCALAPPDATA%\GitHubDesktop (app-*). Ouverture en LECTURE SEULE de ce seul dossier, pour ce fichier seulement (jamais une écriture, jamais le dossier parent).
-const LECTURES_LOCALAPPDATA = { 'test-retirer-worktree.js': ['GitHubDesktop'] };
+// COPIE-SITE-2 : l'outil de copie lit les sources du site au commit nommé (`git show`) et cherche git de la même façon ; les deux bancs qui l'appellent ont la même ouverture, en lecture seule.
+const LECTURES_LOCALAPPDATA = { 'test-retirer-worktree.js': ['GitHubDesktop'], 'test-chargeur-regle-site.js': ['GitHubDesktop'], 'test-chargeur-deck.js': ['GitHubDesktop'] };
 
 /**
  * Tour 1 (I-3) — une exception est écrite par ce qu'on AUTORISE : une clé est un chemin RELATIF au Bureau, en « / », de segments non vides, ni « . » ni « .. », qui ne désigne pas le Bureau lui-même

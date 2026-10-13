@@ -1,5 +1,6 @@
 import { tableauOuVide, texteSur } from "./expressionsSures.mjs";
 import { normaliserNumero,                     } from "./imageDeLImpression.mjs";
+import { conditionImpressionMongo } from "./impressionDuSet.mjs";
 
 /**
  * UNE FICHE PAR IMPRESSION — la règle, testée avant d'être allumée.
@@ -135,16 +136,22 @@ const normalise = (champ        ) => ({
   },
 });
 
-/** Après `$unwind: "$sets"` : la région et les expansions du set courant, par les trois tableaux parallèles. */
+/**
+ * Après `$unwind: "$sets"` : la région, les expansions et le deck du set courant, par les tableaux parallèles.
+ * `decks` : pour chaque set, les valeurs BRUTES de `impressions.deck` qu'il accepte, ou `null` (lib/impressionDuSet.ts,
+ * `decksAcceptesDesSets`) ; aucun set à deck dans l'appel → pas de clause du tout.
+ */
 function expressionsDuSetCourant(
   slugs                   ,
   regions                   ,
   expansions                                ,
+  decks                                       ,
 ) {
   const indice = { $indexOfArray: [{ $literal: slugs }, "$sets"] };
   return {
     region: { $arrayElemAt: [{ $literal: regions }, indice] },
     expansionsDuSet: { $arrayElemAt: [{ $literal: expansions }, indice] },
+    decksDuSet: decks.some((d) => d !== null) ? { $arrayElemAt: [{ $literal: decks }, indice] } : null,
   };
 }
 
@@ -161,16 +168,16 @@ export function etapesLignesParIllustrateur(
   slugs                   ,
   regions                   ,
   expansions                                ,
+  decks                                       ,
 ) {
-  const { region, expansionsDuSet } = expressionsDuSetCourant(slugs, regions, expansions);
+  const { region, expansionsDuSet, decksDuSet } = expressionsDuSetCourant(slugs, regions, expansions, decks);
   return [
     { $unwind: "$impressions" },
     {
       $match: {
         $expr: {
           $and: [
-            { $eq: ["$impressions.tirage", region] },
-            { $in: ["$impressions.expansion", expansionsDuSet] },
+            ...conditionImpressionMongo("$impressions", region, expansionsDuSet, decksDuSet).$and,
             { $eq: [{ $type: "$impressions.illustrateur" }, "string"] },
             { $ne: ["$impressions.illustrateur", ""] },
           ],
@@ -188,8 +195,9 @@ export function expressionsFichesParSet(
   slugs                   ,
   regions                   ,
   expansions                                ,
+  decks                                       ,
 ) {
-  const { region, expansionsDuSet } = expressionsDuSetCourant(slugs, regions, expansions);
+  const { region, expansionsDuSet, decksDuSet } = expressionsDuSetCourant(slugs, regions, expansions, decks);
   const numeros = {
     $setUnion: [
       {
@@ -198,9 +206,7 @@ export function expressionsFichesParSet(
             $filter: {
               input: tableauOuVide("$impressions"),
               as: "i",
-              cond: {
-                $and: [{ $eq: ["$$i.tirage", region] }, { $in: ["$$i.expansion", expansionsDuSet] }],
-              },
+              cond: conditionImpressionMongo("$$i", region, expansionsDuSet, decksDuSet),
             },
           },
           as: "i",
