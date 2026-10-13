@@ -48,10 +48,24 @@ async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes,
 }
 
 // PHOTO-EXTENSION : un corps BINAIRE (une image) avec son Content-Type
-async function jouerBinaire(url, route, etat, attendu, chemin, octets, type, entetes, { garde = false } = {}) {
-    const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { ...(type ? { 'content-type': type } : {}), ...entetes } });
-    const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
-    const r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+async function jouerBinaire(url, route, etat, attendu, chemin, octets, type, entetes, { garde = false, longueurAnnoncee = null } = {}) {
+    let r;
+    if (longueurAnnoncee !== null) {
+        // un refus décidé sur les EN-TÊTES : le client annonce une longueur et n'écrit que 16 octets, puis attend la réponse (un client qui écrit 2 Mio pendant qu'on lui répond peut perdre la réponse dans une
+        // réinitialisation de la connexion : de la plomberie de socket, pas le sujet du contrat)
+        r = await new Promise((resolve, reject) => {
+            const u = new URL(url + chemin);
+            const req = require('http').request({ host: u.hostname, port: u.port, path: u.pathname + u.search, method: 'POST', agent: false, headers: { ...(type ? { 'content-type': type } : {}), ...entetes, 'content-length': String(longueurAnnoncee) } }, res => {
+                const m = []; res.on('data', c => m.push(c));
+                res.on('end', () => { const texte = Buffer.concat(m).toString('utf8'); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ } resolve({ statut: res.statusCode, json, texte, entetes: res.headers }); req.destroy(); });
+            });
+            req.on('error', reject); req.write(octets.subarray(0, 16));
+        });
+    } else {
+        const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { ...(type ? { 'content-type': type } : {}), ...entetes } });
+        const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+        r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+    }
     consigner(route, etat, r, { garde });
     if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
     return r;
@@ -745,7 +759,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await jouerBinaire(V, R, 'scan d\'un autre administrateur', 404, q, JPG, 'image/jpeg', extH(xa2.jeton));
             const aff2 = await ident(V, 'seconde analyse de l\'administrateur (pour la photo)', 200, xa.jeton);
             const q2 = `${CH}?scanId=${aff2.json.scanId}`;
-            await jouerBinaire(V, R, 'plus de 2 Mio (413)', 413, q2, Buffer.alloc(2 * 1024 * 1024 + 1, 1), 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'plus de 2 Mio (413)', 413, q2, JPG, 'image/jpeg', extH(xa.jeton), { longueurAnnoncee: 2 * 1024 * 1024 + 1 });
             await jouerBinaire(V, R, 'Content-Type hors JPEG/PNG/WebP (415)', 415, q2, JPG, 'text/plain', extH(xa.jeton));
             await jouerBinaire(V, R, 'image tronquée (422)', 422, q2, JPG.subarray(0, 60), 'image/jpeg', extH(xa.jeton));
             const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);
