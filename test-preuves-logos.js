@@ -55,6 +55,11 @@ verifier('retrait refusé si le sha1 a changé', P.planifierRetrait({ preuve: pa
 
 // la liste fermée écrite dans le code
 verifier('la liste fermée : chaque preuve a un set, un fichier, 64 hex de sha256, 40 hex de sha1, un type a ou b', P.PREUVES.every(p => p.set && p.fichier && /^[0-9a-f]{64}$/.test(p.sha256) && /^[0-9a-f]{40}$/.test(p.sha1) && ['a', 'b'].includes(p.type) && p.champ === 'logo'), true);
+verifier('la liste fermée : 21 preuves (20 a, 1 b) — 13 de LOGOS-ECR + 8 de LOGOS-BG', [P.PREUVES.length, P.PREUVES.filter(p => p.type === 'a').length, P.PREUVES.filter(p => p.type === 'b').length], [21, 20, 1]);
+const LOGOS_BG = ['VSTAR-Universe', 'Ruler-of-the-Black-Flame', 'Stellar-Miracle', 'EX-Battle-Boost', 'Scarlet-ex', 'Violet-ex', 'Mega-Symphonia', 'Mega-Brave'];
+verifier('LOGOS-BG : les 8 preuves jp sont dans la liste, type a, champ logo, source demande-site', LOGOS_BG.every(id => { const p = P.PREUVES.find(x => x.set === id); return p && p.type === 'a' && p.champ === 'logo' && p.sourceAttendue === 'bulbagarden:demande-site'; }), true);
+verifier('LOGOS-BG : pour CHAQUE preuve a de la liste, une copie archive.org d\'un autre sha256 dit NON', P.PREUVES.filter(p => p.type === 'a').every(p => plan({ ...p, archive: { ...p.archive, sha256: '0'.repeat(64) } }, set(p, { sha1: p.sha1 })).action === 'refus'), true);
+verifier('LOGOS-BG : pour CHAQUE preuve a de la liste, des octets R2 d\'un autre sha256 disent NON', P.PREUVES.filter(p => p.type === 'a').every(p => plan(p, set(p, { sha1: p.sha1 }), '1'.repeat(64)).action === 'refus'), true);
 verifier('la liste fermée : aucun set en double', new Set(P.PREUVES.map(p => p.set)).size, P.PREUVES.length);
 verifier('la liste fermée : toute preuve a porte une copie archive.org au MÊME sha256, toute preuve b est regardée', P.PREUVES.every(p => p.type === 'a' ? p.archive?.sha256 === p.sha256 && /^\d{14}$/.test(p.archive.horodatage) : p.emballage?.regarde === true), true);
 
