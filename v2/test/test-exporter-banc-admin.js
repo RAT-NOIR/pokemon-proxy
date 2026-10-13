@@ -184,18 +184,25 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         // Tout est FABRIQUÉ sous la lettre `Z:` (rien n'existe : un défaut ne peut rien écrire chez le testeur) avec `realpath` et `lstat` injectés.
         {
             const Z = (...seg) => ['Z:\\Users\\Yung', ...seg].join('\\');
-            const dans = (extra, dossier) => X.exporterBancAdmin({ ...base, ...identite, tmpdir: () => path.join(racine, 'pas-ce-temporaire'), ...extra, dossier });
+            // La création du dossier est INJECTÉE et ne crée rien : on compte ses appels. « Refusé » veut dire refusé PAR LA GARDE, avant toute création (un refus tardif de la création, faute de disque `Z:`, ne compte pas).
+            const appels = [];
+            const mkdir = p => { appels.push(p); throw Object.assign(new Error('absent'), { code: 'ENOENT' }); };
+            const dans = (extra, dossier) => X.exporterBancAdmin({ ...base, ...identite, mkdir, tmpdir: () => path.join(racine, 'pas-ce-temporaire'), ...extra, dossier });
+            const gardee = async (extra, dossier) => { appels.length = 0; const r = await code(() => dans(extra, dossier)); return [r, appels.length]; };
+            const REFUS = ['DOSSIER-REFUSE', 0];
             const NOMMEE = { env: { V2_EXPORT_RACINE: 'Z:\\Users\\Yung' } };
-            H.v('N2. racine nommée = le profil : une sortie sous le Bureau est refusée, nom innocent ou non', [await code(() => dans(NOMMEE, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export'))), await code(() => dans(NOMMEE, Z('Desktop', 'export')))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
-            H.v('N2. idem pour un Bureau « Bureau » et pour un dossier OneDrive', [await code(() => dans(NOMMEE, Z('Bureau', 'export'))), await code(() => dans(NOMMEE, Z('OneDrive - Perso', 'Documents', 'export')))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
-            H.v('N2. le TEMPORAIRE du système valant le Bureau : refusé', await code(() => dans({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'export'))), 'DOSSIER-REFUSE');
-            H.v('N2. le TEMPORAIRE valant un Bureau, sortie sous un sous-dossier de nom innocent : refusé (la racine temporaire est jugée comme la racine nommée)', await code(() => dans({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export'))), 'DOSSIER-REFUSE');
-            H.v('N2. le TEMPORAIRE valant la racine d\'un disque : refusé', await code(() => dans({ tmpdir: () => 'Z:\\' }, 'Z:\\export')), 'DOSSIER-REFUSE');
-            H.v('N2. le TEMPORAIRE valant un dossier d\'apports : refusé', await code(() => dans({ tmpdir: () => Z(LF, 'tmp') }, Z(LF, 'tmp', 'export'))), 'DOSSIER-REFUSE');
-            H.v('N2. le TEMPORAIRE trop large ne referme pas pour autant la racine nommée valide (la garde juge, elle ne casse pas tout)', await code(() => dans({ tmpdir: () => 'Z:\\', env: { V2_EXPORT_RACINE: N } }, path.join(N, 'export-temp-large'))), null);
+            H.v('N2. témoin : sous la racine nommée, hors Bureau, la garde ADMET (la création est tentée une fois)', await gardee(NOMMEE, Z('Exports', 'export')), ['DOSSIER-REFUSE', 1]);
+            H.v('N2. racine nommée = le profil : une sortie sous le Bureau est refusée par la garde, nom innocent ou non', [await gardee(NOMMEE, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export')), await gardee(NOMMEE, Z('Desktop', 'export'))], [REFUS, REFUS]);
+            H.v('N2. idem pour un Bureau « Bureau » et pour un dossier OneDrive', [await gardee(NOMMEE, Z('Bureau', 'export')), await gardee(NOMMEE, Z('OneDrive - Perso', 'Documents', 'export'))], [REFUS, REFUS]);
+            H.v('N2. le TEMPORAIRE du système valant le Bureau : refusé', await gardee({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'export')), REFUS);
+            H.v('N2. le TEMPORAIRE valant un Bureau, sortie sous un sous-dossier de nom innocent : refusé (la racine temporaire est jugée comme la racine nommée)', await gardee({ tmpdir: () => Z('Desktop') }, Z('Desktop', 'pokemon-proxy', 'Mes photos Vinted', 'export')), REFUS);
+            H.v('N2. le TEMPORAIRE valant la racine d\'un disque : refusé', await gardee({ tmpdir: () => 'Z:\\' }, 'Z:\\export'), REFUS);
+            H.v('N2. le TEMPORAIRE valant un dossier d\'apports : refusé', await gardee({ tmpdir: () => Z(LF, 'tmp') }, Z(LF, 'tmp', 'export')), REFUS);
+            H.v('N2. le TEMPORAIRE valant le profil entier (trop large : il contient les Bureaux), sortie hors Bureau : la garde ne l\'admet pas comme racine', await gardee({ tmpdir: () => 'Z:\\' }, 'Z:\\Users\\Yung\\Exports\\export'), REFUS);
+            H.v('N2. le TEMPORAIRE trop large ne referme pas pour autant la racine nommée valide (la garde juge, elle ne casse pas tout)', await code(() => X.exporterBancAdmin({ ...base, ...identite, tmpdir: () => 'Z:\\', env: { V2_EXPORT_RACINE: N }, dossier: path.join(N, 'export-temp-large') })), null);
             // le chemin RÉEL complet : un ancêtre innocent dont la résolution traverse un Bureau
             const traverse = p => p.replace('\\innocent', '\\Desktop\\innocent');
-            H.v('N2. un ancêtre dont le chemin RÉEL traverse un Bureau (résolution injectée) : refusé', await code(() => dans({ ...NOMMEE, realpath: traverse }, Z('innocent', 'out'))), 'DOSSIER-REFUSE');
+            H.v('N2. un ancêtre dont le chemin RÉEL traverse un Bureau (résolution injectée) : refusé', await gardee({ ...NOMMEE, realpath: traverse }, Z('innocent', 'out')), REFUS);
             // la création exclusive : un dossier de sortie qui existe déjà, même vide, est refusé et reste intact ; un parent absent aussi ; un dossier neuf est créé par l'export
             const vide = path.join(T, 'deja-la'); fs.mkdirSync(vide);
             H.v('N2. un dossier de sortie qui existe déjà, même VIDE : refusé, rien n\'y est écrit', [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: vide })), fs.readdirSync(vide)], ['DOSSIER-REFUSE', []]);

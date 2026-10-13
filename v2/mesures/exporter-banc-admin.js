@@ -123,8 +123,8 @@ function jugerSortie(dossier, { realpath, lstat, env, tmpdir }) {
  * N2 — l'export CRÉE LUI-MÊME son dossier de sortie : création exclusive, non récursive. Un dossier qui existe déjà (même vide), un parent absent ou toute autre erreur REFUSE :
  * l'export n'ajoute jamais un fichier dans un dossier existant du testeur, et n'écrit que dans ce qu'il vient de créer.
  */
-function creerDossierNeuf(dossier) {
-    try { fs.mkdirSync(dossier); }
+function creerDossierNeuf(dossier, mkdir = fs.mkdirSync) {
+    try { mkdir(dossier); }
     catch (e) { throw erreur('DOSSIER-REFUSE', e && e.code === 'EEXIST' ? 'le dossier de sortie existe déjà : un export crée un dossier neuf' : 'dossier de sortie non créable (le dossier parent doit exister)'); }
 }
 
@@ -132,13 +132,13 @@ function creerDossierNeuf(dossier) {
  * @param {{dossier:string, colFn:(n:string)=>any, stockage:{lire:(cle:string)=>Promise<Buffer>}, base:string}} o
  * @returns {Promise<{lignes:number, photos:number, sansPhoto:number}>}
  */
-async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs.realpathSync.native, lstat = fs.lstatSync, env = process.env, tmpdir = os.tmpdir }) {
+async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs.realpathSync.native, lstat = fs.lstatSync, env = process.env, tmpdir = os.tmpdir, mkdir = fs.mkdirSync }) {
     if (typeof base !== 'string' || !base.trim() || base.trim().toLowerCase() === 'test') throw erreur('BASE-REFUSEE', 'base absente ou de production');
     // le dossier de sortie est jugé ICI, puis JUSTE AVANT chaque écriture (la course : un dossier vide au premier jugement qui devient un lien pendant l'export)
     const juge = () => jugerSortie(dossier, { realpath, lstat, env, tmpdir });
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
     juge();
-    creerDossierNeuf(dossier);
+    creerDossierNeuf(dossier, mkdir);
     juge();
     const brutes = await colFn('banc_lignes').find({ source: 'etiquette-admin', etat: 'confirmee' }).sort({ _id: 1 }).toArray();
     const lues = new Map();        // clé -> true (écrite) | false (illisible)
