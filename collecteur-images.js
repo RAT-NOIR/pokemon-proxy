@@ -218,17 +218,19 @@ async function collecterSet(code, M, dossierRapport) {
             // `pagesListe` : page, entrées lues, nouvelles — la preuve d'une pagination, en base et pas en log.
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], [`pagesListe.${id}`]: entrees[id].pages || null, phase: 'liste', derniereRequete: new Date() } });
         }
-        if (S.sousSection != null) {   // V8 : la ligne ne traite que sa sous-section (en mémoire : l'état garde la liste entière)
+        // V8 : la ligne ne traite que sa sous-section ; JA-2 : ou sa plage de rangs (deux decks sous UN id). En mémoire : l'état garde la liste entière.
+        const delimitee = S.sousSection != null || S.plageDeRangs != null;
+        if (delimitee) {
             const toutes = entrees[id].length; entrees[id] = entreesDeLaLigne(entrees[id], S);
-            console.log(`   sous-section ${S.sousSection} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
+            console.log(`   ${S.sousSection != null ? `sous-section ${S.sousSection}` : `plage de rangs ${JSON.stringify(S.plageDeRangs)}`} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
         }
         console.log(`1. liste ${id} : ${entrees[id].length} entrées${etat.entrees?.[id]?.length ? ' (reprises de l\'état)' : ''}`);
         if (!mesures[id]?.length) {
             const m = [];
             // V8 : une ligne qui déclare sa sous-section mesure DANS elle (collecte-cartes/echantillon-mesure.js) ; aucune entrée de cette sous-section = refus
             const echantillon = entreesDeMesure(entrees[id], S);
-            if (S.sousSection != null && !echantillon.length) {
-                console.error(`❌ ${code} : la sous-section ${S.sousSection} déclarée par la ligne n'a AUCUNE entrée dans la liste ${id} — set REFUSÉ, on ne mesure pas un autre deck.`);
+            if (delimitee && !echantillon.length) {
+                console.error(`❌ ${code} : ${S.sousSection != null ? `la sous-section ${S.sousSection}` : `la plage de rangs ${JSON.stringify(S.plageDeRangs)}`} déclarée par la ligne n'a AUCUNE entrée dans la liste ${id} — set REFUSÉ, on ne mesure pas un autre deck.`);
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-sous-section-absente', fini: new Date() } });
                 await liberer(); return { code, etat: 'refuse-sous-section-absente' };
             }
