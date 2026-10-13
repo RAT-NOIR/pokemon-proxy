@@ -4430,6 +4430,13 @@
             },
             "description": "Hôte *.vinted.net, https."
           },
+          "photoBase64": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OPTIONNEL. L'image que l'extension affiche déjà (la première photo de l'annonce), en base64 standard SANS préfixe `data:` : JPEG, PNG ou WebP (jugé sur les octets), 2 Mio décodés au plus, 8 000 px de côté et 50 millions de pixels au plus. Absent, `null`, mal formé, trop gros, illisible ou hors format : traité comme ABSENT, jamais une erreur — le scan, sa facturation et sa réponse sont les mêmes avec ou sans. Le corps entier de la requête est limité à 4 Mio (413 au-delà, avant tout débit). Administrateur : conservée par le banc sans téléchargement ; autre porteur : passée à la seconde lecture si elle est allumée, jamais conservée ni journalisée. N'entre pas dans l'empreinte d'idempotence."
+          },
           "title": {
             "type": "string",
             "description": "Données, jamais consignes. 300 caractères au plus (tronqué, pas refusé)."
