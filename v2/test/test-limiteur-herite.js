@@ -72,6 +72,20 @@ const nb429 = rs => rs.filter(r => r.statut === 429).length;
         H.v('0p. mémoire : MAX_IPS + 50 IP distinctes ⇒ jamais plus de MAX_IPS entrées', [LH.MAX_IPS, g.taillePlafond()], [100000, 100000]);
         t += 3600e3 + 1; g.purger();
         H.v('0q. la purge retire les fenêtres écoulées', g.taillePlafond(), 0);
+        // I-1 : la clé du plafond est celle du limiteur hérité (ipKeyGenerator d'express-rate-limit, /56 pour l'IPv6), pas req.ip brut
+        const { ipKeyGenerator } = require('express-rate-limit');
+        const h = LH.fabrique(() => cfgLimites, { maintenant: () => t });
+        const passerH = (ip) => { const res = reponseFausse(); let suite = false; h.plafondIp(requete({ ip }), res, () => { suite = true; }); return suite; };
+        const a56 = '2001:db8:1:aa00::1', b56 = '2001:db8:1:aaff:1234::9', c56 = '2001:db8:1:bb00::1';   // a et b : même /56 (2001:db8:1:aa..) ; c : un autre /56
+        H.v('0r. (I-1) précondition : a et b ont la même clé du limiteur hérité, c une autre', [ipKeyGenerator(a56) === ipKeyGenerator(b56), ipKeyGenerator(a56) === ipKeyGenerator(c56)], [true, false]);
+        for (let k = 0; k < plafond; k++) passerH(a56);
+        H.v('0s. (I-1) deux adresses du MÊME /56 partagent un compteur : la 2e (autre adresse) est refusée au-delà du plafond', [passerH(a56), passerH(b56)], [false, false]);
+        H.v('0t. (I-1) une adresse d\'un /56 différent a son propre compteur', passerH(c56), true);
+        const v4 = LH.fabrique(() => cfgLimites, { maintenant: () => t });
+        const passerV4 = (ip) => { let suite = false; v4.plafondIp(requete({ ip }), reponseFausse(), () => { suite = true; }); return suite; };
+        for (let k = 0; k < plafond; k++) passerV4('203.0.113.7');
+        H.v('0u. (I-1) une IPv4 se comporte comme avant : refusée au-delà du plafond, une autre IPv4 intacte', [passerV4('203.0.113.7'), passerV4('203.0.113.8')], [false, true]);
+        H.vrai('0v. (M-2) le plafond couvre au moins UN porteur au maximum de ses deux routes (identifications + réponses)', LH.plafondDe(cfgLimites) >= cfgLimites.limites.identifierParCompteHeure + cfgLimites.limites.reponseParPorteurHeure && LH.PORTEURS_PAR_IP >= 1);
     }
     const r0 = reponseFausse(); sansCfg.refuser(requete(), r0, () => { }, { statusCode: 429, message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' } });
     H.v('0b. sans configuration : le refus garde la forme héritée', [r0.statut, JSON.stringify(r0.corps)], [429, LEGACY_429]);

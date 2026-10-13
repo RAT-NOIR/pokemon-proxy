@@ -8,7 +8,7 @@
 // la chaîne héritée n'est appelée (deps.gererIdentifier) qu'APRÈS porteur, installation, plafond par porteur, idempotence et entrée validée.
 // LE COÛT : `skip` lit la base à chaque requête candidate, et la route v2 y écrit ; un PLAFOND EN MÉMOIRE par IP (plafondIp, monté avant le limiteur hérité) les refuse sans la toucher.
 const { resoudrePorteur } = require('./porteur');
-const { repondreErreur } = require('./erreurs');
+const { repondreErreur } = require('./erreurs'); const { ipKeyGenerator } = require('express-rate-limit');
 
 const CHEMIN_IDENTIFIER = '/api/identifier', CHEMIN_REPONSE = '/api/identifier/reponse';
 const cheminDe = req => String(req.originalUrl || req.url || '').split('?')[0];
@@ -60,7 +60,7 @@ function fabrique(lireCfg, o = {}) {
     function plafondIp(req, res, next) {
         const cfg = actif();
         if (!cfg || !requeteDeLaV2(req)) return next();
-        const plafond = plafondDe(cfg), t = maintenant(), ip = String(req.ip || '?');
+        const plafond = plafondDe(cfg), t = maintenant(), ip = ipKeyGenerator(String(req.ip || '?'));   // la clé du limiteur hérité (IPv6 regroupée par /56) : la MÊME fonction, importée
         let w = fenetres.get(ip);
         if (!w || t - w.debut >= FENETRE_MS) {
             if (!w && fenetres.size >= MAX_IPS) fenetres.delete(fenetres.keys().next().value);
