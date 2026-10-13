@@ -157,7 +157,10 @@ function ordreDeSecours(a, b) {
 module.exports = { visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, choisirVisuel, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
-    const fichier = async rel => { const b = fs.readFileSync(path.join(__dirname, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(__dirname, rel), sha1: sha1(b), w: m.width, h: m.height }; };
+    // (TESTS-APPORTS) RACINE_APPORTS / TABLE_APPORTS : où lire les fichiers d'apport et leur table. Par défaut, EXACTEMENT le comportement d'avant (le banc les pointe vers v2/test/fixtures).
+    const RACINE_APPORTS = process.env.RACINE_APPORTS || __dirname;
+    const TABLE_APPORTS = process.env.TABLE_APPORTS || path.join(__dirname, 'collecte-cartes/logos-apport-manuel-lus.json');
+    const fichier = async rel => { const b = fs.readFileSync(path.join(RACINE_APPORTS, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(RACINE_APPORTS, rel), sha1: sha1(b), w: m.width, h: m.height }; };
     const copies = new Map([...LOGOS_COPIES]);
     const wcd = [];
     for (const [annee, n] of WCD) {
@@ -169,7 +172,7 @@ if (require.main === module) (async () => {
     const CH = path.join(__dirname, 'collecte-cartes', 'wcd-decks-champions.json');
     const champions = fs.existsSync(CH) ? new Map(JSON.parse(fs.readFileSync(CH, 'utf8')).annees.map(a => [a.annee, a])) : new Map();
     for (const w of wcd) { const c = champions.get(w.annee); w.deckChampion = c?.deckChampion ?? null; if (!w.deckChampion) w.deckChampionRaison = c?.raison ?? 'année non lue'; }
-    const T = JSON.parse(fs.readFileSync(path.join(__dirname, 'collecte-cartes/logos-apport-manuel-lus.json'), 'utf8'));
+    const T = JSON.parse(fs.readFileSync(TABLE_APPORTS, 'utf8'));
     const lus = new Map((Array.isArray(T) ? T : T.lignes).filter(l => l.dossier === 'Deck JP').map(l => [l.fichier.replace(/\.png$/i, ''), l]));
     const partages = [];
     for (const [set, code] of Object.entries(PARTAGES)) {
