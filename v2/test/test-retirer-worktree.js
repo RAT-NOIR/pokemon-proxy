@@ -165,7 +165,8 @@ try {
         const r = T.retirer(m.wt, opts({ depots: [m.depot], lancerGit: (args) => { appelsGit.push(args.join(' ')); return gitReel(args); } }));
         v('2. code 0', r.code, 0);
         vrai('2. le dossier du worktree a disparu, sans quarantaine', !existe(m.wt) && quarantaines(m.wt).length === 0);
-        vrai('2. git n\'est JAMAIS appelé pour supprimer (ni `worktree remove`, ni `--force`) : prune seulement', appelsGit.length > 0 && !appelsGit.some(a => /\bremove\b|--force/.test(a)) && appelsGit.some(a => /worktree prune/.test(a)));
+        vrai('2. git n\'est JAMAIS appelé pour supprimer ni élaguer (ni `remove`, ni `--force`, ni `prune`) : list et status seulement', appelsGit.length > 0 && !appelsGit.some(a => /\bremove\b|--force|\bprune\b/.test(a)));
+        vrai('2. le répertoire d\'administration de la cible (et de lui seul) a été retiré par l\'outil', !existe(path.join(m.depot, '.git', 'worktrees', 'wt')));
         const lignesWt = listeWt(m.depot);
         v('2. git worktree list ne porte plus que le dépôt principal (1 entrée)', lignesWt.length, 1);
         vrai('2. le worktree a disparu de git worktree list', !lignesWt.some(l => l.endsWith('/wt')));
@@ -173,13 +174,17 @@ try {
         v('2. le second témoin est intact', photo(m.temoin2), m.avantT2);
         vrai('2. le dépôt principal est intact', existe(path.join(m.depot, 'f.txt')) && existe(path.join(m.depot, '.git')));
     }
-    {   // 2c. code 4 : `git worktree prune` échoue (injection) : alerte, code 4, au journal ; la copie, elle, a déjà été supprimée par l'outil
+    {   // 2c. N2/N3(c) : après le retrait du seul répertoire d'administration, git liste ENCORE la cible (injection) : ALERTE ROUGE, code 4, au journal
         const m = mondeWt();
-        const r4 = T.retirer(m.wt, opts({ depots: [m.depot], lancerGit: (args) => (args.includes('prune') ? { status: 1, stderr: 'échec simulé par le banc' } : gitReel(args)) }));
-        v('2c. prune en échec : code 4', r4.code, 4);
-        vrai('2c. le message dit l\'échec de prune, le journal le porte, le dossier est déjà supprimé par l\'outil', /worktree prune a échoué/.test(String(r4.message)) && lignesJournal().some(l => l.issue === 'echec-git') && !existe(m.wt));
+        let nl = 0;
+        const r4 = T.retirer(m.wt, opts({ depots: [m.depot], lancerGit: (args) => {
+            const r = gitReel(args);
+            if (args.includes('list')) { nl++; if (nl >= 2) return { status: 0, stdout: String(r.stdout) + '\nworktree ' + m.wt.replace(/\\/g, '/') + '\nHEAD 0000000000000000000000000000000000000000\nbranch refs/heads/x\n\n' }; }
+            return r;
+        } }));
+        v('2c. la cible reste listée : code 4', r4.code, 4);
+        vrai('2c. ALERTE ROUGE dans le message, le journal la porte, le dossier est déjà supprimé par l\'outil', /ALERTE ROUGE/.test(String(r4.message)) && lignesJournal().some(l => /ALERTE/.test(l.issue || '') && /liste/.test(l.issue || '')) && !existe(m.wt));
         v('2c. les témoins sont intacts', [photo(m.temoin), photo(m.temoin2)], [m.avantT, m.avantT2]);
-        git(m.depot, 'worktree', 'prune');
     }
     {   // 2d. N2, essai A : un worktree SALE est refusé par défaut ; le plan affiche git status
         const m = mondeWt();
@@ -221,6 +226,62 @@ try {
         v('2g. essai C : le témoin reste IDENTIQUE (aucune traversée)', [photo(m.temoin), photo(m.temoin2)], [m.avantT, m.avantT2]);
         vrai('2g. essai C : le lien tardif est signalé (jamais « retiré » sans mot)', /apparu/.test(String(r.message)));
         vrai('2g. essai C : le worktree est tout de même retiré', r.code === 0 && !existe(m.wt) && listeWt(m.depot).length === 1);
+    }
+
+    {   // 2c'. N2 : la liste des AUTRES worktrees change pendant le retrait (injection : le dépôt principal disparaît de la liste d'après) : ALERTE ROUGE, code 4
+        const m = mondeWt();
+        let nl = 0;
+        const r4 = T.retirer(m.wt, opts({ depots: [m.depot], lancerGit: (args) => {
+            const r = gitReel(args);
+            if (args.includes('list')) { nl++; if (nl >= 2) return { status: 0, stdout: String(r.stdout).replace(/\r/g, '').split(/\n\s*\n/).filter(b => !/depot/i.test(b)).join('\n\n') + '\n\n' }; }
+            return r;
+        } }));
+        v('2c\'. les autres worktrees ne sont plus à l\'identique : code 4', r4.code, 4);
+        vrai('2c\'. ALERTE ROUGE qui parle des AUTRES worktrees', /ALERTE ROUGE/.test(String(r4.message)) && /AUTRES/.test(String(r4.message)));
+    }
+    {   // 2h. N2, sonde F4 : un AUTRE worktree dont le dossier est absent garde son répertoire d'administration (plus aucun `prune`)
+        const m = mondeWt();
+        const wb = path.join(m.base, 'wb');
+        git(m.depot, 'worktree', 'add', '-q', '-b', 'bb' + (++n), wb);
+        fs.writeFileSync(path.join(wb, 'indexe.txt'), 'x'); git(wb, 'add', 'indexe.txt');
+        const wbAbsent = wb + '-absent'; fs.renameSync(wb, wbAbsent);
+        const adminB = path.join(m.depot, '.git', 'worktrees', 'wb');
+        const avantListe = listeWt(m.depot);
+        const r = T.retirer(m.wt, opts({ depots: [m.depot] }));
+        v('2h. code 0', r.code, 0);
+        vrai('2h. le répertoire d\'administration de l\'AUTRE worktree (HEAD et index) est intact', existe(path.join(adminB, 'HEAD')) && existe(path.join(adminB, 'index')));
+        v('2h. git liste les autres worktrees à l\'identique (seule la cible disparaît)', listeWt(m.depot), avantListe.filter(l => !l.endsWith('/wt')));
+        fs.renameSync(wbAbsent, wb);
+        v('2h. au retour du dossier, l\'autre worktree fonctionne (git status répond)', git(wb, 'status', '--porcelain').status, 0);
+        vrai('2h. le répertoire d\'administration de la cible a disparu', !existe(path.join(m.depot, '.git', 'worktrees', 'wt')));
+        v('2h. les témoins sont intacts', [photo(m.temoin), photo(m.temoin2)], [m.avantT, m.avantT2]);
+    }
+    {   // 2i. N1 : une quarantaine laissée par un échec se finit AVEC l'outil (sondes F2/F3) ; un faux nom absent du journal est refusé
+        const panne = instrumentQui({ status: 1, stdout: 'RM-FIN\r\n' });
+        const m = mondeWt();
+        const r1 = T.retirer(m.wt, opts({ depots: [m.depot], instrumentReanalyse: panne }));
+        vrai('2i. instrument en échec : code 3, le worktree reste en quarantaine', r1.code === 3 && !existe(m.wt) && quarantaines(m.wt).length === 1);
+        const q = quarantaines(m.wt)[0];
+        const r2 = T.retirer(q, opts({ depots: [m.depot] }));
+        v('2i. la reprise du worktree en quarantaine finit proprement : code 0', r2.code, 0);
+        vrai('2i. quarantaine disparue, répertoire d\'administration retiré, plus listé', !existe(q) && !existe(path.join(m.depot, '.git', 'worktrees', 'wt')) && listeWt(m.depot).length === 1);
+        v('2i. les témoins sont intacts', [photo(m.temoin), photo(m.temoin2)], [m.avantT, m.avantT2]);
+        const w = monde();
+        T.retirer(w.copie, opts({ instrumentReanalyse: panne }));
+        const q3 = quarantaines(w.copie)[0];
+        const r4 = T.retirer(q3, opts());
+        vrai('2i. la reprise d\'une copie simple en quarantaine finit proprement : code 0, rien ne traîne', r4.code === 0 && !existe(q3) && quarantaines(w.copie).length === 0);
+        v('2i. …témoins intacts', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+        const faux = path.join(MUT, 'faux.retrait-20261013120000000-1-abc'); fs.mkdirSync(faux); fs.writeFileSync(path.join(faux, 'f'), 'f');
+        const r5 = T.retirer(faux, opts());
+        vrai('2i. un faux nom de quarantaine absent du journal : refus, rien supprimé', r5.code !== 0 && existe(path.join(faux, 'f')));
+        const w2 = monde();
+        T.retirer(w2.copie, opts({ instrumentReanalyse: panne }));
+        const q6 = quarantaines(w2.copie)[0], q6b = q6.replace(/-[0-9a-z]+$/, '-zzzz');
+        fs.renameSync(q6, q6b);
+        const r6 = T.retirer(q6b, opts());
+        vrai('2i. une vraie quarantaine renommée à la main (absente du journal sous ce nom) : refus', r6.code !== 0 && existe(q6b));
+        if (existe(q6b)) delier(q6b);
     }
 
     // 3. une cible qui CHANGE pendant le retrait : refus, la copie reste, le message nomme la cible
@@ -334,6 +395,61 @@ try {
         vrai('3i. code 0, la copie a disparu, les 2 liens tardifs sont signalés', r.code === 0 && !existe(w.copie) && quarantaines(w.copie).length === 0 && /2 lien\(s\) apparu/.test(String(r.message)));
         const jl = lignesJournal().filter(l => l.dossier.toLowerCase().endsWith(path.basename(w.copie).toLowerCase())).pop() || {};
         vrai('3i. le journal liste les liens tardifs', Array.isArray(jl.liensTardifs) && jl.liensTardifs.length === 2);
+    }
+
+    // 3j. N3 : les gardes de la suppression sont PROUVÉES (chacune meurt si on la retire)
+    {   // (a) le PARENT d'un fichier devient une jonction vers un témoin juste avant son unlink
+        const w = monde();
+        fs.mkdirSync(path.join(w.copie, 'x')); fs.copyFileSync(path.join(w.temoin, 'a.txt'), path.join(w.copie, 'x', 'a.txt'));
+        let fait = 0;
+        const r = T.retirer(w.copie, opts({ avantGeste: (p) => {
+            if (!fait && /[\\/]x[\\/]a\.txt$/.test(p)) { const x = path.dirname(p); fs.renameSync(x, x + '-deplace'); jonction(w.temoin, x); fait++; }
+        } }));
+        v('3j(a). l\'échange du parent a bien eu lieu', fait, 1);
+        vrai('3j(a). le parent est devenu une jonction : arrêt, code non nul', r.code !== 0 && /parent/.test(String(r.message)));
+        v('3j(a). le témoin est INTACT (son a.txt n\'est pas supprimé)', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+        for (const q of quarantaines(w.copie)) delier(q);
+    }
+    {   // (b) un dossier devient une jonction entre son lstat et son readdir
+        const w = monde();
+        fs.mkdirSync(path.join(w.copie, 'y')); fs.writeFileSync(path.join(w.copie, 'y', 'a.txt'), 'a');
+        let fait = 0;
+        const r = T.retirer(w.copie, opts({ entreLstatEtLecture: (p) => {
+            if (!fait && /[\\/]y$/.test(p) && !fs.lstatSync(p).isSymbolicLink()) { fs.renameSync(p, p + '-deplace'); jonction(w.temoin, p); fait++; }
+        } }));
+        v('3j(b). l\'échange du dossier a bien eu lieu', fait, 1);
+        vrai('3j(b). arrêt, code non nul', r.code !== 0);
+        v('3j(b). le témoin est INTACT', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+        for (const q of quarantaines(w.copie)) delier(q);
+    }
+    {   // (d) le PARENT d'un dossier vide devient une jonction juste avant son rmdir
+        const w = monde();
+        fs.mkdirSync(path.join(w.copie, 'q', 'vide'), { recursive: true });
+        let fait = 0;
+        const r = T.retirer(w.copie, opts({ avantRmdir: (p) => {
+            if (!fait && /[\\/]q[\\/]vide$/.test(p)) { const q = path.dirname(p); fs.renameSync(q, q + '-deplace'); jonction(w.temoin2, q); fait++; }
+        } }));
+        v('3j(d). l\'échange du parent a bien eu lieu', fait, 1);
+        vrai('3j(d). arrêt, code non nul', r.code !== 0);
+        v('3j(d). le témoin2 est INTACT (son dossier `vide` n\'est pas supprimé)', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+        for (const q of quarantaines(w.copie)) delier(q);
+    }
+    {   // (e) un dossier vidé est remplacé par une jonction juste avant son rmdir : retiré comme lien ET signalé
+        const w = monde();
+        let fait = 0;
+        const r = T.retirer(w.copie, opts({ avantRmdir: (p) => {
+            if (!fait && /[\\/]vide$/.test(p) && path.basename(path.dirname(p)).includes('.retrait-')) { fs.rmdirSync(p); jonction(w.temoin2, p); fait++; }
+        } }));
+        v('3j(e). le remplacement a bien eu lieu', fait, 1);
+        vrai('3j(e). retiré comme lien et signalé : code 0, « 1 lien(s) apparu(s) »', r.code === 0 && /1 lien\(s\) apparu/.test(String(r.message)));
+        v('3j(e). aucun témoin n\'a bougé', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+    }
+    {   // (f) le dernier inventaire Node refuse seul (l'instrument est neutralisé) : un lien réapparu avant le renommage
+        const w = monde();
+        const r = T.retirer(w.copie, opts({ apresRecompte: () => jonction(w.temoin, path.join(w.copie, 'revenu')), instrumentReanalyse: instrumentQui({ status: 0, stdout: 'RM-FIN\r\n' }) }));
+        vrai('3j(f). un lien réapparu, instrument muet sur le sujet : l\'inventaire Node refuse seul', r.code !== 0 && quarantaines(w.copie).length === 1 && /lien est apparu/.test(String(r.message)));
+        v('3j(f). le témoin est intact', photo(w.temoin), w.avantT);
+        for (const q of quarantaines(w.copie)) delier(q);
     }
 
     // 4. les refus d'entrée (rien n'est supprimé)
@@ -491,6 +607,27 @@ try {
         vrai('4e. …et un dossier .git aussi', r3.code !== 0 && existe(path.join(w3.copie, 'node_modules')));
     }
 
+    // 4f. N6 : le plan dit TOUT ce qui sera détruit
+    {
+        const m = mondeWt();
+        fs.mkdirSync(path.join(m.wt, 'x', 'photos'), { recursive: true }); fs.writeFileSync(path.join(m.wt, 'x', 'photos', 'p.jpg'), '0123456789');
+        let sortie = '';
+        T.retirer(m.wt, { executer: false, racine: ROOT, journal: JOURNAL, depots: [m.depot], sortie: (s) => { sortie += s + '\n'; } });
+        vrai('4f. le plan résume les fichiers IGNORÉS par git (nombre, octets, premiers chemins)', /IGNORÉS/.test(sortie) && /10 octets/.test(sortie) && /x[\\/]/.test(sortie));
+        const w = monde();
+        fs.mkdirSync(path.join(w.copie, 'a', 'Logo FR'), { recursive: true }); fs.writeFileSync(path.join(w.copie, 'a', 'Logo FR', 'precieux.png'), 'p');
+        sortie = '';
+        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, sortie: (s) => { sortie += s + '\n'; } });
+        vrai('4f. un VRAI dossier « Logo FR » dans la copie : ROUGE au plan, option nommée', rp.code === 0 && /ROUGE/.test(sortie) && /Logo FR/.test(sortie) && /--detruire-copies-apports/.test(sortie));
+        const r = T.retirer(w.copie, opts());
+        vrai('4f. …et REFUS sans l\'option : rien n\'est supprimé, les liens sont encore là', r.code !== 0 && existe(path.join(w.copie, 'a', 'Logo FR', 'precieux.png')) && existe(path.join(w.copie, 'node_modules')));
+        const r2 = T.retirer(w.copie, opts({ detruireCopiesApports: true }));
+        v('4f. avec --detruire-copies-apports : code 0', r2.code, 0);
+        const jl = lignesJournal().filter(l => l.dossier.toLowerCase().endsWith(path.basename(w.copie).toLowerCase()) && l.issue === 'ok').pop() || {};
+        vrai('4f. le journal liste les fichiers d\'apports détruits', Array.isArray(jl.apportsDetruits) && jl.apportsDetruits.some(x => /precieux\.png/.test(x)));
+        v('4f. les témoins sont intacts', [photo(w.temoin), photo(w.temoin2)], [w.avantT, w.avantT2]);
+    }
+
     // 5. le PLAN ne supprime rien
     {
         const w = monde();
@@ -519,7 +656,7 @@ try {
         const e = cli([w.copie, '--executer']);
         v('6. CLI --executer : code 0', e.status, 0);
         vrai('6. CLI --executer : la copie a disparu, le témoin est intact', !existe(w.copie) && JSON.stringify(photo(w.temoin)) === JSON.stringify(w.avantT));
-        vrai('6. CLI : une ligne au journal du banc', existe(j2) && fs.readFileSync(j2, 'utf8').split(/\r?\n/).filter(Boolean).length === 1);
+        vrai('6. CLI : une ligne au journal du banc', existe(j2) && fs.readFileSync(j2, 'utf8').split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l)).filter(l => !l.evenement).length === 1);
         const w2 = monde();
         vrai('6. CLI : un argument inconnu est refusé', cli([w2.copie, '--force']).status !== 0 && existe(w2.copie));
         vrai('6. CLI : deux dossiers sont refusés', cli([w2.copie, w2.base]).status !== 0 && existe(w2.copie));
@@ -529,6 +666,9 @@ try {
         vrai('6. CLI : sans racine de banc, un dossier temporaire est refusé', cli([w2.copie, '--executer'], { RM_RETRAIT_RACINE_BANC: '' }).status !== 0 && existe(w2.copie));
         const e2 = cli([w2.copie, '--executer', '--jeter-modifications']);
         v('6. CLI : l\'option explicite --jeter-modifications est reconnue (sans effet sur une copie simple)', e2.status, 0);
+        const w3 = monde();
+        const e3 = cli([w3.copie, '--executer', '--detruire-copies-apports']);
+        v('6. CLI : l\'option explicite --detruire-copies-apports est reconnue', e3.status, 0);
         // M1 : le cas démontré par la relecture : variables de banc + TEMP/TMP redirigés vers un faux « bureau » portant un « Logo FR »
         const faux = path.join(ROOT, 'faux-tmp'); const fauxBureau = path.join(faux, 'faux-bureau');
         const logo = path.join(fauxBureau, 'Logo FR'); fs.mkdirSync(logo, { recursive: true }); fs.writeFileSync(path.join(logo, 'precieux.png'), 'p');
