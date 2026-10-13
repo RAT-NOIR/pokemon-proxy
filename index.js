@@ -449,6 +449,12 @@ numeroCarteSchema.index({ setTcgdex: 1 });
 numeroCarteSchema.index({ slugSet: 1 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
 
+// D2 (2026-10-13) — la garde provisoire contre les faux prix des « jumeaux » (garde-jumeaux.js). Table en mémoire chargée à la
+// première utilisation (aucun index sur idMetacard, aucune création d'index ici), relue toutes les 6 h.
+const { creerGardeJumeaux, appliquerGarde, tetesDesCandidats, accesMongoose: accesGardeJumeaux } = require('./garde-jumeaux');
+const accesJumeaux = accesGardeJumeaux({ CatalogueProduit, NumeroCarte, CodeSet, mongoose });
+const gardeJumeaux = creerGardeJumeaux(accesJumeaux);
+
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
 // simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
 // L'index unique sur eventId est le verrou — c'est l'insertion qui échoue (11000), pas
@@ -3490,6 +3496,8 @@ const PHRASE_REFUS = {
     'nom-contredit-sans-repli': 'Je ne peux pas trancher : plusieurs cartes portent exactement les mêmes indices. Voici ce que ça pourrait être.',
     'aucun-candidat': 'Cette carte n\'est pas dans mon catalogue.',
     'aucun-prix': 'Cette carte n\'est pas dans mon catalogue.',
+    // D2 : la même carte de jeu existe dans plus de trois créneaux (extensions, numéros) — on ne montre pas trois d'entre eux.
+    'jumeaux-trop-nombreux': 'Je ne peux pas trancher : cette carte existe dans trop d\'extensions pour que je la devine sans risquer un faux prix.',
     'numero-illisible': 'Je n\'ai pas pu lire cette carte.',
     'carte-introuvable': 'Je n\'ai pas pu lire cette carte.',
     'ia-echec': 'Je n\'ai pas pu lire cette carte.',
@@ -3508,6 +3516,7 @@ const NATURE_REFUS = {
     'nom-contredit-sans-repli': 'refus-delibere',// idem, et le vivier de preuve est vide
     'egalite-parfaite': 'refus-delibere',        // plusieurs cartes correspondent aussi bien, l'écart de prix décide du verdict
     'aucun-prix': 'refus-delibere',              // ⚠️ /api/analyser UNIQUEMENT — jamais émis par /api/identifier
+    'jumeaux-trop-nombreux': 'refus-delibere',   // D2 : plus de 3 produits pour la même métacarte (jumeaux d'autres créneaux) — la garde refuse plutôt que de choisir
 
     // ── ÉCHECS TECHNIQUES : quelque chose n'a pas marché. Rouge, même remboursé.
     'ia-echec': 'echec-technique',               // le modèle n'a rien rendu d'exploitable — REMBOURSÉ, et pourtant une panne
@@ -5355,7 +5364,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
         // Les deux signaux de rang entrent dans l'incertitude, chacun avec SON motif —
         // un motif générique empêcherait de mesurer lequel se déclenche.
-        const carteAmbigue = Boolean(
+        const ambigueAvantGarde = Boolean(
             // LA LECTURE DE SECOURS (2026-10-05) : le service de lecture est tombé, la carte a été cherchée par le TITRE de l'annonce.
             // Un titre n'est pas une lecture de la carte : la sortie est une QUESTION (les candidats), jamais un verdict ferme.
             cardInfo?.lectureDeSecours
@@ -5408,6 +5417,43 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // affirmé sur le banc du 2026-09-09. Le drapeau reste levé partout ailleurs.
             || (avisDex.estDex && !clePokedexDesigne)
         );
+        // ════════════════════════════════════════════════════════════════════
+        // D2 — LA GARDE DES JUMEAUX, LÀ OÙ LA CHAÎNE S'APPRÊTE À AFFIRMER (2026-10-13)
+        // ════════════════════════════════════════════════════════════════════
+        // IMG_3237 : Roaring Moon ex PRE 162 lue « PAR 251 » ; un seul candidat, `ambigu: false`, 29,84 € affirmés pour 135,98 €.
+        // Même métacarte (426438), deux créneaux. La garde ne joue QUE sur un verdict qui serait ferme : une réponse déjà sous réserve
+        // garde sa raison et son niveau (`non-jouee`). Elle est écrite par ce qu'elle AUTORISE : seul « aucun jumeau, recherche
+        // réussie » laisse passer ; une recherche en échec passe sous réserve (verdictApresGarde). Voir garde-jumeaux.js.
+        // Tour 1 (I3) : la décision est une fonction PURE (garde-jumeaux.js, testée sur tous les résultats possibles) ; la route l'applique.
+        const { resultat: resultatGarde, decision: decisionGarde } = await appliquerGarde({
+            ambigueAvantGarde, idProduct: classement[0]?.idProduct, garde: gardeJumeaux
+        });
+        const champsGarde = { gardeJumeaux: decisionGarde.issue, gardeJumeauxCause: resultatGarde.cause ?? null, gardeJumeauxIds: decisionGarde.jumeauxIds, gardeJumeauxNb: decisionGarde.nbProduits };
+        if (decisionGarde.issue !== 'aucun' && decisionGarde.issue !== 'non-jouee') {
+            console.warn(`🪞 [garde-jumeaux] ${decisionGarde.issue} pour ${classement[0]?.idProduct} : ${resultatGarde.cause ?? (resultatGarde.jumeaux || []).join(', ') ?? ''}${resultatGarde.nbProduits ? ` (${resultatGarde.nbProduits} produits)` : ''}`);
+        }
+        if (decisionGarde.action === 'refus') {
+            // Plus de trois produits pour la même carte de jeu : on ne montre jamais trois candidats choisis parmi N (la vérité
+            // pourrait en être exclue). Refus remboursé HORS du plafond quotidien (tour 1, I2) : c'est NOTRE refus, pas un échec du
+            // client — il ne doit jamais être débité sans réponse à cause de cette garde. Une seule fois par scan (req.scanRembourse).
+            const rendu = await rembourserScan(req, decisionGarde.motifRefus, { sansPlafond: true });
+            enregistrerEchec({
+                route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+                motifEchec: decisionGarde.motifRefus, rembourse: rendu,
+                reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex, prixVinted,
+                ...champsEtat(), ...champsCout(),
+                exAequoIds, ...champsVivier(), ...champsIdentification(),
+                nbCandidats: produits.length,
+                ...champsGarde
+            });
+            return res.json({
+                success: false,
+                ...champsDeRefus(decisionGarde.motifRefus, rendu),
+                error: `Cette carte existe sous le même nom dans ${decisionGarde.nbProduits ?? 'plusieurs'} produits d'extensions ou de numéros différents : aucun prix ne peut être donné sans risquer de tomber sur le mauvais.`,
+                cardInfo
+            });
+        }
+        const carteAmbigue = Boolean(ambigueAvantGarde || decisionGarde.action === 'reserve');
         // ════════════════════════════════════════════════════════════════════
         // LA RAISON DE LA RÉSERVE — calculée UNE FOIS, donnée à ses DEUX consommateurs
         // ════════════════════════════════════════════════════════════════════
@@ -5490,6 +5536,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // ancienne étiquette ; les statistiques par raison ne sont pas additionnables de
         // part et d'autre de cette date pour les scans qui déclenchent la contradiction A.
         const raisonReserve = !carteAmbigue ? null
+            // D2 (2026-10-13) : la garde des jumeaux ne joue QUE sur un verdict qui serait ferme — aucune autre cause n'est vraie quand elle
+            // parle, donc sa place dans l'ordre est sans effet sur les autres raisons (leurs statistiques restent additionnables).
+            : decisionGarde.raison ? decisionGarde.raison
             // 2026-10-05 : DEVANT TOUT, c'est la prémisse la plus faible — la carte n'a pas été LUE, seulement cherchée par le titre
             : cardInfo?.lectureDeSecours ? 'lecture-de-secours'
             : impressionCorrigee ? 'impression-corrigee'
@@ -5718,7 +5767,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             'nom-repli-suspect': 'faible',
             // La lecture de secours (2026-10-05) : la carte n'a pas été LUE, le service de lecture était tombé ; on l'a cherchée par
             // le titre de l'annonce. Faiblesse CONSTITUTIVE : un titre écrit par un vendeur n'est pas la carte photographiée.
-            'lecture-de-secours': 'faible'
+            'lecture-de-secours': 'faible',
+            // D2 : un verdict ferme dont le produit a 1 ou 2 jumeaux (même métacarte, autre créneau) : le prix d'un jumeau peut être
+            // 4,5 fois plus haut (IMG_3237 : 29,84 € contre 135,98 €). Faible par construction, comme la recherche en échec.
+            'jumeaux-garde': 'faible',
+            'jumeaux-recherche-echec': 'faible'
         };
         // ════════════════════════════════════════════════════════════════════
         // 📌 NOTE — NON DEMANDÉE AUJOURD'HUI, ÉCRITE POUR NE PAS ÊTRE REDÉCOUVERTE
@@ -5913,10 +5966,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // base. `null` est la seule valeur que le serveur sait produire honnêtement ; le
         // champ existe dans le contrat pour que l'extension l'affiche sans image sans avoir
         // à deviner. Voir la note de passation avant de tenter de le remplir.
-        const tetesDuClassement = classement.slice(0, carteAmbigue ? 3 : 1).filter(Boolean);
+        // D2 : sous réserve PAR LA GARDE DES JUMEAUX, les candidats sont le gagnant puis ses jumeaux (3 produits au plus en tout) — le
+        // classement top-3 peut ne pas les contenir (IMG_3237 : le vivier n'avait qu'un candidat). Recherche en échec : le seul produit.
+        // Les jumeaux sont hors vivier : nom et prix guide se lisent à part ; une lecture qui échoue laisse `null`, jamais un prix inventé.
+        const estReverseJumeau = impressionEstReverse(motifResolution.cible, cardInfo.reverse);
+        const { tetes: tetesDuClassement, noms: nomsJumeaux } = await tetesDesCandidats({
+            decision: decisionGarde, classement, carteAmbigue,
+            lireNoms: accesJumeaux.lireNoms, lirePrix: id => getPrixGuideLocal(id, estReverseJumeau)
+        });
         const numerosDesTetes = await lireNumeros(tetesDuClassement.map(c => c.idProduct));
         const candidats = tetesDuClassement.map((c, i) => {
-            const p = produits.find(x => x.idProduct === c.idProduct);
+            const p = produits.find(x => x.idProduct === c.idProduct) ?? (nomsJumeaux.has(c.idProduct) ? { name: nomsJumeaux.get(c.idProduct) } : undefined);
             const num = numerosDesTetes.get(c.idProduct);
             // Le gagnant porte le prix RÉELLEMENT retenu — sur le chemin à candidat
             // unique, `classement[0]` n'en a pas et seul `prixGuideRetenu` l'a lu.
@@ -6080,6 +6140,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // neuve s'est déclenchée une seule fois.
             raisonReserve,
             niveauReserve,
+            // D2 : la garde des jumeaux a-t-elle joué, et avec quelle issue ('aucun' | 'jumeaux' | 'echec' | 'non-jouee'), sa cause en cas
+            // d'échec, et les jumeaux trouvés. Écrit à CHAQUE scan abouti — 'non-jouee' dit que la réponse était déjà sous réserve.
+            ...champsGarde,
             // Les onze champs du départage par l'image, à CHAQUE scan — y compris quand il
             // s'abstient, et surtout quand il s'abstient. Voir journal-scans.js.
             ...champsImage,
