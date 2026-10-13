@@ -231,10 +231,13 @@ const TABLE = [
     // Pikachu de Celebrations, Mew, Reshiram, Zekrom), et les énergies de base sans carte déclarante.
     ...[
         ['pcgL', 5718, 42, 'Master Kit', 'Master-Kit', 'japonais', 'jp', 'Master Kit', 27],
-        ['CEL', 4347, 53, 'Celebrations', 'Celebrations', 'occidental', 'intl', 'Celebrations', 36]
-    ].map(([code, exp, prod, nom, slugSet, region, tirage, expansion, gardes]) => ({ code, exp, prod, nom, slugSet, region, bulba: { titre: null, sansPage: true, nomSeul: true, tirage, expansion }, attendu: prod,
-        controle: { couverture: null, gardeNomSeul: { gardes }, le: '2026-10-05' },
-        verifie: { le: '2026-10-05', page: null, note: `sans page, clé NOM SEUL (numéros masqués) sous garde bidirectionnelle : ${gardes}/${prod} produits gardés au rejeu, paires lues une à une` } })),
+        // 🔑 CEL, lot du 2026-10-13 : `cles` ouvre, POUR CETTE LIGNE SEULEMENT, le numéro EXACT (« 002 » du tirage principal ≠ « 2 » de la Classic Collection) et la clé nom + attaques exactes
+        // (Reshiram, Zekrom V2) de la garde du nom seul ; avec les alias par expansion (collecte-cartes/alias-noms.js), 50/53 produits gardés — restent Pikachu V2/V3 et Charizard V2,
+        // que rien ne départage (même nom, mêmes attaques, aucun numéro). Rejeu mesuré : 14 lignes gagnées, 0 perdue, 0 déplacée, 0 modifiée ; aucune autre ligne ne change.
+        ['CEL', 4347, 53, 'Celebrations', 'Celebrations', 'occidental', 'intl', 'Celebrations', 50, ['numero-exact', 'attaques-exactes']]
+    ].map(([code, exp, prod, nom, slugSet, region, tirage, expansion, gardes, cles]) => ({ code, exp, prod, nom, slugSet, region, bulba: { titre: null, sansPage: true, nomSeul: true, tirage, expansion, ...(cles ? { cles } : {}) }, attendu: prod,
+        controle: { couverture: null, gardeNomSeul: { gardes }, le: cles ? '2026-10-13' : '2026-10-05' },
+        verifie: { le: cles ? '2026-10-13' : '2026-10-05', page: null, note: `sans page, clé NOM SEUL (numéros masqués) sous garde bidirectionnelle : ${gardes}/${prod} produits gardés au rejeu, paires lues une à une` } })),
 
     // ════ EX HOLON PHANTOMS — 2026-09-26 (« crée-le maintenant, en priorité ») ═══════════════════════════════════════════
     // 🔴 L'EXPANSION 1551 ÉTAIT « NOM INCONNU » : 112 produits (7 185 € au guide, dont Gyarados ☆ δ et Pikachu ☆ δ), aucun appris

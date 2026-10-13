@@ -83,10 +83,11 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const t = (c, numeroCm, idProduct, fiche = numeroCm) => ({ carte: c, numeroCm, numeroFiche: fiche, idProduct });
     const plan1 = P.planifierPtcgio({ slug: 'Celebrations', trous: [t(carte(1, 'Pikachu'), '005', 10), t(carte(2, 'Mew'), '011', 11), t(carte(2, 'Mew'), '011', 12), t(carte(3, 'Zekrom'), null, 13),
         t(carte(4, 'Venusaur'), 'BS 15', 14, '15'), t(carte(5, 'Ho-Oh', [{ set: 'Celebrations', source: 'tcgdex', numero: '001' }]), '001', 15), t(carte(6, 'Lunala'), '011', 16, '12')] });
-    verifier('plan : « 15 Venusaur » (classic collection, fiche n° 15 de Base Set, Cardmarket « BS 15 ») ne reçoit PAS la carte n° 15 de cel25', plan1.plan.some(p => p.carteId === 4), false);
-    verifier('plan : 2 prouvés (le doublon carte+numéro compte une fois), l\'adresse est la haute définition', plan1.plan.map(p => [p.carteId, p.numero, p.url]), [[1, '005', 'https://images.pokemontcg.io/cel25/5_hires.png'], [2, '011', 'https://images.pokemontcg.io/cel25/11_hires.png']]);
+    // (lot CEL, 2026-10-13 : la Classic Collection a SA ligne `cel25c` — « 15 Venusaur » reçoit désormais SON image, jamais la n° 15 de cel25 (Lunala) ; test-celebrations.js détaille la ligne)
+    verifier('plan : « 15 Venusaur » (classic collection, fiche n° 15 de Base Set, Cardmarket « BS 15 ») reçoit l\'image de cel25c, JAMAIS la carte n° 15 de cel25', plan1.plan.filter(p => p.carteId === 4).map(p => p.url), ['https://images.pokemontcg.io/cel25c/15_A_hires.png']);
+    verifier('plan : 3 prouvés (le doublon carte+numéro compte une fois), l\'adresse est la haute définition', plan1.plan.map(p => [p.carteId, p.numero, p.url]), [[1, '005', 'https://images.pokemontcg.io/cel25/5_hires.png'], [2, '011', 'https://images.pokemontcg.io/cel25/11_hires.png'], [4, '15', 'https://images.pokemontcg.io/cel25c/15_A_hires.png']]);
     verifier('plan : un produit déjà pourvu au même numéro n\'est jamais dans le plan (additif)', plan1.plan.some(p => p.carteId === 5), false);
-    verifier('plan : les restes disent pourquoi', plan1.restes.map(r => [r.carteId, r.motif]).sort(), [[3, 'sans-numero'], [4, 'numero-hors-set'], [6, 'numero-contradictoire']]);
+    verifier('plan : les restes disent pourquoi', plan1.restes.map(r => [r.carteId, r.motif]).sort(), [[3, 'sans-numero'], [6, 'numero-contradictoire']]);
     const plan2 = P.planifierPtcgio({ slug: 'Shining-Legends', trous: [t(carte(21, 'Raichu-GX'), '75', 31), t(carte(22, 'Hoopa'), '76', 32), t(carte(23, 'Pikachu'), '77a', 33)] });
     verifier('plan : un numéro hors de ce que les témoins couvrent est RETIRÉ et nommé « non couvert par un témoin » (76), un numéro d\'une autre forme (77a) reste hors set', [plan2.plan.map(p => p.carteId), plan2.restes.map(r => [r.carteId, r.motif])], [[21], [[22, 'non-couvert-par-un-temoin'], [23, 'numero-hors-set']]]);
     verifier('plan : le numéro de fiche absent (null) n\'empêche pas l\'adresse (McDonald\'s 2011 : Snivy)', P.planifierPtcgio({ slug: 'McDonalds-Collection-2011', trous: [t(carte(8, 'Snivy'), '1', 98, null)] }).plan.map(p => [p.url, p.numero]), [['https://images.pokemontcg.io/mcd11/1_hires.png', '1']]);
@@ -181,7 +182,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     tr = reseau(normal);
     let { b, depots } = await lancer(B, tr);
     verifier('collecte : « verifie »', b.etat, 'verifie');
-    verifier('requêtes : robots.txt puis les 2 trous prouvés — pas le produit déjà pourvu, pas « BS 15 »', tr.appels.map(u => u.replace('https://images.pokemontcg.io', '')), ['/robots.txt', '/cel25/5_hires.png', '/cel25/11_hires.png']);
+    verifier('requêtes : robots.txt puis les 3 trous prouvés (dont la Classic « BS 15 » → cel25c/15_A, jamais cel25/15) — pas le produit déjà pourvu', tr.appels.map(u => u.replace('https://images.pokemontcg.io', '')), ['/robots.txt', '/cel25/5_hires.png', '/cel25/11_hires.png', '/cel25c/15_A_hires.png']);
     const im = B.col('images').get('pokemontcg.io/Celebrations/1/005/en');
     verifier('le document `images` : source, langue, mention, lot, état, adresse, preuve', [im?.source, im?.langue, im?.mention, im?.lot, im?.etat, im?.urlOriginal, /005/.test(im?.preuve || '') && /cel25/.test(im?.preuve || '')],
         ['pokemontcg.io', 'en', '© Pokémon / The Pokémon Company', 'ptcgio-2026-10', 'ok', 'https://images.pokemontcg.io/cel25/5_hires.png', true]);
@@ -189,22 +190,22 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('la carte reçoit SON visuel et garde celui de l\'autre set', B.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `pokemontcg.io:${SLUG}:005`]);
     verifier('   l\'entrée porte mention, lot, langue, attribution, source', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source])(B.col('cartes').get(2).images[0]), ['© Pokémon / The Pokémon Company', 'ptcgio-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokemontcg.io']);
     verifier('un produit DÉJÀ pourvu par une autre source : intact (additif ; la vignette est un champ NEUF que assurerVignettes pose partout, vignette.js)', B.col('cartes').get(3).images.map(({ vignette, ...e }) => e), [{ set: SLUG, source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/h.webp', langue: 'en' }]);
-    verifier('un numéro hors plage (« BS 15 ») reste un trou : aucune entrée', B.col('cartes').get(4).images, []);
+    verifier('la Classic « BS 15 » est demandée à cel25c ; le serveur simulé répond 404 (le numéro n\'existe pas à la source) : le trou reste, aucune entrée', B.col('cartes').get(4).images, []);
     verifier('VIGNETTES : après la jointure, le collecteur appelle vignetterApresJointure avec le bucket des images et le set', appelsVignettes[0], ['bucket-banc', SLUG]);
     const duLot = B.col('cartes').get(1).images.concat(B.col('cartes').get(2).images).filter(e => e.source === 'pokemontcg.io' && e.lot === 'ptcgio-2026-10');
     verifier('VIGNETTES : toute entrée du lot a sa vignette (2 entrées, clé sous vignettes/pokemontcg.io/)', [duLot.length, duLot.every(e => /^vignettes\/pokemontcg\.io\/Celebrations\/.+\.webp$/.test(e.vignette?.cleR2 || ''))], [2, true]);
-    verifier('le bilan du set : 2 prouvés, garde verte', [B.col('sets').get(SLUG).visuelsPtcgio?.prouves, B.col('sets').get(SLUG).visuelsPtcgio?.garde?.ok], [2, true]);
+    verifier('le bilan du set : 3 prouvés (2 images + un 404), garde verte', [B.col('sets').get(SLUG).visuelsPtcgio?.prouves, B.col('sets').get(SLUG).visuelsPtcgio?.garde?.ok], [3, true]);
 
     tr = reseau(normal);
     ({ b, depots } = await lancer(B, tr));
-    verifier('un second passage : « verifie », 0 téléchargement, 0 dépôt, pas de doublon', [b.etat, tr.appels.filter(u => /hires/.test(u)).length, depots.length, B.col('cartes').get(1).images.length], ['verifie', 0, 0, 2]);
+    verifier('un second passage : « verifie », seule la Classic 404 est redemandée (rien n\'est stocké pour elle), 0 dépôt, pas de doublon', [b.etat, tr.appels.filter(u => /hires/.test(u)).length, depots.length, B.col('cartes').get(1).images.length], ['verifie', 1, 0, 2]);
 
     // un visuel RETIRÉ ne revient jamais
     B.col('images').get('pokemontcg.io/Celebrations/2/011/en').etat = 'retire';
     B.col('cartes').get(2).images = [];
     tr = reseau(normal);
     ({ b } = await lancer(B, tr));
-    verifier('un visuel retiré (état « retire ») n\'est ni redemandé ni rejoint', [tr.appels.filter(u => /hires/.test(u)).length, B.col('cartes').get(2).images.length], [0, 0]);
+    verifier('un visuel retiré (état « retire ») n\'est ni redemandé ni rejoint', [tr.appels.filter(u => /hires/.test(u)).length, B.col('cartes').get(2).images.length], [1, 0]);   // (1 : la Classic 404, jamais le numéro 011 retiré)
 
     // défi en cours de route : arrêt, ce qui est prouvé avant est joint, l'alerte est écrite
     const B2 = fausseBase(); semer(B2);
@@ -222,7 +223,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     B3.col('cartes').set(6, { _id: 6, nomEn: 'Mew', images: [] }); B3.col('cartes_produits').set('6|15', { _id: '6|15', carteId: 6, idProduct: 15, numeroFiche: '024', slugSet: SLUG });
     tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : /\/24_hires/.test(url) ? { status: 200, type: 'image/png', octets: petit } : { status: 200, type: 'image/png', octets: png });
     ({ b, depots } = await lancer(B3, tr));
-    verifier('dimensions : le fichier 600×825 d\'un set en 734×1024 est refusé, les 3 autres jointes', [B3.col('cartes').get(6).images.length, [1, 2, 5].map(i => B3.col('cartes').get(i).images.filter(e => e.source === 'pokemontcg.io').length), depots.length], [0, [1, 1, 1], 3]);
+    verifier('dimensions : le fichier 600×825 d\'un set en 734×1024 est refusé, les 3 autres jointes (+ la Classic, ligne cel25c, jugée avec ses propres fichiers)', [B3.col('cartes').get(6).images.length, [1, 2, 5].map(i => B3.col('cartes').get(i).images.filter(e => e.source === 'pokemontcg.io').length), depots.length], [0, [1, 1, 1], 4]);
 
     // les vignettes qui échouent : l'unité n'est PAS « verifie » (une entrée sans vignette est servie sans), et l'erreur se dit
     const B8 = fausseBase(); semer(B8);
@@ -334,7 +335,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
-    verifier('langue : la preuve écrite en base porte le VRAI compte (82 témoins, 90 images ouvertes) et plus « 42 »', [/82 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /90 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 82]);
+    verifier('langue : la preuve écrite en base porte le VRAI compte (104 témoins, 112 images ouvertes — les 22 de cel25c le 2026-10-13 en plus) et plus « 42 »', [/104 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /112 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 104]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
     // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
