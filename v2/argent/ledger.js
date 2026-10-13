@@ -322,4 +322,75 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
     await ecrireEtat('rembourse');                                              // crédit rendu : si cette écriture échoue, la ligne reste « rendu-en-cours » (listée), jamais rendue une 2e fois
     return { rendu: true, raisonNonRembourse: null };
 }
-module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME };
+// MOYENS-B2a — RÉPARER un débit « rembourse » SANS mouvement de crédit (état laissé par l'ANCIEN ordre de `rendreLeScan`, qui posait « rembourse » avant le crédit ; plus produit par le code actuel).
+// Geste MANUEL (opérateur), jamais automatique : il n'est appelé par aucune minuterie ni aucune route. Le crédit manquant est écrit UNE fois, de façon idempotente, après la PREUVE par le grand livre qu'aucun mouvement n'existe.
+// Deux faces du même état, que seul l'ÉCART DE POCHE sépare (reel − attendu, la mesure de `reconcilier`) : écart 0 = le crédit n'a jamais été rendu (on le rend ET on écrit la trace `rp|<débit>`) ;
+// écart +1 = le crédit a été rendu sans sa trace (on écrit la trace SEULE : jamais de second crédit). Tout autre cas REFUSE et le dit (une garde s'écrit par ce qu'elle autorise) :
+//   · plusieurs débits « rembourse » sans mouvement chez ce porteur (l'écart ne s'attribue pas à un scan) ; une ligne « rendu-en-cours » / « rendu-echoue » de la même poche (son crédit a pu être rendu) ;
+//   · poche non vérifiable (hebdo, abonnement, installation sans dotation connue, installation LIÉE) ; écart autre que 0 ou +1 ; réparation interrompue (marque `reparation` sans mouvement `rp|…`).
+// Idempotence : la prise de la marque `reparation` sur le débit est atomique (deux appels simultanés : un seul passe) ; le mouvement a une clé unique `rp|<id du débit>` ; un second appel trouve autant de
+// mouvements que de débits « rembourse » et ne fait rien. Limite dite : si le processus s'arrête APRÈS la prise de la marque et AVANT le mouvement, le cas reste listé (« reparation-interrompue ») pour décision du testeur.
+async function reparerDebitRembourseSansMouvement(porteur, { scanId, debitId = null, maintenant = new Date() } = {}, cfg) {
+    const refus = (raison, plus = {}) => ({ repare: false, raison, creditRendu: false, ...plus });
+    if (!scanId) return refus('scan-absent');
+    let cible;
+    try {
+        const debits = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1 }).toArray();
+        const prises = debits.filter(d => d.etat === 'rembourse' && d.credit && typeof d.cleIdempotence === 'string');
+        const traces = await col('mouvements').countDocuments({ type: 'remboursement', scanId, delta: 1 });
+        if (prises.length <= traces) return refus('rien-a-reparer');
+        for (const d of prises) if (d.reparation && !(await col('mouvements').countDocuments({ cleIdempotence: `rp|${d._id}` }))) return refus('reparation-interrompue');
+        // l'écart de poche ne s'attribue à CE scan que si c'est le seul cas ambigu du porteur
+        const tous = await col('mouvements').find({ ...base(porteur), type: 'debit', delta: -1, etat: 'rembourse', scanId: { $exists: true, $ne: null }, cleIdempotence: { $type: 'string' }, credit: { $ne: null } }).toArray();
+        const parScan = new Map(); for (const d of tous) parScan.set(String(d.scanId), (parScan.get(String(d.scanId)) || 0) + 1);
+        let manque = 0; for (const [s, n] of parScan) manque += Math.max(0, n - await col('mouvements').countDocuments({ type: 'remboursement', delta: 1, scanId: tous.find(d => String(d.scanId) === s).scanId }));
+        if (manque !== 1) return refus('plusieurs-ambigus');
+        const candidats = prises.filter(d => !d.reparation && (!debitId || String(d._id) === String(debitId)));
+        if (!candidats.length) return refus('rien-a-reparer');
+        if (new Set(candidats.map(d => d.credit.poche)).size > 1) return refus('choix-ambigu');
+        cible = candidats[0];
+    } catch (e) { console.error(`❌ [v2 reparer] lecture : ${codeErr(e)}`); return refus('erreur'); }
+    const poche = cible.credit.poche;
+    let ecart;
+    try {
+        const non = await col('mouvements').countDocuments({ ...base(porteur), type: 'debit', 'credit.poche': poche, etat: { $in: ETATS_RENDU_NON_CONFIRME } });
+        if (non) return refus('non-resolus-meme-poche');
+        let reel, attendu;
+        if (porteur.type === 'installation') {
+            const i = await col('installations').findOne({ _id: porteur.id });
+            if (!i) return refus('porteur-introuvable');
+            if (i.compteId) return refus('installation-liee');
+            if (poche === 'essai') { if (!Number.isInteger(i.essaisInitiaux)) return refus('poche-non-verifiable'); reel = i.essais ?? 0; attendu = i.essaisInitiaux; }
+            else if (poche === 'achete') { reel = i.achete ?? 0; attendu = 0; }
+            else return refus('poche-non-verifiable');
+        } else if (porteur.type === 'compte') {
+            const c = await col('comptes').findOne({ _id: porteur.id });
+            if (!c) return refus('porteur-introuvable');
+            if (poche !== 'accueil' && poche !== 'achete') return refus('poche-non-verifiable');
+            reel = c.solde?.[poche] ?? 0; attendu = 0;
+        } else return refus('poche-non-verifiable');
+        const [s] = await col('mouvements').aggregate([{ $match: { ...base(porteur), poche } }, { $group: { _id: null, s: { $sum: '$delta' } } }]).toArray();
+        ecart = reel - (attendu + (s ? s.s : 0));
+    } catch (e) { console.error(`❌ [v2 reparer] preuve : ${codeErr(e)}`); return refus('erreur'); }
+    if (ecart !== 0 && ecart !== 1) return refus('ecart-inattendu', { ecart });
+    // prise atomique de la marque : un seul appel passe
+    let pris;
+    try { pris = await col('mouvements').findOneAndUpdate({ _id: cible._id, etat: 'rembourse', reparation: { $exists: false } }, { $set: { reparation: { le: maintenant, ecart } } }, { returnDocument: 'before' }); }
+    catch (e) { console.error(`❌ [v2 reparer] prise : ${codeErr(e)}`); return refus('erreur'); }
+    if (!pris) return refus('prise-perdue');
+    let cr = null;
+    if (ecart === 0) {
+        try { cr = await rendreUnite(porteur, cible.credit, cfg, maintenant); }
+        catch (e) { console.error(`🔴 [v2 reparer] crédit en erreur (${codeErr(e)}) — marque laissée : « reparation-interrompue », décision du testeur`); return refus('erreur-apres-prise'); }
+        if (!cr.rendu) { try { await col('mouvements').updateOne({ _id: cible._id }, { $unset: { reparation: '' } }); } catch (_) { /* la marque restée dit « interrompue » */ } return refus(cr.raison || 'credit-non-rendu'); }
+    }
+    try {
+        await col('mouvements').insertOne({ ...base(cr ? cr.cible : porteur), poche: cr ? cr.pocheRendue : poche, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif: 'reparation', scanId, etat: 'rembourse', cleIdempotence: `rp|${cible._id}`, expireLe: expireMouvement(maintenant, cfg) });
+    } catch (e) {
+        if (e.code === 11000) return refus('deja-repare');
+        console.error(`🔴 [v2 reparer] ${ecart === 0 ? 'crédit rendu mais ' : ''}trace non écrite (${codeErr(e)}) — marque laissée : « reparation-interrompue »`);
+        return refus('trace-non-ecrite', { creditRendu: ecart === 0 });
+    }
+    return { repare: true, raison: null, creditRendu: ecart === 0, poche, ecart };
+}
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, reparerDebitRembourseSansMouvement, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME };
