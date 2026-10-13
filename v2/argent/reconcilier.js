@@ -45,8 +45,17 @@ async function reconcilier(porteur, { cfg = require('../config').lireConfig(proc
     const rendusEchoues = await lignesNonRendues(porteur);
     const marquesEnSuspens = await MS.enSuspens({ porteur });
     const gardes = await debitsGardes(porteur, { cfg, maintenant });
-    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, debitsGardes: gardes,
-        propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 && gardes.length === 0 };
+    const lots = await lotsARendre(porteur);
+    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, debitsGardes: gardes, lotsARendre: lots,
+        propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 && gardes.length === 0 && lots.length === 0 };
+}
+// UN-CANDIDAT, tour 2 : un lot dont toutes les confirmations sont refusées et dont le remboursement a ÉCHOUÉ (ou n'a pas pu être jugé) porte `lotARendre` sur ses lignes `questions_v2`. Le solde et le journal
+// concordent (le client est débité, rien ne dit qu'il aurait dû être rendu) : il est LISTÉ ici, le balayage le reprend, et le verdict n'est pas « propre » tant qu'il en reste un.
+async function lotsARendre(porteur) {
+    const l = await col('questions_v2').find({ lot: true, lotARendre: { $exists: true }, 'porteur.type': porteur.type, 'porteur.id': porteur.id }).toArray();
+    const vus = new Map();
+    for (const q of l) if (!vus.has(String(q.scanId))) vus.set(String(q.scanId), { scanId: q.scanId, porteur: `${porteur.type}:${porteur.id}`, cause: q.lotARendre.cause ?? null, depuis: q.lotARendre.depuis ?? null });
+    return [...vus.values()];
 }
 // Une ligne de débit dont le rendu a échoué (« rendu-echoue ») ou n'a pas été confirmé (« rendu-en-cours ») NE se voit PAS dans la somme des deltas (le solde et le journal restent d'accord) :
 // le client est débité sans livraison. Elle est LISTÉE ici et le verdict n'est pas « propre » tant qu'il en reste une.
@@ -57,7 +66,7 @@ async function lignesNonRendues(porteur) {
 }
 // Tous les porteurs de la base (curseur : pas de liste en mémoire)
 async function reconcilierTous({ cfg = require('../config').lireConfig(process.env), maintenant = new Date() } = {}) {
-    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], debitsGardes: [], banc: null, propre: true };
+    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], debitsGardes: [], lotsARendre: [], banc: null, propre: true };
     for (const [type, nom] of [['compte', 'comptes'], ['installation', 'installations']]) {
         for await (const d of col(nom).find({}, { projection: { _id: 1 } })) {
             const r = await reconcilier({ type, id: d._id }, { cfg, maintenant });
@@ -65,6 +74,7 @@ async function reconcilierTous({ cfg = require('../config').lireConfig(process.e
             if (r.ecarts.length) { bilan.avecEcart++; bilan.lignes.push(r); }
             bilan.rendusEchoues.push(...(r.rendusEchoues ?? []));
             bilan.debitsGardes.push(...(r.debitsGardes ?? []));
+            bilan.lotsARendre.push(...(r.lotsARendre ?? []));
         }
     }
     bilan.marquesEnSuspens = await MS.enSuspens();            // toutes, y compris celles d'un porteur disparu (un compte supprimé n'efface pas un débit sans livraison)
@@ -74,7 +84,7 @@ async function reconcilierTous({ cfg = require('../config').lireConfig(process.e
     // (la passe ne tourne plus : un « 0 » ancien ne rassure pas). Aucune passe enregistrée (null) : dit, sans bloquer (v2 éteinte, ou pas encore de passe).
     bilan.banc = etat ? { lignesEnEchec: etat.lignesEnEchec, ageMaxJours: etat.ageMaxJours, objetsEnAttente: etat.objetsEnAttente, objetsRefuses: etat.objetsRefuses ?? 0,
         perime: new Date(maintenant).getTime() - new Date(etat.majLe).getTime() > 3 * 86400e3 } : null;
-    bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0 && bilan.debitsGardes.length === 0
+    bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0 && bilan.debitsGardes.length === 0 && bilan.lotsARendre.length === 0
         && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0 || bilan.banc.perime));
     return bilan;
 }

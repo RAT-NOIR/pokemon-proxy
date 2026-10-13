@@ -331,6 +331,62 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         H.vrai(`   ${cas.length} cas comparés ; le seul surcoût est celui d'une confirmation OUI`, cas.every(k => k.apres <= k.avant || k.avecOui));
         await svL.fermer();
     }
+    // ── 14. TOUR 2 : un remboursement de lot qui échoue n'est jamais perdu ; le plafond du lot parle ; le rejeu redit le résultat
+    {
+        const { reconcilier } = require('../argent/reconcilier');
+        const conf = id => ({ statutHttp: 200, corps: qst([id]) });
+        let liste = [];
+        const svT = await monter({ identifierLot: async () => liste });
+        const lance = async (ids, x0) => { liste = ids.map(conf); const x = x0 || await inst(20); const r = await poster(svT.url, x.jeton), j = r.json || {}; return { ...x, j, cartes: (j.analyse && j.analyse.cartes) || [] }; };
+        const rep = (L, id, choix) => repondre(svT.url, L.jeton, { scanId: L.j.scanId, carte: L.cartes.find(c => c.candidats[0].idProduct === id).index, choix });
+        const porteurDe = x => ({ type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false });
+        const idx = (L, id) => L.cartes.find(c => c.candidats[0].idProduct === id).index;
+        const RENDU = { essais: 20, net: 0, mouvements: 2, ouverts: [], remboursements: 1 }, PAYE = { essais: 19, net: -1, mouvements: 1, ouverts: ['debite'], remboursements: 0 };
+        const listes = async x => (await reconcilier(porteurDe(x), { cfg })).lotsARendre.length;
+        const sid = L => new mongoose.Types.ObjectId(L.j.scanId);
+
+        // S1 : l'analyse est ABSENTE au dernier NON (écriture annexe perdue)
+        {
+            const L = await lance([ID_A, ID_B]); await rep(L, ID_A, 'aucune');
+            const analyse = await raw('analyses').findOne({ _id: sid(L) });
+            await raw('analyses').deleteOne({ _id: sid(L) });
+            const r = await argentReg().repondreQuestion(porteurDe(L), { scanId: sid(L), carte: idx(L, ID_B), choix: 'aucune' });
+            H.v('14a. analyse absente au dernier NON : le lot n\'est pas rendu, MAIS l\'état « lot à rendre » est écrit en base', [r.statut, await livre(L), (await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotARendre.cause': 'analyse-absente' }))], [200, PAYE, 2]);
+            const rc = await reconcilier(porteurDe(L), { cfg });
+            H.v('   reconcilier : le lot est LISTÉ, propre = false', [rc.lotsARendre.map(l => String(l.scanId)), rc.propre], [[String(sid(L))], false]);
+            await argentReg().balayerQuestions({ maintenant: new Date(), max: 500 });
+            H.v('   le balayage, analyse TOUJOURS absente : jamais rendu au hasard, toujours listé', [await livre(L), await listes(L)], [PAYE, 1]);
+            await raw('analyses').insertOne(analyse);
+            const b1 = await argentReg().balayerQuestions({ maintenant: new Date(), max: 500 });
+            H.v('   l\'analyse revenue, le balayage rend le lot UNE fois (net 0), efface l\'état, propre = true', [await livre(L), await listes(L), (await reconcilier(porteurDe(L), { cfg })).propre, b1.lotsRepris], [RENDU, 0, true, 1]);
+            const b2 = await argentReg().balayerQuestions({ maintenant: new Date(), max: 500 });
+            H.v('   une reprise rejouée ne rend rien de plus', [(await livre(L)).remboursements, b2.lotsRepris], [1, 0]);
+            const rj = await argentReg().repondreQuestion(porteurDe(L), { scanId: sid(L), carte: idx(L, ID_B), choix: 'aucune' });
+            H.v('   le rejeu du dernier NON redit « rembourse » (le lot a été rendu) sans rien rendre de plus', [rj.facturation.rembourse, rj.facturation.motif, (await livre(L)).remboursements], [true, 'lot', 1]);
+        }
+        // un remboursement qui ÉCHOUE dans le ledger (erreur d'écriture du claim) : même chemin
+        {
+            const L = await lance([ID_A, ID_B]); await rep(L, ID_A, 'aucune');
+            const colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async (...a) => { if (armee && a[0] && a[0].type === 'remboursement') { armee = false; throw new Error('panne simulée'); } return t.insertOne(...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let r2; try { r2 = await rep(L, ID_B, 'aucune'); } finally { db.col = colOrig; }
+            H.v('14b. le ledger échoue au remboursement du lot : payé, « lot à rendre » écrit et listé', [r2.statut, await livre(L), await listes(L)], [200, PAYE, 1]);
+            const b = await argentReg().balayerQuestions({ maintenant: new Date(), max: 500 });
+            H.v('   le balayage rend le lot une fois et efface l\'état', [await livre(L), await listes(L), b.lotsRepris], [RENDU, 0, 1]);
+        }
+        // S3 : le plafond du lot (compteur PANNE, 5/jour) — le 6e lot du jour n'est pas rendu et la réponse le dit
+        {
+            const x = await inst(20); const res = []; let sixieme = null;
+            for (let k = 0; k < 6; k++) { const L = await lance([ID_A, ID_B], x); await rep(L, ID_A, 'aucune'); const r = await rep(L, ID_B, 'aucune'); res.push(r.json.facturation.rembourse); if (k === 5) sixieme = { L, r }; }
+            H.v('14c. 6 lots tout-NON du même porteur dans la journée : les 5 premiers rendus, le 6e non', res, [true, true, true, true, true, false]);
+            const f = sixieme.r.json.facturation;
+            H.v('   le 6e dit POURQUOI : plafond-jour, débité 1', [f.rembourse, f.debite, f.motif, f.raisonNonRembourse], [false, 1, 'plafond-jour', 'plafond-jour']);
+            H.v('   le compteur est celui des PANNES (5/jour), pas celui des questions (30/jour)', [await compteurDe(x, 'panne'), await compteurDe(x, 'question')], [cfg.plafonds.panne, 0]);
+            const rj = await rep(sixieme.L, ID_B, 'aucune');
+            H.v('   le rejeu redit le même résultat, rien de plus ; ce refus est définitif (non listé)', [rj.json.facturation, await listes(x)], [f, 0]);
+        }
+        await svT.fermer();
+    }
     H.v(`dénominateur : ${reponsesValidees} réponses de la route validées contre le contrat, ${ecartsContrat} écart(s)`, ecartsContrat, 0);
     H.vrai('   le banc a bien validé des réponses (un contrôle qui ne valide rien ne dit rien)', reponsesValidees >= 20);
     await sv.fermer();
