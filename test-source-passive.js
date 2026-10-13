@@ -85,6 +85,9 @@ const ALERTE_ECHUE = () => ({ _id: P.ID_ALERTE, active: true, depuis: new Date(T
         assert.strictEqual(autre, null, 'une autre alerte garde sa phrase d\'origine');
         const src = fs.readFileSync(require.resolve('./file-a-l-arret.js'), 'utf8');
         assert.ok(/phraseAlerte\(/.test(src), 'file-a-l-arret.js appelle phraseAlerte');
+        // tour 2 : plus aucune phrase « prochaine tentative » en REPLI (aucune tentative n'est programmée, pour aucune source)
+        assert.ok(!/prochaine tentative au plus tôt/.test(src.replace(/^\s*\/\/.*$/gm, '')), 'le repli ne promet plus de prochaine tentative');
+        assert.ok(/aucune tentative automatique/.test(src), 'le repli le dit');
     });
 
     console.log('l\'unité déjà en file');

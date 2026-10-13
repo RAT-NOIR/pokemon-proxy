@@ -103,6 +103,19 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
         await refusImage('image tronquée (l\'en-tête seul se lit)', entree(1, 'Pikachu', '001', imPng.subarray(0, 60)), /ne se décodent pas/);
         const bruitPng = await sharp(crypto.randomBytes(100 * 100 * 3), { raw: { width: 100, height: 100, channels: 3 } }).png({ compressionLevel: 0 }).toBuffer();
         await refusImage('image tronquée EN PLEIN CORPS (l\'en-tête se lit, les pixels non : seul le décodage complet le voit)', entree(1, 'Pikachu', '001', bruitPng.subarray(0, Math.floor(bruitPng.length / 2))), /ne se décodent pas/);
+        // TOUR 2 (relecture X, mineur) : l'EN-TÊTE QUI MENT. Un PNG fabriqué à la main dont l'en-tête (IHDR) déclare une taille et dont les données en portent une autre (CRC recalculés).
+        {
+            const zlib = require('zlib');
+            const chunk = (type, data) => { const t = Buffer.from(type), len = Buffer.alloc(4), crc = Buffer.alloc(4); len.writeUInt32BE(data.length); crc.writeUInt32BE(zlib.crc32(Buffer.concat([t, data])) >>> 0); return Buffer.concat([len, t, data, crc]); };
+            const pngMenteur = (largeurEntete, hauteurEntete, largeurDonnees, rangeesDonnees) => {
+                const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(largeurEntete, 0); ihdr.writeUInt32BE(hauteurEntete, 4); ihdr[8] = 8; ihdr[9] = 2;
+                return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.alloc(rangeesDonnees * (1 + largeurDonnees * 3)))), chunk('IEND', Buffer.alloc(0))]);
+            };
+            global.__pngMenteur = pngMenteur;
+            // (b) l'en-tête dit 4096 × 4096 (la borne), les données n'ont que 10 rangées : un fichier tronqué, que seul le décodage complet voit
+            const gros = pngMenteur(4096, 4096, 4096, 10);
+            await refusImage('en-tête qui ment à la borne (4096 × 4096 déclarés, 10 rangées de données)', entree(1, 'Pikachu', '001', gros), /ne se décodent pas/);
+        }
         const gif = await sharp(couleur(1, 2, 3, 20, 20)).gif().toBuffer();
         await refusImage('format gif', entree(1, 'Pikachu', '001', gif), /format « gif »/);
         const large = await sharp(couleur(1, 2, 3, 4097, 1)).png().toBuffer();
@@ -111,6 +124,13 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
         const geant = await sharp({ create: { width: 12000, height: 12000, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png({ compressionLevel: 9 }).toBuffer();
         verifier('le PNG géant tient sous le plafond de 2 Mo (donc passe les contrôles de taille)', geant.length < P.IMAGE_MAX_OCTETS, true);
         await refusImage('PNG de moins de 2 Mo qui se décoderait en 12000 × 12000 (refusé sur l\'en-tête)', entree(1, 'Pikachu', '001', geant), /dimensions 12000×12000/);
+        {
+            // (a) l'en-tête dit 100 × 100, les données portent 100 × 6000 : refusé, ou accepté à la taille de l'EN-TÊTE — jamais plus grand que l'en-tête (en dernier : une acceptation écrit un fichier)
+            const petit = global.__pngMenteur(100, 100, 100, 6000);
+            const rep1 = await envoyer(port, { corps: lot([entree(1, 'Pikachu', '001', petit)]) });
+            const dernier = (lirePage().recues[UUID(1)] ?? []).at(-1);
+            verifier('en-tête qui ment (100 × 100 déclaré, 6000 rangées de données) : refusé, OU accepté à la taille de l\'EN-TÊTE — jamais une image plus grande que l\'en-tête', [rep1.status, rep1.json?.recues === 0 ? rep1.json?.refusees?.length === 1 : (dernier?.sha256 === crypto.createHash('sha256').update(petit).digest('hex') && dernier.w === 100 && dernier.h === 100)], [200, true]);
+        }
         {
             const src = fs.readFileSync(process.env.PK_RECEPTEUR ? path.resolve(process.env.PK_RECEPTEUR) : path.join(__dirname, 'recepteur-pikaqian.js'), 'utf8');
             const j = src.slice(src.indexOf('async function jugerImages'));

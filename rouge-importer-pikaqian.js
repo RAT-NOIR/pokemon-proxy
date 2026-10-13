@@ -24,9 +24,18 @@ const MUTANTS = [
     { nom: 'plafond de 400 Mo', de: 'st.dataSize + st.indexSize > stopOctets', vers: 'false' },
     { nom: 'seuls les « a-ecrire » s\'écrivent', de: "if (e.statut !== 'a-ecrire') continue;", vers: '' },
     { nom: 'octets identiques sur deux tuiles (octets-partages)', de: 'if (ids.length > 1) for', vers: 'if (false) for' },
-    { nom: 'bilan réécrit à « 0 écrite » quand tout est déjà là', de: 'if (ecrites === 0 && S.aEcrire === 0) {', vers: 'if (false) {' }
+    { nom: 'bilan réécrit à « 0 écrite » quand tout est déjà là', de: 'if (ecrites === 0 && S.aEcrire === 0 && bilanExistant) {', vers: 'if (false) {' },
+    { nom: 'premier import sans rien à écrire : aucun bilan écrit', de: 'if (ecrites === 0 && S.aEcrire === 0 && bilanExistant) {', vers: 'if (ecrites === 0 && S.aEcrire === 0) {' },
+    { nom: 'le dossier est lu hors de la racine autorisée', de: "if (!R.dansRacineAutorisee(dossierPassif, racine) || R.dansApportsManuels(dossierPassif)) return", vers: "if (false) return" },
+    { nom: 'la racine ne se juge plus que par les 3 noms (garde par refus)', de: "if (!R.dansRacineAutorisee(dossierPassif, racine) || R.dansApportsManuels(dossierPassif)) return", vers: "if (R.dansApportsManuels(dossierPassif)) return" },
+    { nom: 'mêmes octets sur deux PAGES : empreintes entre codes non comparées', de: ".filter(([, codes]) => codes.size > 1)", vers: ".filter(([, codes]) => codes.size > 99)" },
+    { nom: 'mêmes octets sur deux PAGES : l\'ensemble partagé n\'est pas appliqué', de: "o.ok && partagesEntreCodes.has(o.sha256) ?", vers: "false ?" },
+    { nom: 'octets déjà en base non vérifiés', de: "if (memes.some(", vers: "if (false && memes.some(" },
+    { nom: 'octets déjà en base : la même carte dans le même set devient un trou', de: "(d.carteId !== p.carteId || d.set !== slug)", vers: "true" },
+    { nom: 'octets déjà en base : le sha256 du WebP servi n\'est plus cherché', de: "find({ sha256: webpSha })", vers: "find({ sha256: 'rien' })" },
+    { nom: 'octets déjà en base : le sha256 des octets reçus n\'est plus cherché', de: "find({ sha256Octets: o.sha256 })", vers: "find({ sha256Octets: 'rien' })" }
 ];
-// (la garde `cle-partagee` est RETIRÉE de l'import : vide par construction, elle ne pouvait pas échouer — relecture C ; son mutant « inerte » l'est avec elle)
+// (la garde `cle-partagee` est RETIRÉE de l'import : vide par construction, elle ne pouvait pas échouer — relecture C)
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-import-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));

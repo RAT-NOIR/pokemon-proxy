@@ -7,14 +7,16 @@
 // 🔑 DÉCISION DU TESTEUR (2026-10-13) : « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker ne touche jamais le CDN. Mêmes preuves
 // exigées (numéro, nom, set) ; un doute est un trou. » Ce programme ne fait AUCUNE requête réseau : il lit le dossier que recepteur-pikaqian.js remplit (images + un fichier de page par visite) et rejoue,
 // avec les fonctions de PRODUCTION du collecteur (collecteur-images-pikaqian.js : releve, gardeTirage, gardeProduits, planifier — numéro + tuile sans foil unique + nom concordant —, poserOriginal, joindreAdditif ;
-// seuil de largeur largeurMinDe, aRejuger, marque basseDefinition ; images-cle-partagee.js), les MÊMES preuves que le collecteur du worker aurait exigées. Un doute est un TROU : compté, nommé, jamais écrit.
+// seuil de largeur largeurMinDe, aRejuger, marque basseDefinition), les MÊMES preuves que le collecteur du worker aurait exigées. Un doute est un TROU : compté, nommé, jamais écrit.
+// 🔑 IL NE LIT QUE SOUS UNE RACINE AUTORISÉE (recepteur-pikaqian.js : RACINE_AUTORISEE, jonctions résolues) — tout autre dossier est refusé, sans liste de refus.
 // Ce qu'il écrit — R2 (WebP) puis `images`, `cartes.images`, les vignettes, le bilan `sets.visuelsPikaqianPassif` — est posé par les mêmes fonctions que le collecteur, avec la source `pikaqian` et le lot
 // `pikaqian-2026-10` : `retirer-visuels-pikaqian.js` les retire d'un geste. Chaque document porte en plus la voie de lecture (canvas, cache, navigateur) et la visite.
 //
 // LES PREUVES AJOUTÉES PAR LA NATURE DE LA SOURCE (le navigateur du testeur, pas un client à nous) :
 //   · la page de la visite est rejugée (verdictDePage, complétude contre la mesure du set) ; l'image d'une tuile ne vaut que si la tuile est la MÊME (nom, numéro, adresse) dans toutes les visites qui l'ont envoyée ;
 //   · plusieurs empreintes différentes pour une même tuile (visites ou voies qui se contredisent) : trou « versions-divergentes » ; le fichier relu doit avoir l'empreinte que le fichier de page annonce ;
-//   · une tuile désignée par deux produits : trou « tuile-partagee » ; une clé (carte, numéro) portée par deux empreintes : trou « cle-partagee » (images-cle-partagee.js).
+//   · une tuile désignée par deux produits : trou « tuile-partagee » ; les MÊMES octets sur deux tuiles distinctes — d'une page, ou de pages différentes d'un même import — : trou « octets-partages » ;
+//     les mêmes octets déjà en base (`images`, toutes sources) pour une AUTRE carte ou un autre set : trou « octets-deja-en-base » (un réimport du même lot n'en est pas un).
 // ÉCRITURE : `--ecrire` exige `--codes` ET `--attendu=<code>:<N>` pour chaque code, N = le nombre d'images que la simulation donne à écrire. Si un seul code diffère, RIEN n'est écrit. Après l'écriture, la base est RELUE
 // (documents `images` « ok » et entrées de `cartes.images` du lot) et doit donner N.
 require('dotenv').config();
@@ -24,7 +26,7 @@ const crypto = require('crypto');
 const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, uniteDeLaLigne } = require('./collecte-cartes/pikaqian-sets');
-const { largeurMinDe, aRejuger } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const R = require('./recepteur-pikaqian');
@@ -87,14 +89,33 @@ async function octetsDesTuiles(visites, dossierPassif, code) {
     for (const ids of parEmpreinte.values()) if (ids.length > 1) for (const id of ids) sortie.set(id, { ok: false, motif: 'octets-partages' });   // PREUVE:octets-partages
     return sortie;
 }
+/** La lecture d'UN code (fichiers de page + octets des tuiles) : séparée du jugement pour que l'import compare les empreintes de TOUTES les pages avant de juger l'une d'elles. */
+async function lireCode(code, dossierPassif) {
+    const { visites, illisibles } = lireVisites(dossierPassif, code);
+    return { code, visites, illisibles, octets: visites.length ? await octetsDesTuiles(visites, dossierPassif, code) : new Map() };
+}
+/**
+ * 🔴 DES OCTETS IDENTIQUES SUR DES PAGES DIFFÉRENTES (relecture Y, tour 1, réserve a) : une image de remplacement commune à deux sets passerait la garde d'une seule page. Rend l'ensemble des
+ * empreintes portées par au moins DEUX codes différents d'un même import. Pure.
+ */
+function empreintesEntreCodes(lectures) {
+    const parSha = new Map();
+    for (const L of lectures) for (const o of L.octets.values()) if (o.ok) (parSha.get(o.sha256) || parSha.set(o.sha256, new Set()).get(o.sha256)).add(L.code);
+    return new Set([...parSha].filter(([, codes]) => codes.size > 1).map(([sha]) => sha));   // PREUVE:octets-partages-entre-pages
+}
 
 // ── 2. LE JUGEMENT D'UN CODE : les preuves du collecteur, rejouées ─────────────────────────────────────────────────
 /**
- * @param {{code: string, dossierPassif: string, db: object, M: object, table?: object[], attendu?: Function}} o  `db` : la base `cartes` (lecture suffit) ; `M` : ses modèles.
+ * @param {{code: string, dossierPassif: string, db: object, M: object, table?: object[], attendu?: Function, racine?: string, lecture?: object, partagesEntreCodes?: Set<string>}} o
+ * `db` : la base `cartes` (lecture suffit) ; `M` : ses modèles ; `racine` : la racine autorisée (les bancs seuls la surchargent) ; `lecture` / `partagesEntreCodes` : `lireCode` et `empreintesEntreCodes`
+ * quand l'import juge plusieurs codes.
  * @returns le jugement du code : par set (ligne de table), les entrées { p (le plan de production), statut, motif } et les comptes.
  */
-async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, attendu = R.attenduParTable }) {
-    const { visites, illisibles } = lireVisites(dossierPassif, code);
+async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, attendu = R.attenduParTable, racine = R.RACINE_AUTORISEE, lecture = null, partagesEntreCodes = new Set() }) {
+    // l'import ne LIT que sous la racine autorisée (jonctions résolues) — par ce qu'il autorise ; les trois noms d'apports manuels en second filet
+    if (!R.dansRacineAutorisee(dossierPassif, racine) || R.dansApportsManuels(dossierPassif)) return { code, visites: 0, illisibles: [], sets: [], refus: { etat: 'dossier-hors-racine', motif: `le dossier « ${dossierPassif} » n'est pas sous la racine autorisée « ${racine} » : rien n'y est lu` } };   // PREUVE:racine
+    const L = lecture || await lireCode(code, dossierPassif);
+    const { visites, illisibles } = L;
     const base = { code, visites: visites.length, illisibles, sets: [] };
     if (!visites.length) return { ...base, refus: { etat: 'aucune-visite', motif: `aucun fichier de page lisible pour ${code} dans ${path.join(dossierPassif, code)}` } };
     const derniere = visites.at(-1), tuiles = derniere.tuiles;
@@ -106,7 +127,7 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
     if (voulu && tuiles.length < voulu) return { ...base, refus: { etat: 'page-incomplete', motif: `page incomplète : ${tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure` } };
     const lignes = table.filter(l => l.codePk === code);
     if (!lignes.length) return { ...base, refus: { etat: 'refuse-table', motif: `code ${code} sans ligne dans collecte-cartes/pikaqian-sets.js` } };
-    const octets = await octetsDesTuiles(visites, dossierPassif, code);
+    const octets = new Map([...L.octets].map(([id, o]) => [id, o.ok && partagesEntreCodes.has(o.sha256) ? { ok: false, motif: 'octets-partages' } : o]));
     const origines = new Map(Array.isArray(derniere.origines) ? derniere.origines : []);
     const sansImage = derniere.sansImageDansLeNavigateur;
     for (const ligne of lignes) {
@@ -122,13 +143,17 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
         const compte = (k) => { trous[k] = (trous[k] || 0) + 1; };
         const parTuile = new Map(); for (const p of Pl.plan) parTuile.set(p.tuile.id, (parTuile.get(p.tuile.id) || 0) + 1);
         const entrees = [];
-        // (la garde `cle-partagee` d'images-cle-partagee.js est RETIRÉE ici : le plan est dédoublonné par (carte, numéro), elle ne pouvait pas échouer — relecture C. Sa menace réelle, des octets
-        //  identiques sur des tuiles différentes, est jugée par `octets-partages` dans octetsDesTuiles.)
+        // (les octets identiques sur des tuiles différentes sont jugés dans octetsDesTuiles (une page) et empreintesEntreCodes (plusieurs pages) ; ici, contre la BASE)
         for (const p of Pl.plan) {
             const o = octets.get(p.tuile.id);
             if (parTuile.get(p.tuile.id) > 1) { entrees.push({ p, statut: 'trou', motif: 'tuile-partagee' }); compte('tuile-partagee'); continue; }
             if (!o?.ok) { const motif = o?.motif ?? 'image-non-recue'; entrees.push({ p, statut: 'trou', motif }); compte(motif); continue; }
             const _id = P.idImagePikaqian(slug, p.carteId, p.numero);
+            // 🔴 LES MÊMES OCTETS DÉJÀ EN BASE (relecture Y, réserve b), toutes sources : le sha256 des octets reçus (documents de l'import) ET celui du WebP que nous servirions (documents de toutes les sources). Un document
+            // qui désigne UNE AUTRE carte ou un autre set est un trou ; la même carte dans le même set (réimport du même lot, ou autre source) n'en est pas un (le _id encode déjà carte et set).
+            const webpSha = sha256(await sharp(o.octets).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer());
+            const memes = [...await db.collection('images').find({ sha256Octets: o.sha256 }).toArray(), ...await db.collection('images').find({ sha256: webpSha }).toArray()];
+            if (memes.some(d => (d.carteId !== p.carteId || d.set !== slug))) { entrees.push({ p, statut: 'trou', motif: 'octets-deja-en-base' }); compte('octets-deja-en-base'); continue; }   // PREUVE:octets-deja-en-base
             const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal seuilApplique').lean();
             // les états que le collecteur du worker juge pareil : retiré = jamais repris ; ok à la même adresse = déjà là ; jugé trop petit à la même adresse = pas rejugé
             if (deja?.etat === 'retire') { entrees.push({ p, o, _id, deja, statut: 'retire' }); continue; }
@@ -187,7 +212,9 @@ async function ecrireCode({ jugement, M, db, deposer, bucket, vignetter = vignet
             const W = await vignetter(db, S.slug, { bucket, arreter });
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
             // rien à écrire (tout est déjà là) : la jointure ci-dessus a pu réparer une jointure interrompue, mais le bilan du premier import n'est PAS réécrit à « 0 écrite » (relecture C, D3)
-            if (ecrites === 0 && S.aEcrire === 0) {
+            // MAIS un set dont le premier import n'a rien à écrire écrit son bilan (0) UNE fois : sans bilan existant, la branche ne s'applique pas (relecture Y, mineur)
+            const bilanExistant = (await db.collection('sets').findOne({ _id: S.slug }, { projection: { visuelsPikaqianPassif: 1 } }))?.visuelsPikaqianPassif;
+            if (ecrites === 0 && S.aEcrire === 0 && bilanExistant) {
                 journal.log(`   ${S.slug} : rien à écrire (tout est déjà là) · jointure : ${J.joints} entrée(s) · bilan existant conservé`);
                 bilans.push({ slug: S.slug, rien: true, joints: J.joints });
                 continue;
@@ -205,7 +232,7 @@ async function ecrireCode({ jugement, M, db, deposer, bucket, vignetter = vignet
                 joints: J.joints, dejaParAutre: J.dejaParAutre, cartesAbsentes: J.cartesAbsentes, erreurJointure: J.erreurJointure, vignettes: W.vg,
                 garde: { autresAvant: J.avant.nAutres, autresApres: J.apres.nAutres, autresIdentiques: J.avant.autres === J.apres.autres, siennesApres: J.apres.siennes, ok: J.garde },
                 relu: { documents: docsRelus.length, entrees: entreesRelues.length },
-                concordance: J.garde && !J.erreurJointure && vignettesOk && J.cartesAbsentes === 0 && ecrites === S.aEcrire && docsRelus.length === S.aEcrire && entreesRelues.length === S.aEcrire - J.dejaParAutre,
+                concordance: J.garde && !J.erreurJointure && vignettesOk && J.cartesAbsentes === 0 && ecrites === S.aEcrire && docsRelus.length === S.aEcrire && entreesRelues.length <= S.aEcrire && entreesRelues.length >= S.aEcrire - J.dejaParAutre,
                 verifieLe: new Date()
             };
             await M.Set.updateOne({ _id: S.slug }, { $set: { visuelsPikaqianPassif: bilan } });
@@ -240,7 +267,7 @@ function formater(js, { dossierPassif }) {
     return l.join('\n');
 }
 
-module.exports = { codesDuDossier, lireVisites, octetsDesTuiles, jugerCode, aEcrireDe, ecartsAttendus, ecrireCode, formater, FICHIER_IMAGE };
+module.exports = { codesDuDossier, lireVisites, octetsDesTuiles, lireCode, empreintesEntreCodes, jugerCode, aEcrireDe, ecartsAttendus, ecrireCode, formater, FICHIER_IMAGE };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main === module) {
@@ -258,6 +285,7 @@ if (require.main === module) {
         process.exit(2);
     }
     if (R.dansLeDepot(dossierPassif)) { console.error(`❌ le dossier « ${dossierPassif} » est dans le dépôt : les images reçues n'y entrent jamais.`); process.exit(2); }
+    if (!R.dansRacineAutorisee(dossierPassif)) { console.error(`❌ le dossier « ${dossierPassif} » n'est pas sous la racine autorisée « ${R.RACINE_AUTORISEE} » : l'import n'y lit rien.`); process.exit(2); }
     if (R.dansApportsManuels(dossierPassif)) { console.error(`❌ le dossier « ${dossierPassif} » est un dossier d'apports manuels (ou est dedans) : jamais lu ni écrit par un outil.`); process.exit(2); }
     process.on('SIGINT', () => process.exit(130));
     (async () => {
@@ -282,7 +310,10 @@ if (require.main === module) {
         const M = ecrire ? modeles(cx) : { Image: { findById: id => ({ select: () => ({ lean: async () => cx.db.collection('images').findOne({ _id: id }) }) }) } };
         try {
             const jugements = [];
-            for (const code of codes) jugements.push(await jugerCode({ code, dossierPassif, db: cx.db, M }));
+            // toutes les pages sont LUES d'abord : les mêmes octets sur deux pages différentes sont des trous partout
+            const lectures = []; for (const code of codes) lectures.push(await lireCode(code, dossierPassif));
+            const partagesEntreCodes = empreintesEntreCodes(lectures);
+            for (const L of lectures) jugements.push(await jugerCode({ code: L.code, dossierPassif, db: cx.db, M, lecture: L, partagesEntreCodes }));
             console.log(formater(jugements, { dossierPassif }));
             if (!ecrire) return;
             // « à l'attendu juste » : un seul code qui diffère de l'attendu, et RIEN n'est écrit

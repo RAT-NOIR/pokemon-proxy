@@ -93,7 +93,7 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
 (async () => {
     const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'import-pk-'));
     const dossierFiches = path.join(racine, 'fiches'), dossierPassif = path.join(racine, 'passif');
-    const srv = await R.demarrer({ port: 0, dossier: dossierFiches, dossierImages: dossierPassif, attendu: () => null, journal: () => { } });
+    const srv = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierFiches, dossierImages: dossierPassif, attendu: () => null, journal: () => { } });
     const img = async (nom, ...a) => ({ webp: await sharp(couleur(...a)).webp().toBuffer(), png: await sharp(couleur(...a)).png().toBuffer() })[nom];
     const envoyerImages = async (fichier, liste, nomsHtml = {}) => {
         const images = [];
@@ -133,7 +133,7 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         // ── 1. LA SIMULATION
         const base = fausseBase(); semer(base);
         const attendu = () => null;
-        const juger = (o = {}) => I.jugerCode({ code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, ...o });
+        const juger = (o = {}) => I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, ...o });
         const j = await juger();
         verifier('2 visites lues, 1 fichier de page illisible NOMMÉ (schéma 1)', [j.visites, j.illisibles.map(x => x.fichier), /schéma 2/.test(j.illisibles[0]?.motif || '')], [2, ['page--cs1bc--00000000T000000Z.json'], true]);
         verifier('la page est celle de la visite la plus récente : 16 tuiles, au code du set', [j.refus, j.tuiles, j.auCode, j.derniere.fiche], [undefined, 16, 16, fB]);
@@ -151,14 +151,14 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
 
         // ── les preuves rejouées, une par une (chacune seule)
         verifier('page incomplète contre la mesure du set (attendu 99 tuiles, 13 lues) : refus en bloc, rien à écrire', [(await juger({ attendu: () => 99 })).refus?.etat, I.aEcrireDe(await juger({ attendu: () => 99 }))], ['page-incomplete', 0]);
-        verifier('code sans dossier : refus « aucune-visite »', (await I.jugerCode({ code: 'inconnu', dossierPassif, db: base.db, M: base.M, attendu })).refus?.etat, 'aucune-visite');
-        const sansLigne = await I.jugerCode({ code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, table: [] });
+        verifier('code sans dossier : refus « aucune-visite »', (await I.jugerCode({ racine: os.tmpdir(), code: 'inconnu', dossierPassif, db: base.db, M: base.M, attendu })).refus?.etat, 'aucune-visite');
+        const sansLigne = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, table: [] });
         verifier('un code sans ligne de table : refus « refuse-table »', sansLigne.refus?.etat, 'refuse-table');
         const baseTirage = fausseBase(); semer(baseTirage); baseTirage.col('sets').set(SLUG, { _id: SLUG, tirage: 'jp', region: 'jp' });
-        const jT = await I.jugerCode({ code: 'cs1bc', dossierPassif, db: baseTirage.db, M: baseTirage.M, attendu });
+        const jT = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: baseTirage.db, M: baseTirage.M, attendu });
         verifier('le tirage du set en base n\'est pas celui de la table : le collecteur refuserait (gardeTirage), l\'import aussi', [jT.sets[0].refus?.etat, I.aEcrireDe(jT)], ['refuse-set', 0]);
         const baseSansProduits = fausseBase(); semer(baseSansProduits); for (const k of [...baseSansProduits.col('cartes_produits').keys()]) baseSansProduits.col('cartes_produits').delete(k);
-        const jP = await I.jugerCode({ code: 'cs1bc', dossierPassif, db: baseSansProduits.db, M: baseSansProduits.M, attendu });
+        const jP = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: baseSansProduits.db, M: baseSansProduits.M, attendu });
         verifier('aucun produit joint : refus du collecteur (gardeProduits), aucun « verifie » sur du vide', [jP.sets[0].refus?.etat, I.aEcrireDe(jP)], ['refuse-set', 0]);
         // une carte déjà servie par une autre source à ce numéro : additif, elle n'est pas un trou (planifier)
         verifier('Raichu, déjà servie à ce numéro par une autre source : ni plan ni trou (additif)', S.entrees.some(e => e.p.carteId === 2), false);
@@ -204,9 +204,67 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         const ret = await retirerLot(base.db, { ecrire: true });
         verifier('retrait écrit : plus aucune entrée du lot, les documents `images` du lot sont « retire », le bilan passif est nettoyé, l\'entrée d\'une autre source reste', [ret.reste, base.col('images').get(P.idImagePikaqian(SLUG, 1, '001')).etat, base.col('sets').get(SLUG).visuelsPikaqianPassif, base.col('cartes').get(1).images.map(e => e.source)], [0, 'retire', undefined, ['tcgdex']]);
 
+        // ── TOUR 2 (relecture X, important 1) : l'import ne LIT que sous la racine autorisée
+        const jHors = await I.jugerCode({ code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu });
+        const jAutreRacine = await I.jugerCode({ racine: path.join(os.tmpdir(), 'autre-racine-du-banc'), code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu });
+        verifier('racine par DÉFAUT (le chantier) : le dossier du banc est refusé, rien n\'est lu ; une autre racine aussi', [jHors.refus?.etat, jHors.sets.length, jAutreRacine.refus?.etat], ['dossier-hors-racine', 0, 'dossier-hors-racine']);
+        verifier('un dossier « rempli par le testeur » hors des 3 noms (Desktop\\autre) : refusé par la racine, que la liste de refus laisserait passer', [R.dansApportsManuels(path.join(os.homedir(), 'Desktop', 'autre')), (await I.jugerCode({ code: 'cs1bc', dossierPassif: path.join(os.homedir(), 'Desktop', 'autre'), db: base.db, M: base.M, attendu })).refus?.etat], [false, 'dossier-hors-racine']);
+
+        // ── TOUR 2 (relecture Y, réserve a) : les MÊMES octets sur deux PAGES (deux codes) d'un même import
+        const urlC = n => `https://images.pikaqian.com/csv10c/${UUID(n)}.webp`;
+        const tuileC = (n, num, nom) => `<a class="w-full group" data-discover="true" href="/cards/${UUID(n)}"><div><img alt="${nom}" src="${urlC(n)}"/></div><h2>${nom}</h2><p class="font-mono">csv10c<!-- --> · ${num}</p></a>`;
+        const C1 = await envoyer(srv.port, '/apprendre', { url: 'https://pikaqian.com/sets/csv10c', html: `<html><body>${tuileC(101, '001', 'Zubat')}${tuileC(102, '002', 'Golbat')}</body></html>` });
+        const bGolbat = await img('webp', 66, 77, 88);
+        const rC = await envoyer(srv.port, '/images', { fichier: C1.json.fichier, sansImage: 0, images: [
+            { id: UUID(101), src: urlC(101), nom: 'Zubat', numero: '001', voie: 'canvas', b64: b1.toString('base64') },       // les MÊMES octets que Pikachu (cs1bc)
+            { id: UUID(102), src: urlC(102), nom: 'Golbat', numero: '002', voie: 'canvas', b64: bGolbat.toString('base64') }] });
+        verifier('la page csv10c est apprise et reçoit ses 2 images (dont une aux octets de Pikachu)', [C1.status, rC.json?.recues], [200, 2]);
+        const base3 = fausseBase(); semer(base3);
+        base3.col('sets').set('Chasing-Glory-Together', { _id: 'Chasing-Glory-Together', tirage: 'zh-hans', region: 'intl' });
+        for (const [c, nom, num] of [[30, 'Zubat', '001'], [31, 'Golbat', '002']]) { base3.col('cartes').set(c, { _id: c, nomEn: nom, images: [] }); base3.col('cartes_produits').set(`${c}|${100 + c}`, { _id: `${c}|${100 + c}`, carteId: c, idProduct: 100 + c, numeroFiche: num, slugSet: 'Chasing-Glory-Together' }); }
+        const juge3 = (code, o = {}) => I.jugerCode({ racine: os.tmpdir(), code, dossierPassif, db: base3.db, M: base3.M, attendu, ...o });
+        const seul = await juge3('csv10c');
+        verifier('TÉMOIN : csv10c jugée SEULE, ses deux images s\'écriraient (la page ne voit pas le partage)', [seul.sets[0].aEcrire, seul.sets[0].nTrous], [2, 0]);
+        const Lc = await I.lireCode('cs1bc', dossierPassif), Ld = await I.lireCode('csv10c', dossierPassif);
+        const partages = I.empreintesEntreCodes([Lc, Ld]);
+        const jc = await juge3('cs1bc', { lecture: Lc, partagesEntreCodes: partages }), jd = await juge3('csv10c', { lecture: Ld, partagesEntreCodes: partages });
+        verifier('plusieurs PAGES : une seule empreinte est partagée entre codes ; Pikachu (cs1bc) ET Zubat (csv10c) sont des trous « octets-partages », Golbat s\'écrit, Sylveon s\'écrit', [partages.size, jc.sets[0].entrees.find(e => e.p.carteId === 1)?.motif, jd.sets[0].entrees.find(e => e.p.carteId === 30)?.motif, jd.sets[0].aEcrire, jc.sets[0].aEcrire], [1, 'octets-partages', 'octets-partages', 1, 1]);
+        verifier('ce qui est partagé n\'est jamais écrit : à écrire cs1bc = 1 (Sylveon), csv10c = 1 (Golbat) ; la simulation par page seule en aurait écrit 2 et 2', [I.aEcrireDe(jc), I.aEcrireDe(jd), I.aEcrireDe(await juge3('cs1bc')), I.aEcrireDe(seul)], [1, 1, 2, 2]);
+
+        // ── TOUR 2 (relecture Y, réserve b) : les mêmes octets DÉJÀ EN BASE pour une autre carte ou un autre set
+        const crypto = require('crypto');
+        const webpDe = async b => crypto.createHash('sha256').update(await sharp(b).resize({ width: 700, withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()).digest('hex');
+        const shaDe = b => crypto.createHash('sha256').update(b).digest('hex');
+        const jugerAvec = async (docs) => { const B = fausseBase(); semer(B); for (const d of docs) B.col('images').set(d._id, d); return I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: B.db, M: B.M, attendu }); };
+        const idPikachu = P.idImagePikaqian(SLUG, 1, '001');
+        const jBaseA = await jugerAvec([{ _id: 'z1', source: 'pikaqian', set: 'Autre-Set', carteId: 777, sha256Octets: shaDe(b11) }]);
+        const jBaseB = await jugerAvec([{ _id: 'z2', source: 'tcgdex', set: SLUG, carteId: 778, sha256: await webpDe(b1) }]);
+        const jBaseC = await jugerAvec([{ _id: idPikachu, source: 'pikaqian', set: SLUG, carteId: 1, sha256Octets: shaDe(b1), etat: 'ok', urlOriginal: 'https://autre.exemple/x.webp' }]);
+        const jBaseD = await jugerAvec([{ _id: 'z4', source: 'tcgdex', set: SLUG, carteId: 1, sha256: await webpDe(b1) }]);
+        const motifDe = (j, c) => j.sets[0].entrees.find(e => e.p.carteId === c);
+        verifier('en base : un document d\'une AUTRE carte aux octets reçus (sha256Octets) → Sylveon « octets-deja-en-base », Pikachu s\'écrit', [motifDe(jBaseA, 12).motif, motifDe(jBaseA, 1).statut, jBaseA.sets[0].aEcrire], ['octets-deja-en-base', 'a-ecrire', 1]);
+        verifier('en base : un document d\'une AUTRE source/carte au sha256 du WebP qu\'on servirait → Pikachu « octets-deja-en-base », Sylveon s\'écrit', [motifDe(jBaseB, 1).motif, motifDe(jBaseB, 12).statut, jBaseB.sets[0].aEcrire], ['octets-deja-en-base', 'a-ecrire', 1]);
+        verifier('RÉIMPORT du même lot (même _id, même carte, même set, même source) : PAS un trou', [motifDe(jBaseC, 1).statut, jBaseC.sets[0].aEcrire], ['a-ecrire', 2]);
+        verifier('la même carte dans le même set sous une AUTRE source (autre _id) : PAS un trou', [motifDe(jBaseD, 1).statut, jBaseD.sets[0].aEcrire], ['a-ecrire', 2]);
+
+        // ── TOUR 2 (relecture Y, mineur) : un set dont le PREMIER import n'a rien à écrire écrit son bilan (0) UNE fois, puis ne le réécrit plus
+        const base5 = fausseBase(); semer(base5);
+        const jZero = { ...j, sets: [{ ...j.sets[0], entrees: j.sets[0].entrees.filter(e => e.statut !== 'a-ecrire'), aEcrire: 0 }] };
+        const ecrire5 = async () => { const fin = silencieux(); try { return await I.ecrireCode({ jugement: jZero, M: base5.M, db: base5.db, deposer: async () => { }, bucket: 'b', vignetter, fabriquerVerrouSet: verrouSet, journal: console }); } finally { fin(); } };
+        const z1 = await ecrire5();
+        const bilanZero = JSON.stringify(base5.col('sets').get(SLUG).visuelsPikaqianPassif);
+        verifier('premier import sans rien à écrire : le bilan (0 écrite) est ÉCRIT une fois', [z1[0].rien, base5.col('sets').get(SLUG).visuelsPikaqianPassif?.ecrites, base5.col('sets').get(SLUG).visuelsPikaqianPassif?.concordance], [undefined, 0, true]);
+        await new Promise(res => setTimeout(res, 15));
+        const z2 = await ecrire5();
+        verifier('… et un second import identique ne le réécrit PAS (bilan conservé tel quel)', [z2[0].rien, JSON.stringify(base5.col('sets').get(SLUG).visuelsPikaqianPassif) === bilanZero], [true, true]);
+
+        // ── l'en-tête ne cite plus de garde qui n'existe pas
+        const entete = fs.readFileSync(path.join(__dirname, 'importer-pikaqian-passif.js'), 'utf8').split('\n').slice(0, 25).join('\n');
+        verifier('l\'en-tête du fichier ne cite plus « cle-partagee » (aucune ligne exécutable ne l\'applique) et nomme les deux trous d\'octets', [/cle-partagee/.test(entete), /octets-partages/.test(entete), /octets-deja-en-base/.test(entete)], [false, true, true]);
+
         // ── la ligne de commande : un argument inconnu, ou une écriture sans attendu, refuse AVANT toute connexion (code 2)
         const cli = a => spawnSync(process.execPath, [path.join(__dirname, 'importer-pikaqian-passif.js'), ...a], { encoding: 'utf8', timeout: 20000 });
-        for (const a of [['--inconnu'], ['--ecrire'], ['--ecrire', '--codes=cs1bc'], ['--ecrire', '--codes=cs1bc', '--attendu=151c:3'], ['--ecrire', '--codes=cs1bc,151c', '--attendu=cs1bc:2'], ['--attendu=cs1bc:2'], ['--codes=CS1BC'], ['--dossier=' + path.join(__dirname, 'import-test')], ['--dossier=' + path.join(os.tmpdir(), 'Logo FR', 'x')], ['--dossier=' + path.join(os.tmpdir(), 'apport-manuel')]])
+        for (const a of [['--inconnu'], ['--ecrire'], ['--ecrire', '--codes=cs1bc'], ['--ecrire', '--codes=cs1bc', '--attendu=151c:3'], ['--ecrire', '--codes=cs1bc,151c', '--attendu=cs1bc:2'], ['--attendu=cs1bc:2'], ['--codes=CS1BC'], ['--dossier=' + path.join(__dirname, 'import-test')], ['--dossier=' + path.join(os.tmpdir(), 'Logo FR', 'x')], ['--dossier=' + path.join(os.tmpdir(), 'apport-manuel')], ['--dossier=' + path.join(os.homedir(), 'Desktop', 'autre-rempli-par-le-testeur')], ['--dossier=' + os.tmpdir()]])
             verifier(`CLI ${a.join(' ')} : refusé, code 2, avant toute connexion`, cli(a).status, 2);
         verifier('… et un dossier dans le dépôt n\'a rien créé', fs.existsSync(path.join(__dirname, 'import-test')), false);
         // aucun accès réseau dans le code de l'import : ni fetch, ni http, ni axios

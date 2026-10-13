@@ -62,9 +62,9 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     // au-delà de 400 Mo (consigne de l'éditeur : STOP)
     for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/(source-bloquee\/|taille-base)/, active: true }).toArray())
         console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : ${al.motif}`
-            // le réessai espacé (collecte-cartes/reessai-pikaqian.js) : le compte des blocages et la prochaine tentative, ou la SUSPENSION
+            // une source PASSIVE (PikaQian) le dit ; sinon aucune tentative n'est jamais programmée (aucun réessai espacé n'est allumé) : l'alerte ne promet donc pas de « prochaine tentative »
             + (require('./collecte-cartes/source-passive').phraseAlerte(al)
-                ?? (al.suspendue ? ' · ⛔ SUSPENDUE : plus aucune tentative sans décision du testeur' : al.pasAvant ? ` · prochaine tentative au plus tôt ${new Date(al.pasAvant).toISOString()}` : ''))
+                ?? (al.suspendue ? ' · ⛔ SUSPENDUE : plus aucune tentative sans décision du testeur' : ' · aucune tentative automatique : levée seulement par une décision'))
             + (Array.isArray(al.blocages) ? ` · ${al.blocages.length} blocage(s)` : ''));
 
     const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS) || importEnCours;
