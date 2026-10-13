@@ -45,7 +45,9 @@ const ACTIONS = {
     rejet: `Promise.reject(new Error('rejet voulu')); await new Promise(() => { });`,
     exit: `process.exit(3);`,
     fin: ``,                                              // fin naturelle de la boucle d'événements, sans arreter()
-    attendre: `await new Promise(() => { });`           // pour être tué
+    // pour être tué : la boucle doit rester VIVANTE (le lot libère IPC et tubes du mongod, une promesse jamais résolue ne retient plus rien : l'enfant
+    // se terminerait seul, avant le kill()). Mesuré par la relecture : 3 fois sur 5 sans ce minuteur.
+    attendre: `setInterval(() => { }, 1000); await new Promise(() => { });`
 };
 function ecrireEnfant(nom, action) {
     const f = path.join(SCRIPTS, `${nom}.js`);
@@ -62,8 +64,8 @@ const { ouvrirBanc } = require(${JSON.stringify(BASE_BANC)});
 `);
     return f;
 }
-function lancer(script) {
-    const c = spawn(process.execPath, [script], { env: envEnfant(), stdio: ['ignore', 'pipe', 'pipe'] });
+function lancer(script, extra = {}) {
+    const c = spawn(process.execPath, [script], { env: { ...envEnfant(), ...extra }, stdio: ['ignore', 'pipe', 'pipe'] });
     const r = { sortie: '', erreur: '', code: null, fini: false, enfant: c };
     c.stdout.on('data', d => { r.sortie += d; });
     c.stderr.on('data', d => { r.erreur += d; });
@@ -82,10 +84,11 @@ async function cas(nom, action, { codeAttendu, tuer = false }) {
     const dossier = dossierDe(r);
     verifier(`${nom} : l'enfant a ouvert un banc et dit son dossier`, [vu, dossier !== null, /EXISTE true/.test(r.sortie)], [true, true, true]);
     if (tuer) {
-        const meurt = new Promise(res => r.enfant.once('exit', res));
+        // l'écoute de 'exit' est posée dès le spawn (lancer) : r.fini ne peut pas manquer la mort ; on prouve que l'enfant vivait encore AVANT le kill
+        verifier(`${nom} : l'enfant est encore vivant juste avant le kill`, !r.fini, true);
         r.enfant.kill();   // TerminateProcess : aucun code de l'enfant ne s'exécute
-        await meurt;
-        verifier(`${nom} : l'enfant est mort sans rien exécuter, son dossier est ENCORE là (arrêt brutal)`, dossier ? fs.existsSync(dossier) : null, true);
+        const mort = await attendre(() => r.fini, 15000);
+        verifier(`${nom} : l'enfant est mort sans rien exécuter, son dossier est ENCORE là (arrêt brutal)`, [mort, dossier ? fs.existsSync(dossier) : null], [true, true]);
         return { r, dossier };
     }
     const fini = await attendre(() => r.fini, 60000);
@@ -104,7 +107,14 @@ const { balayerOrphelins, PREFIXE_BANC, FICHIER_MARQUE, contenuMarque } = (() =>
     catch (e) { console.log('  (base-banc ne se charge pas :', e.message, ')'); return {}; }
 })();
 const nbFichiers = d => { let n = 0; const marche = p => { for (const e of fs.readdirSync(p, { withFileTypes: true })) { n++; if (e.isDirectory()) marche(path.join(p, e.name)); } }; marche(d); return n; };
-function pidMort() { const r = spawnSync(process.execPath, ['--version'], { encoding: 'utf8' }); return r.pid; }
+// un PID dont l'ABSENCE est constatée juste avant l'usage (process.kill(pid, 0) lève ESRCH) : celui d'un enfant terminé, plusieurs essais si recyclé
+function pidMort() {
+    for (let i = 0; i < 10; i++) {
+        const { pid } = spawnSync(process.execPath, ['--version'], { encoding: 'utf8' });
+        try { process.kill(pid, 0); } catch (e) { if (e.code === 'ESRCH') return pid; }
+    }
+    throw new Error('aucun PID mort trouvé');
+}
 
 async function balayage() {
     console.log('\n── le balayage ne touche que SES dossiers orphelins');
@@ -122,6 +132,9 @@ async function balayage() {
     const avantCible = nbFichiers(cible);
 
     const etranger = fab('mongo-mem-etranger');
+    // M1 : le PRÉFIXE seul doit protéger — un dossier au marqueur VALIDE et au PID mort, mais sans le préfixe du module, n'est jamais effacé
+    const sansPrefixe = fab('autre-nom-marque-valide', { marque: contenuMarque(mort) });
+    const mongoMemMarque = fab('mongo-mem-marque-valide', { marque: contenuMarque(mort) });
     const sansMarque = fab(PREFIXE_BANC + 'sansmarque');
     const vivant = fab(PREFIXE_BANC + 'vivant', { marque: contenuMarque(process.pid) });
     const illisible = fab(PREFIXE_BANC + 'illisible', { marque: '{ pas du json' });
@@ -148,6 +161,7 @@ async function balayage() {
     const res = balayerOrphelins({ racine, log: m => dits.push(m) });
     verifier('l\'orphelin marqué, PID mort, sans jonction : effacé', fs.existsSync(orphelin), false);
     verifier('mongo-mem-<x> d\'un autre agent : intact', fs.existsSync(path.join(etranger, 'x.wt')), true);
+    verifier('marqueur valide + PID mort mais SANS le préfixe du module : intact (le préfixe protège seul)', [fs.existsSync(path.join(sansPrefixe, 'x.wt')), fs.existsSync(path.join(mongoMemMarque, 'x.wt'))], [true, true]);
     verifier('bon préfixe SANS marqueur : intact', fs.existsSync(path.join(sansMarque, 'x.wt')), true);
     verifier('bon préfixe, PID d\'un processus VIVANT : intact', fs.existsSync(path.join(vivant, 'x.wt')), true);
     verifier('marqueur illisible : intact', fs.existsSync(path.join(illisible, 'x.wt')), true);
@@ -176,6 +190,56 @@ async function appelantReel() {
     verifier('aucun dossier nouveau dans le tmp de l\'appelant', [propre, contenuTmp()], [true, avant]);
 }
 
+// ── g : l'unité d'un banc QUI SE TERMINE contient une jonction -> le même contrôle précède l'effacement : rien n'est effacé, le refus se dit
+async function uniteAvecJonction() {
+    console.log('\n── g : l\'unité d\'un banc qui se termine contient une jonction');
+    if (libreC() < 20) { console.log('  🛑 ARRÊT : moins de 20 Go libres'); ko++; return; }
+    const cible = path.join(RACINE, 'cible-g'); fs.mkdirSync(cible);
+    for (let i = 0; i < 5; i++) fs.writeFileSync(path.join(cible, `precieux-${i}.txt`), 'à ne pas toucher');
+    const avant = nbFichiers(cible);
+    const f = path.join(SCRIPTS, 'g-jonction.js');
+    fs.writeFileSync(f, `const { ouvrirBanc } = require(${JSON.stringify(BASE_BANC)});
+const { spawnSync } = require('child_process');
+(async () => {
+    const banc = await ouvrirBanc();
+    console.log('UNITE ' + banc.dossier);
+    const r = spawnSync('cmd.exe', ['/c', 'mklink', '/J', banc.dossier + '\\\\piege', process.env.CIBLE_G]);
+    console.log('MKLINK ' + r.status);
+    process.exit(0);
+})();
+`);
+    const r = lancer(f, { CIBLE_G: cible });
+    const fini = await attendre(() => r.fini, 90000);
+    const unite = (/^UNITE (.+)$/m.exec(r.sortie) || [])[1]?.trim();
+    const piege = unite ? path.join(unite, 'piege') : null;
+    if (piege) jonctions.push(piege);
+    verifier('g : l\'enfant a fabriqué la jonction dans son unité puis s\'est terminé (code 0)', [fini, /MKLINK 0/.test(r.sortie), r.code], [true, true, 0]);
+    verifier('g : l\'unité N\'est PAS effacée (jonction)', unite ? fs.existsSync(unite) : null, true);
+    verifier('g : la cible de la jonction a le même nombre de fichiers', nbFichiers(cible), avant);
+    verifier('g : le refus est DIT avec le chemin', unite ? r.erreur.includes(unite) : null, true);
+    if (piege) { spawnSync('cmd.exe', ['/c', 'rmdir', piege]); verifier('g : la jonction retirée sans toucher la cible', [fs.existsSync(piege), nbFichiers(cible)], [false, avant]); }
+    if (unite && !fs.existsSync(piege || '')) { const reste = await attendre(() => { try { fs.rmSync(unite, { recursive: true, force: true }); } catch (_) { } return !fs.existsSync(unite); }, 8000); verifier('g : l\'unité refusée est retirée par le banc, jonction ôtée', reste, true); }
+}
+
+// ── h : démarrage du mongod RATÉ -> l'unité créée avant est effacée IMMÉDIATEMENT (dans le catch d'ouvrirBanc), pas laissée au balayage
+async function demarrageRate() {
+    console.log('\n── h : démarrage du mongod raté');
+    const f = path.join(SCRIPTS, 'h-demarrage-rate.js');
+    fs.writeFileSync(f, `const fs = require('fs'), os = require('os');
+const { ouvrirBanc } = require(${JSON.stringify(BASE_BANC)});
+(async () => {
+    try { await ouvrirBanc(); console.log('OUVERT'); } catch (e) { console.log('LEVE'); }
+    console.log('RESTES ' + fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('rat-banc-mongod-')).length);
+    process.exit(0);
+})();
+`);
+    const r = lancer(f, { MONGOMS_SYSTEM_BINARY: path.join(RACINE, 'mongod-inexistant.exe') });
+    const fini = await attendre(() => r.fini, 60000);
+    verifier('h : ouvrirBanc LÈVE (le démarrage a échoué) et l\'enfant se termine', [fini, /LEVE/.test(r.sortie), /OUVERT/.test(r.sortie)], [true, true, false]);
+    verifier('h : aucune unité n\'est laissée, DÈS le catch (avant tout balayage)', [/RESTES 0/.test(r.sortie), contenuTmp().filter(n => n.startsWith('rat-banc-mongod-')).length], [true, 0]);
+    if (!/LEVE/.test(r.sortie)) console.log('     sortie :', r.sortie.slice(0, 300), r.erreur.slice(0, 300));
+}
+
 // ── retrait de tout ce que ce banc a fabriqué
 function retirerRacine() {
     for (const j of jonctions) { try { if (fs.existsSync(j)) spawnSync('cmd.exe', ['/c', 'rmdir', j]); } catch (_) { } }
@@ -187,6 +251,7 @@ function retirerRacine() {
     console.log('  ⚠️ la racine privée n\'a pas pu être effacée :', RACINE);
 }
 
+process.exitCode = 1;   // 🔑 jamais de sortie 0 sans verdict : remis à 0 seulement quand TOUS les verdicts sont rendus (dernière ligne)
 (async () => {
     try {
         console.log(`racine privée : ${RACINE}\nespace libre sur C: : ${libreC().toFixed(1)} Go`);
@@ -204,6 +269,8 @@ function retirerRacine() {
             if (!parti) console.log('     stderr :', r2.r.erreur.slice(0, 400));
         }
         await balayage();
+        await uniteAvecJonction();
+        await demarrageRate();
         await appelantReel();
     } catch (e) {
         ko++; console.log('  ❌ le banc lui-même a levé :', e && e.message);
