@@ -223,6 +223,19 @@ const idsEnvoyes = w => lotsDe(w).flatMap(l => l.images).map(i => parseInt(i.id.
     cliquer(w);
     await attendre(30);
     verifier('flux absent : l\'anomalie est affichée', /FLUX DE DONNÉES ABSENT/.test(texte(w)), true);
+    // LOT PQ-SANSNUM : les cartes sans numéro sont COMPTÉES dans le panneau, jamais lues ni envoyées
+    const sansNum = '00000000-0000-4000-8000-000000000002', avecNum = '00000000-0000-4000-8000-000000000001';
+    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, code: 'promo-sv-p', ancres: 758, tuilesLues: 701, tuilesAuCode: 701, sansNumero: 57, flux: 'present', officielles: 0, fichier: 'x.json' }) }, tuiles: [{ id: avecNum, nom: 'A', numero: '001', src: `https://${P.HOTE_IMAGES}/promo-sv-p/${avecNum}.webp`, canvas: 'ok' }, { id: sansNum, nom: 'B', numero: '', src: `https://${P.HOTE_IMAGES}/promo-sv-p/${sansNum}.webp`, canvas: 'ok' }] });
+    lancer(w);
+    cliquer(w);
+    await attendre(60);
+    verifier('PQ-SANSNUM : « 57 cartes sans numéro sur la page : jamais importées » est affiché', /57 cartes sans numéro sur la page : jamais importées/.test(texte(w)), true);
+    verifier('PQ-SANSNUM : la carte sans numéro du DOM n\'est ni lue ni envoyée (une seule image envoyée, celle de la tuile)', idsEnvoyes(w), [1]);
+    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', ancres: 315, tuilesLues: 315, tuilesAuCode: 315, sansNumero: 0, flux: 'present', officielles: 0, fichier: 'x.json' }) } });
+    lancer(w);
+    cliquer(w);
+    await attendre(30);
+    verifier('PQ-SANSNUM : sansNumero 0 (ou absent) → aucune mention dans le panneau', /sans numéro/.test(texte(w)), false);
     // un refus du récepteur : son motif est affiché, AUCUNE image n'est lue ni envoyée
     w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: '3 tuiles sur 9 portent le code cs1bc : la page ne désigne pas ce set' }) }, tuiles: [{ id: '00000000-0000-4000-8000-000000000001', nom: 'A', numero: '001', src: `https://${P.HOTE_IMAGES}/cs1bc/00000000-0000-4000-8000-000000000001.webp`, canvas: 'ok' }] });
     lancer(w);

@@ -110,6 +110,7 @@
             if (!m) continue;
             var img = a.querySelector('img'), h2 = a.querySelector('h2'), p = a.querySelector('p');
             var ref = p ? String(p.textContent || '').split('·') : [];
+            if (ref.length < 2 || !String(ref[1]).trim()) continue;   // PQ-SANSNUM : une carte sans numéro n'est pas une tuile (le récepteur la compte à part) : aucune image n'en est lue ni envoyée
             sortie.push({
                 id: m[1],
                 nom: h2 ? normaliser(h2.textContent) : '',
@@ -252,7 +253,7 @@
             dire('❌ Refusé (HTTP ' + rep.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur') + lignesDeDiagnostic(j), '#f56c6c');
             return;
         }
-        var avertissement = j.anomalie ? '\n⚠️ ' + j.anomalie : '';
+        var avertissement = (j.anomalie ? '\n⚠️ ' + j.anomalie : '') + (j.sansNumero > 0 ? '\n' + j.sansNumero + ' cartes sans numéro sur la page : jamais importées.' : '');
         var pretes = tuiles.filter(function (t) { return t.chargee; });
         var sansImage = tuiles.length - pretes.length;
         var voies = { canvas: 0, cache: 0, navigateur: 0 }, illisibles = 0, recues = 0, refusees = 0, premierMotif = '', lot = [], tailleLot = 0, faites = 0;

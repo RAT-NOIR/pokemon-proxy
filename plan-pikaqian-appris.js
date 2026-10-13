@@ -35,7 +35,8 @@ function lireApprises(dossier, attendu = attenduParTable, table = TABLE_PIKAQIAN
         const V = P.verdictDePage({ tuiles: fiche.tuiles, code: fiche.code, titre: fiche.titre, table });   // le titre que le récepteur a écrit dans la fiche (absent = une ligne qui déclare un titre refuse)
         if (!V.ok) { illisibles.push({ fichier: nom, motif: V.motif }); continue; }
         // défense en profondeur : le récepteur refuse déjà ces pages ; un fichier qui en viendrait d'ailleurs (ancien, édité) ne fait pas compter de « absente-de-la-source »
-        if (Number.isInteger(fiche.ancres) && fiche.ancres > fiche.tuiles.length) { illisibles.push({ fichier: nom, motif: `page partielle ou forme changée : ${fiche.ancres} ancres, ${fiche.tuiles.length} tuiles` }); continue; }
+        const completude = P.jugerCompletude({ ancres: fiche.ancres, tuiles: fiche.tuiles, sansNumero: fiche.sansNumero });   // LA règle de complétude (pikaqian.js) : tuiles = ancres AVEC numéro ; sansNumero absent = 0
+        if (!completude.complete) { illisibles.push({ fichier: nom, motif: completude.motif }); continue; }
         const voulu = attendu(fiche.code);
         if (voulu && fiche.tuiles.length < voulu) { illisibles.push({ fichier: nom, motif: `page incomplète : ${fiche.tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure` }); continue; }
         const courante = parCode.get(fiche.code);

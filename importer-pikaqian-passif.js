@@ -122,7 +122,8 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
     // la page de la visite est rejugée comme le récepteur et la mesure passive la jugent (fonctions de production)
     const V = P.verdictDePage({ tuiles, code, titre: derniere.titre, table });   // `titre` : celui que le récepteur a lu sur la page de la visite (fichier de page) ; absent = une ligne qui déclare un titre refuse
     if (!V.ok) return { ...base, refus: { etat: 'page-refusee', motif: V.motif } };
-    if (Number.isInteger(derniere.ancres) && derniere.ancres > tuiles.length) return { ...base, refus: { etat: 'page-partielle', motif: `page partielle ou forme changée : ${derniere.ancres} ancres, ${tuiles.length} tuiles` } };
+    const completude = P.jugerCompletude({ ancres: derniere.ancres, tuiles, sansNumero: derniere.sansNumero });   // LA règle de complétude (pikaqian.js) : tuiles = ancres AVEC numéro ; sansNumero absent = 0
+    if (!completude.complete) return { ...base, refus: { etat: 'page-partielle', motif: completude.motif } };
     const voulu = attendu(code);
     if (voulu && tuiles.length < voulu) return { ...base, refus: { etat: 'page-incomplete', motif: `page incomplète : ${tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure` } };
     const lignes = table.filter(l => l.codePk === code);

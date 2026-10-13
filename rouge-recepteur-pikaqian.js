@@ -23,14 +23,24 @@ function neutraliser(ligne) {
 // sont retirées aussi, une à une : le récepteur MUTANT est alors relié à un pikaqian.js MUTANT, et PK_MODULE donne ce même mutant au banc pur.
 const SRC_P = fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'pikaqian.js'), 'utf8').split(/\r?\n/);
 const nomsP = [...new Set(SRC_P.map(l => /GARDE:([a-z-]+)/.exec(l)?.[1]).filter(Boolean))];
+// LOT PQ-SANSNUM (2026-10-13) : des mutants qui ne sont pas un « if retiré » — la définition ÉLARGIE d'une ancre sans numéro (image non exigée, dossier non exigé), l'égalité de la complétude
+// remplacée par ≤ (tuiles ≤ ancres avec numéro), et un récepteur qui relit la règle d'avant (ancres > tuiles, une COPIE au lieu de la fonction unique). `texte` : [source exacte, remplacement].
+const MUTANTS_TEXTE = [
+    { nom: 'définition élargie : image non exigée', fichier: 'pikaqian', texte: ['if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;', 'if (a.img != null && T.entites(a.img) !== urlImage(code, a.id)) continue;'] },
+    { nom: 'définition élargie : dossier non exigé', fichier: 'pikaqian', texte: ['if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;', 'if (a.img == null || !DOSSIER_IMAGE.test(T.entites(a.img))) continue;'] },
+    { nom: 'définition élargie : code non exigé', fichier: 'pikaqian', texte: ['if (p == null || sansBalises(p) !== codeTuiles) continue;', 'if (p == null) continue;'] },
+    { nom: 'complétude : égalité remplacée par ≤', fichier: 'pikaqian', texte: ['if (ts.length !== ancres - sans)', 'if (ts.length > ancres - sans)'] },
+    { nom: 'complétude : sansNumero ignoré (la règle d\'avant)', fichier: 'pikaqian', texte: ['const ts = tuiles || [], sans = compterSansNumero(sansNumero, ts);', 'const ts = tuiles || [], sans = 0;'] },
+    { nom: 'récepteur : lecture d\'une copie (ancres > tuiles)', fichier: 'recepteur', texte: ['const completude = P.jugerCompletude({ ancres, tuiles, sansNumero });', 'const completude = { complete: !(ancres > tuiles.length), sansNumero: sansNumero.length, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles` };'] }
+];
 const mutants = [...nomsDesGardes.map(n => ({ nom: n, gardes: [n], fichier: 'recepteur' })), { nom: 'taille (déclaration + flux ensemble)', gardes: ['taille-declaree', 'taille-flux'], fichier: 'recepteur' },
-    ...nomsP.map(n => ({ nom: n, gardes: [n], fichier: 'pikaqian' }))];
+    ...nomsP.map(n => ({ nom: n, gardes: [n], fichier: 'pikaqian' })), ...MUTANTS_TEXTE.map(m => ({ ...m, gardes: [] }))];
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-recepteur-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));
 let anormaux = 0;
 // 2026-10-13 : QUATRE bancs (les pages, les images de /images, les pages promo du récepteur, le module pur des déclarations) ; un mutant « échoue » si l'un d'eux échoue
-const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js'];
+const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js', 'test-pikaqian-sansnumero.js'];
 const lance = (fichier, fichierP = null) => {
     const rs = BANCS.map(b => spawnSync(process.execPath, [path.join(__dirname, b)], { encoding: 'utf8', timeout: 180000, env: { ...process.env, PK_RECEPTEUR: fichier, ...(fichierP ? { PK_MODULE: fichierP } : {}) } }));
     const rate = rs.find(r => r.status !== 0);
@@ -45,12 +55,13 @@ if (temoin.status !== 0) anormaux++;
 for (const m of mutants) {
     let touchees = 0;
     const source = m.fichier === 'pikaqian' ? SRC_P : SRC;
-    const lignes = source.map(l => {
+    const lignes = m.texte ? source.map(l => { if (!l.includes(m.texte[0])) return l; touchees++; return l.replace(m.texte[0], () => m.texte[1]); }) : source.map(l => {
         const g = /GARDE:([a-z-]+)/.exec(l)?.[1];
         if (!g || !m.gardes.includes(g)) return l;
         touchees++;
         return neutraliser(l);
     });
+    if (m.texte) m.gardes = ['texte'];   // un mutant de texte doit toucher EXACTEMENT une ligne (sinon « ⚠️ N ligne(s) marquée(s) » s'imprime et le mutant est anormal)
     const base = m.nom.replace(/\W+/g, '-');
     let r;
     if (m.fichier === 'pikaqian') {
