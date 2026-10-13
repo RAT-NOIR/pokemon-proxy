@@ -40,6 +40,20 @@ const CORRECTIONS = [
     {
         cleR2: 'artofpkm/592/167.webp', carteId: 358696, nomEn: 'Mew', numero: 'G', lu: 'ミュウ, J m6a G/RGB, Illus. YOSHIROTTEN (fond vert)', le: '2026-10-07',
         cause: '30th Celebration (JP) : le second Mew sans numéro chez artofpkm (le « R » n\'y est pas)'
+    },
+    // (2026-10-13, lot JA-2) TROIS FICHIERS REGARDÉS (l'original ouvert, PNG réduit, un par un) : la page artofpkm nomme la carte SANS son suffixe, donc le nom seul ne les distingue pas de leur jumelle
+    // (Mewtwo ×2, Gliscor ×2 dans le Battle Starter Pack Heatran vs Regigigas) ou ne les désigne pas (Milotic pour Milotic ex).
+    {
+        cleR2: 'artofpkm/173/15.webp', carteId: 50861, nomEn: 'Mewtwo LV.X', lu: 'ミュウツー LV.X, HP120, 「ポケボディー サイコバリア」「ギガバーン 120」, Illus. Shizurow, DPt', le: '2026-10-13',
+        cause: 'Heatran vs Regigigas Deck Kit : la page artofpkm 173/15 se nomme « Mewtwo » ; le fichier est la carte LV.X (la liste 173 range les deux LV.X aux rangs 15 et 16, après les 14 Pokémon de base)'
+    },
+    {
+        cleR2: 'artofpkm/173/16.webp', carteId: 51213, nomEn: 'Gliscor LV.X', lu: 'グライオン LV.X, HP110, 「ポケパワー スピットポイズン」「つじぎり 60」, Illus. Ryo Ueda, DPt', le: '2026-10-13',
+        cause: 'Heatran vs Regigigas Deck Kit : la page artofpkm 173/16 se nomme « Gliscor » ; le fichier est la carte LV.X'
+    },
+    {
+        cleR2: 'artofpkm/105/4.webp', carteId: 51875, nomEn: 'Milotic ex', lu: 'ミロカロスex, HP130, 「まとわりつく 30」「エネリフレクト 70」, 004/015, Illus. Ryo Ueda', le: '2026-10-13',
+        cause: 'Quick Construction Pack Water : la page artofpkm 105/4 se nomme « Milotic » (sans « ex ») ; le numéro 004/015 imprimé est celui de Milotic ex chez nous'
     }
 ];
 const PAR_CLE = new Map(CORRECTIONS.map(c => [c.cleR2, c]));
