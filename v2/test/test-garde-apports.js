@@ -53,4 +53,9 @@ H.v('l\'exception « pokemon-proxy » est un CHEMIN, plus le dossier entier', [
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\autre-dossier-du-testeur'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy'").length], [0, 1, 1]);
 H.v('un fichier sain passe', juger('x.js', "path.join(__dirname, 'fixtures', 'a.json')"), []);
+// Tour 1 (I-3) : les exceptions sont validées AU CHARGEMENT de la liste partagée (valider) ; une clé vide, « . », « .. », absolue ou dans un dossier d'apports est refusée. La mutation « clé vide » tue ce banc
+// (et celui de l'espion) : le module de la liste lève dès son require.
+const { valider } = require('./_apports-exceptions');
+const refuse = ex => { try { valider(ex, {}); return false; } catch { return true; } };
+H.v('une exception à clé vide, « . » ou « .. » est refusée (elle ouvrirait le Bureau entier) ; une clé nommée et raisonnée passe', [refuse({ 'x.js': { '': 'raison' } }), refuse({ 'x.js': { '.': 'raison' } }), refuse({ 'x.js': { '..': 'raison' } }), refuse({ 'x.js': { 'rat-market-site/lib': 'raison' } })], [true, true, true, false]);
 H.bilan();

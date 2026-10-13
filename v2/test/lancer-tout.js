@@ -45,7 +45,11 @@ const envEnfants = { ...process.env }; purgerEnv(envEnfants);
 // MOYENS-B2b point 7 : chaque suite est lancée avec l'ESPION des fichiers (_espion-fs-armer.js, node -r) : tout accès hors du dépôt, du dossier temporaire, de .banc-local\cache-mongod et des exceptions
 // nommées de _apports-exceptions.js fait échouer la suite en nommant le chemin. Dans une COPIE du lanceur (test-lanceur.js), l'espion n'est pas à côté : aucune précharge (avertissement).
 const ESPION = path.join(__dirname, '_espion-fs-armer.js'), espionPresent = fs.existsSync(ESPION);
-if (!espionPresent) console.log('⚠️ _espion-fs-armer.js absent de ce dossier (copie du lanceur) : les suites sont lancées SANS l\'espion des fichiers');
+// Tour 1 (M-4) : écrit par ce qu'on autorise — l'armeur absent REFUSE, sauf pour test-lanceur.js qui joue des copies du lanceur et pose RM_LANCEUR_SANS_ESPION=1 (avertissement alors).
+if (!espionPresent) {
+    if (process.env.RM_LANCEUR_SANS_ESPION !== '1') refuser('_espion-fs-armer.js est absent de ce dossier : les suites tourneraient SANS l\'espion des fichiers (rien n\'est lancé)');
+    console.log('⚠️ _espion-fs-armer.js absent de ce dossier (copie du lanceur de test-lanceur.js) : les suites sont lancées SANS l\'espion des fichiers');
+}
 for (const f of fichiers) {
     console.log(`\n=== ${f} ===`);
     const r = spawnSync(process.execPath, [...(espionPresent ? ['-r', ESPION] : []), path.join(dossier, f)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: envEnfants });

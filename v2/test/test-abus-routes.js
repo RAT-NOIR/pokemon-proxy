@@ -86,10 +86,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
 
 (async () => {
     // B2b point 6 : (O1) « au plus 3 courriers par adresse et par heure » est un compteur de SERVICE (consommer, `new Date()`) : une frontière d'heure entre les 8 demandes ferait partir 3 courriers dans chaque
-    // heure (6 reçus, assertion fausse) ; c'est le seul candidat connu au 85/2 vu une fois en B1 (non reproduit, aucune sortie gardée). La garde attend la frontière si elle est à moins de 4 minutes (le banc dure ~35 s).
-    // (les limiteurs de ce banc passent par l'horloge commune, fixée au milieu de l'heure : fenêtres d'IP et de porteur.)
-    H.fixerHorlogeMilieu(); await H.eviterFrontieres({ heure: true });
+    // heure (6 reçus, assertion fausse) ; c'est la cause retenue du « 85 réussis, 2 échoués » vu une fois en B1 (reproduit à l'horloge décalée sur une copie sans garde). La garde attend la frontière si elle est à moins de 4 minutes (le banc dure ~35 s).
+    // (les limiteurs de ce banc passent par l'horloge commune, fixée au milieu de l'heure après l'ouverture de la base : fenêtres d'IP et de porteur.)
+    await H.eviterFrontieres({ heure: true });
     await H.ouvrirBancV2();
+    H.fixerHorlogeMilieu();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-abus-routes.js', ecrit: true });

@@ -9,7 +9,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
 (async () => {
     // Les limiteurs comptent par FENÊTRE FIXE (l'heure UTC, limites.js). Un banc qui franchirait la frontière en pleine série verrait son compteur repartir à zéro (la N+1e requête rendrait 200).
     // B2b point 6 : plus d'attente de 60 s (garde du tour 2) ; l'horloge des limiteurs est FIXÉE au milieu de l'heure (limites.fixerHorloge), la frontière ne peut plus tomber dans la série.
-    H.fixerHorlogeMilieu();
+    // (posée plus bas, après l'ouverture de la base de banc : fixerHorloge exige BANC_HOTES)
     // ── la configuration : défauts, réglage, valeur mal formée
     const def = lireConfig({ MONGODB_BASE: 'test_scratch' }).limites;
     H.v('défauts : compte 600, solde 1 200, réponse 600, retour-live 600 par heure', [def.compteParPorteurHeure, def.soldeParPorteurHeure, def.reponseParPorteurHeure, def.retourLiveParPorteurHeure], [600, 1200, 600, 600]);
@@ -20,6 +20,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     }
 
     await H.ouvrirBac('test-limites-porteur.js'); await M.creerIndex();
+    H.fixerHorlogeMilieu();
     // Tour 1 (I-1) : QUATRE valeurs DISTINCTES. Avec une valeur commune, brancher une route sur la variable d'une autre laissait le banc vert (mutations M9, M10).
     const N = { 'GET /api/compte': 3, 'POST /api/solde': 4, 'POST /api/identifier/reponse': 5, 'POST /api/retour-live': 6 };
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COMPTE_HEURE: '3', V2_SOLDE_HEURE: '4', V2_REPONSE_HEURE: '5', V2_RETOUR_LIVE_HEURE: '6' });

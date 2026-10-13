@@ -28,6 +28,24 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
     const voisin = path.join(path.dirname(RACINE), 'rat-market-site', 'lib', 'x.ts');
     H.v('   le même chemin nommé, trouvé depuis le dossier PARENT du checkout (copie de travail), passe pour son fichier seulement ; un autre voisin non', [E.autorise(voisin, Pf('test-chargeur-regle-site.js')).ok, E.autorise(voisin, Pf('test-autre.js')).ok, E.autorise(path.join(path.dirname(RACINE), 'autre-voisin', 'x'), Pf('test-chargeur-regle-site.js')).ok], [true, false, false]);
     H.v('   les exceptions sont CELLES de _apports-exceptions.js (une seule définition, partagée avec test-garde-apports.js)', Object.keys(require('./_apports-exceptions').EXCEPTIONS).includes('test-collection-forme.js'), true);
+    // Tour 1 (I-3) : les deux bancs chargeur n'ont droit qu'à la LECTURE de rat-market-site/lib
+    const lib = path.join(desktop, 'rat-market-site', 'lib', 'x.ts'), env = path.join(desktop, 'rat-market-site', '.env');
+    const Pc = Pf('test-chargeur-decision.js');
+    H.v('exception en LECTURE SEULE : lire rat-market-site/lib passe, y ÉCRIRE non, lire ailleurs dans le site (.env) non, pour les deux bancs chargeur',
+        [E.autorise(lib, Pc, { ecriture: false }).ok, E.autorise(lib, Pc, { ecriture: true }).ok, E.autorise(env, Pc, { ecriture: false }).ok, E.autorise(lib, Pf('test-chargeur-regle-site.js'), { ecriture: false }).ok, E.autorise(lib, Pf('test-chargeur-regle-site.js'), { ecriture: true }).ok],
+        [true, false, false, true, false]);
+    H.v('   une exception ordinaire (test-collection-forme.js) garde son droit actuel', [E.autorise(site, Pf('test-collection-forme.js'), { ecriture: true }).ok], [true]);
+    // Tour 1 (I-3) : une clé d'exception vide, « . », « .. », absolue, racine, le Bureau entier, ou dans un dossier d'apports est REFUSÉE au chargement (valider)
+    const V = require('./_apports-exceptions');
+    const leve = (ex, ls = {}) => { try { V.valider(ex, ls); return false; } catch (e) { return /exception/i.test(e.message); } };
+    H.vrai('   _apports-exceptions.js exporte valider', typeof V.valider === 'function');
+    if (typeof V.valider === 'function') {
+        const mal = { '(vide)': '', '(blancs)': '  ', '.': '.', '..': '..', 'a/../..': 'a/../..', '/': '/', '\\': '\\', 'lecteur': 'C:/', 'absolu': ['C:', 'Users', 'x', 'Desk' + 'top', 'y'].join('/'), 'le Bureau': 'Desk' + 'top', 'sous le Bureau': 'Desk' + 'top/x', 'dans le dossier du testeur': `pokemon-proxy/${BAS}/x`, 'dossier des apports manuels': ['apport', 'manuel'].join('-'), 'photos du verrou': ['verrou', 'photos'].join('/'), 'segment vide': 'a//b', 'finit par /': 'a/' };
+        H.v('   valider REFUSE (ligne par ligne) : ' + Object.keys(mal).join(' · '), Object.fromEntries(Object.entries(mal).map(([n, k]) => [n, leve({ 'test-x.js': { [k]: 'raison' } })])), Object.fromEntries(Object.keys(mal).map(n => [n, true])));
+        H.v('   valider accepte les clés légitimes et exige une raison écrite', [leve({ 'test-x.js': { 'rat-market-site/lib': 'r', 'extension v2/src/fond/fausses': 'r' } }), leve({ 'test-x.js': { 'rat-market-site/lib': '' } })], [false, true]);
+        H.v('   la liste réelle passe valider (sinon le module ne se chargerait pas)', leve(V.EXCEPTIONS, V.LECTURE_SEULE), false);
+        H.v('   une entrée LECTURE_SEULE qui ne désigne aucune exception du fichier est refusée', (() => { try { V.valider(V.EXCEPTIONS, { 'test-x.js': ['rat-market-site/lib'] }); return false; } catch { return true; } })(), true);
+    }
 }
 {
     const ext = path.join(path.dirname(os.homedir()), 'zz-cache-b2b'), cache = path.join(ext, '.banc-local', 'cache-mongod');    // hors dépôt ET hors dossier temporaire
@@ -38,9 +56,9 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
 
 // ── 2. des suites FABRIQUÉES, jouées dans un processus enfant armé (-r)
 const jetable = fs.mkdtempSync(path.join(__dirname, '.jetable-espion-'));
-const rouler = (nom, code, { lanceur = false } = {}) => {
+const rouler = (nom, code, { env = {} } = {}) => {
     const f = path.join(jetable, nom); fs.writeFileSync(f, code);
-    const r = spawnSync(process.execPath, ['-r', ARME, f], { encoding: 'utf8', env: { ...process.env, RACINE_TEST: RACINE, BAS_TEST: BAS, HORS_TEST: path.join(path.dirname(RACINE), 'hors-espion-b2b-inexistant') } });
+    const r = spawnSync(process.execPath, ['-r', ARME, f], { encoding: 'utf8', timeout: 60000, env: { ...process.env, RACINE_TEST: RACINE, BAS_TEST: BAS, HORS_TEST: path.join(path.dirname(RACINE), 'hors-espion-b2b-inexistant'), ...env } });
     let res = null; try { res = JSON.parse((r.stdout.match(/RESULTAT (\{.*\})/) || [])[1]); } catch { /* sortie sans résultat */ }
     return { status: r.status, res, sortie: `${r.stdout}${r.stderr}` };
 };
@@ -75,9 +93,69 @@ try {
     const nommee = rouler('test-collection-forme.js', ENTETE + lireSite + FIN), autre = rouler('test-autre-banc.js', ENTETE + lireSite + FIN);
     H.v('exception nommée : test-collection-forme.js lit le site (ENOENT : permis), test-autre-banc.js non (ESPION_FS, code 1)', [nommee.res && nommee.res.site, nommee.status, autre.res && autre.res.site, autre.status], ['ENOENT', 0, 'ESPION_FS', 1]);
 
+    // ── 2 bis. TOUR 1 (I-2) : l'espion juge le chemin RÉEL — une JONCTION du dépôt vers l'extérieur est vue (le vecteur de l'incident du 2026-10-12).
+    // Le dossier témoin est créé HORS du dépôt par cmd (le banc, lui-même espionné, ne pourrait pas) ; la jonction est retirée par `rmdir` NON récursif AVANT tout nettoyage récursif.
+    const temoin = path.join(path.dirname(RACINE), '_temoin-espion-b2b'), lien = path.join(jetable, 'lien');
+    const cmd = (...a) => spawnSync('cmd', ['/c', ...a], { encoding: 'utf8' });
+    let jonctionPosee = false;
+    // un petit script d'aide (dans le dossier temporaire, lancé SANS l'espion) crée et retire le dossier témoin HORS du dépôt ; jamais de suppression récursive
+    const aide = path.join(os.tmpdir(), `espion-aide-${process.pid}.js`);
+    fs.writeFileSync(aide, `const fs = require('fs'), path = require('path'); const [, , cmdAide, t] = process.argv;
+        if (cmdAide === 'creer') { fs.mkdirSync(t, { recursive: true }); fs.writeFileSync(path.join(t, 'x.txt'), 'temoin'); }
+        else { for (const f of ['x.txt', 'y.txt']) { try { fs.unlinkSync(path.join(t, f)); } catch { /* absent */ } } try { fs.rmdirSync(t); } catch { /* absent ou non vide */ } }`);
+    const aider = (c) => spawnSync(process.execPath, [aide, c, temoin], { encoding: 'utf8' });
+    try {
+        aider('creer');
+        jonctionPosee = cmd('mklink', '/J', lien, temoin).status === 0;
+        H.vrai('(mise en place) la jonction du dépôt vers le dossier témoin existe', jonctionPosee && fs.existsSync(path.join(lien, 'x.txt')));
+        const jon = rouler('suite-jonction.js', ENTETE + `
+        await essai('lecture-par-jonction', () => fs.readFileSync(path.join(process.env.LIEN_TEST, 'x.txt')));
+        await essai('liste-par-jonction', () => fs.readdirSync(process.env.LIEN_TEST));
+        await essai('ecriture-par-jonction', () => fs.writeFileSync(path.join(process.env.LIEN_TEST, 'y.txt'), 'a'));` + FIN, { env: { LIEN_TEST: lien } });
+        H.v('une jonction DANS le dépôt vers un dossier hors périmètre : lecture, listage et écriture par elle sont ESPION_FS (le chemin RÉEL est jugé), code 1', [jon.res, jon.status],
+            [{ 'lecture-par-jonction': 'ESPION_FS', 'liste-par-jonction': 'ESPION_FS', 'ecriture-par-jonction': 'ESPION_FS' }, 1]);
+        H.vrai('   et rien n\'a été écrit dans le dossier témoin par elle', !fs.existsSync(path.join(temoin, 'y.txt')));
+    } finally {
+        if (jonctionPosee) cmd('rmdir', lien);                                  // NON récursif : la cible n'est pas touchée
+        aider('nettoyer'); fs.unlinkSync(aide);
+    }
+    H.vrai('   (nettoyage) la jonction est retirée avant tout nettoyage récursif', !fs.existsSync(lien));
+
+    // les opérations que la première version laissait passer (openAsBlob, glob, watch, watchFile, opendir, cp) : toutes ESPION_FS sur une cible hors périmètre
+    const ops = rouler('suite-ops.js', ENTETE + `
+        const g = (k, f) => (f ? essai(k, f) : (r[k] = 'absent'));
+        await g('openAsBlob', fs.openAsBlob && (() => fs.openAsBlob(path.join(HORS, 'a.txt'))));
+        await g('globSync', fs.globSync && (() => fs.globSync('*', { cwd: HORS })));
+        await g('globSync-absolu', fs.globSync && (() => fs.globSync(path.join(HORS, '*.txt'))));
+        await g('glob-promesse', fs.promises.glob && (async () => { for await (const x of fs.promises.glob('*', { cwd: HORS })) { void x; } }));
+        await g('watch', () => { const w = fs.watch(HORS); w.close(); });
+        await g('watchFile', () => { const w = fs.watchFile(path.join(HORS, 'a.txt'), () => { }); fs.unwatchFile(path.join(HORS, 'a.txt')); return w; });
+        await g('opendirSync', () => fs.opendirSync(HORS));
+        await g('opendir', () => fs.promises.opendir(HORS));
+        await g('cpSync', () => fs.cpSync(path.join(R, 'package.json'), path.join(HORS, 'b.json')));
+        await g('cp-promesse', () => fs.promises.cp(path.join(R, 'package.json'), path.join(HORS, 'c.json')));
+        await g('mkdtemp', () => fs.mkdtempSync(path.join(HORS, 'z-')));` + FIN);
+    const dispo = ops.res || {};
+    H.v('openAsBlob, glob (relatif et absolu, synchrone et à promesse), watch, watchFile, opendir, cp, mkdtemp hors périmètre : tous ESPION_FS (une API absente de ce Node est dite « absent »)',
+        Object.fromEntries(Object.entries(dispo).map(([k, v]) => [k, v === 'absent' ? 'ESPION_FS' : v])),
+        Object.fromEntries(Object.keys(dispo).map(k => [k, 'ESPION_FS'])));
+    H.vrai('   au moins 9 de ces 11 opérations existent dans ce Node (le test éprouve quelque chose)', Object.values(dispo).filter(v => v !== 'absent').length >= 9);
+
+    // exceptions LECTURE SEULE (I-3) : les bancs chargeur ne lisent que rat-market-site/lib
+    const site = `const SITE = path.join(os.homedir(), 'Desktop', 'rat-market-site');
+        await essai('lit-lib', () => fs.readFileSync(path.join(SITE, 'lib', 'inexistant-b2b.ts')));
+        await essai('ecrit-lib', () => fs.writeFileSync(path.join(SITE, 'lib', '_inexistant-dossier-b2b', 'x.txt'), 'a'));
+        await essai('lit-hors-lib', () => fs.readFileSync(path.join(SITE, '.env')));
+        await essai('liste-site', () => fs.readdirSync(SITE));
+        await essai('copie-depuis-lib', () => fs.copyFileSync(path.join(SITE, 'lib', 'inexistant-b2b.ts'), path.join(os.tmpdir(), 'espion-copie-inexistante.ts')));
+        await essai('copie-vers-lib', () => fs.copyFileSync(path.join(R, 'package.json'), path.join(SITE, 'lib', '_inexistant-dossier-b2b', 'p.json')));`;
+    const ch = rouler('test-chargeur-regle-site.js', ENTETE + site + FIN);
+    H.v('un banc chargeur : LIT rat-market-site/lib (ENOENT : permis), jamais d\'écriture, rien hors de lib (.env, listage du site), copie DEPUIS lib permise, VERS lib refusée',
+        ch.res, { 'lit-lib': 'ENOENT', 'ecrit-lib': 'ESPION_FS', 'lit-hors-lib': 'ESPION_FS', 'liste-site': 'ESPION_FS', 'copie-depuis-lib': 'ENOENT', 'copie-vers-lib': 'ESPION_FS' });
+
     // ── 3. lancer-tout arme l'espion pour chaque suite qu'il lance
     fs.writeFileSync(path.join(jetable, 'test-fabrique-dehors.js'), ENTETE + `await essai('x', () => fs.readFileSync(path.join(R, '..', 'pokemon-proxy', BAS, 'x.png')));` + FIN + `console.log('1 réussis, 0 échoués');\n`);
-    fs.unlinkSync(path.join(jetable, 'suite-lit-dehors.js')); fs.unlinkSync(path.join(jetable, 'suite-dedans.js')); fs.unlinkSync(path.join(jetable, 'test-collection-forme.js')); fs.unlinkSync(path.join(jetable, 'test-autre-banc.js'));
+    for (const f of fs.readdirSync(jetable)) if (f !== 'test-fabrique-dehors.js') fs.unlinkSync(path.join(jetable, f));      // la jonction est déjà retirée : il ne reste que des fichiers
     const lt = spawnSync(process.execPath, [LANCEUR, `--dossier=${jetable}`], { encoding: 'utf8', env: { ...process.env, RACINE_TEST: RACINE, BAS_TEST: BAS } });
     H.v('lancer-tout : une suite qui lit hors périmètre par un chemin construit est EN ÉCHEC (code 1, « 1 en échec ») et le chemin est nommé',
         [lt.status, /1 fichier\(s\), 1 en échec/.test(lt.stdout), lt.stdout.includes('hors périmètre')], [1, true, true]);

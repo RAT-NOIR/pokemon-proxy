@@ -34,20 +34,24 @@ async function reserver(cle, { delaiMs, maintenant = new Date() }) {
 }
 // B2b point 6 — l'HORLOGE du limiteur est facultative. Par défaut (production, rien n'est posé) : `new Date()`, comportement inchangé. Un banc la fixe au milieu d'une fenêtre pour qu'une
 // frontière d'heure ne tombe pas au milieu d'une série (la fenêtre est alignée sur l'époque). Deux voies : l'option `horloge` d'un limiteur, ou l'horloge COMMUNE `fixerHorloge`, lue à chaque
-// requête par tous les limiteurs sans option (ceux que les routes construisent). `fixerHorloge` est réservée aux bancs isolés (BANC_ISOLE=1, posé par le harnais) : elle lève ailleurs.
-let horlogeCommune = null;
+// requête par tous les limiteurs sans option (ceux que les routes construisent). `fixerHorloge` est écrite par ce qu'elle AUTORISE : BANC_ISOLE === '1' (posé par le harnais) ET NODE_ENV différent de
+// « production » ET BANC_HOTES non vide (posé par la base de banc) ; elle lève dans tout autre cas. Les horloges posées forment une PILE : défaire dans le désordre retire la sienne, jamais celle d'un autre.
+const horloges = [];
 function fixerHorloge(fn) {
     if (typeof fn !== 'function') throw new Error('fixerHorloge : une fonction est exigée');
     if (process.env.BANC_ISOLE !== '1') throw new Error('fixerHorloge : réservée aux bancs isolés (BANC_ISOLE=1)');
-    const avant = horlogeCommune; horlogeCommune = fn;
-    return () => { horlogeCommune = avant; };
+    if (process.env.NODE_ENV === 'production') throw new Error('fixerHorloge : refusée en production (NODE_ENV=production)');
+    if (!String(process.env.BANC_HOTES || '').split(',').some(h => h.trim() !== '')) throw new Error('fixerHorloge : refusée sans BANC_HOTES (aucune base de banc ouverte)');
+    const entree = { fn };
+    horloges.push(entree);
+    return () => { const i = horloges.indexOf(entree); if (i >= 0) horloges.splice(i, 1); };
 }
 function limiteur({ nom, max, fenetreMs, cle, horloge }) {
     return async function limiteurV2(req, res, next) {
         try {
             const k = cle(req);
             if (!k) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');   // on ne laisse pas passer ce qu'on ne sait pas identifier
-            const lire = typeof horloge === 'function' ? horloge : horlogeCommune;
+            const lire = typeof horloge === 'function' ? horloge : (horloges.length ? horloges[horloges.length - 1].fn : null);
             const maintenant = lire ? lire() : new Date();
             if (!(maintenant instanceof Date) || Number.isNaN(maintenant.getTime())) throw new Error('horloge invalide');   // ne sait pas dater : refus fermé
             const r = await consommer(`${nom}:${k}`, { max, fenetreMs, maintenant });

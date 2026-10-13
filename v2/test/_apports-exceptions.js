@@ -7,9 +7,10 @@ const INTERDITS = ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'verrou/pho
 const EXCEPTIONS = {
     'test-abus-routes.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (dépôt voisin) ; le banc se passe du dossier absent', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'journal de lots du plan, lecture seule (RM_PROGRESS)' },
     'test-collection-forme.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel (RM_SITE)' },
-    // découvertes par l'ESPION des fichiers (_espion-fs.js, MOYENS-B2b) : ces deux bancs construisent le chemin du site par path.join (la garde sur le texte ne le voyait pas)
-    'test-chargeur-decision.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel : la copie embarquée de la règle est comparée à lui' },
-    'test-chargeur-regle-site.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel : la copie embarquée de la règle est régénérée et comparée' },
+    // découvertes par l'ESPION des fichiers (_espion-fs.js, MOYENS-B2b) : ces deux bancs construisent le chemin du site par path.join (la garde sur le texte ne le voyait pas).
+    // Tour 1 : ils ne lisent que rat-market-site/lib (vérifié : seuls des readFileSync et le côté SOURCE d'un copyFileSync y sont refusés sans exception) — et en LECTURE SEULE (LECTURE_SEULE ci-dessous).
+    'test-chargeur-decision.js': { 'rat-market-site/lib': 'code du site (lib/*.ts, lib/*.json), pas un apport manuel : la copie embarquée de la règle est comparée à lui' },
+    'test-chargeur-regle-site.js': { 'rat-market-site/lib': 'code du site (lib/*.ts, lib/*.json), pas un apport manuel : la copie embarquée de la règle est régénérée et comparée' },
     'test-contrat-extension.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (RM_EXTENSION_FAUSSES)' },
     'test-identifier-adaptateur.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension' },
     'test-identifier-regle-g.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
@@ -19,4 +20,34 @@ const EXCEPTIONS = {
     'mesurer-memoire.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)', 'pokemon-proxy/.banc-local/cache-mongod': 'cache mongod (MONGOMS_DOWNLOAD_DIR)' },
     'test-collections-partagees.js': { 'pokemon-proxy/mesures/taille-bases.jsonl': 'COMMENTAIRE seulement : source du relevé épinglé, jamais lu' },
 };
-module.exports = { INTERDITS, EXCEPTIONS };
+// Les exceptions que l'espion n'ouvre qu'en LECTURE (fichier de banc -> clés de EXCEPTIONS). Toute autre exception garde le droit d'avant.
+const LECTURE_SEULE = {
+    'test-chargeur-decision.js': ['rat-market-site/lib'],
+    'test-chargeur-regle-site.js': ['rat-market-site/lib'],
+};
+
+/**
+ * Tour 1 (I-3) — une exception est écrite par ce qu'on AUTORISE : une clé est un chemin RELATIF au Bureau, en « / », de segments non vides, ni « . » ni « .. », qui ne désigne pas le Bureau lui-même
+ * (ni un lecteur, ni la racine), qui n'est pas absolue et ne tombe pas dans un dossier d'apports ; chaque exception porte une raison écrite. LÈVE au chargement : un élargissement (clé vide =
+ * le Bureau entier) tue la garde sur le texte ET l'espion, qui chargent tous deux ce module.
+ */
+function valider(exceptions = EXCEPTIONS, lectureSeule = LECTURE_SEULE) {
+    const faute = (nom, cle, pourquoi) => { throw new Error(`exception refusée (${nom} : « ${cle} ») : ${pourquoi}`); };
+    for (const [nom, ex] of Object.entries(exceptions)) {
+        for (const [cle, raison] of Object.entries(ex || {})) {
+            if (typeof cle !== 'string' || cle.trim() === '') faute(nom, cle, 'clé vide');
+            if (/\\/.test(cle)) faute(nom, cle, 'séparateurs « / » seulement');
+            if (/^[a-z]:/i.test(cle) || cle.startsWith('/')) faute(nom, cle, 'chemin absolu ou racine : une clé est relative au Bureau');
+            const segments = cle.split('/');
+            if (segments.some(s => s.trim() === '' || s === '.' || s === '..')) faute(nom, cle, 'segment vide, « . » ou « .. »');
+            if (['desktop', 'bureau'].includes(segments[0].toLowerCase())) faute(nom, cle, 'désigne le Bureau lui-même, pas un chemin nommé en dessous');
+            const bas = cle.toLowerCase();
+            for (const i of INTERDITS) if (bas.includes(i.toLowerCase())) faute(nom, cle, `tombe dans un dossier d'apports (${i})`);
+            if (typeof raison !== 'string' || raison.trim() === '') faute(nom, cle, 'raison écrite exigée');
+        }
+    }
+    for (const [nom, cles] of Object.entries(lectureSeule)) for (const cle of cles) if (!Object.keys((exceptions[nom]) || {}).includes(cle)) faute(nom, cle, 'LECTURE_SEULE ne désigne aucune exception de ce fichier');
+    return true;
+}
+valider();
+module.exports = { INTERDITS, EXCEPTIONS, LECTURE_SEULE, valider };

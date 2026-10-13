@@ -51,12 +51,31 @@ const H = require('./_harnais'); const M = require('../modeles'); const L = requ
         restaurer();
         const r3 = resH(); await L.limiteur({ nom: 'commune2', max: 5, fenetreMs: MIN, cle: () => 'c2' })({ ip: '203.0.113.8' }, r3, () => { });
         H.vrai('   rendue : le limiteur revient à l\'horloge réelle (ni refus ni erreur)', r3.s === null);
-        const ancien = process.env.BANC_ISOLE; delete process.env.BANC_ISOLE;
-        let leve = false; try { L.fixerHorloge(() => new Date()); } catch { leve = true; }
-        if (ancien !== undefined) process.env.BANC_ISOLE = ancien;
-        H.v('   fixerHorloge refuse hors banc isolé (BANC_ISOLE absent)', leve, true);
+        // Tour 1 : fixerHorloge est écrite par ce qu'elle AUTORISE : BANC_ISOLE === '1' ET NODE_ENV !== 'production' ET BANC_HOTES non vide. Chaque refus a son test.
+        const refus = (nom, poser) => { const sauve = { ...process.env }; let leve = false; try { poser(process.env); L.fixerHorloge(() => new Date()); } catch { leve = true; } finally { for (const k of ['BANC_ISOLE', 'NODE_ENV', 'BANC_HOTES']) { if (sauve[k] === undefined) delete process.env[k]; else process.env[k] = sauve[k]; } } H.v(`   fixerHorloge refuse : ${nom}`, leve, true); };
+        H.vrai('   (témoin) dans l\'environnement du banc, BANC_ISOLE=1 et BANC_HOTES non vide, NODE_ENV différent de production : elle accepte', process.env.BANC_ISOLE === '1' && Boolean(process.env.BANC_HOTES) && process.env.NODE_ENV !== 'production');
+        refus('BANC_ISOLE absent', e => { delete e.BANC_ISOLE; });
+        refus('BANC_ISOLE autre que « 1 » (« 1 », « true », « 01 »)', e => { e.BANC_ISOLE = 'true'; });
+        refus('NODE_ENV=production', e => { e.NODE_ENV = 'production'; });
+        refus('BANC_HOTES absent', e => { delete e.BANC_HOTES; });
+        refus('BANC_HOTES vide', e => { e.BANC_HOTES = ''; });
+        refus('BANC_HOTES fait de blancs', e => { e.BANC_HOTES = '  ,  '; });
         let leve2 = false; try { L.fixerHorloge('maintenant'); } catch { leve2 = true; }
         H.v('   fixerHorloge refuse autre chose qu\'une fonction', leve2, true);
+        // M-6 : défaire dans le désordre ne laisse aucune horloge fantôme
+        const f1 = L.fixerHorloge(() => new Date(milieuMinute - 10 * 3600e3)), f2 = L.fixerHorloge(() => new Date(milieuMinute + 1e3));
+        f1(); f2();
+        const rg = resH(); await L.limiteur({ nom: 'fantome', max: 5, fenetreMs: MIN, cle: () => 'g' })({ ip: '203.0.113.9' }, rg, () => { });
+        const dg = (await require('../db').col('limites').findOne({ cle: new RegExp(`^fantome:g\\|`) }));
+        H.vrai('   deux horloges défaites dans le désordre : aucune horloge fantôme (le limiteur lit l\'heure réelle, pas la première fixée)', dg && Math.abs(Number(dg.cle.split('|')[1]) - Math.floor(Date.now() / MIN) * MIN) <= MIN);
+    }
+    // Tour 1 (M-3) : l'horloge par DÉFAUT est l'instant courant, à la milliseconde près (sans option ni fixerHorloge). Fenêtre d'1 ms : la clé du compteur porte l'instant lu.
+    {
+        const mwD = L.limiteur({ nom: 'defaut', max: 100, fenetreMs: 1, cle: () => 'd' }), resH = () => ({ s: null, setHeader() { }, status(x) { this.s = x; return this; }, json() { return this; } });
+        const avant = Date.now(); await mwD({ ip: '203.0.113.10' }, resH(), () => { }); await new Promise(r => setTimeout(r, 40)); await mwD({ ip: '203.0.113.10' }, resH(), () => { }); const apres = Date.now();
+        const ds = (await require('../db').col('limites').find({ cle: /^defaut:d\|/ }).toArray()).map(d => Number(d.cle.split('|')[1])).sort((a, b) => a - b);
+        H.v('horloge par défaut : deux appels espacés de 40 ms lisent deux instants distincts, compris entre avant et après, à la milliseconde (ni arrondi à la minute, ni décalé)', [ds.length, ds.every(x => x >= avant && x <= apres), ds.length === 2 && ds[1] - ds[0] >= 35 && ds[1] - ds[0] <= 400], [2, true, true]);
+        await require('../db').col('limites').deleteMany({ cle: /^defaut:d\|/ });     // nés « déjà expirés » (fenêtre d'1 ms) : retirés avant le contrôle du moniteur TTL
     }
     // les frontières UTC de la garde d'attente des bancs (harnais) : heure, jour, semaine (lundi 00:00, comme semaineISO), mois
     {
