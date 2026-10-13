@@ -46,7 +46,8 @@ function fabrique(lireCfg, o = {}) {
             const reset = req.rateLimit && req.rateLimit.resetTime instanceof Date ? req.rateLimit.resetTime.getTime() : Date.now() + options.windowMs;
             return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: Math.max(1, Math.ceil((reset - Date.now()) / 1000)) });
         }
-        return res.status(options.statusCode).send(options.message);
+        const { statusCode, message: corpsHerite } = options;   // le corps hérité tel que configuré dans index.js
+        return res.status(statusCode).send(corpsHerite);
     }
     return { sauter, refuser };
 }
