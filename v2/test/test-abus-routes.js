@@ -750,6 +750,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_PLAFOND_PANNES: [c => c.plafonds.panne, 5, 'abc', 'leve'], V2_PLAFOND_QUESTIONS: [c => c.plafonds.question, 30, 'abc', 'leve'], V2_LECTURE_LIVE_MAX: [c => c.lot.lectureLiveMax, 5, 'abc', 'leve'],
             V2_JUMEAUX_REMBOURSES_JOUR: [c => c.plafonds.jumeaux, 20, 'abc', 'leve'],
             V2_SANS_PRIX_JOUR: [c => c.plafonds.sansPrix, 5, 'abc', 'leve'], V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
+            V2_COMPTE_HEURE: [c => c.limites.compteParPorteurHeure, 600, '0', 'leve'], V2_SOLDE_HEURE: [c => c.limites.soldeParPorteurHeure, 1200, '0', 'leve'],      // MOYENS-B1 (O4) : plafonds par porteur, posés sans mesure d'usage réel
+            V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
             V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 30 jours au plus
