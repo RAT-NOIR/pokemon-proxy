@@ -170,6 +170,22 @@ function coutEnergie(valeur) {
     return [...String(valeur || '').matchAll(/\{\{\s*e\s*\|([^|}]+)/g)].map(m => m[1].trim());
 }
 
+/**
+ * Le coût d'une attaque depuis les paramètres de `{{Cardtext/Attack}}` : { cout: [énergies] } ; { cout: [] } = une attaque SANS coût ; { coutNombre: n }
+ * quand la source écrit un NOMBRE (`cost=2`, Pikachu VMAX Raid Battle : le type des énergies est inconnu, ce n'est pas « aucun coût ») ; {} quand le
+ * texte n'est ni énergie, ni vide, ni nombre (inconnu : rien n'est deviné). `cost` ABSENT et `cost=` VIDE restent `[]` : 20 cartes ouvertes à l'œil
+ * (DATES-CORR, 2026-10-13) portent le rond gris vide des attaques sans coût, 8 sur 8 pour l'absent, 12 sur 12 pour le vide.
+ */
+function coutDeAttaque(params) {
+    const brut = String((params || {}).cost ?? '');
+    const energies = coutEnergie(brut);
+    if (energies.length) return { cout: energies };
+    const t = plat(brut);
+    if (t === '') return { cout: [] };
+    if (/^\d+$/.test(t)) return { coutNombre: Number(t) };
+    return {};
+}
+
 /** Illustrateur depuis une légende « … Illus. [[Nom]] » (ou `illustrator=` s'il existe). */
 function illustrateurDe(g) {
     if (g.params.illustrator) return plat(g.params.illustrator) || null;
@@ -349,7 +365,7 @@ function faitsDeCarte(texte, titre = null) {
     const attaques = gs.filter(g => g.nom === 'Cardtext/Attack').map(g => ({
         nom: plat(g.params.name) || null,
         nomJa: plat(g.params.jname) || null,
-        cout: coutEnergie(g.params.cost),
+        ...coutDeAttaque(g.params),
         degats: plat(g.params.damage) || null
     })).filter(a => { const k = JSON.stringify(a); if (vues.has(k)) return false; vues.add(k); return true; });
     const carddex = gs.find(g => g.nom === 'Carddex');
@@ -634,4 +650,4 @@ function entreesDeLaSetlist(texte, b) {
     return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
-module.exports = { sansCommentaires, gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
+module.exports = { coutDeAttaque, sansCommentaires, gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
