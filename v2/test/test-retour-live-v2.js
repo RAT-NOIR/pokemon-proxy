@@ -7,7 +7,7 @@ const H = require('./_harnais');
 const path = require('path');
 const mongoose = require('mongoose');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
-const VB = require('./_visuels-banc'); const VIS = new Map();
+const VB = require('./_visuels-banc'); const VIS = new Map(); const Q = require('./_aide-quota');
 const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
@@ -42,6 +42,7 @@ async function semer() {
     await H.ouvrirBancV2();
     // B2b point 6 : le plafond « sans-prix » (jour UTC) est semé puis lu par la route avec `new Date()` (D4) : minuit entre les deux ne l'atteindrait pas.
     await H.eviterFrontieres({ jour: true });
+    await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-retour-live-v2.js', ecrit: true });
@@ -99,7 +100,8 @@ async function semer() {
         await journal(scanId);
         return { ...x, scanId, q, idRepondu: (q.choix.find(c => c.id === choix) || {}).idProduct };
     };
-    const essais = async id => (await raw('installations').findOne({ _id: id })).essais;
+    // OFFRE-QUOTA : plus de stock « essais » à regarder baisser — ce qui reste au porteur aujourd'hui (3 par jour sans compte), relu par la fonction même des routes.
+    const essais = id => Q.restantDe({ type: 'installation', id }, cfg);
     const mouv = id => raw('mouvements').find({ installationId: id }).toArray();
     const rembNet = async id => (await mouv(id)).filter(m => m.type === 'remboursement' && m.delta === 1).length;
 
@@ -148,6 +150,7 @@ async function semer() {
         H.v('D0. avant : scan répondu « a » = débité (essais 2)', await essais(s.i._id), 2);
         const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }), j = r.json || {};
         H.v('D3. definitive:true : 200, facturation { debite:0, rembourse:true, motif:sans-prix }, solde.essai 3', [r.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, j.solde && j.solde.essai, await essais(s.i._id)], [200, 0, true, 'sans-prix', 3, 3]);
+        H.v('    offre relue APRÈS le remboursement : sans-compte, restant 3, remiseAZero à minuit de Paris', [j.offre && j.offre.nom, j.offre && j.offre.restant, /^\d{4}-\d{2}-\d{2}T00:00:00\+0[12]:00$/.test(j.offre && j.offre.remiseAZero)], ['sans-compte', 3, true]);
         const pl = await raw('plafonds').findOne({ porteur: `installation:${s.i._id}`, type: 'sans-prix' });
         H.v('    compté sous le compteur PROPRE sans-prix (5/jour), ni celui des QUESTIONS (30/jour) ni celui des pannes', [pl && pl.count, await raw('plafonds').countDocuments({ porteur: `installation:${s.i._id}`, type: { $in: ['panne', 'question'] } })], [1, 0]);
         const r2 = await rl(s.jeton, { scanId: s.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), j2 = r2.json || {};
@@ -247,10 +250,10 @@ async function semer() {
         const x = await inst(3);
         const r = await H.appel(url, '/api/solde', { methode: 'POST', corps: {}, entetes: entetes(x.jeton) });
         const v = valider(r.json, ref('ReponseSolde'), SCHEMA);
-        H.v('F1. Bearer : { success:true, solde } valide contre ReponseSolde, essai 3', [r.statut, r.json.success, v.ok, r.json.solde && r.json.solde.essai, r.json.solde && r.json.solde.total], [200, true, true, 3, 3]);
+        H.v('F1. Bearer : { success:true, solde, offre } valide contre ReponseSolde, offre sans-compte 3 restantes (OFFRE-QUOTA)', [r.statut, r.json.success, v.ok, r.json.offre && r.json.offre.nom, r.json.offre && r.json.offre.restant], [200, true, true, 'sans-compte', 3]);
         await identifier(x.jeton);
         const r2 = await H.appel(url, '/api/solde', { methode: 'POST', corps: {}, entetes: entetes(x.jeton) });
-        H.v('    relu après un scan : essai 2 (lecture seule, aucun débit par la route)', [r2.json.solde.essai, (await mouv(x.i._id)).length], [2, 1]);
+        H.v('    relu après un scan : offre.restant 2 (lecture seule, aucun débit par la route) ; le solde hérité n\'est pas débité (essai reste 3)', [r2.json.offre.restant, r2.json.solde.essai, (await mouv(x.i._id)).length], [2, 3, 1]);
         const r3 = await H.appel(url, '/api/solde', { methode: 'POST', corps: {}, entetes: entetes('A'.repeat(30)) });
         H.v('F2. Bearer inconnu : 401 JETON (corps v2), jamais la forme héritée', [r3.statut, r3.json.erreur.code, 'soldeGratuit' in r3.json], [401, 'JETON', false]);
         const r4 = await H.appel(url, '/api/solde', { methode: 'POST', corps: {}, entetes: { origin: ORIGINE, ...ip(), 'x-jeton': 'jeton-verrou' } });

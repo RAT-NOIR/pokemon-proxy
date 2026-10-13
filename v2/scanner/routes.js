@@ -17,7 +17,8 @@ const L = require('../transport/limites');
 const { idempotente, FORME } = require('../transport/idempotence');
 const { resoudrePorteur, exigerSession } = require('../porteur');
 const { exigerOrigineSite } = require('../comptes/sessions');
-const { traiterIdentifier, traiterReponse, URL_RECHARGE } = require('../identifier/routes');
+const { traiterIdentifier, traiterReponse } = require('../identifier/routes');
+const { offreSur, avecOffre, offreRefusee } = require('../argent/offre-sur');
 const { facturation: fabriquerFacturation } = require('../argent/facturation');
 const { facturationDeLecture } = require('../identifier/retour-live');
 const { col } = require('../db');
@@ -99,7 +100,8 @@ function routesScanner(router, cfg, deps = {}) {
         catch (e) { journalErreur('peutPayer', e); return refuserAvantLecture(req, res, () => repondreErreur(res, 'INDISPONIBLE')); }
         if (p.ok) return next();
         let solde; try { solde = await registre.obtenir('argent').solde(porteur); } catch (e) { journalErreur('solde', e); }
-        return refuserAvantLecture(req, res, () => repondreErreur(res, p.code, undefined, { facturation: null, ...(solde !== undefined ? { solde } : {}), ...(p.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) }));
+        const offre = await offreSur(porteur);      // OFFRE-QUOTA : plus de recharge (`achat` n'est plus joint) ; le refus QUOTA joint l'offre, restant 0
+        return refuserAvantLecture(req, res, () => repondreErreur(res, p.code, undefined, { facturation: null, ...(solde !== undefined ? { solde } : {}), ...avecOffre(p.code === 'QUOTA' ? offreRefusee(offre) : offre) }));
     }
 
     // C1 + I2b + N1 + porte : un jeton de la porte (3 corps pour le processus) ET le droit de lire UN corps pour ce compte. Exactement UNE libération (idempotente) :
@@ -194,7 +196,8 @@ function routesScanner(router, cfg, deps = {}) {
         const facturation = !r.rendu && r.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : facturationDeLecture(r);
         let solde; try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { await col('analyses').updateOne({ _id: scanId }, { $set: { facturation } }); } catch (e) { journalErreur('analyses', e); }
-        return { ...corps, facturation, ...(solde !== undefined ? { solde } : {}) };
+        const offre = await offreSur(porteur, argent);      // l'offre est relue APRÈS le remboursement : l'unité rendue se voit
+        return { ...corps, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
     }
     // Habille res.json : `transformer` (null au scanner), puis le remboursement sans-prix si `aRembourser(corps)`. Un remboursement qui échoue sert la réponse d'origine (jamais une panne).
     function habiller(transformer, aRembourser, idScan) {

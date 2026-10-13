@@ -3575,6 +3575,39 @@
         ],
         "additionalProperties": false
       },
+      "Offre": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ]
+          },
+          "restant": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Analyses restantes aujourd'hui (jour de Paris), jamais négatif. `null` pour Pro : illimité, son plafond technique anti-abus ne se montre jamais."
+          },
+          "remiseAZero": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T00:00:00[+-]\\d{2}:\\d{2}$",
+            "description": "Le prochain minuit de Paris, ISO 8601 AVEC son décalage (+01:00 l'hiver, +02:00 l'été)."
+          }
+        },
+        "required": [
+          "nom",
+          "restant",
+          "remiseAZero"
+        ],
+        "additionalProperties": false,
+        "description": "L'offre du porteur et son quota quotidien (OFFRE-QUOTA). Une analyse RENDUE compte 1 (un lot : 1 par tranche de 10 cartes) ; un introuvable, une panne et un prix illisible définitif sont rendus au quota. Sans compte : 3 par jour ; compte gratuit (vérifié) : 10 ; Pro : illimité. Un compte non vérifié se voit `gratuit` avec `restant: 0`."
+      },
       "Solde": {
         "type": "object",
         "properties": {
@@ -3742,6 +3775,9 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
@@ -3750,7 +3786,8 @@
           "scanId",
           "analyse",
           "facturation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -3772,13 +3809,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
           "carte",
           "facturation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -3847,17 +3888,8 @@
           "solde": {
             "$ref": "#/components/schemas/Solde"
           },
-          "achat": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "url"
-            ],
-            "additionalProperties": false
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
@@ -4086,11 +4118,15 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -4368,13 +4404,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
           "success",
           "compte",
           "jetonInstallation",
-          "solde"
+          "solde",
+          "offre"
         ],
         "additionalProperties": false
       },
@@ -4396,13 +4436,17 @@
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
           }
         },
         "required": [
-          "success"
+          "success",
+          "offre"
         ],
         "additionalProperties": false,
-        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true) et `solde`, une fois par scan."
+        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
       },
       "ReponsePing": {
         "type": "object",

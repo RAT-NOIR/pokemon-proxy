@@ -6,7 +6,7 @@
 const H = require('./_harnais');
 const path = require('path');
 const mongoose = require('mongoose');
-const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const Q = require('./_aide-quota');
 const { lireConfig } = require('../config');
 const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const RG = require('../identifier/regle-g');
@@ -16,7 +16,7 @@ const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').im
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
 // hebdo éteinte : un compte débite accueil puis achete (l'ordre du plan, assertion 10). V2_LOT_CARTES_MAX=100 : ce banc exerce les lots de 21 à 100 cartes (coût, supplément, remboursement poche par poche) ;
 // la borne par défaut (20), son refus et le plafond des refus de lot sont dans test-plafonds.js.
-const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' };
+const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100', V2_QUOTA_GRATUIT: '1000' };
 const cfg = lireConfig(BASE);
 const ORIGINE = cfg.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.11.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -54,6 +54,7 @@ async function inst(o = {}) {
 async function compteLie(solde, role) {
     const c = Object.assign(M.nouveauCompte({ email: `lot${++nCle}@x.fr`, emailCle: `lot${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde }, role ? { role } : {});
     await db.col('comptes').insertOne(c);
+    await Q.poserRestant(`compte:${c._id}`, (solde.accueil || 0) + (solde.achete || 0), { limite: Q.GRAND });      // l'ancien stock (accueil + achete) devient « autant d'analyses devant lui aujourd'hui »
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'banc' }), { compteId: c._id });
     await db.col('installations').insertOne(i); return { i, c, jeton, base: { compteId: c._id } };
 }
@@ -63,8 +64,10 @@ const repondre = (url, jeton, b) => H.appel(url, '/api/identifier/reponse', { me
 const mouvements = async x => raw('mouvements').find(x.base).sort({ _id: 1 }).toArray();
 const net = async (x, nom) => { const m = await mouvements(x); const s = m.reduce((t, y) => t + y.delta, 0); console.log(`   (dénominateur ${nom} : ${m.length} ligne(s) mouvements, somme des delta ${s})`); return s; };
 const debits = async x => (await mouvements(x)).filter(m => m.type === 'debit');
-const essais = async x => (await raw('installations').findOne({ _id: x.i._id })).essais;
-const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).solde;
+// OFFRE-QUOTA : plus de poches à regarder baisser. « essais » = ce qui reste aujourd'hui à l'installation seule (3 par jour) ; « achete » (ancien nom du stock du compte) = ce qui reste au compte
+// (gratuit, porté ici à 1000 par jour pour que le stock de départ soit celui que le banc choisit : `compteLie(n)`), relu par la fonction même des routes.
+const essais = x => Q.restantDe({ type: 'installation', id: x.i._id }, cfg);
+const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 'compte', id: x.c._id }, cfg) });
 
 (async () => {
     // ════════════ unités pures (aucune base) ════════════
@@ -82,6 +85,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     }
 
     await H.ouvrirBancV2();
+    await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-identifier-lot.js', ecrit: true });
@@ -192,7 +196,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     }
     // ── (5) supplément non payable : 25 cartes, solde 1
     {
-        const x = await inst({ essais: 1, achete: 0 }); lot(nAff(25));
+        const x = await inst(); await Q.poserRestant(`installation:${x.i._id}`, 1, { limite: cfg.quotas.sansCompte }); lot(nAff(25));       // il lui reste UNE analyse aujourd'hui, le lot en coûte 3
         const r = await poster(sv.url, x.jeton); const j = r.json || {};
         H.v('5. 25 cartes, solde 1 : 429 QUOTA detail lot-trop-grand, facturation rendue { debite:0, rembourse:true }', [r.statut, j.erreur && j.erreur.code, j.erreur && j.erreur.detail, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse], [429, 'QUOTA', 'lot-trop-grand', 0, true]);
         const vE = valider(j, ref('ReponseErreur'), SCHEMA);
@@ -200,9 +204,9 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         const plafonds = await raw('plafonds').find({ porteur: `installation:${x.i._id}` }).toArray();
         H.v('   crédit initial rendu (essai 1), aucun mouvement net ; le refus compte dans son compteur PROPRE lot-trop-grand (1) et dans aucun autre (ni panne ni question)', [await essais(x), await net(x, 'lot-trop-grand'), plafonds.map(p => `${p.type}:${p.count}`)], [1, 0, ['lot-trop-grand:1']]);
         // partiel : 2 crédits pour un lot à 3
-        const y = await inst({ essais: 1, achete: 1 }); lot(nAff(25));
+        const y = await inst(); await Q.poserRestant(`installation:${y.i._id}`, 2, { limite: cfg.quotas.sansCompte }); lot(nAff(25));       // 2 analyses pour un lot à 3
         const r2 = await poster(sv.url, y.jeton);
-        H.v('   2 crédits pour un lot à 3 (tout-ou-rien) : QUOTA, les deux poches retrouvées (essai 1, achete 1), somme des delta 0', [r2.statut, r2.json.erreur && r2.json.erreur.detail, await essais(y), (await raw('installations').findOne({ _id: y.i._id })).achete, await net(y, 'supplément partiel')], [429, 'lot-trop-grand', 1, 1, 0]);
+        H.v('   2 analyses pour un lot à 3 (tout-ou-rien) : QUOTA, les deux unités retrouvées en base (restant 2), somme des delta 0 ; le refus QUOTA joint l\'offre à 0 (brief : « restant 0 » sur tout refus QUOTA)', [r2.statut, r2.json.erreur && r2.json.erreur.detail, await essais(y), r2.json.offre && r2.json.offre.restant, await net(y, 'supplément partiel')], [429, 'lot-trop-grand', 2, 0, 0]);
     }
     // ── (6) lot entièrement introuvable : remboursé ; un seul identifié : jamais remboursé (ruling 4)
     {
@@ -364,14 +368,14 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     {
         const x = await compteLie({ accueil: 1, achete: 5 }); lot(nAff(25));
         const r = await poster(sv.url, x.jeton); const d = await debits(x);
-        H.v('10. 25 cartes sur un compte accueil 1 + achete 5 : 3 lignes UNITAIRES (delta -1 chacune), poches [accueil, achete, achete], clés base / #0 / #1 du supplément',
-            [r.statut, d.length, d.map(m => m.delta), d.map(m => m.credit && m.credit.poche), d.slice(1).map(m => m.cleIdempotence.replace(/^.*\|supplement/, 'supplement'))], [200, 3, [-1, -1, -1], ['accueil', 'achete', 'achete'], ['supplement#0', 'supplement#1']]);
-        H.v('   soldes après débit : accueil 0, achete 3', [(await soldeCompte(x)).accueil, (await soldeCompte(x)).achete], [0, 3]);
+        H.v('10. 25 cartes sur un compte à 6 analyses devant lui : 3 lignes UNITAIRES (delta -1 chacune), toutes sur le compteur du jour (OFFRE-QUOTA : plus de poches accueil/achete), clés base / #0 / #1 du supplément',
+            [r.statut, d.length, d.map(m => m.delta), d.map(m => m.credit && m.credit.poche), d.slice(1).map(m => m.cleIdempotence.replace(/^.*\|supplement/, 'supplement'))], [200, 3, [-1, -1, -1], ['jour', 'jour', 'jour'], ['supplement#0', 'supplement#1']]);
+        H.v('   restant après débit : 3 (6 - 3), offre.restant le dit', [(await soldeCompte(x)).achete, r.json.offre && r.json.offre.restant], [3, 3]);
         const y = await compteLie({ accueil: 1, achete: 5 }); lot(nIntro(25));
         const r2 = await poster(sv.url, y.jeton); const s = await soldeCompte(y);
         const rb = (await mouvements(y)).filter(m => m.type === 'remboursement' && m.delta === 1).map(m => m.poche).sort();
-        H.v('   le même lot de 25, entièrement introuvable : remboursé poche par poche — accueil 1 et achete 5 retrouvés, une ligne +1 par unité (accueil, achete, achete), somme 0',
-            [r2.json.facturation.rembourse, s.accueil, s.achete, rb, await net(y, 'lot de 25 remboursé')], [true, 1, 5, ['accueil', 'achete', 'achete'], 0]);
+        H.v('   le même lot de 25, entièrement introuvable : remboursé unité par unité — les 6 retrouvées, une ligne +1 par unité (toutes du compteur du jour), somme 0',
+            [r2.json.facturation.rembourse, s.achete, rb, await net(y, 'lot de 25 remboursé')], [true, 6, ['jour', 'jour', 'jour'], 0]);
     }
     // ── supplément et concurrence entre deux requêtes de MÊME clé (ruling 3) : un seul jeu de lignes, le jumeau reçoit « en cours »
     {

@@ -6,7 +6,7 @@
 // affirmation : débit 1, rien de réservé) ; tout le reste (autre lecture, échec, délai, deuxième passage) rend la réponse d'AVANT, sans débit ni remboursement de plus ; le coût est journalisé.
 const H = require('./_harnais');
 const mongoose = require('mongoose');
-const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const Q = require('./_aide-quota');
 const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const SL = require('../identifier/seconde-lecture');
 const { choixPour } = require('../choix');
@@ -36,7 +36,8 @@ async function poster(url, jeton, cleIdem = cle()) {
 }
 async function livre(x) {
     const mv = await raw('mouvements').find({ installationId: x.i._id }).toArray();
-    const ins = await raw('installations').findOne({ _id: x.i._id });
+    // OFFRE-QUOTA : « essais » = ce qui reste aujourd'hui à l'installation seule (3 par jour), relu par la fonction même des routes
+    const ins = { essais: await Q.restantDe({ type: 'installation', id: x.i._id }, cfgOff) };
     return { essais: ins.essais, net: mv.reduce((s, m) => s + m.delta, 0), mouvements: mv.length, ouverts: mv.filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat), remboursements: mv.filter(m => m.type === 'remboursement').length };
 }
 const PAYE = { essais: 2, net: -1, mouvements: 1, ouverts: ['debite'], remboursements: 0 };       // une affirmation : débit 1, rien de réservé
@@ -46,6 +47,7 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
 
 (async () => {
     await H.ouvrirBancV2();
+    await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-seconde-lecture-route.js', ecrit: true });

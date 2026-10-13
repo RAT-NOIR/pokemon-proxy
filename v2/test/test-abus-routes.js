@@ -768,7 +768,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const entier = (c, ...cle) => cle.reduce((o, k) => o[k], c);
         // [lecture, défaut attendu, valeur mal formée, issue : 'leve' (la configuration est invalide : v2 répond 503, jamais mal configurée) | 'ignore' (retombe sur le défaut) | { ferme: prédicat }, base de l'essai]
         const T = {
-            V2_ORDRE_POCHES: [c => c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'], 'essai,gratuit', 'leve'],
+            V2_ORDRE_POCHES: [c => c.ordrePoches, ['jour'], 'essai,gratuit', 'leve'],      // OFFRE-QUOTA : la seule poche débitable est le quota du jour
+            V2_QUOTA_SANS_COMPTE: [c => c.quotas.sansCompte, 3, 'abc', 'leve'], V2_QUOTA_GRATUIT: [c => c.quotas.gratuit, 10, 'abc', 'leve'], V2_QUOTA_PRO_PLAFOND: [c => c.quotas.proPlafond, 200, 'abc', 'leve'],      // OFFRE-QUOTA : quotas quotidiens (3 / 10 / plafond technique Pro 200)
             MONGODB_BASE: [c => c.base, null, '   ', 'ignore', {}],
             RM_API_V2: [c => c.actif, false, 'true', 'ignore', {}],
             V2_SECRET_EMPREINTE: [c => c.empreinte.secret, null, 'trop-court', 'leve', {}],

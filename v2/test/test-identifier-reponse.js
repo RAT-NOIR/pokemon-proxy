@@ -5,7 +5,7 @@
 const H = require('./_harnais');
 const path = require('path');
 const mongoose = require('mongoose');
-const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const Q = require('./_aide-quota');
 const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
@@ -37,7 +37,8 @@ async function repondre(url, jeton, corps, { cleIdem, nom } = {}) {
     return r;
 }
 const mouv = id => raw('mouvements').find({ installationId: id }).toArray();
-const essais = async id => (await raw('installations').findOne({ _id: id })).essais;
+// OFFRE-QUOTA : « essais » = ce qui reste aujourd'hui au porteur (3 par jour sans compte), relu par la fonction même des routes.
+const essais = id => Q.restantDe({ type: 'installation', id }, cfg);
 const ID_A = 895789, ID_B = 895790, EXP = 990001;
 async function semer() {
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
@@ -53,6 +54,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
 
 (async () => {
     await H.ouvrirBancV2();
+    await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-identifier-reponse.js', ecrit: true });
@@ -86,7 +88,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
     const r1 = await repondre(url, s1.jeton, { scanId: s1.scanId, carte: 0, choix: 'a' }, { cleIdem: k1, nom: '1' });
     const j1 = r1.json || {};
     H.v('1. choix a : 200, carte identifiee désignant le candidat a', [r1.statut, j1.success, j1.carte && j1.carte.statut, j1.carte && j1.carte.carte && j1.carte.carte.idProduct, j1.carte && j1.carte.index], [200, true, 'identifiee', s1.id.a, 0]);
-    H.v('   facturation { debite:1, reserve:0, rembourse:false, motif:question }, solde.essai 2', [j1.facturation, j1.solde && j1.solde.essai], [{ debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+    H.v('   facturation { debite:1, reserve:0, rembourse:false, motif:question }, offre.restant 2 (le solde hérité n\'est plus débité : OFFRE-QUOTA)', [j1.facturation, j1.offre && j1.offre.restant], [{ debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
     H.v('   un seul débit net : essais 2, un débit « debite », pas de remboursement', [await essais(s1.i._id), (await mouv(s1.i._id)).map(m => `${m.type}:${m.etat}`)], [2, ['debit:debite']]);
     // 9. la vérité
     await attendre(200);

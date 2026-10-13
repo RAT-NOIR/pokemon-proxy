@@ -202,6 +202,11 @@ La réponse a **trois issues par carte**, jamais une quatrième. Une carte ident
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -360,6 +365,11 @@ Une carte à trancher : 1 à 3 candidats **sans ordre de classement** (rangés p
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -417,6 +427,11 @@ Une carte introuvable (remboursée, `motif: introuvable`) :
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -515,6 +530,11 @@ Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candida
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -558,6 +578,11 @@ Une lecture ratée **définitive** (aucun prix lisible) est remboursée une fois
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -584,6 +609,11 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -641,6 +671,11 @@ Le mot de passe ne se donne PAS à l'inscription (décision D6, voir §1.6 ter) 
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -950,7 +985,7 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 
 **Taille d'un lot : 20 cartes au plus** (`V2_LOT_CARTES_MAX`, entier de 2 à 100 ; au-delà, la configuration est invalide). `POST /api/banc/correction` suit la même borne (`carte` de 0 à taille − 1 ; `maximum: 99` du schéma est le plafond absolu). `carte` (`/api/identifier/reponse`, `/api/retour-live`) va de 0 à 19 (même variable : une seule source). Un lot de plus de 20 cartes est **refusé, jamais tronqué** : `400 ENTREE` + `detail: "lot-trop-grand-taille"` (le supplément impayable reste `429 QUOTA` + `detail: "lot-trop-grand"`). Dans les deux cas : crédit initial rendu jusqu'à 10 refus par jour et par compte, `facturation { debite: 0, rembourse: true, motif: "lot" }` ; au 11e, `facturation { debite: 1, rembourse: false, motif: "lot", raisonNonRembourse: "plafond-jour" }`, le refus restant la réponse.
 
-`solde.total` compte déjà les réserves en moins. Le solde se débite dans l'ordre `essai` → `accueil` → `hebdo` → `abonnement` → `achete` (réglable côté serveur). Une installation non liée n'a que ses 3 essais ; un compte **vérifié** reçoit 25 analyses offertes une seule fois, plus 2 par semaine ISO (non cumulables).
+**OFFRE-QUOTA (décision du testeur, 2026-10-13) : plus de scans payants, plus de poches de crédits.** Chaque porteur a un QUOTA QUOTIDIEN d'analyses selon son offre, servi dans l'objet `offre` `{ nom: "sans-compte"|"gratuit"|"pro", restant: entier ≥ 0 (null pour Pro), remiseAZero: ISO 8601 avec décalage du prochain minuit de Paris }` : installation sans compte 3 par jour (`V2_QUOTA_SANS_COMPTE`), compte gratuit **vérifié** 10 par jour (`V2_QUOTA_GRATUIT`), Pro (abonnement actif et `jusquAu` futur) illimité en apparence (`restant: null`) avec un plafond technique invisible (`V2_QUOTA_PRO_PLAFOND`, 200). Un compte non vérifié, un compte ou une installation inconnus, une installation liée n'ont AUCUNE offre plus large : le refus d'avant. L'administrateur est inchangé (débit 0, motif `administrateur`). Ce qui compte : une analyse RENDUE (carte affirmée ou question = 1 ; lot = ⌈N/10⌉) ; un introuvable, une panne et un prix illisible définitif sont RENDUS au quota du jour où ils ont été pris. La remise à zéro est à minuit, heure de Paris (jours de 23 h et 25 h compris). `offre` est servi par la MÊME fonction sur : `POST /api/solde`, toute réponse de `POST /api/identifier` (succès, question, introuvable, refus `QUOTA` avec `restant: 0`), `POST /api/identifier/reponse`, `POST /api/retour-live`, `POST /api/compte/lier` et `/api/compte/delier`. `Solde` garde ses champs mais n'est plus débité : les anciens crédits achetés sont en LECTURE SEULE (ni débités, ni remboursés, ni effacés). `solde.total` compte déjà les réserves en moins pour ces anciens crédits.
 
 ### 3.2 Quand une carte est affirmée — et quand elle ne l'est PAS (lots JUMEAU-V2)
 
@@ -1037,13 +1072,13 @@ La clé est conservée **24 h**, par porteur et par route : elle vaut par l'une 
 
 ## 6. Les erreurs, et ce que chaque client doit faire
 
-Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, message, detail?, reessayerDans? }, facturation, solde?, achat? }`. `facturation` est toujours présent (`null` quand rien n'a été analysé). `solde` accompagne `QUOTA` et `VERIFICATION`, et les pannes remboursées. `achat.url` accompagne `QUOTA` pour un compte.
+Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, message, detail?, reessayerDans? }, facturation, solde?, offre? }`. `facturation` est toujours présent (`null` quand rien n'a été analysé). `solde` et `offre` accompagnent `QUOTA` et `VERIFICATION`, et les pannes remboursées. `achat` n'est plus servi (la vente est arrêtée).
 
 | code | statut | quand | ce que le client doit faire |
 |---|---|---|---|
 | `JETON` | 401 | Bearer absent, inconnu ou révoqué | extension : recréer une installation (`POST /api/installation`) |
 | `VERIFICATION` | 403 | compte lié dont l'adresse n'est pas confirmée | afficher « **confirmez votre adresse** » (pas « crédits épuisés ») |
-| `QUOTA` | 429 | plus aucune analyse disponible | **proposer un compte** (installation non liée) ou la recharge (`achat.url`, compte) ; afficher le jour du retour de l'hebdomadaire (`solde.prochainHebdo`) |
+| `QUOTA` | 429 | plus aucune analyse disponible | **proposer un compte** (installation non liée) ou l'offre Pro (compte gratuit) ; afficher le retour du quota à `offre.remiseAZero` (minuit de Paris). Plus de recharge |
 | `DEBIT` | 429 | trop vite, ou requête identique en cours | **attendre `reessayerDans` secondes** (en-tête `Retry-After` aussi), puis rejouer avec la MÊME `Idempotency-Key` |
 | `INDISPONIBLE` | 503 | base, catalogue ou index injoignables | rien n'est débité (remboursé) ; réessayer plus tard |
 | `IMAGE` | 200 | aucune image exploitable | statut 200 conservé comme la route héritée ; au scanner, `detail` : `trop-lourde` (413) · `format` (415) · `aucune-carte` (422) |
@@ -1093,8 +1128,10 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     "partage": true,
     "abonnement": null
   },
-  "achat": {
-    "url": "https://rat-market.fr/fr/compte#recharge"
+  "offre": {
+    "nom": "gratuit",
+    "restant": 0,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1122,6 +1159,11 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 0,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1155,6 +1197,11 @@ Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }
 ```
@@ -1262,6 +1309,7 @@ Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre l
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
+| E12 | `POST /api/identifier` 200 | `$.offre` | absent | clé requise : `{ nom, restant, remiseAZero }` (OFFRE-QUOTA, §1.5) | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels.js | l'extension (B5 de sa `DEMANDE-SERVEUR-EXTENSION.md`) |
 | E11 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.set.slug` | `null` (set sans slug) | chaîne : le slug du set est toujours connu | reels.js | l'extension |
 
 Non mesuré par cette lecture de forme (aucune faute de FORME, la faute est de sens) : E9 (`variante` et `liens.cardmarket` remplis alors que le serveur rend `null` quand l'édition ou le numéro est inconnu — les valeurs `normale` / une adresse sont de forme valide), E10 (codes d'erreur : le fichier `quota.json` n'en porte qu'un). `lectures.json` n'est pas une réponse du serveur (les grilles de la lecture live simulée ne sont jamais envoyées : le serveur ne reçoit que `prixLive` et `prixLiveEtat`) ; ses états `MT`…`PO` et ses prix (`null` ou > 0) tiennent la liste fermée du contrat.
@@ -1275,7 +1323,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 | # | route · statut · chemin | constat | décision à prendre |
 |---|---|---|---|
 | X1 | `GET /api/compte` · `200` · `$.historique.lignes[]` | **trou du contrat, pas du serveur** : le contrat n'a pas de motif de crédit pour une poche `abonnement` ni `essai`. Ces lignes sont **omises de l'historique, jamais inventées sous un autre motif**, et le banc compte celles qu'il omet. De même une analyse ancienne sans `facturation` complète ou sans `surface` est omise (rien n'est fabriqué). | ajouter des motifs (`abonnement`, `essai`) au contrat si le site veut les montrer |
-| X2 | `POST /api/creer-recharge` · `501` · `404` | **servie, jamais publiée** : montée derrière un aiguilleur dont le prédicat exige un porteur v2 que rien ne résout sur cette route ; elle passe donc toujours la main à la route héritée (404 dans le banc, qui n'en a pas). Son `501 INDISPONIBLE` / `paiement-non-branche` est **inatteignable en l'état**. Publiée quand elle sera implémentée ; l'alignement 501 / `INDISPONIBLE` est parqué pour la tâche de paiement. | publier avec le paiement |
+| X2 | `POST /api/creer-recharge` · `410` | **OFFRE-QUOTA : la vente de scans est arrêtée.** `index.js` répond `410 { success:false, error:"La vente de scans est arrêtée" }` sans créer de session Stripe ; le chemin v2 (`creerRecharge`) répond `410 INDISPONIBLE` (detail `vente-arretee`). Le crédit Stripe (`crediterAchat`) et le rattachement des achats (`rattacherAchats`) refusent et journalisent. | rien : la route disparaît quand le site n'y appelle plus |
 | X4 | `POST /api/identifier` · `200` · `pas-une-carte` | listée au contrat, **jamais produite** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` et `impression-indeterminee` sortent) | les clients ne comptent pas dessus |
 | X4 | `POST /api/identifier` · `200` · `plusieurs-cartes-non-separees` | idem | idem |
 | X4 | `POST /api/identifier` · `200` · `$.analyse.cartes[].carte.set.tirage` | `Produit.set.tirage` est **toujours `null`** (le catalogue ne porte pas le tirage) | les clients ne comptent pas dessus |

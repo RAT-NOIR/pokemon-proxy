@@ -13,7 +13,8 @@ const db = require('../db'); const M = require('../modeles');
 const { lireConfig } = require('../config');
 const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const Q = require('./_aide-quota');
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_QUOTA_GRATUIT: '1000' });      // OFFRE-QUOTA : le compte gratuit part de 1000 par jour, dont on prend `solde.accueil` : « 25 analyses devant lui »
 const SITE = cfg.origines.site, EXT = cfg.origines.extension;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
@@ -44,6 +45,7 @@ async function semer() {
 async function compte(o = {}) {
     const c = Object.assign(M.nouveauCompte({ email: `s${++nCle}@x.fr`, emailCle: `s${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde: { accueil: 25, achete: 0 } }, o);
     await raw('comptes').insertOne(c);
+    await Q.poserRestant(`compte:${c._id}`, (c.solde.accueil || 0) + (c.solde.achete || 0));      // l'ancien stock (accueil + achete) = autant d'analyses devant le compte aujourd'hui
     const S = require('../comptes/sessions'); const s = await S.creerSession(c._id);
     return { c, cookie: `rm_session=${s.token}` };
 }
@@ -52,7 +54,8 @@ async function installationLiee(c) {
     const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'ext' }), { compteId: c._id });
     await raw('installations').insertOne(i); return { i, jeton };
 }
-const soldeCompte = async c => (await raw('comptes').findOne({ _id: c._id })).solde.accueil;
+// OFFRE-QUOTA : ce qui reste de l'ancien « stock » = GRAND - compteur du jour (lecture mécanique du compteur, indépendante de l'état du compte)
+const soldeCompte = async c => Q.GRAND - ((await Q.prisAujourdhui(`compte:${c._id}`)) ?? 0);
 const nMouv = () => raw('mouvements').countDocuments({});
 
 // ── POST multipart (fetch + FormData : le corps que produira le navigateur)
@@ -114,7 +117,7 @@ async function parcourir() {
     await H.ouvrirBancV2();
     // B2b point 6 : (9) « 120 par heure » est une fenêtre FIXE du limiteur -> horloge fixée au milieu de l'heure ; la poche hebdo (l.189, semaine ISO) et les plafonds du jour sont lus par la route avec `new Date()`
     // -> si minuit ou le lundi 00:00 UTC est à moins de 4 minutes, on l'attend avant de jouer. (L'enfant lancé plus bas garde l'horloge réelle : il ne joue aucune série de fenêtre.)
-    H.fixerHorlogeMilieu(); await H.eviterFrontieres({ jour: true, semaine: true });
+    H.fixerHorlogeMilieu(); await H.eviterFrontieres({ jour: true, semaine: true }); await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-scanner-routes.js', ecrit: true });
@@ -189,13 +192,13 @@ async function parcourir() {
         const taille5Mo = { 'content-length': String(80 * 65536) };
         const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
         const vide = await compte({ solde: { accueil: 0, achete: 0 } });
-        await raw('hebdo').insertOne({ compteId: vide.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 86400e3) });   // la poche hebdo de la semaine est épuisée
+        // (le compteur du jour de `vide` est déjà plein : compte() l'a posé à 0 analyse restante)
         require('v8').setFlagsFromString('--expose-gc'); const gc = require('vm').runInNewContext('gc'); const ab = async () => { for (let k = 0; k < 4; k++) { gc(); await attendre(80); } return process.memoryUsage().arrayBuffers; };
         const ab0 = await ab();
         const a = await brut(sv.url, { cookie: nv.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
         H.v('N2/I2a. compte non vérifié (O3 : plus un porteur), client qui envoie 5 Mo : 401 SESSION COMPLET (statut, JSON), connexion non coupée', [a.statut, a.json && a.json.erreur.code, a.json && a.json.facturation, a.erreur, a.entetes.connection !== 'close'], [401, 'SESSION', null, null, true]);
         const b = await brut(sv.url, { cookie: vide.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
-        H.v('   compte vérifié sans crédit, 5 Mo : 429 QUOTA complet, avec solde, facturation null ET achat.url', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && b.json.solde && b.json.solde.total, b.json && b.json.achat && typeof b.json.achat.url, b.erreur], [429, 'QUOTA', null, 0, 'string', null]);
+        H.v('   compte vérifié à quota épuisé, 5 Mo : 429 QUOTA complet, avec solde, facturation null, offre gratuit restant 0 et PLUS d\'achat.url (la vente est arrêtée)', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && typeof (b.json.solde && b.json.solde.total), b.json && b.json.offre && [b.json.offre.nom, b.json.offre.restant], b.json && b.json.achat, b.erreur], [429, 'QUOTA', null, 'number', ['gratuit', 0], undefined, null]);
         const ab1 = await ab();
         H.vrai(`   mémoire : aucun corps accumulé (arrayBuffers après GC : ${ab0} -> ${ab1}, 10 Mo envoyés)`, ab1 - ab0 < 4 * 1024 * 1024);
         H.v('   la porte n\'a rien gardé', [SC.etatPorte().enCours, SC.etatPorte().comptes], [0, 0]);
@@ -235,7 +238,7 @@ async function parcourir() {
         const k = j.analyse.cartes[0];
         H.v('4. regleVerdict null, prixLive null', [j.analyse.regleVerdict, k.prixLive], [null, null]);
         H.vrai('   prixGuide rempli ET daté', k.carte.prixGuide && k.carte.prixGuide.tendance === 1 && /^2026-10-04/.test(String(k.carte.prixGuide.date)));
-        H.v('   facturation affirmee, solde 25 -> 24', [j.facturation.motif, j.facturation.debite, j.solde.accueil, await soldeCompte(compteA.c)], ['affirmee', 1, 24, 24]);
+        H.v('   facturation affirmee, solde 25 -> 24', [j.facturation.motif, j.facturation.debite, j.offre.restant, await soldeCompte(compteA.c)], ['affirmee', 1, 24, 24]);
         scanAffirme = j;
         const a = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         H.v('   la ligne analyses est celle du compte, surface scanner', [a.porteur, a.surface], [`compte:${compteA.c._id}`, 'scanner']);
@@ -249,7 +252,7 @@ async function parcourir() {
         const { c, cookie } = await compte(); mode = 'sans-prix';
         const r = await scanner(sv.url, cookie, { nom: '5' }), j = r.json || {};
         H.v('5. identifiée sans prix au guide : prixGuide null, facturation { debite:0, rembourse:true, motif:sans-prix }', [j.analyse.cartes[0].carte.prixGuide, j.facturation.debite, j.facturation.rembourse, j.facturation.motif], [null, 0, true, 'sans-prix']);
-        H.v('   solde revenu à 25 (corps ET base)', [j.solde.accueil, await soldeCompte(c)], [25, 25]);
+        H.v('   solde revenu à 25 (corps ET base)', [j.offre.restant, await soldeCompte(c)], [25, 25]);
         const nRb = () => raw('mouvements').countDocuments({ type: 'remboursement', scanId: new mongoose.Types.ObjectId(j.scanId) });
         H.v('   UN seul mouvement de remboursement pour ce scan', await nRb(), 1);
         const argent = registre.obtenir('argent');
@@ -315,18 +318,18 @@ async function parcourir() {
     {
         const { c, cookie } = await compte(); mode = 'affirmee';
         const { jeton } = await installationLiee(c);
-        const lireExt = async () => (await (await fetch(sv.url + '/api/solde', { method: 'POST', headers: { authorization: `Bearer ${jeton}`, origin: EXT, 'content-type': 'application/json' }, body: '{}' })).json()).solde;
+        const lireExt = async () => { const j = await (await fetch(sv.url + '/api/solde', { method: 'POST', headers: { authorization: `Bearer ${jeton}`, origin: EXT, 'content-type': 'application/json' }, body: '{}' })).json(); return { ...j.solde, offre: j.offre }; };
         const avant = await lireExt();
         await scanner(sv.url, cookie, { nom: '7' });
         const apres = await lireExt();
-        H.v('7. un débit scanner, puis /api/solde (extension, installation liée) : le total baisse de 1, partage:true, accueil 25 -> 24', [avant.total - apres.total, apres.partage, avant.accueil, apres.accueil], [1, true, 25, 24]);
+        H.v('7. un débit scanner, puis /api/solde (extension, installation liée) : MÊME offre (gratuit), restant 25 -> 24, partage:true ; le solde hérité n\'est plus débité (OFFRE-QUOTA)', [avant.offre.nom, apres.offre.nom, avant.offre.restant - apres.offre.restant, apres.partage, avant.offre.restant, apres.offre.restant, avant.total - apres.total], ['gratuit', 'gratuit', 1, true, 25, 24, 0]);
     }
 
     // ═══ (8) la réponse à une question suit B1b.5 ═══
     {
         const { c, cookie } = await compte(); mode = 'ambigue';
         const r = await scanner(sv.url, cookie, { nom: '8' }), j = r.json || {};
-        H.v('8. ambiguë au scanner : a-trancher, 2 candidats, réservé (debite 0, reserve 1)', [j.analyse.statut, j.analyse.cartes[0].candidats.length, j.facturation.debite, j.facturation.reserve, j.solde.accueil], ['a-trancher', 2, 0, 1, 24]);
+        H.v('8. ambiguë au scanner : a-trancher, 2 candidats, réservé (debite 0, reserve 1)', [j.analyse.statut, j.analyse.cartes[0].candidats.length, j.facturation.debite, j.facturation.reserve, j.offre.restant], ['a-trancher', 2, 0, 1, 24]);
         const q = j.analyse.cartes[0].question; const choixA = q.choix[0].id;
         const rep = await repondre(sv.url, cookie, j.scanId, { choix: choixA, carte: 0 }, { nom: '8a' });
         H.v('   répondre « a » (scanId dans le chemin) : 200, carte identifiée, débité UNE fois', [rep.statut, rep.json.carte.statut, rep.json.facturation.debite, rep.json.facturation.motif, await soldeCompte(c)], [200, 'identifiee', 1, 'question', 24]);
@@ -359,7 +362,7 @@ async function parcourir() {
         const sansPrix = ch.find(x => x.idProduct === ID_C).id, avecPrix = ch.find(x => x.idProduct === ID_A).id;
         const nRb = () => raw('mouvements').countDocuments({ type: 'remboursement', scanId: new mongoose.Types.ObjectId(j.scanId) });
         const rep = await repondre(sv.url, cookie, j.scanId, { choix: sansPrix }, { nom: 'M4a' });
-        H.v('M4. répondre par le candidat SANS prix : identifiée, prixGuide null, { debite:0, rembourse:true, motif:sans-prix }, solde revenu à 25', [rep.json.carte.statut, rep.json.carte.carte.prixGuide, rep.json.facturation.debite, rep.json.facturation.rembourse, rep.json.facturation.motif, rep.json.solde.accueil, await soldeCompte(c)], ['identifiee', null, 0, true, 'sans-prix', 25, 25]);
+        H.v('M4. répondre par le candidat SANS prix : identifiée, prixGuide null, { debite:0, rembourse:true, motif:sans-prix }, solde revenu à 25', [rep.json.carte.statut, rep.json.carte.carte.prixGuide, rep.json.facturation.debite, rep.json.facturation.rembourse, rep.json.facturation.motif, rep.json.offre.restant, await soldeCompte(c)], ['identifiee', null, 0, true, 'sans-prix', 25, 25]);
         const rej = await repondre(sv.url, cookie, j.scanId, { choix: sansPrix }, { nom: 'M4b' });
         H.v('   le rejeu de la réponse : même facturation, UN seul remboursement, solde 25', [rej.json.facturation, await nRb(), await soldeCompte(c)], [rep.json.facturation, 1, 25]);
         const r2 = await scanner(sv.url, cookie, { nom: 'M4c' });
@@ -569,7 +572,7 @@ async function parcourir() {
         let appelsG = 0; const vus = [];
         RG.decisionRegleG = () => { appelsG++; return null; };
         const voisins = async ({ imageUrls }) => { vus.push(String(imageUrls[0]).startsWith('data:')); return { ligne: {}, nEssais: 0, mesures: [], contexteG: {}, seuils: {} }; };
-        const cfgG = lireConfig({ MONGODB_BASE: 'test_scratch', V2_REGLE_G: '1' });
+        const cfgG = lireConfig({ MONGODB_BASE: 'test_scratch', V2_REGLE_G: '1', V2_QUOTA_GRATUIT: '1000' });
         const svG = await monter({ voisins }, cfgG);
         try {
             mode = 'affirmee';
@@ -628,7 +631,7 @@ async function parcourir() {
     {
         const { demarrer } = require('../../verrou/serveur');
         const FAUX = path.join(__dirname, 'faux-reseau-scanner.js');
-        const base = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', RM_API_V2: '1' };
+        const base = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', RM_API_V2: '1', V2_QUOTA_GRATUIT: '1000' };
         await semer();
         base.V2_VISUELS_BANC_FICHIER = FICHIER_VIS;
         const srv = await demarrer(FAUX, base);

@@ -6789,54 +6789,11 @@ const PACKS = {
     }
 }
 
-// Crée une session de paiement et renvoie l'URL Stripe où rediriger l'utilisateur.
-// Ne crédite RIEN : le crédit n'a lieu que dans le webhook signé, après paiement confirmé.
-app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res) => {
-    try {
-        if (!stripe) return res.status(503).json({ success: false, error: "Paiement indisponible" });
-
-        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
-        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
-
-        const pack = PACKS[req.body && req.body.packId];
-        if (!pack) return res.status(400).json({ success: false, error: "Pack inconnu" });
-        // Pack connu mais price_id absent de l'environnement : on REFUSE plutôt que de
-        // créer une session qui échouerait chez Stripe avec un message technique.
-        if (!pack.price) {
-            console.error(`❌ [recharge] pack ${req.body.packId} sans price_id — vérifie STRIPE_PRICE_* dans l'environnement`);
-            return res.status(503).json({ success: false, error: "Ce pack est momentanément indisponible" });
-        }
-
-        const session = await stripe.checkout.sessions.create({
-            mode: 'payment',
-            line_items: [{ price: pack.price, quantity: 1 }],
-            client_reference_id: userId,
-            // metadata : c'est ce que le webhook relira pour savoir QUI créditer et de
-            // COMBIEN. Écrit ici par le serveur à partir de PACKS, donc non falsifiable.
-            metadata: { userId, scans: String(pack.scans) },
-            // Les MÊMES métadonnées sur le PaymentIntent, donc sur la charge : c'est ce que
-            // relisent `charge.refunded` et `charge.dispute.created` pour savoir QUI débiter
-            // et de COMBIEN, sans appel à l'API. Les sessions antérieures à ce commit n'en
-            // ont pas : le webhook remonte alors au PaymentIntent puis à la session.
-            payment_intent_data: { metadata: { userId, scans: String(pack.scans) } },
-            // ⚠️ ACCEPTATION EXPLICITE DES CONDITIONS DE VENTE. Vente à des consommateurs
-            // dans l'UE : le consentement doit être un acte positif, et il doit être
-            // PROUVABLE. Stripe horodate l'acceptation et la conserve sur la session, ce
-            // qu'aucune case cochée dans l'extension ne ferait aussi bien.
-            // ⚠️ DÉPENDANCE : Stripe REFUSE la création de session si l'URL des conditions
-            // n'est pas renseignée dans le Dashboard (Paramètres > Informations publiques).
-            // À poser AVANT de déployer, sinon toutes les recharges tombent en 500.
-            consent_collection: { terms_of_service: 'required' },
-            success_url: `${process.env.SITE_URL}/merci`,
-            cancel_url: `${process.env.SITE_URL}/annule`
-        });
-
-        console.log(`💳 [recharge] session créée pour ${userId} — pack ${req.body.packId} (${pack.scans} scans)`);
-        res.json({ url: session.url });
-    } catch (e) {
-        console.error("❌ [creer-recharge]", e.message);
-        res.status(500).json({ success: false, error: "Impossible de créer la session de paiement" });
-    }
+// OFFRE-QUOTA (branche api-v2, décision du testeur 2026-10-13) : la VENTE DE SCANS EST ARRÊTÉE. Plus de recharge : cette route répond 410 à tout appelant, sans lire le corps, sans
+// jeton, sans AUCUN appel à Stripe (aucune session de paiement n'est créée). Le webhook ci-dessous reste en place : il traite encore les remboursements et litiges de paiements déjà
+// faits ; le crédit des NOUVEAUX achats n'a plus d'émetteur. L'ancien corps (session Checkout, packs) est retiré. L'abonnement Pro viendra dans un lot après l'allumage.
+app.post('/api/creer-recharge', (req, res) => {
+    res.status(410).json({ success: false, error: "La vente de scans est arrêtée" });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
