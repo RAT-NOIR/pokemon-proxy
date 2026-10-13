@@ -345,7 +345,7 @@ function capturer() {
         await banc.apresReponse({ ...e, scanId: '650000000000000000000025', corps: consentement(), choix: 'a', idProduct: 9 });
         await banc.corriger({ ...e, scanId: SCAN, corps: consentement(), idProduct: 12 });
         const st = await banc.statistiquesBanc();
-        H.v('(8) statistiquesBanc : dénominateur par source — 1 affirme, 1 reponse, 1 correction (l\'affirmée corrigée change de source), 1 en attente, total 4', st, { confirmees: { affirme: 1, reponse: 1, correction: 1 }, attente: 1, total: 4 });
+        H.v('(8) statistiquesBanc : dénominateur par source — 1 affirme, 1 reponse, 1 correction (l\'affirmée corrigée change de source), 1 en attente, total 4', st, { confirmees: { affirme: 1, reponse: 1, correction: 1, 'etiquette-admin': 0 }, attente: 1, total: 4 });   // ETIQUETAGE-B : la source `etiquette-admin` est comptée (0 ici)
         H.vrai('(8) aucune clé de taux global dans le bilan', !Object.keys(st).some(k => /taux|ratio|pourcent/i.test(k)));
         await vider();
     }

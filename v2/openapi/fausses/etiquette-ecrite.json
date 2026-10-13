@@ -1,5 +1,6 @@
 {
   "success": true,
   "etat": "ecrit",
-  "rev": 1
+  "rev": 1,
+  "banc": "ecrit"
 }

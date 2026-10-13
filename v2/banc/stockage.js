@@ -30,6 +30,19 @@ async function traiterImage(buffer) {
     }
 }
 
+/** ETIQUETAGE-B : la photo d'annonce BRUTE d'un scan de l'administrateur -> WebP sans métadonnées, plus grand côté 1600 au plus (jamais agrandie), orientation appliquée.
+ *  Même format et même encodeur que `traiterImage`, mais SANS la contrainte de taille d'une image redressée. Tout ce qui n'est pas une image lisible de 5 Mo au plus est refusé. */
+const COTE_PHOTO_MAX = 1600;
+async function traiterPhoto(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > OCTETS_MAX) throw refus('image-refusee');
+    try {
+        const sharp = require('sharp');
+        const sortie = await sharp(buffer, { failOn: 'error', limitInputPixels: 50e6 }).rotate()
+            .resize(COTE_PHOTO_MAX, COTE_PHOTO_MAX, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }).toBuffer({ resolveWithObject: true });
+        return { buffer: sortie.data, w: sortie.info.width, h: sortie.info.height };
+    } catch { throw refus('image-refusee'); }
+}
+
 /** Clé de stockage : hex aléatoire, jamais dérivée d'une donnée de l'utilisateur. */
 function nouvelleCle(attente = false) {
     return PREFIXE + (attente ? 'attente/' : '') + crypto.randomBytes(16).toString('hex') + '.webp';
@@ -97,4 +110,4 @@ function creerStockageMemoire() {
     };
 }
 
-module.exports = { traiterImage, creerStockage, creerStockageReel, creerStockageMemoire, nouvelleCle, PREFIXE };
+module.exports = { traiterImage, traiterPhoto, creerStockage, creerStockageReel, creerStockageMemoire, nouvelleCle, PREFIXE };

@@ -29,7 +29,7 @@ const mort = () => { try { require('fs').writeSync(1, `COUPURE=${process.env.COU
     if (mode === 'c2') db.col = nom => (nom === 'analyses' ? new Proxy(orig(nom), { get: (t, k) => (k === 'insertOne' ? async (...a) => { await t.insertOne(...a); mort(); } : t[k]) }) : orig(nom));
     // p : la PASSE de rattrapage elle-même meurt, entre le claim `rb|scanId` (déjà inséré) et le rendu de la 1re unité (sa prise atomique)
     if (mode === 'p') db.col = nom => (nom === 'mouvements' ? new Proxy(orig(nom), { get: (t, k) => (k === 'findOneAndUpdate' ? async () => mort() : t[k]) }) : orig(nom));
-    // r : la PASSE meurt entre la prise d'une unité (le ledger la pose `rembourse`) et le rendu de son crédit (le $inc de la poche) — l'ordre du ledger, R4
+    // r : la PASSE meurt entre la prise d'une unité (le ledger la pose `rendu-en-cours` depuis MOYENS-B2a, `rembourse` avant) et le rendu de son crédit (le $inc de la poche) — l'ordre du ledger, R4
     if (mode === 'r') db.col = nom => (nom === 'installations' ? new Proxy(orig(nom), { get: (t, k) => (k === 'updateOne' ? async () => mort() : t[k]) }) : orig(nom));
     const express = require('express');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret'); const M = require('../modeles');
