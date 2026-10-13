@@ -18,6 +18,22 @@ const ACT_RW = ['collStats', 'createCollection', 'createIndex', 'dbHash', 'dbSta
 const priv = (base, actions, collection = '') => ({ resource: { db: base, collection }, actions });
 const statut = (roles, privileges, users = [{ user: 'essai', db: 'admin' }]) => ({ ok: 1, authInfo: { authenticatedUsers: users, authenticatedUserRoles: roles, authenticatedUserPrivileges: privileges } });
 const statutBon = () => statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('rm_essai', ACT_RW), priv('rm_essai', ACT_RW, 'system.js')]);
+const PC = require('../migrations/preuve-cible');
+// des URI FABRIQUÉES (hôtes d'exemple, jamais réels) : la production, cartes (écriture et lecture), la source de lecture et la cible d'essai sont quatre grappes
+const ENV = { MONGODB_URI: 'mongodb+srv://ecr:pw@prod.abcde.mongodb.net/test', MONGODB_LECTURE_URI: 'mongodb+srv://lec:pw@prod.abcde.mongodb.net/test',
+    MONGODB_CARTES_URI: 'mongodb+srv://ecr:pw@cartes.fghij.mongodb.net/cartes', MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://lec:pw@cartes.fghij.mongodb.net/cartes',
+    MONGODB_ESSAI_URI: 'mongodb+srv://essai:pw@essai.klmno.mongodb.net/rm_essai' };
+// la cible est la base du banc, enveloppée d'une VUE qui répond à connectionStatus et à hello comme le ferait Atlas (la base en mémoire n'a ni utilisateur ni jeu de réplicas)
+const vue = (base, { statut = statutBon(), hello = { setName: 'essai-rs' } } = {}) => new Proxy(base, {
+    get(t, p) {
+        if (p === 'admin') return () => ({ command: async c => {
+            if (c && c.connectionStatus) { if (statut instanceof Error) throw statut; return statut; }
+            if (c && c.hello) { if (hello instanceof Error) throw hello; return hello; }
+            return t.admin().command(c);
+        } });
+        const x = t[p]; return typeof x === 'function' ? x.bind(t) : x;
+    }
+});
 
 (async () => {
     await H.ouvrirBac('test-compte-essai.js'); await M.creerIndex();
@@ -43,8 +59,10 @@ const statutBon = () => statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('r
         process.stdout.write = (c, ...r) => { brut.push(String(c)); return true; };
         process.stderr.write = (c, ...r) => { brut.push(String(c)); return true; };
         let connexions = 0, code, leve = null;
-        const cx = { base: 'rm_essai', db: db.base() };
-        const deps = { saisie: s, ecrire: l => sortie.push(String(l)), ecrireErreur: l => sortie.push(String(l)), statut: async () => statutBon(),
+        const cx = { base: 'rm_essai', db: vue(db.base()) };
+        const deps = { saisie: s, ecrire: l => sortie.push(String(l)), ecrireErreur: l => sortie.push(String(l)), env: ENV,
+            ouvrirSource: async () => ({ ok: true, source: { identite: async () => 'prod-rs' }, fermer: async () => { } }),
+            ouvrirCartes: async () => ({ ok: true, setName: 'cartes-rs', fermer: async () => { } }),
             connecter: async () => { connexions++; return cx; }, ...extra };
         try { code = await essai.main(argv, deps); } catch (e) { leve = e; code = 'LEVE'; }
         finally { process.stdout.write = so; process.stderr.write = se; }
@@ -78,9 +96,11 @@ const statutBon = () => statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('r
     H.v('   ... rien n\'a été écrit', await compterTout(), base0);
 
     // ---- 2. la preuve de privilèges, CÔTÉ SERVEUR : le jugement (pur)
-    const juge = s => essai.jugerPrivileges(s, 'rm_essai');
-    H.vrai('2. readWrite sur rm_essai seul : admis', juge(statutBon()).ok === true);
-    H.vrai('   + read sur une autre base (lecture seule) : admis', juge(statut([{ role: 'readWrite', db: 'rm_essai' }, { role: 'read', db: 'cartes' }], [priv('rm_essai', ACT_RW), priv('cartes', ['find', 'listCollections'])])).ok === true);
+    // (la table COMPLÈTE de formes — 41 d'AMORÇAGE plus celles de ce tour — vit dans test-preuve-cible.js ; ici, que l'outil juge avec LE module partagé)
+    const juge = s => essai.jugerStatut(s);
+    H.vrai('2. l\'outil juge avec le module partagé (même fonction que amorcer-essai.js)', essai.jugerStatut === PC.jugerStatut && require('../migrations/amorcer-essai').prouverCible === essai.prouverCible);
+    H.vrai('   readWrite sur rm_essai seul : admis', juge(statutBon()).ok === true);
+    H.vrai('   + read sur une autre base : REFUSÉ (le plus strict d\'AMORÇAGE)', juge(statut([{ role: 'readWrite', db: 'rm_essai' }, { role: 'read', db: 'cartes' }], [priv('rm_essai', ACT_RW), priv('cartes', ['find', 'listCollections'])])).ok === false);
     H.vrai('   + listDatabases de grappe (lecture) : admis', juge(statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('rm_essai', ACT_RW), { resource: { cluster: true }, actions: ['listDatabases'] }])).ok === true);
     const refuses = {
         'statut null': null, 'sans authInfo': { ok: 1 }, 'aucun utilisateur': statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('rm_essai', ACT_RW)], []),
@@ -102,16 +122,41 @@ const statutBon = () => statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('r
     H.vrai('   le jugement ne répète pas le nom de l\'utilisateur du statut', !JSON.stringify(Object.values(refuses).map(juge)).includes('"essai"') && !JSON.stringify(Object.values(refuses).map(juge)).includes('admin"'));
 
     // ---- 3. la preuve de privilèges, dans main : avant toute saisie, avant toute écriture
-    for (const [nom, st] of [['trop larges (atlasAdmin)', refuses['rôle de grappe atlasAdmin']], ['illisible (null)', null], ['la commande échoue', 'LEVE']]) {
+    const avecCible = (opts) => ({ connecter: async () => ({ base: 'rm_essai', db: vue(db.base(), opts) }) });
+    for (const [nom, opts] of [['trop larges (atlasAdmin)', { statut: refuses['rôle de grappe atlasAdmin'] }], ['illisible (null)', { statut: null }], ['la commande échoue', { statut: new Error('connectionStatus a échoué (adresse secrète mongodb://u:p@h)') }],
+        ['rôle read sur une autre base (le plus strict d\'AMORÇAGE)', { statut: statut([{ role: 'readWrite', db: 'rm_essai' }, { role: 'read', db: 'cartes' }], [priv('rm_essai', ACT_RW)]) }],
+        ['action hors de la liste fermée sur rm_essai', { statut: statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('rm_essai', [...ACT_RW, 'createUser'])]) }],
+        ['anyResource avec db rm_essai (C6)', { statut: statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('rm_essai', ACT_RW), { resource: { anyResource: true, db: 'rm_essai', collection: '' }, actions: ['insert'] }]) }],
+        ['même jeu de réplicas que la production (setName)', { hello: { setName: 'prod-rs' } }], ['même jeu de réplicas que cartes', { hello: { setName: 'cartes-rs' } }],
+        ['setName absent', { hello: {} }], ['hello refusé', { hello: new Error('boom mongodb://u:p@h') }]]) {
         const s = saisie([EMAIL], [MDP, MDP]);
-        const r = await jouer(['--base=rm_essai'], s, { statut: async () => { if (st === 'LEVE') throw new Error('connectionStatus a échoué (adresse secrète mongodb://u:p@h)'); return st; } });
-        H.v(`3. privilèges ${nom} : refus, aucune saisie, rien d'écrit`, [r.code, s.questions.length, await compterTout()], [1, 0, base0]);
-        H.vrai('   ... ni message du pilote, ni URI à l\'écran', !r.texte.includes('mongodb://') && !r.texte.includes('secrète'));
+        const r = await jouer(['--base=rm_essai'], s, avecCible(opts));
+        H.v(`3. cible ${nom} : refus, aucune saisie, rien d'écrit`, [r.code, s.questions.length, await compterTout()], [1, 0, base0]);
+        H.vrai('   ... ni message du pilote, ni URI, ni setName à l\'écran', !r.texte.includes('mongodb://') && !r.texte.includes('secrète') && !/prod-rs|cartes-rs|essai-rs/.test(r.texte));
     }
-    {   // aucun accès au statut : jamais de repli
-        const s = saisie([EMAIL], [MDP, MDP]); const r = await jouer(['--base=rm_essai'], s, { statut: undefined });
-        // (extra écrase par undefined -> l'outil retombe sur sa lecture réelle : db.admin().command sur la base de banc SANS authentification => aucun utilisateur => refus)
+    {   // aucun accès au statut : jamais de repli (la base de banc réelle n'a aucun utilisateur authentifié)
+        const s = saisie([EMAIL], [MDP, MDP]); const r = await jouer(['--base=rm_essai'], s, { connecter: async () => ({ base: 'rm_essai', db: db.base() }) });
         H.v('   statut réel d\'une base sans authentification (aucun utilisateur) : refus', [r.code, s.questions.length, await compterTout()], [1, 0, base0]);
+    }
+    {   // la production, la cartes : sources injoignables ou muettes
+        for (const [nom, extra] of [['identité de la production inconnue (ok:false)', { ouvrirSource: async () => ({ ok: false, raison: 'injoignable' }) }],
+            ['identité de la production : la source lève', { ouvrirSource: async () => ({ ok: true, source: { identite: async () => { throw new Error('x'); } }, fermer: async () => { } }) }],
+            ['cartes injoignable', { ouvrirCartes: async () => ({ ok: false, raison: 'injoignable' }) }], ['cartes lève', { ouvrirCartes: async () => { throw new Error('ECONNREFUSED'); } }]]) {
+            const s = saisie([EMAIL], [MDP, MDP]); const r = await jouer(['--base=rm_essai'], s, extra);
+            H.v(`   ${nom} : refus, aucune saisie, rien d'écrit`, [r.code, s.questions.length, await compterTout()], [1, 0, base0]);
+        }
+        // les hôtes, avant toute connexion
+        for (const [nom, env] of [['MONGODB_ESSAI_URI sur la grappe de la production', { ...ENV, MONGODB_ESSAI_URI: 'mongodb+srv://essai:pw@prod.abcde.mongodb.net/rm_essai' }],
+            ['MONGODB_ESSAI_URI sur la grappe de cartes', { ...ENV, MONGODB_ESSAI_URI: 'mongodb+srv://essai:pw@cartes.fghij.mongodb.net/rm_essai' }], ['MONGODB_LECTURE_URI absente', { ...ENV, MONGODB_LECTURE_URI: undefined }], ['MONGODB_ESSAI_URI absente', { ...ENV, MONGODB_ESSAI_URI: undefined }]]) {
+            const s = saisie([EMAIL], [MDP, MDP]); const r = await jouer(['--base=rm_essai'], s, { env });
+            H.v(`   hôtes : ${nom} : refus AVANT toute connexion`, [r.code, r.connexions, s.questions.length], [1, 0, 0]);
+            H.vrai('      ... aucune URI à l\'écran', !r.texte.includes('mongodb+srv://') && !r.texte.includes('pw@'));
+        }
+        // l'outil appelle LE module partagé (pas une copie) : une espionne sur l'export le voit
+        let appels = 0; const vraie = PC.prouverCible; PC.prouverCible = async (...a) => { appels++; return vraie(...a); };
+        const s = saisie([], []); await jouer(['--base=rm_essai'], s, { saisie: { ligne: async () => { throw new Error('arrêt du banc après la preuve'); }, secret: async () => { throw new Error('non'); } } });
+        PC.prouverCible = vraie;
+        H.v('   la preuve de la cible est celle du module partagé (appelée une fois)', appels, 1);
     }
 
     {   // une exception du pilote (message chargé d'une URI) : jamais répétée
@@ -185,6 +230,25 @@ const statutBon = () => statut([{ role: 'readWrite', db: 'rm_essai' }], [priv('r
         H.v('   deux saisies différentes : refus, rien créé', [r.code, (await compterTout()).comptes, espions.hacher.length], [1, 1, 0]);
         const s2 = saisie(['pas une adresse'], [MDP, MDP]); const r2 = await jouer(['--base=rm_essai'], s2);
         H.v('   adresse illisible : refus avant tout mot de passe', [r2.code, s2.questions.length, (await compterTout()).comptes], [1, 1, 1]);
+    }
+
+    // ---- 8 bis. tour 1 : le mot de passe d'espaces seulement (la règle de la vérification d'adresse : !motDePasse.trim()) ; un refus de saisie dit sa cause
+    {
+        raz();
+        for (const [nom, mdp] of [['10 espaces', ' '.repeat(10)], ['10 tabulations', '\t'.repeat(10)]]) {
+            const s = saisie(['nouveau.compte@example.org'], [mdp, mdp]); const r = await jouer(['--base=rm_essai'], s);
+            H.v(`8b. mot de passe de ${nom} : refus « espaces-seulement », rien créé, hacher non appelé`, [r.code, /espaces-seulement/.test(r.texte), (await compterTout()).comptes, espions.hacher.length], [1, true, 1, 0]);
+        }
+        const s1 = { questions: [], ligne: async () => 'nouveau.compte@example.org', secret: async () => { throw new essai.ErreurSaisie('pas de terminal interactif : le mot de passe ne se saisit que masqué, jamais lu en clair'); } };
+        const r1 = await jouer(['--base=rm_essai'], s1);
+        H.v('   refus de saisie « pas de terminal interactif » : la cause est dite, code 1, rien créé', [r1.code, /pas de terminal interactif/.test(r1.texte), (await compterTout()).comptes], [1, true, 1]);
+        const s2 = { questions: [], ligne: async () => 'nouveau.compte@example.org', secret: async () => { throw new essai.ErreurSaisie('saisie interrompue'); } };
+        const r2 = await jouer(['--base=rm_essai'], s2);
+        H.v('   « saisie interrompue » : la cause est dite', [r2.code, /saisie interrompue/.test(r2.texte)], [1, true]);
+        const s3 = { questions: [], ligne: async () => 'nouveau.compte@example.org', secret: async () => { throw new Error('boom mongodb://u:pwderreur@hote'); } };
+        const r3 = await jouer(['--base=rm_essai'], s3);
+        H.v('   une erreur ordinaire garde son message pour elle (seul le nom sort)', [r3.code, r3.texte.includes('pwderreur') || r3.texte.includes('mongodb://'), /Error/.test(r3.texte)], [1, false, true]);
+        H.vrai('   une ErreurSaisie est de classe sûre (name, sure)', new essai.ErreurSaisie('x').sure === true && new essai.ErreurSaisie('x').name === 'ErreurSaisie');
     }
 
     // ---- 9. --reprendre

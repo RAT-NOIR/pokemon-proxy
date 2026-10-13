@@ -6,15 +6,17 @@
 // Écrit par ce qu'il AUTORISE : les seuls arguments admis sont ci-dessus ; la seule base admise est rm_essai ; il n'existe AUCUNE option pour la production.
 // Rien d'écrit à la main qui diverge du service : le document vient de nouveauCompte (modeles), le hachage et la politique de mots-de-passe, la clé d'adresse de email-cle,
 // le rôle de poser-role, le code de liaison.creerCode (la fonction de POST /api/compte/code). Aucune URI, aucun hôte, aucun message de pilote, jamais le mot de passe, à l'écran.
+// LA CIBLE SE PROUVE par v2/migrations/preuve-cible.js, le MÊME module qu'amorcer-essai.js (une seule règle de sécurité, la plus stricte des deux) : hôtes, connectionStatus, setName.
 const M = require('../modeles'); const P = require('../comptes/mots-de-passe'); const { emailCle } = require('../comptes/email-cle');
 const liaison = require('../installations/liaison'); const roleAdmin = require('./poser-role');
-const { ACTIONS_DE_LECTURE } = require('../chargeur/lecture-seule');
+const PC = require('../migrations/preuve-cible');
 const { lireConfig } = require('../config'); const { col } = require('../db');
 
 const BASE_ESSAI = 'rm_essai';
-// Ce qu'un rôle readWrite ajoute à la lecture. Toute autre action (administration, utilisateurs, grappe, arrêt…) refuse.
-const ACTIONS_ECRITURE_ESSAI = Object.freeze(new Set([...ACTIONS_DE_LECTURE, 'convertToCapped', 'createCollection', 'createIndex', 'dropCollection', 'dropIndex', 'insert', 'remove', 'renameCollectionSameDB', 'update', 'compact', 'collMod']));
 const MSG_IDENTIFIANTS = 'Adresse inconnue, compte non confirmé ou mot de passe incorrect. Rien n\'a été fait.';
+
+/** Une erreur dont le message est FIXE et sûr (jamais celui d'un pilote) : c'est le seul message d'erreur que l'outil affiche tel quel. */
+class ErreurSaisie extends Error { constructor(message) { super(message); this.name = 'ErreurSaisie'; this.sure = true; } }
 
 /** Arguments : seuls --base=rm_essai, --reprendre, --code (jamais les deux). Ne répète jamais un argument refusé. → { ok, reprendre, code } | { ok:false, raison } */
 function lireArgs(argv) {
@@ -32,55 +34,59 @@ function lireArgs(argv) {
     return { ok: true, reprendre, code };
 }
 
-/** La preuve CÔTÉ SERVEUR (connectionStatus, privilèges inclus) : écrite par ce qu'elle autorise. Tout doute refuse. Pure. → { ok } | { ok:false, raison } */
-function jugerPrivileges(statut, base = BASE_ESSAI) {
-    const info = statut && typeof statut === 'object' ? statut.authInfo : null;
-    if (!info || typeof info !== 'object') return { ok: false, raison: 'connectionStatus sans authInfo : je ne sais pas ce que cet utilisateur peut faire' };
-    if (!Array.isArray(info.authenticatedUsers) || info.authenticatedUsers.length === 0) return { ok: false, raison: 'aucun utilisateur authentifié : je ne sais pas qui écrit' };
-    const roles = info.authenticatedUserRoles;
-    if (!Array.isArray(roles) || roles.length === 0) return { ok: false, raison: 'aucun rôle lisible : je ne sais pas ce que cet utilisateur peut faire' };
-    for (const r of roles) {
-        const ok = r && typeof r === 'object' && typeof r.role === 'string' && typeof r.db === 'string' && ((r.role === 'readWrite' && r.db === base) || r.role === 'read');
-        if (!ok) return { ok: false, raison: `rôle « ${r && typeof r.role === 'string' ? r.role.slice(0, 30) : '?'} » hors de la liste admise (readWrite sur ${base}, ou read)` };
-    }
-    const privileges = info.authenticatedUserPrivileges;
-    if (!Array.isArray(privileges) || privileges.length === 0) return { ok: false, raison: 'aucun privilège lisible : je ne sais pas ce que cet utilisateur peut faire' };
-    const vues = new Set();
-    for (const p of privileges) {
-        if (!p || typeof p !== 'object' || !Array.isArray(p.actions) || p.actions.length === 0) return { ok: false, raison: 'un privilège sans liste d\'actions lisible : refus' };
-        const res = p.resource && typeof p.resource === 'object' ? p.resource : null;
-        for (const a of p.actions) if (typeof a !== 'string') return { ok: false, raison: 'une action illisible dans un privilège : refus' };
-        if (p.actions.every(a => ACTIONS_DE_LECTURE.includes(a))) continue;   // lecture seule, où que ce soit : sans danger
-        if (!res || res.cluster || res.anyResource || res.db !== base || typeof res.collection !== 'string') return { ok: false, raison: `une action d'écriture ou d'administration ailleurs que sur ${base} : refus` };
-        for (const a of p.actions) {
-            if (!ACTIONS_ECRITURE_ESSAI.has(a)) return { ok: false, raison: `action « ${a.slice(0, 40)} » hors de la liste d'un simple readWrite : cet utilisateur peut faire plus` };
-            vues.add(a);
-        }
-    }
-    if (!vues.has('insert') || !vues.has('update')) return { ok: false, raison: `cet utilisateur n'a pas le droit d'écrire sur ${base}` };
-    return { ok: true };
-}
-
-/** Saisie réelle : l'adresse en clair, le mot de passe MASQUÉ (aucun écho). Sans terminal interactif, le mot de passe est refusé : il ne se lit jamais en clair. */
+/**
+ * Saisie réelle, SANS readline : l'adresse s'affiche (ce n'est pas un secret), le mot de passe n'est JAMAIS écrit, sous aucune forme.
+ *  · le terminal passe en mode brut (donc muet : le système n'écho plus) AVANT que la moindre invite soit écrite ;
+ *  · ce qui est tapé alors qu'aucune question n'est posée est MIS EN FILE, jamais affiché ; la question secrète suivante le consomme (un collage « mot de passe, Entrée, mot de passe, Entrée »
+ *    sert donc à la confirmation) ; la question d'adresse l'écarte ;
+ *  · Ctrl+C, Ctrl+D et la fin de l'entrée refusent par « saisie interrompue » ; sans terminal interactif, le mot de passe est REFUSÉ (jamais lu en clair).
+ */
 function saisieTerminal({ entree = process.stdin, sortie = process.stdout } = {}) {
-    const readline = require('readline'); const { Writable } = require('stream');
-    let rl = null, muet = false, attente = null;
-    const ouvrir = () => {
-        if (rl) return rl;
-        const out = new Writable({ write(c, e, cb) { if (!muet) sortie.write(c, e); cb(); } });
-        rl = readline.createInterface({ input: entree, output: out, terminal: Boolean(entree.isTTY) });
-        rl.on('close', () => { if (attente) { const a = attente; attente = null; a(new Error('saisie interrompue')); } });
-        return rl;
+    const interactif = entree.isTTY === true && typeof entree.setRawMode === 'function';
+    let ouvert = false, fini = false, courant = null, ignorerLF = false, echap = 0;
+    const file = [];
+    const interrompue = () => new ErreurSaisie('saisie interrompue');
+    const finir = (erreur) => { fini = true; const c = courant; courant = null; if (c && erreur) c.reject(erreur); };
+    const traiter = ch => {
+        const c = courant;
+        if (echap) {                                              // séquence d'échappement (flèches, Suppr…) : ignorée jusqu'à son octet final
+            if (echap === 1) { echap = (ch === '[' || ch === 'O') ? 2 : 0; return; }
+            if (/[A-Za-z~]/.test(ch)) echap = 0; return;
+        }
+        if (ch === '\x03' || ch === '\x04') { sortie.write('\n'); finir(interrompue()); return; }
+        if (ch === '\x1b') { echap = 1; return; }
+        if (ch === '\n' && ignorerLF) { ignorerLF = false; return; }
+        ignorerLF = ch === '\r';
+        if (ch === '\r' || ch === '\n') { const valeur = c.tampon.join(''); courant = null; sortie.write('\n'); c.resolve(valeur); return; }
+        if (ch === '\x7f' || ch === '\b') { if (c.tampon.length) { c.tampon.pop(); if (c.echo) sortie.write('\b \b'); } return; }
+        if (ch < ' ') return;                                     // autres caractères de commande : ignorés
+        c.tampon.push(ch); if (c.echo) sortie.write(ch);          // l'écho n'existe que pour la question d'adresse
     };
-    const lire = (question, masque) => new Promise((resolve, reject) => {
-        const r = ouvrir(); attente = reject;
-        const fin = reponse => { attente = null; muet = false; if (masque) sortie.write('\n'); resolve(reponse); };
-        if (masque) { sortie.write(question); muet = true; r.question('', fin); } else r.question(question, fin);
+    const pomper = () => { while (courant && file.length && !fini) traiter(file.shift()); };
+    const surDonnees = chunk => { for (const ch of String(chunk)) { if (fini) return; if (courant) traiter(ch); else file.push(ch); } };
+    const surFin = () => { if (!fini) finir(interrompue()); };
+    const ouvrir = () => {
+        if (ouvert) return; ouvert = true;
+        if (interactif) entree.setRawMode(true);                  // muet AVANT toute invite
+        if (typeof entree.setEncoding === 'function') entree.setEncoding('utf8');
+        entree.on('data', surDonnees); entree.on('end', surFin); entree.on('close', surFin);
+        if (typeof entree.resume === 'function') entree.resume();
+    };
+    const lire = (question, echo) => new Promise((resolve, reject) => {
+        if (fini) return reject(interrompue());
+        ouvrir();
+        if (echo) file.length = 0;                                // ce qui a été tapé avant l'invite d'adresse n'est pas rejoué à l'écran
+        courant = { tampon: [], echo, resolve, reject };
+        sortie.write(question);
+        pomper();
     });
     return {
-        ligne: q => lire(q, false),
-        secret: async q => { if (!entree.isTTY) throw new Error('terminal interactif requis : le mot de passe ne se saisit que masqué, jamais lu en clair'); return lire(q, true); },
-        fermer: () => { if (rl) rl.close(); }
+        ligne: q => lire(q, true),
+        secret: async q => { if (!interactif) throw new ErreurSaisie('pas de terminal interactif : le mot de passe ne se saisit que masqué, jamais lu en clair'); return lire(q, false); },
+        fermer: () => {
+            if (ouvert) { entree.removeListener('data', surDonnees); entree.removeListener('end', surFin); entree.removeListener('close', surFin); if (interactif) entree.setRawMode(false); if (typeof entree.pause === 'function') entree.pause(); ouvert = false; }
+            finir(null);
+        }
     };
 }
 
@@ -97,22 +103,26 @@ const heureLocale = d => d.toLocaleTimeString('fr-FR', { hour12: false });
 async function main(argv, deps = {}) {
     const ecrire = deps.ecrire || (s => console.log(s)), ecrireErreur = deps.ecrireErreur || (s => console.error(s));
     const refuser = m => { ecrireErreur(`REFUS : ${m}`); return 1; };
+    const env = deps.env || process.env;
     const a = lireArgs(argv);
     if (!a.ok) return refuser(a.raison);                                       // AVANT toute connexion
+    const hotes = PC.jugerHotes(env);                                          // les hôtes se comparent sans connexion (la même règle qu'AMORÇAGE)
+    if (!hotes.ok) return refuser(`${hotes.raison} Rien n'a été fait.`);
     const saisie = deps.saisie || saisieTerminal();
-    let cx = null;
+    let cx = null, so = null;
     try {
         cx = await (deps.connecter || connecterReel)();
         if (!cx || cx.base !== BASE_ESSAI || !cx.db) return refuser(`la connexion n'est pas sur ${BASE_ESSAI} : rien n'a été fait`);
         let collections;
         try { collections = await cx.db.listCollections().toArray(); } catch (e) { return refuser('impossible de lister les collections de la base : rien n\'a été fait'); }
         if (!Array.isArray(collections) || collections.length === 0) return refuser(`la base ${BASE_ESSAI} est VIDE (elle doit contenir le catalogue copié) : on n'est pas sur la bonne base. Rien n'a été fait.`);
-        let st = null;
-        try { st = await (deps.statut ? deps.statut() : cx.db.admin().command({ connectionStatus: 1, showPrivileges: true })); }
-        catch (e) { return refuser('connectionStatus a échoué : je ne peux pas prouver que cet utilisateur n\'écrit que sur la base de test. Rien n\'a été fait.'); }
-        const p = jugerPrivileges(st, BASE_ESSAI);
-        if (!p.ok) return refuser(`privilèges non prouvés — ${p.raison}. Rien n'a été fait.`);
-        ecrire(`Base ${BASE_ESSAI} : non vide, utilisateur limité à l'écriture sur ${BASE_ESSAI} (prouvé côté serveur).`);
+        // LA PREUVE DE LA CIBLE : celle d'AMORÇAGE (module partagé), avant toute saisie et toute écriture
+        so = await (deps.ouvrirSource || PC.ouvrirIdentiteProduction)(env);
+        if (!so || so.ok !== true) return refuser(`cible non prouvée — ${(so && typeof so.raison === 'string' && so.raison) || 'identité de la production inconnue'}. Rien n'a été fait.`);
+        let pr = null;
+        try { pr = await (deps.prouverCible || PC.prouverCible)(cx.db, { source: so.source, ouvrirCartes: deps.ouvrirCartes || PC.ouvrirCartesParDefaut, env }); } catch { pr = null; }
+        if (!pr || pr.ok !== true) return refuser(`la cible n'est pas prouvée — ${(pr && typeof pr.raison === 'string' && pr.raison) || 'je ne sais pas'}. Rien n'a été fait.`);
+        ecrire(`Base ${BASE_ESSAI} : non vide, grappe distincte de la production et de cartes, utilisateur limité à l'écriture sur ${BASE_ESSAI} (prouvé côté serveur).`);
 
         const brut = String(await saisie.ligne('Adresse du compte : ')).normalize('NFKC').trim();
         const cle = brut.length <= 254 ? emailCle(brut) : null;
@@ -136,7 +146,8 @@ async function main(argv, deps = {}) {
         } else {                                                               // création
             if (await col('comptes').findOne({ emailCle: cle })) return refuser(`cette adresse a déjà un compte. Pour reprendre un compte confirmé : --base=${BASE_ESSAI} --reprendre. Rien n'a été fait.`);
             const mdp = await saisie.secret('Mot de passe (masqué) : ');
-            const faute = P.politique(mdp, cle);                               // la fonction de la route d'inscription
+            // la fonction de la route d'inscription, puis la règle de la vérification d'adresse (O3-RESIDU : `!motDePasse.trim()` -> espaces-seulement, service.js verifierAdresse)
+            const faute = P.politique(mdp, cle) || (typeof mdp === 'string' && !mdp.trim() ? 'espaces-seulement' : null);
             if (faute) return refuser(`mot de passe refusé par la politique (${faute}). Rien n'a été fait.`);
             const mdp2 = await saisie.secret('Mot de passe, une seconde fois (masqué) : ');
             if (mdp2 !== mdp) return refuser('les deux saisies du mot de passe diffèrent. Rien n\'a été fait.');
@@ -156,9 +167,11 @@ async function main(argv, deps = {}) {
         ecrire(`Il expire à ${heureLocale(new Date(c.expire))} (heure locale) — ${c.expire} — et ne sert qu'une fois. Tapez-le dans l'extension. Il ne sera pas réaffiché.`);
         return 0;
     } catch (e) {
+        if (e && e.sure === true && typeof e.message === 'string') return refuser(e.message);   // un refus de saisie dit sa cause (message fixe, jamais celui d'un pilote)
         return refuser(`arrêt sur erreur (${(e && (e.codeName || e.code || e.name)) || 'erreur'}) : je n'affiche jamais le message du pilote. Relire l'état avant de relancer.`);
     } finally {
         try { if (saisie.fermer) saisie.fermer(); } catch { /* terminal déjà fermé */ }
+        try { if (so && so.fermer) await so.fermer(); } catch { /* connexion déjà fermée */ }
         try { if (cx && cx.fermer) await cx.fermer(); } catch { /* connexion déjà fermée */ }
     }
 }
@@ -167,4 +180,4 @@ if (require.main === module) {
     require('dotenv').config();
     main(process.argv.slice(2)).then(code => process.exit(code)).catch(e => { console.error(`❌ ${(e && e.name) || 'erreur'}`); process.exit(1); });
 }
-module.exports = { main, jugerPrivileges, saisieTerminal, lireArgs, BASE_ESSAI };
+module.exports = { main, saisieTerminal, ErreurSaisie, lireArgs, BASE_ESSAI, prouverCible: PC.prouverCible, jugerHotes: PC.jugerHotes, jugerStatut: PC.jugerStatut };
