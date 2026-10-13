@@ -16,6 +16,9 @@
 //  · SEPT collections, liste gelée ci-dessous (D4 §5). Toute autre — credits, journal_scans, quotas, remboursements, evenements_stripe, questions, comptes… — est impossible à lire par l'adaptateur de source.
 //  · SOURCE = la base `test`, par une connexion dont les privilèges sont PROUVÉS en lecture seule (v2/chargeur/lecture-seule.js, la même garde que l'API) ; documents lus par la façade de lecture à liste fermée.
 //  · CIBLE = la base `rm_essai`, par MONGODB_ESSAI_URI (mongo-connexion.js, seule option NOMMÉE autorisée à commencer sur du vide), sur un hôte qui n'est NI celui de la production NI celui des cartes NI celui de la source.
+//  · LA CIBLE SE PROUVE côté serveur (tour 1, C1), avant toute lecture ou écriture : connectionStatus (l'utilisateur n'écrit QUE sur rm_essai, rôles readWrite/read@rm_essai) ET hello.setName connu et
+//    DIFFÉRENT de celui de la source et de celui de cartes (MONGODB_CARTES_LECTURE_URI, lue le temps d'un hello). Cas non conclu = refus. mongo-connexion.js ne laisse passer le vide qu'APRÈS cette preuve.
+//  · « TERMINÉE » ne se dit que si les comptes, les noms d'index ET la méta de la source (guide_prix_meta, catalogue_export_meta, relues avant/après) concordent ; le contenu document par document n'est PAS contrôlé, et le dit.
 //  · CIBLE VIDE, ou RENDUE À UN ÉTAT DE COPIE que ce script a lui-même écrit (collection `_amorcage_etat`) ET --reprendre. Toute autre cible non vide est refusée, rien n'est écrit.
 //  · ARRÊT DUR : avant chaque lot, poids mesuré de la cible (données + index) + octets du lot ≤ 480 Mo ; sinon la copie s'arrête AVANT de le franchir, et le dit.
 //  · À LA FIN : compte source = compte cible, par collection, et mêmes noms d'index. Un écart = code 1, collection nommée, état « non terminé ».
@@ -30,6 +33,7 @@ const COLLECTIONS_AUTORISEES = Object.freeze(['references_image', 'numeros_carte
 const BASE_SOURCE = 'test', BASE_CIBLE = 'rm_essai';
 const ARRET_DUR_MO = 480;                // sur les 512 Mo d'une M0 (D4 §5) — la même unité que mesurer-taille-bases.js : 1 Mo = 1e6 octets, données + index
 const ETAT = '_amorcage_etat';
+const COLLECTIONS_META = Object.freeze(['guide_prix_meta', 'catalogue_export_meta']);   // ce que les imports de la production (guide 00:49, catalogue 05:00 et 12:15 UTC) mettent à jour
 const TAILLE_LOT = 500;
 const JOURNAL_PAR_DEFAUT = path.join(__dirname, '..', '..', 'backup-amorcage-essai', 'journal.jsonl');   // backup-*/ est ignoré par git
 
@@ -91,8 +95,70 @@ function adapterSource(db) {
         async compter(nom) { return facade.collection(garde(nom)).countDocuments({}); },
         async poids(nom) { const s = await db.command({ collStats: garde(nom) }); return { donnees: s.size, index: s.totalIndexSize }; },
         async indexes(nom) { return db.collection(garde(nom)).indexes(); },
-        async lot(nom, apres, n) { return facade.collection(garde(nom)).find(apres === undefined ? {} : { _id: { $gt: apres } }).sort({ _id: 1 }).limit(n).toArray(); }
+        async lot(nom, apres, n) { return facade.collection(garde(nom)).find(apres === undefined ? {} : { _id: { $gt: apres } }).sort({ _id: 1 }).limit(n).toArray(); },
+        /** L'identité du jeu de réplicas de la source (hello.setName), ou undefined si le serveur ne la donne pas. */
+        async identite() { const h = await db.admin().command({ hello: 1 }); return h && typeof h.setName === 'string' && h.setName ? h.setName : undefined; },
+        /** Les deux collections de MÉTA (date du guide, fichier d'export du catalogue), en entier, une chaîne par collection : ce que les imports de la production changent. */
+        async meta() { const o = {}; for (const n of COLLECTIONS_META) o[n] = JSON.stringify(await facade.collection(garde(n)).find({}).sort({ _id: 1 }).toArray()); return o; }
     });
+}
+
+// ── 2bis. LA PREUVE DE LA CIBLE (tour 1, C1) : côté serveur, jamais par le nom d'un hôte ─────────────────────────────────────
+// Une liste de noms d'hôtes est une liste de REFUS : un alias de la production, un point d'accès privé ou une troisième grappe n'y figurent pas, la cible y serait VIDE, et
+// l'option du vide (mongo-connexion.js) retire justement le filet « une base réelle n'est jamais vide » (§50 : le contrôle juste porte sur ce que le cas redouté n'a PAS).
+// Écrite par ce qu'elle AUTORISE, sur la connexion CIBLE elle-même :
+//  (a) connectionStatus : l'utilisateur n'a d'actions d'écriture QUE sur la base rm_essai, et ses rôles sont readWrite/read sur rm_essai (aucun rôle d'une autre base, aucun rôle d'administration) ;
+//  (b) hello.setName de la cible est connu, et DIFFÉRENT de celui de la source (la production) ET de celui de cartes ;
+// tout cas non conclu (commande refusée, champ absent, erreur, cartes injoignable) BLOQUE et le dit. Aucune raison ne contient un nom d'utilisateur ni un setName.
+const ROLES_ADMIS = Object.freeze(['readWrite', 'read']);
+async function prouverCible(db, { source, ouvrirCartes, env = process.env } = {}) {
+    const LS = require('../chargeur/lecture-seule');
+    const refus = raison => ({ ok: false, raison });
+    let statut;
+    try { statut = await db.admin().command({ connectionStatus: 1, showPrivileges: true }); }
+    catch { return refus('connectionStatus a échoué sur la cible : je ne peux pas prouver ce que son utilisateur peut écrire.'); }
+    const info = statut && typeof statut === 'object' ? statut.authInfo : null;
+    if (!info || typeof info !== 'object') return refus('connectionStatus sans authInfo : je ne sais pas ce que l\'utilisateur de la cible peut faire.');
+    if (!Array.isArray(info.authenticatedUsers) || info.authenticatedUsers.length === 0) return refus('aucun utilisateur authentifié sur la cible : je ne sais pas qui écrit.');
+    const roles = info.authenticatedUserRoles;
+    if (!Array.isArray(roles) || roles.length === 0) return refus('liste des rôles de l\'utilisateur de la cible absente : je ne sais pas ce qu\'il est.');
+    for (const r of roles) if (!r || typeof r !== 'object' || r.db !== BASE_CIBLE || !ROLES_ADMIS.includes(r.role)) return refus(`l'utilisateur de la cible porte un rôle autre que ${ROLES_ADMIS.join('/')} sur "${BASE_CIBLE}" : refusé (aucun rôle d'une autre base, aucun rôle d'administration).`);
+    const privileges = info.authenticatedUserPrivileges;
+    if (!Array.isArray(privileges) || privileges.length === 0) return refus('liste des privilèges de l\'utilisateur de la cible absente : je ne sais pas ce qu\'il peut écrire.');
+    for (const p of privileges) {
+        if (!p || typeof p !== 'object' || !Array.isArray(p.actions) || !p.resource || typeof p.resource !== 'object') return refus('un privilège illisible sur la cible : refusé.');
+        const ecriture = p.actions.filter(a => typeof a !== 'string' || !LS.ACTIONS_DE_LECTURE.includes(a));
+        const surRmEssai = p.resource.db === BASE_CIBLE && p.resource.cluster !== true;
+        if (ecriture.length && !surRmEssai) return refus(`l'utilisateur de la cible a ${ecriture.length} action(s) d'écriture ou d'administration hors de la base "${BASE_CIBLE}" : refusé.`);
+    }
+    let h;
+    try { h = await db.admin().command({ hello: 1 }); } catch { return refus('hello a échoué sur la cible : je ne peux pas dire quel jeu de réplicas c\'est.'); }
+    const setCible = h && typeof h.setName === 'string' ? h.setName : '';
+    if (!setCible) return refus('le jeu de réplicas de la cible n\'a pas de nom (hello.setName) : je ne peux pas prouver qu\'il n\'est pas la production.');
+    let setSource;
+    try { setSource = await source.identite(); } catch { return refus('la source ne sait pas dire son jeu de réplicas : je ne peux rien comparer.'); }
+    if (typeof setSource !== 'string' || !setSource) return refus('le jeu de réplicas de la source est inconnu : je ne peux rien comparer.');
+    if (setCible === setSource) return refus('la cible est le MÊME jeu de réplicas que la source (la production, sous un autre nom) : refusé.');
+    let c = null;
+    try {
+        try { c = await ouvrirCartes(env); } catch { return refus('la grappe des cartes est injoignable : je ne peux pas comparer, refusé.'); }
+        if (!c || c.ok !== true || typeof c.setName !== 'string' || !c.setName) return refus('l\'identité de la grappe des cartes est inconnue : je ne peux pas comparer, refusé.');
+        if (setCible === c.setName) return refus('la cible est le MÊME jeu de réplicas que la grappe des cartes : refusé.');
+        return { ok: true };
+    } finally { if (c && typeof c.fermer === 'function') { try { await c.fermer(); } catch { /* déjà fermée */ } } }
+}
+/** La grappe des cartes, ouverte en LECTURE (MONGODB_CARTES_LECTURE_URI) le temps d'un hello. { ok, setName, fermer } | { ok: false, raison }. `connecter(uri)` injectable, rend { db, close }. */
+async function ouvrirCartesParDefaut(env, { connecter = async uri => require('mongoose').createConnection(uri, { dbName: 'cartes', serverSelectionTimeoutMS: 20000 }).asPromise() } = {}) {
+    const uri = env && typeof env.MONGODB_CARTES_LECTURE_URI === 'string' ? env.MONGODB_CARTES_LECTURE_URI.trim() : '';
+    if (!uri) return { ok: false, raison: 'MONGODB_CARTES_LECTURE_URI absente : l\'identité de la grappe des cartes est inconnue, refusé.' };
+    let cx = null;
+    const fermer = async () => { try { if (cx) await cx.close(); } catch { /* déjà fermée */ } };
+    try {
+        cx = await connecter(uri);
+        const h = await cx.db.admin().command({ hello: 1 });
+        if (!h || typeof h.setName !== 'string' || !h.setName) { await fermer(); return { ok: false, raison: 'la grappe des cartes ne donne pas de nom de jeu de réplicas : refusé.' }; }
+        return { ok: true, setName: h.setName, fermer };
+    } catch (e) { await fermer(); return { ok: false, raison: `connexion à la grappe des cartes impossible (${cause(e)}).` }; }
 }
 
 async function connecterSourceParDefaut(uri) {
@@ -117,10 +183,11 @@ async function ouvrirSourceParDefaut(env, { connecter = connecterSourceParDefaut
 }
 
 // ── 3. LA CIBLE : mongo-connexion.js (grappe, nom, contrôles), avec l'option NOMMÉE du vide ───────────────────────────────
-async function ouvrirCibleParDefaut() {
+async function ouvrirCibleParDefaut(env, { preuve } = {}) {
     const { connecterMongo } = require('../../mongo-connexion');
     const mongoose = require('mongoose');
-    const base = await connecterMongo({ script: 'v2/migrations/amorcer-essai.js', ecrit: true, baseVideAutorisee: true });
+    // l'option du vide ne s'obtient qu'avec la PREUVE de la cible (mongo-connexion.js la joue avant d'accepter le vide)
+    const base = await connecterMongo({ script: 'v2/migrations/amorcer-essai.js', ecrit: true, baseVideAutorisee: true, preuveCible: preuve });
     return { ok: true, db: mongoose.connection.db, nomBase: base, fermer: async () => { await mongoose.disconnect(); } };
 }
 async function poidsCibleParDefaut(db) { const s = await db.command({ dbStats: 1 }); return s.dataSize + s.indexSize; }
@@ -183,15 +250,20 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
     try {
         const source = so.source;
         if (source.nomBase !== BASE_SOURCE) return stop(`la source est la base "${nomCourt(source.nomBase)}" et non "${BASE_SOURCE}" : refusé.`);
-        const co = await (deps.ouvrirCible || ouvrirCibleParDefaut)(env);
+        // la PREUVE de la cible : jouée par mongo-connexion.js AVANT d'accepter le vide (ouvreur par défaut), et rejouée ici avant toute lecture ou écriture de la cible
+        const preuve = db => (deps.prouverCible || prouverCible)(db, { source, ouvrirCartes: deps.ouvrirCartes || ouvrirCartesParDefaut, env });
+        const co = await (deps.ouvrirCible || ouvrirCibleParDefaut)(env, { preuve });
         if (!co.ok) return stop(co.raison);
-        try { return await corps({ A, source, cible: co.db, noms, seuil, tailleLot, poidsCible, journal, deps, say, stop }); }
+        try { return await corps({ A, source, cible: co.db, noms, seuil, tailleLot, poidsCible, journal, deps, say, stop, preuve }); }
         finally { await co.fermer(); }
     } finally { await so.fermer(); }
 }
 
-async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, journal, deps, say, stop }) {
+async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, journal, deps, say, stop, preuve }) {
     if (cible.databaseName !== BASE_CIBLE) return stop(`la cible est la base "${nomCourt(cible.databaseName)}" et non "${BASE_CIBLE}" : refusé.`);
+    let pr = null;
+    try { pr = await preuve(cible); } catch { pr = null; }
+    if (!pr || pr.ok !== true) return stop(`la cible n'est pas prouvée — ${(pr && typeof pr.raison === 'string' && pr.raison) || 'je ne sais pas'}. Rien n'est lu ni écrit dans la cible.`);
     say(`🗄️  Source : "${BASE_SOURCE}" (production, LECTURE SEULE)   →   cible : "${BASE_CIBLE}"`);
     say(A.executer ? (A.reprendre ? '▶️  COPIE — reprise' : '▶️  COPIE') : '🔎 SIMULATION — rien n\'est écrit (--executer pour copier)');
 
@@ -207,6 +279,10 @@ async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, jou
     for (const c of plan) say(`   ${c.nom.padEnd(24)} ${String(c.n).padStart(9)} documents · données ${String(mo(c.donnees)).padStart(7)} Mo · index ${String(mo(c.index)).padStart(6)} Mo · ${c.idx.length} index hors _id`);
     say(`   → total à copier : ${mo(total)} Mo (données + index) ; ARRÊT DUR : ${mo(seuil)} Mo`);
     if (total > seuil) return stop(`le total source (${mo(total)} Mo) dépasserait l'arrêt dur de ${mo(seuil)} Mo : la copie ne démarre pas, rien n'est écrit.`);
+    // la MÉTA de la source au début (date du guide, fichier d'export) : relue à la fin ; si elle a bougé, un import de la production a eu lieu pendant la copie
+    const metaDebut = await source.meta();
+    const nomsChanges = (avant, apres) => COLLECTIONS_META.filter(n => avant[n] !== apres[n]);
+    const CONSEIL_FENETRES = 'Relancer HORS des fenêtres d\'import de la production (guide : 00:49 UTC ; catalogue : 05:00 et 12:15 UTC) : supprimer les collections de "rm_essai" (utilisateur essai-amorcage), puis refaire la simulation et la copie.';
 
     // ── la cible : vide, ou reprenable, ou refus
     const presentes = (await cible.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name);
@@ -219,29 +295,39 @@ async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, jou
         const etrangeres = presentes.filter(n => n !== ETAT && !COLLECTIONS_AUTORISEES.includes(n));
         if (etrangeres.length) return stop(`la cible porte des collections hors de la liste autorisée : ${etrangeres.map(nomCourt).join(', ')}. Je ne la reprends pas.`);
         if (A.executer && !A.reprendre) return stop(`une copie existe déjà dans la cible (${etat.termine ? 'terminée' : 'interrompue'}, commencée le ${etat.debut instanceof Date ? etat.debut.toISOString() : '?'}) : --reprendre pour la continuer ; rien n'a été écrit.`);
+        if (A.executer) {
+            // une reprise suppose que la source n'a pas changé de GUIDE ni de CATALOGUE depuis le début de la copie : sinon la cible mélangerait deux états de la production
+            let avant = null; try { avant = typeof etat.metaDebut === 'string' ? JSON.parse(etat.metaDebut) : null; } catch { avant = null; }
+            if (!avant) return stop('l\'état de la copie ne porte pas l\'empreinte de la méta de la source : je ne sais pas si elle a changé depuis le début, je ne reprends pas, rien n\'est écrit.');
+            const diff = nomsChanges(avant, metaDebut);
+            if (diff.length) return stop(`« ${diff.join('», « ')} » a changé à la source depuis le début de la copie (un import de la production a eu lieu) : la reprise mélangerait deux états. ${CONSEIL_FENETRES}`);
+        }
         say(`\nCible : copie ${etat.termine ? 'TERMINÉE' : 'INTERROMPUE'} détectée — ${A.executer ? 'reprise' : 'relancer avec --executer --reprendre pour la reprendre'}.`);
     }
     if (!A.executer) { say(`\n✅ Simulation terminée : rien n'a été écrit. Pour copier : node v2/migrations/amorcer-essai.js --base=${BASE_CIBLE} --executer`); return 0; }
 
     // ── la copie
     const ecrireEtat = champs => cible.collection(ETAT).updateOne({ _id: 'amorcage' }, champs, { upsert: true });
-    if (!etat) await ecrireEtat({ $set: { debut: new Date(), collections: noms, termine: false, comptesSource: Object.fromEntries(plan.map(c => [c.nom, c.n])) } });
+    if (!etat) await ecrireEtat({ $set: { debut: new Date(), collections: noms, termine: false, comptesSource: Object.fromEntries(plan.map(c => [c.nom, c.n])), metaDebut: JSON.stringify(metaDebut) } });
     else await ecrireEtat({ $set: { termine: false }, $push: { reprises: new Date() } });
+    const metaReference = etat ? JSON.parse(etat.metaDebut) : metaDebut;   // le début de la copie ENTIÈRE, pas de cette exécution
 
     const interrompre = async (nom, copies, raison) => {
         journal({ le: new Date().toISOString(), collection: nom, etat: 'interrompue', copies, raison });
         console.error(`❌ ARRÊT : ${raison}`);
-        console.error(`   Copie PARTIELLE dans « ${BASE_CIBLE} » (« ${nom} » : ${copies} document(s) de cette exécution). Elle se reprend, sans doublon, par :`);
+        console.error(`   Copie PARTIELLE dans « ${BASE_CIBLE} » (« ${nom} » : ${copies} document(s) copiés par cette exécution dans cette collection). Elle se reprend, sans doublon, par :`);
         console.error(`     node v2/migrations/amorcer-essai.js --base=${BASE_CIBLE} --executer --reprendre`);
         return 1;
     };
     for (const c of plan) {
         const col = cible.collection(c.nom);
         if (!(await cible.listCollections({ name: c.nom }, { nameOnly: true }).toArray()).length) await cible.createCollection(c.nom);
+        let avantN = 0, copies = 0;
         try {
             if (c.idx.length) await col.createIndexes(c.idx.map(({ v, ns, background, ...spec }) => spec));
             const dernier = await col.find({}, { projection: { _id: 1 } }).sort({ _id: -1 }).limit(1).toArray();
-            let apres = dernier.length ? dernier[0]._id : undefined, copies = 0;
+            let apres = dernier.length ? dernier[0]._id : undefined;
+            avantN = await col.countDocuments({});
             if (apres !== undefined) say(`↻ « ${c.nom} » : reprise après le plus grand _id présent (${await col.countDocuments({})} document(s) déjà copiés).`);
             for (; ;) {
                 const lot = await source.lot(c.nom, apres, tailleLot);
@@ -256,7 +342,11 @@ async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, jou
             }
             await ecrireEtat({ $set: { [`faites.${c.nom}`]: new Date() } });
             say(`✔️  « ${c.nom} » : ${copies} document(s) copiés par cette exécution.`);
-        } catch (e) { return await interrompre(c.nom, 0, `copie de « ${c.nom} » interrompue (${cause(e)}).`); }
+        } catch (e) {
+            // le VRAI nombre de documents copiés : ce que la collection porte maintenant moins ce qu'elle portait au début de cette exécution (un lot coupé en deux en a écrit une partie)
+            let reels = copies; try { reels = (await col.countDocuments({})) - avantN; } catch { /* cible injoignable : le décompte des lots entiers fait foi */ }
+            return await interrompre(c.nom, reels, `copie de « ${c.nom} » interrompue (${cause(e)}).`);
+        }
     }
 
     // ── le contrôle final : compte source = compte cible, mêmes index
@@ -270,15 +360,34 @@ async function corps({ A, source, cible, noms, seuil, tailleLot, poidsCible, jou
         say(`   ${bon ? '✅' : '🔴'} ${c.nom.padEnd(24)} source ${String(s).padStart(9)} · cible ${String(k).padStart(9)}${s === k ? '' : `   ÉCART ${k - s}`}${iS === iC ? '' : '   index différents'}`);
         journal({ le: new Date().toISOString(), collection: c.nom, source: s, cible: k, indexSource: iS === '' ? 0 : iS.split('|').length, indexCible: iC === '' ? 0 : iC.split('|').length, etat: bon ? 'complete' : 'ECART' });
     }
+    // la MÉTA : relue à la source (a-t-elle bougé depuis le début de la copie ?) et comparée à ce que la cible a reçu
+    const metaFin = await source.meta();
+    const bougees = nomsChanges(metaReference, metaFin);
+    const differentes = [];
+    for (const n of COLLECTIONS_META.filter(x => noms.includes(x))) {
+        const dansCible = JSON.stringify(await cible.collection(n).find({}).sort({ _id: 1 }).toArray());
+        if (dansCible !== metaFin[n]) differentes.push(n);
+    }
+    for (const n of COLLECTIONS_META) {
+        const ok = !bougees.includes(n) && !differentes.includes(n);
+        say(`   ${ok ? '✅' : '🔴'} ${n.padEnd(24)} méta ${bougees.includes(n) ? 'CHANGÉE à la source depuis le début de la copie' : 'inchangée à la source'}${differentes.includes(n) ? ' · différente de la copie dans la cible' : ''}`);
+    }
     const poidsFinal = await poidsCible(cible);
     say(`\n   Poids de la cible : ${mo(poidsFinal)} Mo (données + index) sur ${mo(seuil)} Mo d'arrêt dur.`);
+    if (bougees.length || differentes.length) {
+        console.error(`❌ ARRÊT : la méta « ${[...new Set([...bougees, ...differentes])].join('», « ')} » a changé à la source pendant la copie (ou ne correspond pas à la cible) : un import de la production a eu lieu, la copie mélange peut-être deux états. Elle n'est PAS déclarée terminée.`);
+        console.error(`   ${CONSEIL_FENETRES}`);
+        return 1;
+    }
     if (ecarts) { console.error(`❌ ARRÊT : ${ecarts} collection(s) en écart (🔴 ci-dessus) : la copie n'est PAS déclarée terminée. La source est vivante : relancer la simulation, puis la copie après avoir compris l'écart.`); return 1; }
     await ecrireEtat({ $set: { termine: noms.length === COLLECTIONS_AUTORISEES.length, termineLe: new Date(), poidsFinalOctets: poidsFinal } });
-    say(`\n✅ Copie terminée et contrôlée. Suite : node v2/migrations/creer-index.js --base=${BASE_CIBLE}`);
+    say(`\n✅ Copie terminée. CONTRÔLÉ : les comptes des collections copiées, leurs noms d'index, et la méta de la source (${COLLECTIONS_META.join(', ')}) inchangée pendant la copie et identique dans la cible.`);
+    say(`   NON contrôlé : le contenu document par document (un document modifié à la source sans que la méta change n'est pas vu).`);
+    say(`   Suite : node v2/migrations/creer-index.js --base=${BASE_CIBLE}`);
     return 0;
 }
 
-module.exports = { principal, jugerHotes, clesDHotes, adapterSource, ouvrirSourceParDefaut, lireArguments, COLLECTIONS_AUTORISEES, ARRET_DUR_MO, ETAT, BASE_SOURCE, BASE_CIBLE };
+module.exports = { principal, jugerHotes, clesDHotes, adapterSource, ouvrirSourceParDefaut, ouvrirCartesParDefaut, prouverCible, lireArguments, COLLECTIONS_AUTORISEES, COLLECTIONS_META, ARRET_DUR_MO, ETAT, BASE_SOURCE, BASE_CIBLE };
 
 if (require.main === module) {
     require('dotenv').config();

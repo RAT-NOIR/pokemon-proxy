@@ -93,7 +93,7 @@ function baseDemandee() {
  * Ne renvoie JAMAIS sur une base non demandée : en cas d'écart, le processus s'arrête
  * avec un code de sortie 1, connexion fermée, avant toute opération.
  */
-async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false, baseVideAutorisee = false } = {}) {
+async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false, baseVideAutorisee = false, preuveCible = null } = {}) {
     if (!process.env.MONGODB_URI) {
         console.error("❌ MONGODB_URI absent du .env — impossible de continuer.");
         process.exit(1);
@@ -103,6 +103,11 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     const vide = resoudreBaseVide(attendue, baseVideAutorisee);
     if (!vide.ok) {
         console.error(`\n❌ REFUS : ${vide.raison}`);
+        console.error(`   Aucune connexion n'a été ouverte.`);
+        process.exit(1);
+    }
+    if (vide.videAutorise && typeof preuveCible !== 'function') {
+        console.error(`\n❌ REFUS : l'option baseVideAutorisee exige une preuveCible (identité de la cible prouvée côté serveur) ; aucune fournie.`);
         console.error(`   Aucune connexion n'a été ouverte.`);
         process.exit(1);
     }
@@ -162,7 +167,7 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     // naître en s'y connectant — la signature exacte d'une grappe fausse.
     // ⚠️ SOUS BANC_ISOLE=1 ce contrôle est REMPLACÉ : une base de banc NEUVE est vide, et c'est normal. Le contrôle qui peut échouer dans le
     // cas redouté ici (un banc qui se retrouve sur une vraie grappe) porte sur ce qu'une vraie grappe n'a PAS : l'hôte du banc.
-    const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env, videAutorise: vide.videAutorise });
+    const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env, videAutorise: vide.videAutorise, preuve: preuveCible });
     if (!apres.ok) {
         console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} — ${apres.raison}`);
         console.error(`   Aucune opération n'a été effectuée.`);
@@ -198,7 +203,16 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
  * Le contrôle d'après connexion. Hors banc : « une base RÉELLE de ce projet n'est jamais vide » (§50, inchangé). Sous BANC_ISOLE=1 : l'hôte de la
  * connexion est celui du banc (une base vide y est normale). { ok, raison }
  */
-async function controlerApresConnexion({ db, hote, env = process.env, videAutorise = false }) {
+async function controlerApresConnexion({ db, hote, env = process.env, videAutorise = false, preuve = null }) {
+    // 🔑 TOUR 1 (C1) : le passe-droit du vide retire le filet « une base réelle n'est jamais vide » ; il ne s'obtient donc QU'APRÈS une PREUVE, côté serveur, que la
+    // connexion est bien celle de la base de test (privilèges de l'utilisateur, identité du jeu de réplicas) — jamais par le seul nom d'un hôte. Écrit par ce qu'il
+    // AUTORISE : une preuve qui rend exactement { ok: true }. Absente, qui lève, qui rend autre chose : REFUS (« je ne sais pas » n'est jamais « tout va bien »).
+    if (videAutorise === true) {
+        if (typeof preuve !== 'function') return { ok: false, raison: 'l\'option du vide exige une PREUVE, côté serveur, de l\'identité de la cible (aucune fournie) : refusé.' };
+        let p = null;
+        try { p = await preuve(db); } catch { p = null; }
+        if (!p || p.ok !== true) return { ok: false, raison: `preuve de la cible non conclue — ${(p && typeof p.raison === 'string' && p.raison) || 'je ne sais pas'}` };
+    }
     if (env.BANC_ISOLE === '1') {
         const g = verifierHoteBanc(`mongodb://${hote || ''}/`, env);
         return g.ok ? { ok: true, raison: null } : { ok: false, raison: g.raison };

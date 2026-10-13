@@ -62,9 +62,30 @@ const poidsReel = async db => { const s = await db.command({ dbStats: 1 }); retu
     // l'ouvreur injecté : la source est un ADAPTATEUR de lecture (jamais la base brute), la cible la base native
     let ouverturesSource = 0, ouverturesCible = 0;
     const fermetures = { source: 0, cible: 0 };
+    // TOUR 1 (C1) : la cible se PROUVE côté serveur. Les bases en mémoire n'ont ni utilisateur ni jeu de réplicas distincts : la cible est donc enveloppée d'une VUE dont
+    // `admin().command` répond à connectionStatus et à hello comme le ferait Atlas (les autres commandes et toutes les opérations vont à la vraie base en mémoire).
+    const statutOk = (extra = {}) => ({ authInfo: {
+        authenticatedUsers: [{ user: 'essai-amorcage', db: 'admin' }],
+        authenticatedUserRoles: [{ role: 'readWrite', db: 'rm_essai' }],
+        authenticatedUserPrivileges: [{ resource: { db: 'rm_essai', collection: '' }, actions: ['find', 'insert', 'update', 'remove', 'createCollection', 'createIndex', 'listCollections', 'listIndexes', 'dbStats', 'collStats'] }, ...(extra.privileges || [])],
+        ...(extra.auth || {})
+    } });
+    const cibleVue = ({ statut = statutOk(), hello = { setName: 'essai-rs' }, base = dbC } = {}) => new Proxy(base, {
+        get(t, p) {
+            if (p === 'admin') return () => ({ command: async c => {
+                if (c && c.connectionStatus) { if (statut instanceof Error) throw statut; return statut; }
+                if (c && c.hello) { if (hello instanceof Error) throw hello; return hello; }
+                return t.admin().command(c);
+            } });
+            const x = t[p]; return typeof x === 'function' ? x.bind(t) : x;
+        }
+    });
+    const sourceVue = (setName = 'prod-rs') => ({ ...A.adapterSource(dbS), identite: async () => setName });
+    const cartesOk = async () => ({ ok: true, setName: 'cartes-rs', fermer: async () => { } });
     const deps = (extra = {}) => ({
-        ouvrirSource: async () => { ouverturesSource++; return { ok: true, source: A.adapterSource(dbS), fermer: async () => { fermetures.source++; } }; },
-        ouvrirCible: async () => { ouverturesCible++; return { ok: true, db: dbC, fermer: async () => { fermetures.cible++; } }; },
+        ouvrirSource: async () => { ouverturesSource++; return { ok: true, source: sourceVue(), fermer: async () => { fermetures.source++; } }; },
+        ouvrirCible: async () => { ouverturesCible++; return { ok: true, db: cibleVue(), fermer: async () => { fermetures.cible++; } }; },
+        ouvrirCartes: cartesOk,
         journal: () => { },
         ...extra
     });
@@ -269,6 +290,167 @@ const poidsReel = async db => { const s = await db.command({ dbStats: 1 }); retu
         const { r, texte } = await lancer([...EXE, '--executer'], ENV, deps({ apresLot: bouge, tailleLot: 3 }));
         v('9a. un document ajouté à la source AVANT le point copié : l\'égalité finale échoue, code 1, collection nommée', [r, /codes_set/.test(texte), /🔴|écart|diff/i.test(texte)], [1, true, true]);
         await dbS.collection('codes_set').deleteOne({ _id: 'A000' });
+    }
+
+    // ══ 10. TOUR 1 (C1) — LA CIBLE SE PROUVE CÔTÉ SERVEUR, elle ne se devine plus par le nom de son hôte
+    {
+        const prouver = async (db, opts) => { try { return await A.prouverCible(db, opts); } catch (e) { return { ok: 'EXCEPTION', raison: String(e && e.message) }; } };
+        const optsOk = (o = {}) => ({ source: { identite: async () => 'prod-rs' }, ouvrirCartes: cartesOk, env: {}, ...o });
+        const refus = async (nom, db, opts) => { const r = await prouver(db, opts); v(nom, [r.ok === false, typeof r.raison === 'string' && r.raison.length > 0, /prod-rs|cartes-rs|essai-rs|essai-amorcage/.test(r.raison || '')], [true, true, false]); };
+
+        const bon = await prouver(cibleVue(), optsOk());
+        v('10a. la seule combinaison juste passe : readWrite@rm_essai seulement, setName connu et distinct de la source ET de cartes', bon.ok, true);
+        await refus('10b. un utilisateur cible qui peut ÉCRIRE ailleurs (insert sur la base test) : REFUS', cibleVue({ statut: statutOk({ privileges: [{ resource: { db: 'test', collection: '' }, actions: ['find', 'insert'] }] }) }), optsOk());
+        await refus('10c. un privilège d\'écriture sur TOUTES les bases (db vide) : REFUS', cibleVue({ statut: statutOk({ privileges: [{ resource: { db: '', collection: '' }, actions: ['update'] }] }) }), optsOk());
+        await refus('10d. un privilège de grappe/administration (cluster:true, action hors lecture) : REFUS', cibleVue({ statut: statutOk({ privileges: [{ resource: { cluster: true }, actions: ['shutdown'] }] }) }), optsOk());
+        await refus('10e. un rôle sur une autre base ({readWrite, test}) : REFUS', cibleVue({ statut: statutOk({ auth: { authenticatedUserRoles: [{ role: 'readWrite', db: 'rm_essai' }, { role: 'readWrite', db: 'test' }] } }) }), optsOk());
+        await refus('10f. un rôle d\'administration sur rm_essai (dbOwner) : REFUS', cibleVue({ statut: statutOk({ auth: { authenticatedUserRoles: [{ role: 'dbOwner', db: 'rm_essai' }] } }) }), optsOk());
+        await refus('10g. aucun utilisateur authentifié : REFUS', cibleVue({ statut: statutOk({ auth: { authenticatedUsers: [] } }) }), optsOk());
+        await refus('10h. liste des rôles absente : REFUS (je ne sais pas)', cibleVue({ statut: statutOk({ auth: { authenticatedUserRoles: undefined } }) }), optsOk());
+        await refus('10i. liste des privilèges absente : REFUS', cibleVue({ statut: statutOk({ auth: { authenticatedUserPrivileges: undefined } }) }), optsOk());
+        await refus('10j. connectionStatus refusé par le serveur (lève) : REFUS', cibleVue({ statut: new Error('not authorized') }), optsOk());
+        await refus('10k. même setName que la source (la production sous un alias) : REFUS', cibleVue({ hello: { setName: 'prod-rs' } }), optsOk());
+        await refus('10l. même setName que cartes : REFUS', cibleVue({ hello: { setName: 'cartes-rs' } }), optsOk());
+        await refus('10m. setName absent de la cible : REFUS', cibleVue({ hello: {} }), optsOk());
+        await refus('10n. setName vide : REFUS', cibleVue({ hello: { setName: '' } }), optsOk());
+        await refus('10o. hello refusé (lève) : REFUS', cibleVue({ hello: new Error('boom') }), optsOk());
+        await refus('10p. setName de la source inconnu : REFUS', cibleVue(), optsOk({ source: { identite: async () => undefined } }));
+        await refus('10q. la source ne sait pas dire son identité (lève) : REFUS', cibleVue(), optsOk({ source: { identite: async () => { throw new Error('x'); } } }));
+        await refus('10r. cartes injoignable (ok:false) : REFUS', cibleVue(), optsOk({ ouvrirCartes: async () => ({ ok: false, raison: 'injoignable' }) }));
+        await refus('10s. cartes injoignable (lève) : REFUS', cibleVue(), optsOk({ ouvrirCartes: async () => { throw new Error('ECONNREFUSED'); } }));
+        await refus('10t. cartes sans setName : REFUS', cibleVue(), optsOk({ ouvrirCartes: async () => ({ ok: true, setName: '', fermer: async () => { } }) }));
+        let fermee = 0;
+        await prouver(cibleVue(), optsOk({ ouvrirCartes: async () => ({ ok: true, setName: 'cartes-rs', fermer: async () => { fermee++; } }) }));
+        v('10u. la connexion vers cartes est fermée après le hello', fermee, 1);
+
+        // de bout en bout par principal : la cible est refusée AVANT toute écriture (aucune collection créée, même pas l'état)
+        const ENV_ALIAS = { ...ENV, MONGODB_ESSAI_URI: 'mongodb+srv://essai-amorcage:pw-secret-4@alias-prive.exemple.invalid/rm_essai' };
+        v('10v. précondition : l\'alias passe la liste de noms (c\'est le cas 12 de la relecture 2)', A.jugerHotes(ENV_ALIAS).ok, true);
+        const bout = async (nom, cible, extra = {}, args = [...EXE, '--executer']) => {
+            await viderCible();
+            const { r, texte } = await lancer(args, ENV_ALIAS, deps({ ouvrirCible: async () => ({ ok: true, db: cible, fermer: async () => { } }), ...extra }));
+            const ecrit = await noms(dbC);
+            v(nom, [r, ecrit, FRAGMENTS_SECRETS.some(f => texte.includes(f)) || /prod-rs|cartes-rs|essai-rs/.test(texte)], [1, [], false]);
+            await viderCible();
+            return texte;
+        };
+        await bout('10w. la production sous un alias (même setName que la source) : code 1, RIEN d\'écrit', cibleVue({ hello: { setName: 'prod-rs' } }));
+        await bout('10x. un utilisateur cible qui peut écrire sur test : code 1, RIEN d\'écrit', cibleVue({ statut: statutOk({ privileges: [{ resource: { db: 'test', collection: '' }, actions: ['insert', 'update'] }] }) }));
+        await bout('10y. même setName que cartes : code 1, RIEN d\'écrit', cibleVue({ hello: { setName: 'cartes-rs' } }));
+        await bout('10z. setName absent : code 1, RIEN d\'écrit', cibleVue({ hello: {} }));
+        await bout('10aa. cartes injoignable : code 1, RIEN d\'écrit', cibleVue(), { ouvrirCartes: async () => ({ ok: false, raison: 'injoignable' }) });
+        await bout('10ab. la simulation fait la même preuve (pré-vol) : code 1', cibleVue({ hello: { setName: 'prod-rs' } }), {}, EXE);
+        // ET la seule combinaison juste passe jusqu'au bout
+        await viderCible();
+        const ok = await lancer([...EXE, '--executer'], ENV_ALIAS, deps());
+        v('10ac. la seule combinaison juste (readWrite@rm_essai, setName distincts) copie jusqu\'au bout : code 0, comptes égaux', [ok.r, ...(await Promise.all(COLS.map(n => compte(dbC, n))))], [0, ...COLS.map(n => nb[n])]);
+        await viderCible();
+        // les sorties ne contiennent ni setName ni nom d'utilisateur
+        const t = await bout('10ad. (refus) les messages ne contiennent aucun setName ni utilisateur', cibleVue({ hello: { setName: 'prod-rs' } }));
+        v('10ae. idem, texte vérifié', /prod-rs|cartes-rs|essai-rs|essai-amorcage/.test(t), false);
+        // connexion par défaut vers cartes : variable absente ou connexion qui échoue = REFUS
+        const sur = async f => { try { return await f(); } catch (e) { return { ok: 'EXCEPTION', fermer: async () => { } }; } };
+        const c1 = await sur(() => A.ouvrirCartesParDefaut({}, { connecter: async () => { throw new Error('x'); } }));
+        v('10af. ouvrirCartesParDefaut : MONGODB_CARTES_LECTURE_URI absente : ok:false', c1.ok, false);
+        const c2 = await sur(() => A.ouvrirCartesParDefaut({ MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://u:p@c.fghij.mongodb.net/cartes' }, { connecter: async () => { throw new Error('pw'); } }));
+        v('10ag. ouvrirCartesParDefaut : connexion impossible : ok:false, sans le message du pilote', [c2.ok, JSON.stringify(c2).includes('pw')], [false, false]);
+        let fermeeC = 0;
+        const c3 = await sur(() => A.ouvrirCartesParDefaut({ MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://u:p@c.fghij.mongodb.net/cartes' }, { connecter: async () => ({ db: { databaseName: 'cartes', admin: () => ({ command: async c => (c.hello ? { setName: 'cartes-rs' } : {}) }) }, close: async () => { fermeeC++; } }) }));
+        v('10ah. ouvrirCartesParDefaut : hello lu, setName rendu', [c3.ok, c3.setName], [true, 'cartes-rs']);
+        await c3.fermer();
+        v('10ai. ouvrirCartesParDefaut : fermer() ferme la connexion', fermeeC, 1);
+    }
+
+    // ══ 11. TOUR 1 (I1) — « terminée » ne se dit que si c'est vrai : la méta de la source est relue avant et après
+    {
+        await viderCible();
+        const sauve = async n => dbS.collection(n).find({}).toArray();
+        const restaure = async (n, docs) => { await dbS.collection(n).deleteMany({}); if (docs.length) await dbS.collection(n).insertMany(docs); };
+        const gpm = await sauve('guide_prix_meta'), cem = await sauve('catalogue_export_meta'), gp = await sauve('guide_prix');
+        const unefois = f => { let fait = false; return async (x) => { if (!fait) { fait = true; await f(x); } }; };
+
+        // le scénario du relecteur : un document modifié à la source PENDANT la copie, avec la méta changée
+        const hook = unefois(async () => { await dbS.collection('guide_prix').updateOne({ idProduct: 1000 }, { $set: { prix: 999 } }); await dbS.collection('guide_prix_meta').updateOne({ _id: 'b' }, { $set: { date: '2026-10-14' } }); });
+        const a = await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, apresLot: async x => { if (x.collection === 'guide_prix') await hook(x); } }));
+        const etat = await dbC.collection(A.ETAT).findOne({ _id: 'amorcage' });
+        v('11a. document modifié à la source pendant la copie + méta changée : code 1', a.r, 1);
+        v('11b. le message nomme la méta qui a changé et la parade (relancer hors 00:49, 05:00 et 12:15 UTC)', [/guide_prix_meta/.test(a.texte), /00:49/.test(a.texte), /05:00/.test(a.texte), /12:15/.test(a.texte)], [true, true, true, true]);
+        v('11c. jamais « terminée » : état non terminé, aucune phrase de réussite', [etat && etat.termine, /Copie terminée/.test(a.texte)], [false, false]);
+        await restaure('guide_prix_meta', gpm); await restaure('guide_prix', gp); await viderCible();
+
+        // catalogue_export_meta
+        const hook2 = unefois(async () => { await dbS.collection('catalogue_export_meta').updateOne({ _id: 'dernier' }, { $set: { fichier: 'products_singles_7.json' } }); });
+        const b = await lancer([...EXE, '--executer'], ENV, deps({ apresLot: async x => { if (x.collection === 'references_image') await hook2(x); } }));
+        v('11d. catalogue_export_meta changée pendant la copie : code 1, nommée', [b.r, /catalogue_export_meta/.test(b.texte), /Copie terminée/.test(b.texte)], [1, true, false]);
+        await restaure('catalogue_export_meta', cem); await viderCible();
+
+        // un document modifié sans que la méta ait changé : non détectable, et le message le DIT
+        const hook3 = unefois(async () => { await dbS.collection('guide_prix').updateOne({ idProduct: 1001 }, { $set: { prix: 777 } }); });
+        const c = await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, apresLot: async x => { if (x.collection === 'guide_prix') await hook3(x); } }));
+        v('11e. document modifié sans méta changée : code 0 (non détectable) mais le message dit ce qui N\'A PAS été contrôlé', [c.r, /NON contrôlé/.test(c.texte), /contenu document par document/.test(c.texte)], [0, true, true]);
+        v('11f. le message dit ce qui A été contrôlé (comptes, index, méta nommées)', [/comptes/.test(c.texte), /index/.test(c.texte), /guide_prix_meta/.test(c.texte), /catalogue_export_meta/.test(c.texte)], [true, true, true, true]);
+        await restaure('guide_prix', gp); await viderCible();
+
+        // la méta de la cible = celle de la source (copie juste)
+        const d = await lancer([...EXE, '--executer'], ENV, deps());
+        v('11g. copie juste : code 0 et la méta de la cible égale celle de la source', [d.r, JSON.stringify(await dbC.collection('guide_prix_meta').find({}).sort({ _id: 1 }).toArray()) === JSON.stringify(await dbS.collection('guide_prix_meta').find({}).sort({ _id: 1 }).toArray())], [0, true]);
+        await viderCible();
+
+        // la méta de la CIBLE doit être celle de la source : une cible altérée (ici un document de méta modifié juste après sa copie) n'est pas « terminée »
+        const hook4 = unefois(async () => { await dbC.collection('guide_prix_meta').updateOne({ _id: 'a' }, { $set: { date: 'altérée' } }); });
+        const g = await lancer([...EXE, '--executer'], ENV, deps({ apresLot: async x => { if (x.collection === 'guide_prix_meta') await hook4(x); } }));
+        v('11j. méta de la cible différente de celle de la source (source inchangée) : code 1, nommée, jamais « terminée »', [g.r, /guide_prix_meta/.test(g.texte), /Copie terminée/.test(g.texte)], [1, true, false]);
+        await viderCible();
+
+        // une reprise refuse si la méta de la source a changé depuis le début de la copie
+        let lots = 0;
+        const coupure = async ({ collection }) => { if (collection === 'numeros_cartes' && ++lots === 3) throw new Error('coupure fabriquée'); };
+        await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, apresLot: coupure }));
+        const avant = await compte(dbC, 'numeros_cartes');
+        await dbS.collection('guide_prix_meta').updateOne({ _id: 'a' }, { $set: { date: '2026-10-15' } });
+        const e = await lancer([...EXE, '--executer', '--reprendre'], ENV, deps({ tailleLot: 5 }));
+        v('11h. --reprendre alors que la méta de la source a changé depuis le début : code 1, nommée, RIEN de plus copié', [e.r, /guide_prix_meta/.test(e.texte), await compte(dbC, 'numeros_cartes')], [1, true, avant]);
+        await restaure('guide_prix_meta', gpm); await viderCible();
+        // état sans snapshot de méta (état inconnu) : on ne reprend pas
+        await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, apresLot: unefois(async () => { throw new Error('coupure'); }) }));
+        await dbC.collection(A.ETAT).updateOne({ _id: 'amorcage' }, { $unset: { metaDebut: '' } });
+        const f = await lancer([...EXE, '--executer', '--reprendre'], ENV, deps());
+        v('11i. état sans empreinte de méta : --reprendre REFUSÉ (je ne sais pas)', f.r, 1);
+        await viderCible();
+    }
+
+    // ══ 12. TOUR 1 (M4) — le message d'arrêt dit le VRAI nombre de documents copiés
+    {
+        await viderCible();
+        let lots = 0;
+        const coupure = async ({ collection }) => { if (collection === 'numeros_cartes' && ++lots === 3) throw new Error('coupure fabriquée'); };
+        const a = await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, apresLot: coupure }));
+        v('12a. arrêt entre deux lots : le message dit 15 documents copiés dans « numeros_cartes »', [a.r, /« numeros_cartes » : 15 document\(s\)/.test(a.texte)], [1, true]);
+        await viderCible();
+        // coupure DANS un lot : 3 documents écrits puis l'exception
+        const cibleCoupee = () => {
+            const vue = cibleVue();
+            return new Proxy(vue, { get(t, p) {
+                if (p === 'collection') return nom => {
+                    const c = t.collection(nom);
+                    if (nom !== 'references_image') return c;
+                    return new Proxy(c, { get(tc, q) {
+                        if (q === 'insertMany') return async (docs, o) => { await tc.insertMany(docs.slice(0, 3), o); throw new Error('coupure dans le lot'); };
+                        const x = tc[q]; return typeof x === 'function' ? x.bind(tc) : x;
+                    } });
+                };
+                const x = t[p]; return typeof x === 'function' ? x.bind(t) : x;
+            } });
+        };
+        const b = await lancer([...EXE, '--executer'], ENV, deps({ tailleLot: 5, ouvrirCible: async () => ({ ok: true, db: cibleCoupee(), fermer: async () => { } }) }));
+        v('12b. coupure DANS un lot (3 documents écrits) : code 1, le message dit 3 et non 0', [b.r, await compte(dbC, 'references_image'), /« references_image » : 3 document\(s\)/.test(b.texte), /« references_image » : 0 document/.test(b.texte)], [1, 3, true, false]);
+        await viderCible();
+        // arrêt dur : le message dit aussi le nombre copié (déjà juste, verrouillé)
+        const total = (await Promise.all(COLS.map(async n => { const s = await dbS.command({ collStats: n }); return s.size + s.totalIndexSize; }))).reduce((x, y) => x + y, 0);
+        const c = await lancer([...EXE, '--executer'], ENV, deps({ seuilOctets: Math.ceil(total * 1.5), poidsCible: async db => total + (await poidsReel(db)), tailleLot: 3 }));
+        const partielRef = await compte(dbC, 'references_image');
+        v('12c. arrêt dur : le message dit le nombre de documents copiés de la collection en cours', [c.r, /document\(s\) copiés par cette exécution/.test(c.texte)], [1, true]);
+        await viderCible();
     }
 
     await cs.close(); await cc.close(); await bs.arreter(); await bc.arreter();
