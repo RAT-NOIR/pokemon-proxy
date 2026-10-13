@@ -165,11 +165,14 @@ const etatsDe = async scanId => (await debitsDe(scanId)).map(d => d.etat);
         const p = await neuf('m4', 2); const [A, B] = await debitsDe('m4');
         await Lg.rembourserLigne(p, A.cleIdempotence, 'panne', { maintenant: t }, cfg);                           // A : rendu normalement (crédit + trace)
         await db.col('mouvements').updateOne({ _id: B._id }, { $set: { etat: 'rembourse' } });                      // B : l'ancien état (rembourse, ni crédit ni trace)
-        const sans = await reparer(p, 'm4');
-        H.v('M-4a. deux candidats sans désignation : refusé (choix-ambigu), rien d\'écrit', [sans.repare, sans.raison, (await lire(p)).essais], [false, 'choix-ambigu', 2]);
-        const avec = await reparer(p, 'm4', { debitId: B._id });
+        // tour 2 : A est reconnu rendu PAR SON DÉBIT (marqueur de poche + trace `debitId`) — la réparation vise B seul, sans désignation
+        const avec = await reparer(p, 'm4');
         const [A2, B2] = await debitsDe('m4');
-        H.v('M-4b. avec le débit désigné : réparé, le marqueur est sur B (le débit qui manquait), pas sur A ; essais 3', [avec.repare, 'reparation' in B2, 'reparation' in A2, (await lire(p)).essais], [true, true, false, 3]);
+        H.v('M-4b. A rendu normalement, B ancien état : B est visé SANS désignation (A reconnu par son débit), le marqueur est sur B, pas sur A ; essais 3', [avec.repare, 'reparation' in B2, 'reparation' in A2, (await lire(p)).essais], [true, true, false, 3]);
+        // deux débits d'AVANT le tour 2, sans marqueur ni trace : rien ne les distingue, l'opérateur désigne
+        const q = await neuf('m4c', 2); await db.col('mouvements').updateMany({ scanId: 'm4c', type: 'debit' }, { $set: { etat: 'rembourse' } });
+        const sans = await reparer(q, 'm4c');
+        H.v('M-4a. deux débits anciens sans preuve propre, sans désignation : refusé (choix-ambigu), rien d\'écrit', [sans.repare, sans.raison, (await lire(q)).essais], [false, 'choix-ambigu', 1]);
     }
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

@@ -22,7 +22,8 @@ const muet = async f => { const e0 = console.error; console.error = () => { }; t
 
     // 1. SIMULATION par défaut : imprime la preuve et le verdict, n'écrit RIEN
     const r1 = lance(...args);
-    H.v('1. simulation (défaut) : code 0, « SIMULATION », verdict « reparable », écart 0, débit et mouvements du scan imprimés', [r1.status, /SIMULATION/.test(r1.stdout), /reparable/.test(r1.stdout), /écart de poche : 0/.test(r1.stdout), /rembourse/.test(r1.stdout)], [0, true, true, true, true]);
+    H.v('1. simulation (défaut) : code 0, « SIMULATION », verdict « reparable », écart 0, débit et mouvements du scan imprimés', [r1.status, /SIMULATION/.test(r1.stdout), /reparable/.test(r1.stdout), /écart de poche \(témoin\) : 0/.test(r1.stdout), /rembourse/.test(r1.stdout)], [0, true, true, true, true]);
+    H.v('   (N-10) l\'outil dit son délai effectif, et la preuve lit le DÉBIT (crédit absent de la poche, trace absente)', [/délai d'attente effectif : 15 min/.test(r1.stdout), /crédit de CE débit ABSENT de la poche, trace absente/.test(r1.stdout)], [true, true]);
     H.v('   rien n\'est écrit : essais 2, aucun mouvement +1, aucun fichier de sauvegarde', [await etat(), fs.readdirSync(dossier).length], [[2, 0], 0]);
     // 2. --executer exige un dossier de sauvegarde NOMMÉ
     const r2 = lance(...args, '--executer');
@@ -34,6 +35,9 @@ const muet = async f => { const e0 = console.error; console.error = () => { }; t
     H.v('3. --executer : code 0, essais 3, UN mouvement +1', [r3.status, await etat()], [0, [3, 1]]);
     H.v('   sauvegarde LOCALE du débit et des mouvements du scan (fichier), une ligne de journal', [Boolean(sauv), contenu && contenu.debits.length, contenu && Array.isArray(contenu.mouvements), Boolean(journal) && fs.readFileSync(path.join(dossier, journal), 'utf8').trim().split('\n').length], [true, 1, true, 1]);
     H.v('   la réconciliation est imprimée AVANT (non propre) et APRÈS (propre)', [/avant.*propre : non/is.test(r3.stdout), /après.*propre : oui/is.test(r3.stdout)], [true, true]);
+    // N-4 : la sauvegarde est écrite AVANT l'écriture (aucune ligne `rp|` dedans, solde d'AVANT) et porte le solde du porteur
+    H.v('   (N-4) la sauvegarde est celle d\'AVANT : aucun mouvement `rp|…`, 1 mouvement de débit, solde du porteur 2 essais (avant la réparation), clé `marque` présente',
+        [contenu && !contenu.mouvements.some(m => /^rp\|/.test(m.cleIdempotence || '')), contenu && contenu.mouvements.length, contenu && contenu.porteurDoc && contenu.porteurDoc.essais, contenu && 'marque' in contenu], [true, 1, 2, true]);
     // 4. second passage : ne fait rien, n'écrit ni sauvegarde ni journal
     const r4 = lance(...args, '--executer', `--sauvegarde=${dossier}`);
     H.v('4. second passage : code 3 (refus : rien-a-reparer), essais 3, un seul mouvement, aucun fichier de plus', [r4.status, /rien-a-reparer/.test(r4.stdout + r4.stderr), await etat(), fs.readdirSync(dossier).length], [3, true, [3, 1], 2]);
@@ -47,5 +51,13 @@ const muet = async f => { const e0 = console.error; console.error = () => { }; t
     H.v('6. scanId invalide (texte non ObjectId) : refus clair, code 2', [r7.status, /scan/i.test(r7.stderr)], [2, true]);
     const r8 = lance(...base, '--porteur=compte:pas-un-id', `--scan=${scanId}`);
     H.v('   porteur invalide : refus clair, code 2', [r8.status, /porteur/i.test(r8.stderr)], [2, true]);
+    // N-2 : un porteur inexistant est un refus propre (code 3, « porteur-introuvable »), pas un TypeError
+    const r9 = lance(...base, `--porteur=installation:${'0'.repeat(32)}`, `--scan=${scanId}`);
+    H.v('7. (N-2) porteur inexistant : code 3, « porteur-introuvable », aucune trace de TypeError', [r9.status, /porteur-introuvable/.test(r9.stdout), /TypeError/.test(r9.stdout + r9.stderr)], [3, true, false]);
+    // N-3 : un refus APRÈS la prise de la marque peut avoir écrit le crédit — le texte ne dit pas « rien d'écrit »
+    const { texteDeRefus } = require('../argent/reparer-debit');
+    const tt = texteDeRefus({ raison: 'trace-non-ecrite', creditRendu: true }, 15, 'journal.jsonl'), te = texteDeRefus({ raison: 'erreur-apres-prise', creditRendu: false }, 15, 'journal.jsonl'), tr = texteDeRefus({ raison: 'rien-a-reparer' }, 15, 'j');
+    H.v('8. (N-3) `trace-non-ecrite` : « le crédit A ÉTÉ écrit », `erreur-apres-prise` : « a PEUT-ÊTRE été écrit », jamais « rien n\'a été écrit » ; un refus avant la prise : « rien n\'a été écrit »',
+        [/A ÉTÉ écrit/.test(tt) && !/rien n'a été écrit/.test(tt), /PEUT-ÊTRE/.test(te) && !/rien n'a été écrit/.test(te), /rien n'a été écrit/.test(tr)], [true, true, true]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

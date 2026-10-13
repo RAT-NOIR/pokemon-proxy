@@ -24,6 +24,12 @@ function lireArguments(ObjectId) {
     if (debit !== null && !/^[0-9a-f]{24}$/i.test(debit)) refus(2, 'REFUS : --debit doit être un identifiant de 24 caractères hexadécimaux.');
     return { scanId: new ObjectId(scan), debitId: debit ? new ObjectId(debit) : null, porteur: { type, id: type === 'compte' ? new ObjectId(m[2]) : m[2], surface: null } };
 }
+// N-3 : deux refus arrivent APRÈS la prise de la marque et peuvent avoir écrit le crédit — le texte ne dit jamais « rien d'écrit » pour eux
+const APRES_PRISE = ['trace-non-ecrite', 'erreur-apres-prise'];
+function texteDeRefus(r, delaiMin, journal) {
+    if (!APRES_PRISE.includes(r.raison)) return `REFUS : ${r.raison} — rien n'a été écrit par la réparation.`;
+    return `REFUS : ${r.raison} — le crédit ${r.creditRendu ? 'A ÉTÉ écrit' : 'a PEUT-ÊTRE été écrit'} ; la trace manque. NE PAS relancer avant ${delaiMin} min : la reprise refait la preuve sur le marqueur de la poche et n'écrit que la trace. (journal : ${journal})`;
+}
 const resume = r => `propre : ${r.propre ? 'oui' : 'non'} — écarts ${r.ecarts.length}, lignes au rendu non confirmé ${r.rendusEchoues.length}, débits « rembourse » sans mouvement ${r.debitsRembourseSansMouvement.length}, claims orphelines ${r.claimsOrphelines.length}, marques en suspens ${r.marquesEnSuspens.length}`;
 
 if (require.main === module) {
@@ -51,25 +57,38 @@ if (require.main === module) {
         console.log(`porteur ${porteur.type}:${porteur.id}  scan ${scanId}`);
         console.log(`débits du scan (${debits.length}) :`); for (const d of debits) console.log(`  débit ${d._id}  état ${d.etat}  poche ${d.credit ? d.credit.poche : '-'}  clé ${d.cleIdempotence ? 'oui' : 'non'}  le ${new Date(d.le).toISOString()}${d.reparation ? '  marque reparation' : ''}`);
         console.log(`mouvements du scan (${mouvements.length}) :`); for (const m of mouvements) console.log(`  ${m.type}  delta ${m.delta}  état ${m.etat}  clé ${String(m.cleIdempotence || '-').slice(0, 40)}  le ${new Date(m.le).toISOString()}`);
+        console.log(`délai d'attente effectif : ${Math.round(cfg.lot.reparationAgeMs / 60e3)} min (V2_REPARATION_AGE_MIN, entier de 5 à 1440, défaut 15) — un débit pris, un mouvement de la poche ou un remboursement du scan plus récents refusent`);
         const avant = await R.reconcilier(porteur, { cfg, maintenant });
-        console.log(`réconciliation AVANT : ${resume(avant)}`);
+        console.log(`réconciliation AVANT : ${avant.porteur && avant.debitsRembourseSansMouvement ? resume(avant) : 'porteur introuvable'}`);
         const sim = await Lg.reparerDebitRembourseSansMouvement(porteur, { scanId, debitId, maintenant, simuler: true }, cfg);
         if (!sim.simulation) { console.log(`REFUS : ${sim.raison}${sim.ecart !== undefined ? ` (écart de poche ${sim.ecart})` : ''} — rien n'est écrit.`); await mongoose.disconnect(); process.exit(3); }
-        console.log(`verdict : ${sim.verdict}${sim.ecart === null ? '' : ` — écart de poche : ${sim.ecart} (${sim.creditRendu ? 'le crédit n\'a jamais été rendu : il sera rendu ET tracé' : 'le crédit a été rendu sans sa trace : la trace seule sera écrite'})`}${sim.verdict === 'a-clore' ? ' — les traces existent : la ligne sera close en « rembourse »' : ''}`);
+        // la preuve LIT LE DÉBIT (marqueur de poche, trace) ; l'écart de poche n'est qu'un témoin, sauf pour un débit d'avant le tour 2 sans preuve propre
+        console.log(`preuve : crédit de CE débit ${sim.preuve.credit ? 'présent sur la poche' : 'ABSENT de la poche'}, trace ${sim.preuve.trace ? 'présente' : 'absente'} — mode ${sim.preuve.mode}${sim.ecart === null || sim.ecart === undefined ? '' : ` — écart de poche (témoin) : ${sim.ecart}`}`);
+        console.log(`verdict : ${sim.verdict}${sim.verdict === 'a-clore' ? ' — les traces existent : la ligne sera close en « rembourse »' : (sim.creditRendu ? ' — le crédit n\'a pas été rendu : il sera rendu ET tracé' : ' — le crédit est sur la poche sans sa trace : la trace seule sera écrite')}`);
         if (!executer) { console.log('SIMULATION : rien n\'est écrit. Relance avec --executer --sauvegarde=<dossier> pour réparer.'); await mongoose.disconnect(); process.exit(0); }
         // ── la sauvegarde LOCALE avant toute écriture
         fs.mkdirSync(dossier, { recursive: true });
         const { EJSON } = mongoose.mongo.BSON;
         const nomSauv = `sauvegarde-${String(scanId)}-${maintenant.toISOString().replace(/[:.]/g, '-')}.json`;
-        fs.writeFileSync(path.join(dossier, nomSauv), JSON.stringify({ le: maintenant.toISOString(), base: nomBase, porteur: `${porteur.type}:${porteur.id}`, scanId: String(scanId), debits: EJSON.serialize(debits), mouvements: EJSON.serialize(mouvements) }, null, 1));
+        // N-4 : le porteur (solde de ses poches, marqueurs `creditsRendus`) et la marque de livraison sont sauvegardés AVEC les débits et les mouvements — de quoi restaurer sans calcul
+        const champs = { essais: 1, essaisInitiaux: 1, achete: 1, solde: 1, abonnement: 1, compteId: 1, creditsRendus: 1 };
+        const porteurDoc = await col(porteur.type === 'compte' ? 'comptes' : 'installations').findOne({ _id: porteur.id }, { projection: champs });
+        const marque = await col('scans_en_cours').findOne({ _id: scanId });
+        fs.writeFileSync(path.join(dossier, nomSauv), JSON.stringify({ le: maintenant.toISOString(), base: nomBase, porteur: `${porteur.type}:${porteur.id}`, scanId: String(scanId), debits: EJSON.serialize(debits), mouvements: EJSON.serialize(mouvements), porteurDoc: EJSON.serialize(porteurDoc), marque: EJSON.serialize(marque) }, null, 1));
         console.log(`sauvegarde locale : ${path.join(dossier, nomSauv)}`);
         const r = await Lg.reparerDebitRembourseSansMouvement(porteur, { scanId, debitId, maintenant }, cfg);
         const apres = await R.reconcilier(porteur, { cfg, maintenant: new Date() });
-        console.log(`réconciliation APRÈS : ${resume(apres)}`);
-        if (!r.repare) { console.log(`REFUS : ${r.raison} — rien n'a été écrit par la réparation.`); await mongoose.disconnect(); process.exit(3); }
-        fs.appendFileSync(path.join(dossier, 'journal-reparations.jsonl'), JSON.stringify({ le: maintenant.toISOString(), base: nomBase, porteur: `${porteur.type}:${porteur.id}`, scanId: String(scanId), debit: sim.debits.map(String), verdict: sim.verdict, ecart: sim.ecart, creditRendu: r.creditRendu, sauvegarde: nomSauv }) + '\n');
+        console.log(`réconciliation APRÈS : ${apres.debitsRembourseSansMouvement ? resume(apres) : 'porteur introuvable'}`);
+        const journaliser = extra => fs.appendFileSync(path.join(dossier, 'journal-reparations.jsonl'), JSON.stringify({ le: maintenant.toISOString(), base: nomBase, porteur: `${porteur.type}:${porteur.id}`, scanId: String(scanId), debit: sim.debits.map(String), verdict: sim.verdict, ecart: sim.ecart, creditRendu: r.creditRendu, sauvegarde: nomSauv, ...extra }) + '\n');
+        if (!r.repare) {
+            // N-3 : un refus APRÈS la prise peut avoir écrit le crédit (`trace-non-ecrite`, `erreur-apres-prise`) : il se dit et se journalise, il n'est PAS « rien d'écrit »
+            if (APRES_PRISE.includes(r.raison)) journaliser({ refus: r.raison, creditPeutEtreEcrit: true });
+            console.log(texteDeRefus(r, Math.round(cfg.lot.reparationAgeMs / 60e3), path.join(dossier, 'journal-reparations.jsonl')));
+            await mongoose.disconnect(); process.exit(3);
+        }
+        journaliser({});
         console.log(`RÉPARÉ : ${r.creditRendu ? 'crédit rendu et tracé' : (sim.verdict === 'a-clore' ? 'ligne close' : 'trace écrite')} (journal : ${path.join(dossier, 'journal-reparations.jsonl')})`);
         await mongoose.disconnect(); process.exit(0);
     })().catch(e => { console.error('❌', e); process.exit(1); });
 }
-module.exports = { lireArguments };
+module.exports = { lireArguments, texteDeRefus };

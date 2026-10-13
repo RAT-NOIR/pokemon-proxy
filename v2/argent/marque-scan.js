@@ -155,7 +155,10 @@ async function enSuspens({ porteur = null } = {}) {
     const filtre = { $and: [{ $or: [{ etat: 'en-suspens', ...PERIMEE }, { etat: 'en-reprise', $expr: { $lte: ['$ouverteLe', { $subtract: ['$$NOW', PLANCHER_MS] }] } }, { etat: 'echec' }] },
         ...(porteur ? [{ 'porteur.type': porteur.type, 'porteur.id': porteur.id }] : [])] };
     const l = await col().find(filtre).sort({ ouverteLe: 1 }).toArray();
-    return l.map(m => ({ scanId: m._id, porteur: `${m.porteur.type}:${m.porteur.id}`, etat: m.etat, ouverteLe: m.ouverteLe, issue: m.issue ?? null }));
+    // MOYENS-B2a tour 2 (N-5) : une marque en `echec` dont l'unité a un crédit déjà écrit ou une ligne à clore a un GESTE nommé (l'outil de réparation prouve par le débit, puis clôt) — elle n'est plus un « non propre » muet
+    const GESTE = 'node v2/argent/reparer-debit.js --base=<nom> --porteur=<type:id> --scan=<id> (simulation, puis --executer --sauvegarde=<dossier>) — audit §15';
+    return l.map(m => ({ scanId: m._id, porteur: `${m.porteur.type}:${m.porteur.id}`, etat: m.etat, ouverteLe: m.ouverteLe, issue: m.issue ?? null,
+        ...(m.etat === 'echec' && ['poche-deja-compensee', 'unite-sans-credit', 'remboursement-en-cours'].includes(m.issue) ? { geste: GESTE } : {}) }));
 }
 
 // ── la passe de démarrage (différée) ET périodique : même schéma que la purge du banc (v2/banc/monter.js). Rien sans Mongo prêt ; un seul différé et un seul intervalle par processus ; unref.
