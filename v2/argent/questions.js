@@ -119,7 +119,8 @@ async function grandLivreDuLot(scanId, porteur) {
     // TOUR 1 — « rendu » se juge sur les MOUVEMENTS du grand livre (`remboursement`, delta 1, écrits APRÈS le crédit), jamais sur `debit.etat` : la prise atomique met le débit à « rembourse » AVANT de créditer,
     // et un crédit qui échoue restitue l'état. Un débit « rembourse » SANS mouvement correspondant est AMBIGU (ni rendu, ni rendu à nouveau) : compté à part (`ambigus`) et listé par la réconciliation.
     const mouvements = await col('mouvements').countDocuments({ type: 'remboursement', scanId, delta: 1 });
-    const prises = debits.filter(d => d.etat === 'rembourse').length;
+    // MOYENS-B2a : la prise écrit « rendu-en-cours » AVANT le crédit (puis « rembourse » après la trace) : les deux états sont des unités PRISES dont la trace peut manquer
+    const prises = debits.filter(d => d.etat === 'rembourse' || d.etat === 'rendu-en-cours').length;
     return { total: debits.length, rendues: mouvements, ambigus: Math.max(0, prises - mouvements) };
 }
 // TOUR 1 — un arrêt du processus ENTRE deux unités d'un grand lot laisse la claim `rb|scan` (delta ≠ 0) sans son renommage `…|fait|…` : le remboursement ne reprendrait jamais (« deja-rembourse » à chaque passage).

@@ -81,12 +81,13 @@ const rendreALaPasse = (m, issue) => col().updateOne({ _id: m._id, etat: 'en-rep
 const unitesNonRendues = (m) => db.col('mouvements').find({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
     type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $nin: ['rembourse', 'rendu-en-cours'] } }).toArray();
 
-// R4 — le ledger (rendreLeScan) pose `rembourse` sur une unité AVANT de lui rendre son crédit : un arrêt entre les deux laisse une unité « rendue » sans crédit, invisible aux lignes de débit
-// comme à somme(delta) = solde. On compare donc, pour ce scan, les unités `rembourse` (avec leur clé : une unité ANNULÉE par le supplément n'en a plus et a sa propre trace sans scanId)
-// aux lignes de remboursement +1 de CE scan. Aucun recrédit automatique : l'ordre du ledger se corrige au lot MOYENS.
+// R4 — avant MOYENS-B2a, le ledger (rendreLeScan) posait `rembourse` sur une unité AVANT de lui rendre son crédit : un arrêt entre les deux laissait une unité « rendue » sans crédit. Il pose maintenant
+// `rendu-en-cours` à la prise (puis `rembourse` après le crédit ET sa trace) ; les lignes déjà « rembourse » sans trace d'AVANT ce lot existent encore en base. On compare donc, pour ce scan, les unités
+// `rembourse` ou `rendu-en-cours` (avec leur clé : une unité ANNULÉE par le supplément n'en a plus et a sa propre trace sans scanId) aux lignes de remboursement +1 de CE scan.
+// Aucun recrédit automatique : la réparation d'un cas ancien est `reparerDebitRembourseSansMouvement` (ledger.js), lancée à la main.
 async function creditsManquants(m) {
     const unites = await db.col('mouvements').countDocuments({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
-        type: 'debit', scanId: m._id, credit: { $ne: null }, etat: 'rembourse', cleIdempotence: { $type: 'string' } });
+        type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $in: ['rembourse', 'rendu-en-cours'] }, cleIdempotence: { $type: 'string' } });   // MOYENS-B2a : « rendu-en-cours » = prise avant le crédit
     const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, delta: 1 });
     return Math.max(0, unites - credits);
 }
