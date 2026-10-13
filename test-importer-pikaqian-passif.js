@@ -63,7 +63,7 @@ const tuile = (n, num, nom) => `<a class="w-full group" data-discover="true" hre
 // (id de tuile, numéro, nom) — voir le commentaire de chaque cas
 const TUILES = [[1, '001', 'Pikachu'], [2, '001', 'Pikachu Reverse Holo'], [3, '002', 'Raichu'], [4, '003', 'Eevee Plus'], [5, '004', 'Vaporeon'], [6, '005', 'Jolteon'], [7, '006', 'Flareon'],
     [8, '007', 'Espeon'], [9, '008', 'Umbreon'], [10, '010', 'Glaceon'], [11, '011', 'Sylveon'], [12, '012', 'Gible'], [13, '013', 'Bidoof'], [14, '014', 'Leafeon'], [15, '015', 'Zoroark'], [16, '016', 'Zorua']];
-const pageHtml = (renomme = {}) => `<html><body>${TUILES.map(([n, num, nom]) => tuile(n, num, renomme[n] ?? nom)).join('')}</body></html>`;
+const pageHtml = (renomme = {}) => `<html><head><title>Titre du banc | PikaQian</title></head><body><h1>Titre du banc</h1>${TUILES.map(([n, num, nom]) => tuile(n, num, renomme[n] ?? nom)).join('')}</body></html>`;
 function semer(B) {
     B.col('sets').set(SLUG, { _id: SLUG, tirage: 'zh-hans', region: 'intl' });
     const cartes = { 1: 'Pikachu', 2: 'Raichu', 3: 'Eevee', 4: 'Vaporeon', 5: 'Jolteon', 6: 'Flareon', 7: 'Espeon', 8: 'Umbreon', 10: 'Glaceon', 11: 'Glaceon', 12: 'Sylveon', 13: 'Gible', 14: 'Bidoof', 15: 'Leafeon', 16: 'Zoroark', 17: 'Zorua' };
@@ -154,6 +154,19 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         verifier('code sans dossier : refus « aucune-visite »', (await I.jugerCode({ racine: os.tmpdir(), code: 'inconnu', dossierPassif, db: base.db, M: base.M, attendu })).refus?.etat, 'aucune-visite');
         const sansLigne = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, table: [] });
         verifier('un code sans ligne de table : refus « refuse-table »', sansLigne.refus?.etat, 'refuse-table');
+        // LOT PQ-PROMO : l'import rejuge la page par verdictDePage AVEC le titre que le récepteur a écrit dans le fichier de page ; une ligne qui déclare un titre refuse un titre autre ou absent
+        const ligneCs1bc = require('./collecte-cartes/pikaqian-sets').lignePikaqian(SLUG);
+        const declaree = (titrePk, extra = {}) => [{ ...ligneCs1bc, mesure: 'déclaration fabriquée par le banc', codesTuiles: ['cs1bc'], dossiersImages: ['cs1bc'], titrePk, tuiles: 16, ...extra }];
+        verifier('le fichier de page porte le titre lu par le récepteur', typeof j.derniere.titre, 'string');
+        const tDecl = await juger({ table: declaree(j.derniere.titre) });
+        verifier('ligne déclarée, titre = celui de la visite : la page passe le verdict (aucun refus de page)', [tDecl.refus, tDecl.sets.length], [undefined, 1]);
+        const tAutre = await juger({ table: declaree('Un autre titre') });
+        verifier('ligne déclarée, titre différent : refus « page-refusee » (titre), rien à écrire', [tAutre.refus?.etat, /titre/.test(tAutre.refus?.motif || ''), I.aEcrireDe(tAutre)], ['page-refusee', true, 0]);
+        const lecSansTitre = await I.lireCode('cs1bc', dossierPassif); lecSansTitre.visites.at(-1).titre = undefined;
+        const tAbsent = await juger({ table: declaree(j.derniere.titre), lecture: lecSansTitre });
+        verifier('ligne déclarée, fichier de page sans titre (ancien) : refus « page-refusee »', tAbsent.refus?.etat, 'page-refusee');
+        const tIncomplete = await juger({ table: declaree(j.derniere.titre, { tuiles: null }) });
+        verifier('ligne dont titrePk est déclaré SANS tuiles : refus « page-refusee » (déclaration incomplète)', [tIncomplete.refus?.etat, /incompl/.test(tIncomplete.refus?.motif || '')], ['page-refusee', true]);
         const baseTirage = fausseBase(); semer(baseTirage); baseTirage.col('sets').set(SLUG, { _id: SLUG, tirage: 'jp', region: 'jp' });
         const jT = await I.jugerCode({ racine: os.tmpdir(), code: 'cs1bc', dossierPassif, db: baseTirage.db, M: baseTirage.M, attendu });
         verifier('le tirage du set en base n\'est pas celui de la table : le collecteur refuserait (gardeTirage), l\'import aussi', [jT.sets[0].refus?.etat, I.aEcrireDe(jT)], ['refuse-set', 0]);

@@ -1,5 +1,16 @@
 # PikaQian passif — mode d'emploi (préparé le 2026-10-12, jamais lancé)
 
+## ➕ 2026-10-13 (lot PQ-PROMO) — les pages promo : le refus se mesure, puis la ligne se déclare
+Le récepteur refusait promo-sv-p (« 0 tuiles sur 701 portent le code promo-sv-p ») : les tuiles d'une page promo portent d'autres codes que celui de l'adresse. Rien n'est deviné.
+- **Relancer le récepteur** (inchangé) : `node recepteur-pikaqian.js` (options `--port`, `--dossier`, `--dossier-images`, et `--dossier-refusees` si besoin). Il faut le **relancer** : l'ancien processus ne connaît pas le diagnostic.
+- **Au prochain clic sur promo-sv-p** : la page est refusée (HTTP 422) comme avant, mais le panneau du userscript (à réinstaller aussi, il affiche maintenant le diagnostic) et le journal du récepteur montrent « ce que la page portait » :
+  les codes lus sur les tuiles (10 au plus), les dossiers des adresses d'images (10 au plus), le titre (`<h1>` et `<title>`), toute annonce « N cartes » lisible. Le même diagnostic est écrit dans
+  `C:\Users\Yung\rat-market-travail\catalogue\pikaqian\refusees\promo-sv-p--<date>.json` (jamais écrasé, ni HTML ni tuile).
+- **Ensuite**, le coordinateur lit ce fichier et écrit dans `collecte-cartes/pikaqian-sets.json`, pour la ligne concernée et à partir de la mesure : `mesure` (la preuve écrite), `codesTuiles`, `dossiersImages`, `titrePk`
+  (le titre exact : le `<h1>`, à défaut le `<title>`), `tuiles` (le nombre relevé). Tout ou rien : une déclaration incomplète refuse la page. La page n'est alors acceptée que si le titre est exact, si la majorité
+  stricte des tuiles porte un code déclaré (ou celui du set), si elle a au moins `tuiles` tuiles, et chaque image n'est reçue que dans un dossier déclaré, à l'adresse `images.pikaqian.com/<dossier>/<id>.webp`.
+  Une ligne qui ne déclare rien se comporte exactement comme avant. Une seule fonction lit ces champs : `declarationsDeCode` (`collecte-cartes/pikaqian-sets.js`).
+
 ## ➕ 2026-10-13 (lot P2) — le worker ne touche plus PikaQian ; le script envoie les IMAGES que ton navigateur affiche
 Décision du testeur : « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker ne touche jamais le CDN. Mêmes preuves exigées
 (numéro, nom, set) ; un doute est un trou. Arrête les tentatives automatiques depuis le worker : la source n'est plus interrogée que par mes visites. »

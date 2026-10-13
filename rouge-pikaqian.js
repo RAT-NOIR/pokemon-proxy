@@ -52,9 +52,9 @@ const MUTANTS = [
     // ── la lecture, la preuve, le plan ──
     M('preuve : aucune tuile n\'est un foil', C, "const estFoil = nom => /\\sHolo$/i.test(String(nom ?? '').trim());", 'const estFoil = nom => false;', BC),
     M('preuve : deux tuiles exactes — la première gagne', C, 'if (exactes.length > 1) {', 'if (false) {', BC),
-    M('preuve : la cohérence de l\'adresse d\'image n\'est pas vérifiée', C, 'if (t.img !== urlImage(code, t.id)) {', 'if (false) {', BC),
+    M('preuve : la cohérence de l\'adresse d\'image n\'est pas vérifiée', C, 'if (!imageAcceptee(code, t, table)) {', 'if (false) {', BC),
     M('plan : un trou déjà servi n\'est pas écarté (le visuel existant serait remplacé)', C, 'if (T.dejaServi(x.carte, slug, numero)) continue;', '', BC),
-    M('plan : les tuiles d\'un autre code de set sont candidates', C, 'if (t.code !== code) continue;', '', BC),
+    M('plan : les tuiles d\'un autre code de set sont candidates', C, 'if (!codesDuSet.includes(t.code)) continue;', '', BC),
     M('plan : un doublon (carte, numéro) donne deux visuels', C, 'if (vus.has(cle)) continue;', '', BC),
     M('page : la majorité stricte devient une simple moitié', C, 'if (bonnes * 2 <= n) return', 'if (bonnes * 2 < n) return', BC),
     M('page : une page sans tuile — redondance documentée : la ligne suivante (0 × 2 <= 0) la refuse aussi', C, 'if (!n) return { ok: false', 'if (false) return { ok: false', null),

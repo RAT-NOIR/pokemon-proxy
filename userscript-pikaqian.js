@@ -88,6 +88,16 @@
         });
     }
 
+    // Le DIAGNOSTIC d'une page refusée (lot PQ-PROMO) : les lignes que le récepteur a fabriquées (codes lus, dossiers des images, titre, annonce du nombre de cartes), AFFICHÉES telles quelles.
+    // Rien n'est interprété ni renvoyé : seules des chaînes sont montrées, 8 lignes au plus, 300 caractères chacune. Aucune requête.
+    function lignesDeDiagnostic(j) {
+        var l = j && j.diagnostic && j.diagnostic.lignes, sortie = '';
+        if (!Array.isArray(l)) return '';
+        var gardees = l.filter(function (x) { return typeof x === 'string'; }).slice(0, 8);
+        for (var i = 0; i < gardees.length; i++) sortie += '\n' + gardees[i].slice(0, 300);
+        return sortie ? '\n— ce que la page portait —' + sortie : '';
+    }
+
     function normaliser(t) { return String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); }
 
     // Les tuiles TELLES QUE LA PAGE LES AFFICHE : l'identifiant (de l'adresse de la carte), le nom (h2), le numéro (p « code · numéro »), l'image et son état de chargement.
@@ -242,7 +252,7 @@
         var rep = await poster(RECEPTEUR, { url: url, html: html });
         var j = rep.json;
         if (!(j && j.ok)) {
-            etat.textContent = 'Refusé (HTTP ' + rep.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur');
+            etat.textContent = 'Refusé (HTTP ' + rep.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur') + lignesDeDiagnostic(j);
             return;
         }
         var entete = annonceDuClic + '\n— — —\nAppris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +

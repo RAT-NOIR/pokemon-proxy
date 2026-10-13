@@ -22,7 +22,7 @@ const NOM_FICHIER = new RegExp(`^(${CODE.source.slice(1, -1)})--(\\d{8}T\\d{6}Z)
 const somme = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = (a[k] || 0) + v; return a; };
 
 /** Les fiches du dossier : { fiches (la plus récente par code), anciens, illisibles, fichiers }. Un fichier qui ne tient pas à la relecture n'est pas mesuré, et sa raison s'écrit. */
-function lireApprises(dossier, attendu = attenduParTable) {
+function lireApprises(dossier, attendu = attenduParTable, table = TABLE_PIKAQIAN) {
     const noms = fs.readdirSync(dossier).filter(n => n.endsWith('.json'));
     const illisibles = [], parCode = new Map();
     for (const nom of noms) {
@@ -32,7 +32,7 @@ function lireApprises(dossier, attendu = attenduParTable) {
         if (!m) { illisibles.push({ fichier: nom, motif: 'nom hors du format <code>--<horodatage>.json' }); continue; }
         if (fiche?.schema !== 1 || fiche.code !== m[1] || !CODE.test(String(fiche.code)) || !Array.isArray(fiche.tuiles) || !Array.isArray(fiche.origines)) { illisibles.push({ fichier: nom, motif: 'fiche hors du format écrit par le récepteur (schéma 1)' }); continue; }
         // le verdict ne se croit pas sur parole : la relecture par la fonction de production, sur les tuiles du fichier
-        const V = P.verdictDePage({ tuiles: fiche.tuiles, code: fiche.code });
+        const V = P.verdictDePage({ tuiles: fiche.tuiles, code: fiche.code, titre: fiche.titre, table });   // le titre que le récepteur a écrit dans la fiche (absent = une ligne qui déclare un titre refuse)
         if (!V.ok) { illisibles.push({ fichier: nom, motif: V.motif }); continue; }
         // défense en profondeur : le récepteur refuse déjà ces pages ; un fichier qui en viendrait d'ailleurs (ancien, édité) ne fait pas compter de « absente-de-la-source »
         if (Number.isInteger(fiche.ancres) && fiche.ancres > fiche.tuiles.length) { illisibles.push({ fichier: nom, motif: `page partielle ou forme changée : ${fiche.ancres} ancres, ${fiche.tuiles.length} tuiles` }); continue; }
@@ -55,7 +55,7 @@ function lireApprises(dossier, attendu = attenduParTable) {
  */
 async function mesurer({ dossier, db, C = require('./collecteur-images-pikaqian'), table = TABLE_PIKAQIAN, attendu = attenduParTable }) {
     const { uniteDeLaLigne } = require('./collecte-cartes/pikaqian-sets');
-    const L = lireApprises(dossier, attendu);
+    const L = lireApprises(dossier, attendu, table);
     const sets = [];
     for (const { fichier, fiche, verdict } of L.fiches.sort((a, b) => a.fiche.code.localeCompare(b.fiche.code))) {
         const lignes = table.filter(l => l.codePk === fiche.code);

@@ -18,6 +18,7 @@
 const T = require('./tpc');
 const { cleNumero } = require('./jointure');
 const { estPassive, motifPassif } = require('./source-passive');
+const { TABLE_PIKAQIAN, declarationsDeCode, CODE_PK } = require('./pikaqian-sets');   // la fonction UNIQUE des déclarations d'une ligne, et le motif de code : jamais recopiés
 
 const SOURCE = 'pikaqian';
 const HOTE_PAGES = 'pikaqian.com';
@@ -88,12 +89,81 @@ function compterAncresCartes(html) {
 /** Une tuile de VARIANTE de foil (le même numéro, un autre produit) : le nom se termine par « … Holo » (Reverse Holo, Pokeball Holo, Master Ball Holo…). */
 const estFoil = nom => /\sHolo$/i.test(String(nom ?? '').trim());
 
-/** Cette page désigne-t-elle ce set ? La MAJORITÉ STRICTE des tuiles porte le code du set — sinon la page n'est pas celle qu'on croit. */
-function verdictDePage({ tuiles, code }) {
-    const n = (tuiles || []).length, bonnes = (tuiles || []).filter(t => t.code === code).length;
-    if (!n) return { ok: false, motif: `aucune tuile lisible sur la page de ${code} : la page n'a plus la forme mesurée le 2026-10-10`, tuiles: 0, bonnes: 0 };
-    if (bonnes * 2 <= n) return { ok: false, motif: `${bonnes} tuiles sur ${n} portent le code ${code} : la page ne désigne pas ce set`, tuiles: n, bonnes };
+/**
+ * Cette page désigne-t-elle ce set ? La MAJORITÉ STRICTE des tuiles porte un code que la ligne du set AUTORISE — son propre code, plus ceux qu'elle a déclarés (`codesTuiles`,
+ * collecte-cartes/pikaqian-sets.js `declarationsDeCode`, la fonction unique) — sinon la page n'est pas celle qu'on croit. Une ligne qui déclare un titre exige en plus que la page
+ * porte CE titre (`titre`, lu par `titreLu`) ; une déclaration incomplète refuse. `table` : les bancs seuls la passent.
+ */
+function verdictDePage({ tuiles, code, titre, table = TABLE_PIKAQIAN }) {
+    const d = declarationsDeCode(code, table);
+    const n = (tuiles || []).length, bonnes = (tuiles || []).filter(t => d.codes.includes(t.code)).length;
+    if (d.declare && !d.valide) return { ok: false, motif: d.motif, tuiles: n, bonnes, declaration: 'incomplete' };   // GARDE:pk-declaration
+    if (!n) return { ok: false, motif: `aucune tuile lisible sur la page de ${code} : la page n'a plus la forme mesurée le 2026-10-10`, tuiles: 0, bonnes: 0 };   // GARDE:pk-aucune-tuile
+    if (bonnes * 2 <= n) return { ok: false, motif: `${bonnes} tuiles sur ${n} portent ${d.codes.length > 1 ? `un des codes ${d.codes.join(', ')}` : `le code ${code}`} : la page ne désigne pas ce set`, tuiles: n, bonnes };   // GARDE:pk-majorite
+    if (d.titre !== null && titre !== d.titre) return { ok: false, motif: `la page porte le titre ${titre == null ? '(aucun lu)' : `« ${String(titre).slice(0, 120)} »`}, la mesure du set déclare « ${d.titre.slice(0, 120)} » : la page ne désigne pas ce set`, tuiles: n, bonnes, titre: 'different' };   // GARDE:pk-titre
     return { ok: true, tuiles: n, bonnes };
+}
+
+// ── LE TITRE ET LE DIAGNOSTIC D'UNE PAGE (lot PQ-PROMO) : ce que la page porte, sans HTML ni tuile complète ───────────────────────────────
+const TITRE_MAX = 120;
+const sansBalises = s => T.entites(String(s ?? '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+/** Le texte du premier `<h1>` et du premier `<title>` de la page (balises retirées, espaces normalisés), ou null. */
+function lireTitre(html) {
+    const h = String(html ?? '');
+    const h1 = /<h1[^>]*>([\s\S]{0,2000}?)<\/h1>/i.exec(h)?.[1], title = /<title[^>]*>([\s\S]{0,2000}?)<\/title>/i.exec(h)?.[1];
+    return { h1: h1 == null ? null : sansBalises(h1) || null, title: title == null ? null : sansBalises(title) || null };
+}
+/** LE titre de la page, celui que `titrePk` doit égaler : le `<h1>`, à défaut le `<title>` (jamais l'un OU l'autre au choix de l'appelant). */
+function titreLu(html) { const t = lireTitre(html); return t.h1 ?? t.title ?? null; }
+const coupe = (s, n = TITRE_MAX) => (s == null ? null : String(s).length > n ? `${String(s).slice(0, n)}…` : String(s));
+const REPARTITION_MAX = 10;
+const repartir = (valeurs, cle) => {
+    const m = new Map(); for (const v of valeurs) m.set(v, (m.get(v) || 0) + 1);
+    const tri = [...m].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+    return { liste: tri.slice(0, REPARTITION_MAX).map(([v, n]) => ({ [cle]: coupe(v, 60), n })), autres: tri.slice(REPARTITION_MAX).reduce((s, [, n]) => s + n, 0) };
+};
+const DOSSIER_IMAGE = new RegExp(`^https://${HOTE_IMAGES.replace(/\./g, '\\.')}/([^/?#]+)/[^/?#]+$`);
+/** Les annonces d'un nombre de cartes que le TEXTE visible de la page porte (« 701 cartes », « 701 cards », « 共701 »…), hors scripts : 3 au plus, avec leur voisinage. */
+function annoncesDeNombre(html) {
+    const texte = String(html ?? '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    const vus = [];
+    for (const re of [/\d[\d,.]{0,6}\s*(?:cards?|cartes?|张|張|枚)/gi, /共\s*\d[\d,.]{0,6}/g, /(?:total|cards?|cartes?)\s*[:：]\s*\d[\d,.]{0,6}/gi]) {
+        for (const m of texte.matchAll(re)) { const a = coupe(texte.slice(Math.max(0, m.index - 20), m.index + m[0].length + 20).trim(), 80); if (!vus.includes(a)) vus.push(a); if (vus.length >= 3) return vus; }
+    }
+    return vus;
+}
+/**
+ * Ce que la page porte et que la garde n'a pas reconnu — pour que le refus SOIT la mesure : la répartition des codes lus sur les tuiles et des dossiers de leurs images (10 au plus
+ * chacune, le reste compté), le titre (h1, title), les annonces d'un nombre de cartes. Ni HTML ni tuile complète : des comptes et des textes tronqués.
+ */
+function diagnostiquerPage({ html, tuiles }) {
+    const ts = tuiles || [];
+    const c = repartir(ts.map(t => t.code), 'code'), dd = repartir(ts.map(t => DOSSIER_IMAGE.exec(String(t.img ?? ''))?.[1] ?? '(hors forme)'), 'dossier');
+    const { h1, title } = lireTitre(html);
+    const annonces = annoncesDeNombre(html);
+    const r = { codes: c.liste, autresCodes: c.autres, dossiers: dd.liste, autresDossiers: dd.autres, h1: coupe(h1), title: coupe(title), annonces };
+    return { ...r, lignes: lignesDeDiagnostic(r) };
+}
+/** Les lignes d'affichage d'un diagnostic (récepteur, journal, userscript : UN formatage). */
+function lignesDeDiagnostic(r) {
+    const liste = (xs, k, autres) => xs.length ? `${xs.map(x => `${x[k]}×${x.n}`).join(', ')}${autres ? `, +${autres} autre(s)` : ''}` : '(aucun)';
+    return [`codes lus sur les tuiles : ${liste(r.codes, 'code', r.autresCodes)}`, `dossiers des images : ${liste(r.dossiers, 'dossier', r.autresDossiers)}`,
+        `titre de la page : h1 ${r.h1 == null ? '(aucun)' : `« ${r.h1} »`}, title ${r.title == null ? '(aucun)' : `« ${r.title} »`}`, `nombre de cartes annoncé : ${r.annonces.length ? r.annonces.map(a => `« ${a} »`).join(' ; ') : '(aucune annonce lisible)'}`];
+}
+
+/**
+ * Cette tuile peut-elle servir une image POUR ce set ? Son code est l'un de ceux que la ligne autorise, et son image est à `images.pikaqian.com/<dossier>/<id de la tuile>.webp` dans l'un
+ * des dossiers que la ligne autorise (son propre code, plus `dossiersImages`). Définition unique : le plan, la garde d'image du récepteur et l'import la lisent.
+ */
+function imageAcceptee(code, tuile, table = TABLE_PIKAQIAN) {
+    const d = declarationsDeCode(code, table);
+    if (d.declare && !d.valide) return false;   // GARDE:pk-declaration-image
+    const m = DOSSIER_IMAGE.exec(String(tuile?.img ?? ''));
+    if (!m) return false;   // GARDE:pk-image-forme
+    if (!d.dossiers.includes(m[1])) return false;   // GARDE:pk-dossier
+    if (tuile.img !== urlImage(m[1], tuile.id)) return false;   // GARDE:pk-image-id
+    if (!d.codes.includes(tuile.code)) return false;   // GARDE:pk-image-code
+    return true;
 }
 
 // ── LA PREUVE ET LE PLAN : numéro + tuile sans foil unique + nom — un doute est un trou ──────────────────────────────────
@@ -101,9 +171,9 @@ function verdictDePage({ tuiles, code }) {
  * @param {{trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>, tuiles: object[], code: string, slug: string}} o
  * Un trou déjà servi (au même numéro, ou sans numéro dans le set) n'y figure jamais — ADDITIF.
  */
-function planifierPikaqian({ trous, tuiles, code, slug }) {
-    const parNumero = new Map();
-    for (const t of tuiles || []) { if (t.code !== code) continue; const k = cleNumero(t.numero); if (!k) continue; (parNumero.get(k) || parNumero.set(k, []).get(k)).push(t); }
+function planifierPikaqian({ trous, tuiles, code, slug, table = TABLE_PIKAQIAN }) {
+    const parNumero = new Map(), codesDuSet = declarationsDeCode(code, table).codes;
+    for (const t of tuiles || []) { if (!codesDuSet.includes(t.code)) continue; const k = cleNumero(t.numero); if (!k) continue; (parNumero.get(k) || parNumero.set(k, []).get(k)).push(t); }
     const vus = new Set(), plan = [], restes = [], suffixesInconnus = new Map();
     for (const x of trous) {
         const numero = x.numeroFiche ?? null;
@@ -128,7 +198,7 @@ function planifierPikaqian({ trous, tuiles, code, slug }) {
         if (!exactes.length) { restes.push({ ...base, motif: c.some(prolonge) ? 'tuile-a-suffixe' : 'nom-different', detail: `${c.map(t => `« ${t.nom} »`).join(' | ')} à la source, « ${x.carte.nomEn} » chez nous` }); continue; }
         const t = exactes[0];
         // l'adresse de l'image est celle DE CETTE tuile, dans le dossier de CE set : sinon la page se contredit
-        if (t.img !== urlImage(code, t.id)) { restes.push({ ...base, motif: 'image-incoherente', detail: `${t.img} pour la tuile ${t.id} du set ${code}` }); continue; }
+        if (!imageAcceptee(code, t, table)) { restes.push({ ...base, motif: 'image-incoherente', detail: `${t.img} pour la tuile ${t.id} du set ${code}` }); continue; }
         plan.push({ ...base, tuile: t, url: t.img, voie: 'set+numero+tuile-sans-foil+nom',
             preuve: `pikaqian.com set ${code} : tuile ${t.id} n° ${t.numero}, nom « ${t.nom} » = « ${x.carte.nomEn} » ; numéro identique au nôtre (fiche ${numero}) ; seule tuile dont le nom ne laisse aucun suffixe à ce numéro (${c.length} tuile${c.length > 1 ? 's' : ''} au numéro)` });
     }
@@ -136,7 +206,6 @@ function planifierPikaqian({ trous, tuiles, code, slug }) {
 }
 
 // ── LES ADRESSES ─────────────────────────────────────────────────────────────────────────────────────────────────────
-const CODE_PK = /^[a-z0-9][a-z0-9.-]{0,30}$/;
 const urlSet = code => { if (!CODE_PK.test(String(code))) throw new Error(`${SOURCE} : code de set « ${code} » hors du motif autorisé`); return `https://${HOTE_PAGES}/sets/${code}`; };
 const urlImage = (code, id) => `https://${HOTE_IMAGES}/${code}/${id}.webp`;
 const INTERDITS = /^\/(api|admin|auth|login|logout|currency)(\/|$)/i;
@@ -311,6 +380,7 @@ function planRetraitPikaqian(cartes) {
 
 module.exports = {
     SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne, PAGE_MAX_OCTETS, IMAGE_MAX_OCTETS, CODE_PK, compterAncresCartes,
+    lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
     defi, DEFI

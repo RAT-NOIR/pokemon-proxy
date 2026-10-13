@@ -32,7 +32,7 @@ const http = require('http');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');
-const { TABLE_PIKAQIAN } = require('./collecte-cartes/pikaqian-sets');
+const { TABLE_PIKAQIAN, declarationsDeCode } = require('./collecte-cartes/pikaqian-sets');
 
 // ── LES IMAGES (lot P2, 2026-10-13) ───────────────────────────────────────────────────────────────────────────────────────────
 // 🔑 DÉCISION DU TESTEUR (2026-10-13) : « PikaQian : A. Le script passif envoie l'image telle que mon navigateur l'affiche, avec la carte et le numéro ; le worker
@@ -89,8 +89,25 @@ const APPORTS_MANUELS = [/(^|[\\/])logo fr([\\/]|$)/i, /(^|[\\/])apport-manuel([
 const dansApportsManuels = dossier => { const reel = cheminReel(dossier), brut = path.resolve(dossier); return APPORTS_MANUELS.some(r => r.test(reel) || r.test(brut)); };
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
-/** Le nombre de tuiles que la mesure du set a relevé (pikaqian-sets.json, `tuiles`), ou null quand la table ne le connaît pas. */
-const attenduParTable = code => TABLE_PIKAQIAN.filter(l => l.codePk === code && Number.isInteger(l.tuiles)).reduce((m, l) => Math.max(m, l.tuiles), 0) || null;
+/** Le nombre de tuiles que la mesure du set a relevé (pikaqian-sets.json, `tuiles`), ou null quand la table ne le connaît pas — lu par la fonction unique des déclarations d'une ligne. */
+const attenduParTable = (code, table = TABLE_PIKAQIAN) => declarationsDeCode(code, table).tuiles;
+
+/** Le dossier des DIAGNOSTICS de pages refusées : le voisin `refusees` du dossier de production, sinon `<dossier>-refusees` (les bancs n'écrivent jamais en production). */
+const dossierRefuseesParDefaut = dossier => path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? path.join(path.dirname(DOSSIER_DEFAUT), 'refusees') : `${path.resolve(dossier)}-refusees`;
+/**
+ * Écrit le diagnostic d'une page refusée, `<code>--<date>.json`, JAMAIS écrasé (un refus de plus = un fichier de plus), et seulement sous la racine autorisée. Rend le nom écrit, ou null.
+ * Le contenu est celui que `jugerPage` a rendu : des comptes et des textes tronqués, aucun HTML, aucune tuile.
+ */
+function ecrireRefusee(dossierRefusees, fiche, { racine = RACINE_AUTORISEE } = {}) {
+    if (!dansRacineAutorisee(dossierRefusees, racine) || dansApportsManuels(dossierRefusees)) return null;   // GARDE:refusee-racine
+    fs.mkdirSync(dossierRefusees, { recursive: true });
+    const base = `${fiche.code}--${horodatage(new Date(fiche.le))}`;
+    for (let i = 0; i < 100; i++) {
+        const nom = `${base}${i ? `-${i + 1}` : ''}.json`, cible = path.join(dossierRefusees, nom);
+        try { fs.writeFileSync(cible, JSON.stringify(fiche), { flag: 'wx' }); return nom; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    }
+    throw new Error('plus de 100 diagnostics pour la même seconde');
+}
 
 /** Écrit la fiche sans jamais écraser un fichier existant (un apprentissage de plus = un fichier de plus). */
 function ecrireFiche(dossier, fiche) {
@@ -109,7 +126,7 @@ function ecrireFiche(dossier, fiche) {
 /**
  * Le JUGEMENT d'un corps lu : pur, rend { statut, corps, fiche? }. `html` n'est jamais gardé. `attendu(code)` : le nombre de tuiles attendu, ou null.
  */
-function jugerPage(brut, { attendu = attenduParTable } = {}) {
+function jugerPage(brut, { table = TABLE_PIKAQIAN, attendu = c => attenduParTable(c, table) } = {}) {
     let o;
     try { o = JSON.parse(brut); } catch { return { statut: 400, corps: { ok: false, motif: 'corps illisible : ce n\'est pas du JSON' } }; }
     if (!o || typeof o !== 'object' || Array.isArray(o)) return { statut: 400, corps: { ok: false, motif: 'le corps doit être un objet JSON' } };   // GARDE:objet
@@ -122,8 +139,10 @@ function jugerPage(brut, { attendu = attenduParTable } = {}) {
     if (attendue !== o.url) return { statut: 422, corps: { ok: false, motif: `adresse « ${o.url.slice(0, 120)} » : ce n'est pas la page d'un set (${PREFIXE_URL}<code>)` } };   // GARDE:url
     const tuiles = P.lireTuiles(o.html);
     const ancres = P.compterAncresCartes(o.html);
-    const verdict = P.verdictDePage({ tuiles, code });
-    if (!verdict.ok) return { statut: 422, corps: { ok: false, code, motif: verdict.motif, tuilesLues: verdict.tuiles, tuilesAuCode: verdict.bonnes, ancres } };   // GARDE:verdict
+    const titre = P.titreLu(o.html);
+    const verdict = P.verdictDePage({ tuiles, code, titre, table });
+    // le refus de la page EST la mesure : ce que la page portait (codes lus, dossiers des images, titre, annonce du nombre de cartes), sans HTML ni tuile complète
+    if (!verdict.ok) return { statut: 422, corps: { ok: false, code, url: o.url, motif: verdict.motif, tuilesLues: verdict.tuiles, tuilesAuCode: verdict.bonnes, ancres, diagnostic: P.diagnostiquerPage({ html: o.html, tuiles }), sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html) } };   // GARDE:verdict
     if (ancres > tuiles.length) return { statut: 422, corps: { ok: false, code, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles`, tuilesLues: tuiles.length, ancres } };   // GARDE:ancres
     const voulu = attendu(code);
     if (voulu && tuiles.length < voulu) return { statut: 422, corps: { ok: false, code, motif: `page incomplète : ${tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure`, tuilesLues: tuiles.length, ancres, attendu: voulu } };   // GARDE:incomplete
@@ -133,7 +152,7 @@ function jugerPage(brut, { attendu = attenduParTable } = {}) {
     const flux = origines.length || MARQUEURS_FLUX.test(o.html) ? 'present' : 'absent';
     const anomalie = flux === 'absent' ? 'FLUX DE DONNÉES ABSENT : aucun bloc de données Remix trouvé dans la page — les adresses officielles ne peuvent pas être lues (page non hydratée ? forme changée ?). À signaler.' : null;
     const fiche = {
-        schema: 1, code, url: o.url, le: new Date().toISOString(),
+        schema: 1, code, url: o.url, le: new Date().toISOString(), titre,
         sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html),
         verdict, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, flux, tuiles, origines, officielles
     };
@@ -153,7 +172,7 @@ function ecrireFichier(cible, contenu, { ecraser = false } = {}) {
 /** Le fichier de PAGE d'une visite : ce que la page portait (code, date, tuiles), puis ce que les lots d'images y ajoutent. Créé avec la fiche, jamais deux fois. */
 function creerPage(dossierImages, nomFiche, fiche) {
     fs.mkdirSync(path.join(dossierImages, fiche.code), { recursive: true });
-    const page = { schema: 2, code: fiche.code, url: fiche.url, le: fiche.le, fiche: nomFiche, sha256Html: fiche.sha256,
+    const page = { schema: 2, code: fiche.code, url: fiche.url, le: fiche.le, fiche: nomFiche, sha256Html: fiche.sha256, titre: fiche.titre ?? null,
         tuiles: fiche.tuiles.map(t => ({ id: t.id, nom: t.nom, numero: t.numero, code: t.code, img: t.img })),
         // ce que la page déclare de l'ORIGINE des visuels (lireOrigines) et le dénominateur de la lecture : l'import n'a pas besoin d'une autre pièce pour la provenance
         origines: fiche.origines, ancres: fiche.ancres, flux: fiche.flux,
@@ -166,7 +185,7 @@ function creerPage(dossierImages, nomFiche, fiche) {
  * Le JUGEMENT d'un lot d'images : asynchrone (décodage), écrit les images valides et met à jour le fichier de page. Rend { statut, corps }.
  * Un lot mal formé est refusé en bloc ; une IMAGE refusée ne refuse pas les autres (elle est rendue avec son motif et écrite dans le fichier de page).
  */
-async function jugerImages(brut, { dossier, dossierImages, maintenant = () => new Date() }) {
+async function jugerImages(brut, { dossier, dossierImages, table = TABLE_PIKAQIAN, maintenant = () => new Date() }) {
     let o;
     try { o = JSON.parse(brut); } catch { return { statut: 400, corps: { ok: false, motif: 'corps illisible : ce n\'est pas du JSON' } }; }
     if (!o || typeof o !== 'object' || Array.isArray(o)) return { statut: 400, corps: { ok: false, motif: 'le corps doit être un objet JSON' } };
@@ -189,7 +208,8 @@ async function jugerImages(brut, { dossier, dossierImages, maintenant = () => ne
         if (!im || typeof im !== 'object' || Object.keys(im).sort().join(',') !== 'b64,id,nom,numero,src,voie' || Object.values(im).some(v => typeof v !== 'string')) { refus(im?.id, 'image mal formée : id, src, nom, numero, voie et b64 (chaînes) exigés, rien d\'autre'); continue; }   // GARDE:image-forme
         const t = parId.get(im.id);
         if (!t) { refus(im.id, 'tuile inconnue de la page apprise'); continue; }   // GARDE:image-tuile
-        if (!(im.src === t.img && t.img === P.urlImage(code, t.id) && t.code === code)) { refus(im.id, `adresse « ${im.src.slice(0, 100)} » : ce n'est pas celle que la page déclare pour cette tuile (${t.img}) dans le dossier du set`); continue; }   // GARDE:image-adresse
+        // l'adresse est celle que la page déclare ET celle que la ligne du set autorise (`imageAcceptee`, pikaqian.js : le dossier du set ou un dossier déclaré, l'identifiant de la tuile, un code de tuile autorisé)
+        if (!(im.src === t.img && P.imageAcceptee(code, t, table))) { refus(im.id, `adresse « ${im.src.slice(0, 100)} » : ce n'est pas celle que la page déclare pour cette tuile (${t.img}) dans un dossier que le set autorise`); continue; }   // GARDE:image-adresse
         if (!(im.nom === t.nom && im.numero === t.numero)) { refus(im.id, `le DOM affiche « ${im.nom.slice(0, 60)} » n° ${im.numero.slice(0, 20)}, le HTML de la page « ${t.nom} » n° ${t.numero} : deux lectures qui se contredisent`); continue; }   // GARDE:image-nom-numero
         if (!VOIES.has(im.voie)) { refus(im.id, `voie « ${im.voie.slice(0, 20)} » inconnue`); continue; }   // GARDE:image-voie
         if (im.b64.length > Math.ceil(IMAGE_OCTETS_MAX * 4 / 3) + 4 || !B64.test(im.b64)) { refus(im.id, `octets illisibles ou au-delà de ${IMAGE_OCTETS_MAX} octets`); continue; }   // GARDE:image-octets
@@ -234,14 +254,17 @@ async function jugerImages(brut, { dossier, dossierImages, maintenant = () => ne
  * Démarre le récepteur. `port: 0` = éphémère (les bancs). `hote` n'existe pas : 127.0.0.1 seulement. `attendu` n'existe que pour les bancs.
  * @returns {Promise<{port:number, adresse:string, fermer:()=>Promise<void>}>}
  */
-async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierImages = null, racine = RACINE_AUTORISEE, maxOctets = P.PAGE_MAX_OCTETS, attendu = attenduParTable, journal = m => console.log(m) } = {}) {
+async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierImages = null, dossierRefusees = null, racine = RACINE_AUTORISEE, maxOctets = P.PAGE_MAX_OCTETS, table = TABLE_PIKAQIAN, attendu = c => attenduParTable(c, table), journal = m => console.log(m) } = {}) {
     if (!Number.isFinite(maxOctets) || maxOctets <= 0) throw new Error(`plafond de corps illisible (${maxOctets}) : PAGE_MAX_OCTETS de pikaqian.js doit être un nombre`);
     if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les pages apprises n'y entrent jamais`);
     // les images et les fichiers de page : le dossier de production par défaut, SEULEMENT quand les fiches vont au leur ; sinon un voisin du dossier donné (les bancs)
     if (!dossierImages) dossierImages = path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`;
     if (dansLeDepot(dossierImages)) throw new Error(`le dossier « ${dossierImages} » est dans le dépôt : les images reçues n'y entrent jamais`);
-    for (const d of [dossier, dossierImages]) if (!dansRacineAutorisee(d, racine)) throw new Error(`le dossier « ${d} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);   // GARDE:racine
-    for (const d of [dossier, dossierImages]) if (dansApportsManuels(d)) throw new Error(`le dossier « ${d} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
+    // les diagnostics de pages refusées : leur voisin `refusees` (production) ou `<dossier>-refusees` (bancs)
+    if (!dossierRefusees) dossierRefusees = dossierRefuseesParDefaut(dossier);
+    if (dansLeDepot(dossierRefusees)) throw new Error(`le dossier « ${dossierRefusees} » est dans le dépôt : les diagnostics de pages refusées n'y entrent jamais`);
+    for (const d of [dossier, dossierImages, dossierRefusees]) if (!dansRacineAutorisee(d, racine)) throw new Error(`le dossier « ${d} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);   // GARDE:racine
+    for (const d of [dossier, dossierImages, dossierRefusees]) if (dansApportsManuels(d)) throw new Error(`le dossier « ${d} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     fs.mkdirSync(dossier, { recursive: true });
     let serie = Promise.resolve();                                // les lots d'images sont jugés UN À LA FOIS (le fichier de page se réécrit)
     const serveur = http.createServer((req, res) => {
@@ -276,7 +299,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
                 const brut = Buffer.concat(morceaux).toString('utf8');
                 serie = serie.then(async () => {
                     try {
-                        const j = await jugerImages(brut, { dossier, dossierImages });
+                        const j = await jugerImages(brut, { dossier, dossierImages, table });
                         if (j.statut !== 200) { journal(`⛔ ${j.statut} lot d'images refusé : ${j.corps.motif}`); return repondre(j.statut, j.corps); }
                         journal(`🖼️ ${j.corps.code} : ${j.corps.recues} image(s) reçue(s) (${j.corps.nouvelles} nouvelle(s), ${j.corps.deja} déjà là), ${j.corps.refusees.length} refusée(s)${j.corps.refusees.length ? ` — ${j.corps.refusees.slice(0, 3).map(r => r.motif).join(' | ')}` : ''}`);
                         repondre(200, j.corps);
@@ -285,8 +308,17 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
                 return;
             }
             try {
-                const j = jugerPage(Buffer.concat(morceaux).toString('utf8'), { attendu });
-                if (j.statut !== 200) { journal(`⛔ ${j.statut} page refusée : ${j.corps.motif}${j.corps.ancres != null ? ` (ancres ${j.corps.ancres}, tuiles ${j.corps.tuilesLues ?? '?'})` : ''}`); return repondre(j.statut, j.corps); }
+                const j = jugerPage(Buffer.concat(morceaux).toString('utf8'), { attendu, table });
+                if (j.statut !== 200) {
+                    journal(`⛔ ${j.statut} page refusée : ${j.corps.motif}${j.corps.ancres != null ? ` (ancres ${j.corps.ancres}, tuiles ${j.corps.tuilesLues ?? '?'})` : ''}`);
+                    if (j.corps.diagnostic) {
+                        // le diagnostic : au journal (une ligne par fait) et dans refusees\<code>--<date>.json — c'est la mesure du prochain clic du testeur
+                        const fichier = ecrireRefusee(dossierRefusees, { schema: 1, code: j.corps.code, url: j.corps.url, le: new Date().toISOString(), motif: j.corps.motif, ancres: j.corps.ancres, tuilesLues: j.corps.tuilesLues, tuilesAuCode: j.corps.tuilesAuCode, sha256: j.corps.sha256, octetsHtml: j.corps.octetsHtml, diagnostic: j.corps.diagnostic }, { racine });
+                        for (const l of j.corps.diagnostic.lignes) journal(`   ${l}`);
+                        journal(fichier ? `   diagnostic écrit : ${path.join(dossierRefusees, fichier)}` : '   diagnostic NON écrit (dossier hors de la racine autorisée)');
+                    }
+                    return repondre(j.statut, j.corps);
+                }
                 const nom = ecrireFiche(dossier, j.fiche);
                 creerPage(dossierImages, nom, j.fiche);
                 journal(`✅ ${j.fiche.code} : ${j.fiche.ancres} ancres, ${j.fiche.tuilesLues} tuiles lues, ${j.fiche.tuilesAuCode} au code du set, flux ${j.fiche.flux}, ${j.fiche.officielles} adresse(s) officielle(s) déclarée(s) → ${nom}${j.corps.anomalie ? `\n   ⚠️ ${j.corps.anomalie}` : ''}`);
@@ -300,13 +332,13 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, DIMENSION_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
+module.exports = { demarrer, jugerPage, jugerImages, ecrireRefusee, dossierRefuseesParDefaut, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, DIMENSION_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main === module) {
     // La ligne de commande s'écrit par ce qu'elle AUTORISE : un argument inconnu refuse avant d'écouter.
     const args = process.argv.slice(2);
-    const AUTORISES = [/^--port=(\d{4,5})$/, /^--dossier=.+$/, /^--dossier-images=.+$/];
+    const AUTORISES = [/^--port=(\d{4,5})$/, /^--dossier=.+$/, /^--dossier-images=.+$/, /^--dossier-refusees=.+$/];
     const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
     const port = Number(args.find(a => a.startsWith('--port='))?.slice(7) ?? PORT_DEFAUT);
     if (inconnus.length || !(port >= 1024 && port <= 65535)) {
@@ -315,7 +347,8 @@ if (require.main === module) {
     }
     const dossier = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? DOSSIER_DEFAUT;
     const dossierImages = args.find(a => a.startsWith('--dossier-images='))?.slice(17) ?? null;
-    demarrer({ port, dossier, dossierImages }).then(s => {
-        console.log(`Récepteur PikaQian : http://${s.adresse}:${s.port}/apprendre et /images — fiches ${dossier} — images ${dossierImages ?? (path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`)} — Ctrl+C pour arrêter. Aucune requête sortante.`);
+    const dossierRefusees = args.find(a => a.startsWith('--dossier-refusees='))?.slice(19) ?? null;
+    demarrer({ port, dossier, dossierImages, dossierRefusees }).then(s => {
+        console.log(`Récepteur PikaQian : http://${s.adresse}:${s.port}/apprendre et /images — fiches ${dossier} — images ${dossierImages ?? (path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`)} — diagnostics de pages refusées ${dossierRefusees ?? dossierRefuseesParDefaut(dossier)} — Ctrl+C pour arrêter. Aucune requête sortante.`);
     }).catch(e => { console.error('❌', e.message); process.exit(1); });
 }

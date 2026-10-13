@@ -148,6 +148,20 @@ const hotesDes = appels => appels.map(a => new URL(a.url).host);
     w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
     await attendre(30);
     verifier('page refusée (422) : la raison est affichée, une seule requête (la page), aucune image lue', [/ne désigne pas ce set/.test(texte(w)), w.appels.length, w.fetches.length], [true, 1, 0]);
+    // LOT PQ-PROMO : le refus d'une page porte son diagnostic, affiché tel quel (les lignes du récepteur), sans rien envoyer de plus
+    const lignesDiag = ['codes lus sur les tuiles : code-inconnu×3', 'dossiers des images : dossier-ailleurs×3', 'titre de la page : h1 « Promo SV-P », title « Promo SV-P | PikaQian »', 'nombre de cartes annoncé : « 701 cartes »'];
+    w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: '0 tuiles sur 3 portent le code promo-sv-p : la page ne désigne pas ce set', diagnostic: { lignes: lignesDiag } }) }, tuiles: [{ id: '00000000-0000-4000-8000-000000000001', nom: 'A', numero: '001', src: `https://${P.HOTE_IMAGES}/cs1bc/00000000-0000-4000-8000-000000000001.webp`, canvas: 'ok' }] });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(30);
+    verifier('page refusée avec diagnostic : le motif ET les quatre lignes (codes, dossiers, titre, annonce) sont affichés, toujours une seule requête', [/ne désigne pas ce set/.test(texte(w)), lignesDiag.every(l => texte(w).includes(l)), w.appels.length, w.fetches.length], [true, true, 1, 0]);
+    // un diagnostic mal formé (pas des chaînes, trop de lignes) n'est jamais interprété : seules des chaînes, 8 lignes au plus, 300 caractères chacune
+    w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: 'refus', diagnostic: { lignes: [{ x: 1 }, 'z'.repeat(1000), 'ok-1', ...Array.from({ length: 20 }, (_, i) => `l${i}`)] } }) } });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await attendre(30);
+    verifier('diagnostic mal formé : les objets sont ignorés, 8 lignes au plus, aucune ligne de plus de 300 caractères', [texte(w).includes('[object'), texte(w).includes('l15'), /z{301}/.test(texte(w))], [false, false, false]);
+    verifier('… et les chaînes valides sont affichées malgré l\'objet qui les précède', [texte(w).includes('ok-1'), texte(w).includes('l0')], [true, true]);
     // récepteur éteint
     w = fabriquerMonde({ erreur: 'connexion refusée' });
     vm.runInNewContext(SRC, w.bac);

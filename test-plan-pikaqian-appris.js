@@ -115,6 +115,17 @@ const cartes = [
     const M3 = await PL.mesurer({ dossier: d3, db, attendu: () => null });
     verifier('dossier sans fichier appris : fichiers 0, et l\'impression le dit', [M3.fichiers, /aucune page apprise/.test(PL.formater(M3))], [0, true]);
 
+    // ── LOT PQ-PROMO : une ligne qui déclare un titre — la fiche doit porter CE titre (celui que le récepteur a lu), sinon elle n'est pas mesurée
+    const ligneDecl = { ...require('./collecte-cartes/pikaqian-sets').lignePikaqian(SLUG), mesure: 'déclaration fabriquée par le banc', codesTuiles: ['cs1bc'], dossiersImages: ['cs1bc'], titrePk: 'Titre du banc', tuiles: 3 };
+    const avecTitre = t => R.jugerPage(JSON.stringify({ url: 'https://pikaqian.com/sets/cs1bc', html: HTML.replace('<body>', `<head><title>${t} | PikaQian</title></head><body><h1>${t}</h1>`) }), { attendu: () => null, table: [ligneDecl] });
+    for (const [nomCas, fiche, mesuree] of [['titre égal à titrePk', avecTitre('Titre du banc').fiche, true], ['titre différent (fiche éditée : le récepteur ne l\'aurait pas écrite)', { ...avecTitre('Titre du banc').fiche, titre: 'Un autre titre' }, false], ['fiche sans titre (écrite avant ce lot)', { ...j.fiche, titre: undefined }, false]]) {
+        const dT = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-pk-titre-'));
+        R.ecrireFiche(dT, { ...fiche, le: '2026-10-13T10:00:00.000Z' });
+        const MT = await PL.mesurer({ dossier: dT, db, attendu: () => null, table: [ligneDecl] });
+        verifier(`ligne qui déclare titrePk, ${nomCas} : ${mesuree ? 'mesurée' : 'non mesurée, avec sa raison'}`, [MT.sets.some(x => x.code === 'cs1bc'), mesuree ? 0 : /titre/.test(MT.illisibles[0]?.motif || '') ? 1 : -1], [mesuree, mesuree ? 0 : 1]);
+        fs.rmSync(dT, { recursive: true, force: true });
+    }
+
     // ── la ligne de commande : argument inconnu = refus avant toute connexion ; variable de lecture absente = refus
     const cli = (args, env = {}) => spawnSync(process.execPath, [path.join(__dirname, 'plan-pikaqian-appris.js'), ...args], { encoding: 'utf8', timeout: 20000, env: { ...process.env, MONGODB_CARTES_LECTURE_URI: '', ...env } });
     const c1 = cli(['--inconnu']);
