@@ -268,7 +268,7 @@ function mesurerGeminiSeul(lignes) {
     return {
         n, autres: lignes.filter(l => !['affirmee', 'question', 'introuvable'].includes(l.statut)).length,
         affirmees: { n: aff.length, justes, fausses, wilsonJustes: wilson(justes, aff.length) },
-        fauxAffirmes: { n: fausses, sur: n, wilson: wilson(fausses, n) },
+        fauxAffirmes: { n: fausses, sur: n, wilson: wilson(fausses, n), surAffirmees: { sur: aff.length, wilson: wilson(fausses, aff.length) } },
         questions: { n: q.length, contiennentLaVerite: contiennent, wilsonContiennent: wilson(contiennent, q.length) },
         introuvables: { n: intro.length, aBonDroit, manques: intro.length - aBonDroit },
         justesOuQuestionJuste: justesOuQ, wilsonJustesOuQuestionJuste: wilson(justesOuQ, n)
@@ -282,7 +282,9 @@ async function principal() {
         const w = x => (x.p === null ? 'n/a' : `${(100 * x.p).toFixed(1)} % [${(100 * x.bas).toFixed(1)} ; ${(100 * x.haut).toFixed(1)}]`);
         console.log(`BANC DE L'ADMINISTRATEUR — base « Gemini seul » (réponse d'origine), ${m.n} cartes étiquetées (${e.manifeste.sansPhoto} sans photo)`);
         console.log(`  affirmées : ${m.affirmees.n} · justes ${m.affirmees.justes} (${w(m.affirmees.wilsonJustes)}) · fausses ${m.affirmees.fausses}`);
-        console.log(`  faux affirmés : ${m.fauxAffirmes.n} / ${m.fauxAffirmes.sur} (${w(m.fauxAffirmes.wilson)})`);
+        // I2 : des étiquettes pas encore reflétées dans les lignes rendent cette mesure OBSOLÈTE pour ces cartes (une ligne peut porter une vérité plus ancienne) : jamais tu
+        if (e.manifeste.etiquettesEnAttente !== 0) console.log(`  ⚠️ ${e.manifeste.etiquettesEnAttente === null || e.manifeste.etiquettesEnAttente === undefined ? 'nombre d\'étiquettes en attente INCONNU' : `${e.manifeste.etiquettesEnAttente} analyse(s) avec une étiquette pas encore reflétée dans le banc`} : relancer l'export après la reprise`);
+        console.log(`  faux affirmés : ${m.fauxAffirmes.n} / ${m.fauxAffirmes.sur} cartes (${w(m.fauxAffirmes.wilson)}) · ${m.fauxAffirmes.n} / ${m.fauxAffirmes.surAffirmees.sur} affirmées (${w(m.fauxAffirmes.surAffirmees.wilson)})`);
         console.log(`  questions : ${m.questions.n} · contiennent la vérité ${m.questions.contiennentLaVerite} (${w(m.questions.wilsonContiennent)})`);
         console.log(`  introuvables : ${m.introuvables.n} · à bon droit ${m.introuvables.aBonDroit} · manqués ${m.introuvables.manques}`);
         console.log(`  affirmée juste ou question juste : ${m.justesOuQuestionJuste} / ${m.n} (${w(m.wilsonJustesOuQuestionJuste)})`);

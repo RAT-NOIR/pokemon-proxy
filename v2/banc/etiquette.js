@@ -109,7 +109,9 @@ function traiterEtiquette(cfg, deps = {}) {
             // écriture CONDITIONNELLE sur le rev lu : si une autre requête est passée entre-temps, rien n'est écrit et on relit
             const filtre = { _id: scanId, porteur: `${porteur.type}:${porteur.id}`, ...(dernier ? { [`${chemin}.rev`]: dernier.rev } : { [chemin]: { $exists: false } }) };
             let r;
-            try { r = await db.col('analyses').updateOne(filtre, { $set: { [chemin]: doc } }); }
+            // ETIQUETAGE-B (I2) : la marque de reprise `bancAttente` est posée DANS LA MÊME écriture que l'étiquette — si MongoDB tombe ensuite pendant l'écriture de la ligne du banc, la reprise connaît
+            // quand même cette étiquette ; la marque ne tombe que lorsque la ligne est à jour (v2/banc/etiquette-ligne.js).
+            try { r = await db.col('analyses').updateOne(filtre, { $set: { [chemin]: doc, bancAttente: true } }); }
             catch (x) { journal('écriture', x); return repondreErreur(res, 'INDISPONIBLE'); }
             if (r && r.matchedCount === 1) return res.status(200).json({ success: true, etat: 'ecrit', rev: e.rev, banc: await etatDuBanc(deps, e.scanId, e.carte) });
         }

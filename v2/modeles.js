@@ -21,12 +21,18 @@ const INDEX = Object.freeze([
     // O5 : la marque de livraison d'un scan (v2/argent/marque-scan.js). (etat, ouverteLe) sert la passe de rattrapage et la réconciliation ; le TTL ne porte que sur les marques CLOSES (une marque non close n'a pas d'expireLe).
     I('scans_en_cours', 'scans_etat', { etat: 1, ouverteLe: 1 }), TTL('scans_en_cours'),
     I('analyses', 'analyses_porteur', { porteur: 1, creeLe: -1 }), TTL('analyses'),
+    // ETIQUETAGE-B : deux index PARTIELS (une entrée seulement pour les analyses d'un administrateur concernées : quelques centaines au plus, quelques dizaines de Ko) — la reprise des lignes en attente
+    // (`bancAttente: true`, triée par dernier essai) et le filet des orphelins du banc (`photoBanc.cle`) ne parcourent plus toute la collection `analyses`.
+    I('analyses', 'analyses_banc_attente', { bancAttente: 1, bancEssaiLe: 1 }, { partialFilterExpression: { bancAttente: true } }),
+    I('analyses', 'analyses_photo_banc', { 'photoBanc.cle': 1 }, { partialFilterExpression: { 'photoBanc.cle': { $type: 'string' } } }),
     TTL('annonces'),
     I('idempotence', 'idempotence_cle', { cle: 1 }, { unique: true }), TTL('idempotence'),
     I('limites', 'limites_cle', { cle: 1 }, { unique: true }), TTL('limites'),
     // B6.4 : PAS de TTL sur banc_lignes. La purge (v2/banc/purge.js) est le SEUL effaceur : Mongo supprimerait la ligne avant que la purge ait effacé son objet R2
     // (objets d'abord, lignes ensuite) et l'objet resterait orphelin, hors rétention. Un index simple sur expireLe sert la requête de la purge.
     I('banc_lignes', 'banc_jeton', { jetonEmpreinte: 1 }), I('banc_lignes', 'banc_lignes_expire', { expireLe: 1 }),
+    // ETIQUETAGE-B : un objet de photo est PARTAGÉ par les lignes d'un lot ; « une autre ligne le porte-t-elle ? » (suppression, anonymisation) compte par cleR2 — un index simple, une entrée par ligne (~100 octets).
+    I('banc_lignes', 'banc_lignes_cle', { cleR2: 1 }),
     I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),

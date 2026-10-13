@@ -8,7 +8,7 @@
 //   photos/<32 hexadécimaux>.webp
 // Écrit par ce qu'il AUTORISE :
 //   · la base : un nom de TEXTE non vide, différent de `test` (la production), que la connexion confirme ;
-//   · le dossier : absolu, ni la racine d'un disque, ni DANS un dossier d'apports (Logo FR, apport-manuel, LOGO, Logo JP, Logo ZH) ou de photos du verrou ; vide ou déjà un export de ce format ;
+//   · le dossier : absolu, ni la racine d'un disque, ni DANS un dossier d'apports (Logo FR, apport-manuel, LOGO, Logo JP, Logo ZH) ou de photos du verrou, JUGÉ SUR SON CHEMIN RÉEL (un lien vers un tel dossier est refusé, une cible qui est un lien aussi) ; vide ou inexistant (jamais par-dessus un ancien export) ;
 //   · chaque écriture passe par `ecrireDans`, qui résout le chemin et le refuse s'il sort du dossier ; un nom de photo ne vient que d'une clé de la forme du banc (jamais d'un texte libre) ;
 //   · la base et le bucket ne reçoivent AUCUNE écriture : cet outil n'appelle que find et lire.
 // Aucune valeur de variable, d'URI ni de clé n'est jamais journalisée.
@@ -45,25 +45,49 @@ function ecrireDans(racine, relatif, contenu) {
 
 const statutDe = s => ({ identifiee: 'affirmee', 'a-trancher': 'question', introuvable: 'introuvable' })[s] || 'autre';
 
-/** Un dossier déjà rempli n'est admis que s'il est un export de ce format (le manifeste le dit) ; vide ou inexistant : admis. */
+/**
+ * I1 — le chemin RÉEL de la cible (ou de son plus proche ancêtre existant, complété du reste) est jugé par les MÊMES règles que le chemin donné : un lien (jonction, lien symbolique) vers un dossier
+ * d'apports, vers `verrou/photos` ou vers la racine d'un disque est refusé même si son nom est innocent. Une cible qui est elle-même un lien est refusée. `realpath` et `lstat` sont injectables :
+ * les bancs prouvent le refus SANS créer de lien. Toute erreur autre que « n'existe pas » refuse (une garde qui ne peut pas conclure bloque).
+ */
+function jugerCheminReel(dossier, realpath, lstat) {
+    try {
+        const st = lstat(dossier);
+        if (st && typeof st.isSymbolicLink === 'function' && st.isSymbolicLink()) throw erreur('DOSSIER-REFUSE', 'la cible est un lien');
+    } catch (e) { if (e && e.code === 'DOSSIER-REFUSE') throw e; if (!e || e.code !== 'ENOENT') throw erreur('DOSSIER-REFUSE', 'cible illisible'); }
+    let p = path.resolve(dossier);
+    const reste = [];
+    for (;;) {
+        let reel = null;
+        try { reel = realpath(p); } catch (e) { if (!e || e.code !== 'ENOENT') throw erreur('DOSSIER-REFUSE', 'chemin réel illisible'); }
+        if (typeof reel === 'string' && reel) {
+            const complet = reste.length ? path.join(reel, ...reste.reverse()) : reel;
+            const raison = refusDeDossier(complet.replace(/^\\\\\?\\/, ''));
+            if (raison) throw erreur('DOSSIER-REFUSE', `chemin réel : ${raison}`);
+            return complet;
+        }
+        const parent = path.dirname(p);
+        if (parent === p) throw erreur('DOSSIER-REFUSE', 'aucun ancêtre existant');
+        reste.push(path.basename(p)); p = parent;
+    }
+}
+
+/** M5 — l'export n'écrit que dans un dossier VIDE ou inexistant : jamais par-dessus un ancien export (ses photos survivraient à une purge). */
 function verifierDossierLibre(dossier) {
     if (!fs.existsSync(dossier)) return;
     if (!fs.statSync(dossier).isDirectory()) throw erreur('DOSSIER-REFUSE', 'ce n\'est pas un dossier');
-    const contenu = fs.readdirSync(dossier);
-    if (!contenu.length) return;
-    let ok = false;
-    try { ok = JSON.parse(fs.readFileSync(path.join(dossier, 'manifeste.json'), 'utf8')).format === FORMAT; } catch { ok = false; }
-    if (!ok) throw erreur('DOSSIER-REFUSE', 'dossier non vide qui n\'est pas un export précédent');
+    if (fs.readdirSync(dossier).length) throw erreur('DOSSIER-REFUSE', 'dossier non vide : un export va dans un dossier vide ou neuf');
 }
 
 /**
  * @param {{dossier:string, colFn:(n:string)=>any, stockage:{lire:(cle:string)=>Promise<Buffer>}, base:string}} o
  * @returns {Promise<{lignes:number, photos:number, sansPhoto:number}>}
  */
-async function exporterBancAdmin({ dossier, colFn, stockage, base }) {
+async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs.realpathSync, lstat = fs.lstatSync }) {
     if (typeof base !== 'string' || !base.trim() || base.trim().toLowerCase() === 'test') throw erreur('BASE-REFUSEE', 'base absente ou de production');
     const raison = refusDeDossier(dossier);
     if (raison) throw erreur('DOSSIER-REFUSE', raison);
+    jugerCheminReel(dossier, realpath, lstat);              // I1 : le chemin RÉEL, pas seulement le texte donné
     verifierDossierLibre(dossier);
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
     const brutes = await colFn('banc_lignes').find({ source: 'etiquette-admin', etat: 'confirmee' }).sort({ _id: 1 }).toArray();
@@ -86,13 +110,17 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base }) {
         lignes.push({
             id: String(l._id), photo, verite: Number.isSafeInteger(l.verite) ? l.verite : null, aucune: typeof l.aucune === 'string' ? l.aucune : null,
             statut: statutDe(r.statut), reponse: { statut: r.statut ?? null, idProduct: Number.isSafeInteger(r.idProduct) ? r.idProduct : null, candidats: Array.isArray(r.candidats) ? r.candidats.filter(Number.isSafeInteger) : [], questionCode: r.questionCode ?? null },
-            versionModele: l.versionModele ?? null, versionChaine: l.versionChaine ?? null, rev: Number.isSafeInteger(l.rev) ? l.rev : null, anonyme: l.anonyme === true
+            versionModele: l.versionModele ?? null, versionChaine: l.versionChaine ?? null, rev: Number.isSafeInteger(l.rev) ? l.rev : null, anonyme: l.anonyme === true,
+            sha256: typeof l.sha256 === 'string' && /^[0-9a-f]{64}$/.test(l.sha256) ? l.sha256 : null      // l'empreinte de la photo STOCKÉE (elle peut différer de celle que la chaîne a analysée)
         });
     }
+    // I2 — des étiquettes que le banc n'a pas encore reflétées (panne, reprise à venir) : le NOMBRE est dit dans le manifeste, jamais tu. `null` : la base n'a pas répondu (inconnu, pas « zéro »).
+    let enAttente = null;
+    try { enAttente = await colFn('analyses').countDocuments({ bancAttente: true }); } catch { enAttente = null; }
     fs.mkdirSync(path.join(dossier, 'photos'), { recursive: true });
     const photos = [...lues.values()].filter(Boolean).length;
     ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1));
-    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1));
+    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1));
     return { lignes: lignes.length, photos, sansPhoto };
 }
 
@@ -111,12 +139,15 @@ function analyserArgs(argv) {
     if (!sortie) return { erreur: 'aucun dossier de sortie' };
     return { base, sortie };
 }
-async function connecterLecture(env, base) {
-    const { MongoClient } = require('mongodb');
+/** M4 — le contrôle de la base porte sur ce que la base redoutée n'a PAS : la base nommée doit porter la collection `banc_lignes` (le nom de la base, lui, se lit sur la connexion et ne prouve rien). */
+async function connecterLecture(env, base, { MongoClient = require('mongodb').MongoClient } = {}) {
     const client = new MongoClient(env.MONGODB_ESSAI_LECTURE_URI, { readPreference: 'secondaryPreferred', appName: 'export-banc-admin' });
     await client.connect();
     const d = client.db(base);
-    if (d.databaseName !== base) throw erreur('BASE-REFUSEE', 'la connexion ne désigne pas la base demandée');
+    let cols = [];
+    try { cols = await d.listCollections({ name: 'banc_lignes' }, { nameOnly: true }).toArray(); }
+    catch { try { await client.close(); } catch { /* rien */ } throw erreur('BASE-REFUSEE', 'la base ne répond pas à la liste de ses collections'); }
+    if (!Array.isArray(cols) || !cols.length) { try { await client.close(); } catch { /* rien */ } throw erreur('BASE-REFUSEE', 'la base nommée ne porte pas de collection banc_lignes'); }
     return { colFn: n => d.collection(n), base, fermer: () => client.close() };
 }
 /** @returns {Promise<number>} 0 : exporté ; 1 : refusé ou impossible. Ne quitte jamais le processus. */
@@ -139,7 +170,7 @@ async function lancerCLI(argv, { env = process.env, connecter = connecterLecture
     finally { try { if (c && c.fermer) await c.fermer(); } catch { /* rien */ } }
 }
 
-module.exports = { exporterBancAdmin, ecrireDans, refusDeDossier, analyserArgs, lancerCLI, FORMAT };
+module.exports = { exporterBancAdmin, ecrireDans, refusDeDossier, jugerCheminReel, connecterLecture, analyserArgs, lancerCLI, FORMAT };
 
 if (require.main === module) {
     require('dotenv').config();

@@ -77,7 +77,7 @@ const lire = async id => db.col('analyses').findOne({ _id: new mongoose.Types.Ob
     const post = (a, corps) => H.appel(srv.url, '/api/banc/etiquette', { methode: 'POST', corps, entetes: { authorization: `Bearer ${a.jeton}`, ...ip() } });
     const CP = require('../banc/photo-admin');
     const scanner = (a, scanId, o = {}) => CP.apresIdentifierAdmin({ cfg, deps: { telechargerPhoto: o.telecharger || (async () => photoJpeg()) }, req: { entree: { imageUrls: o.urls || [URL_PHOTO] }, body: o.corps || {} }, scanId, porteur: o.porteur || a.obj });
-    const CLES_ADMIN = ['_id', 'aucune', 'cleR2', 'etat', 'expireLe', 'le', 'rev', 'reponse', 'source', 'verite', 'versionChaine', 'versionModele'];
+    const CLES_ADMIN = ['_id', 'aucune', 'cleR2', 'etat', 'expireLe', 'le', 'rev', 'reponse', 'sha256', 'source', 'verite', 'versionChaine', 'versionModele'];
 
     // ═══ 0. la photo : un WebP sans métadonnées, de taille bornée ═══
     {

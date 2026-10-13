@@ -26,7 +26,7 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
     const cA = await nouvelle('A', { r: 255, g: 0, b: 0 }), cB = await nouvelle('B', { r: 0, g: 255, b: 0 }), cC = await nouvelle('C', { r: 0, g: 0, b: 255 });
     const orpheline = cle();                                                       // une clé dont l'objet n'existe pas
     const L = [
-        ligne('a1', { cleR2: cA, verite: 100, reponse: rep('identifiee', 100) }),                              // affirmée juste
+        ligne('a1', { cleR2: cA, verite: 100, sha256: 'ab'.repeat(32), reponse: rep('identifiee', 100) }),    // affirmée juste
         ligne('a2', { cleR2: cA, verite: 101, reponse: rep('identifiee', 100) }),                              // affirmée FAUSSE (autre produit), même photo
         ligne('a3', { cleR2: cB, verite: null, aucune: 'pas-une-carte', reponse: rep('identifiee', 100) }),   // affirmée FAUSSE (la vérité est « aucune »)
         ligne('a4', { cleR2: cB, verite: 7, reponse: rep('identifiee', 7) }),                                  // affirmée juste
@@ -51,6 +51,7 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         const lignes = JSON.parse(fs.readFileSync(path.join(dossier, 'lignes.json'), 'utf8'));
         H.v('1. bilan : 10 lignes d\'étiquette confirmées (dont la copie anonyme), 3 photos distinctes, 1 ligne sans photo', [bilan.lignes, bilan.photos, bilan.sansPhoto], [10, 3, 1]);
         H.v('1. manifeste : format, base, dénominateurs', [man.format, man.base, man.lignes, man.sansPhoto], ['banc-admin-v1', 'essai_lecture', 10, 1]);
+        H.v('1. tour 1 : l\'empreinte de la photo (sha256) est exportée avec la ligne ; aucune étiquette en attente dans cette base', [lignes.find(l => l.verite === 100 && l.photo).sha256, man.etiquettesEnAttente], ['ab'.repeat(32), 0]);
         H.v('1. le dossier ne contient que manifeste.json, lignes.json et photos/', fs.readdirSync(dossier).sort(), ['lignes.json', 'manifeste.json', 'photos']);
         H.v('1. trois photos distinctes, nommées par la clé de l\'objet, octets identiques à ceux du bucket', fs.readdirSync(path.join(dossier, 'photos')).sort(), Object.values(photos).map(p => path.basename(p.c)).sort());
         H.vrai('1. les octets exportés sont ceux du bucket', Object.values(photos).every(p => Buffer.compare(fs.readFileSync(path.join(dossier, 'photos', path.basename(p.c))), p.b) === 0));
@@ -109,13 +110,30 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
             H.v(`4. dossier d'apports « ${nom} » refusé, rien créé`, [await code(() => X.exporterBancAdmin({ ...base, dossier: d })), fs.existsSync(d)], ['DOSSIER-REFUSE', false]);
         H.vrai('4. et le dossier temporaire des doubles n\'a rien reçu', !fs.existsSync(faux()));
         H.v('4. dossier relatif, vide, non textuel : refusés', [await code(() => X.exporterBancAdmin({ ...base, dossier: 'export' })), await code(() => X.exporterBancAdmin({ ...base, dossier: '' })), await code(() => X.exporterBancAdmin({ ...base, dossier: null }))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
-        const racineDisque = path.parse(racine).root;
-        H.v('4. la racine d\'un disque est refusée', await code(() => X.exporterBancAdmin({ ...base, dossier: racineDisque })), 'DOSSIER-REFUSE');
+        // M3 : la racine d'un disque est jugée par la fonction PURE sur une lettre fabriquée (aucun accès au disque), jamais par la vraie racine du poste
+        H.v('4. la racine d\'un disque (lettre fabriquée) est refusée par la garde elle-même', [X.refusDeDossier('Z:\\'), X.refusDeDossier('Z:\\x') === null], ['racine d\'un disque', true]);
+        // I1 : le chemin RÉEL est jugé. AUCUN lien n'est créé : la résolution `realpath` et `lstat` sont INJECTÉES (un lien réel, lui, ne se prouve que par ces deux appels).
+        {
+            const cible = faux('sortie-lien');
+            const reel = r => ({ realpath: () => r });
+            for (const [nom, r] of [[LF, faux('ailleurs', LF, 'x')], [AM, faux('ailleurs', AM)], [LG, faux('ailleurs', LG, 'y')], [['verrou', 'photos'].join(' + '), faux('ailleurs', 'verrou', 'photos', 'x')], ['racine d\'un disque', 'Z:\\']])
+                H.v(`I1. chemin RÉEL dans un dossier d'apports (${nom}) alors que le chemin donné est innocent : refusé, rien écrit`, [await code(() => X.exporterBancAdmin({ ...base, dossier: cible, ...reel(r) })), fs.existsSync(cible)], ['DOSSIER-REFUSE', false]);
+            H.v('I1. une cible qui est elle-même un lien (lstat injecté) est refusée, rien écrit', [await code(() => X.exporterBancAdmin({ ...base, dossier: cible, lstat: () => ({ isSymbolicLink: () => true }) })), fs.existsSync(cible)], ['DOSSIER-REFUSE', false]);
+            H.v('I1. un chemin réel qui reste ailleurs et innocent est admis (témoin : la garde ne refuse pas tout)', await code(() => X.exporterBancAdmin({ ...base, dossier: sortie('reel-ok'), realpath: p => p })), null);
+        }
         // un dossier déjà rempli de choses qui ne sont pas un export : refusé, rien n'y est écrit
         const occupe = sortie('occupe'); fs.mkdirSync(occupe); fs.writeFileSync(path.join(occupe, 'important.txt'), 'x');
         H.v('4. un dossier non vide qui n\'est pas un export précédent est refusé, son contenu est intact', [await code(() => X.exporterBancAdmin({ ...base, dossier: occupe })), fs.readdirSync(occupe)], ['DOSSIER-REFUSE', ['important.txt']]);
-        // un export précédent peut être refait par-dessus (même dossier, même format)
-        H.v('4. un dossier qui est déjà un export est refait', await code(() => X.exporterBancAdmin({ ...base, dossier: sortie('ok') })), null);
+        // M5 : un dossier non vide est refusé, MÊME si c'est un export précédent (jamais de photos anciennes qui survivent à une purge)
+        const avantOk = fs.readdirSync(path.join(sortie('ok'), 'photos')).sort();
+        H.v('4. un dossier qui est déjà un export est REFUSÉ aussi (dossier vide ou inexistant seulement), son contenu est intact', [await code(() => X.exporterBancAdmin({ ...base, dossier: sortie('ok') })), fs.readdirSync(path.join(sortie('ok'), 'photos')).sort()], ['DOSSIER-REFUSE', avantOk]);
+        // M4 : le contrôle de la base peut ÉCHOUER : la base nommée doit porter une collection `banc_lignes`
+        {
+            const faux = (liste) => ({ connect: async () => { }, close: async () => { }, db: nom => ({ databaseName: nom, listCollections: () => ({ toArray: async () => liste }), collection: () => ({}) }) });
+            const env = { MONGODB_ESSAI_LECTURE_URI: 'mongodb://127.0.0.1:1/x' };
+            H.v('4. M4 : une base qui n\'a pas de collection `banc_lignes` (autre base, autre grappe) est refusée', await code(() => X.connecterLecture(env, 'cartes', { MongoClient: function () { return faux([]); } })), 'BASE-REFUSEE');
+            H.v('4. M4 : une base qui porte `banc_lignes` est admise', await code(() => X.connecterLecture(env, 'essai_lecture', { MongoClient: function () { return faux([{ name: 'banc_lignes' }]); } })), null);
+        }
         // écrire hors du dossier donné : le chemin résolu doit y rester
         const ev = `evasion-${process.pid}-${Date.now()}.txt`;      // un nom NEUF à chaque exécution : un reste d'une exécution précédente ne peut pas fausser la preuve
         H.v('4. ecrireDans refuse « .. », un chemin absolu et un nom étranger', [await code(async () => X.ecrireDans(racine, `../${ev}`, 'x')), await code(async () => X.ecrireDans(racine, path.join(os.tmpdir(), ev), 'x')), await code(async () => X.ecrireDans(racine, `photos/../../${ev}`, 'x'))], ['HORS-DOSSIER', 'HORS-DOSSIER', 'HORS-DOSSIER']);

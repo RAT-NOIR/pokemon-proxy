@@ -60,7 +60,7 @@ const oid = () => new mongoose.Types.ObjectId();
     ];
     const semer = async (a, o = {}) => { const _id = oid(); await db.col('analyses').insertOne({ _id, porteur: a.porteur, surface: 'extension', statut: 'identifiee', cartes: o.cartes || CARTES(), produits: [], facturation: { motif: 'administrateur' }, versionChaine: 'abc123def456', versionModele: 'gemini-x', creeLe: new Date(), expireLe: new Date(Date.now() + 864e5) }); return String(_id); };
     const lire = async id => db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(id) });
-    const sansEtiquette = an => JSON.stringify({ ...an, cartes: an.cartes.map(({ etiquetteAdmin, ...r }) => r) });
+    const sansEtiquette = ({ bancAttente, ...an }) => JSON.stringify({ ...an, cartes: an.cartes.map(({ etiquetteAdmin, ...r }) => r) });   // ETIQUETAGE-B : la marque de reprise `bancAttente` est posée avec l'étiquette ; ce n'est pas la réponse d'origine
     let n = 0; const ip = () => ({ 'x-forwarded-for': `10.9.${Math.floor(++n / 250)}.${n % 250 + 1}` });
     const post = (a, corps, entetes = {}) => H.appel(srv.url, '/api/banc/etiquette', { methode: 'POST', corps, entetes: { ...(a ? { authorization: `Bearer ${a.jeton}` } : {}), ...entetes } });
     const etiq = async (id, i = 0) => (await lire(id)).cartes[i].etiquetteAdmin;
