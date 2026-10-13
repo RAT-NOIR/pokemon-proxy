@@ -26,7 +26,9 @@ let nEssai = 0, nIp = 0;
 const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (exception)`, String(e && (e.code || e.message)), 'aucune'); } };
 
 // client brut : `corps` (Buffer) ; `partiel` : n'écrit que ce nombre d'octets puis se tait (Content-Length annoncé = corps.length) ; `contentLength: null` : chunked
-function envoyer(base, { chemin = '/api/banc/photo', query, jeton, type = 'image/jpeg', corps = Buffer.alloc(0), contentLength, partiel = null } = {}) {
+// TOUR 2 (I2) : une réponse DOIT partir. `fini` rend { statut: 'EXPIRE-sans-reponse' } et détruit la requête après `attente` ms (2,5 s pour un refus décidé sur les en-têtes) : un mutant qui lit le corps AVANT de
+// répondre (R3, R14) fait donc échouer une ASSERTION et le banc se termine, au lieu de pendre jusqu'à l'expiration de la porte.
+function envoyer(base, { chemin = '/api/banc/photo', query, jeton, type = 'image/jpeg', corps = Buffer.alloc(0), contentLength, partiel = null, attente = 8000 } = {}) {
     const essai = `e${++nEssai}`, url = new URL(base + chemin + (query === undefined ? '' : `?${query}`));
     const h = { 'x-essai': essai, 'x-forwarded-for': `10.20.${Math.floor(++nIp / 250)}.${nIp % 250 + 1}` };
     if (type) h['content-type'] = type; if (jeton) h.authorization = `Bearer ${jeton}`;
@@ -38,12 +40,14 @@ function envoyer(base, { chemin = '/api/banc/photo', query, jeton, type = 'image
     });
     req.on('error', () => { ferme = true; setTimeout(() => fin(repondu || { statut: null, erreur: true }), 300); });
     req.on('close', () => { ferme = true; setTimeout(() => fin(repondu || { statut: null, ferme: true }), 300); });
+    const garde = setTimeout(() => { if (!repondu) { fin({ statut: 'EXPIRE-sans-reponse' }); try { req.destroy(); } catch { /* déjà fermée */ } } }, attente); garde.unref();
     if (partiel !== null) req.write(corps.subarray(0, partiel));
     else if (contentLength === null) { req.write(corps.subarray(0, 100)); req.end(corps.subarray(100)); }
     else req.end(corps);
     return { essai, req, fini, estFerme: () => ferme, lus: () => lus.get(essai) };
 }
 
+setTimeout(() => { console.error('❌ le banc a dépassé 170 s (une lecture ou un serveur est resté en suspens)'); process.exit(1); }, 170000).unref();
 (async () => {
     await H.ouvrirBac('test-banc-photo.js'); await M.creerIndex();
     const mem = S.creerStockageMemoire();
@@ -87,7 +91,7 @@ function envoyer(base, { chemin = '/api/banc/photo', query, jeton, type = 'image
     const pasLu = (c) => (c.lus() ?? 1e9) < 100 * 1024;
     const refus = async (nom, opts, statut, detail) => {
         const avant = mem.cles().length;
-        const c = envoyer(url, { partiel: 16, corps: jpg, ...opts }); const r = await c.fini;
+        const c = envoyer(url, { partiel: 16, corps: jpg, attente: 2500, ...opts }); const r = await c.fini;      // une réponse DOIT partir sans le corps
         H.v(`${nom} : ${statut}${detail ? ` (${detail})` : ''}, corps NON lu (moins de 100 ko lus sur ${Math.round((opts.contentLength ?? jpg.length) / 1024)} ko annoncés), rien conservé`, [r.statut, detail === undefined ? undefined : (r.json && r.json.erreur && r.json.erreur.detail), pasLu(c), mem.cles().length - avant], [statut, detail, true, 0]);
         return r;
     };
@@ -103,6 +107,17 @@ function envoyer(base, { chemin = '/api/banc/photo', query, jeton, type = 'image
         for (const [nom, a] of [['compte non administrateur', USR], ['installation seule', SEUL]]) H.v(`1. ${nom} : EXACTEMENT la réponse d'une route inexistante (404 natif, mêmes corps et en-têtes)`, await brut(a.jeton, `/api/banc/photo?scanId=${SA}`), vraie);
         H.vrai('1. instrument : la route inexistante rend bien un 404 non JSON qui cite le chemin', vraie.statut === 404 && vraie.texte.includes('<CHEMIN>'));
         await refus('1. non-administrateur : 404, corps non lu', { query: q, jeton: USR.jeton }, 404);
+        // TOUR 2 (I1) : le refus d'un non-administrateur ne prend NI place NI mémoire et laisse Node vider le corps comme pour une route inexistante (aucun plafond d'octets maison : il était du code mort, Node ne
+        // livre plus de `data` après `_dump()`). Preuve : trois non-administrateurs gardent leur corps incomplet ouvert, et les deux places (ici) restent libres pour un administrateur.
+        {
+            const ouverts = [USR, SEUL, USR].map(a => envoyer(url, { query: q, jeton: a.jeton, partiel: 16, corps: jpg, attente: 2500 }));
+            const reps = await Promise.all(ouverts.map(o => o.fini));
+            const SF = await semer(ADM);
+            const adm = await envoyer(url, { query: `scanId=${SF}`, jeton: ADM.jeton, corps: jpg }).fini;
+            H.v('1. TOUR 2 (I1) : trois refus de non-administrateurs corps ouverts => 404 natif chacun, et un administrateur passe aussitôt (aucune place prise)', [reps.map(r => r.statut), adm.statut], [[404, 404, 404], 200]);
+            const src = require('fs').readFileSync(require.resolve('../banc/photo'), 'utf8');
+            H.v('1. TOUR 2 (I1) : le code mort est retiré (aucun compteur « jeté », aucun plafond de 8 Mio, aucun minuteur de rejet)', [/jete\b|8 \* 1024 \* 1024/.test(src), /setTimeout\(arret/.test(src)], [false, false]);
+        }
         await refus('1. scanId absent', { jeton: ADM.jeton }, 400, 'scan-id');
         await refus('1. scanId mal formé', { query: 'scanId=pas-un-id', jeton: ADM.jeton }, 400, 'scan-id');
         await refus('1. photo=1 (le banc ne garde que la première photo)', { query: `${q}&photo=1`, jeton: ADM.jeton }, 400, 'photo');

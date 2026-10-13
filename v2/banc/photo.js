@@ -20,17 +20,11 @@ const FORME_ID = /^[0-9a-f]{24}$/i;
 const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000;
 const journal = (ou, e) => console.error(`❌ [v2 banc-photo] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
 
-// Une réponse décidée AVANT la lecture : la connexion se ferme ensuite. Le corps non lu est JETÉ (aucune mémoire) jusqu'à 8 Mio ou 2 s : fermer tout de suite une socket qui a encore du corps à lire la réinitialiserait
-// (RST) et le client perdrait la réponse. La mesure « octets lus » des bancs est prise quand la RÉPONSE part.
+// Une réponse décidée AVANT la lecture : le corps n'est pas lu par la route. Node le vide lui-même à la fin de la réponse (comme pour une route inexistante) : coût en bande passante identique à n'importe quelle route,
+// ni place ni mémoire. TOUR 2 (I1) : l'ancien plafond « 8 Mio ou 2 s » était du code mort (Node n'émet plus de `data` après `_dump()`) : retiré. On ne coupe PAS la connexion pour arrêter le flux : le 404 d'un
+// non-administrateur se distinguerait de celui d'une route inexistante. Un refus ordinaire envoie `Connection: close` ; le `discret` (le 404 natif d'un non-administrateur) n'ajoute AUCUN en-tête.
 function fermerApres(req, res, { discret = false } = {}) {
-    // `discret` (le 404 natif d'un non-administrateur) : AUCUN en-tête de plus (pas de `Connection: close`) — la réponse doit être indiscernable de celle d'une route inexistante ; le corps non lu est jeté, sans fermer
     if (!discret) res.setHeader('Connection', 'close');
-    res.once('finish', () => {
-        let jete = 0; const arret = () => { try { req.destroy(); } catch { /* déjà fermée */ } };
-        const t = setTimeout(arret, discret ? 10000 : 2000); t.unref();
-        req.on('data', c => { jete += c.length; if (jete > 8 * 1024 * 1024) { clearTimeout(t); arret(); } });
-        req.resume();
-    });
 }
 
 /** La garde de rôle de /api/banc/etiquette (exigerAdministrateur), avec UNE différence : le 404 natif d'un non-administrateur est écrit SANS lire le corps. `next('route')` laisse `finalhandler` répondre, mais
