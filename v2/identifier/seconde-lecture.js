@@ -101,12 +101,24 @@ function decider({ p, jumeaux, premiere, seconde } = {}) {
         const conf = { setCode: normLu(premiere && premiere.setCode) ? lu2.setCode : null, numero: normLu(premiere && premiere.numero) ? lu2.numero : null };
         if (!conf.setCode && !conf.numero) return non('aucun champ lu par la première lecture n\'est relu par la seconde');
         const cP = comparer(conf, p);
-        // la CONTRADICTION lit tout ce que la seconde a lu (le sens prudent : elle retire une affirmation)
-        const rP = comparer(lu2, p);
-        const pourJ = j => comparer(lu2, j);
-        // LEÇON 2 : le code lu ne retire pas à lui seul ; il retire si un AUTRE candidat porte ce code sans être contredit sur le numéro
-        const autreAuCodeLu = rP.contredit.includes('code') && jumeaux.some(j => { const x = pourJ(j); return x.concorde.includes('code') && !x.contredit.includes('numero'); });
-        const contre = rP.contredit.filter(f => f !== 'code' || autreAuCodeLu);
+        // TOUR 1 (I-1) : une confirmation exige l'accord des DEUX lectures. (a) la PREMIÈRE lecture ne contredit P sur aucun champ qu'elle a lu ; (b) sur chaque champ lu par les deux, elles disent
+        // la même chose. Sans cela la seconde pourrait contredire la première et gagner (§73 : « deux lectures en conflit ⇒ jamais d'affirmation »).
+        const lu1 = { setCode: normLu(premiere && premiere.setCode), numero: normLu(premiere && premiere.numero) };
+        // la CONTRADICTION lit tout ce que la lecture a lu (le sens prudent : elle retire une affirmation) ; LEÇON 2 : le code lu ne retire pas à lui seul, il retire si un AUTRE candidat
+        // porte ce code sans être contredit sur le numéro
+        const contreDe = lu => {
+            const r = comparer(lu, p);
+            const autreAuCodeLu = r.contredit.includes('code') && jumeaux.some(j => { const x = comparer(lu, j); return x.concorde.includes('code') && !x.contredit.includes('numero'); });
+            return r.contredit.filter(f => f !== 'code' || autreAuCodeLu);
+        };
+        const contre1 = contreDe(lu1);
+        if (contre1.length) return non(`conflit de lecture : la première lecture contredit le produit (${contre1.join(', ')})`);
+        const codeNorm = x => { const n = S.normaliserCodeSet(x); return n ? (S.ALIAS_CODES_LUS.get(n) ?? n) : null; };
+        const desaccords = [];
+        if (lu1.setCode && lu2.setCode && codeNorm(lu1.setCode) !== codeNorm(lu2.setCode)) desaccords.push('code');
+        if (lu1.numero && lu2.numero && S.comparerNumeros(lu1.numero, lu2.numero) !== 'exact') desaccords.push('numero');
+        if (desaccords.length) return non(`conflit de lecture : les deux lectures ne disent pas la même chose (${desaccords.join(', ')})`);
+        const contre = contreDe(lu2);
         if (contre.length) return non(`la seconde lecture contredit le produit (${contre.join(', ')})`);
         for (const j of jumeaux) {
             if (separeParLaLangue(premiere, j)) continue;
@@ -127,17 +139,20 @@ function decider({ p, jumeaux, premiere, seconde } = {}) {
  */
 function creerFournisseur({ recadrer, lecteur, maxEssais } = {}) {
     const essaisMax = bornerEssais(maxEssais);
-    return async function seconde({ photos, corps, compteur } = {}) {
+    return async function seconde({ image, corps, compteur, signal } = {}) {
         const c = compteur && typeof compteur === 'object' ? compteur : { appels: 0 };
         const essais = [];
+        // TOUR 1 (I-2) : AUCUN téléchargement. L'image est fournie par l'appelant (des octets) ; sans elle, pas de seconde lecture et aucun appel.
+        if (!Buffer.isBuffer(image) || !image.length) return { setCode: null, numero: null, total: null, essais, echec: false, sansImage: true, raison: 'aucune image fournie (octets)' };
         const lire = async bande => {
+            if (signal && signal.aborted) throw Object.assign(new Error('interrompue'), { code: 'INTERROMPUE' });     // TOUR 1 : après le délai, aucun appel de plus ne part
             c.appels = (c.appels || 0) + 1;                                        // l'appel est compté AVANT d'être tenté : un appel qui échoue a coûté quand même (la route additionne au compteur global)
-            const r = await lecteur(bande);
+            const r = await lecteur(bande, { signal });
             if (!r || typeof r !== 'object' || r.illisible) { essais.push({ setCode: null, numero: null, total: null }); return; }     // une réponse illisible est un essai sans champ, jamais un champ
             essais.push({ setCode: normLu(r.setCode), numero: normLu(r.number ?? r.numero), total: normLu(r.total) });
         };
         try {
-            const bandes = await recadrer({ photos, corps });
+            const bandes = await recadrer({ image, corps, signal });
             if (!Array.isArray(bandes) || !bandes.length) return { setCode: null, numero: null, total: null, essais, echec: false, raison: 'aucune bande à lire (pas de recadrage possible)' };
             await lire(bandes[0]);
             if (bandes.length > 1) await lire(bandes[1]);

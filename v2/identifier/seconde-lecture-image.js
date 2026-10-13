@@ -1,11 +1,12 @@
 'use strict';
-// SECONDE-LECTURE — les pièces qui touchent l'image et le modèle, ADAPTÉES du labo (pokemon-proxy-labo/seconde-lecture.js, calibré au §72). Aucune n'ouvre le réseau d'elle-même :
-// le téléchargement de la photo et le client HTTP du modèle sont INJECTÉS (les bancs n'appellent jamais rien de payant). Rien ici n'est branché par défaut : voir monter.js.
+// SECONDE-LECTURE — les pièces qui touchent l'image et le modèle, ADAPTÉES du labo (pokemon-proxy-labo/seconde-lecture.js, calibré au §72).
+// 🔴 AUCUN TÉLÉCHARGEMENT (décision 4 du testeur, tour 1) : ce module ne fait JAMAIS de requête serveur vers une photo (Vinted ou autre). L'image arrive en OCTETS, fournie par l'appelant
+// (plus tard l'extension, dans la re-mesure le jeu de photos). Son seul client réseau est le `post` INJECTÉ du lecteur du modèle (les bancs n'appellent jamais rien de payant) ; un banc
+// (test-seconde-lecture-image.js §5) échoue si un client réseau y est importé ou appelé. Rien ici n'est branché par défaut : voir monter.js.
 //   · redresser(photo, geometrie)  la carte redressée en haute définition depuis la photo ORIGINALE (le redressé de la chaîne vient d'une image réduite à 640 px) ;
 //   · bandes(carte)                trois recadrages DISTINCTS du bas de la carte (20 %, 32 %, et 26 % contrasté) — jamais deux essais au même crop (erreurs corrélées) ;
-//   · creerLecteur({post,modele,cle}) le modèle : DEUX champs (code du set, numéro), rien d'autre ; l'erreur levée ne porte jamais la clé ;
-//   · creerRecadreur({telecharger}) photo → bandes : hôte vérifié contre la liste blanche de la production AVANT le téléchargement, géométrie EXIGÉE (sans elle, aucune bande).
-const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');       // la liste blanche de la production, pas une copie
+//   · creerLecteur({post,modele,cle}) le modèle : DEUX champs (code du set, numéro), rien d'autre ; l'erreur levée ne porte jamais la clé ; un signal d'abandon est transmis au client ;
+//   · creerRecadreur({largeur})    octets de l'image → bandes : géométrie EXIGÉE (sans elle, ou sans octets, aucune bande).
 
 // La consigne du labo (VERSION v1-2026-10-04) : deux champs, jamais le nom ni le titre — la lecture reste indépendante de la première.
 const PROMPT = `This image is the BOTTOM EDGE of a Pokémon trading card (a photo, possibly blurry or at an angle).
@@ -67,13 +68,13 @@ async function bandes(carte) {
 /** Le lecteur du modèle. `post(url, corps, config)` est un client axios-compatible ; `modele` et `cle` sont OBLIGATOIRES. Rend { setCode, number, total } ou { illisible: true }. */
 function creerLecteur({ post, modele, cle } = {}) {
     if (typeof post !== 'function' || typeof modele !== 'string' || !modele || typeof cle !== 'string' || !cle) throw new Error('creerLecteur : post, modele et cle sont obligatoires');
-    return async function lire(bande) {
+    return async function lire(bande, { signal } = {}) {
         let r;
         try {
             r = await post('https://openrouter.ai/api/v1/chat/completions', {
                 model: modele, temperature: 0,
                 messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${Buffer.from(bande).toString('base64')}` } }] }]
-            }, { headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' }, timeout: 30000 });
+            }, { headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' }, timeout: 30000, ...(signal ? { signal } : {}) });     // le signal d'abandon (délai de la route) interrompt l'appel en vol
         } catch (e) {
             throw Object.assign(new Error('seconde lecture : appel du modèle en échec'), { code: (e && typeof e.code === 'string' && /^[A-Z_0-9]{2,40}$/.test(e.code)) ? e.code : 'APPEL_MODELE' });     // jamais le message d'origine : il peut contenir l'en-tête
         }
@@ -86,17 +87,12 @@ function creerLecteur({ post, modele, cle } = {}) {
     };
 }
 
-/** photos + corps de la chaîne → bandes. La géométrie (corps.geometrie : { W, quad, paysage? }) est EXIGÉE : sans elle, rien n'est téléchargé et aucune bande n'est devinée. */
-function creerRecadreur({ telecharger, largeur = 1000 } = {}) {
-    if (typeof telecharger !== 'function') throw new Error('creerRecadreur : telecharger est obligatoire');
-    return async function recadrer({ photos, corps } = {}) {
+/** octets de l'image + corps de la chaîne → bandes. Aucun téléchargement : `image` est un Buffer fourni par l'appelant. La géométrie (corps.geometrie : { W, quad, paysage? }) est EXIGÉE : sans elle, ou sans octets, aucune bande n'est devinée. */
+function creerRecadreur({ largeur = 1000 } = {}) {
+    return async function recadrer({ image, corps } = {}) {
         const geo = corps && corps.geometrie;
-        const url = Array.isArray(photos) ? photos[0] : null;
-        if (!geo || typeof url !== 'string') return [];
-        let hote = null; try { hote = new URL(url).hostname; } catch { hote = null; }
-        if (!hote || !HOTES_PHOTO_AUTORISES.some(re => re.test(hote))) return [];                // liste blanche AVANT tout téléchargement
-        const photo = await telecharger(url);
-        const carte = await redresser(photo, geo, { largeur });
+        if (!geo || !Buffer.isBuffer(image) || !image.length) return [];
+        const carte = await redresser(image, geo, { largeur });
         return carte ? bandes(carte) : [];
     };
 }

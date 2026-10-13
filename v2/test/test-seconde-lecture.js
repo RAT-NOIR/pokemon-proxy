@@ -47,54 +47,85 @@ const P = L(1, 'PRE', '162'), J = L(2, 'PAR', '251');
     H.v('4e. la convention du « x » (code Cardmarket « xASC » pour la carte « ASC ») est un code concordant', dec({ setCode: 'ASC', numero: null }, { setCode: 'ASC', numero: null }, [L(2, 'PAR', '1')], L(1, 'xASC', '5')).confirme, true);
     H.v('2i. deux jumeaux, un seul séparable : ne confirme pas (TOUS les jumeaux doivent être séparés)', dec(lu, { setCode: 'PRE', numero: '162' }, [J, L(3, 'PRE', '162')]).confirme, false);
     H.v('2j. LEÇON 1 : un jumeau déjà séparé par la langue n\'a pas à être séparé par la lecture ; l\'autre l\'est : confirme', dec({ ...lu, langue: 'FR' }, { setCode: 'PRE', numero: '162' }, [J, L(3, 'PRE', '162', 'JP')]).confirme, true);
+    // ── TOUR 1 (I-1) : une confirmation exige l'accord des DEUX lectures — la première ne contredit pas P, et la seconde lit ce que la première a lu
+    H.v('8a. I-1 : la première lecture EST le jumeau (PAR/251), la seconde lit P (PRE/162) : les deux lectures se contredisent, ne confirme PAS', dec({ setCode: 'PAR', numero: '251' }, { setCode: 'PRE', numero: '162' }).confirme, false);
+    H.v('8b. I-1 : la première n\'a lu que le code du jumeau (PAR), la seconde lit P : ne confirme pas', dec({ setCode: 'PAR', numero: null }, { setCode: 'PRE', numero: '162' }).confirme, false);
+    H.v('8c. I-1 : la première n\'a lu que le numéro du jumeau (251), la seconde lit P : ne confirme pas', dec({ setCode: null, numero: '251' }, { setCode: 'PRE', numero: '162' }).confirme, false);
+    H.v('8d. le désaccord est nommé : raison « conflit de lecture »', /conflit de lecture/.test(dec({ setCode: 'PAR', numero: '251' }, { setCode: 'PRE', numero: '162' }).raison), true);
+    H.v('8e. champ par champ : le numéro est le même des deux fois (162) mais les lectures se contredisent sur le code (PAR puis PRE) : ne confirme pas', dec({ setCode: 'PAR', numero: '162' }, { setCode: 'PRE', numero: '162' }).confirme, false);
+    H.v('8f. champ par champ : le code est le même des deux fois (PRE) mais les lectures se contredisent sur le numéro (251 puis 162) : ne confirme pas', dec({ setCode: 'PRE', numero: '251' }, { setCode: 'PRE', numero: '162' }, [L(2, 'PRE', '251')]).confirme, false);
+    H.v('8g. un accord des deux lectures sur un champ qui ne SÉPARE pas le jumeau (le code, identique chez les deux) ne suffit pas', dec({ setCode: 'PRE', numero: '162' }, { setCode: 'PRE', numero: null }, [L(2, 'PRE', '251')]).confirme, false);
+    H.v('8h. les deux lectures disent la même chose et séparent le jumeau : confirme (le cas nominal reste ouvert)', dec({ setCode: 'PRE', numero: '162' }, { setCode: 'PRE', numero: '162' }).confirme, true);
+    H.v('8i. la première lecture contredit P sur le numéro (999) et la seconde la suit : ne confirme pas', dec({ setCode: 'PRE', numero: '999' }, { setCode: 'PRE', numero: '999' }).confirme, false);
     // la décision rend toujours une raison, jamais une exception
     H.v('5a. entrée vide ou absente : ne confirme pas, ne lève pas', [S.decider({}).confirme, S.decider().confirme, S.decider({ p: P, jumeaux: [J] }).confirme], [false, false, false]);
     H.v('5b. une raison est toujours donnée', typeof dec(lu, { setCode: null, numero: null }).raison, 'string');
 
     // ── 6. le FOURNISSEUR d'essais : un champ n'est retenu que si DEUX essais le lisent à l'identique
     const lecteurDe = reponses => { const appels = []; const f = async bande => { appels.push(bande); const r = reponses[appels.length - 1]; if (r instanceof Error) throw r; return r; }; f.appels = appels; return f; };
+    const IMG = Buffer.from('octets-factices');
     const recadrer = async () => ['b1', 'b2', 'b3'];
     const fournir = (reponses, o = {}) => { const lecteur = lecteurDe(reponses); return { lecteur, F: S.creerFournisseur({ recadrer, lecteur, ...o }) }; };
     {
         const { lecteur, F } = fournir([{ setCode: 'PRE', number: '162' }, { setCode: 'PRE', number: '162' }]);
-        const c = { appels: 0 }; const r = await F({ photos: ['p'], corps: {}, compteur: c });
+        const c = { appels: 0 }; const r = await F({ image: IMG, corps: {}, compteur: c });
         H.v('6a. deux essais d\'accord : lu, et le troisième n\'est PAS demandé (2 appels, pas 3)', [r.setCode, r.numero, lecteur.appels.length, c.appels], ['PRE', '162', 2, 2]);
     }
     {
         const { lecteur, F } = fournir([{ setCode: 'PRE', number: '162' }, { setCode: 'PAR', number: '162' }, { setCode: 'PRE', number: '162' }]);
-        const c = { appels: 0 }; const r = await F({ photos: ['p'], corps: {}, compteur: c });
+        const c = { appels: 0 }; const r = await F({ image: IMG, corps: {}, compteur: c });
         H.v('6b. désaccord sur le code : un troisième essai, le code retenu est celui que DEUX essais lisent', [r.setCode, r.numero, lecteur.appels.length, c.appels], ['PRE', '162', 3, 3]);
     }
     {
         const { F } = fournir([{ setCode: 'PRE', number: '162' }, { setCode: 'PAR', number: '251' }, { setCode: 'XYZ', number: '7' }]);
-        const r = await F({ photos: ['p'], corps: {}, compteur: { appels: 0 } });
+        const r = await F({ image: IMG, corps: {}, compteur: { appels: 0 } });
         H.v('6c. trois essais, trois lectures différentes : rien n\'est retenu (null, null) — un champ deviné serait une lecture de plus qui peut mentir', [r.setCode, r.numero], [null, null]);
     }
     {
         const { lecteur, F } = fournir([{ setCode: 'PRE', number: '162' }, { setCode: 'PAR', number: '162' }, { setCode: 'PRE', number: '162' }], { maxEssais: 2 });
-        const r = await F({ photos: ['p'], corps: {}, compteur: { appels: 0 } });
+        const r = await F({ image: IMG, corps: {}, compteur: { appels: 0 } });
         H.v('6d. maxEssais = 2 : jamais un troisième appel ; le désaccord laisse le code illisible', [lecteur.appels.length, r.setCode, r.numero], [2, null, '162']);
     }
     H.v('6e. maxEssais borné : 7, 0, -1, « x », 2.5 retombent sur le défaut 3 ; 2 et 3 sont gardés', [7, 0, -1, 'x', 2.5, 2, 3, undefined].map(S.bornerEssais), [3, 3, 3, 3, 3, 2, 3, 3]);
     {
         const { lecteur, F } = fournir([{ setCode: 'PRE', number: '162' }], { recadrer: async () => [] });
-        const c = { appels: 0 }; const r = await F({ photos: ['p'], corps: {}, compteur: c });
+        const c = { appels: 0 }; const r = await F({ image: IMG, corps: {}, compteur: c });
         H.v('6f. aucune bande à lire (pas de géométrie) : aucun appel, aucun champ, la raison le dit', [lecteur.appels.length, c.appels, r.setCode, r.numero, typeof r.raison], [0, 0, null, null, 'string']);
     }
     {
         const { F } = fournir([new Error('panne OpenRouter')]);
         const c = { appels: 0 }; let levee = null, r = null;
-        try { r = await F({ photos: ['p'], corps: {}, compteur: c }); } catch (e) { levee = e; }
+        try { r = await F({ image: IMG, corps: {}, compteur: c }); } catch (e) { levee = e; }
         H.v('6g. le modèle tombe : le fournisseur NE LÈVE PAS, rend echec: true, l\'appel tenté est COMPTÉ (1)', [levee, r && r.echec, c.appels], [null, true, 1]);
+    }
+    // TOUR 1 (I-2) : sans octets d'image, aucune seconde lecture, aucun appel, le recadreur n'est même pas consulté
+    for (const [nom, image] of [['absente', undefined], ['une URL (texte)', 'https://images1.vinted.net/x.jpg'], ['un Buffer vide', Buffer.alloc(0)], ['null', null]]) {
+        let recadrages = 0;
+        const lecteur = lecteurDe([{ setCode: 'PRE', number: '162' }]);
+        const F = S.creerFournisseur({ recadrer: async () => { recadrages++; return ['b1', 'b2']; }, lecteur });
+        const c = { appels: 0 }; const r = await F({ image, corps: {}, compteur: c });
+        H.v(`6j. image ${nom} : sansImage, aucun appel (${lecteur.appels.length}), aucun recadrage, rien de lu`, [r.sansImage, r.echec, lecteur.appels.length, c.appels, recadrages, r.setCode, r.numero], [true, false, 0, 0, 0, null, null]);
+    }
+    // TOUR 1 (coût exact) : un signal d'abandon — après lui, AUCUN appel de plus ne part, et le lecteur reçoit le signal
+    {
+        const ctl = new AbortController(); const vus = [];
+        const lecteur = async (bande, o) => { vus.push(o && o.signal); ctl.abort(); return { setCode: 'PRE', number: '162' }; };     // le délai tombe pendant le premier appel
+        const F = S.creerFournisseur({ recadrer, lecteur });
+        const c = { appels: 0 }; const r = await F({ image: IMG, corps: {}, compteur: c, signal: ctl.signal });
+        H.v('6k. le signal tombe pendant le 1er appel : le 2e ne part PAS, un seul appel compté, échec « interrompue », le lecteur a reçu le signal', [vus.length, vus[0] === ctl.signal, c.appels, r.echec, /INTERROMPUE/.test(r.raison)], [1, true, 1, true, true]);
+        const ctl2 = new AbortController(); ctl2.abort();
+        const l2 = lecteurDe([{ setCode: 'PRE', number: '162' }]); const c2 = { appels: 0 };
+        const r2 = await S.creerFournisseur({ recadrer, lecteur: l2 })({ image: IMG, corps: {}, compteur: c2, signal: ctl2.signal });
+        H.v('6l. signal déjà tombé : aucun appel du tout (0 appel, 0 compté)', [l2.appels.length, c2.appels, r2.echec], [0, 0, true]);
     }
     {
         const { F } = fournir([{ setCode: 'PRE', number: ' 162 ' }, { setCode: ' pre', number: '162' }]);
-        const r = await F({ photos: ['p'], corps: {}, compteur: { appels: 0 } });
+        const r = await F({ image: IMG, corps: {}, compteur: { appels: 0 } });
         H.v('6h. espaces et casse normalisés avant l\'accord (« pre » = « PRE »)', [r.setCode, r.numero], ['PRE', '162']);
     }
     {
         const { F } = fournir([{ setCode: 'null', number: 'NULL' }, { setCode: ' Null ', number: 'null' }, { setCode: null, number: null }]);
-        const r = await F({ photos: ['p'], corps: {}, compteur: { appels: 0 } });
+        const r = await F({ image: IMG, corps: {}, compteur: { appels: 0 } });
         H.v('6i. « null » écrit en toutes lettres ou null : jamais retenu comme un code', [r.setCode, r.numero], [null, null]);
     }
 

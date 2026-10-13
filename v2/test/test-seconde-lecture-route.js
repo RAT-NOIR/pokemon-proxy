@@ -73,14 +73,14 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
             return res.json({ success: true, scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, etat: ETAT, candidats: [cand(ID_P)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2,
                 carte: { idProduct: ID_P, nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', numero: '162', setCode: 'PRE', total: '131', rarete: null, langue: 'FR', ambigu: true } });
         }
-        const lu = mode === 'sans-lecture' ? { numero: null, setCode: null } : { numero: '162', setCode: 'PRE' };
+        const lu = mode === 'sans-lecture' ? { numero: null, setCode: null } : mode === 'lu-jumeau' ? { numero: '251', setCode: 'PAR' } : { numero: '162', setCode: 'PRE' };
         return res.json({ success: true, scanId: String(req.scanIdImpose), question: null, etat: ETAT, candidats: [cand(ID_P)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2,
             carte: { idProduct: ID_P, nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', ...lu, total: '131', rarete: null, langue: 'FR', ambigu: false } });
     };
     // le « modèle » factice : ce que la seconde lecture rend, et combien d'appels elle aurait coûté
     const modele = { appels: [], reponse: { setCode: 'PRE', numero: '162' }, cout: 2, panne: false, lenteurMs: 0 };
-    const fournisseur = async ({ photos, corps: c, scanId, compteur }) => {
-        modele.appels.push({ scanId: String(scanId), photos: Array.isArray(photos) ? photos.length : null, premiere: c && c.carte && { numero: c.carte.numero, setCode: c.carte.setCode } });
+    const fournisseur = async ({ image, signal, corps: c, scanId, compteur, photos }) => {
+        modele.appels.push({ scanId: String(scanId), image: Buffer.isBuffer(image), signal: Boolean(signal), photos: photos === undefined ? 'absent' : 'fourni', premiere: c && c.carte && { numero: c.carte.numero, setCode: c.carte.setCode } });
         if (compteur) compteur.appels = (compteur.appels || 0) + modele.cout;
         if (modele.lenteurMs) await new Promise(r => setTimeout(r, modele.lenteurMs));
         if (modele.panne) return { setCode: null, numero: null, essais: [], echec: true, raison: 'panne factice' };
@@ -126,7 +126,7 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         H.v('   grand livre : un débit « debite », aucune question écrite, aucun remboursement', [await livre(a), await ligneQ(a.scanId)], [PAYE, null]);
         const an = await analyseDe(a.scanId);
         H.v('   le coût est journalisé dans `analyses` : déclenchée, 2 appels, confirmée — et jamais servi au client', [an.secondeLecture && an.secondeLecture.declenchee, an.secondeLecture && an.secondeLecture.appels, an.secondeLecture && an.secondeLecture.issue, JSON.stringify(a.j).includes('secondeLecture')], [true, 2, 'confirmee', false]);
-        H.v('   le fournisseur a reçu la photo et la PREMIÈRE lecture (numéro et code), une fois', [modele.appels.length, modele.appels[0].photos, modele.appels[0].premiere], [1, 1, { numero: '162', setCode: 'PRE' }]);
+        H.v('   le fournisseur a reçu la PREMIÈRE lecture (numéro et code) et un signal d\'abandon, une fois ; AUCUNE URL de photo ne lui est donnée (TOUR 1 : plus de téléchargement) et la requête ne porte pas d\'octets', [modele.appels.length, modele.appels[0].photos, modele.appels[0].signal, modele.appels[0].image, modele.appels[0].premiere], [1, 'absent', true, false, { numero: '162', setCode: 'PRE' }]);
         H.v('   compteurs : 1 déclenchée, 1 confirmée, 2 appels', [SL.compteurs().declenchees, SL.compteurs().confirmees, SL.compteurs().appels], [1, 1, 2]);
     }
 
@@ -152,9 +152,9 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         H.v('4a. le modèle tombe : la question d\'avant, crédit réservé (net -1, aucun remboursement de plus), journal « echec », appels comptés', [a.c0.statut, await livre(a), (await analyseDe(a.scanId)).secondeLecture.issue, (await analyseDe(a.scanId)).secondeLecture.appels, SL.compteurs().echecs - e0], ['a-trancher', RESERVE, 'echec', 2, 1]);
         modele.panne = false;
         const svLent = await monter({ secondeLecture: fournisseur, delaiSecondeMs: 150 }, cfgOn);
-        modele.lenteurMs = 800;
+        modele.lenteurMs = 2500;
         const t0 = Date.now(); const b = await scan(svLent); const dt = Date.now() - t0; modele.lenteurMs = 0;
-        H.v('4b. le modèle dépasse le délai borné : la question d\'avant, journal « delai », rendue bien avant la fin de l\'appel lent', [b.c0.statut, await livre(b), (await analyseDe(b.scanId)).secondeLecture.issue, dt < 780], ['a-trancher', RESERVE, 'delai', true]);
+        H.v('4b. le modèle dépasse le délai borné : la question d\'avant, journal « delai », rendue bien avant la fin de l\'appel lent', [b.c0.statut, await livre(b), (await analyseDe(b.scanId)).secondeLecture.issue, dt < 2300], ['a-trancher', RESERVE, 'delai', true]);
         await svLent.fermer();
         const svThrow = await monter({ secondeLecture: async () => { throw new Error('boum'); } }, cfgOn);
         const c = await scan(svThrow);
@@ -169,6 +169,39 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         const e = await scan(svSansBande);
         H.v('4e. aucune bande à lire (pas de géométrie), 0 appel : la question d\'avant, compté « non faisable », journal « non-confirmee » à 0 appel', [e.c0.statut, await livre(e), SL.compteurs().nonFaisables - nf0, (await analyseDe(e.scanId)).secondeLecture.appels, (await analyseDe(e.scanId)).secondeLecture.issue], ['a-trancher', RESERVE, 1, 0, 'non-confirmee']);
         await svSansBande.fermer();
+        // TOUR 1 (I-2) : pas d'octets d'image => pas de seconde lecture, aucun appel payant, compté « sans-image »
+        const svSansImage = await monter({ secondeLecture: async () => ({ setCode: null, numero: null, essais: [], echec: false, sansImage: true, raison: 'aucune image fournie (octets)' }) }, cfgOn);
+        const nf1 = SL.compteurs().nonFaisables, nc1 = SL.compteurs().nonConfirmees;
+        const f = await scan(svSansImage); const tf = (await analyseDe(f.scanId)).secondeLecture;
+        H.v('4f. pas d\'octets d\'image : la question d\'avant, journal « sans-image » à 0 appel, compté « non faisable » (et pas « non confirmée »)', [f.c0.statut, await livre(f), tf.issue, tf.appels, SL.compteurs().nonFaisables - nf1, SL.compteurs().nonConfirmees - nc1], ['a-trancher', RESERVE, 'sans-image', 0, 1, 0]);
+        await svSansImage.fermer();
+        // TOUR 1 (coût exact) : le délai INTERROMPT les appels restants (signal) et tout appel parti est compté
+        const attente = ms => new Promise(r => setTimeout(r, ms));
+        let partis = 0;
+        const sequentiel = async ({ compteur, signal }) => { for (let k = 0; k < 3; k++) { if (signal && signal.aborted) return { echec: true, essais: [], raison: 'interrompue' }; compteur.appels = (compteur.appels || 0) + 1; partis++; await attente(100); } return { setCode: null, numero: null, essais: [], echec: false, raison: 'fin' }; };
+        const svCoupe = await monter({ secondeLecture: sequentiel, delaiSecondeMs: 150 }, cfgOn);
+        const a0 = SL.compteurs().appels;
+        const g = await scan(svCoupe); await attente(500);
+        const tg = (await analyseDe(g.scanId)).secondeLecture;
+        H.v('4g. délai de 150 ms, un appel toutes les 100 ms : le 3e appel ne part JAMAIS (2 partis), 2 comptés au global ET dans la trace, journal « delai », la question d\'avant',
+            [partis, SL.compteurs().appels - a0, tg.appels, tg.issue, g.c0.statut, await livre(g)], [2, 2, 2, 'delai', 'a-trancher', RESERVE]);
+        await svCoupe.fermer();
+        // un fournisseur qui IGNORE le signal et lance un appel après le délai : l'appel est quand même compté au global (le coût est exact)
+        const tardif = async ({ compteur }) => { await attente(2500); compteur.appels = (compteur.appels || 0) + 1; return { setCode: null, numero: null, essais: [], echec: false, raison: 'tard' }; };
+        const svTard = await monter({ secondeLecture: tardif, delaiSecondeMs: 100 }, cfgOn);
+        const a1 = SL.compteurs().appels;
+        const h = await scan(svTard); const apresReponse = SL.compteurs().appels - a1; await attente(3000);
+        H.v('4h. un fournisseur sourd au signal qui appelle APRÈS le délai : la réponse part sans attendre (0 compté à ce moment), puis l\'appel tardif est compté au global (1)', [apresReponse, SL.compteurs().appels - a1, (await analyseDe(h.scanId)).secondeLecture.issue], [0, 1, 'delai']);
+        await svTard.fermer();
+    }
+
+    // ── TOUR 1 (I-1) : les deux lectures se contredisent => la question reste, jamais une affirmation
+    {
+        modele.reponse = { setCode: 'PRE', numero: '162' }; const avant = modele.appels.length;
+        const j = await scan(svOn, 'lu-jumeau');
+        const tj = (await analyseDe(j.scanId)).secondeLecture;
+        H.v('9. la chaîne a lu le JUMEAU (PAR/251) et affirmé P ; le modèle relit P (PRE/162) : les deux lectures se contredisent => la question d\'avant, journal « non-confirmee », raison « conflit de lecture »',
+            [j.c0.statut, j.c0.candidats.map(c => c.idProduct), await livre(j), tj.issue, /conflit de lecture/.test(tj.raison), modele.appels.length - avant], ['a-trancher', [ID_P, ID_J], RESERVE, 'non-confirmee', true, 1]);
     }
 
     // ── 5. LE COÛT NE SE DÉCLENCHE QUE SUR LE CAS VISÉ

@@ -184,16 +184,23 @@ async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, co
     if (!SL.besoin({ p, jumeaux: js, premiere }).declencher) return null;
     if (!SL.premiereFois(String(scanId))) return { trace: { declenchee: false, appels: 0, issue: 'deja-tentee', raison: 'ce scan a déjà eu sa seconde lecture' } };
     SL.noter('declenchees');
-    const compteur = { appels: 0 };
+    // TOUR 1 (coût exact) : le compteur ÉCRIT au compteur global à chaque appel, au moment où il part — un appel tardif d'un fournisseur sourd au signal est donc compté lui aussi ; le signal d'abandon
+    // tombe au délai, et le fournisseur n'envoie plus d'appel après lui. Aucun téléchargement (décision 4) : les OCTETS de l'image viennent de l'appelant (entree.imageOctets, un jour l'extension), jamais d'une URL.
+    let appels = 0;
+    const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { SL.noter('appels', v - appels); appels = v; } } };
+    const abandon = new AbortController();
     let lu = null, issue = null, raison = null;
     try {
         const ms = Number.isFinite(deps.delaiSecondeMs) && deps.delaiSecondeMs > 0 ? deps.delaiSecondeMs : DELAI_SECONDE_MS;
-        lu = await avecBorne(() => deps.secondeLecture({ photos: entree.imageUrls, corps: c, scanId: String(scanId), compteur }), ms, 'seconde lecture', 'SECONDE_DELAI');
-    } catch (e) { issue = e && e.code === 'SECONDE_DELAI' ? 'delai' : 'echec'; raison = issue === 'delai' ? 'délai dépassé' : 'le fournisseur a levé'; if (issue === 'echec') journalErreur('seconde lecture', e); }
-    if (Number.isInteger(compteur.appels) && compteur.appels > 0) SL.noter('appels', compteur.appels);
-    const trace = () => ({ declenchee: true, appels: Number.isInteger(compteur.appels) ? compteur.appels : 0, issue, raison });
+        lu = await avecBorne(() => deps.secondeLecture({ image: entree && entree.imageOctets, corps: c, scanId: String(scanId), compteur, signal: abandon.signal }), ms, 'seconde lecture', 'SECONDE_DELAI');
+    } catch (e) {
+        issue = e && e.code === 'SECONDE_DELAI' ? 'delai' : 'echec'; raison = issue === 'delai' ? 'délai dépassé' : 'le fournisseur a levé';
+        if (issue === 'delai') abandon.abort(); else journalErreur('seconde lecture', e);
+    }
+    const trace = () => ({ declenchee: true, appels: compteur.appels, issue, raison });
     if (!issue) {
         if (!lu || typeof lu !== 'object') { issue = 'rien'; raison = 'le fournisseur n\'a rien rendu'; }
+        else if (lu.sansImage === true) { issue = 'sans-image'; raison = 'aucun octet d\'image fourni : pas de seconde lecture'; SL.noter('nonFaisables'); console.log(`🔎 [v2 seconde-lecture] scan=${scanId} sans-image appels=${compteur.appels}`); return { trace: trace() }; }
         else if (lu.echec === true) { issue = 'echec'; raison = String(lu.raison || 'échec de la lecture').slice(0, 200); }
         else {
             if (compteur.appels === 0 && Array.isArray(lu.essais) && lu.essais.length === 0) SL.noter('nonFaisables');     // aucune bande à lire (pas de recadrage possible) : rien n'a coûté, rien n'a été lu

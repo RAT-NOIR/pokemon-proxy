@@ -1,8 +1,9 @@
 'use strict';
 // SECONDE-LECTURE — les pièces qui touchent l'image et le modèle, SANS réseau ni appel payant : le recadrage du bas de la carte (sharp + opencv, sur une image FABRIQUÉE), le lecteur du modèle
-// (le client HTTP est INJECTÉ : une fonction de ce fichier), et le recadreur de production (le téléchargement est injecté ; la liste blanche d'hôtes est celle de la production).
+// (le client HTTP est INJECTÉ : une fonction de ce fichier), et le recadreur (il reçoit les OCTETS de l'image : plus aucun téléchargement, tour 1 ; un détecteur §5 échoue si un client réseau y entre).
 const H = require('./_harnais');
 const sharp = require('sharp');
+const path = require('path');
 const I = require('../identifier/seconde-lecture-image');
 
 (async () => {
@@ -46,20 +47,45 @@ const I = require('../identifier/seconde-lecture-image');
     }
     H.v('3e. sans clé ou sans modèle : refuse de se construire (aucun appel possible)', [() => I.creerLecteur({ post: postDe('{}'), modele: 'm' }), () => I.creerLecteur({ post: postDe('{}'), cle: 'k' }), () => I.creerLecteur({ modele: 'm', cle: 'k' })].map(f => { try { f(); return 'ok'; } catch { return 'refuse'; } }), ['refuse', 'refuse', 'refuse']);
 
-    // ── 4. le RECADREUR de production : liste blanche d'hôtes AVANT tout téléchargement, géométrie exigée
+    // TOUR 1 (coût exact) : le signal d'abandon arrive jusqu'à la requête du modèle
     {
-        const telechargements = [];
-        const recadreur = I.creerRecadreur({ telecharger: async url => { telechargements.push(url); return photo; }, largeur: 400 });
-        const HOTE_OK = 'https://images1.vinted.net/t/00_banc/f800/p.png';        // un hôte de la liste blanche de la production (départage par l'image) ; le téléchargement est injecté
-        const sans = await recadreur({ photos: [HOTE_OK], corps: {} });
-        H.v('4a. sans géométrie dans le corps de la chaîne : aucune bande, AUCUN téléchargement', [sans, telechargements.length], [[], 0]);
-        const avec = await recadreur({ photos: [HOTE_OK], corps: { geometrie: geo } });
-        H.v('4b. avec géométrie : trois bandes, une photo téléchargée (la première)', [avec.length, telechargements], [3, [HOTE_OK]]);
-        telechargements.length = 0;
-        const hors = await recadreur({ photos: ['https://exemple.invalide/p.png'], corps: { geometrie: geo } });
-        H.v('4c. un hôte hors liste blanche : aucune bande, JAMAIS téléchargé', [hors, telechargements.length], [[], 0]);
-        const aucune = await recadreur({ photos: [], corps: { geometrie: geo } });
-        H.v('4d. aucune photo : aucune bande', aucune, []);
+        const ctl = new AbortController(); requetes.length = 0;
+        await I.creerLecteur({ post: postDe('{"setCode":null,"number":null,"total":null}'), modele: 'm', cle: 'k' })(bande, { signal: ctl.signal });
+        H.v('3f. le lecteur transmet le signal d\'abandon au client HTTP (config.signal)', requetes[0].config.signal === ctl.signal, true);
+        requetes.length = 0;
+        await I.creerLecteur({ post: postDe('{"setCode":null,"number":null,"total":null}'), modele: 'm', cle: 'k' })(bande);
+        H.v('   sans signal : aucune clé `signal` inventée', 'signal' in requetes[0].config, false);
+    }
+
+    // ── 4. le RECADREUR : il reçoit les OCTETS de l'image (TOUR 1, I-2 : plus aucun téléchargement), la géométrie est EXIGÉE
+    {
+        const recadreur = I.creerRecadreur({ largeur: 400 });
+        const sans = await recadreur({ image: photo, corps: {} });
+        H.v('4a. sans géométrie dans le corps de la chaîne : aucune bande', sans, []);
+        const avec = await recadreur({ image: photo, corps: { geometrie: geo } });
+        H.v('4b. avec les octets ET la géométrie : trois bandes', avec.length, 3);
+        H.v('4c. sans octets (absents, une URL, un Buffer vide, null) : aucune bande, jamais un téléchargement', await Promise.all([undefined, 'https://images1.vinted.net/p.png', Buffer.alloc(0), null].map(image => recadreur({ image, corps: { geometrie: geo } }))), [[], [], [], []]);
+        H.v('4d. des octets qui ne sont pas une image : aucune bande (le fournisseur rend un échec, jamais une lecture)', await recadreur({ image: Buffer.from('pas une image'), corps: { geometrie: geo } }).then(x => x, () => 'lève'), 'lève');
+        H.v('4e. l\'ancien chemin réseau est parti : creerRecadreur n\'accepte ni `telecharger` ni liste d\'hôtes', [typeof I.creerRecadreur({ telecharger: async () => { throw new Error('réseau'); } }), Object.keys(I).filter(k => /telecharg|hote|blanche/i.test(k))], ['function', []]);
+        let appels = 0; const fetchOrigine = globalThis.fetch; globalThis.fetch = () => { appels++; throw new Error('fetch interdit'); };
+        try { await recadreur({ image: photo, corps: { geometrie: geo } }); await I.creerLecteur({ post: postDe('{}'), modele: 'm', cle: 'k' })(bande); } finally { globalThis.fetch = fetchOrigine; }
+        H.v('4f. recadrage + lecture : AUCUN appel à fetch (le seul client est le `post` injecté du lecteur)', appels, 0);
+    }
+
+    // ── 5. TOUR 1 (décision 4 du testeur) : aucun module de la seconde lecture n'importe ni n'appelle de client réseau, sauf le `post` INJECTÉ du lecteur
+    {
+        const fs = require('fs'); const dir = path.join(__dirname, '..', 'identifier');
+        const MODULES = ['seconde-lecture.js', 'seconde-lecture-image.js'];
+        const requis = f => [...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
+        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring']);
+        H.v('5a. les modules n\'importent que sharp, opencv-js et scoring (ni http, https, net, dns, tls, axios, undici, node-fetch, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], []]);
+        const code = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
+        H.v('5b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios` dans le code des modules (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], []]);
+        const routes = fs.readFileSync(path.join(dir, 'routes.js'), 'utf8');
+        const bloc = routes.slice(routes.indexOf('async function consulterSecondeLecture'), routes.indexOf('const INTROUVABLE_REGLE_G'));
+        H.v('5c. la décision de la route ne télécharge rien non plus (aucun fetch / axios dans consulterSecondeLecture)', [bloc.length > 500, /\bfetch\s*\(|axios|https?\.(get|request)/.test(bloc)], [true, false]);
+        const exemple = "const https = require('https'); const r = await fetch(u); axios.get(u);";
+        H.v('5d. contrôle de l\'instrument : les mêmes motifs voient un module qui importe https, appelle fetch et axios', [[...exemple.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]).filter(r => !AUTORISES.has(r)), (exemple.match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || []).length], [['https'], 2]);
     }
     H.bilan();
 })().catch(e => { console.error(e); process.exitCode = 1; });
