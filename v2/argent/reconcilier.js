@@ -75,13 +75,19 @@ async function claimsOrphelines(porteur, maintenant, ms) {
 async function debitsRembourseSansMouvement(porteur, maintenant, ms) {
     const filtre = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
     const t = new Date(maintenant).getTime();
-    const l = await col('mouvements').find({ ...filtre, type: 'debit', delta: -1, etat: 'rembourse', scanId: { $exists: true, $ne: null }, cleIdempotence: { $type: 'string' }, le: { $lt: new Date(t - ms) } }).toArray();
+    // TOUR 2 : l'âge est celui de la TENTATIVE DE REMBOURSEMENT (la plus récente ligne `remboursement` du scan : claim, « fait » ou unité), jamais celui du débit — la ligne de débit d'une question de lot date de la
+    // pose de la question (jusqu'à 24 h) et listerait un remboursement VIVANT. Sans aucune ligne de remboursement pour le scan, à défaut, l'âge du débit.
+    const l = await col('mouvements').find({ ...filtre, type: 'debit', delta: -1, etat: 'rembourse', scanId: { $exists: true, $ne: null }, cleIdempotence: { $type: 'string' } }).toArray();
     const parScan = new Map();
-    for (const d of l) { const k = String(d.scanId); const e = parScan.get(k) || { scanId: d.scanId, debits: 0, le: d.le }; e.debits++; parScan.set(k, e); }
+    for (const d of l) { const k = String(d.scanId); const e = parScan.get(k) || { scanId: d.scanId, debits: 0, le: d.le }; e.debits++; if (new Date(d.le) > new Date(e.le)) e.le = d.le; parScan.set(k, e); }
     const sortie = [];
     for (const e of parScan.values()) {
-        const mouvements = await col('mouvements').countDocuments({ type: 'remboursement', delta: 1, scanId: e.scanId });
-        if (e.debits > mouvements) sortie.push({ scanId: e.scanId, porteur: `${porteur.type}:${porteur.id}`, debits: e.debits, mouvements, ageMinutes: Math.floor((t - new Date(e.le).getTime()) / 60e3) });
+        const rembs = await col('mouvements').find({ type: 'remboursement', scanId: e.scanId }).toArray();
+        const mouvements = rembs.filter(m => m.delta === 1).length;
+        if (e.debits <= mouvements) continue;
+        const tentative = rembs.length ? Math.max(...rembs.map(m => new Date(m.le).getTime())) : new Date(e.le).getTime();
+        if (tentative >= t - ms) continue;
+        sortie.push({ scanId: e.scanId, porteur: `${porteur.type}:${porteur.id}`, debits: e.debits, mouvements, ageMinutes: Math.floor((t - tentative) / 60e3) });
     }
     return sortie;
 }

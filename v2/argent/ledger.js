@@ -189,22 +189,28 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         // sinon un partiel repris près du plafond devenait un « plafond-jour » définitif, après que le client avait été rendu en partie. Le plafond a été compté une fois, à la première tentative.
         // TOUR 1 : pour un scan à `cleOrigine`, la clé de la claim porte l'id de la 1re unité OUVERTE et change après un partiel (cette unité n'est plus ouverte) : la claim « fait » de CETTE tentative se retrouve
         // par les ids des débits du même groupe (même `cleOrigine`), jamais par le préfixe de la clé courante seule. Une claim d'un autre scan, d'un autre groupe ou sans « fait » ne dispense de rien.
-        const groupe = pendantes[0].cleOrigine ? debits.filter(d => d.cleOrigine === pendantes[0].cleOrigine).map(d => `rb|${scanId}|${d._id}|fait|`) : [`rb|${scanId}|fait|`];
-        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(m => typeof m.cleIdempotence === 'string' && groupe.some(p => m.cleIdempotence.startsWith(p)))) sansPlafond = true;
+        // TOUR 2 : et pour un scan à `cleOrigine` interrompu ENTRE deux unités (processus arrêté, claim `rb|scan|<id1>` portant une unité rendue, jamais renommée « fait »), la continuation s'insère sous une AUTRE clé
+        // (`rb|scan|<id2>`) sans conflit : toute claim du groupe qui a RENDU une unité (delta ≠ 0, hors lignes `…#id`) dispense aussi du plafond — il a été compté à la première tentative.
+        const idsGroupe = pendantes[0].cleOrigine ? debits.filter(d => d.cleOrigine === pendantes[0].cleOrigine).map(d => `rb|${scanId}|${d._id}`) : [];
+        const dejaCommencee = m => typeof m.cleIdempotence === 'string' && !m.cleIdempotence.includes('#') && (idsGroupe.length
+            ? idsGroupe.some(p => m.cleIdempotence === p ? m.delta !== 0 : m.cleIdempotence.startsWith(`${p}|fait|`))
+            : m.cleIdempotence.startsWith(`rb|${scanId}|fait|`));
+        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(dejaCommencee)) sansPlafond = true;
         // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
         // `sans-prix` est du côté des QUESTIONS (comme avant le lot PLAFONDS) : il rembourse justement une carte tranchée par une réponse, dont le prix est illisible
         if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions_v2').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
             return { rendu: false, raisonNonRembourse: 'deja-livre' };
     } catch (e) { console.error(`❌ [v2 rembourser] lecture des débits : ${codeErr(e)}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
-    try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 0, poche: null, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }
+    let claimFiltre = { cleIdempotence: cle };                 // TOUR 2 : la claim se cible par son `_id` (lu à l'insertion), jamais par sa clé — une continuation concurrente peut avoir renommé l'ancienne et posé la sienne sous la même clé
+    try { const ins = await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 0, poche: null, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); if (ins && ins.insertedId) claimFiltre = { _id: ins.insertedId }; }
     catch (e) { if (e.code === 11000) return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; console.error(`❌ [v2 rembourser] claim : ${codeErr(e)}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let compteurPris = false;
-    const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -pas } }); };
+    const liberer = async () => { await col('mouvements').deleteOne(claimFiltre); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -pas } }); };
     const rendus = [];
     let premiereRaison = null;
     // P — remboursement PARTIEL : la ligne-claim est la trace de la 1re unité rendue ; on la renomme pour libérer `rb|…`, afin que les unités restituées « debite » restent remboursables.
     // Pas de double remboursement : chaque unité ne se rend que par sa prise atomique (etat ≠ rembourse), quel que soit le nombre de claims successifs.
-    const libererClaim = () => col('mouvements').updateOne({ cleIdempotence: cle }, { $set: { cleIdempotence: `${cle}|fait|${rendus[0]}` } });
+    const libererClaim = () => col('mouvements').updateOne(claimFiltre, { $set: { cleIdempotence: `${cle}|fait|${rendus[0]}` } });
     try {
         // I1 — le remboursement rend CHAQUE unité débitée pour ce scan (un lot = 1 débit + des suppléments au même scanId), jugée sur les débits ENREGISTRÉS ;
         // une unité n'est rendue qu'une fois (le passage de son débit à « rembourse » est la prise atomique), et tout le scan compte pour UN seul remboursement au plafond.
@@ -229,7 +235,10 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
             if (!r.rendu) { await restituer(); premiereRaison = premiereRaison || r.raison; continue; }
             // la trace : la ligne-claim `rb|scanId` devient celle de la 1re unité rendue, les suivantes ont la leur (`rb|scanId#k`) — somme(delta) reste égale au solde
             const cible = r.cible, ligne = { ...base(cible), poche: r.pocheRendue };
-            if (!rendus.length) await col('mouvements').updateOne({ cleIdempotence: cle }, { $set: { delta: 1, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
+            if (!rendus.length) {
+                const w = await col('mouvements').updateOne(claimFiltre, { $set: { delta: 1, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
+                if (w && w.modifiedCount === 0) console.error(`🔴 [v2 rembourser] ${cleJournal(cle)} : le crédit est rendu mais la claim n'a pas reçu sa trace (delta 1) — la réconciliation le dira (débit « rembourse » sans mouvement)`);
+            }
             else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, etat: 'rembourse', cleIdempotence: `${cle}#${d._id}`, expireLe: expireMouvement(maintenant, cfg) });
             rendus.push(d._id);
         }

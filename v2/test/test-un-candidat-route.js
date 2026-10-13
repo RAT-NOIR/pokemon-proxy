@@ -651,7 +651,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         {
             const L = await lance([ID_A, ID_B]); const d = await debitsDe(L);
             await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rembourse' } });
-            H.v('17c. débit « rembourse » sans mouvement : pas listé tant qu\'il est récent (un rendu vivant), listé ensuite avec son âge, propre = false',
+            H.v('17c. débit « rembourse » sans mouvement ni aucune ligne de remboursement (âge du DÉBIT, à défaut de tentative) : pas listé tant que ce débit est récent, listé ensuite avec son âge, propre = false (voir 18d pour l\'âge de la tentative)',
                 [((await reconcilier(porteurDe(L), { cfg: cfgY })).debitsRembourseSansMouvement || []).length, ((await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) })).debitsRembourseSansMouvement || []).map(x => [String(x.scanId), x.debits, x.mouvements]), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) })).propre],
                 [0, [[String(sid(L)), 1, 0]], false]);
         }
@@ -686,6 +686,51 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'findOneAndUpdate') return async (f, ...a) => { if (f && f._id && f.etat === 'en-reglement') { essais++; throw new Error('panne simulée'); } return t.findOneAndUpdate(f, ...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
             let b1, b2; try { b1 = await balayer(); b2 = await balayer(plus(60e3)); } finally { db.col = colOrig; }
             H.v('17f. un règlement repris qui échoue : UN essai (pas deux dans le même passage, pas de re-essai une minute après), compté en échec', [essais, b1.lotsReglementsEnEchec, b2.lotsReglementsEnEchec, b1.bloquees], [1, 1, 0, 0]);
+        }
+        // ── TOUR 2 (relecture 2)
+        // R2-C (argent) : un scan à `cleOrigine` interrompu entre deux unités — la continuation du MÊME scan ne recompte jamais le plafond, `cleOrigine` ou non
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
+            const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
+            const colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            try { for (const c of L.cartes) await repI(L, c.index, 'aucune'); } finally { armee = false; db.col = colOrig; }
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            const avant = [await unitesRendues(L), await compteurDe(L, 'panne')];
+            await balayer(plus(20 * 60e3));
+            H.v('18a. scan à cleOrigine interrompu entre deux unités : 1 unité, plafond 5 ; au balayage suivant le délai, TOUT est rendu (net 0), plafond jamais recompté (5), propre',
+                [avant, await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).propre], [[1, 5], 2, 0, 5, 11, true]);
+        }
+        // M24 : une claim SANS unité rendue (delta 0) n'est JAMAIS libérée par la reprise — même vieille, même avec des débits ouverts
+        {
+            const L = await lance([ID_A, ID_B]);
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: plus(-40 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-m24', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}` });
+            await repI(L, L.cartes[0].index, 'aucune'); await repI(L, L.cartes[1].index, 'aucune');
+            await balayer(plus(20 * 60e3));
+            H.v('18b. claim delta 0 de 40 min avec débits ouverts : jamais renommée ni libérée par la reprise, rien n\'est rendu à l\'aveugle (net -1), le lot reste à rendre',
+                [await raw('mouvements').countDocuments({ cleIdempotence: `rb|${L.j.scanId}`, delta: 0 }), await raw('mouvements').countDocuments({ scanId: sid(L), cleIdempotence: { $regex: '\\|fait\\|' } }), (await livre(L)).net, await lignesQ(L, { lotARendre: { $exists: true } }) > 0], [1, 0, -1, true]);
+        }
+        // M31 : un remboursement COMPLET n'est jamais une claim orpheline, même des heures plus tard
+        // R2-E : la reprise ne renomme pas la claim d'un lot déjà COMPLET (rejugé plus tard)
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune'); await repI(L, L.cartes[1].index, 'aucune');
+            const rc = await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) });
+            H.v('18c. lot complet rendu, relu 3 h plus tard : aucune claim orpheline listée, aucun débit ambigu', [rc.claimsOrphelines.length, rc.debitsRembourseSansMouvement.length], [0, 0]);
+            await raw('questions_v2').updateMany({ scanId: sid(L) }, { $unset: { lotIssue: '', lotARendre: '' } });          // le lot est rejugé plus tard (aucune décision écrite)
+            await balayer(plus(20 * 60e3));
+            H.v('   le lot complet rejugé au-delà du délai : la claim rb|scan reste telle quelle (jamais renommée), net 0, un remboursement, lotIssue rendu',
+                [await raw('mouvements').countDocuments({ cleIdempotence: `rb|${L.j.scanId}`, delta: 1 }), await raw('mouvements').countDocuments({ scanId: sid(L), cleIdempotence: { $regex: '\\|fait\\|' } }), (await livre(L)).net, (await livre(L)).remboursements, await lignesQ(L, { 'lotIssue.rendu': true })], [1, 0, 0, 1, 2]);
+        }
+        // Mineur 3 : l'âge d'un débit « rembourse » sans mouvement se mesure depuis la tentative de REMBOURSEMENT (la claim), pas depuis le débit
+        {
+            const L = await lance([ID_A, ID_B]); const d = await debitsDe(L);
+            await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rembourse', le: plus(-5 * 3600e3) } });
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-vivant', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}` });
+            const vivant = ((await reconcilier(porteurDe(L), { cfg: cfgY })).debitsRembourseSansMouvement || []).length;
+            await raw('mouvements').updateOne({ cleIdempotence: `rb|${L.j.scanId}` }, { $set: { le: plus(-2 * 3600e3) } });
+            const ancien = ((await reconcilier(porteurDe(L), { cfg: cfgY })).debitsRembourseSansMouvement || []).map(x => x.ageMinutes >= 119);
+            H.v('18d. débit vieux de 5 h mais remboursement en cours (claim de maintenant) : PAS listé ; claim de 2 h : listé, âge = celui du remboursement', [vivant, ancien], [0, [true]]);
         }
         await svT.fermer();
     }

@@ -130,6 +130,8 @@ async function reprendreClaimInterrompue(scanId, cfg, maintenant) {
     const limite = new Date(maintenant).getTime() - cfg.lot.reglementBloqueMs;
     const claim = lignes.find(m => typeof m.cleIdempotence === 'string' && m.cleIdempotence.startsWith(`rb|${scanId}`) && !m.cleIdempotence.includes('#') && !m.cleIdempotence.includes('|fait|') && m.delta !== 0 && new Date(m.le).getTime() < limite);
     if (!claim) return false;
+    // TOUR 2 : une claim de lot déjà COMPLET (plus aucun débit ouvert) n'est jamais renommée — elle reste la trace d'un remboursement fait en un geste
+    if (await col('mouvements').countDocuments({ type: 'debit', delta: -1, scanId, credit: { $ne: null }, etat: { $nin: ['rembourse', 'rendu-en-cours'] } }) === 0) return false;
     const r = await col('mouvements').updateOne({ _id: claim._id, cleIdempotence: claim.cleIdempotence }, { $set: { cleIdempotence: `${claim.cleIdempotence}|fait|${claim._id}` } });
     return (r.modifiedCount ?? 0) > 0;
 }
