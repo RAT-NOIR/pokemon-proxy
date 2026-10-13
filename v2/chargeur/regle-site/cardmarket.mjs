@@ -1,7 +1,7 @@
                                        
                     
-                
-                   
+                       
+                          
      
                                                                     
                                                                            
@@ -114,7 +114,7 @@ export function cardmarketUrl(impression                      )                {
  * Cardmarket des sets internationaux (MEW, PAR, ASC… : préfixe de 29 075
  * segments chiffrés sur 31 485).
  */
-export function segmentApresLeCode(slug                    , codeSet                )                {
+export function segmentApresLeCode(slug                           , codeSet                )                {
   if (!slug) return null;
   const code = (codeSet ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (code.length < 2) return null;
@@ -135,7 +135,7 @@ export function segmentApresLeCode(slug                    , codeSet            
 }
 
 export function ficheDuProduit(
-  slug                    ,
+  slug                           ,
   numeros                            ,
   codeSet                ,
 )                {
@@ -184,7 +184,7 @@ export function ficheDuProduit(
  * apparie par rang : Vk ↔ la k-ième fiche par numéro croissant. Un produit de
  * plus ou de moins (16 documents), et on ne devine pas.
  */
-function rangParVersion(slug                    )                {
+function rangParVersion(slug                           )                {
   const m = /-V(\d+)$/i.exec(slug ?? "");
   return m ? Number(m[1]) : null;
 }
@@ -198,7 +198,7 @@ function ordreDesNumeros(numeros                            )           {
 }
 
 /** Le slug porte-t-il un numéro de carte ? Son dernier segment, la version « -Vn » ôtée, contient un chiffre. */
-export function slugPorteUnNumero(slug                    )          {
+export function slugPorteUnNumero(slug                           )          {
   const s = (slug ?? "").replace(/-V\d+$/i, "");
   return /\d/.test(s.slice(s.lastIndexOf("-") + 1));
 }
