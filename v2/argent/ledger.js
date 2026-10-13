@@ -140,7 +140,9 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
 // rendrePoche : ne rend JAMAIS plus que ce qui a été pris (chaque filtre porte son plafond)
 // MOYENS-B2a tour 2 — UN CRÉDIT SE RECONNAÎT PAR SON DÉBIT. Quand `debitId` est donné, l'identité du débit est posée sur le document de la poche (`creditsRendus`, les CREDITS_MAX derniers) dans la MÊME écriture
 // atomique que le $inc, et le filtre exige qu'elle n'y soit pas : deux chemins qui rendent le même débit (`rendreLeScan`, `rembourserLigne`, la réparation, la compensation de `debiter`) ne peuvent pas écrire deux
-// crédits — par construction, pas par délai ni par agrégat. Le second reçoit `poche-deja-compensee` (le crédit de CE débit existe déjà). La preuve d'un crédit est la lecture de ce marqueur (`creditPresent`).
+// crédits TANT QUE l'identité est dans le marqueur. LIMITE EXACTE (relecture 3) : le marqueur ne garde que les CREDITS_MAX (200) DERNIÈRES identités par DOCUMENT de poche (`comptes` en porte un pour accueil, acheté ET abonnement ;
+// `installations` un pour essai et acheté) ; au-delà, l'identité la plus ancienne sort et l'absence de marqueur ne prouve plus l'absence de crédit. Le second chemin reçoit `poche-deja-compensee` (le crédit de CE débit existe
+// déjà) ; la réparation, elle, REFUSE un débit pris dont l'identité n'est pas dans un marqueur plein (`marqueur-sature`). La preuve d'un crédit est la lecture de ce marqueur (`creditPresent`).
 const CREDITS_MAX = 200;
 const marqueur = debitId => (debitId ? { filtre: { creditsRendus: { $ne: debitId } }, push: { $push: { creditsRendus: { $each: [debitId], $slice: -CREDITS_MAX } } } } : { filtre: {}, push: {} });
 // le document qui porte le compteur d'une poche (et donc le marqueur) : [collection, filtre]
@@ -359,4 +361,4 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
 const reparerDebitRembourseSansMouvement = (...a) => require('./reparation').reparer(...a);
 module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, reparerDebitRembourseSansMouvement, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME,
     // intérieur du grand livre, partagé avec `reparation.js` (une seule définition de ce qu'est un crédit et de sa trace)
-    interne: { rendreUnite, creditPresent, proprietaireDe, expireMouvement, base, codeErr, cleJournal, col: nom => col(nom) } };
+    interne: { rendreUnite, creditPresent, proprietaireDe, CREDITS_MAX, expireMouvement, base, codeErr, cleJournal, col: nom => col(nom) } };

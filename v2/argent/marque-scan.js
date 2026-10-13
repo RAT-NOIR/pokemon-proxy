@@ -88,7 +88,7 @@ const unitesNonRendues = (m) => db.col('mouvements').find({ ...(m.porteur.type =
 async function creditsManquants(m) {
     const unites = await db.col('mouvements').countDocuments({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
         type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $in: ['rembourse', 'rendu-en-cours'] }, cleIdempotence: { $type: 'string' } });   // MOYENS-B2a : « rendu-en-cours » = prise avant le crédit
-    const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, delta: 1 });
+    const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, $or: [{ delta: 1 }, { motif: 'semaine-expiree' }] });
     return Math.max(0, unites - credits);
 }
 
