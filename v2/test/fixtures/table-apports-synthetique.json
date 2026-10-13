@@ -1,0 +1,133 @@
+{
+ "lu": "2026-10-13",
+ "comment": "table SYNTHÉTIQUE (format de la table des logos lus de collecte-cartes/) : sha1 des PNG générés par generer-apports.js, textes « lu » de la référence gelée",
+ "attendus": {
+  "Logo FR/WCD/jap_076.png": "0372c31d2dc9aa3174eeb1a777ca98b1365f2004",
+  "Logo FR/WCD/jap_077.png": "7e1781a8ea7aee27f7717716d55f64fba9cc7709",
+  "Logo FR/WCD/jap_078.png": "65a4ec33b24ce746cdd1963bbdf9341ecdfa687e",
+  "Logo FR/WCD/jap_079.png": "949981edc459533d4cff91a0b1e16644ecb873b7",
+  "Logo FR/WCD/jap_080.png": "0cbb76e30dcbf983c2e715bfb132e570c96e11fd",
+  "Logo FR/WCD/jap_081.png": "6ef6a7061a66e58add8d79f318791f1f197ca120",
+  "Logo FR/WCD/jap_082.png": "0103f228058a76047184ac59eb9c975ed503fba4",
+  "Logo FR/WCD/jap_083.png": "e39664273bebe597f1b67189cf766e07a8bb36f4",
+  "Logo FR/WCD/jap_084.png": "f33738c8562df44cbb22b742f95f2644cf6ae6fa",
+  "Logo FR/WCD/jap_085.png": "be6469b4b2c4113d1b6b8767ceb421ad4ba965c7",
+  "Logo FR/WCD/jap_086.png": "349d72f87ed70dad17cb9e1d41611b44b5666ecb",
+  "Logo FR/WCD/jap_087.png": "61f279cfb875d459a9e54468405ddb7376a50622",
+  "Logo FR/WCD/jap_088.png": "3f196f080e5f7bc0a3ac8eb3760130ec7f1f5dfd",
+  "Logo FR/WCD/jap_089.png": "aee1379313bdc97f8e92e205c8f21db342f32014",
+  "Logo FR/WCD/jap_090.png": "b24b0ac95a0c33b66c24ecfad514c96170520f39",
+  "Logo FR/WCD/jap_091.png": "b523df48c27370bb86c277fa327b6cfc63c23dd4",
+  "Logo FR/WCD/jap_092.png": "d1d0a4f24d32256804e831cce540a0f288f7adef",
+  "Logo FR/WCD/jap_093.png": "8c3ba07728459fc54a78bf025dde5e4fbcb23092",
+  "Logo FR/WCD/jap_094.png": "df89fead2ab0b6e92e3bc0ac7ff987a9d051e52c",
+  "Logo FR/WCD/jap_095.png": "e28c750c0bebc7dec90f2ccf3bb2b94b81bb326c",
+  "apport-manuel/Deck JP/EPDIA.png": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+  "apport-manuel/Deck JP/EPGIR.png": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+  "apport-manuel/Deck JP/EPPAL.png": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+  "apport-manuel/Deck JP/GBCHIM.png": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+  "apport-manuel/Deck JP/GBPIKA.png": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+  "apport-manuel/Deck JP/GBPIPL.png": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+  "apport-manuel/Deck JP/GBTURT.png": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+  "apport-manuel/Deck JP/GBLAHD.png": "4c4dda9fa9e74c33f54ac5ac6f6841d4b2c955c8",
+  "apport-manuel/Deck JP/GBLOHD.png": "4c4dda9fa9e74c33f54ac5ac6f6841d4b2c955c8",
+  "apport-manuel/Deck JP/IPB.png": "c5391c3505dee2509ee950b952df09ad6b2342e9",
+  "apport-manuel/Deck JP/IPS.png": "c5391c3505dee2509ee950b952df09ad6b2342e9",
+  "apport-manuel/Deck JP/SPCHA.png": "a4a1674c005df2f8695cbf0cfcd83d5efe6eb765",
+  "apport-manuel/Deck JP/SPGAR.png": "a4a1674c005df2f8695cbf0cfcd83d5efe6eb765",
+  "apport-manuel/Deck JP/SPGAL.png": "049af5e9f00099522ad548d29a5057f00de6f1e5",
+  "apport-manuel/Deck JP/SPINF.png": "049af5e9f00099522ad548d29a5057f00de6f1e5"
+ },
+ "lignes": [
+  {
+   "dossier": "Deck JP",
+   "fichier": "EPDIA.png",
+   "sha1": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+   "lu": "エントリーパック ポケモンカードゲームDPt (même fichier pour EPGIR et EPPAL)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "EPGIR.png",
+   "sha1": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+   "lu": "エントリーパック ポケモンカードゲームDPt (= EPDIA)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "EPPAL.png",
+   "sha1": "8e21504d82bd0cecd1bfa9135c0560f88e9d4865",
+   "lu": "エントリーパック ポケモンカードゲームDPt (= EPDIA)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBCHIM.png",
+   "sha1": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+   "lu": "ポケモンカードゲームDPt POKÉMON CARD GAME — le logo de la SÉRIE DPt (même fichier pour GBPIKA, GBPIPL, GBTURT)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBPIKA.png",
+   "sha1": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+   "lu": "ポケモンカードゲームDPt (= GBCHIM)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBPIPL.png",
+   "sha1": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+   "lu": "ポケモンカードゲームDPt (= GBCHIM)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBTURT.png",
+   "sha1": "b6a1df86b4f8782c4acd9e10827f7d418b8a6bf8",
+   "lu": "ポケモンカードゲームDPt (= GBCHIM)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBLAHD.png",
+   "sha1": "4c4dda9fa9e74c33f54ac5ac6f6841d4b2c955c8",
+   "lu": "ポケモンカードゲームADV ギフトボックス (même fichier que GBLOHD)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "GBLOHD.png",
+   "sha1": "4c4dda9fa9e74c33f54ac5ac6f6841d4b2c955c8",
+   "lu": "ポケモンカードゲームADV ギフトボックス (= GBLAHD)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "IPB.png",
+   "sha1": "c5391c3505dee2509ee950b952df09ad6b2342e9",
+   "lu": "ポケモンカードゲーム イントロパック (même fichier que IPS ; Intro-Pack-Squirtle n'a pas de page Bulbapedia chez nous)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "IPS.png",
+   "sha1": "c5391c3505dee2509ee950b952df09ad6b2342e9",
+   "lu": "イントロパック (= IPB)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "SPCHA.png",
+   "sha1": "a4a1674c005df2f8695cbf0cfcd83d5efe6eb765",
+   "lu": "ガブリアスVSリザードン 対戦スターターパックSP (même fichier que SPGAR)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "SPGAR.png",
+   "sha1": "a4a1674c005df2f8695cbf0cfcd83d5efe6eb765",
+   "lu": "ガブリアスVSリザードン SP (= SPCHA)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "SPGAL.png",
+   "sha1": "049af5e9f00099522ad548d29a5057f00de6f1e5",
+   "lu": "ゴウカザルVSエルレイド 対戦スターターパックSP (même fichier que SPINF)"
+  },
+  {
+   "dossier": "Deck JP",
+   "fichier": "SPINF.png",
+   "sha1": "049af5e9f00099522ad548d29a5057f00de6f1e5",
+   "lu": "ゴウカザルVSエルレイド SP (= SPGAL)"
+  }
+ ]
+}
