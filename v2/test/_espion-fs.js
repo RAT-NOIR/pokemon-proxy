@@ -17,7 +17,7 @@
 // (dlopen, bibliothèques) ; (3) un descripteur ou un FileHandle déjà ouvert ; (4) les métadonnées seules (stat, exists, access, realpath, lstat) ; (5) un `const { readFileSync } = require('fs')` extrait
 // AVANT l'armement (le harnais est le premier require ; `-r` arme avant tout) ; (6) une suite qui retire elle-même ses écouteurs de sortie (elle perd le code 1 ; l'erreur ESPION_FS levée à l'accès reste).
 const fs = require('fs'), os = require('os'), path = require('path'), { fileURLToPath } = require('url');
-const { EXCEPTIONS, LECTURE_SEULE } = require('./_apports-exceptions');
+const { EXCEPTIONS, LECTURE_SEULE, VOISINS_DU_TEMP, LECTURES_LOCALAPPDATA } = require('./_apports-exceptions');
 const realpathNative = fs.realpathSync.native;             // l'original, pris avant tout armement
 
 const norm = p => path.resolve(String(p)).replace(/[\\/]+/g, '/').toLowerCase();
@@ -46,12 +46,16 @@ function perimetre({ racine = path.resolve(__dirname, '..', '..'), nomBanc = '',
     // chaque exception est donc permise sous le Bureau ET sous le parent de la racine — le même chemin nommé, jamais le dossier parent lui-même.
     const parents = [path.join(os.homedir(), 'Desktop'), path.dirname(path.resolve(racine))];
     for (const e of Object.keys(EXCEPTIONS[nomBanc] || {})) for (const b of parents) ajouter(path.join(b, e), (LECTURE_SEULE[nomBanc] || []).includes(e));
-    return { bases: [...bases.entries()].map(([base, lecture]) => ({ base, lecture })) };
+    // voisins du dossier temporaire créés par CE banc (préfixe nommé, _apports-exceptions.js) : seulement dans le dossier parent du temporaire (réel et nominal), jamais un dossier existant au hasard
+    for (const nm of LECTURES_LOCALAPPDATA[nomBanc] || []) if (/^[A-Za-z0-9]+$/.test(nm) && env && env.LOCALAPPDATA) ajouter(path.join(env.LOCALAPPDATA, nm), true);
+    const prefixes = [];
+    for (const pre of VOISINS_DU_TEMP[nomBanc] || []) for (const b of new Set([norm(path.dirname(os.tmpdir())), cheminReel(path.dirname(os.tmpdir()))])) prefixes.push(`${b}/${pre.toLowerCase()}`);
+    return { bases: [...bases.entries()].map(([base, lecture]) => ({ base, lecture })), prefixes };
 }
 /** @returns {{ ok: boolean, chemin: string }} le chemin RÉEL qui a été JUGÉ (absolu, séparateurs « / », sans casse). `ecriture` : l'accès modifie (les exceptions en lecture seule ne l'ouvrent pas). */
 function autorise(chemin, p, { ecriture = false } = {}) {
     const c = cheminReel(chemin);
-    return { ok: p.bases.some(b => sous(c, b.base) && !(ecriture && b.lecture)), chemin: c };
+    return { ok: p.bases.some(b => sous(c, b.base) && !(ecriture && b.lecture)) || (p.prefixes || []).some(x => c.startsWith(x)), chemin: c };
 }
 
 const violations = [];

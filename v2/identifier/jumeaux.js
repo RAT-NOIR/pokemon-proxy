@@ -41,10 +41,34 @@ function fournisseurDe(version, verdicts) {
     };
 }
 
-/** Les produits qu'une réponse de la chaîne AFFIRME (success et ambigu faux) : les seuls pour lesquels la garde est consultée, donc les seuls à vérifier. */
+const idsDe = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
+const MOTIFS_EGALITE_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite']);     // PAS nom-contredit-sans-repli : le nom y CONTREDIT les candidats, jamais une question
+
+/**
+ * UN-CANDIDAT (D1) : le produit UNIQUE qu'une réponse non affirmée désigne — une ambiguë qui n'a qu'un candidat, ou une égalité dont l'UNION (corps + `extra` = ctx.candidatsDeRefus) n'en compte qu'un.
+ * C'est lui qui passe par la garde des jumeaux avant de devenir une question « est-ce cette carte ? ». null : pas de candidat unique (0, 2 ou plus, sans-repli, une affirmation, un refus).
+ */
+function candidatUniqueDe(corps, extra = []) {
+    if (!corps || typeof corps !== 'object') return null;
+    if (corps.success === true) {
+        const c = corps.carte;
+        if (!c || typeof c !== 'object' || c.ambigu !== true) return null;
+        const ids = idsDe(corps.candidats);
+        return ids.length === 1 ? ids[0] : null;
+    }
+    if (corps.success === false && corps.natureRefus === 'refus-delibere' && MOTIFS_EGALITE_EN_QUESTION.includes(corps.motifRefus)) {
+        const union = [...new Set([...idsDe(corps.candidats), ...idsDe(extra)])];
+        return union.length === 1 ? union[0] : null;
+    }
+    return null;
+}
+
+/** Les produits qu'une réponse de la chaîne AFFIRME (success et ambigu faux), ou désigne comme CANDIDAT UNIQUE (UN-CANDIDAT) : les seuls pour lesquels la garde est consultée, donc les seuls à vérifier. */
 function idsAffirmes(corps) {
     const c = corps && typeof corps === 'object' ? corps.carte : null;
-    return corps && corps.success === true && c && c.ambigu === false && Number.isInteger(c.idProduct) ? [c.idProduct] : [];
+    if (corps && corps.success === true && c && c.ambigu === false && Number.isInteger(c.idProduct)) return [c.idProduct];
+    const u = candidatUniqueDe(corps);
+    return u === null ? [] : [u];
 }
 
 /**
@@ -67,12 +91,12 @@ async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
 
 /** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux, seulement s'ils tiennent dans une question (au plus 2). */
 function idsACharger(corps, fournisseur) {
-    const c = corps && typeof corps === 'object' ? corps.carte : null;
-    if (!corps || corps.success !== true || !c || c.ambigu !== false || !Number.isInteger(c.idProduct) || typeof fournisseur !== 'function') return [];
+    const p = idsAffirmes(corps)[0];                                    // le produit affirmé, ou le candidat UNIQUE (UN-CANDIDAT)
+    if (p === undefined || typeof fournisseur !== 'function') return [];
     try {
-        const r = fournisseur(c.idProduct);
+        const r = fournisseur(p);
         if (!r || r.conclu !== true || !entiers(r.ids)) return [];
-        const ids = [...new Set(r.ids)].filter(i => i !== c.idProduct);
+        const ids = [...new Set(r.ids)].filter(i => i !== p);
         return ids.length >= 1 && ids.length <= MAX_PRODUITS - 1 ? ids : [];
     } catch { return []; }
 }
@@ -101,4 +125,4 @@ function garde(ctx, idProduct) {
     return { action: 'question', ids: [idProduct, ...jumeaux] };
 }
 
-module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, compteurs, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS };
+module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS };

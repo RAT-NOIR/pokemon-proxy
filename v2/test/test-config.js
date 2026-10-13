@@ -81,7 +81,8 @@ H.v('repondreErreur : statut 429 et reessayerDans', [res.s, res.j.erreur.reessay
 H.v('choixPour trie par idProduct', choixPour([30, 10, 20]),
     [{ id: 'a', idProduct: 10 }, { id: 'b', idProduct: 20 }, { id: 'c', idProduct: 30 }]);
 H.v('choixPour à 2 candidats', choixPour([7, 3]), [{ id: 'a', idProduct: 3 }, { id: 'b', idProduct: 7 }]);
-for (const [nom, arg] of [['un seul candidat', [5]], ['quatre candidats', [1, 2, 3, 4]], ['un doublon', [2, 2]]]) {
+H.v('choixPour à UN candidat (UN-CANDIDAT, D1 : la question de confirmation)', choixPour([5]), [{ id: 'a', idProduct: 5 }]);
+for (const [nom, arg] of [['aucun candidat', []], ['quatre candidats', [1, 2, 3, 4]], ['un doublon', [2, 2]]]) {
     let e = null; try { choixPour(arg); } catch (x) { e = x.message; }
     H.vrai(`choixPour : ${nom} lève`, e);
 }

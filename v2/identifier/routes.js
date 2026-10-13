@@ -404,6 +404,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}),
                     ...((sortie.motifs ? sortie.motifs[i] : i === 0 ? sortie.motif : null) ? { motifJumeaux: sortie.motifs ? sortie.motifs[i] : sortie.motif } : {}) })),     // JUMEAU-V2 : le motif de la garde, PAR CARTE (interne, jamais servi)
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
+                versionChaine: (cfg.versions && cfg.versions.chaine) || null, versionModele: (cfg.versions && cfg.versions.modele) || null,   // ETIQUETAGE-A : le code et le modèle qui ont répondu (interne, jamais servi) ; la base « Gemini seul » de la mesure
                 ...(sortie.motif ? { motifJumeaux: sortie.motif } : {}),                    // JUMEAU-V2 : le motif distinct d'un introuvable de la garde (jamais servi au client : le contrat public ne change pas)
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
@@ -442,7 +443,7 @@ function carteRepondue(an, entree, index, choix, idProduct) {
     if (choix === 'ne-sait-pas') {
         const ids = ((entree.question && entree.question.choix) || []).map(c => c.idProduct);
         const cands = produitsDe(an, ids);
-        if (!entree.question || cands.length !== ids.length || cands.length < 2) return null;
+        if (!entree.question || cands.length !== ids.length || cands.length < 1) return null;     // UN-CANDIDAT (D1) : une question de confirmation a UN candidat, `ne-sait-pas` la laisse posée
         return { index, statut: 'a-trancher', carte: null, candidats: cands, question: entree.question, raison: null, etat: entree.etat ?? null, prixLive: null, zone: entree.zone ?? null };
     }
     const produit = produitsDe(an, [idProduct])[0];
@@ -486,7 +487,7 @@ function traiterReponse(cfg, deps = {}) {
         if (!entree || entree.statut !== 'a-trancher') return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
         const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
 
-        let facturation, idProduct = null, le = new Date();
+        let facturation, idProduct = null, le = new Date(), enAttente = false;
         if (admin) {
             // un administrateur n'a rien débité : aucune question n'a été réservée. La réponse se résout sur la ligne analyses, et se rejoue / se contredit comme les autres.
             const ids = ((entree.question && entree.question.choix) || []);
@@ -507,7 +508,7 @@ function traiterReponse(cfg, deps = {}) {
             if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
             if (r.statut === 410) { const s = await soldeSur(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}) }); }
             if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
-            facturation = r.facturation;
+            facturation = r.facturation; enAttente = r.remboursementEnAttente === true;
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
@@ -519,7 +520,7 @@ function traiterReponse(cfg, deps = {}) {
         const solde = await soldeSur();
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });
-        return res.status(200).json({ success: true, carte: resolue, facturation, ...(solde !== undefined ? { solde } : {}) });
+        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(solde !== undefined ? { solde } : {}) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
     };
 }
 

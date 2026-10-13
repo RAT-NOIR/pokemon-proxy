@@ -20,7 +20,7 @@ const charges = require(CHARGES).charges;
 const IMAGE = charges.find(c => c.cellule === 'occidentale').imageUrl;      // Tropius PBL 001 : la lecture rejouée par le faux réseau
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le service de lecture « tombe »
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });
 const ORIGINE = cfg.origines.extension;
 let nIp = 0;
 const ip = () => { nIp++; return { 'x-forwarded-for': `10.7.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -94,7 +94,7 @@ async function semer(mode) {                                  // 'double' | 'sim
     // (la référence d'A0.5 se rejoue sur un catalogue réel de test_scratch ; ici la base est en mémoire et fabriquée : la référence ne se rejoue pas, on compare
     //  DEUX serveurs vivants — v2 éteinte / allumée — sur les mêmes requêtes. Un écart d'un octet, scanId normalisé, échoue.)
     const srvOff = await demarrer(FAUX, { ...base, RM_API_V2: '' });
-    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1' });
+    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
     if (!await srvOff.attendreMongo() || !await srvOn.attendreMongo()) throw new Error('Mongo non connecté');
     const urlOn = `http://127.0.0.1:${srvOn.port}`;
     const { appeler } = require('../../verrou/serveur');
@@ -132,6 +132,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const an = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         const t = JSON.stringify(an);
         H.vrai('14. analyses : ni le titre, ni la description, ni l\'IP', an && !/secret 4242|XYZ-777|10\.9\.9\.9/.test(t));
+        H.v('   ETIQUETAGE-A : analyses garde le code (12 hex du commit) et le modèle qui ont répondu — interne, jamais servi dans la réponse', [an.versionChaine, an.versionModele, JSON.stringify(j).includes('0123456789ab'), JSON.stringify(j).includes('modele-test.1')], ['0123456789ab', 'modele-test.1', false, false]);
         const ann = await raw('annonces').findOne({ _id: j.scanId });
         const att = preparerAnnonce({ title: 'Tropius secret 4242 PBL', description: 'Description secrète XYZ-777' }, cfg);
         H.v('   annonces : titre et description EXPURGÉS (ceux de preparerAnnonce)', ann && [ann.titre, ann.description], [att.titre, att.description]);
@@ -307,9 +308,10 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.v('   après une réponse (débité UNE fois) : identique, essais 2, net -1', [R_rep.apresReponse, R_rep.apresReponse.essais, R_rep.apresReponse.net, R_rep.apresReponse.debitsOuverts], [A_rep.apresReponse, 2, -1, ['debite']]);
         H.v('   après un abandon (rendu) : identique, essais 3, net 0', [R_ab.apresReponse, R_ab.apresReponse.essais, R_ab.apresReponse.net], [A_ab.apresReponse, 3, 0]);
         H.vrai('   la facturation est celle de l\'ambiguë, à l\'identique', JSON.stringify(R_rep.facturation) === JSON.stringify(A_rep.facturation));
-        // un seul candidat : pas de question possible -> introuvable, et le crédit est RENDU (le remboursement différé n'est jamais perdu)
+        // UN SEUL candidat (UN-CANDIDAT, D1 : « ce qui n'est pas affirmé devient une question ») : la question « est-ce cette carte ? », RÉSERVÉE comme toute question — le remboursement différé
+        // devient une réservation (jamais perdu : OUI le débite, NON ou l'abandon le rend ; l'argent complet est dans test-un-candidat-route.js)
         mode = 'refus-egalite-seul'; const un = await inst(3); const ru = await poster(sv.url, un.jeton, corps(), { nom: 'fab-refus-seul' });
-        H.v('   refus à UN seul candidat : introuvable, crédit rendu (essai 3), motif introuvable', [ru.json.analyse.statut, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['introuvable', true, 'introuvable', 3]);
+        H.v('   refus à UN seul candidat : a-trancher (question de confirmation), crédit RÉSERVÉ (essai 2), motif question', [ru.json.analyse.statut, ru.json.analyse.cartes[0].question.code, ru.json.facturation.reserve, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['a-trancher', 'confirmation', 1, false, 'question', 2]);
         // ── JUMEAU-V2 : une AFFIRMATION de la chaîne dont le produit a un jumeau devient une question RÉSERVÉE (comme une ambiguë) ; au-delà de 3 produits, ou sans colonne, un
         //    introuvable REMBOURSÉ au motif distinct, écrit dans `analyses` (jamais servi : le contrat public ne change pas). Chemin de PRODUCTION : deps.jumeaux est lu par la route.
         {

@@ -53,7 +53,7 @@ types déjà écrits par le site (`scannerContrat.ts`, `compteContrat.ts`) ; il 
 |---|---|---|---|
 | `index` | ✓ | ✓ | ✓ |
 | `carte` (`Produit`) | ✓ | `null` | `null` |
-| `candidats` (`Produit[]`) | `[]` | **2 ou 3, sans ordre de classement** | `[]` |
+| `candidats` (`Produit[]`) | `[]` | **1 à 3, sans ordre de classement** (UN seul = la question de confirmation « est-ce cette carte ? », code `confirmation`, un choix `a` = OUI ; NON = la réponse `aucune` — CONTRAT-API-V2.md §3.3) | `[]` |
 | `question` (`Question`) | `null` | ✓ | `null` |
 | `raison` | `null` | `null` | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` · `impression-indeterminee` |
 | `etat` | `{ estime, confiance, defauts, declare, retenu }` — `confiance` : `haute` · `moyenne` · `basse` · `null` | idem | `null` |

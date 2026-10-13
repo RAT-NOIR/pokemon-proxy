@@ -11,19 +11,29 @@ const H = require('./_harnais');
 // La liste des dossiers d'apports (INTERDITS) et les exceptions nommées fichier par fichier (EXCEPTIONS) vivent dans _apports-exceptions.js : l'ESPION des lectures de fichiers (_espion-fs.js) lit la MÊME définition.
 const { INTERDITS, EXCEPTIONS } = require('./_apports-exceptions');
 const ELLE_MEME = path.basename(__filename), LISTE = '_apports-exceptions.js';   // la liste partagée NOMME les dossiers interdits (c'est sa fonction) : elle est la définition, pas un usage
+// PREUVES DE REFUS (api-v2, e232caeb) : table LOCALE à ce banc, HORS de valider() et de la liste partagée. Elle ne concerne que test-retirer-worktree.js, dont l'objet est de prouver que l'outil de retrait
+// (outils/retirer-worktree.js) REFUSE ces noms et manipule des jonctions. Il les nomme comme NOMS DE DOSSIERS qu'il crée lui-même sous son dossier temporaire (fs.mkdtempSync(os.tmpdir())) et comme CHAÎNES
+// passées à estDossierApports (« …\Desktop\LOGO » : jamais ouverte ni lue) ; ses jonctions visent exclusivement des dossiers témoins de ce même temporaire. Il n'ouvre jamais un vrai dossier d'apports.
+// Pourquoi hors de la liste partagée : cette liste est celle de l'ESPION (accès réels au disque) et valider() y refuse tout chemin protégé et ses descendants, « LOGO » compris — à raison. Ici ce n'est pas un
+// accès, c'est du texte : la preuve reste une chaîne nommée dans ce banc, et l'espion n'en reçoit aucune ouverture. Exception NOMMÉE : un seul fichier, ces noms-là seulement ('verrou/photos' reste interdit),
+// le chemin du Bureau « LOGO » (chaîne) et le droit de jonction pour ce fichier seulement ; tout autre fichier, tout autre nom, tout autre dossier du Bureau reste refusé.
+const PREUVES_DE_REFUS = {
+    'test-retirer-worktree.js': { noms: ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'Desktop/LOGO', 'GABARIT-pokecardex'], chemins: ['LOGO'], jonction: true },
+};
 const sep = t => t.replace(/[\\/]+/g, '/');
 
 // La garde sur du texte : renvoie la liste des fautes. Jouée aussi sur des états fabriqués.
-function juger(nom, texte, exceptions = EXCEPTIONS) {
-    const fautes = [], t = sep(texte), bas = t.toLowerCase();
-    for (const i of INTERDITS) if (bas.includes(i.toLowerCase())) fautes.push(`${nom} nomme « ${i} »`);
+function juger(nom, texte, exceptions = EXCEPTIONS, preuves = PREUVES_DE_REFUS) {
+    const fautes = [], t = sep(texte), bas = t.toLowerCase(), p = preuves[nom] || { noms: [], chemins: [], jonction: false };
+    for (const i of INTERDITS) if (bas.includes(i.toLowerCase()) && !p.noms.includes(i)) fautes.push(`${nom} nomme « ${i} »`);
     for (const m of t.matchAll(/[A-Za-z]:\/Users\/[^/'"]+\/Desktop\/([^'"\n(,]+)/g)) {
         const chemin = m[1].trim().toLowerCase();
         // chemin exact de l'exception, ou un sous-chemin de lui (jamais l'inverse : le dossier parent n'est pas permis)
         const permis = Object.keys(exceptions[nom] || {}).some(e => { const x = e.toLowerCase(); return chemin === x || chemin.startsWith(x + '/'); });
-        if (!permis) fautes.push(`${nom} nomme le chemin du Bureau « ${m[1].trim()} », hors des exceptions nommées`);
+        const preuve = (p.chemins || []).some(e => chemin === e.toLowerCase());   // chaîne de preuve de refus : égalité EXACTE, jamais un sous-chemin
+        if (!permis && !preuve) fautes.push(`${nom} nomme le chemin du Bureau « ${m[1].trim()} », hors des exceptions nommées`);
     }
-    if (/symlinkSync|'junction'|"junction"/.test(texte)) fautes.push(`${nom} crée une jonction ou un lien`);
+    if (/symlinkSync|'junction'|"junction"/.test(texte) && !p.jonction) fautes.push(`${nom} crée une jonction ou un lien`);
     return fautes;
 }
 
@@ -52,6 +62,14 @@ H.v('l\'exception « pokemon-proxy » est un CHEMIN, plus le dossier entier', [
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\backup-2026-10-10-lot-075226'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\autre-dossier-du-testeur'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy'").length], [0, 1, 1]);
+H.v('la preuve de refus de l\'outil de retrait : ses six noms et ses jonctions passent, pour CE fichier seulement', [
+    juger('test-retirer-worktree.js', "['Logo FR','apport-manuel','Logo JP','Logo ZH','GABARIT-pokecardex'].map(n => path.join(MUT, n)); 'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO'; fs.symlinkSync(a, b, 'junction')").length,
+    juger('autre.js', "path.join(MUT, 'Logo FR')").length, juger('autre.js', "fs.symlinkSync(a, b, 'junction')").length], [0, 1, 1]);
+H.v('…mais « verrou/photos » reste interdit à ce fichier, et un chemin du Bureau inconnu aussi', [
+    juger('test-retirer-worktree.js', "'verrou/photos'").length, juger('test-retirer-worktree.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\inconnu\\\\a'").length], [1, 1]);
+H.v('la chaîne « Desktop\\LOGO » de la preuve est EXACTE et propre à ce fichier : un sous-chemin (LOGO\\sub) ou un autre fichier est refusé ; la table de preuves n\'est PAS la liste validée (aucune clé de preuve n\'y figure)', [
+    juger('test-retirer-worktree.js', "'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO\\\\sub'").length >= 1, juger('autre.js', "'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO'").length >= 1,
+    Object.keys(require('./_apports-exceptions').EXCEPTIONS).includes('test-retirer-worktree.js')], [true, true, false]);
 H.v('un fichier sain passe', juger('x.js', "path.join(__dirname, 'fixtures', 'a.json')"), []);
 // Tour 1 (I-3) : les exceptions sont validées AU CHARGEMENT de la liste partagée (valider) ; une clé vide, « . », « .. », absolue ou dans un dossier d'apports est refusée. La mutation « clé vide » tue ce banc
 // (et celui de l'espion) : le module de la liste lève dès son require.

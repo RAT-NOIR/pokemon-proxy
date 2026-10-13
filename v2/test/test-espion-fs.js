@@ -201,4 +201,22 @@ try {
     H.v('lancer-tout : une suite qui lit hors périmètre par un chemin construit est EN ÉCHEC (code 1, « 1 en échec ») et le chemin est nommé',
         [lt.status, /1 fichier\(s\), 1 en échec/.test(lt.stdout), lt.stdout.includes('hors périmètre')], [1, true, true]);
 } finally { fs.rmSync(jetable, { recursive: true, force: true }); }
+// Intégration (OUTIL-RETRAIT) : l'ouverture ÉTROITE de test-retirer-worktree.js — un voisin du dossier temporaire dont le nom commence par son préfixe, ce fichier seulement, rien d'autre
+{
+    const parentTemp = path.dirname(os.tmpdir()), PRE = 'rm-retrait-horstemp-';
+    const Pr = E.perimetre({ racine: RACINE, nomBanc: 'test-retirer-worktree.js', env: {} }), Pa = E.perimetre({ racine: RACINE, nomBanc: 'test-autre.js', env: {} });
+    H.v('test-retirer-worktree.js : le préfixe nu (argument de mkdtemp) et le dossier créé passent ; un autre nom, un dossier existant du parent du temporaire, le parent lui-même et le Bureau sont refusés ; un autre banc n\'a pas l\'ouverture', [
+        E.autorise(path.join(parentTemp, PRE), Pr, { ecriture: true }).ok, E.autorise(path.join(parentTemp, `${PRE}AbC123`, 'x', 'y'), Pr, { ecriture: true }).ok,
+        E.autorise(path.join(parentTemp, 'rm-retrait-autre-AbC123'), Pr, { ecriture: true }).ok, E.autorise(path.join(parentTemp, 'Programs'), Pr, { ecriture: true }).ok,
+        E.autorise(parentTemp, Pr, { ecriture: true }).ok, E.autorise(path.join(os.homedir(), 'Desktop', `${PRE}x`), Pr, { ecriture: true }).ok,
+        E.autorise(path.join(parentTemp, `${PRE}AbC123`), Pa, { ecriture: true }).ok], [true, true, false, false, false, false, false]);
+    const LAD = path.join(os.tmpdir(), '..', 'Local-fictif'), envL = { LOCALAPPDATA: LAD };
+    const Pl = E.perimetre({ racine: RACINE, nomBanc: 'test-retirer-worktree.js', env: envL }), Pn = E.perimetre({ racine: RACINE, nomBanc: 'test-autre.js', env: envL });
+    H.v('test-retirer-worktree.js : %LOCALAPPDATA%\\GitHubDesktop se LIT (jamais écrit) ; le parent, un autre dossier et un autre banc sont refusés', [
+        E.autorise(path.join(LAD, 'GitHubDesktop'), Pl).ok, E.autorise(path.join(LAD, 'GitHubDesktop', 'app-1'), Pl).ok, E.autorise(path.join(LAD, 'GitHubDesktop', 'app-1'), Pl, { ecriture: true }).ok,
+        E.autorise(LAD, Pl).ok, E.autorise(path.join(LAD, 'Autre'), Pl).ok, E.autorise(path.join(LAD, 'GitHubDesktop'), Pn).ok], [true, true, false, false, false, false]);
+    const { valider } = require('./_apports-exceptions');
+    const refuse = v => { try { valider({}, {}, v); return false; } catch { return true; } };
+    H.v('la liste des voisins est validée : préfixe court, sans « rm- », avec séparateur ou joker, ou nommant un dossier d\'apports : refusé ; le préfixe réel passe', [refuse({ 'x.js': ['rm-a'] }), refuse({ 'x.js': ['retrait-horstemp-'] }), refuse({ 'x.js': ['rm-retrait-horstemp-/..'] }), refuse({ 'x.js': ['rm-retrait-*-xxxxxx'] }), refuse({ 'x.js': [['rm-apport', 'manuel-xx'].join('-')] }), refuse({ 'x.js': [PRE] })], [true, true, true, true, true, false]);
+}
 H.bilan();

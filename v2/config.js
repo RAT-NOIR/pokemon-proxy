@@ -69,7 +69,8 @@ function lireConfig(env = process.env) {
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).
-        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5), cartesMax: entier('V2_LOT_CARTES_MAX', env.V2_LOT_CARTES_MAX, 20, 2, 100) },   // borné à [2, 100] : 100 est l'ancien plafond dur ; au-delà, configuration invalide
+        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5), cartesMax: entier('V2_LOT_CARTES_MAX', env.V2_LOT_CARTES_MAX, 20, 2, 100),
+               reprisesParPassage: entier('V2_LOT_REPRISES_PASSAGE', env.V2_LOT_REPRISES_PASSAGE, 200, 1, 5000) },   // UN-CANDIDAT tour 3 : lots rejugés / repris au plus par passage du balayage (le plus ancien d'abord)   // borné à [2, 100] : 100 est l'ancien plafond dur ; au-delà, configuration invalide
         limites: { installationParIpJour: 2, essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),
@@ -80,7 +81,12 @@ function lireConfig(env = process.env) {
                    // MOYENS-B1 (O4) : un plafond horaire PAR PORTEUR (compte ou installation) sur quatre routes qui n'en avaient pas. Valeurs posées SANS mesure d'usage réelle ;
                    // coût si elles sont fausses : des 429 à un client très actif, et une valeur à relever (variable d'environnement).
                    compteParPorteurHeure: entier('V2_COMPTE_HEURE', env.V2_COMPTE_HEURE, 600, 1), soldeParPorteurHeure: entier('V2_SOLDE_HEURE', env.V2_SOLDE_HEURE, 1200, 1),
-                   reponseParPorteurHeure: entier('V2_REPONSE_HEURE', env.V2_REPONSE_HEURE, 600, 1), retourLiveParPorteurHeure: entier('V2_RETOUR_LIVE_HEURE', env.V2_RETOUR_LIVE_HEURE, 600, 1) },
+                   reponseParPorteurHeure: entier('V2_REPONSE_HEURE', env.V2_REPONSE_HEURE, 600, 1), retourLiveParPorteurHeure: entier('V2_RETOUR_LIVE_HEURE', env.V2_RETOUR_LIVE_HEURE, 600, 1),
+                   // ETIQUETAGE-A : POST /api/banc/etiquette, un administrateur qui étiquette ses propres scans (~400 par session). Borné [1, 100 000] ; défaut posé SANS mesure d'usage réelle.
+                   etiquetteParPorteurHeure: entier('V2_ETIQUETTE_HEURE', env.V2_ETIQUETTE_HEURE, 600, 1, 100000) },
+        // ETIQUETAGE-A : de quel code et de quel modèle vient la réponse que `analyses` garde (base « Gemini seul » de la mesure). Une valeur illisible ou absente est `null`, jamais inventée.
+        versions: { chaine: /^[0-9a-f]{7,40}$/i.test(String(env.RENDER_GIT_COMMIT || '')) ? String(env.RENDER_GIT_COMMIT).slice(0, 12).toLowerCase() : null,
+                    modele: /^[A-Za-z0-9._-]{1,40}$/.test(String(env.V2_VERSION_MODELE || '')) ? String(env.V2_VERSION_MODELE) : null },
         // « Ma collection » (COLLECTION-COMPACTE) : bornes écrites par ce qu'elles protègent. Pas de variable d'environnement : une borne qu'on desserre se décide.
         //   · clesParCompte = le CATALOGUE COMPLET avec une MARGE : 100 000 pour le plus grand compte MESURÉ le 2026-10-11 (68 792 fiches par la règle du site sur la sauvegarde du 10/10 — 64 858 fiches liées de
         //     l'archive plus 3 934 fiches sans produit ; le contrat annonçait 39 648, un dénominateur qui ne contenait pas ces fiches), soit +45 % : le catalogue grandit (141 fiches simples au lot 6, un set récent compte
