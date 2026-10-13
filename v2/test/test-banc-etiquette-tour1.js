@@ -39,10 +39,10 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     }
     const mem = S.creerStockageMemoire();
     const stockage = { verifierBucket: async () => { }, ecrire: (c, b) => mem.ecrire(c, b), supprimer: c => mem.supprimer(c), lire: c => mem.lire(c), lister: () => mem.lister() };
-    // une base qui tombe en panne à la demande, seulement pour banc_lignes (les analyses restent lisibles : c'est la route d'ETIQUETAGE-A qui les écrit)
+    // une base qui tombe en panne à la demande POUR LE BANC (toutes ses lectures et écritures, `analyses` comprise : il ne peut alors poser AUCUNE marque lui-même). La route d'étiquetage, elle, écrit par
+    // `db.col` : c'est elle seule qui peut poser la marque de reprise, dans la même écriture que l'étiquette.
     const etat = { panne: false };
     const colPanne = n => {
-        if (n !== 'banc_lignes') return db.col(n);
         const vrai = db.col(n);
         return new Proxy(vrai, { get(c, p) { const v = c[p]; return typeof v === 'function' ? (...a) => { if (etat.panne) throw Object.assign(new Error('Mongo HS'), { code: 'MONGO_HS' }); return v.apply(c, a); } : v; } });
     };
@@ -112,7 +112,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
 
     // ═══ I3. le téléchargeur par défaut, sur un serveur HTTP LOCAL ═══
     {
-        const hits = {};
+        const hits = {}, infini = { octets: 0 };
         let port = 0;
         const jpeg = await photoJpeg(300, 400);
         const serveur = http.createServer((q, s) => {
@@ -121,6 +121,12 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
             if (q.url === '/redir') { s.writeHead(302, { location: `http://127.0.0.1:${port}/ok` }); return s.end(); }
             if (q.url === '/gros') { s.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': 6 * 1024 * 1024 }); return s.end(Buffer.alloc(6 * 1024 * 1024)); }
             if (q.url === '/gros-sans-longueur') { s.writeHead(200, { 'content-type': 'image/jpeg' }); for (let i = 0; i < 6; i++) s.write(Buffer.alloc(1024 * 1024)); return s.end(); }
+            if (q.url === '/infini') {                       // un flux SANS fin ni longueur annoncée : seul un plafond d'octets côté client l'arrête avant le délai
+                s.writeHead(200, { 'content-type': 'image/jpeg' });
+                const morceau = Buffer.alloc(1 << 20);
+                const boucle = () => { while (!s.destroyed) { infini.octets += morceau.length; if (!s.write(morceau)) { s.once('drain', boucle); return; } } };
+                return boucle();
+            }
             if (q.url === '/lent') { s.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': jpeg.length }); return s.write(jpeg.subarray(0, 10)); }   // ne finit jamais
             if (q.url === '/texte') { s.writeHead(200, { 'content-type': 'text/plain', 'content-length': jpeg.length }); return s.end(jpeg); }
             if (q.url === '/faux-octets') { s.writeHead(200, { 'content-type': 'image/jpeg' }); return s.end('pas une image'); }
@@ -140,6 +146,8 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
             H.v('I3. un corps annoncé de 6 Mo est refusé', [x.r, x.photo], ['echec', undefined]);
             x = await essai('/gros-sans-longueur');
             H.v('I3. un corps de 6 Mo SANS longueur annoncée est coupé et refusé', [x.r, x.photo], ['echec', undefined]);
+            x = await essai('/infini');
+            H.v('I3. un flux sans fin ni longueur est COUPÉ au plafond (le serveur n\'a pas envoyé 25 Mo) : le plafond d\'octets est tenu par le téléchargement, pas seulement par le décodage', [x.r, x.photo, infini.octets < 25 * 1024 * 1024], ['echec', undefined, true]);
             x = await essai('/lent');
             H.v('I3. un serveur qui ne finit jamais expire (délai injecté 400 ms) : abandon en moins de 3 s, rien de stocké', [x.r, x.ms < 3000, x.photo], ['echec', true, undefined]);
             x = await essai('/texte');
