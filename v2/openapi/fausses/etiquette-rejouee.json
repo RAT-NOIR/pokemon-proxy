@@ -1,5 +1,6 @@
 {
   "success": true,
   "etat": "rejoue",
-  "rev": 1
+  "rev": 1,
+  "banc": "en-attente"
 }

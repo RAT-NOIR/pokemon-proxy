@@ -4771,12 +4771,19 @@
           "rev": {
             "type": "integer",
             "minimum": 1
+          },
+          "banc": {
+            "enum": [
+              "ecrit",
+              "en-attente"
+            ]
           }
         },
         "required": [
           "success",
           "etat",
-          "rev"
+          "rev",
+          "banc"
         ],
         "additionalProperties": false
       },
