@@ -26,7 +26,7 @@
 const normaliserNom = n => String(n || '').normalize('NFC').toLowerCase()
     .replace(/[’‘ʼ`´]/g, "'").replace(/[–—‐]/g, '-')
     .replace(/♂/g, 'm').replace(/♀/g, 'f').replace(/[\s\-'.&:!?,]/g, '');
-const { ALIAS_CARDMARKET_VERS_BULBAPEDIA } = require('./alias-noms');
+const { aliasDe } = require('./alias-noms');   // global (ALIAS_CARDMARKET_VERS_BULBAPEDIA) ou limité à l'expansion de la cible (ALIAS_PAR_EXPANSION, lot CEL)
 const chiffresDuNumero = n => { const m = String(n ?? '').match(/\d+/); return m ? String(parseInt(m[0], 10)) : null; };
 // LA CLÉ DE NUMÉRO GARDE SON PRÉFIXE ALPHABÉTIQUE. `chiffresDuNumero` (« S04 » -> « 4 ») joignait les
 // 29 produits de la sous-série S d'EC1 aux cartes 001…029 du set principal (Venusaur S04 -> Ekans
@@ -202,7 +202,7 @@ const clesNom = nom => [...new Set([normaliserNom(nom), normaliserNom(String(nom
  * @param {object[]} cartes les cartes du set, TOUTES (multiplicités comptées, §34)
  * @returns {(carte: object, p: {nom: string}) => object[]|null}  les AUTRES cartes que le nom désigne, ou null
  */
-function temoinDuNom(cartes) {
+function temoinDuNom(cartes, idExpansion = null) {
     const clesCarte = new Map(), parCle = new Map();
     for (const c of cartes) {
         const k = c.nomEn ? clesNom(nomJointDe(c)) : [];
@@ -212,7 +212,7 @@ function temoinDuNom(cartes) {
     return (carte, p) => {
         const kc = clesCarte.get(carte._id) || [];
         if (!kc.length) return null;
-        const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom];
+        const alias = aliasDe(p.nom, idExpansion);
         const kp = [...new Set([...clesNom(p.nom), ...(alias ? clesNom(alias) : [])])];
         if (kp.some(k => kc.includes(k))) return null;
         const autres = [...new Map(kp.flatMap(k => parCle.get(k) || []).filter(c => c._id !== carte._id).map(c => [c._id, c])).values()];
@@ -243,7 +243,7 @@ function joindre(cartes, produits, cible) {
         const nom = normaliserNom(p.nom);
         if (!parNom.has(nom)) parNom.set(nom, []); parNom.get(nom).push(p);
         // Alias à la main : le produit est aussi indexé sous le nom que Bulbapedia lui donne.
-        const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom];
+        const alias = aliasDe(p.nom, cible.idExpansion);
         if (alias) { const k = normaliserNom(alias); if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(p); }
     }
     const attache = (carte, p, preuve, detail, numeroFiche = null) => {
@@ -320,7 +320,7 @@ function joindre(cartes, produits, cible) {
     // « Miraidon » sans impression (appartenance par la Setlist seule) prenait les produits n°013 et n°092 déjà joints — 7 produits
     // vers plusieurs cartes. Un produit joint par son NUMÉRO n'est plus offert au nom de personne.
     const etatDeCarte = new Map();
-    const temoin = temoinDuNom(cartes);
+    const temoin = temoinDuNom(cartes, cible.idExpansion);
     const contradictions = [];            // { carte, p, autres, detail } — le numéro désigne carte, le nom désigne autres
     for (const carte of cartes) {
         // 🔴 UNE PAGE SANS NOM N'EST PAS UNE CARTE (2026-09-24). Les 6 documents sans nomEn de la base sont 4 pages

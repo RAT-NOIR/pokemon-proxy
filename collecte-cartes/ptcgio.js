@@ -17,7 +17,7 @@
 // dédié montrant la marque, une image serait un SUBSTITUT (§19) — `verdictDuSet` les refuse par leur nom, énumérés.
 // ⚠️ La source ne livre ni nom ni donnée : le NOM d'un produit ne se vérifie donc pas carte par carte à la collecte. Ce qui le garantit est la
 // numérotation du set (segments couverts par les témoins, suffixe/préfixe du kit) ; un numéro « non couvert par un témoin » reste un trou.
-const { cleNumero } = require('./jointure');
+const { cleNumero, normaliserNom } = require('./jointure');
 const T = require('./tpc');
 
 const SOURCE = 'pokemontcg.io';
@@ -48,6 +48,18 @@ const TABLE_PTCGIO = Object.freeze([
     { slug: 'McDonalds-Collection-2016', id: 'mcd16', segments: [[1, 12]], marque: 'collection de 12 cartes ©2015 ; symbole d\'extension propre au tirage McDonald\'s : un « m » stylisé à côté de 6/12 (vu agrandi, relecteur)', temoins: [t(1, 'Vulpix', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
     { slug: 'McDonalds-Collection-2019', id: 'mcd19', segments: [[1, 12]], marque: 'collection de 12 cartes ©2019 ; symbole d\'extension propre au tirage McDonald\'s : un symbole rond (M stylisé) en bas à gauche (vu agrandi, relecteur)', temoins: [t(1, 'Caterpie', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
     { slug: 'McDonalds-Collection-2022', id: 'mcd22', segments: [[1, 15]], marque: 'collection de 15 cartes ©2022 ; symbole propre au tirage, en bas à gauche, à côté de la marque de règlement « E » (vu agrandi, relecteur)', temoins: [t(1, 'Ledyba', '1/15'), t(8, 'Chinchou', '8/15'), t(15, 'Smeargle', '15/15')] },
+    // ── CEL (2026-10-13) : la CLASSIC COLLECTION de Celebrations (25 cartes, réimpressions des sets d'origine, marquées du logo « 25 »). Le serveur la range sous `cel25c`, fichier
+    // `<n° imprimé d'origine>_A_hires.png`. Elle n'a PAS de segment de numérotation : ses numéros sont ceux de sets d'origine différents (2/102, 8/82, 17/17, 109/111…) et quatre
+    // cartes partagent « 15 ». Chaque numéro n'est donc servi que sous le NOM de son témoin (`numeroDe: 'fiche'` : le numéro de la FICHE, sans zéros de tête — « 002 » est le tirage
+    // principal, ligne cel25 — ET le nom de la carte), jamais par plage. 22 images ouvertes à l'œil le 2026-10-13 (numéro imprimé, nom, logo « 25 ») ; les 3 autres cartes « 15 »
+    // (Here Comes Team Rocket!, Rocket's Zapdos, Claydol) n'ont pas d'adresse connue (15_A1…A4 : 404) : elles restent des trous. Placée AVANT cel25 : un numéro de fiche à nom prouvé
+    // gagne sur l'adresse nue.
+    { slug: 'Celebrations', id: 'cel25c', numeroDe: 'fiche', suffixeUrl: '_A', segments: [], lu: '2026-10-13',
+      marque: 'logo « 25 » de la célébration (Pikachu jaune, « 2 » et « 5 » rouges) imprimé sur chaque carte de la Classic Collection, numéro imprimé = numéro de la carte d\'origine',
+      temoins: [t(2, 'Blastoise', '2/102'), t(4, 'Charizard', '4/102'), t(8, 'Dark Gyarados', '8/82'), t(9, 'Team Magma\'s Groudon', '9/95'), t(15, 'Venusaur', '15/102'), t(17, 'Umbreon', '17/17'),
+          t(20, 'Cleffa', '20/111'), t(24, '_____\'s Pikachu', '24'), t(54, 'Mewtwo-EX', '54/99'), t(60, 'Tapu Lele-GX', '60/145'), t(66, 'Shining Magikarp', '66/64'), t(73, 'Imposter Professor Oak', '73/102'),
+          t(76, 'M Rayquaza-EX', '76/108'), t(86, 'Rocket\'s Admin.', '86/109'), t(88, 'Mew ex', '88/92'), t(93, 'Gardevoir ex δ', '93/101'), t(97, 'Xerneas-EX', '97/146'), t(107, 'Donphan', '107/123'),
+          t(109, 'Luxray GL LV.X', '109/111'), t(113, 'Reshiram', '113/114'), t(114, 'Zekrom', '114/114'), t(145, 'Garchomp C LV.X', '145/147')] },
     { slug: 'Celebrations', id: 'cel25', segments: [[1, 25]], marque: 'logo « 25 » de la célébration imprimé sur chaque carte', temoins: [t(1, 'Ho-Oh', '001/025'), t(5, 'Pikachu', '005/025'), t(11, 'Mew', '011/025'), t(24, 'Professor\'s Research', '024/025'), t(25, 'Mew', '025/025')] },
     { slug: 'Shining-Legends', id: 'sm35', segments: [[1, 73], [74, 75]], marque: 'symbole Shining Legends, ©2017, dénominateur /73 (principal 1-73, secrètes au-delà)',
       temoins: [t(1, 'Bulbasaur', '1/73'), t(4, 'Shroomish', '4/73'), t(29, 'Raichu-GX', '29/73'), t(55, 'Hoopa', '55/73'), t(72, 'Mewtwo-GX', '72/73'), t(73, 'Pokémon Breeder', '73/73'), t(75, 'Raichu-GX', '75/73')] },
@@ -83,6 +95,7 @@ const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
 function lireNumero(ligne, numeroFiche) {
     if (!ligne || numeroFiche == null) return null;
     const s = String(numeroFiche).trim();
+    if (ligne.numeroDe === 'fiche') return /^[1-9]\d{0,2}$/.test(s) ? Number(s) : null;   // numéro d'ORIGINE : sans zéros de tête (« 002 » est le tirage principal, ligne cel25)
     const m = ligne.suffixe ? new RegExp(`^(\\d{1,3})${ligne.suffixe}$`).exec(s) : ligne.prefixe ? new RegExp(`^${ligne.prefixe}(\\d{1,3})$`).exec(s) : /^0*(\d{1,3})$/.exec(s);
     return m ? Number(m[1]) : null;
 }
@@ -91,17 +104,25 @@ function lireNumero(ligne, numeroFiche) {
  * 🔑 RULING DU 2026-10-10 : la source ne livre aucun nom, la garantie d'un numéro vient des TÉMOINS. Un numéro n'est servi que dans un SEGMENT de
  * numérotation (principal, secrètes) que la ligne déclare, et chaque segment a un témoin en son sein et un témoin à son plus grand numéro.
  */
-function adresseDe(ligne, numeroFiche) {
+function adresseDe(ligne, numeroFiche, nomEn = undefined) {
     const n = lireNumero(ligne, numeroFiche);
-    return n != null && ligne.segments.some(([de, a]) => n >= de && n <= a) ? n : null;
+    if (n == null) return null;
+    // 🔑 CEL (2026-10-13) : une ligne `numeroDe: 'fiche'` ne sert un numéro que sous le NOM de son témoin — quatre cartes de la Classic Collection portent « 15 », une seule est la Venusaur.
+    // Sans le nom de la carte, rien ne se construit.
+    if (ligne.numeroDe === 'fiche') { const w = ligne.temoins.find(x => x.n === n); return w && nomEn != null && normaliserNom(w.nom) === normaliserNom(nomEn) ? n : null; }
+    return ligne.segments.some(([de, a]) => n >= de && n <= a) ? n : null;
 }
 // 🔑 T2 (2026-10-12) : certains sets numérotent leurs fichiers « SM246 », « TG05 » (promos, Trainer Gallery) — pas l'entier nu. Le jeton d'URL d'une ligne
 // (`jeton: { prefixe, largeur }`) s'écrit par ce qu'il AUTORISE : un préfixe de cette liste ÉNUMÉRÉE, sinon rien ne se construit.
 const JETONS_URL = Object.freeze(['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG', 'H']);   // T7b : « H » = les holos des séries e-Card (Skyridge ecard3, Aquapolis ecard2), fichiers « H1 »…« H32 »
-function urlHires(id, n, jeton = null) {
-    if (!jeton) return `${HOTE}/${id}/${n}_hires.png`;
+// 🔑 CEL (2026-10-13) : la Classic Collection de Celebrations est servie sous `cel25c/<n>_A_hires.png`. Le suffixe est une liste ÉNUMÉRÉE d'un seul élément, et le client ne
+// l'autorise que sur cel25c (CHEMIN_AUTORISE) : aucun autre chemin ne s'élargit.
+const SUFFIXES_URL = Object.freeze(['_A']);
+function urlHires(id, n, jeton = null, suffixe = '') {
+    if (suffixe && !SUFFIXES_URL.includes(suffixe)) throw new Error(`${SOURCE} : suffixe d'URL « ${suffixe} » hors de ce que le client autorise (${SUFFIXES_URL.join(', ')})`);
+    if (!jeton) return `${HOTE}/${id}/${n}${suffixe}_hires.png`;
     if (!JETONS_URL.includes(jeton.prefixe) || !Number.isInteger(jeton.largeur) || jeton.largeur < 1 || jeton.largeur > 3) throw new Error(`${SOURCE} : jeton d'URL « ${jeton.prefixe} » hors de ce que le client autorise (${JETONS_URL.join(', ')})`);
-    return `${HOTE}/${id}/${jeton.prefixe}${String(n).padStart(jeton.largeur, '0')}_hires.png`;
+    return `${HOTE}/${id}/${jeton.prefixe}${String(n).padStart(jeton.largeur, '0')}${suffixe}_hires.png`;
 }
 
 // Les réimpressions MARQUÉES (tampon) : sans set dédié qui montre la marque, ce serait un substitut. ÉNUMÉRÉ, par le nom Cardmarket du set.
@@ -135,7 +156,8 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
     // pas prouvé et l'entrée le DIT (`noteVariante`, lue par le site). Compté par le numéro du PRODUIT (l'adresse qu'il fait), jamais par le nom ; sans la
     // liste des numéros du set, aucune note n'est inventée.
     const parAdresse = new Map();
-    for (const nc of tousNumerosCm || []) for (const l of lignes) { const n = adresseDe(l, nc); if (n != null) { const k = `${l.id}|${n}`; parAdresse.set(k, (parAdresse.get(k) || 0) + 1); break; } }
+    // (une ligne `numeroDe: 'fiche'` n'est pas comptée ici : ses adresses sont gardées par le NOM, une seule carte par adresse — pas de variantes à signaler)
+    for (const nc of tousNumerosCm || []) for (const l of lignes) { if (l.numeroDe === 'fiche') continue; const n = adresseDe(l, nc); if (n != null) { const k = `${l.id}|${n}`; parAdresse.set(k, (parAdresse.get(k) || 0) + 1); break; } }
     const vus = new Set(), plan = [], restes = [];
     for (const x of trous) {
         // 🔴 LE NUMÉRO QUI FAIT L'ADRESSE EST CELUI DU PRODUIT CARDMARKET (`numeroCm`), pas `numeroFiche` : une réimpression porte en fiche le
@@ -145,12 +167,21 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
         const base = { carteId: x.carte._id, nomEn: x.carte.nomEn ?? null, numero, idProduct: x.idProduct };
         if (V.verdict !== 'prouve') { restes.push({ ...base, motif: V.verdict }); continue; }
         if (T.dejaServi(x.carte, slug, numero)) continue;
-        if (x.numeroCm == null || !cleNumero(x.numeroCm)) { restes.push({ ...base, motif: 'sans-numero' }); continue; }
+        // 🔑 Le numéro qui fait l'adresse est celui du PRODUIT Cardmarket (`numeroCm`) — SAUF sur une ligne `numeroDe: 'fiche'` (Classic Collection de CEL : Cardmarket ne numérote pas ces
+        // réimpressions, ou écrit « BS 15 »), où c'est le numéro de FICHE sans zéros ET le nom de la carte qui font l'adresse.
+        const source = l => (l.numeroDe === 'fiche' ? x.numeroFiche : x.numeroCm);
         let hit = null;
-        for (const l of lignes) { const n = adresseDe(l, x.numeroCm); if (n != null) { hit = { l, n }; break; } }
+        for (const l of lignes) { const n = adresseDe(l, source(l), x.carte.nomEn); if (n != null) { hit = { l, n }; break; } }
         if (!hit) {
+            // un numéro de fiche que la ligne `fiche` connaît MAIS sous un autre nom : jamais l'image d'une autre carte (quatre cartes « 15 »)
+            const parFiche = lignes.filter(l => l.numeroDe === 'fiche');
+            if (parFiche.some(l => { const n = lireNumero(l, x.numeroFiche); return n != null && l.temoins.some(w => w.n === n); })) { restes.push({ ...base, motif: 'numero-nom-contredit' }); continue; }
+            if (x.numeroCm == null || !cleNumero(x.numeroCm)) {
+                // ni numéro de produit, ni numéro de fiche lisible par une ligne : un numéro de la forme de la ligne `fiche` sans témoin reste NOMMÉ ; sinon « sans numéro »
+                restes.push({ ...base, motif: parFiche.some(l => lireNumero(l, x.numeroFiche) != null) ? 'non-couvert-par-un-temoin' : 'sans-numero' }); continue;
+            }
             // la forme est celle du set mais aucun témoin ne couvre ce numéro : RETIRÉ de l'écriture et nommé ; une autre forme (« BS 15 », « 77a ») n'est pas de ce set
-            const nonCouvert = lignes.some(l => lireNumero(l, x.numeroCm) != null);
+            const nonCouvert = lignes.some(l => lireNumero(l, source(l)) != null);
             restes.push({ ...base, motif: nonCouvert ? 'non-couvert-par-un-temoin' : 'numero-hors-set' }); continue;
         }
         if (x.numeroFiche != null) {
@@ -160,8 +191,8 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
         const cle = `${x.carte._id}|${hit.l.id}|${hit.n}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
-        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton), voie: 'set-prouve+numero',
-            preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
+        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton, hit.l.suffixeUrl || ''), voie: 'set-prouve+numero',
+            preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (${hit.l.numeroDe === 'fiche' ? `fiche ${x.numeroFiche}, nom « ${x.carte.nomEn} » = celui du témoin lu à l'œil` : `Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}`}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
     }
     return { plan, restes };
 }
@@ -195,7 +226,8 @@ const transportFetch = {
     }
 };
 const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
-const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETONS_URL.join('|')})\\d{1,3}|\\d{1,3})_hires\\.png)$`);
+// …et, SEUL, `cel25c/<n>_A_hires.png` (Classic Collection de Celebrations, lot CEL du 2026-10-13) : le suffixe `_A` n'est autorisé sur aucun autre set.
+const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETONS_URL.join('|')})\\d{1,3}|\\d{1,3})_hires\\.png|cel25c/[1-9]\\d{0,2}_A_hires\\.png)$`);
 
 /**
  * Le SEUL chemin vers images.pokemontcg.io. Garde FERMÉE : aucune requête sans verrou global lié et tenu ; hôte unique, chemins ÉNUMÉRÉS

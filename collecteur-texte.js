@@ -34,7 +34,7 @@ const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = r
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
-const { gardeNomSeul } = require('./collecte-cartes/garde-nom-seul');
+const { planSansPage } = require('./collecte-cartes/plan-sans-page');
 const { ecrirePageDeCarte } = require('./collecte-cartes/page-de-carte');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -131,28 +131,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     if (L.bulba.sansPage) {
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
         const produitsLus = await produitsDeLExpansion(prod, L.exp);
-        // `nomSeul` = LE NOM SEUL, numéros MASQUÉS (2026-10-05) : c'est la situation que la garde a calibrée (rejouer-nom-seul.js, « numéros
-        // masqués des deux côtés »). Sans masque, un kit à deux decks (Master Kit) ne joignait RIEN — ses numéros désignent deux cartes —
-        // et Celebrations perdait sa Classic Collection, numérotée comme ses sets d'origine. Sans effet sur UNP et les séries du 2026-09-26 :
-        // leurs produits n'ont aucun numéro.
-        const produits = L.bulba.nomSeul ? produitsLus.map(p => ({ ...p, numero: null })) : produitsLus;
+        // Le PLAN (masque des numéros `nomSeul`, jointure, garde du nom seul, numéro de fiche restitué) est UNE fonction pure — collecte-cartes/plan-sans-page.js —
+        // que la simulation à blanc de la recollecte appelle aussi (§21 bis : deux copies d'une règle divergent toujours).
+        const { J, produits, G } = planSansPage({ cartesDuSet, produitsLus, L, slugCardmarket });
         console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket${L.bulba.nomSeul ? ' (numéros masqués : nom seul)' : ''} · 0 requête`);
-        let J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket });
-        // `nomSeul` : une expansion SANS AUCUN numéro (Unnumbered Promos) ne se joint que par le nom. La garde bidirectionnelle
-        // calibrée (collecte-cartes/garde-nom-seul.js : 21 925 justes, 0 faux) décide ; ce qu'elle refuse reste un produit sans
-        // carte, AVEC sa raison — un refus nommé, pas un silence.
-        if (L.bulba.nomSeul) {
-            const G = gardeNomSeul({ lignes: J.lignes, produits, cartes: cartesDuSet });
-            const nomDe = new Map(produits.map(p => [p.idProduct, p.nom]));
-            // `numeroFiche` (relecture du 2026-10-05) : le masque le laissait vide, et le site retombait sur la devinette par le slug pour
-            // une carte présente dans plusieurs sets. Il se RESTITUE quand la carte n'a qu'UNE impression dans ce set : c'est alors
-            // l'impression retenue, sans choix à faire. Deux impressions (une carte des deux decks d'un kit) : null, comme avant.
-            const impsDe = new Map(cartesDuSet.map(c => [c._id, c.impressions.filter(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck))]));
-            for (const l of G.gardees) { const imps = impsDe.get(l.carteId) || []; if (l.numeroFiche == null && imps.length === 1 && imps[0].numero != null) l.numeroFiche = imps[0].numero; }
-            J = { ...J, lignes: G.gardees, restes: [...J.restes, ...G.refusees.map(r => ({ type: 'produit-sans-carte', detail: `${r.idProduct} « ${nomDe.get(r.idProduct)} » n°— — nom seul refusé : ${r.raison}` }))],
-                compte: { ...J.compte, produitsJoints: new Set(G.gardees.map(l => l.idProduct)).size } };
-            console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);
-        }
+        if (G) console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);
         // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — nommé AVANT la première écriture de la jointure (collecte-cartes/set-nomme.js)
         const nomNaissance = await champsDeNaissance(cx.db, prod.db, { _id: slug, code: L.code, idExpansion: [L.exp], nomEn: TIRAGE === 'intl' ? nomsCibles[0] : null, nomJa: null, nomJaTraduit: null, region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE });
         const ecrit = await ecrireJointure(M, { slug, J, produits });
