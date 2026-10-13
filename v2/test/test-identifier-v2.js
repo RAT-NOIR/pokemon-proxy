@@ -382,6 +382,7 @@ async function semer(mode) {                                  // 'double' | 'sim
             let r;
             try { r = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-leve' }); } finally { db.col = colOrig; }
             H.v('5b. l\'écriture du mouvement échoue après la prise de la poche : 503 INDISPONIBLE, la chaîne n\'est pas appelée', [r.statut, r.json.erreur.code, armee], [503, 'INDISPONIBLE', false]);
+            // (tour 2 : la compensation porte l'identité du débit SUR LA POCHE, dans la même écriture que le crédit — aucune ligne de mouvement de plus)
             H.v('   solde IDENTIQUE à l\'avant (essais 3), aucun mouvement', [(await solde(y.i._id)).essais, await raw('mouvements').countDocuments({ installationId: y.i._id })], [3, 0]);
             const r2 = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-apres-panne' });
             H.v('   la panne ne coince rien : la requête suivante réussit et débite une fois', [r2.statut, r2.json.success, (await solde(y.i._id)).essais], [200, true, 2]);

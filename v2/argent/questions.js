@@ -119,7 +119,8 @@ async function grandLivreDuLot(scanId, porteur) {
     // TOUR 1 — « rendu » se juge sur les MOUVEMENTS du grand livre (`remboursement`, delta 1, écrits APRÈS le crédit), jamais sur `debit.etat` : la prise atomique met le débit à « rembourse » AVANT de créditer,
     // et un crédit qui échoue restitue l'état. Un débit « rembourse » SANS mouvement correspondant est AMBIGU (ni rendu, ni rendu à nouveau) : compté à part (`ambigus`) et listé par la réconciliation.
     const mouvements = await col('mouvements').countDocuments({ type: 'remboursement', scanId, delta: 1 });
-    const prises = debits.filter(d => d.etat === 'rembourse').length;
+    // MOYENS-B2a : la prise écrit « rendu-en-cours » AVANT le crédit (puis « rembourse » après la trace) : les deux états sont des unités PRISES dont la trace peut manquer
+    const prises = debits.filter(d => d.etat === 'rembourse' || d.etat === 'rendu-en-cours').length;
     return { total: debits.length, rendues: mouvements, ambigus: Math.max(0, prises - mouvements) };
 }
 // TOUR 1 — un arrêt du processus ENTRE deux unités d'un grand lot laisse la claim `rb|scan` (delta ≠ 0) sans son renommage `…|fait|…` : le remboursement ne reprendrait jamais (« deja-rembourse » à chaque passage).
@@ -164,10 +165,12 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
             r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
             raison = (r && r.raisonNonRembourse) || 'erreur';
         }
-        if ((r && r.rendu) || raison === 'deja-rembourse') {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
+        // MOYENS-B2a tour 1 : « remboursement-en-cours » (une unité « rendu-en-cours », ni rendue ni perdue) se traite comme « deja-rembourse » : on relit le grand livre, le lot n'est jamais écrit rendu sans les mouvements
+        const dejaOuEnCours = raison === 'deja-rembourse' || raison === 'remboursement-en-cours';
+        if ((r && r.rendu) || dejaOuEnCours) {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
             let gl = await grandLivreDuLot(scanId, porteur);
             // UN-CANDIDAT-2 : le PERDANT d'une course a pu relire le grand livre avant que le gagnant du claim ait fini de rendre : il relit (courte pause, 3 fois au plus) avant d'écrire une marque
-            for (let i = 0; i < 3 && raison === 'deja-rembourse' && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
+            for (let i = 0; i < 3 && dejaOuEnCours && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
             if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant }); return { rendu: true }; }
             await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
             console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}${gl.ambigus ? `, ${gl.ambigus} débit(s) « rembourse » sans mouvement` : ''}) — écrit « lot à rendre », repris par le balayage`);
