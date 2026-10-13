@@ -382,7 +382,8 @@ async function semer(mode) {                                  // 'double' | 'sim
             let r;
             try { r = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-leve' }); } finally { db.col = colOrig; }
             H.v('5b. l\'écriture du mouvement échoue après la prise de la poche : 503 INDISPONIBLE, la chaîne n\'est pas appelée', [r.statut, r.json.erreur.code, armee], [503, 'INDISPONIBLE', false]);
-            H.v('   solde IDENTIQUE à l\'avant (essais 3), aucun mouvement', [(await solde(y.i._id)).essais, await raw('mouvements').countDocuments({ installationId: y.i._id })], [3, 0]);
+            // MOYENS-B2a tour 1 (I-2) : la compensation laisse UNE trace `compensation` (delta 0, sans poche : le solde et les sommes de la réconciliation n'en voient rien) ; aucun mouvement de crédit ni de débit
+            H.v('   solde IDENTIQUE à l\'avant (essais 3), aucun mouvement de crédit ou de débit, UNE trace de compensation (delta 0)', [(await solde(y.i._id)).essais, await raw('mouvements').countDocuments({ installationId: y.i._id, type: { $ne: 'compensation' } }), await raw('mouvements').countDocuments({ installationId: y.i._id, type: 'compensation', delta: 0 })], [3, 0, 1]);
             const r2 = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-apres-panne' });
             H.v('   la panne ne coince rien : la requête suivante réussit et débite une fois', [r2.statut, r2.json.success, (await solde(y.i._id)).essais], [200, true, 2]);
         }
