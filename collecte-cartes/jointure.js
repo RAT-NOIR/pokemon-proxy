@@ -32,7 +32,9 @@ const chiffresDuNumero = n => { const m = String(n ?? '').match(/\d+/); return m
 // 29 produits de la sous-série S d'EC1 aux cartes 001…029 du set principal (Venusaur S04 -> Ekans
 // 004), mesuré le 2026-09-12 : 29 jointures fausses, preuve « set+numero ». C'est la classe des
 // 1 936 produits à préfixe alphabétique (S, TG, SV, GG, H…) déjà nommée dans sets-vintage-japonais.js.
-const cleNumero = n => { const m = String(n ?? '').trim().toUpperCase().match(/^([A-Z-]*)0*(\d+)([A-Z]*)$/); return m ? `${m[1]}${m[2]}${m[3]}` : (String(n ?? '').trim().toUpperCase() || null); };
+// (POP2, 2026-10-13) « R/RGB », « G/RGB », « B/RGB » (les trois Mew du 30th Celebration, 909509-909511) : Cardmarket écrit la lettre suivie du code du trio, la carte
+// porte les impressions « R », « G », « B ». Forme EXACTE et limitée (une lettre R, G ou B) ; mesurée sur toute la base : aucune autre valeur ne change de clé.
+const cleNumero = n => { const s = String(n ?? '').trim().toUpperCase(); const rgb = /^([RGB])\/RGB$/.exec(s); if (rgb) return rgb[1]; const m = s.match(/^([A-Z-]*)0*(\d+)([A-Z]*)$/); return m ? `${m[1]}${m[2]}${m[3]}` : (s || null); };
 
 /**
  * « Alakazam [Damage Swap | Confuse Ray] » -> { nom: 'Alakazam', attaques: ['Damage Swap', 'Confuse Ray'] }
