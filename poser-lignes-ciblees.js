@@ -2,6 +2,7 @@
 // UNE LIGNE DE JOINTURE PROUVÉE, POSÉE SANS REPARSE (lot POP2, 2026-10-13)
 // ============================================================
 //   node poser-lignes-ciblees.js --code=PAL --produits=872163                                    (simulation : rien n'est écrit)
+//   node poser-lignes-ciblees.js --code=x30C --produits=909373,909374 --cartes-du-parent         (un Additionals jamais collecté : cartes du parent)
 //   node lot-additif.js --quoi="…" --collections=cartes,cartes_produits -- node poser-lignes-ciblees.js --code=PAL --produits=872163 --attendu=1 --ecrire
 //
 // POURQUOI : `collecteur-texte.js --set=X --reparser` rejoue TOUTE la jointure d'un set, et son upsert `$set` réécrit chaque ligne que joindre() refabrique —
@@ -49,8 +50,21 @@ async function ecrireLignes(db, lignes, metaDe) {
     return { lignes: n, cartes: c };
 }
 
+/**
+ * Les cartes que joindre() reçoit. Par défaut, celles qui portent le slug de la ligne. `--cartes-du-parent` (lot X30C, 2026-10-13) : un ADDITIONALS dont le
+ * slug n'est porté que par ses fiches simples (aucune collecte du slug n'a eu lieu) joint les cartes de son PARENT — celui que la ligne déclare (`additionalsDe`),
+ * jamais une fiche simple (elle serait « jointe » à elle-même). La ligne reste écrite sous le slug de l'Additionals.
+ */
+function filtreDesCartes(L, duParent, ligneDe) {
+    if (!duParent) return { sets: L.slugSet || L.code };
+    if (!L.additionalsDe) throw new Error(`${L.code} : --cartes-du-parent exige une ligne Additionals (additionalsDe)`);
+    const P = ligneDe(L.additionalsDe);
+    if (!P || !P.slugSet) throw new Error(`${L.code} : le parent déclaré (${L.additionalsDe}) est absent de la table`);
+    return { sets: P.slugSet, ficheSimple: { $exists: false } };
+}
+
 async function executer({ argv, ouvrirConnexions, log = console.log, err = console.error }) {
-    const AUTORISES = [/^--code=[\w.\/-]+$/, /^--produits=\d+(,\d+)*$/, /^--attendu=\d+$/, /^--ecrire$/];
+    const AUTORISES = [/^--code=[\w.\/-]+$/, /^--produits=\d+(,\d+)*$/, /^--attendu=\d+$/, /^--ecrire$/, /^--cartes-du-parent$/];
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     if (inconnus.length || !arg('code') || !arg('produits')) { err(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--code=<code de la table> et --produits=<idProduct,…> obligatoires`); return 2; }
@@ -63,7 +77,7 @@ async function executer({ argv, ouvrirConnexions, log = console.log, err = conso
     const slug = L.slugSet || L.code, TIRAGE = L.bulba.tirage || 'jp';
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     try {
-        const cartes = await cx.db.collection('cartes').find({ sets: slug }).toArray();
+        const cartes = await cx.db.collection('cartes').find(filtreDesCartes(L, argv.includes('--cartes-du-parent'), ligneDeTable)).toArray();
         const produits = await produitsDeLExpansion(prod, L.exp);
         const visees = arg('produits').split(',').map(Number);
         const existants = new Map((await cx.db.collection('cartes_produits').find({ idProduct: { $in: visees } }, { projection: { preuve: 1, idProduct: 1 } }).toArray()).map(l => [l._id, l]));
@@ -83,7 +97,7 @@ async function executer({ argv, ouvrirConnexions, log = console.log, err = conso
     } finally { await fermer(); }
 }
 
-module.exports = { planifier, verifierAttendu, ecrireLignes, executer };
+module.exports = { planifier, verifierAttendu, ecrireLignes, executer, filtreDesCartes };
 
 if (require.main === module) {
     require('dotenv').config();

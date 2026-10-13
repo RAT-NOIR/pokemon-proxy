@@ -24,6 +24,16 @@ verifier('un produit à DEUX cartes (nom + numéro qui désignent deux cartes) :
 verifier('le témoin du nom de joindre() contredit (numéro d\'une autre carte) : refus', (() => { const p = plan({ cartes: [carte(1, 'Quaxly', '172'), carte(2, 'Ghetsis', '050')], visees: [10] }); return p.lignes.length; })(), 0);
 verifier('--attendu : le bon nombre passe, un autre ou l\'absence refuse', [verifierAttendu(bon, 1).ok, verifierAttendu(bon, 2).ok, verifierAttendu(bon, undefined).ok], [true, false, false]);
 
+// ➕ 2026-10-13 (lot X30C) --cartes-du-parent : un ADDITIONALS dont les cartes du parent ne portent pas encore son slug (seules ses fiches simples le portent)
+const { filtreDesCartes } = require('./poser-lignes-ciblees');
+const LIGNE_X = { code: 'x30C', slugSet: '30th-Celebration-Additionals', additionalsDe: '30C' };
+const LIGNE_P = { code: '30C', slugSet: '30th-Celebration' };
+const ligneDe = c => (c === '30C' ? LIGNE_P : null);
+verifier('sans l\'option : les cartes du slug de la ligne (comportement inchangé)', filtreDesCartes(LIGNE_X, false, ligneDe), { sets: '30th-Celebration-Additionals' });
+verifier('avec l\'option : les cartes du PARENT déclaré par la ligne, jamais une fiche simple', filtreDesCartes(LIGNE_X, true, ligneDe), { sets: '30th-Celebration', ficheSimple: { $exists: false } });
+verifier('l\'option sur une ligne qui n\'est pas un Additionals : refus nommé', (() => { try { filtreDesCartes(LIGNE_P, true, ligneDe); return 'passe'; } catch (e) { return /additionalsDe/.test(e.message); } })(), true);
+verifier('l\'option avec un parent absent de la table : refus nommé', (() => { try { filtreDesCartes({ ...LIGNE_X, additionalsDe: 'ZZZ' }, true, ligneDe); return 'passe'; } catch (e) { return /ZZZ/.test(e.message); } })(), true);
+
 (async () => {
     const banc = await ouvrirBanc();
     const { MongoClient } = require('mongodb');
