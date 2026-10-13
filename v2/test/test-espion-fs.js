@@ -22,9 +22,14 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
 {
     const desktop = path.join(os.homedir(), 'Desktop');
     const Pf = nom => E.perimetre({ racine: RACINE, nomBanc: nom, env: {} });
-    const site = path.join(desktop, 'rat-market-site', 'lib', 'x.ts');
-    H.v('une exception NOMMÉE passe pour son fichier seulement (test-collection-forme.js : le site), jamais pour un autre', [E.autorise(site, Pf('test-collection-forme.js')).ok, E.autorise(site, Pf('test-autre.js')).ok], [true, false]);
+    const site = path.join(desktop, 'rat-market-site', 'archives', 'CORRECTION-ILLUSTRATEURS.json');
+    H.v('une exception NOMMÉE passe pour son fichier seulement (test-collection-forme.js : un fichier de données du site), jamais pour un autre', [E.autorise(site, Pf('test-collection-forme.js')).ok, E.autorise(site, Pf('test-autre.js')).ok], [true, false]);
     H.v('   le DOSSIER PARENT d\'une exception n\'est pas permis (le Bureau entier, ni un voisin du site)', [E.autorise(desktop, Pf('test-collection-forme.js')).ok, E.autorise(path.join(desktop, 'rat-market-site-2', 'x'), Pf('test-collection-forme.js')).ok], [false, false]);
+    // Tour 3 (M-E) : test-collection-forme.js lit TROIS fichiers du site, en lecture seule ; plus la clé nue qui ouvrait le site entier (son .env compris) en lecture ET écriture
+    const sj = f => path.join(desktop, 'rat-market-site', ...f.split('/')), Pcf = Pf('test-collection-forme.js');
+    H.v('test-collection-forme.js : les trois fichiers lus passent en lecture, aucune ÉCRITURE, ni le .env du site, ni un autre fichier du site, ni le dossier du site',
+        [['archives/CORRECTION-ILLUSTRATEURS.json', 'lib/logos-officiels.json', 'LISTE-FICHES-SANS-VISUEL.json'].map(f => E.autorise(sj(f), Pcf, { ecriture: false }).ok), E.autorise(sj('lib/logos-officiels.json'), Pcf, { ecriture: true }).ok, E.autorise(sj('.env'), Pcf).ok, E.autorise(sj('lib/autre.ts'), Pcf).ok, E.autorise(path.join(desktop, 'rat-market-site'), Pcf).ok],
+        [[true, true, true], false, false, false, false]);
     const voisin = path.join(path.dirname(RACINE), 'rat-market-site', 'lib', 'x.ts');
     H.v('   le même chemin nommé, trouvé depuis le dossier PARENT du checkout (copie de travail), passe pour son fichier seulement ; un autre voisin non', [E.autorise(voisin, Pf('test-chargeur-regle-site.js')).ok, E.autorise(voisin, Pf('test-autre.js')).ok, E.autorise(path.join(path.dirname(RACINE), 'autre-voisin', 'x'), Pf('test-chargeur-regle-site.js')).ok], [true, false, false]);
     H.v('   les exceptions sont CELLES de _apports-exceptions.js (une seule définition, partagée avec test-garde-apports.js)', Object.keys(require('./_apports-exceptions').EXCEPTIONS).includes('test-collection-forme.js'), true);
@@ -34,7 +39,6 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
     H.v('exception en LECTURE SEULE : lire rat-market-site/lib passe, y ÉCRIRE non, lire ailleurs dans le site (.env) non, pour les deux bancs chargeur',
         [E.autorise(lib, Pc, { ecriture: false }).ok, E.autorise(lib, Pc, { ecriture: true }).ok, E.autorise(env, Pc, { ecriture: false }).ok, E.autorise(lib, Pf('test-chargeur-regle-site.js'), { ecriture: false }).ok, E.autorise(lib, Pf('test-chargeur-regle-site.js'), { ecriture: true }).ok],
         [true, false, false, true, false]);
-    H.v('   une exception ordinaire (test-collection-forme.js) garde son droit actuel', [E.autorise(site, Pf('test-collection-forme.js'), { ecriture: true }).ok], [true]);
     // Tour 1 (I-3) : une clé d'exception vide, « . », « .. », absolue, racine, le Bureau entier, ou dans un dossier d'apports est REFUSÉE au chargement (valider)
     const V = require('./_apports-exceptions');
     const leve = (ex, ls = {}) => { try { V.valider(ex, ls); return false; } catch (e) { return /exception/i.test(e.message); } };
@@ -43,7 +47,11 @@ H.v('refusé : un autre « .banc-local\\cache-mongod » que celui du dépôt ou 
         const mal = { '(vide)': '', '(blancs)': '  ', '.': '.', '..': '..', 'a/../..': 'a/../..', '/': '/', '\\': '\\', 'lecteur': 'C:/', 'absolu': ['C:', 'Users', 'x', 'Desk' + 'top', 'y'].join('/'), 'le Bureau': 'Desk' + 'top', 'sous le Bureau': 'Desk' + 'top/x', 'dans le dossier du testeur': `pokemon-proxy/${BAS}/x`, 'dossier des apports manuels': ['apport', 'manuel'].join('-'), 'photos du verrou': ['verrou', 'photos'].join('/'), 'segment vide': 'a//b', 'finit par /': 'a/',
             // Tour 2 (I-A) : un ANCÊTRE d'un dossier d'apports ouvre le dossier d'apports lui-même (le dépôt du testeur contient les dossiers du testeur)
             'ancêtre : le dépôt principal': 'pokemon-proxy', 'ancêtre : casse': 'Pokemon-Proxy', 'ancêtre : verrou': 'pokemon-proxy/verrou', 'ancêtre : le dépôt de l\'API': 'pokemon-proxy-api-v2', 'ancêtre : verrou de l\'API': 'pokemon-proxy-api-v2/verrou',
-            'égal à un dossier d\'apports : LOGO': 'LOGO', 'égal : logo': 'logo', 'nom court 8.3': 'LOGOFR~1', 'joker': 'Logo*', 'point final': 'rat-market-site/lib.', 'espace final': 'rat-market-site/lib ' };
+            'égal à un dossier d\'apports : LOGO': 'LOGO', 'égal : logo': 'logo', 'nom court 8.3': 'LOGOFR~1', 'joker': 'Logo*', 'point final': 'rat-market-site/lib.', 'espace final': 'rat-market-site/lib ',
+            // Tour 3 (I-B) : un DESCENDANT d'un dossier protégé ouvre le dossier du testeur par le dessous (toute casse, toute profondeur)
+            'descendant : LOGO/sub': 'LOGO/sub', 'descendant : casse': 'logo/x.png', 'descendant : dossier du testeur': `${BAS}/x`, 'descendant : profond': ['apport', 'manuel'].join('-') + '/a/b', 'descendant : photos du verrou': ['verrou', 'photos'].join('/') + '/y', 'descendant sous le dépôt': `pokemon-proxy/${BAS}/a/b/c`, 'descendant des photos sous le dépôt de l\'API': 'pokemon-proxy-api-v2/' + ['verrou', 'photos'].join('/') + '/y',
+            // Tour 3 (M-E) : une clé qui ouvrirait un fichier .env (le sien, ou celui d'un dossier qu'elle contient) est refusée
+            'la clé nue du site (contient son .env)': 'rat-market-site', 'le .env du site': 'rat-market-site/.env', 'un .env sous lib': 'rat-market-site/lib/.env', 'un .env.local': 'rat-market-site/lib/.env.local' };
         H.v('   valider REFUSE (ligne par ligne) : ' + Object.keys(mal).join(' · '), Object.fromEntries(Object.entries(mal).map(([n, k]) => [n, leve({ 'test-x.js': { [k]: 'raison' } })])), Object.fromEntries(Object.keys(mal).map(n => [n, true])));
         H.v('   valider accepte les clés légitimes et exige une raison écrite', [leve({ 'test-x.js': { 'rat-market-site/lib': 'r', 'extension v2/src/fond/fausses': 'r' } }), leve({ 'test-x.js': { 'rat-market-site/lib': '' } })], [false, true]);
         H.v('   valider accepte les clés PRÉCISES déjà en usage (sauvegarde de lot, cache mongod, journal du plan, labo)', leve({ 'test-x.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'r', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'r', 'pokemon-proxy/.banc-local/cache-mongod': 'r', 'labo-embedding/rm/fixtures-g': 'r' } }), false);
@@ -95,9 +103,9 @@ try {
     H.v('une suite qui reste dans le dépôt, le dossier temporaire et le cache mongod : aucune erreur de l\'espion, code 0 (le cache absent donne ENOENT, pas ESPION_FS)',
         [dedans.status, dedans.res], [0, { depot: 'passe', tmp: 'passe', 'cache-mongod': 'ENOENT', descripteur: 'passe', 'promesse-depot': 'passe' }]);
 
-    const lireSite = `await essai('site', () => fs.readFileSync(path.join(os.homedir(), 'Desktop', 'rat-market-site', 'lib', 'inexistant-b2b.ts')));`;
+    const lireSite = `await essai('site', () => fs.readFileSync(path.join(os.homedir(), 'Desktop', 'rat-market-site', 'lib', 'logos-officiels.json')));`;
     const nommee = rouler('test-collection-forme.js', ENTETE + lireSite + FIN), autre = rouler('test-autre-banc.js', ENTETE + lireSite + FIN);
-    H.v('exception nommée : test-collection-forme.js lit le site (ENOENT : permis), test-autre-banc.js non (ESPION_FS, code 1)', [nommee.res && nommee.res.site, nommee.status, autre.res && autre.res.site, autre.status], ['ENOENT', 0, 'ESPION_FS', 1]);
+    H.v('exception nommée : test-collection-forme.js lit un fichier de données du site (lu ou ENOENT : permis), test-autre-banc.js non (ESPION_FS, code 1)', [['passe', 'ENOENT'].includes(nommee.res && nommee.res.site), nommee.status, autre.res && autre.res.site, autre.status], [true, 0, 'ESPION_FS', 1]);
 
     // ── 2 bis. TOUR 1 (I-2) : l'espion juge le chemin RÉEL — une JONCTION du dépôt vers l'extérieur est vue (le vecteur de l'incident du 2026-10-12).
     // Le dossier témoin est créé HORS du dépôt par cmd (le banc, lui-même espionné, ne pourrait pas) ; la jonction est retirée par `rmdir` NON récursif AVANT tout nettoyage récursif.

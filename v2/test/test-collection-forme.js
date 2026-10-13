@@ -28,7 +28,8 @@ H.vrai('« | » est interdit dans le numéro, « - » seul est le numéro absent
     H.v('openapi : le motif de la clé est celui de forme.js (idInterne + « | » + numéro)', P.CleDeFiche.schema.pattern, '^-?[1-9][0-9]{0,11}\\|' + F.NUMERO.source.slice(1));
 }
 // ── dérivation depuis les données du site (lecture seule). Absentes : SAUT DIT.
-const SITE = process.env.RM_SITE || 'C:\\Users\\Yung\\Desktop\\rat-market-site';
+// (tour 3 : le chemin est CONSTRUIT, pas écrit en toutes lettres — la garde sur le texte n'a plus à connaître le dossier ; l'espion juge les trois fichiers lus, en lecture seule : _apports-exceptions.js)
+const SITE = process.env.RM_SITE || path.join(require('os').homedir(), 'Desktop', 'rat-market-site');
 const fich = path.join(SITE, 'archives', 'CORRECTION-ILLUSTRATEURS.json');
 if (!fs.existsSync(fich)) console.log(`   SAUT DIT : ${fich} absent de cette machine — jeu de caractères non confronté aux données du site`);
 else {

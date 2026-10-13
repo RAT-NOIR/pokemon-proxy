@@ -95,7 +95,13 @@ function avecDelai(promesse, ms, nom) {
     let minuteur; const expire = new Promise((_, ko) => { minuteur = setTimeout(() => ko(new Error(`${nom} : pas abouti en ${ms} ms`)), ms); });
     return Promise.race([promesse, expire]).finally(() => clearTimeout(minuteur));
 }
-const attendreInitialisation = (ms = 30000) => (dernierRecompte ? avecDelai(dernierRecompte, ms, 'recompte du compteur de la collection') : Promise.resolve(null));
+// Tour 3 (M-C) : « prêt » seulement si le recompte a abouti ET n'a pas été remis à rejouer depuis (une écriture qui constate le compteur absent remet `initialisation` à null : la promesse déjà résolue ne dit plus la vérité).
+async function attendreInitialisation(ms = 30000) {
+    if (!dernierRecompte) return null;
+    const n = await avecDelai(dernierRecompte, ms, 'recompte du compteur de la collection');
+    if (initialisation === null) throw new Error('recompte à rejouer : une écriture a constaté le compteur global absent (la prochaine écriture le rejoue)');
+    return n;
+}
 const assurer = cfg => initialisation || initialiser(cfg);
 
 // ── le registre

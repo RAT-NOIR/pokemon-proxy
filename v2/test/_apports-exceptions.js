@@ -6,7 +6,8 @@ const INTERDITS = ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'verrou/pho
 // Chemins du Bureau qu'un fichier a le droit de nommer (début du chemin, séparateurs « / »), PAR FICHIER de banc. AUCUN n'est un dossier rempli à la main par le testeur.
 const EXCEPTIONS = {
     'test-abus-routes.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (dépôt voisin) ; le banc se passe du dossier absent', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'journal de lots du plan, lecture seule (RM_PROGRESS)' },
-    'test-collection-forme.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel (RM_SITE)' },
+    // Tour 3 (M-E) : trois fichiers de DONNÉES du site, lus par ce banc (RM_SITE) — en lecture seule ; plus la clé nue qui ouvrait le site entier (son .env compris) en lecture et en écriture
+    'test-collection-forme.js': { 'rat-market-site/archives/CORRECTION-ILLUSTRATEURS.json': 'données du site lues (jeu de caractères des clés), pas un apport manuel', 'rat-market-site/lib/logos-officiels.json': 'données du site lues (slugs), pas un apport manuel', 'rat-market-site/LISTE-FICHES-SANS-VISUEL.json': 'données du site lues (clés et slugs), pas un apport manuel' },
     // découvertes par l'ESPION des fichiers (_espion-fs.js, MOYENS-B2b) : ces deux bancs construisent le chemin du site par path.join (la garde sur le texte ne le voyait pas).
     // Tour 1 : ils ne lisent que rat-market-site/lib (vérifié : seuls des readFileSync et le côté SOURCE d'un copyFileSync y sont refusés sans exception) — et en LECTURE SEULE (LECTURE_SEULE ci-dessous).
     'test-chargeur-decision.js': { 'rat-market-site/lib': 'code du site (lib/*.ts, lib/*.json), pas un apport manuel : la copie embarquée de la règle est comparée à lui' },
@@ -22,6 +23,7 @@ const EXCEPTIONS = {
 };
 // Les exceptions que l'espion n'ouvre qu'en LECTURE (fichier de banc -> clés de EXCEPTIONS). Toute autre exception garde le droit d'avant.
 const LECTURE_SEULE = {
+    'test-collection-forme.js': ['rat-market-site/archives/CORRECTION-ILLUSTRATEURS.json', 'rat-market-site/lib/logos-officiels.json', 'rat-market-site/LISTE-FICHES-SANS-VISUEL.json'],
     'test-chargeur-decision.js': ['rat-market-site/lib'],
     'test-chargeur-regle-site.js': ['rat-market-site/lib'],
 };
@@ -38,6 +40,8 @@ function valider(exceptions = EXCEPTIONS, lectureSeule = LECTURE_SEULE) {
     const path = require('path'), fs = require('fs');
     const protegesRel = [];
     for (const i of INTERDITS) { const n = i.toLowerCase().replace(/^desktop\//, ''); protegesRel.push(n, `pokemon-proxy/${n}`, `pokemon-proxy-api-v2/${n}`); }
+    // Tour 3 (M-E) : les fichiers `.env` sont protégés aussi (celui du site et ceux des deux dépôts) — une clé qui les contient ou les désigne est refusée, comme tout segment `.env*`
+    protegesRel.push('rat-market-site/.env', 'pokemon-proxy/.env', 'pokemon-proxy-api-v2/.env');
     const bureau = path.join(require('os').homedir(), 'Desktop');
     const reel = p => { let abs = path.resolve(p); const reste = []; for (;;) { try { return path.join(fs.realpathSync.native(abs), ...reste.reverse()).replace(/[\\/]+/g, '/').toLowerCase(); } catch { const parent = path.dirname(abs); if (parent === abs) return path.resolve(p).replace(/[\\/]+/g, '/').toLowerCase(); reste.push(path.basename(abs)); abs = parent; } } };
     for (const [nom, ex] of Object.entries(exceptions)) {
@@ -51,10 +55,12 @@ function valider(exceptions = EXCEPTIONS, lectureSeule = LECTURE_SEULE) {
             if (segments.some(s => /[~*?<>|"]/.test(s) || /[. ]$/.test(s))) faute(nom, cle, 'segment avec un joker, un nom court 8.3 (~), un caractère interdit ou un point ou espace final');
             const bas = cle.toLowerCase();
             for (const i of INTERDITS) if (bas.includes(i.toLowerCase())) faute(nom, cle, `tombe dans un dossier d'apports (${i})`);
-            for (const p of protegesRel) if (p === bas || p.startsWith(`${bas}/`)) faute(nom, cle, `est, ou CONTIENT, le dossier protégé « ${p} » (une exception nomme un chemin précis qui n'en contient aucun)`);
-            // le chemin RÉEL (jonctions suivies) : la clé résolue sous le Bureau ne doit contenir aucun dossier protégé résolu de même
+            if (segments.some(s => /^\.env/i.test(s))) faute(nom, cle, 'désigne un fichier .env');
+            // ni égale, ni ANCÊTRE (tour 2), ni DESCENDANTE (tour 3 : « LOGO/sub » ouvre le dossier du testeur par le dessous) d'un chemin protégé
+            for (const p of protegesRel) if (p === bas || p.startsWith(`${bas}/`) || bas.startsWith(`${p}/`)) faute(nom, cle, `est, CONTIENT ou est SOUS le chemin protégé « ${p} » (une exception nomme un chemin précis, sans aucun lien avec eux)`);
+            // le chemin RÉEL (jonctions suivies) : la clé résolue sous le Bureau, dans les deux sens, comme ci-dessus
             const kr = reel(path.join(bureau, cle));
-            for (const p of protegesRel) { const pr = reel(path.join(bureau, p)); if (pr === kr || pr.startsWith(`${kr}/`)) faute(nom, cle, `son chemin réel contient « ${p} »`); }
+            for (const p of protegesRel) { const pr = reel(path.join(bureau, p)); if (pr === kr || pr.startsWith(`${kr}/`) || kr.startsWith(`${pr}/`)) faute(nom, cle, `son chemin réel touche « ${p} »`); }
             if (typeof raison !== 'string' || raison.trim() === '') faute(nom, cle, 'raison écrite exigée');
         }
     }

@@ -47,7 +47,7 @@ H.v('refuse Logo JP, Logo ZH, verrou\\photos et GABARIT-pokecardex', ['Logo JP',
 H.v('refuse Desktop\\LOGO', juger('x.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\LOGO\\\\a.png'").length >= 1, true);
 H.v('refuse un dossier du Bureau inconnu', juger('x.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\inconnu\\\\a'").length, 1);
 H.v('refuse une jonction', juger('x.js', "fs.symlinkSync(a, b, 'junction')").length, 1);
-H.v('une exception nommée passe, pour son fichier seulement', [juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length, juger('autre.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length], [0, 1]);
+H.v('une exception nommée passe, pour son fichier seulement', [juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site\\\\lib\\\\logos-officiels.json'").length, juger('autre.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site\\\\lib\\\\logos-officiels.json'").length, juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length], [0, 1, 1]);   // tour 3 : la clé nue du site n'est plus permise
 H.v('l\'exception « pokemon-proxy » est un CHEMIN, plus le dossier entier', [
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\backup-2026-10-10-lot-075226'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\autre-dossier-du-testeur'").length,
@@ -62,4 +62,9 @@ H.v('une exception à clé vide, « . » ou « .. » est refusée (elle ouvrirai
 H.v('une exception qui est un ANCÊTRE d\'un dossier d\'apports (le dépôt du testeur, son verrou, le dépôt de l\'API) ou « LOGO » est refusée ; la liste réelle ajoutée de l\'une d\'elles est refusée',
     [refuse({ 'x.js': { 'pokemon-proxy': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy/verrou': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy-api-v2': 'raison' } }), refuse({ 'x.js': { LOGO: 'raison' } }),
         refuse({ ...require('./_apports-exceptions').EXCEPTIONS, 'test-chargeur-decision.js': { 'rat-market-site/lib': 'r', 'pokemon-proxy': 'r' } })], [true, true, true, true, true]);
+// Tour 3 (I-B) : un DESCENDANT d'un dossier protégé est refusé aussi (mutation A de la relecture 3 : « LOGO/sub » ajouté à un banc chargeur) ; (M-E) toute clé qui ouvrirait un .env l'est aussi
+const EX = require('./_apports-exceptions').EXCEPTIONS;
+H.v('une exception SOUS le dossier du testeur (LOGO/sub, logo/x.png) ou qui ouvrirait un .env (la clé nue du site, son .env) est refusée ; la liste réelle ajoutée de « LOGO/sub » est refusée',
+    [refuse({ 'x.js': { 'LOGO/sub': 'raison' } }), refuse({ 'x.js': { 'logo/x.png': 'raison' } }), refuse({ 'x.js': { 'rat-market-site': 'raison' } }), refuse({ 'x.js': { 'rat-market-site/.env': 'raison' } }),
+        refuse({ ...EX, 'test-chargeur-decision.js': { 'rat-market-site/lib': 'r', 'LOGO/sub': 'r' } })], [true, true, true, true, true]);
 H.bilan();
