@@ -41,44 +41,8 @@ const mo = o => Number((o / 1e6).toFixed(1));
 const nomCourt = x => String(x).slice(0, 60);
 const cause = e => (e && (e.codeName || e.code || e.name)) || 'erreur';     // jamais e.message : un pilote peut y mettre une adresse
 
-// ── 1. LES HÔTES : comparés, jamais affichés ──────────────────────────────────────────────────────────────────────────────
-/** Les identités de serveur d'une URI mongodb(+srv)://. Hôte Atlas : ses trois derniers labels (le nom srv et les hôtes de shard d'une même grappe se confondent) ; autre hôte : hôte:port. [] si illisible. */
-function clesDHotes(uri) {
-    if (typeof uri !== 'string') return [];
-    const m = /^mongodb(\+srv)?:\/\/(?:[^@/]*@)?([^/?#]+)/i.exec(uri.trim());
-    if (!m) return [];
-    const cles = [];
-    for (let h of m[2].split(',')) {
-        h = h.trim().toLowerCase();
-        let port = null;
-        const br = /^(\[[0-9a-f:.]+\])(?::(\d+))?$/.exec(h);
-        if (br) { h = br[1]; port = br[2] || null; }
-        else { const p = /^([a-z0-9._-]+?)(?::(\d+))?$/.exec(h); if (!p) return []; h = p[1].replace(/\.$/, ''); port = p[2] || null; }
-        if (!h) return [];
-        const l = h.split('.');
-        cles.push(h.endsWith('.mongodb.net') && l.length >= 4 ? l.slice(-3).join('.') : `${h}:${port || '27017'}`);
-    }
-    return cles;
-}
-/** Un utilisateur ne se lit que dans l'URI : { ok, raison } — des NOMS de variables seulement. */
-function jugerHotes(env) {
-    const cible = clesDHotes(env.MONGODB_ESSAI_URI), lecture = clesDHotes(env.MONGODB_LECTURE_URI);
-    if (!cible.length) return { ok: false, raison: 'MONGODB_ESSAI_URI est illisible : je ne peux pas dire où elle pointe, refusé (doute = refus).' };
-    if (!lecture.length) return { ok: false, raison: 'MONGODB_LECTURE_URI est illisible : je ne peux pas dire où elle pointe, refusé (doute = refus).' };
-    const production = new Set();
-    for (const nom of ['MONGODB_URI', 'MONGODB_CARTES_URI', 'MONGODB_LECTURE_URI', 'MONGODB_CARTES_LECTURE_URI']) {
-        if (env[nom] === undefined || env[nom] === '') continue;
-        const c = clesDHotes(env[nom]);
-        if (!c.length) return { ok: false, raison: `${nom} est illisible : je ne peux pas la comparer à la cible, refusé (doute = refus).` };
-        c.forEach(x => production.add(x));
-    }
-    if (cible.some(c => production.has(c))) return { ok: false, raison: 'MONGODB_ESSAI_URI pointe l\'hôte (la grappe) de la production, des cartes ou de la source de lecture : refusé — la copie n\'écrit jamais là.' };
-    if (env.MONGODB_URI) {
-        const ecr = clesDHotes(env.MONGODB_URI);
-        if (!lecture.some(c => ecr.includes(c))) return { ok: false, raison: 'MONGODB_LECTURE_URI ne pointe pas la grappe de MONGODB_URI (la production) : la source de la copie doit être la production, refusé.' };
-    }
-    return { ok: true };
-}
+// ── 1. LES HÔTES, 2bis. LA PREUVE DE LA CIBLE : UN SEUL module, partagé avec v2/admin/compte-essai.js (le plus strict des deux outils sur chaque point) ──────────────
+const { clesDHotes, jugerHotes, prouverCible, ouvrirCartesParDefaut } = require('./preuve-cible');
 
 // ── 2. LA SOURCE : un adaptateur à liste fermée ────────────────────────────────────────────────────────────────────────────
 /** Ce que la copie peut faire de la production, et rien d'autre. `db` est la Db native d'une connexion DÉJÀ jugée en lecture seule ; elle ne sort jamais de ce module. */
@@ -101,64 +65,6 @@ function adapterSource(db) {
         /** Les deux collections de MÉTA (date du guide, fichier d'export du catalogue), en entier, une chaîne par collection : ce que les imports de la production changent. */
         async meta() { const o = {}; for (const n of COLLECTIONS_META) o[n] = JSON.stringify(await facade.collection(garde(n)).find({}).sort({ _id: 1 }).toArray()); return o; }
     });
-}
-
-// ── 2bis. LA PREUVE DE LA CIBLE (tour 1, C1) : côté serveur, jamais par le nom d'un hôte ─────────────────────────────────────
-// Une liste de noms d'hôtes est une liste de REFUS : un alias de la production, un point d'accès privé ou une troisième grappe n'y figurent pas, la cible y serait VIDE, et
-// l'option du vide (mongo-connexion.js) retire justement le filet « une base réelle n'est jamais vide » (§50 : le contrôle juste porte sur ce que le cas redouté n'a PAS).
-// Écrite par ce qu'elle AUTORISE, sur la connexion CIBLE elle-même :
-//  (a) connectionStatus : l'utilisateur n'a d'actions d'écriture QUE sur la base rm_essai, et ses rôles sont readWrite/read sur rm_essai (aucun rôle d'une autre base, aucun rôle d'administration) ;
-//  (b) hello.setName de la cible est connu, et DIFFÉRENT de celui de la source (la production) ET de celui de cartes ;
-// tout cas non conclu (commande refusée, champ absent, erreur, cartes injoignable) BLOQUE et le dit. Aucune raison ne contient un nom d'utilisateur ni un setName.
-const ROLES_ADMIS = Object.freeze(['readWrite', 'read']);
-async function prouverCible(db, { source, ouvrirCartes, env = process.env } = {}) {
-    const LS = require('../chargeur/lecture-seule');
-    const refus = raison => ({ ok: false, raison });
-    let statut;
-    try { statut = await db.admin().command({ connectionStatus: 1, showPrivileges: true }); }
-    catch { return refus('connectionStatus a échoué sur la cible : je ne peux pas prouver ce que son utilisateur peut écrire.'); }
-    const info = statut && typeof statut === 'object' ? statut.authInfo : null;
-    if (!info || typeof info !== 'object') return refus('connectionStatus sans authInfo : je ne sais pas ce que l\'utilisateur de la cible peut faire.');
-    if (!Array.isArray(info.authenticatedUsers) || info.authenticatedUsers.length === 0) return refus('aucun utilisateur authentifié sur la cible : je ne sais pas qui écrit.');
-    const roles = info.authenticatedUserRoles;
-    if (!Array.isArray(roles) || roles.length === 0) return refus('liste des rôles de l\'utilisateur de la cible absente : je ne sais pas ce qu\'il est.');
-    for (const r of roles) if (!r || typeof r !== 'object' || r.db !== BASE_CIBLE || !ROLES_ADMIS.includes(r.role)) return refus(`l'utilisateur de la cible porte un rôle autre que ${ROLES_ADMIS.join('/')} sur "${BASE_CIBLE}" : refusé (aucun rôle d'une autre base, aucun rôle d'administration).`);
-    const privileges = info.authenticatedUserPrivileges;
-    if (!Array.isArray(privileges) || privileges.length === 0) return refus('liste des privilèges de l\'utilisateur de la cible absente : je ne sais pas ce qu\'il peut écrire.');
-    for (const p of privileges) {
-        if (!p || typeof p !== 'object' || !Array.isArray(p.actions) || !p.resource || typeof p.resource !== 'object') return refus('un privilège illisible sur la cible : refusé.');
-        const ecriture = p.actions.filter(a => typeof a !== 'string' || !LS.ACTIONS_DE_LECTURE.includes(a));
-        const surRmEssai = p.resource.db === BASE_CIBLE && p.resource.cluster !== true;
-        if (ecriture.length && !surRmEssai) return refus(`l'utilisateur de la cible a ${ecriture.length} action(s) d'écriture ou d'administration hors de la base "${BASE_CIBLE}" : refusé.`);
-    }
-    let h;
-    try { h = await db.admin().command({ hello: 1 }); } catch { return refus('hello a échoué sur la cible : je ne peux pas dire quel jeu de réplicas c\'est.'); }
-    const setCible = h && typeof h.setName === 'string' ? h.setName : '';
-    if (!setCible) return refus('le jeu de réplicas de la cible n\'a pas de nom (hello.setName) : je ne peux pas prouver qu\'il n\'est pas la production.');
-    let setSource;
-    try { setSource = await source.identite(); } catch { return refus('la source ne sait pas dire son jeu de réplicas : je ne peux rien comparer.'); }
-    if (typeof setSource !== 'string' || !setSource) return refus('le jeu de réplicas de la source est inconnu : je ne peux rien comparer.');
-    if (setCible === setSource) return refus('la cible est le MÊME jeu de réplicas que la source (la production, sous un autre nom) : refusé.');
-    let c = null;
-    try {
-        try { c = await ouvrirCartes(env); } catch { return refus('la grappe des cartes est injoignable : je ne peux pas comparer, refusé.'); }
-        if (!c || c.ok !== true || typeof c.setName !== 'string' || !c.setName) return refus('l\'identité de la grappe des cartes est inconnue : je ne peux pas comparer, refusé.');
-        if (setCible === c.setName) return refus('la cible est le MÊME jeu de réplicas que la grappe des cartes : refusé.');
-        return { ok: true };
-    } finally { if (c && typeof c.fermer === 'function') { try { await c.fermer(); } catch { /* déjà fermée */ } } }
-}
-/** La grappe des cartes, ouverte en LECTURE (MONGODB_CARTES_LECTURE_URI) le temps d'un hello. { ok, setName, fermer } | { ok: false, raison }. `connecter(uri)` injectable, rend { db, close }. */
-async function ouvrirCartesParDefaut(env, { connecter = async uri => require('mongoose').createConnection(uri, { dbName: 'cartes', serverSelectionTimeoutMS: 20000 }).asPromise() } = {}) {
-    const uri = env && typeof env.MONGODB_CARTES_LECTURE_URI === 'string' ? env.MONGODB_CARTES_LECTURE_URI.trim() : '';
-    if (!uri) return { ok: false, raison: 'MONGODB_CARTES_LECTURE_URI absente : l\'identité de la grappe des cartes est inconnue, refusé.' };
-    let cx = null;
-    const fermer = async () => { try { if (cx) await cx.close(); } catch { /* déjà fermée */ } };
-    try {
-        cx = await connecter(uri);
-        const h = await cx.db.admin().command({ hello: 1 });
-        if (!h || typeof h.setName !== 'string' || !h.setName) { await fermer(); return { ok: false, raison: 'la grappe des cartes ne donne pas de nom de jeu de réplicas : refusé.' }; }
-        return { ok: true, setName: h.setName, fermer };
-    } catch (e) { await fermer(); return { ok: false, raison: `connexion à la grappe des cartes impossible (${cause(e)}).` }; }
 }
 
 async function connecterSourceParDefaut(uri) {
