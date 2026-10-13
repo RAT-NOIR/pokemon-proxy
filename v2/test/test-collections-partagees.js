@@ -22,7 +22,7 @@ const TEST_PROD = Object.freeze(['references_image', 'catalogue_produits', 'guid
 const BASE_CARTES = Object.freeze(['sets', 'cartes', 'cartes_produits']);
 const HERITEES = Object.freeze([...TEST_PROD, ...BASE_CARTES]);
 // Les partages VOULUS, déclarés à AUDIT-SECURITE-V2.md (tableau « nom · lecture/écriture · voulu ? »). Rien d'autre.
-const VOULUS = Object.freeze(['credits', 'journal_scans', 'catalogue_produits', 'guide_prix', 'numeros_cartes', 'codes_set', 'guide_prix_meta', 'references_image', 'cardprices', 'sets', 'cartes', 'cartes_produits']);
+const VOULUS = Object.freeze(['credits', 'journal_scans', 'catalogue_produits', 'guide_prix', 'numeros_cartes', 'codes_set', 'guide_prix_meta', 'references_image', 'cardprices', 'sets', 'cartes', 'cartes_produits', 'catalogue_export_meta']);
 
 function fichiersV2(dir, acc = []) {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
