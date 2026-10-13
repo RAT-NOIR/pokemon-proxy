@@ -101,6 +101,7 @@ const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('../../sources');
 const { col } = require('../db');
+const SL = require('./seconde-lecture');
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
@@ -154,12 +155,68 @@ function facturationDe(issue, faits) {
 // Dépassement => la chaîne décide, journal du code seul. (deps.delaiVoisinsMs : surcharge pour les bancs.)
 const DELAI_VOISINS_MS = 2000;
 const CANDIDATS_MAX = 3;                         // la limite d'une question : celle que l'adaptateur applique déjà (question(), slice(0, 3))
-function avecBorne(fonction, ms) {
+function avecBorne(fonction, ms, nom = 'voisins', code = 'VOISINS_DELAI') {
     let minuteur;
-    const borne = new Promise((_, rejeter) => { minuteur = setTimeout(() => rejeter(Object.assign(new Error('voisins : délai dépassé'), { code: 'VOISINS_DELAI' })), ms); });
+    const borne = new Promise((_, rejeter) => { minuteur = setTimeout(() => rejeter(Object.assign(new Error(`${nom} : délai dépassé`), { code })), ms); });
     const promesse = Promise.resolve().then(fonction);
     promesse.catch(() => { });                   // une résolution ou un rejet TARDIF n'est jamais une erreur non gérée
     return Promise.race([promesse, borne]).finally(() => clearTimeout(minuteur));
+}
+// ── SECONDE-LECTURE (§72), DERRIÈRE son interrupteur (V2_SECONDE_LECTURE ET un fournisseur deps.secondeLecture). Consultée APRÈS l'adaptateur, sur UN seul cas : la chaîne a AFFIRMÉ P, la garde des
+// jumeaux en a fait une QUESTION (P et 1 ou 2 jumeaux, tous au catalogue de l'API), et la première lecture a lu au moins le code ou le numéro. Elle ne peut que CONFIRMER P (seconde-lecture.js::decider) :
+// toute autre issue (autre lecture, rien de lisible, échec, délai, deuxième passage) laisse la réponse d'AVANT, sans débit ni remboursement de plus. Le fournisseur est appelé APRÈS le débit : sa durée
+// est BORNÉE (deps.delaiSecondeMs en banc). Chaque appel TENTÉ est compté (le coût) et la trace va dans `analyses.secondeLecture` — jamais dans la réponse.
+// @returns null (pas le cas visé : rien d'appelé, rien de noté) | { resultat?, trace } — resultat : l'affirmation, SEULEMENT si la seconde lecture confirme.
+const DELAI_SECONDE_MS = 20000;
+async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine, produits, jumeaux, rejouer }) {
+    if (!(cfg && cfg.secondeLecture === true && deps && typeof deps.secondeLecture === 'function')) return null;
+    const c = corpsChaine && typeof corpsChaine === 'object' ? corpsChaine : null, carte = c && c.carte;
+    if (!resultat || resultat.issue !== 'question' || resultat.motif || !c || c.success !== true || !carte || carte.ambigu !== false || !Number.isInteger(carte.idProduct)) return null;
+    let p, js;
+    try {
+        const r = typeof jumeaux === 'function' ? jumeaux(carte.idProduct) : null;
+        if (!r || r.conclu !== true || !Array.isArray(r.ids) || !r.ids.every(Number.isInteger)) return null;
+        const ids = [...new Set(r.ids)].filter(i => i !== carte.idProduct);
+        if (!(produits instanceof Map) || !produits.has(carte.idProduct) || ids.some(i => !produits.has(i))) return null;
+        p = produits.get(carte.idProduct); js = ids.map(i => produits.get(i));
+    } catch { return null; }
+    const premiere = { setCode: carte.setCode, numero: carte.numero, langue: carte.langue };
+    if (!SL.besoin({ p, jumeaux: js, premiere }).declencher) return null;
+    if (!SL.premiereFois(String(scanId))) return { trace: { declenchee: false, appels: 0, issue: 'deja-tentee', raison: 'ce scan a déjà eu sa seconde lecture' } };
+    SL.noter('declenchees');
+    // TOUR 1 (coût exact) : le compteur ÉCRIT au compteur global à chaque appel, au moment où il part — un appel tardif d'un fournisseur sourd au signal est donc compté lui aussi ; le signal d'abandon
+    // tombe au délai, et le fournisseur n'envoie plus d'appel après lui. Aucun téléchargement (décision 4) : les OCTETS de l'image viennent de l'appelant (entree.imageOctets, un jour l'extension), jamais d'une URL.
+    let appels = 0;
+    const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { SL.noter('appels', v - appels); appels = v; } } };
+    const abandon = new AbortController();
+    let lu = null, issue = null, raison = null;
+    try {
+        const ms = Number.isFinite(deps.delaiSecondeMs) && deps.delaiSecondeMs > 0 ? deps.delaiSecondeMs : DELAI_SECONDE_MS;
+        lu = await avecBorne(() => deps.secondeLecture({ image: entree && entree.imageOctets, corps: c, scanId: String(scanId), compteur, signal: abandon.signal }), ms, 'seconde lecture', 'SECONDE_DELAI');
+    } catch (e) {
+        issue = e && e.code === 'SECONDE_DELAI' ? 'delai' : 'echec'; raison = issue === 'delai' ? 'délai dépassé' : 'le fournisseur a levé';
+        if (issue === 'delai') abandon.abort(); else journalErreur('seconde lecture', e);
+    }
+    const trace = () => ({ declenchee: true, appels: compteur.appels, issue, raison });
+    if (!issue) {
+        if (!lu || typeof lu !== 'object') { issue = 'rien'; raison = 'le fournisseur n\'a rien rendu'; }
+        else if (lu.sansImage === true) { issue = 'sans-image'; raison = 'aucun octet d\'image fourni : pas de seconde lecture'; SL.noter('nonFaisables'); console.log(`🔎 [v2 seconde-lecture] scan=${scanId} sans-image appels=${compteur.appels}`); return { trace: trace() }; }
+        else if (lu.echec === true) { issue = 'echec'; raison = String(lu.raison || 'échec de la lecture').slice(0, 200); }
+        else {
+            if (compteur.appels === 0 && Array.isArray(lu.essais) && lu.essais.length === 0) SL.noter('nonFaisables');     // aucune bande à lire (pas de recadrage possible) : rien n'a coûté, rien n'a été lu
+            const d = SL.decider({ p, jumeaux: js, premiere, seconde: lu });
+            raison = d.raison;
+            if (d.confirme) {
+                let aff = null;
+                try { aff = rejouer(id => (id === carte.idProduct ? { conclu: true, ids: [] } : jumeaux(id))); } catch (e) { journalErreur('seconde lecture (affirmation)', e); }
+                if (aff && aff.issue === 'affirmee') { issue = 'confirmee'; SL.noter('confirmees'); console.log(`🔎 [v2 seconde-lecture] scan=${scanId} confirmée appels=${compteur.appels}`); return { resultat: aff, trace: trace() }; }
+                issue = 'non-confirmee'; raison = 'la confirmation n\'a pas pu produire une affirmation';
+            } else issue = 'non-confirmee';
+        }
+    }
+    if (issue === 'echec' || issue === 'delai') SL.noter('echecs'); else SL.noter('nonConfirmees');
+    console.log(`🔎 [v2 seconde-lecture] scan=${scanId} ${issue} appels=${compteur.appels}`);
+    return { trace: trace() };
 }
 const INTROUVABLE_REGLE_G = Object.freeze({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible' });   // -> introuvable « photo-illisible » : on ne sait pas, on n'affirme pas l'absence
 
@@ -255,7 +312,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const userId = `v2:${porteur.type}:${porteur.id}`;
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → compteur DÉDIÉ `jumeaux`, une unité (une carte) ; plein, le ledger le juge au plafond de pannes ordinaire
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
@@ -304,6 +361,13 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux });
+                    // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
+                    if (resultat.issue === 'question') {
+                        const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum });
+                        let sl = null;
+                        try { sl = await consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer }); } catch (e) { journalErreur('seconde lecture', e); }
+                        if (sl) { traceSeconde = sl.trace; if (sl.resultat) resultat = sl.resultat; }
+                    }
                     // une AFFIRMATION de la chaîne devenue une question (le produit a des jumeaux) : son crédit est encore pris, il est RÉSERVÉ plus bas, comme pour la règle G
                     if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
                     // B1b.7 : la règle G, si (et seulement si) l'interrupteur est allumé ET qu'un fournisseur de voisins est branché ; jamais sur une panne
@@ -351,7 +415,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}) };
             });
             }
         } catch (e) {
@@ -406,6 +470,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
                 versionChaine: (cfg.versions && cfg.versions.chaine) || null, versionModele: (cfg.versions && cfg.versions.modele) || null,   // ETIQUETAGE-A : le code et le modèle qui ont répondu (interne, jamais servi) ; la base « Gemini seul » de la mesure
                 ...(sortie.motif ? { motifJumeaux: sortie.motif } : {}),                    // JUMEAU-V2 : le motif distinct d'un introuvable de la garde (jamais servi au client : le contrat public ne change pas)
+                ...(sortie.secondeLecture ? { secondeLecture: sortie.secondeLecture } : {}),     // SECONDE-LECTURE : ce qu'elle a COÛTÉ (appels) et son issue — interne, jamais servi
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
@@ -417,6 +482,8 @@ function traiterIdentifier(cfg, deps = {}) {
         if (req.marqueFermeeParLaReponse === true) { req.fermerMarque = fermer; etat.differe = true; } else await fermer();
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
+        // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
+        if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
     };
     return async function traiterIdentifierV2(req, res) {
@@ -524,4 +591,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe, URL_RECHARGE };
+module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe, URL_RECHARGE };
