@@ -20,9 +20,12 @@ const memeLigne = (a, b) => CLES.every(k => JSON.stringify(a?.[k] ?? null) === J
 const CHAMPS_PARTIEL = ['prouves', 'total', 'restes', 'contredits', 'dejaJoints', 'horsDenominateur', 'mention', 'tiragePreuve'];
 const CHAMPS_RESOLU = ['resoluLe', 'resoluPar', 'resoluLigne', 'resoluCarteId'];
 const PAR = 'completer-set-partiel';
+// Clé STABLE d'un _id, pour les Map/Set et les messages. Un ObjectId (le type réel des restes) se compare par sa VALEUR : une Map indexée sur
+// l'objet lui-même ne le retrouve jamais, et `${id}` d'un objet nu s'écrit « [object Object] ».
+const lisible = v => (v !== null && typeof v === 'object') ? (typeof v.toHexString === 'function' ? v.toHexString() : JSON.stringify(v)) : String(v);
 
 /**
- * Pur. lignes : les lignes que la classification produirait ; existantes : Map<_id, document> (celles qui existent déjà) ; set : le document du set
+ * Pur. lignes : les lignes que la classification produirait ; existantes : Map<lisible(_id), document> (celles qui existent déjà) ; set : le document du set
  * (null = il n'existe pas) ; cartes : Map<carteId, { liens, sets }> ; metaDe : Map<idProduct, idMetacard>.
  * @returns {{ neuves: object[], identiques: string[], erreurs: string[] }}
  */
@@ -30,10 +33,10 @@ function planComplement({ lignes, existantes, set, cartes, metaDe }) {
     const erreurs = [], neuves = [], identiques = [];
     if (!set) erreurs.push('le set n\'existe pas : le créer est un autre geste (creer-set-partiel.js sans --completer)');
     for (const l of lignes) {
-        const ex = existantes.get(l._id);
-        if (ex) { if (memeLigne(ex, l)) identiques.push(l._id); else erreurs.push(`la ligne ${l._id} existe avec un contenu qui diverge (slug « ${ex.slug} », preuve « ${ex.preuve} ») : une ligne existante n'est JAMAIS réécrite`); continue; }
+        const ex = existantes.get(lisible(l._id));
+        if (ex) { if (memeLigne(ex, l)) identiques.push(lisible(l._id)); else erreurs.push(`la ligne ${lisible(l._id)} existe avec un contenu qui diverge (slug « ${ex.slug} », preuve « ${ex.preuve} ») : une ligne existante n'est JAMAIS réécrite`); continue; }
         const c = cartes.get(l.carteId);
-        if (!c) { erreurs.push(`la carte ${l.carteId} de la ligne ${l._id} est introuvable`); continue; }
+        if (!c) { erreurs.push(`la carte ${l.carteId} de la ligne ${lisible(l._id)} est introuvable`); continue; }
         const liens = c.liens?.idProduct;
         if (!Array.isArray(liens) || !liens.length) { erreurs.push(`la carte ${l.carteId} n'a pas de liens.idProduct : le produit ${l.idProduct} y deviendrait le premier élément, le repère d'adresse du site — refusé`); continue; }
         neuves.push({ ligne: l, carteId: l.carteId, ajoutLien: !liens.includes(l.idProduct), ajoutSet: !(c.sets || []).includes(l.slugSet), meta: metaDe?.get(l.idProduct) ?? null });
@@ -63,7 +66,7 @@ async function appliquerComplement(db, plan, slug, partiel, restesAMarquer, le) 
     for (const n of plan.neuves) {
         const { _id, ...corps } = n.ligne;
         const r = await db.collection('cartes_produits').updateOne({ _id }, { $setOnInsert: corps }, { upsert: true });
-        if (r.upsertedCount !== 1) throw new Error(`la ligne ${_id} existait déjà au moment d'écrire (insérées : ${r.upsertedCount}) — la base a bougé depuis le plan ; arrêt`);
+        if (r.upsertedCount !== 1) throw new Error(`la ligne ${lisible(_id)} existait déjà au moment d'écrire (insérées : ${r.upsertedCount}) — la base a bougé depuis le plan ; arrêt`);
         inserees += r.upsertedCount;
         const ajout = { sets: slug, 'liens.idProduct': n.ligne.idProduct };
         if (n.meta != null) ajout['liens.idMetacards'] = n.meta;
@@ -80,14 +83,14 @@ async function appliquerComplement(db, plan, slug, partiel, restesAMarquer, le) 
     return { inserees, cartesModifiees, setModifie: rs.modifiedCount, restesMarques };
 }
 
-/** La relecture, à l'ATTENDU du plan. Rend la liste des écarts ([] = juste). `avant` : { cartes: Map<id, doc>, nbLignes, set, restes: doc[], nbRestes }. */
+/** La relecture, à l'ATTENDU du plan. Rend la liste des écarts ([] = juste). `avant` : { cartes: Map<id, doc>, nbLignes, set, restes: Map<lisible(_id), JSON du doc>, nbRestes }. */
 async function relire(db, plan, avant, slug, partiel, restesAMarquer) {
     const e = [];
     const lignes = await db.collection('cartes_produits').find({ _id: { $in: plan.neuves.map(n => n.ligne._id) } }).toArray();
     const nbLignes = await db.collection('cartes_produits').countDocuments({});
     if (nbLignes !== avant.nbLignes + plan.neuves.length) e.push(`cartes_produits : ${nbLignes}, attendu ${avant.nbLignes + plan.neuves.length}`);
     for (const n of plan.neuves) {
-        if (!memeLigne(lignes.find(l => l._id === n.ligne._id), n.ligne)) e.push(`la ligne ${n.ligne._id} n'est pas celle du plan`);
+        if (!memeLigne(lignes.find(l => lisible(l._id) === lisible(n.ligne._id)), n.ligne)) e.push(`la ligne ${lisible(n.ligne._id)} n'est pas celle du plan`);
         const c = (await db.collection('cartes').find({ _id: n.carteId }).toArray())[0], a = avant.cartes.get(n.carteId);
         const attLiens = [...a.liens.idProduct, ...(n.ajoutLien ? [n.ligne.idProduct] : [])], attSets = [...(a.sets || []), ...(n.ajoutSet ? [slug] : [])];
         if (JSON.stringify(c?.liens?.idProduct) !== JSON.stringify(attLiens)) e.push(`carte ${n.carteId} : liens.idProduct ${JSON.stringify(c?.liens?.idProduct)}, attendu les anciens dans leur ordre + le nouveau à la fin`);
@@ -100,14 +103,14 @@ async function relire(db, plan, avant, slug, partiel, restesAMarquer) {
     if (JSON.stringify(set) !== JSON.stringify(attSet)) e.push('le document du set n\'est pas celui d\'avant + les seuls champs du compteur');
     // les restes : aucun supprimé ; les marqués portent les 4 champs ; tous les autres champs et tous les autres documents sont inchangés
     if (await db.collection('restes').countDocuments({}) !== avant.nbRestes) e.push('restes : le nombre de documents a changé (aucune suppression permise)');
-    const apres = new Map((await db.collection('restes').find({ set: slug }).toArray()).map(d => [d._id, d]));
-    const marques = new Set(restesAMarquer.map(x => x._id));
-    for (const a of avant.restes) {
-        const d = apres.get(a._id);
-        if (!d) { e.push(`reste ${a._id} disparu`); continue; }
+    const apres = new Map((await db.collection('restes').find({ set: slug }).toArray()).map(d => [lisible(d._id), d]));
+    const marques = new Set(restesAMarquer.map(x => lisible(x._id)));
+    for (const [cle, avantJson] of avant.restes) {
+        const d = apres.get(cle);
+        if (!d) { e.push(`reste ${cle} disparu`); continue; }
         const { resoluLe, resoluPar, resoluLigne, resoluCarteId, ...reste } = d;
-        if (JSON.stringify(reste) !== JSON.stringify(a)) e.push(`reste ${a._id} : un champ autre que « résolu » a changé`);
-        if (marques.has(a._id) ? resoluPar !== PAR : resoluPar !== undefined) e.push(`reste ${a._id} : ${marques.has(a._id) ? 'non marqué résolu' : 'marqué à tort'}`);
+        if (JSON.stringify(reste) !== avantJson) e.push(`reste ${cle} : un champ autre que « résolu » a changé`);
+        if (marques.has(cle) ? resoluPar !== PAR : resoluPar !== undefined) e.push(`reste ${cle} : ${marques.has(cle) ? 'non marqué résolu' : 'marqué à tort'}`);
     }
     return e;
 }
@@ -115,7 +118,7 @@ async function relire(db, plan, avant, slug, partiel, restesAMarquer) {
 async function completer({ db, slug, lignes, metaDe, attendu, ecrire, classement, code, chemin, le = new Date(), log = console.log, err = console.error }) {
     if (ecrire && (attendu == null || !Number.isInteger(attendu))) { err('❌ --ecrire exige --attendu=N (le nombre de lignes neuves de la simulation)'); return 2; }
     const set = (await db.collection('sets').find({ _id: slug }).toArray())[0] ?? null;
-    const existantes = new Map((await db.collection('cartes_produits').find({ _id: { $in: lignes.map(l => l._id) } }).toArray()).map(d => [d._id, d]));
+    const existantes = new Map((await db.collection('cartes_produits').find({ _id: { $in: lignes.map(l => l._id) } }).toArray()).map(d => [lisible(d._id), d]));
     const ids = [...new Set(lignes.map(l => l.carteId))];
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: ids } }).toArray()).map(c => [c._id, c]));
     const plan = planComplement({ lignes, existantes, set, cartes, metaDe });
@@ -124,7 +127,7 @@ async function completer({ db, slug, lignes, metaDe, attendu, ecrire, classement
     if (!plan.neuves.length) { err('❌ rien à faire : aucune ligne neuve'); return 1; }
     for (const n of plan.neuves) {
         const c = cartes.get(n.carteId);
-        log(`   + ${n.ligne._id} (${n.ligne.slug}, preuve ${n.ligne.preuve}) — carte « ${c.nomEn} » : liens.idProduct ${c.liens.idProduct.length} → ${c.liens.idProduct.length + (n.ajoutLien ? 1 : 0)} (le nouveau à la fin ; premier élément ${c.liens.idProduct[0]} inchangé) · slug du set ${n.ajoutSet ? 'AJOUTÉ à cartes.sets' : 'déjà présent'}`);
+        log(`   + ${lisible(n.ligne._id)} (${n.ligne.slug}, preuve ${n.ligne.preuve}) — carte « ${c.nomEn} » : liens.idProduct ${c.liens.idProduct.length} → ${c.liens.idProduct.length + (n.ajoutLien ? 1 : 0)} (le nouveau à la fin ; premier élément ${c.liens.idProduct[0]} inchangé) · slug du set ${n.ajoutSet ? 'AJOUTÉ à cartes.sets' : 'déjà présent'}`);
     }
     // le compteur du set, recalculé par partielDe, et les restes à marquer résolus
     const posees = await db.collection('cartes_produits').countDocuments({ preuve: SP.PREUVE, route: code, slugSet: slug });
@@ -137,7 +140,7 @@ async function completer({ db, slug, lignes, metaDe, attendu, ecrire, classement
     log(`   restes marqués RÉSOLUS (jamais supprimés ; champs ${CHAMPS_RESOLU.join(', ')}) : ${restesAMarquer.length ? restesAMarquer.map(x => `${x.idProduct} (${x.type})`).join(', ') : 'aucun'}`);
     if (attendu != null && attendu !== plan.neuves.length) { err(`❌ le plan a ${plan.neuves.length} ligne(s) neuve(s), ${attendu} attendue(s) (--attendu=${attendu}) : le plan diffère, RIEN ne s'écrit`); return 1; }
     if (!ecrire) { log('(simulation — rien n\'est écrit)'); return 0; }
-    const avant = { cartes: new Map([...cartes].map(([id, c]) => [id, structuredClone(c)])), nbLignes: await db.collection('cartes_produits').countDocuments({}), set: structuredClone(set), restes: structuredClone(restesDuSet), nbRestes: await db.collection('restes').countDocuments({}) };
+    const avant = { cartes: new Map([...cartes].map(([id, c]) => [id, structuredClone(c)])), nbLignes: await db.collection('cartes_produits').countDocuments({}), set: structuredClone(set), restes: new Map(restesDuSet.map(d => [lisible(d._id), JSON.stringify(d)])), nbRestes: await db.collection('restes').countDocuments({}) };
     const r = await appliquerComplement(db, plan, slug, R.partiel, restesAMarquer, le);
     log(`   écrit : ${r.inserees} ligne(s) insérée(s), ${r.cartesModifiees} carte(s) modifiée(s), set ${r.setModifie}, ${r.restesMarques} reste(s) marqué(s)`);
     const ecarts = await relire(db, plan, avant, slug, R.partiel, restesAMarquer);
