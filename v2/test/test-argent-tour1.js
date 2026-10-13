@@ -114,6 +114,21 @@ const etatsDe = async scanId => (await debitsDe(scanId)).map(d => d.etat);
         let leve = 0; for (const v of ['4', '1441', 'x']) { try { lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_REPARATION_AGE_MIN: v }); } catch (_) { leve++; } }
         H.v('   hors bornes ou non entier : configuration invalide', leve, 3);
     }
+    {   // M-1d : un remboursement VIVANT (sa claim est récente) alors que le débit est ancien : la réparation attend, sinon elle rendrait le crédit en même temps que lui
+        const p = await neuf('m1d'); await db.col('mouvements').updateOne({ scanId: 'm1d', type: 'debit' }, { $set: { etat: 'rendu-en-cours', le: new Date(t.getTime() - 24 * 3600e3) } });
+        await db.col('mouvements').insertOne({ installationId: p.id, le: t, surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'vivant', scanId: 'm1d', etat: 'rembourse', cleIdempotence: 'rb|m1d' });
+        const r = await reparer(p, 'm1d', { maintenant: new Date(t.getTime() + 60e3) });
+        H.v('M-1d. la claim du scan date de moins de N minutes (remboursement vivant), le débit est ancien : refusé (mouvement-recent), aucun crédit', [r.repare, r.raison, (await lire(p)).essais], [false, 'mouvement-recent', 2]);
+    }
+    {   // I-2b : une nouvelle tentative sous la MÊME clé, après une compensation, est un vrai débit : elle reste remboursable (la trace de compensation ne vise que le débit tardif de l'heure d'origine)
+        const p = await inst({ essais: 3 }); await db.col('installations').updateOne({ _id: p.id }, { $set: { essaisInitiaux: 3 } });
+        const scanId = new ObjectId(), cle = `scan|installation:${p.id}|i2b`;
+        const ouvrir = paner((nom, m, ar) => nom === 'mouvements' && m === 'insertOne' && ar[0] && ar[0].type === 'debit' ? { rejette: true } : null);
+        try { await muet(() => Lg.debiter(p, { scanId, cleIdempotence: cle, maintenant: t }, cfg)); } catch (_) { /* panne voulue */ } finally { ouvrir(); }
+        const d2 = await muet(() => Lg.debiter(p, { scanId, cleIdempotence: cle, maintenant: new Date(t.getTime() + 3600e3) }, cfg));
+        const r = await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId, maintenant: new Date(t.getTime() + 3600e3) }, cfg));
+        H.v('I-2b. nouvelle tentative sous la même clé après une compensation : débitée (essais 2) puis REMBOURSÉE (essais 3) — la compensation ne la vise pas', [d2.ok, r.rendu, (await lire(p)).essais], [true, true, 3]);
+    }
     // ═══ M-2 : une marque `reparation` laissée par un arrêt est reprenable quand elle est vieille ET que la preuve est refaite
     {
         const p = await neuf('m2a'); await db.col('mouvements').updateOne({ scanId: 'm2a', type: 'debit' }, { $set: { etat: 'rembourse', reparation: { le: new Date(tard.getTime() - 60e3), ecart: 0 } } });
@@ -126,6 +141,11 @@ const etatsDe = async scanId => (await debitsDe(scanId)).map(d => d.etat);
         await db.col('installations').updateOne({ _id: s.id }, { $inc: { essais: 1 } });                         // l'exécution interrompue avait déjà rendu le crédit
         const r3 = await reparer(s, 'm2c');
         H.v('M-2c. marque VIEILLE, crédit déjà écrit (écart +1) : la trace seule (jamais un second crédit)', [r3.repare, r3.creditRendu, (await lire(s)).essais, await plus1('m2c')], [true, false, 3, 1]);
+    }
+    {   // M-2d : trois reprises SIMULTANÉES d'une même marque vieille : une seule passe, un seul crédit
+        const p = await neuf('m2d'); await db.col('mouvements').updateOne({ scanId: 'm2d', type: 'debit' }, { $set: { etat: 'rembourse', reparation: { le: t, ecart: 0 } } });
+        const rs = await Promise.all([reparer(p, 'm2d'), reparer(p, 'm2d'), reparer(p, 'm2d')]);
+        H.v('M-2d. trois reprises simultanées de la même marque vieille : UNE seule réparée, un seul crédit (essais 3, jamais 4 ou 5), un seul mouvement', [rs.filter(r => r.repare).length, (await lire(p)).essais, await plus1('m2d')], [1, 3, 1]);
     }
     // ═══ M-3 : MR (la trace de la claim ne reçoit rien : modifiedCount 0) et MS (le crédit est refusé : la marque est débloquée)
     {

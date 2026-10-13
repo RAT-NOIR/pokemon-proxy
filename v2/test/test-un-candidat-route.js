@@ -757,6 +757,15 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             H.v('19a2. même fenêtre, unité « rendu-en-cours » (prise avant le crédit) : aucun `plafond-jour` définitif, rien rendu, compteur remis à 5, lot « à rendre »',
                 [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'panne'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 5, 11]);
         }
+        // MOYENS-B2a tour 1 (I-1) : TOUTES les unités du lot sont « rendu-en-cours » (une coupure juste après la prise) : le remboursement répond « remboursement-en-cours », traité comme « déjà rendu » — le grand livre est relu,
+        // le lot n'est jamais écrit rendu sans ses mouvements, il est marqué « à rendre » avec la cause « ambigu » (prises sans trace), pas avec une cause d'échec du ledger
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await isoler(L);
+            await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { etat: 'rendu-en-cours' } });
+            for (const c of L.cartes) await repI(L, c.index, 'aucune');
+            H.v('19a3. toutes les unités « rendu-en-cours » : le lot n\'est PAS décidé rendu, ni « plafond-jour » : « à rendre » avec la cause « ambigu » (2 prises sans trace), aucun remboursement écrit',
+                [await lignesQ(L, { 'lotIssue.rendu': true }), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotARendre.cause': /^ambigu:2:0\/2/ }), await unitesRendues(L)], [0, 0, 11, 0]);
+        }
         // R3-B : une installation LIÉE entre deux unités — la claim change de propriétaire, la dispense du plafond la retrouve par le scan
         {
             const { L, d, credit1 } = await partielReel(); await isoler(L);
