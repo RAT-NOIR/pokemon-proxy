@@ -1,7 +1,7 @@
 'use strict';
 // LE CHEMIN DE L'ARGENT v2. Tout compteur est un findOneAndUpdate CONDITIONNEL atomique (jamais lire-puis-écrire) ;
 // un remboursement ne rend jamais plus que ce qui a été pris ; un cas non classé => QUOTA / non remboursé, et la cause s'écrit.
-const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches'); const { ObjectId } = require('mongoose').Types;
+const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches'); const Of = require('./offre'); const { ObjectId } = require('mongoose').Types;
 const col = nom => db.col(nom);   // indirection VOLONTAIRE : les bancs y glissent une panne simulée (db.col remplacé)
 const expireMouvement =(now, cfg) => new Date(now.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
@@ -15,37 +15,24 @@ async function incrementerHebdo(compteId, semaine, now) {   // upsert + course d
     try { return await col('hebdo').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
     catch (e) { if (e.code !== 11000) throw e; return col('hebdo').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
 }
+// Le compteur du JOUR (OFFRE-QUOTA) : même mécanique que l'hebdo — upsert + $inc atomique, course de première insertion (11000) retentée une fois, jeton rendu si la limite est dépassée.
+async function incrementerJour(porteurCle, jour, now) {
+    // le compteur survit 3 jours à son PREMIER usage, mesurés sur l'horloge réelle si l'instant fourni est plus ancien (un rejeu, un banc : un document déjà échu à sa naissance serait retiré par le TTL avant son remboursement)
+    const filtre = { porteur: porteurCle, jour }, maj = { $inc: { count: 1 }, $setOnInsert: { expireLe: new Date(Math.max(now.getTime(), Date.now()) + 3 * 86400e3) } };
+    try { return await col('quota_jour').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
+    catch (e) { if (e.code !== 11000) throw e; return col('quota_jour').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
+}
+// Seule la poche `jour` se DÉBITE. Les anciennes (essai, accueil, hebdo, abonnement, achete) ne le sont plus : leurs soldes restent en base, lisibles, intacts.
 async function essayerPoche(poche, p, cfg, now) {
-    const compte = p.compte;
-    if (poche === 'essai') {
-        if (p.type !== 'installation') return null;
-        // compteId: null — une installation LIÉE n'a plus de poches propres : son porteur est le compte
-        return (await col('installations').findOneAndUpdate({ _id: p.id, compteId: null, essais: { $gt: 0 } }, { $inc: { essais: -1 } })) ? { poche } : null;
-    }
-    if (poche === 'achete' && p.type === 'installation')
-        return (await col('installations').findOneAndUpdate({ _id: p.id, compteId: null, achete: { $gt: 0 } }, { $inc: { achete: -1 } })) ? { poche } : null;
-    if (!compte || p.type !== 'compte') return null;
-    if (poche === 'accueil')
-        return (await col('comptes').findOneAndUpdate({ _id: compte._id, verifie: true, 'solde.accueil': { $gt: 0 } }, { $inc: { 'solde.accueil': -1 } })) ? { poche } : null;
-    if (poche === 'achete')
-        return (await col('comptes').findOneAndUpdate({ _id: compte._id, 'solde.achete': { $gt: 0 } }, { $inc: { 'solde.achete': -1 } })) ? { poche } : null;
-    if (poche === 'hebdo') {
-        if (cfg.quotas.hebdo <= 0) return null;
-        // la vérification se lit en BASE (pas sur l'instantané du porteur) : une garde s'écrit par ce qu'elle autorise
-        if (!(await col('comptes').countDocuments({ _id: compte._id, verifie: true }))) return null;
-        const semaine = semaineISO(now), doc = await incrementerHebdo(compte._id, semaine, now);
-        if (doc.count <= cfg.quotas.hebdo) return { poche, semaineIso: semaine };
-        await col('hebdo').updateOne({ compteId: compte._id, semaine }, { $inc: { count: -1 } });   // on rend le jeton pris : le compteur ne dérive pas
-        return null;
-    }
-    if (poche === 'abonnement') {
-        const mois = P.moisCle(now), actif = { 'abonnement.actif': true, 'abonnement.jusquAu': { $gt: now } };
-        await col('comptes').updateOne({ _id: compte._id, ...actif, 'abonnement.moisCle': { $ne: mois } },
-            [{ $set: { 'abonnement.moisCle': mois, 'abonnement.restant': '$abonnement.quotaMensuel' } }]);   // le mois a changé : recharge, sans report
-        return (await col('comptes').findOneAndUpdate({ _id: compte._id, ...actif, 'abonnement.moisCle': mois, 'abonnement.restant': { $gt: 0 } }, { $inc: { 'abonnement.restant': -1 } }))
-            ? { poche, moisCle: mois } : null;
-    }
-    return null;   // poche inconnue : on n'invente rien
+    if (poche !== 'jour') return null;   // poche inconnue ou ancienne : on n'invente rien
+    // la limite se lit EN BASE à chaque débit (offre.etatDe) : l'instantané du porteur n'est jamais la preuve de son offre
+    const e = await Of.etatDe(p, cfg, now);
+    if (!e || !(e.limite > 0)) return null;
+    const jour = Of.jourDeParis(now), porteurCle = Of.cleDe(p), doc = await incrementerJour(porteurCle, jour, now);
+    // le crédit PORTE son jour et son compteur : un remboursement rend l'unité là où elle a été prise, jamais au jour courant
+    if (doc.count <= e.limite) return { poche, jour, porteurCle };
+    await col('quota_jour').updateOne({ porteur: porteurCle, jour }, { $inc: { count: -1 } });   // on rend le jeton pris : le compteur ne dérive pas
+    return null;
 }
 // Relecture bornée de la clé avant un QUOTA : atténuation (5 × 20 ms), pas une garantie — voir le commentaire dans debiter.
 const ATTENTES_JUMEAU = 5, PAUSE_JUMEAU_MS = 20;
@@ -103,7 +90,10 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
                 if (essai < ATTENTES_JUMEAU - 1) await new Promise(r => setTimeout(r, PAUSE_JUMEAU_MS));
             }
         }
-        return { ok: false, code: P.codeRefus(porteur) };
+        // un compte non vérifié se voit demander de confirmer son adresse (relu en base : l'instantané peut dire « vérifié » à tort) ; tout autre refus est QUOTA
+        let nonVerifie = false;
+        try { const e = await Of.etatDe(porteur, cfg, maintenant); nonVerifie = Boolean(e && e.nonVerifie); } catch (_) { /* repli sur l'instantané ci-dessous */ }
+        return { ok: false, code: nonVerifie ? 'VERIFICATION' : P.codeRefus(porteur) };
     }
     mv._id = new ObjectId(); mv.poche = credit.poche; mv.credit = credit;       // l'identité du débit est posée AVANT l'écriture : la compensation et l'écriture tardive la partagent
     try { await col('mouvements').insertOne(mv); }
@@ -152,6 +142,7 @@ function proprietaireDe(porteur, credit) {
     if (credit.poche === 'achete') return porteur.type === 'compte' ? ['comptes', { _id: compteId }] : ['installations', { _id: porteur.id }];
     if (credit.poche === 'accueil' || credit.poche === 'abonnement') return ['comptes', { _id: compteId }];
     if (credit.poche === 'hebdo') return ['hebdo', { compteId, semaine: credit.semaineIso }];
+    if (credit.poche === 'jour') return typeof credit.porteurCle === 'string' && typeof credit.jour === 'string' ? ['quota_jour', { porteur: credit.porteurCle, jour: credit.jour }] : null;
     return null;
 }
 async function creditPresent(porteur, credit, debitId) {
@@ -164,7 +155,12 @@ async function rendrePoche(porteur, credit, cfg, now, debitId = null) {
     const compteId = porteur.type === 'compte' ? porteur.id : null;
     const mq = marqueur(debitId);
     let rendu = false, raison = 'poche-introuvable';
-    if (credit.poche === 'essai') rendu = un(await col('installations').updateOne({ _id: porteur.id, essais: { $lt: Math.max(cfg.quotas.essai, cfg.quotas.accueil) }, ...mq.filtre }, { $inc: { essais: 1 }, ...mq.push }));
+    if (credit.poche === 'jour') {
+        // OFFRE-QUOTA : l'unité retourne au compteur du JOUR OÙ ELLE A ÉTÉ PRISE (pas au jour courant : après minuit, une unité rendue de la veille ne crée aucun quota en plus), par le même
+        // protocole que les autres poches (marqueur d'identité du débit dans la MÊME écriture que le $inc). Le compteur doit être celui de CE porteur : un crédit forgé vers un autre compteur est refusé.
+        if (credit.porteurCle !== Of.cleDe(porteur) || typeof credit.jour !== 'string') raison = 'poche-introuvable';
+        else rendu = un(await col('quota_jour').updateOne({ porteur: credit.porteurCle, jour: credit.jour, count: { $gt: 0 }, ...mq.filtre }, { $inc: { count: -1 }, ...mq.push }));
+    } else if (credit.poche === 'essai') rendu = un(await col('installations').updateOne({ _id: porteur.id, essais: { $lt: Math.max(cfg.quotas.essai, cfg.quotas.accueil) }, ...mq.filtre }, { $inc: { essais: 1 }, ...mq.push }));
     else if (credit.poche === 'achete') rendu = porteur.type === 'compte'
         ? un(await col('comptes').updateOne({ _id: compteId, ...mq.filtre }, { $inc: { 'solde.achete': 1 }, ...mq.push }))
         : un(await col('installations').updateOne({ _id: porteur.id, ...mq.filtre }, { $inc: { achete: 1 }, ...mq.push }));
@@ -294,7 +290,8 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
 // M6 — le porteur effectif d'une unité : une installation LIÉE entre-temps n'a plus de poches propres, le crédit est rendu à celles du COMPTE (essai → accueil, plafonné ; acheté → acheté).
 async function rendreUnite(porteur, credit, cfg, now, debitId = null) {
     let cible = porteur, c = credit;
-    if (porteur.type === 'installation') {
+    // `jour` : le compteur porte la clé du porteur au moment du débit (installation:X) ; une liaison survenue depuis ne le déplace pas — l'unité retourne là où elle a été prise
+    if (porteur.type === 'installation' && credit.poche !== 'jour') {
         const i = await col('installations').findOne({ _id: porteur.id }, { projection: { compteId: 1 } });
         if (i && i.compteId) {
             cible = { type: 'compte', id: i.compteId };

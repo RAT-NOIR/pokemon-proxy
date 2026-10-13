@@ -19,6 +19,8 @@ const INDEX = Object.freeze([
     I('mouvements', 'mouvements_debit_trace', { debitId: 1 }, { unique: true, partialFilterExpression: { debitId: { $type: 'objectId' } } }),
     I('mouvements', 'mouvements_compte', { compteId: 1, le: -1 }), I('mouvements', 'mouvements_installation', { installationId: 1, le: -1 }), TTL('mouvements'),
     I('hebdo', 'hebdo_cle', { compteId: 1, semaine: 1 }, { unique: true }), TTL('hebdo'),
+    // OFFRE-QUOTA : le compteur d'analyses du JOUR DE PARIS, un document par (porteur, jour) ; TTL (3 jours après la création) ; l'unicité sert l'upsert et la course de première insertion
+    I('quota_jour', 'quota_jour_cle', { porteur: 1, jour: 1 }, { unique: true }), TTL('quota_jour'),
     I('plafonds', 'plafonds_cle', { porteur: 1, jour: 1, type: 1 }, { unique: true }), TTL('plafonds'),
     I('questions_v2', 'questions_etat', { etat: 1, poseeLe: 1 }),
     // O5 : la marque de livraison d'un scan (v2/argent/marque-scan.js). (etat, ouverteLe) sert la passe de rattrapage et la réconciliation ; le TTL ne porte que sur les marques CLOSES (une marque non close n'a pas d'expireLe).
