@@ -78,7 +78,7 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
             const S = await lireSetlist(L);
             const produits = await produitsDe(L);
             const expansion = [].concat(L.bulba.expansion)[0];
-            const P = planDuSet({ base, entrees: S.entrees, produits, lignesDuSet: lignes.filter(l => l.slugSet === L.slugSet), jointsIds, tirage: L.bulba.tirage, expansion });
+            const P = planDuSet({ base, entrees: S.entrees, produits, lignesDuSet: lignes.filter(l => l.slugSet === L.slugSet), jointsIds, tirage: L.bulba.tirage, expansion, entreesSansPage: S.entreesSansPage || [] });
             log(`\n■ ${L.code} (${L.slugSet}) · ${P.retenus.length} lignes · ${new Set(P.retenus.map(x => x.d.carte._id)).size} cartes · ${P.impressions.size} impressions · ${P.ecartes.length} écartés · ${P.refus.length} refusés`);
             for (const x of P.refus.filter(r => r.garde === 'numero-partage')) log(`   ✗ numéro partagé · ${x.p.idProduct} « ${x.p.name} » : ${x.raison}`);
             if (ecrire && ATTENDUS[L.code] !== P.retenus.length) { err(`❌ ARRÊT : ${L.code} rend ${P.retenus.length}, attendu ${ATTENDUS[L.code] ?? 'non donné'} — rien n'est écrit`); return 1; }
