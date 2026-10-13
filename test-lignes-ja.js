@@ -26,7 +26,6 @@ const ATTENDU = {
     MEDK: { exp: 4307, slug: 'Magmortar-vs-Electivire-Deck-Kit', liste: 165, cle: 'nom' },
     CGH: { exp: 5682, slug: 'Hanada-City-Gym', liste: 13, cle: 'nom' }
 };
-const NON_PROUVES = { CGY: 'Yamabuki', IPNC: 'Intro Pack Neo', IPNT: 'Intro Pack Neo', pcgG: 'Quick Construction', HRDK: 'Heatran', CGN: 'Nivi', CGK: 'Kuchiba', CGT: 'Tamamushi', GTG: 'Guren' };
 
 for (const [code, a] of Object.entries(ATTENDU)) {
     t(`${code} : la ligne de table porte le slug, l'expansion Cardmarket et le tirage jp que la jointure des images lit`, () => {
@@ -61,21 +60,17 @@ t('(tour 2) les six lignes DÉCLARENT la parade `gardeSansNumero` ; aucune autre
     const autres = Object.entries({ ...ARTOFPKM_AUTO, ...ARTOFPKM }).filter(([c, s]) => s.gardeSansNumero && !ATTENDU[c]).map(([c]) => c);
     assert.deepStrictEqual(autres, []); assert.strictEqual(sourceDe('IPB').gardeSansNumero, undefined);
 });
-t('aucun set non prouvé ne reçoit de source active', () => {
-    for (const c of Object.keys(NON_PROUVES)) assert.strictEqual(sourceDe(c), null, `${c} a une source active`);
-});
-t('sources-sets-en-attente.json : sm2+ et MCRP (désormais actifs) en sortent ; CGY est prête avec sa mesure ; IPN est refusé avec sa raison', () => {
+// (lot JA-2, 2026-10-13) les neuf sets que ce banc gardait « non prouvés » (CGY, CGN, CGK, CGT, GTG, HRDK, pcgG, IPNC, IPNT) ont leur source, prouvée : leur banc est test-lignes-ja2.js.
+t('sources-sets-en-attente.json : sm2+ et MCRP (actifs depuis le lot JA) en sortent ; CGY et IPN (actifs depuis le lot JA-2) aussi', () => {
     const att = JSON.parse(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'sources-sets-en-attente.json'), 'utf8'));
     assert.strictEqual(att['sm2+'], undefined); assert.strictEqual(att.MCRP, undefined);
-    assert.ok(att.CGY && att.CGY.source && JSON.stringify(att.CGY.source.ids) === '[21]', 'CGY prête');
-    assert.ok(/aucune page lue/i.test(att.CGY.note) && /\+15/.test(att.CGY.note), 'CGY : la note dit pourquoi elle attend et ce qu\'elle rendrait');
-    assert.ok(att.IPN && /deux decks/i.test(att.IPN.note) && /42/.test(att.IPN.note), 'IPN : raison du refus');
+    assert.strictEqual(att.CGY, undefined); assert.strictEqual(att.IPN, undefined);
 });
-t('le lot ne touche aucune source existante : ARTOFPKM ne gagne que six lignes', () => {
+t('le lot ne touche aucune source existante : ARTOFPKM ne gagne que six lignes (neuf de plus depuis, au lot JA-2)', () => {
     const attendu = ['ADV1', 'CGH', 'MCRP', 'MEDK', 'sm1+', 'sm2+'];
     const txt = fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'sources-sets.js'), 'utf8');
     for (const c of attendu) assert.ok(txt.includes(c.includes('+') ? `'${c}'` : c), c);
-    assert.strictEqual(Object.keys(ARTOFPKM).length, BASE_ARTOFPKM + 6, `ARTOFPKM compte ${Object.keys(ARTOFPKM).length} lignes`);
+    assert.strictEqual(Object.keys(ARTOFPKM).length, BASE_ARTOFPKM + 6 + 9, `ARTOFPKM compte ${Object.keys(ARTOFPKM).length} lignes`);
 });
 t('(les lignes de table existantes ne sont pas réécrites) chaque code du lot est dans une seule des trois tables', () => {
     for (const c of Object.keys(ATTENDU)) {

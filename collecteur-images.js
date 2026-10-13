@@ -36,7 +36,7 @@ const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jo
 const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
-const { normaliserNom, cleNumero } = require('./collecte-cartes/jointure');
+const { normaliserNom, cleNumero, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -55,7 +55,7 @@ const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
-const { entreesDeMesure, entreesDeLaLigne } = require('./collecte-cartes/echantillon-mesure');   // V8 : les mesures de largeur d'une ligne à sous-section se prennent dans CETTE sous-section
+const { entreesDeMesure, entreesDeLaLigne, plageDeRangs, dansLaPlage } = require('./collecte-cartes/echantillon-mesure');   // V8 : les mesures de largeur d'une ligne à sous-section se prennent dans CETTE sous-section
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
@@ -197,6 +197,12 @@ async function collecterSet(code, M, dossierRapport) {
     const requetesAuDebut = src.compteRequetes();
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
     const etat = await M.EtatImages.findById(idEtat).lean();
+    // JA-2 (tour 1) : une plage de rangs illisible est un REFUS NOMMÉ ÉCRIT sur l'unité, comme les autres refus du collecteur — jamais une exception qui laisse l'unité sans état
+    try { plageDeRangs(S); } catch (e) {
+        console.error(`❌ ${code} : ${e.message} — set REFUSÉ, rien n'est demandé.`);
+        await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-plage-invalide', cause: e.message, fini: new Date() } });
+        await liberer(); return { code, etat: 'refuse-plage-invalide', erreur: e.message };
+    }
     const entrees = { ...(etat.entrees || {}) };
     const mesures = { ...(etat.mesures || {}) };
 
@@ -218,17 +224,28 @@ async function collecterSet(code, M, dossierRapport) {
             // `pagesListe` : page, entrées lues, nouvelles — la preuve d'une pagination, en base et pas en log.
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], [`pagesListe.${id}`]: entrees[id].pages || null, phase: 'liste', derniereRequete: new Date() } });
         }
-        if (S.sousSection != null) {   // V8 : la ligne ne traite que sa sous-section (en mémoire : l'état garde la liste entière)
+        // V8 : la ligne ne traite que sa sous-section ; JA-2 : ou sa plage de rangs (deux decks sous UN id). En mémoire : l'état garde la liste entière.
+        const delimitee = S.sousSection != null || S.plageDeRangs != null;
+        if (S.plageDeRangs != null) {   // JA-2 (tour 1) : une plage qui DÉBORDE la liste (fin > dernier rang lu) dit que la liste n'est plus celle qu'on a mesurée : refus nommé
+            const dernier = Math.max(0, ...entrees[id].map(e => Number(e.n) || 0));
+            if (S.plageDeRangs[1] > dernier) {
+                const cause = `la plage de rangs ${JSON.stringify(S.plageDeRangs)} déborde la liste ${id} (dernier rang lu : ${dernier}) — la liste n'est plus celle qui a été mesurée`;
+                console.error(`❌ ${code} : ${cause} — set REFUSÉ, rien n'est téléchargé.`);
+                await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-plage-hors-liste', cause, fini: new Date() } });
+                await liberer(); return { code, etat: 'refuse-plage-hors-liste', erreur: cause };
+            }
+        }
+        if (delimitee) {
             const toutes = entrees[id].length; entrees[id] = entreesDeLaLigne(entrees[id], S);
-            console.log(`   sous-section ${S.sousSection} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
+            console.log(`   ${S.sousSection != null ? `sous-section ${S.sousSection}` : `plage de rangs ${JSON.stringify(S.plageDeRangs)}`} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
         }
         console.log(`1. liste ${id} : ${entrees[id].length} entrées${etat.entrees?.[id]?.length ? ' (reprises de l\'état)' : ''}`);
         if (!mesures[id]?.length) {
             const m = [];
             // V8 : une ligne qui déclare sa sous-section mesure DANS elle (collecte-cartes/echantillon-mesure.js) ; aucune entrée de cette sous-section = refus
             const echantillon = entreesDeMesure(entrees[id], S);
-            if (S.sousSection != null && !echantillon.length) {
-                console.error(`❌ ${code} : la sous-section ${S.sousSection} déclarée par la ligne n'a AUCUNE entrée dans la liste ${id} — set REFUSÉ, on ne mesure pas un autre deck.`);
+            if (delimitee && !echantillon.length) {
+                console.error(`❌ ${code} : ${S.sousSection != null ? `la sous-section ${S.sousSection}` : `la plage de rangs ${JSON.stringify(S.plageDeRangs)}`} déclarée par la ligne n'a AUCUNE entrée dans la liste ${id} — set REFUSÉ, on ne mesure pas un autre deck.`);
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-sous-section-absente', fini: new Date() } });
                 await liberer(); return { code, etat: 'refuse-sous-section-absente' };
             }
@@ -403,7 +420,9 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const partagees = !!S?.setDeBase;
     // les sous-sections de kit sont des sets source à part (2026-10-06) : leurs ids viennent des entrées de la liste
     const idsSource = [...new Set([...S?.ids || [], ...(S?.ids || []).flatMap(id => (entrees?.[id] || []).map(e => e.sourceSetId).filter(x => x != null))])];
-    const images = await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: idsSource }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean();
+    // 🔑 LOT JA-2 : une ligne qui déclare `plageDeRangs` (deux decks sous UN id artofpkm) ne joint QUE les images de sa plage — comme `sousSection` pour les entrées (même prédicat, echantillon-mesure.js)
+    const images = (await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: idsSource }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean()).filter(i => dansLaPlage(i.n, S));
+    const PLAGE = plageDeRangs(S);
     // 🔑 LA NOTE VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
     // (motifs Master Ball, Poké Ball) qui partagent le numéro du set de base ; artofpkm, lui, ne publie qu'UNE image par
     // NUMÉRO — mesuré : Terastal Festival ex, 381 numéros distincts, aucun doublon. Leur visuel est donc le bon numéro du
@@ -423,7 +442,10 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // « B/RGB » de 30th Celebration : une image du set sans numéro faisait passer TOUT le set en « une fiche par document » chez le
         // site — 31 fiches mélangées). Seulement là où la source n'a rien : un numéro de la source n'est jamais remplacé.
         const corrNumero = correctionDe(imSource.cleR2)?.numero;
-        const im = corrNumero != null && imSource.numero == null ? { ...imSource, numero: corrNumero, numeroLu: true } : imSource;
+        // 🔑 LOT JA-2 : sur une ligne à `plageDeRangs`, le RANG dans le deck (n − début + 1) tient lieu de numéro quand la source n'en imprime pas (mesuré : 35/35 produits d'Intro Pack Neo) ;
+        // jamais à la place d'un numéro de la source, et JAMAIS sans le nom (voir `rangNonConfirme` plus bas : numéro ET nom, sinon reste nommé).
+        const numeroDuRang = PLAGE && imSource.numero == null && corrNumero == null && Number.isInteger(imSource.n) ? String(imSource.n - PLAGE[0] + 1) : null;
+        const im = corrNumero != null && imSource.numero == null ? { ...imSource, numero: corrNumero, numeroLu: true } : numeroDuRang != null ? { ...imSource, numero: numeroDuRang, numeroDuRang: true } : imSource;
         let cands = [], preuve = null;
         const num = cleNumero(im.numero);
         // Une correction LUE À L'ŒIL passe avant le numéro (collecte-cartes/corrections-images.js : les deux témoins par
@@ -450,7 +472,18 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             const parNomExact = cands.filter(c => nomImage(c.nomEn) === nomImage(im.nomEn));
             if (parNomExact.length === 1) { cands = parNomExact; preuve = 'numero+nom'; }
         }
-        if (!corr && !cands.length && im.nomEn) {
+        // 🔑 LOT JA-2 : un rang-dans-le-deck n'est pas un numéro imprimé — il désigne une carte seulement si le NOM de l'image est celui de cette carte (la comparaison du témoin du nom, `clesNom`) ;
+        // un rang qui ne désigne rien ne retombe pas sur le nom seul (le nom d'une Potion est celui des DEUX decks : c'est la raison d'être de la plage).
+        if (im.numeroDuRang && !corr && cands.length) {
+            const clesIm = clesNom(String(im.nomEn ?? '').replace(/[\[\]]/g, ' '));
+            const confirmees = im.nomEn ? cands.filter(c => clesNom(nomJointDe(c)).some(x => clesIm.includes(x))) : [];
+            if (confirmees.length !== 1) {
+                restes.push({ set: slug, type: 'image-rang-non-confirme', detail: `${im._id} « ${im.titre} » rang ${im.n} (n°${im.numero} dans le deck) -> ${cands.map(c => `${c._id} « ${c.nomEn} »`).join(', ')} : le nom de l'image n'est pas celui de la carte du rang (ou plusieurs) — refusée`, le: new Date() });
+                continue;
+            }
+            cands = confirmees; preuve = 'rang+nom';
+        }
+        if (!corr && !cands.length && im.nomEn && !im.numeroDuRang) {
             cands = parNom.get(nomImage(im.nomEn)) || [];
             preuve = 'nom';
             if (cands.length > 1 && im.illustrateur) {
@@ -505,7 +538,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const poolTemoins = await M.Carte.find(filtreCartesDuSet(slug, nomsCibles, TIRAGE)).select('_id nomEn nomJa niveau impressions attaques').lean();
     // ⚠️ ORDRE : les clés partagées se calculent sur les résolues d'AVANT le témoin (il ne peut que RETIRER, jamais faire servir une image
     // restée seule sur une clé qui en portait trois) — `jugerResolues`.
-    const { gardees, contredites, refusees } = jugerResolues(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }), rs => clesPartagees(rs, { numerotes: S?.sousSection != null }));   // V8 : même règle, étendue aux numéros chiffrés pour les seules lignes qui déclarent une sous-section
+    const { gardees, contredites, refusees } = jugerResolues(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }), rs => clesPartagees(rs, { numerotes: S?.sousSection != null || S?.numerosPartages === true }));   // V8 : même règle, étendue aux numéros chiffrés pour les seules lignes qui déclarent une sous-section
     resolues = gardees;
     for (const x of contredites) restes.push({ set: slug, type: 'image-contredite-par-le-nom', detail: `${x.im._id} « ${x.im.titre} » n°${x.im.numero ?? '—'} -> carte ${x.c._id} « ${x.c.nomEn} » refusée : ${x.verdict.raison}`, le: new Date() });
     // CONCORDANCE DES DECKS, par (carte, NUMÉRO) pour les cartes touchées par une contredite : chaque emplacement attendu est servi ou NOMMÉ en
@@ -581,7 +614,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // (symbole du set, mention d'indisponibilité). Elles se COMPTENT et se nomment, elles ne sont
     // pas des restes.
     const cartesSansImage = cartes.filter(c => !cartesAvecImage.has(c._id)).map(c => ({ carteId: c._id, nomEn: c.nomEn }));
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee', 'image-contredite-par-le-nom', 'image-sans-numero-carte-numerotee'] } });
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee', 'image-contredite-par-le-nom', 'image-sans-numero-carte-numerotee', 'image-rang-non-confirme'] } });
     if (restes.length) await M.Reste.insertMany(restes);
 
     // ---- 5. complétude ----------------------------------------------------------------------

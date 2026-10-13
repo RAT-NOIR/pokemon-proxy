@@ -109,6 +109,8 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // « même sous-section » (echantillon-mesure.js), garde de sous-section (sous-section-image.js), clés partagées (images-cle-partagee.js), voie des fiches simples
     // (image-fiche-simple.js), clé de numéro et témoin du nom (jointure.js), client de la source (artofpkm.js), schéma et verrou (schemas.js, verrou-source.js) et
     // l'alimentateur qui insère les unités : un worker qui n'a pas l'un d'eux appliquerait l'ANCIENNE règle à une ligne qui déclare `sousSection` (champ inconnu = liste entière).
+    // ➕ 2026-10-13 (JA-2) : même chose pour `plageDeRangs` (IPNC, IPNT : deux decks sous la liste 42 — un worker qui ne la lit pas téléchargerait les 80 entrées et poserait la Potion du deck
+    // Totodile sur le set Chikorita) et `numerosPartages` (pcgG) : tous leurs lecteurs (echantillon-mesure.js, collecteur-images.js, images-cle-partagee.js, sources-sets.js) sont déjà ci-dessous.
     'collecte-cartes/echantillon-mesure.js', 'collecte-cartes/sous-section-image.js', 'collecte-cartes/images-cle-partagee.js', 'collecte-cartes/image-fiche-simple.js',
     'collecte-cartes/jointure.js', 'collecte-cartes/artofpkm.js', 'collecte-cartes/schemas.js', 'collecte-cartes/verrou-source.js', 'collecte-cartes/alimentateur.js'];
 

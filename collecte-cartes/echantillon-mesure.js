@@ -16,9 +16,20 @@ function memeSousSection(sourceSetId, sousSection) {
     if (sourceSetId == null || sourceSetId === '') return false;
     return Number(sourceSetId) === Number(sousSection);
 }
+// 🔑 LOT JA-2 (2026-10-13) : `plageDeRangs: [début, fin]` — une liste artofpkm qui porte DEUX decks sous UN id et n'imprime aucun numéro (Intro Pack Neo, liste 42 : rangs 1-40 = deck
+// Chikorita, 41-80 = deck Totodile, 35 produits sur 35 au rang-dans-le-deck = numéro Cardmarket). La ligne ne traite que les entrées dont le RANG (`n`) tombe dans la plage. Une garde
+// écrite par ce qu'elle autorise : deux entiers début ≤ fin, sinon on LÈVE (une plage illisible ne se lit pas comme « toute la liste »). Sans déclaration, rien ne change.
+function plageDeRangs(S) {
+    const p = S?.plageDeRangs;
+    if (p == null) return null;
+    if (!Array.isArray(p) || p.length !== 2 || !p.every(Number.isInteger) || p[0] < 1 || p[0] > p[1]) throw new Error(`plageDeRangs invalide (${JSON.stringify(p)}) : deux entiers 1 ≤ début ≤ fin attendus`);
+    return p;
+}
+const dansLaPlage = (n, S) => { const p = plageDeRangs(S); return p == null || (Number.isInteger(Number(n)) && Number(n) >= p[0] && Number(n) <= p[1]); };
 function entreesDeLaLigne(entrees, S) {
     const liste = entrees || [];
-    return S?.sousSection == null ? liste : liste.filter(e => memeSousSection(e.sourceSetId, S.sousSection));
+    const parSousSection = S?.sousSection == null ? liste : liste.filter(e => memeSousSection(e.sourceSetId, S.sousSection));
+    return plageDeRangs(S) == null ? parSousSection : parSousSection.filter(e => dansLaPlage(e.n, S));
 }
 function entreesDeMesure(entrees, S, n = N_MESURES) { return entreesDeLaLigne(entrees, S).slice(0, n); }
-module.exports = { entreesDeMesure, entreesDeLaLigne, memeSousSection, N_MESURES };
+module.exports = { entreesDeMesure, entreesDeLaLigne, memeSousSection, plageDeRangs, dansLaPlage, N_MESURES };
