@@ -22,7 +22,7 @@
 // CADENCE : les images prêtes se lisent par paquets de CONCURRENCE en parallèle ; une pause de PAUSE_MS sépare deux paquets quand le précédent a émis au moins une requête (aucune pause
 // après le dernier paquet, aucune quand tout se lit au canvas). Quand le canvas est refusé, le premier paquet peut émettre jusqu'à 2 × CONCURRENCE requêtes (CONCURRENCE caches, puis
 // CONCURRENCE navigateurs) avant que la voie cache soit abandonnée.
-// ARRÊT PARTAGÉ lecture.arret : posé au premier 403, 429 ou 5xx, à la troisième réponse 404 de suite, ou à une URL finale qui n'est pas celle de la tuile. Ensuite aucune requête
+// ARRÊT PARTAGÉ lecture.arret : posé au premier 403, 429 ou 5xx, à la troisième réponse 404 de suite, ou à une URL finale qui n'est pas celle de la tuile (une redirection arrête comme un 403). Ensuite aucune requête
 // nouvelle ne part (au plus CONCURRENCE − 1 sont déjà en vol), les images déjà lues du paquet sont envoyées au récepteur, puis le panneau affiche l'arrêt.
 // Le récepteur est joint en 127.0.0.1 seulement ; le refus d'une page affiche le diagnostic que le récepteur a fabriqué (lignesDeDiagnostic).
 // ============================================================
@@ -153,7 +153,11 @@
     }
     var SUITE_404_MAX = 3;
     function arretDe(res, voie, src) {
-        if (res.redirige) return { motif: 'redirection vers « ' + res.finale + ' »', voie: voie, src: src };
+        if (res.redirige) {
+            var ar = { motif: 'redirection vers « ' + res.finale + ' »', voie: voie, src: src };
+            if (!lecture.arret) lecture.arret = ar;
+            return ar;
+        }
         if (res.b64) lecture.suite404 = 0;
         else if (res.statut === 404) lecture.suite404++;
         else if (res.statut > 0) lecture.suite404 = 0;

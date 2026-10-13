@@ -356,24 +356,10 @@ const idsEnvoyes = w => lotsDe(w).flatMap(l => l.images).map(i => parseInt(i.id.
         ['403 (voie cache)', { 2: { fetchStatut: 403, faute: true } }, [2], /ARRÊT : HTTP 403 \(voie cache\)/, [1, 3, 4, 5]],
         ['429 (voie cache)', { 2: { fetchStatut: 429, faute: true } }, [2], /ARRÊT : HTTP 429 \(voie cache\)/, [1, 3, 4, 5]],
         ['503 (voie cache)', { 2: { fetchStatut: 503, faute: true } }, [2], /ARRÊT : HTTP 503 \(voie cache\)/, [1, 3, 4, 5]],
-        ['trois 404 de suite (voie cache)', { 1: { fetchStatut: 404, gm: 'echec' }, 2: { fetchStatut: 404, gm: 'echec' }, 3: { fetchStatut: 404, faute: true } }, [1, 2, 3], /ARRÊT : trois réponses 404 de suite.*\(voie cache\)/, [4, 5]]
+        ['trois 404 de suite (voie cache)', { 1: { fetchStatut: 404, gm: 'echec' }, 2: { fetchStatut: 404, gm: 'echec' }, 3: { fetchStatut: 404, faute: true } }, [1, 2, 3], /ARRÊT : trois réponses 404 de suite.*\(voie cache\)/, [4, 5]],
+        ['URL finale redirigée (voie cache)', { 2: { fetch: 'ok', fetchFinal: AUTRE_CHEMIN, faute: true } }, [2], /ARRÊT : redirection.*\(voie cache\)/, [1, 3, 4, 5]]
     ];
     const tuilesDuCas = surcharge => Array.from({ length: 16 }, (_, i) => { const n = i + 1; return T(n, { fetchPorte: true, ...((n === 1 || (n >= 3 && n <= 5) || n >= 9) ? { fetch: 'ok' } : {}), ...(surcharge[n] || {}) }); });
-    // URL finale redirigée : ÉCART CONNU de la 2.3 du testeur — la branche « redirige » d'arretDe rend l'arrêt SANS poser lecture.arret (les autres branches le posent). L'arrêt lève bien
-    // pour la tuile fautive, le paquet suivant n'est jamais demandé et les images lues partent ; mais les autres images du MÊME paquet ne sont pas arrêtées par lecture.arret : celles dont le cache
-    // échoue passent encore au navigateur. Le banc le MESURE (3 navigateurs : tuiles 6, 7, 8) sans le corriger : une garde du script passe d'abord par le testeur.
-    {
-        w = fabriquerMonde({ tuiles: tuilesDuCas({ 2: { fetch: 'ok', fetchFinal: AUTRE_CHEMIN, faute: true } }) });
-        lancer(w);
-        cliquer(w);
-        await attendre(40);
-        w.ouvrir(`fetch:${ID(2)}`);
-        await attendre(30);
-        w.ouvrirTout();
-        await attendre(200);
-        verifier('ARRÊT — URL finale redirigée (voie cache) : le panneau l\'affiche, aucune tuile du paquet suivant (9 à 16) n\'est demandée, les images lues du paquet partent', [/ARRÊT : redirection.*\(voie cache\)/.test(texte(w)), w.demarrages.some(d => parseInt(d.url.slice(-17, -5), 10) >= 9), idsEnvoyes(w)], [true, false, [1, 3, 4, 5, 6, 7, 8]]);
-        verifier('ÉCART CONNU (mesuré, non corrigé : à trancher par le testeur) — redirection : lecture.arret n\'est pas posé, les 3 tuiles dont le cache échoue (6, 7, 8) passent au navigateur', w.demarrages.filter(d => d.voie === 'navigateur').length, 3);
-    }
     for (const [nom, surcharge, ordre, motif, lues] of CAS) {
         const tuiles = tuilesDuCas(surcharge);
         w = fabriquerMonde({ tuiles });

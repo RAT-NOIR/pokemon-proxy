@@ -24,6 +24,7 @@ const MUTANTS = [
     { nom: 'lireImage sans le « if (lecture.arret) throw » avant la voie navigateur', de: GARDE_LIRE_IMAGE, vers: 'return depuisLeNavigateur', equivalent: 'avantRequete refuse la même requête avec le même objet { arret }' },
     { nom: 'COMBINÉ : ni avantRequete ni lireImage ne refusent plus après l\'arrêt', de: GARDE_AVANT_REQUETE, vers: '', et: { de: GARDE_LIRE_IMAGE, vers: 'return depuisLeNavigateur' } },
     { nom: 'arretDe ne pose plus lecture.arret', de: 'if (a && !lecture.arret) lecture.arret = a;', vers: '' },
+    { nom: 'la branche redirection ne pose plus lecture.arret', de: 'if (!lecture.arret) lecture.arret = ar;', vers: '' },
     { nom: 'le catch n\'envoie plus le lot avant d\'afficher l\'arrêt', de: 'try { await envoyerLot(); } catch (e2) { /* récepteur muet */ }', vers: '' },
     { nom: 'la boucle ne s\'arrête plus sur lecture.arret après un paquet', de: 'if (lecture.arret) throw { arret: lecture.arret };\n                if (erreur) throw erreur;', vers: 'if (erreur) throw erreur;', equivalent: 'la tuile qui pose lecture.arret lève aussi { arret } : « if (erreur) throw erreur » rend le même arrêt' },
     // ── les arrêts eux-mêmes
@@ -31,8 +32,8 @@ const MUTANTS = [
     { nom: 'le 429 n\'arrête plus', de: 'statut === 403 || statut === 429 || statut >= 500', vers: 'statut === 403 || statut >= 500' },
     { nom: 'les 5xx n\'arrêtent plus', de: 'statut === 403 || statut === 429 || statut >= 500', vers: 'statut === 403 || statut === 429' },
     { nom: 'le 403 n\'arrête plus', de: 'statut === 403 || statut === 429 || statut >= 500', vers: 'statut === 429 || statut >= 500' },
-    { nom: 'plus d\'arrêt sur le navigateur (arretDe(n) ignoré)', de: 'if (an) throw { arret: an };', vers: '' },
-    { nom: 'plus d\'arrêt sur le cache (arretDe(c) ignoré)', de: 'if (ac) throw { arret: ac };', vers: '' },
+    { nom: 'plus d\'arrêt sur le navigateur (arretDe(n) ignoré)', de: 'if (an) throw { arret: an };', vers: '', equivalent: 'depuis le tour 1, toute branche d\'arretDe pose lecture.arret : la boucle de paquet le relit' },
+    { nom: 'plus d\'arrêt sur le cache (arretDe(c) ignoré)', de: 'if (ac) throw { arret: ac };', vers: '', equivalent: 'depuis le tour 1, toute branche d\'arretDe pose lecture.arret : « if (lecture.arret) throw » juste dessous le relit' },
     { nom: 'URL finale du fetch non vérifiée', de: 'if (!urlFinaleOk(r.url, src)) return', vers: 'if (false) return' },
     { nom: 'URL finale de GM non vérifiée', de: 'if (!urlFinaleOk(r.finalUrl, src)) resoudre', vers: 'if (false) resoudre' },
     { nom: 'URL finale : n\'importe quel hôte', de: 'u.hostname === HOTE_IMAGES && u.pathname === s.pathname', vers: 'u.pathname === s.pathname' },
