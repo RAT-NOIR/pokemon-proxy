@@ -67,9 +67,9 @@ const mv = async scanId => db.col('mouvements').find({ scanId, type: 'remboursem
     // G. une réparation interrompue (marque posée, aucun mouvement) : refus, jamais de second crédit
     {
         const p = await instInit(); await ancienEtat(p, 'rg');
-        const d = await db.col('mouvements').findOne({ scanId: 'rg', type: 'debit' }); await db.col('mouvements').updateOne({ _id: d._id }, { $set: { reparation: { le: t, ecart: 0 } } });
+        const d = await db.col('mouvements').findOne({ scanId: 'rg', type: 'debit' }); await db.col('mouvements').updateOne({ _id: d._id }, { $set: { reparation: { le: new Date(tard.getTime() - 60e3), ecart: 0 } } });
         const r = await reparer(p, 'rg');
-        H.v('G. marque de réparation sans mouvement : refusé (reparation-interrompue), essais 2, aucun mouvement', [r.repare, r.raison, (await lire(p)).essais, (await mv('rg')).length], [false, 'reparation-interrompue', 2, 0]);
+        H.v('G. marque de réparation RÉCENTE sans mouvement (une exécution peut être vivante) : refusé (reparation-en-cours), essais 2, aucun mouvement ; une marque VIEILLE se reprend (test-argent-tour1.js, M-2)', [r.repare, r.raison, (await lire(p)).essais, (await mv('rg')).length], [false, 'reparation-en-cours', 2, 0]);
     }
     // H. poche non vérifiable (installation sans dotation connue) : refus
     {
@@ -85,12 +85,12 @@ const mv = async scanId => db.col('mouvements').find({ scanId, type: 'remboursem
         const r = await reparer(p, 'ri');
         H.v('I. compte (accueil) : réparé, solde.accueil 25, un mouvement +1 sur le compte, réconciliation propre', [r.repare, (await lire(p)).solde.accueil, (await mv('ri')).map(m => String(m.compteId) === String(p.id)), (await R.reconcilier(p, { cfg, maintenant: tard })).propre], [true, 25, [true], true]);
     }
-    // K. une ligne « rendu-en-cours » de la même poche (son crédit a pu être rendu) : l'écart ne se lit plus, refus
+    // K. une ligne « rendu-echoue » de la même poche (son crédit a pu être rendu) : l'écart ne se lit plus, refus
     {
         const p = await instInit(); await ancienEtat(p, 'rk'); await Lg.debiter(p, { scanId: 'rk2', cleIdempotence: 'k-rk2', maintenant: t }, cfg);
-        await db.col('mouvements').updateOne({ scanId: 'rk2', type: 'debit' }, { $set: { etat: 'rendu-en-cours' } });
+        await db.col('mouvements').updateOne({ scanId: 'rk2', type: 'debit' }, { $set: { etat: 'rendu-echoue' } });
         const r = await reparer(p, 'rk');
-        H.v('K. une ligne « rendu-en-cours » de la même poche : refusé (non-resolus-meme-poche), rien d\'écrit', [r.repare, r.raison, (await mv('rk')).length], [false, 'non-resolus-meme-poche', 0]);
+        H.v('K. une ligne « rendu-echoue » de la même poche : refusé (non-resolus-meme-poche), rien d\'écrit', [r.repare, r.raison, (await mv('rk')).length], [false, 'non-resolus-meme-poche', 0]);
     }
     // J. entrées invalides
     {

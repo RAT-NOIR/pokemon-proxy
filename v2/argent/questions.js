@@ -165,10 +165,12 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
             r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
             raison = (r && r.raisonNonRembourse) || 'erreur';
         }
-        if ((r && r.rendu) || raison === 'deja-rembourse') {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
+        // MOYENS-B2a tour 1 : « remboursement-en-cours » (une unité « rendu-en-cours », ni rendue ni perdue) se traite comme « deja-rembourse » : on relit le grand livre, le lot n'est jamais écrit rendu sans les mouvements
+        const dejaOuEnCours = raison === 'deja-rembourse' || raison === 'remboursement-en-cours';
+        if ((r && r.rendu) || dejaOuEnCours) {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
             let gl = await grandLivreDuLot(scanId, porteur);
             // UN-CANDIDAT-2 : le PERDANT d'une course a pu relire le grand livre avant que le gagnant du claim ait fini de rendre : il relit (courte pause, 3 fois au plus) avant d'écrire une marque
-            for (let i = 0; i < 3 && raison === 'deja-rembourse' && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
+            for (let i = 0; i < 3 && dejaOuEnCours && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
             if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant }); return { rendu: true }; }
             await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
             console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}${gl.ambigus ? `, ${gl.ambigus} débit(s) « rembourse » sans mouvement` : ''}) — écrit « lot à rendre », repris par le balayage`);
