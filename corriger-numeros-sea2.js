@@ -41,8 +41,42 @@ function decider({ fiches, cartes }) {
     });
 }
 
-/** Les écritures d'une décision : des opérations ciblées, jamais un tableau entier. */
-function operations(d) {
+/**
+ * L'ÉTAT DE DÉPART d'un produit, reconnu par ce qu'il AUTORISE (tour 1) : l'état écrit par SEA-2 (rien de fait), ou un état À MOITIÉ corrigé
+ * (l'écriture de `cartes_produits` précède celle de `cartes` : un `$pull` en échec laisse la ligne corrigée et l'impression encore là — ou
+ * l'inverse après une reprise). Tout autre état refuse. Rend { ligneFaite, impFaite } ou { refus }.
+ */
+function etatDeDepart(d, ligne, carte) {
+    const imps = (carte?.impressions || []).filter(Boolean);
+    const nFaux = imps.filter(i => estImpSea2(i, d.numeroFaux)), nOff = imps.filter(i => estImpSea2(i, d.numeroOfficiel));
+    const exact = (xs, n) => xs.length === 1 && xs[0].numero === n;
+    let ligneFaite;
+    if (ligne.numeroFiche === d.numeroFaux) ligneFaite = false;
+    else if (d.voie === 'b' && ligne.numeroFiche == null) ligneFaite = true;
+    else if (d.voie === 'a' && ligne.numeroFiche != null && ligne.numeroFiche === d.numeroOfficiel) ligneFaite = true;
+    else return { refus: `numeroFiche ${JSON.stringify(ligne.numeroFiche)} : ni celui de SEA-2 (« ${d.numeroFaux} ») ni l'état corrigé de la voie ${d.voie}` };
+    let impFaite;
+    if (d.voie === 'b') {
+        if (!d.impressionSea2) impFaite = true;                                   // aucun geste sur les impressions
+        else if (exact(nFaux, d.numeroFaux)) impFaite = false;
+        else if (nFaux.length === 0) impFaite = true;
+        else return { refus: `${nFaux.length} impression(s) id « ${d.numeroFaux} » de source setlist, attendu 1 au numéro exact (ou 0 si déjà retirée)` };
+    } else if (d.impressionSea2) {
+        if (exact(nFaux, d.numeroFaux) && nOff.length === 0) impFaite = false;
+        else if (nFaux.length === 0 && exact(nOff, d.numeroOfficiel)) impFaite = true;
+        else return { refus: `impressions id « ${d.numeroFaux} » : ${nFaux.length}, « ${d.numeroOfficiel} » : ${nOff.length} — ni l'état de SEA-2 ni l'état corrigé` };
+    } else if (nOff.length === 0) impFaite = false;
+    else if (exact(nOff, d.numeroOfficiel)) impFaite = true;
+    else return { refus: `${nOff.length} impression(s) id « ${d.numeroOfficiel} » de source setlist, attendu 0 ou 1 au numéro exact` };
+    return { ligneFaite, impFaite };
+}
+
+/** Les écritures d'une décision : des opérations ciblées, jamais un tableau entier. `etat` : seuls les gestes MANQUANTS s'exécutent. */
+function operations(d, etat = { ligneFaite: false, impFaite: false }) {
+    const tout = operationsCompletes(d);
+    return { cartes_produits: etat.ligneFaite ? [] : tout.cartes_produits, cartes: etat.impFaite ? [] : tout.cartes };
+}
+function operationsCompletes(d) {
     const ops = { cartes_produits: [], cartes: [] };
     const ligne = { _id: `${d.carteId}|${d.idProduct}`, preuve: PREUVE, numeroFiche: d.numeroFaux, slug: d.slug, slugSet: SLUGSET };
     if (d.voie === 'a') {
@@ -93,13 +127,10 @@ async function executer({ argv, ouvrir, log = console.log, err = console.error }
             const ls = await db.collection('cartes_produits').find({ idProduct: p.idProduct }).toArray();
             if (ls.length !== 1) { err(`❌ ${p.nomEn} ${p.idProduct} : ${ls.length} ligne(s) de jointure, attendu 1 — rien n'est écrit`); return 1; }
             const l = ls[0];
-            if (l.carteId !== p.carteId || l.preuve !== PREUVE || l.slug !== p.slug || l.slugSet !== SLUGSET || l.numeroFiche !== p.numeroFaux) { err(`❌ ${p.nomEn} ${p.idProduct} : la ligne n'est plus celle de SEA-2 (carte ${l.carteId}, preuve ${l.preuve}, slug ${l.slug}, set ${l.slugSet}, numeroFiche ${JSON.stringify(l.numeroFiche)}) — rien n'est écrit`); return 1; }
+            if (l.carteId !== p.carteId || l.preuve !== PREUVE || l.slug !== p.slug || l.slugSet !== SLUGSET) { err(`❌ ${p.nomEn} ${p.idProduct} : la ligne n'est plus celle de SEA-2 (carte ${l.carteId}, preuve ${l.preuve}, slug ${l.slug}, set ${l.slugSet}) — rien n'est écrit`); return 1; }
             const c = (await db.collection('cartes').find({ _id: p.carteId }).toArray())[0];
             if (!c || c.nomEn !== p.nomEn) { err(`❌ la carte ${p.carteId} n'est pas « ${p.nomEn} » — rien n'est écrit`); return 1; }
-            const sea2 = (c.impressions || []).filter(i => estImpSea2(i, p.numeroFaux));
-            if (p.impressionSea2 && !(sea2.length === 1 && sea2[0].numero === p.numeroFaux)) { err(`❌ ${p.nomEn} : ${sea2.length} impression(s) id « ${p.numeroFaux} » de source setlist (attendu 1, au numéro exact) — rien n'est écrit`); return 1; }
             lignes.set(p.idProduct, l); cartes.set(p.carteId, c);
-            avant.set(p.idProduct, { impressions: (c.impressions || []).filter(Boolean).length, dontSetlistId: sea2.length, liens: c.liens?.idProduct ?? null, sets: [...(c.sets || [])].sort() });
         }
         // ── la fiche officielle TPC du cache (M-P indonésien) ──
         const etat = (await db.collection('collecte_images_etat').find({ _id: ETAT }).toArray())[0];
@@ -113,17 +144,30 @@ async function executer({ argv, ouvrir, log = console.log, err = console.error }
         for (const n of ['17', '18', '19', '35', '36', '37']) log(`   n° ${n} : ${fiches.filter(f => memeNumero(f.numero, n)).map(f => `« ${f.nom} » (fiche ${f.idFiche}, Pokédex ${f.dex ?? '—'}, PV ${f.pv ?? '—'})`).join(' ; ') || 'AUCUNE fiche'}`);
         const decisions = decider({ fiches, cartes });
         for (const d of decisions) log(`■ ${d.nomEn} ${d.idProduct} (${d.slug}) : numeroFiche « ${d.numeroFaux} » → ${d.voie === 'a' ? `a) CORRIGER en ${d.numeroOfficiel} — ${d.preuve}` : `b) RETIRER le numeroFiche${d.impressionSea2 ? ` et l'impression id « ${d.numeroFaux} »` : ''} — la fiche n° ${d.numeroOfficiel} ne se prouve pas : ${d.motif}${d.detail ? ` (${d.detail})` : ''}`}`);
+        // l'état de départ de chaque produit : SEA-2 intact, ou à moitié corrigé (un seul geste manquant) — sinon rien n'est écrit
+        const etats = new Map();
+        for (const d of decisions) {
+            const c = cartes.get(d.carteId), e = etatDeDepart(d, lignes.get(d.idProduct), c);
+            if (e.refus) { err(`❌ ${d.nomEn} ${d.idProduct} : ${e.refus} — rien n'est écrit`); return 1; }
+            etats.set(d.idProduct, e);
+            const imps = (c.impressions || []).filter(Boolean).length;
+            // l'attendu de la relecture se compte depuis l'état de DÉPART SEA-2, quel que soit l'état trouvé
+            const initial = imps + (d.voie === 'b' && d.impressionSea2 && e.impFaite ? 1 : 0) - (d.voie === 'a' && !d.impressionSea2 && e.impFaite ? 1 : 0);
+            avant.set(d.idProduct, { impressions: initial, dontSetlistId: (c.impressions || []).filter(i => estImpSea2(i, d.numeroFaux)).length, liens: c.liens?.idProduct ?? null, sets: [...(c.sets || [])].sort() });
+            log(`   état trouvé ${d.nomEn} : ligne ${e.ligneFaite ? 'DÉJÀ corrigée' : 'à corriger'} · impression ${d.voie === 'b' && !d.impressionSea2 ? 'sans geste' : e.impFaite ? 'DÉJÀ faite' : 'à faire'}${e.ligneFaite !== e.impFaite && !(d.voie === 'b' && !d.impressionSea2) ? ' — ÉTAT À MOITIÉ CORRIGÉ, seul le geste manquant sera exécuté' : ''}`);
+        }
+        if (decisions.every(d => etats.get(d.idProduct).ligneFaite && etats.get(d.idProduct).impFaite)) { err('❌ rien à faire : les deux produits sont déjà corrigés (la ligne n\'est plus celle de SEA-2 et l\'impression est dans l\'état attendu)'); return 1; }
         const gastly = cartes.get(339431);
         log(`   (Gastly 339431 : ${(gastly.impressions || []).filter(i => estImpSea2(i, '18')).length} impression(s) id « 018 »/« 18 » de source setlist, écrite(s) AVANT SEA-2 par un outil antérieur (pas par ce lot), au numéro de la Setlist comme l'erreur corrigée ici — jamais touchée(s), à instruire à part)`);
         const annonce = {}; let retraits = 0;
-        for (const d of decisions) if (d.voie === 'b' && d.impressionSea2) retraits++;
+        for (const d of decisions) if (d.voie === 'b' && d.impressionSea2 && !etats.get(d.idProduct).impFaite) retraits++;
         if (retraits) annonce[`impressions imp:${IMP.tirage}|${IMP.expansion}`] = retraits;
         log(`   annonce de lot-additif : ${JSON.stringify(annonce)}`);
         if (!ecrire) { log('(simulation — rien n\'est écrit)'); return 0; }
 
         // ── l'écriture : le geste minimal, document par document, chaque compte vérifié ──
         for (const d of decisions) {
-            const ops = operations(d);
+            const ops = operations(d, etats.get(d.idProduct));
             for (const o of ops.cartes_produits) { const r = await db.collection('cartes_produits').updateOne(o.filtre, o.maj, o.options); if (r.modifiedCount !== 1) { err(`❌ ${d.nomEn} : la ligne n'a pas été modifiée (${r.modifiedCount}) — la base a bougé depuis le plan ; arrêt`); return 1; } }
             for (const o of ops.cartes) { const r = await db.collection('cartes').updateOne(o.filtre, o.maj, o.options); if (r.modifiedCount !== 1) { err(`❌ ${d.nomEn} : la carte n'a pas été modifiée (${r.modifiedCount}) — arrêt`); return 1; } }
         }

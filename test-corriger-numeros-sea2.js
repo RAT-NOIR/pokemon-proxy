@@ -37,16 +37,20 @@ function fakeDb(init, opts = {}) {
 
 const IMP = (numero, tirage = 'id') => ({ tirage, expansion: 'M-P Promotional cards', numero, total: null, deck: null, rarete: null, source: 'setlist' });
 const IMP_INTL = { tirage: 'intl', expansion: 'Phantasmal Flames', numero: '032', total: '094', rarete: 'Common', illustrateur: 'X' };
-function monde({ avecTpc35 = false, listeIncomplete = false, ligneDejaCorrigee = false } = {}) {
-    const pawmi = { _id: 342068, nomEn: 'Pawmi', categorie: 'pokemon', ndex: 921, pv: 60, impressions: [IMP_INTL, IMP('017', 'th'), IMP('17')], liens: { idProduct: [850539, 860034] }, sets: ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'] };
-    const gastly = { _id: 339431, nomEn: 'Gastly', categorie: 'pokemon', ndex: 92, pv: 70, impressions: [IMP_INTL, IMP('018'), IMP('018', 'th')], liens: { idProduct: [860035, 859982] }, sets: ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'] };
+function monde({ avecTpc35 = false, listeIncomplete = false, ligneDejaCorrigee = false, numeroPawmi = '17', impPawmi = 'seule17', autresDix7 = false, numeroGastly = '18', impGastly36 = false } = {}) {
+    // autresDix7 : la carte de Pawmi porte AUSSI d'autres impressions « 17 » (th, intl, id d'une autre source ou expansion) que le $pull ne doit pas toucher
+    const autres = autresDix7 ? [IMP('17', 'th'), { ...IMP_INTL, numero: '17' }, { ...IMP('17'), source: 'tcgdex' }, { ...IMP('17'), expansion: 'Autre expansion' }] : [];
+    // impPawmi : 'seule17' (état SEA-2) · 'aucune' (retirée) · '35' (corrigée par la voie a)
+    const impsId = impPawmi === 'seule17' ? [IMP('17')] : impPawmi === '35' ? [IMP('35')] : [];
+    const pawmi = { _id: 342068, nomEn: 'Pawmi', categorie: 'pokemon', ndex: 921, pv: 60, impressions: [IMP_INTL, IMP('017', 'th'), ...autres, ...impsId], liens: { idProduct: [850539, 860034] }, sets: ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'] };
+    const gastly = { _id: 339431, nomEn: 'Gastly', categorie: 'pokemon', ndex: 92, pv: 70, impressions: [IMP_INTL, IMP('018'), IMP('018', 'th'), ...(impGastly36 ? [IMP('36')] : [])], liens: { idProduct: [860035, 859982] }, sets: ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'] };
     const ligne = (c, p, slug, n) => ({ _id: `${c}|${p}`, carteId: c, idProduct: p, slugSet: 'M-P-Indonesian-Promos', slug, numeroFiche: n, preuve: 'metacarte+setlist', idExpansion: 6393 });
     const autre = { _id: '1|2', carteId: 1, idProduct: 2, slugSet: 'Autre', numeroFiche: '5', preuve: 'set+numero' };
     const fiche = (id, numero, nom, dex, pv) => ({ _id: `tpc-asie/id/${id}`, site: 'tpc-asie', langue: 'id', idFiche: id, url: `https://x/${id}`, fiche: { nom, numero, denominateur: 'M-P', pv, dex, symbole: 'S' } });
     const fiches = [fiche(16630, '017', 'Squawkabilly ex', 931, 160), fiche(16631, '018', 'Sekop Pelubang', null, null), fiche(16632, '019', 'Wadah Daratan', null, null), fiche(16650, '034', 'Basic Energy', null, null)];
     if (avecTpc35) fiches.push(fiche(16651, '035', 'Pawmi', 921, 60), fiche(16652, '036', 'Gastly', 92, 70));
     return fakeDb({
-        cartes_produits: [ligne(342068, 860034, 'Pawmi-M-PID035', ligneDejaCorrigee ? null : '17'), ligne(339431, 860035, 'Gastly-M-PID036', '18'), autre],
+        cartes_produits: [ligne(342068, 860034, 'Pawmi-M-PID035', ligneDejaCorrigee ? null : numeroPawmi), ligne(339431, 860035, 'Gastly-M-PID036', numeroGastly), autre],
         cartes: [pawmi, gastly, { _id: 5, nomEn: 'Autre', impressions: [IMP('17')], liens: { idProduct: [] }, sets: [] }],
         collecte_images_etat: [{ _id: 'tpc-asie/M-P-Indonesian-Promos', liste: { code: 'M-P', langue: 'id', ids: fiches.map(f => f.idFiche).concat(listeIncomplete ? [99999] : []), total: fiches.length + (listeIncomplete ? 1 : 0), complete: true, luLe: new Date('2026-10-08') } }],
         tpc_fiches: fiches
@@ -73,7 +77,38 @@ const impsId = c => c.impressions.filter(i => i.tirage === 'id').map(i => i.nume
     verifier('   (b) Pawmi : seule l\'impression id « 17 » part (th 017 et intl restent) ; Gastly : impressions inchangees, sa 018 est la', [impsId(carte(db, 342068)), carte(db, 342068).impressions.length, impsId(carte(db, 339431)), carte(db, 339431).impressions.length], [[], 2, ['018'], 3]);
     verifier('   (b) liens, sets et les autres documents inchanges', [carte(db, 342068).liens.idProduct, carte(db, 342068).sets, ligne(db, 2).numeroFiche, carte(db, 5).impressions.length], [[850539, 860034], ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'], '5', 1]);
     r = await lancer(db, ['--ecrire']);
-    verifier('rejeu apres ecriture : la ligne n\'est plus celle de SEA-2 -> exit 1, rien de plus d\'ecrit', [r.code, /n'est plus celle de SEA-2/.test(r.erreurs)], [1, true]);
+    verifier('rejeu apres ecriture complete : rien a faire -> exit 1, rien de plus d\'ecrit', [r.code, /rien à faire/.test(r.erreurs)], [1, true]);
+
+    // ── tour 1 (important) : le $pull ne retire que id / M-P Promotional cards / 17 / setlist, pas toute impression « 17 » ──
+    db = monde({ autresDix7: true });
+    r = await lancer(db, ['--ecrire']);
+    verifier('$pull ciblé : la carte porte aussi th 17, intl 17, id 17 d\'une autre source et d\'une autre expansion -> seule id/M-P/17/setlist part', [r.code, carte(db, 342068).impressions.map(i => `${i.tirage}|${i.expansion}|${i.numero}|${i.source ?? ''}`)],
+        [0, ['intl|Phantasmal Flames|032|', 'th|M-P Promotional cards|017|setlist', 'th|M-P Promotional cards|17|setlist', 'intl|Phantasmal Flames|17|', 'id|M-P Promotional cards|17|tcgdex', 'id|Autre expansion|17|setlist']]);
+
+    // ── tour 1 (mineur) : un état À MOITIÉ corrigé est un état de départ valide ; le seul geste manquant s'exécute ──
+    db = monde({ ligneDejaCorrigee: true });
+    r = await lancer(db, ['--ecrire']);
+    verifier('moitié 1 (b) : numeroFiche de Pawmi déjà retiré, impression encore là -> exit 0, l\'impression part seule, le dit', [r.code, /ÉTAT À MOITIÉ CORRIGÉ/.test(r.sorties), impsId(carte(db, 342068)), ligne(db, 860034).numeroFiche, ligne(db, 860035).numeroFiche, /écrit et relu/.test(r.sorties)], [0, true, [], null, undefined, true]);
+    db = monde({ impPawmi: 'aucune' });
+    r = await lancer(db, ['--ecrire']);
+    verifier('moitié 2 (b) : impression déjà retirée, numeroFiche encore là -> exit 0, seul le numeroFiche part ; annonce vide (aucune baisse restante)', [r.code, /annonce de lot-additif : \{\}/.test(r.sorties), ligne(db, 860034).numeroFiche, carte(db, 342068).impressions.length, /écrit et relu/.test(r.sorties)], [0, true, undefined, 2, true]);
+    db = monde({ ligneDejaCorrigee: true, impPawmi: 'aucune', numeroGastly: '18' });
+    r = await lancer(db, ['--ecrire']);
+    verifier('Pawmi entièrement fait, Gastly intact -> exit 0 (seul Gastly s\'écrit)', [r.code, ligne(db, 860035).numeroFiche], [0, undefined]);
+    db = monde({ numeroPawmi: 'zzz' }); const avZ = etat(db);
+    r = await lancer(db, ['--ecrire']);
+    verifier('tout autre état refuse : numeroFiche « zzz » -> exit 1, rien d\'écrit', [r.code, /ni celui de SEA-2/.test(r.erreurs), etat(db) === avZ], [1, true, true]);
+    db = monde({ autresDix7: true, ligneDejaCorrigee: true }); db.collection('cartes').updateOne({ _id: 342068 }, { $push: { impressions: IMP('17') } });
+    const avD = etat(db);
+    r = await lancer(db, ['--ecrire']);
+    verifier('deux impressions id/17/setlist (ambigu) -> exit 1, rien d\'écrit', [r.code, etat(db) === avD], [1, true]);
+    // voie a, les deux moitiés
+    db = monde({ avecTpc35: true, numeroPawmi: '35' });
+    r = await lancer(db, ['--ecrire']);
+    verifier('moitié (a) 1 : numeroFiche déjà 35, impression encore 17 -> exit 0, impression passe à 35', [r.code, impsId(carte(db, 342068)), ligne(db, 860034).numeroFiche, ligne(db, 860035).numeroFiche], [0, ['35'], '35', '36']);
+    db = monde({ avecTpc35: true, impPawmi: '35', impGastly36: true });
+    r = await lancer(db, ['--ecrire']);
+    verifier('moitié (a) 2 : impressions déjà à 35 et 36, numeroFiche encore 17/18 -> exit 0, les deux lignes passent', [r.code, ligne(db, 860034).numeroFiche, ligne(db, 860035).numeroFiche, impsId(carte(db, 339431))], [0, '35', '36', ['018', '36']]);
 
     // ── (a) : le cache porte 035 = Pawmi et 036 = Gastly ──
     db = monde({ avecTpc35: true });
@@ -86,7 +121,7 @@ const impsId = c => c.impressions.filter(i => i.tirage === 'id').map(i => i.nume
     db = monde({ listeIncomplete: true }); const av = etat(db);
     r = await lancer(db, ['--ecrire']);
     verifier('garde : cache TPC incomplet (liste annoncee > fiches lues) -> exit 1, rien d\'ecrit, dit pourquoi', [r.code, etat(db) === av, /fiches en cache|pas complète/.test(r.erreurs)], [1, true, true]);
-    db = monde({ ligneDejaCorrigee: true }); const av2 = etat(db);
+    db = monde({ numeroGastly: 'zzz' }); const av2 = etat(db);
     r = await lancer(db, ['--ecrire']);
     verifier('garde : une ligne qui n\'est pas celle de SEA-2 -> exit 1, rien d\'ecrit', [r.code, etat(db) === av2], [1, true]);
     r = await lancer(monde(), ['--ecrire', '--produits=1']);
