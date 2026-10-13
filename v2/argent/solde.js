@@ -1,7 +1,7 @@
 'use strict';
 // Le Solde (CONTRAT-2 §3.5) et l'historique. Tout est relu EN BASE (jamais l'instantané du porteur) ; chaque poche annoncée est une poche UTILISABLE :
 // un compte non vérifié n'a ni accueil ni hebdo, même si la base porte un nombre (la garde s'écrit par ce qu'elle autorise).
-const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches');
+const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches'); const Of = require('./offre');
 const { RAISONS_NON_REMBOURSE } = require('../../sources');
 const col = nom => db.col(nom);
 
@@ -29,8 +29,9 @@ async function solde(porteur, cfg, maintenant = new Date()) {
             }
             const a = c.abonnement;
             if (a && a.actif && a.jusquAu && a.jusquAu > maintenant) {
+                const entier = n => (Number.isInteger(n) ? n : 0);   // OFFRE-QUOTA : un abonnement posé sans les champs de l'ancienne vente (quotaMensuel, restant) ne casse pas le contrat (entiers) : 0, jamais NaN/null
                 const restant = a.moisCle === P.moisCle(maintenant) ? a.restant : a.quotaMensuel;   // le mois a changé : le prochain débit recharge, on annonce ce rechargement
-                abonnement = { restant: Math.max(0, restant), quotaMensuel: a.quotaMensuel, renouvelleLe: premierDuMoisSuivant(maintenant) };
+                abonnement = { restant: Math.max(0, entier(restant)), quotaMensuel: entier(a.quotaMensuel), renouvelleLe: premierDuMoisSuivant(maintenant) };
             }
         }
     }
@@ -42,8 +43,13 @@ async function solde(porteur, cfg, maintenant = new Date()) {
 // comme le débit) passe. Rien n'est écrit : le débit reste seul juge — ce contrôle ne fait qu'éviter de lire 12 Mo pour un refus d'argent certain.
 async function peutPayer(porteur, cfg, maintenant = new Date()) {
     if (porteur.administrateur === true && porteur.type === 'compte' && (await col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' })) > 0) return { ok: true };
-    const s = await solde(porteur, cfg, maintenant);
-    return s.total > 0 ? { ok: true } : { ok: false, code: P.codeRefus(porteur) };
+    // OFFRE-QUOTA : « peut-il payer ? » = lui reste-t-il une analyse aujourd'hui (même source que le débit : l'offre relue en base). Les anciens soldes ne comptent plus : ils ne se débitent plus.
+    // Pro (restant: null) passe tant que le plafond technique n'est pas atteint (le débit reste seul juge) ; un compte non vérifié se voit demander de confirmer son adresse.
+    const e = await Of.etatDe(porteur, cfg, maintenant);
+    if (!e) return { ok: false, code: P.codeRefus(porteur) };
+    if (e.nonVerifie) return { ok: false, code: 'VERIFICATION' };
+    const pris = await Of.prisAuJour(porteur, Of.jourDeParis(maintenant));
+    return e.limite > pris ? { ok: true } : { ok: false, code: P.codeRefus(porteur) };
 }
 
 // ── historique : une ligne « analyse » par scan, une ligne « credits » par octroi / achat / migration ; la suite est opaque ─────────────────────

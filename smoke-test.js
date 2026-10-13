@@ -303,7 +303,7 @@ async function testerLesRoutes() {
 
     // --- Paiement : Stripe absent -> 503 propre, jamais un crash ---
     r = await appeler(port, 'POST', '/api/creer-recharge', { corps: { userId: 'SMOKE-TEST-USER', packId: 'p20' } });
-    verifier('POST /api/creer-recharge sans Stripe -> 503', r.status, 503);
+    verifier('POST /api/creer-recharge -> 410 (OFFRE-QUOTA : la vente de scans est arrêtée, aucune session Stripe)', r.status, 410);
 
     // --- Webhook Stripe : signature absente -> 503 (Stripe non configuré) ---
     r = await appeler(port, 'POST', '/api/webhook-stripe', { corps: '{}', brut: true, jeton: false });

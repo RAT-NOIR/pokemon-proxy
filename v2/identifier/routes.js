@@ -99,6 +99,7 @@ const { regleVerdict } = require('./taux');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
+const { offreSur, avecOffre, offreRefusee } = require('../argent/offre-sur');
 const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('../../sources');
 const { col } = require('../db');
 const SL = require('./seconde-lecture');
@@ -127,7 +128,6 @@ function chaineDepuisResultat(r) {
     };
 }
 
-const URL_RECHARGE = 'https://rat-market.fr/fr/compte#recharge';
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 const journalErreur = (ou, e) => console.error(`❌ [v2 identifier] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
@@ -273,6 +273,7 @@ function traiterIdentifier(cfg, deps = {}) {
             if (!porteur || !entree || typeof deps.gererIdentifier !== 'function') throw new Error('montage incomplet');
         } catch (e) { journalErreur('montage', e); return repondreErreur(res, 'INDISPONIBLE'); }
         const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
+        const offreP = () => offreSur(porteur, argent);
 
         // 1. l'annonce est une DONNÉE : expurgée avant tout usage
         let annonce;
@@ -301,8 +302,12 @@ function traiterIdentifier(cfg, deps = {}) {
         if (!debit || !debit.ok) {
             const code = debit && ['QUOTA', 'VERIFICATION', 'EN_RECONCILIATION'].includes(debit.code) ? debit.code : 'INDISPONIBLE';
             if (code === 'INDISPONIBLE') return repondreErreur(res, code);
-            const extra = { facturation: null, ...(code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) };
-            if (code !== 'EN_RECONCILIATION') { const s = await soldeSur(); if (s !== undefined) extra.solde = s; }
+            // OFFRE-QUOTA : plus de recharge (`achat` n'est plus joint) ; le refus QUOTA joint l'offre, restant 0
+            const extra = { facturation: null };
+            if (code !== 'EN_RECONCILIATION') {
+                const s = await soldeSur(); if (s !== undefined) extra.solde = s;
+                const o = await offreP(); if (o !== undefined) extra.offre = code === 'QUOTA' ? offreRefusee(o) : o;
+            }
             return repondreErreur(res, code, undefined, extra);
         }
         // une clé déjà débitée par une requête qui n'a pas abouti : jamais un second appel à la chaîne sur ce débit (la réconciliation tranche)
@@ -436,21 +441,21 @@ function traiterIdentifier(cfg, deps = {}) {
             let facturation;
             try { facturation = facturationDe('panne', { admin, rendu, question: false, cause: rendu ? null : (cause ? raisonPublique(cause) : 'erreur') }); }
             catch (e3) { journalErreur('facturation après exception', e3); facturation = { debite: rendu || admin ? 0 : 1, reserve: 0, rembourse: rendu, motif: admin ? 'administrateur' : 'panne', raisonNonRembourse: rendu || admin ? null : 'erreur' }; }
-            const s = await soldeSur();
+            const s = await soldeSur(), o = await offreP();
             await fermer();                                // le scan est rendu (ou dit non rendu) : le résultat est produit
-            return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}) });
+            return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
         }
         // 7. le solde, relu APRÈS les mouvements
-        const solde = await soldeSur();
+        const solde = await soldeSur(), offre = await offreP();
         if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
             await fermer();
             return repondreErreur(res, erreurLot.code, undefined, { facturation: erreurLot.facturation, ...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
-                ...(erreurLot.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}), ...(solde !== undefined ? { solde } : {}) });
+                ...(solde !== undefined ? { solde } : {}), ...avecOffre(erreurLot.code === 'QUOTA' && erreurLot.detail !== 'lot-trop-grand' ? offreRefusee(offre) : offre) });   // lot-trop-grand : les unités sont rendues, l'offre relue dit le VRAI restant (relecture 1, I-2)
         }
         const { resultat, facturation } = sortie;
         if (resultat.issue === 'panne') {
             await fermer();
-            return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}) });
+            return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
         }
         // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
         let regle = null;
@@ -484,7 +489,7 @@ function traiterIdentifier(cfg, deps = {}) {
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
-        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
+        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
     };
     return async function traiterIdentifierV2(req, res) {
         const etat = { suivi: null, differe: false };
@@ -536,6 +541,7 @@ function traiterReponse(cfg, deps = {}) {
         const choix = b.choix;
         const scanId = new mongoose.Types.ObjectId(b.scanId);                  // une chaîne ne sert à aucun filtre : analyses, mouvements et questions portent un ObjectId
         const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
+        const offreP = () => offreSur(porteur, argent);
         // la ligne du scan, À CE PORTEUR : celle d'un autre porteur n'existe pas (404, jamais 403)
         let an;
         try { an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }); }
@@ -573,7 +579,7 @@ function traiterReponse(cfg, deps = {}) {
             if (r.statut === 404) return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
             if (r.statut === 400) return entreeInvalide('choix');
             if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
-            if (r.statut === 410) { const s = await soldeSur(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}) }); }
+            if (r.statut === 410) { const s = await soldeSur(), o = await offreP(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) }); }
             if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
             facturation = r.facturation; enAttente = r.remboursementEnAttente === true;
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
@@ -584,11 +590,11 @@ function traiterReponse(cfg, deps = {}) {
         // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
         catch (e) { journalErreur('vérité de la réponse', e); }
-        const solde = await soldeSur();
+        const solde = await soldeSur(), offre = await offreP();
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });
-        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(solde !== undefined ? { solde } : {}) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
+        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe, URL_RECHARGE };
+module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };

@@ -10,13 +10,15 @@ const db = require('../db'); const M = require('../modeles'); const J = require(
 const { lireConfig } = require('../config');
 const CHARGES = path.join(__dirname, '..', '..', 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
-const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' };
+const Q = require('./_aide-quota');
+// OFFRE-QUOTA : un « solde » de N crédits devient un quota du jour de 1000 dont 1000 - N sont déjà pris (voir _aide-quota.js) ; l'arithmétique des plafonds de remboursement n'en change pas.
+const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_GRATUIT: String(Q.GRAND), V2_QUOTA_SANS_COMPTE: String(Q.GRAND), V2_QUOTA_PRO_PLAFOND: String(Q.GRAND) };
 const cfg = lireConfig(BASE);
 const ORIGINE = cfg.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.12.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
 let nCle = 0; const cle = () => `banc-plaf-${Date.now().toString(36)}-${++nCle}`;
 const raw = n => mongoose.connection.db.collection(n);
-const jourUTC = () => new Date().toISOString().slice(0, 10);
+const jourUTC = () => Q.jourCourant();
 
 const EXP = 990003;
 const semer = async (id, trend) => {
@@ -37,6 +39,7 @@ const nAff = n => Array.from({ length: n }, (_, i) => aff(POOL[i % POOL.length])
 async function compteLie(solde, role) {
     const c = Object.assign(M.nouveauCompte({ email: `plaf${++nCle}@x.fr`, emailCle: `plaf${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde }, role ? { role } : {});
     await db.col('comptes').insertOne(c);
+    await Q.poserRestant(`compte:${c._id}`, (solde.achete || 0) + (solde.accueil || 0));
     return { c, ...(await installationDe(c)) };
 }
 async function installationDe(c) {
@@ -53,7 +56,7 @@ const poster = (url, jeton, c = corps(), k = cle()) => H.appel(url, '/api/identi
 const repondre = (url, jeton, b) => H.appel(url, '/api/identifier/reponse', { methode: 'POST', corps: b, entetes: entetes(jeton) });
 const retour = (url, jeton, b) => H.appel(url, '/api/retour-live', { methode: 'POST', corps: b, entetes: entetes(jeton) });
 const LR = scanId => ({ scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } });
-const solde = async c => (await raw('comptes').findOne({ _id: c._id })).solde;
+const solde = async c => ({ achete: await Q.restantDe({ type: 'compte', id: c._id }, cfg) });      // le « solde » d'un compte = ce qu'il lui reste aujourd'hui (OFFRE-QUOTA)
 const compteur = async (cle_, type) => { const d = await raw('plafonds').findOne({ porteur: cle_, jour: jourUTC(), type }); return d ? d.count : 0; };
 const capter = async f => { const lignes = []; const e = console.error, w = console.warn, l = console.log; console.error = console.warn = (...a) => { lignes.push(a.join(' ')); }; try { return { r: await f(), lignes }; } finally { console.error = e; console.warn = w; console.log = l; } };
 
@@ -81,7 +84,7 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
 
     await H.ouvrirBancV2();
     // B2b point 6 : les plafonds sont comptés par JOUR UTC ; le banc sème un compteur du jour PUIS fait la requête, que la route date avec `new Date()` : minuit entre les deux ferait lire un autre jour.
-    await H.eviterFrontieres({ jour: true });
+    await H.eviterFrontieres({ jour: true }); await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-plafonds.js', ecrit: true });
@@ -223,7 +226,7 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         const x = await compteLie({ accueil: 0, achete: 30 }); const pk = `compte:${x.c._id}`;
         const sorties = [];
         for (let k = 0; k < 11; k++) {
-            if (k % 2 === 0) { lot(nAff(21)); } else { await raw('comptes').updateOne({ _id: x.c._id }, { $set: { 'solde.achete': 1 } }); lot(nAff(20)); }
+            if (k % 2 === 0) { lot(nAff(21)); } else { await Q.poserRestant(pk, 1); lot(nAff(20)); }
             const r = await poster(svLot.url, x.jeton); sorties.push(`${r.json.erreur.detail}:${r.json.facturation.rembourse ? 'rendu' : r.json.facturation.raisonNonRembourse}`);
         }
         H.v('R3. 6 refus de taille et 5 refus de quota en alternance (11) : 10 rendus, le 11e (taille) facturé — un seul compteur', [sorties.filter(s => s.endsWith(':rendu')).length, sorties[10], await compteur(pk, 'lot-trop-grand')], [10, 'lot-trop-grand-taille:plafond-jour', 10]);

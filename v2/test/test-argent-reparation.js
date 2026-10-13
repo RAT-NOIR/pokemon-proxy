@@ -10,9 +10,15 @@ const t = new Date('2026-10-08T10:00:00Z'), tard = new Date('2026-10-08T14:00:00
 const muet = async f => { const e0 = console.error; console.error = () => { }; try { return await f(); } finally { console.error = e0; } };
 const instInit = async () => { const p = await inst({ essais: 3 }); await db.col('installations').updateOne({ _id: p.id }, { $set: { essaisInitiaux: 3 } }); return p; };
 // fabrique l'état hérité : un débit pris puis posé « rembourse » SANS aucun mouvement de remboursement ; `creditRendu` : le crédit a-t-il été rendu quand même (écart +1) ?
+// OFFRE-QUOTA (2026-10-13) : ce cas « d'avant le tour 2 » (débit sans priseLe ni marqueur, jugé par l'écart de poche) n'existe que pour les ANCIENNES poches : le débit est fabriqué sur la poche `essai` (installation)
+// ou `accueil` (compte), tel que le grand livre d'avant la bascule l'écrivait. Le quota du jour est né avec le protocole actuel (priseLe, marqueur) : ses coupures sont jouées par test-argent-tour1.js à tour4.js.
+async function debitAncien(p, scanId, etat = 'debite') {
+    if (p.type === 'compte') { await db.col('comptes').updateOne({ _id: p.id }, { $inc: { 'solde.accueil': -1 } }); await db.col('mouvements').insertOne({ compteId: p.id, le: t, surface: 'scanner', type: 'debit', delta: -1, poche: 'accueil', credit: { poche: 'accueil' }, motif: null, scanId, etat, cleIdempotence: `k-${scanId}`, expireLe: new Date('2028-01-01') }); return; }
+    await db.col('installations').updateOne({ _id: p.id }, { $inc: { essais: -1 } });
+    await db.col('mouvements').insertOne({ installationId: p.id, le: t, surface: 'extension', type: 'debit', delta: -1, poche: 'essai', credit: { poche: 'essai' }, motif: null, scanId, etat, cleIdempotence: `k-${scanId}`, expireLe: new Date('2028-01-01') });
+}
 async function ancienEtat(p, scanId, { creditRendu = false } = {}) {
-    await Lg.debiter(p, { scanId, cleIdempotence: `k-${scanId}`, maintenant: t }, cfg);
-    await db.col('mouvements').updateOne({ scanId, type: 'debit' }, { $set: { etat: 'rembourse' } });
+    await debitAncien(p, scanId, 'rembourse');
     if (creditRendu) await db.col('installations').updateOne({ _id: p.id }, { $inc: { essais: 1 } });
 }
 const mv = async scanId => db.col('mouvements').find({ scanId, type: 'remboursement' }).toArray();
@@ -42,7 +48,7 @@ const mv = async scanId => db.col('mouvements').find({ scanId, type: 'remboursem
     }
     // C. un débit réellement rendu n'est pas touché
     {
-        const p = await instInit(); await Lg.debiter(p, { scanId: 'rc', cleIdempotence: 'k-rc', maintenant: t }, cfg); await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId: 'rc', maintenant: t }, cfg));
+        const p = await instInit(); await debitAncien(p, 'rc'); await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId: 'rc', maintenant: t }, cfg));
         const av = (await mv('rc')).length, r = await reparer(p, 'rc');
         H.v('C. un débit réellement rendu : rien à réparer, essais 3, mouvements inchangés', [r.repare, r.raison, (await lire(p)).essais, (await mv('rc')).length], [false, 'rien-a-reparer', 3, av]);
     }
@@ -81,14 +87,13 @@ const mv = async scanId => db.col('mouvements').find({ scanId, type: 'remboursem
     {
         const p = await compte({ solde: { accueil: 25, achete: 0 } });
         await db.col('mouvements').insertOne({ compteId: p.id, le: t, surface: 'scanner', type: 'octroi', delta: 25, poche: 'accueil', motif: 'octroi', scanId: null, etat: 'debite', cleIdempotence: `octroi|${p.id}`, expireLe: new Date('2028-01-01') });
-        await Lg.debiter(p, { scanId: 'ri', cleIdempotence: 'k-ri', maintenant: t }, cfg); await db.col('mouvements').updateOne({ scanId: 'ri', type: 'debit' }, { $set: { etat: 'rembourse' } });
+        await debitAncien(p, 'ri', 'rembourse');
         const r = await reparer(p, 'ri');
         H.v('I. compte (accueil) : réparé, solde.accueil 25, un mouvement +1 sur le compte, réconciliation propre', [r.repare, (await lire(p)).solde.accueil, (await mv('ri')).map(m => String(m.compteId) === String(p.id)), (await R.reconcilier(p, { cfg, maintenant: tard })).propre], [true, 25, [true], true]);
     }
     // K. une ligne « rendu-echoue » de la même poche (son crédit a pu être rendu) : l'écart ne se lit plus, refus
     {
-        const p = await instInit(); await ancienEtat(p, 'rk'); await Lg.debiter(p, { scanId: 'rk2', cleIdempotence: 'k-rk2', maintenant: t }, cfg);
-        await db.col('mouvements').updateOne({ scanId: 'rk2', type: 'debit' }, { $set: { etat: 'rendu-echoue' } });
+        const p = await instInit(); await ancienEtat(p, 'rk'); await debitAncien(p, 'rk2', 'rendu-echoue');
         const r = await reparer(p, 'rk');
         H.v('K. une ligne « rendu-echoue » de la même poche : refusé (non-resolus-meme-poche), rien d\'écrit', [r.repare, r.raison, (await mv('rk')).length], [false, 'non-resolus-meme-poche', 0]);
     }

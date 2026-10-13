@@ -2,7 +2,7 @@
 // HÉRITAGE DES PORTEFEUILLES 1.0.x (collection `credits`, LUE ici et marquée — jamais recréée) — PLAN-COMPTES §4.4, §5 Q30, §8.
 //   · reprendreHeritage : la partie GRATUITE est DÉPLACÉE (soldeGratuit → 0, migreVers posé) : l'ancien client ne peut pas la dépenser deux fois. Les crédits ACHETÉS ne bougent pas ici.
 //     Le gratuit repris est PLAFONNÉ à la dotation d'essai d'une installation (quotas.essai) et toute élévation des essais d'une installation est COMPTÉE dans le plafond global (D7 b).
-//   · rattacherAchats   : les crédits ACHETÉS ne suivent que la PREUVE PAR L'ADRESSE : l'adresse Stripe du portefeuille égale (emailCle) celle d'un compte VÉRIFIÉ. Aucune autre preuve ne suffit.
+//   · rattacherAchats   : ARRÊTÉ (OFFRE-QUOTA, 2026-10-13) — il refusait toute preuve autre que l'adresse ; il refuse désormais tout : plus aucune écriture ne crédite la poche `achete`, voir la fonction.
 // Le userId (identifiant anonyme de l'ancienne extension) ne se journalise qu'en empreinte SHA-256.
 const crypto = require('crypto'); const db = require('../db'); const { dansUneTransaction } = require('./transaction'); const L = require('../transport/limites');
 const col = nom => db.col(nom);
@@ -51,34 +51,11 @@ async function reprendreHeritage({ userId, installation, maintenant = new Date()
     });
 }
 
-// les portefeuilles dont l'adresse Stripe pourrait égaler celle du compte : le domaine est comparé sans casse (googlemail = gmail), la clé exacte juge ensuite
-function motifDomaine(emailCleDuCompte) {
-    const d = emailCleDuCompte.slice(emailCleDuCompte.indexOf('@') + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`@${d === 'gmail\\.com' ? '(gmail|googlemail)\\.com' : d}\\s*$`, 'i');
-}
 async function rattacherAchats({ compteId, maintenant = new Date(), session = null }, cfg, { emailCle } = {}) {
-    const cle = chargerEmailCle(emailCle);
-    const compte = await col('comptes').findOne({ _id: compteId });
-    if (!compte || compte.verifie !== true || !compte.emailCle) return { ok: false, raison: 'compte-non-verifie', total: 0 };
-    const candidats = await col('credits').find({ email: { $regex: motifDomaine(compte.emailCle) }, achatsMigresVers: { $exists: false }, soldeScans: { $gt: 0 } }).toArray();
-    let total = 0; const rattaches = [];
-    for (const c of candidats) {
-        if (cle(c.email) !== compte.emailCle) continue;                                       // la preuve : l'adresse, et rien d'autre
-        let n = 0;
-        try { n = await dansUneTransaction(async s => {
-            const ok = await col('comptes').countDocuments({ _id: compteId, verifie: true }, { session: s });
-            if (!ok) return 0;
-            const avant = await col('credits').findOneAndUpdate({ _id: c._id, achatsMigresVers: { $exists: false }, soldeScans: { $gt: 0 } },
-                { $set: { soldeScans: 0, achatsMigresVers: compteId, achatsMigresLe: maintenant } }, { session: s, returnDocument: 'before' });
-            if (!avant) return 0;                                                              // un rattachement simultané a gagné
-            const n = avant.soldeScans;
-            await col('comptes').updateOne({ _id: compteId }, { $inc: { 'solde.achete': n } }, { session: s });
-            await col('mouvements').insertOne(mouv({ compteId }, n, 'achete', 'migration-stripe', `migration-stripe|${empreinte(c.userId)}`, cfg, maintenant), { session: s });
-            return n;
-        }, session); } catch (e) { if (e.code !== 11000) throw e; n = 0; }               // la clé migration-stripe|… existe déjà : ce portefeuille a déjà été rattaché
-        if (n > 0) { total += n; rattaches.push(empreinte(c.userId).slice(0, 12)); console.log(`ℹ️ [v2 rattachement] ${n} crédit(s) acheté(s) du portefeuille ${rattaches[rattaches.length - 1]} rattachés au compte ${compteId}`); }
-    }
-    return { ok: true, total, rattaches: rattaches.length };
+    // OFFRE-QUOTA (2026-10-13) : le grand livre des achats est en LECTURE SEULE. Rattacher les achats de l'ancien portefeuille ÉCRIRAIT un crédit dans la poche `achete` (et marquerait le
+    // portefeuille hérité comme migré) : refusé et journalisé, AUCUNE écriture — ni sur le compte, ni sur `credits`, ni dans `mouvements`. Aucune décision n'est prise sur les crédits déjà achetés.
+    console.error(`🔴 [v2 rattachement] REFUSÉ (la vente de scans est arrêtée, grand livre des achats en lecture seule) — compte ${compteId}`);
+    return { ok: false, raison: 'vente-arretee', total: 0 };
 }
 function emailCleB2OuNull() { try { return chargerEmailCle(null); } catch (_) { return null; } }
 module.exports = { reprendreHeritage, rattacherAchats, empreinte, chargerEmailCle, emailCleB2OuNull };

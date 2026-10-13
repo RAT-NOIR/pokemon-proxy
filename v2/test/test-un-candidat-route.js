@@ -5,14 +5,14 @@
 // aucun double remboursement ; un lot suit la règle des questions de lot (répondre ne coûte ni ne rend rien).
 const H = require('./_harnais');
 const mongoose = require('mongoose');
-const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const Q = require('./_aide-quota');
 const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const { choixPour } = require('../choix');
 const path = require('path');
 const CHARGES = path.join(__dirname, '..', '..', 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000' });
 const ORIGINE = cfg.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.12.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
 let nCle = 0; const cle = () => `banc-un-candidat-${Date.now().toString(36)}-${++nCle}`;
@@ -23,7 +23,9 @@ let ecartsContrat = 0, reponsesValidees = 0;
 
 async function inst(essais = 3, o = {}) {
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais, libelle: 'banc' }), o);
-    await db.col('installations').insertOne(i); return { i, jeton };
+    await db.col('installations').insertOne(i);
+    // OFFRE-QUOTA : l'ancien stock « essais » devient « autant d'analyses devant l'installation aujourd'hui » (quota sans compte porté à 1000 par jour dans ce banc)
+    await Q.poserRestant(`installation:${i._id}`, essais); return { i, jeton };
 }
 async function compteAdmin() {
     const c = Object.assign(M.nouveauCompte({ email: `uc${++nCle}@x.fr`, emailCle: `uc${nCle}@x.fr`, motDePasse: {} }), { verifie: true, role: 'administrateur', solde: { accueil: 25, achete: 0 } });
@@ -46,7 +48,7 @@ async function repondre(url, jeton, b) {
 // l'ÉTAT D'ARGENT d'un porteur : le solde, la somme nette des mouvements, les débits encore ouverts, le nombre de remboursements (le grand livre)
 async function livre(x) {
     const mv = await raw('mouvements').find({ installationId: x.i._id }).toArray();
-    const ins = await raw('installations').findOne({ _id: x.i._id });
+    const ins = { essais: await Q.restantDe({ type: 'installation', id: x.i._id }, cfg) };
     return { essais: ins.essais, net: mv.reduce((s, m) => s + m.delta, 0), mouvements: mv.length, ouverts: mv.filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat), remboursements: mv.filter(m => m.type === 'remboursement').length };
 }
 const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
@@ -54,6 +56,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
 
 (async () => {
     await H.ouvrirBancV2();
+    await Q.eviterMinuit();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-un-candidat-route.js', ecrit: true });
@@ -105,7 +108,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     H.v('1. un candidat sans jumeau : 200, a-trancher, UN candidat, question `confirmation` à un choix `a`',
         [s1.r.statut, s1.j.analyse.statut, s1.c0.statut, s1.c0.candidats.map(c => c.idProduct), s1.c0.question.code, s1.c0.question.choix.map(c => [c.id, c.idProduct])], [200, 'a-trancher', 'a-trancher', [ID_A], 'confirmation', [['a', ID_A]]]);
     H.v('   facturation RÉSERVÉE { debite:0, reserve:1, rembourse:false, motif:question }, solde.essai 3 -> 2',
-        [s1.j.facturation, s1.j.solde.essai], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+        [s1.j.facturation, s1.j.offre.restant], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
     const q1 = await ligneQ(s1.scanId);
     H.v('   la question est écrite en attente, avec les choix du contrat (choixPour), le crédit réservé', [q1 && q1.etat, q1 && q1.choix, q1 && q1.lot], ['en-attente', choixPour([ID_A]), false]);
     H.v('   grand livre après le scan : essai 2, net -1, un débit « reserve », aucun remboursement', await livre(s1), { essais: 2, net: -1, mouvements: 1, ouverts: ['reserve'], remboursements: 0 });
@@ -165,7 +168,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     // ── 7. LE PLAFOND (règle existante d'une question répondue « aucune ») : 30 par jour ; plein, le NON ne rend rien et le dit
     {
         const s = await scan('ambigue-seul');
-        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: Q.jourCourant(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const k = await repondre(sv.url, s.jeton, { scanId: s.scanId, choix: 'aucune' }), j = k.json || {};
         H.v('7. compteur des abandons de questions PLEIN : NON répond 200 mais ne rend rien, et le dit { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }',
             [k.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await livre(s)).essais, await compteurDe(s, 'question')], [200, 1, false, 'plafond-jour', 2, cfg.plafonds.question]);
@@ -390,7 +393,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     // ── 15. TOUR 3 : le jugement du lot est un état DÉRIVÉ que le balayage recalcule ; « déjà rendu » relit le grand livre ; un grand lot n'efface sa marque que rendu EN ENTIER
     {
         const { reconcilier } = require('../argent/reconcilier');
-        const cfgX = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REPRISES_PASSAGE: '2' });
+        const cfgX = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000', V2_LOT_REPRISES_PASSAGE: '2' });
         const conf = id => ({ statutHttp: 200, corps: qst([id]) });
         let liste = [];
         const svT = await monter({ identifierLot: async () => liste }, cfgX);
@@ -480,7 +483,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     // ── 16. UN-CANDIDAT-2 : les états rares où un client restait débité sans trace
     {
         const { reconcilier } = require('../argent/reconcilier');
-        const cfgY = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REPRISES_PASSAGE: '2' });
+        const cfgY = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000', V2_LOT_REPRISES_PASSAGE: '2' });
         const conf = id => ({ statutHttp: 200, corps: qst([id]) });
         let liste = [];
         const svT = await monter({ identifierLot: async () => liste }, cfgY);
@@ -491,7 +494,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         const RENDU = { essais: 20, net: 0, mouvements: 2, ouverts: [], remboursements: 1 };
         const plus = ms => new Date(Date.now() + ms);
         const balayer = (maintenant = new Date()) => argentReg().balayerQuestions({ maintenant, max: 500 });
-        const jourJ = new Date().toISOString().slice(0, 10);
+        const jourJ = Q.jourCourant();
         const debitsDe = (L) => raw('mouvements').find({ installationId: L.i._id, type: 'debit', scanId: sid(L) }).sort({ _id: 1 }).toArray();
         const unitesRendues = L => raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 });
         const lignesQ = (L, f) => raw('questions_v2').countDocuments({ scanId: sid(L), ...f });
@@ -550,7 +553,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-gagnant', scanId: sid(L), etat: 'rembourse', cleIdempotence: cl });
             const gagnant = new Promise(fin => setTimeout(async () => {              // le gagnant du claim finit de rendre l'unité PENDANT que le perdant relit
                 await raw('mouvements').updateOne({ _id: deb._id }, { $set: { etat: 'rembourse' } });
-                await raw('installations').updateOne({ _id: L.i._id }, { $inc: { essais: 1 } });
+                await raw('quota_jour').updateOne({ porteur: `installation:${L.i._id}`, jour: Q.jourCourant() }, { $inc: { count: -1 } });      // l'unité rendue retourne au compteur du jour
                 await raw('mouvements').updateOne({ cleIdempotence: cl }, { $set: { delta: 1, poche: deb.credit.poche } });
                 fin();
             }, 25));
@@ -565,7 +568,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             const rc = await reconcilier(porteurDe(L), { cfg: cfgY });
             H.v('16d. une claim rb|scanId sans aucune unité rendue depuis 90 min : listée avec son âge, propre = false', [(rc.claimsOrphelines || []).map(c => [String(c.scanId), c.ageMinutes >= 89]), rc.propre], [[[String(sid(L)), true]], false]);
             // TOUR 1 : le seuil des orphelines est SA variable (minimum 60 min) : une valeur basse de la reprise des « en-reglement » ne fait plus lister une claim vivante
-            const cfgBas = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REGLEMENT_REPRISE_MIN: '1' });
+            const cfgBas = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000', V2_LOT_REGLEMENT_REPRISE_MIN: '1' });
             const L3 = await lance([ID_A, ID_B]);
             await raw('mouvements').insertOne({ installationId: L3.i._id, le: plus(-40 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-40', scanId: sid(L3), etat: 'rembourse', cleIdempotence: `rb|${L3.j.scanId}` });
             H.v('   TOUR 1 : une claim de 40 min n\'est PAS listée, même si la reprise des « en-reglement » est réglée à 1 minute (seuil des orphelines : ≥ 60 min, sa propre variable)', ((await reconcilier(porteurDe(L3), { cfg: cfgBas })).claimsOrphelines || []).length, 0);

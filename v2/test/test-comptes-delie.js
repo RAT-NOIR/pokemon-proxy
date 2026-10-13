@@ -43,6 +43,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const soldeAvant = await post('/api/solde', {}, bearer);
     H.v('A0. (avant) liée : le jeton lit le solde du COMPTE (accueil 25, acheté 5 + 2 fusionnés)', [lier.statut, soldeAvant.json && soldeAvant.json.solde && soldeAvant.json.solde.accueil, soldeAvant.json && soldeAvant.json.solde && soldeAvant.json.solde.achete], [200, 25, 7]);
     const instLiee0 = await col('installations').findOne({ jetonEmpreinte: J.empreinte(tok) });
+    H.v('A0a. (avant, OFFRE-QUOTA) liée à un compte à abonnement actif : l\'offre servie est celle du COMPTE, « pro », restant null (le plafond technique ne se montre pas)', [soldeAvant.json && soldeAvant.json.offre && soldeAvant.json.offre.nom, soldeAvant.json && soldeAvant.json.offre && soldeAvant.json.offre.restant], ['pro', null]);
     H.v('A0b. (avant) la liaison réelle a fusionné : l\'installation est à 0 essai et 0 acheté', [instLiee0.essais, instLiee0.achete], [0, 0]);
     // une question en attente du compte
     await col('questions_v2').insertOne({ _id: SID + ':0', scanId: SID, carte: 0, porteur: { type: 'compte', id: c._id }, surface: 'extension', credit: { poche: 'accueil' }, raison: null, choix: [], candidats: [], poseeLe: new Date(), etat: 'en-attente', reponse: null, priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: false });
@@ -67,6 +68,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const sl = await jouer('POST /api/solde', post('/api/solde', {}, bearer));
     const s = sl.json && sl.json.solde;
     H.v('B2. POST /api/solde : la poche de l\'INSTALLATION seule (0 essai, 0 acheté), rien du compte (accueil 0, hebdo 0, pas d\'abonnement, pas de compte lié)', [sl.statut, s && s.essai, s && s.accueil, s && s.achete, s && s.hebdo, s && s.abonnement, s && s.compte], [200, 0, 0, 0, 0, null, { lie: false, emailMasque: null, verifie: false }]);
+    H.v('B2b. (OFFRE-QUOTA) et l\'OFFRE est celle d\'une installation sans compte : « sans-compte », 3 restants — rien du Pro du compte', [sl.json.offre && sl.json.offre.nom, sl.json.offre && sl.json.offre.restant], ['sans-compte', 3]);
     const g1 = await jouer('GET /api/collection', H.appel(srv.url, '/api/collection', { entetes: { ...SITE, ...ip(), ...bearer } }));
     const g2 = await jouer('GET set', H.appel(srv.url, '/api/collection/sets/Set-A', { entetes: { ...SITE, ...ip(), ...bearer } }));
     const g3 = await jouer('PUT fiche', H.appel(srv.url, '/api/collection/sets/Set-A/fiches/' + encodeURIComponent('1|002'), { methode: 'PUT', corps: { possedee: true }, entetes: { ...SITE, ...ip(), ...bearer } }));
@@ -77,7 +79,12 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const ancien = await jouer('lier ancien code', post('/api/compte/lier', { code: code2.json.code }, bearer));
     H.v('B5. le code resté vivant ne lie plus (404), l\'installation reste sans compte : pas de rattachement possible sans une nouvelle connexion', [ancien.statut, (await col('installations').findOne({ jetonEmpreinte: J.empreinte(tok) })).compteId], [404, null]);
     const ident = await jouer('POST /api/identifier', post('/api/identifier', { contrat: 2, imageUrls: [require('../../verrou/charges.json').charges.find(x => x.cellule === 'occidentale').imageUrl], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr' }, { ...bearer, 'idempotency-key': `rel-${Date.now()}` }));
-    H.v('B6. identification avec le jeton délié : 429 QUOTA (aucune poche : ni la sienne, vidée par la fusion, ni celle du compte), chaîne non appelée, aucun mouvement', [ident.statut, ident.json && ident.json.erreur && ident.json.erreur.code, appelsChaine, (await col('mouvements').countDocuments({})) - mv0], [429, 'QUOTA', 0, 0]);
+    // OFFRE-QUOTA : l'installation déliée est une installation SANS COMPTE comme une autre : elle a SON quota du jour (3), jamais celui du compte. L'identification passe donc jusqu'à la chaîne (fabriquée ici pour lever),
+    // le débit est pris sur le compteur de l'INSTALLATION (aucun compteur du compte n'est créé) puis rendu par la panne (500 SERVEUR).
+    const instB6 = await col('installations').findOne({ jetonEmpreinte: J.empreinte(tok) }), cptInst = await col('quota_jour').findOne({ porteur: `installation:${instB6._id}` });
+    H.v('B6. identification avec le jeton délié : le quota de l\'INSTALLATION (sans compte) s\'applique — la chaîne est appelée une fois (fabriquée pour lever : 500 SERVEUR, débit rendu : 2 mouvements), AUCUN compteur du compte, le compteur de l\'installation est revenu à 0',
+        [ident.statut, ident.json && ident.json.erreur && ident.json.erreur.code, appelsChaine, (await col('mouvements').countDocuments({})) - mv0, await col('quota_jour').countDocuments({ porteur: `compte:${c._id}` }), cptInst && cptInst.count], [500, 'SERVEUR', 1, 2, 0, 0]);
+    H.v('B6b. … et la facturation dit la panne rendue, l\'offre revient à 3 (sans-compte)', [ident.json.facturation && ident.json.facturation.rembourse, ident.json.offre && [ident.json.offre.nom, ident.json.offre.restant]], [true, ['sans-compte', 3]]);
     const rep = await jouer('POST /api/identifier/reponse', post('/api/identifier/reponse', { scanId: SID, carte: 0, choix: 'aucune' }, { ...bearer, 'idempotency-key': `rel2-${Date.now()}` }));
     const qv = await col('questions_v2').findOne({ _id: SID + ':0' });
     H.v('B7. répondre à la question en attente du compte avec le jeton délié : refusé (≥ 400), question intacte', [rep.statut >= 400, qv.etat], [true, 'en-attente']);
@@ -92,10 +99,11 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const anon = await post('/api/installation', { libelle: 'anonyme neuve' }, EXT);
     const soldeAnon = await post('/api/solde', {}, { authorization: `Bearer ${anon.json.jetonInstallation}`, ...EXT });
     H.v('C1b. ses droits sont ceux d\'une installation anonyme : même forme de solde (compte non lié, rien du compte) ; seule diffère la poche d\'essai (3 à la naissance, une fois)', [Object.keys(s).sort(), Object.keys(soldeAnon.json.solde).sort(), soldeAnon.json.solde.essai, soldeAnon.json.solde.compte], [Object.keys(soldeAnon.json.solde).sort(), Object.keys(s).sort(), 3, { lie: false, emailMasque: null, verifie: false }]);
+    H.v('C1c. (OFFRE-QUOTA) même OFFRE qu\'une installation anonyme neuve : « sans-compte », 3 par jour, même remise à zéro', [sl.json.offre.nom, sl.json.offre.restant, soldeAnon.json.offre.nom, soldeAnon.json.offre.restant, sl.json.offre.remiseAZero === soldeAnon.json.offre.remiseAZero], ['sans-compte', 3, 'sans-compte', 3, true]);
     // seconde réinitialisation : rien de neuf
     const jr2 = J.genererJeton(); await col('liens_email').insertOne({ empreinte: J.empreinte(jr2), type: 'reinit', compteId: c._id, creeLe: new Date(), expireLe: new Date(Date.now() + 864e5), utiliseLe: null });
     await post('/api/compte/reinitialiser', { jeton: jr2, motDePasse: 'encore-un-mot-de-passe-9' });
     const inst2 = await col('installations').findOne({ jetonEmpreinte: J.empreinte(tok) });
-    H.v('C2. après une seconde réinitialisation : toujours 0 essai / 0 acheté, sans compte (la déliaison ne fabrique aucun essai)', [inst2.compteId, inst2.essais, inst2.achete, (await col('mouvements').countDocuments({})) - mv0], [null, 0, 0, 0]);
+    H.v('C2. après une seconde réinitialisation : toujours 0 essai / 0 acheté, sans compte (la déliaison ne fabrique aucun essai)', [inst2.compteId, inst2.essais, inst2.achete, (await col('mouvements').countDocuments({})) - mv0], [null, 0, 0, 2]);      // 2 : le débit de B6 et son remboursement (sur le compteur de l'INSTALLATION) ; la réinitialisation, elle, n'écrit rien
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

@@ -1,5 +1,9 @@
 'use strict';
-const POCHES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
+// OFFRE-QUOTA (2026-10-13) : plus de poches de crédits à débiter. La SEULE poche débitable est `jour` (un quota quotidien par porteur, selon son offre).
+// Les anciennes (essai, accueil, hebdo, abonnement, achete) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
+// et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
+const POCHES = Object.freeze(['jour']);
+const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0, max = Infinity) => {
     if (v === undefined || v === '') return defaut;
     const n = String(v).trim() === '' ? NaN : Number(v);   // Number(' ') vaut 0 : un nombre fait d'espaces n'est pas un nombre
@@ -16,11 +20,14 @@ const booleen = (nom, v, defaut) => {
 };
 
 function lireConfig(env = process.env) {
-    const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'];
-    for (const p of ordre) if (!POCHES.includes(p)) throw new Error(`configuration invalide : poche inconnue "${p}"`);
+    const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
+    for (const p of ordre) {
+        if (POCHES_ANCIENNES.includes(p)) throw new Error(`configuration invalide : la poche "${p}" n'est plus débitée (quota quotidien : seule "jour" l'est)`);
+        if (!POCHES.includes(p)) throw new Error(`configuration invalide : poche inconnue "${p}"`);
+    }
     if (new Set(ordre).size !== ordre.length) throw new Error('configuration invalide : doublon dans V2_ORDRE_POCHES');
-    // O2 : une garde s'écrit par ce qu'elle AUTORISE. Les deux poches PAYÉES doivent figurer dans l'ordre, sinon un compte qui a des crédits achetés ou un abonnement reçoit QUOTA (ses poches deviennent inutilisables).
-    for (const payee of ['achete', 'abonnement']) if (!ordre.includes(payee)) throw new Error(`configuration invalide : V2_ORDRE_POCHES doit contenir la poche payée "${payee}"`);
+    // O2, réécrite pour le quota quotidien : une garde s'écrit par ce qu'elle AUTORISE. L'ordre doit contenir `jour`, sinon aucun porteur ne pourrait plus être débité (tout recevrait QUOTA).
+    if (!ordre.includes('jour')) throw new Error('configuration invalide : V2_ORDRE_POCHES doit contenir la poche "jour"');
     const base = (env.MONGODB_BASE || '').trim() || null;
     const actif = env.RM_API_V2 === '1';
     // B8 (tour 1, m4) — le MODE BANC (secret de bac, Turnstile off, cookie sans Secure, origine d'extension de développement) exige DEUX témoins : le nom `test_scratch` (une étiquette,
@@ -56,8 +63,14 @@ function lireConfig(env = process.env) {
     return gele({
         actif,
         base,
+        // `essai`, `accueil`, `hebdo`, `aboMensuel` : anciens réglages, gardés pour les chemins qui ÉCRIVENT encore des dotations lisibles (création d'installation, vérification d'un compte) et pour rendre un débit
+        // d'avant la bascule ; plus aucun n'est débité. Les trois suivants sont le quota QUOTIDIEN (OFFRE-QUOTA, décision du testeur 2026-10-13), analyses RENDUES par jour de Paris :
+        //   sansCompte : une installation non liée (3) · gratuit : un compte VÉRIFIÉ sans abonnement actif (10) · proPlafond : le plafond TECHNIQUE anti-abus d'un abonné Pro (200), jamais montré (`offre.restant: null`).
+        // Bornées (1 à 1000) : un quota à 0 ou à une valeur démesurée n'est pas un réglage, c'est une faute de frappe. Le marqueur de crédits rendus garde 200 identités par compteur (CREDITS_MAX, ledger.js).
         quotas: { essai: entier('V2_ESSAIS', env.V2_ESSAIS, 3), accueil: entier('V2_ACCUEIL', env.V2_ACCUEIL, 25),
-                  hebdo: entier('V2_HEBDO', env.V2_HEBDO, 2), aboMensuel: entier('V2_ABO_MENSUEL', env.V2_ABO_MENSUEL, 100) },
+                  hebdo: entier('V2_HEBDO', env.V2_HEBDO, 2), aboMensuel: entier('V2_ABO_MENSUEL', env.V2_ABO_MENSUEL, 100),
+                  sansCompte: entier('V2_QUOTA_SANS_COMPTE', env.V2_QUOTA_SANS_COMPTE, 3, 1, 1000), gratuit: entier('V2_QUOTA_GRATUIT', env.V2_QUOTA_GRATUIT, 10, 1, 1000),
+                  proPlafond: entier('V2_QUOTA_PRO_PLAFOND', env.V2_QUOTA_PRO_PLAFOND, 200, 1, 1000) },
         ordrePoches: [...ordre],
         // Remboursements par JOUR UTC et par PORTEUR (le compte quand il y en a un, sinon l'installation) : panne 5, question 30, et deux compteurs PROPRES (lot PLAFONDS, 2026-10-11) —
         // sansPrix : « prix illisible, définitif » déclaré par le client (5) ; lotTropGrand : refus `lot-trop-grand`, taille ou quota (10). Au-delà : pas de remboursement.
@@ -138,4 +151,4 @@ function lireConfig(env = process.env) {
         cookieSecure
     });
 }
-module.exports = { lireConfig, POCHES };
+module.exports = { lireConfig, POCHES, POCHES_ANCIENNES };

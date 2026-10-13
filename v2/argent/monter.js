@@ -2,7 +2,7 @@
 // Emplacement du lot B3 — réécrit par son lot, et par lui seul. Enregistre « argent » dans le registre (contrat §3.3) : la configuration est LIÉE ici, les consommateurs appellent sans cfg.
 const paiement = require('./paiement'); const { aiguilleur } = require('../heritage'); const registre = require('../registre');
 const Lg = require('./ledger'); const Q = require('./questions'); const S = require('./solde'); const Lot = require('./lot'); const Fa = require('./facturation');
-const Fu = require('./fusion'); const He = require('./heritage'); const Ab = require('./abonnement'); const Pont = require('./pont-acces');
+const Of = require('./offre'); const Fu = require('./fusion'); const He = require('./heritage'); const Ab = require('./abonnement'); const Pont = require('./pont-acces');
 module.exports = {
     enTete(app, cfg) { },
     routes(router, cfg, deps) {
@@ -12,6 +12,7 @@ module.exports = {
         registre.fournir('argent', {
             solde: (porteur, maintenant) => S.solde(porteur, cfg, maintenant),
             peutPayer: (porteur, maintenant) => S.peutPayer(porteur, cfg, maintenant),
+            offre: (porteur, maintenant) => Of.offre(porteur, cfg, maintenant),     // OFFRE-QUOTA : { nom, restant, remiseAZero } — UNE fonction pour toutes les routes
             historique: (porteur, suite) => S.historique(porteur, typeof suite === 'object' && suite !== null ? suite : { suite }, cfg),
             debiter: (porteur, o) => Lg.debiter(porteur, o, cfg),
             rembourser: (porteur, credit, motif, o) => Lg.rembourser(porteur, credit, motif, o, cfg),

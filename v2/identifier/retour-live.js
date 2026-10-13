@@ -16,6 +16,7 @@ const { col } = require('../db');
 const { colLue } = require('./catalogue');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { cartesParScanMax } = require('./cartes-par-scan');
+const { offreSur, avecOffre } = require('../argent/offre-sur');
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -128,8 +129,8 @@ function traiterRetourLive(cfg, deps = {}) {
                 }
             }
         }
-        const solde = await soldeSur();
-        return res.status(200).json({ success: true, facturation, ...(solde !== undefined ? { solde } : {}) });
+        const solde = await soldeSur(), offre = await offreSur(porteur, argent);      // OFFRE-QUOTA : relue APRÈS le remboursement `sans-prix` : l'unité rendue se voit
+        return res.status(200).json({ success: true, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
     };
 }
 

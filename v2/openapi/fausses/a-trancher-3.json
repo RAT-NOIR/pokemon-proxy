@@ -185,5 +185,10 @@
     },
     "partage": true,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }

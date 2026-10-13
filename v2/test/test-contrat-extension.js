@@ -25,6 +25,7 @@ const CLASSES = new Map([
     // E1 (clés de `solde`) retiré : les vecteurs n'ont plus de `solde` du tout (DEMANDE-SERVEUR-EXTENSION §B5) ; le manque se classe sous E3.
     ...E('E11', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.set.slug']),
     ...E('E12', 'POST /api/identifier', 200, ['$.analyse.cartes[].etat.declare']),      // §B7 : l'extension ne lit plus l'état déclaré
+    ...E('E13', 'POST /api/identifier', 200, ['$.offre']),                               // OFFRE-QUOTA : l'objet `offre` (nom, restant, remiseAZero), absent des vecteurs de l'extension
     ...E('E2', 'POST /api/identifier', 200, ['$.facturation']),                          // §B5 : plus de `facturation` (sauf motif administrateur)
     ...E('E2', 'POST /api/identifier/reponse', 200, ['$.<scanId>[].<choix>.facturation']),
     ...E('E3', 'POST /api/identifier', 200, ['$.solde']),
@@ -96,7 +97,7 @@ const CLASSES = new Map([
     //    et d'un produit VALIDE du serveur (la fausse publiée a-trancher-2), puis jugé contre ReponseQuestion : toute faute vient du vecteur, pas du produit.
     {
         const j = lire('reponses.json'), fausse = f => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi', 'fausses', f), 'utf8'));
-        const modele2 = fausse('a-trancher-2.json'), modele3 = fausse('a-trancher-3.json'), soldeModele = modele2.solde; let n = 0;
+        const modele2 = fausse('a-trancher-2.json'), modele3 = fausse('a-trancher-3.json'), soldeModele = modele2.solde, offreModele = modele2.offre; let n = 0;      // OFFRE-QUOTA : `offre` est servi par le serveur à côté du solde ; la reconstruction le prend de la fausse publiée (ce n'est pas un champ que reponses.json porte)
         let aTrancher = modele2.analyse.cartes[0];
         for (const [scan, parCarte] of Object.entries(j)) {
             if (scan.startsWith('_')) continue;
@@ -111,7 +112,7 @@ const CLASSES = new Map([
                 else if (r.statut === 'introuvable') c = { index, statut: 'introuvable', carte: null, candidats: [], question: null, raison: r.raison, etat: null, prixLive: null, zone: null };
                 else if (r.statut === 'inchangee') c = { ...aTrancher, index };
                 else { verser('reponses.json', 'POST /api/identifier/reponse', 200, [{ chemin: `$.${scan}[${carte}].${choix}.statut`, message: `statut de carte « ${r.statut} » hors du contrat` }]); continue; }
-                const corps = { success: true, carte: c, facturation: r.facturation, solde: soldeModele };
+                const corps = { success: true, carte: c, facturation: r.facturation, solde: soldeModele, offre: offreModele };
                 verser('reponses.json', 'POST /api/identifier/reponse', 200, valider(corps, ref('ReponseQuestion'), SCHEMA).erreurs.map(e => ({ chemin: `$.${scan}[${carte}].${choix}${e.chemin.slice(1)}`, message: e.message })));
             }
         }
@@ -120,7 +121,7 @@ const CLASSES = new Map([
         // le contrôle de reconstruction sait dire NON : une facturation correcte et un produit valide donnent un corps valide
         aTrancher = modele2.analyse.cartes[0];
         const saine = { success: true, carte: { index: 0, statut: 'identifiee', carte: aTrancher.candidats[0], candidats: [], question: null, raison: null, etat: { estime: 'EX', confiance: 'moyenne', defauts: [], declare: null, retenu: 'EX' }, prixLive: { idProduct: aTrancher.candidats[0].idProduct, langues: [1], reverseHolo: false, etatVise: 'EX' }, zone: null },
-            facturation: { debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null }, solde: soldeModele };
+            facturation: { debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null }, solde: soldeModele, offre: offreModele };
         H.v('contrôle : une réponse reconstruite SAINE passe ReponseQuestion', valider(saine, ref('ReponseQuestion'), SCHEMA).erreurs, []);
         H.vrai('contrôle : la même, sans raisonNonRembourse, est refusée', valider({ ...saine, facturation: { debite: 1, reserve: 0, rembourse: false, motif: 'question' } }, ref('ReponseQuestion'), SCHEMA).erreurs.length > 0);
     }

@@ -48,5 +48,10 @@
     },
     "partage": false,
     "abonnement": null
+  },
+  "offre": {
+    "nom": "sans-compte",
+    "restant": 2,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
   }
 }

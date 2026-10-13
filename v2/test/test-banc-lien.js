@@ -98,7 +98,10 @@ async function fabriquer(m, client, { jeton = jetonNeuf(), image, ligneS4 = fals
 }
 const mouvs = w => db.col('mouvements').find({ compteId: w.porteur.id }).toArray();
 const sommeDeltas = async w => (await mouvs(w)).reduce((s, x) => s + x.delta, 0);
-const soldeTotal = async w => { const c = await db.col('comptes').findOne({ _id: w.porteur.id }); return c.solde.accueil + c.solde.achete; };
+// OFFRE-QUOTA : le « solde » d'un compte (ses 25 d'accueil, que l'octroi du banc écrit) ne baisse plus ; ce que les débits consomment est le quota du jour. Le solde EFFECTIF (celui que somme(delta) doit égaler) est donc
+// l'ancien solde moins ce qui est pris aujourd'hui sur le compteur.
+const prisJour = async p => (await db.col('quota_jour').find({ porteur: `compte:${p.id}` }).toArray()).reduce((s, d) => s + d.count, 0);
+const soldeTotal = async w => { const c = await db.col('comptes').findOne({ _id: w.porteur.id }); return c.solde.accueil + c.solde.achete - await prisJour(w.porteur); };
 const avecScanId = () => db.col('mouvements').countDocuments({ scanId: { $exists: true, $ne: null } });
 const argentDe = () => ({ rembourser: (p, c, mo, o) => Lg.rembourser(p, c, mo, o, cfg), rembourserLigne: (p, c, mo, o) => Lg.rembourserLigne(p, c, mo, o, cfg) });
 
@@ -135,9 +138,9 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         const sc = new mongoose.Types.ObjectId(), p2 = await compte({ solde: { accueil: 25, achete: 0 } }); p2.surface = 'extension';
         await Lg.debiter(p2, { scanId: sc, cleIdempotence: `scan|ctrl|${sc}`, surface: 'extension', maintenant: T0 }, cfg);
         await MS.ouvrir({ scanId: sc, porteur: { type: 'compte', id: p2.id }, cleDebit: `scan|ctrl|${sc}`, maintenant: new Date(Date.now() - H1) });
-        const soldeAvant = (await db.col('comptes').findOne({ _id: p2.id })).solde.accueil;
+        const prisAvant = await prisJour(p2);
         const br = await MS.rattraper({ argent: argentDe(), maintenant: new Date() });
-        H.v('témoin du banc : AVANT 12 mois, le rattrapage d\'O5 rend le scan en suspens (+1 crédit) par le scanId du ledger', [br.rendues, (await db.col('comptes').findOne({ _id: p2.id })).solde.accueil - soldeAvant], [1, 1]);
+        H.v('témoin du banc : AVANT 12 mois, le rattrapage d\'O5 rend le scan en suspens (+1 unité du quota) par le scanId du ledger', [br.rendues, prisAvant - await prisJour(p2)], [1, 1]);
     });
 
     // ═══ À 12 mois + 1 jour, TOUS les magasins et le sel en main : chaque chemin échoue ═══
