@@ -204,6 +204,8 @@ const limiteurIA = rateLimit({
     // v2 éteinte : AUCUNE option de plus, le limiteur est celui d'avant. v2 allumée : il ne saute que la requête que la v2 traite elle-même, porteur authentifié (v2/limiteur-heritage.js).
     ...(V2 ? { skip: V2.limiteurHerite.sauter, handler: V2.limiteurHerite.refuser } : {})
 });
+// v2 allumée : le plafond EN MÉMOIRE par IP des requêtes candidates à l'exemption passe AVANT toute lecture en base (v2/limiteur-heritage.js).
+if (V2) app.use('/api/identifier', V2.limiteurHerite.plafondIp);
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
 if (V2) V2.monter(app, { mongoose, gererIdentifier, gererRetourLive });
 

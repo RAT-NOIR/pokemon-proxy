@@ -6,6 +6,7 @@
 // Bearer, faux `contrat: 2` sur une route héritée voisine, chemin autrement écrit, v2 éteinte ou configuration invalide, erreur de lecture du porteur (échec fermé).
 // Pourquoi c'est sûr : ces deux routes v2 n'appellent jamais `next()` vers la route héritée une fois l'aiguilleur passé (refus JETON/ENTREE/INDISPONIBLE, ou traitement) ;
 // la chaîne héritée n'est appelée (deps.gererIdentifier) qu'APRÈS porteur, installation, plafond par porteur, idempotence et entrée validée.
+// LE COÛT : `skip` lit la base à chaque requête candidate, et la route v2 y écrit ; un PLAFOND EN MÉMOIRE par IP (plafondIp, monté avant le limiteur hérité) les refuse sans la toucher.
 const { resoudrePorteur } = require('./porteur');
 const { repondreErreur } = require('./erreurs');
 
@@ -31,14 +32,14 @@ function fabrique(lireCfg, o = {}) {
     async function sauter(req) {
         const cfg = actif();
         if (!cfg || !requeteDeLaV2(req)) return false;
-        const avant = req.v2, resultat = { refuse: false };
+        // `req.v2` reste posé par la résolution : les deux routes candidates commencent par `resoudrePorteur`, qui le réinitialise sans le lire (porteur.js:12) avant tout autre usage ; aucune route héritée ne le lit.
+        const resultat = { refuse: false };
         const fauxRes = { setHeader() { }, status() { return this; }, json() { resultat.refuse = true; return this; } };
         try {
             await new Promise((ok, ko) => { try { Promise.resolve(resoudreDe(cfg)(req, fauxRes, ok)).then(() => { if (resultat.refuse) ok(); }, ko); } catch (e) { ko(e); } });
             const porteur = req.v2 && req.v2.porteur;
             return !resultat.refuse && Boolean(porteur && porteur.installation);
         } catch { return false; }
-        finally { if (avant === undefined) delete req.v2; else req.v2 = avant; }
     }
     /** `handler` d'express-rate-limit : une requête de la v2 reçoit le refus v2 (DEBIT + Retry-After) ; toute autre, le refus hérité inchangé. */
     function refuser(req, res, next, options) {
@@ -49,6 +50,31 @@ function fabrique(lireCfg, o = {}) {
         const { statusCode, message: corpsHerite } = options;   // le corps hérité tel que configuré dans index.js
         return res.status(statusCode).send(corpsHerite);
     }
-    return { sauter, refuser };
+    // ── LE PLAFOND EN MÉMOIRE PAR IP, réservé aux requêtes CANDIDATES (celles que requeteDeLaV2 admet), monté AVANT le limiteur hérité : `skip` lit la base à chaque requête
+    // (express-rate-limit appelle `skip` avant de compter) et la route v2 y écrit (transport/limites.js:12) ; ce plafond refuse SANS lire ni écrire en base. Fenêtre fixe d'une heure
+    // par IP, ouverte à la première candidate. Mémoire : une entrée {debut, n} par IP, au plus MAX_IPS (la plus ancienne est évincée quand la table est pleine), balayage des fenêtres écoulées toutes les 5 min.
+    const maintenant = typeof o.maintenant === 'function' ? o.maintenant : Date.now;
+    const fenetres = new Map();
+    let balai = null;
+    function purger() { const t = maintenant(); for (const [ip, w] of fenetres) if (t - w.debut >= FENETRE_MS) fenetres.delete(ip); }
+    function plafondIp(req, res, next) {
+        const cfg = actif();
+        if (!cfg || !requeteDeLaV2(req)) return next();
+        const plafond = plafondDe(cfg), t = maintenant(), ip = String(req.ip || '?');
+        let w = fenetres.get(ip);
+        if (!w || t - w.debut >= FENETRE_MS) {
+            if (!w && fenetres.size >= MAX_IPS) fenetres.delete(fenetres.keys().next().value);
+            w = { debut: t, n: 0 }; fenetres.delete(ip); fenetres.set(ip, w);
+            if (!balai) { balai = setInterval(purger, BALAYAGE_MS); if (balai.unref) balai.unref(); }
+        }
+        if (w.n >= plafond) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: Math.max(1, Math.ceil((w.debut + FENETRE_MS - t) / 1000)) });
+        w.n++;
+        return next();
+    }
+    return { sauter, refuser, plafondIp, taillePlafond: () => fenetres.size, purger };
 }
-module.exports = { fabrique, requeteDeLaV2 };
+// Le plafond se DÉRIVE des limites par porteur de la v2 : PORTEURS_PAR_IP porteurs derrière une même IP (foyer, petit bureau, NAT), chacun au maximum de ses deux routes
+// (identifications + réponses par heure : transport/limites.js, config.js identifierParCompteHeure 120 et reponseParPorteurHeure 600) = 5 × (120 + 600) = 3600 par heure.
+const PORTEURS_PAR_IP = 5, MAX_IPS = 100000, FENETRE_MS = 3600e3, BALAYAGE_MS = 5 * 60e3;
+const plafondDe = cfg => PORTEURS_PAR_IP * (cfg.limites.identifierParCompteHeure + cfg.limites.reponseParPorteurHeure);
+module.exports = { fabrique, requeteDeLaV2, PORTEURS_PAR_IP, MAX_IPS, plafondDe };
