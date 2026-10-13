@@ -55,16 +55,19 @@ function verifierUrl(ligne, url) {
  */
 function langueProuvee(url) {
     let u; try { u = new URL(url); } catch { return null; }
-    if (u.hostname === 'assets.tcgdex.net') { const s = u.pathname.split('/').filter(Boolean)[0]; return s === 'fr' ? 'fr' : s === 'ja' ? 'ja' : null; }
+    // (2026-10-13, lot LOGOS-NIVEAU) `/en/` prouve l'anglais chez TCGdex. Chez Bill's, AUCUNE règle de nom de fichier ne prouve l'anglais (`jp-` prouve le japonais, le reste
+    // ne prouve rien : « arceus.webp », « celebrations.webp ») : la cible `en` n'y est jamais écrite.
+    if (u.hostname === 'assets.tcgdex.net') { const s = u.pathname.split('/').filter(Boolean)[0]; return s === 'fr' ? 'fr' : s === 'ja' ? 'ja' : s === 'en' ? 'en' : null; }
     if (u.hostname === 'billsarchive.com') return /^jp-/.test(path.posix.basename(u.pathname)) ? 'ja' : null;
     return null;
 }
-/** Une ligne va sous `fr` seulement si sa langue est `fr`, sous `ja` seulement si elle est `ja` — ET si l'adresse le prouve. Rend la raison du refus, ou null. */
+const CIBLES = ['fr', 'ja', 'en'];
+/** Une ligne va sous `fr` seulement si sa langue est `fr`, sous `ja` si elle est `ja`, sous `en` si elle est `en` — ET si l'adresse le prouve. Rend la raison du refus, ou null. */
 function refusLangue(ligne, url) {
-    if (!['fr', 'ja'].includes(ligne.cible)) return `cible « ${ligne.cible} » inconnue`;
+    if (!CIBLES.includes(ligne.cible)) return `cible « ${ligne.cible} » inconnue`;
     if (ligne.langue !== ligne.cible) return `langue « ${ligne.langue} » ≠ cible ${ligne.cible} : un logo ne va que sous sa langue`;
     const p = langueProuvee(url);
-    if (!p) return `l'adresse ne prouve pas la langue (ni /fr/ ou /ja/ chez TCGdex, ni préfixe jp- chez Bill's) : langue non prouvée`;
+    if (!p) return `l'adresse ne prouve pas la langue (ni /fr/, /ja/ ou /en/ chez TCGdex, ni préfixe jp- chez Bill's) : langue non prouvée`;
     if (p !== ligne.cible) return `l'adresse prouve la langue ${p}, la cible est ${ligne.cible}`;
     return null;
 }
@@ -79,7 +82,7 @@ function refusSetBase(ligne, setsParId) {
     const s = setsParId.get(ligne.set);
     if (!s) return { action: 'ecartee', raison: `set « ${ligne.set} » absent de la base` };
     const tirage = s.tirage ?? s.region;
-    const attendu = ligne.cible === 'fr' ? 'intl' : ligne.cible === 'ja' ? 'jp' : null;
+    const attendu = ligne.cible === 'fr' || ligne.cible === 'en' ? 'intl' : ligne.cible === 'ja' ? 'jp' : null;
     if (tirage !== attendu) return { action: 'ecartee', raison: `set de tirage ${tirage}, logo ${ligne.cible} (attendu ${attendu})` };
     return null;
 }
@@ -87,6 +90,7 @@ function refusSetBase(ligne, setsParId) {
 /** Le plan d'UNE ligne, avant tout téléchargement : collecter / reportee / ecartee / refus. `setsParId` : Map slug → { tirage, region }. */
 function planifier(ligne, setsParId) {
     if (ligne.verdict !== 'OFFICIEL') return { action: 'refus', raison: `verdict ${ligne.verdict} : seuls les OFFICIEL se collectent` };
+    if (ligne.niveau === 'semi-officiel' && !representeValide(ligne.represente)) return { action: 'refus', raison: 'semi-officiel sans phrase `represente` (ce que le logo représente, au moins une phrase) : refus' };
     if (ligne.bulbapediaSeule) return { action: 'reportee', raison: 'Bulbapedia seule (copie archive.org) : reportée, décision du testeur' };
     const rS = refusSetIdentifie(ligne);
     if (rS) return rS;
@@ -98,6 +102,66 @@ function planifier(ligne, setsParId) {
     const rB = refusSetBase(ligne, setsParId);
     if (rB) return rB;
     return { action: 'collecter' };
+}
+
+// ───────────────────────── LOGOS-NIVEAU (2026-10-13) : --sets, la cible `en`, le semi-officiel
+// Règle du testeur : « chaque logo porte son niveau (officiel, semi-officiel, composé) et sa source ». Ici : `niveau: 'officiel'` sur toute entrée de `logoOfficiel`,
+// et un champ distinct `sets.logoSemiOfficiel.<langue>` (même forme + `niveau: 'semi-officiel'` + `represente`).
+const LOT_SEMI = 'logos-semi-officiels-2026-10';
+/** La phrase qui dit ce que le logo REPRÉSENTE (« logo de l'opération McDonald's Match Battle 2022-2023 ») : une vraie phrase, pas un mot. */
+const representeValide = s => typeof s === 'string' && s.trim().length >= 20;
+/**
+ * LES AJOUTS : des logos officiels qui ne sont pas dans la table issue de Pokécardex (la table ne dit que ce que le testeur avait déposé). LISTE FERMÉE, TCGdex seul,
+ * l'adresse EXACTE écrite ici ; la langue se prouve par `/fr/` ou `/en/` dans l'adresse. Ils ne se collectent QUE si `--sets=` nomme leur set : sans `--sets`, la collecte
+ * est exactement celle d'avant. Plan sur le logo de TCGdex (cel25 = Celebrations, set propre : aucun autre set ne porte ce fichier).
+ */
+const ajoutTcgdex = (set, cible, serie, id) => {
+    const url = `https://assets.tcgdex.net/${cible}/${serie}/${id}/logo.png`;
+    return { part: 'AJOUT', fichier: `AJOUT TCGdex ${set} ${cible}`, verdict: 'OFFICIEL', set, setSur: true, cible, langue: cible, urls: [url], urlChoisie: url, source: 'tcgdex', bulbapediaSeule: false, cache: null, pokecardexSha256: null, ajoutDirect: true };
+};
+const AJOUTS = [ajoutTcgdex('Celebrations', 'fr', 'swsh', 'cel25'), ajoutTcgdex('Celebrations', 'en', 'swsh', 'cel25')];
+
+/** Une entrée du fichier `--semi-officiel` → sa ligne et son plan. Aucune exception en dehors de la phrase : hôte fermé, langue prouvée, set de la base, tirage. */
+function planifierSemi(e, setsParId) {
+    const ligne = { part: 'SEMI', fichier: String(e?.fichier ?? ''), verdict: 'OFFICIEL', niveau: 'semi-officiel', represente: e?.represente, set: e?.set ?? null, setSur: !!e?.set, cible: e?.cible, langue: e?.langue,
+        urls: [e?.url], urlChoisie: e?.url, source: sourceDe(e?.url), bulbapediaSeule: false, cache: null, pokecardexSha256: null, ajoutDirect: true };
+    if (!ligne.fichier) return { action: 'refus', raison: 'entrée sans nom de fichier', ligne };
+    const p = planifier(ligne, setsParId);
+    return { ...p, ligne };
+}
+
+/**
+ * Les lignes qu'on s'apprête à traiter. SANS `--sets` : exactement `officiels` (la table), les ajouts ne partent pas. AVEC : les lignes de la table dont le set est nommé,
+ * plus les ajouts (et les semi) de ces sets ; un set absent de la base, ou sans aucune ligne, est une ERREUR dite (rien à faire n'est pas un succès) et ne laisse AUCUNE ligne.
+ */
+function choisirLignes({ officiels, ajouts = AJOUTS, semis = [], setsDemandes = null, setsParId }) {
+    if (!setsDemandes) return { officiels, semis, erreurs: [] };
+    const noms = new Set(setsDemandes);
+    const dans = l => noms.has(l.set);
+    const deTable = officiels.filter(dans), deAjout = ajouts.filter(dans), deSemi = semis.filter(dans);
+    const erreurs = [];
+    for (const n of noms) {
+        if (!setsParId.has(n)) erreurs.push(`--sets : « ${n} » est absent de la base`);
+        else if (![...deTable, ...deAjout, ...deSemi].some(l => l.set === n)) erreurs.push(`--sets : « ${n} » n'a aucune ligne à collecter (ni dans la table, ni parmi les ajouts, ni dans le fichier semi-officiel)`);
+    }
+    return erreurs.length ? { officiels: [], semis: [], erreurs } : { officiels: [...deTable, ...deAjout], semis: deSemi, erreurs };
+}
+
+const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/, /^--sets=[A-Za-z0-9][A-Za-z0-9._-]*(,[A-Za-z0-9][A-Za-z0-9._-]*)*$/, /^--semi-officiel=.+\.json$/, /^--lecture-via-ecriture$/];
+/** Les arguments qui ne sont pas dans la liste fermée (un argument inconnu REFUSE avant toute connexion). */
+const argumentsInconnus = argv => argv.filter(a => !AUTORISES.some(r => r.test(a)));
+
+/**
+ * TCGdex sert parfois l'ANGLAIS sous `/fr/` (repli de langue) : un `fr` identique (sha256) à l'`en` du même set n'est pas un logo français. Pour un ajout, un `fr` sans `en`
+ * à comparer est refusé aussi (je ne sais pas). Rend un tableau parallèle à `items` : la raison du refus, ou null.
+ */
+function refusFrIdentiqueEn(items) {
+    return items.map(it => {
+        if (it.ligne.cible !== 'fr' || it.ligne.ajoutDirect !== true) return null;
+        const en = items.find(x => x !== it && x.ligne.set === it.ligne.set && x.ligne.cible === 'en');
+        if (!en) return 'aucun logo en du même set à comparer : je ne sais pas si TCGdex sert l\'anglais sous /fr/';
+        return en.sha256 === it.sha256 ? 'le fr est identique (sha256) à l\'en du même set : TCGdex sert l\'anglais sous /fr/, ce n\'est pas un logo français' : null;
+    });
 }
 
 // ───────────────────────── LES « À REGARDER » REGARDÉS À L'ŒIL (coordinateur, 2026-10-11)
@@ -222,6 +286,13 @@ async function juger(ligne, buf, { pokecardexBuf = null, mesurer = require('./co
     const { refusCopie } = require('./collecte-cartes/langue-logo');
     const copie = refusCopie(base.sha1, null);
     if (copie) return { ok: false, raison: copie, ...base };
+    // LOGOS-NIVEAU : une ligne d'AJOUT (liste fermée, adresse exacte qui prouve la langue) ou SEMI-OFFICIELLE n'a ni cache de la phase 1 ni fichier Pokécardex : son fichier se juge
+    // sur ce qu'il est (image lisible, taille) et sur la garde générique — SAUF pour un semi-officiel qui écrit ce qu'il représente (l'exception ne vaut que pour ce champ, que si la phrase est là).
+    if (ligne.ajoutDirect === true) {
+        if (ligne.niveau === 'semi-officiel') { if (!representeValide(ligne.represente)) return { ok: false, raison: 'semi-officiel sans phrase `represente`', ...base }; }
+        else { const g = require('./collecte-cartes/langue-logo').refusGenerique(base.sha1); if (g) return { ok: false, raison: g, ...base }; }
+        return { ok: true, via: 'adresse-seule', corr: null, ...base };
+    }
     if (ligne.cache?.sha256 && ligne.cache.sha256 === base.sha256) return { ok: true, via: 'identique-phase-1', corr: null, ...base };
     if (!pokecardexBuf) return { ok: false, raison: 'fichier différent de celui comparé en phase 1 et fichier Pokécardex illisible : pas de re-mesure possible (je ne sais pas)', ...base };
     let m; try { m = await mesurer(ligne.part, buf, pokecardexBuf); } catch (e) { return { ok: false, raison: `re-mesure impossible : ${e.message}`, ...base }; }
@@ -231,7 +302,7 @@ async function juger(ligne, buf, { pokecardexBuf = null, mesurer = require('./co
 /** Deux lignes pour un même (langue, set) : le même fichier ne s'écrit qu'une fois ; deux fichiers différents ne se départagent pas (refus des deux). */
 function reduireDoublons(items) {
     const groupes = new Map();
-    items.forEach((it, i) => { const k = `${it.ligne.cible}:${it.ligne.set}`; (groupes.get(k) || groupes.set(k, []).get(k)).push(i); });
+    items.forEach((it, i) => { const k = `${it.ligne.niveau ?? 'officiel'}:${it.ligne.cible}:${it.ligne.set}`; (groupes.get(k) || groupes.set(k, []).get(k)).push(i); });
     const out = items.map(() => ({ action: 'ecrire' }));
     for (const idx of groupes.values()) {
         if (idx.length < 2) continue;
@@ -338,19 +409,24 @@ const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  */
 // `lot`, `refusDeLangue` et `ajout` sont réservés aux routes Bulbapedia (collecte-cartes/logos-bulba.js) : leur langue se prouve par la règle des NOMS DE FICHIER
 // (langue-logo.js), jamais par l'adresse ; `ajout` = { entree, preuve } est ajouté à l'entrée, il ne remplace aucun champ de base.
-async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date(), lot = LOT, refusDeLangue = refusLangue, ajout = {} }) {
+async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date(), lot = null, refusDeLangue = refusLangue, ajout = {} }) {
     const { fabriquerVignette, cleVignette, LARGEUR_VIGNETTE_LOGO } = require('./collecte-cartes/vignette');
+    // LOGOS-NIVEAU : un semi-officiel s'écrit dans SON champ (`logoSemiOfficiel`), sous SON préfixe R2 et son lot, et seulement avec sa phrase `represente` ; tout le reste : `logoOfficiel`, niveau officiel.
+    const semi = ligne.niveau === 'semi-officiel';
+    const racine = semi ? 'logoSemiOfficiel' : 'logoOfficiel';
+    lot = lot ?? (semi ? LOT_SEMI : LOT);
     if (!SLUG.test(set)) return { action: 'refus', raison: `identifiant de set « ${set} » non sûr pour une clé R2` };
-    if (!['fr', 'ja'].includes(ligne.cible)) return { action: 'refus', raison: `cible « ${ligne.cible} » inconnue` };
+    if (!CIBLES.includes(ligne.cible)) return { action: 'refus', raison: `cible « ${ligne.cible} » inconnue` };
+    if (semi && !representeValide(ligne.represente)) return { action: 'refus', raison: 'semi-officiel sans phrase `represente` : rien n\'est écrit' };
     // LA LANGUE (ruling du coordinateur) : la garde est ici AUSSI, sur l'adresse du fichier qu'on s'apprête à écrire — pas seulement dans planifier
     const rL = refusDeLangue(ligne, fichier.url);
     if (rL) return { action: 'refus', raison: rL };
-    const champ = `logoOfficiel.${ligne.cible}`;
-    const doc = await S.findOne({ _id: set }, { projection: { logoOfficiel: 1 } });
+    const champ = `${racine}.${ligne.cible}`;
+    const doc = await S.findOne({ _id: set }, { projection: { [racine]: 1 } });
     if (!doc) return { action: 'refus', raison: `set ${set} absent` };
-    const deja = doc.logoOfficiel?.[ligne.cible];
-    if (deja) return deja.sha256 === fichier.sha256 ? { action: 'deja' } : { action: 'refus', raison: `${set} porte déjà un logoOfficiel.${ligne.cible} différent (${deja.lot}) : rien n'est remplacé` };
-    const cleR2 = `logos-officiels/${ligne.cible}/${set}-${fichier.sha256.slice(0, 10)}.${fichier.ext}`;
+    const deja = doc[racine]?.[ligne.cible];
+    if (deja) return deja.sha256 === fichier.sha256 ? { action: 'deja' } : { action: 'refus', raison: `${set} porte déjà un ${racine}.${ligne.cible} différent (${deja.lot}) : rien n'est remplacé` };
+    const cleR2 = `${semi ? 'logos-semi-officiels' : 'logos-officiels'}/${ligne.cible}/${set}-${fichier.sha256.slice(0, 10)}.${fichier.ext}`;
     const cv = cleVignette(cleR2);
     const vg = await fabriquerVignette(fichier.buf, { largeur: LARGEUR_VIGNETTE_LOGO, qualite: 85 });
     const meta = await sharp(fichier.buf).metadata();
@@ -358,6 +434,7 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
     const d2 = await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
     const entree = {
         ...(ajout.entree ?? {}),
+        niveau: semi ? 'semi-officiel' : 'officiel', ...(semi ? { represente: ligne.represente.trim() } : {}),
         cleR2, w: meta.width, h: meta.height, octets: fichier.buf.length, sha256: fichier.sha256, format: meta.format, langue: ligne.langue,
         source: ligne.source, urlSource: fichier.url, lot, mention: MENTION, le, vignette: { cleR2: cv, w: vg.w, h: vg.h },
         preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null, ...(ligne.regardePar ? { regardePar: ligne.regardePar, raisonRegarde: ligne.raisonRegarde, confirmationSet: ligne.confirmationSet } : {}), ...(ajout.preuve ?? {}) }
@@ -371,35 +448,36 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
 }
 
 /** Le retrait du lot (voir retirer-logos-officiels.js) : exactement les entrées `logoOfficiel.*` de CE lot, et leurs objets R2. */
-async function retirerLot({ S, r2, bucket, lot, ecrire = false, journal = m => console.log(m) }) {
+async function retirerLot({ S, r2, bucket, lot, racine = 'logoOfficiel', ecrire = false, journal = m => console.log(m) }) {
     if (!lot) throw new Error('retirerLot : lot obligatoire');
-    const docs = await S.find({ $or: [{ 'logoOfficiel.fr.lot': lot }, { 'logoOfficiel.ja.lot': lot }] }, { projection: { logoOfficiel: 1 } }).toArray();
+    if (!['logoOfficiel', 'logoSemiOfficiel'].includes(racine)) throw new Error(`retirerLot : champ « ${racine} » inconnu`);
+    const prefixe = racine === 'logoOfficiel' ? 'logos-officiels' : 'logos-semi-officiels';
+    const docs = await S.find({ $or: CIBLES.map(c => ({ [`${racine}.${c}.lot`]: lot })) }, { projection: { [racine]: 1 } }).toArray();
     const sets = [], cles = [], parSet = new Map();
     for (const d of docs) {
-        const ks = Object.keys(d.logoOfficiel || {}).filter(k => d.logoOfficiel[k]?.lot === lot);
+        const ks = Object.keys(d[racine] || {}).filter(k => d[racine][k]?.lot === lot);
         if (!ks.length) continue;
         sets.push(d._id); parSet.set(d._id, ks);
-        for (const k of ks) for (const c of [d.logoOfficiel[k].cleR2, d.logoOfficiel[k].vignette?.cleR2]) if (c) cles.push(c);
+        for (const k of ks) for (const c of [d[racine][k].cleR2, d[racine][k].vignette?.cleR2]) if (c) cles.push(c);
     }
-    for (const c of cles) if (!/^(vignettes\/)?logos-officiels\//.test(c)) throw new Error(`retirerLot : clé « ${c} » hors du préfixe logos-officiels/ : arrêt`);
+    for (const c of cles) if (!c.startsWith(`${prefixe}/`) && !c.startsWith(`vignettes/${prefixe}/`)) throw new Error(`retirerLot : clé « ${c} » hors du préfixe ${prefixe}/ : arrêt`);
     // la liste COMPLÈTE des clés R2 du lot, imprimée AVANT toute modification : un R2 qui échoue après le retrait en base n'en fait perdre aucune
     await journal(`CLÉS R2 DU LOT ${lot} (${cles.length}, ${sets.length} sets : ${sets.join(', ')}) : ${cles.join(' ')}`);
     if (!ecrire) return { sets, cles };
     for (const [id, ks] of parSet) {
-        for (const k of ks) await S.updateOne({ _id: id, [`logoOfficiel.${k}.lot`]: lot }, { $unset: { [`logoOfficiel.${k}`]: '' } });
-        await S.updateOne({ _id: id, logoOfficiel: {} }, { $unset: { logoOfficiel: '' } });
+        for (const k of ks) await S.updateOne({ _id: id, [`${racine}.${k}.lot`]: lot }, { $unset: { [`${racine}.${k}`]: '' } });
+        await S.updateOne({ _id: id, [racine]: {} }, { $unset: { [racine]: '' } });
     }
     if (cles.length) await r2.supprimer(bucket, cles);
     return { sets, cles };
 }
 
-module.exports = { REGARDES_2026_10_11, EXCLUS_2026_10_11, promouvoir, LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, refusSetIdentifie, refusSetBase, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
+module.exports = { REGARDES_2026_10_11, EXCLUS_2026_10_11, promouvoir, LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, refusSetIdentifie, refusSetBase, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue, LOT_SEMI, AJOUTS, CIBLES, choisirLignes, argumentsInconnus, planifierSemi, representeValide, refusFrIdentiqueEn };
 
 // ───────────────────────── la ligne de commande
-const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/];
 if (require.main === module) (async () => {
-    const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --cache=<dossier> (obligatoire), --table=, --pokecardex=, --rapport=, --ecrire`); process.exit(2); }
+    const inconnus = argumentsInconnus(process.argv.slice(2));
+    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --cache=<dossier> (obligatoire), --sets=<id,…>, --semi-officiel=<fichier.json>, --table=, --pokecardex=, --rapport=, --ecrire`); process.exit(2); }
     const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     const ECRIRE = process.argv.includes('--ecrire');
     const cache = arg('cache');
@@ -408,15 +486,26 @@ if (require.main === module) (async () => {
     const racine = arg('pokecardex') || path.join(__dirname, '..', 'pokemon-proxy');
     fs.mkdirSync(cache, { recursive: true });
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
-    const cx = await ouvrirConnexions({ production: false, buckets: ECRIRE ? ['R2_BUCKET_IMAGES'] : [] });
+    // une SIMULATION lit par la connexion de lecture seule (si elle est configurée) ; seule une écriture ouvre la connexion d'écriture
+    const cx = ECRIRE ? await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] })
+        : await require('./collecte-cartes/ouvrir-lecture').ouvrirSimulation({ viaEcriture: process.argv.includes('--lecture-via-ecriture'), ouvrirConnexions });
     const S = cx.cartes.db.collection('sets');
     const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1, code: 1 } }).toArray()).map(s => [s._id, s]));
     if (!sets.size) throw new Error('collection sets vide : base fausse');
     const tcgdexJa = (await cx.cartes.db.collection('tcgdex_sets').findOne({ _id: 'ja/__liste__' }))?.sets ?? null;   // le cache TCGdex ja (0 requête) : la seconde voie de SV11W
-    const regardes = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets, { tcgdexJa }) }));
-    const officiels = [...table.lignes.filter(l => l.verdict === 'OFFICIEL'), ...regardes.filter(r => r.p.ligne).map(r => r.p.ligne)];
-    console.log(`DÉNOMINATEUR : ${table.lignes.length} lignes dans la table · ${officiels.length} OFFICIEL · ${sets.size} sets en base · lot ${LOT}`);
-    const verdicts = [...officiels.map(l => ({ l, ...planifier(l, sets) })), ...regardes.filter(r => !r.p.ligne).map(r => ({ l: r.l, action: 'ecartee', raison: r.p.raison }))];
+    const setsDemandes = arg('sets') ? arg('sets').split(',') : null;
+    const regardesTous = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets, { tcgdexJa }) }));
+    const officielsTable = [...table.lignes.filter(l => l.verdict === 'OFFICIEL'), ...regardesTous.filter(r => r.p.ligne).map(r => r.p.ligne)];
+    // le fichier semi-officiel (liste fermée, écrite à la main) : chaque entrée est planifiée ; celles qui ne passent pas sont dites
+    const semiRefus = [];
+    const semisPlan = arg('semi-officiel') ? (JSON.parse(fs.readFileSync(path.resolve(arg('semi-officiel')), 'utf8')).entrees || []).map(e => planifierSemi(e, sets)) : [];
+    for (const p of semisPlan.filter(p => p.action !== 'collecter')) semiRefus.push({ l: p.ligne, action: p.action, raison: p.raison });
+    const choix = choisirLignes({ officiels: officielsTable, semis: semisPlan.filter(p => p.action === 'collecter').map(p => p.ligne), setsDemandes, setsParId: sets });
+    if (choix.erreurs.length) { for (const e of choix.erreurs) console.error(`❌ ${e}`); await cx.fermer(); process.exit(2); }
+    const officiels = [...choix.officiels, ...choix.semis];
+    const regardes = setsDemandes ? regardesTous.filter(r => setsDemandes.includes(r.l.set)) : regardesTous;
+    console.log(`DÉNOMINATEUR : ${table.lignes.length} lignes dans la table · ${officiels.length} à traiter${setsDemandes ? ` (--sets=${setsDemandes.join(',')} : ${choix.officiels.length - choix.officiels.filter(l => !l.ajoutDirect).length} ajout(s), ${choix.semis.length} semi-officiel(s))` : ''} · ${sets.size} sets en base · lot ${LOT}`);
+    const verdicts = [...officiels.map(l => ({ l, ...planifier(l, sets) })), ...semiRefus.filter(r => !setsDemandes || setsDemandes.includes(r.l.set)), ...regardes.filter(r => !r.p.ligne).map(r => ({ l: r.l, action: 'ecartee', raison: r.p.raison }))];
     console.log(`REGARDÉS À L'ŒIL (2026-10-11) : ${regardes.length} À REGARDER · ${regardes.filter(r => r.p.ligne).length} promus OFFICIEL · ${regardes.filter(r => !r.p.ligne).length} non promus`);
     const compte = {}; for (const v of verdicts) compte[v.action] = (compte[v.action] || 0) + 1;
     console.log(`PLAN (avant tout téléchargement) : ${Object.entries(compte).map(([k, n]) => `${k} ${n}`).join(' · ')}`);
@@ -448,7 +537,8 @@ if (require.main === module) (async () => {
         if (!j.ok) { rapport.lignes.push({ fichier: l.fichier, set: l.set, source: l.source, action: 'refus', raison: j.raison }); console.log(`   🔴 ${l.fichier} → ${l.set} : ${j.raison}`); continue; }
         acceptes.push({ ligne: l, sha256: j.sha256, fichier: { buf, sha256: j.sha256, ext: j.format === 'jpeg' ? 'jpg' : j.format, url: urlFinale, via: j.via, corr: j.corr } });
     }
-    const dd = reduireDoublons(acceptes);
+    const frEn = refusFrIdentiqueEn(acceptes);
+    const dd = reduireDoublons(acceptes).map((d, i) => frEn[i] ? { action: 'refus', raison: frEn[i] } : d);
     acceptes.forEach((a, i) => { a.action = dd[i].action; if (dd[i].raison) a.raison = dd[i].raison; if (dd[i].action !== 'ecrire') rapport.lignes.push({ fichier: a.ligne.fichier, set: a.ligne.set, source: a.ligne.source, action: dd[i].action, raison: dd[i].raison ?? `même fichier que ${dd[i].meme}` }); });
     for (const v of verdicts.filter(v => v.action !== 'collecter')) rapport.lignes.push({ fichier: v.l.fichier, set: v.l.set, source: v.l.source, action: v.action, raison: v.raison });
     const aEcrire = acceptes.filter(a => a.action === 'ecrire');
@@ -470,8 +560,9 @@ if (require.main === module) (async () => {
     await r2.verifierBucket(bucket);
     const bilan = {};
     for (const a of aEcrire) { const e = await ecrireLigne({ S, r2, bucket, ligne: a.ligne, set: a.ligne.set, fichier: a.fichier }); bilan[e.action] = (bilan[e.action] || 0) + 1; if (e.action === 'refus') console.log(`   🔴 ${a.ligne.fichier} → ${a.ligne.set} : ${e.raison}`); }
-    const relus = await S.countDocuments({ $or: [{ 'logoOfficiel.fr.lot': LOT }, { 'logoOfficiel.ja.lot': LOT }] });
-    console.log(`\nÉCRIT : ${JSON.stringify(bilan)} · RELU : ${relus} sets portent un logoOfficiel du lot ${LOT}`);
+    const relus = await S.countDocuments({ $or: CIBLES.map(c => ({ [`logoOfficiel.${c}.lot`]: LOT })) });
+    const relusSemi = await S.countDocuments({ $or: CIBLES.map(c => ({ [`logoSemiOfficiel.${c}.lot`]: LOT_SEMI })) });
+    console.log(`\nÉCRIT : ${JSON.stringify(bilan)} · RELU : ${relus} sets portent un logoOfficiel du lot ${LOT} · ${relusSemi} sets portent un logoSemiOfficiel du lot ${LOT_SEMI}`);
     await cx.fermer();
     if ((bilan.refus || 0) > 0) process.exitCode = 1;
 })().catch(e => { console.error(e); process.exit(1); });
