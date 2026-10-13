@@ -155,7 +155,14 @@ async function executerLot(p) {
             // une question qui n'existe pas n'est répondable par personne : tout le lot devient une panne (jamais un a-trancher sans question)
             try { await col('questions_v2').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, etat: 'en-attente' },
                 { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: new Date() } }); } catch (e) { journal('annulation des questions', e); }
-            return panne('SERVEUR', Boolean(r && r.etat === 'remboursee'));
+            const res = await panne('SERVEUR', Boolean(r && r.etat === 'remboursee'));
+            // UN-CANDIDAT-2 : une fois le client RENDU, les lignes posées finissent dans un état terminal (lotIssue) : sans lui le balayage les rejugeait « analyse-absente » pour toujours (aucune ligne `analyses` n'existe).
+            // Si le remboursement n'a PAS eu lieu, aucune décision n'est écrite : le lot reste visible de la réconciliation.
+            if (res && res.sortie && res.sortie.facturation && res.sortie.facturation.rembourse) {
+                try { await col('questions_v2').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: { rendu: true, raison: 'reservation-echouee', le: new Date() } } }); }
+                catch (e) { journal('décision du lot', e); }
+            }
+            return res;
         }
     }
     const analyse = { statut: 'lot', cartes: ordonnerParValeur(cartes), lot: lotInfo, raison: null };
