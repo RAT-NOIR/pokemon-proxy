@@ -77,6 +77,12 @@
     "schema": "ReponseAnalyse",
     "description": "Introuvable (plusieurs-cartes-non-separees) : remboursé. Raison de la liste fermée que la chaîne actuelle ne produit pas encore."
   },
+  "introuvable-impression-indeterminee.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé, hors plafond de pannes."
+  },
   "introuvable-panne-lecture.json": {
     "route": "POST /api/identifier",
     "statut": 200,

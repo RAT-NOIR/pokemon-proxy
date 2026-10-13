@@ -18,6 +18,7 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     try { r = await calculer({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: catalogue, regle: await regle(), decider }); } finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
     if (!r.version) throw echec('0 visuel sur une base non vide : aucun fichier écrit');
     if (r.comptes.fichesLiees === 0) throw echec('0 lien fiche → produits : aucun fichier écrit');
+    if (!r.version.colonneJumeaux) throw echec('JUMEAU-V2 : la version calculée n\'a pas la colonne des jumeaux (la route n\'affirmerait aucun produit) : aucun fichier écrit');
     const entree = { sets: r.comptes.sets, cartes: r.comptes.cartes, produits: r.comptes.produits, catalogue: r.comptes.catalogue };
     const brut = F.serialiser(r.version, { entree });
     const gz = await F.compresser(brut);
@@ -27,6 +28,7 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     const rj = await rejugerEntreesParPaquets(relu);
     if (!rj.ok) throw echec(`aller-retour : ${rj.refusees} entrée(s) rejetée(s) par la validation d'entrée (${Object.entries(rj.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')}) : aucun fichier écrit`);
     if (relu.comptes.visuels !== r.comptes.visuels || relu.comptes.fichesLiees !== r.comptes.fichesLiees) throw echec('aller-retour : les comptes relus diffèrent des comptes calculés : aucun fichier écrit');
+    if (!relu.colonneJumeaux || relu.comptes.jumeaux !== r.version.comptes.jumeaux) throw echec('aller-retour : la colonne des jumeaux relue diffère de celle calculée : aucun fichier écrit');
     return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, entree, dureeMs: Date.now() - t0 };
 }
 module.exports = { fabriquerFichier };

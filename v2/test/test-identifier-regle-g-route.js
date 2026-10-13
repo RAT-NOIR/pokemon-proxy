@@ -124,7 +124,7 @@ function chargerFixtures() {
     const appFabrique = async (cfgApp, deps = {}) => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(require('../modeles').verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaineFabriquee, ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, ...deps }));
         return H.serveur(app);
     };
     const jouer = async (sv, c, vm) => { chaine = c; voisinsMode = vm; appelsG = 0; appelsVoisins = 0; const x = await inst(3); const r = await poster(sv.url, x.jeton); await attendre(50); return { ...x, r, j: r.json || {} }; };
@@ -173,6 +173,12 @@ function chargerFixtures() {
         const qb = await raw('questions_v2').findOne({ _id: `${b.j.scanId}:0` });
         H.v('3b. G pose une question, la chaîne pose la même : a-trancher, facturation { debite:0, reserve:1, motif:question }, aucun désaccord', [b.j.analyse.statut, b.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort(), b.j.facturation, (await analyseDe(b.j)).desaccordRegleG], ['a-trancher', [...Q].sort(), { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, undefined]);
         H.v('   la question existe, en-attente, ses choix = choixPour(candidats)', [qb && qb.etat, qb && qb.choix], ['en-attente', choixPour(Q.slice(0, 3))]);
+        // JUMEAU-V2 (C1 de la relecture 1) : la règle G, quand elle est d'accord avec une affirmation de la chaîne, ne la RESTAURE jamais — le produit a un jumeau, la réponse reste une question (crédit réservé)
+        const svJum = await appFabrique(cfgOn, { voisins, jumeaux: id => ({ conclu: true, ids: id === P ? [ID_B] : [] }) });
+        const c = await jouer(svJum, { mode: 'affirmee', ids: [P] }, 'affirmee');
+        H.v('3c. G affirme P et la chaîne affirme P, mais P a un jumeau : a-trancher (jamais identifiee), P parmi les candidats, crédit réservé { debite:0, reserve:1 }, essai 3 -> 2',
+            [c.j.analyse.statut, c.j.analyse.cartes[0].candidats.map(x => x.idProduct).includes(P), c.j.facturation.debite, c.j.facturation.reserve, await essaisDe(c.i._id)], ['a-trancher', true, 0, 1, 2]);
+        await svJum.fermer();
     }
 
     // ── (4) DÉSACCORD : jamais tranché en silence — le plus PRUDENT gagne (a-trancher > identifiee), la facturation suit l'issue retenue, ligne desaccordRegleG

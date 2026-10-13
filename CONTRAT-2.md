@@ -55,7 +55,7 @@ types déjà écrits par le site (`scannerContrat.ts`, `compteContrat.ts`) ; il 
 | `carte` (`Produit`) | ✓ | `null` | `null` |
 | `candidats` (`Produit[]`) | `[]` | **2 ou 3, sans ordre de classement** | `[]` |
 | `question` (`Question`) | `null` | ✓ | `null` |
-| `raison` | `null` | `null` | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` |
+| `raison` | `null` | `null` | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` · `impression-indeterminee` |
 | `etat` | `{ estime, confiance, defauts, declare, retenu }` — `confiance` : `haute` · `moyenne` · `basse` · `null` | idem | `null` |
 | `prixLive` (extension) | `{ idProduct, langues, reverseHolo, etatVise }` | `null` | `null` |
 | ~~`prixParEtat`~~ (scanner) | **n'existe pas** — décision de l'éditeur rapportée par le site le 2026-10-06 (après-midi, DEMANDE-SERVICE-PRODUITS.md) : « le scanner affiche les prix du guide Cardmarket (tendance, prix le plus bas, moyenne sur 30 jours), clairement libellés et datés ; le serveur ne va jamais chercher le prix par état chez Cardmarket ». Le seul prix du scanner est `prixGuide`, sur le `Produit` | — | — |
