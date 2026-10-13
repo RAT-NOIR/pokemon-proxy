@@ -35,6 +35,7 @@ const MUTANTS = [
     { nom: 'octets déjà en base : le sha256 du WebP servi n\'est plus cherché', de: "{ sha256: { $in: shaWebp } }", vers: "{ sha256: { $in: [] } }" },
     { nom: 'octets déjà en base : le sha256 des octets reçus n\'est plus cherché', de: "{ sha256Octets: { $in: shaOctets } }", vers: "{ sha256Octets: { $in: [] } }" },
     { nom: 'octets déjà en base : la projection stricte est retirée (charge)', de: "{ projection: { sha256: 1, sha256Octets: 1, carteId: 1, set: 1 } }", vers: "{}" },
+    { nom: 'relecture : le filtre de la requête élargi à la seule source (toute la collection PikaQian rapatriée)', de: "find({ images: { $elemMatch: { source: P.SOURCE, lot: P.LOT, set: S.slug } } }", vers: "find({ 'images.source': P.SOURCE }" },
     { nom: 'octets déjà en base : le WebP servi n\'est pas rapproché des documents', de: "(parOctets.get(o.sha256) || []).concat(parWebp.get(webpSha) || [])", vers: "(parOctets.get(o.sha256) || [])" }
 ];
 // (la garde `cle-partagee` est RETIRÉE de l'import : vide par construction, elle ne pouvait pas échouer — relecture C)

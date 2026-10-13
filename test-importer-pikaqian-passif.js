@@ -27,7 +27,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const lire = (o, k) => k.split('.').reduce((x, p) => Array.isArray(x) ? x.map(y => y?.[p]) : x?.[p], o);
     const ecrireChamp = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
     const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => k === '$or' ? v.some(g => accepte(d, g)) : v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
-        ? ('$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
+        ? ('$elemMatch' in v ? Array.isArray(lire(d, k)) && lire(d, k).some(e => accepte(e, v.$elemMatch)) : '$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
         : (Array.isArray(lire(d, k)) && !Array.isArray(v) ? lire(d, k).includes(v) : lire(d, k) === v));
     const appliquer = (d, u) => {
         for (const [k, v] of Object.entries(u.$set || {})) ecrireChamp(d, k, v);
@@ -199,6 +199,24 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
             [4, 5, 6, 7, 8, 10, 11, 14, 15, 16, 17].every(c => base.col('cartes').get(c).images.length === 0)], [['tcgdex:Autre-Set:5', `pikaqian:${SLUG}:001`], [`pikaqian:${SLUG}:011:${P.LOT}`], ['tcgdex'], true]);
         verifier('le bilan du set (`visuelsPikaqianPassif`) : concordance, écrites 2, relu 2 documents et 2 entrées, garde verte, voies', [bil.concordance, bil.ecrites, bil.relu, bil.garde.ok, bil.voies, bil.aEcrire], [true, 2, { documents: 2, entrees: 2 }, true, { canvas: 2 }, 2]);
         verifier('… et la base le porte', base.col('sets').get(SLUG).visuelsPikaqianPassif?.concordance, true);
+        // ── LOT PQ-RELU : la relecture ne rapatrie que les cartes du lot ET du set (même prédicat côté base que le filtre JavaScript), le résultat est inchangé
+        {
+            const B = fausseBase(); semer(B);
+            const c = (id, images) => { B.col('cartes').get(id).images = images; };
+            c(3, [{ source: 'pikaqian', lot: 'autre-lot', set: SLUG, numero: '003' }]);                                   // autre lot, même set
+            c(4, [{ source: 'pikaqian', lot: P.LOT, set: 'Autre-Set', numero: '004' }]);                                  // même lot, autre set
+            c(5, [{ source: 'tcgdex', lot: P.LOT, set: SLUG, numero: '005' }]);                                           // autre source
+            c(6, [{ source: 'pikaqian', lot: P.LOT, set: 'Autre-Set', numero: '006' }, { source: 'tcgdex', lot: P.LOT, set: SLUG, numero: '006' }]);   // chaque critère sur une entrée différente
+            const bR = await ecrire(j, { M: B.M, db: B.db });
+            const lectures = B.requetes.filter(r => r.col === 'cartes' && r.f && Object.keys(r.f).some(k => k.startsWith('images')) && r.opts?.projection?.images === 1);
+            const ids = async f => (await B.db.collection('cartes').find(f).toArray()).map(x => x._id).sort((a, b) => a - b);
+            const ancien = { 'images.source': P.SOURCE };
+            const relireAncien = (await B.db.collection('cartes').find(ancien).toArray()).flatMap(x => (x.images || []).filter(e => e.source === P.SOURCE && e.lot === P.LOT && e.set === SLUG).map(e => `${x._id}|${e.numero}`));
+            verifier('relecture : UNE lecture des cartes par set, dont le filtre porte le set (pas seulement la source) et ne rapatrie que les cartes du lot dans ce set', [lectures.length, JSON.stringify(lectures[0]?.f).includes(SLUG), await ids(lectures[0]?.f ?? {})], [1, true, [1, 12, 13]]);   // 13 : Gible, jointe par la jointure additive (document « ok » déjà là), entrée du lot dans ce set
+            verifier('… et l\'ancienne lecture aurait rapatrié les cartes d\'un autre lot, d\'un autre set (3 cartes de plus)', await ids(ancien), [1, 3, 4, 6, 12, 13]);
+            const voulues = new Set(['1|001', '12|011']);
+            verifier('… résultat de la relecture STRICTEMENT identique à celui de l\'ancienne lecture (mêmes entrées voulues du set)', [bR[0].bilan.relu.entrees, relireAncien.filter(k => voulues.has(k)).length], [2, 2]);
+        }
         verifier('les trous ne sont PAS écrits : aucun document `images` pour Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Glaceon ×2, Leafeon', [[4, '004'], [5, '005'], [6, '006'], [7, '007'], [8, '008'], [10, '010'], [11, '010'], [15, '014'], [16, '015'], [17, '016']].map(([c, n]) => base.col('images').has(P.idImagePikaqian(SLUG, c, n))), Array(10).fill(false));
         verifier('Bidoof (retiré) et Gible (déjà là) n\'ont pas été touchés', [base.col('images').get(P.idImagePikaqian(SLUG, 14, '013')), base.col('images').get(P.idImagePikaqian(SLUG, 13, '012')).sha256], [{ _id: P.idImagePikaqian(SLUG, 14, '013'), etat: 'retire' }, 'deja']);
 
