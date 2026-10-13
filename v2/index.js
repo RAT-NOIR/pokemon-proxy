@@ -31,7 +31,11 @@ function monter(app, deps = {}, env = process.env) {
     }
     pret.armer(verifierIndex);
     app.use(assembler(LOTS, cfg, deps));
+    monte = true;
 }
+// Le limiteur hérité (index.js) ne saute que ce que la v2 MONTÉE (configuration valide) traite elle-même : voir limiteur-heritage.js.
+let monte = false;
+const limiteurHerite = require('./limiteur-heritage').fabrique(() => (monte && cfg ? cfg : null));
 /**
  * B8.1 (tour 1, I-1) — la garde des CLÉS, écrite par ce qu'elle AUTORISE (liste permise) : une clé n'est acceptée que si elle a la forme d'un identifiant (`FORME_CLE`)
  * ET n'est pas une propriété d'`Object.prototype` (`k in Object.prototype` couvre `__proto__`, `constructor`, `toString`, `hasOwnProperty`, `__defineGetter__`…). Tout le reste est refusé,
@@ -131,4 +135,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { cfg = null; erreurConfig = null; monte = false; pret.desarmer(); } };

@@ -200,7 +200,9 @@ const limiteurIA = rateLimit({
     max: 60,                    // 60 requêtes/h/IP (large pour un usage normal, coupe le pilonnage)
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' }
+    message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' },
+    // v2 éteinte : AUCUNE option de plus, le limiteur est celui d'avant. v2 allumée : il ne saute que la requête que la v2 traite elle-même, porteur authentifié (v2/limiteur-heritage.js).
+    ...(V2 ? { skip: V2.limiteurHerite.sauter, handler: V2.limiteurHerite.refuser } : {})
 });
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
 if (V2) V2.monter(app, { mongoose, gererIdentifier, gererRetourLive });
