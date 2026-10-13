@@ -240,7 +240,7 @@ const oid = () => new mongoose.Types.ObjectId();
         const avant4 = await snapAnalyses();
         const rej = await post(ADM, { scanId: S4, verdict: 'juste', rev: 1 }, k1);
         H.v('8. après un rev 2, rejouer la clé du rev 1 rend la réponse d\'origine `ecrit` rev 1 (rejeu de clé), SANS rien écrire : l\'étiquette reste rev 2',
-            [p1.json.etat, p2.json.etat, rej.statut, rej.entetes['idempotency-replayed'], rej.json, await snapAnalyses() === avant4, (await etiq(S4)).rev, (await etiq(S4)).idProduct], ['ecrit', 'ecrit', 200, 'true', { success: true, etat: 'ecrit', rev: 1 }, true, 2, 4343]);
+            [p1.json.etat, p2.json.etat, rej.statut, rej.entetes['idempotency-replayed'], rej.json, await snapAnalyses() === avant4, (await etiq(S4)).rev, (await etiq(S4)).idProduct], ['ecrit', 'ecrit', 200, 'true', { success: true, etat: 'ecrit', rev: 1, banc: 'en-attente' }, true, 2, 4343]);   // ETIQUETAGE-B : ce banc n'a pas de stockage (banc: {}) => la ligne attend, l'étiquette est écrite
         const sansCle = await post(ADM, { scanId: S4, verdict: 'juste', rev: 1 });
         H.v('8.    le même corps SANS clé rend la vérité : 409 rev-perimee', [sansCle.statut, sansCle.json.erreur.detail], [409, 'rev-perimee']);
 

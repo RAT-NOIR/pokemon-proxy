@@ -302,8 +302,8 @@ async function section(nom, f) {
         await ecrireLigne(banc, image, { jeton: 'jeton-O3-abcdefghij1234' }); await ecrireLigne(banc, image, { jeton: 'jeton-O4-abcdefghij1234' });
         const compteurs = {}; const p4 = nouvellePurge(client, { colFn: colRassise(null, compteurs) });
         const b4 = await p4.purgerBanc(T0);
-        H.v('(I3) filet sur 6 orphelins + 2 référencés (+ le reste du préfixe) : 0 findOne ; 2 find (lignes échues, puis références AVEC projection) ; 8 orphelins supprimés (les 6 + o2 et o3 restés des cas précédents)',
-            [compteurs.findOne || 0, compteurs.find, compteurs.projections, b4.orphelins], [0, 2, [false, true], 8]);
+        H.v('(I3) filet sur 6 orphelins + 2 référencés (+ le reste du préfixe) : 0 findOne ; 3 find (lignes échues, références AVEC projection, puis — ETIQUETAGE-B — les photos nommées par les analyses AVEC projection) ; 8 orphelins supprimés (les 6 + o2 et o3 restés des cas précédents)',
+            [compteurs.findOne || 0, compteurs.find, compteurs.projections, b4.orphelins], [0, 3, [false, true, true], 8]);
         // la sauvegarde de la garde : le seul chemin vers la suppression d'un orphelin est (préfixe, forme de clé, >48 h, aucune ligne)
         const refVieille = poser(cle1(), new Date(T0.getTime() - 900 * H1));
         await db.col('banc_lignes').insertOne({ _id: 'fab', cleR2: refVieille, etat: 'confirmee', source: 'affirme', verite: 1, expireLe: new Date(T0.getTime() + 400 * JOUR), le: T0, jetonEmpreinte: 'x', versionTexte: 'v', versionModele: null });
@@ -405,7 +405,7 @@ async function section(nom, f) {
     // ═══ N2 / N3 — apresAbandon : la définition commune « objet puis ligne », deleteOne porteur de la cleR2 ═══
     await section('N2/N3', async () => {
         const client = fauxClient(); const filtres = [];
-        const colEspion = n => { const r = db.col(n); return { findOne: (...x) => r.findOne(...x), find: (...x) => r.find(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (f, ...x) => { filtres.push(f); return r.deleteOne(f, ...x); } }; };
+        const colEspion = n => { const r = db.col(n); return { findOne: (...x) => r.findOne(...x), find: (...x) => r.find(...x), countDocuments: (...x) => r.countDocuments(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (f, ...x) => { filtres.push(f); return r.deleteOne(f, ...x); } }; };
         const ecr = nouveauBanc(client).banc, sp = nouveauBanc(client, colEspion).banc;
         const scanId = await ecrireLigne(ecr, image, { jeton: 'jeton-N2-abcdefghij1234', issue: 'question' });
         await sp.apresAbandon({ scanId, carte: 0 });
@@ -413,7 +413,7 @@ async function section(nom, f) {
         H.v('   ligne et objet supprimés', [(await lignes()).length, client.objets.size], [0, 0]);
         // la ligne est confirmée entre la lecture et la suppression : elle reste, avec sa copie finale
         const s2 = await ecrireLigne(ecr, image, { jeton: 'jeton-N2-abcdefghij1234', issue: 'question' }); const l0 = (await lignes())[0];
-        const colStale = n => { const r = db.col(n); return { findOne: async (...x) => { const l = await r.findOne(...x); await ecr.corriger({ corps: consentement('jeton-N2-abcdefghij1234'), scanId: s2, carte: 0, idProduct: 55 }); return l; }, find: (...x) => r.find(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (...x) => r.deleteOne(...x) }; };
+        const colStale = n => { const r = db.col(n); return { findOne: async (...x) => { const l = await r.findOne(...x); await ecr.corriger({ corps: consentement('jeton-N2-abcdefghij1234'), scanId: s2, carte: 0, idProduct: 55 }); return l; }, find: (...x) => r.find(...x), countDocuments: (...x) => r.countDocuments(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (...x) => r.deleteOne(...x) }; };
         await nouveauBanc(client, colStale).banc.apresAbandon({ scanId: s2, carte: 0 });
         const ls = await lignes();
         H.v('(N3) abandon d\'une ligne confirmée entre-temps : la ligne confirmée et sa copie finale restent', [ls.length, ls[0] && ls[0].etat, ls[0] && client.objets.has(ls[0].cleR2), client.objets.has(l0.cleR2)], [1, 'confirmee', true, false]);

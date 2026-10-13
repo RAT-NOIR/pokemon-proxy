@@ -96,6 +96,10 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
             let references;
             try { references = new Set((await borner(col().find({}, { projection: { _id: 0, cleR2: 1 } }).toArray())).map(l => l.cleR2)); }
             catch (e) { echec('références des lignes non lisibles, aucun orphelin supprimé', e); bilan.echecsOrphelins++; return bilan; }
+            // ETIQUETAGE-B : la photo d'un scan de l'administrateur existe AVANT sa ligne (la ligne naît à l'étiquetage) : tant que l'analyse la nomme (`photoBanc.cle`), elle n'est pas orpheline.
+            // Si l'on ne sait pas lire les analyses, aucun orphelin n'est supprimé (une garde qui ne peut pas conclure bloque).
+            try { for (const a of await borner(colFn('analyses').find({ photoBanc: { $exists: true } }, { projection: { _id: 0, 'photoBanc.cle': 1 } }).toArray())) if (a.photoBanc && a.photoBanc.cle) references.add(a.photoBanc.cle); }
+            catch (e) { echec('photos des analyses non lisibles, aucun orphelin supprimé', e); bilan.echecsOrphelins++; return bilan; }
             for (const o of vieux) {
                 if (references.has(o.cle)) continue;
                 try { await borner(s.supprimer(o.cle)); bilan.orphelins++; }

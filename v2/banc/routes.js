@@ -13,6 +13,7 @@ const { lireConsentement } = require('./consentement');
 const S = require('./stockage');
 const { repondreErreur } = require('../erreurs');
 const { cartesParScanMax } = require('../identifier/cartes-par-scan');
+const { creerEtiquetteLigne, CLES_DOC_ADMIN } = require('./etiquette-ligne');
 
 const { JOUR_MS, jourUTC, creerBorner, limiteLien, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
 
@@ -118,7 +119,26 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
         }
     }
 
+    // ETIQUETAGE-B : un stockage PRÊT à chaque appel, sans mémoire d'un échec. Une panne passagère du bucket ne ferme pas la photo et les lignes de l'administrateur pour la durée du processus :
+    // elles sont REPRISES (reprendreEtiquettes). Variable absente ou bucket refusé : rien (null).
+    let pretAdminS = null;
+    async function pretAdmin() {
+        if (pretAdminS) return pretAdminS;
+        if (!sel() || typeof env.V2_BANC_BUCKET !== 'string' || !env.V2_BANC_BUCKET) return null;
+        try {
+            const s = stockage || S.creerStockageReel(env);
+            if (!s || typeof s.verifierBucket !== 'function') return null;
+            await s.verifierBucket();
+            pretAdminS = s;
+            return s;
+        } catch (e) { echec('stockage de l\'étiquetage non vérifié', e); return null; }
+    }
+    const admin = creerEtiquetteLigne({ cfg, colFn, pret: pretAdmin, sel, horloge, borner });
+
     const api = {
+        conserverPhoto: admin.conserverPhoto,
+        etiquetteAdmin: admin.etiquetteAdmin,
+        reprendreEtiquettes: admin.reprendreEtiquettes,
         /** Après un verdict : `affirmee` => ligne confirmée ; `question` => ligne en attente. Toute autre issue (introuvable, panne, refus) => rien. */
         async apresVerdict(o) {
             try {
@@ -216,7 +236,7 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
 /** Le biais est écrit : le DÉNOMINATEUR par source (jamais un taux global). Aucune donnée individuelle. */
 async function statistiquesBanc(colFn = n => db.col(n)) {
     const rows = await colFn('banc_lignes').aggregate([{ $group: { _id: { source: '$source', etat: '$etat' }, n: { $sum: 1 } } }]).toArray();
-    const out = { confirmees: { affirme: 0, reponse: 0, correction: 0 }, attente: 0, total: 0 };
+    const out = { confirmees: { affirme: 0, reponse: 0, correction: 0, 'etiquette-admin': 0 }, attente: 0, total: 0 };
     for (const r of rows) {
         out.total += r.n;
         if (r._id.etat === 'attente') out.attente += r.n;
@@ -248,4 +268,4 @@ function traiterCorrection(cfg, banc) {
 }
 const echec404 = (quoi, e) => console.error(`❌ [v2 banc] ${quoi} (${(e && (e.code || e.name)) || 'erreur'})`);
 
-module.exports = { creerBanc, statistiquesBanc, traiterCorrection, TIMEOUT_MS, CLES_DOC };
+module.exports = { creerBanc, statistiquesBanc, traiterCorrection, TIMEOUT_MS, CLES_DOC, CLES_DOC_ADMIN };

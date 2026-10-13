@@ -23,7 +23,7 @@
 // Sans course : une ligne est PRISE par une écriture conditionnelle (etat 'anonymisation', avec la clé et l'identifiant de sa copie, écrits UNE fois) ; la correction, conditionnée à l'état
 // 'confirmee', n'y écrit plus ; une reprise (prise de plus de 10 min) réutilise la MÊME copie. Idempotente : une ligne anonymisée n'a plus de `le`, la passe ne la voit plus.
 const crypto = require('crypto');
-const { JOUR_MS, codeDe, debutMois, limiteLien, supprimerObjetPuisLigne } = require('./commun');
+const { JOUR_MS, codeDe, debutMois, limiteLien, supprimerObjetPuisLigne, autresLignesPortent } = require('./commun');
 const S = require('./stockage');
 // Lu à l'appel (et non au chargement) : le ledger tire du code hérité qui crée ses propres index à l'import (les bancs créent les leurs AVANT) ; UNE définition des lignes d'argent non résolues.
 const etatsRenduNonConfirme = () => require('../argent/ledger').ETATS_RENDU_NON_CONFIRME;
@@ -60,7 +60,9 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
         try { image = await borner(s.lire(c.cleR2)); await borner(s.ecrire(c.anonCle, image)); }
         catch (e) { echec('objet non réécrit, ligne gardée pour la prochaine passe', e); return 'echec'; }
         try {
-            await borner(col().insertOne({ _id: c.anonId, verite: c.verite, source: c.source, etat: 'confirmee', versionModele: c.versionModele ?? null, versionTexte: c.versionTexte,
+            await borner(col().insertOne({ _id: c.anonId, verite: c.verite, source: c.source, etat: 'confirmee', versionModele: c.versionModele ?? null, ...(c.versionTexte !== undefined ? { versionTexte: c.versionTexte } : {}),
+                // ETIQUETAGE-B : une ligne d'étiquette garde, sans lien, de quoi MESURER — la réponse d'origine de la chaîne, la version de la chaîne, la révision, « aucune » (jamais un jour, un jeton, un scanId)
+                ...(c.source === 'etiquette-admin' ? { ...(c.reponse !== undefined ? { reponse: c.reponse } : {}), ...(c.versionChaine !== undefined ? { versionChaine: c.versionChaine } : {}), ...(c.rev !== undefined ? { rev: c.rev } : {}), ...(c.aucune !== undefined ? { aucune: c.aucune } : {}) } : {}),
                 cleR2: c.anonCle, expireLe: debutMois(c.le, cfg.retention.bancMois), anonyme: true }));
         } catch (e) { if (!e || e.code !== 11000) { echec('copie anonyme non écrite', e); return 'echec'; } }     // 11000 : la copie d'une reprise existe déjà
         let r;
@@ -71,8 +73,12 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
             try { await borner(col().deleteOne({ _id: c.anonId })); await borner(s.supprimer(c.anonCle)); } catch (e) { echec('copie d\'une ligne effacée non défaite', e); return 'echec'; }
             return 'changee';
         }
-        try { await borner(s.supprimer(c.cleR2)); }
-        catch (e) {
+        try {
+            // ETIQUETAGE-B : l'ancien objet est PARTAGÉ par les autres cartes du scan tant qu'une ligne le porte (leur propre passe le supprimera, la dernière) ; lecture en échec : gardé (le filet le reprendra)
+            let partage = true;
+            try { partage = await autresLignesPortent(col, c.cleR2, undefined, borner); } catch (e0) { echec('partage de l\'ancien objet non lisible, objet gardé', e0); }
+            if (!partage) await borner(s.supprimer(c.cleR2));
+        } catch (e) {
             echec('ancien objet non supprimé, mis en attente de suppression', e);
             try { await mettreEnAttente(c.cleR2); } catch (e2) { echec('ancien objet non mis en attente (le filet des orphelins le reprendra)', e2); }
             return 'objet-garde';
@@ -89,6 +95,7 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
             await borner(col().deleteOne({ _id: l._id }));
         } catch (e) { echec('ligne non supprimée au-delà de la grâce', e); return false; }
         for (const cle of [cur.cleR2, cur.anonCle].filter(Boolean)) {
+            if (cle === cur.cleR2) { try { if (await autresLignesPortent(col, cle, undefined, borner)) continue; } catch { continue; } }   // ETIQUETAGE-B : un objet encore porté par une autre ligne reste
             let fait = false;
             if (s) { try { await borner(s.supprimer(cle)); fait = true; } catch (e) { echec('objet non supprimé, clé mise en attente', e); } }
             if (!fait) { try { await mettreEnAttente(cle); } catch (e) { echec('clé non mise en attente', e); } }
