@@ -16,6 +16,7 @@ const VERDICTS = Object.freeze(['juste', 'corrige']);
 const AUCUNE = Object.freeze(['pas-une-carte', 'hors-catalogue']);
 const FORME_ID = /^[0-9a-f]{24}$/i;
 const ESSAIS_MAX = 3;
+const REV_MAX = 1000000;
 const journal = (quoi, e) => console.error(`❌ [v2 banc-etiquette] ${quoi} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : il peut citer une clé ou un identifiant
 
 /** Tout ce qui n'est pas un compte administrateur CONFIRMÉ par la base à l'instant de la requête (rôle retiré depuis, installation non liée, simple installation) reçoit EXACTEMENT
@@ -38,7 +39,7 @@ function lireCorps(b) {
     const carte = b.carte === undefined ? 0 : b.carte;
     if (!Number.isSafeInteger(carte) || carte < 0) return { detail: 'carte' };
     if (typeof b.verdict !== 'string' || !VERDICTS.includes(b.verdict)) return { detail: 'verdict' };
-    if (!Number.isSafeInteger(b.rev) || b.rev < 1) return { detail: 'rev' };
+    if (!Number.isSafeInteger(b.rev) || b.rev < 1 || b.rev > REV_MAX) return { detail: 'rev' };   // borné : un rev démesuré figerait l'étiquette de la carte (tout rev inférieur serait périmé)
     const aId = 'idProduct' in b, aAucune = 'aucune' in b;
     if (b.verdict === 'juste') {
         if (aId || aAucune) return { detail: 'juste-sans-contenu' };            // « juste » reprend la réponse de la chaîne : rien d'autre ne l'accompagne

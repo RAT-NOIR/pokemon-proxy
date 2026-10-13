@@ -1828,7 +1828,7 @@
             }
           },
           "400": {
-            "description": "ENTREE : champ inconnu, scanId/carte/verdict/rev illisibles, `juste` accompagné d'un idProduct ou de `aucune`, `corrige` sans exactement un des deux. `detail` précise.",
+            "description": "ENTREE : champ inconnu, scanId/carte/verdict illisibles, rev hors de 1 à 1 000 000, `juste` accompagné d'un idProduct ou de `aucune`, `corrige` sans exactement un des deux. `detail` précise.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4716,7 +4716,7 @@
           "carte": {
             "type": "integer",
             "minimum": 0,
-            "description": "Indice de la carte dans le scan (0 par défaut). Une carte absente du scan = 404."
+            "description": "Le champ `index` de la carte DANS LA RÉPONSE de POST /api/identifier (sa position d'ENTRÉE), jamais sa position dans le tableau `analyse.cartes` (un lot est rangé par valeur décroissante). 0 par défaut. Une carte absente du scan = 404."
           },
           "verdict": {
             "enum": [
@@ -4739,7 +4739,8 @@
           "rev": {
             "type": "integer",
             "minimum": 1,
-            "description": "Strictement croissant par (scan, carte). Le rejeu d'une étiquette porte le MÊME rev."
+            "maximum": 1000000,
+            "description": "De 1 à 1 000 000 (400 au-delà). Strictement croissant par (scan, carte). Le rejeu d'une étiquette porte le MÊME rev. Un rejeu par Idempotency-Key rend la réponse d'origine, même périmée, sans rien écrire."
           }
         },
         "required": [

@@ -118,7 +118,7 @@ const oid = () => new mongoose.Types.ObjectId();
     {
         const S = await semer(ADM); const avant = await snapAnalyses();
         const mauvais = [['corps vide', {}], ['scanId absent', { verdict: 'juste', rev: 1 }], ['scanId mal formé', { scanId: 'abc', verdict: 'juste', rev: 1 }], ['verdict inconnu', { scanId: S, verdict: 'peut-etre', rev: 1 }],
-            ['verdict absent', { scanId: S, rev: 1 }], ['rev absent', { scanId: S, verdict: 'juste' }], ['rev 0', { scanId: S, verdict: 'juste', rev: 0 }], ['rev décimal', { scanId: S, verdict: 'juste', rev: 1.5 }], ['rev texte', { scanId: S, verdict: 'juste', rev: '1' }],
+            ['verdict absent', { scanId: S, rev: 1 }], ['rev absent', { scanId: S, verdict: 'juste' }], ['rev 0', { scanId: S, verdict: 'juste', rev: 0 }], ['rev décimal', { scanId: S, verdict: 'juste', rev: 1.5 }], ['rev texte', { scanId: S, verdict: 'juste', rev: '1' }], ['rev au-delà de 1 000 000', { scanId: S, verdict: 'juste', rev: 1000001 }], ['rev énorme (9e15)', { scanId: S, verdict: 'juste', rev: 9e15 }],
             ['carte négative', { scanId: S, carte: -1, verdict: 'juste', rev: 1 }], ['carte décimale', { scanId: S, carte: 0.5, verdict: 'juste', rev: 1 }], ['champ inconnu', { scanId: S, verdict: 'juste', rev: 1, extra: 1 }],
             ['juste avec idProduct', { scanId: S, verdict: 'juste', idProduct: 4242, rev: 1 }], ['juste avec aucune', { scanId: S, verdict: 'juste', aucune: 'pas-une-carte', rev: 1 }],
             ['corrige sans rien', { scanId: S, verdict: 'corrige', rev: 1 }], ['corrige avec les DEUX', { scanId: S, verdict: 'corrige', idProduct: 4242, aucune: 'pas-une-carte', rev: 1 }],
@@ -183,6 +183,15 @@ const oid = () => new mongoose.Types.ObjectId();
         H.v('6. rev inférieur ⇒ 409, rien d\'écrit', [r.statut, code(r), await snapAnalyses() === av], [409, 'CONFLIT', true]);
         r = await post(ADM, { scanId: S, verdict: 'corrige', idProduct: 4343, rev: 4 });
         H.v('6. rev plus grand ⇒ écrase', [r.statut, r.json.etat, (await etiq(S)).idProduct, (await etiq(S)).rev], [200, 'ecrit', 4343, 4]);
+        // C-5 : le rejeu SÉQUENTIEL au même rev mais avec un autre idProduct est un conflit (le contenu compare l'idProduct, pas seulement le verdict)
+        r = await post(ADM, { scanId: S, verdict: 'corrige', idProduct: 4444, rev: 4 });
+        H.v('6. même rev 4, même verdict `corrige`, autre idProduct ⇒ 409 (sans concurrence), l\'étiquette garde 4343', [r.statut, code(r), (await etiq(S)).idProduct], [409, 'CONFLIT', 4343]);
+        r = await post(ADM, { scanId: S, verdict: 'corrige', idProduct: 4343, rev: 4 });
+        H.v('6. même rev 4, même idProduct ⇒ rejoue', [r.statut, r.json.etat], [200, 'rejoue']);
+        // C-6 : la borne haute du rev (1 000 000) passe, 1 000 001 est refusé (plus haut)
+        const SB = await semer(ADM);
+        r = await post(ADM, { scanId: SB, verdict: 'juste', rev: 1000000 });
+        H.v('6. rev 1 000 000 (la borne) ⇒ ecrit', [r.statut, r.json.etat], [200, 'ecrit']);
         // concurrence : deux requêtes simultanées de même rev
         const S2 = await semer(ADM);
         let rs = await Promise.all([post(ADM, { scanId: S2, verdict: 'corrige', idProduct: 4343, rev: 1 }), post(ADM, { scanId: S2, verdict: 'corrige', idProduct: 4444, rev: 1 })]);
@@ -215,6 +224,26 @@ const oid = () => new mongoose.Types.ObjectId();
         H.v('8. même clé, autre corps ⇒ 422 cle-reutilisee', [c.statut, c.json.erreur.detail], [422, 'cle-reutilisee']);
         const d = await post(ADM, { scanId: S, verdict: 'juste', rev: 1 }, { 'idempotency-key': 'mauvaise cle' });
         H.v('8. Idempotency-Key malformée ⇒ 400', d.statut, 400);
+
+        // C-4 : le rejeu par clé rend la réponse D'ORIGINE, même périmée, et n'écrit RIEN (le rev, lui, dit la vérité)
+        const S4 = await semer(ADM), k1 = { 'idempotency-key': 'etiquette-rev1-0001' }, k2 = { 'idempotency-key': 'etiquette-rev2-0001' };
+        const p1 = await post(ADM, { scanId: S4, verdict: 'juste', rev: 1 }, k1);
+        const p2 = await post(ADM, { scanId: S4, verdict: 'corrige', idProduct: 4343, rev: 2 }, k2);
+        const avant4 = await snapAnalyses();
+        const rej = await post(ADM, { scanId: S4, verdict: 'juste', rev: 1 }, k1);
+        H.v('8. après un rev 2, rejouer la clé du rev 1 rend la réponse d\'origine `ecrit` rev 1 (rejeu de clé), SANS rien écrire : l\'étiquette reste rev 2',
+            [p1.json.etat, p2.json.etat, rej.statut, rej.entetes['idempotency-replayed'], rej.json, await snapAnalyses() === avant4, (await etiq(S4)).rev, (await etiq(S4)).idProduct], ['ecrit', 'ecrit', 200, 'true', { success: true, etat: 'ecrit', rev: 1 }, true, 2, 4343]);
+        const sansCle = await post(ADM, { scanId: S4, verdict: 'juste', rev: 1 });
+        H.v('8.    le même corps SANS clé rend la vérité : 409 rev-perimee', [sansCle.statut, sansCle.json.erreur.detail], [409, 'rev-perimee']);
+
+        // C-5 : un non-administrateur qui envoie une Idempotency-Key reçoit le 404 natif, et RIEN n'est enregistré dans `idempotence` (la garde passe avant l'idempotence)
+        const nIdem = () => db.col('idempotence').countDocuments({});
+        const avantIdem = await nIdem();
+        const SU = await semer(USR);
+        const rb1 = await post(USR, { scanId: SU, verdict: 'juste', rev: 1 }, { 'idempotency-key': 'etiquette-intrus-0001' });
+        const rb2 = await post(USR, { scanId: SU, verdict: 'juste', rev: 1 }, { 'idempotency-key': 'mauvaise cle' });
+        const rb3 = await post(SEUL, { scanId: SU, verdict: 'juste', rev: 1 }, { 'idempotency-key': 'etiquette-intrus-0002' });
+        H.v('8. non-administrateur avec une clé valide, une clé malformée, installation seule avec une clé ⇒ 404 natif (jamais 400), aucune ligne `idempotence` créée', [rb1.statut, rb2.statut, rb3.statut, await nIdem() === avantIdem, (await lire(SU)).cartes[0].etiquetteAdmin], [404, 404, 404, true, undefined]);
     }
 
     // ═══ 9. durées : l'étiquette vit avec l'analyse ═══
