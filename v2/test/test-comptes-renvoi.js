@@ -4,6 +4,7 @@ const H = require('./_harnais'); const A = require('./_b2-aide'); const db = req
 const { lireConfig } = require('../config'); const J = require('../comptes/jetons'); const { creerCourrierMemoire } = require('../comptes/courrier');
 (async () => {
     await H.ouvrirBac('test-comptes-renvoi.js'); await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : le plafond de 30 demandes par IP et par heure est une fenêtre FIXE ; l'horloge des limiteurs est fixée au milieu de l'heure
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
     const courrier = creerCourrierMemoire(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', { verifier: async () => true });
     const srv = await A.demarrer(cfg); let n = 0;

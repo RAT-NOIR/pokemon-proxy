@@ -85,6 +85,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
 }
 
 (async () => {
+    // B2b point 6 : (O1) « au plus 3 courriers par adresse et par heure » est un compteur de SERVICE (consommer, `new Date()`) : une frontière d'heure entre les 8 demandes ferait partir 3 courriers dans chaque
+    // heure (6 reçus, assertion fausse) ; c'est le seul candidat connu au 85/2 vu une fois en B1 (non reproduit, aucune sortie gardée). La garde attend la frontière si elle est à moins de 4 minutes (le banc dure ~35 s).
+    // (les limiteurs de ce banc passent par l'horloge commune, fixée au milieu de l'heure : fenêtres d'IP et de porteur.)
+    H.fixerHorlogeMilieu(); await H.eviterFrontieres({ heure: true });
     await H.ouvrirBancV2();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
@@ -585,8 +589,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // le courrier n'est pas une arme : une même adresse ne reçoit pas plus de `renvoiParCompteHeure` liens de réinitialisation par heure, d'où que viennent les demandes
         courrier.envoyes.length = 0;
         const victime = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: victime, emailCle: victime, motDePasse: hash }), { verifie: true }));
-        const reps = [];
-        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
+        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
         const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
         await svc.attendre();
         const recus = courrier.envoyes.filter(e => e.email === victime).length;
@@ -754,7 +757,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
-            V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 30 jours au plus
+            V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 21 jours au plus (BANC-12 : « 30 » a été ramené à 21)
             V2_INSCRIPTION_IP_HEURE: [c => c.limites.inscriptionIpHeure, 10, '0', 'leve'], V2_OUBLI_IP_HEURE: [c => c.limites.oubliIpHeure, 10, '0', 'leve'], V2_REINIT_IP_HEURE: [c => c.limites.reinitIpHeure, 10, '0', 'leve'],
             V2_VERIFICATION_IP_HEURE: [c => c.limites.verificationIpHeure, 30, '0', 'leve'], V2_CONNEXION_IP_HEURE: [c => c.limites.connexionIpHeure, 30, '0', 'leve'],
             V2_SUPPRESSION_COMPTE_HEURE: [c => c.limites.suppressionParCompteHeure, 10, '0', 'leve'], V2_RENVOI_COMPTE_HEURE: [c => c.limites.renvoiParCompteHeure, 3, '0', 'leve'],

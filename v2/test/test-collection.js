@@ -34,6 +34,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
     await connecterMongo({ script: 'test-collection.js', ecrit: true });
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : « 3 écritures par heure » est une fenêtre FIXE ; l'horloge des limiteurs est fixée au milieu de l'heure
     const pret = require('../pret'); const v2 = require('../index'); const { assembler, LOTS } = v2; const transport = require('../transport/monter');
     const svcReel = require('../collection/service'); const routesReel = require('../collection/routes');
 

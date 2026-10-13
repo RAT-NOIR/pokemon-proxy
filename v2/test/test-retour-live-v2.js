@@ -40,6 +40,8 @@ async function semer() {
 
 (async () => {
     await H.ouvrirBancV2();
+    // B2b point 6 : le plafond « sans-prix » (jour UTC) est semé puis lu par la route avec `new Date()` (D4) : minuit entre les deux ne l'atteindrait pas.
+    await H.eviterFrontieres({ jour: true });
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-retour-live-v2.js', ecrit: true });
@@ -140,7 +142,7 @@ async function semer() {
         H.v('    aucun effet : ligne du journal non complétée, aucun mouvement de plus, essais 2', [l.prixLive ?? null, (await mouv(s.i._id)).length - m0, await essais(s.i._id)], [null, 0, 2]);
     }
 
-    // ── D. la lecture ratée définitive rembourse (sans-prix) UNE fois par scan, sous le compteur des questions
+    // ── D. la lecture ratée définitive rembourse (sans-prix) UNE fois par scan, sous son compteur PROPRE « sans-prix » (5 par jour et par porteur ; le compteur des questions n'en voit plus rien)
     {
         const s = await scanRepondu();
         H.v('D0. avant : scan répondu « a » = débité (essais 2)', await essais(s.i._id), 2);

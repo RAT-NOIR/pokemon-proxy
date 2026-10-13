@@ -81,7 +81,7 @@
     "route": "POST /api/identifier",
     "statut": 200,
     "schema": "ReponseAnalyse",
-    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé, hors plafond de pannes."
+    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé dans le compteur des jumeaux, qui retombe sur le plafond de pannes quand il est plein."
   },
   "introuvable-panne-lecture.json": {
     "route": "POST /api/identifier",

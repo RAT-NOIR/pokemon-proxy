@@ -32,12 +32,25 @@ async function reserver(cle, { delaiMs, maintenant = new Date() }) {
     }
     return { permis: false, reessayerDans: 1 };   // ne peut pas conclure : refuse (une garde qui ne sait pas bloque)
 }
-function limiteur({ nom, max, fenetreMs, cle }) {
+// B2b point 6 — l'HORLOGE du limiteur est facultative. Par défaut (production, rien n'est posé) : `new Date()`, comportement inchangé. Un banc la fixe au milieu d'une fenêtre pour qu'une
+// frontière d'heure ne tombe pas au milieu d'une série (la fenêtre est alignée sur l'époque). Deux voies : l'option `horloge` d'un limiteur, ou l'horloge COMMUNE `fixerHorloge`, lue à chaque
+// requête par tous les limiteurs sans option (ceux que les routes construisent). `fixerHorloge` est réservée aux bancs isolés (BANC_ISOLE=1, posé par le harnais) : elle lève ailleurs.
+let horlogeCommune = null;
+function fixerHorloge(fn) {
+    if (typeof fn !== 'function') throw new Error('fixerHorloge : une fonction est exigée');
+    if (process.env.BANC_ISOLE !== '1') throw new Error('fixerHorloge : réservée aux bancs isolés (BANC_ISOLE=1)');
+    const avant = horlogeCommune; horlogeCommune = fn;
+    return () => { horlogeCommune = avant; };
+}
+function limiteur({ nom, max, fenetreMs, cle, horloge }) {
     return async function limiteurV2(req, res, next) {
         try {
             const k = cle(req);
             if (!k) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');   // on ne laisse pas passer ce qu'on ne sait pas identifier
-            const r = await consommer(`${nom}:${k}`, { max, fenetreMs });
+            const lire = typeof horloge === 'function' ? horloge : horlogeCommune;
+            const maintenant = lire ? lire() : new Date();
+            if (!(maintenant instanceof Date) || Number.isNaN(maintenant.getTime())) throw new Error('horloge invalide');   // ne sait pas dater : refus fermé
+            const r = await consommer(`${nom}:${k}`, { max, fenetreMs, maintenant });
             if (!r.permis) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.reessayerDans });
             next();
         } catch (e) {
@@ -46,4 +59,4 @@ function limiteur({ nom, max, fenetreMs, cle }) {
         }
     };
 }
-module.exports = { consommer, reserver, limiteur, empreinteIp };
+module.exports = { consommer, reserver, limiteur, empreinteIp, fixerHorloge };

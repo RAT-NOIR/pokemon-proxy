@@ -42,9 +42,13 @@ let echecs = 0;
 // (test-lanceur.js), _env-banc.js est dans le dossier parent.
 const { purgerEnv } = require(fs.existsSync(path.join(__dirname, '_env-banc.js')) ? './_env-banc' : path.join(__dirname, '..', '_env-banc'));
 const envEnfants = { ...process.env }; purgerEnv(envEnfants);
+// MOYENS-B2b point 7 : chaque suite est lancée avec l'ESPION des fichiers (_espion-fs-armer.js, node -r) : tout accès hors du dépôt, du dossier temporaire, de .banc-local\cache-mongod et des exceptions
+// nommées de _apports-exceptions.js fait échouer la suite en nommant le chemin. Dans une COPIE du lanceur (test-lanceur.js), l'espion n'est pas à côté : aucune précharge (avertissement).
+const ESPION = path.join(__dirname, '_espion-fs-armer.js'), espionPresent = fs.existsSync(ESPION);
+if (!espionPresent) console.log('⚠️ _espion-fs-armer.js absent de ce dossier (copie du lanceur) : les suites sont lancées SANS l\'espion des fichiers');
 for (const f of fichiers) {
     console.log(`\n=== ${f} ===`);
-    const r = spawnSync(process.execPath, [path.join(dossier, f)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: envEnfants });
+    const r = spawnSync(process.execPath, [...(espionPresent ? ['-r', ESPION] : []), path.join(dossier, f)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: envEnfants });
     process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
     // Une garde s'écrit par ce qu'elle AUTORISE : vert = code 0 ET exactement UN bilan (format de H.bilan()), qui est la dernière ligne
     // non vide de la sortie, avec N > 0 réussites et 0 échec. Un banc dont une promesse reste en suspens sort en 0 sans bilan : ROUGE.

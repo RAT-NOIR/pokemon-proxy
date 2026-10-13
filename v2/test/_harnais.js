@@ -4,6 +4,9 @@ require('dotenv').config();
 // .env vient de charger l'URI de PRODUCTION dans process.env : elle en est retirée AVANT tout autre require (voir _env-banc.js), BANC_ISOLE=1 posé.
 // Seule l'URI d'un banc (ouvrirBancV2) y reviendra ; un code qui ouvre Mongo hors ouvrirBancV2 ne trouve aucune adresse.
 require('./_env-banc').purgerEnv();
+// MOYENS-B2b point 7 : l'ESPION des fichiers (_espion-fs.js) est armé ICI aussi (lancer-tout l'arme déjà par -r avant tout require) : tout accès à un fichier hors du dépôt, du dossier temporaire,
+// de .banc-local\cache-mongod et des exceptions nommées de _apports-exceptions.js est refusé, nomme le chemin et fait échouer la suite. Idempotent.
+require('./_espion-fs').armer();
 const http = require('http');
 const mongoose = require('mongoose');
 mongoose.set('strictQuery', false);
@@ -111,4 +114,30 @@ async function appel(url, chemin, { methode = 'GET', corps, entetes = {} } = {})
     let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
     return { statut: r.status, entetes: Object.fromEntries(r.headers), json, texte };
 }
-module.exports = { v, vrai, bilan, ouvrirBancV2, arreterBanc, ouvrirBac, fermerBac, lancerNode, serveur, appel };
+// B2b point 6 — fixe l'horloge de TOUS les limiteurs de ce processus au MILIEU de l'heure UTC courante (même heure, ±30 min de l'horloge réelle : un compteur né de cette horloge expire
+// dans le futur, le moniteur TTL ne le retire pas). Les fenêtres des limiteurs sont alignées sur l'époque : avec une horloge réelle, une frontière d'heure (ou de jour) tombant entre deux
+// requêtes d'une série remet le compteur à zéro et fait échouer l'assertion « la N+1e est refusée ». Rend la fonction qui rétablit l'horloge réelle.
+function fixerHorlogeMilieu() {
+    const HEURE = 3600e3, t = Math.floor(Date.now() / HEURE) * HEURE + HEURE / 2;
+    return require('../transport/limites').fixerHorloge(() => new Date(t));
+}
+// B2b point 6 — pour les fenêtres que l'horloge des limiteurs NE COUVRE PAS (le jour, la semaine ISO et le mois des plafonds d'argent, lus par `new Date()` dans la route ; un compteur de service
+// qui passe par `consommer` ; un serveur ENFANT) : si la prochaine frontière demandée est à moins de `margeMs`, on l'attend (au plus margeMs + 2 s) AVANT de jouer. Frontières UTC : l'heure, le jour (minuit),
+// la semaine (lundi 00:00, comme `semaineISO`), le mois. Lit `Date.now()` (une horloge décalée de banc est vue). Rend la durée attendue (ms), 0 si rien.
+function prochaineFrontiere(maintenant, { heure, jour, semaine, mois }) {
+    const d = new Date(maintenant), c = [];
+    if (heure) c.push(Math.floor(maintenant / 3600e3) * 3600e3 + 3600e3);
+    const minuit = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    if (jour) c.push(minuit + 86400e3);
+    if (semaine) c.push(minuit + (8 - (d.getUTCDay() || 7)) * 86400e3);    // lundi 00:00 UTC suivant (un lundi à 10 h : le lundi d'après)
+    if (mois) c.push(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    return c.length ? Math.min(...c) : Infinity;
+}
+async function eviterFrontieres(quoi = {}, margeMs = 240e3) {
+    const reste = prochaineFrontiere(Date.now(), quoi) - Date.now();
+    if (!(reste < margeMs)) return 0;
+    console.log(`   frontière de fenêtre (${Object.keys(quoi).filter(k => quoi[k]).join(', ')}) dans ${Math.round(reste / 1000)} s : attente avant de jouer`);
+    await new Promise(r => setTimeout(r, reste + 2000));
+    return reste + 2000;
+}
+module.exports = { v, vrai, bilan, ouvrirBancV2, arreterBanc, ouvrirBac, fermerBac, lancerNode, serveur, appel, fixerHorlogeMilieu, eviterFrontieres, prochaineFrontiere };

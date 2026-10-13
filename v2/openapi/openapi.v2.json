@@ -367,7 +367,7 @@
             }
           },
           "429": {
-            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure pour ce porteur (plafond `V2_REPONSE_HEURE`, posé sans mesure d'usage réel).",
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure par défaut pour ce porteur (plafond `V2_REPONSE_HEURE`, réglable, posé sans mesure d'usage réel).",
             "content": {
               "application/json": {
                 "schema": {
@@ -508,7 +508,7 @@
             }
           },
           "429": {
-            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure pour ce porteur (plafond `V2_RETOUR_LIVE_HEURE`, posé sans mesure d'usage réel).",
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure par défaut pour ce porteur (plafond `V2_RETOUR_LIVE_HEURE`, réglable, posé sans mesure d'usage réel).",
             "content": {
               "application/json": {
                 "schema": {
@@ -563,7 +563,7 @@
             }
           },
           "429": {
-            "description": "DEBIT : plus de 1 200 requêtes par heure pour ce porteur (plafond `V2_SOLDE_HEURE`, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "description": "DEBIT : plus de 1 200 requêtes par heure par défaut pour ce porteur (plafond `V2_SOLDE_HEURE`, réglable, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
             "content": {
               "application/json": {
                 "schema": {
@@ -660,7 +660,7 @@
             }
           },
           "429": {
-            "description": "DEBIT : plus de 600 requêtes par heure pour ce compte (plafond `V2_COMPTE_HEURE`, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "description": "DEBIT : plus de 600 requêtes par heure par défaut pour ce compte (plafond `V2_COMPTE_HEURE`, réglable, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
             "content": {
               "application/json": {
                 "schema": {

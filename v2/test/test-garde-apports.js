@@ -8,22 +8,9 @@
 const fs = require('fs'); const path = require('path');
 const H = require('./_harnais');
 
-// comparés SANS casse (Windows ouvre « logo fr » comme « Logo FR »), après uniformisation des séparateurs en « / »
-const INTERDITS = ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'verrou/photos', 'Desktop/LOGO', 'GABARIT-pokecardex'];
-// Chemins du Bureau qu'un fichier a le droit de nommer (début du chemin, séparateurs « / »). AUCUN n'est un dossier rempli à la main par le testeur.
-const EXCEPTIONS = {
-    'test-abus-routes.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (dépôt voisin) ; le banc se passe du dossier absent', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'journal de lots du plan, lecture seule (RM_PROGRESS)' },
-    'test-collection-forme.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel (RM_SITE)' },
-    'test-contrat-extension.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (RM_EXTENSION_FAUSSES)' },
-    'test-identifier-adaptateur.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension' },
-    'test-identifier-regle-g.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
-    'test-identifier-regle-g-route.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
-    // outils de mesure hors lancer-tout : le chemin exact d'une sauvegarde de lot et du cache mongod, jamais le dossier entier du Bureau
-    'mesurer-collection.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)' },
-    'mesurer-memoire.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)', 'pokemon-proxy/.banc-local/cache-mongod': 'cache mongod (MONGOMS_DOWNLOAD_DIR)' },
-    'test-collections-partagees.js': { 'pokemon-proxy/mesures/taille-bases.jsonl': 'COMMENTAIRE seulement : source du relevé épinglé, jamais lu' },
-};
-const ELLE_MEME = path.basename(__filename);
+// La liste des dossiers d'apports (INTERDITS) et les exceptions nommées fichier par fichier (EXCEPTIONS) vivent dans _apports-exceptions.js : l'ESPION des lectures de fichiers (_espion-fs.js) lit la MÊME définition.
+const { INTERDITS, EXCEPTIONS } = require('./_apports-exceptions');
+const ELLE_MEME = path.basename(__filename), LISTE = '_apports-exceptions.js';   // la liste partagée NOMME les dossiers interdits (c'est sa fonction) : elle est la définition, pas un usage
 const sep = t => t.replace(/[\\/]+/g, '/');
 
 // La garde sur du texte : renvoie la liste des fautes. Jouée aussi sur des états fabriqués.
@@ -46,7 +33,7 @@ const lister = (d, racine = true) => fs.readdirSync(d, { withFileTypes: true }).
     : EXT.test(e.name) ? [path.join(d, e.name)] : []);
 // fixtures/ ne porte que des données figées (référence gelée, table synthétique) — mais ses .js (le générateur) sont lus
 const fixturesJs = fs.readdirSync(path.join(__dirname, 'fixtures')).filter(f => f.endsWith('.js')).map(f => path.join(__dirname, 'fixtures', f));
-const fichiers = [...lister(__dirname), ...fixturesJs].filter(f => path.basename(f) !== ELLE_MEME);
+const fichiers = [...lister(__dirname), ...fixturesJs].filter(f => path.basename(f) !== ELLE_MEME && path.basename(f) !== LISTE);
 H.v('la garde lit des fichiers de banc (dénominateur > 30)', fichiers.length > 30, true);
 H.v('elle lit aussi des .json de v2/test (hors fixtures/)', fichiers.filter(f => f.endsWith('.json')).length >= 2, true);
 const fautes = fichiers.flatMap(f => juger(path.basename(f), fs.readFileSync(f, 'utf8')));
