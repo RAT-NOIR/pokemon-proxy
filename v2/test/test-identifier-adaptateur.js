@@ -206,7 +206,7 @@ for (const [nom, r, code] of pannes) {
 }
 // (10) vecteurs de l'extension : mêmes ensembles de clés
 {
-    const dossier = 'C:/Users/Yung/Desktop/extension v2/src/fond/fausses';
+    const dossier = process.env.RM_EXTENSION_FAUSSES || 'C:/Users/Yung/Desktop/extension v2/src/fond/fausses';
     const lire = f => JSON.parse(fs.readFileSync(path.join(dossier, f), 'utf8'));
     let present = true; try { lire('identifiee.json'); } catch { present = false; }
     if (!present) { console.log(`❌ vecteurs de l'extension absents (${dossier}) : le banc ne peut pas conclure`); process.exitCode = 1; }
@@ -214,13 +214,19 @@ for (const [nom, r, code] of pannes) {
         const cles = o => Object.keys(o).sort();
         // écarts DOCUMENTÉS (CONTRAT-2 fait foi) : moyenne30 et impressions absents des fausses réponses de l'extension
         const ECART_PRODUIT = ['impressions'];
+        const ECART_ETAT = ['declare'];
         const compare = (nom, mien, leur, ecarts = []) => {
             const m = cles(mien).filter(k => !ecarts.includes(k)), l = cles(leur).filter(k => !ecarts.includes(k));
             v(`vecteur ${nom} : mêmes clés`, m, l);
         };
         const comparerCarte = (nom, mienne, fausse) => {
             compare(`${nom} carte`, mienne, fausse);
-            for (const k of ['etat', 'prixLive']) if (fausse[k] && mienne[k]) { compare(`${nom} ${k}`, mienne[k], fausse[k]); }
+            for (const k of ['etat', 'prixLive']) if (fausse[k] && mienne[k]) { compare(`${nom} ${k}`, mienne[k], fausse[k], k === 'etat' ? ECART_ETAT : []); }
+            // écart DOCUMENTÉ, épinglé DANS LES DEUX SENS (CONTRAT-API-V2 §7.3 bis, E12 ; DEMANDE-SERVEUR-EXTENSION §B7) : le serveur sert `etat.declare`, le vecteur ne l'a plus
+            if (fausse.etat && mienne.etat) {
+                v(`vecteur ${nom} : le serveur sert toujours etat.declare`, Object.keys(mienne.etat).includes('declare'), true);
+                v(`vecteur ${nom} : le vecteur de l'extension n'a plus etat.declare (sinon l'écart E12 n'existe plus)`, Object.keys(fausse.etat).includes('declare'), false);
+            }
             if (fausse.carte && mienne.carte) {
                 compare(`${nom} Produit`, mienne.carte, fausse.carte, ECART_PRODUIT);
                 compare(`${nom} Produit.set`, mienne.carte.set, fausse.carte.set);
