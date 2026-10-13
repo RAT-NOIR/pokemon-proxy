@@ -80,7 +80,12 @@ function lireConfig(env = process.env) {
                    // MOYENS-B1 (O4) : un plafond horaire PAR PORTEUR (compte ou installation) sur quatre routes qui n'en avaient pas. Valeurs posées SANS mesure d'usage réelle ;
                    // coût si elles sont fausses : des 429 à un client très actif, et une valeur à relever (variable d'environnement).
                    compteParPorteurHeure: entier('V2_COMPTE_HEURE', env.V2_COMPTE_HEURE, 600, 1), soldeParPorteurHeure: entier('V2_SOLDE_HEURE', env.V2_SOLDE_HEURE, 1200, 1),
-                   reponseParPorteurHeure: entier('V2_REPONSE_HEURE', env.V2_REPONSE_HEURE, 600, 1), retourLiveParPorteurHeure: entier('V2_RETOUR_LIVE_HEURE', env.V2_RETOUR_LIVE_HEURE, 600, 1) },
+                   reponseParPorteurHeure: entier('V2_REPONSE_HEURE', env.V2_REPONSE_HEURE, 600, 1), retourLiveParPorteurHeure: entier('V2_RETOUR_LIVE_HEURE', env.V2_RETOUR_LIVE_HEURE, 600, 1),
+                   // ETIQUETAGE-A : POST /api/banc/etiquette, un administrateur qui étiquette ses propres scans (~400 par session). Borné [1, 100 000] ; défaut posé SANS mesure d'usage réelle.
+                   etiquetteParPorteurHeure: entier('V2_ETIQUETTE_HEURE', env.V2_ETIQUETTE_HEURE, 600, 1, 100000) },
+        // ETIQUETAGE-A : de quel code et de quel modèle vient la réponse que `analyses` garde (base « Gemini seul » de la mesure). Une valeur illisible ou absente est `null`, jamais inventée.
+        versions: { chaine: /^[0-9a-f]{7,40}$/i.test(String(env.RENDER_GIT_COMMIT || '')) ? String(env.RENDER_GIT_COMMIT).slice(0, 12).toLowerCase() : null,
+                    modele: /^[A-Za-z0-9._-]{1,40}$/.test(String(env.V2_VERSION_MODELE || '')) ? String(env.V2_VERSION_MODELE) : null },
         // « Ma collection » (COLLECTION-COMPACTE) : bornes écrites par ce qu'elles protègent. Pas de variable d'environnement : une borne qu'on desserre se décide.
         //   · clesParCompte = le CATALOGUE COMPLET avec une MARGE : 100 000 pour le plus grand compte MESURÉ le 2026-10-11 (68 792 fiches par la règle du site sur la sauvegarde du 10/10 — 64 858 fiches liées de
         //     l'archive plus 3 934 fiches sans produit ; le contrat annonçait 39 648, un dénominateur qui ne contenait pas ces fiches), soit +45 % : le catalogue grandit (141 fiches simples au lot 6, un set récent compte

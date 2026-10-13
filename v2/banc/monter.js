@@ -8,6 +8,9 @@ const { repondreErreur } = require('../erreurs');
 const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const { creerBanc, traiterCorrection } = require('./routes');
 const { creerPurge, FORME_JETON } = require('./purge');
+const { traiterEtiquette, exigerAdministrateur } = require('./etiquette');
+const L = require('../transport/limites');
+const { idempotente } = require('../transport/idempotence');
 
 // ── DELETE /api/banc/contributions { jeton } (Bearer) : toutes les lignes du jeton et leurs objets, tout de suite. Un jeton inconnu : 200, supprimees 0 (on ne révèle rien).
 function traiterEffacement(purge) {
@@ -64,6 +67,9 @@ module.exports = {
         try { registre.obtenir('banc'); } catch { registre.fournir('banc', banc); }
         const purge = deps.purge || creerPurge({ cfg });
         router.post('/api/banc/correction', resoudrePorteur(cfg), exigerInstallation, traiterCorrection(cfg, banc));
+        // ETIQUETAGE-A : la garde de rôle (404 sinon) AVANT le limiteur — un non-administrateur ne voit jamais un 429 qui révélerait la route. Même mécanisme de limiteur que /api/identifier/reponse.
+        const parPorteur = L.limiteur({ nom: 'banc-etiquette', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+        router.post('/api/banc/etiquette', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteur, idempotente('banc-etiquette', { obligatoire: false }, cfg), traiterEtiquette(cfg, deps));
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge);
     },
