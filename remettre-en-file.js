@@ -108,6 +108,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-13 (décision 4 du testeur) : la PRÉSÉANCE DE RÉSOLUTION entre deux images justes d'un même (carte, set, numéro) — collecteur-images-tcgdex.js l'appelle à la
     // jointure : un worker qui ne la porte pas rajouterait l'entrée TCGdex à côté de celle de pokemontcg.io (les 5 de Celebrations, remises à chaque rejeu)
     'collecte-cartes/preseance-images.js',
+    // ➕ 2026-10-13 (lot X30C) : le REFUS D'IMAGES porté par une ligne de table (`imagesRefusees`) — l'alimentateur, le collecteur TCGdex et le collecteur Bulbapedia le lisent :
+    // un worker qui ne le porte pas collecterait l'image du parent sous 30th-Celebration-Additionals (Mewtwo 063 tamponné, Eevee 116 holo de coffret : une autre impression, §19)
+    'collecte-cartes/images-refusees.js',
     // ➕ 2026-10-12 (V8, tour 2) : les règles de la JOINTURE artofpkm que `collecteur-images.js` charge — sélection des entrées d'une ligne à `sousSection` et prédicat
     // « même sous-section » (echantillon-mesure.js), garde de sous-section (sous-section-image.js), clés partagées (images-cle-partagee.js), voie des fiches simples
     // (image-fiche-simple.js), clé de numéro et témoin du nom (jointure.js), client de la source (artofpkm.js), schéma et verrou (schemas.js, verrou-source.js) et
