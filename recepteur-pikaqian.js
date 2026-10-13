@@ -143,7 +143,8 @@ function jugerPage(brut, { table = TABLE_PIKAQIAN, attendu = c => attenduParTabl
     const verdict = P.verdictDePage({ tuiles, code, titre, table });
     // le refus de la page EST la mesure : ce que la page portait (codes lus, dossiers des images, titre, annonce du nombre de cartes), sans HTML ni tuile complète
     if (!verdict.ok) return { statut: 422, corps: { ok: false, code, url: o.url, motif: verdict.motif, tuilesLues: verdict.tuiles, tuilesAuCode: verdict.bonnes, ancres, diagnostic: P.diagnostiquerPage({ html: o.html, tuiles }), sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html) } };   // GARDE:verdict
-    if (ancres > tuiles.length) return { statut: 422, corps: { ok: false, code, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles`, tuilesLues: tuiles.length, ancres } };   // GARDE:ancres
+    // le refus des ancres EST une mesure (lot PQ-PROMO2) : il rend le même diagnostic que le refus du verdict, plus la description des ancres qui ne sont pas des tuiles — AUCUNE garde changée
+    if (ancres > tuiles.length) return { statut: 422, corps: { ok: false, code, url: o.url, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles`, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, ancres, diagnostic: P.diagnostiquerPage({ html: o.html, tuiles }), sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html) } };   // GARDE:ancres
     const voulu = attendu(code);
     if (voulu && tuiles.length < voulu) return { statut: 422, corps: { ok: false, code, motif: `page incomplète : ${tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure`, tuilesLues: tuiles.length, ancres, attendu: voulu } };   // GARDE:incomplete
     const origines = [...P.lireOrigines(o.html)];

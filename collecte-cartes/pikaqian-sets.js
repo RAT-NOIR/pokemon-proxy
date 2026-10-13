@@ -58,4 +58,17 @@ function declarationsDeCode(codePk, table = TABLE_PIKAQIAN) {
     if (e) return refus(e);
     return { ...base, declare: true, codes: [...new Set([codePk, ...l.codesTuiles])], dossiers: [...new Set([codePk, ...l.dossiersImages])], titre: l.titrePk, tuiles: l.tuiles };
 }
-module.exports = { TABLE_PIKAQIAN, lignePikaqian, uniteDeLaLigne, declarationsDeCode, CODE_PK };
+
+// ── LA PAGE PROMO (lot PQ-PROMO2, 2026-10-13) — LA règle du préfixe « promo- », définie ICI et nulle part ailleurs (§21 bis) ─────────────────────────────
+// 🔑 DÉCISION DU TESTEUR (2026-10-13), mesurée sur promo-s-p (242 tuiles s-p, images dans promo-s-p/) et promo-sv-p (701 tuiles sv-p, images dans promo-sv-p/) : sur une page promo, le code des
+// tuiles est le code de l'adresse SANS « promo- », et le dossier des images porte le code COMPLET de l'adresse. `codeDesTuilesPromo` rend ce code, ou null pour toute adresse qui n'est pas
+// `promo-<x>` avec <x> conforme à CODE_PK. verdictDePage, imageAcceptee et planifierPikaqian (collecte-cartes/pikaqian.js) la lisent ; aucun autre fichier ne touche à ce préfixe
+// (test-pikaqian-promo2.js le vérifie sur le source de chaque fichier PikaQian).
+const PREFIXE_PROMO = 'promo-';
+/** @param {string} codePk le code de l'ADRESSE de la page (`/sets/<codePk>`) @returns {string|null} le code que portent les tuiles d'une page promo, sinon null */
+function codeDesTuilesPromo(codePk) {
+    if (typeof codePk !== 'string' || !CODE_PK.test(codePk) || !codePk.startsWith(PREFIXE_PROMO)) return null;
+    const x = codePk.slice(PREFIXE_PROMO.length);
+    return CODE_PK.test(x) ? x : null;
+}
+module.exports = { TABLE_PIKAQIAN, lignePikaqian, uniteDeLaLigne, declarationsDeCode, CODE_PK, codeDesTuilesPromo };

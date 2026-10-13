@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const C = 'collecte-cartes/pikaqian.js', COL = 'collecteur-images-pikaqian.js', RET = 'retirer-visuels-pikaqian.js', ENF = 'enfiler-pikaqian.js', SEUIL = 'collecte-cartes/seuils-images.js', LANG = 'collecte-cartes/langue-visuel.js';
-const BC = 'test-pikaqian.js', BCOL = 'test-collecteur-pikaqian.js', BENF = 'test-enfiler-pikaqian.js', BSEUIL = 'test-seuils-images.js', REE = 'collecte-cartes/reessai-pikaqian.js', BREE = 'test-reessai-pikaqian.js';
+const BC = 'test-pikaqian.js', BCOL = 'test-collecteur-pikaqian.js', BENF = 'test-enfiler-pikaqian.js', BSEUIL = 'test-seuils-images.js', BP2 = 'test-pikaqian-promo2.js', REE = 'collecte-cartes/reessai-pikaqian.js', BREE = 'test-reessai-pikaqian.js';
 const M = (nom, fichier, de, vers, banc) => ({ nom, fichier, de, vers, banc });
 const MUTANTS = [
     // ── le client ──
@@ -58,6 +58,13 @@ const MUTANTS = [
     M('plan : un doublon (carte, numéro) donne deux visuels', C, 'if (vus.has(cle)) continue;', '', BC),
     M('page : la majorité stricte devient une simple moitié', C, 'if (bonnes * 2 <= n) return', 'if (bonnes * 2 < n) return', BC),
     M('page : une page sans tuile — redondance documentée : la ligne suivante (0 × 2 <= 0) la refuse aussi', C, 'if (!n) return { ok: false', 'if (false) return { ok: false', null),
+    // ── la page promo et le diagnostic des ancres (PQ-PROMO2) ──
+    M('promo : le préfixe « promo- » seul rend un code vide', 'collecte-cartes/pikaqian-sets.js', 'return CODE_PK.test(x) ? x : null;', 'return x;', BP2),
+    M('promo : le plan ne compte pas le code <x> comme code du set', C, '...(codePromo === null ? [] : [codePromo])', '...[]', BP2),
+    M('ancres : le nombre d\'exemples n\'est plus borné', C, 'if (r.exemples.length < EXEMPLES_ANCRES_MAX) {', 'if (true) {', BP2),
+    M('ancres : les textes d\'exemple ne sont plus tronqués', C, '.slice(0, TEXTE_ANCRE_MAX).trim()', '.trim()', BP2),
+    M('ancres : les caractères de contrôle et les chevrons restent dans les exemples', C, ".replace(CONTROLE_OU_BALISE, ' ')", '', BP2),
+    M('ancres : la sonde ne lit plus le découpage de la production (toute ancre est comptée)', C, 'if (a.tuile) continue;', '', BP2),
     M('retrait : le lot n\'est pas jugé (toute entrée pikaqian part)', C, 'e.source === SOURCE && e.lot === LOT)', 'e.source === SOURCE)', BC),
     M('retrait : la vignette n\'est pas listée', C, '[e.cleR2, e.vignette?.cleR2].filter(Boolean)', '[e.cleR2].filter(Boolean)', BC),
     // ── le seuil ──
@@ -126,7 +133,7 @@ process.on('exit', restaurer);
 
 function banc(b) { const r = spawnSync(process.execPath, [b], { cwd: __dirname, encoding: 'utf8' }); return { code: r.status, rouges: (r.stdout.match(/^(❌|\s*ECHEC )/gm) || []).length, sortie: r.stdout }; }
 let tues = 0, vivants = [], sansAttache = [], redondants = [];
-for (const b of [BC, BCOL, BENF, BSEUIL, BREE]) { const r = banc(b); if (r.code !== 0) { console.error(`❌ le banc ${b} n'est pas vert avant les mutants (code ${r.code})`); process.exit(2); } }
+for (const b of [BC, BCOL, BENF, BSEUIL, BREE, BP2]) { const r = banc(b); if (r.code !== 0) { console.error(`❌ le banc ${b} n'est pas vert avant les mutants (code ${r.code})`); process.exit(2); } }
 console.log(`bancs verts avant mutation ; ${MUTANTS.length} mutants\n`);
 for (const m of MUTANTS) {
     const t = lire(m.fichier);

@@ -89,8 +89,10 @@ function envoyer(port, chemin, corps) {
         verifier('le même refus une seconde fois (même seconde) : un fichier de plus, le premier JAMAIS écrasé', [refuseesM().length - nRef, fs.readFileSync(path.join(dossierRefusees, nomAvant), 'utf8') === contenuAvant], [2, true]);
         const nApres = refusees().length;
         await envoyer(srv.port, '/apprendre', { url: 'https://exemple.test/sets/promo-m-p', html: html422 });
+        verifier('un refus d\'ADRESSE n\'écrit pas de diagnostic', refusees().length, nApres);
+        // PQ-PROMO2 (décision du testeur : « un diagnostic au refus ancres > tuiles ») : la page PARTIELLE écrit désormais son fichier de diagnostic, comme le refus du verdict (test-pikaqian-promo2.js le détaille)
         await envoyer(srv.port, '/apprendre', { url: url('promo-sv-p'), html: page('Titre du banc', ...trois(), `<a href="/cards/${UUID(9)}">en cours</a>`) });
-        verifier('un refus qui n\'est pas celui du verdict (adresse, page partielle) n\'écrit pas de diagnostic', refusees().length, nApres);
+        verifier('un refus de page PARTIELLE (ancres > tuiles) écrit un diagnostic (lot PQ-PROMO2) ; un refus d\'adresse, non', refusees().length - nApres, 1);
 
         // ── les IMAGES : le dossier déclaré passe, un dossier non déclaré est refusé par image
         const png = (await sharp({ create: { width: 2, height: 2, channels: 3, background: '#ffffff' } }).png().toBuffer()).toString('base64');
