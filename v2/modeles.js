@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { col } = require('./db');
+const FILTRES = require('./banc/filtres');
 
 // nom de collection, clé, options. `nom` est EXPLICITE : verifierIndex() compare des noms, pas des formes.
 const I = (c, nom, cle, opts = {}) => ({ c, nom, cle, opts: { name: nom, ...opts } });
@@ -14,6 +15,8 @@ const INDEX = Object.freeze([
     I('sessions', 'sessions_token', { tokenEmpreinte: 1 }, { unique: true }), TTL('sessions'),
     I('liens_email', 'liens_empreinte', { empreinte: 1 }, { unique: true }), TTL('liens_email'),
     I('mouvements', 'mouvements_cle', { cleIdempotence: 1 }, { unique: true, partialFilterExpression: { cleIdempotence: { $type: 'string' } } }),
+    // MOYENS-B2a tour 2 : la trace +1 d'un débit est UNIQUE, quelle que soit sa clé (`rl|…`, `rp|…`, `rb|…#id`, claim) — deux chemins qui rendent le même débit ne peuvent pas écrire deux crédits tracés
+    I('mouvements', 'mouvements_debit_trace', { debitId: 1 }, { unique: true, partialFilterExpression: { debitId: { $type: 'objectId' } } }),
     I('mouvements', 'mouvements_compte', { compteId: 1, le: -1 }), I('mouvements', 'mouvements_installation', { installationId: 1, le: -1 }), TTL('mouvements'),
     I('hebdo', 'hebdo_cle', { compteId: 1, semaine: 1 }, { unique: true }), TTL('hebdo'),
     I('plafonds', 'plafonds_cle', { porteur: 1, jour: 1, type: 1 }, { unique: true }), TTL('plafonds'),
@@ -21,12 +24,19 @@ const INDEX = Object.freeze([
     // O5 : la marque de livraison d'un scan (v2/argent/marque-scan.js). (etat, ouverteLe) sert la passe de rattrapage et la réconciliation ; le TTL ne porte que sur les marques CLOSES (une marque non close n'a pas d'expireLe).
     I('scans_en_cours', 'scans_etat', { etat: 1, ouverteLe: 1 }), TTL('scans_en_cours'),
     I('analyses', 'analyses_porteur', { porteur: 1, creeLe: -1 }), TTL('analyses'),
+    // ETIQUETAGE-B : deux index PARTIELS (une entrée seulement pour les analyses d'un administrateur concernées : quelques centaines au plus, quelques dizaines de Ko) — la reprise des lignes en attente
+    // (`bancAttente: true`, triée par dernier essai) et le filet des orphelins du banc (`photoBanc.cle`) ne parcourent plus toute la collection `analyses`.
+    // (les filtres sont écrits UNE fois, v2/banc/filtres.js : le filtre d'un index partiel doit être impliqué par celui de la requête qu'il sert)
+    I('analyses', 'analyses_banc_attente', { bancAttente: 1, bancEssaiLe: 1 }, { partialFilterExpression: FILTRES.attente }),
+    I('analyses', 'analyses_photo_banc', { 'photoBanc.cle': 1 }, { partialFilterExpression: FILTRES.photo }),
     TTL('annonces'),
     I('idempotence', 'idempotence_cle', { cle: 1 }, { unique: true }), TTL('idempotence'),
     I('limites', 'limites_cle', { cle: 1 }, { unique: true }), TTL('limites'),
     // B6.4 : PAS de TTL sur banc_lignes. La purge (v2/banc/purge.js) est le SEUL effaceur : Mongo supprimerait la ligne avant que la purge ait effacé son objet R2
     // (objets d'abord, lignes ensuite) et l'objet resterait orphelin, hors rétention. Un index simple sur expireLe sert la requête de la purge.
     I('banc_lignes', 'banc_jeton', { jetonEmpreinte: 1 }), I('banc_lignes', 'banc_lignes_expire', { expireLe: 1 }),
+    // ETIQUETAGE-B : un objet de photo est PARTAGÉ par les lignes d'un lot ; « une autre ligne le porte-t-elle ? » (suppression, anonymisation) compte par cleR2 — un index simple, une entrée par ligne (~100 octets).
+    I('banc_lignes', 'banc_lignes_cle', { cleR2: 1 }),
     I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),

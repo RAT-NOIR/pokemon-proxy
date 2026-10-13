@@ -482,6 +482,8 @@ function traiterIdentifier(cfg, deps = {}) {
         if (req.marqueFermeeParLaReponse === true) { req.fermerMarque = fermer; etat.differe = true; } else await fermer();
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
+        // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
+        if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
     };
     return async function traiterIdentifierV2(req, res) {

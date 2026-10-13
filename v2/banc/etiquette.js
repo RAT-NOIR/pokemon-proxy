@@ -56,6 +56,15 @@ function lireCorps(b) {
 
 const memeContenu = (e, c) => Boolean(e) && e.verdict === c.verdict && (e.idProduct ?? null) === (c.idProduct ?? null) && (e.aucune ?? null) === (c.aucune ?? null);
 
+/** ETIQUETAGE-B : la ligne du banc réel pour cette carte. L'étiquette est DÉJÀ écrite : quoi qu'il arrive ici (banc absent, panne, exception), elle reste, et la réponse dit `en-attente` (reprise plus tard). */
+async function etatDuBanc(deps, scanId, carte) {
+    try {
+        const b = deps && deps.banc;
+        if (!b || typeof b.etiquetteAdmin !== 'function') return 'en-attente';
+        return (await b.etiquetteAdmin({ scanId, carte })) === 'ecrit' ? 'ecrit' : 'en-attente';
+    } catch (x) { journal('banc', x); return 'en-attente'; }
+}
+
 function traiterEtiquette(cfg, deps = {}) {
     let catalogueParDefaut = null;
     const catalogueDe = () => deps.catalogue || (catalogueParDefaut = catalogueParDefaut || require('../identifier/catalogue').creerCatalogue({ cfg }));
@@ -85,7 +94,7 @@ function traiterEtiquette(cfg, deps = {}) {
             if (dernier) {
                 if (e.rev < dernier.rev) return repondreErreur(res, 'CONFLIT', 'Une étiquette plus récente existe', { detail: 'rev-perimee' });
                 if (e.rev === dernier.rev) {
-                    return memeContenu(dernier, contenu) ? res.status(200).json({ success: true, etat: 'rejoue', rev: e.rev }) : repondreErreur(res, 'CONFLIT', 'Ce rev porte déjà un autre contenu', { detail: 'rev-contredit' });
+                    return memeContenu(dernier, contenu) ? res.status(200).json({ success: true, etat: 'rejoue', rev: e.rev, banc: dernier.banc === 'ecrit' ? 'ecrit' : await etatDuBanc(deps, e.scanId, e.carte) }) : repondreErreur(res, 'CONFLIT', 'Ce rev porte déjà un autre contenu', { detail: 'rev-contredit' });
                 }
             }
             // idProduct validé au catalogue AVANT d'écrire (un rejeu n'en a pas besoin)
@@ -100,9 +109,11 @@ function traiterEtiquette(cfg, deps = {}) {
             // écriture CONDITIONNELLE sur le rev lu : si une autre requête est passée entre-temps, rien n'est écrit et on relit
             const filtre = { _id: scanId, porteur: `${porteur.type}:${porteur.id}`, ...(dernier ? { [`${chemin}.rev`]: dernier.rev } : { [chemin]: { $exists: false } }) };
             let r;
-            try { r = await db.col('analyses').updateOne(filtre, { $set: { [chemin]: doc } }); }
+            // ETIQUETAGE-B (I2) : la marque de reprise `bancAttente` est posée DANS LA MÊME écriture que l'étiquette — si MongoDB tombe ensuite pendant l'écriture de la ligne du banc, la reprise connaît
+            // quand même cette étiquette ; la marque ne tombe que lorsque la ligne est à jour (v2/banc/etiquette-ligne.js).
+            try { r = await db.col('analyses').updateOne(filtre, { $set: { [chemin]: doc, bancAttente: true } }); }
             catch (x) { journal('écriture', x); return repondreErreur(res, 'INDISPONIBLE'); }
-            if (r && r.matchedCount === 1) return res.status(200).json({ success: true, etat: 'ecrit', rev: e.rev });
+            if (r && r.matchedCount === 1) return res.status(200).json({ success: true, etat: 'ecrit', rev: e.rev, banc: await etatDuBanc(deps, e.scanId, e.carte) });
         }
         console.error(`🔴 [v2 banc-etiquette] ${ESSAIS_MAX} écritures conditionnelles perdues d'affilée pour un même scan : rien d'écrit`);
         return repondreErreur(res, 'CONFLIT', 'Écriture concurrente, réessayer', { detail: 'concurrence' });

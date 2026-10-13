@@ -29,9 +29,14 @@ function traiterEffacement(purge) {
 // le worker peut la lancer à la main : node v2/banc/purge.js --base=test_scratch).
 const INTERVALLE_PURGE_MS = 24 * 3600 * 1000;
 let minuteurPurge = null;
-async function purgerUneFois({ etatMongo = () => mongoose.connection.readyState, purge } = {}) {
+async function purgerUneFois({ etatMongo = () => mongoose.connection.readyState, purge, banc } = {}) {
     if (etatMongo() !== 1) return false;
     let ok = true;
+    // ETIQUETAGE-B : d'abord la REPRISE des lignes d'étiquettes restées en attente (bucket injoignable au moment d'étiqueter), avant que la purge ne regarde les objets
+    if (banc && typeof banc.reprendreEtiquettes === 'function') {
+        try { await banc.reprendreEtiquettes(); }
+        catch (e) { console.error(`❌ [v2 banc-reprise] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); ok = false; }
+    }
     try { await purge.purgerBanc(new Date()); }
     catch (e) { console.error(`❌ [v2 banc-purge] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); ok = false; }   // jamais e.message
     // BANC-12 : la purge PUIS la coupure des liens échus (12 mois), chacune sans que l'autre l'arrête : une panne de R2 ne doit pas laisser vivre un lien.
@@ -51,10 +56,10 @@ function arreterPurge() {
     if (differePurge) { m.clearTimeout(differePurge); differePurge = null; }
     minuteursEnCours = null;
 }
-function demarrerPurge(purge, intervalleMs = INTERVALLE_PURGE_MS, etatMongo, { differeMs = DIFFERE_PURGE_MS, minuteurs = global } = {}) {
+function demarrerPurge(purge, intervalleMs = INTERVALLE_PURGE_MS, etatMongo, { differeMs = DIFFERE_PURGE_MS, minuteurs = global, banc } = {}) {
     arreterPurge();                                                  // un seul différé et un seul intervalle par processus, même si le montage est refait
     minuteursEnCours = minuteurs;
-    const passe = () => purgerUneFois({ purge, ...(etatMongo ? { etatMongo } : {}) });
+    const passe = () => purgerUneFois({ purge, ...(banc ? { banc } : {}), ...(etatMongo ? { etatMongo } : {}) });
     differePurge = minuteurs.setTimeout(passe, differeMs); differePurge.unref();
     minuteurPurge = minuteurs.setInterval(passe, intervalleMs); minuteurPurge.unref();
     return minuteurPurge;
@@ -69,9 +74,9 @@ module.exports = {
         router.post('/api/banc/correction', resoudrePorteur(cfg), exigerInstallation, traiterCorrection(cfg, banc));
         // ETIQUETAGE-A : la garde de rôle (404 sinon) AVANT le limiteur — un non-administrateur ne voit jamais un 429 qui révélerait la route. Même mécanisme de limiteur que /api/identifier/reponse.
         const parPorteur = L.limiteur({ nom: 'banc-etiquette', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
-        router.post('/api/banc/etiquette', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteur, idempotente('banc-etiquette', { obligatoire: false }, cfg), traiterEtiquette(cfg, deps));
+        router.post('/api/banc/etiquette', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteur, idempotente('banc-etiquette', { obligatoire: false }, cfg), traiterEtiquette(cfg, { ...deps, banc }));
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
-        demarrerPurge(purge);
+        demarrerPurge(purge, undefined, undefined, { banc });
     },
     purgerUneFois, demarrerPurge, arreterPurge, minuteurPurge: () => minuteurPurge, differePurge: () => differePurge, INTERVALLE_PURGE_MS, DIFFERE_PURGE_MS
 };

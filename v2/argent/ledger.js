@@ -1,7 +1,7 @@
 'use strict';
 // LE CHEMIN DE L'ARGENT v2. Tout compteur est un findOneAndUpdate CONDITIONNEL atomique (jamais lire-puis-écrire) ;
 // un remboursement ne rend jamais plus que ce qui a été pris ; un cas non classé => QUOTA / non remboursé, et la cause s'écrit.
-const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches');
+const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches'); const { ObjectId } = require('mongoose').Types;
 const col = nom => db.col(nom);   // indirection VOLONTAIRE : les bancs y glissent une panne simulée (db.col remplacé)
 const expireMouvement =(now, cfg) => new Date(now.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
@@ -105,7 +105,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
         }
         return { ok: false, code: P.codeRefus(porteur) };
     }
-    mv.poche = credit.poche; mv.credit = credit;
+    mv._id = new ObjectId(); mv.poche = credit.poche; mv.credit = credit;       // l'identité du débit est posée AVANT l'écriture : la compensation et l'écriture tardive la partagent
     try { await col('mouvements').insertOne(mv); }
     catch (e) {
         if (e.code !== 11000 || !cleEff) {
@@ -122,7 +122,9 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
             else if (!ecrit) {
                 // M3 : un `rendu:false` (hebdo-semaine-changee, accueil-au-plafond, poche-introuvable) n'est pas une exception — il se journalise aussi
                 try {
-                    const r = await rendrePoche(porteur, credit, cfg, maintenant);
+                    // MOYENS-B2a tour 2 (I-2, N-7) : la compensation porte l'IDENTITÉ du débit (`mv._id`, posée avant l'écriture) sur la poche, dans la même écriture que le crédit. Si l'écriture d'origine arrive TARD (limite M2), le débit
+                    // tardif a le même `_id` : tout chemin qui voudrait le rendre reçoit « poche-deja-compensee » (le crédit de CE débit existe), jamais un second crédit. Plus de trace séparée, plus d'horodatage à comparer.
+                    const r = await rendrePoche(porteur, credit, cfg, maintenant, mv._id);
                     if (!r.rendu) console.error(`🔴 [v2 debiter] poche ${credit.poche} NON rendue après l'échec du mouvement (${r.raison}) — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`);
                 } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${codeErr(e2)} — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`); }
             }
@@ -136,23 +138,46 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };   // `cle` : la clé de la ligne EFFECTIVEMENT débitée (dérivée si ré-essai, N1)
 }
 // rendrePoche : ne rend JAMAIS plus que ce qui a été pris (chaque filtre porte son plafond)
-async function rendrePoche(porteur, credit, cfg, now) {
+// MOYENS-B2a tour 2 — UN CRÉDIT SE RECONNAÎT PAR SON DÉBIT. Quand `debitId` est donné, l'identité du débit est posée sur le document de la poche (`creditsRendus`, les CREDITS_MAX derniers) dans la MÊME écriture
+// atomique que le $inc, et le filtre exige qu'elle n'y soit pas : deux chemins qui rendent le même débit (`rendreLeScan`, `rembourserLigne`, la réparation, la compensation de `debiter`) ne peuvent pas écrire deux
+// crédits TANT QUE l'identité est dans le marqueur. LIMITE EXACTE (relecture 3) : le marqueur ne garde que les CREDITS_MAX (200) DERNIÈRES identités par DOCUMENT de poche (`comptes` en porte un pour accueil, acheté ET abonnement ;
+// `installations` un pour essai et acheté) ; au-delà, l'identité la plus ancienne sort et l'absence de marqueur ne prouve plus l'absence de crédit. Le second chemin reçoit `poche-deja-compensee` (le crédit de CE débit existe
+// déjà) ; la réparation, elle, REFUSE un débit pris dont l'identité n'est pas dans un marqueur plein (`marqueur-sature`). La preuve d'un crédit est la lecture de ce marqueur (`creditPresent`).
+const CREDITS_MAX = 200;
+const marqueur = debitId => (debitId ? { filtre: { creditsRendus: { $ne: debitId } }, push: { $push: { creditsRendus: { $each: [debitId], $slice: -CREDITS_MAX } } } } : { filtre: {}, push: {} });
+// le document qui porte le compteur d'une poche (et donc le marqueur) : [collection, filtre]
+function proprietaireDe(porteur, credit) {
+    const compteId = porteur.type === 'compte' ? porteur.id : null;
+    if (credit.poche === 'essai') return ['installations', { _id: porteur.id }];
+    if (credit.poche === 'achete') return porteur.type === 'compte' ? ['comptes', { _id: compteId }] : ['installations', { _id: porteur.id }];
+    if (credit.poche === 'accueil' || credit.poche === 'abonnement') return ['comptes', { _id: compteId }];
+    if (credit.poche === 'hebdo') return ['hebdo', { compteId, semaine: credit.semaineIso }];
+    return null;
+}
+async function creditPresent(porteur, credit, debitId) {
+    const p = proprietaireDe(porteur, credit); if (!p || !debitId) return false;
+    return Boolean(await col(p[0]).findOne({ ...p[1], creditsRendus: debitId }, { projection: { _id: 1 } }));
+}
+async function rendrePoche(porteur, credit, cfg, now, debitId = null) {
     const un = r => (r.modifiedCount ?? 0) > 0;
     if (!credit) return { rendu: false, raison: 'aucun-debit' };
     const compteId = porteur.type === 'compte' ? porteur.id : null;
+    const mq = marqueur(debitId);
     let rendu = false, raison = 'poche-introuvable';
-    if (credit.poche === 'essai') rendu = un(await col('installations').updateOne({ _id: porteur.id, essais: { $lt: Math.max(cfg.quotas.essai, cfg.quotas.accueil) } }, { $inc: { essais: 1 } }));
+    if (credit.poche === 'essai') rendu = un(await col('installations').updateOne({ _id: porteur.id, essais: { $lt: Math.max(cfg.quotas.essai, cfg.quotas.accueil) }, ...mq.filtre }, { $inc: { essais: 1 }, ...mq.push }));
     else if (credit.poche === 'achete') rendu = porteur.type === 'compte'
-        ? un(await col('comptes').updateOne({ _id: compteId }, { $inc: { 'solde.achete': 1 } }))
-        : un(await col('installations').updateOne({ _id: porteur.id }, { $inc: { achete: 1 } }));
-    else if (credit.poche === 'accueil') { rendu = un(await col('comptes').updateOne({ _id: compteId, 'solde.accueil': { $lt: cfg.quotas.accueil } }, { $inc: { 'solde.accueil': 1 } })); if (!rendu) raison = 'accueil-au-plafond'; }
+        ? un(await col('comptes').updateOne({ _id: compteId, ...mq.filtre }, { $inc: { 'solde.achete': 1 }, ...mq.push }))
+        : un(await col('installations').updateOne({ _id: porteur.id, ...mq.filtre }, { $inc: { achete: 1 }, ...mq.push }));
+    else if (credit.poche === 'accueil') { rendu = un(await col('comptes').updateOne({ _id: compteId, 'solde.accueil': { $lt: cfg.quotas.accueil }, ...mq.filtre }, { $inc: { 'solde.accueil': 1 }, ...mq.push })); if (!rendu) raison = 'accueil-au-plafond'; }
     else if (credit.poche === 'hebdo') {
         if (semaineISO(now) !== credit.semaineIso) raison = 'hebdo-semaine-changee';   // rembourser dans une autre semaine offrirait un scan de plus
-        else rendu = un(await col('hebdo').updateOne({ compteId, semaine: credit.semaineIso, count: { $gt: 0 } }, { $inc: { count: -1 } }));
+        else rendu = un(await col('hebdo').updateOne({ compteId, semaine: credit.semaineIso, count: { $gt: 0 }, ...mq.filtre }, { $inc: { count: -1 }, ...mq.push }));
     } else if (credit.poche === 'abonnement') {
         if (P.moisCle(now) !== credit.moisCle) raison = 'abonnement-mois-change';
-        else rendu = un(await col('comptes').updateOne({ _id: compteId, 'abonnement.moisCle': credit.moisCle, $expr: { $lt: ['$abonnement.restant', '$abonnement.quotaMensuel'] } }, { $inc: { 'abonnement.restant': 1 } }));
+        else rendu = un(await col('comptes').updateOne({ _id: compteId, 'abonnement.moisCle': credit.moisCle, $expr: { $lt: ['$abonnement.restant', '$abonnement.quotaMensuel'] }, ...mq.filtre }, { $inc: { 'abonnement.restant': 1 }, ...mq.push }));
     }
+    // un refus peut venir du marqueur : le crédit de CE débit existe déjà (compensation, autre chemin, exécution interrompue) — il se dit, il ne se confond pas avec un plafond
+    if (!rendu && debitId && await creditPresent(porteur, credit, debitId)) return { rendu: false, raison: 'poche-deja-compensee' };
     return { rendu, raison: rendu ? null : raison };
 }
 async function incPlafond(porteurCle, jour, type, now, pas = 1) {   // même schéma que incrementerHebdo ; expire 2 jours après la fin du jour compté
@@ -161,7 +186,7 @@ async function incPlafond(porteurCle, jour, type, now, pas = 1) {   // même sch
     try { return await col('plafonds').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
     catch (e) { if (e.code !== 11000) throw e; return col('plafonds').findOneAndUpdate(filtre, { $inc: { count: pas } }, { returnDocument: 'after' }); }
 }
-// rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique, rendu, trace) → si rien rendu, libérer claim ET compteur.
+// rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique « rendu-en-cours », crédit, trace +1, PUIS « rembourse») → si rien rendu, libérer claim ET compteur.
 async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, unites = 1, maintenant = new Date() } = {}, cfg) {
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     // `unites` : combien d'unités du compteur ce remboursement consomme (JUMEAU-V2 : UNE par carte refusée par la garde). Un entier >= 1, sinon refus : un compteur qui ne monterait pas serait gratuit sans limite.
@@ -181,7 +206,9 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         const debits = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1 }).toArray();
         if (!debits.some(d => d.credit)) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
         pendantes = debits.filter(ouvertes);
-        if (!pendantes.length) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
+        // MOYENS-B2a tour 1 (I-1) : une unité « rendu-en-cours » n'est PAS rendue (le crédit a pu ne jamais l'être) : « deja-rembourse » serait faux pour le client. Elle se répare par l'outil de l'opérateur (audit §15).
+        if (!pendantes.length) return { rendu: false, raisonNonRembourse: debits.some(d => d.credit && d.etat === 'rendu-en-cours') ? 'remboursement-en-cours' : 'deja-rembourse' };
+        // (tour 2 : une unité dont la poche a déjà été COMPENSÉE par `debiter` puis dont le débit est arrivé TARD est reconnue par son identité sur la poche, à l'étape du crédit : `poche-deja-compensee`, jamais un second crédit)
         // une NOUVELLE tentative (même clé d'idempotence rejouée après un premier remboursement, I2) est un autre débit du même scan : sa claim porte l'id de sa 1re unité
         pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (pendantes[0].cleOrigine) cle = `rb|${scanId}|${pendantes[0]._id}`;
@@ -228,20 +255,31 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
             }
         }
         for (const d of pendantes) {
-            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rembourse', expireLe: expireMouvement(maintenant, cfg) } }, { returnDocument: 'before' });   // une ligne « rendu-echoue » reprise retrouve son expiration
+            // MOYENS-B2a — L'ORDRE : la prise écrit « rendu-en-cours » (jamais « rembourse » avant que le crédit soit rendu ET tracé, comme `rembourserLigne`). Un arrêt n'importe où entre cette prise et le dernier état
+            // laisse une ligne « rendu-en-cours » : LISTÉE aussitôt par la réconciliation (`lignesNonRendues`), ni reprise seule ni rendue deux fois (elle est dans ETATS_CLOS). Avant : « rembourse » d'abord, et un arrêt
+            // avant le crédit laissait un débit lu comme « rendu » sans crédit, que rien ne listait avant 60 min. Une ligne « rendu-echoue » reprise retrouve son expiration au dernier état.
+            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours', priseLe: maintenant }, $unset: { expireLe: '' } }, { returnDocument: 'before' });   // une ligne non résolue n'expire pas ; `priseLe` (tour 2, N-1) dit depuis quand la prise est tenue : la réparation attend
             if (!pris) continue;                                                  // un autre chemin vient de la rendre
-            const restituer = () => col('mouvements').updateOne({ _id: d._id }, pris.expireLe ? { $set: { etat: pris.etat, expireLe: pris.expireLe } } : { $set: { etat: pris.etat }, $unset: { expireLe: '' } });
+            const restituer = () => col('mouvements').updateOne({ _id: d._id, etat: 'rendu-en-cours' }, { $set: { etat: pris.etat, ...(pris.expireLe ? { expireLe: pris.expireLe } : {}) }, $unset: { priseLe: '', ...(pris.expireLe ? {} : { expireLe: '' }) } });
             let r;
-            try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { await restituer(); throw e; }
+            try { r = await rendreUnite(porteur, d.credit, cfg, maintenant, d._id); } catch (e) { await restituer(); throw e; }
             if (!r.rendu) { await restituer(); premiereRaison = premiereRaison || r.raison; continue; }
+            // le crédit EST rendu : plus aucune restitution d'état ni libération de la claim n'est permise pour cette unité (un `liberer` rendrait la claim libre alors que le client est crédité)
+            rendus.push(d._id);
             // la trace : la ligne-claim `rb|scanId` devient celle de la 1re unité rendue, les suivantes ont la leur (`rb|scanId#k`) — somme(delta) reste égale au solde
             const cible = r.cible, ligne = { ...base(cible), poche: r.pocheRendue };
-            if (!rendus.length) {
-                const w = await col('mouvements').updateOne(claimFiltre, { $set: { delta: 1, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
-                if (w && w.modifiedCount === 0) console.error(`🔴 [v2 rembourser] ${cleJournal(cle)} : le crédit est rendu mais la claim n'a pas reçu sa trace (delta 1) — la réconciliation le dira (débit « rembourse » sans mouvement)`);
+            let tracee = true;
+            try {
+                if (rendus.length === 1) {
+                    const w = await col('mouvements').updateOne(claimFiltre, { $set: { delta: 1, debitId: d._id, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
+                    if (w && w.modifiedCount === 0) { tracee = false; console.error(`🔴 [v2 rembourser] ${cleJournal(cle)} : le crédit est rendu mais la claim n'a pas reçu sa trace (delta 1) — ligne « rendu-en-cours », listée par la réconciliation`); }
+                }
+                else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, debitId: d._id, etat: 'rembourse', cleIdempotence: `${cle}#${d._id}`, expireLe: expireMouvement(maintenant, cfg) });
+            } catch (e) { tracee = false; console.error(`🔴 [v2 rembourser] ${cleJournal(cle)} : le crédit est rendu mais sa trace n'est pas écrite (${codeErr(e)}) — ligne « rendu-en-cours », listée par la réconciliation`); }
+            if (tracee) {   // dernier état : si ces deux essais échouent, la ligne reste « rendu-en-cours » (crédit rendu ET tracé), listée, jamais rendue deux fois
+                let ecrit = false;
+                for (let essai = 0; essai < 2 && !ecrit; essai++) { try { await col('mouvements').updateOne({ _id: d._id }, { $set: { etat: 'rembourse', expireLe: expireMouvement(maintenant, cfg) } }); ecrit = true; } catch (e) { if (essai) console.error(`🔴 [v2 rembourser] ${cleJournal(cle)} : état « rembourse » non écrit (${codeErr(e)}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
             }
-            else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, etat: 'rembourse', cleIdempotence: `${cle}#${d._id}`, expireLe: expireMouvement(maintenant, cfg) });
-            rendus.push(d._id);
         }
         if (!rendus.length) { await liberer(); return { rendu: false, raisonNonRembourse: premiereRaison || 'poche-introuvable' }; }
         if (rendus.length < pendantes.length) { await libererClaim(); return { rendu: true, raisonNonRembourse: null, unites: rendus.length, partiel: true, raisonPartielle: premiereRaison }; }
@@ -254,7 +292,7 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     }
 }
 // M6 — le porteur effectif d'une unité : une installation LIÉE entre-temps n'a plus de poches propres, le crédit est rendu à celles du COMPTE (essai → accueil, plafonné ; acheté → acheté).
-async function rendreUnite(porteur, credit, cfg, now) {
+async function rendreUnite(porteur, credit, cfg, now, debitId = null) {
     let cible = porteur, c = credit;
     if (porteur.type === 'installation') {
         const i = await col('installations').findOne({ _id: porteur.id }, { projection: { compteId: 1 } });
@@ -264,7 +302,7 @@ async function rendreUnite(porteur, credit, cfg, now) {
             if (!['accueil', 'achete'].includes(c.poche)) return { rendu: false, raison: 'poche-introuvable', pocheRendue: c.poche, cible };
         }
     }
-    const r = await rendrePoche(cible, c, cfg, now);
+    const r = await rendrePoche(cible, c, cfg, now, debitId);
     return { rendu: r.rendu, raison: r.raison, pocheRendue: c.poche, cible };
 }
 // « rendu-en-cours » : un rendu commencé et non confirmé (processus tué, écriture d'état échouée) — ni ouverte ni close : jamais reprise seule (le crédit a pu être rendu), listée par la réconciliation.
@@ -285,14 +323,14 @@ async function rembourserLot(porteur, credits, motif, o = {}, cfg) {
 // peut être livré ou réservé pour une autre carte). Prise atomique de la ligne ; si le rendu échoue, la ligne passe en « rendu-echoue » (lisible, toujours remboursable) et l'échec est journalisé en erreur.
 async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } = {}, cfg) {
     if (!cle) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
-    let d;
+    let d, pris;
     try {
         d = await col('mouvements').findOne({ ...base(porteur), type: 'debit', cleIdempotence: cle });
         if (!d || !d.credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
         // La prise écrit « rendu-en-cours » (jamais « rembourse » avant que le crédit soit rendu) : si le processus ou une écriture ultérieure échoue, la ligne reste VISIBLE
-        // (réconciliation) et ne peut être ni reprise seule ni rendue deux fois (ni rembourserLigne ni rendreLeScan ne prennent un « rendu-en-cours »).
-        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' }, $unset: { expireLe: '' } }, { returnDocument: 'before' });   // tour 4 (2) : une ligne non résolue n'expire pas
-        if (!pris) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
+        // (réconciliation) et ne peut être ni reprise seule ni rendue deux fois (ni rembourserLigne ni rendreLeScan ne prennent un « rendu-en-cours »). `priseLe` (tour 2, N-1) dit depuis quand elle est tenue.
+        pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours', priseLe: maintenant }, $unset: { expireLe: '' } }, { returnDocument: 'before' });   // tour 4 (2) : une ligne non résolue n'expire pas
+        if (!pris) { const cur = await col('mouvements').findOne({ _id: d._id }, { projection: { etat: 1 } }); return { rendu: false, raisonNonRembourse: cur && cur.etat === 'rendu-en-cours' ? 'remboursement-en-cours' : 'deja-rembourse' }; }   // I-1 : « rendu-en-cours » n'est pas « rendu »
     } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cleJournal(cle)} : ${codeErr(e)}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     const ecrireEtat = async (etat, plus = {}) => {                              // un second essai, puis l'échec est dit : la ligne garde alors « rendu-en-cours »
         for (let essai = 0; essai < 2; essai++) { try { await col('mouvements').updateOne({ _id: d._id }, etat === 'rembourse' ? { $set: { etat, ...plus, expireLe: expireMouvement(maintenant, cfg) } } : { $set: { etat, ...plus }, $unset: { expireLe: '' } }); return true; } catch (e) { if (essai) console.error(`🔴 [v2 rembourser-ligne] ${cleJournal(cle)} : état « ${etat} » non écrit (${codeErr(e)}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
@@ -304,11 +342,23 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
         return { rendu: false, raisonNonRembourse: raison };
     };
     let r;
-    try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { return echec('erreur'); }
+    try { r = await rendreUnite(porteur, d.credit, cfg, maintenant, d._id); } catch (e) { return echec('erreur'); }
+    if (!r.rendu && r.raison === 'poche-deja-compensee') {
+        // le crédit de CE débit est déjà sur la poche (compensation de `debiter`, puis écriture tardive du débit) : rien n'est rendu, la ligne retrouve son état d'avant la prise
+        // conditionnel : si un autre chemin (la réparation) a déjà fini la ligne, on n'écrase pas son état
+        try { await col('mouvements').updateOne({ _id: d._id, etat: 'rendu-en-cours' }, { $set: { etat: pris.etat, ...(pris.expireLe ? { expireLe: pris.expireLe } : {}) }, $unset: { priseLe: '', ...(pris.expireLe ? {} : { expireLe: '' }) } }); } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cleJournal(cle)} : état d'avant la prise non restitué (${codeErr(e)}) — ligne « rendu-en-cours », listée`); }
+        return { rendu: false, raisonNonRembourse: 'poche-deja-compensee' };
+    }
     if (!r.rendu) return echec(r.raison || 'poche-introuvable');
-    try { await col('mouvements').insertOne({ ...base(r.cible), poche: r.pocheRendue, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId: d.scanId, etat: 'rembourse', cleIdempotence: `rl|${cle}`, expireLe: expireMouvement(maintenant, cfg) }); }
-    catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cleJournal(cle)} : crédit rendu mais trace non écrite (${codeErr(e)}) — la réconciliation le dira`); }
-    await ecrireEtat('rembourse');                                              // crédit rendu : si cette écriture échoue, la ligne reste « rendu-en-cours » (listée), jamais rendue une 2e fois
+    // MOYENS-B2a tour 1 (I-3) : même règle que `rendreLeScan` — la ligne ne passe « rembourse » que si la trace est écrite ; sinon elle reste « rendu-en-cours » (listée, réparable par l'outil de l'opérateur)
+    let tracee = true;
+    try { await col('mouvements').insertOne({ ...base(r.cible), poche: r.pocheRendue, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId: d.scanId, debitId: d._id, etat: 'rembourse', cleIdempotence: `rl|${cle}`, expireLe: expireMouvement(maintenant, cfg) }); }
+    catch (e) { if (e.code !== 11000) { tracee = false; console.error(`🔴 [v2 rembourser-ligne] ${cleJournal(cle)} : crédit rendu mais trace non écrite (${codeErr(e)}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
+    if (tracee) await ecrireEtat('rembourse');                                  // crédit rendu ET tracé : si cette écriture échoue, la ligne reste « rendu-en-cours » (listée), jamais rendue une 2e fois
     return { rendu: true, raisonNonRembourse: null };
 }
-module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME };
+// La réparation (geste d'opérateur) vit dans `reparation.js` : elle lit le crédit PAR SON DÉBIT (tour 2). Exportée ici pour que le grand livre reste le point d'entrée unique.
+const reparerDebitRembourseSansMouvement = (...a) => require('./reparation').reparer(...a);
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, reparerDebitRembourseSansMouvement, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME,
+    // intérieur du grand livre, partagé avec `reparation.js` (une seule définition de ce qu'est un crédit et de sa trace)
+    interne: { rendreUnite, creditPresent, proprietaireDe, CREDITS_MAX, expireMouvement, base, codeErr, cleJournal, col: nom => col(nom) } };
