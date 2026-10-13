@@ -29,6 +29,7 @@ const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/ptcgio');
 const J = require('./collecte-cartes/jumeau-en');
 const { cleNumero } = require('./collecte-cartes/jointure');
+const preseance = require('./collecte-cartes/preseance-images');   // ➕ 2026-10-13 : la préséance de résolution (une règle, lue par pokemontcg.io ET par le worker TCGdex)
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -223,7 +224,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, slug, LOT);
         const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, preseanceRemplacees = 0;
         const retirees = [];                                    // R5 : les entrées japonaises sorties de cartes.images, par la clé de compterEntrees
         try {
             for (const im of images) {
@@ -232,15 +233,25 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 // R5 : les jumeaux de CE numéro, par la définition de production (langue « ja » sous un set « intl ») — ils ne comptent pas comme « déjà servi »
                 const jumeauxIci = remplacerJumeau ? (c.images || []).filter(e => e && e.set === slug && e.source !== P.SOURCE && e.numero != null && cleNumero(e.numero) === cleNumero(im.numero) && J.scanJumeau(e, set.tirage ?? set.region)) : [];
                 const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero) && !jumeauxIci.includes(e));
-                if (T.dejaServi({ images: autres }, slug, im.numero)) {
+                const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
+                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                // ➕ 2026-10-13 (décision 4 du testeur) : LA PRÉSÉANCE DE RÉSOLUTION (collecte-cartes/preseance-images.js — la règle du worker TCGdex aussi). Contre une AUTRE source
+                // jugeable (TCGdex) au même numéro : la plus grande aire garde sa place, à égalité TCGdex. Notre entrée qui perd CÈDE (comme avant) ; qui gagne, elle retire la perdante.
+                const pres = preseance.contre(autres, entree);
+                const restantes = autres.filter(e => !pres.aRetirer.includes(e));
+                if (pres.perd || T.dejaServi({ images: restantes }, slug, im.numero)) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                     dejaParAutre++;
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                     continue;
                 }
-                const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
+                for (const l of pres.aRetirer) {
+                    await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: l.source, cleR2: l.cleR2 } } });
+                    await M.Image.updateOne({ source: l.source, set: slug, cleR2: l.cleR2, etat: 'ok' }, { $set: { etat: 'retire', retrait: { le: new Date(), motif: preseance.MOTIF, etatAvant: 'ok', remplacePar: { source: P.SOURCE, cleR2: im.cleR2 } } } });
+                    retirees.push(`${c._id}|${l.source}|${l.set}|${l.numero ?? ''}|${l.cleR2 ?? ''}`);
+                    preseanceRemplacees++;
+                }
                 // R5 — LE REMPLACEMENT : l'anglais prouvé PREND LA PLACE du jumeau japonais, au même numéro ; le document `images` japonais reste, marqué
                 for (const j of jumeauxIci) {
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: j.source, cleR2: j.cleR2 } } });
@@ -263,7 +274,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         const complet = {
             vignettes: W.vg,
             source: P.SOURCE, mention: P.MENTION, lot: LOT, lignes: P.lignesDe(slug).map(l => l.id), produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs,
-            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes,
+            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes, preseanceRemplacees,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attendues === apres.autres, siennesApres: apres.siennes, ok: garde,
                 ...(remplacerJumeau ? { nJaRetirees: retirees.length, nEnPosees: joints } : {}) },
             ...(remplacerJumeau ? { mode: 'remplacement-jumeau', jumeaux: Pl.jumeaux, ecartes: Pl.ecartes.length } : {}),
