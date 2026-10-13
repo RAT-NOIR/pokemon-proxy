@@ -88,7 +88,7 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
         if (!v.ok) {
             log(`   🔴 CALIBRATION INSUFFISANTE : ${v.refus.join(' · ')}`);
             if (ecrire) { err('❌ ARRÊT : la garde de calibration refuse — rien n\'est écrit'); return 1; }
-        } else log('   ✅ la calibration passe (0 faux sur A, B, D-nom, D-frères ; cas atteints >= minimums pour A, D-nom, D-frères)');
+        } else log('   ✅ la calibration passe (0 faux sur A, B\', D-nom, D-frères ; cas atteints >= minimums pour A, B\', D-nom, D-frères ; le 0 faux repose sur A et B\', D ne prouve que « le refus a servi »)');
 
         // ── le plan, set par set ──
         const metaDe = new Map([...exp].map(([id, e]) => [id, { idMetacard: e.idMetacard, idExpansion: e.idExpansion }]));
