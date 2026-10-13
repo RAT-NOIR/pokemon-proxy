@@ -795,7 +795,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_VERSION_MIN_EXTENSION: [c => c.versionMinExtension, '2.0.0', '%%', { ferme: c => require('../identifier/routes').comparerVersions('2.0.0', c.versionMinExtension) === null }],   // illisible : 400 pour tous
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
-            V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
+            V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
+            V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
         };
         H.v('step 6 : chaque variable lue par v2/config.js a une ligne de la table (et réciproquement)', [noms.filter(n => !T[n]), Object.keys(T).filter(n => !noms.includes(n))], [[], []]);
         const echecs = [];

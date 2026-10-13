@@ -128,6 +128,9 @@ function lireConfig(env = process.env) {
             ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'uk'].map(t => `vinted.${t}`)),
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
+        // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
+        // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
+        secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
         turnstile,
         cookieSecure
     });
