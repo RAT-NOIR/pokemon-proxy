@@ -6,35 +6,44 @@ const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 const CS = require(path.join(DIR, 'collecte-cartes', 'completer-set-partiel.js'));
 let ok = 0, ko = 0;
+// copie qui GARDE un ObjectId comme un ObjectId, et lui donne une NOUVELLE identité d'objet à chaque lecture (comme le pilote Mongo) ;
+// structuredClone en ferait un objet nu {} : un banc qui ne sait pas copier un _id ne vaut rien pour les restes (ceux de la base ont des ObjectId).
+const copie = v => {
+    if (v === null || typeof v !== 'object') return v;
+    if (typeof v.toHexString === 'function') return new v.constructor(v.toHexString());
+    if (v instanceof Date) return new Date(v);
+    if (Array.isArray(v)) return v.map(copie);
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copie(x)]));
+};
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
 function fakeDb(init, opts = {}) {
-    const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, structuredClone(d)]))]));
+    const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, copie(d)]))]));
     const egal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const correspond = (d, f) => Object.entries(f).every(([k, v]) => (k === '_id' && v && v.$in) ? v.$in.includes(d._id) : egal(d[k], v));
     const lire = (d, chemin) => chemin.split('.').reduce((x, k) => (x == null ? undefined : x[k]), d);
     const poser = (d, chemin, f) => { const ks = chemin.split('.'); let x = d; for (const k of ks.slice(0, -1)) x = x[k] = x[k] || {}; x[ks.at(-1)] = f(x[ks.at(-1)]); };
     const col = nom => { const m = cols.get(nom); return {
-        find: f => ({ toArray: async () => [...m.values()].filter(d => correspond(d, f || {})).map(d => structuredClone(d)) }),
+        find: f => ({ toArray: async () => [...m.values()].filter(d => correspond(d, f || {})).map(d => copie(d)) }),
         countDocuments: async f => [...m.values()].filter(d => correspond(d, f || {})).length,
         async updateOne(f, u, o = {}) {
             if (opts.ecrire) opts.ecrire(nom, f, u);
             let d = [...m.values()].find(x => correspond(x, f));
             if (!d) {
                 if (!o.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
-                d = { _id: f._id, ...structuredClone(u.$setOnInsert || {}) }; m.set(d._id, d);
+                d = { _id: f._id, ...copie(u.$setOnInsert || {}) }; m.set(d._id, d);
                 return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
             }
             if (opts.perdre && opts.perdre(nom, u)) return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
             let change = false;
             for (const [k, v] of Object.entries(u.$addToSet || {})) {
                 const vals = v && v.$each ? v.$each : [v];
-                poser(d, k, cur => { const a = Array.isArray(cur) ? [...cur] : []; for (const x of vals) if (!a.some(y => egal(y, x))) { a.push(structuredClone(x)); change = true; } return a; });
+                poser(d, k, cur => { const a = Array.isArray(cur) ? [...cur] : []; for (const x of vals) if (!a.some(y => egal(y, x))) { a.push(copie(x)); change = true; } return a; });
             }
             for (const [k, v] of Object.entries(u.$set || {})) { poser(d, k, () => v); change = true; }
             return { matchedCount: 1, modifiedCount: change ? 1 : 0, upsertedCount: 0 };
         } }; };
-    return { collection: col, brut: nom => [...cols.get(nom).values()].map(d => structuredClone(d)) };
+    return { collection: col, brut: nom => [...cols.get(nom).values()].map(d => copie(d)) };
 }
 
 const LIENS = [585160, 651994, 274070, 274133, 678696];
@@ -48,7 +57,7 @@ function monde({ sans: sansSet = false, liens = LIENS, carteAvecSet = false, lig
     const lignes = [{ _id: '60335|274070', carteId: 60335, idProduct: 274070, preuve: 'set+numero', slug: 'Rainbow-Energy-V1-TR17', slugSet: 'Team-Rocket', numeroFiche: '17' }, { _id: '9|9', carteId: 9, idProduct: 9, preuve: 'x' }, ...Array.from({ length: posees }, (_, i) => posee(i + 1))];
     if (ligneExiste) lignes.push(ligneExiste);
     return fakeDb({
-        sets: sansSet ? [] : [structuredClone(SET)],
+        sets: sansSet ? [] : [copie(SET)],
         cartes_produits: lignes,
         cartes: [{ _id: 60335, nomEn: 'Rainbow Energy', sets: ['Team-Rocket', ...(carteAvecSet ? ['Promos'] : [])], liens: liens === null ? undefined : { idProduct: [...liens], idMetacards: [...metas] } }, { _id: 9, nomEn: 'Autre', sets: [], liens: { idProduct: [9], idMetacards: [] } }],
         restes: [{ _id: 'r1', set: 'Promos', idProduct: 275578, type: 'partiel-sans-code-origine', detail: 'd1', le: 'avant' }, { _id: 'r2', set: 'Promos', idProduct: 111, type: 'partiel-sans-code-origine' }, { _id: 'r3', set: 'Autre', idProduct: 275578, type: 'produit-sans-carte' }]
@@ -57,7 +66,7 @@ function monde({ sans: sansSet = false, liens = LIENS, carteAvecSet = false, lig
 const etat = db => JSON.stringify(['sets', 'cartes_produits', 'cartes', 'restes'].map(n => db.brut(n)));
 async function lancer(db, o = {}) {
     const sorties = [], erreurs = [];
-    const code = await CS.completer({ db, slug: 'Promos', lignes: [structuredClone(LIGNE)], metaDe: META, attendu: o.attendu === undefined ? 1 : o.attendu, ecrire: !!o.ecrire, classement: o.classement || CLASSEMENT(), code: 'PR', le: new Date('2026-10-13T12:00:00Z'), log: s => sorties.push(s), err: s => erreurs.push(s) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
+    const code = await CS.completer({ db, slug: 'Promos', lignes: [copie(LIGNE)], metaDe: META, attendu: o.attendu === undefined ? 1 : o.attendu, ecrire: !!o.ecrire, classement: o.classement || CLASSEMENT(), code: 'PR', le: new Date('2026-10-13T12:00:00Z'), log: s => sorties.push(s), err: s => erreurs.push(s) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
     return { code, sorties: sorties.join('\n'), erreurs: erreurs.join('\n') };
 }
 const carte = (db, id) => db.brut('cartes').find(c => c._id === id), ligneDe = (db, id) => db.brut('cartes_produits').find(l => l._id === id);
@@ -133,9 +142,26 @@ const carte = (db, id) => db.brut('cartes').find(c => c._id === id), ligneDe = (
 
     // ── le geste n'ecrit QUE ce qu'il annonce : jamais $unset / $pull / delete ni $push ──
     const gestes = [];
-    db = fakeDb({ sets: [structuredClone(SET)], cartes_produits: monde().brut('cartes_produits'), cartes: monde().brut('cartes'), restes: monde().brut('restes') }, { ecrire: (nom, f, u) => gestes.push(`${nom}:${Object.keys(u).join('+')}`) });
+    db = fakeDb({ sets: [copie(SET)], cartes_produits: monde().brut('cartes_produits'), cartes: monde().brut('cartes'), restes: monde().brut('restes') }, { ecrire: (nom, f, u) => gestes.push(`${nom}:${Object.keys(u).join('+')}`) });
     await lancer(db, { ecrire: true });
     verifier('les seuls operateurs d\'ecriture utilises : $setOnInsert (ligne), $addToSet (carte), $set (compteur), $set (marque du reste)', gestes, ['cartes_produits:$setOnInsert', 'cartes:$addToSet', 'sets:$set', 'restes:$set']);
+
+    // ── les _id des restes sont des ObjectId (le type réel en base) : la relecture les compare par VALEUR, jamais par identité d'objet ──
+    {
+        const { ObjectId } = require('mongodb');
+        const oid = h => new ObjectId(h.padStart(24, '0'));
+        const base = monde();
+        const restesOid = [
+            { _id: oid('a1'), set: 'Promos', idProduct: 275578, type: 'partiel-sans-code-origine', detail: 'd1', le: 'avant' },
+            { _id: oid('a2'), set: 'Promos', idProduct: 111, type: 'partiel-sans-code-origine' },
+            { _id: oid('a3'), set: 'Autre', idProduct: 275578, type: 'produit-sans-carte' }];
+        const dbOid = fakeDb({ sets: base.brut('sets'), cartes_produits: base.brut('cartes_produits'), cartes: base.brut('cartes'), restes: restesOid });
+        r = await lancer(dbOid, { ecrire: true });
+        const ra = dbOid.brut('restes');
+        verifier('restes à _id ObjectId : écriture juste -> relecture juste (exit 0, aucun « disparu », « écrit et relu », seul le reste du produit est marqué)',
+            [r.code, /disparu|\[object Object\]/.test(r.erreurs + r.sorties), /écrit et relu/.test(r.sorties), ra.find(x => String(x._id) === String(oid('a1'))).resoluPar, ra.find(x => String(x._id) === String(oid('a2'))).resoluPar, ra.length],
+            [0, false, true, 'completer-set-partiel', undefined, 3]);
+    }
 
     console.log(`\n${ok} passes, ${ko} en echec`);
     process.exit(ko ? 1 : 0);
