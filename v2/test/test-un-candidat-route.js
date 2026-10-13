@@ -387,6 +387,94 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         }
         await svT.fermer();
     }
+    // ── 15. TOUR 3 : le jugement du lot est un état DÉRIVÉ que le balayage recalcule ; « déjà rendu » relit le grand livre ; un grand lot n'efface sa marque que rendu EN ENTIER
+    {
+        const { reconcilier } = require('../argent/reconcilier');
+        const cfgX = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REPRISES_PASSAGE: '2' });
+        const conf = id => ({ statutHttp: 200, corps: qst([id]) });
+        let liste = [];
+        const svT = await monter({ identifierLot: async () => liste }, cfgX);
+        const lance = async (ids, x0) => { liste = ids.map(conf); const x = x0 || await inst(20); const r = await poster(svT.url, x.jeton), j = r.json || {}; return { ...x, j, cartes: (j.analyse && j.analyse.cartes) || [] }; };
+        const repI = (L, index, choix) => repondre(svT.url, L.jeton, { scanId: L.j.scanId, carte: index, choix });
+        const porteurDe = x => ({ type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false });
+        const sid = L => new mongoose.Types.ObjectId(L.j.scanId);
+        const RENDU = { essais: 20, net: 0, mouvements: 2, ouverts: [], remboursements: 1 }, PAYE = { essais: 19, net: -1, mouvements: 1, ouverts: ['debite'], remboursements: 0 };
+        const plus = ms => new Date(Date.now() + ms);
+        const balayer = (maintenant = new Date()) => argentReg().balayerQuestions({ maintenant, max: 500 });
+        // « arrêt du processus » : la dernière question est `repondue / aucune` mais le jugement du lot n'a jamais eu lieu
+        const arret = async (L, index, quand = new Date()) => raw('questions_v2').updateOne({ _id: `${L.j.scanId}:${index}` }, { $set: { etat: 'repondue', reponse: { choix: 'aucune', idProduct: null, aucune: true, le: quand }, regleeLe: quand } });
+
+        // Important 1 : arrêt entre « repondue » et le jugement
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune'); await arret(L, L.cartes[1].index);
+            H.v('15a. arrêt entre « repondue » et le jugement : le lot est payé (net -1), aucune marque, aucun jugement', [await livre(L), await raw('questions_v2').countDocuments({ scanId: sid(L), $or: [{ lotARendre: { $exists: true } }, { lotIssue: { $exists: true } }] })], [PAYE, 0]);
+            const rc = await reconcilier(porteurDe(L), { cfg: cfgX, maintenant: plus(20 * 60e3) });
+            H.v('   reconcilier le LISTE (réglé mais non jugé) et n\'est pas propre', [(rc.lotsNonJuges || []).map(l => String(l.scanId)), rc.propre], [[String(sid(L))], false]);
+            const b1 = await balayer();
+            H.v('   le balayage suivant juge et rend le lot UNE fois (net 0) ; propre = true', [await livre(L), (await reconcilier(porteurDe(L), { cfg: cfgX, maintenant: plus(20 * 60e3) })).propre, b1.lotsJuges], [RENDU, true, 1]);
+            const b2 = await balayer();
+            H.v('   un second balayage ne rend rien de plus', [(await livre(L)).remboursements, b2.lotsJuges], [1, 0]);
+        }
+        // un lot jugé « non éligible » (OUI) n'est pas rejugé à chaque passage
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune'); await repI(L, L.cartes[1].index, 'a');
+            const b = await balayer();
+            H.v('15b. un lot avec un OUI est jugé une fois pour toutes (non éligible) : le balayage n\'y revient pas, il reste payé', [b.lotsJuges, await livre(L), await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.raison': 'non-eligible' })], [0, PAYE, 2]);
+        }
+        // la reprise est TRIÉE (le plus ancien d'abord) et BORNÉE par passage (V2_LOT_REPRISES_PASSAGE = 2 ici)
+        {
+            const lots = [];
+            for (const age of [30, 10, 20]) { const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune'); await arret(L, L.cartes[1].index, plus(-age * 60e3)); lots.push({ L, age }); }
+            await balayer();
+            const etat = await Promise.all(lots.map(async ({ L, age }) => [age, (await livre(L)).remboursements]));
+            H.v('15c. 3 lots non jugés, bornés à 2 par passage : les 2 PLUS ANCIENS (30 et 20 min) sont rendus, le plus récent attend', etat, [[30, 1], [10, 0], [20, 1]]);
+            await balayer();
+            H.v('   le passage suivant rend le dernier', (await livre(lots[1].L)).remboursements, 1);
+        }
+        // Important 2 : « déjà rendu » relit le grand livre — le remboursement RÉUSSIT, l'écriture de lotIssue ÉCHOUE
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            const colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'updateMany') return async (f, u, ...r) => { if (armee && u && u.$set && u.$set.lotIssue) throw new Error('panne simulée : écriture de lotIssue'); return t.updateMany(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let r2; try { r2 = await repI(L, L.cartes[1].index, 'aucune'); } finally { armee = false; db.col = colOrig; }
+            H.v('15d. remboursement réussi, écriture de lotIssue en échec : le grand livre est rendu (net 0)', await livre(L), RENDU);
+            const rj = await repI(L, L.cartes[1].index, 'aucune');
+            H.v('   le rejeu du NON répond rembourse: true (jamais plafond-jour), rien de plus rendu', [rj.json.facturation.rembourse, rj.json.facturation.raisonNonRembourse, rj.json.facturation.motif, (await livre(L)).remboursements], [true, null, 'lot', 1]);
+            await balayer();
+            const apres = await repI(L, L.cartes[1].index, 'aucune');
+            H.v('   le balayage relit le grand livre : lotIssue rendu, marque effacée, propre, toujours un seul remboursement', [await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgX, maintenant: plus(20 * 60e3) })).propre, apres.json.facturation.rembourse, (await livre(L)).remboursements], [2, true, true, 1]);
+        }
+        // Mineur : un lot de plus de 10 cartes (2 unités) n'efface sa marque que rendu EN ENTIER
+        {
+            const L = await lance(Array(11).fill(ID_A));
+            const debits = await raw('mouvements').find({ installationId: L.i._id, type: 'debit', scanId: sid(L) }).sort({ _id: 1 }).toArray();
+            H.v('15e. lot de 11 cartes : 2 unités débitées', [L.cartes.length, debits.length], [11, 2]);
+            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { etat: 'rendu-en-cours' } });       // une unité que le ledger ne rend pas
+            for (const c of L.cartes) await repI(L, c.index, 'aucune');
+            const avant = await Promise.all([raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 }), raw('questions_v2').countDocuments({ scanId: sid(L), lotARendre: { $exists: true } })]);
+            H.v('   une seule unité rendue sur deux : la marque « à rendre » RESTE (les 11 lignes), pas de lotIssue rendu', [avant, await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true })], [[1, 11], 0]);
+            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { etat: 'debite' } });
+            // un VRAI remboursement partiel libère la claim rb|scanId (ledger.js, libererClaim) ; on l'imite ici pour que la reprise puisse rendre l'unité restante
+            await raw('mouvements').updateOne({ cleIdempotence: `rb|${L.j.scanId}` }, { $set: { cleIdempotence: `rb|${L.j.scanId}|fait|x` } });
+            await balayer();
+            const fin = await Promise.all([raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 }), raw('questions_v2').countDocuments({ scanId: sid(L), lotARendre: { $exists: true } }), raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true })]);
+            H.v('   l\'unité débloquée, le balayage rend le reste : 2 unités rendues, marque effacée, lotIssue rendu', fin, [2, 0, 11]);
+        }
+        // Mineur : l'extension sait qu'un remboursement est EN ATTENTE
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            const colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async (...a) => { if (armee && a[0] && a[0].type === 'remboursement') { throw new Error('panne simulée'); } return t.insertOne(...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let r2; try { r2 = await repI(L, L.cartes[1].index, 'aucune'); } catch (e) { db.col = colOrig; throw e; }
+            H.v('15f. le ledger échoue : la réponse porte remboursementEnAttente: true (champ additif du contrat, valide au schéma)', [r2.statut, r2.json.remboursementEnAttente, r2.json.facturation.rembourse], [200, true, false]);
+            const rj = await repI(L, L.cartes[1].index, 'aucune'); armee = false; db.col = colOrig;
+            H.v('   le rejeu, tant que le ledger échoue, le redit', [rj.statut, rj.json.remboursementEnAttente, rj.json.facturation.rembourse], [200, true, false]);
+            await balayer();
+            const fin = await repI(L, L.cartes[1].index, 'aucune');
+            H.v('   le lot rendu, le champ disparaît et le rejeu dit rembourse: true', [fin.json.remboursementEnAttente, fin.json.facturation.rembourse, (await livre(L)).remboursements], [undefined, true, 1]);
+        }
+        await svT.fermer();
+    }
     H.v(`dénominateur : ${reponsesValidees} réponses de la route validées contre le contrat, ${ecartsContrat} écart(s)`, ecartsContrat, 0);
     H.vrai('   le banc a bien validé des réponses (un contrôle qui ne valide rien ne dit rien)', reponsesValidees >= 20);
     await sv.fermer();

@@ -3640,6 +3640,10 @@
           "facturation": {
             "$ref": "#/components/schemas/Facturation"
           },
+          "remboursementEnAttente": {
+            "const": true,
+            "description": "Additif, présent SEULEMENT quand le lot de cette carte doit être remboursé et ne l'est pas encore (le remboursement a échoué ou n'a pas pu être jugé : le serveur le reprend). Absent sinon. `facturation.rembourse` reste faux ; lire le solde plus tard."
+          },
           "solde": {
             "$ref": "#/components/schemas/Solde"
           }

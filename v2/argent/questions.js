@@ -84,19 +84,21 @@ async function regler(q, motif, cfg, maintenant) {
 }
 // UN-CANDIDAT, tour 1 — un LOT est rendu UNE fois si, une fois tout réglé, CHACUNE de ses cartes est un `introuvable` OU une question de CONFIRMATION (un seul choix) non confirmée
 // (NON = `aucune`, `ne-sait-pas`, ou abandonnée au balayage). Avant D1 ces cartes étaient des introuvables : un lot qui n'avait que cela était rendu ; le client ne paie jamais plus qu'avant.
-// Toute carte affirmée, toute confirmation OUI, toute question à 2 ou 3 candidats : pas rendu par cette règle (règle des lots inchangée). Appelée quand une question de LOT vient d'être réglée ;
-// le remboursement est le MÊME que celui d'un lot entièrement introuvable (ledger.rembourser, compteur `panne`, claim `rb|scanId` : jamais deux fois). Tout ce qui est douteux ne rend rien.
-// TOUR 2 — un remboursement de lot qui ÉCHOUE n'est jamais perdu : l'état « lot à rendre » (`lotARendre: { depuis, cause }`) est ÉCRIT sur les lignes `questions_v2` du lot (document existant,
-// qui porte déjà le porteur et le crédit), le BALAYAGE le reprend (même ledger.rembourser, même claim `rb|scanId` : une reprise ne rend jamais deux fois), un succès l'efface, et `reconcilier()`
-// le liste. Sont DÉFINITIFS (rien à reprendre) : plafond du jour, déjà rendu, aucun débit, déjà livré. Sont À REPRENDRE : analyse absente (le lot ne peut pas être jugé), exception, erreur du ledger.
-// La décision finale est écrite (`lotIssue`) pour que le rejeu d'un NON redise le même résultat (rendu, ou refusé au plafond).
+// Toute carte affirmée, toute confirmation OUI, toute question à 2 ou 3 candidats : pas rendu par cette règle (règle des lots inchangée). Le remboursement est le MÊME que celui d'un lot
+// entièrement introuvable (ledger.rembourser, compteur `panne`, claim `rb|scanId`).
+// TOUR 2 — un remboursement de lot qui ÉCHOUE laisse une trace : l'état « lot à rendre » (`lotARendre: { depuis, cause }`) est ÉCRIT sur les lignes `questions_v2` du lot, le BALAYAGE le reprend et
+// `reconcilier()` le liste. La décision finale est écrite (`lotIssue`) pour que le rejeu d'un NON redise le même résultat.
+// TOUR 3 — le JUGEMENT du lot est un état DÉRIVÉ, recalculé par le balayage : tout lot dont toutes les questions sont réglées et qui ne porte ni `lotIssue` ni `lotARendre` est rejugé (un arrêt entre
+// « repondue » et le jugement ne perd donc rien), TRIÉ du plus ancien et BORNÉ par passage (V2_LOT_REPRISES_PASSAGE). Le jugement est idempotent (claim `rb|scanId`). « Déjà rendu » RELIT le grand livre.
+// Sont DÉFINITIFS (rien à reprendre) : plafond du jour, aucun débit, déjà livré, non éligible. Sont À REPRENDRE : analyse absente, exception, erreur du ledger, remboursement partiel.
 const REGLEE = ['repondue', 'remboursee', 'non-remboursee'];
-const RAISONS_DEFINITIVES = ['plafond-jour', 'deja-rembourse', 'aucun-debit', 'deja-livre'];
-// 'non' (le lot n'est pas rendu par cette règle) | { doute } (on ne peut pas juger) | 'rendre'
+const RAISONS_DEFINITIVES = ['plafond-jour', 'aucun-debit', 'deja-livre'];
+// 'attente' (une question n'est pas réglée) | 'non' (le lot n'est pas rendu par cette règle) | { doute } (on ne peut pas juger) | 'rendre'
 async function jugerLot(scanId, qs) {
     if (!qs.length) return 'non';
+    if (qs.some(q => !REGLEE.includes(q.etat))) return 'attente';
     for (const q of qs) {
-        if (!REGLEE.includes(q.etat) || !Array.isArray(q.choix) || q.choix.length !== 1) return 'non';       // en attente, ou une question à 2 ou 3 candidats
+        if (!Array.isArray(q.choix) || q.choix.length !== 1) return 'non';                                  // une question à 2 ou 3 candidats
         if (q.reponse && q.reponse.aucune !== true) return 'non';                                           // OUI : une carte reconnue, le lot est payé
     }
     const an = await col('analyses').findOne({ _id: scanId }, { projection: { cartes: 1 } });
@@ -108,20 +110,42 @@ async function jugerLot(scanId, qs) {
     }
     return 'rendre';
 }
-const marquerLot = async (scanId, cause, maintenant) => { try { await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { lotARendre: { depuis: maintenant, cause } } }); } catch (e) { console.error(`🔴 [v2 lot-confirmations] ${scanId} : état « lot à rendre » NON écrit (${(e && (e.code || e.name)) || 'erreur'}) — à la main`); } };
+// Le grand livre du lot : combien d'unités débitées, combien rendues (jamais l'objet `credit` d'un appelant).
+async function grandLivreDuLot(scanId, porteur) {
+    const debits = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1 }).toArray();
+    return { total: debits.length, rendues: debits.filter(d => d.etat === 'rembourse').length };
+}
+const toutRendu = gl => gl.total > 0 && gl.rendues === gl.total;
+const marquerLot = async (scanId, cause, maintenant) => { try { await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { lotARendre: { depuis: maintenant, cause } } }); } catch (e) { console.error(`🔴 [v2 lot-confirmations] ${scanId} : état « lot à rendre » NON écrit (${(e && (e.code || e.name)) || 'erreur'}) — le balayage le rejugera`); } };
+// la décision FINALE (jamais écrasée) ; la marque tombe
+async function ecrireIssue(scanId, issue) {
+    await col('questions_v2').updateMany({ scanId, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: issue } });
+    await col('questions_v2').updateMany({ scanId, lot: true }, { $unset: { lotARendre: '' } });
+}
+const decisionDeLotIssue = i => ({ rendu: Boolean(i.rendu), ...(i.raison === 'plafond-jour' ? { raisonNonRembourse: 'plafond-jour', debite: i.debite || 1 } : {}) });
+// Rend { rendu, raisonNonRembourse?, debite?, aRendre?, attente? }. Appelée quand une question de LOT est réglée, au rejeu d'un NON, et par le balayage.
 async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, maintenant) {
     try {
         if (!credit || !scanId) return { rendu: false };
         const qs = await col('questions_v2').find({ scanId, lot: true }).toArray();
+        const decide = qs.find(q => q.lotIssue);
+        if (decide) { if (qs.some(q => q.lotARendre)) await col('questions_v2').updateMany({ scanId, lot: true }, { $unset: { lotARendre: '' } }); return decisionDeLotIssue(decide.lotIssue); }
         const verdict = await jugerLot(scanId, qs);
-        if (verdict === 'non') { if (qs.some(q => q.lotARendre)) await col('questions_v2').updateMany({ scanId, lot: true }, { $unset: { lotARendre: '' } }); return { rendu: false }; }
+        if (verdict === 'attente') return { rendu: false, attente: true };
+        if (verdict === 'non') { await ecrireIssue(scanId, { rendu: false, raison: 'non-eligible', le: maintenant }); return { rendu: false }; }
         if (verdict !== 'rendre') { await marquerLot(scanId, verdict.doute, maintenant); console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot jugé impossible (${verdict.doute}) — écrit « lot à rendre », repris par le balayage`); return { rendu: false, aRendre: true }; }
         const r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
-        if (r && r.rendu) { await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { lotIssue: { rendu: true, le: maintenant } }, $unset: { lotARendre: '' } }); return { rendu: true }; }
         const raison = (r && r.raisonNonRembourse) || 'erreur';
+        if ((r && r.rendu) || raison === 'deja-rembourse') {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
+            const gl = await grandLivreDuLot(scanId, porteur);
+            if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant }); return { rendu: true }; }
+            await marquerLot(scanId, `partiel:${gl.rendues}/${gl.total}`, maintenant);
+            console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}) — écrit « lot à rendre », repris par le balayage`);
+            return { rendu: false, aRendre: true };
+        }
         if (RAISONS_DEFINITIVES.includes(raison)) {
-            const debite = raison === 'plafond-jour' ? await col('mouvements').countDocuments({ ...(porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id }), type: 'debit', scanId, delta: -1 }) : 0;
-            await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { lotIssue: { rendu: false, raison, debite, le: maintenant } }, $unset: { lotARendre: '' } });
+            const debite = raison === 'plafond-jour' ? (await grandLivreDuLot(scanId, porteur)).total : 0;
+            await ecrireIssue(scanId, { rendu: false, raison, debite, le: maintenant });
             return { rendu: false, raisonNonRembourse: raison, debite };
         }
         await marquerLot(scanId, `rembourser:${raison}`, maintenant);
@@ -130,29 +154,55 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
     } catch (e) {
         console.error(`🔴 [v2 lot-confirmations] ${scanId} : exception (${(e && (e.code || e.name)) || 'erreur'}) — écrit « lot à rendre », repris par le balayage`);
         await marquerLot(scanId, 'exception', maintenant);
+        try { if (toutRendu(await grandLivreDuLot(scanId, porteur))) return { rendu: true, aRendre: true }; } catch (_) { /* le grand livre ne répond pas : on ne dit rien de plus */ }   // le remboursement a eu lieu, seule l'écriture d'état a échoué
         return { rendu: false, aRendre: true };
     }
 }
-// Le balayage reprend les lots « à rendre » (même fonction : jugement refait, même claim). Rend le nombre de lots rendus.
-async function reprendreLotsARendre(cfg, maintenant, max = 200) {
-    let rendus = 0;
-    const vus = new Set();
-    let marques = [];
-    try { marques = await col('questions_v2').find({ lot: true, lotARendre: { $exists: true } }).limit(max * 5).toArray(); } catch (e) { console.error(`🔴 [v2 lot-confirmations] lecture des lots à rendre : ${(e && (e.code || e.name)) || 'erreur'}`); return 0; }
-    for (const q of marques) {
-        const cle = String(q.scanId);
-        if (vus.has(cle) || vus.size >= max) continue;
-        vus.add(cle);
-        const r = await rendreLotSiConfirmationsRefusees(q.scanId, { type: q.porteur.type, id: q.porteur.id, surface: q.surface }, q.credit, cfg, maintenant);
-        if (r.rendu) rendus++;
-    }
-    return rendus;
+// Le balayage : (1) reprend les lots « à rendre », du plus ancien ; (2) juge les lots RÉGLÉS mais NON JUGÉS (arrêt entre « repondue » et le jugement), du plus ancien. Chaque phase est bornée à
+// `cfg.lot.reprisesParPassage` lots JUGÉS par passage. Même fonction, même claim : une reprise ne rend jamais deux fois. Rend { repris, juges } = lots rendus par chaque phase.
+async function reprendreLots(cfg, maintenant) {
+    const max = cfg.lot.reprisesParPassage, sortie = { repris: 0, juges: 0 };
+    const phase = async (filtre, tri, cle) => {
+        let docs = [];
+        try { docs = await col('questions_v2').find(filtre).sort(tri).limit(max * 5).toArray(); } catch (e) { console.error(`🔴 [v2 lot-confirmations] lecture des lots à juger : ${(e && (e.code || e.name)) || 'erreur'}`); return; }
+        const vus = new Set(); let jugesN = 0;
+        for (const q of docs) {
+            const k = String(q.scanId);
+            if (vus.has(k)) continue;
+            vus.add(k);
+            if (jugesN >= max) break;
+            const r = await rendreLotSiConfirmationsRefusees(q.scanId, { type: q.porteur.type, id: q.porteur.id, surface: q.surface }, q.credit, cfg, maintenant);
+            if (r.attente) continue;                                      // pas encore réglé : ne consomme pas la borne
+            jugesN++;
+            if (r.rendu) sortie[cle]++;
+        }
+    };
+    await phase({ lot: true, lotARendre: { $exists: true } }, { 'lotARendre.depuis': 1 }, 'repris');
+    await phase({ lot: true, etat: { $in: REGLEE }, lotIssue: { $exists: false }, lotARendre: { $exists: false } }, { regleeLe: 1 }, 'juges');
+    return sortie;
 }
-// La facturation d'un NON/abandon de lot déjà JUGÉ (rejeu) : redit ce qui a été décidé, sans rien rendre.
-function facturationDuLotJuge(q) {
-    if (!q.lot || !q.lotIssue || (q.reponse && q.reponse.aucune === false)) return null;
-    if (q.lotIssue.rendu) return facturation({ rembourse: 1, motif: 'lot' });
-    return facturation({ debite: q.lotIssue.debite || 1, motif: 'plafond-jour', raisonNonRembourse: q.lotIssue.raison === 'plafond-jour' ? 'plafond-jour' : null });
+// Les lots RÉGLÉS mais NON JUGÉS d'un porteur (ni décision ni marque), assez anciens pour que le jugement immédiat ait eu lieu : listés par la réconciliation.
+async function lotsNonJuges(filtrePorteur, maintenant, graceMs = 10 * 60e3) {
+    const docs = await col('questions_v2').find({ ...filtrePorteur, lot: true, etat: { $in: REGLEE }, lotIssue: { $exists: false }, lotARendre: { $exists: false }, regleeLe: { $lt: new Date(new Date(maintenant).getTime() - graceMs) } }).toArray();
+    const sortie = new Map();
+    for (const q of docs) {
+        const k = String(q.scanId);
+        if (sortie.has(k)) continue;
+        if (await col('questions_v2').countDocuments({ scanId: q.scanId, lot: true, etat: { $nin: REGLEE } }) === 0) sortie.set(k, { scanId: q.scanId, porteur: `${q.porteur.type}:${q.porteur.id}`, regleeLe: q.regleeLe });
+    }
+    return [...sortie.values()];
+}
+// La facturation d'un lot JUGÉ (réponse et rejeu) : rendu, ou refusé au plafond ; rien pour le reste (le lot reste payé à juste titre).
+function facturationDuLot(r) {
+    if (!r) return null;
+    if (r.rendu) return facturation({ rembourse: 1, motif: 'lot' });
+    if (r.raisonNonRembourse === 'plafond-jour') return facturation({ debite: r.debite || 1, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
+    return null;
+}
+// La réponse d'une question de LOT réglée : sa facturation, et `remboursementEnAttente` tant qu'un remboursement dû n'est pas fait.
+function habillerLot(c, r) {
+    const f = facturationDuLot(r);
+    return { ...c, ...(f ? { facturation: f } : {}), ...(r && r.aRendre && !r.rendu ? { remboursementEnAttente: true } : {}) };
 }
 const limiteDe = (maintenant, cfg) => new Date(maintenant.getTime() - cfg.questionDelaiMs);
 
@@ -171,10 +221,7 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
         const q = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $gt: limite } }, { $set: { etat: 'repondue', reponse, regleeLe: maintenant } }, { returnDocument: 'after' });
         if (q) {                                                                          // un lot : on n'enregistre que la vérité ; seul le LOT ENTIER peut être rendu (confirmations refusées)
             const lot = await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);
-            const c = corps(q);
-            if (lot.rendu) return { ...c, facturation: facturation({ rembourse: 1, motif: 'lot' }) };
-            if (lot.raisonNonRembourse === 'plafond-jour') return { ...c, facturation: facturation({ debite: lot.debite || 1, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' }) };
-            return c;
+            return habillerLot(corps(q), lot);
         }
     } else if (cand) {
         const q = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $gt: limite } }, { $set: { etat: 'repondue', reponse, regleeLe: maintenant } }, { returnDocument: 'after' });
@@ -199,8 +246,11 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     }
     const memeReponse = l.reponse && l.reponse.choix === choix;
     if (memeReponse && ['repondue', 'remboursee', 'non-remboursee'].includes(l.etat)) {               // rejeu de la même réponse : même corps, rien de plus
-        const c = corps(l), fl = facturationDuLotJuge(l);
-        return fl ? { ...c, facturation: fl } : c;                                                    // un lot jugé redit son résultat (rendu, ou refusé au plafond)
+        if (l.lot && !(l.reponse && l.reponse.aucune === false)) {                                    // un NON de lot : le jugement est IDEMPOTENT, il redit sa décision (ou la prend, s'il n'a pas eu lieu)
+            const lot = await rendreLotSiConfirmationsRefusees(l.scanId, porteur, l.credit, cfg, maintenant);
+            return habillerLot(corps(l), lot);
+        }
+        return corps(l);
     }
     if (l.reponse == null && l.poseeLe <= limite) return corps(l, 410);                  // abandonnée par le balayage : le délai est passé
     return { statut: 409, etat: l.etat, code: 'CONFLIT', question: nu(l) };
@@ -221,9 +271,10 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
         bilan.abandonnees.push({ scanId: String(q.scanId), carte: q.carte });
         if (fin && fin.rembourse) bilan.remboursees++; else bilan.nonRemboursees++;
     }
-    bilan.lotsRepris = await reprendreLotsARendre(cfg, maintenant);     // TOUR 2 : un remboursement de lot échoué est repris jusqu'au succès
+    const lots = await reprendreLots(cfg, maintenant);                  // TOURS 2-3 : lots « à rendre » repris, lots réglés mais non jugés jugés (bornés, du plus ancien)
+    bilan.lotsRepris = lots.repris; bilan.lotsJuges = lots.juges;
     bilan.bloquees = await col('questions_v2').countDocuments({ etat: 'en-reglement', priseLe: { $lt: new Date(maintenant.getTime() - BLOQUEE_MS) } });
     if (bilan.bloquees) console.error(`🔴 [v2 question-balayage] ${bilan.bloquees} question(s) bloquée(s) « en-reglement » depuis plus de 15 min : crédit rendu ou non, à vérifier à la main (jamais reprise seule)`);
     return bilan;
 }
-module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe };
+module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe, lotsNonJuges };
