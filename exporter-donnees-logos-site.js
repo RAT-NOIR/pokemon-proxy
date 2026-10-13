@@ -20,6 +20,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { LOGOS_COPIES } = require('./collecte-cartes/langue-logo');
 const { wcdDepuisLaTable } = require('./collecte-cartes/wcd-logos-table');
 const { cleNumero } = require('./collecte-cartes/jointure');
+const { lirePartages } = require('./collecte-cartes/logos-partages-saut');
 
 // (2026-10-13) les WCD se lisent dans la TABLE DES DÉCISIONS (LOGOS_COPIES + logos-manuels-lus.json), jamais dans la présence des copies
 // Pokécardex (non restaurées après la perte du 2026-10-12) : voir collecte-cartes/wcd-logos-table.js. Deux options, pour rejouer l'export sans
@@ -161,13 +162,13 @@ if (require.main === module) (async () => {
     for (const w of wcd) { const c = champions.get(w.annee); w.deckChampion = c?.deckChampion ?? null; if (!w.deckChampion) w.deckChampionRaison = c?.raison ?? 'année non lue'; }
     const T = JSON.parse(fs.readFileSync(path.join(__dirname, 'collecte-cartes/logos-apport-manuel-lus.json'), 'utf8'));
     const lus = new Map((Array.isArray(T) ? T : T.lignes).filter(l => l.dossier === 'Deck JP').map(l => [l.fichier.replace(/\.png$/i, ''), l]));
-    const partages = [];
-    for (const [set, code] of Object.entries(PARTAGES)) {
-        const l = lus.get(code); if (!l) throw new Error(`${code} absent de la table des logos lus`);
-        const f = await fichier(`apport-manuel/Deck JP/${code}.png`);
-        if (f.sha1 !== l.sha1) throw new Error(`${code} : sha1 ${f.sha1} ≠ table ${l.sha1}`);
-        partages.push({ set, ...f, lu: l.lu, partageAvec: Object.entries(PARTAGES).filter(([s, c]) => s !== set && lus.get(c)?.sha1 === l.sha1).map(([s]) => s) });
-    }
+    // (décision 7 du testeur, 2026-10-13) un fichier ABSENT d'apport-manuel est SAUTÉ, nommé (`fichiersAbsents`) ; le set garde son logo actuel =
+    // l'entrée de l'export PRÉCÉDENT, reprise telle quelle (`reprisDeLExportPrecedent`). Seule l'absence se saute : voir collecte-cartes/logos-partages-saut.js.
+    const SORTIE_PREC = path.join(RACINE, 'donnees-site', 'logos-composes-donnees.json');
+    const exportPrecedent = fs.existsSync(SORTIE_PREC) ? JSON.parse(fs.readFileSync(SORTIE_PREC, 'utf8')) : null;
+    const { partages, fichiersAbsents } = await lirePartages({ racine: RACINE, partages: PARTAGES, lus, fichier, precedents: exportPrecedent?.logosPartages || [] });
+    console.log(`FICHIERS ABSENTS SAUTÉS : ${fichiersAbsents.length}${fichiersAbsents.length ? ` (${fichiersAbsents.filter(a => a.action.startsWith('repris')).length} repris de l'export précédent, ${fichiersAbsents.filter(a => a.action === 'sans logo repris').length} sans logo repris)` : ''}`);
+    for (const a of fichiersAbsents) console.log(`   [${a.rubrique}] ${a.fichier} · ${a.sets.join(', ')} · ${a.action}`);
     // les vedettes — v2 (décisions de l'éditeur, 2026-10-07, soir : le CLASSEMENT LONG, des cartes POKÉMON seulement, aucun tampon)
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const meta = await prod.db.collection('guide_prix_meta').findOne({ _id: 'dernier' });
@@ -180,8 +181,7 @@ if (require.main === module) (async () => {
     // (2026-10-07, soir) le site RÉGÉNÈRE ce fichier en lisant notre classement : ses raisons changent (« aucune carte montrable dans les N
     // du serveur… »). La liste des « autres » se garde donc d'un export à l'autre : ceux de l'export précédent, plus tout set en attente dont
     // la raison cite le serveur.
-    const SORTIE_PREC = path.join(RACINE, 'donnees-site', 'logos-composes-donnees.json');
-    const precedents = fs.existsSync(SORTIE_PREC) ? Object.entries(JSON.parse(fs.readFileSync(SORTIE_PREC, 'utf8')).vedettes || {}).filter(([, v]) => v.autres === true || v.famille === 'autres').map(([k]) => k) : [];
+    const precedents = exportPrecedent ? Object.entries(exportPrecedent.vedettes || {}).filter(([, v]) => v.autres === true || v.famille === 'autres').map(([k]) => k) : [];
     const enAttente = [...new Set([...precedents, ...Object.entries(JSON.parse(fs.readFileSync(SITE, 'utf8')).enAttente || {}).filter(([, v]) => /serveur/.test(v.raison || '')).map(([k]) => k)])];
     if (!enAttente.length) throw new Error(`${SITE} et ${SORTIE_PREC} : aucun set « autres » — clé fausse ?`);
     const autres = enAttente.filter(id => setsBase.has(id) && !familles.some(s => s._id === id)).map(id => setsBase.get(id));
@@ -255,7 +255,7 @@ if (require.main === module) (async () => {
     console.log(`LOGOS OFFICIELS : ${Object.keys(logosOfficiels).length} sets (${Object.values(logosOfficiels).reduce((n, x) => n + Object.keys(x).length, 0)} logos)`);
     await fermer();
     if (Object.keys(raretesHorsTable).length) throw new Error(messageRaretesHorsTable(raretesHorsTable));
-    const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, logosOfficiels, vedettes };
+    const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, fichiersAbsents, logosOfficiels, vedettes };
     fs.mkdirSync(path.dirname(SORTIE), { recursive: true });
     fs.writeFileSync(SORTIE, JSON.stringify(sortie, null, 1));
     const v = Object.entries(vedettes);
