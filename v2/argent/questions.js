@@ -178,9 +178,10 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
             if (raison === 'plafond-jour') {
                 const gl = await grandLivreDuLot(scanId, porteur);
                 // UN-CANDIDAT-2 : « plafond du jour » n'est JAMAIS définitif quand des unités du lot sont déjà rendues (un partiel antérieur) : le client a été rendu en partie, le reste est à rendre
-                if (gl.rendues > 0) {
-                    await marquerLot(scanId, `partiel:${gl.rendues}/${gl.total}`, maintenant);
-                    console.error(`🔴 [v2 lot-confirmations] ${scanId} : plafond atteint alors que ${gl.rendues}/${gl.total} unité(s) sont déjà rendues — écrit « lot à rendre », jamais « plafond-jour » définitif`);
+                // TOUR 3 : ni quand une unité est PRISE sans avoir encore sa trace (`ambigus` : un jugement simultané en cours, ou un arrêt entre la prise et le crédit) — le client est ou sera rendu
+                if (gl.rendues > 0 || gl.ambigus > 0) {
+                    await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
+                    console.error(`🔴 [v2 lot-confirmations] ${scanId} : plafond atteint alors que ${gl.rendues}/${gl.total} unité(s) sont déjà rendues${gl.ambigus ? ` et ${gl.ambigus} prise(s) sans trace` : ''} — écrit « lot à rendre », jamais « plafond-jour » définitif`);
                     return { rendu: false, aRendre: true };
                 }
                 debite = gl.total;

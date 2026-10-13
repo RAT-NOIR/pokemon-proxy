@@ -732,6 +732,42 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             const ancien = ((await reconcilier(porteurDe(L), { cfg: cfgY })).debitsRembourseSansMouvement || []).map(x => x.ageMinutes >= 119);
             H.v('18d. débit vieux de 5 h mais remboursement en cours (claim de maintenant) : PAS listé ; claim de 2 h : listé, âge = celui du remboursement', [vivant, ancien], [0, [true]]);
         }
+        // ── TOUR 3 (relecture 3)
+        // R3-A + R3-1 : scan à `cleOrigine`, un jugement SIMULTANÉ voit la 1re unité PRISE (débit « rembourse », sa claim delta 0 : le gagnant n'a pas fini), plafond à la limite.
+        // Le plafond est compté puis refusé : jamais un `plafond-jour` DÉFINITIF (le client est ou sera rendu), et une claim du groupe SANS unité rendue (delta 0) ne dispense pas du plafond
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 5);
+            await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
+            await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rembourse' } });
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-gagnant', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}|${d[0]._id}` });
+            for (const c of L.cartes) await repI(L, c.index, 'aucune');
+            H.v('19a. un jugement simultané d\'un scan à cleOrigine, plafond à la limite : aucun `plafond-jour` définitif, la 2e unité n\'est PAS rendue (la claim du groupe sans unité rendue ne dispense pas), compteur remis à 5, lot « à rendre »',
+                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'panne'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 5, 11]);
+        }
+        // R3-B : une installation LIÉE entre deux unités — la claim change de propriétaire, la dispense du plafond la retrouve par le scan
+        {
+            const { L, d, credit1 } = await partielReel();
+            await raw('mouvements').updateMany({ scanId: sid(L), type: 'remboursement' }, { $unset: { installationId: '' }, $set: { compteId: new mongoose.Types.ObjectId().toString() } });
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            for (let k = 0; k < 6 && !(await lignesQ(L, { 'lotIssue.rendu': true })); k++) await balayer(plus(20 * 60e3));      // la borne est de 2 lots par passage (cfgY) : des lots restés « à rendre » plus haut passent avant
+            H.v('19b. claim passée à un compte entre deux unités : la continuation ne recompte pas le plafond (5), les 2 unités sont rendues, lotIssue rendu',
+                [await raw('mouvements').countDocuments({ scanId: sid(L), type: 'remboursement', delta: 1 }), await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.rendu': true })], [2, 5, 11]);
+        }
+        // R3-C : le ciblage de la claim par son `_id` — un balayage prend la place d'un processus vivant entre deux unités ; le processus d'origine renomme alors « la claim `rb|scan` » PAR SA CLÉ
+        // (celle du balayage) juste avant que le balayage écrive le delta 1 de sa 1re unité : la trace du balayage doit quand même arriver (par `_id`)
+        {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
+            let colOrig = db.col; let armee = true;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            try { for (const c of L.cartes) await repI(L, c.index, 'aucune'); } finally { armee = false; db.col = colOrig; }
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            colOrig = db.col; let fait = false;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (!fait && u && u.$set && u.$set.delta === 1) { fait = true; await t.updateOne({ cleIdempotence: `rb|${L.j.scanId}`, delta: 0 }, { $set: { cleIdempotence: `rb|${L.j.scanId}|fait|processus-d-origine` } }); } return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            try { for (let k = 0; k < 6 && !(await lignesQ(L, { 'lotIssue.rendu': true })); k++) await balayer(plus(20 * 60e3)); } finally { db.col = colOrig; }
+            H.v('19c. le processus d\'origine renomme par SA clé la claim du balayage avant son delta 1 : la trace du balayage arrive quand même (2 unités tracées, net 0, aucun débit ambigu, propre)',
+                [fait, await unitesRendues(L), (await livre(L)).net, (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(3 * 3600e3) })).debitsRembourseSansMouvement.length, await lignesQ(L, { 'lotIssue.rendu': true })], [true, 2, 0, 0, 11]);
+        }
         await svT.fermer();
     }
     H.v(`dénominateur : ${reponsesValidees} réponses de la route validées contre le contrat, ${ecartsContrat} écart(s)`, ecartsContrat, 0);

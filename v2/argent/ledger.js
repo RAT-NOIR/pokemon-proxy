@@ -195,7 +195,8 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         const dejaCommencee = m => typeof m.cleIdempotence === 'string' && !m.cleIdempotence.includes('#') && (idsGroupe.length
             ? idsGroupe.some(p => m.cleIdempotence === p ? m.delta !== 0 : m.cleIdempotence.startsWith(`${p}|fait|`))
             : m.cleIdempotence.startsWith(`rb|${scanId}|fait|`));
-        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(dejaCommencee)) sansPlafond = true;
+        // TOUR 3 : la claim se cherche par le SCAN (un ObjectId neuf par requête), pas par porteur — une installation liée à un compte entre deux unités a fait passer la claim au compte (`base(cible)`)
+        if (!sansPlafond && (await col('mouvements').find({ type: 'remboursement', scanId }).toArray()).some(dejaCommencee)) sansPlafond = true;
         // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
         // `sans-prix` est du côté des QUESTIONS (comme avant le lot PLAFONDS) : il rembourse justement une carte tranchée par une réponse, dont le prix est illisible
         if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions_v2').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
