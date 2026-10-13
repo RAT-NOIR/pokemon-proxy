@@ -22,8 +22,98 @@
 // refuse alors toute connexion dont l'hôte n'est pas celui du banc.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
+// ── LE DOSSIER TEMPORAIRE DE LA BASE EN MÉMOIRE (lot FUITE-BANCS, incident du 2026-10-13 : 478 dossiers `mongo-mem-*`, 85,7 Go, disque plein)
+// mongodb-memory-server crée `<tmp>/mongo-mem-XXXXXX` et ne le retire que dans `stop()` : une exception, un `process.exit`, un SIGINT/SIGTERM ou un
+// mongod qui ne démarre pas le laissaient. Ici le dossier est créé PAR CE MODULE (son chemin est donc noté à la création) et retiré à chaque sortie
+// que le processus contrôle. 🔑 Écrit par ce qu'il AUTORISE : il ne part que si TOUT tient — noté par ce processus, enfant direct de tmpdir(), nom en
+// `mongo-mem-`, ni lui ni rien dedans n'est un point de reparse (lstat sur chaque entrée AVANT toute suppression), mongod arrêté. Sinon il reste, et une ligne le dit.
+// ⛔ Aucun balayage des dossiers d'un AUTRE processus. Une mise à mort (TerminateProcess, taskkill /F) n'exécute aucun code du processus : sa fuite est mesurée au rapport.
+const PREFIXE_DOSSIER_BANC = 'mongo-mem-';
+const TENTATIVES_SUPPRESSION = 5;          // verrou passager Windows (EBUSY, EPERM, ENOTEMPTY) : 5 tentatives au plus, 300 ms entre deux, jamais de boucle
+const PAUSE_SUPPRESSION_MS = 300;
+const DOSSIERS_NOTES = new Set();          // les chemins créés par CE processus, et eux seuls
+// Le journal WiredTiger préallouait 2 × 100 Mo (WiredTigerLog + WiredTigerPreplog) : un dossier de banc pesait 200,7 Mo. Sans préallocation et à 5 Mo par fichier : 5,7 Mo
+// mesurés après écriture et transaction. L'ensemble de réplicas à un nœud et les transactions restent (le webhook en dépend).
+const ARGS_MONGOD_BANC = ['--wiredTigerEngineConfigString', 'log=(prealloc=false,file_max=5MB)'];
+
+const dormirSync = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) { /* pas de pause possible : on réessaie quand même */ } };
+const memeChemin = (a, b) => process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
+
+/** Y a-t-il un point de reparse (jonction, lien) dans ce dossier, lui compris ? lstat sur chaque entrée, sans jamais suivre. Un doute (lstat qui échoue) vaut « oui ». */
+function trouverReparse(dossier, fsx) {
+    const pile = [dossier];
+    while (pile.length) {
+        const d = pile.pop();
+        let st;
+        try { st = fsx.lstatSync(d); } catch (e) { return `lstat impossible sur ${path.basename(d)} (${e.code || e.message})`; }
+        if (st.isSymbolicLink()) return `point de reparse (lien ou jonction) : ${path.relative(path.dirname(dossier), d)}`;
+        if (!st.isDirectory()) continue;
+        let noms;
+        try { noms = fsx.readdirSync(d); } catch (e) { return `lecture impossible de ${path.basename(d)} (${e.code || e.message})`; }
+        for (const n of noms) pile.push(path.join(d, n));
+    }
+    return null;
+}
+
+/**
+ * Retire UN dossier de banc, ou le laisse et dit pourquoi. Rend { retire, raison, tentatives }. Synchrone (sert aussi dans le crochet `exit`).
+ * `notes` : les chemins créés par ce processus ; `tmp` : le dossier temporaire attendu comme parent ; `mongodArrete` : mongod est-il mort ?
+ */
+function retirerDossierBanc(chemin, { fs: fsx = fs, tmp = os.tmpdir(), notes = DOSSIERS_NOTES, mongodArrete = false, dormir = dormirSync, ecrire = (m) => console.error(m) } = {}) {
+    const garder = (raison, tentatives = 0) => { ecrire(`[base-banc] dossier conservé (${raison}) : ${chemin}`); return { retire: false, raison, tentatives }; };
+    if (typeof chemin !== 'string' || !chemin) return garder('aucun chemin');
+    if (!notes.has(chemin)) return garder('ce processus ne l\'a pas créé');
+    if (!memeChemin(path.dirname(chemin), tmp)) return garder('son parent n\'est pas le dossier temporaire');
+    if (!path.basename(chemin).startsWith(PREFIXE_DOSSIER_BANC)) return garder(`son nom ne commence pas par ${PREFIXE_DOSSIER_BANC}`);
+    if (!mongodArrete) return garder('mongod n\'est pas arrêté');
+    let raison = null;
+    try { if (!fsx.existsSync(chemin)) { notes.delete(chemin); return { retire: true, raison: 'déjà absent', tentatives: 0 }; } raison = trouverReparse(chemin, fsx); }
+    catch (e) { raison = `contrôle impossible (${e.code || e.message})`; }
+    if (raison) return garder(raison);
+    let derniere = null;
+    for (let t = 1; t <= TENTATIVES_SUPPRESSION; t++) {
+        try { fsx.rmSync(chemin, { recursive: true, force: true }); notes.delete(chemin); return { retire: true, raison: null, tentatives: t }; }
+        catch (e) {
+            derniere = e;
+            if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(e.code)) return garder(`suppression impossible : ${e.code || e.message}`, t);
+            if (t < TENTATIVES_SUPPRESSION) dormir(PAUSE_SUPPRESSION_MS);
+        }
+    }
+    return garder(`suppression impossible après ${TENTATIVES_SUPPRESSION} tentatives : ${derniere.code}`, TENTATIVES_SUPPRESSION);
+}
+
+/** Crée le dossier de base d'un banc dans tmpdir() et NOTE son chemin. */
+function creerDossierBanc({ fs: fsx = fs, tmp = os.tmpdir(), notes = DOSSIERS_NOTES } = {}) {
+    const d = fsx.mkdtempSync(path.join(tmp, PREFIXE_DOSSIER_BANC));
+    notes.add(d);
+    return d;
+}
+
+// ── Les sorties que le processus contrôle : `exit` (couvre process.exit, exception non rattrapée, fin normale) et les signaux.
+const ARRETS_EN_COURS = new Set();         // fonctions de nettoyage synchrones des bancs encore ouverts
+let crochetsPoses = false;
+function poserCrochets() {
+    if (crochetsPoses) return; crochetsPoses = true;
+    process.on('exit', () => { for (const f of [...ARRETS_EN_COURS]) { try { f(); } catch (e) { console.error(`[base-banc] nettoyage à la sortie : ${e.message}`); } } });
+    // Un signal sans écouteur termine le processus : un écouteur le remplace, donc il faut sortir ; s'il y en a un autre (le harnais des bancs), c'est lui qui sort.
+    const nums = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1, SIGBREAK: 21 };
+    for (const [s, n] of Object.entries(nums)) {
+        const moi = () => { if (process.listenerCount(s) <= 1) process.exit(128 + n); };
+        try { process.on(s, moi); } catch (_) { /* signal inconnu de cette plateforme */ }
+    }
+}
+/** Tue un mongod que CE processus a lancé (par son PID) et attend, borné à 3 s, qu'il disparaisse. */
+function arreterMongodSync(pid) {
+    if (!(pid > 1)) return false;
+    const mort = () => { try { process.kill(pid, 0); return false; } catch (e) { return e.code === 'ESRCH'; } };
+    if (mort()) return true;
+    try { process.kill(pid); } catch (_) { /* déjà mort ou refusé : le contrôle ci-dessous tranche */ }
+    for (let i = 0; i < 15 && !mort(); i++) dormirSync(200);
+    return mort();
+}
 // 🔑 Ce que la PRODUCTION charge (hotesDe, cleDeGrappe, verifierHoteBanc, verifierEcritureR2, garderClientR2, bucketsDeProduction) vit dans
 // garde-banc.js, sans dépendance : ce module-ci (façade, mongodb-memory-server) peut lever à l'import et la production ne le requiert jamais.
 const { hotesDe, cleDeGrappe, verifierHoteBanc, bucketsDeProduction, verifierEcritureR2, garderClientR2 } = require('./garde-banc');
@@ -102,22 +192,50 @@ function variablesDeConnexion(env, fichierEnv) {
 async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = path.join(__dirname, '..', '.env') } = {}) {
     const r = resoudre(env, memoireDisponible === undefined ? undefined : { memoireDisponible });
     if (!r.ok) throw new Error(`🔴 BANC REFUSÉ — ${r.raison}`);
-    let uri = r.uri, arreter = async () => { };
+    let uri = r.uri, arreter = async () => { }, dossier = null, pidMongod = () => null;
     if (r.origine === 'memoire') {
         if (!process.env.MONGOMS_DOWNLOAD_DIR) process.env.MONGOMS_DOWNLOAD_DIR = CACHE_MONGOD;
         // un ensemble de réplicas à UN nœud, pas un mongod isolé : le webhook Stripe écrit en transaction (« Transaction numbers are only
         // allowed on a replica set member »), comme la production Atlas. Même binaire, quelques secondes de démarrage en plus.
         const { MongoMemoryReplSet } = require(cheminMemoire());
-        const ms = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+        // Le dossier de données est créé ICI (chemin noté à la création) et passé à mongod : mongodb-memory-server ne supprime jamais un `dbPath` qu'on lui donne.
+        poserCrochets();
+        dossier = creerDossierBanc();
+        const ms = new MongoMemoryReplSet({ replSet: { count: 1 }, instanceOpts: [{ dbPath: dossier, args: ARGS_MONGOD_BANC }] });
+        const pid = () => ms.servers?.[0]?.instanceInfo?.instance?.mongodProcess?.pid ?? null;
+        pidMongod = pid;
+        let nettoye = false;
+        // sortie SYNCHRONE (crochet `exit`, signaux) : mongod est tué par son PID puis le dossier part, ou reste avec sa raison
+        const nettoyerSync = () => {
+            if (nettoye) return; nettoye = true; ARRETS_EN_COURS.delete(nettoyerSync);
+            const p = pid();
+            retirerDossierBanc(dossier, { mongodArrete: p ? arreterMongodSync(p) : ms.state === 'stopped' });
+        };
+        ARRETS_EN_COURS.add(nettoyerSync);
+        try {
+            await ms.start(); await ms.waitUntilRunning();
+        } catch (e) {
+            // mongod n'a pas démarré (binaire absent, disque plein…) : mongodb-memory-server a déjà tenté de l'arrêter, sans effacer le dossier
+            nettoye = true; ARRETS_EN_COURS.delete(nettoyerSync);
+            let arrete = false; try { arrete = (await ms.stop({ doCleanup: false, force: false })) === true; } catch (_) { /* reste faux : le dossier reste et la ligne le dit */ }
+            retirerDossierBanc(dossier, { mongodArrete: arrete });
+            throw e;
+        }
         uri = ms.getUri();
-        arreter = () => ms.stop();
+        arreter = async () => {
+            if (nettoye) return;
+            let arrete = false;
+            try { arrete = (await ms.stop({ doCleanup: false, force: false })) === true; } catch (e) { console.error(`[base-banc] arrêt de mongod : ${e.message}`); }
+            nettoye = true; ARRETS_EN_COURS.delete(nettoyerSync);
+            retirerDossierBanc(dossier, { mongodArrete: arrete });
+        };
     }
     // L'URI de production, gardée AVANT le remplacement, pour les seuls bancs qui LISENT la production (copie d'une tranche, journal des scans).
     // Elle ne passe jamais dans l'environnement : les enfants ne la voient pas. Toute écriture mongoose vers elle est refusée (garde ci-dessous).
     // Un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI / MONGODB_CARTES_LECTURE_URI), s'il existe, est préféré ; la façade s'applique de toute façon.
     const uriProduction = env.MONGODB_LECTURE_URI || env.MONGODB_URI, uriCartes = env.MONGODB_CARTES_LECTURE_URI || env.MONGODB_CARTES_URI;
     return {
-        origine: r.origine, uri, arreter, uriProduction, uriCartes,
+        origine: r.origine, uri, arreter, uriProduction, uriCartes, dossier, pidMongod,
         appliquer() {
             // R2 : la liste des buckets de PRODUCTION est figée AVANT tout remplacement ; R2_BUCKET_BANC ne peut pas en faire partie
             const buckets = bucketsDeProduction(env);
@@ -184,5 +302,5 @@ function installerGardeEcriture(Collection, env = process.env) {
     }
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
+module.exports = { retirerDossierBanc, creerDossierBanc, TENTATIVES_SUPPRESSION, ARGS_MONGOD_BANC, hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
     facadeLecture, sortieSure, verifierEcritureR2, garderClientR2 };
