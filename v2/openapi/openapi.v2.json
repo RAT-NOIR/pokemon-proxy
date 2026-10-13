@@ -4426,16 +4426,17 @@
             "maxItems": 20,
             "items": {
               "type": "string",
+              "maxLength": 2048,
               "pattern": "^https://([A-Za-z0-9-]+\\.)+vinted\\.net(/|$)"
             },
-            "description": "Hôte *.vinted.net, https."
+            "description": "Hôte *.vinted.net, https. 2 048 caractères au plus par URL."
           },
           "photoBase64": {
             "type": [
               "string",
               "null"
             ],
-            "description": "OPTIONNEL. L'image que l'extension affiche déjà (la première photo de l'annonce), en base64 standard SANS préfixe `data:` : JPEG, PNG ou WebP (jugé sur les octets), 2 Mio décodés au plus, 8 000 px de côté et 50 millions de pixels au plus. Absent, `null`, mal formé, trop gros, illisible ou hors format : traité comme ABSENT, jamais une erreur — le scan, sa facturation et sa réponse sont les mêmes avec ou sans. Le corps entier de la requête est limité à 4 Mio (413 au-delà, avant tout débit). Administrateur : conservée par le banc sans téléchargement ; autre porteur : passée à la seconde lecture si elle est allumée, jamais conservée ni journalisée. N'entre pas dans l'empreinte d'idempotence."
+            "description": "OPTIONNEL. L'image que l'extension affiche déjà (la première photo de l'annonce), en base64 standard SANS préfixe `data:` : JPEG, PNG ou WebP (jugé sur les octets), 2 Mio décodés au plus, 4 096 px de côté et 12 millions de pixels au plus, une seule page (pas d'image animée). Absent, `null`, mal formé, trop gros, illisible ou hors format : traité comme ABSENT, jamais une erreur. Tant que la seconde lecture est éteinte (défaut) ou neutre, le scan, sa facturation et sa réponse sont les mêmes avec ou sans ; allumée, une image valide peut permettre une CONFIRMATION (une question devient une affirmation, facturée comme telle). Retirer le préfixe `data:...;base64,` d'un `readAsDataURL` (sinon l'image est ignorée en silence). La clé d'idempotence du client se calcule SANS ce champ. Le corps entier de la requête est limité à 4 Mio, `Content-Length` obligatoire (411 sinon), jeton d'installation reconnu : sinon 413 AVANT toute lecture et tout débit ; 429 avec Retry-After si 4 lectures de grand corps sont déjà en cours (1 par IP) ; corps `{ success: false, error }` hors enveloppe v2. Administrateur : conservée par le banc sans téléchargement ; autre porteur : passée à la seconde lecture si elle est allumée, jamais conservée ni journalisée. N'entre pas dans l'empreinte d'idempotence."
           },
           "title": {
             "type": "string",
@@ -4476,7 +4477,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "maxLength": 2048
           },
           "marche": {
             "type": "string",

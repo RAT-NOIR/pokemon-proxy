@@ -8,10 +8,14 @@
 // Jamais conservée (ni base, ni bucket, ni disque), jamais journalisée, jamais dans la réponse. L'analyse d'image est CELLE DU SCANNER (scanner/routes.js::analyserImage) : jamais un second analyseur.
 const { typeDesOctets } = require('../scanner/multipart');
 
-const PIXELS_MAX = 50e6, COTE_MAX = 8000;                     // les bornes de la photo conservée (banc/stockage.js : limitInputPixels 50e6)
+// TOUR 1 (relecture 1, I2) : 12 millions de pixels et 4 096 px de côté. Une photo d'annonce affichée (f800) fait ~1 Mpx ; 12 Mpx est la photo d'un téléphone (4000 × 3000), 4 096 px le côté d'un écran 4K.
+// À 50 Mpx un PNG entrelacé ou un JPEG progressif coûtait +180 Mo de mémoire et 1,4 s de CPU au décodage (mesuré par la relecture) : la mémoire est proportionnelle aux pixels, et l'en-tête est jugé AVANT le décodage.
+// Au plus 2 décodages simultanés (DECODAGES_MAX) : le suivant est refusé tout de suite (cause « occupe », traitée comme absente), jamais une attente qui retiendrait la requête. Une seule page : pas d'image animée.
+const PIXELS_MAX = 12e6, COTE_MAX = 4096, DECODAGES_MAX = 2;
+let decodages = 0;
 const FORME_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const FORMATS = Object.freeze({ 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp' });
-const CAUSES = Object.freeze(['absente', 'type-invalide', 'base64-invalide', 'trop-grosse', 'format', 'illisible', 'dimensions', 'inutilisee', 'erreur', 'ok']);
+const CAUSES = Object.freeze(['absente', 'type-invalide', 'base64-invalide', 'trop-grosse', 'format', 'illisible', 'dimensions', 'occupe', 'inutilisee', 'erreur', 'ok']);
 
 let compte = {};
 const noter = (cause) => { const c = CAUSES.includes(cause) ? cause : 'erreur'; compte[c] = (compte[c] || 0) + 1; };
@@ -30,7 +34,11 @@ async function evaluer(valeur, { octetsMax }) {
         const type = typeDesOctets(octets);                                                     // le format se juge sur les OCTETS, jamais sur une déclaration
         if (!type || !FORMATS[type]) return { cause: 'format' };
         const { analyserImage } = require('../scanner/routes');                                // chargé à l'appel : routes.js du scanner requiert l'identifier (pas de cycle au chargement)
-        const c = await analyserImage(octets, { formats: [FORMATS[type]], pixelsMax: PIXELS_MAX, coteMax: COTE_MAX });
+        if (decodages >= DECODAGES_MAX) return { cause: 'occupe' };
+        decodages++;                                                                           // la place est prise de façon synchrone (aucun await entre le test et l'incrément) et rendue quoi qu'il arrive
+        let c;
+        try { c = await analyserImage(octets, { formats: [FORMATS[type]], pixelsMax: PIXELS_MAX, coteMax: COTE_MAX, pagesMax: 1 }); }
+        finally { decodages--; }
         return c === null ? { octets } : { cause: c };
     } catch { return { cause: 'erreur' }; }
 }

@@ -47,12 +47,13 @@ async function decoderHeicParDefaut(buffer) {
 // M6 : une image aux octets magiques valides doit AUSSI se lire (en-tête décodable, format reconnu, dimensions raisonnables) avant le moindre débit.
 // N3 : l'en-tête ne suffit pas — un DÉCODAGE réduit (64 px, à bas coût) lit l'image entière ; une image tronquée ou corrompue (avertissement du décodeur compris) est refusée.
 // PHOTO-EXTENSION : UN SEUL analyseur pour le scanner du site ET l'image de l'extension. `analyserImage` rend `null` (lisible) ou la CAUSE : 'dimensions' (format connu mais trop grand : pixels ou côté),
-// 'illisible' (tout le reste). Les bornes par défaut sont celles du scanner ; l'extension passe les siennes (50 millions de pixels, 8 000 px de côté — celles de la photo conservée, banc/stockage.js).
-async function analyserImage(buffer, { formats = ['jpeg', 'png', 'webp'], pixelsMax = PIXELS_MAX, coteMax = Infinity } = {}) {
+// 'illisible' (tout le reste). Les bornes par défaut sont celles du scanner ; l'extension passe les siennes (12 millions de pixels, 4 096 px de côté, une seule page : identifier/photo-extension.js).
+async function analyserImage(buffer, { formats = ['jpeg', 'png', 'webp'], pixelsMax = PIXELS_MAX, coteMax = Infinity, pagesMax = Infinity } = {}) {
     try {
         const sharp = require('sharp');
         const m = await sharp(buffer, { failOn: 'error' }).metadata();
         if (!(formats.includes(m.format) && m.width > 0 && m.height > 0)) return 'illisible';
+        if (m.pages > pagesMax) return 'illisible';                              // une image animée (plusieurs pages) : refusée là où l'appelant n'en veut pas
         if (m.width * m.height > pixelsMax || m.width > coteMax || m.height > coteMax) return 'dimensions';
         await sharp(buffer, { limitInputPixels: pixelsMax }).resize({ width: 64, height: 64, fit: 'inside' }).toBuffer();
         return null;

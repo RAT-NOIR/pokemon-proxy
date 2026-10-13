@@ -212,6 +212,39 @@ const jusque = async (cond, ms = 4000) => { const t0 = Date.now(); while (Date.n
         H.v('5g. un administrateur ne débite rien (somme des deltas nulle, aucun débit réel)', [mv.reduce((s, m) => s + (m.delta || 0), 0), mv.filter(m => m.type === 'debit' && m.delta).length], [0, 0]);
     }
 
+    // ── 6. TOUR 1 (I1 de la relecture 1) : un corps SANS contrat: 2 de plus de 100 ko ne passe pas — la route héritée ne voit jamais un `title` plus gros qu'avant ──
+    {
+        const x = await inst(3); const avant = chaineAppels;
+        const r = await poster(svOn, x.jeton, { contrat: undefined, title: 'a'.repeat(3 * 1024 * 1024) });
+        H.v('6. `title` de 3 Mio SANS contrat: 2 (la route héritée) : 413, la chaîne n\'est pas appelée, aucun crédit pris', [r.statut, chaineAppels - avant, (await livre(x)).mouvements], [413, 0, 0]);
+        const r2 = await poster(svOn, x.jeton, { title: 'a'.repeat(3 * 1024 * 1024) });
+        H.v('6. et le même `title` AVEC contrat: 2 est borné à 300 caractères par la validation (le scan est servi) — le grand corps ne sert que le contrat 2', [r2.statut, r2.json && r2.json.success], [200, true]);
+    }
+
+    // ── 6 bis. TOUR 1 (B1, point c) : le défaut de production juge le jeton EN BASE avant de lire le grand corps ; une installation révoquée ne lit pas 4 Mio ──
+    {
+        const grosse = (await bruit(400, 560)).toString('base64');
+        const vive = await inst(3), revoquee = await inst(3);
+        await raw('installations').updateOne({ _id: revoquee.i._id }, { $set: { revoqueeLe: new Date() } });
+        const rv = await poster(svSans, vive.jeton, { photoBase64: grosse }), rr = await poster(svSans, revoquee.jeton, { photoBase64: grosse });
+        H.v('6 bis. corps de plus de 100 ko : une installation VIVANTE est servie (200) ; une installation RÉVOQUÉE est refusée avant lecture (413, pas le 401 de la route)', [grosse.length > 100 * 1024, rv.statut, rr.statut], [true, 200, 413]);
+    }
+
+    // ── 7. TOUR 1 (I1 de la relecture 2) : la phrase vraie est « identique tant que la seconde lecture est éteinte (ou neutre) ; allumée, l'image peut permettre une CONFIRMATION » ──
+    {
+        const sensible = async ({ image, compteur }) => { modele.appels.push({ image: Buffer.isBuffer(image) ? image : null }); if (!Buffer.isBuffer(image)) return { sansImage: true }; if (compteur) compteur.appels = (compteur.appels || 0) + 2; return { setCode: 'PRE', numero: '162', essais: [], echec: false, raison: 'factice' }; };
+        const neutre = async () => ({ setCode: null, numero: null, essais: [], echec: false, raison: 'factice' });
+        const svSens = await monter({ secondeLecture: sensible }, cfgOn), svNeutre = await monter({ secondeLecture: neutre }, cfgOn);
+        const sans = await scan(svSens), avec = await scan(svSens, { photoBase64: PB });
+        const reste = (j) => { const c = JSON.parse(JSON.stringify(j)); delete c.facturation; delete c.analyse.cartes; delete c.analyse.statut; delete c.scanId; return JSON.stringify(c); };
+        H.v('7. fournisseur SENSIBLE à l\'image (ne confirme qu\'avec elle) : sans image la question reste (a-trancher, crédit RÉSERVÉ) ; avec image une affirmation (identifiee, crédit DÉBITÉ)',
+            [sans.j.analyse.cartes[0].statut, avec.j.analyse.cartes[0].statut, sans.j.facturation.reserve, avec.j.facturation.debite, avec.j.facturation.motif], ['a-trancher', 'identifiee', 1, 1, 'affirmee']);
+        H.v('7. et c\'est la SEULE différence : tout le reste de la réponse (hors analyse.cartes, analyse.statut, facturation, scanId) est identique, le solde aussi', [reste(avec.j) === reste(sans.j), JSON.stringify(avec.j.solde) === JSON.stringify(sans.j.solde)], [true, true]);
+        const ns = await scan(svNeutre), na = await scan(svNeutre, { photoBase64: PB });
+        H.v('7. fournisseur NEUTRE (ne confirme jamais) : avec et sans image, réponse et grand livre IDENTIQUES', [norm(JSON.stringify(na.j)) === norm(JSON.stringify(ns.j)), JSON.stringify(await livre(na.x)) === JSON.stringify(await livre(ns.x))], [true, true]);
+        await svSens.fermer(); await svNeutre.fermer();
+    }
+
     await svSans.fermer(); await svOn.fermer(); await svOff.fermer();
     await mongoose.disconnect(); await H.arreterBanc();
     H.bilan();

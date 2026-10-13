@@ -49,8 +49,32 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(40)]), heic = Buffer.concat([Buffer.alloc(4), Buffer.from('ftypheic'), Buffer.alloc(40)]);
         H.v('0. GIF, HEIC, texte, octets nuls : « format » (jugé sur les OCTETS, pas sur une déclaration)', [await cause(b64(gif)), await cause(b64(heic)), await cause(b64(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))), await cause(b64(Buffer.alloc(64)))], Array(4).fill('format'));
         H.v('0. JPEG tronqué de moitié, JPEG aux seuls octets magiques : « illisible »', [await cause(b64(jpg.subarray(0, jpg.length >> 1))), await cause(b64(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(100, 7)])))], ['illisible', 'illisible']);
-        const large = await img(8001, 1, null, 'png'), pixels = await img(7100, 7100, null, 'png'), correcte = await img(5000, 5000, null, 'png');
-        H.v('0. côté de plus de 8 000 px, plus de 50 millions de pixels : « dimensions » ; 5000 × 5000 passe', [await cause(b64(large)), await cause(b64(pixels)), await cause(b64(correcte))], ['dimensions', 'dimensions', undefined]);
+        const large = await img(4097, 1, null, 'png'), pixels = await img(4000, 3300, null, 'png'), correcte = await img(4000, 3000, null, 'png'), carree = await img(4096, 2900, null, 'png');
+        H.v('0. TOUR 1 : côté de plus de 4 096 px, plus de 12 millions de pixels : « dimensions » ; 4000 × 3000 (12 Mpx, une photo de téléphone) et 4096 × 2900 passent', [await cause(b64(large)), await cause(b64(pixels)), await cause(b64(correcte)), await cause(b64(carree))], ['dimensions', 'dimensions', undefined, undefined]);
+        // un PNG entrelacé et un JPEG progressif de 49 Mpx : refusés sur l'EN-TÊTE, avant le décodage complet (le décodage coûtait +180 Mo de mémoire : relecture 1, I2)
+        const entrelace = await sharp({ create: { width: 7000, height: 7000, channels: 3, background: { r: 3, g: 4, b: 5 } } }).png({ progressive: true }).toBuffer();
+        const progressif = await sharp({ create: { width: 7000, height: 7000, channels: 3, background: { r: 3, g: 4, b: 5 } } }).jpeg({ progressive: true }).toBuffer();
+        for (const [nom, b] of [['PNG entrelacé', entrelace], ['JPEG progressif', progressif]]) {
+            const s = b64(b); const r0 = process.memoryUsage().rss; const c = await cause(s); const dr = (process.memoryUsage().rss - r0) / 1048576;
+            H.v(`0. TOUR 1 : ${nom} de 49 Mpx : « dimensions », sans décodage complet (mémoire < 60 Mo de plus)`, [c, dr < 60], ['dimensions', true]);
+        }
+        // une image ANIMÉE (plus d'une page) est refusée : traitée comme absente
+        const trois = crypto.randomBytes(64 * 64 * 3 * 3);
+        const animeW = await sharp(trois, { raw: { width: 64, height: 192, channels: 3, pageHeight: 64 } }).webp({ loop: 0, delay: [100, 100, 100] }).toBuffer();
+        const fixeW = await img(64, 64, null, 'webp');
+        H.v('0. TOUR 1 : un WebP animé (3 pages) : « illisible » ; un WebP fixe passe', [await cause(b64(animeW)), await cause(b64(fixeW))], ['illisible', undefined]);
+        // au plus 2 décodages simultanés : le troisième est refusé tout de suite (jamais une attente)
+        const trio = await Promise.all([1, 2, 3].map(() => PE.evaluer(b64(jpg), { octetsMax: LIM })));
+        H.v('0. TOUR 1 : trois décodages simultanés => un seul refusé « occupe », les deux autres passent', [trio.filter(x => x.cause === 'occupe').length, trio.filter(x => Buffer.isBuffer(x.octets)).length], [1, 2]);
+        H.v('0. TOUR 1 : la place est rendue (même après une image illisible) : les décodages suivants passent', [Buffer.isBuffer((await PE.evaluer(b64(jpg), { octetsMax: LIM })).octets), (await PE.evaluer(b64(jpg.subarray(0, 50)), { octetsMax: LIM })).cause, Buffer.isBuffer((await PE.evaluer(b64(jpg), { octetsMax: LIM })).octets)], [true, 'illisible', true]);
+        // TOUR 1 (M1 de la relecture 1) : longueurs d'URL bornées
+        const { verifierEntree } = require('../identifier/routes');
+        const corpsOk = { contrat: 2, versionExtension: '2.0.0', marche: 'vinted.fr', imageUrls: [URL_PHOTO] };
+        const longue = (n) => `https://images1.vinted.net/${'a'.repeat(n - 27)}`;
+        const vu = (o) => { const r = verifierEntree({ ...corpsOk, ...o }, cfg); return r.erreur ? r.erreur.detail : 'ok'; };
+        H.v('0. TOUR 1 : une URL d\'image de 2 048 caractères passe, de 2 049 est refusée (image-url) ; vintedUrl : 2 048 passe, 2 049 refusée (vinted-url)',
+            [vu({ imageUrls: [longue(2048)] }), vu({ imageUrls: [longue(2049)] }), vu({ imageUrls: [URL_PHOTO, longue(2049)] }), vu({ vintedUrl: `https://www.vinted.fr/items/${'1'.repeat(2048 - 28)}` }), vu({ vintedUrl: `https://www.vinted.fr/items/${'1'.repeat(2049 - 28)}` })],
+            ['ok', 'image-url', 'image-url', 'ok', 'vinted-url']);
         H.v('0. le validateur ne lève jamais (une valeur absurde rend une cause)', await cause(Symbol('x')).catch(e => `levée:${e.message}`), 'type-invalide');
         // le compteur : une cause par appel noté, jamais l'image
         PE.reinitialiser(); PE.noter('format'); PE.noter('format'); PE.noter('ok');
@@ -193,23 +217,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
 
     // ═══ 4. le corps JSON : plus grand SEULEMENT pour un scan v2 ═══
     await essayer('4', async () => {
-        const { json } = require('../transport/corps-json');
-        const app = express(); app.use(json());
-        app.use((q, s) => s.status(200).json({ taille: JSON.stringify(q.body).length }));
-        app.use((e, q, s, n) => s.status(e.status || 500).json({ erreur: e.type || 'erreur' }));     // l'analyseur refuse : 413, sans trace dans la sortie du banc
-        const sv = await H.serveur(app);
-        const gros = n => ({ x: 'a'.repeat(n) });
-        const bearer = { authorization: 'Bearer jeton-quelconque' };
-        const post = (chemin, n, e = {}) => H.appel(sv.url, chemin, { methode: 'POST', corps: gros(n), entetes: e });
-        const st = async (chemin, n, e) => (await post(chemin, n, e)).statut;
-        H.v('4. POST /api/identifier avec Bearer : 3 Mo acceptés', await st('/api/identifier', 3 * 1024 * 1024, bearer), 200);
-        H.v('4. variantes de chemin que Express route de la même façon (casse, barre finale) : 3 Mo acceptés', [await st('/API/Identifier', 3 * 1024 * 1024, bearer), await st('/api/identifier/', 3 * 1024 * 1024, bearer)], [200, 200]);
-        H.v('4. au-delà de 4 Mo : 413 (le corps entier est refusé par l\'analyseur)', await st('/api/identifier', 5 * 1024 * 1024, bearer), 413);
-        H.v('4. SANS Bearer, ou un AUTRE chemin, ou une autre méthode : la limite reste celle d\'avant (100 ko)', [await st('/api/identifier', 200 * 1024), await st('/api/analyser', 200 * 1024, bearer), await st('/api/identifier/reponse', 200 * 1024, bearer), await st('/api/identifier', 50 * 1024), await st('/api/analyser', 50 * 1024, bearer)], [413, 413, 413, 200, 200]);
-        const mauvais = ['Bearer', 'bearer abc', 'Basic abc', 'Bearerabc'];
-        const res = []; for (const a of mauvais) res.push(await st('/api/identifier', 200 * 1024, { authorization: a }));
-        H.v('4. un en-tête qui n\'est pas « Bearer <jeton> » : limite d\'avant', res, [413, 413, 413, 413]);
-        await sv.fermer();
+        // (le comportement de l'analyseur de corps est tenu par test-photo-extension-corps.js)
         // index.js : l'analyseur global est celui-là quand la v2 est allumée, l'ancien sinon
         const src = require('fs').readFileSync(require.resolve('../../index.js'), 'utf8');
         H.v('4. index.js : `express.json()` global remplacé par l\'analyseur v2 quand V2 est allumée, intact sinon', [/app\.use\(V2 \? V2\.corpsJson\(\) : express\.json\(\)\)/.test(src), (src.match(/app\.use\(express\.json\(\)\)/g) || []).length], [true, 0]);
