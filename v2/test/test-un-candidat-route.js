@@ -449,13 +449,15 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             const L = await lance(Array(11).fill(ID_A));
             const debits = await raw('mouvements').find({ installationId: L.i._id, type: 'debit', scanId: sid(L) }).sort({ _id: 1 }).toArray();
             H.v('15e. lot de 11 cartes : 2 unités débitées', [L.cartes.length, debits.length], [11, 2]);
-            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { etat: 'rendu-en-cours' } });       // une unité que le ledger ne rend pas
+            // UN-CANDIDAT-2 : un VRAI partiel, fabriqué par le ledger lui-même — `rendreUnite` ÉCHOUE pour la 2e unité (poche « accueil » sur une installation : aucun compte à créditer),
+            // le ledger rend la 1re, libère SA claim (`…|fait|…`) et répond `partiel`. Plus d'imitation (renommer la claim à la main, ou mettre l'unité en `rendu-en-cours`, ne fabrique pas ce cas).
+            const credit1 = debits[1].credit;
+            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             for (const c of L.cartes) await repI(L, c.index, 'aucune');
             const avant = await Promise.all([raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 }), raw('questions_v2').countDocuments({ scanId: sid(L), lotARendre: { $exists: true } })]);
-            H.v('   une seule unité rendue sur deux : la marque « à rendre » RESTE (les 11 lignes), pas de lotIssue rendu', [avant, await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true })], [[1, 11], 0]);
-            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { etat: 'debite' } });
-            // un VRAI remboursement partiel libère la claim rb|scanId (ledger.js, libererClaim) ; on l'imite ici pour que la reprise puisse rendre l'unité restante
-            await raw('mouvements').updateOne({ cleIdempotence: `rb|${L.j.scanId}` }, { $set: { cleIdempotence: `rb|${L.j.scanId}|fait|x` } });
+            H.v('   une seule unité rendue sur deux (partiel réel) : la marque « à rendre » RESTE (les 11 lignes), pas de lotIssue rendu', [avant, await raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true })], [[1, 11], 0]);
+            H.v('   le ledger a lui-même libéré la claim du partiel (rb|scan|fait|…), plus de claim rb|scan nue', [await raw('mouvements').countDocuments({ cleIdempotence: { $regex: `^rb\\|${L.j.scanId}\\|fait\\|` } }), await raw('mouvements').countDocuments({ cleIdempotence: `rb|${L.j.scanId}` })], [1, 0]);
+            await raw('mouvements').updateOne({ _id: debits[1]._id }, { $set: { credit: credit1 } });
             await balayer();
             const fin = await Promise.all([raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 }), raw('questions_v2').countDocuments({ scanId: sid(L), lotARendre: { $exists: true } }), raw('questions_v2').countDocuments({ scanId: sid(L), 'lotIssue.rendu': true })]);
             H.v('   l\'unité débloquée, le balayage rend le reste : 2 unités rendues, marque effacée, lotIssue rendu', fin, [2, 0, 11]);
@@ -472,6 +474,142 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             await balayer();
             const fin = await repI(L, L.cartes[1].index, 'aucune');
             H.v('   le lot rendu, le champ disparaît et le rejeu dit rembourse: true', [fin.json.remboursementEnAttente, fin.json.facturation.rembourse, (await livre(L)).remboursements], [undefined, true, 1]);
+        }
+        await svT.fermer();
+    }
+    // ── 16. UN-CANDIDAT-2 : les états rares où un client restait débité sans trace
+    {
+        const { reconcilier } = require('../argent/reconcilier');
+        const cfgY = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_REPRISES_PASSAGE: '2' });
+        const conf = id => ({ statutHttp: 200, corps: qst([id]) });
+        let liste = [];
+        const svT = await monter({ identifierLot: async () => liste }, cfgY);
+        const lance = async (ids, x0) => { liste = ids.map(conf); const x = x0 || await inst(20); const r = await poster(svT.url, x.jeton), j = r.json || {}; return { ...x, j, cartes: (j.analyse && j.analyse.cartes) || [] }; };
+        const repI = (L, index, choix) => repondre(svT.url, L.jeton, { scanId: L.j.scanId, carte: index, choix });
+        const porteurDe = x => ({ type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false });
+        const sid = L => new mongoose.Types.ObjectId(L.j.scanId);
+        const RENDU = { essais: 20, net: 0, mouvements: 2, ouverts: [], remboursements: 1 };
+        const plus = ms => new Date(Date.now() + ms);
+        const balayer = (maintenant = new Date()) => argentReg().balayerQuestions({ maintenant, max: 500 });
+        const jourJ = new Date().toISOString().slice(0, 10);
+        const debitsDe = (L) => raw('mouvements').find({ installationId: L.i._id, type: 'debit', scanId: sid(L) }).sort({ _id: 1 }).toArray();
+        const unitesRendues = L => raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 });
+        const lignesQ = (L, f) => raw('questions_v2').countDocuments({ scanId: sid(L), ...f });
+        // un partiel RÉEL : un lot de 11 cartes (2 unités), compteur de pannes à 4/5, la 2e unité ne peut pas être rendue (poche « accueil » sur une installation)
+        const partielReel = async () => {
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L);
+            await raw('plafonds').updateOne({ porteur: `installation:${L.i._id}`, jour: jourJ, type: 'panne' }, { $set: { count: 4, expireLe: plus(3 * 86400e3) } }, { upsert: true });
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
+            for (const c of L.cartes) await repI(L, c.index, 'aucune');
+            return { L, d, credit1: d[1].credit };
+        };
+
+        // Important 1 : une ligne de lot restée « en-reglement » (arrêt pendant le règlement) ne bloque plus le lot pour toujours
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            await raw('questions_v2').updateOne({ _id: `${L.j.scanId}:${L.cartes[1].index}` }, { $set: { etat: 'en-reglement', priseLe: plus(-40 * 60e3), reponse: { choix: 'aucune', idProduct: null, aucune: true, le: plus(-40 * 60e3) } } });
+            H.v('16a. une ligne de lot « en-reglement » depuis 40 min : le lot reste payé, et reconcilier la LISTE (avec son âge), propre = false',
+                [(await livre(L)).net, ((await reconcilier(porteurDe(L), { cfg: cfgY })).lotsEnReglement || []).map(l => [String(l.scanId), l.ageMinutes >= 39]), (await reconcilier(porteurDe(L), { cfg: cfgY })).propre], [-1, [[String(sid(L)), true]], false]);
+            const b1 = await balayer();
+            H.v('   le balayage REPREND le règlement : lot jugé et rendu UNE fois (net 0), plus listé, propre = true', [await livre(L), ((await reconcilier(porteurDe(L), { cfg: cfgY })).lotsEnReglement || []).length, (await reconcilier(porteurDe(L), { cfg: cfgY })).propre, b1.lotsReglementsRepris], [RENDU, 0, true, 1]);
+            const b2 = await balayer();
+            H.v('   un second balayage ne rend rien de plus', [(await livre(L)).remboursements, b2.lotsReglementsRepris], [1, 0]);
+            const M0 = await lance([ID_A, ID_B]); await repI(M0, M0.cartes[0].index, 'aucune');
+            await raw('questions_v2').updateOne({ _id: `${M0.j.scanId}:${M0.cartes[1].index}` }, { $set: { etat: 'en-reglement', priseLe: plus(-5 * 60e3), reponse: { choix: 'aucune', idProduct: null, aucune: true, le: plus(-5 * 60e3) } } });
+            await balayer();
+            H.v('   une ligne « en-reglement » depuis 5 min seulement n\'est PAS reprise (un règlement vivant n\'est jamais doublé)', [(await livre(M0)).net, await lignesQ(M0, { etat: 'en-reglement' })], [-1, 1]);
+        }
+        // Important 2 : une reprise du MÊME scan ne recompte jamais le plafond
+        {
+            const { L, d, credit1 } = await partielReel();
+            H.v('16b. partiel réel (2 unités, la 2e ne peut pas être rendue), plafond de pannes à 4 → 5 : une unité rendue, marque « à rendre », claim libérée',
+                [await unitesRendues(L), await lignesQ(L, { lotARendre: { $exists: true } }), await compteurDe(L, 'panne')], [1, 11, 5]);
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            await balayer();
+            H.v('   la reprise ne recompte PAS le plafond : les 2 unités rendues (net 0), jamais plafond-jour, compteur toujours à 5',
+                [await unitesRendues(L), (await livre(L)).net, await lignesQ(L, { 'lotIssue.rendu': true }), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'panne')], [2, 0, 11, 0, 5]);
+            const rj = await repI(L, L.cartes[0].index, 'aucune');
+            H.v('   le rejeu dit rembourse: true', [rj.json.facturation.rembourse, rj.json.facturation.raisonNonRembourse], [true, null]);
+        }
+        {
+            const { L, d, credit1 } = await partielReel();
+            // la trace du partiel est perdue (claim « fait » absente) : la reprise recompte le plafond, MAIS une unité est déjà rendue → jamais « plafond-jour » définitif
+            await raw('mouvements').updateOne({ cleIdempotence: { $regex: `^rb\\|${L.j.scanId}\\|fait\\|` } }, { $set: { cleIdempotence: `trace-perdue|${L.j.scanId}` } });
+            await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
+            await balayer();
+            H.v('16b2. unités DÉJÀ rendues, plafond atteint à la reprise : jamais lotIssue « plafond-jour » ; le lot reste LISTÉ « à rendre » (net -1)',
+                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), (await reconcilier(porteurDe(L), { cfg: cfgY })).lotsARendre.length, (await livre(L)).net], [0, 1, -1]);
+        }
+        // Mineur : le perdant d'une course ne dit pas « remboursement en attente » quand le client est rendu
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            const cl = `rb|${L.j.scanId}`, deb = (await debitsDe(L))[0];
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-gagnant', scanId: sid(L), etat: 'rembourse', cleIdempotence: cl });
+            const gagnant = new Promise(fin => setTimeout(async () => {              // le gagnant du claim finit de rendre l'unité PENDANT que le perdant relit
+                await raw('mouvements').updateOne({ _id: deb._id }, { $set: { etat: 'rembourse' } });
+                await raw('installations').updateOne({ _id: L.i._id }, { $inc: { essais: 1 } });
+                await raw('mouvements').updateOne({ cleIdempotence: cl }, { $set: { delta: 1, poche: deb.credit.poche } });
+                fin();
+            }, 25));
+            const r2 = await repI(L, L.cartes[1].index, 'aucune'); await gagnant;
+            H.v('16c. le perdant d\'une course (claim déjà pris, unité rendue un instant plus tard) : pas de remboursementEnAttente, rembourse: true, aucune marque',
+                [r2.json.remboursementEnAttente, r2.json.facturation.rembourse, (await livre(L)).net, await lignesQ(L, { lotARendre: { $exists: true } })], [undefined, true, 0, 0]);
+        }
+        // Mineur : une claim rb|scanId orpheline n'est jamais reprise par le ledger (aucun mécanisme existant) : elle est LISTÉE avec son âge
+        {
+            const L = await lance([ID_A, ID_B]);
+            await raw('mouvements').insertOne({ installationId: L.i._id, le: plus(-40 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-orpheline', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}` });
+            const rc = await reconcilier(porteurDe(L), { cfg: cfgY });
+            H.v('16d. une claim rb|scanId sans aucune unité rendue depuis 40 min : listée avec son âge, propre = false', [(rc.claimsOrphelines || []).map(c => [String(c.scanId), c.ageMinutes >= 39]), rc.propre], [[[String(sid(L)), true]], false]);
+            const L2 = await lance([ID_A, ID_B]);
+            await raw('mouvements').insertOne({ installationId: L2.i._id, le: plus(-2 * 60e3), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-vivante', scanId: sid(L2), etat: 'rembourse', cleIdempotence: `rb|${L2.j.scanId}` });
+            H.v('   une claim de 2 minutes (remboursement vivant) n\'est PAS listée', ((await reconcilier(porteurDe(L2), { cfg: cfgY })).claimsOrphelines || []).length, 0);
+        }
+        // Mineur : un échec de réservation d'une question de lot finit dans un état terminal une fois l'argent juste
+        {
+            liste = [ID_A, ID_B].map(conf); const x = await inst(20);
+            const colOrig = db.col; let n = 0;
+            db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async (...a) => { n++; if (n === 2) throw new Error('panne simulée'); return t.insertOne(...a); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
+            let r; try { r = await poster(svT.url, x.jeton); } finally { db.col = colOrig; }
+            await balayer();
+            const lignes = await raw('questions_v2').find({ 'porteur.id': x.i._id }).toArray();
+            H.v('16e. la 2e question du lot ne se réserve pas : le client est rendu (net 0), les lignes posées sont terminales (lotIssue rendu), aucune marque',
+                [r.statut >= 400, (await livre(x)).net, lignes.length, lignes.every(l => l.lotIssue && l.lotIssue.rendu === true && !l.lotARendre)], [true, 0, 1, true]);
+            const rc = await reconcilier(porteurDe(x), { cfg: cfgY, maintenant: plus(20 * 60e3) });
+            H.v('   reconcilier ne le liste plus : propre = true', [rc.lotsARendre.length, rc.lotsNonJuges.length, rc.propre], [0, 0, true]);
+        }
+        // Mineur : la reprise bornée ne s'affame pas — un lot qui échoue passe derrière les autres
+        {
+            // trois lots dont les deux NON ont eu lieu, jugés une première fois avec l'analyse ABSENTE (la route refuse de répondre sans analyse : on écrit l'état du jugement raté, une essai chacun)
+            let rang = 0;
+            const fabrique = async () => {
+                const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+                const an = await raw('analyses').findOne({ _id: sid(L) });
+                await raw('analyses').deleteOne({ _id: sid(L) });
+                const q = `${L.j.scanId}:${L.cartes[1].index}`, le = plus(-(10 - rang++) * 60e3);
+                await raw('questions_v2').updateOne({ _id: q }, { $set: { etat: 'repondue', reponse: { choix: 'aucune', idProduct: null, aucune: true, le }, regleeLe: le } });
+                await raw('questions_v2').updateMany({ scanId: sid(L), lot: true }, { $set: { lotARendre: { depuis: le, cause: 'analyse-absente', essais: 1 } } });
+                return { L, an };
+            };
+            const F1 = await fabrique(), F2 = await fabrique(), G = await fabrique();
+            await raw('analyses').insertOne(G.an);
+            const T0 = plus(-10 * 60e3);
+            await balayer(T0);
+            H.v('16f. 3 lots à rendre, borne de 2 par passage : F1 et F2 (les plus anciens) échouent (analyse absente), G attend',
+                [(await livre(G.L)).remboursements, (await livre(F1.L)).remboursements, await lignesQ(F1.L, { 'lotARendre.essais': 2 })], [0, 0, 2]);
+            const b2 = await balayer(T0);
+            H.v('   au passage suivant G (moins d\'essais) passe DEVANT les lots qui échouent : rendu', [(await livre(G.L)).remboursements, b2.lotsRepris], [1, 1]);
+            const rc = await reconcilier(porteurDe(F1.L), { cfg: cfgY });
+            H.v('   le lot qui échoue reste listé, avec son nombre d\'essais', rc.lotsARendre.map(l => [String(l.scanId), l.essais]), [[String(sid(F1.L)), 3]]);
+        }
+        // Mineur : le délai de grâce du jugement part de la DERNIÈRE réponse du lot
+        {
+            const L = await lance([ID_A, ID_B]); await repI(L, L.cartes[0].index, 'aucune');
+            await raw('questions_v2').updateOne({ _id: `${L.j.scanId}:${L.cartes[0].index}` }, { $set: { regleeLe: plus(-30 * 60e3) } });
+            await raw('questions_v2').updateOne({ _id: `${L.j.scanId}:${L.cartes[1].index}` }, { $set: { etat: 'repondue', reponse: { choix: 'aucune', idProduct: null, aucune: true, le: new Date() }, regleeLe: new Date() } });
+            H.v('16g. la 1re réponse date de 30 min, la DERNIÈRE de maintenant : le jugement immédiat peut encore avoir lieu, le lot n\'est pas listé',
+                (await reconcilier(porteurDe(L), { cfg: cfgY })).lotsNonJuges.length, 0);
+            H.v('   20 minutes après la dernière réponse, il est listé', (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).lotsNonJuges.length, 1);
         }
         await svT.fermer();
     }

@@ -185,6 +185,9 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         // une NOUVELLE tentative (même clé d'idempotence rejouée après un premier remboursement, I2) est un autre débit du même scan : sa claim porte l'id de sa 1re unité
         pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (pendantes[0].cleOrigine) cle = `rb|${scanId}|${pendantes[0]._id}`;
+        // UN-CANDIDAT-2 : la REPRISE d'un remboursement déjà commencé (une claim `…|fait|…` existe pour ce scan : un partiel antérieur a rendu des unités et compté la panne) ne recompte JAMAIS le plafond —
+        // sinon un partiel repris près du plafond devenait un « plafond-jour » définitif, après que le client avait été rendu en partie. Le plafond a été compté une fois, à la première tentative.
+        if (!sansPlafond && (await col('mouvements').find({ ...base(porteur), type: 'remboursement', scanId }).toArray()).some(m => typeof m.cleIdempotence === 'string' && m.cleIdempotence.startsWith(`${cle}|fait|`))) sansPlafond = true;
         // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
         // `sans-prix` est du côté des QUESTIONS (comme avant le lot PLAFONDS) : il rembourse justement une carte tranchée par une réponse, dont le prix est illisible
         if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions_v2').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))

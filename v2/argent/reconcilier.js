@@ -48,15 +48,26 @@ async function reconcilier(porteur, { cfg = require('../config').lireConfig(proc
     const lots = await lotsARendre(porteur);
     // tour 3 : les lots RÉGLÉS mais NON JUGÉS (arrêt entre « repondue » et le jugement) : le balayage les jugera ; listés tant qu'ils existent
     const nonJuges = await require('./questions').lotsNonJuges({ 'porteur.type': porteur.type, 'porteur.id': porteur.id }, maintenant);
-    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, debitsGardes: gardes, lotsARendre: lots, lotsNonJuges: nonJuges,
-        propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 && gardes.length === 0 && lots.length === 0 && nonJuges.length === 0 };
+    // UN-CANDIDAT-2 : les lignes de lot restées « en-reglement » (le balayage les reprend au-delà du délai) et les claims `rb|scanId` sans aucune unité rendue (aucun mécanisme du grand livre ne les reprend : listées)
+    const enReglement = await require('./questions').lotsEnReglement({ 'porteur.type': porteur.type, 'porteur.id': porteur.id }, maintenant, cfg.lot.reglementBloqueMs);
+    const orphelines = await claimsOrphelines(porteur, maintenant, cfg.lot.reglementBloqueMs);
+    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, debitsGardes: gardes, lotsARendre: lots, lotsNonJuges: nonJuges, lotsEnReglement: enReglement, claimsOrphelines: orphelines,
+        propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 && gardes.length === 0 && lots.length === 0 && nonJuges.length === 0 && enReglement.length === 0 && orphelines.length === 0 };
+}
+// Une claim `rb|scanId` qui n'a JAMAIS rendu d'unité (delta 0, ni renommée « …|fait|… » par un partiel) depuis plus de `ms` : le processus s'est arrêté entre la claim et la première unité. Le grand livre n'a aucun
+// mécanisme de reprise d'une claim orpheline (un « deja-rembourse » n'est jamais une preuve, marque-scan.js) : elle est LISTÉE avec son âge, et libérée à la main après vérification.
+async function claimsOrphelines(porteur, maintenant, ms) {
+    const filtre = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
+    const t = new Date(maintenant).getTime();
+    const l = await col('mouvements').find({ ...filtre, type: 'remboursement', delta: 0, cleIdempotence: { $regex: '^rb\\|', $not: /\|fait\|/ }, le: { $lt: new Date(t - ms) } }).toArray();
+    return l.map(m => ({ id: m._id, scanId: m.scanId, porteur: `${porteur.type}:${porteur.id}`, cle: m.cleIdempotence, ageMinutes: Math.floor((t - new Date(m.le).getTime()) / 60e3) }));
 }
 // UN-CANDIDAT, tour 2 : un lot dont toutes les confirmations sont refusées et dont le remboursement a ÉCHOUÉ (ou n'a pas pu être jugé) porte `lotARendre` sur ses lignes `questions_v2`. Le solde et le journal
 // concordent (le client est débité, rien ne dit qu'il aurait dû être rendu) : il est LISTÉ ici, le balayage le reprend, et le verdict n'est pas « propre » tant qu'il en reste un.
 async function lotsARendre(porteur) {
     const l = await col('questions_v2').find({ lot: true, lotARendre: { $exists: true }, 'porteur.type': porteur.type, 'porteur.id': porteur.id }).toArray();
     const vus = new Map();
-    for (const q of l) if (!vus.has(String(q.scanId))) vus.set(String(q.scanId), { scanId: q.scanId, porteur: `${porteur.type}:${porteur.id}`, cause: q.lotARendre.cause ?? null, depuis: q.lotARendre.depuis ?? null });
+    for (const q of l) if (!vus.has(String(q.scanId))) vus.set(String(q.scanId), { scanId: q.scanId, porteur: `${porteur.type}:${porteur.id}`, cause: q.lotARendre.cause ?? null, depuis: q.lotARendre.depuis ?? null, essais: q.lotARendre.essais ?? 0 });
     return [...vus.values()];
 }
 // Une ligne de débit dont le rendu a échoué (« rendu-echoue ») ou n'a pas été confirmé (« rendu-en-cours ») NE se voit PAS dans la somme des deltas (le solde et le journal restent d'accord) :
@@ -68,7 +79,7 @@ async function lignesNonRendues(porteur) {
 }
 // Tous les porteurs de la base (curseur : pas de liste en mémoire)
 async function reconcilierTous({ cfg = require('../config').lireConfig(process.env), maintenant = new Date() } = {}) {
-    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], debitsGardes: [], lotsARendre: [], lotsNonJuges: [], banc: null, propre: true };
+    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], debitsGardes: [], lotsARendre: [], lotsNonJuges: [], lotsEnReglement: [], claimsOrphelines: [], banc: null, propre: true };
     for (const [type, nom] of [['compte', 'comptes'], ['installation', 'installations']]) {
         for await (const d of col(nom).find({}, { projection: { _id: 1 } })) {
             const r = await reconcilier({ type, id: d._id }, { cfg, maintenant });
@@ -78,6 +89,8 @@ async function reconcilierTous({ cfg = require('../config').lireConfig(process.e
             bilan.debitsGardes.push(...(r.debitsGardes ?? []));
             bilan.lotsARendre.push(...(r.lotsARendre ?? []));
             bilan.lotsNonJuges.push(...(r.lotsNonJuges ?? []));
+            bilan.lotsEnReglement.push(...(r.lotsEnReglement ?? []));
+            bilan.claimsOrphelines.push(...(r.claimsOrphelines ?? []));
         }
     }
     bilan.marquesEnSuspens = await MS.enSuspens();            // toutes, y compris celles d'un porteur disparu (un compte supprimé n'efface pas un débit sans livraison)
@@ -88,7 +101,7 @@ async function reconcilierTous({ cfg = require('../config').lireConfig(process.e
     bilan.banc = etat ? { lignesEnEchec: etat.lignesEnEchec, ageMaxJours: etat.ageMaxJours, objetsEnAttente: etat.objetsEnAttente, objetsRefuses: etat.objetsRefuses ?? 0,
         perime: new Date(maintenant).getTime() - new Date(etat.majLe).getTime() > 3 * 86400e3 } : null;
     bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0 && bilan.debitsGardes.length === 0 && bilan.lotsARendre.length === 0 && bilan.lotsNonJuges.length === 0
-        && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0 || bilan.banc.perime));
+        && bilan.lotsEnReglement.length === 0 && bilan.claimsOrphelines.length === 0 && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0 || bilan.banc.perime));
     return bilan;
 }
 module.exports = { reconcilier, reconcilierTous };
@@ -116,6 +129,8 @@ if (require.main === module) {
         console.log(`${b.rendusEchoues.length} ligne(s) de débit au rendu non confirmé (rendu-echoue / rendu-en-cours) — débit sans livraison tant qu'elles restent`);
         console.log(`${b.debitsGardes.length} débit(s) qui gardent leur scanId au-delà du lien du banc (marque non close, question ouverte ou rendu non confirmé) — débit à son scan, jamais une contribution`);
         for (const d of b.debitsGardes) console.log(`  débit ${d.id}  scan ${d.scanId}  ${d.etat}  âge ${d.ageJours} j`);
+        console.log(`${b.lotsEnReglement.length} ligne(s) de lot restée(s) « en-reglement » au-delà du délai (le balayage les reprend) ; ${b.claimsOrphelines.length} claim(s) rb|scanId orpheline(s) (aucune unité rendue — à libérer à la main après vérification)`);
+        for (const c of b.claimsOrphelines) console.log(`  claim ${c.cle}  ${c.porteur}  âge ${c.ageMinutes} min`);
         console.log(b.banc ? `banc réel — dernière passe d'anonymisation : ${b.banc.lignesEnEchec} ligne(s) échue(s) non traitée(s) (âge max ${b.banc.ageMaxJours} j depuis la bascule), ${b.banc.objetsEnAttente} objet(s) en attente de suppression, ${b.banc.objetsRefuses} objet(s) refusé(s) par le stockage${b.banc.perime ? ' — ÉTAT PÉRIMÉ (plus de 3 jours sans passe)' : ''}` : 'banc réel — aucune passe d\'anonymisation enregistrée');
         console.log(`${b.marquesEnSuspens.length} scan(s) dont la marque de livraison reste en suspens (réponse peut-être jamais partie) — débit sans livraison tant qu'elles restent`);
         for (const l of b.marquesEnSuspens) console.log(`  scan ${l.scanId}  ${l.porteur}  ${l.etat}  ouverte le ${l.ouverteLe.toISOString()}${l.issue ? ` (${l.issue})` : ''}`);
