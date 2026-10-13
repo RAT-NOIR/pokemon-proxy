@@ -225,6 +225,20 @@ jamais `sets.logo` : un set peut porter les deux, et le français est celui de l
 posés le 2026-10-04 (`exposer-logos-fr.js`, clés absentes seulement) : la phrase de `preuve` de ces logos n'est pas de celles que
 `lib/visuelSet.ts` reconnaît, et sans `region` la règle du site les aurait tous refusés.
 
+## Le NIVEAU et la SOURCE de chaque logo (2026-10-13)
+
+Règle du testeur : **chaque logo porte son niveau — `officiel`, `semi-officiel` ou `compose` — et sa source ; un logo composé en place est remplacé dès qu'un officiel ou un semi-officiel est trouvé.**
+Champs NEUFS, additifs, sur chaque objet de logo : `sets.logo`, `sets.logoFr`, `sets.logoCompose`, `sets.logoOfficiel.<fr|ja|en>`, `sets.logoSemiOfficiel.<fr|ja|en>`.
+| champ | valeurs | sens |
+|---|---|---|
+| `niveau` | `officiel` · `semi-officiel` · `compose` · `generique` · `inconnu` | `officiel` : le logo du set publié par TPC ou ses partenaires, tel quel (provenance PROUVÉE : TCGdex, Bill's Archive, `setlogo` de la page Bulbapedia du set). `semi-officiel` : un visuel officiel qui représente le set sur du matériel officiel (opération, événement), jamais fan. `compose` : fabriqué par le site/serveur. `generique` : le même fichier sert plusieurs sets. `inconnu` : provenance non prouvée — JAMAIS devinée (c'est le cas de tous les logos déposés à la main : aucune table lue ne dit qu'ils sont officiels). |
+| `source` | `tcgdex`, `billsarchive`, `bulbapedia:setlogo`, `tcgdex:en`, `tcgdex:assets-fr`, `manuel`, `compose`… | d'où vient le fichier (déjà présente partout ; posée seulement si elle manquait et se lisait sans deviner) |
+Le classement est `collecte-cartes/niveau-logos.js` (table fermée) ; il est posé par `poser-niveau-logos.js` (champs NEUFS seulement : aucune valeur existante modifiée).
+
+**`sets.logoOfficiel.en`** — la table `logoOfficiel` accepte désormais la sous-clé `en` (logo anglais d'un set intl, langue prouvée par `/en/` chez TCGdex ; chez Bill's aucune règle de nom de fichier ne prouve l'anglais : refusé). Même forme que `fr`/`ja`, plus `niveau`. **L'export (`logosOfficiels`) porte `en` et `niveau`.** ⚠️ Côté SITE, `lib/logosOfficielsImport.ts` n'accepte que les sous-clés `fr`/`ja` (`sousCle !== "fr" && sousCle !== "ja"` → « sous-cle », l'entrée est écartée comme incomplète) et `lib/logosOfficiels.ts` ne lit que `fr`/`ja` (`TableOfficielle`, boucle `["ja","fr"]`) : tant que le site ne l'accepte pas, un `en` est ignoré sans erreur ; `niveau` et `represente` passent sans être lus.
+
+**`sets.logoSemiOfficiel.<langue>`** — même forme que `logoOfficiel` (clé R2 `logos-semi-officiels/…`, lot `logos-semi-officiels-2026-10`) plus `niveau: "semi-officiel"` et **`represente`** (une phrase : « logo de l'opération McDonald's Match Battle 2022-2023 »), exigée à l'écriture et à l'export. Une exception à la garde « logo générique » ne vaut QUE pour ce champ et QUE si `represente` est écrit. Exporté sous la clé **`logosSemiOfficiels`** (`{ <set>: { <langue>: entrée } }`) ; le site ne la lit pas encore. Rang attendu : après `logoOfficiel`, avant tout composé.
+
 ---
 
 ## Dettes connues, à ne pas rediagnostiquer
