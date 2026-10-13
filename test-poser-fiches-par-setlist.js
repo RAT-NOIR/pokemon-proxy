@@ -53,8 +53,10 @@ const attaquesDe = i => [`Aa${i}`, `Bb${i}`];
 const carte = (i, id = 1000 + i) => ({ _id: id, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), impressions: [], sets: ['SetX'], liens: { idProduct: [] } });
 const nomProduit = i => `Mon${i} [${attaquesDe(i).join(' | ')}]`;
 const L = { code: 'X/ID', slugSet: 'SetX', exp: 1, bulba: { tirage: 'id', expansion: 'X Promo' } };
-function monde({ veriteFausse = false, veriteContredite = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false } = {}) {
+function monde({ veriteFausse = false, veriteContredite = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false, numeroPartage = false, impressionZeros = false } = {}) {
     const cartes = [1, 2, 3, 4].map(i => carte(i)); const homonyme = { ...carte(3, 1503) };
+    // impressionZeros : l'impression « setlist » d'un outil antérieur est écrite « 001 » (zéro-remplissage) — le même numéro que « 1 » (cleNumero)
+    if (impressionZeros) cartes[0].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: '001', total: null, deck: null, rarete: null, source: 'setlist' });
     // veriteFausse : la ligne de vérité de P1 pointe la carte 2, dont les attaques SONT celles du produit (le témoin ne la contredit pas) → un vrai faux de l'épreuve A
     if (veriteFausse) cartes[1].attaques = attaquesDe(1).map(nom => ({ nom }));
     if (impressionSansNumero) cartes[1].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: null, source: 'parseur' });
@@ -64,6 +66,8 @@ function monde({ veriteFausse = false, veriteContredite = false, impressionSansN
     joint(401, 1, 11); joint(403, 3, 13);
     produits.push({ idProduct: 301, name: nomProduit(1), idMetacard: 11 }, { idProduct: 302, name: nomProduit(2), idMetacard: 12 });
     const entrees = [...cartes.map((c, i) => ({ carte: c, numero: String(i + 1) })), { carte: homonyme, numero: '13' }];
+    // numeroPartage : une AUTRE carte de la Setlist porte le n° 1 (le cas Pawmi / Squawkabilly ex, n° 17)
+    if (numeroPartage) entrees.push({ carte: { ...carte(9, 1509), nomEn: 'Zzz', attaques: [{ nom: 'Zz' }] }, numero: '01' });
     const decale = exportDecale ? 9000000 : 0;
     const chemin = path.join(os.tmpdir(), `export-test-poser-fiches-${process.pid}-${exportDecale ? 'decale' : 'bon'}.json`);
     // un export dont les produits existent mais SANS idMetacard (le cas du relecteur A : « tout silence », sans erreur)
@@ -140,6 +144,21 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     w = monde({ impressionSansNumero: true });
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:1', '--ecrire']);
     verifier('impression du parseur au même set SANS numéro : la carte est écartée (fiche mélangée), pas d\'impression en double', [r.code, lignesPosees(w).map(l => l.idProduct), w.db.brut('cartes').find(c => c._id === 1002).impressions.length], [0, [301], 1]);
+
+    // ── garde (1), 2026-10-13 : un numéro de Setlist porté par DEUX cartes ou plus ne désigne aucune d'elles (le cas Pawmi / Gastly de M-P/ID) ──
+    w = monde({ numeroPartage: true }); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
+    r = await lancer(w, ['--codes=X/ID']);
+    verifier('numéro partagé (simulation) : T1 (n°1, partagé avec « Zzz » au n° « 01 ») est REFUSÉ et nommé, T2 reste ; rien d\'écrit', [r.code, /1 fiches, 1 impressions/.test(r.sorties), /numéro de Setlist « 1 » porté par 2 cartes/.test(r.sorties), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [0, true, true, true]);
+    w = monde({ numeroPartage: true });
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('numéro partagé : --attendu 2 (l\'ancien plan) est REFUSÉ, rien d\'écrit', [r.code, /rend 1, attendu 2/.test(r.erreurs), lignesPosees(w).length], [1, true, 0]);
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:1', '--ecrire']);
+    verifier('numéro partagé : --attendu 1 écrit la seule ligne sans collision (T2 -> n°2) et la relit', [r.code, lignesPosees(w).map(l => `${l.idProduct}:${l.numeroFiche}`)], [0, ['302:2']]);
+
+    // ── 2026-10-13 : la relecture compare les numéros par cleNumero (« 001 » = « 1 »), pas à la lettre ──
+    w = monde({ impressionZeros: true });
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('relecture : une impression « 001 » d\'un outil antérieur EST le n° 1 -> « écrit et relu », exit 0 (pas de faux négatif)', [r.code, /écrit et relu/.test(r.sorties), /impressions « setlist » 2\/2/.test(r.sorties), w.db.brut('cartes').find(c => c._id === 1001).impressions.length], [0, true, true, 1]);
 
     // ── tour 3 : la RELECTURE en base après l'écriture ──
     w = monde(); w.db.stats.perdreDerniereLigne = true;

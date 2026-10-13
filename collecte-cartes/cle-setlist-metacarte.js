@@ -122,7 +122,9 @@ async function lireSetlistDuSet({ db, r2, bucket, L }) {
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: ids } }, { projection: { nomEn: 1, niveau: 1, attaques: 1, impressions: 1, sets: 1 } }).toArray()).map(c => [c._id, c]));
     return {
         entrees: ent.filter(e => e.carteId && cartes.get(e.carteId)).map(e => ({ carte: cartes.get(e.carteId), numero: e.numero, titre: e.titre })),
-        lues: ent.length, sansPage: ent.filter(e => !e.carteId).length, sansNumero: ent.filter(e => e.numero == null).length
+        lues: ent.length, sansPage: ent.filter(e => !e.carteId).length, sansNumero: ent.filter(e => e.numero == null).length,
+        // (tour 1) les entrées SANS page (lien rouge) ou sans carte en base, avec leur numéro : un numéro qu'elles portent est aussi un numéro partagé
+        entreesSansPage: ent.filter(e => !e.carteId || !cartes.get(e.carteId)).map(e => ({ titre: e.titre, numero: e.numero }))
     };
 }
 
@@ -131,7 +133,7 @@ async function lireSetlistDuSet({ db, r2, bucket, L }) {
  * Fiche mélangée écartée : la carte montrerait deux numéros dans ce set (déjà jointe à un autre numéro, ou impression de l'expansion à un autre numéro).
  * @returns {{retenus: Array<{p, d}>, ecartes: Array<{p, d}>, refus: Array<{p, raison}>, impressions: Map<string, {p, d}>}}
  */
-function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, expansion }) {
+function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, expansion, entreesSansPage = [] }) {
     const { cleNumero: k } = require('./jointure');
     const res = produits.filter(p => !jointsIds.has(p.idProduct)).map(p => ({ p, d: designerParSetlist({ ...base, setlist: entrees }, p) }));
     const retenus = [], ecartes = [], refus = [];
@@ -140,7 +142,20 @@ function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, ex
     const numerotees = lignesDuSet.map(l => l.numeroFiche).filter(n => n != null && String(n).trim() !== '');
     const prefixee = n => /^[A-Z-]+\d/.test(String(cleNumero(n)));
     const formeDuSet = numerotees.length && numerotees.every(prefixee) ? 'prefixee' : numerotees.length && numerotees.every(n => !prefixee(n)) ? 'nue' : null;
+    // LE NUMÉRO PARTAGÉ (2026-10-13, relecture de SEA-2 : Pawmi 860034 et Gastly 860035, M-P/ID) : un numéro de Setlist porté par DEUX cartes ou plus
+    // dans la MÊME Setlist ne désigne aucune d'elles — c'est le pendant, côté numéro, de « un nom qui désigne plusieurs cartes ne désigne rien ». Les
+    // numéros se comptent par cleNumero (« 01 » = « 1 ») et par carte DISTINCTE (une carte listée deux fois n'est pas une collision : elle est déjà
+    // refusée plus haut, « plusieurs numéros »). Écrit par ce qu'il autorise : la fiche passe seulement si UNE carte, la sienne, porte le numéro.
+    // (tour 1) les entrées SANS page (lien rouge) comptent aussi, par titre distinct : elles ont un numéro, donc elles le partagent
+    const cartesParNumero = new Map();
+    const noter = (n, cle) => (cartesParNumero.get(n) || cartesParNumero.set(n, new Set()).get(n)).add(cle);
+    for (const e of entrees || []) { const n = e?.numero == null ? null : k(e.numero); if (n == null || !e.carte) continue; noter(n, e.carte._id); }
+    for (const e of entreesSansPage || []) { const n = e?.numero == null ? null : k(e.numero); if (n == null) continue; noter(n, `titre:${e.titre}`); }
     for (const x of res) {
+        if (x.d.carte && k(x.d.numero) != null) {
+            const cs = cartesParNumero.get(k(x.d.numero));
+            if (!cs || cs.size !== 1 || !cs.has(x.d.carte._id)) { refus.push({ p: x.p, numero: x.d.numero, garde: 'numero-partage', raison: `numéro de Setlist « ${k(x.d.numero)} » porté par ${cs ? cs.size : 0} cartes (${cs ? [...cs].join(', ') : '—'}) : il ne désigne pas ${x.d.carte._id}` }); continue; }
+        }
         if (x.d.carte && formeDuSet && (formeDuSet === 'prefixee') !== prefixee(x.d.numero)) { refus.push({ p: x.p, raison: `forme du numéro : la Setlist écrit « ${x.d.numero} », les lignes du set s'écrivent ${formeDuSet === 'prefixee' ? 'préfixées (ex. ' + numerotees[0] + ')' : 'nues'}` }); continue; }
         if (!x.d.carte) { refus.push({ p: x.p, raison: x.d.raison }); continue; }
         const deja = lignesDuSet.filter(l => l.carteId === x.d.carte._id && l.numeroFiche != null).map(l => k(l.numeroFiche));

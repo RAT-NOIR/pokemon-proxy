@@ -18,6 +18,7 @@ const { indexerMetacartes } = require('./collecte-cartes/cle-nom-attaques');
 const { lireSetlistDuSet, planDuSet } = require('./collecte-cartes/cle-setlist-metacarte');
 const { calibrer, verdict, imprimer, chargerExport, MINIMUMS } = require('./collecte-cartes/calibration-setlist-metacarte');
 const R = require('./collecte-cartes/regle-r-fiches');
+const J = require('./collecte-cartes/jointure');
 
 const PREUVE = 'metacarte+setlist';
 const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/];
@@ -77,8 +78,9 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
             const S = await lireSetlist(L);
             const produits = await produitsDe(L);
             const expansion = [].concat(L.bulba.expansion)[0];
-            const P = planDuSet({ base, entrees: S.entrees, produits, lignesDuSet: lignes.filter(l => l.slugSet === L.slugSet), jointsIds, tirage: L.bulba.tirage, expansion });
+            const P = planDuSet({ base, entrees: S.entrees, produits, lignesDuSet: lignes.filter(l => l.slugSet === L.slugSet), jointsIds, tirage: L.bulba.tirage, expansion, entreesSansPage: S.entreesSansPage || [] });
             log(`\n■ ${L.code} (${L.slugSet}) · ${P.retenus.length} lignes · ${new Set(P.retenus.map(x => x.d.carte._id)).size} cartes · ${P.impressions.size} impressions · ${P.ecartes.length} écartés · ${P.refus.length} refusés`);
+            for (const x of P.refus.filter(r => r.garde === 'numero-partage')) log(`   ✗ numéro partagé · ${x.p.idProduct} « ${x.p.name} » : ${x.raison}`);
             if (ecrire && ATTENDUS[L.code] !== P.retenus.length) { err(`❌ ARRÊT : ${L.code} rend ${P.retenus.length}, attendu ${ATTENDUS[L.code] ?? 'non donné'} — rien n'est écrit`); return 1; }
             for (const x of P.retenus) aEcrire.push({ ...x, CODE: L.code, L });
             for (const x of P.impressions.values()) impressions.push({ carteId: x.d.carte._id, imp: { tirage: L.bulba.tirage, expansion, numero: x.d.numero, total: null, deck: null, rarete: null, source: 'setlist' } });
@@ -106,7 +108,7 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
         const parId = new Map(cartes.map(c => [c._id, c]));
         const liensOk = aEcrire.filter(x => (parId.get(x.d.carte._id)?.liens?.idProduct || []).includes(x.p.idProduct) && (parId.get(x.d.carte._id)?.sets || []).includes(x.L.slugSet)).length;
         const impAttendues = new Map(aEcrire.map(x => [`${x.d.carte._id}|${x.L.slugSet}|${x.d.numero}`, x]));
-        const impOk = [...impAttendues.values()].filter(x => (parId.get(x.d.carte._id)?.impressions || []).some(i => i.tirage === x.L.bulba.tirage && i.expansion === [].concat(x.L.bulba.expansion)[0] && String(i.numero) === String(x.d.numero) && i.source === 'setlist')).length;
+        const impOk = [...impAttendues.values()].filter(x => (parId.get(x.d.carte._id)?.impressions || []).some(i => i.tirage === x.L.bulba.tirage && i.expansion === [].concat(x.L.bulba.expansion)[0] && J.cleNumero(i.numero) === J.cleNumero(x.d.numero) && i.source === 'setlist')).length;
         log(`\n   RELECTURE : lignes ${lignesOk}/${aEcrire.length} · cartes avec leurs liens et leur set ${liensOk}/${aEcrire.length} · impressions « setlist » ${impOk}/${impAttendues.size}`);
         if (lignesOk !== aEcrire.length || liensOk !== aEcrire.length || impOk !== impAttendues.size) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
         log('   ✅ écrit et relu');

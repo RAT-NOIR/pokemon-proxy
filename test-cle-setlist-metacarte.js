@@ -107,5 +107,23 @@ verifier('plan : la carte est déjà jointe à un AUTRE numéro de ce set → é
 Q = planDuSet({ base: bas, entrees: [{ carte: rabsca, numero: '184' }], produits: [P1], lignesDuSet: [], jointsIds: new Set([824921]), tirage: 'id', expansion: 'X' });
 verifier('plan : un produit déjà joint n\'est pas retouché', [Q.retenus.length, Q.refus.length], [0, 0]);
 
+// ── tour 1 : la garde du NUMÉRO PARTAGÉ, testée DIRECTEMENT sur planDuSet (cleNumero de la production : zéros retirés, préfixe et suffixe gardés) ──
+const pg = (entrees, entreesSansPage) => planDuSet({ base: bas, entrees, produits: [P1], lignesDuSet: [], jointsIds: new Set([900]), tirage: 'id', expansion: 'X', entreesSansPage });
+const verdictGarde = Q2 => [Q2.retenus.length, Q2.refus.map(r => r.garde ?? 'autre')];
+verifier('garde : une autre carte au même numéro → refus « numero-partage »', verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: '184' }])), [0, ['numero-partage']]);
+verifier('garde : zéros — « 0184 » et « 184 » sont le même numéro → refus', verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: '0184' }])), [0, ['numero-partage']]);
+verifier('garde : préfixe — « SV184 » n\'est pas « 184 » (cleNumero garde le préfixe) → pas de collision, la ligne passe', verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: 'SV184' }])), [1, []]);
+verifier('garde : suffixe — « 184a » n\'est pas « 184 » → pas de collision, la ligne passe', verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: '184a' }])), [1, []]);
+verifier('garde : une AUTRE carte listée deux fois à un AUTRE numéro ne gêne pas la ligne', verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: '12' }, { carte: pikachu, numero: '12' }])), [1, []]);
+verifier('garde : la MÊME carte listée deux fois au même numéro = UNE carte distincte, pas de collision ; mais la Setlist la range alors à deux entrées → refus de l\'ancienne règle, pas de la garde',
+    (q => [q.retenus.length, q.refus.map(r => r.garde ?? 'autre'), /2 entrées|plusieurs numéros/.test(q.refus[0]?.raison || '')])(pg([{ carte: rabsca, numero: '184' }, { carte: rabsca, numero: '184' }])), [0, ['autre'], true]);
+verifier('garde : deux entrées dont une seule appartient à la carte du produit, au même numéro, MÊME carte pour la garde → passe (une carte distincte)',
+    verdictGarde(pg([{ carte: rabsca, numero: '184' }, { carte: pikachu, numero: '99' }])), [1, []]);
+// sans page (lien rouge)
+verifier('garde : une entrée SANS page au même numéro → refus « numero-partage » (elle compte, par titre)', verdictGarde(pg([{ carte: rabsca, numero: '184' }], [{ titre: 'Truc (Set 184)', numero: '184' }])), [0, ['numero-partage']]);
+verifier('garde : … même écrite « 0184 » → refus', verdictGarde(pg([{ carte: rabsca, numero: '184' }], [{ titre: 'Truc (Set 184)', numero: '0184' }])), [0, ['numero-partage']]);
+verifier('garde : … une entrée sans page à un AUTRE numéro ne gêne pas', verdictGarde(pg([{ carte: rabsca, numero: '184' }], [{ titre: 'Truc (Set 185)', numero: '185' }])), [1, []]);
+verifier('garde : … une entrée sans page SANS numéro ne compte pas', verdictGarde(pg([{ carte: rabsca, numero: '184' }], [{ titre: 'Truc', numero: null }])), [1, []]);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
