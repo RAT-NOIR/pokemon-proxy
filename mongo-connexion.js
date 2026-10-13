@@ -42,7 +42,8 @@ const BASE_BAC_A_SABLE = 'test_scratch';
 const BASES = Object.freeze({
     [BASE_PRODUCTION]: 'MONGODB_URI',        // le catalogue Cardmarket appris, lecture seule
     [BASE_BAC_A_SABLE]: 'MONGODB_URI',       // le bac à sable, même grappe
-    cartes: 'MONGODB_CARTES_URI'             // la base de collecte — AUTRE grappe (collecte-cartes/garde.js)
+    cartes: 'MONGODB_CARTES_URI',            // la base de collecte — AUTRE grappe (collecte-cartes/garde.js)
+    rm_essai: 'MONGODB_ESSAI_URI'            // la base du service de TEST de l'API v2 (v2/admin/compte-essai.js, seul script qui la nomme)
 });
 
 /**
