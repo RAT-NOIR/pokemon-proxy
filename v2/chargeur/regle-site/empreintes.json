@@ -1,8 +1,10 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 35ed580 par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
+  "commit": "35ed5806e28d1175bca45555ab54b4d3f528cf2a",
   "sources": {
     "imageDeLImpression.ts": "e6f06c44d7eb98a18be7cc56929b3c0253123ac460853b99db2dfdf3a1de89ed",
-    "impressionsDuSet.ts": "3137aad3306d3c461d8a4902831cd6deed37eda681a19b4eda938819ba414137",
+    "impressionDuSet.ts": "ed1a78021c1814589a6eced8ec9c360c83f41bb65d2062f9d2c043dbb92b3503",
+    "impressionsDuSet.ts": "30fff0606b930a62c52133bdee4fc2330d70d8b2552c52e2da8b1c7fc570f427",
     "cardmarket.ts": "b370aeeecbc26d7dc2a8fcc361782b926630e40848d9336e2188386c551ba586",
     "langueDuVisuel.ts": "c7a95ee600f5972bdf3a5155b4dfddcb45a6b6fd77c0c03dfa0b8699c34dc026",
     "expressionsSures.ts": "9399cb9db0b3aa59d0cd32a8d85fb1fecc8d0ffab47b4ed5261ef6a5920b9ae0",
@@ -11,7 +13,8 @@
   },
   "produits": {
     "imageDeLImpression.mjs": "13bd64c51f228a299d54c6be0a8e7c51c6eb17c60a8dda5dc362569f3ea89591",
-    "impressionsDuSet.mjs": "05d9d24ab4c43bf662a61e6c2ac918dda7f62ce3b53610314c4f4bb8e0a1b4a5",
+    "impressionDuSet.mjs": "a1fb0cecc55d73eac34f0fcb7eda7e0f1ec3b67eb2d8846b5fc54e1aa3d315a3",
+    "impressionsDuSet.mjs": "97394b5526126f5f065c0939f5ab83cb6eaa59c1f6849404eb85f4cfbf1fc66a",
     "cardmarket.mjs": "3ee05f71cca97934711f135eefc452ab65c8c2aba6261df0fb89c42b846d4fbd",
     "langueDuVisuel.mjs": "de700461c90cfd0863a39b4f02a550d17a5476b260440cbeeaeab22ddefe16bb",
     "expressionsSures.mjs": "39db4059c95e8556abd95740f45c397ad7d7a30e70b931de7bedc6a112879c0d",

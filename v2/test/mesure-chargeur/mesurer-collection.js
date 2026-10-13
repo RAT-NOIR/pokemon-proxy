@@ -31,8 +31,8 @@ const EXPORT = path.join(__dirname, '..', '..', '..', 'products_singles_6.json')
     const site = new Map();
     for (const s of sets) {
         const membres = (parSet.get(s._id) || []).filter(d => typeof d.nomEn === 'string' && d.nomEn !== '');
-        const tir = s.tirage ?? s.region, noms = [].concat(s.bulba?.expansion ?? []);
-        const documents = membres.map(d => ({ d, fiches: regle.fichesDuDocument((d.impressions || []).filter(i => i && i.tirage === tir && noms.includes(i.expansion))), images: (d.images || []).filter(m => m && m.set === s._id) }));
+        const cible = { tirage: s.tirage ?? s.region, expansions: [].concat(s.bulba?.expansion ?? []), deck: s.deck };      // lib/impressionDuSet.ts : tirage, expansions, deck
+        const documents = membres.map(d => ({ d, fiches: regle.fichesDuDocument((d.impressions || []).filter(i => i && regle.impressionDuSet(i, cible))), images: (d.images || []).filter(m => m && m.set === s._id) }));
         const parImpression = regle.setParImpression(documents);
         const cles = new Set();
         for (const { d, fiches } of documents) for (const f of (parImpression ? fiches : fiches.slice(0, 1))) cles.add(cleFiche(d._id, f.numero));
