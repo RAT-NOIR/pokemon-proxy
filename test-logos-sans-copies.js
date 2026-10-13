@@ -46,6 +46,16 @@ egal('3b un fichier d\'apport manquant reste « fichier absent » (on ne l\'inve
 // 4. l'outil des decks ne lit plus aucun fichier WCD : meme avec un map de fichiers vide, aucun lus.set sur un jap_0NN
 egal('4 la table des decks garde ses 20 WCD (le refus est dit, pas tu)', Object.keys(TABLE).filter(k => /^WCD-/.test(k)).length, 20);
 
+// 5. (tour 1, §21 bis) UNE seule liste années/fichiers : une divergence fabriquée doit lever
+const { coherenceWcd } = require('./poser-logos-composes-decks');
+const { ANNEES_WCD: ANNEES, fichierWcd } = require('./collecte-cartes/wcd-logos-table');
+const leve5 = (table, annees) => { try { coherenceWcd(table, annees); return null; } catch (e) { return e.message; } };
+egal('5 la table des decks et la liste unique concordent', leve5(TABLE), null);
+egal('5b un WCD de la table des decks dont le fichier diverge : leve', /divergent/.test(leve5({ ...TABLE, 'WCD-2004': { ...TABLE['WCD-2004'], fichiers: ['Logo FR/WCD/jap_999.png'] } }) || ''), true);
+egal('5c une année en trop dans la table des decks : leve', /divergent/.test(leve5({ ...TABLE, 'WCD-2020': { cas: 'WCD', fichiers: [fichierWcd(96)], annee: 2020 } }) || ''), true);
+egal('5d une année de la liste unique absente de la table des decks : leve', /divergent/.test(leve5(TABLE, [...ANNEES, [2030, 99]]) || ''), true);
+egal('5e les clés WCD de la table des decks = les années de la liste unique', Object.keys(TABLE).filter(k => /^WCD-/.test(k)), ANNEES.map(([a]) => `WCD-${a}`));
+
 fs.readFileSync = lireOrig; fs.existsSync = existeOrig;
 console.log(`${ko ? '🔴' : '✅'} ${ok} passes, ${ko} en echec`);
 process.exit(ko ? 1 : 0);

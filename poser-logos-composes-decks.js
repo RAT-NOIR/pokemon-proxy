@@ -36,6 +36,8 @@ if (ECRIRE && (!CAS || ATTENDU == null)) { console.error('❌ --ecrire exige --c
 const sharp = require('sharp');
 const M = require('./collecte-cartes/logo-compose');
 const { LOGOS_COPIES } = require('./collecte-cartes/langue-logo');
+const { ANNEES_WCD, fichierWcd } = require('./collecte-cartes/wcd-logos-table');
+const fichierDeLAnnee = a => fichierWcd(ANNEES_WCD.find(([x]) => x === a)[1]);
 
 const AD = 'apport-manuel/Deck JP', AZ = 'apport-manuel/DECK ZH', W = 'Logo FR/WCD';
 const DOSSIER_TIRAGE = { [AD]: ['jp'], [AZ]: ['zh-hans', 'zh-hant'], [W]: ['intl'] };
@@ -64,9 +66,16 @@ const TABLE = {
     'Master-Strategy-Deck-Building-Sets': { cas: 'B', fichiers: [`${AZ}/CSVM1AC.png`, `${AZ}/CSVM1BC.png`, `${AZ}/CSVM1CC.png`] },
     'Master-Strategy-Deck-Building-Sets-Vol-2': { cas: 'B', fichiers: [`${AZ}/CSVM2AC.png`, `${AZ}/CSVM2BC.png`, `${AZ}/CSVM2CC.png`] },
     // WCD — le logo officiel de l'année (lue sur le logo) ; pas de championnat en 2020 ni en 2021
-    ...Object.fromEntries([[2004, 76], [2005, 77], [2006, 78], [2007, 79], [2008, 80], [2009, 81], [2010, 82], [2011, 83], [2012, 84], [2013, 85], [2014, 86], [2015, 87],
-        [2016, 88], [2017, 89], [2018, 90], [2019, 91], [2022, 92], [2023, 93], [2024, 94], [2025, 95]].map(([a, n]) => [`WCD-${a}`, { cas: 'WCD', fichiers: [`${W}/jap_0${n}.png`], annee: a }]))
+    // (tour 1, §21 bis) UNE seule liste années/fichiers : celle de collecte-cartes/wcd-logos-table.js, que l'export lit aussi
+    ...Object.fromEntries(ANNEES_WCD.map(([a]) => [`WCD-${a}`, { cas: 'WCD', fichiers: [fichierDeLAnnee(a)], annee: a }]))
 };
+/** Lève si les entrées WCD de `table` ne sont pas exactement celles de la liste unique (années ET fichiers). */
+function coherenceWcd(table, annees = ANNEES_WCD) {
+    const attendu = annees.map(([a, n]) => `WCD-${a}=${fichierWcd(n)}`).sort();
+    const trouve = Object.entries(table).filter(([, t]) => t.cas === 'WCD').map(([k, t]) => `${k}=${t.fichiers.join('+')}`).sort();
+    if (JSON.stringify(attendu) !== JSON.stringify(trouve)) throw new Error(`les WCD de la table des decks divergent de wcd-logos-table.js : attendu ${attendu.join(', ')} ; trouvé ${trouve.join(', ')}`);
+}
+coherenceWcd(TABLE);
 
 const sha1 = b => crypto.createHash('sha1').update(b).digest('hex');
 /** Le montage côte à côte de 2 ou 3 logos : chacun détouré (fond blanc rendu transparent), rogné, à la même hauteur, 18 px entre deux. */
@@ -105,11 +114,11 @@ function planifier(sets, lus, fichiers, copies = LOGOS_COPIES) {
         const propre = s.logo?.cleR2 && s.logo.logoGenerique !== true && !(s.logo.sha1 && gen.has(String(s.logo.sha1).toLowerCase()));
         if (propre) return { ...base, action: 'garde-logo-propre', raison: `logo propre au set (${s.logo.cleR2})` };
         if (typeof s.nomAffichage !== 'string' || !s.nomAffichage) return { ...base, action: 'refus', raison: 'set sans nom affiché : pas d\'étiquette' };
-        return { ...base, action: 'ecrire', region: s.region, tirage, etiquette: t.cas === 'WCD' ? (s.logoCompose?.elements?.etiquette ?? s.nomAffichage) : s.nomAffichage,
+        return { ...base, action: 'ecrire', region: s.region, tirage, etiquette: s.nomAffichage,
             sous: s.logoCompose?.elements?.sous ?? null, ancien: s.logoCompose ?? null };
     });
 }
-module.exports = { TABLE, planifier, montage };
+module.exports = { TABLE, planifier, montage, coherenceWcd };
 
 if (require.main === module) (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
@@ -164,9 +173,9 @@ if (require.main === module) (async () => {
         await r2.deposerBinaire(bucket, cle, p.png, 'image/png');
         const vg = await fabriquerVignette(p.png, { largeur: LARGEUR_VIGNETTE_LOGO, qualite: 85 });
         const cv = cleVignette(cle); await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
-        const valeur = { cleR2: cle, w: p.w, h: p.h, octets: p.png.length, sha1: p.sha1, region: p.region, source: 'compose', famille: p.cas === 'WCD' ? 'wcd' : 'deck-apport',
+        const valeur = { cleR2: cle, w: p.w, h: p.h, octets: p.png.length, sha1: p.sha1, region: p.region, source: 'compose', famille: 'deck-apport',
             elements: { logo: p.fichiers.map(f => ({ fichier: f, sha1: fichiers.get(f) })), montage: p.fichiers.length > 1, etiquette: p.etiquette, sous: p.sous ?? null, ...(p.annee ? { anneeLue: p.annee } : {}) },
-            preuve: `logo composé par rat-market (${p.cas === 'A' ? 'décision du testeur du 2026-10-07 : un vrai logo partagé par plusieurs decks, composé avec le nom du deck' : p.cas === 'B' ? 'décision du testeur du 2026-10-07 : jusqu\'à 3 logos de deck côte à côte' : `cas WCD inatteignable : les copies de Pokécardex sont refusées par la table des décisions`}) : ${p.fichiers.join(' + ')} + « ${p.etiquette}${p.sous ? ` / ${p.sous}` : ''} » ; région du set`,
+            preuve: `logo composé par rat-market (${p.cas === 'A' ? 'décision du testeur du 2026-10-07 : un vrai logo partagé par plusieurs decks, composé avec le nom du deck' : 'décision du testeur du 2026-10-07 : jusqu\'à 3 logos de deck côte à côte'}) : ${p.fichiers.join(' + ')} + « ${p.etiquette}${p.sous ? ` / ${p.sous}` : ''} » ; région du set`,
             le, vignette: { cleR2: cv, w: vg.w, h: vg.h } };
         const filtre = { _id: p.slug, ...(p.ancien?.sha1 ? { 'logoCompose.sha1': p.ancien.sha1 } : { 'logoCompose.cleR2': { $exists: false } }) };
         const u = await S.updateOne(filtre, { $set: { logoCompose: valeur, ...(p.ancien ? { logoComposeRemplace: { ...p.ancien, remplaceLe: le } } : {}) } });
