@@ -57,6 +57,8 @@ const P = L(1, 'PRE', '162'), J = L(2, 'PAR', '251');
     H.v('8g. un accord des deux lectures sur un champ qui ne SÉPARE pas le jumeau (le code, identique chez les deux) ne suffit pas', dec({ setCode: 'PRE', numero: '162' }, { setCode: 'PRE', numero: null }, [L(2, 'PRE', '251')]).confirme, false);
     H.v('8h. les deux lectures disent la même chose et séparent le jumeau : confirme (le cas nominal reste ouvert)', dec({ setCode: 'PRE', numero: '162' }, { setCode: 'PRE', numero: '162' }).confirme, true);
     H.v('8i. la première lecture contredit P sur le numéro (999) et la seconde la suit : ne confirme pas', dec({ setCode: 'PRE', numero: '999' }, { setCode: 'PRE', numero: '999' }).confirme, false);
+    H.v('8k. la première lecture contredit P sur le numéro (999) que la seconde ne relit pas ; le code (PRE) confirmerait seul : ne confirme pas (la première ne doit contredire P sur AUCUN champ lu)', dec({ setCode: 'PRE', numero: '999' }, { setCode: 'PRE', numero: null }).confirme, false);
+    H.v('8l. les deux lectures ne disent pas la même chose sur le numéro (« 162A » puis « 162 ») sans que la première contredise P : ne confirme pas (accord exact exigé)', dec({ setCode: 'PRE', numero: '162A' }, { setCode: 'PRE', numero: '162' }).confirme, false);
     // la décision rend toujours une raison, jamais une exception
     H.v('5a. entrée vide ou absente : ne confirme pas, ne lève pas', [S.decider({}).confirme, S.decider().confirme, S.decider({ p: P, jumeaux: [J] }).confirme], [false, false, false]);
     H.v('5b. une raison est toujours donnée', typeof dec(lu, { setCode: null, numero: null }).raison, 'string');
@@ -105,6 +107,12 @@ const P = L(1, 'PRE', '162'), J = L(2, 'PAR', '251');
         const F = S.creerFournisseur({ recadrer: async () => { recadrages++; return ['b1', 'b2']; }, lecteur });
         const c = { appels: 0 }; const r = await F({ image, corps: {}, compteur: c });
         H.v(`6j. image ${nom} : sansImage, aucun appel (${lecteur.appels.length}), aucun recadrage, rien de lu`, [r.sansImage, r.echec, lecteur.appels.length, c.appels, recadrages, r.setCode, r.numero], [true, false, 0, 0, 0, null, null]);
+    }
+    {
+        const recus = []; const ctl = new AbortController();
+        const F = S.creerFournisseur({ recadrer: async a => { recus.push(a); return ['b1', 'b2']; }, lecteur: lecteurDe([{ setCode: 'PRE', number: '162' }, { setCode: 'PRE', number: '162' }]) });
+        await F({ image: IMG, corps: { x: 1 }, compteur: { appels: 0 }, signal: ctl.signal, photos: ['https://images1.vinted.net/x.jpg'] });
+        H.v('6m. le recadreur reçoit les OCTETS (image), le corps et le signal — jamais une URL de photo, même si l\'appelant en glisse une', [recus[0].image === IMG, recus[0].signal === ctl.signal, 'photos' in recus[0], recus[0].corps], [true, true, false, { x: 1 }]);
     }
     // TOUR 1 (coût exact) : un signal d'abandon — après lui, AUCUN appel de plus ne part, et le lecteur reçoit le signal
     {
