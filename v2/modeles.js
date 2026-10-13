@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { col } = require('./db');
+const FILTRES = require('./banc/filtres');
 
 // nom de collection, clé, options. `nom` est EXPLICITE : verifierIndex() compare des noms, pas des formes.
 const I = (c, nom, cle, opts = {}) => ({ c, nom, cle, opts: { name: nom, ...opts } });
@@ -23,8 +24,9 @@ const INDEX = Object.freeze([
     I('analyses', 'analyses_porteur', { porteur: 1, creeLe: -1 }), TTL('analyses'),
     // ETIQUETAGE-B : deux index PARTIELS (une entrée seulement pour les analyses d'un administrateur concernées : quelques centaines au plus, quelques dizaines de Ko) — la reprise des lignes en attente
     // (`bancAttente: true`, triée par dernier essai) et le filet des orphelins du banc (`photoBanc.cle`) ne parcourent plus toute la collection `analyses`.
-    I('analyses', 'analyses_banc_attente', { bancAttente: 1, bancEssaiLe: 1 }, { partialFilterExpression: { bancAttente: true } }),
-    I('analyses', 'analyses_photo_banc', { 'photoBanc.cle': 1 }, { partialFilterExpression: { 'photoBanc.cle': { $type: 'string' } } }),
+    // (les filtres sont écrits UNE fois, v2/banc/filtres.js : le filtre d'un index partiel doit être impliqué par celui de la requête qu'il sert)
+    I('analyses', 'analyses_banc_attente', { bancAttente: 1, bancEssaiLe: 1 }, { partialFilterExpression: FILTRES.attente }),
+    I('analyses', 'analyses_photo_banc', { 'photoBanc.cle': 1 }, { partialFilterExpression: FILTRES.photo }),
     TTL('annonces'),
     I('idempotence', 'idempotence_cle', { cle: 1 }, { unique: true }), TTL('idempotence'),
     I('limites', 'limites_cle', { cle: 1 }, { unique: true }), TTL('limites'),

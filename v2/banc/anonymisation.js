@@ -63,7 +63,9 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
             await borner(col().insertOne({ _id: c.anonId, verite: c.verite, source: c.source, etat: 'confirmee', versionModele: c.versionModele ?? null, ...(c.versionTexte !== undefined ? { versionTexte: c.versionTexte } : {}),
                 // ETIQUETAGE-B : une ligne d'étiquette garde, sans lien, de quoi MESURER — la réponse d'origine de la chaîne, la version de la chaîne, la révision, « aucune » (jamais un jour, un jeton, un scanId)
                 ...(c.source === 'etiquette-admin' ? { ...(c.reponse !== undefined ? { reponse: c.reponse } : {}), ...(c.versionChaine !== undefined ? { versionChaine: c.versionChaine } : {}), ...(c.rev !== undefined ? { rev: c.rev } : {}), ...(c.sha256 !== undefined ? { sha256: c.sha256 } : {}), ...(c.aucune !== undefined ? { aucune: c.aucune } : {}) } : {}),
-                cleR2: c.anonCle, expireLe: debutMois(c.le, cfg.retention.bancMois), anonyme: true }));
+                cleR2: c.anonCle,
+                // une ligne d'étiquette garde SON échéance (le jour du SCAN + bancMois, v2/banc/etiquette-ligne.js) ; les autres la recalculent depuis leur jour
+                expireLe: c.source === 'etiquette-admin' && c.expireLe instanceof Date ? c.expireLe : debutMois(c.le, cfg.retention.bancMois), anonyme: true }));
         } catch (e) { if (!e || e.code !== 11000) { echec('copie anonyme non écrite', e); return 'echec'; } }     // 11000 : la copie d'une reprise existe déjà
         let r;
         try { r = await borner(col().deleteOne({ _id: c._id, etat: 'anonymisation' })); }

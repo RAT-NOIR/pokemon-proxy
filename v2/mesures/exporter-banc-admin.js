@@ -13,31 +13,40 @@
 //   · la base et le bucket ne reçoivent AUCUNE écriture : cet outil n'appelle que find et lire.
 // Aucune valeur de variable, d'URI ni de clé n'est jamais journalisée.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const FORMAT = 'banc-admin-v1';
 const CLE_BANC = /^banc-reel\/v2\/[0-9a-f]{32}\.webp$/;
-const APPORTS = Object.freeze(['logo fr', 'logo jp', 'logo zh', 'logo', 'apport-manuel', 'apports-manuels']);   // segments de chemin (casse ignorée) : des dossiers que le testeur remplit lui-même
+const APPORTS = Object.freeze(['logo fr', 'logo jp', 'logo zh', 'logo', 'apport-manuel', 'apports-manuels']);   // SECONDE couche : des dossiers que le testeur remplit lui-même (la première est la liste des racines permises)
 const erreur = (code, message) => Object.assign(new Error(message || code), { code });
+/** Un segment de chemin comparé comme Windows le lit : casse ignorée, points et espaces FINAUX ignorés (« Logo FR. » et « Logo FR  » désignent « Logo FR »). */
+const segmentNorm = s => String(s).replace(/[. ]+$/, '').toLowerCase();
 
-/** Le dossier est-il admis ? Pure. @returns {string|null} la raison du refus, ou null. */
+/**
+ * Le chemin est-il refusé par le NOM ? Pure. @returns {string|null} la raison du refus, ou null.
+ * C'est la SECONDE couche : la première est « sous une racine permise » (racinesPermises / jugerSortie) ; celle-ci refuse en plus, SOUS une racine permise, ce qui ressemble à un dossier d'apports,
+ * à `verrou/photos`, à un Bureau, à la racine d'un disque, ou à un nom court 8.3 (non développé : on ne sait pas ce qu'il désigne).
+ */
 function refusDeDossier(dossier) {
     if (typeof dossier !== 'string' || !dossier.trim()) return 'dossier absent';
     if (!path.isAbsolute(dossier) && !/^[A-Za-z]:[\\/]/.test(dossier)) return 'dossier non absolu';
     const norm = dossier.replace(/\//g, '\\').replace(/\\+$/, '');
-    const segments = norm.split('\\').filter(Boolean).map(s => s.toLowerCase());
+    const segments = norm.split('\\').filter(Boolean).map(segmentNorm);
     if (segments.length < 2) return 'racine d\'un disque';
     if (segments.some(s => APPORTS.includes(s))) return 'dossier d\'apports manuels';
+    if (segments.some(s => /~\d+(\..*)?$/.test(s))) return 'nom court 8.3 (non développé)';
     for (let i = 0; i < segments.length - 1; i++) if (segments[i] === 'verrou' && segments[i + 1] === 'photos') return 'dossier de photos du verrou';
     return null;
 }
 
-/** Écrit `contenu` à `relatif` DANS `racine`, ou lève HORS-DOSSIER. Le seul point d'écriture de l'outil. */
-function ecrireDans(racine, relatif, contenu) {
+/** Écrit `contenu` à `relatif` DANS `racine`, ou lève HORS-DOSSIER. Le seul point d'écriture de l'outil. `juge` (facultatif) est rappelé JUSTE AVANT l'écriture : il relève le chemin réel du dossier de sortie. */
+function ecrireDans(racine, relatif, contenu, juge = null) {
     if (typeof relatif !== 'string' || !relatif || path.isAbsolute(relatif) || /^[A-Za-z]:/.test(relatif)) throw erreur('HORS-DOSSIER');
     const base = path.resolve(racine), cible = path.resolve(base, relatif);
     const rel = path.relative(base, cible);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw erreur('HORS-DOSSIER');
+    if (typeof juge === 'function') juge();
     fs.mkdirSync(path.dirname(cible), { recursive: true });
     fs.writeFileSync(cible, contenu);
     return cible;
@@ -72,6 +81,41 @@ function jugerCheminReel(dossier, realpath, lstat) {
     }
 }
 
+const comparable = p => path.resolve(String(p).replace(/^\\\\\?\\/, '')).replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+const sous = (p, base) => p === base || p.startsWith(`${base}/`);
+
+/**
+ * M1 — LA LISTE DE CE QUI EST PERMIS (une garde s'écrit par ce qu'elle autorise) : l'export n'écrit que SOUS une racine permise —
+ *   · le dossier temporaire du système (`tmpdir()`), toujours ;
+ *   · la racine NOMMÉE par `V2_EXPORT_RACINE` : absolue, existante, et jamais un dossier d'apports, `verrou/photos`, un Bureau (`Desktop`) ni la racine d'un disque.
+ * Une `V2_EXPORT_RACINE` posée mais invalide REFUSE tout l'export (une garde qui ne peut pas conclure bloque). Les racines sont jugées sur leur chemin RÉEL.
+ */
+function racinesPermises({ env, realpath, tmpdir }) {
+    const racines = [];
+    try { racines.push(comparable(realpath(tmpdir()))); } catch { /* pas de temporaire lisible : pas de racine temporaire */ }
+    const v = env && env.V2_EXPORT_RACINE;
+    if (v !== undefined && v !== '') {
+        if (typeof v !== 'string' || !v.trim() || (!path.isAbsolute(v) && !/^[A-Za-z]:[\\/]/.test(v))) throw erreur('DOSSIER-REFUSE', 'racine nommée absente ou relative');
+        let reel;
+        try { reel = realpath(v); } catch { throw erreur('DOSSIER-REFUSE', 'racine nommée inexistante ou illisible'); }
+        const raison = refusDeDossier(String(reel).replace(/^\\\\\?\\/, ''));
+        if (raison) throw erreur('DOSSIER-REFUSE', `racine nommée : ${raison}`);
+        if (String(reel).split(/[\\/]+/).filter(Boolean).map(segmentNorm).some(s => s === 'desktop' || s === 'bureau')) throw erreur('DOSSIER-REFUSE', 'racine nommée : sous un Bureau');
+        racines.push(comparable(reel));
+    }
+    return racines;
+}
+
+/** Le jugement COMPLET du dossier de sortie : le nom (seconde couche), le chemin réel (liens), puis « sous une racine permise ». Rend le chemin réel jugé. */
+function jugerSortie(dossier, { realpath, lstat, env, tmpdir }) {
+    const raison = refusDeDossier(dossier);
+    if (raison) throw erreur('DOSSIER-REFUSE', raison);
+    const reel = jugerCheminReel(dossier, realpath, lstat);
+    const racines = racinesPermises({ env, realpath, tmpdir });
+    if (!racines.some(r => sous(comparable(reel), r))) throw erreur('DOSSIER-REFUSE', 'hors des racines permises (le temporaire du système, ou la racine nommée par V2_EXPORT_RACINE)');
+    return reel;
+}
+
 /** M5 — l'export n'écrit que dans un dossier VIDE ou inexistant : jamais par-dessus un ancien export (ses photos survivraient à une purge). */
 function verifierDossierLibre(dossier) {
     if (!fs.existsSync(dossier)) return;
@@ -83,11 +127,11 @@ function verifierDossierLibre(dossier) {
  * @param {{dossier:string, colFn:(n:string)=>any, stockage:{lire:(cle:string)=>Promise<Buffer>}, base:string}} o
  * @returns {Promise<{lignes:number, photos:number, sansPhoto:number}>}
  */
-async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs.realpathSync, lstat = fs.lstatSync }) {
+async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs.realpathSync.native, lstat = fs.lstatSync, env = process.env, tmpdir = os.tmpdir }) {
     if (typeof base !== 'string' || !base.trim() || base.trim().toLowerCase() === 'test') throw erreur('BASE-REFUSEE', 'base absente ou de production');
-    const raison = refusDeDossier(dossier);
-    if (raison) throw erreur('DOSSIER-REFUSE', raison);
-    jugerCheminReel(dossier, realpath, lstat);              // I1 : le chemin RÉEL, pas seulement le texte donné
+    // le dossier de sortie est jugé ICI, puis JUSTE AVANT chaque écriture (la course : un dossier vide au premier jugement qui devient un lien pendant l'export)
+    const juge = () => jugerSortie(dossier, { realpath, lstat, env, tmpdir });
+    juge();
     verifierDossierLibre(dossier);
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
     const brutes = await colFn('banc_lignes').find({ source: 'etiquette-admin', etat: 'confirmee' }).sort({ _id: 1 }).toArray();
@@ -100,8 +144,8 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
         if (typeof cle === 'string' && CLE_BANC.test(cle)) {
             const nom = path.basename(cle);
             if (!lues.has(nom)) {
-                try { const b = await stockage.lire(cle); if (!Buffer.isBuffer(b) || !b.length) throw new Error('vide'); ecrireDans(dossier, `photos/${nom}`, b); lues.set(nom, true); }
-                catch (e) { if (e && e.code === 'HORS-DOSSIER') throw e; lues.set(nom, false); }
+                try { const b = await stockage.lire(cle); if (!Buffer.isBuffer(b) || !b.length) throw new Error('vide'); ecrireDans(dossier, `photos/${nom}`, b, juge); lues.set(nom, true); }
+                catch (e) { if (e && (e.code === 'HORS-DOSSIER' || e.code === 'DOSSIER-REFUSE')) throw e; lues.set(nom, false); }
             }
             if (lues.get(nom)) photo = `photos/${nom}`;
         }
@@ -117,10 +161,11 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     // I2 — des étiquettes que le banc n'a pas encore reflétées (panne, reprise à venir) : le NOMBRE est dit dans le manifeste, jamais tu. `null` : la base n'a pas répondu (inconnu, pas « zéro »).
     let enAttente = null;
     try { enAttente = await colFn('analyses').countDocuments({ bancAttente: true }); } catch { enAttente = null; }
+    juge();
     fs.mkdirSync(path.join(dossier, 'photos'), { recursive: true });
     const photos = [...lues.values()].filter(Boolean).length;
-    ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1));
-    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1));
+    ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1), juge);
+    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
     return { lignes: lignes.length, photos, sansPhoto };
 }
 
@@ -163,7 +208,7 @@ async function lancerCLI(argv, { env = process.env, connecter = connecterLecture
         c = await connecter(env, a.base);
         let st = stockage;
         if (!st) { const reel = require('../banc/stockage').creerStockageReel(env); st = { lire: k => reel.lire(k) }; }   // l'objet rendu n'expose que `lire`
-        const b = await exporterBancAdmin({ dossier: a.sortie, colFn: c.colFn, stockage: st, base: a.base });
+        const b = await exporterBancAdmin({ dossier: a.sortie, colFn: c.colFn, stockage: st, base: a.base, env });
         journal(`export du banc de l'administrateur : ${b.lignes} ligne(s), ${b.photos} photo(s), ${b.sansPhoto} ligne(s) sans photo → ${a.sortie}`);
         return 0;
     } catch (e) { console.error(`❌ ARRÊT : ${(e && e.code) || (e && e.name) || 'erreur'}`); return 1; }

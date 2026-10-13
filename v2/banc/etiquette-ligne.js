@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const S = require('./stockage');
 const { JOUR_MS, jourUTC, creerBorner, codeDe, autresLignesPortent } = require('./commun');
+const FILTRES = require('./filtres');
 
 const CLES_DOC_ADMIN = Object.freeze(['_id', 'aucune', 'cleR2', 'etat', 'expireLe', 'le', 'rev', 'reponse', 'sha256', 'source', 'verite', 'versionChaine', 'versionModele']);
 const SOURCE = 'etiquette-admin';
@@ -66,10 +67,14 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
         const chemin = `cartes.${carte}.etiquetteAdmin`;
         try {
             await analyses().updateOne({ _id: oid(scanId), [`${chemin}.rev`]: rev }, { $set: { [`${chemin}.banc`]: etat } });
-            if (ETATS_FINIS.includes(etat)) {
-                await analyses().updateOne({ _id: oid(scanId), cartes: { $not: { $elemMatch: { etiquetteAdmin: { $exists: true }, 'etiquetteAdmin.banc': { $nin: ETATS_FINIS } } } } }, { $unset: { bancAttente: '' } });
-            } else await analyses().updateOne({ _id: oid(scanId) }, { $set: { bancAttente: true } });
+            if (ETATS_FINIS.includes(etat)) await retirerMarque(scanId);
+            else await analyses().updateOne({ _id: oid(scanId) }, { $set: { bancAttente: true } });
         } catch (e) { echec('marque non posée', e); }
+    }
+
+    /** Retire la marque d'analyse si, et seulement si, plus AUCUNE carte n'attend (la condition est évaluée par la base, dans la même écriture : une étiquette arrivée entre-temps garde la marque). */
+    async function retirerMarque(scanId) {
+        return analyses().updateOne({ _id: oid(scanId), cartes: { $not: { $elemMatch: { etiquetteAdmin: { $exists: true }, 'etiquetteAdmin.banc': { $nin: ETATS_FINIS } } } } }, { $unset: { bancAttente: '' } });
     }
 
     /** À l'étiquetage (et à la reprise) : écrit ou met à jour LA ligne de la carte. @returns 'ecrit' | 'en-attente' | null (aucune étiquette sur cette carte). Ne lève jamais. */
@@ -77,7 +82,7 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
         let rev = null;
         try {
             if (typeof scanId !== 'string' || !FORME_ID.test(scanId) || !Number.isSafeInteger(carte) || carte < 0) return 'en-attente';
-            const an = await borner(analyses().findOne({ _id: oid(scanId) }, { projection: { cartes: 1, photoBanc: 1, versionChaine: 1, versionModele: 1 } }));
+            const an = await borner(analyses().findOne({ _id: oid(scanId) }, { projection: { cartes: 1, photoBanc: 1, versionChaine: 1, versionModele: 1, creeLe: 1 } }));
             const origine = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
             const et = origine && origine.etiquetteAdmin;
             if (!et || !Number.isSafeInteger(et.rev)) return null;
@@ -95,8 +100,10 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
             for (let essai = 0; essai < 3; essai++) {
                 const existante = await borner(col().findOne({ _id: id }));
                 if (!existante) {
+                    // `le` = le jour de l'étiquetage (le LIEN se compte depuis lui) ; `expireLe` = le jour du SCAN + bancMois : la photo existe depuis le scan, les 24 mois se comptent depuis la capture
                     const now = jourUTC(horloge());
-                    const doc = { _id: id, source: SOURCE, etat: 'confirmee', ...contenu, ...(aucune ? { aucune } : {}), reponse: reponseDOrigine(origine), cleR2: cle, le: now, expireLe: new Date(now.getTime() + cfg.retention.bancMois * 30.5 * JOUR_MS) };
+                    const scan = an.creeLe instanceof Date && Number.isFinite(+an.creeLe) ? jourUTC(an.creeLe) : now;
+                    const doc = { _id: id, source: SOURCE, etat: 'confirmee', ...contenu, ...(aucune ? { aucune } : {}), reponse: reponseDOrigine(origine), cleR2: cle, le: now, expireLe: new Date(scan.getTime() + cfg.retention.bancMois * 30.5 * JOUR_MS) };
                     try { await borner(col().insertOne(doc)); return fin('ecrit'); }
                     catch (e) { if (e && e.code === 11000) continue; throw e; }       // deux étiquettes simultanées : la seconde met à jour
                 }
@@ -130,26 +137,48 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
      * La reprise (passe quotidienne) : TOUTE analyse marquée `bancAttente`, la moins récemment essayée d'abord (`bancEssaiLe`, puis la plus ancienne) — une cible qui échoue toujours passe au bout de la file
      * après chaque essai, elle ne fait pas mourir de faim les réparables. Bornée à `max` analyses par passe. @returns { ecrites, restantes, terminees }
      */
+    /**
+     * Un administrateur DÉCHU n'a plus de photo : les scans non étiquetés qu'il a laissés perdent la leur (rôle relu en base). Une photo que porte déjà une ligne étiquetée reste au bucket (durée du banc) ;
+     * l'analyse, elle, ne la nomme plus. Bornée à `max` analyses par passe ; ne lève jamais.
+     */
+    async function purgerPhotosDeDeches(max, bilan) {
+        try {
+            const porteurs = (await borner(analyses().distinct('porteur', FILTRES.photo))).filter(p => typeof p === 'string');
+            const ids = porteurs.filter(p => p.startsWith('compte:') && FORME_ID.test(p.slice(7))).map(p => oid(p.slice(7)));
+            const admins = new Set(ids.length ? (await borner(colFn('comptes').find({ _id: { $in: ids }, role: 'administrateur' }, { projection: { _id: 1 } }).toArray())).map(c => `compte:${c._id}`) : []);
+            let reste = Math.max(1, max);
+            for (const p of porteurs.filter(x => !admins.has(x))) {
+                if (reste <= 0) break;
+                const liste = await borner(analyses().find({ porteur: p, ...FILTRES.photo }, { projection: { photoBanc: 1 } }).limit(reste).toArray());
+                for (const an of liste) { await abandonnerPhoto(an); bilan.deches++; reste--; }
+            }
+        } catch (e) { echec('photos des anciens administrateurs', e); bilan.restantes++; }
+    }
+
     async function reprendreEtiquettes({ max = REPRISE_MAX } = {}) {
-        const bilan = { ecrites: 0, restantes: 0, terminees: 0 };
+        const bilan = { ecrites: 0, restantes: 0, terminees: 0, orphelines: 0, deches: 0 };
+        await purgerPhotosDeDeches(max, bilan);
         try {
             const now = horloge();
-            const liste = await borner(analyses().find({ bancAttente: true }, { projection: { cartes: 1, porteur: 1, photoBanc: 1, creeLe: 1 } }).sort({ bancEssaiLe: 1, creeLe: 1 }).limit(Math.max(1, max)).toArray());
+            const liste = await borner(analyses().find(FILTRES.attente,{ projection: { cartes: 1, porteur: 1, photoBanc: 1, creeLe: 1 } }).sort({ bancEssaiLe: 1, creeLe: 1 }).limit(Math.max(1, max)).toArray());
             const ids = liste.map(a => String(a.porteur || '')).filter(p => p.startsWith('compte:') && FORME_ID.test(p.slice(7))).map(p => oid(p.slice(7)));
             const admins = new Set(ids.length ? (await borner(colFn('comptes').find({ _id: { $in: ids }, role: 'administrateur' }, { projection: { _id: 1 } }).toArray())).map(c => `compte:${c._id}`) : []);
             for (const an of liste) {
                 try { await analyses().updateOne({ _id: an._id }, { $set: { bancEssaiLe: now } }); } catch (e) { echec('essai non noté', e); }
                 const estAdmin = admins.has(String(an.porteur));
-                let retire = false;
+                let retire = false, enAttente = 0;
                 for (let i = 0; i < (an.cartes || []).length; i++) {
                     const e = an.cartes[i] && an.cartes[i].etiquetteAdmin;
                     if (!e || ETATS_FINIS.includes(e.banc) || !Number.isSafeInteger(e.rev)) continue;
+                    enAttente++;
                     if (!estAdmin) { await marquer(String(an._id), i, e.rev, 'role-retire'); bilan.terminees++; retire = true; continue; }
                     if (!an.photoBanc && an.creeLe instanceof Date && now.getTime() - an.creeLe.getTime() > ATTENTE_PHOTO_MS) { await marquer(String(an._id), i, e.rev, 'sans-photo'); bilan.terminees++; continue; }
                     const r = await etiquetteAdmin({ scanId: String(an._id), carte: i });
                     if (r === 'ecrit') bilan.ecrites++; else bilan.restantes++;
                 }
                 if (retire) await abandonnerPhoto(an);
+                // une marque sans aucune étiquette en attente derrière (un `$unset` avalé) est retirée : l'analyse ne boucle pas dans la file et l'export n'annonce pas une attente qui n'existe pas
+                if (!enAttente) { try { await retirerMarque(String(an._id)); bilan.orphelines++; } catch (e) { echec('marque orpheline non retirée', e); } }
             }
         } catch (e) { echec('reprise', e); bilan.restantes++; }
         return bilan;

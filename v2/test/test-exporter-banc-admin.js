@@ -145,6 +145,43 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         await db.col('banc_lignes').deleteOne({ _id: 'k1'.padEnd(64, '0') });
     }
 
+    // ═══ 4 bis. M1 : la garde de dossier s'écrit par ce qu'elle AUTORISE — une racine permise (le temporaire du système, ou la racine NOMMÉE par V2_EXPORT_RACINE), tout le reste est refusé ═══
+    // Chemins FABRIQUÉS et résolution `realpath` INJECTÉE : aucun accès hors du temporaire, aucun lien. `Z:\` est une lettre fabriquée (jamais écrite : rien n'existe là).
+    {
+        const base = { colFn: colLecture, stockage: { lire: c => mem.lire(c) }, base: 'essai_lecture' };
+        const identite = { realpath: p => p, lstat: () => { throw Object.assign(new Error('absent'), { code: 'ENOENT' }); } };
+        const LF = ['Logo', 'FR'].join(' ');
+        const T = path.join(racine, 'perm');                        // un faux « temporaire du système » : sert de racine permise injectée
+        fs.mkdirSync(T, { recursive: true });
+        const permis = { ...identite, tmpdir: () => T, env: {} };
+        H.v('M1. hors de toute racine permise (nom innocent, dossier inexistant) : REFUSÉ', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: 'Z:\\quelconque\\export' })), 'DOSSIER-REFUSE');
+        H.v('M1. hors de toute racine permise, un dossier au nom inconnu (« Mes photos Vinted », rempli à la main) : REFUSÉ — la liste de refus ne suffit pas', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: 'Z:\\Mes photos Vinted\\export' })), 'DOSSIER-REFUSE');
+        H.v('M1. sous la racine permise (le temporaire injecté) : admis', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: path.join(T, 'ok-1') })), null);
+        // seconde couche : les noms d'apports, normalisés
+        for (const [nom, seg] of [['point final', `${LF}.`], ['espace final', `${LF} `], ['points et espaces finaux', `${LF}. .`], ['nom court 8.3', 'LOGOFR~1']])
+            H.v(`M1. seconde couche : un segment d'apports avec ${nom} est refusé même sous la racine permise`, [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: path.join(T, 'x', seg, 'export') })), fs.existsSync(path.join(T, 'x'))], ['DOSSIER-REFUSE', false]);
+        H.v('M1. seconde couche : un nom court 8.3 que la résolution RÉELLE développe en dossier d\'apports est refusé', await code(() => X.exporterBancAdmin({ ...base, ...permis, tmpdir: () => T, realpath: p => (p.includes('COURT~9') ? p.replace('COURT~9', LF) : p), lstat: identite.lstat, dossier: path.join(T, 'COURT~9', 'export') })), 'DOSSIER-REFUSE');
+        H.v('M1. la fonction pure normalise point/espace finaux', [X.refusDeDossier(`Z:\\a\\${LF}.\\e`) !== null, X.refusDeDossier(`Z:\\a\\${LF} \\e`) !== null, X.refusDeDossier('Z:\\a\\LOGOFR~1\\e') !== null, X.refusDeDossier('Z:\\a\\autre\\e') === null], [true, true, true, true]);
+        // la racine NOMMÉE
+        const N = path.join(racine, 'racine-nommee'); fs.mkdirSync(N, { recursive: true });
+        const autreTmp = { tmpdir: () => path.join(racine, 'un-autre-temporaire'), lstat: identite.lstat, realpath: p => p };       // le temporaire injecté n'est PAS N : seule la racine nommée peut admettre
+        H.v('M1. racine nommée valide : un dossier sous elle est admis (le temporaire n\'y est pour rien)', await code(() => X.exporterBancAdmin({ ...base, ...autreTmp, env: { V2_EXPORT_RACINE: N }, dossier: path.join(N, 'export-n') })), null);
+        H.v('M1. racine nommée valide : un dossier HORS d\'elle (et hors du temporaire injecté) est refusé', await code(() => X.exporterBancAdmin({ ...base, ...autreTmp, env: { V2_EXPORT_RACINE: N }, dossier: path.join(racine, 'ailleurs', 'export') })), 'DOSSIER-REFUSE');
+        for (const [nom, v] of [['relative', 'export'], ['racine de disque', 'Z:\\'], ['contenant un dossier d\'apports', path.join(racine, LF, 'r')], ['sous un Bureau', path.join(racine, 'Desktop', 'r')], ['sous `verrou/photos`', path.join(racine, 'verrou', 'photos', 'r')], ['inexistante', path.join(racine, 'nexiste-pas')], ['vide', ' ']]) {
+            const realpathNommee = nom === 'inexistante' ? (p => { if (p === v) throw Object.assign(new Error('absent'), { code: 'ENOENT' }); return p; }) : (p => p);
+            H.v(`M1. racine nommée ${nom} : l'export est refusé (aucune écriture, même sous le temporaire permis)`, [await code(() => X.exporterBancAdmin({ ...base, ...permis, realpath: realpathNommee, env: { V2_EXPORT_RACINE: v }, dossier: path.join(T, `nommee-${nom.length}`) })), fs.existsSync(path.join(T, `nommee-${nom.length}`))], ['DOSSIER-REFUSE', false]);
+        }
+        // la course : le chemin réel est rejugé JUSTE AVANT chaque écriture
+        {
+            const cible = path.join(T, 'course'); const etat = { bascule: false }; let lues = 0;
+            const realpath = p => (etat.bascule && p.startsWith(cible) ? path.join(T, LF, 'export') : p);
+            const stockage = { lire: async c => { lues++; if (lues === 1) etat.bascule = false; if (lues === 2) etat.bascule = true; return mem.lire(c); } };
+            const r = await code(() => X.exporterBancAdmin({ ...base, ...permis, realpath, stockage, dossier: cible }));
+            const ecrits = fs.existsSync(path.join(cible, 'photos')) ? fs.readdirSync(path.join(cible, 'photos')).length : 0;
+            H.v('M1. course : le dossier devient (à ses yeux) un dossier d\'apports PENDANT l\'export — refusé avant l\'écriture suivante (une seule photo écrite, pas toutes)', [r, ecrits], ['DOSSIER-REFUSE', 1]);
+        }
+    }
+
     // ═══ 5. la ligne de commande : écrite par ce qu'elle AUTORISE ═══
     {
         const sorties = []; const journal = l => sorties.push(String(l));
