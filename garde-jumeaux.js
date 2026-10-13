@@ -46,13 +46,13 @@ function borneInf(tab, cle, lo, hi) {
     return lo;
 }
 
-function creerGardeJumeaux({ lireCatalogue, lireCompte, lireNumeros, lireRegions, maintenant = Date.now, ttlMs = TTL_MS, fraicheurMs = FRAICHEUR_MS, reessaiMs = REESSAI_MS, journal = console }) {
+function creerGardeJumeaux({ lireCatalogue, lireCompte, lireMarqueur, lireNumeros, lireRegions, maintenant = Date.now, ttlMs = TTL_MS, fraicheurMs = FRAICHEUR_MS, reessaiMs = REESSAI_MS, journal = console }) {
     let table = null;               // { ids, exps, metas, parId } triés par (metacarte, idProduct) ; parId = positions triées par idProduct
     let chargeeLe = 0;
     let derniereErreur = null;
     let enCours = null;
     let prochainEssai = 0;
-    let compteLeLe = 0;
+    let verifieLe = 0;              // date de la dernière vérification de fraîcheur RÉUSSIE (ou du dernier chargement réussi)
 
     async function charger() {
         const ids = [], exps = [], metas = [];
@@ -79,31 +79,48 @@ function creerGardeJumeaux({ lireCatalogue, lireCompte, lireNumeros, lireRegions
         // I1 (tour 1) : AUCUNE table périmée ne sert. Une table est fraîche si son TTL n'est pas écoulé ET, au plus une fois par
         // `fraicheurMs`, si le compte du catalogue n'a pas bougé depuis son chargement (un import ajoute des produits : le jumeau d'un
         // produit neuf n'est pas dans la table). Toute impossibilité de le savoir (lecture du compte, rechargement) LÈVE -> `echec`.
+        // Tour 2 : (1) TOUT scan qui arrive pendant un rechargement l'ATTEND et juge sur la table neuve (ou rend echec si elle échoue) ;
+        // (2) la date de la dernière vérification n'est posée qu'une fois la table jugée fraîche ou la table neuve chargée — jamais
+        // avant le chargement, sinon un scan concurrent se croirait à jour sur l'ancienne table ; (3) la vérification lit le compte ET
+        // le marqueur du dernier import (un import peut changer un idMetacard sans changer le nombre de produits).
+        // ⚠️ le test de `enCours` est SYNCHRONE (aucun await avant lui) : trois scans simultanés au démarrage ne lancent qu'UN chargement.
+        if (enCours) { await attendreRechargement(); return; }
         const t = maintenant();
         let recharger = !table || t - chargeeLe >= ttlMs;
-        if (!recharger && t - compteLeLe >= fraicheurMs) {
-            const n = await lireCompte();
+        if (!recharger && t - verifieLe >= fraicheurMs) {
+            const [n, m] = await Promise.all([lireCompte(), lireMarqueur()]);
             if (!Number.isFinite(n)) throw new Error(`compte du catalogue illisible (${n})`);
-            compteLeLe = maintenant();
-            if (n !== table.compte) recharger = true;
+            if (typeof m !== 'string' || m === '') throw new Error('marqueur du dernier import illisible');
+            if (enCours) { await attendreRechargement(); return; }   // un autre scan a lancé un rechargement pendant nos lectures
+            if (!table) throw new Error(derniereErreur || 'table indisponible');
+            if (n !== table.compte || m !== table.marqueur) recharger = true;
+            else verifieLe = maintenant();
         }
         if (!recharger) return;
-        if (!enCours) {
-            if (maintenant() < prochainEssai) throw new Error(derniereErreur || 'table indisponible');   // on ne martèle pas la base après une panne
-            enCours = (async () => {
-                try {
-                    table = await charger();
-                    chargeeLe = compteLeLe = maintenant();
-                    derniereErreur = null;
-                    prochainEssai = 0;
-                } catch (e) {
-                    table = null;   // l'ancienne table est connue périmée (TTL écoulé ou compte changé) : elle ne sert plus
-                    derniereErreur = String(e?.message ?? e).slice(0, 200);
-                    prochainEssai = maintenant() + reessaiMs;
-                    journal.error?.(`⚠️ [garde-jumeaux] chargement de la table en échec : ${derniereErreur}`);
-                }
-            })().finally(() => { enCours = null; });
-        }
+        if (maintenant() < prochainEssai) throw new Error(derniereErreur || 'table indisponible');   // on ne martèle pas la base après une panne
+        const rechargement = enCours = (async () => {
+            try {
+                const marqueur = await lireMarqueur();   // lu AVANT le chargement : un import survenu pendant se verra à la vérification suivante
+                if (typeof marqueur !== 'string' || marqueur === '') throw new Error('marqueur du dernier import illisible');
+                const T = await charger();
+                T.marqueur = marqueur;
+                table = T;
+                chargeeLe = verifieLe = maintenant();
+                derniereErreur = null;
+                prochainEssai = 0;
+            } catch (e) {
+                table = null;   // l'ancienne table est connue périmée (TTL écoulé, compte ou import changé) : elle ne sert plus
+                derniereErreur = String(e?.message ?? e).slice(0, 200);
+                prochainEssai = maintenant() + reessaiMs;
+                journal.error?.(`⚠️ [garde-jumeaux] chargement de la table en échec : ${derniereErreur}`);
+            }
+        })().finally(() => { if (enCours === rechargement) enCours = null; });
+        await rechargement;
+        if (!table) throw new Error(derniereErreur || 'table indisponible');
+    }
+
+    // Attend le rechargement en cours : la table est alors neuve (sinon la panne remonte).
+    async function attendreRechargement() {
         await enCours;
         if (!table) throw new Error(derniereErreur || 'table indisponible');
     }
@@ -124,7 +141,13 @@ function creerGardeJumeaux({ lireCatalogue, lireCompte, lireNumeros, lireRegions
             if (!meta) return echec(`produit ${id} sans metacarte (idMetacard absent ou nul)`);
             const debut = borneInf(T.metas, meta, 0, T.metas.length), fin = borneInf(T.metas, meta + 1, debut, T.metas.length);
             const voisins = [];
-            for (let i = debut; i < fin; i++) if (i !== pos) voisins.push({ idProduct: T.ids[i], idExpansion: T.exps[i] });
+            // un idProduct porté par deux lignes (aucun index unique sur catalogue_produits) n'est ni son propre jumeau ni compté deux fois
+            const dejaVus = new Set([id]);
+            for (let i = debut; i < fin; i++) {
+                if (dejaVus.has(T.ids[i])) continue;
+                dejaVus.add(T.ids[i]);
+                voisins.push({ idProduct: T.ids[i], idExpansion: T.exps[i] });
+            }
             if (voisins.length === 0) return { etat: 'aucun', jumeaux: [], nbProduits: 1, voisins: 0, cause: null };
 
             const expP = T.exps[pos];
@@ -198,10 +221,13 @@ function verdictApresGarde(r, { ambigueAvantGarde = false } = {}) {
 // lève ou rend n'importe quoi donne une réserve d'échec.
 async function appliquerGarde({ ambigueAvantGarde, idProduct, garde }) {
     let resultat;
+    const echec = cause => ({ etat: 'echec', jumeaux: [], nbProduits: null, cause: String(cause).slice(0, 200) });
     if (ambigueAvantGarde) resultat = { etat: 'non-jouee', jumeaux: [], nbProduits: null, cause: null };
     else {
         try { resultat = await garde.chercher(idProduct); }
-        catch (e) { resultat = { etat: 'echec', jumeaux: [], nbProduits: null, cause: `garde en échec : ${e?.message ?? e}`.slice(0, 200) }; }
+        catch (e) { resultat = echec(`garde en échec : ${e?.message ?? e}`); }
+        // la route lit `resultat.cause` et `resultat.jumeaux` : un résultat qui n'est pas un objet à état connu devient un échec lisible
+        if (resultat === null || typeof resultat !== 'object' || typeof resultat.etat !== 'string') resultat = echec(`garde sans résultat exploitable (${resultat === null ? 'null' : typeof resultat})`);
     }
     return { resultat, decision: verdictApresGarde(resultat, { ambigueAvantGarde }) };
 }
@@ -214,6 +240,9 @@ async function tetesDesCandidats({ decision, classement, carteAmbigue, lireNoms,
     const noms = new Map();
     if (decision.issue === 'jumeaux') {
         const tetes = [classement[0]].filter(Boolean);
+        const extra = [];   // le gagnant, ou un jumeau, n'apparaît jamais deux fois
+        for (const id of decision.candidatsExtra) if (!extra.includes(id) && !tetes.some(c => c.idProduct === id)) extra.push(id);
+        decision = { ...decision, candidatsExtra: extra };
         try { for (const [id, nom] of await lireNoms(decision.candidatsExtra)) noms.set(Number(id), nom); }
         catch (e) { journal.error?.(`🪞 [garde-jumeaux] noms des jumeaux illisibles : ${e.message}`); }
         for (const id of decision.candidatsExtra) {
@@ -237,6 +266,16 @@ function accesMongoose({ CatalogueProduit, NumeroCarte, CodeSet, mongoose }) {
         lireCatalogue: () => { pret(); return CatalogueProduit.find({}, { idProduct: 1, idExpansion: 1, idMetacard: 1, _id: 0 }).lean().cursor({ batchSize: 5000 }); },
         // I1 : une métadonnée (O(1)), pas un balayage. Sert à savoir si le catalogue a bougé depuis le chargement de la table.
         lireCompte: async () => { pret(); return CatalogueProduit.estimatedDocumentCount(); },
+        // Tour 2 : le marqueur du dernier import. `catalogue_export_meta` (`_id: 'dernier'`), écrite EN DERNIER par import-catalogue-quotidien.js ;
+        // `archiveLe` (new Date()) change à CHAQUE import réussi, `exportDu` à chaque nouvel export. Absente, ou sans ces deux dates : on LÈVE.
+        // (integrer-export.js, qui MODIFIE des idMetacard à la main, n'écrit pas cette méta : ce cas-là attend le TTL de 6 h.)
+        lireMarqueur: async () => {
+            pret();
+            const m = await mongoose.connection.db.collection('catalogue_export_meta').findOne({ _id: 'dernier' }, { projection: { archiveLe: 1, exportDu: 1 } });
+            const a = m?.archiveLe instanceof Date ? m.archiveLe.getTime() : null, e = m?.exportDu instanceof Date ? m.exportDu.getTime() : null;
+            if (a == null && e == null) throw new Error('marqueur du dernier import absent (catalogue_export_meta/dernier sans archiveLe ni exportDu)');
+            return `${a}|${e}`;
+        },
         lireNoms: async ids => {
             pret();
             const docs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, name: 1, _id: 0 }).lean();

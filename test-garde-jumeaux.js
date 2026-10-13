@@ -39,7 +39,10 @@ const v = (nom, obtenu, attendu) => {
     const CatalogueProduit = mongoose.model('CatalogueProduit', new mongoose.Schema({ idProduct: Number, name: String, idExpansion: Number, idMetacard: Number }), 'catalogue_produits');
     const NumeroCarte = mongoose.model('NumeroCarte', new mongoose.Schema({ idProduct: Number, idExpansion: Number, numero: String, numeroUrl: String }), 'numeros_cartes');
     const CodeSet = mongoose.model('CodeSet', new mongoose.Schema({ idExpansion: Number, codeSet: String }), 'codes_set');
-    const raz = async () => { await CatalogueProduit.deleteMany({}); await NumeroCarte.deleteMany({}); await mongoose.connection.db.collection('codes_set').deleteMany({}); };
+    // `catalogue_export_meta` : écrite par import-catalogue-quotidien.js (`_id: 'dernier'`, `archiveLe` = new Date() à CHAQUE import réussi, `exportDu`).
+    const META = mongoose.connection.db.collection('catalogue_export_meta');
+    const poserMeta = (archiveLe, exportDu = new Date(1)) => META.updateOne({ _id: 'dernier' }, { $set: { archiveLe, exportDu } }, { upsert: true });
+    const raz = async () => { await CatalogueProduit.deleteMany({}); await NumeroCarte.deleteMany({}); await mongoose.connection.db.collection('codes_set').deleteMany({}); await META.deleteMany({}); await poserMeta(new Date(1)); };
     const produit = (idProduct, idExpansion, idMetacard) => ({ idProduct, idExpansion, idMetacard, name: `P${idProduct}` });
     const numero = (idProduct, idExpansion, n) => ({ idProduct, idExpansion, numero: n });
     // `region` n'est pas dans le schéma de CodeSet (comme en production) : écrit en brut.
@@ -232,6 +235,118 @@ const v = (nom, obtenu, attendu) => {
         comptePanne = false;
         r = await g.chercher(10);
         v('   la panne passée : la garde revient', r.etat, 'jumeaux');
+    }
+
+    // ── 9 ter. TOUR 2 — I1 : AUCUN SCAN NE JUGE SUR L'ANCIENNE TABLE PENDANT UN RECHARGEMENT ──
+    // (le scénario de la relecture 2, race-i1.js : fausses lectures, délai de 300 ms dans le curseur)
+    {
+        let t = 0, compte = 2, lectures = 0;
+        let catalogue = [{ idProduct: 10, idExpansion: 100, idMetacard: 7 }, { idProduct: 11, idExpansion: 100, idMetacard: 7 }];
+        const g = creerGardeJumeaux({
+            maintenant: () => t, ttlMs: 6 * 3600 * 1000, reessaiMs: 0, journal: { error() { } },
+            lireCatalogue: async function* () { lectures++; const snap = catalogue.slice(); await new Promise(r => setTimeout(r, 300)); for (const d of snap) yield d; },
+            lireCompte: async () => compte, lireMarqueur: async () => 'm1',
+            lireRegions: async () => new Map([[100, 'intl'], [200, 'intl']]),
+            lireNumeros: async ids => new Map(ids.map(i => [i, { numero: '1' }]))
+        });
+        await g.chercher(10);
+        catalogue.push({ idProduct: 12, idExpansion: 200, idMetacard: 7 }); compte = 3;
+        t += 61000;
+        const A = g.chercher(10);
+        await new Promise(r => setTimeout(r, 50));
+        const B = g.chercher(10);
+        const [ra, rb] = await Promise.all([A, B]);
+        v('scan A (déclencheur du rechargement dû au compte) voit le jumeau neuf', ra.jumeaux, [12]);
+        v('scan B (lancé PENDANT le chargement) attend la table neuve et voit le jumeau aussi', [rb.etat, rb.jumeaux], ['jumeaux', [12]]);
+        v('   un seul rechargement pour les deux', lectures, 2);
+        // le même scénario avec un rechargement qui ÉCHOUE : les deux scans rendent echec, aucun ne juge sur l'ancienne table
+        let casse = false;
+        const g2 = creerGardeJumeaux({
+            maintenant: () => t, ttlMs: 6 * 3600 * 1000, reessaiMs: 0, journal: { error() { } },
+            lireCatalogue: async function* () { await new Promise(r => setTimeout(r, 200)); if (casse) throw new Error('rechargement en panne'); for (const d of catalogue) yield d; },
+            lireCompte: async () => compte, lireMarqueur: async () => 'm1',
+            lireRegions: async () => new Map([[100, 'intl'], [200, 'intl']]), lireNumeros: async ids => new Map(ids.map(i => [i, { numero: '1' }]))
+        });
+        await g2.chercher(10);
+        compte = 4; casse = true; t += 61000;
+        const A2 = g2.chercher(10); await new Promise(r => setTimeout(r, 30)); const B2 = g2.chercher(10);
+        const [ra2, rb2] = await Promise.all([A2, B2]);
+        v('rechargement en panne : les deux scans (dont le concurrent) rendent echec', [ra2.etat, rb2.etat], ['echec', 'echec']);
+    }
+
+    // ── 9 quater. TOUR 2 — FRAÎCHEUR PAR LE MARQUEUR DU DERNIER IMPORT (catalogue_export_meta.archiveLe) ──
+    await raz();
+    await CatalogueProduit.insertMany([produit(10, 100, 7), produit(11, 100, 7), produit(12, 200, 8)]);
+    await NumeroCarte.insertMany([numero(10, 100, '1'), numero(11, 100, '1'), numero(12, 200, '1')]);
+    await region(100, 'intl'); await region(200, 'intl');
+    {
+        let t = 0, rechargements = 0;
+        const acces = accesMongoose({ CatalogueProduit, NumeroCarte, CodeSet, mongoose });
+        const g = garde({ maintenant: () => t, ttlMs: 6 * 3600 * 1000, reessaiMs: 0, lireCatalogue: () => { rechargements++; return acces.lireCatalogue(); } });
+        let r = await g.chercher(10);
+        v('marqueur : chargement initial, aucun jumeau', [r.etat, rechargements], ['aucun', 1]);
+        // un import qui MODIFIE un idMetacard sans changer le nombre de produits
+        await CatalogueProduit.updateOne({ idProduct: 12 }, { $set: { idMetacard: 7 } });
+        t += 61000;
+        r = await g.chercher(10);
+        v('compte inchangé ET marqueur inchangé : pas de rechargement (le jumeau modifié attend le TTL)', [r.etat, rechargements], ['aucun', 1]);
+        await poserMeta(new Date(2));
+        t += 61000;
+        r = await g.chercher(10);
+        v('marqueur changé (archiveLe) à compte égal : rechargement, le jumeau est vu', [r.jumeaux, rechargements], [[12], 2]);
+        t += 61000;
+        r = await g.chercher(10);
+        v('   marqueur stable ensuite : pas de nouveau rechargement', rechargements, 2);
+        await META.deleteMany({}); t += 61000;
+        r = await g.chercher(10);
+        v('marqueur ABSENT : echec', [r.etat, /marqueur/.test(r.cause)], ['echec', true]);
+        await poserMeta(new Date(2)); t += 61000;
+        r = await g.chercher(10);
+        v('   le marqueur revenu : la garde revient', r.etat, 'jumeaux');
+        const g3 = garde({ maintenant: () => t, lireMarqueur: async () => { throw new Error('marqueur en panne'); } });
+        r = await g3.chercher(10);
+        v('lecture du marqueur en panne : echec', [r.etat, /marqueur en panne/.test(r.cause)], ['echec', true]);
+    }
+
+    // ── 9 quinquies. TOUR 2 — M2 : sansPlafond n'est actif que pour `true` ──
+    {
+        const { rembourserScan, Credit } = require('./acces');
+        const u = `T-jumeaux-m2-${Date.now()}`;
+        await Credit.create({ userId: u, soldeGratuit: 3, soldePayant: 0 });
+        const sortie = [];
+        for (const val of ['true', 1, {}, 'oui', [], null, undefined]) {
+            // chaque valeur non stricte joue 6 fois sur le même client : le plafond (5) doit mordre au 6e
+            const dernier = [];
+            const u2 = `${u}-${typeof val}-${Array.isArray(val) ? 'a' : ''}`;
+            await Credit.create({ userId: u2, soldeGratuit: 3, soldePayant: 0 });
+            for (let i = 0; i < 6; i++) dernier.push(await rembourserScan({ credit: { userId: u2, poche: 'accueil' } }, 'x', { sansPlafond: val }));
+            sortie.push(dernier[5]);
+            await Credit.deleteOne({ userId: u2 });
+        }
+        v('sansPlafond = \'true\', 1, {}, \'oui\', [], null, undefined : le plafond s\'applique (6e refusé)', sortie, [false, false, false, false, false, false, false]);
+        await Credit.deleteOne({ userId: u });
+        await mongoose.connection.db.collection('remboursements').deleteMany({ userId: { $regex: '^T-jumeaux-m2-' } });
+    }
+
+    // ── 9 sexies. TOUR 2 — appliquerGarde NE LÈVE JAMAIS ; candidats dédoublonnés ──
+    {
+        const { appliquerGarde, tetesDesCandidats } = require('./garde-jumeaux');
+        for (const [nom, garde_] of [['undefined', { chercher: async () => undefined }], ['null', { chercher: async () => null }], ['une chaîne', { chercher: async () => 'aucun' }], ['garde absente', undefined]]) {
+            let x, leve = false;
+            try { x = await appliquerGarde({ ambigueAvantGarde: false, idProduct: 5, garde: garde_ }); } catch (e) { leve = true; }
+            v(`appliquerGarde, garde rendant « ${nom} » : ne lève pas, réserve d'échec, résultat lisible par la route`, [leve, x?.decision.action, x?.decision.raison, x?.resultat?.etat, typeof x?.resultat?.cause], [false, 'reserve', 'jumeaux-recherche-echec', 'echec', 'string']);
+        }
+        await raz();
+        await CatalogueProduit.insertMany([produit(10, 100, 7), produit(10, 100, 7), produit(12, 200, 7), produit(12, 200, 7)]);
+        await NumeroCarte.insertMany([numero(10, 100, '1'), numero(12, 200, '1')]);
+        await region(100, 'intl'); await region(200, 'intl');
+        const r = await garde().chercher(10);
+        v('doublon de ligne dans le catalogue : le gagnant n\'est pas son propre jumeau, le jumeau n\'est pas compté deux fois', [r.etat, r.jumeaux, r.nbProduits], ['jumeaux', [12], 2]);
+        const t = await tetesDesCandidats({
+            decision: { issue: 'jumeaux', candidatsExtra: [10, 11, 11, 12] }, classement: [{ idProduct: 10, prix: 1 }], carteAmbigue: true,
+            lireNoms: async () => new Map(), lirePrix: async () => null
+        });
+        v('candidats : le gagnant (ou un jumeau) n\'apparaît jamais deux fois', t.tetes.map(x => x.idProduct), [10, 11, 12]);
     }
 
     // ── 10. UNE SEULE LECTURE POUR PLUSIEURS SCANS SIMULTANÉS ──────────
