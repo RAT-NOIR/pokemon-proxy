@@ -69,7 +69,8 @@ function lireConfig(env = process.env) {
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).
-        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5), cartesMax: entier('V2_LOT_CARTES_MAX', env.V2_LOT_CARTES_MAX, 20, 2, 100) },   // borné à [2, 100] : 100 est l'ancien plafond dur ; au-delà, configuration invalide
+        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5), cartesMax: entier('V2_LOT_CARTES_MAX', env.V2_LOT_CARTES_MAX, 20, 2, 100),
+               reprisesParPassage: entier('V2_LOT_REPRISES_PASSAGE', env.V2_LOT_REPRISES_PASSAGE, 200, 1, 5000) },   // UN-CANDIDAT tour 3 : lots rejugés / repris au plus par passage du balayage (le plus ancien d'abord)   // borné à [2, 100] : 100 est l'ancien plafond dur ; au-delà, configuration invalide
         limites: { installationParIpJour: 2, essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),

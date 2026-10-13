@@ -30,7 +30,7 @@ const lignes = [
     ['affirmée', A(succes()), 'affirmee', 'identifiee', null],
     ['ambigu à 2', A(amb([701, 700])), 'question', 'a-trancher', null],
     ['ambigu à 3', A(amb([701, 700, 702])), 'question', 'a-trancher', null],
-    ['ambigu à 1 seul', A(amb([700])), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['ambigu à 1 seul (UN-CANDIDAT, D1 : une question « est-ce cette carte ? »)', A(amb([700])), 'question', 'a-trancher', null],
     ['ambigu à 4 (3 premiers)', A(amb([704, 703, 702, 701])), 'question', 'a-trancher', null],
     ['numero-illisible', A(refus('numero-illisible', 'refus-delibere')), 'introuvable', 'introuvable', 'photo-illisible'],
     ['carte-introuvable', A(refus('carte-introuvable', 'refus-delibere')), 'introuvable', 'introuvable', 'hors-catalogue'],
@@ -47,14 +47,14 @@ const lignes = [
     ['egalite-parfaite, 4 candidats du ctx -> pas de question', A(refusReel('egalite-parfaite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }, { idProduct: 702 }, { idProduct: 703 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
     // C3 : un candidat du corps ne fait pas une question ; le ctx complète seulement si l'UNION donne 2 ou 3 distincts
     ['corps 1 candidat + ctx 1 autre -> union 2 : question', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 701 }] })), 'question', 'a-trancher', null],
-    ['corps 1 candidat + ctx le même -> union 1 : pas de question', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'hors-catalogue'],
+    ['corps 1 candidat + ctx le même -> union 1 : question de confirmation (UN-CANDIDAT)', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'question', 'a-trancher', null],
     ['corps 1 + ctx 3 autres -> union 4 : pas de question', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 701 }, { idProduct: 702 }, { idProduct: 703 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
     ['nom-contredit-egalite, candidats dans le corps (accepté)', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
     ['nom-contredit-egalite RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-egalite')), 'introuvable', 'introuvable', 'photo-illisible'],
     ['nom-contredit-sans-repli RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-sans-repli')), 'introuvable', 'introuvable', 'photo-illisible'],
-    ['nom-contredit-egalite, 1 candidat du ctx', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['nom-contredit-egalite, 1 candidat du ctx (UN-CANDIDAT : question de confirmation)', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'question', 'a-trancher', null],
     ['egalite-parfaite, candidats du ctx si le corps n\'en a pas', A(refusReel('egalite-parfaite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
-    ['egalite-parfaite <2', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'hors-catalogue'],
+    ['egalite-parfaite à 1 candidat (UN-CANDIDAT : question de confirmation)', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] })), 'question', 'a-trancher', null],
     ['egalite-parfaite sans candidats', A(refus('egalite-parfaite', 'refus-delibere')), 'introuvable', 'introuvable', 'hors-catalogue']
 ];
 for (const [nom, r, issue, statut, raison] of lignes) {
@@ -146,7 +146,8 @@ for (const [nom, r, code] of pannes) {
 {
     const t = A(amb([700, 700, 701]));
     v('doublon d\'idProduct dédoublonné', t.analyse.cartes[0].candidats.length, 2);
-    v('un seul candidat distinct -> introuvable photo-illisible', A(amb([700, 700])).analyse.cartes[0].raison, 'photo-illisible');
+    v('un seul candidat distinct -> question de confirmation (UN-CANDIDAT)', [A(amb([700, 700])).analyse.cartes[0].statut, A(amb([700, 700])).analyse.cartes[0].candidats.length], ['a-trancher', 1]);
+    v('aucun candidat -> introuvable photo-illisible', A(amb([])).analyse.cartes[0].raison, 'photo-illisible');
 }
 // (3) état
 {

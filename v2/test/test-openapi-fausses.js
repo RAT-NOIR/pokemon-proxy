@@ -51,7 +51,7 @@ H.v('toute image est sous /fictif/', urlsHorsFictif, []);
 H.v('tout scanId commence par « fausse- »', scansNonFictifs, []);
 
 // ── 4. couverture : une fausse par état demandé, et toutes les valeurs des listes fermées y figurent ──
-const REQUISES = ['identifiee', 'a-trancher-2', 'a-trancher-3', 'lot', 'panne-ia', 'panne-indisponible', 'panne-serveur', 'quota-compte', 'quota-installation', 'verification',
+const REQUISES = ['identifiee', 'a-trancher-1', 'a-trancher-2', 'a-trancher-3', 'lot', 'panne-ia', 'panne-indisponible', 'panne-serveur', 'quota-compte', 'quota-installation', 'verification',
     'cle-reutilisee-identifier', 'cle-reutilisee-reponse', 'cle-reutilisee-retour-live', 'debit', 'cle-en-cours-reponse', 'cle-en-cours-retour-live',
     'question-repondue', 'question-abandonnee-aucune', 'question-abandonnee-ne-sait-pas', 'solde-installation-non-liee', 'solde-installation-liee', 'solde-compte-non-verifie', 'solde-abonnement'];
 H.v('états demandés présents', REQUISES.filter(n => !fichiers.includes(`${n}.json`)), []);
@@ -91,7 +91,13 @@ refuse('un contrat différent de 2', c => { c.contrat = 3; });
 refuse('un prixGuide sans date', c => { delete c.analyse.cartes[0].carte.prixGuide.date; });
 refuse('liens.cardmarket numérique', c => { c.analyse.cartes[0].carte.liens.cardmarket = 12; });
 const tr = lire('a-trancher-3.json');
-refuse('un a-trancher à un seul candidat', c => { c.analyse.cartes[0].candidats.length = 1; }, 'ReponseAnalyse', tr);
+refuse('un a-trancher sans aucun candidat', c => { c.analyse.cartes[0].candidats.length = 0; }, 'ReponseAnalyse', tr);
+{ // UN-CANDIDAT (D1) : un candidat unique est permis, avec UN choix ; la fausse publiée le montre
+    const un = lire('a-trancher-1.json');
+    H.v('a-trancher-1 : un candidat, une question `confirmation` à un choix', [un.analyse.cartes[0].candidats.length, un.analyse.cartes[0].question.code, un.analyse.cartes[0].question.choix.length], [1, 'confirmation', 1]);
+    refuse('une confirmation sans choix', c => { c.analyse.cartes[0].question.choix.length = 0; }, 'ReponseAnalyse', un);
+    refuse('un code de question hors liste', c => { c.analyse.cartes[0].question.code = 'peut-etre'; }, 'ReponseAnalyse', un);
+}
 refuse('un a-trancher à quatre candidats', c => { const x = c.analyse.cartes[0]; x.candidats.push(clone(x.candidats[0])); }, 'ReponseAnalyse', tr);
 refuse('un a-trancher avec une carte', c => { c.analyse.cartes[0].carte = c.analyse.cartes[0].candidats[0]; }, 'ReponseAnalyse', tr);
 refuse('un a-trancher sans question', c => { c.analyse.cartes[0].question = null; }, 'ReponseAnalyse', tr);
