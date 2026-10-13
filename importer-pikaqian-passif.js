@@ -234,7 +234,7 @@ async function ecrireCode({ jugement, M, db, deposer, bucket, vignetter = vignet
             }
             // la RELECTURE : le lot, tel que la base le porte maintenant
             const docs = await M.Image.find({ source: P.SOURCE, set: S.slug, etat: 'ok', lot: P.LOT, voieCollecte: 'navigateur-du-testeur' }).lean();
-            const cartesDuLot = await db.collection('cartes').find({ 'images.source': P.SOURCE }, { projection: { images: 1 } }).toArray();
+            const cartesDuLot = await db.collection('cartes').find({ images: { $elemMatch: { source: P.SOURCE, lot: P.LOT, set: S.slug } } }, { projection: { images: 1 } }).toArray();
             const clesVoulues = new Set(S.entrees.filter(e => e.statut === 'a-ecrire').map(e => `${e.p.carteId}|${e.p.numero}`));
             const entreesRelues = cartesDuLot.flatMap(c => (c.images || []).filter(x => x.source === P.SOURCE && x.lot === P.LOT && x.set === S.slug).map(x => `${c._id}|${x.numero}`)).filter(k => clesVoulues.has(k));
             const docsRelus = docs.filter(d => clesVoulues.has(`${d.carteId}|${d.numero}`));
