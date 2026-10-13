@@ -73,11 +73,18 @@ const cheminReel = p => {
     }
     return path.resolve(p);
 };
-const dansLeDepot = dossier => {
-    const rel = path.relative(cheminReel(__dirname).toLowerCase(), cheminReel(dossier).toLowerCase());
+const sousLe = (dossier, racine) => {
+    const rel = path.relative(cheminReel(racine).toLowerCase(), cheminReel(dossier).toLowerCase());
     return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
-// Les dossiers d'APPORTS MANUELS du testeur (CLAUDE.md : « Logo FR », « apport-manuel », « Desktop\LOGO ») : ni ce dossier ni un dossier DEDANS ne reçoit jamais rien d'un outil.
+/** Dans le dépôt (par défaut celui de ce fichier) : jonctions résolues. `depot` n'est surchargé que par les bancs. */
+const dansLeDepot = (dossier, depot = __dirname) => sousLe(dossier, depot);
+// 🔑 LA GARDE PRINCIPALE, ÉCRITE PAR CE QU'ELLE AUTORISE (CLAUDE.md, en-tête des règles de sécurité ; relecture X, tour 1) : le récepteur n'écrit, et l'import ne lit, QUE sous UNE racine —
+// les dossiers de travail du chantier. Tout le reste est refusé, y compris les dossiers que le testeur remplit lui-même sans qu'on les ait jamais énumérés. Le chemin RÉEL est jugé
+// (jonctions et liens résolus). `racine` n'est surchargé que par les bancs, pour leur dossier temporaire.
+const RACINE_AUTORISEE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue';
+const dansRacineAutorisee = (dossier, racine = RACINE_AUTORISEE) => sousLe(dossier, racine);
+// SECOND FILET seulement (jamais la garde principale) : les trois dossiers d'APPORTS MANUELS connus (CLAUDE.md : « Logo FR », « apport-manuel », « Desktop\LOGO »), même s'ils se trouvaient sous la racine.
 const APPORTS_MANUELS = [/(^|[\\/])logo fr([\\/]|$)/i, /(^|[\\/])apport-manuel([\\/]|$)/i, /[\\/]desktop[\\/]logo([\\/]|$)/i];
 const dansApportsManuels = dossier => { const reel = cheminReel(dossier), brut = path.resolve(dossier); return APPORTS_MANUELS.some(r => r.test(reel) || r.test(brut)); };
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
@@ -227,12 +234,13 @@ async function jugerImages(brut, { dossier, dossierImages, maintenant = () => ne
  * Démarre le récepteur. `port: 0` = éphémère (les bancs). `hote` n'existe pas : 127.0.0.1 seulement. `attendu` n'existe que pour les bancs.
  * @returns {Promise<{port:number, adresse:string, fermer:()=>Promise<void>}>}
  */
-async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierImages = null, maxOctets = P.PAGE_MAX_OCTETS, attendu = attenduParTable, journal = m => console.log(m) } = {}) {
+async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierImages = null, racine = RACINE_AUTORISEE, maxOctets = P.PAGE_MAX_OCTETS, attendu = attenduParTable, journal = m => console.log(m) } = {}) {
     if (!Number.isFinite(maxOctets) || maxOctets <= 0) throw new Error(`plafond de corps illisible (${maxOctets}) : PAGE_MAX_OCTETS de pikaqian.js doit être un nombre`);
     if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les pages apprises n'y entrent jamais`);
     // les images et les fichiers de page : le dossier de production par défaut, SEULEMENT quand les fiches vont au leur ; sinon un voisin du dossier donné (les bancs)
     if (!dossierImages) dossierImages = path.resolve(dossier) === path.resolve(DOSSIER_DEFAUT) ? DOSSIER_PASSIF_DEFAUT : `${path.resolve(dossier)}-passif`;
     if (dansLeDepot(dossierImages)) throw new Error(`le dossier « ${dossierImages} » est dans le dépôt : les images reçues n'y entrent jamais`);
+    for (const d of [dossier, dossierImages]) if (!dansRacineAutorisee(d, racine)) throw new Error(`le dossier « ${d} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);   // GARDE:racine
     for (const d of [dossier, dossierImages]) if (dansApportsManuels(d)) throw new Error(`le dossier « ${d} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     fs.mkdirSync(dossier, { recursive: true });
     let serie = Promise.resolve();                                // les lots d'images sont jugés UN À LA FOIS (le fichier de page se réécrit)
@@ -292,7 +300,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, dossierI
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, DIMENSION_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
+module.exports = { demarrer, jugerPage, jugerImages, ecrireFiche, creerPage, cheminPage, dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE, cheminReel, attenduParTable, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, DOSSIER_PASSIF_DEFAUT, IMAGES_PAR_LOT_MAX, DIMENSION_MAX, LOT_OCTETS_MAX, IMAGE_OCTETS_MAX, EXTENSIONS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main === module) {

@@ -44,7 +44,8 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
     const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'recepteur-img-'));
     const dossier = path.join(racine, 'fiches'), dossierImages = path.join(racine, 'passif');
     const journal = [];
-    const srv = await R.demarrer({ port: 0, dossier, dossierImages, attendu: () => null, journal: m => journal.push(m) });
+    let nettoyageSur = false, cibleJetable = null, horsRacine = null;
+    const srv = await R.demarrer({ racine, port: 0, dossier, dossierImages, attendu: () => null, journal: m => journal.push(m) });
     const port = srv.port;
     try {
         // ── la page d'abord : la fiche ET le fichier de page
@@ -161,28 +162,54 @@ const couleur = (r, g, b, w = 300, h = 416) => ({ create: { width: w, height: h,
 
         // ── jamais dans le dépôt
         if (!process.env.PK_RECEPTEUR) {
-            let leve = null; try { await R.demarrer({ port: 0, dossier, dossierImages: path.join(__dirname, 'images-test'), journal: () => { } }); } catch (e) { leve = e.message; }
+            let leve = null; try { await R.demarrer({ racine, port: 0, dossier, dossierImages: path.join(__dirname, 'images-test'), journal: () => { } }); } catch (e) { leve = e.message; }
             verifier('un dossier d\'images DANS le dépôt : démarrage refusé, rien de créé', [/dépôt/.test(leve || ''), fs.existsSync(path.join(__dirname, 'images-test'))], [true, false]);
-            // TOUR 1 (passe B, mineurs) : les dossiers d'apports manuels, et les jonctions qui mènent au dépôt
-            for (const nom of ['Logo FR', 'apport-manuel', path.join('Desktop', 'LOGO')]) {
-                let l = null; const cible = path.join(racine, nom, 'sous', 'dossier');
-                try { await R.demarrer({ port: 0, dossier: cible, dossierImages: path.join(racine, 'ok-images'), journal: () => { } }); } catch (e) { l = e.message; }
-                verifier(`un dossier dans « ${nom} » : démarrage refusé (apports manuels), rien de créé`, [/apports manuels/.test(l || ''), fs.existsSync(path.join(racine, nom))], [true, false]);
-            }
-            let l2 = null; try { await R.demarrer({ port: 0, dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(racine, 'Logo FR'), journal: () => { } }); } catch (e) { l2 = e.message; }
-            verifier('le dossier d\'IMAGES dans un dossier d\'apports manuels : refusé aussi', /apports manuels/.test(l2 || ''), true);
-            const jonction = path.join(racine, 'jonction-vers-le-depot');
-            const retirerJonction = () => require('child_process').spawnSync('cmd', ['/c', 'rmdir', jonction]);   // une jonction se retire par rmdir, jamais par une suppression récursive
-            fs.symlinkSync(__dirname, jonction, 'junction');
-            try {
-                let l3 = null; try { await R.demarrer({ port: 0, dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(jonction, 'images-test'), journal: () => { } }); } catch (e) { l3 = e.message; }
-                verifier('une JONCTION qui mène au dépôt est résolue : dansLeDepot vrai, démarrage refusé, rien créé dans le dépôt', [R.dansLeDepot(path.join(jonction, 'x')), /dépôt/.test(l3 || ''), fs.existsSync(path.join(__dirname, 'images-test'))], [true, true, false]);
-            } finally { retirerJonction(); }
-            verifier('la jonction est retirée sans toucher à sa cible', [fs.existsSync(jonction), fs.existsSync(path.join(__dirname, 'recepteur-pikaqian.js'))], [false, true]);
             verifier('le dossier par défaut est HORS dépôt et nomme pikaqian-passif', [R.dansLeDepot(R.DOSSIER_PASSIF_DEFAUT), /pikaqian-passif$/.test(R.DOSSIER_PASSIF_DEFAUT)], [false, true]);
         }
+        // ── TOUR 2 (relecture X, important 1) : LA GARDE PRINCIPALE EST UNE RACINE AUTORISÉE, pas une liste de refus. Tout dossier hors de la racine est refusé, même s'il n'est pas dans les trois noms connus.
+        const refuseDemarrage = async (nom, o, motif) => {
+            let l = null; try { const s = await R.demarrer({ racine, port: 0, journal: () => { }, ...o }); await s.fermer(); } catch (e) { l = e.message; }
+            verifier(`${nom} : démarrage refusé (${motif})`, new RegExp(motif).test(l || ''), true);
+        };
+        // Le Bureau réel n'est JAMAIS touché par le banc (un récepteur mutant y créerait des dossiers) : la forme « Desktop\autre » se juge par les fonctions pures ; le démarrage se juge sur un dossier
+        // « rempli par le testeur » que le banc crée lui-même sous %TEMP%, HORS de sa racine (et qu'il supprime à la fin, sans jonction dedans).
+        const dossierDuTesteur = path.join(os.homedir(), 'Desktop', 'autre-dossier-rempli-par-le-testeur', 'x');   // PAS dans les trois noms connus ; jamais créé
+        verifier('« Desktop\\autre » : hors des 3 noms connus (la liste de refus le laisserait passer), mais HORS de la racine autorisée (la garde le refuse)', [R.dansApportsManuels(dossierDuTesteur), R.dansRacineAutorisee(dossierDuTesteur)], [false, false]);
+        horsRacine = fs.mkdtempSync(path.join(os.tmpdir(), 'hors-racine-'));
+        fs.writeFileSync(path.join(horsRacine, 'rempli-par-le-testeur.txt'), 'à lui');
+        await refuseDemarrage('un dossier « rempli par le testeur » hors des 3 noms et hors de la racine', { dossier: path.join(horsRacine, 'autre') }, 'racine autorisée');
+        await refuseDemarrage('un dossier d\'IMAGES hors de la racine', { dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(horsRacine, 'images') }, 'racine autorisée');
+        verifier('… rien n\'a été créé chez le testeur', fs.readdirSync(horsRacine), ['rempli-par-le-testeur.txt']);
+        verifier('la racine par défaut est celle du chantier ; ses dossiers par défaut y sont, le Bureau, %TEMP% et le dépôt non', [R.RACINE_AUTORISEE, R.dansRacineAutorisee(R.DOSSIER_DEFAUT), R.dansRacineAutorisee(R.DOSSIER_PASSIF_DEFAUT), R.dansRacineAutorisee(dossierDuTesteur), R.dansRacineAutorisee(os.tmpdir()), R.dansRacineAutorisee(path.join(os.homedir(), 'Desktop', 'pokemon-proxy'))],
+            ['C:\\Users\\Yung\\rat-market-travail\\catalogue', true, true, false, false, false]);
+        let lDefaut = null; try { const s = await R.demarrer({ port: 0, dossier: path.join(racine, 'sans-racine-donnee'), journal: () => { } }); await s.fermer(); } catch (e) { lDefaut = e.message; }
+        verifier('SANS `racine` donnée (la voie de production), un dossier de bac est refusé', /racine autorisée/.test(lDefaut || ''), true);
+        // second filet : les trois noms d'apports manuels, même SOUS la racine
+        for (const nom of ['Logo FR', 'apport-manuel', path.join('Desktop', 'LOGO')]) {
+            let l = null; const cible = path.join(racine, nom, 'sous', 'dossier');
+            try { await R.demarrer({ racine, port: 0, dossier: cible, dossierImages: path.join(racine, 'ok-images'), journal: () => { } }); } catch (e) { l = e.message; }
+            verifier(`second filet : un dossier dans « ${nom} » sous la racine : refusé (apports manuels), rien de créé`, [/apports manuels/.test(l || ''), fs.existsSync(path.join(racine, nom))], [true, false]);
+        }
+        let l2 = null; try { await R.demarrer({ racine, port: 0, dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(racine, 'Logo FR'), journal: () => { } }); } catch (e) { l2 = e.message; }
+        verifier('second filet : le dossier d\'IMAGES dans un dossier d\'apports manuels : refusé aussi', /apports manuels/.test(l2 || ''), true);
+        // ── TOUR 2 (relecture X, important 2) : une JONCTION qui sort de la racine est résolue. La cible est un dossier JETABLE que le banc crée lui-même (jamais le dépôt, jamais un vrai dossier),
+        // avec un fichier témoin ; le retrait de la jonction (`rmdir`, sans /s) est VÉRIFIÉ, et sans cette preuve le banc ne fait AUCUN nettoyage récursif.
+        cibleJetable = fs.mkdtempSync(path.join(os.tmpdir(), 'jonction-cible-'));
+        fs.writeFileSync(path.join(cibleJetable, 'temoin.txt'), 'intact');
+        const jonction = path.join(racine, 'jonction-vers-la-cible-jetable');
+        fs.symlinkSync(cibleJetable, jonction, 'junction');
+        try {
+            await refuseDemarrage('une JONCTION (sous la racine) qui mène HORS de la racine est résolue', { dossier: path.join(racine, 'ok-fiches'), dossierImages: path.join(jonction, 'images') }, 'racine autorisée');
+            verifier('… rien n\'a été créé derrière la jonction ; dansLeDepot résout la jonction vers un faux dépôt jetable', [fs.readdirSync(cibleJetable), R.dansLeDepot(path.join(jonction, 'x'), cibleJetable), R.dansLeDepot(path.join(jonction, 'x'), path.join(racine, 'ok-fiches'))], [['temoin.txt'], true, false]);
+        } finally {
+            const rm = require('child_process').spawnSync('cmd', ['/c', 'rmdir', jonction]);   // une jonction se retire par rmdir SANS /s, jamais par une suppression récursive
+            nettoyageSur = rm.status === 0 && !fs.existsSync(jonction);
+        }
+        verifier('la jonction est retirée (rmdir status 0, jonction absente) et la cible témoin est INTACTE', [nettoyageSur, fs.readFileSync(path.join(cibleJetable, 'temoin.txt'), 'utf8')], [true, 'intact']);
     } finally { await srv.fermer(); }
-    fs.rmSync(racine, { recursive: true, force: true });
+    // aucun nettoyage récursif tant que la jonction n'est pas prouvée retirée ; sinon le banc échoue et laisse les dossiers temporaires en place (ils ne mènent qu'à un dossier jetable)
+    if (nettoyageSur) { fs.rmSync(racine, { recursive: true, force: true }); fs.rmSync(cibleJetable, { recursive: true, force: true }); if (horsRacine) fs.rmSync(horsRacine, { recursive: true, force: true }); }
+    else { ko++; console.log(`❌ la jonction n'a pas pu être retirée : AUCUN nettoyage récursif ; à retirer à la main (cmd /c rmdir, sans /s) : ${path.join(racine, 'jonction-vers-la-cible-jetable')}`); }
     console.log(`\n${ok} réussis, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ banc interrompu :', e); process.exit(1); });
