@@ -20,7 +20,15 @@ verifier('logo ptcg-assets, bulbagarden:demande-site, source inconnue ou absente
 verifier('un officiel par la source MAIS générique (logoGenerique: true, ou empreinte de la table) : generique', [niveau('logo', { source: 'tcgdex:en', sha1: 'a' }, { logoGenerique: true }), niveau('logo', { source: 'tcgdex:en', sha1: GEN })], ['generique', 'generique']);
 verifier('un officiel par la source MAIS logo du couple (fichier de la table) : inconnu', niveau('logo', { source: 'bulbapedia:setlogo', sha1: 'a', fichier: COUPLE }), 'inconnu');
 verifier('un officiel par la source MAIS copie de Pokécardex : inconnu', niveau('logo', { source: 'tcgdex:en', sha1: COPIE }), 'inconnu');
-verifier('logoOfficiel générique ? non : il est officiel par construction (la table du site refuse elle-même les génériques)', niveau('logoOfficiel.fr', { cleR2: 'x', lot: 'l', sha256: GEN }), 'officiel');
+// TOUR 1 : logoOfficiel.* se classe par la SOURCE de l'entrée (table fermée), plus « par construction »
+const LOT_B = 'logos-officiels-bulba-2026-10';
+verifier('logoOfficiel.* : tcgdex et billsarchive → officiel', [niveau('logoOfficiel.fr', { source: 'tcgdex', cleR2: 'x', lot: 'l' }), niveau('logoOfficiel.ja', { source: 'billsarchive', cleR2: 'x', lot: 'l' })], ['officiel', 'officiel']);
+verifier('logoOfficiel.ja bulbapedia : officiel SEULEMENT du lot bulba ET avec `setlogo` dans la preuve', [
+    niveau('logoOfficiel.ja', { source: 'bulbapedia', lot: LOT_B, preuve: { setConfirmeParPage: 'la page nomme setlogo « X.png »' } }),
+    niveau('logoOfficiel.ja', { source: 'bulbapedia', lot: LOT_B, preuve: { route: 'B' } }),
+    niveau('logoOfficiel.ja', { source: 'bulbapedia', lot: 'autre-lot', preuve: { setConfirmeParPage: 'setlogo' } })], ['officiel', 'inconnu', 'inconnu']);
+verifier('logoOfficiel.* : une autre source, ou aucune source lisible → inconnu (plus « officiel par construction »)', [niveau('logoOfficiel.fr', { source: 'manuel', cleR2: 'x', lot: 'l' }), niveau('logoOfficiel.fr', { cleR2: 'x', lot: 'l', sha256: GEN }), niveau('logoOfficiel.en', { source: 'pokecardex' })], ['inconnu', 'inconnu', 'inconnu']);
+verifier('la raison imprimée dit la SOURCE', [N.classer('logoOfficiel.fr', { source: 'tcgdex' }, {}).raison, N.classer('logoOfficiel.ja', { source: 'bulbapedia', lot: LOT_B, preuve: 'setlogo' }, {}).raison], ['logoOfficiel, source tcgdex (table fermée)', 'logoOfficiel, source bulbapedia, lot logos-officiels-bulba-2026-10, `setlogo` dans la preuve']);
 verifier('champ inconnu : inconnu', niveau('logoAutre', { source: 'tcgdex:en' }), 'inconnu');
 verifier('logoSemiOfficiel : semi-officiel seulement avec sa phrase', [niveau('logoSemiOfficiel.en', { cleR2: 'x', lot: 'l', represente: 'logo de l\'opération McDonald\'s Match Battle 2022-2023' }), niveau('logoSemiOfficiel.en', { cleR2: 'x', lot: 'l' })], ['semi-officiel', 'inconnu']);
 
@@ -42,5 +50,16 @@ verifier('simulation : un champ qui porte déjà son niveau n\'est pas réécrit
 verifier('simulation : l\'écriture ne pose que `niveau` (et `source` si absente et lisible), jamais une valeur existante', sim.aEcrire.map(x => [x._id, x.chemin, Object.keys(x.pose).sort().join('+')]), [['A', 'logo', 'niveau'], ['A', 'logoFr', 'niveau'], ['A', 'logoCompose', 'niveau'], ['B', 'logo', 'niveau'], ['B', 'logoOfficiel.ja', 'niveau+source']]);
 verifier('simulation : 10 exemples au plus par valeur', Object.values(N.simuler(Array.from({ length: 30 }, (_, i) => ({ _id: `S${i}`, region: 'intl', logo: { source: 'manuel' } })), {}).exemples.logo.inconnu).length, 10);
 verifier('simulation : le dénominateur (sets lus, champs de logo vus) est rendu', [sim.sets, sim.champsVus], [4, 6]);
+// TOUR 1 : --attendu=<n> obligatoire avec --ecrire ; le plan doit le confirmer AVANT toute écriture ; la relecture est comparée
+{
+    const P = require('./poser-niveau-logos');
+    const a = P.analyserArguments;
+    verifier('arguments : simulation seule, ou --lecture-via-ecriture', [a([]).erreurs, a(['--lecture-via-ecriture']).erreurs, a(['--lecture-via-ecriture']).viaEcriture], [[], [], true]);
+    verifier('--ecrire sans --attendu : refus nommé', a(['--ecrire']).erreurs.length, 1);
+    verifier('--ecrire --attendu=12 : accepté ; --attendu non entier, négatif ou vide : refus ; --attendu sans --ecrire : refus', [a(['--ecrire', '--attendu=12']).attendu, a(['--ecrire', '--attendu=abc']).erreurs.length, a(['--ecrire', '--attendu=-1']).erreurs.length, a(['--ecrire', '--attendu=']).erreurs.length, a(['--attendu=12']).erreurs.length], [12, 1, 1, 1, 1]);
+    verifier('argument inconnu : refus', a(['--ecrire', '--attendu=1', '--tout']).erreurs.length, 1);
+    verifier('plan = attendu : écriture permise ; plan ≠ attendu : refus AVANT écriture, les deux nombres dits', [P.verifierPlan(1046, 1046), /1046/.test(P.verifierPlan(1045, 1046) ?? '') && /1045/.test(P.verifierPlan(1045, 1046))], [null, true]);
+    verifier('relecture : écrits = attendu et plus aucun champ sans niveau : concordant ; sinon dit', [P.verifierRelecture({ ecrits: 5, attendu: 5, restants: 0 }), typeof P.verifierRelecture({ ecrits: 4, attendu: 5, restants: 0 }), typeof P.verifierRelecture({ ecrits: 5, attendu: 5, restants: 1 })], [null, 'string', 'string']);
+}
 console.log(`\n${ok} passés, ${ko} en échec`);
 if (ko) process.exitCode = 1;

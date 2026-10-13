@@ -147,7 +147,7 @@ function choisirLignes({ officiels, ajouts = AJOUTS, semis = [], setsDemandes = 
     return erreurs.length ? { officiels: [], semis: [], erreurs } : { officiels: [...deTable, ...deAjout], semis: deSemi, erreurs };
 }
 
-const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/, /^--sets=[A-Za-z0-9][A-Za-z0-9._-]*(,[A-Za-z0-9][A-Za-z0-9._-]*)*$/, /^--semi-officiel=.+\.json$/];
+const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/, /^--sets=[A-Za-z0-9][A-Za-z0-9._-]*(,[A-Za-z0-9][A-Za-z0-9._-]*)*$/, /^--semi-officiel=.+\.json$/, /^--lecture-via-ecriture$/];
 /** Les arguments qui ne sont pas dans la liste fermée (un argument inconnu REFUSE avant toute connexion). */
 const argumentsInconnus = argv => argv.filter(a => !AUTORISES.some(r => r.test(a)));
 
@@ -487,7 +487,8 @@ if (require.main === module) (async () => {
     fs.mkdirSync(cache, { recursive: true });
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     // une SIMULATION lit par la connexion de lecture seule (si elle est configurée) ; seule une écriture ouvre la connexion d'écriture
-    const cx = (!ECRIRE && await require('./collecte-cartes/ouvrir-lecture').ouvrirLecture()) || await ouvrirConnexions({ production: false, buckets: ECRIRE ? ['R2_BUCKET_IMAGES'] : [] });
+    const cx = ECRIRE ? await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] })
+        : await require('./collecte-cartes/ouvrir-lecture').ouvrirSimulation({ viaEcriture: process.argv.includes('--lecture-via-ecriture'), ouvrirConnexions });
     const S = cx.cartes.db.collection('sets');
     const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1, code: 1 } }).toArray()).map(s => [s._id, s]));
     if (!sets.size) throw new Error('collection sets vide : base fausse');

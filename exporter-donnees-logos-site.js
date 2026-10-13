@@ -144,7 +144,12 @@ function logosOfficielsDesSets(sets) {
     }
     return sortie;
 }
-// LES LOGOS SEMI-OFFICIELS : `sets.logoSemiOfficiel.<fr|ja|en>`, même forme + `niveau: 'semi-officiel'` + `represente` (ce que le logo représente). Une entrée sans phrase n'est pas exportée.
+/** Le compte imprimé des logos officiels exportés : les entrées `en` à part (le site n'accepte que fr/ja aujourd'hui : lib/logosOfficielsImport.ts). */
+function resumeLogosOfficiels(logos) {
+    const v = Object.values(logos);
+    return `${v.length} sets (${v.reduce((n, x) => n + Object.keys(x).length, 0)} logos, dont ${v.filter(x => x.en).length} en, non lus par le site aujourd'hui)`;
+}
+// LES LOGOS SEMI-OFFICIELS :`sets.logoSemiOfficiel.<fr|ja|en>`, même forme + `niveau: 'semi-officiel'` + `represente` (ce que le logo représente). Une entrée sans phrase n'est pas exportée.
 function logosSemiOfficielsDesSets(sets) {
     const sortie = {};
     for (const s of [...sets].sort((a, b) => String(a._id).localeCompare(String(b._id)))) {
@@ -156,7 +161,7 @@ function logosSemiOfficielsDesSets(sets) {
     }
     return sortie;
 }
-module.exports = { logosOfficielsDesSets, logosSemiOfficielsDesSets, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE, noterRaretesHorsTable, messageRaretesHorsTable };
+module.exports = { logosOfficielsDesSets, logosSemiOfficielsDesSets, resumeLogosOfficiels, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE, noterRaretesHorsTable, messageRaretesHorsTable };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
     const argv = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -265,7 +270,7 @@ if (require.main === module) (async () => {
     console.log(`AUTRES (site) : ${enAttente.length} attendus (${precedents.length} de l'export précédent) · ${autres.length} classés · ${absents.length} absents de la base${absents.length ? ` (${absents.join(', ')})` : ''} · exclus en tout ${JSON.stringify(exclusTotal)}`);
     console.log(`classement de secours (sans prix) : ${Object.values(vedettes).reduce((t, x) => t + x.classementDeSecours, 0)} entrées sur ${Object.values(vedettes).filter(x => x.classementDeSecours).length} sets`);
     const logosOfficiels = logosOfficielsDesSets(await cx.db.collection('sets').find({ $or: [{ 'logoOfficiel.fr': { $exists: true } }, { 'logoOfficiel.ja': { $exists: true } }, { 'logoOfficiel.en': { $exists: true } }] }, { projection: { logoOfficiel: 1 } }).toArray());
-    console.log(`LOGOS OFFICIELS : ${Object.keys(logosOfficiels).length} sets (${Object.values(logosOfficiels).reduce((n, x) => n + Object.keys(x).length, 0)} logos)`);
+    console.log(`LOGOS OFFICIELS : ${resumeLogosOfficiels(logosOfficiels)}`);
     const logosSemiOfficiels = logosSemiOfficielsDesSets(await cx.db.collection('sets').find({ logoSemiOfficiel: { $exists: true } }, { projection: { logoSemiOfficiel: 1 } }).toArray());
     console.log(`LOGOS SEMI-OFFICIELS : ${Object.keys(logosSemiOfficiels).length} sets (${Object.values(logosSemiOfficiels).reduce((n, x) => n + Object.keys(x).length, 0)} logos)`);
     await fermer();

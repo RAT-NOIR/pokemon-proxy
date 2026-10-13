@@ -35,6 +35,19 @@ const REPR = 'logo de l\'opération McDonald\'s Match Battle 2022-2023';
     verifier('arguments : --sets=A,B accepté ; --sets nu, --sets=, --set=A, --sets=A;B refusés', [ar(['--sets=A,B', '--cache=x']), ar(['--sets']), ar(['--sets=']), ar(['--set=A']), ar(['--sets=A;B'])], [[], ['--sets'], ['--sets='], ['--set=A'], ['--sets=A;B']]);
     verifier('arguments : l\'option du semi-officiel existe, un fichier .json', [ar(['--semi-officiel=semis.json']), ar(['--semi-officiel=semis.txt'])], [[], ['--semi-officiel=semis.txt']]);
 
+    // ───── 1 bis. TOUR 1 : la simulation ne retombe JAMAIS en silence sur la connexion d'écriture
+    {
+        const O = require('./collecte-cartes/ouvrir-lecture');
+        const sorties = []; let ouvertures = 0;
+        const ecriture = async () => { ouvertures++; return { cartes: { db: {} }, fermer: async () => { } }; };
+        let erreur = null;
+        try { await O.ouvrirSimulation({ env: {}, ouvrirConnexions: ecriture, journal: m => sorties.push(m) }); } catch (e) { erreur = e.message; }
+        verifier('sans variable de lecture : REFUS nommé, aucune connexion d\'écriture ouverte', [/MONGODB_CARTES_LECTURE_URI/.test(erreur ?? ''), ouvertures, sorties.length], [true, 0, 0]);
+        const cx = await O.ouvrirSimulation({ env: {}, viaEcriture: true, ouvrirConnexions: ecriture, journal: m => sorties.push(m) });
+        verifier('option explicite : la connexion d\'écriture sert, et le bandeau est imprimé', [!!cx.cartes, ouvertures, sorties], [true, 1, ['⚠️ LECTURE VIA LA CONNEXION D\'ÉCRITURE']]);
+        verifier('--lecture-via-ecriture est dans la liste fermée (sans valeur)', [M.argumentsInconnus(['--lecture-via-ecriture']), M.argumentsInconnus(['--lecture-via-ecriture=1'])], [[], ['--lecture-via-ecriture=1']]);
+    }
+
     // ───── 2. la cible `en`
     verifier('langueProuvee : TCGdex /en/ prouve en ; Bill\'s sans préfixe ne prouve rien', [M.langueProuvee(URL_EN), M.langueProuvee(URL_BEN)], ['en', null]);
     verifier('en, TCGdex /en/, set intl : collecter', M.planifier(EN(), sets).action, 'collecter');
@@ -78,6 +91,8 @@ const REPR = 'logo de l\'opération McDonald\'s Match Battle 2022-2023';
         const s = X.logosSemiOfficielsDesSets([{ _id: 'S', logoSemiOfficiel: { en: e('en', { niveau: 'semi-officiel', represente: REPR }) } }, { _id: 'T', logoSemiOfficiel: { en: e('en', { niveau: 'semi-officiel' }) } }, { _id: 'U', logoOfficiel: { fr: e('fr') } }]);
         verifier('export semi : la phrase `represente` et `niveau` sortent ; sans phrase, l\'entrée n\'est pas exportée ; un set sans champ n\'y est pas', [Object.keys(s), s.S?.en?.niveau, s.S?.en?.represente], [['S'], 'semi-officiel', REPR]);
     }
+
+    verifier('export (tour 1) : le compte imprime à part les entrées `en`, non lues par le site', require('./exporter-donnees-logos-site').resumeLogosOfficiels({ A: { fr: {}, en: {} }, B: { ja: {} }, C: { en: {} } }), '3 sets (4 logos, dont 2 en, non lus par le site aujourd\'hui)');
 
     // ───── 6. l'écriture : niveau, en, semi, retrait — base EN MÉMOIRE, faux R2
     const banc = await ouvrirBanc(); banc.appliquer();

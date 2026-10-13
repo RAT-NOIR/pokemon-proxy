@@ -4,7 +4,8 @@
 // Une fonction PURE à TABLE FERMÉE : `classer(champ, entree, set, ctx)`. Elle s'écrit par ce qu'elle AUTORISE (§51) : un seul chemin mène à « officiel » (une provenance
 // prouvée par la SOURCE écrite sur l'entrée, ni générique, ni logo du couple, ni copie de Pokécardex) ; tout ce qu'elle ne reconnaît pas est `inconnu` — jamais deviné.
 //   logoCompose                      → compose
-//   logoOfficiel.<fr|ja|en>          → officiel (la table `logoOfficiel` est officielle par construction : TCGdex ou Bill's, adresse exacte)
+//   logoOfficiel.<fr|ja|en>          → par la SOURCE de l'entrée, table fermée : tcgdex, billsarchive → officiel ; bulbapedia → officiel seulement du lot logos-officiels-bulba-2026-10 ET avec
+//                                      `setlogo` dans la preuve ; toute autre source (ou aucune) → inconnu. Plus « officiel par construction ».
 //   logoSemiOfficiel.<…>             → semi-officiel seulement avec sa phrase `represente`, sinon inconnu
 //   logo / logoFr                    → generique si logoGenerique ou empreinte de la table des génériques ; inconnu si copie de Pokécardex ou logo du couple ; sinon par la SOURCE :
 //        tcgdex:en, tcgdex:assets-fr, billsarchive, bulbapedia:setlogo (le `setlogo` de la page du set, collecter-logos-sets.js)  → officiel
@@ -18,6 +19,7 @@ const { refusCopie, refusDuCouple, logoGenerique } = require('./langue-logo');
 const CHAMPS = ['logo', 'logoFr', 'logoCompose', 'logoOfficiel.fr', 'logoOfficiel.ja', 'logoOfficiel.en', 'logoSemiOfficiel.fr', 'logoSemiOfficiel.ja', 'logoSemiOfficiel.en'];
 const SOURCES_OFFICIELLES = new Set(['tcgdex:en', 'tcgdex:assets-fr', 'billsarchive', 'bulbapedia:setlogo']);
 const SOURCES_MANUELLES = new Set(['manuel', 'apport-manuel']);
+const LOT_BULBA = 'logos-officiels-bulba-2026-10';
 const HOTES = { 'assets.tcgdex.net': 'tcgdex', 'billsarchive.com': 'billsarchive' };
 const hoteDe = u => { try { return new URL(u).hostname; } catch { return null; } };
 const phrase = s => typeof s === 'string' && s.trim().length >= 20;
@@ -33,7 +35,17 @@ function classer(champ, entree, set = {}, ctx = {}) {
     };
     const rendre = (niveau, raison) => ({ niveau, raison, source: sansSource() });
     if (champ === 'logoCompose') return rendre('compose', 'champ logoCompose');
-    if (champ.startsWith('logoOfficiel.')) return rendre('officiel', 'table logoOfficiel (TCGdex ou Bill\'s, adresse exacte)');
+    if (champ.startsWith('logoOfficiel.')) {
+        // TOUR 1 : par la SOURCE de l'entrée, table fermée — plus « officiel par construction » (13 entrées .ja ont source « bulbapedia »)
+        const src = e.source ?? sansSource();
+        if (src === 'tcgdex' || src === 'billsarchive') return rendre('officiel', `logoOfficiel, source ${src} (table fermée)`);
+        if (src === 'bulbapedia') {
+            return e.lot === LOT_BULBA && /setlogo/i.test(JSON.stringify(e.preuve ?? ''))
+                ? rendre('officiel', `logoOfficiel, source bulbapedia, lot ${LOT_BULBA}, \`setlogo\` dans la preuve`)
+                : rendre('inconnu', `logoOfficiel, source bulbapedia hors du lot ${LOT_BULBA} ou sans \`setlogo\` dans la preuve`);
+        }
+        return rendre('inconnu', `logoOfficiel, source « ${src ?? '∅'} » hors de la table fermée (tcgdex, billsarchive, bulbapedia du lot bulba)`);
+    }
     if (champ.startsWith('logoSemiOfficiel.')) return phrase(e.represente) ? rendre('semi-officiel', 'logoSemiOfficiel avec sa phrase `represente`') : rendre('inconnu', 'logoSemiOfficiel sans phrase `represente`');
     if (champ !== 'logo' && champ !== 'logoFr') return rendre('inconnu', `champ « ${champ} » hors de la table`);
     const g = set.logoGenerique === true ? 'logoGenerique: true' : logoGenerique(e.sha1);
