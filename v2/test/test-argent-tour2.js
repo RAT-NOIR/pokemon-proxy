@@ -73,6 +73,17 @@ const etatsDe = async scanId => (await debitsDe(scanId)).map(d => d.etat);
         H.v('trois chemins (rendreLeScan, rembourserLigne, réparation) sur le même débit : UN seul crédit — essais 3, somme des deltas 0, un mouvement +1, réconciliation propre',
             [(await lire(p)).essais, somme, await plus1('n3'), (await recon(p)).propre], [3, 0, 1, true]);
     }
+    // ═══ N-1b : une trace concurrente du MÊME débit écrite entre la preuve et l'écriture de la réparation : une seule trace +1 survit (l'index unique sur `debitId` arbitre, même sous une autre clé)
+    {
+        const p = await neuf('n1b'); const d = (await debitsDe('n1b'))[0]; const orig = db.col; let inseree = false;
+        await db.col('mouvements').updateOne({ _id: d._id }, { $set: { etat: 'rendu-en-cours', priseLe: new Date(t.getTime() - 3600e3) } });
+        db.col = nom => new Proxy(orig(nom), { get(c, k) { const v = c[k]; if (typeof v !== 'function') return v;
+            return (...a) => { if (nom === 'mouvements' && k === 'insertOne' && a[0] && a[0].type === 'remboursement' && /^rp\|/.test(a[0].cleIdempotence) && !inseree) {
+                inseree = true; return c.insertOne({ installationId: p.id, le: t, surface: 'extension', type: 'remboursement', delta: 1, poche: 'essai', motif: 'concurrent', scanId: 'n1b', etat: 'rembourse', cleIdempotence: 'rl|concurrent', debitId: d._id }).then(() => v.apply(c, a)); }
+                return v.apply(c, a); }; } });
+        let r; try { r = await reparer(p, 'n1b'); } finally { db.col = orig; }
+        H.v('N-1b. une trace concurrente du même débit apparaît avant l\'écriture de la réparation : UNE seule trace +1 (l\'index unique arbitre), pas de second mouvement, essais 3, ligne « rembourse »', [inseree, await plus1('n1b'), (await lire(p)).essais, await etatsDe('n1b')], [true, 1, 3, ['rembourse']]);
+    }
     // ═══ la trace +1 d'un débit est UNIQUE (index) : deux traces du même débit ne coexistent jamais
     {
         const p = await neuf('n4'); const d = (await debitsDe('n4'))[0];
