@@ -36,7 +36,8 @@ const { cleNumero } = require('./collecte-cartes/jointure');   // LA normalisati
 
 const PLAFOND_PRODUITS = 3;                   // produit gagnant compris
 const TTL_MS = 6 * 3600 * 1000;
-const REESSAI_MS = 30 * 1000;                 // après une panne de rechargement, pas plus d'une tentative par 30 s
+const FRAICHEUR_MS = 60 * 1000;               // compte du catalogue relu au plus une fois par minute (I1)
+const REESSAI_MS = 30 * 1000;                // après une panne de rechargement, pas plus d'une tentative par 30 s
 
 const entierValide = x => Number.isInteger(x) && x > 0 && x <= 2147483647;
 
@@ -45,12 +46,13 @@ function borneInf(tab, cle, lo, hi) {
     return lo;
 }
 
-function creerGardeJumeaux({ lireCatalogue, lireNumeros, lireRegions, maintenant = Date.now, ttlMs = TTL_MS, reessaiMs = REESSAI_MS, journal = console }) {
+function creerGardeJumeaux({ lireCatalogue, lireCompte, lireNumeros, lireRegions, maintenant = Date.now, ttlMs = TTL_MS, fraicheurMs = FRAICHEUR_MS, reessaiMs = REESSAI_MS, journal = console }) {
     let table = null;               // { ids, exps, metas, parId } triés par (metacarte, idProduct) ; parId = positions triées par idProduct
     let chargeeLe = 0;
     let derniereErreur = null;
     let enCours = null;
     let prochainEssai = 0;
+    let compteLeLe = 0;
 
     async function charger() {
         const ids = [], exps = [], metas = [];
@@ -67,37 +69,43 @@ function creerGardeJumeaux({ lireCatalogue, lireNumeros, lireRegions, maintenant
         if (avecMetacarte === 0) throw new Error(`aucune ligne ne porte idMetacard (${vus} produits lus) : champ absent ou mal nommé`);
         const ordre = Array.from(ids.keys()).sort((a, b) => (metas[a] - metas[b]) || (ids[a] - ids[b]));
         const n = ordre.length;
-        const T = { ids: new Int32Array(n), exps: new Int32Array(n), metas: new Int32Array(n), parId: new Int32Array(n) };
+        const T = { compte: vus, ids: new Int32Array(n), exps: new Int32Array(n), metas: new Int32Array(n), parId: new Int32Array(n) };
         for (let i = 0; i < n; i++) { const k = ordre[i]; T.ids[i] = ids[k]; T.exps[i] = exps[k]; T.metas[i] = metas[k]; }
         T.parId = Int32Array.from(Array.from({ length: n }, (_, i) => i).sort((a, b) => T.ids[a] - T.ids[b]));
         return T;
     }
 
     async function assurer() {
+        // I1 (tour 1) : AUCUNE table périmée ne sert. Une table est fraîche si son TTL n'est pas écoulé ET, au plus une fois par
+        // `fraicheurMs`, si le compte du catalogue n'a pas bougé depuis son chargement (un import ajoute des produits : le jumeau d'un
+        // produit neuf n'est pas dans la table). Toute impossibilité de le savoir (lecture du compte, rechargement) LÈVE -> `echec`.
         const t = maintenant();
-        if (table && t - chargeeLe < ttlMs) return;
-        if (enCours) { await enCours; if (table && maintenant() - chargeeLe <= 4 * ttlMs) return; throw new Error(derniereErreur || 'table indisponible'); }
-        if (t < prochainEssai) {
-            // Un rechargement vient d'échouer : on ne martèle pas la base, on sert l'ancienne table tant qu'elle n'est pas périmée.
-            if (table && t - chargeeLe <= 4 * ttlMs) return;
-            throw new Error(derniereErreur || 'table indisponible');
+        let recharger = !table || t - chargeeLe >= ttlMs;
+        if (!recharger && t - compteLeLe >= fraicheurMs) {
+            const n = await lireCompte();
+            if (!Number.isFinite(n)) throw new Error(`compte du catalogue illisible (${n})`);
+            compteLeLe = maintenant();
+            if (n !== table.compte) recharger = true;
         }
-        enCours = (async () => {
-            try {
-                table = await charger();
-                chargeeLe = maintenant();
-                derniereErreur = null;
-                prochainEssai = 0;
-            } catch (e) {
-                derniereErreur = String(e?.message ?? e).slice(0, 200);
-                prochainEssai = maintenant() + reessaiMs;
-                journal.error?.(`⚠️ [garde-jumeaux] chargement de la table en échec : ${derniereErreur}`);
-            }
-        })();
-        try { await enCours; } finally { enCours = null; }
+        if (!recharger) return;
+        if (!enCours) {
+            if (maintenant() < prochainEssai) throw new Error(derniereErreur || 'table indisponible');   // on ne martèle pas la base après une panne
+            enCours = (async () => {
+                try {
+                    table = await charger();
+                    chargeeLe = compteLeLe = maintenant();
+                    derniereErreur = null;
+                    prochainEssai = 0;
+                } catch (e) {
+                    table = null;   // l'ancienne table est connue périmée (TTL écoulé ou compte changé) : elle ne sert plus
+                    derniereErreur = String(e?.message ?? e).slice(0, 200);
+                    prochainEssai = maintenant() + reessaiMs;
+                    journal.error?.(`⚠️ [garde-jumeaux] chargement de la table en échec : ${derniereErreur}`);
+                }
+            })().finally(() => { enCours = null; });
+        }
+        await enCours;
         if (!table) throw new Error(derniereErreur || 'table indisponible');
-        // Table présente mais le rechargement vient d'échouer : l'ancienne sert tant qu'elle a moins de 4 TTL.
-        if (maintenant() - chargeeLe > 4 * ttlMs) throw new Error(`table périmée (${Math.round((maintenant() - chargeeLe) / 3600000)} h) et rechargement en échec : ${derniereErreur}`);
     }
 
     async function chercher(idProduct) {
@@ -146,7 +154,7 @@ function creerGardeJumeaux({ lireCatalogue, lireNumeros, lireRegions, maintenant
             jumeaux.sort((a, b) => a - b);
             const nbProduits = 1 + jumeaux.length;
             if (jumeaux.length === 0) return { etat: 'aucun', jumeaux: [], nbProduits: 1, voisins: voisins.length, cause: null };
-            if (nbProduits > PLAFOND_PRODUITS) return { etat: 'trop', jumeaux: [], nbProduits, voisins: voisins.length, cause: null };
+            if (nbProduits > PLAFOND_PRODUITS) return { etat: 'trop', jumeaux, nbProduits, voisins: voisins.length, cause: null };
             return { etat: 'jumeaux', jumeaux, nbProduits, voisins: voisins.length, cause: null };
         } catch (e) {
             return echec(`recherche en échec : ${e?.message ?? e}`);
@@ -167,15 +175,35 @@ function creerGardeJumeaux({ lireCatalogue, lireNumeros, lireRegions, maintenant
 
 // Ce que la route fait d'un résultat. Écrit par ce qu'il AUTORISE : seul `aucun` (et `non-jouee`,
 // quand la réponse était déjà sous réserve) laisse passer ; tout état inconnu ou absent -> réserve.
-function verdictApresGarde(r) {
+// I3 (tour 1) : c'est LA décision de la route, fonction pure. `action` vaut `ferme` (le verdict ferme passe), `reserve` (réponse sous
+// réserve, avec `raison` ; `raison` null = déjà sous réserve avant la garde, la route garde la sienne) ou `refus` (avec `motifRefus` et
+// `nbProduits`). Seul `aucun` donne `ferme`.
+function verdictApresGarde(r, { ambigueAvantGarde = false } = {}) {
+    const base = { candidatsExtra: [], raison: null, motifRefus: null, nbProduits: null, jumeauxIds: [] };
+    const reserve = (extra) => ({ ...base, action: 'reserve', incertain: true, refus: false, ...extra });
+    if (ambigueAvantGarde === true || r?.etat === 'non-jouee') return reserve({ issue: 'non-jouee' });
     const etat = r?.etat;
-    if (etat === 'aucun') return { incertain: false, refus: false, candidatsExtra: [], raison: null, motifRefus: null, issue: 'aucun' };
-    if (etat === 'non-jouee') return { incertain: false, refus: false, candidatsExtra: [], raison: null, motifRefus: null, issue: 'non-jouee' };
+    if (etat === 'aucun') return { ...base, action: 'ferme', incertain: false, refus: false, issue: 'aucun' };
     if (etat === 'jumeaux' && Array.isArray(r.jumeaux) && r.jumeaux.length >= 1 && r.jumeaux.length <= PLAFOND_PRODUITS - 1) {
-        return { incertain: true, refus: false, candidatsExtra: r.jumeaux.slice(), raison: 'jumeaux-garde', motifRefus: null, issue: 'jumeaux' };
+        return reserve({ candidatsExtra: r.jumeaux.slice(), jumeauxIds: r.jumeaux.slice(), nbProduits: r.nbProduits ?? 1 + r.jumeaux.length, raison: 'jumeaux-garde', issue: 'jumeaux' });
     }
-    if (etat === 'trop') return { incertain: false, refus: true, candidatsExtra: [], raison: null, motifRefus: 'jumeaux-trop-nombreux', issue: 'trop' };
-    return { incertain: true, refus: false, candidatsExtra: [], raison: 'jumeaux-recherche-echec', motifRefus: null, issue: 'echec' };
+    if (etat === 'trop') {
+        const ids = Array.isArray(r.jumeaux) ? r.jumeaux.slice() : [];
+        return { ...base, action: 'refus', incertain: false, refus: true, motifRefus: 'jumeaux-trop-nombreux', nbProduits: Number.isFinite(r.nbProduits) ? r.nbProduits : null, jumeauxIds: ids, issue: 'trop' };
+    }
+    return reserve({ raison: 'jumeaux-recherche-echec', issue: 'echec' });
+}
+
+// Joue la garde si (et seulement si) le verdict serait ferme, et rend le résultat avec la décision. Ne lève jamais : une garde qui
+// lève ou rend n'importe quoi donne une réserve d'échec.
+async function appliquerGarde({ ambigueAvantGarde, idProduct, garde }) {
+    let resultat;
+    if (ambigueAvantGarde) resultat = { etat: 'non-jouee', jumeaux: [], nbProduits: null, cause: null };
+    else {
+        try { resultat = await garde.chercher(idProduct); }
+        catch (e) { resultat = { etat: 'echec', jumeaux: [], nbProduits: null, cause: `garde en échec : ${e?.message ?? e}`.slice(0, 200) }; }
+    }
+    return { resultat, decision: verdictApresGarde(resultat, { ambigueAvantGarde }) };
 }
 
 // Les candidats à montrer. Hors garde : le top-3 du classement sous réserve, le gagnant seul sinon (comportement d'avant). Sous
@@ -207,6 +235,8 @@ function accesMongoose({ CatalogueProduit, NumeroCarte, CodeSet, mongoose }) {
     const pret = () => { if (mongoose.connection.readyState !== 1) throw new Error('Mongo non connecté'); };
     return {
         lireCatalogue: () => { pret(); return CatalogueProduit.find({}, { idProduct: 1, idExpansion: 1, idMetacard: 1, _id: 0 }).lean().cursor({ batchSize: 5000 }); },
+        // I1 : une métadonnée (O(1)), pas un balayage. Sert à savoir si le catalogue a bougé depuis le chargement de la table.
+        lireCompte: async () => { pret(); return CatalogueProduit.estimatedDocumentCount(); },
         lireNoms: async ids => {
             pret();
             const docs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, name: 1, _id: 0 }).lean();
@@ -227,4 +257,4 @@ function accesMongoose({ CatalogueProduit, NumeroCarte, CodeSet, mongoose }) {
     };
 }
 
-module.exports = { creerGardeJumeaux, verdictApresGarde, tetesDesCandidats, accesMongoose, PLAFOND_PRODUITS, TTL_MS };
+module.exports = { creerGardeJumeaux, verdictApresGarde, appliquerGarde, tetesDesCandidats, accesMongoose, PLAFOND_PRODUITS, TTL_MS };

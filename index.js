@@ -451,7 +451,7 @@ const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_ca
 
 // D2 (2026-10-13) — la garde provisoire contre les faux prix des « jumeaux » (garde-jumeaux.js). Table en mémoire chargée à la
 // première utilisation (aucun index sur idMetacard, aucune création d'index ici), relue toutes les 6 h.
-const { creerGardeJumeaux, verdictApresGarde, tetesDesCandidats, accesMongoose: accesGardeJumeaux } = require('./garde-jumeaux');
+const { creerGardeJumeaux, appliquerGarde, tetesDesCandidats, accesMongoose: accesGardeJumeaux } = require('./garde-jumeaux');
 const accesJumeaux = accesGardeJumeaux({ CatalogueProduit, NumeroCarte, CodeSet, mongoose });
 const gardeJumeaux = creerGardeJumeaux(accesJumeaux);
 
@@ -5424,18 +5424,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Même métacarte (426438), deux créneaux. La garde ne joue QUE sur un verdict qui serait ferme : une réponse déjà sous réserve
         // garde sa raison et son niveau (`non-jouee`). Elle est écrite par ce qu'elle AUTORISE : seul « aucun jumeau, recherche
         // réussie » laisse passer ; une recherche en échec passe sous réserve (verdictApresGarde). Voir garde-jumeaux.js.
-        const resultatGarde = ambigueAvantGarde
-            ? { etat: 'non-jouee', jumeaux: [], nbProduits: null, cause: null }
-            : await gardeJumeaux.chercher(classement[0]?.idProduct);
-        const decisionGarde = verdictApresGarde(resultatGarde);
-        const champsGarde = { gardeJumeaux: decisionGarde.issue, gardeJumeauxCause: resultatGarde.cause ?? null, gardeJumeauxIds: resultatGarde.jumeaux ?? [] };
+        // Tour 1 (I3) : la décision est une fonction PURE (garde-jumeaux.js, testée sur tous les résultats possibles) ; la route l'applique.
+        const { resultat: resultatGarde, decision: decisionGarde } = await appliquerGarde({
+            ambigueAvantGarde, idProduct: classement[0]?.idProduct, garde: gardeJumeaux
+        });
+        const champsGarde = { gardeJumeaux: decisionGarde.issue, gardeJumeauxCause: resultatGarde.cause ?? null, gardeJumeauxIds: decisionGarde.jumeauxIds, gardeJumeauxNb: decisionGarde.nbProduits };
         if (decisionGarde.issue !== 'aucun' && decisionGarde.issue !== 'non-jouee') {
             console.warn(`🪞 [garde-jumeaux] ${decisionGarde.issue} pour ${classement[0]?.idProduct} : ${resultatGarde.cause ?? (resultatGarde.jumeaux || []).join(', ') ?? ''}${resultatGarde.nbProduits ? ` (${resultatGarde.nbProduits} produits)` : ''}`);
         }
-        if (decisionGarde.refus) {
+        if (decisionGarde.action === 'refus') {
             // Plus de trois produits pour la même carte de jeu : on ne montre jamais trois candidats choisis parmi N (la vérité
-            // pourrait en être exclue). Refus remboursé, comme un introuvable d'aujourd'hui.
-            const rendu = await rembourserScan(req, decisionGarde.motifRefus);
+            // pourrait en être exclue). Refus remboursé HORS du plafond quotidien (tour 1, I2) : c'est NOTRE refus, pas un échec du
+            // client — il ne doit jamais être débité sans réponse à cause de cette garde. Une seule fois par scan (req.scanRembourse).
+            const rendu = await rembourserScan(req, decisionGarde.motifRefus, { sansPlafond: true });
             enregistrerEchec({
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                 motifEchec: decisionGarde.motifRefus, rembourse: rendu,
@@ -5448,11 +5449,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             return res.json({
                 success: false,
                 ...champsDeRefus(decisionGarde.motifRefus, rendu),
-                error: `Cette carte existe sous le même nom dans ${resultatGarde.nbProduits} produits d'extensions ou de numéros différents : aucun prix ne peut être donné sans risquer de tomber sur le mauvais.`,
+                error: `Cette carte existe sous le même nom dans ${decisionGarde.nbProduits ?? 'plusieurs'} produits d'extensions ou de numéros différents : aucun prix ne peut être donné sans risquer de tomber sur le mauvais.`,
                 cardInfo
             });
         }
-        const carteAmbigue = Boolean(ambigueAvantGarde || decisionGarde.incertain);
+        const carteAmbigue = Boolean(ambigueAvantGarde || decisionGarde.action === 'reserve');
         // ════════════════════════════════════════════════════════════════════
         // LA RAISON DE LA RÉSERVE — calculée UNE FOIS, donnée à ses DEUX consommateurs
         // ════════════════════════════════════════════════════════════════════

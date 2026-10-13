@@ -132,6 +132,8 @@ const v = (nom, obtenu, attendu) => {
         const d = verdictApresGarde(r);
         v('   décision : refus, motif jumeaux-trop-nombreux, aucun candidat montré', { refus: d.refus, motif: d.motifRefus, extra: d.candidatsExtra }, { refus: true, motif: 'jumeaux-trop-nombreux', extra: [] });
         v('   le nombre total est dit', r.nbProduits, 4);
+        v('   M4 : les jumeaux sont rendus (pour le journal)', r.jumeaux, [11, 12, 13]);
+        v('   M4 : la décision porte nbProduits et les ids, mais aucun candidat à montrer', [d.nbProduits, d.jumeauxIds, d.candidatsExtra], [4, [11, 12, 13], []]);
     }
 
     // ── 8. LA RECHERCHE ÉCHOUE -> JAMAIS D'AFFIRMATION ──────────────────
@@ -188,13 +190,48 @@ const v = (nom, obtenu, attendu) => {
         v('TTL écoulé : la table est relue, le nouveau jumeau apparaît', r.jumeaux, [12]);
         pannes = true; t += 61000;
         r = await g.chercher(10);
-        v('rechargement en panne, table encore récente : l\'ancienne sert, la cause est dite', [r.etat, g.etatTable().derniereErreur != null], ['jumeaux', true]);
+        v('I1 : TTL écoulé ET rechargement en panne : echec tout de suite (l\'ancienne table ne sert plus), la cause est dite', [r.etat, /catalogue en panne/.test(r.cause), g.etatTable().derniereErreur != null], ['echec', true, true]);
         t += 24 * 3600 * 1000;
         r = await g.chercher(10);
-        v('rechargement en panne ET table périmée (> 4 TTL) : echec, jamais d\'affirmation', r.etat, 'echec');
+        v('   24 h plus tard, toujours en panne : echec', r.etat, 'echec');
         pannes = false;
         r = await g.chercher(10);
         v('la panne passée : la table revient', r.etat, 'jumeaux');
+    }
+
+    // ── 9 bis. I1 — LA FRAÎCHEUR PAR LE COMPTE DU CATALOGUE ─────────────
+    await raz();
+    await CatalogueProduit.insertMany([produit(10, 100, 7), produit(11, 100, 7)]);
+    await NumeroCarte.insertMany([numero(10, 100, '1'), numero(11, 100, '1')]);
+    await region(100, 'intl');
+    {
+        let t = 0, comptes = 0, rechargements = 0, comptePanne = false;
+        const acces = accesMongoose({ CatalogueProduit, NumeroCarte, CodeSet, mongoose });
+        const g = garde({
+            maintenant: () => t, ttlMs: 6 * 3600 * 1000, reessaiMs: 0,
+            lireCatalogue: () => { rechargements++; return acces.lireCatalogue(); },
+            lireCompte: async () => { comptes++; if (comptePanne) throw new Error('compte en panne'); return acces.lireCompte(); }
+        });
+        let r = await g.chercher(10);
+        v('chargement initial : 1 lecture du catalogue, aucune lecture du compte', [rechargements, comptes, r.etat], [1, 0, 'aucun']);
+        await CatalogueProduit.insertMany([produit(12, 200, 7)]); await NumeroCarte.insertMany([numero(12, 200, '1')]); await region(200, 'intl');
+        t += 30000;
+        r = await g.chercher(10);
+        v('moins de 60 s : le compte n\'est pas relu, la table sert (le jumeau neuf attend)', [comptes, rechargements, r.etat], [0, 1, 'aucun']);
+        t += 31000;
+        r = await g.chercher(10);
+        v('61 s : le compte a changé -> rechargement AVANT de juger, le jumeau du produit neuf est vu', [comptes, rechargements, r.jumeaux], [1, 2, [12]]);
+        t += 61000;
+        r = await g.chercher(10);
+        v('compte inchangé : lu, mais pas de rechargement', [comptes, rechargements, r.jumeaux], [2, 2, [12]]);
+        r = await g.chercher(10);
+        v('   deux scans dans la même minute : une seule lecture du compte', comptes, 2);
+        comptePanne = true; t += 61000;
+        r = await g.chercher(10);
+        v('lecture du compte en panne : echec (jamais une affirmation sur une fraîcheur inconnue)', [r.etat, /compte en panne/.test(r.cause)], ['echec', true]);
+        comptePanne = false;
+        r = await g.chercher(10);
+        v('   la panne passée : la garde revient', r.etat, 'jumeaux');
     }
 
     // ── 10. UNE SEULE LECTURE POUR PLUSIEURS SCANS SIMULTANÉS ──────────
@@ -211,6 +248,65 @@ const v = (nom, obtenu, attendu) => {
         v('non jouée / aucun : rien ne change', verdictApresGarde({ etat: 'aucun' }).incertain, false);
         v('état inconnu : FERMÉ (réserve), jamais d\'affirmation', (({ incertain, raison }) => ({ incertain, raison }))(verdictApresGarde({ etat: 'inventé' })), { incertain: true, raison: 'jumeaux-recherche-echec' });
         v('résultat absent : FERMÉ', verdictApresGarde(undefined).incertain, true);
+    }
+
+    // ── 11 ter. I3 — LA DÉCISION DE LA ROUTE, FONCTION PURE : ferme / reserve / refus ──
+    {
+        const { appliquerGarde } = require('./garde-jumeaux');
+        const a = (r, o) => verdictApresGarde(r, o).action;
+        v('aucun -> ferme', a({ etat: 'aucun' }), 'ferme');
+        v('jumeaux (1 ou 2) -> reserve, raison jumeaux-garde', [a({ etat: 'jumeaux', jumeaux: [11] }), verdictApresGarde({ etat: 'jumeaux', jumeaux: [11, 12] }).raison], ['reserve', 'jumeaux-garde']);
+        v('jumeaux avec 0 ou 3 ids -> reserve d\'échec, jamais ferme', [a({ etat: 'jumeaux', jumeaux: [] }), a({ etat: 'jumeaux', jumeaux: [1, 2, 3] })], ['reserve', 'reserve']);
+        v('trop -> refus, motif et nbProduits', (({ action, motifRefus, nbProduits }) => ({ action, motifRefus, nbProduits }))(verdictApresGarde({ etat: 'trop', jumeaux: [11, 12, 13], nbProduits: 4 })), { action: 'refus', motifRefus: 'jumeaux-trop-nombreux', nbProduits: 4 });
+        v('echec -> reserve, raison jumeaux-recherche-echec', [a({ etat: 'echec', cause: 'x' }), verdictApresGarde({ etat: 'echec' }).raison], ['reserve', 'jumeaux-recherche-echec']);
+        const inattendus = [undefined, null, {}, { etat: 'inventé' }, { etat: 'AUCUN' }, { etat: '' }, { etat: 42 }, 'aucun', 0, []];
+        v('valeurs inattendues (' + inattendus.length + ') -> jamais ferme', inattendus.map(x => a(x)).filter(x => x === 'ferme').length, 0);
+        v('déjà sous réserve avant la garde : reserve, non-jouee, la garde n\'est pas consultée', (({ action, issue, raison }) => ({ action, issue, raison }))(verdictApresGarde({ etat: 'trop' }, { ambigueAvantGarde: true })), { action: 'reserve', issue: 'non-jouee', raison: null });
+        let appels = 0;
+        const faux = { chercher: async id => { appels++; return { etat: 'aucun', jumeaux: [], nbProduits: 1, cause: null }; } };
+        let x = await appliquerGarde({ ambigueAvantGarde: true, idProduct: 5, garde: faux });
+        v('appliquerGarde : déjà ambigu -> 0 appel', [appels, x.decision.action], [0, 'reserve']);
+        x = await appliquerGarde({ ambigueAvantGarde: false, idProduct: 5, garde: faux });
+        v('appliquerGarde : verdict ferme -> 1 appel, ferme', [appels, x.decision.action], [1, 'ferme']);
+        x = await appliquerGarde({ ambigueAvantGarde: false, idProduct: 5, garde: { chercher: async () => { throw new Error('boum'); } } });
+        v('appliquerGarde : la garde LÈVE -> reserve d\'échec, jamais ferme', [x.decision.action, x.resultat.etat, /boum/.test(x.resultat.cause)], ['reserve', 'echec', true]);
+        x = await appliquerGarde({ ambigueAvantGarde: false, idProduct: 5, garde: { chercher: async () => undefined } });
+        v('appliquerGarde : la garde rend undefined -> reserve', x.decision.action, 'reserve');
+    }
+
+    // ── 11 quater. I2 — LE REMBOURSEMENT HORS PLAFOND, UNE SEULE FOIS PAR SCAN ──
+    {
+        const { rembourserScan, Credit } = require('./acces');
+        const u = `T-jumeaux-${Date.now()}`;
+        await Credit.deleteOne({ userId: u });
+        await Credit.create({ userId: u, soldeGratuit: 5, soldePayant: 0 });
+        const resultats = [];
+        for (let i = 0; i < 6; i++) {
+            const req = { credit: { userId: u, poche: 'accueil' } };
+            resultats.push(await rembourserScan(req, 'jumeaux-trop-nombreux', { sansPlafond: true }));
+        }
+        v('6 refus jumeaux-trop-nombreux le même jour, même client : 6 remboursements', resultats, [true, true, true, true, true, true]);
+        v('   le solde a monté de 6', (await Credit.findOne({ userId: u }).lean()).soldeGratuit, 11);
+        const req2 = { credit: { userId: u, poche: 'accueil' } };
+        const un = await rembourserScan(req2, 'jumeaux-trop-nombreux', { sansPlafond: true });
+        const deux = await rembourserScan(req2, 'jumeaux-trop-nombreux', { sansPlafond: true });
+        v('un 2e remboursement du MÊME scan est refusé', [un, deux, (await Credit.findOne({ userId: u }).lean()).soldeGratuit], [true, false, 12]);
+        // témoin : sans l'option, le plafond des refus s'applique encore (les autres appelants ne changent pas)
+        const u2 = `T-jumeaux-plafond-${Date.now()}`;
+        await Credit.create({ userId: u2, soldeGratuit: 5, soldePayant: 0 });
+        const sans = [];
+        for (let i = 0; i < 6; i++) sans.push(await rembourserScan({ credit: { userId: u2, poche: 'accueil' } }, 'egalite-parfaite'));
+        v('témoin : les autres appelants gardent le plafond (5 par jour)', sans, [true, true, true, true, true, false]);
+        await Credit.deleteMany({ userId: { $in: [u, u2] } });
+        await mongoose.connection.db.collection('remboursements').deleteMany({ userId: { $in: [u, u2] } });
+    }
+
+    // ── 11 quinquies. M3 — LA NORMALISATION DU NUMÉRO VIENT DE LA PRODUCTION ──
+    {
+        const { cleNumero } = require('./collecte-cartes/jointure');
+        v('cleNumero : « 025 » = « 25 »', cleNumero('025') === cleNumero('25'), true);
+        v('   un préfixe alphabétique est gardé (SWSH294 ≠ 294, TG16 ≠ 16)', [cleNumero('SWSH294') !== cleNumero('294'), cleNumero('TG16') !== cleNumero('16')], [true, true]);
+        v('   un suffixe est gardé (1N ≠ 1S)', cleNumero('1N') !== cleNumero('1S'), true);
     }
 
     // ── 11 bis. LES CANDIDATS MONTRÉS ───────────────────────────────────
@@ -237,13 +333,14 @@ const v = (nom, obtenu, attendu) => {
     {
         const src = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
         const j = fs.readFileSync(path.join(__dirname, 'journal-scans.js'), 'utf8');
-        v('index.js appelle la garde sur le verdict ferme seulement', /ambigueAvantGarde[\s\S]{0,400}gardeJumeaux\.chercher\(/.test(src), true);
-        v('index.js : carteAmbigue inclut la garde', /const carteAmbigue = Boolean\(\s*ambigueAvantGarde \|\| decisionGarde\.incertain/.test(src), true);
-        v('index.js : le refus passe par champsDeRefus', /if \(decisionGarde\.refus\)[\s\S]{0,900}rembourserScan\(req, decisionGarde\.motifRefus\)[\s\S]{0,900}champsDeRefus\(decisionGarde\.motifRefus, rendu\)/.test(src), true);
+        v('index.js appelle la garde par appliquerGarde, avec ambigueAvantGarde', /appliquerGarde\(\{\s*ambigueAvantGarde,\s*idProduct: classement\[0\]\?\.idProduct,\s*garde: gardeJumeaux/.test(src), true);
+        v('index.js : carteAmbigue = ambigu avant la garde OU décision « reserve »', /const carteAmbigue = Boolean\(ambigueAvantGarde \|\| decisionGarde\.action === 'reserve'\)/.test(src), true);
+        v('index.js : le refus passe par champsDeRefus, remboursé hors plafond', /if \(decisionGarde\.action === 'refus'\)[\s\S]{0,900}rembourserScan\(req, decisionGarde\.motifRefus, \{ sansPlafond: true \}\)[\s\S]{0,900}champsDeRefus\(decisionGarde\.motifRefus, rendu\)/.test(src), true);
         v('NATURE_REFUS classe le motif en refus délibéré', /'jumeaux-trop-nombreux': 'refus-delibere'/.test(src), true);
         v('NIVEAU_RESERVE classe les deux raisons en faible', /'jumeaux-garde': 'faible'/.test(src) && /'jumeaux-recherche-echec': 'faible'/.test(src), true);
         v('journal : champ gardeJumeaux déclaré au schéma', /gardeJumeaux: String/.test(j), true);
-        v('journal : champ écrit par enregistrerScan', /gardeJumeaux: d\.gardeJumeaux/.test(j), true);
+        v('journal (M4) : gardeJumeauxNb et gardeJumeauxIds déclarés, écrits, et passés par enregistrerEchec', /gardeJumeauxNb: Number/.test(j) && /gardeJumeauxNb: Number\.isFinite/.test(j) && (j.match(/gardeJumeauxIds, gardeJumeauxNb/g) || []).length === 2, true);
+        v('journal : champ écrit par enregistrerScan',/gardeJumeaux: d\.gardeJumeaux/.test(j), true);
     }
 
     await mongoose.disconnect();

@@ -342,7 +342,11 @@ async function verifierAcces(req, res, next) {
  * @param {Date} [options.jourDe]  le jour (UTC) dont le plafond compte ce remboursement — par défaut aujourd'hui ; une question
  *                 abandonnée compte au jour où elle a été POSÉE (« 30 questions par jour »), pas au jour où le balayage la règle.
  */
-async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe } = {}) {
+// ➕ D2 (tour 1) `options.sansPlafond: true` : rembourse HORS du plafond quotidien (ni lu, ni incrémenté) — pour un refus qui est NOTRE choix
+// (garde des jumeaux), jamais un échec du client : il ne doit pas être débité sans réponse parce que son quota de pannes est atteint.
+// Strictement `=== true` : toute autre valeur garde le plafond. Le verrou « un seul remboursement par requête » reste entier.
+async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe, sansPlafond } = {}) {
+    const horsPlafond = sansPlafond === true;
     const question = quelCompteur === 'question';
     const Compteur = question ? RemboursementQuestion : Remboursement;
     const plafond = question ? REMBOURSEMENTS_QUESTIONS_MAX_JOUR : REMBOURSEMENTS_MAX_JOUR;
@@ -380,11 +384,11 @@ async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe } = {
     try {
         // Plafond anti-abus : incrément atomique PUIS vérification, avec rollback en cas
         // de dépassement (même mécanique que le quota hebdo, donc pas de course).
-        const compteur = await Compteur.findOneAndUpdate(
+        const compteur = horsPlafond ? null : await Compteur.findOneAndUpdate(
             { userId, jour }, { $inc: { count: 1 } }, { upsert: true, new: true }
         );
-        plafondPris = true;
-        if (compteur.count > plafond) {
+        plafondPris = !horsPlafond;
+        if (compteur && compteur.count > plafond) {
             await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } });
             console.warn(`🚫 [remboursement-plafond] userId=${userId} poche=${poche} motif=${motif} plafond=${plafond}${question ? ' (questions)' : ''} -> scan NON rembourse`);
             // 🔴 LA SEULE DES NEUF CAUSES OÙ L'UTILISATEUR PERD RÉELLEMENT QUELQUE CHOSE.
@@ -425,7 +429,7 @@ async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe } = {
         if (!rendu) {
             // Rien n'a été rendu : on libère le jeton du plafond, sinon un non-
             // remboursement consommerait quand même le quota de remboursements.
-            await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            if (plafondPris) await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } });
             // Les deux branches ci-dessus ont déjà nommé leur cause ; celle qui reste est
             // « l'écriture n'a modifié aucun document » — poche payante sans compte, ou
             // compteur hebdo déjà à zéro. `noterNonRemboursement` n'écrit qu'une fois,

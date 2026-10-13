@@ -807,6 +807,8 @@ const journalScanSchema = new mongoose.Schema({
     gardeJumeaux: String,
     gardeJumeauxCause: String,
     gardeJumeauxIds: [Number],
+    // Tour 1 (M4) : nombre de produits de la même métacarte, gagnant compris (4 ou plus sur un refus).
+    gardeJumeauxNb: Number,
 
     // L'idProduct du concurrent renvoyé à l'extension, quand il y en a un. Le champ
     // complet (nom, codeSet, prixGuide) part dans la RÉPONSE ; ici on ne garde que
@@ -1142,7 +1144,8 @@ function enregistrerScan(d = {}) {
             // D2 : la garde des jumeaux. `null` = la garde n'a pas joué sur cette ligne (refus en amont, ligne antérieure).
             gardeJumeaux: d.gardeJumeaux || null,
             gardeJumeauxCause: d.gardeJumeauxCause ? String(d.gardeJumeauxCause).slice(0, 200) : null,
-            gardeJumeauxIds: Array.isArray(d.gardeJumeauxIds) ? d.gardeJumeauxIds.map(Number).filter(Number.isFinite).slice(0, 3) : null,
+            gardeJumeauxIds: Array.isArray(d.gardeJumeauxIds) ? d.gardeJumeauxIds.map(Number).filter(Number.isFinite).slice(0, 20) : null,
+            gardeJumeauxNb: Number.isFinite(d.gardeJumeauxNb) ? d.gardeJumeauxNb : null,
             // ── LE DÉPARTAGE PAR L'IMAGE, À CHAQUE SCAN ─────────────────────
             // ⚠️ ÉCRITS MÊME QUAND IL NE TRANCHE PAS, et c'est tout l'intérêt. `raisonReserve`
             // ne dira `image-departage` que sur les scans où l'image a CHANGÉ le gagnant :
@@ -1253,7 +1256,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // groupe était couvert par un index, ni de mesurer la clôture après coup.
     exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
     // D2 : la garde des jumeaux, sur le refus `jumeaux-trop-nombreux` (le seul refus qu'elle produit).
-    gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds,
+    gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds, gardeJumeauxNb,
     // ⚠️ LA PHRASE DU DÉPARTAGE PAR LE SYMBOLE — ajoutée le 2026-09-02, MÊME MOTIF QUE
     // `champsImage` : elle n'existe que là où le départage a été consulté, donc elle passe
     // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
@@ -1327,7 +1330,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,
         exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
-        gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds,
+        gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds, gardeJumeauxNb,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,
