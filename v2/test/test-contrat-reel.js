@@ -350,7 +350,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     }
     // ── (tour 1, section 3) les états de FACTURATION que le premier jeu ne jouait pas
     {
-        const aujourdhui = new Date().toISOString().slice(0, 10), exp = new Date(Date.now() + 3 * 86400e3);
+        const aujourdhui = Q.jourCourant(), exp = new Date(Date.now() + 3 * 86400e3);
         const plafond = async (x, type) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count: cfg.plafonds[type], expireLe: exp });
         // introuvable NON remboursé : le plafond des pannes du jour est atteint, l'utilisateur PAIE (debite 1, motif plafond-jour, raisonNonRembourse)
         mode = 'introuvable:aucun-prix'; const p1 = await inst(3); await plafond(p1, 'panne');

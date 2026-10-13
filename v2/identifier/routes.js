@@ -450,7 +450,7 @@ function traiterIdentifier(cfg, deps = {}) {
         if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
             await fermer();
             return repondreErreur(res, erreurLot.code, undefined, { facturation: erreurLot.facturation, ...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
-                ...(solde !== undefined ? { solde } : {}), ...avecOffre(erreurLot.code === 'QUOTA' ? offreRefusee(offre) : offre) });
+                ...(solde !== undefined ? { solde } : {}), ...avecOffre(erreurLot.code === 'QUOTA' && erreurLot.detail !== 'lot-trop-grand' ? offreRefusee(offre) : offre) });   // lot-trop-grand : les unités sont rendues, l'offre relue dit le VRAI restant (relecture 1, I-2)
         }
         const { resultat, facturation } = sortie;
         if (resultat.issue === 'panne') {

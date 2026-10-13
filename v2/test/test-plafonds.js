@@ -18,7 +18,7 @@ const ORIGINE = cfg.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.12.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
 let nCle = 0; const cle = () => `banc-plaf-${Date.now().toString(36)}-${++nCle}`;
 const raw = n => mongoose.connection.db.collection(n);
-const jourUTC = () => new Date().toISOString().slice(0, 10);
+const jourUTC = () => Q.jourCourant();
 
 const EXP = 990003;
 const semer = async (id, trend) => {

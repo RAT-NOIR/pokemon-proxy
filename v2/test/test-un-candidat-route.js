@@ -168,7 +168,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     // ── 7. LE PLAFOND (règle existante d'une question répondue « aucune ») : 30 par jour ; plein, le NON ne rend rien et le dit
     {
         const s = await scan('ambigue-seul');
-        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: Q.jourCourant(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const k = await repondre(sv.url, s.jeton, { scanId: s.scanId, choix: 'aucune' }), j = k.json || {};
         H.v('7. compteur des abandons de questions PLEIN : NON répond 200 mais ne rend rien, et le dit { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }',
             [k.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await livre(s)).essais, await compteurDe(s, 'question')], [200, 1, false, 'plafond-jour', 2, cfg.plafonds.question]);
@@ -494,7 +494,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         const RENDU = { essais: 20, net: 0, mouvements: 2, ouverts: [], remboursements: 1 };
         const plus = ms => new Date(Date.now() + ms);
         const balayer = (maintenant = new Date()) => argentReg().balayerQuestions({ maintenant, max: 500 });
-        const jourJ = new Date().toISOString().slice(0, 10);
+        const jourJ = Q.jourCourant();
         const debitsDe = (L) => raw('mouvements').find({ installationId: L.i._id, type: 'debit', scanId: sid(L) }).sort({ _id: 1 }).toArray();
         const unitesRendues = L => raw('mouvements').countDocuments({ installationId: L.i._id, scanId: sid(L), type: 'remboursement', delta: 1 });
         const lignesQ = (L, f) => raw('questions_v2').countDocuments({ scanId: sid(L), ...f });

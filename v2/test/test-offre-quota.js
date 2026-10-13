@@ -234,6 +234,17 @@ const futur = new Date('2027-06-01T00:00:00Z');
         await Lg.debiter(pf, { scanId: cle(), cleIdempotence: cle(), maintenant: futurDebit }, cfg);
         H.vrai('    …et sur l\'instant fourni quand il est plus récent (5 jours plus tard : échéance à 8 jours)', Math.abs((await db.col('quota_jour').findOne({ porteur: `installation:${pf.id}` })).expireLe.getTime() - (futurDebit.getTime() + 3 * 86400e3)) < 1000);
     }
+    // relecture 3, I2 : les plafonds de rendu du jour (panne, question, sans-prix) comptent le jour de PARIS, par la même fonction que le quota
+    {
+        // hiver : 23:30Z le 14 janvier = 00:30 Paris le 15 ; été : 22:30Z le 14 juillet = 00:30 Paris le 15
+        for (const [nom, instant, parisJour, utcJour] of [['hiver', new Date('2026-01-14T23:30:00Z'), '2026-01-15', '2026-01-14'], ['été', new Date('2026-07-14T22:30:00Z'), '2026-07-15', '2026-07-14']]) {
+            const pl = await compte(); const sid = `pl-${nom}`;
+            const d = await Lg.debiter(pl, { scanId: sid, cleIdempotence: sid, maintenant: instant }, cfg);
+            const r = await Lg.rembourser(pl, d.credit, 'introuvable', { scanId: sid, maintenant: instant }, cfg);
+            const docs = await db.col('plafonds').find({ porteur: `compte:${pl.id}` }).toArray();
+            H.v(`PLAFOND ${nom} : le rendu à 00:30 Paris compte le jour de Paris (${parisJour}), jamais le jour UTC (${utcJour})`, [r.rendu, docs.map(x => x.jour)], [true, [parisJour]]);
+        }
+    }
     // précision de l'extension (transmise par le coordinateur) : le refus QUOTA ne porte PLUS `achat`, ni aucun lien de vente — ni dans le schéma, ni dans le corps d'erreur
     {
         const SCH = require('../openapi/openapi.v2.json'), { corpsErreur } = require('../erreurs');

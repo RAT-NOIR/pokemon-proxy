@@ -164,7 +164,7 @@ async function semer() {
         H.v('    puis définitive sur le même scan : remboursée (la non-définitive n\'a rien consommé)', [rd.json.facturation && rd.json.facturation.rembourse, await essais(t.i._id)], [true, 3]);
         // 4. plafond atteint
         const u = await scanRepondu();
-        await raw('plafonds').insertOne({ porteur: `installation:${u.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'sans-prix', count: cfg.plafonds.sansPrix, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${u.i._id}`, jour: Q.jourCourant(), type: 'sans-prix', count: cfg.plafonds.sansPrix, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const rp = await rl(u.jeton, { scanId: u.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), jp = rp.json || {};
         H.v('D4. plafond sans-prix atteint : motif plafond-jour, rembourse:false, debite 1, essais 2', [rp.statut, jp.facturation && jp.facturation.motif, jp.facturation && jp.facturation.rembourse, jp.facturation && jp.facturation.debite, jp.facturation && jp.facturation.raisonNonRembourse, await essais(u.i._id)], [200, 'plafond-jour', false, 1, 'plafond-jour', 2]);
         // lecture ratée sur un scan d'un autre porteur : 404, rien rendu

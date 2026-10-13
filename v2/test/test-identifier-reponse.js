@@ -150,6 +150,8 @@ const VB = require('./_visuels-banc'); const VIS = [];
         const r = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '7' }), j = r.json || {};
         H.v('7. après 24 h (balayage passé) : 410 CODE_EXPIRE, facturation.rembourse true', [bilan.remboursees >= 1, r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse], [true, 410, 'CODE_EXPIRE', true]);
         H.v('   crédit rendu une seule fois (essais 3)', await essais(s.i._id), 3);
+        // relecture 2, M1 : le 410 CODE_EXPIRE joint l'offre, relue APRÈS le rendu (3 restantes), avec le minuit de Paris
+        H.v('   le 410 CODE_EXPIRE sert `offre` : sans-compte, restant 3 (unité rendue), remiseAZero à minuit de Paris', [j.offre && j.offre.nom, j.offre && j.offre.restant, /^\d{4}-\d{2}-\d{2}T00:00:00\+0[12]:00$/.test(j.offre && j.offre.remiseAZero)], ['sans-compte', 3, true]);
     }
     // ── 6bis. ligne analyses ABSENTE alors que la question de CE porteur existe : une panne explicite et réessayable, JAMAIS un 404 (qui veut dire « scan d'un autre »)
     {

@@ -206,7 +206,12 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         // partiel : 2 crédits pour un lot à 3
         const y = await inst(); await Q.poserRestant(`installation:${y.i._id}`, 2, { limite: cfg.quotas.sansCompte }); lot(nAff(25));       // 2 analyses pour un lot à 3
         const r2 = await poster(sv.url, y.jeton);
-        H.v('   2 analyses pour un lot à 3 (tout-ou-rien) : QUOTA, les deux unités retrouvées en base (restant 2), somme des delta 0 ; le refus QUOTA joint l\'offre à 0 (brief : « restant 0 » sur tout refus QUOTA)', [r2.statut, r2.json.erreur && r2.json.erreur.detail, await essais(y), r2.json.offre && r2.json.offre.restant, await net(y, 'supplément partiel')], [429, 'lot-trop-grand', 2, 0, 0]);
+        H.v('   2 analyses pour un lot à 3 (tout-ou-rien) : QUOTA, les deux unités retrouvées en base (restant 2), somme des delta 0 ; le refus lot-trop-grand sert le VRAI restant (2), pas 0 : les unités sont rendues (relecture 1, I-2)', [r2.statut, r2.json.erreur && r2.json.erreur.detail, await essais(y), r2.json.offre && r2.json.offre.restant, await net(y, 'supplément partiel')], [429, 'lot-trop-grand', 2, 2, 0]);
+        H.v('   (5 bis) même refus, installation à 1 restante : offre.restant 1, nom sans-compte', [j.offre && j.offre.restant, j.offre && j.offre.nom], [1, 'sans-compte']);
+        // 9 prises sur 10 (compte gratuit, limite 10) : un lot de 25 (3 unités) est refusé, il reste UNE analyse
+        const g = await compteLie({ accueil: 0, achete: 1 }); lot(nAff(25));
+        const rg = await poster(sv.url, g.jeton), jg = rg.json || {};
+        H.v('   (5 ter) compte gratuit à 9 prises sur 10 : lot de 25 refusé lot-trop-grand, offre gratuit restant 1 (jamais 0), compteur à 9', [rg.statut, jg.erreur && jg.erreur.detail, jg.offre && [jg.offre.nom, jg.offre.restant], await (async () => Q.GRAND - await Q.prisAujourdhui(`compte:${g.c._id}`))()], [429, 'lot-trop-grand', ['gratuit', 1], 1]);
     }
     // ── (6) lot entièrement introuvable : remboursé ; un seul identifié : jamais remboursé (ruling 4)
     {
@@ -220,7 +225,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
     }
     // ── JUMEAU-V2 (C1 de la relecture 1) : la garde des jumeaux du LOT. Chaque carte affirmée par la chaîne passe par elle ; sans elle (un lot « tout affirmé »), ces assertions rougissent.
     {
-        const aujourdhui = new Date().toISOString().slice(0, 10);
+        const aujourdhui = Q.jourCourant();
         const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const compteurPanne = async x => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type: 'panne' }) || {}).count;
         const parIndex = j => Object.fromEntries(((j.analyse || {}).cartes || []).map(c => [c.index, c]));

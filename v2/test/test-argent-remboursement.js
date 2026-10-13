@@ -60,7 +60,7 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
     // 5. jourDe : une question posée à 23 h 50, abandonnée à 00 h 10, compte au jour où elle a été posée
     const p5 = await compteN(10); const c5 = await prendre(p5, 'j1'), c5b = await prendre(p5, 'j2');
     await db.col('plafonds').insertOne({ porteur: `compte:${p5.id}`, jour: '2026-10-08', type: 'question', count: 30, expireLe: new Date('2026-10-12') });
-    const posee = new Date('2026-10-08T23:50:00Z'), abandon = new Date('2026-10-09T00:10:00Z');
+    const posee = new Date('2026-10-08T21:50:00Z'), abandon = new Date('2026-10-08T22:10:00Z');       // 23 h 50 puis 00 h 10 HEURE DE PARIS (les plafonds du jour comptent le jour de Paris : relecture 3, I2)
     const j1 = await Lg.rembourser(p5, c5, 'question:x', { scanId: 'j1', compteur: 'question', jourDe: posee, maintenant: abandon }, cfg);
     H.v('jourDe = jour de pose (plafond de CE jour atteint) : refusé', j1, { rendu: false, raisonNonRembourse: 'plafond-jour' });
     H.v('   le compteur du jour de pose est resté à 30', (await plaf(p5, '2026-10-08', 'question')).count, 30);
@@ -72,7 +72,7 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
     const apresMinuit = new Date('2026-10-08T22:30:00Z');       // 00 h 30 à Paris, le 9
     const r6 = await Lg.rembourser(p6, c6, 'ia-echec', { scanId: 'h1', maintenant: apresMinuit }, cfg);
     H.v('remboursé après minuit de Paris : rendu, au compteur du 8 (995 -> restant 5), aucun compteur du 9 créé', [r6.rendu, await restant(p6), await cnt(p6, '2026-10-09')], [true, 5, null]);
-    H.v('   le plafond de pannes se compte au jour UTC du remboursement (8 octobre, 22:30Z) : 1', (await plaf(p6, '2026-10-08', 'panne')).count, 1);
+    H.v('   le plafond de pannes se compte au jour de PARIS du remboursement (le 9 octobre à 00:30 Paris, 22:30Z), pas au jour UTC (le 8) : 1', [(await plaf(p6, '2026-10-09', 'panne')).count, await plaf(p6, '2026-10-08', 'panne')], [1, null]);
     // 7. ANCIENNES poches : accueil au plafond ; abonnement même mois / mois suivant (le grand livre sait toujours rendre un débit d'avant la bascule)
     const p7 = await compte({ solde: { accueil: 24, achete: 0 } }); const c7a = await debitAncien({ compteId: p7.id }, { poche: 'accueil' }, 'ac1');
     await db.col('comptes').updateOne({ _id: p7.id }, { $set: { 'solde.accueil': 25 } });          // le solde est remonté à la dotation (autre chemin) : rendre un de plus dépasserait 25

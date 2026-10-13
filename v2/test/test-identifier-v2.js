@@ -279,7 +279,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.v('table : introuvable remboursé par la chaîne', [b.j.analyse.statut, b.j.facturation.debite, b.j.facturation.rembourse, b.j.facturation.motif, b.j.offre.restant], ['introuvable', 0, true, 'introuvable', 3]);
         // remboursement refusé : plafond du jour atteint
         mode = 'introuvable'; const pl = await inst(3);
-        await raw('plafonds').insertOne({ porteur: `installation:${pl.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${pl.i._id}`, jour: Q.jourCourant(), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const c = await poster(sv.url, pl.jeton, corps(), { nom: 'fab-plafond' });
         H.v('table : remboursement refusé (plafond-jour) : motif plafond-jour, non rendu', [c.json.facturation.debite, c.json.facturation.rembourse, c.json.facturation.motif, c.json.facturation.raisonNonRembourse, c.json.offre.restant], [1, false, 'plafond-jour', 'plafond-jour', 2]);
         // exception de la chaîne : panne SERVEUR remboursée
@@ -334,7 +334,7 @@ async function semer(mode) {                                  // 'double' | 'sim
             await svZ.fermer();
             // C2 de la relecture 1 : le refus de la garde est NOTRE refus, pas un échec du client — remboursé SANS compter dans le plafond de pannes. Le plafond du jour est PLEIN avant le scan :
             // le remboursement doit quand même partir, et le compteur ne bouge pas (le 6e de la journée est encore rendu).
-            const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
             const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
             const compteurPanne = x => compteurDe(x, 'panne');
             const refusJ = async (jumeaux, nom, motifAttendu) => {
@@ -348,13 +348,13 @@ async function semer(mode) {                                  // 'double' | 'sim
             // C1 de la passe 2 : le 21e refus de la journée n'est plus remboursé quand le plafond de pannes ordinaire est plein aussi (jamais gratuit sans limite)
             {
                 const s = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] })); const x = await inst(3); await plafondPlein(x);
-                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
                 const r = await poster(s.url, x.jeton, corps(), { nom: 'jumeau-21e' }), j = r.json || {};
                 H.v('   le 21e refus de la journée (compteur jumeaux plein ET pannes plein) : PAS remboursé — { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }, essai 2, les deux compteurs inchangés',
                     [j.analyse && j.analyse.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
                     ['introuvable', 1, false, 'plafond-jour', 2, cfg.plafonds.panne, cfg.plafonds.jumeaux]);
                 // compteur dédié plein mais plafond de pannes libre : le refus est jugé comme un introuvable ORDINAIRE (rendu, et c'est le compteur de pannes qui monte)
-                const y = await inst(3); await raw('plafonds').insertOne({ porteur: `installation:${y.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                const y = await inst(3); await raw('plafonds').insertOne({ porteur: `installation:${y.i._id}`, jour: Q.jourCourant(), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
                 const r2 = await poster(s.url, y.jeton, corps(), { nom: 'jumeau-21e-repli' }), j2 = r2.json || {};
                 H.v('   compteur jumeaux plein mais pannes libre : rendu comme un introuvable ordinaire (essai 3), le compteur de pannes monte à 1, celui des jumeaux reste plein',
                     [j2.facturation && j2.facturation.rembourse, (await solde(y.i._id)).essais, await compteurPanne(y), await compteurDe(y, 'jumeaux')], [true, 3, 1, cfg.plafonds.jumeaux]);
@@ -422,7 +422,7 @@ async function semer(mode) {                                  // 'double' | 'sim
             H.v('m1a. question non écrite, repli REMBOURSÉ : a-trancher gratuit { debite:0, rembourse:true }, essai 3', [ra.json.analyse && ra.json.analyse.statut, ra.json.facturation.debite, ra.json.facturation.rembourse, ra.json.facturation.motif, (await solde(a.i._id)).essais], ['a-trancher', 0, true, 'question', 3]);
             // (b) repli NON remboursé (plafond des questions atteint) : plus un a-trancher, une panne SERVEUR, ligne 🔴
             const b = await inst(3);
-            await raw('plafonds').insertOne({ porteur: `installation:${b.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            await raw('plafonds').insertOne({ porteur: `installation:${b.i._id}`, jour: Q.jourCourant(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
             const journal = []; const errOrig = console.error; console.error = (...x) => { journal.push(x.join(' ')); };
             sansEcritureQuestion(); let rb;
             try { rb = await poster(sv.url, b.jeton, corps(), { nom: 'fab-repli-non-rembourse' }); } finally { db.col = colOrig; console.error = errOrig; }

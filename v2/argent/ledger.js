@@ -188,7 +188,7 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     // `unites` : combien d'unités du compteur ce remboursement consomme (JUMEAU-V2 : UNE par carte refusée par la garde). Un entier >= 1, sinon refus : un compteur qui ne monterait pas serait gratuit sans limite.
     if (!Number.isInteger(unites) || unites < 1) { console.error('❌ [v2 rembourser] unites invalides : refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let cle = `rb|${scanId}`;
-    const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
+    const jour = Of.jourDeParis(jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant);   // le jour de PARIS, par la même fonction que le quota (relecture 3, I2) : jamais une copie en UTC
     // Quatre compteurs, un par nature de remboursement (jour UTC, par porteur) : `panne` (défaut quand aucun n'est nommé), `question`, et les deux PROPRES du lot PLAFONDS — `sans-prix`
     // (« prix illisible, définitif » déclaré par le client) et `lot-trop-grand` (refus d'un lot trop grand ou impayable). Le plafond se lit dans la configuration, jamais en dur.
     // Le cinquième, `jumeaux` (JUMEAU-V2) : les refus de la garde des jumeaux (nôtres, pas ceux du client), UNE unité par carte ; plein, le refus retombe sur `panne` (voir plus bas), jamais gratuit sans limite.
