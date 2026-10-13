@@ -22,6 +22,7 @@
 // refuse alors toute connexion dont l'hôte n'est pas celui du banc.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 // 🔑 Ce que la PRODUCTION charge (hotesDe, cleDeGrappe, verifierHoteBanc, verifierEcritureR2, garderClientR2, bucketsDeProduction) vit dans
@@ -178,6 +179,122 @@ async function verifierPrivilegesLecture(db, dbName) {
     return { ok: true, raison: null };
 }
 
+// ============================================================================
+// LE DOSSIER DE DONNÉES DU MONGOD EN MÉMOIRE — EFFACÉ À LA FIN, QUELLE QUE SOIT LA FIN (lot BANC-NET, 2026-10-13)
+// ============================================================================
+// Le 2026-10-13 le disque C: est tombé à 0,1 Go libre : 155 dossiers `%TEMP%\mongo-mem-*` (23,3 Go) laissés par des bancs tués, plantés ou
+// sortis par `process.exit` avant `arreter()`. Décision du testeur : « chaque test qui lance un mongod en mémoire efface son dossier à la fin,
+// même en cas d'échec, et un test le vérifie » (test-banc-nettoyage.js).
+//
+// ▸ MÉTHODE (cas d : `process.exit()` sans arreter(), et b/c/e) — un gestionnaire `exit`, SYNCHRONE (rien d'asynchrone ne s'exécute dans `exit`) :
+//   (1) on tue les ChildProcess mongod que nous détenons (`cp.kill()` : TerminateProcess sous Windows, immédiat ; le ChildProcess sait s'il est déjà
+//   sorti, donc aucun risque de viser un PID recyclé) ; (2) on efface le dossier avec des essais bornés (50 × 100 ms, `Atomics.wait`) : sous
+//   Windows les fichiers restent verrouillés quelques millisecondes après la mort du processus. POURQUOI pas un processus nettoyeur détaché : il
+//   faudrait une seconde mécanique de vie/mort, et rien ne prouverait qu'il a fini quand le banc rend son code de sortie ; ici l'effacement est
+//   FINI avant la sortie, et ce qui échoue s'imprime avec son chemin.
+// ▸ Un arrêt BRUTAL (taskkill /F, coupure) n'exécute aucun code : le dossier reste, avec sa marque (PID du propriétaire + heure), et le PROCHAIN
+//   ouvrirBanc le balaie (`balayerOrphelins`). mongodb-memory-server lance un « killer » détaché qui tue le mongod quand le parent meurt ; le
+//   balayage réessaie donc quelques secondes si des fichiers sont encore verrouillés.
+// ▸ UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE. Le balayage n'efface un dossier que s'il cumule : directement sous la racine (os.tmpdir()), vrai
+//   dossier (ni lien ni jonction), nom au préfixe `rat-banc-mongod-`, fichier marqueur lisible de CE module (module, version, pid entier > 0, heure
+//   valide), PID qui ne vit plus, ET aucun point d'analyse dans tout l'arbre. Tout le reste — `mongo-mem-*` d'autres agents, dossier sans marqueur,
+//   marqueur illisible, PID vivant (ou recyclé : dans le doute on garde) — n'est jamais touché ; un refus pour jonction se DIT.
+// ⚠️ LIMITES ÉCRITES : (1) fenêtre entre l'inspection et l'effacement (un lien créé entre les deux) — rmSync ne suit pas les liens, il les retire ;
+//   (2) une machine éteinte ou un `taskkill /F` laisse le dossier jusqu'au prochain ouvrirBanc (~0,2 Go) ; (3) sous Windows, process.kill(pid, 0) dit
+//   « vivant » pour un PID recyclé par un autre processus : le dossier reste (direction sûre).
+const PREFIXE_BANC = 'rat-banc-mongod-';
+const FICHIER_MARQUE = 'marque-rat-banc.json';
+const MODULE_MARQUE = 'collecte-cartes/base-banc';
+const contenuMarque = (pid = process.pid) => JSON.stringify({ module: MODULE_MARQUE, version: 1, pid, heure: new Date().toISOString() });
+const ESSAIS_EFFACEMENT = 50, PAUSE_EFFACEMENT_MS = 100;
+
+const pauseSynchrone = ms => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) { const f = Date.now() + ms; while (Date.now() < f) { /* attente active */ } } };
+const pidVivant = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const memeChemin = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+
+/** null si l'arbre est sain (fichiers et dossiers ordinaires seulement), sinon la raison. Ne suit AUCUN lien (lstat) ; vérifie aussi par realpath que
+ *  chaque chemin se résout sur lui-même (une jonction que lstat ne reconnaîtrait pas se trahit ici). Une erreur de lecture est un refus. */
+function inspecterArbre(dir) {
+    try {
+        const parent = fs.realpathSync.native(path.dirname(dir));
+        const pile = [[dir, path.join(parent, path.basename(dir))]];
+        while (pile.length) {
+            const [p, attendu] = pile.pop();
+            const st = fs.lstatSync(p);
+            if (st.isSymbolicLink()) return `point d'analyse (lien ou jonction) : ${p}`;
+            if (!memeChemin(fs.realpathSync.native(p), attendu)) return `chemin qui se résout ailleurs (jonction probable) : ${p}`;
+            if (st.isDirectory()) { for (const n of fs.readdirSync(p)) pile.push([path.join(p, n), path.join(attendu, n)]); }
+            else if (!st.isFile()) return `entrée ni fichier ni dossier : ${p}`;
+        }
+        return null;
+    } catch (e) { return `inspection impossible (${e && (e.code || e.message)}) : doute = refus`; }
+}
+
+/** Efface `dir` APRÈS avoir constaté qu'il ne contient aucun point d'analyse ; essais bornés (fichiers verrouillés un instant). Ne lève JAMAIS :
+ *  un échec s'imprime avec le chemin et rend false, le code de sortie du banc reste le sien. */
+function nettoyer(dir, log = console.error) {
+    try {
+        const existe = () => { try { fs.lstatSync(dir); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } };
+        if (!existe()) return true;
+        const raison = inspecterArbre(dir);
+        if (raison) { log(`⚠️ BANC : ${dir} n'est PAS effacé — ${raison}.`); return false; }
+        let derniere = null;
+        for (let i = 0; i < ESSAIS_EFFACEMENT; i++) {
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { derniere = e; }
+            if (!existe()) return true;
+            pauseSynchrone(PAUSE_EFFACEMENT_MS);
+        }
+        log(`⚠️ BANC : ${dir} n'a pas pu être effacé (${derniere ? (derniere.code || derniere.message) : 'encore présent'}).`);
+        return false;
+    } catch (e) {
+        try { log(`⚠️ BANC : effacement de ${dir} impossible (${e && (e.code || e.message)}).`); } catch (_) { /* rien de plus à faire */ }
+        return false;
+    }
+}
+
+/** Les dossiers orphelins de CE module sous `racine`, effacés selon la garde ci-dessus. { effaces, refuses }. Ne lève jamais. */
+function balayerOrphelins({ racine = os.tmpdir(), log = console.error } = {}) {
+    const effaces = [], refuses = [];
+    let noms = [];
+    try { noms = fs.readdirSync(racine).filter(n => n.startsWith(PREFIXE_BANC)); } catch (e) { return { effaces, refuses }; }
+    for (const nom of noms) {
+        const dir = path.join(racine, nom);
+        try {
+            const st = fs.lstatSync(dir);
+            if (st.isSymbolicLink() || !st.isDirectory()) { refuses.push({ dir, raison: 'pas un vrai dossier (fichier, lien ou jonction)' }); continue; }
+            const fm = path.join(dir, FICHIER_MARQUE);
+            const sm = fs.lstatSync(fm);
+            if (!sm.isFile() || sm.size > 4096) { refuses.push({ dir, raison: 'marqueur illisible' }); continue; }
+            const m = JSON.parse(fs.readFileSync(fm, 'utf8'));
+            const valide = m && m.module === MODULE_MARQUE && m.version === 1 && Number.isInteger(m.pid) && m.pid > 0 && typeof m.heure === 'string' && !Number.isNaN(Date.parse(m.heure));
+            if (!valide) { refuses.push({ dir, raison: 'marqueur qui n\'est pas celui de ce module' }); continue; }
+            if (pidVivant(m.pid)) { refuses.push({ dir, raison: `propriétaire (pid ${m.pid}) vivant` }); continue; }
+            const raison = inspecterArbre(dir);
+            if (raison) { log(`⚠️ BANC : orphelin ${dir} NON effacé — ${raison}.`); refuses.push({ dir, raison }); continue; }
+            if (nettoyer(dir, log)) effaces.push(dir); else refuses.push({ dir, raison: 'effacement échoué' });
+        } catch (e) {
+            refuses.push({ dir, raison: e && (e.code || e.message) || 'erreur' });   // marqueur absent (ENOENT), JSON cassé… : intact
+        }
+    }
+    return { effaces, refuses };
+}
+
+// Les bancs ouverts par CE processus et pas encore arrêtés. Le gestionnaire `exit` (un seul, posé à la première ouverture) les ferme.
+const actifs = new Set();
+let accroche = false;
+function fermerProcessus(entree) {
+    for (const cp of entree.serveurs()) { try { if (cp.exitCode === null && cp.signalCode === null) cp.kill(); } catch (_) { /* déjà mort */ } }
+}
+function accrocher() {
+    if (accroche) return;
+    accroche = true;
+    process.on('exit', () => { for (const e of [...actifs]) { actifs.delete(e); e.fini = true; fermerProcessus(e); nettoyer(e.dir); } });
+    // Ctrl+C / arrêt demandé : sans gestionnaire, Node s'arrête SANS émettre `exit`. Posé seulement si le banc n'en a pas déjà un.
+    for (const [sig, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGBREAK', 149]]) {
+        try { if (process.listenerCount(sig) === 0) process.on(sig, () => process.exit(code)); } catch (_) { /* signal inconnu de cette plateforme */ }
+    }
+}
+
 /**
  * Ouvre la base du banc ou LÈVE (le banc ne démarre pas). Rend { origine, uri, arreter(), appliquer(), connexionProduction(), connexionCartes(), connecterLecture() }.
  * `appliquer()` : REMPLACE chaque variable MONGODB_*URI (environnement et .env) par l'URI du banc et pose BANC_ISOLE=1 / BANC_HOTES. À appeler
@@ -199,14 +316,43 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
     const r = resoudre(env, memoireDisponible === undefined ? undefined : { memoireDisponible });
     if (!r.ok) throw new Error(`🔴 BANC REFUSÉ — ${r.raison}`);
     let uri = r.uri, arreter = async () => { };
+    let unite = null, dbPath = null;
     if (r.origine === 'memoire') {
         if (!process.env.MONGOMS_DOWNLOAD_DIR) process.env.MONGOMS_DOWNLOAD_DIR = CACHE_MONGOD;
+        // 🔑 BANC-NET : les dossiers orphelins d'un arrêt brutal PRÉCÉDENT de ce module sont balayés ici, avant d'en créer un nouveau.
+        balayerOrphelins();
         // un ensemble de réplicas à UN nœud, pas un mongod isolé : le webhook Stripe écrit en transaction (« Transaction numbers are only
         // allowed on a replica set member »), comme la production Atlas. Même binaire, quelques secondes de démarrage en plus.
         const { MongoMemoryReplSet } = require(cheminMemoire());
-        const ms = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
-        uri = ms.getUri();
-        arreter = () => ms.stop();
+        // 🔑 dbPath EXPLICITE, dans une unité à nous (préfixe + marqueur) : mongodb-memory-server n'efface QUE le tmpDir qu'il crée lui-même ;
+        // avec un dbPath donné il ne touche à rien, et l'effacement (toutes les sorties) est le nôtre.
+        unite = fs.mkdtempSync(path.join(os.tmpdir(), PREFIXE_BANC));
+        const entree = { dir: unite, serveurs: () => [], fini: false };
+        try {
+            fs.writeFileSync(path.join(unite, FICHIER_MARQUE), contenuMarque());   // la marque AVANT le mongod : un arrêt brutal entre les deux est déjà rattrapable
+            dbPath = path.join(unite, 'db'); fs.mkdirSync(dbPath);
+            actifs.add(entree); accrocher();
+            const ms = await MongoMemoryReplSet.create({ replSet: { count: 1 }, instanceOpts: [{ dbPath }] });
+            entree.serveurs = () => (ms.servers || []).map(s => s.instanceInfo?.instance?.mongodProcess).filter(Boolean);
+            // le mongod ne doit pas retenir la boucle d'événements : sans cela un banc qui finit sans arreter() ne finit jamais (cas e), et le nettoyage de sortie ne s'exécute pas
+            for (const cp of entree.serveurs()) for (const f of [cp.stdin, cp.stdout, cp.stderr]) { try { f && f.unref && f.unref(); } catch (_) { /* meilleur effort */ } }
+            // 🔑 mesuré (sonde des handles actifs) : le seul handle qui retenait encore la boucle est le canal IPC du « killer » (fork() ouvre un IPC même en
+            // stdio 'ignore', et killer.unref() ne le libère pas). On le libère aussi ; le killer, lui, surveille le PID du parent par sondage, pas par ce canal.
+            for (const s of (ms.servers || [])) { try { s.instanceInfo?.instance?.killerProcess?.channel?.unref?.(); } catch (_) { /* meilleur effort */ } }
+            uri = ms.getUri();
+            arreter = async () => {
+                if (entree.fini) return;
+                entree.fini = true; actifs.delete(entree);
+                try { await ms.stop({ doCleanup: false }); }
+                finally { nettoyer(unite); }   // même si l'arrêt lève : l'erreur du banc sort telle quelle, l'effacement s'imprime seul
+            };
+        } catch (e) {
+            // démarrage raté : mongodb-memory-server a déjà arrêté ce qu'il avait lancé (sans effacer) ; le dossier est à nous, on l'efface
+            actifs.delete(entree); entree.fini = true;
+            fermerProcessus(entree);
+            nettoyer(unite);
+            throw e;
+        }
     }
     // Les URI de LECTURE (utilisateurs Atlas en lecture seule), jugées AVANT le remplacement des variables, pour les seuls bancs qui LISENT la production
     // (copie d'une tranche, journal des scans). Aucune URI n'est exposée par le handle et aucune ne passe dans l'environnement : les enfants ne les voient
@@ -221,7 +367,7 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
         if (!v.ok) { try { await fermer(); } catch (_) { /* on lève le refus, pas l'échec de fermeture */ } throw new Error(v.raison); }
     };
     return {
-        origine: r.origine, uri, arreter,
+        origine: r.origine, uri, arreter, dossier: unite, dbPath,
         appliquer() {
             // R2 : la liste des buckets de PRODUCTION est figée AVANT tout remplacement ; R2_BUCKET_BANC ne peut pas en faire partie
             const buckets = bucketsDeProduction(env);
@@ -458,4 +604,4 @@ function installerGardeEcriture(Collection, env = process.env) {
 }
 
 module.exports = { hotesDe, cleDeGrappe, jugerUri, LECTURES, jugerLecture, verifierPrivilegesLecture, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
-    facadeLecture, sortieSure, verifierEcritureR2, garderClientR2 };
+    facadeLecture, sortieSure, verifierEcritureR2, garderClientR2, balayerOrphelins, inspecterArbre, nettoyer, PREFIXE_BANC, FICHIER_MARQUE, contenuMarque };
