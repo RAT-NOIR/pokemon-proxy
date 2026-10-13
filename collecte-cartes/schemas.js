@@ -33,7 +33,8 @@ const carteSchema = new mongoose.Schema({
     nomFrSource: String, nomFrLe: Date,
     categorie: String, type: String, pv: mongoose.Schema.Types.Mixed, stade: String, ndex: Number,
     rarete: String, illustrateur: String,
-    attaques: [{ _id: false, nom: String, nomJa: String, cout: [String], degats: String }],
+    // `cout` SANS défaut : mongoose rend [] à un tableau absent, ce qui ferait d'un coût NUMÉRIQUE (`coutNombre`, type des énergies inconnu) une attaque « sans coût »
+    attaques: [{ _id: false, nom: String, nomJa: String, cout: { type: [String], default: undefined }, coutNombre: Number, degats: String }],
     faiblesse: String, resistance: String, retraite: Number,
     // `illustrateur` PAR IMPRESSION (2026-09-23) : une page Bulbapedia est une carte TOUS TIRAGES FUSIONNÉS, et deux
     // tirages d'un même nom n'ont pas toujours le même illustrateur — le champ unique de la carte en choisissait un.

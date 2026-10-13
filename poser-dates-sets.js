@@ -51,6 +51,8 @@ const r2 = require('./collecte-cartes/r2');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
 const CLONE = arg('clone');
+// `--sets=<id>,<id>` : limiter la mesure ET l'écriture à ces sets (par _id) ; absent : tous les sets sans date.
+const SETS = arg('sets') ? arg('sets').split(',').map(x => x.trim()).filter(Boolean) : null;
 // `--pages=<json>` : des pages de set lues HORS de l'archive R2 (sonde revisionsDe, avec pageid et revid), pour les sets qui n'ont
 // pas de `bulba.cleR2` — la voie « sans page ». Clé : l'_id du set (`id`), valeur : { page, revid, content }.
 const PAGES = new Map(arg('pages') ? JSON.parse(fs.readFileSync(arg('pages'), 'utf8')).filter(x => x.content).map(x => [x.id, x]) : []);
@@ -129,6 +131,11 @@ const OFFICIELLES = {
     // Une page pour les trois « スターターセットex » (ニャオハ＆ルカリオex, ホゲータ＆デンリュウex, クワッス＆ミミッキュex), un seul jour.
     'ex-Starter-Set-Sprigatito-Lucario-ex': { jour: 'January 20, 2023', url: 'https://www.pokemon-card.com/ex/sva/index.html', citation: '発売日 2023年1月20日（金）', lu: '2026-09-26' },
     'ex-Starter-Set-Quaxly-Mimikyu-ex': { jour: 'January 20, 2023', url: 'https://www.pokemon-card.com/ex/sva/index.html', citation: '発売日 2023年1月20日（金）', lu: '2026-09-26' },
+    // ➕ 2026-10-13 (DATES-CORR) : les trois decks « Pokémon Card Game Classic » — UNE page officielle pour les trois, qui ne donne que
+    // « fin octobre » : le MOIS (2023-10) va dans `dateSortieMois`, jamais un jour inventé (§66). Bulbapedia dit « Late October 2023 » :
+    // `isoPartiel` ne lit pas « Late », donc elle ne vote pas (et ne contredit pas).
+    ...Object.fromEntries(['Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck', 'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck', 'Pokemon-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck'].map(id => [id, {
+        jour: 'October 2023', url: 'https://www.pokemon-card.com/ex/classic/', citation: '●発売日：2023年10月下旬以降予定 (prévu fin octobre 2023 : le mois seul, le jour n\'est pas donné)', lu: '2026-10-13' }])),
     'Play-Pokemon-Prize-Pack-Series-Three': { jour: 'August 14, 2023', url: 'https://www.pokemon.com/us/pokemon-news/visit-your-local-game-store-to-receive-play-pokemon-prize-packs', citation: 'the Prize Pack Series Three will be available starting August 14, 2023', lu: '2026-09-26' }
 };
 // ➕ 2026-10-04 (« il reste 35 sets que toi seul peux dater — mois et année suffisent ») : Bulbapedia répond 403 (2026-10-03 et
@@ -304,6 +311,11 @@ const RELEVES_2026_10_12 = {
     'Metagross-Expert-Deck': { jour: 'November 20, 2009', url: 'r2://bulba/89322/4317795.wikitext', citation: 'release=November 20, 2009 — infobox de « Leafeon vs Metagross Expert Deck (TCG) » (rév. 4317795, archive R2) ; Halfdecklist « Metagross Deck » 001/014-014/014 = les 14 produits' }
 };
 for (const [k, v] of Object.entries(RELEVES_2026_10_12)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-12' };
+// ➕ 2026-10-13 (DATES-CORR) : Pikachu World Collection (copie Wayback déjà téléchargée en T4, relue le 2026-10-13 ; aucune requête).
+// ⚠️ RÉSERVE : l'expansion Cardmarket mêle aussi la PWC 2010 (10 produits « [Hello! | Thunderbolt] » hors des 7 prouvés) — la date écrite est celle de la
+// collection de 2000 (la page Bulbapedia de ce titre), qui porte les 7 produits prouvés ; la règle (une voix par source) ne sépare pas les deux collections.
+RELEVES_BULBAPEDIA['Pikachu-World-Collection'] = { jour: 'September 12, 2000', url: `${W}20260709110309/${P('Pikachu_World_Collection_(TCG)')}`, lu: '2026-10-13',
+    citation: 'Release date September 12, 2000 — « available to purchase exclusively at Pokémon Park 2000 held at Sydney University, Sydney, Australia from September 12 to October 4, 2000 » ; la page cite la PWC de 2010 à part' };
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
@@ -449,6 +461,13 @@ function pairerIntl(tcg, s) {
     return { id, par: cles.map(([n]) => n).join('+') };
 }
 
+/** `--sets=<id>,<id>` : ne retenir que ces sets parmi ceux sans date ; ceux qui n'y sont pas (déjà datés, non publiés, faute de frappe) sont DITS. Sans liste : tous. */
+function retenirSets(sans, ids) {
+    if (!ids) return { retenus: sans, absents: [] };
+    const presents = new Set(sans.map(s => s._id));
+    return { retenus: sans.filter(s => ids.includes(s._id)), absents: ids.filter(i => !presents.has(i)) };
+}
+
 async function principal() {
     const ecrire = process.argv.includes('--ecrire');
     if (!CLONE || !fs.existsSync(path.join(CLONE, 'data'))) { console.error('❌ --clone=<chemin du clone tcgdex/cards-database> requis (git clone --depth 1)'); process.exit(2); }
@@ -461,7 +480,8 @@ async function principal() {
     // « N/A » n'est pas une date (le site l'écrit, DEMANDE du 2026-09-25 : Black Bolt, White Flare) : c'est l'absence écrite en
     // toutes lettres, traitée comme l'absence. Toute AUTRE valeur présente, même illisible, n'est jamais réécrite.
     const ABSENT = [null, '', 'N/A'];
-    const sans = sets.filter(s => champDe(s) && ABSENT.includes(s[champDe(s)] ?? null));
+    const { retenus: sans, absents: sansAbsents } = retenirSets(sets.filter(s => champDe(s) && ABSENT.includes(s[champDe(s)] ?? null)), SETS);
+    if (SETS) console.log(`--sets : ${sans.length} set(s) retenu(s) sur ${SETS.length} demandé(s)${sansAbsents.length ? ` · NON RETENUS (déjà datés, non publiés ou inconnus) : ${sansAbsents.join(', ')}` : ''}`);
     const illisibles = sets.filter(s => champDe(s) && !ABSENT.includes(s[champDe(s)] ?? null) && Number.isNaN(Date.parse(s[champDe(s)])));
     console.log(`« N/A » traités comme absents : ${sets.filter(s => champDe(s) && s[champDe(s)] === 'N/A').map(s => s.code).join(', ') || 'aucun'}`);
     console.log(`DÉNOMINATEUR : ${sets.length} sets publiés · sans date (règle du site) ${sans.length} · date présente mais illisible par Date.parse ${illisibles.length} (non touchées) : ${illisibles.map(s => `${s.code} « ${s[champDe(s)]} »`).join(' · ')}`);
@@ -595,5 +615,5 @@ async function principal() {
     await fermer();
 }
 
-module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA };
+module.exports = { retenirSets, jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });
