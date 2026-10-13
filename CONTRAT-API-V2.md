@@ -33,6 +33,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/banc/correction` | extension | Bearer | non | `RequeteCorrectionBanc` → `ReponseSimple` (200 quoi qu'il arrive après les contrôles) |
 | `DELETE /api/banc/contributions` | extension | Bearer | non | `RequeteEffacementBanc` → `ReponseEffacementBanc` |
 | `POST /api/banc/etiquette` | extension | Bearer (compte ADMINISTRATEUR seulement) | facultative | `RequeteEtiquetteBanc` → `ReponseEtiquetteBanc` |
+| `POST /api/banc/photo` | extension | Bearer (compte ADMINISTRATEUR seulement) | non (la même photo pour le même scan rend `deja`) | octets bruts JPEG/PNG/WebP + `?scanId=` → `ReponsePhotoBanc` (§1.7 ter) |
 | `POST /api/compte/code` | site | cookie | non | rien → `ReponseCodeLiaison` |
 | `GET /api/compte` | site | cookie | non | rien → `ReponseCompte` |
 | `DELETE /api/compte` | site | cookie | non | `RequeteSuppressionCompte` → `ReponseSimple` |

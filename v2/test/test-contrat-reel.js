@@ -47,6 +47,22 @@ async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes,
     return r;
 }
 
+// PHOTO-EXTENSION : un corps BINAIRE (une image) avec son Content-Type
+async function jouerBinaire(url, route, etat, attendu, chemin, octets, type, entetes, { garde = false } = {}) {
+    const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { ...(type ? { 'content-type': type } : {}), ...entetes } });
+    const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+    const r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+    consigner(route, etat, r, { garde });
+    if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
+    return r;
+}
+
+async function jouerBinaireBrut(url, chemin, octets, type, entetes) {
+    const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: octets, headers: { 'content-type': type, ...entetes } });
+    const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+    return { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+}
+
 // ── porteurs
 async function inst(essais = 3, o = {}) {
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais, libelle: 'banc' }), o);
@@ -311,9 +327,11 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc: BANC_MEMOIRE, ...deps }));
         return H.serveur(app);
     };
+    // PHOTO-EXTENSION : un banc à stockage MÉMOIRE (sans lui `POST /api/banc/photo` ne pourrait jamais rendre 200 : pas de bucket)
+    const BANC_MEMOIRE = require('../banc/routes').creerBanc({ cfg, env: { V2_BANC_BUCKET: 'bucket-banc-test', V2_BANC_SEL: 'sel-contrat-reel' }, stockage: require('../banc/stockage').creerStockageMemoire() });
     const sv = await monter();
     const V = sv.url;
     // identifier : les états que SEULE la chaîne fabriquée sait produire
@@ -706,6 +724,34 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await plafonner('banc-etiquette', 'compte', adm3.c._id, 600);
             await jouer(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa3.jeton) });
         }
+        // PHOTO-EXTENSION (recadrage) : la photo d'un administrateur sur SON scan ; tous les statuts documentés sont joués par un état réel (hors 503 : garde d'index)
+        {
+            const R = 'POST /api/banc/photo', CH = '/api/banc/photo';
+            const sharp = require('sharp');
+            const JPG = await sharp(crypto.randomBytes(120 * 160 * 3), { raw: { width: 120, height: 160, channels: 3 } }).jpeg().toBuffer();
+            const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm), adm2 = await compte({ role: 'administrateur' }), xa2 = await instLiee(adm2);
+            mode = 'affirmee';
+            const aff = await ident(V, 'analyse affirmée de l\'administrateur (pour la photo)', 200, xa.jeton);
+            const q = `${CH}?scanId=${aff.json.scanId}`;
+            await jouerBinaire(V, R, 'photo conservée (ecrit)', 200, q, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'la photo existe déjà (deja)', 200, q, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'scanId mal formé', 400, `${CH}?scanId=x`, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'sans Authorization', 401, q, JPG, 'image/jpeg', extH(null));
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await jouerBinaireBrut(V, q, JPG, 'image/jpeg', extH(x.jeton));
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
+            await jouerBinaire(V, R, 'scan d\'un autre administrateur', 404, q, JPG, 'image/jpeg', extH(xa2.jeton));
+            const aff2 = await ident(V, 'seconde analyse de l\'administrateur (pour la photo)', 200, xa.jeton);
+            const q2 = `${CH}?scanId=${aff2.json.scanId}`;
+            await jouerBinaire(V, R, 'plus de 2 Mio (413)', 413, q2, Buffer.alloc(2 * 1024 * 1024 + 1, 1), 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'Content-Type hors JPEG/PNG/WebP (415)', 415, q2, JPG, 'text/plain', extH(xa.jeton));
+            await jouerBinaire(V, R, 'image tronquée (422)', 422, q2, JPG.subarray(0, 60), 'image/jpeg', extH(xa.jeton));
+            const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);
+            await plafonner('banc-photo', 'compte', adm3.c._id, 600);
+            await jouerBinaire(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, q2, JPG, 'image/jpeg', extH(xa3.jeton));
+        }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
@@ -732,6 +778,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/compte/renvoyer-verification': { chemin: '/api/compte/renvoyer-verification', corps: { email: 'a@exemple.fr' } },
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
             'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'POST /api/banc/photo': { chemin: `/api/banc/photo?scanId=${fauxId}`, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },
