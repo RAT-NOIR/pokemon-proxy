@@ -42,8 +42,27 @@ const BASE_BAC_A_SABLE = 'test_scratch';
 const BASES = Object.freeze({
     [BASE_PRODUCTION]: 'MONGODB_URI',        // le catalogue Cardmarket appris, lecture seule
     [BASE_BAC_A_SABLE]: 'MONGODB_URI',       // le bac à sable, même grappe
-    cartes: 'MONGODB_CARTES_URI'             // la base de collecte — AUTRE grappe (collecte-cartes/garde.js)
+    cartes: 'MONGODB_CARTES_URI',            // la base de collecte — AUTRE grappe (collecte-cartes/garde.js)
+    rm_essai: 'MONGODB_ESSAI_URI'            // la base du service de TEST — AUTRE projet Atlas (D4-BASE-DU-SERVICE-DE-TEST.md) ; utilisateur `essai-amorcage` (readWrite rm_essai)
 });
+
+// Les variables de LECTURE SEULE (utilisateurs Atlas `read`), pour les mesures : une table à part, jamais un repli de BASES (une lecture ne s'écrit pas avec l'URI d'écriture).
+const LECTURES = Object.freeze({
+    [BASE_PRODUCTION]: 'MONGODB_LECTURE_URI',
+    cartes: 'MONGODB_CARTES_LECTURE_URI',
+    rm_essai: 'MONGODB_ESSAI_LECTURE_URI'
+});
+
+// 🔑 LE SEUL PASSE-DROIT À « UNE BASE RÉELLE N'EST JAMAIS VIDE » : la copie initiale du catalogue (v2/migrations/amorcer-essai.js) commence, par construction, sur
+// une base VIDE. Il s'obtient par une option NOMMÉE (`baseVideAutorisee: true`) et SEULEMENT pour rm_essai : pour toute autre base, demander l'option est un REFUS,
+// pas un ignorer (un script qui la demanderait par erreur pour `test` ne doit pas croire qu'elle a été prise en compte).
+const BASE_AVEC_VIDE_PERMIS = 'rm_essai';
+function resoudreBaseVide(base, baseVideAutorisee) {
+    if (baseVideAutorisee === undefined || baseVideAutorisee === false) return { ok: true, videAutorise: false };
+    if (baseVideAutorisee !== true) return { ok: false, raison: 'baseVideAutorisee doit valoir exactement true ou false.' };
+    if (base !== BASE_AVEC_VIDE_PERMIS) return { ok: false, raison: `l'option baseVideAutorisee n'existe que pour "${BASE_AVEC_VIDE_PERMIS}" ; la base "${String(base).slice(0, 40)}" ne peut jamais commencer sur du vide.` };
+    return { ok: true, videAutorise: true };
+}
 
 /**
  * Résout la base demandée, sans jamais deviner.
@@ -74,13 +93,19 @@ function baseDemandee() {
  * Ne renvoie JAMAIS sur une base non demandée : en cas d'écart, le processus s'arrête
  * avec un code de sortie 1, connexion fermée, avant toute opération.
  */
-async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false } = {}) {
+async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false, baseVideAutorisee = false } = {}) {
     if (!process.env.MONGODB_URI) {
         console.error("❌ MONGODB_URI absent du .env — impossible de continuer.");
         process.exit(1);
     }
 
     const attendue = baseDemandee();
+    const vide = resoudreBaseVide(attendue, baseVideAutorisee);
+    if (!vide.ok) {
+        console.error(`\n❌ REFUS : ${vide.raison}`);
+        console.error(`   Aucune connexion n'a été ouverte.`);
+        process.exit(1);
+    }
     if (!attendue) {
         console.error("❌ ARRÊT : aucune base précisée, et je ne devine pas.");
         console.error(`   Usage : node ${script} --base=<nom> [autres options]`);
@@ -137,7 +162,7 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     // naître en s'y connectant — la signature exacte d'une grappe fausse.
     // ⚠️ SOUS BANC_ISOLE=1 ce contrôle est REMPLACÉ : une base de banc NEUVE est vide, et c'est normal. Le contrôle qui peut échouer dans le
     // cas redouté ici (un banc qui se retrouve sur une vraie grappe) porte sur ce qu'une vraie grappe n'a PAS : l'hôte du banc.
-    const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env });
+    const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env, videAutorise: vide.videAutorise });
     if (!apres.ok) {
         console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} — ${apres.raison}`);
         console.error(`   Aucune opération n'a été effectuée.`);
@@ -173,13 +198,14 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
  * Le contrôle d'après connexion. Hors banc : « une base RÉELLE de ce projet n'est jamais vide » (§50, inchangé). Sous BANC_ISOLE=1 : l'hôte de la
  * connexion est celui du banc (une base vide y est normale). { ok, raison }
  */
-async function controlerApresConnexion({ db, hote, env = process.env }) {
+async function controlerApresConnexion({ db, hote, env = process.env, videAutorise = false }) {
     if (env.BANC_ISOLE === '1') {
         const g = verifierHoteBanc(`mongodb://${hote || ''}/`, env);
         return g.ok ? { ok: true, raison: null } : { ok: false, raison: g.raison };
     }
     const n = (await db.listCollections().toArray()).length;
+    if (!n && videAutorise === true) return { ok: true, raison: null };   // la copie initiale de rm_essai, et rien d'autre (resoudreBaseVide l'a jugé avant la connexion)
     return n ? { ok: true, raison: null } : { ok: false, raison: 'ne contient AUCUNE collection. Une base vide n\'est pas un résultat : MongoDB la crée à la demande, c\'est le signe qu\'on n\'est pas sur la bonne grappe.' };
 }
 
-module.exports = { connecterMongo, controlerApresConnexion, baseDemandee, BASES, BASE_PRODUCTION, BASE_BAC_A_SABLE };
+module.exports = { connecterMongo, controlerApresConnexion, baseDemandee, resoudreBaseVide, BASES, LECTURES, BASE_PRODUCTION, BASE_BAC_A_SABLE };
