@@ -2,12 +2,15 @@
 // LA QUESTION RÉSERVÉE. Même machine à états que acces.js (poserQuestion / repondreQuestion / rembourserQuestionsAbandonnees), clé (porteur, scanId:carte) :
 //   en-attente → repondue                       (réponse par un candidat : le débit initial EST la facture, rien de plus)
 //   en-attente → en-reglement → remboursee | non-remboursee   (« aucune », « ne-sait-pas », ou sans réponse sous 24 h)
-// ⚠️ Un « en-reglement » n'est JAMAIS repris seul : un processus tué entre la prise et l'état final a pu rendre le crédit, le reprendre risquerait de le rendre deux fois.
+// ⚠️ Un « en-reglement » d'une question HORS LOT n'est JAMAIS repris seul : un processus tué entre la prise et l'état final a pu rendre le crédit, le reprendre risquerait de le rendre deux fois.
+// UN-CANDIDAT-2 : pour une carte de LOT cette raison n'existe pas (aucun crédit ne bouge avant l'écriture d'état ; le remboursement du lot est idempotent par son claim) : une ligne de lot restée
+// « en-reglement » au-delà de `cfg.lot.reglementBloqueMs` (15 min) est REPRISE par le balayage, et listée par la réconciliation tant qu'elle ne l'est pas.
 const db = require('../db'); const { rembourser, rembourserLigne } = require('./ledger');
 const col = nom => db.col(nom);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
 const idQuestion = (scanId, carte) => `${scanId}:${carte}`;
 const BLOQUEE_MS = 15 * 60e3;
+const ATTENTE_GAGNANT_MS = 40;
 const ABANDONS = ['aucune', 'ne-sait-pas'];
 const { facturation } = require('./facturation');
 const nu = q => q;   // la question rendue telle que stockée (aucun champ secret)
@@ -113,10 +116,31 @@ async function jugerLot(scanId, qs) {
 // Le grand livre du lot : combien d'unités débitées, combien rendues (jamais l'objet `credit` d'un appelant).
 async function grandLivreDuLot(scanId, porteur) {
     const debits = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1 }).toArray();
-    return { total: debits.length, rendues: debits.filter(d => d.etat === 'rembourse').length };
+    // TOUR 1 — « rendu » se juge sur les MOUVEMENTS du grand livre (`remboursement`, delta 1, écrits APRÈS le crédit), jamais sur `debit.etat` : la prise atomique met le débit à « rembourse » AVANT de créditer,
+    // et un crédit qui échoue restitue l'état. Un débit « rembourse » SANS mouvement correspondant est AMBIGU (ni rendu, ni rendu à nouveau) : compté à part (`ambigus`) et listé par la réconciliation.
+    const mouvements = await col('mouvements').countDocuments({ type: 'remboursement', scanId, delta: 1 });
+    const prises = debits.filter(d => d.etat === 'rembourse').length;
+    return { total: debits.length, rendues: mouvements, ambigus: Math.max(0, prises - mouvements) };
 }
-const toutRendu = gl => gl.total > 0 && gl.rendues === gl.total;
-const marquerLot = async (scanId, cause, maintenant) => { try { await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { lotARendre: { depuis: maintenant, cause } } }); } catch (e) { console.error(`🔴 [v2 lot-confirmations] ${scanId} : état « lot à rendre » NON écrit (${(e && (e.code || e.name)) || 'erreur'}) — le balayage le rejugera`); } };
+// TOUR 1 — un arrêt du processus ENTRE deux unités d'un grand lot laisse la claim `rb|scan` (delta ≠ 0) sans son renommage `…|fait|…` : le remboursement ne reprendrait jamais (« deja-rembourse » à chaque passage).
+// Au-delà du délai de reprise, la claim est renommée (même geste que le ledger en fin de partiel) et le remboursement CONTINUE sur les unités restantes ; chaque unité ne se rend que par sa prise atomique.
+// Une claim sans aucune unité rendue (delta 0) n'est JAMAIS libérée ici : elle est listée par la réconciliation (procédure manuelle).
+async function reprendreClaimInterrompue(scanId, cfg, maintenant) {
+    const lignes = await col('mouvements').find({ type: 'remboursement', scanId }).toArray();
+    const limite = new Date(maintenant).getTime() - cfg.lot.reglementBloqueMs;
+    const claim = lignes.find(m => typeof m.cleIdempotence === 'string' && m.cleIdempotence.startsWith(`rb|${scanId}`) && !m.cleIdempotence.includes('#') && !m.cleIdempotence.includes('|fait|') && m.delta !== 0 && new Date(m.le).getTime() < limite);
+    if (!claim) return false;
+    // TOUR 2 : une claim de lot déjà COMPLET (plus aucun débit ouvert) n'est jamais renommée — elle reste la trace d'un remboursement fait en un geste
+    if (await col('mouvements').countDocuments({ type: 'debit', delta: -1, scanId, credit: { $ne: null }, etat: { $nin: ['rembourse', 'rendu-en-cours'] } }) === 0) return false;
+    const r = await col('mouvements').updateOne({ _id: claim._id, cleIdempotence: claim.cleIdempotence }, { $set: { cleIdempotence: `${claim.cleIdempotence}|fait|${claim._id}` } });
+    return (r.modifiedCount ?? 0) > 0;
+}
+const toutRendu = gl => gl.total > 0 && gl.rendues >= gl.total;
+// UN-CANDIDAT-2 : `depuis` est posé UNE fois (l'âge réel du lot à rendre) ; `essais` compte les jugements ratés — la reprise passe DERRIÈRE les lots qui ont échoué le plus (jamais d'affamement)
+const marquerLot = async (scanId, cause, maintenant) => { try {
+    await col('questions_v2').updateMany({ scanId, lot: true, 'lotARendre.depuis': { $exists: false } }, { $set: { 'lotARendre.depuis': maintenant } });
+    await col('questions_v2').updateMany({ scanId, lot: true }, { $set: { 'lotARendre.cause': cause }, $inc: { 'lotARendre.essais': 1 } });
+} catch (e) { console.error(`🔴 [v2 lot-confirmations] ${scanId} : état « lot à rendre » NON écrit (${(e && (e.code || e.name)) || 'erreur'}) — le balayage le rejugera`); } };
 // la décision FINALE (jamais écrasée) ; la marque tombe
 async function ecrireIssue(scanId, issue) {
     await col('questions_v2').updateMany({ scanId, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: issue } });
@@ -134,17 +158,34 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
         if (verdict === 'attente') return { rendu: false, attente: true };
         if (verdict === 'non') { await ecrireIssue(scanId, { rendu: false, raison: 'non-eligible', le: maintenant }); return { rendu: false }; }
         if (verdict !== 'rendre') { await marquerLot(scanId, verdict.doute, maintenant); console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot jugé impossible (${verdict.doute}) — écrit « lot à rendre », repris par le balayage`); return { rendu: false, aRendre: true }; }
-        const r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
-        const raison = (r && r.raisonNonRembourse) || 'erreur';
+        let r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
+        let raison = (r && r.raisonNonRembourse) || 'erreur';
+        if (!(r && r.rendu) && raison === 'deja-rembourse' && await reprendreClaimInterrompue(scanId, cfg, maintenant)) {
+            r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
+            raison = (r && r.raisonNonRembourse) || 'erreur';
+        }
         if ((r && r.rendu) || raison === 'deja-rembourse') {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
-            const gl = await grandLivreDuLot(scanId, porteur);
+            let gl = await grandLivreDuLot(scanId, porteur);
+            // UN-CANDIDAT-2 : le PERDANT d'une course a pu relire le grand livre avant que le gagnant du claim ait fini de rendre : il relit (courte pause, 3 fois au plus) avant d'écrire une marque
+            for (let i = 0; i < 3 && raison === 'deja-rembourse' && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
             if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant }); return { rendu: true }; }
-            await marquerLot(scanId, `partiel:${gl.rendues}/${gl.total}`, maintenant);
-            console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}) — écrit « lot à rendre », repris par le balayage`);
+            await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
+            console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}${gl.ambigus ? `, ${gl.ambigus} débit(s) « rembourse » sans mouvement` : ''}) — écrit « lot à rendre », repris par le balayage`);
             return { rendu: false, aRendre: true };
         }
         if (RAISONS_DEFINITIVES.includes(raison)) {
-            const debite = raison === 'plafond-jour' ? (await grandLivreDuLot(scanId, porteur)).total : 0;
+            let debite = 0;
+            if (raison === 'plafond-jour') {
+                const gl = await grandLivreDuLot(scanId, porteur);
+                // UN-CANDIDAT-2 : « plafond du jour » n'est JAMAIS définitif quand des unités du lot sont déjà rendues (un partiel antérieur) : le client a été rendu en partie, le reste est à rendre
+                // TOUR 3 : ni quand une unité est PRISE sans avoir encore sa trace (`ambigus` : un jugement simultané en cours, ou un arrêt entre la prise et le crédit) — le client est ou sera rendu
+                if (gl.rendues > 0 || gl.ambigus > 0) {
+                    await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
+                    console.error(`🔴 [v2 lot-confirmations] ${scanId} : plafond atteint alors que ${gl.rendues}/${gl.total} unité(s) sont déjà rendues${gl.ambigus ? ` et ${gl.ambigus} prise(s) sans trace` : ''} — écrit « lot à rendre », jamais « plafond-jour » définitif`);
+                    return { rendu: false, aRendre: true };
+                }
+                debite = gl.total;
+            }
             await ecrireIssue(scanId, { rendu: false, raison, debite, le: maintenant });
             return { rendu: false, raisonNonRembourse: raison, debite };
         }
@@ -177,20 +218,44 @@ async function reprendreLots(cfg, maintenant) {
             if (r.rendu) sortie[cle]++;
         }
     };
-    await phase({ lot: true, lotARendre: { $exists: true } }, { 'lotARendre.depuis': 1 }, 'repris');
+    await phase({ lot: true, lotARendre: { $exists: true } }, { 'lotARendre.essais': 1, 'lotARendre.depuis': 1 }, 'repris');     // les lots qui ont échoué le moins d'abord, puis le plus ancien
     await phase({ lot: true, etat: { $in: REGLEE }, lotIssue: { $exists: false }, lotARendre: { $exists: false } }, { regleeLe: 1 }, 'juges');
     return sortie;
 }
 // Les lots RÉGLÉS mais NON JUGÉS d'un porteur (ni décision ni marque), assez anciens pour que le jugement immédiat ait eu lieu : listés par la réconciliation.
 async function lotsNonJuges(filtrePorteur, maintenant, graceMs = 10 * 60e3) {
-    const docs = await col('questions_v2').find({ ...filtrePorteur, lot: true, etat: { $in: REGLEE }, lotIssue: { $exists: false }, lotARendre: { $exists: false }, regleeLe: { $lt: new Date(new Date(maintenant).getTime() - graceMs) } }).toArray();
-    const sortie = new Map();
+    const limite = new Date(new Date(maintenant).getTime() - graceMs);
+    const docs = await col('questions_v2').find({ ...filtrePorteur, lot: true, etat: { $in: REGLEE }, lotIssue: { $exists: false }, lotARendre: { $exists: false }, regleeLe: { $lt: limite } }).toArray();
+    const sortie = new Map(), vus = new Set();
     for (const q of docs) {
         const k = String(q.scanId);
-        if (sortie.has(k)) continue;
-        if (await col('questions_v2').countDocuments({ scanId: q.scanId, lot: true, etat: { $nin: REGLEE } }) === 0) sortie.set(k, { scanId: q.scanId, porteur: `${q.porteur.type}:${q.porteur.id}`, regleeLe: q.regleeLe });
+        if (vus.has(k)) continue;
+        vus.add(k);
+        // UN-CANDIDAT-2 : le délai de grâce part de la DERNIÈRE réponse du lot (la ligne la plus récente), pas de la plus ancienne
+        const lignes = await col('questions_v2').find({ scanId: q.scanId, lot: true }).toArray();
+        if (lignes.some(l => !REGLEE.includes(l.etat))) continue;
+        const derniere = Math.max(...lignes.map(l => l.regleeLe ? new Date(l.regleeLe).getTime() : 0));
+        if (derniere >= limite.getTime()) continue;
+        sortie.set(k, { scanId: q.scanId, porteur: `${q.porteur.type}:${q.porteur.id}`, regleeLe: new Date(derniere) });
     }
     return [...sortie.values()];
+}
+// UN-CANDIDAT-2 : les lignes de LOT restées « en-reglement » (arrêt du processus, erreur de base pendant le règlement) depuis plus de `ms` : listées par la réconciliation avec leur âge.
+async function lotsEnReglement(filtrePorteur, maintenant, ms) {
+    const t = new Date(maintenant).getTime();
+    const docs = await col('questions_v2').find({ ...filtrePorteur, lot: true, etat: 'en-reglement', priseLe: { $lt: new Date(t - ms) } }).toArray();
+    return docs.map(q => ({ scanId: q.scanId, carte: q.carte, porteur: `${q.porteur.type}:${q.porteur.id}`, priseLe: q.priseLe, ageMinutes: Math.floor((t - new Date(q.priseLe).getTime()) / 60e3) }));
+}
+// Reprend le règlement d'une ligne de LOT restée « en-reglement » au-delà de `cfg.lot.reglementBloqueMs`. Pour un lot AUCUN crédit n'a bougé dans `regler` avant son écriture d'état (le remboursement du lot passe par le claim
+// `rb|scanId`, idempotent) : la reprise ne peut pas rendre deux fois. La prise est conditionnelle (priseLe rafraîchi) : un règlement vivant n'est jamais doublé, un échec est retenté après le même délai.
+async function reprendreReglementsDeLots(cfg, maintenant, bilan) {
+    const limite = new Date(new Date(maintenant).getTime() - cfg.lot.reglementBloqueMs);
+    for (let i = 0; i < cfg.lot.reprisesParPassage; i++) {
+        const q = await col('questions_v2').findOneAndUpdate({ lot: true, etat: 'en-reglement', priseLe: { $lt: limite } }, { $set: { priseLe: maintenant } }, { sort: { priseLe: 1 }, returnDocument: 'after' });
+        if (!q) break;
+        try { await regler(q, 'question-abandonnee', cfg, maintenant); bilan.lotsReglementsRepris++; }
+        catch (e) { bilan.erreurs++; bilan.lotsReglementsEnEchec++; console.error(`🔴 [v2 question-balayage] ${q._id} : reprise du règlement d'une ligne de LOT restée « en-reglement » depuis plus de ${Math.round(cfg.lot.reglementBloqueMs / 60e3)} min : ${(e && (e.code || e.name)) || 'erreur'} — retentée après le même délai (aucun crédit n'a bougé : la reprise d'un lot est idempotente)`); }
+    }
 }
 // La facturation d'un lot JUGÉ (réponse et rejeu) : rendu, ou refusé au plafond ; rien pour le reste (le lot reste payé à juste titre).
 function facturationDuLot(r) {
@@ -271,10 +336,13 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
         bilan.abandonnees.push({ scanId: String(q.scanId), carte: q.carte });
         if (fin && fin.rembourse) bilan.remboursees++; else bilan.nonRemboursees++;
     }
+    bilan.lotsReglementsRepris = 0; bilan.lotsReglementsEnEchec = 0;
+    await reprendreReglementsDeLots(cfg, maintenant, bilan);            // UN-CANDIDAT-2 : une ligne de lot restée « en-reglement » est reprise (jamais une question hors lot)
     const lots = await reprendreLots(cfg, maintenant);                  // TOURS 2-3 : lots « à rendre » repris, lots réglés mais non jugés jugés (bornés, du plus ancien)
     bilan.lotsRepris = lots.repris; bilan.lotsJuges = lots.juges;
-    bilan.bloquees = await col('questions_v2').countDocuments({ etat: 'en-reglement', priseLe: { $lt: new Date(maintenant.getTime() - BLOQUEE_MS) } });
+    // `bloquees` ne compte que les questions HORS LOT (jamais reprises seules) ; les lignes de lot ont leur propre reprise et leur propre compte (`lotsReglementsEnEchec`)
+    bilan.bloquees = await col('questions_v2').countDocuments({ etat: 'en-reglement', lot: { $ne: true }, priseLe: { $lt: new Date(maintenant.getTime() - BLOQUEE_MS) } });
     if (bilan.bloquees) console.error(`🔴 [v2 question-balayage] ${bilan.bloquees} question(s) bloquée(s) « en-reglement » depuis plus de 15 min : crédit rendu ou non, à vérifier à la main (jamais reprise seule)`);
     return bilan;
 }
-module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe, lotsNonJuges };
+module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe, lotsNonJuges, lotsEnReglement };
