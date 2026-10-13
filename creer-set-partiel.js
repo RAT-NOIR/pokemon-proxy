@@ -27,8 +27,8 @@ const TP = require('./collecte-cartes/table-pwc');
 // La liste FERMÉE des sets partiels : l'expansion, le slugSet Cardmarket, le code de famille (codeSet) et la route.
 //   2107 Promos : le set EXISTE (53/93 posés le 2026-10-12) ; `formeCollee` (S6) y ajoute Rainbow-Energy-TR17 — un COMPLÉMENT d'un set existant
 //        est une MODIFICATION (compteurs `partiel`, reste à retirer) : sans option, la simulation le dit et l'écriture le REFUSE. L'option NOMMÉE
-//        `--completer` (COURTS2, collecte-cartes/completer-set-partiel.js) ne fait que de l'AJOUT : lignes NEUVES ($setOnInsert) et $addToSet sur la carte ;
-//        compteurs `partiel` et `restes` NON touchés (dits par la simulation), --attendu = le nombre de lignes neuves.
+//        `--completer` (COURTS2, collecte-cartes/completer-set-partiel.js) pose des lignes NEUVES ($setOnInsert), un $addToSet sur la carte,
+//        recalcule les champs du compteur `partiel` (partielDe) et MARQUE résolu le `reste` du produit (jamais supprimé) ; --attendu = le nombre de lignes neuves.
 //   4392 Pikachu World Collection (S6) : origines lues dans la TABLE FERMÉE (collecte-cartes/table-pwc.js), attaques de Cardmarket vérifiées.
 const PARTIELS = {
     2107: { slug: 'Promos', CODE: 'PR', route: 'pr', formeCollee: true },
@@ -80,8 +80,8 @@ const INCONNUS = process.argv.slice(2).filter(a => !/^--(set|attendu|sortie)=.+$
     // (COURTS2) --completer : compléter un set qui EXISTE par des lignes NEUVES seulement (collecte-cartes/completer-set-partiel.js) ; --attendu = le nombre de lignes neuves
     if (completer) {
         console.log('');
-        const code = await CS.completer({ db: cx.db, slug: conf.slug, lignes, metaDe: new Map(produits.map(p => [p.idProduct, p.idMetacard])), attendu, ecrire });
-        await fermer(); process.exitCode = code; return;
+        const codeSortie = await CS.completer({ db: cx.db, slug: conf.slug, lignes, metaDe: new Map(produits.map(p => [p.idProduct, p.idMetacard])), attendu, ecrire, classement: C, code: conf.CODE, chemin: conf.chemin });
+        await fermer(); process.exitCode = codeSortie; return;
     }
     if (!ecrire) { console.log('\n   (mesure seule — relancer avec --attendu=' + C.prouves.length + ' --ecrire)'); await fermer(); return; }
     if (attendu !== C.prouves.length) { console.log(`\n   🔴 ${C.prouves.length} prouvés contre ${attendu} attendus : RIEN ne s'écrit`); await fermer(); process.exitCode = 1; return; }

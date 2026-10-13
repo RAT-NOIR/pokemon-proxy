@@ -38,23 +38,26 @@ function fakeDb(init, opts = {}) {
 }
 
 const LIENS = [585160, 651994, 274070, 274133, 678696];
-const SET = { _id: 'Promos', idExpansion: [2107], partiel: { prouves: 53, total: 93, restes: 39, dejaJoints: 1 } };
+// le set partiel d'avant : 2 prouvés posés par la création, 3 restes, 1 déjà joint ailleurs, 0 contredit, 0 carte-code = 6 ; la pose doit donner 3 / 2 / 1 = 6
+const SET = { _id: 'Promos', idExpansion: [2107], nomAffichage: 'Promos', partiel: { prouves: 2, total: 6, restes: 3, contredits: 0, dejaJoints: 1, horsDenominateur: 0, mention: 'avant', tirage: 'intl', tiragePreuve: 'avant' } };
+const CLASSEMENT = (o = {}) => ({ prouves: [{}], restes: new Array(o.restes ?? 2).fill({}), contredits: [], deja: new Array(o.deja ?? 3).fill({}), horsDenominateur: [] });
 const LIGNE = { _id: '60335|275578', carteId: 60335, idProduct: 275578, idExpansion: 2107, tirage: 'intl', preuve: 'reimpression+origine+numero', slug: 'Rainbow-Energy-TR17', slugSet: 'Promos', origine: { code: 'TR', numero: '17', source: 'slug-collee' }, detail: 'slug … → TR n°17', verifieLe: new Date('2026-10-13'), route: 'PR' };
 const META = new Map([[275578, 211994]]);
-function monde({ sans: sansSet = false, liens = LIENS, carteAvecSet = false, ligneExiste = null, metas = [211994] } = {}) {
-    const lignes = [{ _id: '60335|274070', carteId: 60335, idProduct: 274070, preuve: 'set+numero', slug: 'Rainbow-Energy-V1-TR17', slugSet: 'Team-Rocket', numeroFiche: '17' }, { _id: '9|9', carteId: 9, idProduct: 9, preuve: 'x' }];
+function monde({ sans: sansSet = false, liens = LIENS, carteAvecSet = false, ligneExiste = null, metas = [211994], posees = 2 } = {}) {
+    const posee = i => ({ _id: `${i}|${10 + i}`, carteId: i, idProduct: 10 + i, preuve: 'reimpression+origine+numero', route: 'PR', slugSet: 'Promos', slug: `X-PR${i}` });
+    const lignes = [{ _id: '60335|274070', carteId: 60335, idProduct: 274070, preuve: 'set+numero', slug: 'Rainbow-Energy-V1-TR17', slugSet: 'Team-Rocket', numeroFiche: '17' }, { _id: '9|9', carteId: 9, idProduct: 9, preuve: 'x' }, ...Array.from({ length: posees }, (_, i) => posee(i + 1))];
     if (ligneExiste) lignes.push(ligneExiste);
     return fakeDb({
         sets: sansSet ? [] : [structuredClone(SET)],
         cartes_produits: lignes,
         cartes: [{ _id: 60335, nomEn: 'Rainbow Energy', sets: ['Team-Rocket', ...(carteAvecSet ? ['Promos'] : [])], liens: liens === null ? undefined : { idProduct: [...liens], idMetacards: [...metas] } }, { _id: 9, nomEn: 'Autre', sets: [], liens: { idProduct: [9], idMetacards: [] } }],
-        restes: [{ _id: 'r1', set: 'Promos', idProduct: 275578, type: 'partiel-sans-code-origine' }]
+        restes: [{ _id: 'r1', set: 'Promos', idProduct: 275578, type: 'partiel-sans-code-origine', detail: 'd1', le: 'avant' }, { _id: 'r2', set: 'Promos', idProduct: 111, type: 'partiel-sans-code-origine' }, { _id: 'r3', set: 'Autre', idProduct: 275578, type: 'produit-sans-carte' }]
     });
 }
 const etat = db => JSON.stringify(['sets', 'cartes_produits', 'cartes', 'restes'].map(n => db.brut(n)));
 async function lancer(db, o = {}) {
     const sorties = [], erreurs = [];
-    const code = await CS.completer({ db, slug: 'Promos', lignes: [structuredClone(LIGNE)], metaDe: META, attendu: o.attendu === undefined ? 1 : o.attendu, ecrire: !!o.ecrire, log: s => sorties.push(s), err: s => erreurs.push(s) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
+    const code = await CS.completer({ db, slug: 'Promos', lignes: [structuredClone(LIGNE)], metaDe: META, attendu: o.attendu === undefined ? 1 : o.attendu, ecrire: !!o.ecrire, classement: o.classement || CLASSEMENT(), code: 'PR', le: new Date('2026-10-13T12:00:00Z'), log: s => sorties.push(s), err: s => erreurs.push(s) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
     return { code, sorties: sorties.join('\n'), erreurs: erreurs.join('\n') };
 }
 const carte = (db, id) => db.brut('cartes').find(c => c._id === id), ligneDe = (db, id) => db.brut('cartes_produits').find(l => l._id === id);
@@ -64,15 +67,19 @@ const carte = (db, id) => db.brut('cartes').find(c => c._id === id), ligneDe = (
     let db = monde(), av = etat(db);
     let r = await lancer(db);
     verifier('simulation : exit 0, rien d\'ecrit, "1 ligne neuve, 0 modifiee", la carte et ses liens sont nommes', [r.code, etat(db) === av, /1 ligne\(s\) NEUVE\(S\), 0 modifiée\(s\)/.test(r.sorties), /60335\|275578/.test(r.sorties)], [0, true, true, true]);
-    verifier('simulation : dit les deux comptes que le complement NE touche PAS (sets.partiel, reste)', [/sets\.partiel/.test(r.sorties), /restes/.test(r.sorties) && /275578/.test(r.sorties)], [true, true]);
+    verifier('simulation : annonce le compteur recalcule (prouves 2->3, restes 3->2, total 6->6) et le reste a marquer resolu (jamais supprime)', [/prouvés 2→3 · restes 3→2 · total 6→6 · dejaJoints 1→1/.test(r.sorties), /restes marqués RÉSOLUS.*275578 \(partiel-sans-code-origine\)/.test(r.sorties)], [true, true]);
 
     // ── l'ecriture : une ligne neuve, la carte ne fait que s'ajouter ──
     r = await lancer(db, { ecrire: true });
     verifier('ecriture : exit 0, relue', [r.code, /écrit et relu/.test(r.sorties)], [0, true]);
-    verifier('   la ligne neuve existe, telle quelle ; les deux lignes existantes sont intactes', [ligneDe(db, '60335|275578').preuve, ligneDe(db, '60335|275578').slug, ligneDe(db, '60335|274070').numeroFiche, db.brut('cartes_produits').length], ['reimpression+origine+numero', 'Rainbow-Energy-TR17', '17', 3]);
+    verifier('   la ligne neuve existe, telle quelle ; les deux lignes existantes sont intactes', [ligneDe(db, '60335|275578').preuve, ligneDe(db, '60335|275578').slug, ligneDe(db, '60335|274070').numeroFiche, db.brut('cartes_produits').length], ['reimpression+origine+numero', 'Rainbow-Energy-TR17', '17', 5]);
     verifier('   🔑 liens.idProduct : les 5 premiers elements inchanges ET dans le meme ordre (le 1er est le repere d\'adresse du site), le nouveau est AJOUTE a la fin', [carte(db, 60335).liens.idProduct, carte(db, 60335).liens.idProduct[0]], [[...LIENS, 275578], 585160]);
     verifier('   la carte gagne le slug du set (ajout a la fin de sets, rien retire), ses metacartes inchangees (deja la)', [carte(db, 60335).sets, carte(db, 60335).liens.idMetacards], [['Team-Rocket', 'Promos'], [211994]]);
-    verifier('   le set, les restes et l\'autre carte : NON touches', [JSON.stringify(db.brut('sets')) === JSON.stringify([SET]), db.brut('restes').length, carte(db, 9).liens.idProduct], [true, 1, [9]]);
+    const setApres = db.brut('sets')[0];
+    verifier('   sets.partiel : les SEULS champs du compteur changent (3/6, restes 2, dejaJoints 1), recalcules par partielDe (mention et tiragePreuve disent 3) ; nomAffichage, tirage, idExpansion intacts', [setApres.partiel.prouves, setApres.partiel.total, setApres.partiel.restes, setApres.partiel.dejaJoints, /3 produits sur 6/.test(setApres.partiel.mention), /3 produits prouvés/.test(setApres.partiel.tiragePreuve), setApres.nomAffichage, setApres.partiel.tirage, setApres.idExpansion], [3, 6, 2, 1, true, true, 'Promos', 'intl', [2107]]);
+    const restesApres = db.brut('restes');
+    verifier('   🔑 le reste 275578 n\'est PAS supprime : marque resolu (4 champs), ses autres champs intacts ; 3 documents restent', [restesApres.length, restesApres.find(x => x._id === 'r1').resoluPar, restesApres.find(x => x._id === 'r1').resoluLigne, restesApres.find(x => x._id === 'r1').resoluCarteId, restesApres.find(x => x._id === 'r1').type, restesApres.find(x => x._id === 'r1').detail], [3, 'completer-set-partiel', '60335|275578', 60335, 'partiel-sans-code-origine', 'd1']);
+    verifier('   les autres restes (autre produit, autre set) : intacts, non marques ; l\'autre carte intacte', [restesApres.find(x => x._id === 'r2').resoluPar, restesApres.find(x => x._id === 'r3').resoluPar, carte(db, 9).liens.idProduct], [undefined, undefined, [9]]);
     r = await lancer(db, { ecrire: true });
     verifier('rejeu apres ecriture : la ligne existe deja, identique -> rien a faire, exit 1, rien de plus ecrit', [r.code, /rien à faire/.test(r.erreurs)], [1, true]);
 
@@ -104,11 +111,31 @@ const carte = (db, id) => db.brut('cartes').find(c => c._id === id), ligneDe = (
     r = await lancer(dbPerd, { ecrire: true });
     verifier('relecture : un $addToSet de la carte qui ne fait rien sans erreur -> exit 1, la relecture le dit', [r.code, /relecture ne retrouve pas/.test(r.erreurs)], [1, true]);
 
-    // ── le geste n'ecrit QUE ce qu'il annonce : $setOnInsert et $addToSet, jamais $set / $pull / $unset / delete ──
+    db = monde(); const dbPerdSet = fakeDb({ sets: db.brut('sets'), cartes_produits: db.brut('cartes_produits'), cartes: db.brut('cartes'), restes: db.brut('restes') }, { perdre: (nom) => nom === 'sets' });
+    r = await lancer(dbPerdSet, { ecrire: true });
+    verifier('relecture : un $set du compteur qui ne fait rien sans erreur -> exit 1', [r.code, /champs du compteur/.test(r.sorties)], [1, true]);
+    db = monde(); const dbPerdReste = fakeDb({ sets: db.brut('sets'), cartes_produits: db.brut('cartes_produits'), cartes: db.brut('cartes'), restes: db.brut('restes') }, { perdre: (nom) => nom === 'restes' });
+    r = await lancer(dbPerdReste, { ecrire: true });
+    verifier('relecture : un marquage de reste qui ne fait rien sans erreur -> exit 1, "non marque resolu"', [r.code, /non marqué résolu/.test(r.sorties)], [1, true]);
+
+    // ── le compteur : le recalcul doit COLLER aux compteurs d'avant, sinon refus (rien d'ecrit) ──
+    db = monde(); av = etat(db);
+    r = await lancer(db, { ecrire: true, classement: CLASSEMENT({ restes: 3 }) });
+    verifier('garde : le classement trouve 3 restes (au lieu de 2 apres la pose) -> le classement a bouge autrement que par la pose : refus, rien d\'ecrit', [r.code, etat(db) === av, /le recalcul donne/.test(r.erreurs)], [1, true, true]);
+    r = await lancer(db, { ecrire: true, classement: CLASSEMENT({ deja: 4 }) });
+    verifier('garde : un produit de plus "deja joint" ailleurs (total 7) -> refus, rien d\'ecrit', [r.code, etat(db) === av], [1, true]);
+    db = monde({ posees: 1 }); av = etat(db);
+    r = await lancer(db, { ecrire: true });
+    verifier('garde : 1 ligne posee par la creation en base mais 2 au compteur -> le compteur ne decrit pas la base : refus, rien d\'ecrit', [r.code, etat(db) === av, /ne décrit pas la base/.test(r.erreurs)], [1, true, true]);
+    db = monde({ ligneExiste: null }); const sansReste = fakeDb({ sets: db.brut('sets'), cartes_produits: db.brut('cartes_produits'), cartes: db.brut('cartes'), restes: [] });
+    r = await lancer(sansReste, { ecrire: true });
+    verifier('aucun reste pour le produit : rien a marquer, la pose se fait quand meme (exit 0, "aucun")', [r.code, /marqués RÉSOLUS.*: aucun/.test(r.sorties)], [0, true]);
+
+    // ── le geste n'ecrit QUE ce qu'il annonce : jamais $unset / $pull / delete ni $push ──
     const gestes = [];
-    db = fakeDb({ sets: [structuredClone(SET)], cartes_produits: monde().brut('cartes_produits'), cartes: monde().brut('cartes'), restes: [] }, { ecrire: (nom, f, u) => gestes.push(`${nom}:${Object.keys(u).join('+')}`) });
+    db = fakeDb({ sets: [structuredClone(SET)], cartes_produits: monde().brut('cartes_produits'), cartes: monde().brut('cartes'), restes: monde().brut('restes') }, { ecrire: (nom, f, u) => gestes.push(`${nom}:${Object.keys(u).join('+')}`) });
     await lancer(db, { ecrire: true });
-    verifier('les seuls operateurs d\'ecriture utilises : $setOnInsert sur cartes_produits, $addToSet sur cartes', gestes, ['cartes_produits:$setOnInsert', 'cartes:$addToSet']);
+    verifier('les seuls operateurs d\'ecriture utilises : $setOnInsert (ligne), $addToSet (carte), $set (compteur), $set (marque du reste)', gestes, ['cartes_produits:$setOnInsert', 'cartes:$addToSet', 'sets:$set', 'restes:$set']);
 
     console.log(`\n${ok} passes, ${ko} en echec`);
     process.exit(ko ? 1 : 0);
