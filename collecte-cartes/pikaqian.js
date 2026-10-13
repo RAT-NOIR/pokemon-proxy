@@ -185,16 +185,63 @@ function decrireAncresSansTuile(html) {
     return r;
 }
 
+// ── LES ANCRES SANS NUMÉRO (lot PQ-SANSNUM, 2026-10-13) — LA définition fermée et LA règle de complétude, définies ICI et nulle part ailleurs (§21 bis) ────────────────────
+// 🔑 DÉCISION DU TESTEUR (2026-10-13 ~19:10 UTC), mot pour mot : « Oui pour la garde des ancres, à cette condition stricte : la page reste complète si tuiles = ancres AVEC numéro, à l'unité
+// près. Les ancres sans numéro sont listées une par une dans le diagnostic (nom, lien), comptées dans le panneau, et jamais importées : un doute est un trou. Aucun autre assouplissement. »
+// Mesuré (récepteur, 18:20 UTC, promo-sv-p) : 758 ancres, 701 tuiles, 57 ancres qui ont une image du dossier de la page, un nom, le code des tuiles, et AUCUN numéro (« 758 of 758 cards »).
+/**
+ * Les ancres SANS NUMÉRO d'une page, par ce que la définition AUTORISE (rien de plus large) : une ancre `/cards/<uuid>` du découpage UNIQUE (`lireAncres`) qui n'est pas une tuile ET qui a
+ * exactement un `<h2>` non vide (le nom), exactement une `<img>` dont la `src` est `images.pikaqian.com/<code de la page>/<son uuid>.webp`, exactement un `<p>` dont le texte est le code que
+ * portent les tuiles de la page — le code de la page, ou `codeDesTuilesPromo(code)` (la fonction unique) pour une page promo — SANS « · numéro ». Toute autre ancre qui n'est pas une tuile
+ * n'en est PAS une : elle compte comme une ancre AVEC numéro manquante, et la page est refusée. Rend [{ nom, lien }] dans l'ordre de la page (nom tronqué comme le diagnostic, lien `/cards/<uuid>`).
+ */
+function ancresSansNumero(html, code) {
+    if (typeof code !== 'string' || !CODE_PK.test(code)) return [];
+    const codeTuiles = codeDesTuilesPromo(code) ?? code, sortie = [];
+    for (const a of lireAncres(html)) {
+        if (a.tuile !== null) continue;   // une tuile n'est jamais « sans numéro »
+        const nombre = re => (a.corps.match(re) || []).length;
+        if (nombre(/<h2[\s>]/gi) !== 1 || nombre(/<img[\s/>]/gi) !== 1 || nombre(/<p[\s>]/gi) !== 1) continue;   // GARDE:pk-sn-forme
+        const nom = a.titre == null || !T.entites(a.titre).trim() ? null : texteAncre(a.titre);
+        if (nom === null) continue;   // GARDE:pk-sn-nom
+        if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;   // GARDE:pk-sn-image
+        const p = /<p[^>]*>([\s\S]{0,400}?)<\/p>/.exec(a.corps)?.[1];
+        if (p == null || sansBalises(p) !== codeTuiles) continue;   // GARDE:pk-sn-code
+        sortie.push({ nom, lien: `/cards/${a.id}` });
+    }
+    return sortie;
+}
+const LIEN_CARTE = /^\/cards\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** Le nombre d'ancres sans numéro qu'une liste écrite (fiche, fichier de page) DÉCLARE valablement : des entrées { nom, lien } de lien `/cards/<uuid>`, distinctes, qui ne sont pas des tuiles. Absente ou mal formée = 0. */
+function compterSansNumero(sansNumero, tuiles) {
+    if (!Array.isArray(sansNumero)) return 0;
+    const idsTuiles = new Set((tuiles || []).map(t => `/cards/${t?.id}`)), vus = new Set();
+    for (const s of sansNumero) if (s && typeof s === 'object' && typeof s.nom === 'string' && typeof s.lien === 'string' && LIEN_CARTE.test(s.lien) && !idsTuiles.has(s.lien)) vus.add(s.lien);
+    return vus.size;
+}
+/**
+ * LA règle de complétude d'une page (§21 bis : le récepteur, l'import et la mesure passive la lisent, jamais une copie) : la page est complète si et seulement si
+ * `tuiles = ancres − ancres sans numéro`, à l'unité près. `ancres` : le nombre d'ancres de cartes de la page ; `tuiles` : les tuiles lues ; `sansNumero` : la liste écrite des ancres sans numéro
+ * (absente = 0, jamais « inconnu = accepté »). Un fichier sans compte d'ancres lisible n'est pas jugé ici (comme avant). Rend { complete, sansNumero (le nombre), motif }.
+ */
+function jugerCompletude({ ancres, tuiles, sansNumero }) {
+    const ts = tuiles || [], sans = compterSansNumero(sansNumero, ts);
+    if (!Number.isInteger(ancres)) return { complete: true, sansNumero: sans, motif: null };
+    if (ts.length !== ancres - sans) return { complete: false, sansNumero: sans, motif: `page partielle ou forme changée : ${ancres} ancres, ${ts.length} tuiles, ${sans} sans numéro` };   // GARDE:pk-completude
+    return { complete: true, sansNumero: sans, motif: null };
+}
+
 /**
  * Ce que la page porte et que la garde n'a pas reconnu — pour que le refus SOIT la mesure : la répartition des codes lus sur les tuiles et des dossiers de leurs images (10 au plus
- * chacune, le reste compté), le titre (h1, title), les annonces d'un nombre de cartes, et les ancres qui ne sont pas des tuiles. Ni HTML ni tuile complète : des comptes et des textes tronqués.
+ * chacune, le reste compté), le titre (h1, title), les annonces d'un nombre de cartes, les ancres qui ne sont pas des tuiles, et — si `code` est donné — les ancres SANS NUMÉRO, listées une par
+ * une (nom, lien). Ni HTML ni tuile complète : des comptes et des textes tronqués.
  */
-function diagnostiquerPage({ html, tuiles }) {
+function diagnostiquerPage({ html, tuiles, code }) {
     const ts = tuiles || [];
     const c = repartir(ts.map(t => t.code), 'code'), dd = repartir(ts.map(t => DOSSIER_IMAGE.exec(String(t.img ?? ''))?.[1] ?? '(hors forme)'), 'dossier');
     const { h1, title } = lireTitre(html);
     const annonces = annoncesDeNombre(html);
-    const r = { codes: c.liste, autresCodes: c.autres, dossiers: dd.liste, autresDossiers: dd.autres, h1: coupe(h1), title: coupe(title), annonces, ancresSansTuile: decrireAncresSansTuile(html) };
+    const r = { codes: c.liste, autresCodes: c.autres, dossiers: dd.liste, autresDossiers: dd.autres, h1: coupe(h1), title: coupe(title), annonces, ancresSansTuile: decrireAncresSansTuile(html), sansNumero: ancresSansNumero(html, code) };
     return { ...r, lignes: lignesDeDiagnostic(r) };
 }
 /** Les lignes d'affichage d'un diagnostic (récepteur, journal, userscript : UN formatage). */
@@ -207,6 +254,8 @@ function lignesDeDiagnostic(r) {
         const ex = a.exemples.map(e => `« ${e.h2 ?? '(sans h2)'} » / « ${e.p ?? '(sans p)'} » / ${e.img ? `img ${e.dossier ?? '(hors forme)'}` : 'sans img'}`).join(' ; ');
         lignes.push(`ancres sans tuile : ${a.n} (sans img ${a.sansImg}, sans h2 ${a.sansH2}, sans « code · numéro » ${a.sansRef}, img sans src ${a.imgSansSrc}, src hors ${HOTE_IMAGES} ${a.srcHorsHote}) ; exemples : ${ex}`);
     }
+    const s = r.sansNumero;
+    if (Array.isArray(s) && s.length > 0) lignes.push(`ancres sans numéro (comptées à part, listées une par une dans le diagnostic, jamais importées) : ${s.length} ; premières : ${s.slice(0, 3).map(x => `« ${x.nom} » ${x.lien}`).join(' ; ')}`);
     return lignes;
 }
 
@@ -443,7 +492,7 @@ function planRetraitPikaqian(cartes) {
 
 module.exports = {
     SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne, PAGE_MAX_OCTETS, IMAGE_MAX_OCTETS, CODE_PK, compterAncresCartes,
-    lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres,
+    lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres, ancresSansNumero, compterSansNumero, jugerCompletude,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
     defi, DEFI

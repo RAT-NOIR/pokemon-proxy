@@ -89,7 +89,7 @@ const EXTRAS = [
 const pageDuJeu = (j, ancresEnPlus = []) => `<!DOCTYPE html><html><head><title>${j.diagnostic.title}</title></head><body><h1>${j.diagnostic.h1}</h1><p>${j.ancres} cards</p>${tuilesDuJeu(j).map(tuileHtml).join('')}${ancresEnPlus.join('')}</body></html>`;
 const juger = (j, ancresEnPlus) => R.jugerPage(JSON.stringify({ url: `https://pikaqian.com/sets/${j.code}`, html: pageDuJeu(j, ancresEnPlus) }));
 const sansTuile = juger(SP, EXTRAS);
-verifier('jugerPage promo-s-p (322 ancres, 242 tuiles) : le verdict passe, GARDE:ancres refuse (322 > 242) — cause 2, non tranchée', [sansTuile.statut, sansTuile.corps.motif, sansTuile.corps.tuilesLues, sansTuile.corps.tuilesAuCode, sansTuile.corps.ancres], [422, 'page partielle ou forme changée : 322 ancres, 242 tuiles', 242, 242, 322]);
+verifier('jugerPage promo-s-p (322 ancres, 242 tuiles) : le verdict passe, GARDE:ancres refuse (322 > 242) — cause 2, non tranchée', [sansTuile.statut, sansTuile.corps.motif, sansTuile.corps.tuilesLues, sansTuile.corps.tuilesAuCode, sansTuile.corps.ancres], [422, 'page partielle ou forme changée : 322 ancres, 242 tuiles, 0 sans numéro', 242, 242, 322]);
 const a = sansTuile.corps.diagnostic?.ancresSansTuile;
 verifier('… et le refus rend le diagnostic des 80 ancres sans tuile : sans <img> 20, sans <h2> 30, sans « code · numéro » 20, <img> sans src 10, src hors images.pikaqian.com 10', [a?.n, a?.sansImg, a?.sansH2, a?.sansRef, a?.imgSansSrc, a?.srcHorsHote], [80, 20, 30, 20, 10, 10]);
 verifier('… 5 exemples au plus, chacun réduit à h2, p, img (oui/non) et dossier ; le premier est une ancre sans image', [a?.exemples?.length, Object.keys(a?.exemples?.[0] ?? {}).sort(), a?.exemples?.[0]], [5, ['dossier', 'h2', 'img', 'p'], { h2: 'Sans image 0', p: 's-p · 0', img: false, dossier: null }]);
@@ -98,7 +98,7 @@ verifier('… et sha256 / octetsHtml sont rendus (la mesure du refus, comme pour
 const complete = juger(SP, []);
 verifier('la même page SANS ancre en trop (242 ancres, 242 tuiles) : 200, la fiche porte les 242 tuiles', [complete.statut, complete.fiche?.tuilesLues, complete.fiche?.tuilesAuCode], [200, 242, 242]);
 const svSans = juger(SV, Array.from({ length: 57 }, (_, i) => code1(i)));
-verifier('jugerPage promo-sv-p (758 ancres, 701 tuiles) : verdict OK puis GARDE:ancres refuse (758 > 701)', [svSans.statut, svSans.corps.motif, svSans.corps.tuilesAuCode], [422, 'page partielle ou forme changée : 758 ancres, 701 tuiles', 701]);
+verifier('jugerPage promo-sv-p (758 ancres, 701 tuiles) : verdict OK puis GARDE:ancres refuse (758 > 701)', [svSans.statut, svSans.corps.motif, svSans.corps.tuilesAuCode], [422, 'page partielle ou forme changée : 758 ancres, 701 tuiles, 0 sans numéro', 701]);
 verifier('… les 57 ancres vides sont comptées sans <img>, sans <h2>, sans « code · numéro »', [svSans.corps.diagnostic?.ancresSansTuile?.n, svSans.corps.diagnostic?.ancresSansTuile?.sansImg, svSans.corps.diagnostic?.ancresSansTuile?.sansH2, svSans.corps.diagnostic?.ancresSansTuile?.sansRef], [57, 57, 57, 57]);
 verifier('jugerPage : une page promo-s-p dont UNE tuile est dans s-p/ est refusée par le VERDICT (pas par les ancres)', R.jugerPage(JSON.stringify({ url: 'https://pikaqian.com/sets/promo-s-p', html: pageDuJeu(SP).replace(`promo-s-p/${UUID(5)}.webp`, `s-p/${UUID(5)}.webp`) })).corps.motif.replace(/\d+/g, 'N'), 'N tuiles sur N portent le code promo-s-p : la page ne désigne pas ce set');
 
@@ -137,7 +137,7 @@ function envoyer(port, chemin, corps) {
         const corps = { url: 'https://pikaqian.com/sets/promo-s-p', html: pageDuJeu(SP, EXTRAS) };
         const r = await envoyer(srv.port, '/apprendre', corps);
         const fichiers = () => (fs.existsSync(dossierRefusees) ? fs.readdirSync(dossierRefusees).sort() : []);
-        verifier('POST de la page promo-s-p (322 ancres, 242 tuiles) : 422 « page partielle », rien dans les fiches apprises', [r.status, r.json?.motif, fs.existsSync(dossier) ? fs.readdirSync(dossier).length : 0], [422, 'page partielle ou forme changée : 322 ancres, 242 tuiles', 0]);
+        verifier('POST de la page promo-s-p (322 ancres, 242 tuiles) : 422 « page partielle », rien dans les fiches apprises', [r.status, r.json?.motif, fs.existsSync(dossier) ? fs.readdirSync(dossier).length : 0], [422, 'page partielle ou forme changée : 322 ancres, 242 tuiles, 0 sans numéro', 0]);
         verifier('… et un fichier refusees/promo-s-p--<date>.json est écrit', [fichiers().length, /^promo-s-p--\d{8}T\d{6}Z(-\d+)?\.json$/.test(fichiers()[0] ?? '')], [1, true]);
         const f = JSON.parse(fs.readFileSync(path.join(dossierRefusees, fichiers()[0]), 'utf8'));
         verifier('… il porte le motif, les comptes et le diagnostic des ancres sans tuile (et aucun HTML)', [f.code, f.ancres, f.tuilesLues, f.tuilesAuCode, f.diagnostic?.ancresSansTuile?.n, JSON.stringify(f).includes('<a ')], ['promo-s-p', 322, 242, 242, 80, false]);
