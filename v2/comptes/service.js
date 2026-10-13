@@ -172,11 +172,18 @@ async function verifierAdresse({ jeton, motDePasse, cfg, maintenant = new Date()
     if (compte.verifie !== false) return refus('inconnu');
     const faute = P.politique(motDePasse, compte.emailCle);
     if (faute) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: faute };
+    // tour 1 (R1 M4) : une chaîne d'espaces seulement (espace, tabulation, blancs Unicode : `trim`) n'est pas un mot de passe choisi ; refusée après la longueur, comme les autres motifs, sans brûler le lien
+    if (!motDePasse.trim()) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: 'espaces-seulement' };
     const hash = await P.hacher(motDePasse);
     if (!(await bruler(v.lien, maintenant))) return refus('inconnu');   // un concurrent l'a brûlé : une seule réponse 200
     let actif;
     try { actif = await accorderOffertes(v.lien.compteId, cfg, maintenant, hash); }
-    catch (e) { await col('liens_email').updateOne({ _id: v.lien._id, utiliseLe: maintenant }, { $set: { utiliseLe: null } }).catch(() => { }); throw e; }
+    catch (e) {
+        // la compensation (rendre le lien) peut échouer à son tour : on le DIT (le nom de l'erreur seul : ni jeton, ni adresse, ni mot de passe, ni message du pilote) ; le lien reste alors brûlé, le titulaire termine par « mot de passe oublié »
+        await col('liens_email').updateOne({ _id: v.lien._id, utiliseLe: maintenant }, { $set: { utiliseLe: null } })
+            .catch(e2 => console.error(`❌ [v2 verification] remise du lien en échec après une panne d'activation (${(e2 && e2.name) || 'Error'}) — lien brûlé, compte inactif`));
+        throw e;
+    }
     if (!actif) return refus('inconnu');
     try { await col('liens_email').updateMany({ compteId: v.lien.compteId, type: 'verification', utiliseLe: null }, { $set: { utiliseLe: maintenant } }); }
     catch (e) { console.error(`❌ [v2 verification] autres liens non brûlés (${(e && e.name) || 'Error'}) — ils ne peuvent plus rien : le compte est déjà vérifié`); }

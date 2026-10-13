@@ -82,6 +82,21 @@ const HEURE = 3600e3;
     const rIn = await confirmer(J.genererJeton(), VICTIME);
     H.v('D6-3i. lien inconnu : 404 CODE_INVALIDE', [rIn.statut, rIn.json.erreur.code], [404, 'CODE_INVALIDE']);
 
+    // ---- 3 bis (tour 1, R1 M4) : un mot de passe fait d'ESPACES seulement est refusé à la confirmation ----
+    {
+        const ce2 = M.nouveauCompte({ email: 'blancs@exemple.fr', emailCle: 'blancs@exemple.fr', motDePasse: null }); await db.col('comptes').insertOne(ce2);
+        const jb = await lienPour(ce2);
+        const blancs = { espaces: ' '.repeat(10), tabulations: '\t'.repeat(10), insecables: ' '.repeat(10), melange: ' \t   \n    ', long: ' '.repeat(200) };
+        const rb2 = {}; for (const [k, v] of Object.entries(blancs)) { const r = await confirmer(jb, v); rb2[k] = [r.statut, r.json.erreur?.code, r.json.erreur?.detail]; }
+        const attenduB = [422, 'MOT_DE_PASSE_FAIBLE', 'espaces-seulement'];
+        H.v('D6-3j. un mot de passe fait seulement d\'espaces, tabulations ou blancs Unicode (10 à 200 caractères) : 422 MOT_DE_PASSE_FAIBLE, detail espaces-seulement', rb2, { espaces: attenduB, tabulations: attenduB, insecables: attenduB, melange: attenduB, long: attenduB });
+        const court = await confirmer(jb, ' '.repeat(9));
+        H.v('D6-3k. 9 espaces : la longueur prime (trop-court)', [court.statut, court.json.erreur?.detail], [422, 'trop-court']);
+        H.v('D6-3l. … ces refus ne brûlent pas le lien et n\'activent rien', [(await db.col('liens_email').findOne({ empreinte: J.empreinte(jb) })).utiliseLe, (await db.col('comptes').findOne({ _id: ce2._id })).verifie], [null, false]);
+        const entoure = await confirmer(jb, '  un-mot-de-passe-entoure  ');
+        H.v('D6-3m. un vrai mot de passe entouré d\'espaces reste admis tel quel (les espaces comptent), 200 et connexion avec lui', [entoure.statut, (await conn('blancs@exemple.fr', '  un-mot-de-passe-entoure  ')).statut, (await conn('blancs@exemple.fr', 'un-mot-de-passe-entoure')).statut], [200, 200, 401]);
+    }
+
     // ---- 4 : concurrence et états croisés ----
     const cr = M.nouveauCompte({ email: 'course@exemple.fr', emailCle: 'course@exemple.fr', motDePasse: null }); await db.col('comptes').insertOne(cr);
     const jr = await lienPour(cr);
@@ -121,6 +136,23 @@ const HEURE = 3600e3;
         const lien = await db.col('liens_email').findOne({ empreinte: J.empreinte(jx) });
         H.v('D6-5a. écriture en panne : 503, le lien n\'est PAS perdu (rejouable), compte inactif sans mot de passe', [frappe, rep.statut, lien.utiliseLe, (await db.col('comptes').findOne({ _id: cx._id })).verifie, (await db.col('comptes').findOne({ _id: cx._id })).motDePasse], [1, 503, null, false, null]);
         H.v('D6-5b. … et le rejeu aboutit', [(await confirmer(jx, VICTIME)).statut, (await conn('panne@exemple.fr', VICTIME)).statut], [200, 200]);
+    }
+
+    // ---- 5 ter (tour 1, R1 M1) : la compensation journalise SA propre panne (une ligne, sans jeton, sans adresse, sans mot de passe) ----
+    {
+        const cy = M.nouveauCompte({ email: 'double-panne@exemple.fr', emailCle: 'double-panne@exemple.fr', motDePasse: null }); await db.col('comptes').insertOne(cy);
+        const jy = await lienPour(cy), MDP_Y = 'mot-de-passe-de-la-double-panne';
+        const proto = Object.getPrototypeOf(db.col('comptes')); const orig = proto.updateOne;
+        proto.updateOne = async function (filtre, maj, ...r) {
+            if (this.collectionName.endsWith('comptes') && filtre && String(filtre._id) === String(cy._id)) throw new Error(`panne activation ${MDP_Y} double-panne@exemple.fr ${jy}`);
+            if (this.collectionName.endsWith('liens_email') && maj && maj.$set && maj.$set.utiliseLe === null) throw new Error(`panne remise ${MDP_Y} double-panne@exemple.fr ${jy}`);
+            return orig.call(this, filtre, maj, ...r);
+        };
+        const trace = []; const o = { error: console.error }; console.error = (...a) => trace.push(a.join(' '));
+        let rep; try { rep = await confirmer(jy, MDP_Y); } finally { proto.updateOne = orig; console.error = o.error; }
+        const lignes = trace.filter(l => /remise du lien/.test(l));
+        H.v('D6-5c. activation ET remise du lien en panne : 503, lien brûlé, compte inactif (état connu), ET la panne de la compensation est journalisée (une ligne)', [rep.statut, (await db.col('liens_email').findOne({ empreinte: J.empreinte(jy) })).utiliseLe instanceof Date, (await db.col('comptes').findOne({ _id: cy._id })).verifie, lignes.length], [503, true, false, 1]);
+        H.v('D6-5d. … la journalisation ne porte ni le jeton, ni l\'adresse, ni le mot de passe, ni le message du pilote', [trace.join('\n').includes(jy), trace.join('\n').toLowerCase().includes('double-panne@'), trace.join('\n').includes(MDP_Y), /panne remise|panne activation/.test(trace.join('\n'))], [false, false, false, false]);
     }
 
     // ---- 5 bis : l'adresse a déjà reçu ses offertes (compte supprimé puis recréé) ; et une activation concurrente par un autre chemin ----

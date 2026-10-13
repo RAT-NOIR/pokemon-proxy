@@ -921,7 +921,7 @@
             }
           },
           "422": {
-            "description": "MOT_DE_PASSE_FAIBLE (detail `trop-court`, `trop-long` ou `egal-a-l-adresse`) : le lien n'est pas consommé, on peut réessayer avec un autre mot de passe.",
+            "description": "MOT_DE_PASSE_FAIBLE (detail `trop-court`, `trop-long`, `egal-a-l-adresse` ou `espaces-seulement`) : le lien n'est pas consommé, on peut réessayer avec un autre mot de passe.",
             "content": {
               "application/json": {
                 "schema": {

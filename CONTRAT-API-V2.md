@@ -591,7 +591,13 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
 ### 1.6 Les comptes (site)
 
 ```json schema=RequeteInscription
-{ "email": "vous@exemple.fr", "motDePasse": "un mot de passe long", "turnstile": "jeton-turnstile-fictif" }
+{ "email": "vous@exemple.fr", "turnstile": "jeton-turnstile-fictif" }
+```
+
+Le mot de passe ne se donne PAS à l'inscription (décision D6, voir §1.6 ter) : il se choisit au clic de confirmation.
+
+```json schema=RequeteVerification
+{ "jeton": "jeton-du-lien-recu-par-courriel", "motDePasse": "un mot de passe choisi à ce moment" }
 ```
 
 ```json schema=RequeteConnexion
@@ -747,15 +753,27 @@ Décision du testeur : « le compte reste inactif jusqu'au clic de confirmation.
 | réponse | quand | à afficher |
 |---|---|---|
 | `200 { success: true, verifie: true }` | lien vivant + mot de passe accepté : compte activé avec CE mot de passe, 25 offertes (une fois par adresse) | « compte activé », puis page de connexion (aucune session n'est ouverte par la confirmation) |
-| `422 MOT_DE_PASSE_FAIBLE`, `detail` ∈ `trop-court` · `trop-long` · `egal-a-l-adresse` | politique refusée ; **le lien n'est pas consommé** | le motif, et le formulaire reste ouvert (réessayer avec le même lien) |
+| `422 MOT_DE_PASSE_FAIBLE`, `detail` ∈ `trop-court` · `trop-long` · `egal-a-l-adresse` · `espaces-seulement` | politique refusée (moins de 10 ou plus de 200 caractères, identique à l'adresse, ou **fait seulement d'espaces, de tabulations ou de blancs Unicode**) ; **le lien n'est pas consommé** | le motif, et le formulaire reste ouvert (réessayer avec le même lien) |
 | `400 ENTREE` | `motDePasse` absent ou non texte | erreur de formulaire (ne devrait pas arriver) |
-| `404 CODE_INVALIDE` | lien inconnu, déjà utilisé, d'un compte déjà vérifié, d'un compte supprimé ou périmé (48 h) | « lien invalide », proposer le renvoi (`renvoyer-verification`) ou une nouvelle inscription |
-| `410 CODE_EXPIRE` | lien échu (24 h) | « lien expiré », proposer le renvoi |
+| `404 CODE_INVALIDE` | lien inconnu, **déjà utilisé** (y compris par un double clic), d'un compte **déjà vérifié**, d'un compte supprimé ou périmé (48 h) | « ce lien a déjà servi ou n'est plus valable. **Si vous avez déjà confirmé votre adresse : connectez-vous** ; si vous avez oublié votre mot de passe : **mot de passe oublié**. » Ne PAS proposer « renvoi » ou « réinscription » comme issue : pour un compte actif ils répondent 202 sans rien envoyer (impasse), et le renvoi est limité à un courriel par adresse et par 24 h. |
+| `410 CODE_EXPIRE` | lien échu (24 h), jamais utilisé | « lien expiré » : proposer le renvoi (`renvoyer-verification`), et, si le renvoi tarde (un courriel par 24 h), **mot de passe oublié** |
 | `403 ORIGINE` · `429 DEBIT` · `503 INDISPONIBLE` | inchangés | inchangés |
 
 **Règles que le site ne doit pas contourner.** Le lien est à usage unique : en cas de clics simultanés un seul gagne (les autres reçoivent `404`) et c'est SON mot de passe qui est posé. Le lien d'un compte déjà vérifié ne change jamais son mot de passe (`404`) : un second lien de renvoi, cliqué après la confirmation, est refusé. Un mot de passe oublié passe par la réinitialisation, inchangée. Le renvoi (`renvoyer-verification`), la limite d'un courriel par adresse et par 24 h, la purge à 48 h et les limites par IP sont **inchangés**.
 
 **Comptes créés avant D6** (non confirmés, avec le hachage du mot de passe d'un tiers) : leur lien de confirmation, ouvert avec un mot de passe, **remplace** ce hachage par celui du clic ; tant qu'ils ne sont pas confirmés ils ne peuvent pas se connecter. Un lien déjà envoyé avant D6 fonctionne donc, à condition que la page envoie le mot de passe. Les comptes déjà confirmés ne changent pas.
+
+**Le jeton du lien vaut désormais « choisir le mot de passe de ce compte » : la page le protège (obligations du site).** Avant D6, un lien divulgué ne donnait rien (le mot de passe existait déjà). Maintenant, qui lit le lien AVANT la victime choisit le mot de passe et prend le compte (neuf, 25 offertes, tout ce que la victime y déposera). La page `/fr/verification` doit donc :
+- être servie avec l'en-tête **`Referrer-Policy: no-referrer`** ;
+- ne charger **AUCUNE ressource tierce** (ni police, ni pixel, ni script d'analytique, ni image distante) : un tiers recevrait l'URL, jeton compris, dans le `Referer` ;
+- **retirer le jeton de l'URL dès sa lecture** (`history.replaceState`) et le garder en mémoire de la page seulement ;
+- ne **jamais journaliser le corps** de la requête de confirmation (ni le mot de passe, ni le jeton), ni côté serveur du site, ni dans un outil d'erreurs ou d'analytique ;
+- désactiver le bouton dès la première soumission : la première réponse fait foi (deux soumissions simultanées donnent un 200 et un 404 ; l'écran ne doit pas afficher l'erreur après le succès).
+
+**Ordre de mise en service : l'API portant D6 AVANT le site qui l'appelle.** Le site ne passe à la nouvelle forme (inscription sans mot de passe, vérification avec mot de passe) qu'après avoir CONSTATÉ en ligne que l'API D6 répond (une requête de vérification sans `motDePasse` doit rendre `400`, et non `404`).
+- *Un NOUVEAU site sur une ANCIENNE API (le cas dangereux, silencieux)* : l'ancienne API ignore le `motDePasse` de la vérification et active le compte avec le hachage du tiers ; la victime croit avoir choisi son mot de passe et le tiers peut se connecter. C'est exactement le trou que D6 ferme, rouvert sans aucune erreur visible.
+- *Un ANCIEN site sur la NOUVELLE API (le cas sûr, bruyant)* : l'inscription répond `422 mot-de-passe-non-attendu` et l'ancienne page de confirmation (sans mot de passe) répond `400 ENTREE` : rien ne s'active, tout échoue visiblement.
+- Interrupteur du site (`API_V2_BRANCHEE`) : seulement après la page de vérification déployée. Un lien de courriel vers une page absente laisse les comptes jamais confirmés (purge à 48 h). En TEST, `V2_URL_VERIFICATION` et `V2_URL_REINIT` doivent pointer vers une page de test, jamais le site de production.
 
 ### 1.7 Le banc réel, et le renvoi du lien de vérification
 
@@ -1031,7 +1049,7 @@ Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, messa
 | `SESSION` | 401 | cookie absent, expiré ou révoqué | site : renvoyer vers la connexion |
 | `ORIGINE` | 403 | `Origin` ou `X-Rat-Market` manquant sur une écriture par cookie | bug du site : jamais montré à l'utilisateur |
 | `IDENTIFIANTS` | 401 | adresse ou mot de passe incorrects | « adresse ou mot de passe incorrect » (le message ne dit jamais si l'adresse existe) |
-| `MOT_DE_PASSE_FAIBLE` | 422 | moins de 10 caractères | afficher la règle |
+| `MOT_DE_PASSE_FAIBLE` | 422 | mot de passe refusé à la confirmation (ou à la réinitialisation) : `detail` ∈ `trop-court` (moins de 10 caractères), `trop-long` (plus de 200), `egal-a-l-adresse`, et, à la confirmation seulement, `espaces-seulement` (D6) | afficher la règle |
 | `CODE_INVALIDE` | 404 | code de liaison ou jeton de lien inconnu ou déjà utilisé | redemander un code / un lien |
 | `CODE_EXPIRE` | 410 | code (10 min), lien (24 h) ou question (24 h) échu | redemander |
 | `DEJA_LIE` | 409 | l'installation est déjà liée | proposer de la délier d'abord |
