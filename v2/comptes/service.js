@@ -49,12 +49,12 @@ async function confirmer(compte, cle, cfg, courrier, nom, maintenant) {
 /**
  * Crée un compte INACTIF + son lien de vérification (l'inscription ne donne aucun porteur : voir `connecter`). Le travail est détaché de la réponse, qui est la même quelle que soit l'adresse.
  * Adresse déjà prise : confirmée = rien ; en attente = le PREMIER inscrit garde la place (ni mot de passe ni rien d'autre ne change) et un courriel part SEULEMENT si la limite le permet ;
- * en attente depuis 48 h ou plus (balayage pas encore passé) = ce compte est purgé à l'instant, l'adresse est libre. Le hachage est calculé dans tous les cas.
+ * en attente depuis 48 h ou plus (balayage pas encore passé) = ce compte est purgé à l'instant, l'adresse est libre. Aucun mot de passe n'est pris (D6) : le temps de travail ne dépend donc d'aucun hachage.
  */
-function inscrire({ email, emailCle, motDePasse, cfg, courrier, maintenant = new Date() }) {
+function inscrire({ email, emailCle, cfg, courrier, maintenant = new Date() }) {
     return detacher('inscription', async () => {
-        const hash = await P.hacher(motDePasse);
-        const compte = M.nouveauCompte({ email, emailCle, motDePasse: hash, now: maintenant });
+        // D6 : aucun secret avant le clic. Le compte naît SANS mot de passe (`null`) ; il est choisi à la confirmation (verifierAdresse). Rien n'est haché ici.
+        const compte = M.nouveauCompte({ email, emailCle, motDePasse: null, now: maintenant });
         for (let tour = 0; ; tour++) {
             try { await col('comptes').insertOne(compte); break; }
             catch (e) {
@@ -134,13 +134,16 @@ async function noterAdresse(cle, cfg, maintenant) {
 /** Marque le compte vérifié et lui accorde les offertes UNE fois. Garde 1 : l'empreinte de l'adresse (un compte supprimé puis recréé ne
  *  reçoit rien) ; garde 2 : `offertesAccordeesLe: null` dans l'écriture elle-même (atomique). Idempotent : on peut le rejouer sans risque.
  *  → false si le compte n'existe plus. */
-async function accorderOffertes(compteId, cfg, maintenant) {
+async function accorderOffertes(compteId, cfg, maintenant, hash = null) {
+    // D6 : avec `hash` (la confirmation par lien), le mot de passe choisi au clic est posé DANS la même écriture atomique que `verifie: true`, et seulement sur un compte encore NON vérifié :
+    // jamais d'état « actif sans mot de passe choisi au clic », jamais un mot de passe remplacé sur un compte déjà actif. Sans `hash` (réinitialisation), le comportement est celui d'avant.
+    const avecMdp = hash !== null;
     const compte = await col('comptes').findOne({ _id: compteId });
     if (!compte) return false;
     if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return false; }   // O3 : un compte non confirmé de 48 h ou plus ne s'active plus (il va être, ou est déjà, purgé)
     const dejaOctroyee = await col('adresses_octroyees').findOne({ empreinte: empreinteAdresse(compte.emailCle, cfg) });
-    const r = dejaOctroyee ? { modifiedCount: 0 } : await col('comptes').updateOne({ _id: compteId, offertesAccordeesLe: null },
-        { $set: { verifie: true, verifieLe: maintenant, offertesAccordeesLe: maintenant }, $inc: { 'solde.accueil': cfg.quotas.accueil } });
+    const r = dejaOctroyee ? { modifiedCount: 0 } : await col('comptes').updateOne({ _id: compteId, offertesAccordeesLe: null, ...(avecMdp ? { verifie: false } : {}) },
+        { $set: { verifie: true, verifieLe: maintenant, offertesAccordeesLe: maintenant, ...(avecMdp ? { motDePasse: hash } : {}) }, $inc: { 'solde.accueil': cfg.quotas.accueil } });
     if (r.modifiedCount === 1) {
         try { await noterAdresse(compte.emailCle, cfg, maintenant); } catch (e) { console.error(`❌ [v2 octroi] empreinte d'adresse non écrite (${(e && e.name) || 'Error'}) — réécrite à la suppression du compte`); }
         try {
@@ -148,20 +151,35 @@ async function accorderOffertes(compteId, cfg, maintenant) {
                 motif: 'octroi-accueil', scanId: null, etat: 'debite', cleIdempotence: `octroi-accueil|${compteId}`, expireLe: new Date(maintenant.getTime() + cfg.retention.octroiJours * 86400e3) });
         } catch (e) { if (e.code !== 11000) console.error(`❌ [v2 octroi] mouvement d'octroi non écrit (${(e && e.name) || 'Error'}) — la réconciliation imprimera l'écart`); }
     } else {
-        await col('comptes').updateOne({ _id: compteId, verifie: false }, { $set: { verifie: true, verifieLe: maintenant } });   // jamais d'octroi hors des deux gardes
+        const r2 = await col('comptes').updateOne({ _id: compteId, verifie: false }, { $set: { verifie: true, verifieLe: maintenant, ...(avecMdp ? { motDePasse: hash } : {}) } });   // jamais d'octroi hors des deux gardes
+        if (avecMdp && r2.modifiedCount !== 1) return false;   // D6 : le compte a été activé (ou supprimé) par un autre chemin entre-temps : ce clic n'a rien posé, il ne répond pas 200
     }
     // O3 : « vrai » ne se dit que d'un compte PRÉSENT et confirmé. La purge peut avoir supprimé le compte entre la lecture et les écritures ci-dessus (elles ne trouvent alors rien et ne
     // lèvent pas) : sans cette relecture, la vérification répondrait 200 pour un compte qui n'existe plus.
     return Boolean(await col('comptes').findOne({ _id: compteId, verifie: true }, { projection: { _id: 1 } }));
 }
 
-/** Vérification de l'adresse. Ordre : lien regardé, octroi (idempotent), PUIS lien brûlé : une panne entre les deux laisse un lien rejouable
- *  et ne perd jamais les 25. */
-async function verifierAdresse({ jeton, cfg, maintenant = new Date() }) {
+/** Confirmation de l'adresse ET choix du mot de passe (D6). Le compte inscrit n'a aucun secret : le mot de passe est celui présenté AVEC le lien.
+ *  Ordre : (1) lien regardé sans être consommé, (2) compte présent, non périmé, encore NON vérifié (un lien de vérification ne change jamais le mot de passe d'un compte actif),
+ *  (3) politique du mot de passe (un refus ne brûle pas le lien), (4) hachage prêt, (5) lien BRÛLÉ (atomique : un seul clic concurrent continue ; le filtre `verifie: false` de l'activation (6) double cette garde : un seul mot de passe est posé même si le brûlage était contourné),
+ *  (6) activation + octroi, mot de passe dans la même écriture que `verifie: true`. Une panne en (6) rend le lien (rejouable) puis relève l'erreur : ni lien perdu, ni compte à demi activé. */
+async function verifierAdresse({ jeton, motDePasse, cfg, maintenant = new Date() }) {
     const v = await lienVivant(jeton, 'verification', maintenant);
     if (v.echec) return refus(v.echec);
-    if (!(await accorderOffertes(v.lien.compteId, cfg, maintenant))) return refus('inconnu');
+    const compte = await col('comptes').findOne({ _id: v.lien.compteId });
+    if (!compte) return refus('inconnu');
+    if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return refus('inconnu'); }
+    if (compte.verifie !== false) return refus('inconnu');
+    const faute = P.politique(motDePasse, compte.emailCle);
+    if (faute) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: faute };
+    const hash = await P.hacher(motDePasse);
     if (!(await bruler(v.lien, maintenant))) return refus('inconnu');   // un concurrent l'a brûlé : une seule réponse 200
+    let actif;
+    try { actif = await accorderOffertes(v.lien.compteId, cfg, maintenant, hash); }
+    catch (e) { await col('liens_email').updateOne({ _id: v.lien._id, utiliseLe: maintenant }, { $set: { utiliseLe: null } }).catch(() => { }); throw e; }
+    if (!actif) return refus('inconnu');
+    try { await col('liens_email').updateMany({ compteId: v.lien.compteId, type: 'verification', utiliseLe: null }, { $set: { utiliseLe: maintenant } }); }
+    catch (e) { console.error(`❌ [v2 verification] autres liens non brûlés (${(e && e.name) || 'Error'}) — ils ne peuvent plus rien : le compte est déjà vérifié`); }
     return { statut: 200 };
 }
 
@@ -174,7 +192,8 @@ async function connecter({ email, motDePasse, cfg, maintenant = new Date() }) {
     if (!compte) { await P.verifierFactice(mdp); return { ok: false }; }
     // O3 : le scrypt est payé AVANT de regarder l'état du compte — un compte non confirmé répond comme un mauvais mot de passe (même calcul, même réponse) ; ni le statut, ni le corps, ni le temps ne disent
     // que l'adresse existe. Écrit par ce qu'il AUTORISE : seul `verifie === true` ouvre une session.
-    const motDePasseBon = await P.verifier(mdp, compte.motDePasse);
+    // D6 : un compte sans mot de passe (non confirmé, `null`) paie le MÊME scrypt qu'une adresse inconnue (`verifierFactice`) : une sortie rapide le distinguerait d'un mauvais mot de passe.
+    const motDePasseBon = compte.motDePasse && compte.motDePasse.algo === 'scrypt' ? await P.verifier(mdp, compte.motDePasse) : await P.verifierFactice(mdp);
     if (!motDePasseBon || compte.verifie !== true) return { ok: false };
     // O3 tour 2 (I-A) : la génération est celle lue AVEC le compte, avant le hachage ci-dessus : une réinitialisation survenue pendant le hachage rend cette session inutilisable
     const session = await S.creerSession(compte._id, maintenant, cfg.comptes.sessionJours, Number.isInteger(compte.generation) ? compte.generation : null);

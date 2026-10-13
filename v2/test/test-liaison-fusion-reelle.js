@@ -15,8 +15,8 @@ const { lireConfig } = require('../config'); const { creerCourrierMemoire } = re
     const SITE = { ...A.SITE }, EXT = { origin: cfg.origines.extension };
     const post = (ch, corps, entetes = {}) => H.appel(srv.url, ch, { methode: 'POST', corps, entetes: { ...A.ip(++n), ...entetes } });
     const MDP = 'un-mot-de-passe-solide';
-    await post('/api/compte/inscription', { email: 'fusion@exemple.fr', motDePasse: MDP, turnstile: 'ok' }, SITE); await A.attendre();
-    await post('/api/compte/verification', { jeton: new URL(courrier.envoyes[0].lien).searchParams.get('jeton') }, SITE);
+    await post('/api/compte/inscription', { email: 'fusion@exemple.fr', turnstile: 'ok' }, SITE); await A.attendre();
+    await post('/api/compte/verification', { jeton: new URL(courrier.envoyes[0].lien).searchParams.get('jeton'), motDePasse: MDP }, SITE);   // D6 : mot de passe choisi au clic
     const compte0 = await db.col('comptes').findOne({ emailCle: 'fusion@exemple.fr' });
     const conn = await post('/api/compte/connexion', { email: 'fusion@exemple.fr', motDePasse: MDP }, SITE); const cookie = String(conn.entetes['set-cookie']).split(';')[0];
     const cr = await post('/api/installation', { libelle: 'Chrome' }, EXT);

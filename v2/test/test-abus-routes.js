@@ -198,7 +198,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             } },
         'POST /api/compte/lier': { auth: 'bearer', base: () => ({ code: 'ABC123' }), nullables: [] },
         'POST /api/compte/delier': { auth: 'bearer', base: () => ({}), nullables: [] },
-        'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP, turnstile: 't' }), nullables: [] },
+        'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [] },   // D6 : l'inscription ne prend plus de mot de passe
         'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP }), nullables: [] },
         'POST /api/compte/deconnexion': { auth: 'site', base: () => ({}), nullables: [] },
         // 202 IDENTIQUE par construction (anti-énumération) : un e-mail de mauvais type n'est ni accepté ni refusé, il ne déclenche RIEN (aucune écriture, aucun courrier). Les objets d'opérateur, eux, sont refusés (400).
@@ -207,7 +207,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/compte/renvoyer-verification': { auth: 'site', base: () => ({ email: mail() }), nullables: [],
             tolere: { email: { variantes: ['tableau', 'nombre', 'null'], ecriture: false, raison: '202 identique par construction (anti-énumération) : aucun traitement, aucune écriture' } } },
         'POST /api/compte/reinitialiser': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },
-        'POST /api/compte/verification': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43) }), nullables: [] },
+        'POST /api/compte/verification': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },   // D6 : lien + mot de passe choisi au clic
         'POST /api/compte/code': { auth: 'session', base: () => ({}), nullables: [] },
         'DELETE /api/compte': { auth: 'session', base: () => ({ motDePasse: 'pas-le-bon-mot-de-passe', renonciation: false }), nullables: [] },
         'DELETE /api/compte/installations/:id': { auth: 'session', base: () => ({}), nullables: [], chemin: () => `/api/compte/installations/${crypto.randomBytes(16).toString('hex')}` },
@@ -594,8 +594,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const signature = r => JSON.stringify({ statut: r.statut, texte: r.texte, entetes: Object.fromEntries(Object.entries(r.entetes).filter(([k]) => !['date', 'content-length'].includes(k)).sort()) });
         // inscription : adresse neuve / adresse déjà prise
         const prise = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: prise, emailCle: prise, motDePasse: hash }), { verifie: true }));
-        const i1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/inscription', entetes: siteH(null), corps: { email: mail(), motDePasse: MDP, turnstile: 't' } });
-        const i2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/inscription', entetes: siteH(null), corps: { email: prise, motDePasse: MDP, turnstile: 't' } });
+        const i1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/inscription', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
+        const i2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/inscription', entetes: siteH(null), corps: { email: prise, turnstile: 't' } });
         await svc.attendre();
         H.v('step 2 : inscription — adresse neuve et adresse déjà prise : 202, MÊMES OCTETS (corps et en-têtes)', [i1.statut, i2.statut, signature(i1) === signature(i2)], [202, 202, true]);
         // mot de passe oublié : adresse connue / inconnue

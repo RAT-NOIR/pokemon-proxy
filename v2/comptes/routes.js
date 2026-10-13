@@ -1,7 +1,7 @@
 'use strict';
 const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('./sessions'); const svc = require('./service');
-const { resoudrePorteur, exigerSession } = require('../porteur'); const liaison = require('../installations/liaison'); const J = require('./jetons'); const P = require('./mots-de-passe'); const { emailCle, estJetable } = require('./email-cle');
+const { resoudrePorteur, exigerSession } = require('../porteur'); const liaison = require('../installations/liaison'); const J = require('./jetons'); const { emailCle, estJetable } = require('./email-cle');
 
 // Pas de use() ici et pas de deps.pret : l'assembleur du socle pose la garde d'index sur la pile de chaque route.
 const HEURE = 3600e3;
@@ -28,17 +28,17 @@ function routesComptes(router, cfg) {
         try {
             const b = req.body;
             if (!objet(b)) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'adresse-invalide' }, 422);
+            // D6 : le mot de passe se choisit AU CLIC de confirmation. Un champ `motDePasse` à l'inscription est REFUSÉ (jamais ignoré en silence : l'utilisateur croirait avoir choisi un secret ; jamais lu, jamais haché, jamais stocké).
+            // Le refus ne dépend que du corps de la requête, jamais de l'adresse : la réponse reste la même pour toutes les adresses.
+            if (Object.prototype.hasOwnProperty.call(b, 'motDePasse')) return repondreErreur(res, 'ENTREE', 'Le mot de passe se choisit à la confirmation', { detail: 'mot-de-passe-non-attendu' }, 422);
             const cle = typeof b.email === 'string' && b.email.length <= 254 ? emailCle(b.email) : null;
             if (!cle) return repondreErreur(res, 'ENTREE', 'Adresse invalide', { detail: 'adresse-invalide' }, 422);
             if (estJetable(cle.split('@')[1])) return repondreErreur(res, 'ENTREE', 'Adresse refusée', { detail: 'adresse-refusee' }, 422);
-            if (typeof b.motDePasse !== 'string') return entreeInvalide(res);
-            const faute = P.politique(b.motDePasse, cle);
-            if (faute) return repondreErreur(res, 'MOT_DE_PASSE_FAIBLE', 'Mot de passe trop faible', { detail: faute });
             const courrier = courrierDe(); if (!courrier) return indispo(res);   // pas de compte qu'on ne saurait pas vérifier
             const d = await defi(cfg, b, req.ip);
             if (d === 'indispo') return indispo(res);
             if (d === 'refuse') return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
-            svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, motDePasse: b.motDePasse, cfg, courrier });   // détaché : la réponse ne dépend pas de l'adresse
+            svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, cfg, courrier });   // détaché : la réponse ne dépend pas de l'adresse
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 inscription] ${nomErreur(e)}`); return indispo(res); }
     });
@@ -140,8 +140,11 @@ function routesComptes(router, cfg) {
 
     router.post('/api/compte/verification', ...site, parIp('verification-ip', cfg.limites.verificationIpHeure), async (req, res) => {
         try {
-            const r = await svc.verifierAdresse({ jeton: objet(req.body) ? req.body.jeton : undefined, cfg });
-            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'CODE_EXPIRE' ? 'Lien expiré' : 'Lien invalide');
+            // D6 : le lien ET le mot de passe choisi à ce moment (le compte n'a aucun secret avant).
+            const b = objet(req.body) ? req.body : {};
+            if (typeof b.motDePasse !== 'string') return entreeInvalide(res);
+            const r = await svc.verifierAdresse({ jeton: b.jeton, motDePasse: b.motDePasse, cfg });
+            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'MOT_DE_PASSE_FAIBLE' ? 'Mot de passe trop faible' : r.code === 'CODE_EXPIRE' ? 'Lien expiré' : 'Lien invalide', r.detail ? { detail: r.detail } : {});
             return res.status(200).json({ success: true, verifie: true });
         } catch (e) { console.error(`❌ [v2 verification] ${nomErreur(e)}`); return indispo(res); }
     });

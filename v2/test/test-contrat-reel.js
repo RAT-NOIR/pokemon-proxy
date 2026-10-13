@@ -403,28 +403,31 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     let cookie, jetonLien, compteC, jetonInst;
     {
         const email = 'a.b+promo@gmail.com';
-        await postS('POST /api/compte/inscription', 'adresse neuve', 202, '/api/compte/inscription', { email, motDePasse: MDP, turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'adresse neuve', 202, '/api/compte/inscription', { email, turnstile: 't' });
         await attendreCourrier();
-        await postS('POST /api/compte/inscription', 'même adresse sous une autre écriture (202 neutre)', 202, '/api/compte/inscription', { email: 'ab@gmail.com', motDePasse: MDP, turnstile: 't' });
-        await postS('POST /api/compte/inscription', 'adresse invalide', 422, '/api/compte/inscription', { email: 'pas-une-adresse', motDePasse: MDP, turnstile: 't' });
-        await postS('POST /api/compte/inscription', 'mot de passe trop faible', 422, '/api/compte/inscription', { email: 'faible@exemple.fr', motDePasse: 'abc', turnstile: 't' });
-        await postS('POST /api/compte/inscription', 'motDePasse de mauvais type', 400, '/api/compte/inscription', { email: 'x@exemple.fr', motDePasse: 12, turnstile: 't' });
-        await postS('POST /api/compte/inscription', 'sans Origin du site', 403, '/api/compte/inscription', { email: 'y@exemple.fr', motDePasse: MDP }, ip());
-        const mem = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/inscription', 'sous le plafond par IP', 202, '/api/compte/inscription', { email: `plaf${k}@exemple.fr`, motDePasse: MDP, turnstile: 't' }, { ...siteH(null), ...mem });
-        await postS('POST /api/compte/inscription', 'plafond par IP atteint', 429, '/api/compte/inscription', { email: 'plaf9@exemple.fr', motDePasse: MDP, turnstile: 't' }, { ...siteH(null), ...mem });
+        await postS('POST /api/compte/inscription', 'même adresse sous une autre écriture (202 neutre)', 202, '/api/compte/inscription', { email: 'ab@gmail.com', turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'adresse invalide', 422, '/api/compte/inscription', { email: 'pas-une-adresse', turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'mot de passe fourni à l\'inscription (D6 : refusé, il se choisit à la confirmation)', 422, '/api/compte/inscription', { email: 'faible@exemple.fr', motDePasse: 'abc', turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'motDePasse de mauvais type (refusé de même)', 422, '/api/compte/inscription', { email: 'x@exemple.fr', motDePasse: 12, turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'sans Origin du site', 403, '/api/compte/inscription', { email: 'y@exemple.fr' }, ip());
+        const mem = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/inscription', 'sous le plafond par IP', 202, '/api/compte/inscription', { email: `plaf${k}@exemple.fr`, turnstile: 't' }, { ...siteH(null), ...mem });
+        await postS('POST /api/compte/inscription', 'plafond par IP atteint', 429, '/api/compte/inscription', { email: 'plaf9@exemple.fr', turnstile: 't' }, { ...siteH(null), ...mem });
         await attendreCourrier();
         jetonLien = new URL(courrier.envoyes.find(e => e.type === 'verification').lien).searchParams.get('jeton');
-        await postS('POST /api/compte/verification', 'lien inconnu', 404, '/api/compte/verification', { jeton: 'x'.repeat(40) });
-        await postS('POST /api/compte/verification', 'sans Origin du site', 403, '/api/compte/verification', { jeton: jetonLien }, ip());
+        await postS('POST /api/compte/verification', 'lien inconnu', 404, '/api/compte/verification', { jeton: 'x'.repeat(40), motDePasse: MDP });
+        await postS('POST /api/compte/verification', 'sans Origin du site', 403, '/api/compte/verification', { jeton: jetonLien, motDePasse: MDP }, ip());
         // un lien expiré : ceux de « plaf0 »
         const plaf = await raw('comptes').findOne({ emailCle: 'plaf0@exemple.fr' });
         const lienExpire = await raw('liens_email').findOne({ compteId: plaf._id });
         await raw('liens_email').updateOne({ _id: lienExpire._id }, { $set: { expireLe: new Date(Date.now() - 1000) } });
         const lienPlaf = courrier.envoyes.find(e => e.email === 'plaf0@exemple.fr');
-        await postS('POST /api/compte/verification', 'lien expiré', 410, '/api/compte/verification', { jeton: new URL(lienPlaf.lien).searchParams.get('jeton') });
-        await postS('POST /api/compte/verification', 'lien valide (25 offertes)', 200, '/api/compte/verification', { jeton: jetonLien });
-        const memV = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/verification', 'sous le plafond', 404, '/api/compte/verification', { jeton: 'y'.repeat(40) }, { ...siteH(null), ...memV });
-        await postS('POST /api/compte/verification', 'plafond par IP atteint', 429, '/api/compte/verification', { jeton: 'y'.repeat(40) }, { ...siteH(null), ...memV });
+        await postS('POST /api/compte/verification', 'lien expiré', 410, '/api/compte/verification', { jeton: new URL(lienPlaf.lien).searchParams.get('jeton'), motDePasse: MDP });
+        await postS('POST /api/compte/verification', 'sans mot de passe (D6 : requis)', 400, '/api/compte/verification', { jeton: jetonLien });
+        await postS('POST /api/compte/verification', 'mot de passe de mauvais type', 400, '/api/compte/verification', { jeton: jetonLien, motDePasse: 12 });
+        await postS('POST /api/compte/verification', 'mot de passe trop faible (le lien n\'est pas brûlé)', 422, '/api/compte/verification', { jeton: jetonLien, motDePasse: 'abc' });
+        await postS('POST /api/compte/verification', 'lien valide + mot de passe choisi (25 offertes)', 200, '/api/compte/verification', { jeton: jetonLien, motDePasse: MDP });
+        const memV = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/verification', 'sous le plafond', 404, '/api/compte/verification', { jeton: 'y'.repeat(40), motDePasse: MDP }, { ...siteH(null), ...memV });
+        await postS('POST /api/compte/verification', 'plafond par IP atteint', 429, '/api/compte/verification', { jeton: 'y'.repeat(40), motDePasse: MDP }, { ...siteH(null), ...memV });
         // connexion
         const conn = await postS('POST /api/compte/connexion', 'identifiants justes', 200, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP });
         cookie = /rm_session=[^;]+/.exec(conn.entetes['set-cookie'] || '')?.[0];
@@ -720,8 +723,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/solde': { chemin: '/api/solde', corps: {}, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'GET /api/compte': { chemin: '/api/compte' },
             'DELETE /api/compte': { chemin: '/api/compte', corps: { motDePasse: MDP } },
-            'POST /api/compte/inscription': { chemin: '/api/compte/inscription', corps: { email: 'a@exemple.fr', motDePasse: MDP } },
-            'POST /api/compte/verification': { chemin: '/api/compte/verification', corps: { jeton: 'x' } },
+            'POST /api/compte/inscription': { chemin: '/api/compte/inscription', corps: { email: 'a@exemple.fr' } },
+            'POST /api/compte/verification': { chemin: '/api/compte/verification', corps: { jeton: 'x', motDePasse: MDP } },
             'POST /api/compte/connexion': { chemin: '/api/compte/connexion', corps: { email: 'a@exemple.fr', motDePasse: MDP } },
             'POST /api/compte/deconnexion': { chemin: '/api/compte/deconnexion', corps: {} },
             'POST /api/compte/mot-de-passe-oublie': { chemin: '/api/compte/mot-de-passe-oublie', corps: { email: 'a@exemple.fr' } },

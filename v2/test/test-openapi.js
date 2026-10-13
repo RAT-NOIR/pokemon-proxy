@@ -141,7 +141,8 @@ H.v('confiance de l\'état (une chaîne de liste fermée, jamais un score)', dif
 H.v('devises : schéma = cfg.devises', diff(aller(S, 'RequeteIdentifier.properties.devise.enum'), cfg.devises), { enTrop: [], manquants: [] });
 H.v('imageUrls : au plus cfg.images.imageUrlsMax', aller(S, 'RequeteIdentifier.properties.imageUrls.maxItems'), cfg.images.imageUrlsMax);
 H.v('libellé d\'installation : au plus cfg.comptes.libelleMax', aller(S, 'RequeteInstallation.properties.libelle.maxLength'), cfg.comptes.libelleMax);
-H.v('mot de passe : cfg.comptes.motDePasseMin caractères au moins', aller(S, 'RequeteInscription.properties.motDePasse.minLength'), cfg.comptes.motDePasseMin);
+H.v('mot de passe (choisi à la confirmation, D6) : cfg.comptes.motDePasseMin caractères au moins', aller(S, 'RequeteVerification.properties.motDePasse.minLength'), cfg.comptes.motDePasseMin);
+H.v('D6 : l\'inscription ne déclare plus de mot de passe', aller(S, 'RequeteInscription.properties.motDePasse'), undefined);
 H.v('code de liaison : cfg.comptes.codeLongueur caractères [A-Z0-9]', aller(S, 'ReponseCodeLiaison.properties.code.pattern'), `^[A-Z0-9]{${cfg.comptes.codeLongueur}}$`);
 H.v('lot : lectureLiveMax est un entier', aller(S, 'Lot.properties.lectureLiveMax.type'), 'integer');
 // images servies : l'hôte exact du bucket public ou rat-market.fr, jamais autre chose (CONTRAT-2 règle 6)

@@ -15,8 +15,8 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
     const ESSAIS = 20; const t = { insNouvelle: [], insExistante: [], oubliConnu: [], oubliInconnu: [], renvoiConnu: [], renvoiInconnu: [] };
     await mesure('/api/compte/mot-de-passe-oublie', { email: 'existe@exemple.fr' });   // chauffe
     for (let i = 0; i < ESSAIS; i++) {
-        t.insNouvelle.push((await mesure('/api/compte/inscription', { email: `neuf${i}@exemple.fr`, motDePasse: MDP, turnstile: 't' })).ms);
-        t.insExistante.push((await mesure('/api/compte/inscription', { email: 'existe@exemple.fr', motDePasse: MDP, turnstile: 't' })).ms);
+        t.insNouvelle.push((await mesure('/api/compte/inscription', { email: `neuf${i}@exemple.fr`, turnstile: 't' })).ms);
+        t.insExistante.push((await mesure('/api/compte/inscription', { email: 'existe@exemple.fr', turnstile: 't' })).ms);
         t.oubliConnu.push((await mesure('/api/compte/mot-de-passe-oublie', { email: 'existe@exemple.fr' })).ms);
         t.oubliInconnu.push((await mesure('/api/compte/mot-de-passe-oublie', { email: `inconnu${i}@exemple.fr` })).ms);
         // O3 (tour 1, I-4) : le renvoi — adresse EN ATTENTE dont le courriel est libre (la limite est vidée : le courrier lent PART à chaque essai) contre adresse inconnue
@@ -37,7 +37,7 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
     // une panne du pilote est journalisée sans adresse ni message brut
     const trace = []; const orig = console.error; console.error = (...a) => trace.push(a.join(' '));
     A.registre.fournir('courrier', { envoyerVerification: async () => { throw new Error('Brevo 401 pour secret@exemple.fr'); }, envoyerReinitialisation: async () => { throw new Error('Brevo 401 pour autre@exemple.fr'); } });
-    await mesure('/api/compte/inscription', { email: 'secret@exemple.fr', motDePasse: MDP, turnstile: 't' });
+    await mesure('/api/compte/inscription', { email: 'secret@exemple.fr', turnstile: 't' });
     // B8 (O1) : la première adresse a épuisé sa borne par heure ; la panne du pilote se prouve sur une AUTRE adresse connue (même pilote, même chemin), qui a encore son droit à un courrier
     await db.col('comptes').insertOne(M.nouveauCompte({ email: 'autre@exemple.fr', emailCle: 'autre@exemple.fr', motDePasse: await P.hacher(MDP) }));
     await mesure('/api/compte/mot-de-passe-oublie', { email: 'autre@exemple.fr' });
