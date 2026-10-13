@@ -84,6 +84,12 @@ async function semer(mode) {                              // 'double' (A, B) | '
 }
 const journalDe = async scanId => { for (let k = 0; k < 40; k++) { const l = await raw('journal_scans').findOne({ _id: new mongoose.Types.ObjectId(scanId) }); if (l) return l; await attendre(150); } return null; };
 // une clé d'idempotence DÉJÀ prise par une requête en cours (le seul moyen honnête de fabriquer le 429 DEBIT « requête identique en cours » sans course)
+// Pose le compteur de la fenêtre horaire COURANTE d'un limiteur par porteur (v2/transport/limites.js : clé `${nom}:${type}:${id}|${début de fenêtre}`) à son plafond : jouer le plafond
+// de 600 ou 1 200 requêtes une à une n'apporterait rien de plus que la 429 elle-même, que le serveur réel rend.
+async function plafonner(nom, type, id, n) {
+    const debut = Math.floor(Date.now() / 3600e3) * 3600e3;
+    await raw('limites').insertOne({ cle: `${nom}:${type}:${id}|${debut}`, n, expireLe: new Date(debut + 7200e3) });
+}
 async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const { empreinteDuCorps } = require('../transport/idempotence');
     await raw('idempotence').insertOne({ cle: `${porteur}|${routeIdem}|${valeur}`, empreinteCorps: empreinteDuCorps(corps), etat: 'en-cours', proprietaire: 'banc', creeLe: new Date(), expireLe: new Date(Date.now() + 120000) });
@@ -243,6 +249,9 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const ab = await compte({ abonnement: { actif: true, paliers: 1, expireLe: new Date(Date.now() + 20 * 86400e3), restant: 80 } }); const la = await instLiee(ab);
         await jouer(U, 'POST /api/solde', 'compte avec abonnement', 200, '/api/solde', { corps: {}, entetes: extH(la.jeton) });
         await jouer(U, 'POST /api/solde', 'jeton inconnu', 401, '/api/solde', { corps: {}, entetes: extH('b'.repeat(32)) });
+        // MOYENS-B1 (O4) : le plafond horaire de l'installation (1 200), compteur posé au plafond (voir plafonner)
+        const xp = await inst(3); await plafonner('solde', 'installation', xp.i._id, 1200);
+        await jouer(U, 'POST /api/solde', 'plafond horaire par porteur atteint (DEBIT, Retry-After)', 429, '/api/solde', { corps: {}, entetes: extH(xp.jeton) });
     }
     // comptes côté enfant : lecture, connexion par un VRAI hachage, session -> scanner (la vraie chaîne, le data-URL rejoué)
     {
@@ -300,7 +309,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler(LOTS, cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        app.use(assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
         return H.serveur(app);
     };
     const sv = await monter();
@@ -499,6 +508,9 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const gmu = await jouer(V, 'GET /api/compte', 'compte à PLUSIEURS installations', 200, '/api/compte', { entetes: siteH(cmu.cookie) });
         H.v('   … trois installations servies', gmu.json && gmu.json.installations.length, 3);
         await jouer(V, 'GET /api/compte', 'sans session', 401, '/api/compte', { entetes: ip() });
+        // MOYENS-B1 (O4) : le plafond horaire du compte (600). Le compteur de la fenêtre courante est posé AU PLAFOND (la frontière d'heure est évitée en tête de banc) : la requête suivante est la 601e.
+        const cpl = await compte(); await plafonner('compte-lecture', 'compte', cpl.c._id, 600);
+        await jouer(V, 'GET /api/compte', 'plafond horaire par compte atteint (DEBIT, Retry-After)', 429, '/api/compte', { entetes: siteH(cpl.cookie) });
         const idLiee = (await raw('installations').findOne({ compteId: compteC._id }))._id;
         const autreC = await compte(); const autreI = await instLiee(autreC);
         await jouer(V, 'DELETE /api/compte/installations/{id}', 'installation d\'un autre compte (404, rien révélé)', 404, `/api/compte/installations/${autreI.i._id}`, { entetes: siteH(cookie) });
@@ -781,7 +793,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const express2 = require('express');
     const servies = (function () {
         const out = new Set(); const app = express2(); for (const l of LOTS) { l.enTete(app, cfg); }
-        app.use(assembler(LOTS, cfg, { gererIdentifier: chaine }));
+        app.use(assembler(LOTS, cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine }));
         (function lire(pile) { for (const l of pile || []) { if (l.route) for (const m of Object.keys(l.route.methods)) out.add(`${m.toUpperCase()} ${l.route.path.replace(/:([A-Za-z]+)/g, '{$1}')}`); else if (l.name === 'router' && l.handle && l.handle.stack) lire(l.handle.stack); } })(app._router && app._router.stack);
         return out;
     })();

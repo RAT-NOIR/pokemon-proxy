@@ -367,7 +367,7 @@
             }
           },
           "429": {
-            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure pour ce porteur (plafond `V2_REPONSE_HEURE`, posé sans mesure d'usage réel).",
             "content": {
               "application/json": {
                 "schema": {
@@ -508,7 +508,7 @@
             }
           },
           "429": {
-            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`) : DEBIT aussi au-delà de 600 requêtes par heure pour ce porteur (plafond `V2_RETOUR_LIVE_HEURE`, posé sans mesure d'usage réel).",
             "content": {
               "application/json": {
                 "schema": {
@@ -558,6 +558,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseSolde"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plus de 1 200 requêtes par heure pour ce porteur (plafond `V2_SOLDE_HEURE`, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
                 }
               }
             }
@@ -637,6 +655,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plus de 600 requêtes par heure pour ce compte (plafond `V2_COMPTE_HEURE`, posé sans mesure d'usage réel ; avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
                 }
               }
             }
@@ -3218,7 +3254,8 @@
               "pas-une-carte",
               "hors-catalogue",
               "plusieurs-cartes-non-separees",
-              "panne-lecture"
+              "panne-lecture",
+              "impression-indeterminee"
             ]
           },
           "etat": {
@@ -3558,6 +3595,7 @@
                   "hors-catalogue",
                   "plusieurs-cartes-non-separees",
                   "panne-lecture",
+                  "impression-indeterminee",
                   null
                 ]
               }

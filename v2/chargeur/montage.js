@@ -26,13 +26,14 @@ function demarrerPourConfig(cfg, { env = process.env, client = null, journal: jo
         return null;
     }
     if (env.BANC_ISOLE === '1') return null;                                              // un banc ne télécharge ni ne lit cartes
-    if (v.source === 'calcul') return I.demarrerChargeur({ env, ...duChargeur });
+    const alerte = require('./alerte-archive').ecrire;                                    // JUMEAU-V2 : l'alerte « archive absente / sans colonne / > 48 h » est écrite en base (collection `alertes` de l'API)
+    if (v.source === 'calcul') return I.demarrerChargeur({ env, ...duChargeur, alerte });
     const R2 = require('./r2-prive');
     const c = R2.configLecture(env);
     if (!c.ok) { journal(`ℹ️ [v2 chargeur] sans visuel (voie fichier fermée par défaut) : ${c.raison}`); return null; }
     if (!require('./scellement').secretValide(c.c.hmac)) { journal('ℹ️ [v2 chargeur] sans visuel : V2_VISUELS_HMAC trop court (32 caractères au moins)'); return null; }
     let cl = client;
     const lire = () => { if (!cl) cl = R2.creerClient(c.c); return R2.lireObjet({ client: cl, bucket: c.c.bucket, objet: c.c.objet, max: PLAFONDS.archive + 64 }); };
-    return I.demarrerChargeur({ env, ...duChargeur, catalogue: async () => new Map(), pret: async () => true, executer: I.executerDepuisFichier({ lireFichier: lire, secret: c.c.hmac }) });
+    return I.demarrerChargeur({ env, ...duChargeur, alerte, catalogue: async () => new Map(), pret: async () => true, executer: I.executerDepuisFichier({ lireFichier: lire, secret: c.c.hmac }) });
 }
 module.exports = { demarrerPourConfig };

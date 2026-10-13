@@ -10,7 +10,7 @@ H.v('essais', c.quotas.essai, 3);
 H.v('accueil', c.quotas.accueil, 25);
 H.v('hebdo', c.quotas.hebdo, 2);
 H.v('ordre des poches par défaut', c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
-H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30, sansPrix: 5, lotTropGrand: 10 });
+H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30, sansPrix: 5, lotTropGrand: 10, jumeaux: 20 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
 H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
 H.v('idempotence : au plus 10 min', c.retention.idempotenceBattementMaxMinutes, 10);
@@ -48,6 +48,13 @@ let l2 = null; try { lireConfig({ V2_ORDRE_POCHES: 'essai,gratuit' }); } catch (
 H.vrai('poche inconnue dans l\'ordre lève', /poche inconnue/.test(l2 || ''));
 let l3 = null; try { lireConfig({ V2_ORDRE_POCHES: 'essai,accueil,accueil' }); } catch (e) { l3 = e.message; }
 H.vrai('doublon dans l\'ordre lève', /doublon/.test(l3 || ''));
+// O2 (MOYENS-B1) : l'ordre doit contenir `achete` ET `abonnement` — un sous-ensemble rendrait QUOTA à qui a des crédits payés
+const refusOrdre = o => { try { lireConfig({ V2_ORDRE_POCHES: o }); return null; } catch (e) { return e.message; } };
+H.vrai('O2 : `essai` seul est refusé (configuration invalide, nomme achete)', /configuration invalide/.test(refusOrdre('essai') || '') && /achete/.test(refusOrdre('essai')));
+H.vrai('O2 : `essai,accueil,hebdo,achete` (sans abonnement) est refusé et nomme abonnement', /configuration invalide/.test(refusOrdre('essai,accueil,hebdo,achete') || '') && /abonnement/.test(refusOrdre('essai,accueil,hebdo,achete')));
+H.vrai('O2 : `essai,accueil,hebdo,abonnement` (sans achete) est refusé', /configuration invalide/.test(refusOrdre('essai,accueil,hebdo,abonnement') || ''));
+H.v('O2 : l\'ordre complet est accepté, dans un autre ordre aussi', [refusOrdre('essai,accueil,hebdo,abonnement,achete'), lireConfig({ V2_ORDRE_POCHES: 'achete,abonnement,hebdo,accueil,essai' }).ordrePoches], [null, ['achete', 'abonnement', 'hebdo', 'accueil', 'essai']]);
+H.v('O2 : `achete,abonnement` suffit (essai, accueil, hebdo peuvent manquer)', refusOrdre('achete,abonnement'), null);
 // l'origine "extension de développement" n'est lue QUE sur test_scratch
 H.v('extension dev ignorée en production', lireConfig({ V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abc', MONGODB_BASE: 'test' }).origines.extensionDev, null);
 H.v('extension dev lue sur test_scratch', lireConfig({ V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abc', MONGODB_BASE: 'test_scratch' }).origines.extensionDev, 'chrome-extension://abc');

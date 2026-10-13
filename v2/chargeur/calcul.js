@@ -5,7 +5,7 @@ const { creerConstructeur } = require('./version');
 
 async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a) }) {
     const b = creerConstructeur();
-    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, sink: { entree: e => b.entree(e), lien: (s, c, i) => b.lien(s, c, i) } });
+    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, sink: { entree: e => b.entree(e), lien: (s, c, i) => b.lien(s, c, i), jumeau: j => b.jumeau(j) } });
     const e = b.etat();
     const comptes = { sets: sets.length, cartes: docs.length, produits: lignes.length, catalogue: metacarte.size, visuels: e.admises, refusees: e.refusees, doublons: e.doublons, doublonsContradictoires: e.doublonsContradictoires, motifs: e.motifs, fichesLiees: e.fiches,
         setsAvecLiens: r.denominateurs.setsAvecLiens, produitsLies: r.denominateurs.produitsLies };

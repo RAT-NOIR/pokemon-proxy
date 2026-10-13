@@ -85,11 +85,13 @@ module.exports = {
             resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
-        router.post('/api/identifier/reponse', resoudrePorteur(cfg), exigerInstallation, idempotente('reponse', { obligatoire: false }, cfg), traiterReponse(cfg, deps));
+        // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
+        const parPorteurDe = (nom, max) => L.limiteur({ nom, max, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+        router.post('/api/identifier/reponse', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('reponse', cfg.limites.reponseParPorteurHeure), idempotente('reponse', { obligatoire: false }, cfg), traiterReponse(cfg, deps));
         // Le prix lu en direct : avec Bearer seulement. Même remarque sur la clé (la garde « un second retour est refusé » est déjà un rejeu sûr).
-        router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, idempotente('retour-live', { obligatoire: false }, cfg), traiterRetourLive(cfg, deps));
+        router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('retour-live', cfg.limites.retourLiveParPorteurHeure), idempotente('retour-live', { obligatoire: false }, cfg), traiterRetourLive(cfg, deps));
         // Le solde : avec Bearer seulement (lecture pure, aucun débit).
-        router.post('/api/solde', siBearer, resoudrePorteur(cfg), exigerInstallation, async (req, res) => {
+        router.post('/api/solde', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('solde', cfg.limites.soldeParPorteurHeure), async (req, res) => {
             let solde;
             try { solde = await registre.obtenir('argent').solde(req.v2.porteur); }
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }

@@ -150,7 +150,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         for (const l of LOTS) l.enTete(app, cfgApp);
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        const routeur = assembler(LOTS, cfgApp, { gererIdentifier: chaine, gererRetourLive: retourLive, ...deps });
+        const routeur = assembler(LOTS, cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: retourLive, ...deps });
         app.use(routeur); app.use(gestionnaireFinal);
         const s = await H.serveur(app);
         return { ...s, routeur };
@@ -748,7 +748,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_TURNSTILE: [c => c.turnstile, 'on', 'peut-etre', 'leve'],
             V2_ESSAIS: [c => c.quotas.essai, 3, 'abc', 'leve'], V2_ACCUEIL: [c => c.quotas.accueil, 25, 'abc', 'leve'], V2_HEBDO: [c => c.quotas.hebdo, 2, 'abc', 'leve'], V2_ABO_MENSUEL: [c => c.quotas.aboMensuel, 100, 'abc', 'leve'],
             V2_PLAFOND_PANNES: [c => c.plafonds.panne, 5, 'abc', 'leve'], V2_PLAFOND_QUESTIONS: [c => c.plafonds.question, 30, 'abc', 'leve'], V2_LECTURE_LIVE_MAX: [c => c.lot.lectureLiveMax, 5, 'abc', 'leve'],
+            V2_JUMEAUX_REMBOURSES_JOUR: [c => c.plafonds.jumeaux, 20, 'abc', 'leve'],
             V2_SANS_PRIX_JOUR: [c => c.plafonds.sansPrix, 5, 'abc', 'leve'], V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
+            V2_COMPTE_HEURE: [c => c.limites.compteParPorteurHeure, 600, '0', 'leve'], V2_SOLDE_HEURE: [c => c.limites.soldeParPorteurHeure, 1200, '0', 'leve'],      // MOYENS-B1 (O4) : plafonds par porteur, posés sans mesure d'usage réel
+            V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
             V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 30 jours au plus

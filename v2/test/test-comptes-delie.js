@@ -16,7 +16,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     let appelsChaine = 0; const chaine = async () => { appelsChaine++; throw new Error('chaîne atteinte'); };
     const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(M.verifierIndex);
-    app.use(assembler([require('../argent/monter'), require('../installations/monter'), require('../comptes/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { gererIdentifier: chaine }));
+    app.use(assembler([require('../argent/monter'), require('../installations/monter'), require('../comptes/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine }));
     const srv = await H.serveur(app); let n = 0; const ip = () => ({ 'x-forwarded-for': `10.7.${Math.floor(++n / 250)}.${n % 250 + 1}` });
     const SITE = { origin: cfg.origines.site, 'x-rat-market': '1' }, EXT = { origin: cfg.origines.extension };
     const post = (ch, corps, entetes = {}) => H.appel(srv.url, ch, { methode: 'POST', corps, entetes: { ...SITE, ...ip(), ...entetes } });

@@ -102,7 +102,9 @@ function routesComptes(router, cfg) {
             return res.status(200).json({ success: true, code: r.code, expire: r.expire });
         } catch (e) { console.error(`❌ [v2 code] ${nomErreur(e)}`); return indispo(res); }
     });
-    router.get('/api/compte', resoudrePorteur(cfg), exigerSession, async (req, res) => {
+    // O4 : un plafond horaire par porteur (la session), après la résolution de l'identité.
+    const lecture = L.limiteur({ nom: 'compte-lecture', max: cfg.limites.compteParPorteurHeure, fenetreMs: HEURE, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+    router.get('/api/compte', resoudrePorteur(cfg), exigerSession, lecture, async (req, res) => {
         try {
             const argent = registre.obtenir('argent'), porteur = req.v2.porteur, compte = porteur.compte;
             // `suite` (curseur opaque) : absent = première page ; présent mais illisible (pas une chaîne, trop long, falsifié) = 400 ENTREE, une faute du client — jamais 503, ni la première page en silence

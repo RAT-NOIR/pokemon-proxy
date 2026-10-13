@@ -256,7 +256,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const appFabrique = async (cfgApp, deps = {}) => {
             const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
             pret.armer(require('../modeles').verifierIndex);
-            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaineFabriquee, ...deps }));
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, ...deps }));
             return H.serveur(app);
         };
         const sv = await appFabrique(cfg);
@@ -308,6 +308,63 @@ async function semer(mode) {                                  // 'double' | 'sim
         // un seul candidat : pas de question possible -> introuvable, et le crédit est RENDU (le remboursement différé n'est jamais perdu)
         mode = 'refus-egalite-seul'; const un = await inst(3); const ru = await poster(sv.url, un.jeton, corps(), { nom: 'fab-refus-seul' });
         H.v('   refus à UN seul candidat : introuvable, crédit rendu (essai 3), motif introuvable', [ru.json.analyse.statut, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['introuvable', true, 'introuvable', 3]);
+        // ── JUMEAU-V2 : une AFFIRMATION de la chaîne dont le produit a un jumeau devient une question RÉSERVÉE (comme une ambiguë) ; au-delà de 3 produits, ou sans colonne, un
+        //    introuvable REMBOURSÉ au motif distinct, écrit dans `analyses` (jamais servi : le contrat public ne change pas). Chemin de PRODUCTION : deps.jumeaux est lu par la route.
+        {
+            const serveurJ = async jumeaux => appFabrique(cfg, { jumeaux });
+            const svJ = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B] : [] }));
+            mode = 'affirmee'; const xj = await inst(3); const rj = await poster(svJ.url, xj.jeton, corps(), { nom: 'jumeau-question' }), jj = rj.json || {};
+            H.v('JUMEAU-V2 : produit affirmé avec UN jumeau : a-trancher à 2 candidats (le produit et son jumeau), { debite:0, reserve:1, motif:question }, essai 3 -> 2',
+                [jj.analyse && jj.analyse.statut, jj.analyse && jj.analyse.cartes[0].candidats.map(c => c.idProduct), jj.facturation, (await solde(xj.i._id)).essais],
+                ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+            const qj = await raw('questions_v2').findOne({ _id: `${jj.scanId}:0` });
+            H.v('   la question est écrite en attente avec les choix du contrat (choixPour)', [qj && qj.etat, qj && qj.choix], ['en-attente', choixPour([ID_A, ID_B])]);
+            await svJ.fermer();
+            const svZ = await serveurJ(() => ({ conclu: true, ids: [] }));
+            const xz = await inst(3); const rz = await poster(svZ.url, xz.jeton, corps(), { nom: 'jumeau-aucun' }), jz = rz.json || {};
+            H.v('   un produit SANS jumeau : affirmé comme avant (identifiee, debite 1, essai 3 -> 2)', [jz.analyse && jz.analyse.statut, jz.facturation && jz.facturation.motif, jz.solde && jz.solde.essai], ['identifiee', 'affirmee', 2]);
+            await svZ.fermer();
+            // C2 de la relecture 1 : le refus de la garde est NOTRE refus, pas un échec du client — remboursé SANS compter dans le plafond de pannes. Le plafond du jour est PLEIN avant le scan :
+            // le remboursement doit quand même partir, et le compteur ne bouge pas (le 6e de la journée est encore rendu).
+            const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
+            const compteurPanne = x => compteurDe(x, 'panne');
+            const refusJ = async (jumeaux, nom, motifAttendu) => {
+                const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
+                const an = j.scanId ? await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) }) : null;
+                H.v(`   ${nom} : introuvable / impression-indeterminee REMBOURSÉ, plafond de pannes PLEIN mais compteur DÉDIÉ jumeaux à 1 (essai 3, compteur de pannes inchangé), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
+                    [j.analyse && j.analyse.statut, j.analyse && j.analyse.raison, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux'), an && an.motifJumeaux, JSON.stringify(j).includes('jumeaux-')],
+                    ['introuvable', 'impression-indeterminee', true, 0, 3, cfg.plafonds.panne, 1, motifAttendu, false]);
+                await s.fermer();
+            };
+            // C1 de la passe 2 : le 21e refus de la journée n'est plus remboursé quand le plafond de pannes ordinaire est plein aussi (jamais gratuit sans limite)
+            {
+                const s = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] })); const x = await inst(3); await plafondPlein(x);
+                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                const r = await poster(s.url, x.jeton, corps(), { nom: 'jumeau-21e' }), j = r.json || {};
+                H.v('   le 21e refus de la journée (compteur jumeaux plein ET pannes plein) : PAS remboursé — { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }, essai 2, les deux compteurs inchangés',
+                    [j.analyse && j.analyse.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
+                    ['introuvable', 1, false, 'plafond-jour', 2, cfg.plafonds.panne, cfg.plafonds.jumeaux]);
+                // compteur dédié plein mais plafond de pannes libre : le refus est jugé comme un introuvable ORDINAIRE (rendu, et c'est le compteur de pannes qui monte)
+                const y = await inst(3); await raw('plafonds').insertOne({ porteur: `installation:${y.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                const r2 = await poster(s.url, y.jeton, corps(), { nom: 'jumeau-21e-repli' }), j2 = r2.json || {};
+                H.v('   compteur jumeaux plein mais pannes libre : rendu comme un introuvable ordinaire (essai 3), le compteur de pannes monte à 1, celui des jumeaux reste plein',
+                    [j2.facturation && j2.facturation.rembourse, (await solde(y.i._id)).essais, await compteurPanne(y), await compteurDe(y, 'jumeaux')], [true, 3, 1, cfg.plafonds.jumeaux]);
+                await s.fermer();
+            }
+            await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
+            // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi sans plafond, pas un introuvable
+            const panneJ = async (jumeaux, nom) => {
+                const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
+                H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE dans le compteur dédié jumeaux (1) alors que le plafond de pannes est plein et inchangé (essai 3), aucune analyse`,
+                    [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
+                    [503, 'INDISPONIBLE', undefined, true, 'panne', 3, cfg.plafonds.panne, 1]);
+                await s.fermer();
+            };
+            await panneJ(() => ({ conclu: false, ids: [] }), 'colonne absente (le fournisseur ne conclut pas)');
+            await panneJ(() => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }), 'colonne PÉRIMÉE (un produit a été ajouté au catalogue depuis l\'archive)');
+            await panneJ(undefined, 'aucun fournisseur injecté ET aucune version en mémoire (le défaut de PRODUCTION)');
+        }
         // ── n°5b : debiter qui LÈVE après avoir pris la poche (l'écriture du mouvement échoue) ne laisse RIEN de pris
         {
             const colOrig = db.col; let armee = true;

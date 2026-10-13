@@ -36,7 +36,7 @@ const M = require('../modeles'); const pret = require('../pret'); const { lireCo
     const chaine = async () => { appelsChaine++; throw new Error('la chaîne ne doit pas être atteinte'); };
     const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(M.verifierIndex);
-    app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { gererIdentifier: chaine }));
+    app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine }));
     const srv = await H.serveur(app);
     let n = 0; const ip = () => ({ 'x-forwarded-for': `10.4.${Math.floor(++n / 250)}.${n % 250 + 1}` });
     const SITE = { origin: cfg.origines.site, 'x-rat-market': '1' };

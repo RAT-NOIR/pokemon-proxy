@@ -47,12 +47,27 @@ const plusLongPrefixe = liste => {
     const cut = p.lastIndexOf('/'); return cut >= 0 ? p.slice(0, cut + 1) : '';        // on coupe à une frontière de segment
 };
 
+// JUMEAU-V2 — la COLONNE DES JUMEAUX. Un jumeau de P est un AUTRE produit de même métacarte, de même langue de tirage et d'un AUTRE créneau (expansion, numéro) : la seule lecture du code et du
+// numéro le sépare de P, et c'est précisément la lecture qui se trompe (IMG_3237). Elle porte TOUT le catalogue, pas seulement les produits qui ont un visuel (mesuré : 27,6 % des jumeaux n'en ont pas).
+// Un champ INCONNU (créneau, langue) compte comme « même » : le produit voisin reste un jumeau. Sans colonne (fichier plus ancien), jumeauxDe rend null : on ne peut pas conclure.
+const JUM_COLS = Object.freeze(['meta', 'id', 'exp', 'num', 'tir', 'ordre']);
+function plusPetitOrdre(jum, id) {                                              // dichotomie sur la permutation triée par identifiant ; -1 si absent
+    let lo = 0, hi = jum.ordre.length - 1;
+    while (lo <= hi) { const m = (lo + hi) >>> 1, x = jum.id[jum.ordre[m]]; if (x === id) return jum.ordre[m]; if (x < id) lo = m + 1; else hi = m - 1; }
+    return -1;
+}
+function sontJumeaux(jum, a, b) {
+    if (jum.exp[a] >= 0 && jum.num[a] >= 0 && jum.exp[b] >= 0 && jum.num[b] >= 0 && jum.exp[a] === jum.exp[b] && jum.num[a] === jum.num[b]) return false;     // même créneau : une variante, pas un jumeau
+    if (jum.tir[a] >= 0 && jum.tir[b] >= 0 && jum.tir[a] !== jum.tir[b]) return false;                                                                      // une autre langue de tirage
+    return true;
+}
+
 /** Assemble la VERSION (gelée) autour de colonnes déjà construites — par le constructeur ou reçues d'un autre fil. */
 function assembler(d) {
-    const { cols, texte, liens, meta, fiches, comptes, chargeLe } = d;
+    const { cols, texte, liens, meta, fiches, comptes, chargeLe, jum } = d;
     const ids = cols.id;
     const octets = { colonnes: 0, chaines: texte.octets.byteLength + liens.octets.byteLength + texte.off.byteLength + liens.off.byteLength };
-    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits]) octets.colonnes += k.byteLength;
+    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : [])]) octets.colonnes += k.byteLength;
     octets.total = octets.colonnes + octets.chaines;
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
     const V = {
@@ -75,6 +90,21 @@ function assembler(d) {
             for (let i = a; i < b; i++) out.push(meta.produit[i]);
             return out;
         },
+        /** La colonne des jumeaux est-elle chargée ? (un fichier d'avant la colonne : non — aucune affirmation ne peut alors être conclue.) */
+        colonneJumeaux: Boolean(jum),
+        /** Ce que la colonne couvre : { n: nombre de produits, max: le plus grand idProduct qu'elle connaît }. La route cherche, pour un produit qu'elle s'apprête à affirmer, un produit PLUS RÉCENT (> max) de sa métacarte. null sans colonne. */
+        empreinteJumeaux() { return jum && jum.id.length ? { n: jum.id.length, max: jum.id[jum.ordre[jum.id.length - 1]] } : null; },
+        /** La métacarte d'un produit selon la colonne, ou null (colonne absente, produit hors colonne, métacarte inconnue). */
+        metacarteJumeaux(id) { if (!jum || !Number.isInteger(id)) return null; const r = plusPetitOrdre(jum, id); return r < 0 || jum.meta[r] < 0 ? null : jum.meta[r]; },
+        /** Les jumeaux d'un produit (idProduct triés), ou null quand on ne peut PAS conclure : colonne absente, produit hors colonne, métacarte inconnue. [] = conclu, aucun jumeau. */
+        jumeauxDe(id) {
+            if (!jum || !Number.isInteger(id)) return null;
+            const r = plusPetitOrdre(jum, id);
+            if (r < 0 || jum.meta[r] < 0) return null;
+            const m = jum.meta[r], a = borne(jum.meta, m, false), b = borne(jum.meta, m, true), out = [];
+            for (let i = a; i < b; i++) if (i !== r && sontJumeaux(jum, r, i)) out.push(jum.id[i]);
+            return out.sort((x, y) => x - y);
+        },
         fichesDuSet(slug) {
             const p = typeof slug === 'string' ? parSet.get(slug) : undefined;
             if (!p) return [];
@@ -85,8 +115,8 @@ function assembler(d) {
         produitsDeLaFiche(slug, cle) { const f = V.fichesDuSet(slug).find(x => x.cle === cle); return f ? f.produits : []; },
         /** Le paquet à transmettre à un autre fil : des tampons à TRANSFÉRER (aucune copie) et le reste en données simples. */
         paquet() {
-            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets];
-            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe }, tampons: [...new Set(tous.map(t => t.buffer))] };
+            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : [])];
+            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe, ...(jum ? { jum } : {}) }, tampons: [...new Set(tous.map(t => t.buffer))] };
         }
     };
     return Object.freeze(V);
@@ -100,7 +130,24 @@ function creerConstructeur() {
     const rang = new Map();                                                          // idProduct → rang dans les colonnes : un produit n'a qu'UNE entrée
     const contradictoires = new Set();                                               // idProduct dont deux entrées portent des visuels DIFFÉRENTS : aucun visuel n'est servi pour eux
     const VISUEL = [1, 2, 3, 4, 5, 6].map(i => COLS[i]);                             // vig, vw, vh, gra, gw, gh : ce qui est AFFICHÉ (le reste de l'entrée n'est pas un visuel)
+    const jumeaux = new Map();                                                       // idProduct → { meta, exp, num, tir } (-1 = inconnu) : UNE ligne par produit du catalogue
     return {
+        /**
+         * JUMEAU-V2 : le créneau (expansion, numéro) et la langue de tirage d'UN produit du catalogue, avec sa métacarte. null / absent = inconnu (et un inconnu reste un jumeau).
+         * Deux appels pour le même produit qui se CONTREDISENT rendent le champ inconnu : jamais « le dernier gagne ».
+         */
+        jumeau({ idProduct, idMetacard = null, idExpansion = null, numero = null, tirage = null }) {
+            if (!Number.isInteger(idProduct)) throw new Error('jumeau : idProduct non entier');
+            const exp = Number.isInteger(idExpansion) && idExpansion >= 0 ? idExpansion : -1;
+            const num = typeof numero === 'string' && numero.trim() ? texte.id(numero.trim()) : -1;
+            const tir = typeof tirage === 'string' && tirage.trim() ? texte.id(tirage.trim()) : -1;
+            const meta = Number.isInteger(idMetacard) && idMetacard >= 0 ? idMetacard : -1;
+            const p = jumeaux.get(idProduct);
+            if (!p) { jumeaux.set(idProduct, { meta, exp, num, tir }); return; }
+            if (p.meta !== meta) p.meta = -1;                                        // deux métacartes pour un produit : on ne sait pas
+            if (p.exp !== exp || p.num !== num) { p.exp = -1; p.num = -1; }          // le créneau est un COUPLE : il devient inconnu en entier
+            if (p.tir !== tir) p.tir = -1;
+        },
         etat: () => ({ lues, admises: c.id.n - contradictoires.size, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, fiches: fSet.length }),
         entree(e) {
             lues++;
@@ -151,8 +198,16 @@ function creerConstructeur() {
             const prefixe = plusLongPrefixe(liensR.liste);
             const liens = { ...encoder(liensR.liste, s => s.slice(prefixe.length)), prefixe };
             const t = encoder(texte.liste);
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length });
-            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}) });
+            // la colonne des jumeaux : paires (métacarte, produit) triées, plus la permutation triée par produit (recherche d'un produit seul)
+            let jum;
+            if (jumeaux.size) {
+                const lignes = [...jumeaux].map(([id, p]) => ({ id, ...p })).sort((a, b) => a.meta - b.meta || a.id - b.id), k2 = lignes.length;
+                jum = { meta: new Int32Array(k2), id: new Int32Array(k2), exp: new Int32Array(k2), num: new Int32Array(k2), tir: new Int32Array(k2), ordre: new Int32Array(k2) };
+                lignes.forEach((l, i) => { jum.meta[i] = l.meta; jum.id[i] = l.id; jum.exp[i] = l.exp; jum.num[i] = l.num; jum.tir[i] = l.tir; jum.ordre[i] = i; });
+                jum.ordre.sort((a, b) => jum.id[a] - jum.id[b]);
+            }
+            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe, jum });
         }
     };
 }
@@ -184,6 +239,19 @@ function verifierStructure(d) {
     for (let i = 0; i < m; i++) if (d.fiches.debut[i] < 0 || d.fiches.debut[i] > d.fiches.fin[i] || d.fiches.fin[i] > d.fiches.produits.length) refuser('fiches : bornes de produits hors des produits');
     if (!Array.isArray(d.fiches.sets)) refuser('sets illisibles');
     for (const s of d.fiches.sets) if (!Array.isArray(s) || typeof s[0] !== 'string' || !Array.isArray(s[1]) || !(s[1][0] >= 0 && s[1][0] <= s[1][1] && s[1][1] <= m)) refuser('sets : bornes hors des fiches');
+    if (d.jum !== undefined) {                                                  // la colonne des jumeaux (optionnelle : un fichier plus ancien n'en a pas), jugée comme les autres
+        const j = d.jum;
+        if (!j || typeof j !== 'object') refuser('jumeaux : colonne illisible');
+        const k = j.id && j.id.length;
+        for (const nom of JUM_COLS) if (!(j[nom] instanceof Int32Array) || j[nom].length !== k) refuser(`jumeaux : colonne « ${nom} » de longueur différente`);
+        if (!k) refuser('jumeaux : colonne vide');
+        for (let i = 0; i < k; i++) {
+            if (j.meta[i] < -1 || j.exp[i] < -1 || j.num[i] < -1 || j.num[i] >= nT || j.tir[i] < -1 || j.tir[i] >= nT) refuser('jumeaux : valeur hors bornes');
+            if (i > 0 && (j.meta[i] < j.meta[i - 1] || (j.meta[i] === j.meta[i - 1] && j.id[i] <= j.id[i - 1]))) refuser('jumeaux : paires (métacarte, produit) non triées ou en double');
+            if (j.ordre[i] < 0 || j.ordre[i] >= k) refuser('jumeaux : permutation hors bornes');
+            if (i > 0 && j.id[j.ordre[i]] <= j.id[j.ordre[i - 1]]) refuser('jumeaux : permutation non triée par produit');
+        }
+    }
     const c = d.comptes;
     if (!c || typeof c !== 'object' || c.visuels !== n || c.fichesLiees !== m || c.produitsLies !== d.fiches.produits.length) refuser('comptes de l\'en-tête différents de ceux des colonnes');
     if (typeof d.liens.prefixe !== 'string' || d.liens.prefixe.length > 300) refuser('préfixe de lien illisible');

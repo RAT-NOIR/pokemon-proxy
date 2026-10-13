@@ -17,7 +17,7 @@ const PLAN = {
     motifs: ['affirmee', 'question', 'lot', 'introuvable', 'sans-prix', 'panne', 'plafond-jour', 'administrateur'],
     questions: ['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel'],
     variantes: ['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo'],
-    raisons: ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture'],
+    raisons: ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture', 'impression-indeterminee'],
     statutsCarte: ['identifiee', 'a-trancher', 'introuvable'],
     etats: ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'],
     confiance: ['haute', 'moyenne', 'basse']

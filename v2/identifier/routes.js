@@ -92,6 +92,8 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe } = require('./adaptateur');
+const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
+const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
 const { preparerAnnonce } = require('../annonce/verifier');
@@ -254,7 +256,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null;
-        const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
+        // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → compteur DÉDIÉ `jumeaux`, une unité (une carte) ; plein, le ledger le juge au plafond de pannes ordinaire
+        const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
@@ -294,10 +297,15 @@ function traiterIdentifier(cfg, deps = {}) {
                     const c = fr.corps && typeof fr.corps === 'object' ? fr.corps : {};
                     // B1b.5 : ce que /reponse ne pourra pas relire (la langue lue et la stratégie reverse) pour fabriquer le prixLive d'une carte tranchée
                     lecture = { codeLangue: codeLangueDe(c), reverseStrategie: c.reverse && typeof c.reverse.strategie === 'string' ? c.reverse.strategie : null };
-                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : [])];
+                    // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
+                    // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
+                    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), idsAffirmes(c));
+                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)];
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux });
+                    // une AFFIRMATION de la chaîne devenue une question (le produit a des jumeaux) : son crédit est encore pris, il est RÉSERVÉ plus bas, comme pour la règle G
+                    if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
                     // B1b.7 : la règle G, si (et seulement si) l'interrupteur est allumé ET qu'un fournisseur de voisins est branché ; jamais sur une panne
                     if (resultat.issue !== 'panne' && RG.regleGActive(cfg, deps)) {
                         const g = await consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter });
@@ -339,10 +347,11 @@ function traiterIdentifier(cfg, deps = {}) {
                 }
                 // le filet : une panne ou un « introuvable » sont TOUJOURS rendus ; si la chaîne ne l'a pas tenté, c'est ici (annule aussi une question réservée)
                 if (!admin && credit && (resultat.issue === 'panne' || resultat.issue === 'introuvable') && !reqH.scanRembourse) {
-                    try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable'); } catch (e) { journalErreur('remboursement', e); }
+                    // un refus de la garde des jumeaux (resultat.motif) est NOTRE refus : rendu dans le compteur dédié `jumeaux` (l'unicité par scan reste)
+                    try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null };
             });
             }
         } catch (e) {
@@ -392,8 +401,10 @@ function traiterIdentifier(cfg, deps = {}) {
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
-                    ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}) })),
+                    ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}),
+                    ...((sortie.motifs ? sortie.motifs[i] : i === 0 ? sortie.motif : null) ? { motifJumeaux: sortie.motifs ? sortie.motifs[i] : sortie.motif } : {}) })),     // JUMEAU-V2 : le motif de la garde, PAR CARTE (interne, jamais servi)
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
+                ...(sortie.motif ? { motifJumeaux: sortie.motif } : {}),                    // JUMEAU-V2 : le motif distinct d'un introuvable de la garde (jamais servi au client : le contrat public ne change pas)
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
