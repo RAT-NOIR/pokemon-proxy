@@ -22,12 +22,12 @@ const norm = c => c.replace(/\[\d+\]/g, '[]').replace(/\$\.fausse-[a-z]+-\d+/, '
 // LA CLASSIFICATION : clé exacte -> référence de §7.3. Une clé absente d'ici est NOUVELLE et fait échouer le banc.
 const E = (r, route, statut, chemins) => chemins.map(c => [`${route} ${statut} ${c}`, r]);
 const CLASSES = new Map([
-    ...E('E1', 'POST /api/identifier', 200, ['$.solde.essai', '$.solde.abonnement', '$.solde.soldeGratuit', '$.solde.restantSemaine', '$.solde.soldeScans', '$.solde.compte.verifie']),
-    ...E('E1', 'POST /api/identifier', 429, ['$.solde.essai', '$.solde.abonnement', '$.solde.soldeGratuit', '$.solde.restantSemaine', '$.solde.soldeScans', '$.solde.compte.verifie']),
+    // E1 (clés de `solde`) retiré : les vecteurs n'ont plus de `solde` du tout (DEMANDE-SERVEUR-EXTENSION §B5) ; le manque se classe sous E3.
     ...E('E11', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.set.slug']),
-    ...E('E12', 'POST /api/identifier', 200, ['$.offre']),
-    ...E('E2', 'POST /api/identifier', 200, ['$.facturation.reserve']),
-    ...E('E2', 'POST /api/identifier/reponse', 200, ['$.<scanId>[].<choix>.facturation.raisonNonRembourse']),
+    ...E('E12', 'POST /api/identifier', 200, ['$.analyse.cartes[].etat.declare']),      // §B7 : l'extension ne lit plus l'état déclaré
+    ...E('E13', 'POST /api/identifier', 200, ['$.offre']),                               // OFFRE-QUOTA : l'objet `offre` (nom, restant, remiseAZero), absent des vecteurs de l'extension
+    ...E('E2', 'POST /api/identifier', 200, ['$.facturation']),                          // §B5 : plus de `facturation` (sauf motif administrateur)
+    ...E('E2', 'POST /api/identifier/reponse', 200, ['$.<scanId>[].<choix>.facturation']),
     ...E('E3', 'POST /api/identifier', 200, ['$.solde']),
     ...E('E4', 'POST /api/identifier', 200, ['$.question']),
     ...E('E5', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.impressions', '$.analyse.cartes[].candidats[].impressions', '$.analyse.cartes[].carte.prixGuide.moyenne30',
