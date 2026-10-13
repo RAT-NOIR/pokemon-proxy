@@ -775,7 +775,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_TURNSTILE: [c => c.turnstile, 'on', 'peut-etre', 'leve'],
             V2_ESSAIS: [c => c.quotas.essai, 3, 'abc', 'leve'], V2_ACCUEIL: [c => c.quotas.accueil, 25, 'abc', 'leve'], V2_HEBDO: [c => c.quotas.hebdo, 2, 'abc', 'leve'], V2_ABO_MENSUEL: [c => c.quotas.aboMensuel, 100, 'abc', 'leve'],
             V2_PLAFOND_PANNES: [c => c.plafonds.panne, 5, 'abc', 'leve'], V2_PLAFOND_QUESTIONS: [c => c.plafonds.question, 30, 'abc', 'leve'], V2_LECTURE_LIVE_MAX: [c => c.lot.lectureLiveMax, 5, 'abc', 'leve'],
-            V2_JUMEAUX_REMBOURSES_JOUR: [c => c.plafonds.jumeaux, 20, 'abc', 'leve'], V2_LOT_REPRISES_PASSAGE: [c => c.lot.reprisesParPassage, 200, '0', 'leve'], V2_LOT_REGLEMENT_REPRISE_MIN: [c => c.lot.reglementBloqueMs, 15 * 60e3, '0', 'leve'], V2_CLAIM_ORPHELINE_MIN: [c => c.lot.claimOrphelineMs, 60 * 60e3, '59', 'leve'],
+            V2_JUMEAUX_REMBOURSES_JOUR: [c => c.plafonds.jumeaux, 20, 'abc', 'leve'], V2_LOT_REPRISES_PASSAGE: [c => c.lot.reprisesParPassage, 200, '0', 'leve'], V2_LOT_REGLEMENT_REPRISE_MIN: [c => c.lot.reglementBloqueMs, 15 * 60e3, '0', 'leve'], V2_CLAIM_ORPHELINE_MIN: [c => c.lot.claimOrphelineMs, 60 * 60e3, '59', 'leve'], V2_REPARATION_AGE_MIN: [c => c.lot.reparationAgeMs, 15 * 60e3, '4', 'leve'],
             V2_SANS_PRIX_JOUR: [c => c.plafonds.sansPrix, 5, 'abc', 'leve'], V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
             V2_COMPTE_HEURE: [c => c.limites.compteParPorteurHeure, 600, '0', 'leve'], V2_SOLDE_HEURE: [c => c.limites.soldeParPorteurHeure, 1200, '0', 'leve'],      // MOYENS-B1 (O4) : plafonds par porteur, posés sans mesure d'usage réel
             V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
@@ -795,7 +795,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_VERSION_MIN_EXTENSION: [c => c.versionMinExtension, '2.0.0', '%%', { ferme: c => require('../identifier/routes').comparerVersions('2.0.0', c.versionMinExtension) === null }],   // illisible : 400 pour tous
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
-            V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
+            V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
+            V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
         };
         H.v('step 6 : chaque variable lue par v2/config.js a une ligne de la table (et réciproquement)', [noms.filter(n => !T[n]), Object.keys(T).filter(n => !noms.includes(n))], [[], []]);
         const echecs = [];

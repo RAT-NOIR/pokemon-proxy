@@ -238,8 +238,58 @@ function recalculer(fichier, dossierInstantane, sortie) {
     return totaux;
 }
 
+// ── ETIQUETAGE-B : la lecture de l'export du banc de l'administrateur (v2/mesures/exporter-banc-admin.js) et la mesure de la base « Gemini seul » = la réponse d'ORIGINE de la chaîne ─────────
+const FORMAT_EXPORT_ADMIN = 'banc-admin-v1';
+const erreurExport = (code, m) => Object.assign(new Error(m || code), { code });
+/** Lit un export : manifeste au bon format, lignes cohérentes avec le manifeste, chaque photo nommée présente dans le dossier. Lève FORMAT ou EXPORT-INCOMPLET. */
+function lireExportBancAdmin(dossier) {
+    let man, lignes;
+    try { man = JSON.parse(fs.readFileSync(path.join(dossier, 'manifeste.json'), 'utf8')); lignes = JSON.parse(fs.readFileSync(path.join(dossier, 'lignes.json'), 'utf8')); }
+    catch { throw erreurExport('FORMAT', 'dossier sans export lisible'); }
+    if (!man || man.format !== FORMAT_EXPORT_ADMIN || !Array.isArray(lignes)) throw erreurExport('FORMAT', 'format d\'export inconnu');
+    if (man.lignes !== lignes.length) throw erreurExport('EXPORT-INCOMPLET', 'le manifeste annonce un autre nombre de lignes');
+    for (const l of lignes) if (l.photo !== null && !(typeof l.photo === 'string' && /^photos\/[0-9a-f]{32}\.webp$/.test(l.photo) && fs.existsSync(path.join(dossier, l.photo)))) throw erreurExport('EXPORT-INCOMPLET', 'photo nommée mais absente');
+    return { manifeste: man, lignes };
+}
+/**
+ * La réponse d'ORIGINE de la chaîne (« Gemini seul ») jugée contre la vérité de l'administrateur, au niveau du PRODUIT (exacte : l'export n'a pas le catalogue des impressions).
+ *  · affirmée juste : l'idProduct affirmé est la vérité ; FAUSSE : tout autre cas, la vérité « aucune » comprise ;
+ *  · question qui contient la vérité : la vérité est parmi les candidats ; introuvable à bon droit : la vérité est « aucune ».
+ * Chaque taux imprime son dénominateur et son intervalle de Wilson à 95 %.
+ */
+function mesurerGeminiSeul(lignes) {
+    const n = lignes.length;
+    const aff = lignes.filter(l => l.statut === 'affirmee'), q = lignes.filter(l => l.statut === 'question'), intro = lignes.filter(l => l.statut === 'introuvable');
+    const juste = l => l.verite !== null && l.reponse.idProduct === l.verite;
+    const justes = aff.filter(juste).length, fausses = aff.length - justes;
+    const contiennent = q.filter(l => l.verite !== null && l.reponse.candidats.includes(l.verite)).length;
+    const aBonDroit = intro.filter(l => l.verite === null && l.aucune).length;
+    const justesOuQ = justes + contiennent;
+    return {
+        n, autres: lignes.filter(l => !['affirmee', 'question', 'introuvable'].includes(l.statut)).length,
+        affirmees: { n: aff.length, justes, fausses, wilsonJustes: wilson(justes, aff.length) },
+        fauxAffirmes: { n: fausses, sur: n, wilson: wilson(fausses, n), surAffirmees: { sur: aff.length, wilson: wilson(fausses, aff.length) } },
+        questions: { n: q.length, contiennentLaVerite: contiennent, wilsonContiennent: wilson(contiennent, q.length) },
+        introuvables: { n: intro.length, aBonDroit, manques: intro.length - aBonDroit },
+        justesOuQuestionJuste: justesOuQ, wilsonJustesOuQuestionJuste: wilson(justesOuQ, n)
+    };
+}
+
 async function principal() {
     const arg0 = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
+    if (arg0('export')) {                                                                  // aucun appel : ni base, ni réseau, ni clé — seulement le dossier d'un export
+        const e = lireExportBancAdmin(arg0('export')), m = mesurerGeminiSeul(e.lignes);
+        const w = x => (x.p === null ? 'n/a' : `${(100 * x.p).toFixed(1)} % [${(100 * x.bas).toFixed(1)} ; ${(100 * x.haut).toFixed(1)}]`);
+        console.log(`BANC DE L'ADMINISTRATEUR — base « Gemini seul » (réponse d'origine), ${m.n} cartes étiquetées (${e.manifeste.sansPhoto} sans photo)`);
+        console.log(`  affirmées : ${m.affirmees.n} · justes ${m.affirmees.justes} (${w(m.affirmees.wilsonJustes)}) · fausses ${m.affirmees.fausses}`);
+        // I2 : des étiquettes pas encore reflétées dans les lignes rendent cette mesure OBSOLÈTE pour ces cartes (une ligne peut porter une vérité plus ancienne) : jamais tu
+        if (e.manifeste.etiquettesEnAttente !== 0) console.log(`  ⚠️ ${e.manifeste.etiquettesEnAttente === null || e.manifeste.etiquettesEnAttente === undefined ? 'nombre d\'étiquettes en attente INCONNU' : `${e.manifeste.etiquettesEnAttente} analyse(s) avec une étiquette pas encore reflétée dans le banc`} : relancer l'export après la reprise`);
+        console.log(`  faux affirmés : ${m.fauxAffirmes.n} / ${m.fauxAffirmes.sur} cartes (${w(m.fauxAffirmes.wilson)}) · ${m.fauxAffirmes.n} / ${m.fauxAffirmes.surAffirmees.sur} affirmées (${w(m.fauxAffirmes.surAffirmees.wilson)})`);
+        console.log(`  questions : ${m.questions.n} · contiennent la vérité ${m.questions.contiennentLaVerite} (${w(m.questions.wilsonContiennent)})`);
+        console.log(`  introuvables : ${m.introuvables.n} · à bon droit ${m.introuvables.aBonDroit} · manqués ${m.introuvables.manques}`);
+        console.log(`  affirmée juste ou question juste : ${m.justesOuQuestionJuste} / ${m.n} (${w(m.wilsonJustesOuQuestionJuste)})`);
+        return;
+    }
     if (arg0('recalculer')) {                                                              // aucun appel : ni base, ni réseau, ni clé
         const f = arg0('recalculer'), t = recalculer(f, arg0('instantane'), f.replace(/\.json$/, '.recalcule.json'));
         console.log(JSON.stringify(t, null, 1)); return;
@@ -390,6 +440,6 @@ async function principal() {
     }
 }
 
-module.exports = { verifierEnvironnement, wilson, percentile, juger, classeIntrouvable, calculerTotaux, recalculer, chargerBancReel, creerCarnet, sommaire };
+module.exports = { lireExportBancAdmin, mesurerGeminiSeul, verifierEnvironnement, wilson, percentile, juger, classeIntrouvable, calculerTotaux, recalculer, chargerBancReel, creerCarnet, sommaire };
 
 if (require.main === module) principal().then(() => process.exit(0)).catch(e => { console.error('🔴', String(e && e.message || e).replace(/mongodb(\+srv)?:\/\/[^\s'"]+/gi, '<uri masquée>')); process.exit(1); });

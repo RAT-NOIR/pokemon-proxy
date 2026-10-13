@@ -83,7 +83,7 @@ async function debitsRembourseSansMouvement(porteur, maintenant, ms) {
     const sortie = [];
     for (const e of parScan.values()) {
         const rembs = await col('mouvements').find({ type: 'remboursement', scanId: e.scanId }).toArray();
-        const mouvements = rembs.filter(m => m.delta === 1).length;
+        const mouvements = rembs.filter(m => m.delta === 1 || m.motif === 'semaine-expiree').length;       // une clôture hebdomadaire sans crédit (`semaine-expiree`, delta 0) est la trace de son débit
         if (e.debits <= mouvements) continue;
         const tentative = rembs.length ? Math.max(...rembs.map(m => new Date(m.le).getTime())) : new Date(e.le).getTime();
         if (tentative >= t - ms) continue;
@@ -104,7 +104,10 @@ async function lotsARendre(porteur) {
 async function lignesNonRendues(porteur) {
     const filtre = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
     const l = await col('mouvements').find({ ...filtre, type: 'debit', etat: { $in: ['rendu-echoue', 'rendu-en-cours'] } }).toArray();
-    return l.map(m => ({ id: m._id, scanId: m.scanId, porteur: `${porteur.type}:${porteur.id}`, poche: m.poche, etat: m.etat, raison: m.raisonRendu ?? null }));
+    // MOYENS-B2a tour 3 : chaque ligne porte son GESTE — la simulation de l'outil de réparation d'abord ; si elle refuse « marqueur-sature » (le marqueur de la poche est plein et ne prouve plus l'absence de crédit),
+    // vérifier À LA MAIN le grand livre (écart de poche, mouvements du porteur) avant tout geste : l'outil ne crédite pas
+    const geste = 'node v2/argent/reparer-debit.js (simulation, puis --executer --sauvegarde=<dossier>) — audit §15 ; refus « marqueur-sature » : vérifier à la main le grand livre, ne rien créditer sans preuve';
+    return l.map(m => ({ id: m._id, scanId: m.scanId, porteur: `${porteur.type}:${porteur.id}`, poche: m.poche, etat: m.etat, raison: m.raisonRendu ?? null, geste }));
 }
 // Tous les porteurs de la base (curseur : pas de liste en mémoire)
 async function reconcilierTous({ cfg = require('../config').lireConfig(process.env), maintenant = new Date() } = {}) {

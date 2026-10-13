@@ -256,8 +256,10 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         await vieillir(x);
         const cr = await lancer('r', { COUPURE_DIFFERE_MS: '0' });
         const sr = await cr.fin;
-        const unitesRembourse = (await debits(x)).filter(d => d.etat === 'rembourse').length;
-        H.v('(e) la passe meurt entre la prise de l\'unité et le rendu de son crédit (marqueur COUPURE=r) : 1 unité posée « rembourse », AUCUN crédit rendu (essai 0, acheté 3), 0 ligne +1', [cr.stdout().includes('COUPURE=r') && sr.code !== 0, unitesRembourse, await poche(x), (await rembs(x)).length], [true, 1, [0, 3], 0]);
+        const unitesRembourse = (await debits(x)).filter(d => d.etat === 'rembourse').length, unitesEnCours = (await debits(x)).filter(d => d.etat === 'rendu-en-cours').length;
+        // MOYENS-B2a : la prise pose « rendu-en-cours » (jamais « rembourse » avant le crédit et sa trace) — la réconciliation la liste aussitôt
+        H.v('(e) la passe meurt entre la prise de l\'unité et le rendu de son crédit (marqueur COUPURE=r) : 1 unité posée « rendu-en-cours » (aucune « rembourse »), AUCUN crédit rendu (essai 0, acheté 3), 0 ligne +1', [cr.stdout().includes('COUPURE=r') && sr.code !== 0, unitesRembourse, unitesEnCours, await poche(x), (await rembs(x)).length], [true, 0, 1, [0, 3], 0]);
+        H.v('   la réconciliation LISTE aussitôt cette ligne (rendu-en-cours) : verdict non propre', [(await R.reconcilier(x.p, cfg)).rendusEchoues.map(l => l.etat), (await R.reconcilier(x.p, cfg)).propre], [['rendu-en-cours'], false]);
         await db.col('scans_en_cours').updateOne({ _id: (await marqueDe(x))._id }, { $set: { priseLe: new Date(Date.now() - 20 * MIN) } });
         const cs = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
         try {

@@ -43,16 +43,18 @@ async function annulerUnite(porteur, u, cfg, maintenant) {
     const base = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
     const expire = new Date(maintenant.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
     // Tour 4 (3) — PRISE ATOMIQUE de la ligne (même garde des états clos que rembourserLigne) : une unité déjà « rembourse » / « rendu-en-cours » n'est pas rendue deux fois.
-    const pris = await col('mouvements').findOneAndUpdate({ ...base, type: 'debit', cleIdempotence: u.cle, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' }, $unset: { expireLe: '' } }, { returnDocument: 'before' });
+    // MOYENS-B2a tour 3 (M-4) : même protocole que les autres chemins de crédit — `priseLe` à la prise, identité du débit dans le marqueur de la poche (même écriture que le crédit), `debitId` sur la trace
+    const pris = await col('mouvements').findOneAndUpdate({ ...base, type: 'debit', cleIdempotence: u.cle, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours', priseLe: maintenant }, $unset: { expireLe: '' } }, { returnDocument: 'before' });
     if (!pris) { console.error(`🔴 [v2 supplement] unité ${u.cle} : déjà prise par un autre chemin (ou ligne absente) — rien n'est rendu ici`); return; }
-    const { rendu, raison } = await rendrePoche(porteur, u.credit, cfg, maintenant);
+    const credite = await rendrePoche(porteur, u.credit, cfg, maintenant, pris._id);
+    const { raison } = credite, rendu = credite.rendu || raison === 'poche-deja-compensee';           // le crédit de CE débit est déjà sur la poche : l'unité est rendue, il ne manque que sa trace
     if (!rendu) {
         console.error(`🔴 [v2 supplement] unité ${u.cle} NON rendue (poche ${u.credit.poche}) : ligne « rendu-echoue », la réconciliation le dira`);
         await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rendu-echoue', raisonRendu: raison || 'poche-introuvable' } });
         return;
     }
     await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rembourse', expireLe: expire }, $unset: { cleIdempotence: '' } });
-    await col('mouvements').insertOne({ ...base, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: u.credit.poche, motif: 'supplement-annule', scanId: null,
+    await col('mouvements').insertOne({ ...base, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: u.credit.poche, motif: 'supplement-annule', scanId: null, debitId: pris._id,
         etat: 'rembourse', cleIdempotence: `annule|${u.cle}|${new ObjectId()}`, expireLe: expire });
 }
 module.exports = { coutDuLot, debiterSupplement };

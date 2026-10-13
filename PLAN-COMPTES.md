@@ -161,7 +161,7 @@ inchangé).
    Le contrat 2 est additif (`CONTRAT-2.md`, règle 1).
 2. **Premier appel d'une v2 qui porte encore son ancien `userId`** : `POST /api/installation { userIdHerite }`. Le serveur crée
    l'installation, y reporte le portefeuille (`credits` de ce `userId`) : achetés → `achete` de l'installation, accueil restant →
-   `essais` (au plus 25), et marque le document `credits` **`migreVers: installationId`**. Dès lors, l'ancien `userId` ne débite plus
+   `essais` (au plus la dotation d'une installation, 3 : HERITAGE-GRATUIT, D7 b ; l'élévation compte dans le plafond global), et marque le document `credits` **`migreVers: installationId`**. Dès lors, l'ancien `userId` ne débite plus
    rien sans le jeton (la 1.0.x de la même machine est remplacée par la v2).
 3. **À la liaison** : achetés additionnés au compte ; l'accueil hérité n'est **pas** ajouté aux 25 du compte (jamais deux
    dotations) — le compte garde `max(25 restants, accueil hérité)` (❓ §10.4).

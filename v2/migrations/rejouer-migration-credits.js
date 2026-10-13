@@ -21,8 +21,9 @@ async function rejouer(docs, cfg, { rattacher = He.rattacherAchats, emailCle } =
     for (const d of docs) {
         const inst = M.nouvelleInstallation({ jetonEmpreinte: `rejeu-${d.userId}`, essais: 0, libelle: 'rejeu' }); inst.essaisInitiaux = 0;
         await col('installations').insertOne(inst); installations.push(inst._id);
-        const h = await He.reprendreHeritage({ userId: d.userId, installation: inst }, cfg);
-        gratuitAttendu += Math.min(Math.max(0, d.soldeGratuit ?? 0), cfg.quotas.accueil); if (h.ok) gratuitRepris += h.essais;
+        // le rejeu prouve la CONSERVATION des achetés, pas le plafond global du jour : son plafond est élargi au nombre de portefeuilles, sinon un grand fichier serait refusé au-delà de 500 reprises
+        const h = await He.reprendreHeritage({ userId: d.userId, installation: inst }, { ...cfg, limites: { ...cfg.limites, essaisGlobauxJour: Math.max(cfg.limites.essaisGlobauxJour, docs.length) } });
+        gratuitAttendu += Math.min(Math.max(0, d.soldeGratuit ?? 0), cfg.quotas.essai); if (h.ok) gratuitRepris += h.essais;
         const k = d.email ? cle(d.email) : null;
         if (k && !comptes.has(k)) { const c = M.nouveauCompte({ email: d.email, emailCle: k, motDePasse: {} }); c.verifie = true; await col('comptes').insertOne(c); comptes.set(k, c._id); }
     }
@@ -64,7 +65,7 @@ if (require.main === module) {
             console.log(`${r.portefeuilles} portefeuilles rejoués, ${r.comptes} compte(s) fabriqué(s)`);
             console.log(`somme(achetés) avant : ${r.avant}`);
             console.log(`somme(achetés) après : ${r.apres}  (sur les comptes ${r.rattachesSurComptes}, restant sur les anciens portefeuilles ${r.resteSurAnciens})`);
-            console.log(`essais repris : ${r.gratuitRepris} sur ${r.gratuitAttendu} attendus (plafond de la dotation)`);
+            console.log(`essais repris : ${r.gratuitRepris} sur ${r.gratuitAttendu} attendus (plafond : la dotation d'essai)`);
             code = codeDeSortie(r);
             console.log(code ? '🔴 la somme des achetés NE SE CONSERVE PAS' : '✅ la somme des achetés se conserve');
         } finally { await db.viderPrefixe(); await mongoose.disconnect(); }

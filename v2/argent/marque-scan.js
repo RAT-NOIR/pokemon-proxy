@@ -81,13 +81,14 @@ const rendreALaPasse = (m, issue) => col().updateOne({ _id: m._id, etat: 'en-rep
 const unitesNonRendues = (m) => db.col('mouvements').find({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
     type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $nin: ['rembourse', 'rendu-en-cours'] } }).toArray();
 
-// R4 — le ledger (rendreLeScan) pose `rembourse` sur une unité AVANT de lui rendre son crédit : un arrêt entre les deux laisse une unité « rendue » sans crédit, invisible aux lignes de débit
-// comme à somme(delta) = solde. On compare donc, pour ce scan, les unités `rembourse` (avec leur clé : une unité ANNULÉE par le supplément n'en a plus et a sa propre trace sans scanId)
-// aux lignes de remboursement +1 de CE scan. Aucun recrédit automatique : l'ordre du ledger se corrige au lot MOYENS.
+// R4 — avant MOYENS-B2a, le ledger (rendreLeScan) posait `rembourse` sur une unité AVANT de lui rendre son crédit : un arrêt entre les deux laissait une unité « rendue » sans crédit. Il pose maintenant
+// `rendu-en-cours` à la prise (puis `rembourse` après le crédit ET sa trace) ; les lignes déjà « rembourse » sans trace d'AVANT ce lot existent encore en base. On compare donc, pour ce scan, les unités
+// `rembourse` ou `rendu-en-cours` (avec leur clé : une unité ANNULÉE par le supplément n'en a plus et a sa propre trace sans scanId) aux lignes de remboursement +1 de CE scan.
+// Aucun recrédit automatique : la réparation d'un cas ancien est `reparerDebitRembourseSansMouvement` (ledger.js), lancée à la main.
 async function creditsManquants(m) {
     const unites = await db.col('mouvements').countDocuments({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
-        type: 'debit', scanId: m._id, credit: { $ne: null }, etat: 'rembourse', cleIdempotence: { $type: 'string' } });
-    const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, delta: 1 });
+        type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $in: ['rembourse', 'rendu-en-cours'] }, cleIdempotence: { $type: 'string' } });   // MOYENS-B2a : « rendu-en-cours » = prise avant le crédit
+    const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, $or: [{ delta: 1 }, { motif: 'semaine-expiree' }] });
     return Math.max(0, unites - credits);
 }
 
@@ -154,7 +155,10 @@ async function enSuspens({ porteur = null } = {}) {
     const filtre = { $and: [{ $or: [{ etat: 'en-suspens', ...PERIMEE }, { etat: 'en-reprise', $expr: { $lte: ['$ouverteLe', { $subtract: ['$$NOW', PLANCHER_MS] }] } }, { etat: 'echec' }] },
         ...(porteur ? [{ 'porteur.type': porteur.type, 'porteur.id': porteur.id }] : [])] };
     const l = await col().find(filtre).sort({ ouverteLe: 1 }).toArray();
-    return l.map(m => ({ scanId: m._id, porteur: `${m.porteur.type}:${m.porteur.id}`, etat: m.etat, ouverteLe: m.ouverteLe, issue: m.issue ?? null }));
+    // MOYENS-B2a tour 2 (N-5) : une marque en `echec` dont l'unité a un crédit déjà écrit ou une ligne à clore a un GESTE nommé (l'outil de réparation prouve par le débit, puis clôt) — elle n'est plus un « non propre » muet
+    const GESTE = 'node v2/argent/reparer-debit.js --base=<nom> --porteur=<type:id> --scan=<id> (simulation, puis --executer --sauvegarde=<dossier>) — audit §15';
+    return l.map(m => ({ scanId: m._id, porteur: `${m.porteur.type}:${m.porteur.id}`, etat: m.etat, ouverteLe: m.ouverteLe, issue: m.issue ?? null,
+        ...(m.etat === 'echec' && ['poche-deja-compensee', 'unite-sans-credit', 'remboursement-en-cours'].includes(m.issue) ? { geste: GESTE } : {}) }));
 }
 
 // ── la passe de démarrage (différée) ET périodique : même schéma que la purge du banc (v2/banc/monter.js). Rien sans Mongo prêt ; un seul différé et un seul intervalle par processus ; unref.

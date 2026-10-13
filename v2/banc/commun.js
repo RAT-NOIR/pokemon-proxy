@@ -36,6 +36,12 @@ function lignesEchues(col, maintenant, borner, { attenteSeulement = false } = {}
     return borner(col().find(attenteSeulement ? attente : { $or: [{ expireLe: { $lte: now } }, attente] }).toArray());
 }
 
+/** Une AUTRE ligne (ou, avec `idExclu` absent, une ligne) porte-t-elle cet objet ? Lève si la lecture échoue : l'appelant ne supprime alors pas l'objet. */
+async function autresLignesPortent(col, cleR2, idExclu, borner) {
+    const filtre = idExclu === undefined ? { cleR2 } : { cleR2, _id: { $ne: idExclu } };
+    return (await borner(col().countDocuments(filtre))) > 0;
+}
+
 /**
  * L'objet d'abord, la ligne ensuite. La ligne n'est supprimée que si elle porte encore la cleR2 LUE : une ligne confirmée entre la lecture et la suppression
  * (sa cleR2 a changé) n'est JAMAIS supprimée.
@@ -43,8 +49,15 @@ function lignesEchues(col, maintenant, borner, { attenteSeulement = false } = {}
  * 'changee' : la ligne n'est plus celle qu'on a lue, rien n'a été fait d'irréparable.
  */
 async function supprimerObjetPuisLigne(stockage, ligne, col, borner, filtre = {}) {
-    try { await borner(stockage.supprimer(ligne.cleR2)); }
-    catch (e) { console.error(`❌ [v2 banc] objet non supprimé, ligne conservée (${codeDe(e)})`); return 'echec'; }
+    // ETIQUETAGE-B : la photo d'un scan est PARTAGÉE par les lignes de ses cartes (un lot : une photo, N lignes). L'objet n'est supprimé que par la DERNIÈRE ligne qui le porte ;
+    // si l'on ne sait pas (lecture en échec), il est gardé et la ligne reste (reprise à la prochaine passe).
+    let partage;
+    try { partage = await autresLignesPortent(col, ligne.cleR2, ligne._id, borner); }
+    catch (e) { console.error(`❌ [v2 banc] partage de l'objet non lisible, ligne conservée (${codeDe(e)})`); return 'echec'; }
+    if (!partage) {
+        try { await borner(stockage.supprimer(ligne.cleR2)); }
+        catch (e) { console.error(`❌ [v2 banc] objet non supprimé, ligne conservée (${codeDe(e)})`); return 'echec'; }
+    }
     try {
         const r = await borner(col().deleteOne({ ...filtre, _id: ligne._id, cleR2: ligne.cleR2 }));
         return r && r.deletedCount === 0 ? 'changee' : 'supprimee';
@@ -77,4 +90,4 @@ async function consentementAutorise(req, cfg, colFn = n => db.col(n)) {
     } catch (e) { console.error(`❌ [v2 banc] garde du jeton de consentement non conclue, rien conservé (${codeDe(e)})`); return false; }
 }
 
-module.exports = { JOUR_MS, jourUTC, debutMois, codeDe, creerBorner, limiteLien, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };
+module.exports = { JOUR_MS, jourUTC, debutMois, codeDe, creerBorner, limiteLien, limiteAttente, lignesEchues, supprimerObjetPuisLigne, autresLignesPortent, consentementAutorise };
