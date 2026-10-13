@@ -89,5 +89,43 @@ const mouvementsPlus = async scanId => db.col('mouvements').countDocuments({ sca
         const d = await debitDe('c4');
         H.v('4. l\'écriture de l\'état final échoue : le client EST rendu (rendu: true), ligne « rendu-en-cours » listée, un seul crédit', [r.rendu, d.etat, (await lire(p)).essais, await mouvementsPlus('c4')], [true, 'rendu-en-cours', 3, 1]);
     }
+    // 5. la TRACE échoue SANS arrêt du processus (le crédit est rendu) : le client est rendu, mais la ligne ne passe PAS « rembourse » (aucune trace +1) — elle reste « rendu-en-cours », listée
+    {
+        const { p } = await neuf('c5'); const orig = db.col;
+        db.col = nom => new Proxy(orig(nom), { get(c, k) { const v = c[k]; if (typeof v !== 'function') return v;
+            return (...a) => { if (nom === 'mouvements' && k === 'updateOne' && a[1] && a[1].$set && a[1].$set.delta === 1) return Promise.reject(new Error('panne simulée')); return v.apply(c, a); }; } });
+        let r; try { r = await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId: 'c5', maintenant: t }, cfg)); } finally { db.col = orig; }
+        const d = await debitDe('c5'), rc = await recon(p);
+        H.v('5. la trace +1 échoue (sans arrêt) : crédit rendu (essais 3), aucun mouvement, la ligne reste « rendu-en-cours » (jamais « rembourse » sans trace), listée, écart +1 dit',
+            [r.rendu, (await lire(p)).essais, await mouvementsPlus('c5'), d.etat, rc.rendusEchoues.length, rc.ecarts.map(e => e.ecart)], [true, 3, 0, 'rendu-en-cours', 1, [1]]);
+    }
+    // 6. O5 M1 (constat, pas un correctif) : la poche est PRISE, puis l'écriture du mouvement ET la vérification de son existence échouent (`ecrit === null`) — le crédit est perdu SANS mouvement.
+    //    Ce que dit la réconciliation : l'écart de poche −1 (jamais le scan : aucun mouvement ne porte son identité). La marque de livraison d'O5 ne change pas ce constat (voir l'audit §5, O5).
+    {
+        const p = await inst({ essais: 3 }); await db.col('installations').updateOne({ _id: p.id }, { $set: { essaisInitiaux: 3 } }); const orig = db.col; let lectures = 0;
+        db.col = nom => new Proxy(orig(nom), { get(c, k) { const v = c[k]; if (typeof v !== 'function') return v;
+            return (...a) => { if (nom === 'mouvements' && k === 'insertOne') return Promise.reject(new Error('panne simulée'));
+                if (nom === 'mouvements' && k === 'findOne' && ++lectures >= 2) return Promise.reject(new Error('panne simulée')); return v.apply(c, a); }; } });
+        let echec = null; try { await muet(() => Lg.debiter(p, { scanId: 'c6', cleIdempotence: 'k-c6', maintenant: t }, cfg)); } catch (e) { echec = e.message; } finally { db.col = orig; }
+        const rc = await recon(p);
+        H.v('6. M1 : poche prise, mouvement et vérification en panne : le débit lève, essais 2 (perdu), AUCUN mouvement, la réconciliation dit l\'écart de poche −1 et n\'est pas propre',
+            [echec, (await lire(p)).essais, await db.col('mouvements').countDocuments({ installationId: p.id }), rc.ecarts.map(e => [e.poche, e.ecart]), rc.propre], ['panne simulée', 2, 0, [['essai', -1]], false]);
+    }
+    // 7. UN-CANDIDAT-2 M4 : la limite de la procédure manuelle (audit §15, étape 2) vaut pour TOUTE continuation après un partiel, pas pour le seul `cleOrigine`.
+    //    Scan SANS cleOrigine, 2 unités : la 1re est rendue (partiel, claim renommée « fait »), puis la continuation s'arrête après avoir posé sa claim `rb|scan` (delta 0) et avant sa prise.
+    {
+        const p = await inst({ essais: 3 }); await db.col('installations').updateOne({ _id: p.id }, { $set: { essaisInitiaux: 3 } });
+        await Lg.debiter(p, { scanId: 'c7', cleIdempotence: 'k-c7a', maintenant: t }, cfg); await Lg.debiter(p, { scanId: 'c7', cleIdempotence: 'k-c7b', maintenant: t }, cfg);
+        const d2 = (await db.col('mouvements').find({ scanId: 'c7', type: 'debit' }).sort({ _id: 1 }).toArray())[1];
+        await db.col('mouvements').updateOne({ _id: d2._id }, { $set: { credit: { poche: 'accueil' } } });           // la 2e unité ne peut pas être rendue : partiel
+        const r1 = await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId: 'c7', maintenant: t }, cfg));
+        await db.col('mouvements').updateOne({ _id: d2._id }, { $set: { credit: { poche: 'essai' } } });
+        const a = armerArret((nom, m) => nom === 'mouvements' && m === 'findOneAndUpdate');
+        try { await muet(() => Lg.rembourser(p, { x: 1 }, 'panne', { scanId: 'c7', maintenant: t }, cfg)); } finally { a.relever(); }
+        const rc = await R.reconcilier(p, { cfg, maintenant: new Date(t.getTime() + 2 * 3600e3) });
+        const preuve = { debitsPris: await db.col('mouvements').countDocuments({ scanId: 'c7', type: 'debit', etat: { $in: ['rembourse', 'rendu-en-cours'] } }), mouvementsNonNuls: await db.col('mouvements').countDocuments({ scanId: 'c7', type: 'remboursement', delta: { $ne: 0 } }) };
+        H.v('7. continuation arrêtée après un partiel : partiel (1 unité), claim orpheline listée (delta 0), ET la preuve de l\'étape (2) trouve un débit pris et un mouvement non nul : STOP, la claim n\'est PAS libérable par la procédure',
+            [r1.rendu, a.etat.au, rc.claimsOrphelines.map(c => c.unitesRendues), preuve.debitsPris >= 1 && preuve.mouvementsNonNuls >= 1], [true, 'mouvements.findOneAndUpdate', [false], true]);
+    }
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
