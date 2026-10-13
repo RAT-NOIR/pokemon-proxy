@@ -14,7 +14,9 @@ async function chargerRegle({ importer = f => import(require('url').pathToFileUR
     const base = await LOGOS().regleDuSite();
     const C = await importer('cardmarket.ts');
     if (typeof C?.cardmarketUrl !== 'function') throw new Error(`cardmarketUrl absent de ${SITE_LIB} — l'export s'arrête (jamais un repli)`);
-    return { ...base, cardmarketUrl: C.cardmarketUrl };
+    const D = await importer('impressionDuSet.ts');       // lot 2-A du site : « une impression appartient au set » (tirage, expansion, deck)
+    if (typeof D?.impressionDuSet !== 'function') throw new Error(`impressionDuSet absent de ${SITE_LIB} — l'export s'arrête (jamais un repli)`);
+    return { ...base, cardmarketUrl: C.cardmarketUrl, impressionDuSet: D.impressionDuSet };
 }
 
 async function lireTout(col, filtre, projection) { return col.find(filtre, { projection }).toArray(); }
@@ -25,7 +27,7 @@ async function lireTout(col, filtre, projection) { return col.find(filtre, { pro
  */
 async function exporter({ cartes, prod, regle, journal = () => { } }) {
     verifierRegle(regle);
-    const sets = await lireTout(cartes.collection('sets'), {}, { idExpansion: 1, nomAffichage: 1, tirage: 1, region: 1, code: 1, 'bulba.expansion': 1 });
+    const sets = await lireTout(cartes.collection('sets'), {}, { idExpansion: 1, nomAffichage: 1, tirage: 1, region: 1, code: 1, 'bulba.expansion': 1, deck: 1 });
     const docs = await lireTout(cartes.collection('cartes'), {}, { nomEn: 1, sets: 1, impressions: 1, images: 1 });
     const lignes = await lireTout(cartes.collection('cartes_produits'), {}, { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1 });
     const catalogue = await lireTout(prod.collection('catalogue_produits'), {}, { idProduct: 1, idMetacard: 1 });

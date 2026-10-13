@@ -9,7 +9,8 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 (async () => {
     const dossier = C.DOSSIER;
     const emp = JSON.parse(fs.readFileSync(path.join(dossier, 'empreintes.json'), 'utf8'));
-    H.v('les sept sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
+    H.v('les huit sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
+    H.v('le commit NOMMÉ est écrit dans les empreintes (35ed580, forme complète de 40 caractères)', [/^35ed580[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '35ed580']);
     // la copie n'a pas été retouchée à la main : chaque fichier produit porte l'empreinte écrite
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : empreinte de la copie conforme au fichier`, sha(fs.readFileSync(path.join(dossier, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts (imports réécrits en .mjs)', Object.keys(emp.produits).filter(n => n.endsWith('.mjs')).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(dossier, n), 'utf8'))), []);
@@ -27,28 +28,68 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     }
 
     // les cas fabriqués : la dérive est vue, et nommée
+    const leve1 = (f) => { try { f(); return null; } catch (e) { return e.message; } };
+    const git = C.trouverGit();
+    const gitBrut = (repo, ...args) => require('child_process').execFileSync(git, ['-C', repo, ...args], { maxBuffer: 64 * 1024 * 1024 });
+    // la LECTURE AU COMMIT NOMMÉ : les octets de `git show <commit>:lib/<fichier>`, jamais l'arbre de travail (fins de ligne du poste)
+    const absentDuSite = etat.etat === 'site-absent';
+    if (!absentDuSite) {
+        const pin = C.lecteurGit(C.REPO_SITE, C.COMMIT);
+        for (const nom of Object.keys(emp.sources)) H.v(`   ${nom} : octets lus = \`git show ${C.COMMIT}:lib/${nom}\` (empreinte de la copie)`, sha(pin(nom)), emp.sources[nom]);
+        H.v('   le lecteur rend exactement les octets de git show (comparés à un appel direct à git)', pin('impressionDuSet.ts').equals(gitBrut(C.REPO_SITE, 'show', `${C.COMMIT}:lib/impressionDuSet.ts`)), true);
+        H.v('   un commit qui n\'existe pas : le lecteur LÈVE (jamais un repli sur l\'arbre de travail)', /introuvable|existe|fatal/i.test(leve1(() => C.lecteurGit(C.REPO_SITE, 'deadbeef00000000')('impressionDuSet.ts')) || ''), true);
+        H.v('   un fichier absent du commit : le lecteur LÈVE', leve1(() => pin('nexiste-pas.ts')) !== null, true);
+    }
+    // sur un dépôt FABRIQUÉ : l'arbre de travail diffère du commit (fins de ligne CRLF) ; le lecteur rend le commit
+    const depot = fs.mkdtempSync(path.join(os.tmpdir(), 'regle-depot-'));
+    try {
+        const g = (...a) => require('child_process').execFileSync(git, ['-C', depot, '-c', 'user.name=banc', '-c', 'user.email=banc@exemple.invalid', '-c', 'core.autocrlf=false', ...a]);
+        g('init', '-q'); fs.mkdirSync(path.join(depot, 'lib'));
+        fs.writeFileSync(path.join(depot, 'lib', 'a.ts'), 'export const a = 1;\nexport const b = 2;\n');
+        g('add', 'lib/a.ts'); g('commit', '-q', '-m', 'un');
+        const commit = g('rev-parse', 'HEAD').toString().trim();
+        fs.writeFileSync(path.join(depot, 'lib', 'a.ts'), 'export const a = 1;\r\nexport const b = 3;\r\n');
+        H.v('dépôt fabriqué : le lecteur rend le COMMIT, pas l\'arbre de travail modifié', C.lecteurGit(depot, commit)('a.ts').toString('utf8'), 'export const a = 1;\nexport const b = 2;\n');
+        H.v('   le lecteur de dossier, lui, rend l\'arbre (c\'est ce qui changerait les octets)', C.lecteurDossier(path.join(depot, 'lib'))('a.ts').toString('utf8'), 'export const a = 1;\r\nexport const b = 3;\r\n');
+    } finally { fs.rmSync(depot, { recursive: true, force: true }); }
+    H.v('git introuvable : trouverGit LÈVE (jamais un chemin de version écrit en dur)', /introuvable/.test(leve1(() => C.trouverGit({ LOCALAPPDATA: path.join(os.tmpdir(), 'nexiste-pas-' + process.pid) })) || ''), true);
+
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'regle-site-'));
     try {
-        for (const f of Object.keys(emp.sources)) fs.copyFileSync(path.join(siteLib, f), path.join(tmp, f));
-        H.v('copie conforme du site : ok', C.verifier({ siteLib: tmp }).etat, 'ok');
-        fs.appendFileSync(path.join(tmp, 'imageDeLImpression.ts'), '\n// dérive\n');
-        const d = C.verifier({ siteLib: tmp });
-        H.v('un fichier du site modifié : DÉRIVE, nommé', [d.etat, d.derives], ['derive', ['imageDeLImpression.ts']]);
-        fs.copyFileSync(path.join(siteLib, 'imageDeLImpression.ts'), path.join(tmp, 'imageDeLImpression.ts'));
-        fs.writeFileSync(path.join(tmp, 'visuels-anglais-regardes.json'), JSON.stringify({ cles: ['x'] }));
-        H.v('un JSON du site modifié : DÉRIVE, nommé', C.verifier({ siteLib: tmp }).derives, ['visuels-anglais-regardes.json']);
-        fs.rmSync(path.join(tmp, 'cardmarket.ts'));
-        H.v('un fichier du site manquant (dossier présent) : DÉRIVE, pas « absent »', [C.verifier({ siteLib: tmp }).etat, C.verifier({ siteLib: tmp }).derives.includes('cardmarket.ts')], ['derive', true]);
+        if (!absentDuSite) {
+            const pin = C.lecteurGit(C.REPO_SITE, C.COMMIT);
+            for (const f of Object.keys(emp.sources)) fs.writeFileSync(path.join(tmp, f), pin(f));
+            const lec = (dir) => ({ pin: C.lecteurDossier(dir), main: C.lecteurDossier(dir) });
+            H.v('copie conforme du site : ok', C.verifier({ siteLib, lecteurs: lec(tmp) }).etat, 'ok');
+            fs.appendFileSync(path.join(tmp, 'imageDeLImpression.ts'), '\n// dérive\n');
+            const d = C.verifier({ siteLib, lecteurs: lec(tmp) });
+            H.v('un fichier du site modifié : DÉRIVE, nommé', [d.etat, d.derives], ['derive', ['imageDeLImpression.ts']]);
+            fs.writeFileSync(path.join(tmp, 'imageDeLImpression.ts'), pin('imageDeLImpression.ts'));
+            fs.writeFileSync(path.join(tmp, 'visuels-anglais-regardes.json'), JSON.stringify({ cles: ['x'] }));
+            H.v('un JSON du site modifié : DÉRIVE, nommé', C.verifier({ siteLib, lecteurs: lec(tmp) }).derives, ['visuels-anglais-regardes.json']);
+            fs.writeFileSync(path.join(tmp, 'visuels-anglais-regardes.json'), pin('visuels-anglais-regardes.json'));
+            fs.rmSync(path.join(tmp, 'cardmarket.ts'));
+            H.v('un fichier du site manquant (dossier présent) : DÉRIVE, pas « absent »', [C.verifier({ siteLib, lecteurs: lec(tmp) }).etat, C.verifier({ siteLib, lecteurs: lec(tmp) }).derives.includes('cardmarket.ts')], ['derive', true]);
+            fs.writeFileSync(path.join(tmp, 'cardmarket.ts'), pin('cardmarket.ts'));
+            // le `main` du site bouge APRÈS le commit nommé : la dérive est dite, même si le commit nommé est intact
+            const apres = nom => (nom === 'impressionDuSet.ts' ? Buffer.concat([pin(nom), Buffer.from('\n// lot suivant\n')]) : pin(nom));
+            const dm = C.verifier({ siteLib, lecteurs: { pin: C.lecteurGit(C.REPO_SITE, C.COMMIT), main: apres } });
+            H.v('le main du site change impressionDuSet.ts après le commit nommé : DÉRIVE, nommée', [dm.etat, dm.derives], ['derive', ['impressionDuSet.ts']]);
+        }
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     H.v('dossier du site absent : « site-absent », ni ok ni dérive', C.verifier({ siteLib: path.join(os.tmpdir(), 'nexiste-pas-' + process.pid) }).etat, 'site-absent');
 
     // la GARDE DE FERMETURE : toute importation relative d'un fichier copié doit viser un fichier de la liste des sources (écrite par ce qu'elle autorise)
-    const leve1 = (f) => { try { f(); return null; } catch (e) { return e.message; } };
     const SANS_EXPR = C.SOURCES.filter(n => n !== 'expressionsSures.ts');
-    if (etat.etat !== 'site-absent') {
-        const m = leve1(() => C.produire(siteLib, SANS_EXPR));
-        H.vrai('garde : le site d\'aujourd\'hui sans expressionsSures.ts dans la liste → produire() LÈVE en nommant le fichier manquant et l\'importeur', m && /expressionsSures/.test(m) && /impressionsDuSet/.test(m));
-        H.v('   la liste réelle (avec expressionsSures.ts) produit sans lever', leve1(() => C.produire(siteLib)), null);
+    const SANS_IMP = C.SOURCES.filter(n => n !== 'impressionDuSet.ts');
+    if (!absentDuSite) {
+        const pin = C.lecteurGit(C.REPO_SITE, C.COMMIT);
+        const m = leve1(() => C.produire(pin, SANS_EXPR));
+        H.vrai('garde : le site au commit nommé sans expressionsSures.ts dans la liste → produire() LÈVE en nommant le fichier manquant et l\'importeur', m && /expressionsSures/.test(m) && /impressionsDuSet/.test(m));
+        const m2 = leve1(() => C.produire(pin, SANS_IMP));
+        H.vrai('garde : sans impressionDuSet.ts dans la liste → produire() LÈVE (la copie importerait ./impressionDuSet.mjs, absent), nomme le fichier et l\'importeur', m2 && /impressionDuSet\.ts/.test(m2) && /impressionsDuSet/.test(m2));
+        H.v('   la liste réelle (huit sources) produit sans lever', leve1(() => C.produire(pin)), null);
+        H.v('   la copie produite importe ./impressionDuSet.mjs ET ce fichier est livré', [/from "\.\/impressionDuSet\.mjs"/.test(C.produire(pin).fichiers['impressionsDuSet.mjs'].toString('utf8')), 'impressionDuSet.mjs' in C.produire(pin).fichiers], [true, true]);
     }
     const L = ['a.ts', 'c.json'];
     H.v('garde : import relatif d\'un fichier de la liste (.ts) : accepté', leve1(() => C.fermeture('a.ts', 'import { x } from "./a.ts";', L)), null);
@@ -64,9 +105,12 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     // la règle embarquée se charge, a ses six fonctions, et dit la même chose que celle du site (.ts) sur des cas fabriqués
     const R = require('../chargeur/regle-site');
     const regle = await R.regleEmbarquee();
-    H.v('règle embarquée : les six fonctions', ['fichesDuDocument', 'setParImpression', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'].map(k => typeof regle[k]), Array(6).fill('function'));
+    H.v('règle embarquée : les sept fonctions', ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'].map(k => typeof regle[k]), Array(7).fill('function'));
     let leve = null; try { await R.regleEmbarquee({ importer: async () => ({}) }); } catch (e) { leve = e.message; }
     H.vrai('   un module sans la fonction demandée LÈVE en la nommant (jamais un repli sur une règle vide)', /fichesDuDocument|cardmarketUrl|produitsDeLaFiche/.test(leve || ''));
+    const vrai = f => import(require('url').pathToFileURL(path.join(C.DOSSIER, f)).href);
+    leve = null; try { await R.regleEmbarquee({ importer: async f => (f === 'impressionDuSet.mjs' ? {} : vrai(f)) }); } catch (e) { leve = e.message; }
+    H.vrai('   sans impressionDuSet : LÈVE en la nommant', /impressionDuSet/.test(leve || ''));
     if (etat.etat !== 'site-absent') {
         const site = await require('../migrations/exporter-visuels').chargerRegle();
         const imps = [{ numero: '006', total: '100', rarete: 'Rare' }, { numero: '6' }, { numero: 'TG05', rarete: 'Ultra' }, { numero: null }];

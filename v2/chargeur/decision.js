@@ -6,12 +6,14 @@
 //   · le LIEN : set (slug) → clé de fiche `idInterne|numero` (collectionContrat.ts : cleFiche) → idProducts, avec `fichesDesProduits` du site (produitsDeLaFiche, fichesDuDocument).
 // Rend la main à la boucle d'événements entre deux sets (l'API sert pendant le chargement) : async.
 const L = () => require('../../exporter-donnees-logos-site');      // paresseux : ce module charge dotenv à l'import
-const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
+const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
 
 const entier = x => Number.isInteger(x) && x > 0;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const fichierDe = (cle, w, h) => (typeof cle === 'string' && cle ? { cle, w, h } : null);
 const ceder = () => new Promise(r => setImmediate(r));
+/** Ce qui définit un set pour ses impressions (lib/impressionDuSet.ts : CibleDuSet) : le tirage, les expansions Bulbapedia et, quand le set en porte un, le deck. */
+const cibleDuSet = s => ({ tirage: s.tirage ?? s.region, expansions: [].concat(s.bulba?.expansion ?? []), deck: s.deck });
 /** La clé stable d'une fiche, comme lib/collectionContrat.ts::cleFiche (« - » pour une fiche sans numéro). */
 const cleFiche = (idInterne, numero) => `${idInterne}|${numero ?? '-'}`;
 
@@ -20,11 +22,11 @@ function verifierRegle(regle) {
 }
 
 /**
- * @param sets      documents `sets` (_id, idExpansion, nomAffichage, tirage, region, code, bulba.expansion)
+ * @param sets      documents `sets` (_id, idExpansion, nomAffichage, tirage, region, code, bulba.expansion, deck)
  * @param docs      documents `cartes` (_id, nomEn, sets, impressions, images)
  * @param lignes    documents `cartes_produits` (carteId, idProduct, idExpansion, numeroFiche, slug, slugSet, visuelSubstitut)
  * @param metacarte Map idProduct → idMetacard (le catalogue : sa taille est le dénominateur du catalogue)
- * @param regle     la règle du site (six fonctions) ; @param journal fonction(texte)
+ * @param regle     la règle du site (sept fonctions, dont impressionDuSet) ; @param journal fonction(texte)
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
 async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null }) {
@@ -59,7 +61,11 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     const fiches = new Map(), liens = new Map(), compte = { sets: 0, fiches: 0, produits: 0 };
     let n = 0;
     for (const [id, ls] of lignesParSet) {
-        const s = setsBase.get(id), membres = (parSet.get(id) || []).filter(d => typeof d.nomEn === 'string' && d.nomEn !== '');
+        const s = setsBase.get(id), cible = cibleDuSet(s);
+        // LA règle du site : les impressions de CE set (tirage, expansion, deck). fichesDesProduits (exporter-donnees-logos-site.js, hors v2/, non touché) filtre encore par tirage et expansion ;
+        // elle reçoit ici des documents dont les impressions sont DÉJÀ celles du set, son filtre ne retire plus rien de plus.
+        const membres = (parSet.get(id) || []).filter(d => typeof d.nomEn === 'string' && d.nomEn !== '')
+            .map(d => ({ ...d, impressions: (d.impressions || []).filter(i => i && regle.impressionDuSet(i, cible)) }));
         const ids = new Set(membres.map(d => d._id));
         const fiche = Lg.fichesDesProduits(regle, s, membres, ls.filter(l => ids.has(l.carteId) && exps(s).includes(l.idExpansion))).fiche;
         fiches.set(id, fiche);
@@ -103,7 +109,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (plusieurs) d.plusieursSets++;
         if (!c) { d.aucun++; d.aucunDetail['carte absente']++; continue; }
         if (!s) { d.aucun++; d.aucunDetail['aucun set candidat']++; continue; }
-        const tirage = s.tirage ?? s.region, noms = [].concat(s.bulba?.expansion ?? []);
+        const cibleS = cibleDuSet(s);
         // LE choix du visuel : la fonction des logos (un seul exemplaire). Politiques : un produit sans fiche du site est écarté, comme chez les logos
         // (le site ne le montre sur aucune fiche : aucun visuel « du set » à lui désigner) ; un substitut sans mention reste sans mention et
         // la validation d'entrée le refuse (elle exige une mention non vide), alors que les logos posent un repli.
@@ -116,7 +122,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
         const cle = x => regle.normaliserNumero(x) ?? '';
         const voulu = l.numeroFiche == null ? '' : cle(l.numeroFiche);
-        const au = voulu ? (c.impressions || []).filter(i => i && i.tirage === tirage && noms.includes(i.expansion) && cle(i.numero) === voulu) : [];
+        const au = voulu ? (c.impressions || []).filter(i => i && regle.impressionDuSet(i, cibleS) && cle(i.numero) === voulu) : [];
         const valeur = champ => { const vs = [...new Set(au.map(i => texte(i[champ])).filter(Boolean))]; return vs.length === 1 ? vs[0] : null; };
         const distincts = champ => new Set(au.map(i => texte(i[champ])).filter(Boolean)).size;
         const rarete = valeur('rarete'), total = valeur('total');
