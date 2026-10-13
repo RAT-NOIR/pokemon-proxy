@@ -25,7 +25,6 @@ const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, uniteDeLaLigne } = require('./collecte-cartes/pikaqian-sets');
 const { largeurMinDe, aRejuger } = require('./collecte-cartes/seuils-images');
-const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const R = require('./recepteur-pikaqian');
@@ -76,10 +75,16 @@ async function octetsDesTuiles(visites, dossierPassif, code) {
         if (!m || m[1] !== t.id || path.basename(e.fichier) !== e.fichier) { sortie.set(t.id, { ok: false, motif: 'fichier-hors-forme' }); continue; }
         let octets; try { octets = fs.readFileSync(path.join(dossierPassif, code, e.fichier)); } catch { sortie.set(t.id, { ok: false, motif: 'fichier-absent' }); continue; }
         if (sha256(octets) !== e.sha256) { sortie.set(t.id, { ok: false, motif: 'fichier-corrompu' }); continue; }
-        let meta; try { meta = await sharp(octets).metadata(); await sharp(octets).raw().toBuffer(); } catch { sortie.set(t.id, { ok: false, motif: 'image-illisible' }); continue; }
-        if (!meta.width || !meta.height) { sortie.set(t.id, { ok: false, motif: 'image-illisible' }); continue; }
+        // l'en-tête d'abord, puis un décodage borné (un fichier du dossier peut avoir été édité depuis le récepteur)
+        let meta; try { meta = await sharp(octets).metadata(); if (meta.width && meta.height && meta.width <= R.DIMENSION_MAX && meta.height <= R.DIMENSION_MAX) await sharp(octets, { limitInputPixels: R.DIMENSION_MAX * R.DIMENSION_MAX }).raw().toBuffer(); } catch { sortie.set(t.id, { ok: false, motif: 'image-illisible' }); continue; }
+        if (!meta.width || !meta.height || meta.width > R.DIMENSION_MAX || meta.height > R.DIMENSION_MAX) { sortie.set(t.id, { ok: false, motif: 'image-illisible' }); continue; }
         sortie.set(t.id, { ok: true, octets, sha256: e.sha256, voie: e.voie, fichier: e.fichier, visite: e.visite, w: meta.width, h: meta.height });
     }
+    // 🔴 DES OCTETS IDENTIQUES SUR DEUX TUILES (relecture C, D1) : une image de remplacement chargée paresseusement, un canvas figé, ou un « image non disponible » servi à plusieurs tuiles passeraient toutes les autres
+    // preuves (numéro, nom, adresse) avec une image qui n'est PAS celle de la carte. Une empreinte portée par au moins deux tuiles DISTINCTES de la page désigne aucune d'elles : toutes sont des trous.
+    const parEmpreinte = new Map();
+    for (const [id, o] of sortie) if (o.ok) (parEmpreinte.get(o.sha256) || parEmpreinte.set(o.sha256, []).get(o.sha256)).push(id);
+    for (const ids of parEmpreinte.values()) if (ids.length > 1) for (const id of ids) sortie.set(id, { ok: false, motif: 'octets-partages' });   // PREUVE:octets-partages
     return sortie;
 }
 
@@ -116,17 +121,13 @@ async function jugerCode({ code, dossierPassif, db, M, table = TABLE_PIKAQIAN, a
         const trous = {}; for (const r of Pl.restes) trous[r.motif] = (trous[r.motif] || 0) + 1;
         const compte = (k) => { trous[k] = (trous[k] || 0) + 1; };
         const parTuile = new Map(); for (const p of Pl.plan) parTuile.set(p.tuile.id, (parTuile.get(p.tuile.id) || 0) + 1);
-        const entrees = [], candidates = [];
+        const entrees = [];
+        // (la garde `cle-partagee` d'images-cle-partagee.js est RETIRÉE ici : le plan est dédoublonné par (carte, numéro), elle ne pouvait pas échouer — relecture C. Sa menace réelle, des octets
+        //  identiques sur des tuiles différentes, est jugée par `octets-partages` dans octetsDesTuiles.)
         for (const p of Pl.plan) {
             const o = octets.get(p.tuile.id);
             if (parTuile.get(p.tuile.id) > 1) { entrees.push({ p, statut: 'trou', motif: 'tuile-partagee' }); compte('tuile-partagee'); continue; }
             if (!o?.ok) { const motif = o?.motif ?? 'image-non-recue'; entrees.push({ p, statut: 'trou', motif }); compte(motif); continue; }
-            candidates.push({ p, o });
-        }
-        // une clé (carte, numéro) que plusieurs empreintes partagent n'en désigne aucune (images-cle-partagee.js, `numerotes` : la règle pour les numéros chiffrés)
-        const partagees = clesPartagees(candidates.map(({ p, o }) => ({ carteId: p.carteId, im: { numero: p.numero, sha256: o.sha256 } })), { numerotes: true });
-        for (const { p, o } of candidates) {
-            if (partagees.has(`${p.carteId}|${String(p.numero).trim()}`)) { entrees.push({ p, statut: 'trou', motif: 'cle-partagee' }); compte('cle-partagee'); continue; }
             const _id = P.idImagePikaqian(slug, p.carteId, p.numero);
             const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal seuilApplique').lean();
             // les états que le collecteur du worker juge pareil : retiré = jamais repris ; ok à la même adresse = déjà là ; jugé trop petit à la même adresse = pas rejugé
@@ -185,6 +186,12 @@ async function ecrireCode({ jugement, M, db, deposer, bucket, vignetter = vignet
             const J = await C.joindreAdditif(db, M, S.slug, idEtat);
             const W = await vignetter(db, S.slug, { bucket, arreter });
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
+            // rien à écrire (tout est déjà là) : la jointure ci-dessus a pu réparer une jointure interrompue, mais le bilan du premier import n'est PAS réécrit à « 0 écrite » (relecture C, D3)
+            if (ecrites === 0 && S.aEcrire === 0) {
+                journal.log(`   ${S.slug} : rien à écrire (tout est déjà là) · jointure : ${J.joints} entrée(s) · bilan existant conservé`);
+                bilans.push({ slug: S.slug, rien: true, joints: J.joints });
+                continue;
+            }
             // la RELECTURE : le lot, tel que la base le porte maintenant
             const docs = await M.Image.find({ source: P.SOURCE, set: S.slug, etat: 'ok', lot: P.LOT, voieCollecte: 'navigateur-du-testeur' }).lean();
             const cartesDuLot = await db.collection('cartes').find({ 'images.source': P.SOURCE }, { projection: { images: 1 } }).toArray();
@@ -251,6 +258,7 @@ if (require.main === module) {
         process.exit(2);
     }
     if (R.dansLeDepot(dossierPassif)) { console.error(`❌ le dossier « ${dossierPassif} » est dans le dépôt : les images reçues n'y entrent jamais.`); process.exit(2); }
+    if (R.dansApportsManuels(dossierPassif)) { console.error(`❌ le dossier « ${dossierPassif} » est un dossier d'apports manuels (ou est dedans) : jamais lu ni écrit par un outil.`); process.exit(2); }
     process.on('SIGINT', () => process.exit(130));
     (async () => {
         const { ouvrirConnexions } = require('./collecte-cartes/garde');
@@ -286,7 +294,7 @@ if (require.main === module) {
             let code = 0, total = 0;
             for (const j of jugements) {
                 const b = await ecrireCode({ jugement: j, M, db: cx.db, deposer: (b, cle, donnees, type) => r2.deposerBinaire(b, cle, donnees, type), bucket });
-                for (const x of b) { if (x.bilan) total += x.bilan.ecrites; if (!x.bilan?.concordance) code = 1; }
+                for (const x of b) { if (x.rien || x.refus) continue; total += x.bilan.ecrites; if (!x.bilan.concordance) code = 1; }
             }
             console.log(`\n${code ? '🔴' : '✅'} ${total} image(s) écrite(s) · relu à l'attendu : ${code ? 'NON CONCORDANT, voir ci-dessus' : 'oui'}`);
             console.log(`SETS : ${jugements.flatMap(j => j.sets.map(s => s.slug)).join(',')}`);

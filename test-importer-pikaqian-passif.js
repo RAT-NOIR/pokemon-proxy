@@ -62,12 +62,12 @@ const URL_IMG = n => `https://images.pikaqian.com/cs1bc/${UUID(n)}.webp`;
 const tuile = (n, num, nom) => `<a class="w-full group" data-discover="true" href="/cards/${UUID(n)}"><div><img alt="${nom}" src="${URL_IMG(n)}"/></div><h2>${nom}</h2><p class="font-mono">cs1bc<!-- --> · ${num}</p></a>`;
 // (id de tuile, numéro, nom) — voir le commentaire de chaque cas
 const TUILES = [[1, '001', 'Pikachu'], [2, '001', 'Pikachu Reverse Holo'], [3, '002', 'Raichu'], [4, '003', 'Eevee Plus'], [5, '004', 'Vaporeon'], [6, '005', 'Jolteon'], [7, '006', 'Flareon'],
-    [8, '007', 'Espeon'], [9, '008', 'Umbreon'], [10, '010', 'Glaceon'], [11, '011', 'Sylveon'], [12, '012', 'Gible'], [13, '013', 'Bidoof'], [14, '014', 'Leafeon']];
+    [8, '007', 'Espeon'], [9, '008', 'Umbreon'], [10, '010', 'Glaceon'], [11, '011', 'Sylveon'], [12, '012', 'Gible'], [13, '013', 'Bidoof'], [14, '014', 'Leafeon'], [15, '015', 'Zoroark'], [16, '016', 'Zorua']];
 const pageHtml = (renomme = {}) => `<html><body>${TUILES.map(([n, num, nom]) => tuile(n, num, renomme[n] ?? nom)).join('')}</body></html>`;
 function semer(B) {
     B.col('sets').set(SLUG, { _id: SLUG, tirage: 'zh-hans', region: 'intl' });
-    const cartes = { 1: 'Pikachu', 2: 'Raichu', 3: 'Eevee', 4: 'Vaporeon', 5: 'Jolteon', 6: 'Flareon', 7: 'Espeon', 8: 'Umbreon', 10: 'Glaceon', 11: 'Glaceon', 12: 'Sylveon', 13: 'Gible', 14: 'Bidoof', 15: 'Leafeon' };
-    const numeros = { 1: '001', 2: '002', 3: '003', 4: '004', 5: '005', 6: '006', 7: '007', 8: '008', 10: '010', 11: '010', 12: '011', 13: '012', 14: '013', 15: '014' };
+    const cartes = { 1: 'Pikachu', 2: 'Raichu', 3: 'Eevee', 4: 'Vaporeon', 5: 'Jolteon', 6: 'Flareon', 7: 'Espeon', 8: 'Umbreon', 10: 'Glaceon', 11: 'Glaceon', 12: 'Sylveon', 13: 'Gible', 14: 'Bidoof', 15: 'Leafeon', 16: 'Zoroark', 17: 'Zorua' };
+    const numeros = { 1: '001', 2: '002', 3: '003', 4: '004', 5: '005', 6: '006', 7: '007', 8: '008', 10: '010', 11: '010', 12: '011', 13: '012', 14: '013', 15: '014', 16: '015', 17: '016' };
     for (const [id, nom] of Object.entries(cartes)) {
         const c = Number(id);
         B.col('cartes').set(c, { _id: c, nomEn: nom, images: c === 2 ? [{ set: SLUG, source: 'tcgdex', numero: '002', cleR2: 'tcgdex/y.webp' }] : c === 1 ? [{ set: 'Autre-Set', source: 'tcgdex', numero: '5', cleR2: 'tcgdex/x.webp' }] : [] });
@@ -107,8 +107,10 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         const fA = A.json.fichier;
         const b1 = await img('webp', 200, 30, 30), b3 = await img('webp', 30, 200, 30), b5 = await img('webp', 100, 100, 30, 299), b7 = await img('webp', 30, 30, 200), b8 = await img('webp', 90, 90, 90), b9 = await img('webp', 5, 5, 5);
         const b10 = await img('webp', 200, 200, 30), b11 = await img('png', 30, 200, 200, 320), b12 = await img('webp', 11, 22, 33), b13 = await img('webp', 44, 55, 66);
-        let r = await envoyerImages(fA, [[1, b1], [3, b3], [5, b5], [7, b7], [8, b8], [9, b9], [10, b10], [11, b11], [12, b12], [13, b13]], { 9: 'Umbreon Z' });
-        verifier('la visite A : 10 images reçues par le récepteur', [A.status, r.status, r.json?.recues, r.json?.refusees], [200, 200, 10, []]);
+        // Zoroark et Zorua : les MÊMES octets sur deux tuiles distinctes (une image de remplacement chargée paresseusement) — relecture C, D1
+        const bPartage = await img('webp', 123, 45, 67);
+        let r = await envoyerImages(fA, [[1, b1], [3, b3], [5, b5], [7, b7], [8, b8], [9, b9], [10, b10], [11, b11], [12, b12], [13, b13], [15, bPartage], [16, bPartage]], { 9: 'Umbreon Z' });
+        verifier('la visite A : 12 images reçues par le récepteur', [A.status, r.status, r.json?.recues, r.json?.refusees], [200, 200, 12, []]);
         await new Promise(res => setTimeout(res, 1100));
         // visite B (la plus récente, la page telle qu'elle est maintenant) : Flareon revient avec d'AUTRES octets
         const B = await envoyer(srv.port, '/apprendre', { url: 'https://pikaqian.com/sets/cs1bc', html: pageHtml() });
@@ -134,12 +136,13 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         const juger = (o = {}) => I.jugerCode({ code: 'cs1bc', dossierPassif, db: base.db, M: base.M, attendu, ...o });
         const j = await juger();
         verifier('2 visites lues, 1 fichier de page illisible NOMMÉ (schéma 1)', [j.visites, j.illisibles.map(x => x.fichier), /schéma 2/.test(j.illisibles[0]?.motif || '')], [2, ['page--cs1bc--00000000T000000Z.json'], true]);
-        verifier('la page est celle de la visite la plus récente : 14 tuiles, au code du set', [j.refus, j.tuiles, j.auCode, j.derniere.fiche], [undefined, 14, 14, fB]);
+        verifier('la page est celle de la visite la plus récente : 16 tuiles, au code du set', [j.refus, j.tuiles, j.auCode, j.derniere.fiche], [undefined, 16, 16, fB]);
         const S = j.sets[0];
         verifier('une ligne de table, le set joint à CS1bC', [j.sets.length, S.slug, S.ligne.codePk], [1, SLUG, 'cs1bc']);
-        verifier('PLAN de production : 12 appariés (numéro + tuile sans foil + nom), la tuile à suffixe « Eevee Plus » est un reste nommé par le collecteur', [S.plan, S.restes['tuile-a-suffixe']], [12, 1]);
-        verifier('à ÉCRIRE : 2 (Pikachu webp, Sylveon png) ; déjà là 1 (Gible) ; retiré 1 (Bidoof) ; sous le seuil 1 (Vaporeon 299 px) ; trous 7', [S.aEcrire, S.dejaLa, S.retires, S.tropPetits, S.nTrous], [2, 1, 1, 1, 7]);
-        verifier('trous NOMMÉS par motif : image-non-recue (Leafeon), fichier-hors-forme (Jolteon), versions-divergentes, fichier-corrompu, tuile-changee, tuile-partagee ×2', [S.restes['image-non-recue'], S.restes['fichier-hors-forme'], S.restes['versions-divergentes'], S.restes['fichier-corrompu'], S.restes['tuile-changee'], S.restes['tuile-partagee']], [1, 1, 1, 1, 1, 2]);
+        verifier('PLAN de production : 14 appariés (numéro + tuile sans foil + nom), la tuile à suffixe « Eevee Plus » est un reste nommé par le collecteur', [S.plan, S.restes['tuile-a-suffixe']], [14, 1]);
+        verifier('à ÉCRIRE : 2 (Pikachu webp, Sylveon png) ; déjà là 1 (Gible) ; retiré 1 (Bidoof) ; sous le seuil 1 (Vaporeon 299 px) ; trous 9', [S.aEcrire, S.dejaLa, S.retires, S.tropPetits, S.nTrous], [2, 1, 1, 1, 9]);
+        verifier('trous NOMMÉS par motif : image-non-recue (Leafeon), fichier-hors-forme (Jolteon), versions-divergentes, fichier-corrompu, tuile-changee, tuile-partagee ×2, octets-partages ×2 (Zoroark et Zorua)', [S.restes['image-non-recue'], S.restes['fichier-hors-forme'], S.restes['versions-divergentes'], S.restes['fichier-corrompu'], S.restes['tuile-changee'], S.restes['tuile-partagee'], S.restes['octets-partages']], [1, 1, 1, 1, 1, 2, 2]);
+        verifier('les deux tuiles aux MÊMES octets n\'écrivent rien : ni Zoroark (carte 16) ni Zorua (carte 17) n\'est « a-ecrire » ; une image de remplacement ne passe pas', [16, 17].map(c => S.entrees.find(e => e.p.carteId === c)?.statut + ':' + S.entrees.find(e => e.p.carteId === c)?.motif), ['trou:octets-partages', 'trou:octets-partages']);
         verifier('les deux à écrire sont Pikachu (carte 1) et Sylveon (carte 12), lus par la voie du navigateur', S.entrees.filter(e => e.statut === 'a-ecrire').map(e => [e.p.carteId, e.p.numero, e.o.voie, e.o.w]), [[1, '001', 'canvas', 300], [12, '011', 'canvas', 320]]);
         verifier('le total à écrire par code : aEcrireDe = 2', I.aEcrireDe(j), 2);
         verifier('la simulation n\'a RIEN écrit (images, cartes, sets)', [base.col('images').size, base.col('cartes').get(1).images.length, base.col('sets').get(SLUG).visuelsPikaqianPassif], [2, 1, undefined]);
@@ -180,18 +183,20 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
         verifier('   la tuile, la preuve (set, numéro, nom), l\'adresse, les dimensions de l\'ORIGINAL reçu (300 ; 320 pour le png) et la marque 350 px', [d1.idTuile, /cs1bc/.test(d1.preuve) && /Pikachu/.test(d1.preuve), d1.urlOriginal, d1.wOriginal, d12.wOriginal, d1.basseDefinition, d12.basseDefinition], [UUID(1), true, URL_IMG(1), 300, 320, true, true]);
         verifier('cartes.images : Pikachu garde le visuel de l\'autre set et reçoit le sien ; Sylveon reçoit le sien ; les autres cartes n\'ont pas bougé', [
             base.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), base.col('cartes').get(12).images.map(e => `${e.source}:${e.set}:${e.numero}:${e.lot}`), base.col('cartes').get(2).images.map(e => e.source),
-            [4, 5, 6, 7, 8, 10, 11, 14, 15].every(c => base.col('cartes').get(c).images.length === 0)], [['tcgdex:Autre-Set:5', `pikaqian:${SLUG}:001`], [`pikaqian:${SLUG}:011:${P.LOT}`], ['tcgdex'], true]);
+            [4, 5, 6, 7, 8, 10, 11, 14, 15, 16, 17].every(c => base.col('cartes').get(c).images.length === 0)], [['tcgdex:Autre-Set:5', `pikaqian:${SLUG}:001`], [`pikaqian:${SLUG}:011:${P.LOT}`], ['tcgdex'], true]);
         verifier('le bilan du set (`visuelsPikaqianPassif`) : concordance, écrites 2, relu 2 documents et 2 entrées, garde verte, voies', [bil.concordance, bil.ecrites, bil.relu, bil.garde.ok, bil.voies, bil.aEcrire], [true, 2, { documents: 2, entrees: 2 }, true, { canvas: 2 }, 2]);
         verifier('… et la base le porte', base.col('sets').get(SLUG).visuelsPikaqianPassif?.concordance, true);
-        verifier('les trous ne sont PAS écrits : aucun document `images` pour Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Glaceon ×2, Leafeon', [[4, '004'], [5, '005'], [6, '006'], [7, '007'], [8, '008'], [10, '010'], [11, '010'], [15, '014']].map(([c, n]) => base.col('images').has(P.idImagePikaqian(SLUG, c, n))), Array(8).fill(false));
+        verifier('les trous ne sont PAS écrits : aucun document `images` pour Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Glaceon ×2, Leafeon', [[4, '004'], [5, '005'], [6, '006'], [7, '007'], [8, '008'], [10, '010'], [11, '010'], [15, '014'], [16, '015'], [17, '016']].map(([c, n]) => base.col('images').has(P.idImagePikaqian(SLUG, c, n))), Array(10).fill(false));
         verifier('Bidoof (retiré) et Gible (déjà là) n\'ont pas été touchés', [base.col('images').get(P.idImagePikaqian(SLUG, 14, '013')), base.col('images').get(P.idImagePikaqian(SLUG, 13, '012')).sha256], [{ _id: P.idImagePikaqian(SLUG, 14, '013'), etat: 'retire' }, 'deja']);
 
         // ── IDEMPOTENT : un second passage ne trouve plus rien à écrire (les 2 sont « déjà là »)
         const j2 = await juger();
         // (la jointure additive a aussi posé l'entrée de Gible, dont le document `images` « ok » existait déjà : comme le collecteur du worker l'aurait fait ; les trois cartes sont servies, donc plus des trous)
-        verifier('second passage (simulation) : plus rien à écrire, Pikachu, Sylveon et Gible servis (plus de trous), Bidoof toujours retiré', [I.aEcrireDe(j2), j2.sets[0].dejaLa, j2.sets[0].plan, j2.sets[0].retires, base.col('cartes').get(13).images.map(e => e.source)], [0, 0, 9, 1, ['pikaqian']]);
-        const nDepots = depots.length; await ecrire(j2);
+        verifier('second passage (simulation) : plus rien à écrire, Pikachu, Sylveon et Gible servis (plus de trous), Bidoof toujours retiré', [I.aEcrireDe(j2), j2.sets[0].dejaLa, j2.sets[0].plan, j2.sets[0].retires, base.col('cartes').get(13).images.map(e => e.source)], [0, 0, 11, 1, ['pikaqian']]);
+        const nDepots = depots.length, bilanAvant = JSON.stringify(base.col('sets').get(SLUG).visuelsPikaqianPassif);
+        const b2 = await ecrire(j2);
         verifier('… et son écriture ne dépose rien et ne double aucune entrée', [depots.length - nDepots, base.col('cartes').get(1).images.filter(e => e.source === 'pikaqian').length], [0, 1]);
+        verifier('un import où tout est déjà là ne RÉÉCRIT PAS le bilan à « 0 écrite » : le premier bilan (2 écrites) est conservé tel quel', [b2[0].rien, JSON.stringify(base.col('sets').get(SLUG).visuelsPikaqianPassif) === bilanAvant, base.col('sets').get(SLUG).visuelsPikaqianPassif.ecrites], [true, true, 2]);
 
         // ── LE RETRAIT EN UN GESTE : retirer-visuels-pikaqian.js retire ce que l'import a posé (source + lot), et le bilan passif
         const plan = await retirerLot(base.db, { ecrire: false });
@@ -201,13 +206,13 @@ const couleur = (r, g, b, w = 300) => ({ create: { width: w, height: Math.round(
 
         // ── la ligne de commande : un argument inconnu, ou une écriture sans attendu, refuse AVANT toute connexion (code 2)
         const cli = a => spawnSync(process.execPath, [path.join(__dirname, 'importer-pikaqian-passif.js'), ...a], { encoding: 'utf8', timeout: 20000 });
-        for (const a of [['--inconnu'], ['--ecrire'], ['--ecrire', '--codes=cs1bc'], ['--ecrire', '--codes=cs1bc', '--attendu=151c:3'], ['--ecrire', '--codes=cs1bc,151c', '--attendu=cs1bc:2'], ['--attendu=cs1bc:2'], ['--codes=CS1BC'], ['--dossier=' + path.join(__dirname, 'import-test')]])
+        for (const a of [['--inconnu'], ['--ecrire'], ['--ecrire', '--codes=cs1bc'], ['--ecrire', '--codes=cs1bc', '--attendu=151c:3'], ['--ecrire', '--codes=cs1bc,151c', '--attendu=cs1bc:2'], ['--attendu=cs1bc:2'], ['--codes=CS1BC'], ['--dossier=' + path.join(__dirname, 'import-test')], ['--dossier=' + path.join(os.tmpdir(), 'Logo FR', 'x')], ['--dossier=' + path.join(os.tmpdir(), 'apport-manuel')]])
             verifier(`CLI ${a.join(' ')} : refusé, code 2, avant toute connexion`, cli(a).status, 2);
         verifier('… et un dossier dans le dépôt n\'a rien créé', fs.existsSync(path.join(__dirname, 'import-test')), false);
         // aucun accès réseau dans le code de l'import : ni fetch, ni http, ni axios
         const src = fs.readFileSync(path.join(__dirname, 'importer-pikaqian-passif.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
         verifier('l\'import n\'ouvre aucune connexion réseau (ni fetch, ni http, ni axios, ni https)', /\bfetch\s*\(|require\('(https?|axios|node-fetch|undici)'\)/.test(src), false);
-        verifier('et il importe le collecteur de production (releve, gardeTirage, gardeProduits, planifier, poserOriginal, joindreAdditif), jamais une copie', [/C\.releve\(/.test(src), /C\.gardeTirage\(/.test(src), /C\.gardeProduits\(/.test(src), /C\.planifier\(/.test(src), /C\.poserOriginal\(/.test(src), /C\.joindreAdditif\(/.test(src), /largeurMinDe\(/.test(src), /clesPartagees\(/.test(src)], Array(8).fill(true));
+        verifier('et il importe le collecteur de production (releve, gardeTirage, gardeProduits, planifier, poserOriginal, joindreAdditif), jamais une copie', [/C\.releve\(/.test(src), /C\.gardeTirage\(/.test(src), /C\.gardeProduits\(/.test(src), /C\.planifier\(/.test(src), /C\.poserOriginal\(/.test(src), /C\.joindreAdditif\(/.test(src), /largeurMinDe\(/.test(src), /octets-partages/.test(src)], Array(8).fill(true));
     } finally { await srv.fermer(); fs.rmSync(racine, { recursive: true, force: true }); }
     console.log(`\n${ok} réussis, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

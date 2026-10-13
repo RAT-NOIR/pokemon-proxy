@@ -23,8 +23,10 @@ const MUTANTS = [
     { nom: 'source retirée par décision', de: 'if (retrait) throw', vers: 'if (false) throw' },
     { nom: 'plafond de 400 Mo', de: 'st.dataSize + st.indexSize > stopOctets', vers: 'false' },
     { nom: 'seuls les « a-ecrire » s\'écrivent', de: "if (e.statut !== 'a-ecrire') continue;", vers: '' },
-    { nom: 'cle-partagee (images-cle-partagee.js) — VIDE PAR CONSTRUCTION : le plan est dédoublonné par (carte, numéro)', de: "partagees.has(`${p.carteId}|${String(p.numero).trim()}`)", vers: 'false', inerte: true }
+    { nom: 'octets identiques sur deux tuiles (octets-partages)', de: 'if (ids.length > 1) for', vers: 'if (false) for' },
+    { nom: 'bilan réécrit à « 0 écrite » quand tout est déjà là', de: 'if (ecrites === 0 && S.aEcrire === 0) {', vers: 'if (false) {' }
 ];
+// (la garde `cle-partagee` est RETIRÉE de l'import : vide par construction, elle ne pouvait pas échouer — relecture C ; son mutant « inerte » l'est avec elle)
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-import-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));
