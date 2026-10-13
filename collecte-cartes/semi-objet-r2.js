@@ -3,7 +3,7 @@
 // ============================================================
 // Décision 3 du testeur : les logos communs d'une opération sont SEMI-OFFICIELS. « Match Battle logo.png » (Bulbagarden, `bulbapedia:setlogo`) est DÉJÀ dans notre R2
 // (`bulbapedia/logos/matchbattlelogopng.png`, refusé « générique » le 2026-09-28 sur McDonald's Collection 2022 et McDonald's Match Battle 2023 : c'est leur `logoRefus`).
-// Aucune requête, aucun objet R2 écrit ni retiré : l'entrée `logoSemiOfficiel.en` POINTE vers l'objet existant (vignette absente : `null`, que l'export accepte).
+// Aucune requête, aucun objet R2 écrit ni retiré : l'entrée `logoSemiOfficiel.en` POINTE vers l'objet existant ET vers sa vignette existante (`vignettes/bulbapedia/logos/matchbattlelogopng.webp`, tour 1 : le plan refuse si elle manque).
 // POURQUOI UN OUTIL À PART et non une entrée de collecter-logos-officiels.js : ce collecteur TÉLÉCHARGE (client, cadence, robots, fichier dans R2) et son retrait (`retirerLot`) SUPPRIME
 // les objets R2 de son lot ; un objet partagé avec le `logoRefus` ne doit jamais l'être. Le lot est donc distinct, et le retrait d'ici ne touche à aucun objet. collecter-logos-officiels.js n'est pas modifié.
 // UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE : deux sets nommés, de tirage intl, qui portent le logoRefus de CET objet (cleR2 + sha1) ; des octets de R2 au sha256 attendu (lus par l'appelant) ;
