@@ -35,6 +35,12 @@
     "schema": "ReponseAnalyse",
     "description": "Au scanner : regleVerdict et prixLive null, un seul prix (le guide)."
   },
+  "a-trancher-1.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Un seul candidat (UN-CANDIDAT, D1) : la question « est-ce cette carte ? » (code confirmation, un choix a = OUI). NON = la réponse `aucune` (scan remboursé). Crédit RÉSERVÉ (debite 0, reserve 1)."
+  },
   "a-trancher-2.json": {
     "route": "POST /api/identifier",
     "statut": 200,

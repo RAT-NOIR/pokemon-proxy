@@ -4,7 +4,8 @@
 // une variante ou un numéro inconnu rend le code inéligible. `visuel` est le repli, toujours possible.
 const { choixPour } = require('../choix');
 
-const CODES_QUESTION = Object.freeze(['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel']);
+// 'confirmation' (UN-CANDIDAT, D1) : la question « est-ce cette carte ? » d'un candidat UNIQUE. Un seul choix (OUI = `a`) ; NON est la réponse `aucune` qui existe déjà.
+const CODES_QUESTION = Object.freeze(['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel', 'confirmation']);
 const ZONES = Object.freeze({
     symbole: { x: 0.02, y: 0.84, w: 0.30, h: 0.14 },
     numero: { x: 0.02, y: 0.90, w: 0.40, h: 0.08 },
@@ -23,7 +24,8 @@ const PHRASES = Object.freeze({
         numero: { texte: 'Quel numéro est imprimé en bas de la carte ?', aide: 'Les cartes proposées portent le même nom : le numéro imprimé les distingue.' },
         langue: { texte: 'En quelle langue la carte est-elle imprimée ?', aide: 'Les cartes proposées existent en plusieurs langues : regardez le texte de la carte.' },
         'premiere-edition': { texte: 'La carte porte-t-elle le tampon « Edition 1 » ?', aide: 'Le tampon se trouve sous l’illustration, à gauche.' },
-        visuel: { texte: 'Laquelle de ces cartes est celle de l’annonce ?', aide: 'Plusieurs cartes portent ce nom : comparez l’illustration avec les photos.' }
+        visuel: { texte: 'Laquelle de ces cartes est celle de l’annonce ?', aide: 'Plusieurs cartes portent ce nom : comparez l’illustration avec les photos.' },
+        confirmation: { texte: 'Est-ce bien cette carte ?', aide: 'Comparez l’illustration, le numéro et l’extension avec les photos de l’annonce.' }
     },
     en: {
         reverse: { texte: 'Does the card have a foil shine across its whole surface?', aide: 'A "reverse" card shines almost everywhere except the artwork; a normal card does not. Look at the listing photos.' },
@@ -31,12 +33,13 @@ const PHRASES = Object.freeze({
         numero: { texte: 'Which number is printed at the bottom of the card?', aide: 'The proposed cards share a name: the printed number tells them apart.' },
         langue: { texte: 'Which language is the card printed in?', aide: 'The proposed cards exist in several languages: look at the text on the card.' },
         'premiere-edition': { texte: 'Does the card carry the "Edition 1" stamp?', aide: 'The stamp sits below the artwork, on the left.' },
-        visuel: { texte: 'Which of these cards is the one in the listing?', aide: 'Several cards share this name: compare the artwork with the photos.' }
+        visuel: { texte: 'Which of these cards is the one in the listing?', aide: 'Several cards share this name: compare the artwork with the photos.' },
+        confirmation: { texte: 'Is this the right card?', aide: 'Compare the artwork, the number and the set with the listing photos.' }
     }
 });
 const LIBELLES = Object.freeze({
-    fr: { reverse: 'Reflet sur toute la carte (reverse)', sansReflet: 'Sans reflet sur la carte', tampon: 'Avec le tampon « Edition 1 »', sansTampon: 'Sans le tampon', carte: 'Carte', numero: 'n°' },
-    en: { reverse: 'Shine across the whole card (reverse)', sansReflet: 'No shine on the card', tampon: 'With the "Edition 1" stamp', sansTampon: 'Without the stamp', carte: 'Card', numero: 'No.' }
+    fr: { oui: 'Oui, c’est cette carte', reverse: 'Reflet sur toute la carte (reverse)', sansReflet: 'Sans reflet sur la carte', tampon: 'Avec le tampon « Edition 1 »', sansTampon: 'Sans le tampon', carte: 'Carte', numero: 'n°' },
+    en: { oui: 'Yes, this is the card', reverse: 'Shine across the whole card (reverse)', sansReflet: 'No shine on the card', tampon: 'With the "Edition 1" stamp', sansTampon: 'Without the stamp', carte: 'Card', numero: 'No.' }
 });
 // Libellé FR du brief « Avec le tampon « Edition 1 » » : repris à la lettre.
 
@@ -88,14 +91,15 @@ function zoneDe(code, cs) {
 }
 
 function construireQuestion(candidats, ctx = {}) {
-    if (!Array.isArray(candidats) || candidats.length < 2 || candidats.length > 3) throw new Error(`construireQuestion : 2 ou 3 candidats, reçu ${Array.isArray(candidats) ? candidats.length : typeof candidats}`);
+    if (!Array.isArray(candidats) || candidats.length < 1 || candidats.length > 3) throw new Error(`construireQuestion : 1 à 3 candidats, reçu ${Array.isArray(candidats) ? candidats.length : typeof candidats}`);
     const langue = ctx.langueInterface === 'fr' ? 'fr' : 'en';                    // une langue inconnue rend l'anglais
     const L = LIBELLES[langue];
     const ids = choixPour(candidats.map(c => c.idProduct));                          // lève sur un doublon ; trie par idProduct
     const parId = new Map(candidats.map(c => [c.idProduct, c]));
     const ordonnes = ids.map(x => parId.get(x.idProduct));
     let code = null, libelles = null;
-    for (const c of CODES_QUESTION) {
+    if (ordonnes.length === 1) { code = 'confirmation'; libelles = [L.oui]; }          // un candidat UNIQUE : rien à départager, on demande « est-ce cette carte ? »
+    else for (const c of CODES_QUESTION) {
         if (c === 'visuel') break;
         const l = libellesDe(c, ordonnes, L, langue);
         if (l) { code = c; libelles = l; break; }

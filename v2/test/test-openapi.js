@@ -15,7 +15,7 @@ const cfg = lireConfig({});
 // ── listes de référence du plan (§2), utilisées quand le module du code n'est pas encore fusionné ──
 const PLAN = {
     motifs: ['affirmee', 'question', 'lot', 'introuvable', 'sans-prix', 'panne', 'plafond-jour', 'administrateur'],
-    questions: ['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel'],
+    questions: ['reverse', 'symbole', 'numero', 'langue', 'premiere-edition', 'visuel', 'confirmation'],     // + `confirmation` : UN-CANDIDAT (D1), additive
     variantes: ['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo'],
     raisons: ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture', 'impression-indeterminee'],
     statutsCarte: ['identifiee', 'a-trancher', 'introuvable'],

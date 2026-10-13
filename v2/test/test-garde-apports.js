@@ -22,21 +22,31 @@ const EXCEPTIONS = {
     'mesurer-collection.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)' },
     'mesurer-memoire.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)', 'pokemon-proxy/.banc-local/cache-mongod': 'cache mongod (MONGOMS_DOWNLOAD_DIR)' },
     'test-collections-partagees.js': { 'pokemon-proxy/mesures/taille-bases.jsonl': 'COMMENTAIRE seulement : source du relevé épinglé, jamais lu' },
+    // une CHAÎNE de test, pas un chemin lu : « …\Desktop\LOGO » passé à estDossierApports pour prouver que l'outil de retrait le reconnaît et le REFUSE (voir PREUVES_DE_REFUS)
+    'test-retirer-worktree.js': { 'LOGO': 'chaîne passée à estDossierApports (outil de retrait) : jamais ouverte ni lue' },
+};
+// PREUVES DE REFUS : le SEUL banc dont l'objet est de prouver que l'outil de retrait (outils/retirer-worktree.js) REFUSE ces noms et manipule des jonctions.
+// Il nomme ces six noms comme NOMS DE DOSSIERS qu'il crée lui-même, vides ou presque, sous son dossier temporaire (fs.mkdtempSync(os.tmpdir())), pour vérifier
+// que l'outil refuse de les retirer ; ses jonctions (fs.symlinkSync(…, 'junction')) visent exclusivement des dossiers témoins de ce même temporaire, et son nettoyage
+// délie avant de supprimer. Il n'ouvre jamais un vrai dossier d'apports. Exception NOMMÉE : un seul fichier, ces noms-là seulement ('verrou/photos' reste interdit),
+// et le droit de jonction pour ce fichier seulement ; tout autre fichier, tout autre nom, reste refusé.
+const PREUVES_DE_REFUS = {
+    'test-retirer-worktree.js': { noms: ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'Desktop/LOGO', 'GABARIT-pokecardex'], jonction: true },
 };
 const ELLE_MEME = path.basename(__filename);
 const sep = t => t.replace(/[\\/]+/g, '/');
 
 // La garde sur du texte : renvoie la liste des fautes. Jouée aussi sur des états fabriqués.
-function juger(nom, texte, exceptions = EXCEPTIONS) {
-    const fautes = [], t = sep(texte), bas = t.toLowerCase();
-    for (const i of INTERDITS) if (bas.includes(i.toLowerCase())) fautes.push(`${nom} nomme « ${i} »`);
+function juger(nom, texte, exceptions = EXCEPTIONS, preuves = PREUVES_DE_REFUS) {
+    const fautes = [], t = sep(texte), bas = t.toLowerCase(), p = preuves[nom] || { noms: [], jonction: false };
+    for (const i of INTERDITS) if (bas.includes(i.toLowerCase()) && !p.noms.includes(i)) fautes.push(`${nom} nomme « ${i} »`);
     for (const m of t.matchAll(/[A-Za-z]:\/Users\/[^/'"]+\/Desktop\/([^'"\n(,]+)/g)) {
         const chemin = m[1].trim().toLowerCase();
         // chemin exact de l'exception, ou un sous-chemin de lui (jamais l'inverse : le dossier parent n'est pas permis)
         const permis = Object.keys(exceptions[nom] || {}).some(e => { const x = e.toLowerCase(); return chemin === x || chemin.startsWith(x + '/'); });
         if (!permis) fautes.push(`${nom} nomme le chemin du Bureau « ${m[1].trim()} », hors des exceptions nommées`);
     }
-    if (/symlinkSync|'junction'|"junction"/.test(texte)) fautes.push(`${nom} crée une jonction ou un lien`);
+    if (/symlinkSync|'junction'|"junction"/.test(texte) && !p.jonction) fautes.push(`${nom} crée une jonction ou un lien`);
     return fautes;
 }
 
@@ -65,5 +75,10 @@ H.v('l\'exception « pokemon-proxy » est un CHEMIN, plus le dossier entier', [
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\backup-2026-10-10-lot-075226'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\autre-dossier-du-testeur'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy'").length], [0, 1, 1]);
+H.v('la preuve de refus de l\'outil de retrait : ses six noms et ses jonctions passent, pour CE fichier seulement', [
+    juger('test-retirer-worktree.js', "['Logo FR','apport-manuel','Logo JP','Logo ZH','GABARIT-pokecardex'].map(n => path.join(MUT, n)); 'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO'; fs.symlinkSync(a, b, 'junction')").length,
+    juger('autre.js', "path.join(MUT, 'Logo FR')").length, juger('autre.js', "fs.symlinkSync(a, b, 'junction')").length], [0, 1, 1]);
+H.v('…mais « verrou/photos » reste interdit à ce fichier, et un chemin du Bureau inconnu aussi', [
+    juger('test-retirer-worktree.js', "'verrou/photos'").length, juger('test-retirer-worktree.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\inconnu\\\\a'").length], [1, 1]);
 H.v('un fichier sain passe', juger('x.js', "path.join(__dirname, 'fixtures', 'a.json')"), []);
 H.bilan();

@@ -306,9 +306,10 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.v('   après une réponse (débité UNE fois) : identique, essais 2, net -1', [R_rep.apresReponse, R_rep.apresReponse.essais, R_rep.apresReponse.net, R_rep.apresReponse.debitsOuverts], [A_rep.apresReponse, 2, -1, ['debite']]);
         H.v('   après un abandon (rendu) : identique, essais 3, net 0', [R_ab.apresReponse, R_ab.apresReponse.essais, R_ab.apresReponse.net], [A_ab.apresReponse, 3, 0]);
         H.vrai('   la facturation est celle de l\'ambiguë, à l\'identique', JSON.stringify(R_rep.facturation) === JSON.stringify(A_rep.facturation));
-        // un seul candidat : pas de question possible -> introuvable, et le crédit est RENDU (le remboursement différé n'est jamais perdu)
+        // UN SEUL candidat (UN-CANDIDAT, D1 : « ce qui n'est pas affirmé devient une question ») : la question « est-ce cette carte ? », RÉSERVÉE comme toute question — le remboursement différé
+        // devient une réservation (jamais perdu : OUI le débite, NON ou l'abandon le rend ; l'argent complet est dans test-un-candidat-route.js)
         mode = 'refus-egalite-seul'; const un = await inst(3); const ru = await poster(sv.url, un.jeton, corps(), { nom: 'fab-refus-seul' });
-        H.v('   refus à UN seul candidat : introuvable, crédit rendu (essai 3), motif introuvable', [ru.json.analyse.statut, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['introuvable', true, 'introuvable', 3]);
+        H.v('   refus à UN seul candidat : a-trancher (question de confirmation), crédit RÉSERVÉ (essai 2), motif question', [ru.json.analyse.statut, ru.json.analyse.cartes[0].question.code, ru.json.facturation.reserve, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['a-trancher', 'confirmation', 1, false, 'question', 2]);
         // ── JUMEAU-V2 : une AFFIRMATION de la chaîne dont le produit a un jumeau devient une question RÉSERVÉE (comme une ambiguë) ; au-delà de 3 produits, ou sans colonne, un
         //    introuvable REMBOURSÉ au motif distinct, écrit dans `analyses` (jamais servi : le contrat public ne change pas). Chemin de PRODUCTION : deps.jumeaux est lu par la route.
         {

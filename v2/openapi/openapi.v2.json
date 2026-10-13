@@ -3072,8 +3072,10 @@
               "numero",
               "langue",
               "premiere-edition",
-              "visuel"
-            ]
+              "visuel",
+              "confirmation"
+            ],
+            "description": "`confirmation` : « est-ce cette carte ? » d'un candidat UNIQUE (un seul choix `a`, OUI) ; NON est la réponse `aucune`. Les autres codes séparent 2 ou 3 candidats."
           },
           "texte": {
             "type": "string"
@@ -3096,7 +3098,7 @@
           },
           "choix": {
             "type": "array",
-            "minItems": 2,
+            "minItems": 1,
             "maxItems": 3,
             "items": {
               "$ref": "#/components/schemas/Choix"
@@ -3300,7 +3302,7 @@
           },
           "candidats": {
             "type": "array",
-            "minItems": 2,
+            "minItems": 1,
             "maxItems": 3,
             "items": {
               "$ref": "#/components/schemas/Produit"
@@ -3752,6 +3754,10 @@
           },
           "facturation": {
             "$ref": "#/components/schemas/Facturation"
+          },
+          "remboursementEnAttente": {
+            "const": true,
+            "description": "Additif, présent SEULEMENT quand le lot de cette carte doit être remboursé et ne l'est pas encore (le remboursement a échoué ou n'a pas pu être jugé : le serveur le reprend). Absent sinon. `facturation.rembourse` reste faux ; lire le solde plus tard."
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
@@ -4504,7 +4510,7 @@
               "aucune",
               "ne-sait-pas"
             ],
-            "description": "L'`id` d'un choix, `aucune` ou `ne-sait-pas`."
+            "description": "L'`id` d'un choix, `aucune` ou `ne-sait-pas`. Sur une question de confirmation (un seul candidat, code `confirmation`) : `a` = OUI, c'est cette carte (débitée) ; `aucune` = NON (scan remboursé) ; `ne-sait-pas` = abandon (remboursé, la question reste posée)."
           }
         },
         "required": [
