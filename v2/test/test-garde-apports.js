@@ -8,43 +8,30 @@
 const fs = require('fs'); const path = require('path');
 const H = require('./_harnais');
 
-// comparés SANS casse (Windows ouvre « logo fr » comme « Logo FR »), après uniformisation des séparateurs en « / »
-const INTERDITS = ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'verrou/photos', 'Desktop/LOGO', 'GABARIT-pokecardex'];
-// Chemins du Bureau qu'un fichier a le droit de nommer (début du chemin, séparateurs « / »). AUCUN n'est un dossier rempli à la main par le testeur.
-const EXCEPTIONS = {
-    'test-abus-routes.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (dépôt voisin) ; le banc se passe du dossier absent', 'pokemon-proxy-api-v2/.superpowers/sdd/PLAN-API-V2/progress.md': 'journal de lots du plan, lecture seule (RM_PROGRESS)' },
-    'test-collection-forme.js': { 'rat-market-site': 'code du site (lib/*.ts), pas un apport manuel (RM_SITE)' },
-    'test-contrat-extension.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (RM_EXTENSION_FAUSSES)' },
-    'test-identifier-adaptateur.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension' },
-    'test-identifier-regle-g.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
-    'test-identifier-regle-g-route.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
-    // outils de mesure hors lancer-tout : le chemin exact d'une sauvegarde de lot et du cache mongod, jamais le dossier entier du Bureau
-    'mesurer-collection.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)' },
-    'mesurer-memoire.js': { 'pokemon-proxy/backup-2026-10-10-lot-075226': 'sauvegarde de lot (lecture)', 'pokemon-proxy/.banc-local/cache-mongod': 'cache mongod (MONGOMS_DOWNLOAD_DIR)' },
-    'test-collections-partagees.js': { 'pokemon-proxy/mesures/taille-bases.jsonl': 'COMMENTAIRE seulement : source du relevé épinglé, jamais lu' },
-    // une CHAÎNE de test, pas un chemin lu : « …\Desktop\LOGO » passé à estDossierApports pour prouver que l'outil de retrait le reconnaît et le REFUSE (voir PREUVES_DE_REFUS)
-    'test-retirer-worktree.js': { 'LOGO': 'chaîne passée à estDossierApports (outil de retrait) : jamais ouverte ni lue' },
-};
-// PREUVES DE REFUS : le SEUL banc dont l'objet est de prouver que l'outil de retrait (outils/retirer-worktree.js) REFUSE ces noms et manipule des jonctions.
-// Il nomme ces six noms comme NOMS DE DOSSIERS qu'il crée lui-même, vides ou presque, sous son dossier temporaire (fs.mkdtempSync(os.tmpdir())), pour vérifier
-// que l'outil refuse de les retirer ; ses jonctions (fs.symlinkSync(…, 'junction')) visent exclusivement des dossiers témoins de ce même temporaire, et son nettoyage
-// délie avant de supprimer. Il n'ouvre jamais un vrai dossier d'apports. Exception NOMMÉE : un seul fichier, ces noms-là seulement ('verrou/photos' reste interdit),
-// et le droit de jonction pour ce fichier seulement ; tout autre fichier, tout autre nom, reste refusé.
+// La liste des dossiers d'apports (INTERDITS) et les exceptions nommées fichier par fichier (EXCEPTIONS) vivent dans _apports-exceptions.js : l'ESPION des lectures de fichiers (_espion-fs.js) lit la MÊME définition.
+const { INTERDITS, EXCEPTIONS } = require('./_apports-exceptions');
+const ELLE_MEME = path.basename(__filename), LISTE = '_apports-exceptions.js';   // la liste partagée NOMME les dossiers interdits (c'est sa fonction) : elle est la définition, pas un usage
+// PREUVES DE REFUS (api-v2, e232caeb) : table LOCALE à ce banc, HORS de valider() et de la liste partagée. Elle ne concerne que test-retirer-worktree.js, dont l'objet est de prouver que l'outil de retrait
+// (outils/retirer-worktree.js) REFUSE ces noms et manipule des jonctions. Il les nomme comme NOMS DE DOSSIERS qu'il crée lui-même sous son dossier temporaire (fs.mkdtempSync(os.tmpdir())) et comme CHAÎNES
+// passées à estDossierApports (« …\Desktop\LOGO » : jamais ouverte ni lue) ; ses jonctions visent exclusivement des dossiers témoins de ce même temporaire. Il n'ouvre jamais un vrai dossier d'apports.
+// Pourquoi hors de la liste partagée : cette liste est celle de l'ESPION (accès réels au disque) et valider() y refuse tout chemin protégé et ses descendants, « LOGO » compris — à raison. Ici ce n'est pas un
+// accès, c'est du texte : la preuve reste une chaîne nommée dans ce banc, et l'espion n'en reçoit aucune ouverture. Exception NOMMÉE : un seul fichier, ces noms-là seulement ('verrou/photos' reste interdit),
+// le chemin du Bureau « LOGO » (chaîne) et le droit de jonction pour ce fichier seulement ; tout autre fichier, tout autre nom, tout autre dossier du Bureau reste refusé.
 const PREUVES_DE_REFUS = {
-    'test-retirer-worktree.js': { noms: ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'Desktop/LOGO', 'GABARIT-pokecardex'], jonction: true },
+    'test-retirer-worktree.js': { noms: ['Logo FR', 'apport-manuel', 'Logo JP', 'Logo ZH', 'Desktop/LOGO', 'GABARIT-pokecardex'], chemins: ['LOGO'], jonction: true },
 };
-const ELLE_MEME = path.basename(__filename);
 const sep = t => t.replace(/[\\/]+/g, '/');
 
 // La garde sur du texte : renvoie la liste des fautes. Jouée aussi sur des états fabriqués.
 function juger(nom, texte, exceptions = EXCEPTIONS, preuves = PREUVES_DE_REFUS) {
-    const fautes = [], t = sep(texte), bas = t.toLowerCase(), p = preuves[nom] || { noms: [], jonction: false };
+    const fautes = [], t = sep(texte), bas = t.toLowerCase(), p = preuves[nom] || { noms: [], chemins: [], jonction: false };
     for (const i of INTERDITS) if (bas.includes(i.toLowerCase()) && !p.noms.includes(i)) fautes.push(`${nom} nomme « ${i} »`);
     for (const m of t.matchAll(/[A-Za-z]:\/Users\/[^/'"]+\/Desktop\/([^'"\n(,]+)/g)) {
         const chemin = m[1].trim().toLowerCase();
         // chemin exact de l'exception, ou un sous-chemin de lui (jamais l'inverse : le dossier parent n'est pas permis)
         const permis = Object.keys(exceptions[nom] || {}).some(e => { const x = e.toLowerCase(); return chemin === x || chemin.startsWith(x + '/'); });
-        if (!permis) fautes.push(`${nom} nomme le chemin du Bureau « ${m[1].trim()} », hors des exceptions nommées`);
+        const preuve = (p.chemins || []).some(e => chemin === e.toLowerCase());   // chaîne de preuve de refus : égalité EXACTE, jamais un sous-chemin
+        if (!permis && !preuve) fautes.push(`${nom} nomme le chemin du Bureau « ${m[1].trim()} », hors des exceptions nommées`);
     }
     if (/symlinkSync|'junction'|"junction"/.test(texte) && !p.jonction) fautes.push(`${nom} crée une jonction ou un lien`);
     return fautes;
@@ -56,7 +43,7 @@ const lister = (d, racine = true) => fs.readdirSync(d, { withFileTypes: true }).
     : EXT.test(e.name) ? [path.join(d, e.name)] : []);
 // fixtures/ ne porte que des données figées (référence gelée, table synthétique) — mais ses .js (le générateur) sont lus
 const fixturesJs = fs.readdirSync(path.join(__dirname, 'fixtures')).filter(f => f.endsWith('.js')).map(f => path.join(__dirname, 'fixtures', f));
-const fichiers = [...lister(__dirname), ...fixturesJs].filter(f => path.basename(f) !== ELLE_MEME);
+const fichiers = [...lister(__dirname), ...fixturesJs].filter(f => path.basename(f) !== ELLE_MEME && path.basename(f) !== LISTE);
 H.v('la garde lit des fichiers de banc (dénominateur > 30)', fichiers.length > 30, true);
 H.v('elle lit aussi des .json de v2/test (hors fixtures/)', fichiers.filter(f => f.endsWith('.json')).length >= 2, true);
 const fautes = fichiers.flatMap(f => juger(path.basename(f), fs.readFileSync(f, 'utf8')));
@@ -70,7 +57,7 @@ H.v('refuse Logo JP, Logo ZH, verrou\\photos et GABARIT-pokecardex', ['Logo JP',
 H.v('refuse Desktop\\LOGO', juger('x.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\LOGO\\\\a.png'").length >= 1, true);
 H.v('refuse un dossier du Bureau inconnu', juger('x.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\inconnu\\\\a'").length, 1);
 H.v('refuse une jonction', juger('x.js', "fs.symlinkSync(a, b, 'junction')").length, 1);
-H.v('une exception nommée passe, pour son fichier seulement', [juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length, juger('autre.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length], [0, 1]);
+H.v('une exception nommée passe, pour son fichier seulement', [juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site\\\\lib\\\\logos-officiels.json'").length, juger('autre.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site\\\\lib\\\\logos-officiels.json'").length, juger('test-collection-forme.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\rat-market-site'").length], [0, 1, 1]);   // tour 3 : la clé nue du site n'est plus permise
 H.v('l\'exception « pokemon-proxy » est un CHEMIN, plus le dossier entier', [
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\backup-2026-10-10-lot-075226'").length,
     juger('mesurer-memoire.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\pokemon-proxy\\\\autre-dossier-du-testeur'").length,
@@ -80,5 +67,22 @@ H.v('la preuve de refus de l\'outil de retrait : ses six noms et ses jonctions p
     juger('autre.js', "path.join(MUT, 'Logo FR')").length, juger('autre.js', "fs.symlinkSync(a, b, 'junction')").length], [0, 1, 1]);
 H.v('…mais « verrou/photos » reste interdit à ce fichier, et un chemin du Bureau inconnu aussi', [
     juger('test-retirer-worktree.js', "'verrou/photos'").length, juger('test-retirer-worktree.js', "'C:\\\\Users\\\\Yung\\\\Desktop\\\\inconnu\\\\a'").length], [1, 1]);
+H.v('la chaîne « Desktop\\LOGO » de la preuve est EXACTE et propre à ce fichier : un sous-chemin (LOGO\\sub) ou un autre fichier est refusé ; la table de preuves n\'est PAS la liste validée (aucune clé de preuve n\'y figure)', [
+    juger('test-retirer-worktree.js', "'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO\\\\sub'").length >= 1, juger('autre.js', "'C:\\\\Users\\\\u\\\\Desktop\\\\LOGO'").length >= 1,
+    Object.keys(require('./_apports-exceptions').EXCEPTIONS).includes('test-retirer-worktree.js')], [true, true, false]);
 H.v('un fichier sain passe', juger('x.js', "path.join(__dirname, 'fixtures', 'a.json')"), []);
+// Tour 1 (I-3) : les exceptions sont validées AU CHARGEMENT de la liste partagée (valider) ; une clé vide, « . », « .. », absolue ou dans un dossier d'apports est refusée. La mutation « clé vide » tue ce banc
+// (et celui de l'espion) : le module de la liste lève dès son require.
+const { valider } = require('./_apports-exceptions');
+const refuse = ex => { try { valider(ex, {}); return false; } catch { return true; } };
+H.v('une exception à clé vide, « . » ou « .. » est refusée (elle ouvrirait le Bureau entier) ; une clé nommée et raisonnée passe', [refuse({ 'x.js': { '': 'raison' } }), refuse({ 'x.js': { '.': 'raison' } }), refuse({ 'x.js': { '..': 'raison' } }), refuse({ 'x.js': { 'rat-market-site/lib': 'raison' } })], [true, true, true, false]);
+// Tour 2 (I-A) : un ANCÊTRE d'un dossier d'apports est refusé comme le dossier lui-même (la mutation M1 de la relecture 2 : « pokemon-proxy » ajouté à un banc chargeur, et « LOGO » seul)
+H.v('une exception qui est un ANCÊTRE d\'un dossier d\'apports (le dépôt du testeur, son verrou, le dépôt de l\'API) ou « LOGO » est refusée ; la liste réelle ajoutée de l\'une d\'elles est refusée',
+    [refuse({ 'x.js': { 'pokemon-proxy': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy/verrou': 'raison' } }), refuse({ 'x.js': { 'pokemon-proxy-api-v2': 'raison' } }), refuse({ 'x.js': { LOGO: 'raison' } }),
+        refuse({ ...require('./_apports-exceptions').EXCEPTIONS, 'test-chargeur-decision.js': { 'rat-market-site/lib': 'r', 'pokemon-proxy': 'r' } })], [true, true, true, true, true]);
+// Tour 3 (I-B) : un DESCENDANT d'un dossier protégé est refusé aussi (mutation A de la relecture 3 : « LOGO/sub » ajouté à un banc chargeur) ; (M-E) toute clé qui ouvrirait un .env l'est aussi
+const EX = require('./_apports-exceptions').EXCEPTIONS;
+H.v('une exception SOUS le dossier du testeur (LOGO/sub, logo/x.png) ou qui ouvrirait un .env (la clé nue du site, son .env) est refusée ; la liste réelle ajoutée de « LOGO/sub » est refusée',
+    [refuse({ 'x.js': { 'LOGO/sub': 'raison' } }), refuse({ 'x.js': { 'logo/x.png': 'raison' } }), refuse({ 'x.js': { 'rat-market-site': 'raison' } }), refuse({ 'x.js': { 'rat-market-site/.env': 'raison' } }),
+        refuse({ ...EX, 'test-chargeur-decision.js': { 'rat-market-site/lib': 'r', 'LOGO/sub': 'r' } })], [true, true, true, true, true]);
 H.bilan();

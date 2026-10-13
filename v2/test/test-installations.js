@@ -3,6 +3,7 @@ const H = require('./_harnais'); const A = require('./_b2-aide'); const db = req
 const { lireConfig } = require('../config'); const J = require('../comptes/jetons');
 (async () => {
     await H.ouvrirBac('test-installations.js'); await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : 2 installations par IP et par JOUR (fenêtre fixe) ; horloge des limiteurs fixée au milieu de l'heure (donc du jour courant)
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_ESSAIS_GLOBAUX_JOUR: '500' });
     const appels = [];
     const fauxArgent = {

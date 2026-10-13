@@ -4,6 +4,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
 const { resoudrePorteur } = require('../porteur');
 (async () => {
     await H.ouvrirBac('test-comptes-connexion.js'); await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : plafonds de connexion par compte (10) et par IP (31), fenêtres FIXES d'une heure ; horloge des limiteurs fixée au milieu de l'heure
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
     const srv = await A.demarrer(cfg);
     let n = 0;

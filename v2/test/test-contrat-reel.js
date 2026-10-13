@@ -98,7 +98,9 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
 (async () => {
     // Les limiteurs du serveur comptent par FENÊTRE FIXE (heure, jour). Un banc qui franchirait une frontière en pleine série de « 3 essais puis 429 » verrait son compteur repartir à zéro :
     // état non joué, comptes différents d'une exécution à l'autre (constat du tour 1, M3). On attend donc la frontière avant de commencer quand elle est à moins de 4 minutes.
-    for (const fenetre of [3600e3, 86400e3]) { const reste = fenetre - (Date.now() % fenetre); if (reste < 240e3) { console.log(`   frontière de fenêtre (${fenetre / 3600e3} h) dans ${Math.round(reste / 1000)} s : attente avant de jouer`); await attendre(reste + 2000); } }
+    // B2b point 6 : la garde couvre aussi la SEMAINE (poche hebdo semée à la semaine ISO courante, l.168 et l.559) et le MOIS (abonnement `moisCle`, l.501) — lus par le serveur enfant avec son horloge réelle.
+    // Une horloge de limiteur ne peut pas atteindre un serveur enfant : la garde d'attente reste le seul moyen ici (harnais : H.eviterFrontieres, marge 4 minutes).
+    await H.eviterFrontieres({ heure: true, jour: true, semaine: true, mois: true }, 240e3);
     await H.ouvrirBancV2();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');

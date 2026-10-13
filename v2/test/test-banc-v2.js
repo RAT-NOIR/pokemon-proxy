@@ -58,7 +58,7 @@ const avecEnv = (vars, f) => {
     try {
         sys.copyFileSync(chemin.join(__dirname, 'lancer-tout.js'), chemin.join(dLanceur, 'lancer-tout.js'));
         sys.writeFileSync(chemin.join(dLanceur, 'test-env.js'), "const m = process.env.MONGODB_URI === undefined && !Object.values(process.env).some(v => /^mongodb(\\+srv)?:\\/\\//i.test(v)) && process.env.BANC_ISOLE === '1';\nconsole.log(m ? '1 réussis, 0 échoués' : '0 réussis, 1 échoués'); process.exitCode = m ? 0 : 1;\n");
-        const rl = cp.spawnSync(process.execPath, [chemin.join(dLanceur, 'lancer-tout.js')], { encoding: 'utf8', env: envProduction(), timeout: 60000, cwd: dLanceur });
+        const rl = cp.spawnSync(process.execPath, [chemin.join(dLanceur, 'lancer-tout.js')], { encoding: 'utf8', env: { ...envProduction(), RM_LANCEUR_SANS_ESPION: '1' }, timeout: 60000, cwd: dLanceur });   // copie du lanceur seule : sans l'armeur de l'espion à côté (tour 1, M-4)
         H.v('   lancer-tout : ses enfants ne voient ni URI mongodb ni production (code 0)', rl.status, 0);
     } finally { sys.rmSync(dLanceur, { recursive: true, force: true }); }
     // le rejeu de migration, LANCÉ SEUL (hors banc), refuse AVANT de se connecter. L'URI donnée est un port fermé de loopback : si le script tentait quand même

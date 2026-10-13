@@ -4,6 +4,8 @@
 const { routesCollection } = require('./routes');
 const service = require('./service');
 module.exports = {
+    // B2b tour 2 : pour les BANCS seulement — la promesse du recompte lancé au montage (`routes` ne l'attend toujours pas ; un banc qui compte les documents juste après le montage l'attend ici). Lève si le recompte échoue ou dépasse le délai.
+    pret: (ms) => service.attendreInitialisation(ms),
     enTete(app, cfg) { },
     routes(router, cfg, deps) {
         routesCollection(router, cfg, deps);

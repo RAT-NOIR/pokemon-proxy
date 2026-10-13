@@ -63,7 +63,18 @@ function fuite(texte, reponse = {}) {
     return null;
 }
 const protoSain = () => Object.keys(Object.prototype).length === 0 && ({}).role === undefined && ({}).x === undefined && !Object.prototype.hasOwnProperty.call(Object.prototype, 'x') && Object.getPrototypeOf(Object.prototype) === null;
+// Le compteur de la collection (`compteurs`, clé collection-octets) est créé par un RECOMPTE lancé au MONTAGE du lot, sans que personne l'attende (collection/service.js : initialiser). Sous charge
+// (lancer-tout), il peut aboutir APRÈS le premier instantané : « ÉCART … écriture en base (compteurs 0→1) » sur une requête hostile qui n'a rien écrit (« 85 réussis, 2 échoués », vu en B1 puis au tour 1 de
+// B2b). Tour 2 : le lot expose la PROMESSE de ce recompte (`collection/monter.js` : pret, production inchangée) ; le premier instantané l'ATTEND (30 s) au lieu de sonder la base, et l'attente qui expire,
+// un recompte en échec ou un compteur toujours absent LÈVENT : le banc n'est plus instable en silence.
+let compteurAttendu = false;
+async function attendreCompteur() {
+    if (compteurAttendu) return; compteurAttendu = true;
+    await require('../collection/monter').pret(30000);
+    if (await raw('compteurs').countDocuments({ cle: 'collection-octets' }) < 1) throw new Error('le recompte de la collection a abouti mais le compteur global est absent');
+}
 async function instantane() {
+    await attendreCompteur();
     const noms = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name).filter(n => !n.startsWith('system.'));
     const o = {}; for (const n of noms) o[n] = await raw(n).countDocuments({});
     return o;
@@ -85,7 +96,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
 }
 
 (async () => {
+    // B2b point 6 : (O1) « au plus 3 courriers par adresse et par heure » est un compteur de SERVICE (consommer, `new Date()`) : une frontière d'heure entre les 8 demandes ferait partir 3 courriers dans chaque
+    // heure (6 reçus, assertion fausse) ; c'est la cause retenue du « 85 réussis, 2 échoués » vu une fois en B1 (reproduit à l'horloge décalée sur une copie sans garde). La garde attend la frontière si elle est à moins de 4 minutes (le banc dure ~35 s).
+    // (les limiteurs de ce banc passent par l'horloge commune, fixée au milieu de l'heure après l'ouverture de la base : fenêtres d'IP et de porteur.)
+    await H.eviterFrontieres({ heure: true });
     await H.ouvrirBancV2();
+    H.fixerHorlogeMilieu();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
     await connecterMongo({ script: 'test-abus-routes.js', ecrit: true });
@@ -597,8 +613,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // le courrier n'est pas une arme : une même adresse ne reçoit pas plus de `renvoiParCompteHeure` liens de réinitialisation par heure, d'où que viennent les demandes
         courrier.envoyes.length = 0;
         const victime = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: victime, emailCle: victime, motDePasse: hash }), { verifie: true }));
-        const reps = [];
-        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
+        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
         const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
         await svc.attendre();
         const recus = courrier.envoyes.filter(e => e.email === victime).length;
@@ -768,7 +783,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             RENDER_GIT_COMMIT: [c => c.versions.chaine, null, 'pas-un-commit', 'ignore'], V2_VERSION_MODELE: [c => c.versions.modele, null, '%%', 'ignore'],   // ETIQUETAGE-A : informations internes, une valeur illisible vaut `null` (jamais invalide, jamais inventée)
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
-            V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 30 jours au plus
+            V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 21 jours au plus (BANC-12 : « 30 » a été ramené à 21)
             V2_INSCRIPTION_IP_HEURE: [c => c.limites.inscriptionIpHeure, 10, '0', 'leve'], V2_OUBLI_IP_HEURE: [c => c.limites.oubliIpHeure, 10, '0', 'leve'], V2_REINIT_IP_HEURE: [c => c.limites.reinitIpHeure, 10, '0', 'leve'],
             V2_VERIFICATION_IP_HEURE: [c => c.limites.verificationIpHeure, 30, '0', 'leve'], V2_CONNEXION_IP_HEURE: [c => c.limites.connexionIpHeure, 30, '0', 'leve'],
             V2_SUPPRESSION_COMPTE_HEURE: [c => c.limites.suppressionParCompteHeure, 10, '0', 'leve'], V2_RENVOI_COMPTE_HEURE: [c => c.limites.renvoiParCompteHeure, 3, '0', 'leve'],

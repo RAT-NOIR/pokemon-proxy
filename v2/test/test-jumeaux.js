@@ -86,7 +86,7 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     H.v('   5 produits : de même', [GROS.issue, GROS.motif], ['introuvable', 'jumeaux-trop-nombreux']);
 
     const SANSFOURNISSEUR = adapter({ statutHttp: 200, corps: succes(700) }, { produits, langueInterface: 'fr', cfg });
-    // I1 de la relecture 1 : une colonne qui manque est une panne de NOTRE côté (INDISPONIBLE, remboursée sans plafond), jamais un « introuvable » (la photo n'y est pour rien)
+    // I1 de la relecture 1 : une colonne qui manque est une panne de NOTRE côté (INDISPONIBLE, remboursée dans le compteur des jumeaux, puis au plafond de pannes quand il est plein), jamais un « introuvable » (la photo n'y est pour rien)
     const estPanne = (r, motif) => [r.issue, r.erreur && r.erreur.code, r.analyse, r.motif].join('|') === ['panne', 'INDISPONIBLE', null, motif].join('|');
     H.vrai('AUCUN fournisseur de jumeaux dans le contexte : aucune affirmation, PANNE INDISPONIBLE, motif jumeaux-indisponibles', estPanne(SANSFOURNISSEUR, 'jumeaux-indisponibles'));
     const NONCONCLU = A(700, table(new Map()));
@@ -97,6 +97,9 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     H.vrai('un fournisseur qui rend une forme inconnue : PANNE INDISPONIBLE', estPanne(MAL, 'jumeaux-indisponibles'));
     const ABSENT = A(740794, table(new Map([[740794, [999999]]])));
     H.vrai('un jumeau qui n\'a pas de ligne au catalogue de l\'API (pas de question possible) : PANNE INDISPONIBLE, motif jumeaux-incomplets', estPanne(ABSENT, 'jumeaux-incomplets'));
+    // B2b M-1 (JUMEAU-V2, passe 3) : « conclu » doit valoir EXACTEMENT true. Une réponse sans `conclu`, ou à `conclu` non booléen, n'affirme jamais (même sans jumeau).
+    H.vrai('un fournisseur qui rend { ids: [] } SANS « conclu » : PANNE INDISPONIBLE, jamais une affirmation', estPanne(A(700, () => ({ ids: [] })), 'jumeaux-indisponibles'));
+    H.vrai('   « conclu » non booléen (la chaîne « true », 1) : PANNE INDISPONIBLE', [A(700, () => ({ conclu: 'true', ids: [] })), A(700, () => ({ conclu: 1, ids: [] }))].every(r => estPanne(r, 'jumeaux-indisponibles')));
     const PERIME = A(700, () => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }));
     H.vrai('une colonne PÉRIMÉE (le fournisseur le dit) : PANNE INDISPONIBLE, motif jumeaux-perimes, jamais une affirmation', estPanne(PERIME, 'jumeaux-perimes'));
     H.vrai('   un motif inconnu rendu par un fournisseur retombe sur jumeaux-indisponibles (liste fermée)', estPanne(A(700, () => ({ conclu: false, ids: [], motif: 'autre-chose' })), 'jumeaux-indisponibles'));

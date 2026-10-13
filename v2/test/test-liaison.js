@@ -3,6 +3,7 @@ const H = require('./_harnais'); const A = require('./_b2-aide'); const db = req
 const { lireConfig } = require('../config'); const J = require('../comptes/jetons'); const S = require('../comptes/sessions');
 (async () => {
     await H.ouvrirBac('test-liaison.js'); await M.creerIndex();
+    H.fixerHorlogeMilieu();   // B2b point 6 : essais de code par installation et par IP, fenêtres FIXES d'une heure ; horloge des limiteurs fixée au milieu de l'heure
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
     const fusions = []; let fusionCasse = false;
     A.registre.fournir('argent', {
