@@ -105,6 +105,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-12 : la marque « basseDefinition » (posée par TPC et PikaQian) et le REMPLACEMENT automatique (appelé par artofpkm, Bulbapedia, TCGdex) :
     // un worker qui ne la porte pas poserait des entrées sous 350 px sans marque, ou ne remplacerait jamais une basse définition par une meilleure image
     'collecte-cartes/basse-definition.js',
+    // ➕ 2026-10-13 (décision 4 du testeur) : la PRÉSÉANCE DE RÉSOLUTION entre deux images justes d'un même (carte, set, numéro) — collecteur-images-tcgdex.js l'appelle à la
+    // jointure : un worker qui ne la porte pas rajouterait l'entrée TCGdex à côté de celle de pokemontcg.io (les 5 de Celebrations, remises à chaque rejeu)
+    'collecte-cartes/preseance-images.js',
     // ➕ 2026-10-12 (V8, tour 2) : les règles de la JOINTURE artofpkm que `collecteur-images.js` charge — sélection des entrées d'une ligne à `sousSection` et prédicat
     // « même sous-section » (echantillon-mesure.js), garde de sous-section (sous-section-image.js), clés partagées (images-cle-partagee.js), voie des fiches simples
     // (image-fiche-simple.js), clé de numéro et témoin du nom (jointure.js), client de la source (artofpkm.js), schéma et verrou (schemas.js, verrou-source.js) et

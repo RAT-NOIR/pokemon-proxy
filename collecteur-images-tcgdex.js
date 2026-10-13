@@ -47,6 +47,7 @@ const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('
 const { cartesEn, cartesLangue, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion, filtreCartesDuSet, recevantsDuSet } = require('./collecte-cartes/tcgdex-appariement');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+const preseance = require('./collecte-cartes/preseance-images');   // ➕ 2026-10-13 : la préséance de résolution (une règle, lue par le worker TCGdex ET par pokemontcg.io)
 // l'identifiant d'un document `images` TCGdex vit dans le module du manque réel : l'alimentateur y cherche ce que ce
 // collecteur a TENTÉ, et une seconde écriture de la forme divergerait un jour (§21 bis)
 const { idImageTcgdex } = require('./collecte-cartes/manque-reel');
@@ -146,14 +147,29 @@ async function planifier(M, db, client, L, set, langue = 'en') {
 async function joindreImagesTcgdex(M, slug, images, { langue, LANGUE }) {
     const parCarte = new Map();
     for (const im of images) (parCarte.get(im.carteId) || parCarte.set(im.carteId, []).get(im.carteId)).push(im);
-    let bulbaRetirees = 0, basseDefRemplacees = 0;
+    let bulbaRetirees = 0, basseDefRemplacees = 0, preseancePerdues = 0, preseanceRemplacees = 0;
     for (const [carteId, ims] of parCarte) {
         const numeros = ims.map(im => im.numero);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — sinon un rejeu (pull puis push) l'effacerait
-        const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() }));
+        const toutes = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() }));
         // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place à ce scan — la règle est celle du module
-        for (const e of entrees) basseDefRemplacees += await remplacerBasseDefinition(M, carteId, e);
+        for (const e of toutes) basseDefRemplacees += await remplacerBasseDefinition(M, carteId, e);
         const avant = await M.Carte.findById(carteId).select('images').lean();
+        // ➕ 2026-10-13 (décision 4 du testeur) : LA PRÉSÉANCE DE RÉSOLUTION (collecte-cartes/preseance-images.js, la règle de TOUTES les écritures). Face aux entrées des
+        // AUTRES sources (celles que cette jointure ne réécrit pas), un scan qui perd n'ajoute pas son entrée ; un scan qui gagne retire la perdante et marque son document.
+        const miennes = e => e.set === slug && e.source === SOURCE && (langue === 'en' || e.langue === LANGUE.langue);
+        const autres = (avant?.images || []).filter(e => e && !miennes(e));
+        const entrees = [];
+        for (const e of toutes) {
+            const c = preseance.contre(autres, e);
+            if (c.perd) { preseancePerdues++; continue; }
+            for (const l of c.aRetirer) {
+                await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: l.set, source: l.source, cleR2: l.cleR2 } } });
+                await M.Image.updateOne({ source: l.source, set: l.set, cleR2: l.cleR2, etat: 'ok' }, { $set: { etat: 'retire', retrait: { le: new Date(), motif: preseance.MOTIF, etatAvant: 'ok', remplacePar: { source: e.source, cleR2: e.cleR2 } } } });
+                preseanceRemplacees++;
+            }
+            entrees.push(e);
+        }
         // une autre langue ne retire que SES entrées (avant le 2026-10-03, le retrait prenait toutes les entrées TCGdex du set : une
         // unité thaïe sur un set idth aurait effacé ses visuels indonésiens) ; l'anglais garde son geste
         await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE, ...(langue === 'en' ? {} : { langue: LANGUE.langue }) } } });
@@ -163,9 +179,9 @@ async function joindreImagesTcgdex(M, slug, images, { langue, LANGUE }) {
             bulbaRetirees += (avant?.images || []).filter(e => e.set === slug && e.source === 'bulbapedia' && numeros.includes(e.numero)).length;
             await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: 'bulbapedia', numero: { $in: numeros } } } });
         }
-        await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
+        if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
     }
-    return { bulbaRetirees, basseDefRemplacees };
+    return { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees };
 }
 
 async function collecterSet(unite, M, { verrou }) {
@@ -243,11 +259,11 @@ async function collecterSet(unite, M, { verrou }) {
         const filtreImages = { source: SOURCE, set: slug, etat: 'ok', ...(langue === 'en' ? {} : { langue: LANGUE.langue }), ...(CONTROLE_PAR_IMAGE.has(langue) ? { 'controle.etat': 'accepte' } : {}) };
         const images = await M.Image.find(filtreImages).lean();
         const controle = CONTROLE_PAR_IMAGE.has(langue) ? Object.fromEntries(await Promise.all(['a-controler', 'accepte', 'refuse'].map(async e => [e, await M.Image.countDocuments({ source: SOURCE, set: slug, etat: 'ok', langue: LANGUE.langue, 'controle.etat': e })]))) : null;
-        const { bulbaRetirees, basseDefRemplacees } = await joindreImagesTcgdex(M, slug, images, { langue, LANGUE });
+        const { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees } = await joindreImagesTcgdex(M, slug, images, { langue, LANGUE });
         const complet = {
             langue, tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
             impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
-            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, basseDefinitionRemplacees: basseDefRemplacees, restes: P.motifs, sansScanAnglais: P.restes,
+            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, basseDefinitionRemplacees: basseDefRemplacees, preseancePerdues, preseanceRemplacees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             // une langue contrôlée par l'image : la concordance porte sur le TÉLÉCHARGEMENT (tout le plan est sur R2), le contrôle se compte
             // à part — un visuel refusé par l'image n'est pas un échec de collecte, c'est « ce qui ne passe pas reste vide »

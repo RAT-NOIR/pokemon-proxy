@@ -207,6 +207,27 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     ({ b } = await lancer(B, tr));
     verifier('un visuel retiré (état « retire ») n\'est ni redemandé ni rejoint', [tr.appels.filter(u => /hires/.test(u)).length, B.col('cartes').get(2).images.length], [1, 0]);   // (1 : la Classic 404, jamais le numéro 011 retiré)
 
+    // ➕ 2026-10-13 (décision 4 du testeur) : LA PRÉSÉANCE DE RÉSOLUTION, lue ici aussi (collecte-cartes/preseance-images.js). Un TCGdex posé entre deux passages au numéro 011 :
+    // plus petit (600×825 contre 700×977) → il SORT, notre entrée reste ; plus grand → notre entrée cède (comme avant) ; Bulbapedia / autre numéro : rien de changé.
+    {
+        const tcgEntree = (o = {}) => ({ set: SLUG, source: 'tcgdex', numero: '011', cleR2: 'tcgdex/Celebrations/011-2.webp', w: 600, h: 825, langue: 'en', ...o });
+        const tcgDoc = (o = {}) => ({ _id: 'tcgdex/Celebrations/2/011', source: 'tcgdex', set: SLUG, carteId: 2, numero: '011', cleR2: 'tcgdex/Celebrations/011-2.webp', etat: 'ok', langue: 'en', ...o });
+        const apresPremier = async (entreeTcg, docTcg) => {
+            const Bp = fausseBase(); semer(Bp);
+            await lancer(Bp, reseau(normal));                                   // le premier passage pose pokemontcg.io 700×977 sur 005 et 011
+            Bp.col('cartes').get(2).images.push(entreeTcg); Bp.col('images').set(docTcg._id, docTcg);
+            const r = await lancer(Bp, reseau(normal));
+            return { Bp, b: r.b };
+        };
+        let R = await apresPremier(tcgEntree(), tcgDoc());
+        verifier('PRÉSÉANCE : un TCGdex 600×825 posé après pokemontcg.io 700×977 SORT, notre entrée reste (plus de doublon)', R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), ['pokemontcg.io:011']);
+        verifier('   son document passe « retire » (motif de la préséance), sans effacer R2 ; la garde de lot du collecteur reste verte', [R.Bp.col('images').get('tcgdex/Celebrations/2/011').etat, R.Bp.col('images').get('tcgdex/Celebrations/2/011').retrait?.motif, R.b.garde?.ok, R.b.etat, R.b.preseanceRemplacees], ['retire', 'préséance de résolution', true, 'verifie', 1]);
+        R = await apresPremier(tcgEntree({ w: 800, h: 1100 }), tcgDoc());
+        verifier('PRÉSÉANCE : un TCGdex plus grand (800×1100) garde sa place, notre entrée cède (comme avant) — son document reste « ok »', [R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), R.Bp.col('images').get('tcgdex/Celebrations/2/011').etat, R.b.etat], [['tcgdex:011'], 'ok', 'verifie']);
+        R = await apresPremier(tcgEntree({ source: 'bulbapedia', cleR2: 'bulbapedia/x.webp' }), tcgDoc({ source: 'bulbapedia', cleR2: 'bulbapedia/x.webp', _id: 'bulba:x' }));
+        verifier('PRÉSÉANCE : une entrée Bulbapedia au même numéro n\'est pas jugée par cette règle — notre entrée cède comme avant (dejaServi), Bulbapedia intacte', R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), ['bulbapedia:011']);
+    }
+
     // défi en cours de route : arrêt, ce qui est prouvé avant est joint, l'alerte est écrite
     const B2 = fausseBase(); semer(B2);
     tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : /\/5_hires/.test(url) ? { status: 200, type: 'image/png', octets: png } : { status: 403, texte: 'Just a moment' });
