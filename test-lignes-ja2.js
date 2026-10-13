@@ -12,7 +12,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { ligne, TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
-const { sourceDe, ARTOFPKM, ARTOFPKM_AUTO } = require('./collecte-cartes/sources-sets');
+const { sourceDe, ARTOFPKM, ARTOFPKM_AUTO, verifierPlages } = require('./collecte-cartes/sources-sets');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 
 const BASE_ARTOFPKM = 106;   // lignes de ARTOFPKM (table à la main) après le lot JA, sur main d446c782
@@ -36,7 +36,7 @@ for (const [code, a] of Object.entries(ATTENDU)) {
     t(`${code} : la ligne de table porte le slug, l'expansion Cardmarket et le tirage jp que la jointure des images lit`, () => {
         const l = ligne(code);
         assert.ok(l, `ligne(${code}) absente`);
-        assert.strictEqual(l.exp, a.exp); assert.strictEqual(l.slugSet, a.slug); assert.strictEqual(l.bulba.tirage || 'jp', 'jp', 'tirage : celui de la ligne, ou jp par défaut comme joindreImages'); assert.ok(l.bulba.expansion);
+        assert.strictEqual(l.exp, a.exp); assert.strictEqual(l.slugSet, a.slug); assert.strictEqual(l.bulba.tirage, 'jp', 'le tirage est ÉCRIT sur la ligne (§19), jamais le « jp » par défaut du collecteur'); assert.ok(l.bulba.expansion);
     });
     t(`${code} : la source artofpkm est ${a.ids.length > 1 ? 'les listes ' : 'la liste '}${a.ids.join(', ')}, sans sous-section ni setDeBase`, () => {
         const s = sourceDe(code);
@@ -63,6 +63,20 @@ t('une liste n\'est lue que par ses lignes : seules IPNC et IPNT partagent la li
     }
     const [c, t2] = [sourceDe('IPNC').plageDeRangs, sourceDe('IPNT').plageDeRangs];
     assert.ok(c[1] < t2[0] || t2[1] < c[0], 'plages disjointes');
+});
+t('pcgG : le tirage jp est écrit AVEC sa preuve et la marque de conservation (une régénération de table-sets-auto.json ne l\'efface pas)', () => {
+    const l = TABLE_AUTO.find(x => x.code === 'pcgG');
+    assert.ok(l && l.auto && l.auto.aLaMain === true, 'auto.aLaMain'); assert.ok(/tirage jp ECRIT/.test(l.auto.note) && /codes_set/.test(l.auto.note), 'preuve à côté');
+});
+t('deux lignes aux plages qui se chevauchent sur la même liste : erreur au CHARGEMENT (verifierPlages) ; des plages disjointes ou des listes différentes passent', () => {
+    assert.throws(() => verifierPlages({ A: { ids: [42], plageDeRangs: [1, 40] }, B: { ids: [42], plageDeRangs: [40, 80] } }), /chevauchent/);
+    assert.throws(() => verifierPlages({ A: { ids: [42, 7], plageDeRangs: [1, 80] }, B: { ids: [7], plageDeRangs: [5, 6] } }), /chevauchent/);
+    verifierPlages({ A: { ids: [42], plageDeRangs: [1, 40] }, B: { ids: [42], plageDeRangs: [41, 80] }, C: { ids: [9], plageDeRangs: [1, 80] }, D: { ids: [42] } });
+    verifierPlages({ ...ARTOFPKM_AUTO, ...ARTOFPKM });
+});
+t('la note de pcgG dit ce que la simulation fait réellement des clés partagées (reste image-vers-plusieurs-cartes), sans promettre un service qu\'elle n\'exerce pas', () => {
+    const n = sourceDe('pcgG').note;
+    assert.ok(/image-vers-plusieurs-cartes/.test(n) && /PAS servis/.test(n)); assert.ok(!/ne sont servis que si/.test(n));
 });
 t('`plageDeRangs` et `numerosPartages` n\'existent que sur les lignes qui les ont mesurées', () => {
     assert.deepStrictEqual(Object.entries(TOUTES).filter(([, s]) => s.plageDeRangs).map(([c]) => c).sort(), ['IPNC', 'IPNT']);

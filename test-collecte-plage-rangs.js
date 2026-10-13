@@ -139,6 +139,24 @@ const rangs = ds => ds.map(x => Number(String(x).split('-').pop().split('/').pop
         assert.ok(/^refuse/.test(r.etat), JSON.stringify(r).slice(0, 200));
         assert.strictEqual(demandes.telechargements.length, 0); assert.strictEqual(demandes.pages.length, 0);
     });
+    await t('(tour 1) une plage qui DÉBORDE la liste ([41,80] sur 60 entrées) : refus NOMMÉ écrit sur l\'unité, rien demandé au-delà de la liste', async () => {
+        const B3 = fausseBase(); const l3 = semer(B3).slice(0, 60); brancherLeClientFaux(l3);
+        const r = await silencieux(() => collecterSet('IPNT', B3.M, dossier));
+        assert.strictEqual(r.etat, 'refuse-plage-hors-liste', JSON.stringify(r).slice(0, 200)); assert.ok(/déborde/.test(r.erreur));
+        assert.strictEqual(B3.cols.etat.get(`artofpkm/${ST}`).phase, 'refuse-plage-hors-liste');
+        assert.strictEqual(demandes.telechargements.length, 0); assert.strictEqual(demandes.pages.length, 0); assert.strictEqual(demandes.mesures.length, 0);
+    });
+    await t('(tour 1) une plage INVALIDE : refus nommé ÉCRIT sur l\'unité (plus d\'exception sans état), aucune requête', async () => {
+        const { ARTOFPKM } = require('./collecte-cartes/sources-sets'); const avant = ARTOFPKM.IPNT.plageDeRangs;
+        ARTOFPKM.IPNT.plageDeRangs = [80, 41];
+        try {
+            const B4 = fausseBase(); const l4 = semer(B4); brancherLeClientFaux(l4);
+            const r = await silencieux(() => collecterSet('IPNT', B4.M, dossier));
+            assert.strictEqual(r.etat, 'refuse-plage-invalide', JSON.stringify(r).slice(0, 200));
+            const e = B4.cols.etat.get(`artofpkm/${ST}`); assert.strictEqual(e.phase, 'refuse-plage-invalide'); assert.ok(/plageDeRangs invalide/.test(e.cause));
+            assert.strictEqual(demandes.listes + demandes.pages.length + demandes.telechargements.length, 0);
+        } finally { ARTOFPKM.IPNT.plageDeRangs = avant; }
+    });
     console.log(`\n${ok} réussi(s), ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('ÉCHEC DU BANC', e.stack || e.message); process.exit(2); });

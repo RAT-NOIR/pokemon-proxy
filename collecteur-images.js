@@ -197,6 +197,12 @@ async function collecterSet(code, M, dossierRapport) {
     const requetesAuDebut = src.compteRequetes();
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
     const etat = await M.EtatImages.findById(idEtat).lean();
+    // JA-2 (tour 1) : une plage de rangs illisible est un REFUS NOMMÉ ÉCRIT sur l'unité, comme les autres refus du collecteur — jamais une exception qui laisse l'unité sans état
+    try { plageDeRangs(S); } catch (e) {
+        console.error(`❌ ${code} : ${e.message} — set REFUSÉ, rien n'est demandé.`);
+        await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-plage-invalide', cause: e.message, fini: new Date() } });
+        await liberer(); return { code, etat: 'refuse-plage-invalide', erreur: e.message };
+    }
     const entrees = { ...(etat.entrees || {}) };
     const mesures = { ...(etat.mesures || {}) };
 
@@ -220,6 +226,15 @@ async function collecterSet(code, M, dossierRapport) {
         }
         // V8 : la ligne ne traite que sa sous-section ; JA-2 : ou sa plage de rangs (deux decks sous UN id). En mémoire : l'état garde la liste entière.
         const delimitee = S.sousSection != null || S.plageDeRangs != null;
+        if (S.plageDeRangs != null) {   // JA-2 (tour 1) : une plage qui DÉBORDE la liste (fin > dernier rang lu) dit que la liste n'est plus celle qu'on a mesurée : refus nommé
+            const dernier = Math.max(0, ...entrees[id].map(e => Number(e.n) || 0));
+            if (S.plageDeRangs[1] > dernier) {
+                const cause = `la plage de rangs ${JSON.stringify(S.plageDeRangs)} déborde la liste ${id} (dernier rang lu : ${dernier}) — la liste n'est plus celle qui a été mesurée`;
+                console.error(`❌ ${code} : ${cause} — set REFUSÉ, rien n'est téléchargé.`);
+                await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-plage-hors-liste', cause, fini: new Date() } });
+                await liberer(); return { code, etat: 'refuse-plage-hors-liste', erreur: cause };
+            }
+        }
         if (delimitee) {
             const toutes = entrees[id].length; entrees[id] = entreesDeLaLigne(entrees[id], S);
             console.log(`   ${S.sousSection != null ? `sous-section ${S.sousSection}` : `plage de rangs ${JSON.stringify(S.plageDeRangs)}`} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
