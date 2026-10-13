@@ -1231,25 +1231,14 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 
 #### 7.3 bis — Les écarts de forme MESURÉS (B7b.1, `v2/test/test-contrat-extension.js`)
 
-Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse et les quatre de `reels.js` — module de données pur, lu en texte — contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chacune des 13 réponses de `reponses.json` RECONSTRUITE en entier — carte, facturation, solde — et jugée contre `ReponseQuestion`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart.
+Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse et les quatre de `reels.js` — module de données pur, lu en texte — contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chacune des 16 réponses de `reponses.json` RECONSTRUITE en entier — carte, facturation, solde — et jugée contre `ReponseQuestion`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart.
 
 | réf. | route et statut | chemin JSON | l'extension attend (fausse) | le serveur rend (schéma) | fichiers | qui doit changer |
 |---|---|---|---|---|---|---|
-| E1 | `POST /api/identifier` 200 | `$.solde.essai` | absent | clé requise (entier) | identifiee, lot, a-trancher | l'extension |
-| E1 | `POST /api/identifier` 200 | `$.solde.abonnement` | absent | clé requise (objet ou `null`) | identifiee, lot, a-trancher | l'extension |
-| E1 | `POST /api/identifier` 200 | `$.solde.soldeGratuit` | présent | **n'existe pas** (forme héritée seulement) | identifiee, lot, a-trancher, quota | l'extension |
-| E1 | `POST /api/identifier` 200 | `$.solde.restantSemaine` | présent | **n'existe pas** | idem | l'extension |
-| E1 | `POST /api/identifier` 200 | `$.solde.soldeScans` | présent | **n'existe pas** | idem | l'extension |
-| E1 | `POST /api/identifier` 200 | `$.solde.compte.verifie` | absent | clé requise (booléen) | idem | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.essai` | absent | clé requise (entier) | quota | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.abonnement` | absent | clé requise (objet ou `null`) | quota | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.soldeGratuit` | présent | **n'existe pas** | quota | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.restantSemaine` | présent | **n'existe pas** | quota | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.soldeScans` | présent | **n'existe pas** | quota | l'extension |
-| E1 | `POST /api/identifier` 429 | `$.solde.compte.verifie` | absent | clé requise (booléen) | quota | l'extension |
-| E2 | `POST /api/identifier` 200 | `$.facturation.reserve` | absent | clé requise (0 ou 1) | identifiee, lot, a-trancher, introuvable | l'extension |
-| E2 | `POST /api/identifier/reponse` 200 | `$.<scanId>[].<choix>.facturation.raisonNonRembourse` | absent | clé requise (`null` ou une raison) | reponses | l'extension |
-| E3 | `POST /api/identifier` 200 | `$.solde` | `null` | objet, **toujours** présent après une analyse | a-trancher, lot, introuvable | l'extension |
+| E2 | `POST /api/identifier` 200 | `$.facturation` | absent (l'extension ne lit plus `facturation`, sauf `motif === "administrateur"` : DEMANDE-SERVEUR-EXTENSION §B5 et B8) | clé requise : objet à cinq clés, **toujours** présent après une analyse | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels | l'extension |
+| E2 | `POST /api/identifier/reponse` 200 | `$.<scanId>[].<choix>.facturation` | absent (même décision) | clé requise : objet à cinq clés | reponses | l'extension |
+| E3 | `POST /api/identifier` 200 | `$.solde` | absent (l'extension ne lit plus que `compte` et `offre` : §B5) | objet, **toujours** présent après une analyse | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels | l'extension |
+| E12 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat.declare` | absent (l'état d'une carte ne vient jamais du vendeur : §B7) | clé requise (`null` ou l'état déclaré) ; le serveur la sert toujours | identifiee, identifiee-impressions, a-trancher, lot, reels | l'extension |
 | E4 | `POST /api/identifier` 200 | `$.question` | `{ etat, delaiHeures }` à la racine | clé **non servie** (le délai est de 24 h, fixe) | a-trancher | l'extension |
 | E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions` | absent | clé requise (`[]` par défaut) | identifiee, lot | l'extension |
 | E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].impressions` | absent | clé requise | a-trancher, lot | l'extension |
@@ -1258,7 +1247,7 @@ Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre l
 | E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30` | absent | clé requise | identifiee-impressions | l'extension |
 | E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.date` | absent (`{ de, tendance }`) | clé requise (date du guide) | identifiee-impressions | l'extension |
 | E6 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat` | objet rempli de `null` (introuvable) | `null` pour un introuvable | introuvable | l'extension |
-| E7 | `POST /api/identifier` 429 | `$.facturation` | `{ debite:0, rembourse:false, motif:null, … }` | `null` (aucune analyse) | quota | l'extension |
+| E7 | `POST /api/identifier` 429 | `$.facturation` | absent (plus de `facturation` dans la fausse quota : §B5) | `null` (aucune analyse) : clé requise, valeur `null` | quota | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
