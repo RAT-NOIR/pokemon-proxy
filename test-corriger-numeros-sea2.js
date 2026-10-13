@@ -142,6 +142,70 @@ const impsId = c => c.impressions.filter(i => i.tirage === 'id').map(i => i.nume
     const dA = { ...LISTE[0], voie: 'a' };
     verifier('relecture (a) : numeroFiche « 035 » vaut « 35 » (cleNumero)', ecartsApres(dA, { ...ligneB, slug: LISTE[0].slug, numeroFiche: '035' }, { impressions: [IMP_INTL, IMP('35')], liens: { idProduct: [1] }, sets: ['a'] }, { impressions: 2, dontSetlistId: 1, liens: [1], sets: ['a'] }), []);
 
+    // ── COURTS2 : --restantes, les trois impressions « 017 »/« 018 » d'apres SEA-2 (th Pawmi 017, th Gastly 018, id Gastly 018) ──
+    const THAI = 'tpc-asie/M-P-Thai-Promos', IMAGE_TH = (n, c) => ({ set: 'M-P-Thai-Promos', source: 'tpc-asie', numero: n, cleR2: `tpc-asie/M-P-Thai-Promos/${n}-${c}-th.webp`, langue: 'th' });
+    function mondeR({ thGastlyDex = 92, sans017 = false, imgGastly = true, idRetiree = false, pawmiTh2 = false, thIncomplet = false } = {}) {
+        const ficheTh = (id, numero, nom, dex, pv) => ({ _id: `tpc-asie/th/${id}`, site: 'tpc-asie', langue: 'th', idFiche: id, url: `https://x/th/${id}`, fiche: { nom, numero, denominateur: 'M-P', pv, dex, symbole: 'S', categorie: 'pokemon' } });
+        const fth = [ficheTh(12567, '016', 'ลายเสือ', 931, 160), ficheTh(12569, '018', 'โกส', thGastlyDex, 70), ficheTh(12570, '019', 'Basic Energy', null, null)];
+        if (!sans017) fth.push(ficheTh(12568, '017', 'พาโม', 921, 60));
+        const b = mondeBrut();
+        const impsGastly = b.cartes.find(c => c._id === 339431).impressions;
+        if (idRetiree) b.cartes.find(c => c._id === 339431).impressions = impsGastly.filter(i => !(i.tirage === 'id'));
+        b.cartes.find(c => c._id === 342068).impressions = b.cartes.find(c => c._id === 342068).impressions.filter(i => i.tirage !== 'id');
+        if (pawmiTh2) b.cartes.find(c => c._id === 342068).impressions.push(IMP('17', 'th'));
+        b.cartes.find(c => c._id === 342068).images = [IMAGE_TH('017', 342068), { set: 'Phantasmal-Flames', source: 'tcgdex', numero: '032' }];
+        b.cartes.find(c => c._id === 339431).images = imgGastly ? [IMAGE_TH('018', 339431)] : [];
+        return fakeDb({ cartes_produits: b.cartes_produits, cartes: b.cartes, tpc_fiches: [...b.tpc_fiches, ...fth],
+            collecte_images_etat: [...b.collecte_images_etat, { _id: THAI, liste: { code: 'M-P', langue: 'th', ids: fth.map(f => f.idFiche).concat(thIncomplet ? [99999] : []), total: fth.length + (thIncomplet ? 1 : 0), complete: true, luLe: new Date('2026-10-08') } }] });
+    }
+    function mondeBrut() { const w = monde({ ligneDejaCorrigee: true, impPawmi: 'aucune', numeroGastly: null }); return { cartes_produits: w.brut('cartes_produits'), cartes: w.brut('cartes'), tpc_fiches: w.brut('tpc_fiches'), collecte_images_etat: w.brut('collecte_images_etat') }; }
+    const impsDe = (db, id) => carte(db, id).impressions.map(i => `${i.tirage}|${i.numero}`);
+
+    db = mondeR(); let avR = etat(db);
+    r = await lancer(db, ['--restantes']);
+    verifier('restantes, simulation : exit 0, rien d\'ecrit', [r.code, etat(db) === avR], [0, true]);
+    verifier('   la fiche TPC lue est imprimee pour chacune des 3 impressions (th 017 Pawmi, th 018 Gastly, id 018 Sekop Pelubang)', [/Pawmi.*th.*017.*PROUVÉE.*fiche 12568.*Pokédex 921/.test(r.sorties.replace(/\n/g, ' ')), /Gastly.*th.*018.*PROUVÉE.*fiche 12569/.test(r.sorties.replace(/\n/g, ' ')), /Gastly id « 018 » : fiche TPC 16631 « Sekop Pelubang ».*RETIRER/.test(r.sorties.replace(/\n/g, ' '))], [true, true, true]);
+    verifier('   l\'annonce de lot-additif : une seule baisse, id', /annonce de lot-additif : \{"impressions imp:id\|M-P Promotional cards":1\}/.test(r.sorties), true);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('restantes, ecriture : exit 0, relue', [r.code, /écrit et relu/.test(r.sorties)], [0, true]);
+    verifier('   seule l\'impression id 018 de Gastly part (sa th 018 et l\'intl restent) ; Pawmi inchangee', [impsDe(db, 339431), impsDe(db, 342068)], [['intl|032', 'th|018'], ['intl|032', 'th|017']]);
+    verifier('   Gastly : plus aucune impression id ; la th 018 est la', [impsDe(db, 339431).filter(x => x.startsWith('id|')), impsDe(db, 339431).includes('th|018')], [[], true]);
+    verifier('   les images (dont celles jointes aux n° th 017/018 par la preuve TPC), liens, sets et lignes : intacts', [carte(db, 342068).images.length, carte(db, 339431).images.length, carte(db, 339431).images[0].numero, carte(db, 339431).liens.idProduct, carte(db, 339431).sets, ligne(db, 860035).numeroFiche], [2, 1, '018', [860035, 859982], ['M-P-Thai-Promos', 'M-P-Indonesian-Promos'], undefined]);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('restantes, rejeu apres ecriture : rien a faire -> exit 1', [r.code, /rien à faire/.test(r.erreurs)], [1, true]);
+    db = mondeR({ idRetiree: true }); r = await lancer(db, ['--restantes']);
+    verifier('restantes : l\'impression id deja retiree se reconnait, rien a faire -> exit 1', [r.code, /rien à faire/.test(r.erreurs), /DÉJÀ retirée/.test(r.sorties)], [1, true, true]);
+
+    // th Gastly : la fiche th 018 ne designe plus Gastly (Pokedex 999) -> la preuve manque ; une image y est JOINTE : on ne retire jamais une image juste, l'outil s'arrete
+    db = mondeR({ thGastlyDex: 999 }); avR = etat(db);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('image jointe au n° d\'une impression sans preuve : exit 1, rien d\'ecrit, l\'image est nommee', [r.code, etat(db) === avR, /image.*018.*jointe/i.test(r.erreurs)], [1, true, true]);
+    // sans image jointe, la meme absence de preuve RETIRE l'impression th (la fiche reste), annonce th
+    db = mondeR({ thGastlyDex: 999, imgGastly: false }); r = await lancer(db, ['--restantes']);
+    const annonceDe = s => { const m = /annonce de lot-additif : (\{.*\})/.exec(s); return m ? JSON.parse(m[1]) : null; };
+    verifier('absence de preuve sans image : th 018 est a retirer, annonce id ET th', [r.code, annonceDe(r.sorties)], [0, { 'impressions imp:th|M-P Promotional cards': 1, 'impressions imp:id|M-P Promotional cards': 1 }]);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('   ecrit : les impressions id et th 018 de Gastly partent, l\'intl reste', [r.code, impsDe(db, 339431)], [0, ['intl|032']]);
+    // Pawmi th 017 : aucune fiche au n° 017 et une image jointe -> arret ; sans image -> retrait
+    db = mondeR({ sans017: true }); avR = etat(db);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('Pawmi th 017 sans fiche ET image jointe : exit 1, rien d\'ecrit', [r.code, etat(db) === avR], [1, true]);
+    // garde : cache TPC incomplet / doublon d'impression / argument inconnu / ancien mode intact
+    db = mondeR({ thIncomplet: true }); avR = etat(db);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('cache th incomplet : exit 1, rien d\'ecrit', [r.code, etat(db) === avR, /pas complète|fiches en cache/.test(r.erreurs)], [1, true, true]);
+    db = mondeR({ pawmiTh2: true }); avR = etat(db);
+    r = await lancer(db, ['--restantes', '--ecrire']);
+    verifier('deux impressions th/setlist/017 (ambigu) : exit 1, rien d\'ecrit', [r.code, etat(db) === avR], [1, true]);
+    r = await lancer(mondeR(), ['--restantes', '--produits=1']);
+    verifier('arguments : --restantes accepte seulement --ecrire a ses cotes -> exit 2', r.code, 2);
+    db = mondeR(); r = await lancer(db, ['--ecrire']);
+    verifier('sans --restantes, le mode SEA-2 ne se declenche pas sur l\'etat d\'apres (lignes deja corrigees) : exit 1, rien d\'ecrit', [r.code], [1]);
+    // la relecture voit un $pull qui ne fait rien sans erreur
+    const wR = mondeR(); const dbPerdR = fakeDb({ cartes_produits: wR.brut('cartes_produits'), cartes: wR.brut('cartes'), collecte_images_etat: wR.brut('collecte_images_etat'), tpc_fiches: wR.brut('tpc_fiches') }, { perdre: (nom, u) => nom === 'cartes' && !!u.$pull });
+    r = await lancer(dbPerdR, ['--restantes', '--ecrire']);
+    verifier('restantes : un $pull qui ne fait rien sans erreur -> exit 1, la relecture le dit', [r.code, /encore là/.test(r.sorties), /relecture ne retrouve pas/.test(r.erreurs)], [1, true, true]);
+
     console.log(`\n${ok} passes, ${ko} en echec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ ERREUR DU BANC', e); process.exit(1); });
