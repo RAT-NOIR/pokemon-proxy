@@ -4620,7 +4620,7 @@
           },
           "userIdHerite": {
             "type": "string",
-            "description": "Le `userId` de la 1.0.x, repris une seule fois."
+            "description": "Le `userId` de la 1.0.x, repris une seule fois. Le gratuit repris ne dépasse jamais la dotation d'une installation neuve (3 essais par défaut) et, quand il élève les essais, compte dans le plafond global journalier ; plafond atteint, la reprise est refusée sans erreur (201, 0 essai) et le portefeuille 1.0.x reste intact. Les crédits achetés ne suivent pas ce `userId`."
           }
         },
         "required": [

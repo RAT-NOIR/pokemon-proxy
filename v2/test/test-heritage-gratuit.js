@@ -102,5 +102,36 @@ const muet = async f => { const w = console.warn, l = console.log; console.warn 
     };
     let r9; try { r9 = await muet(() => He.reprendreHeritage({ userId: 'course-lecture-9', installation: p9.installation, maintenant: d9 }, cfg)); } finally { db.col = colReelle; }
     H.v('(9) solde remonté entre la lecture et la prise, aucune unité payée : les essais ne sont PAS élevés (0), aucune unité consommée', [r9.ok, (await lire(p9)).essais, (await compteurGlobal(d9)) - n9], [true, 0, 0]);
+    // 10. le userId n'apparaît JAMAIS en clair dans un journal de la reprise (info, avertissement, erreur), sur chacune de ses issues : reprise, excédent, refus du plafond, déjà migré, inconnu
+    const capter = async f => {
+        const lignes = [], o = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+        for (const k of Object.keys(o)) console[k] = (...a) => lignes.push(a.map(x => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '));
+        try { await f(); } finally { Object.assign(console, o); }
+        return lignes;
+    };
+    const SECRETS = ['USERID-SECRET-REPRIS', 'USERID-SECRET-EXCEDENT', 'USERID-SECRET-PLAFOND', 'USERID-SECRET-DEJA', 'USERID-SECRET-INCONNU'];
+    const d10 = jour(10), cfg10 = lireConfig({ MONGODB_BASE: 'test_scratch', V2_ESSAIS_GLOBAUX_JOUR: '1' });
+    await wallet(SECRETS[0], { soldeGratuit: 2 }); await wallet(SECRETS[1], { soldeGratuit: 25 }); await wallet(SECRETS[2], { soldeGratuit: 25 }); await wallet(SECRETS[3], { soldeGratuit: 5, migreVers: 'ailleurs' });
+    const pRepris = await inst({ essais: 3 }), pExcedent = await inst({ essais: 3 }), pDeja = await inst({ essais: 3 }), pInconnu = await inst({ essais: 3 });
+    await S.creerInstallation({ libelle: 'consomme l\'unique unité', cfg: cfg10, maintenant: d10 });
+    const pPlafond = await S.creerInstallation({ libelle: 'née à 0', cfg: cfg10, maintenant: d10 });
+    const journaux = {
+        repris: await capter(() => He.reprendreHeritage({ userId: SECRETS[0], installation: pRepris.installation, maintenant: d10 }, cfg10)),
+        excedent: await capter(() => He.reprendreHeritage({ userId: SECRETS[1], installation: pExcedent.installation, maintenant: d10 }, cfg10)),
+        plafond: await capter(() => He.reprendreHeritage({ userId: SECRETS[2], installation: pPlafond.installation, maintenant: d10 }, cfg10)),
+        deja: await capter(() => He.reprendreHeritage({ userId: SECRETS[3], installation: pDeja.installation, maintenant: d10 }, cfg10)),
+        inconnu: await capter(() => He.reprendreHeritage({ userId: SECRETS[4], installation: pInconnu.installation, maintenant: d10 }, cfg10))
+    };
+    const empr = u => He.empreinte(u).slice(0, 12);
+    H.v('(10) contrôle de l\'instrument : le journal « repris », celui de l\'excédent et celui du refus du plafond existent et disent l\'empreinte', [
+        journaux.repris.some(l => l.includes('repris') && l.includes(empr(SECRETS[0]))), journaux.excedent.some(l => l.includes('excédent') && l.includes(empr(SECRETS[1]))), journaux.plafond.some(l => l.includes('plafond') && l.includes(empr(SECRETS[2])))], [true, true, true]);
+    H.v('(10) aucun journal de la reprise (5 issues : reprise, excédent, plafond, déjà migré, inconnu) ne contient le userId en clair', Object.entries(journaux).map(([k, ls]) => [k, ls.some(l => SECRETS.some(s => l.includes(s)))]), [['repris', false], ['excedent', false], ['plafond', false], ['deja', false], ['inconnu', false]]);
+
+    // 11. l'outil de rejeu de migration : l'attendu est la dotation d'ESSAI (pas accueil) et son plafond global est ÉLARGI au nombre de portefeuilles
+    const Rej = require('../migrations/rejouer-migration-credits'), cfg11 = lireConfig({ MONGODB_BASE: 'test_scratch', V2_ESSAIS_GLOBAUX_JOUR: '1' });
+    const docs11 = [{ userId: 'rejeu-11-a', soldeGratuit: 12, soldeScans: 160, email: null }, { userId: 'rejeu-11-b', soldeGratuit: 400, soldeScans: 0, email: null }, { userId: 'rejeu-11-c', soldeGratuit: 2, soldeScans: 20, email: null }, { userId: 'rejeu-11-d', soldeGratuit: 7, soldeScans: 0, email: null }];
+    const r11 = await muet(() => Rej.rejouer(docs11, cfg11, { emailCle: b => b }));
+    H.v('(11) rejeu : attendu = min(gratuit, dotation d\'essai 3) = 3 + 3 + 2 + 3 = 11 (pas 12 + 25 + 2 + 7)', r11.gratuitAttendu, 11);
+    H.v('(11) rejeu : plafond global de la config à 1 mais élargi au nombre de portefeuilles (4, tous à gratuit > 0) : 11 essais repris sur 11, achetés conservés', [r11.gratuitRepris, r11.ok], [11, true]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
