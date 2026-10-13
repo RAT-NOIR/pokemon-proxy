@@ -1,7 +1,7 @@
 // BANC — les règles de poser-dates-sets.js sur des valeurs RÉELLES de l'infobox (collecte-cartes/rapports/dates-sets.json, 2026-09-25) :
 // une période se range à son début quand il est un jour complet, jamais à un jour fabriqué.
 //   node test-poser-dates.js
-const { periodeDe, isoPartiel, dateBulbapedia, majorite, texteDeIso, OFFICIELLES, jourComplet } = require('./poser-dates-sets');
+const { periodeDe, isoPartiel, dateBulbapedia, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA, jourComplet, retenirSets } = require('./poser-dates-sets');
 let ok = 0, ko = 0;
 const verifier = (quoi, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
@@ -66,7 +66,25 @@ verifier('un jour connu passe avant un mois seul', V(['bulbapedia', '2016-11'], 
 verifier('un mois seul : la précision au mois, aucun jour', V(['bulbapedia', '2016-11']), ['2016-11', 'mois', 1]);
 verifier('aucune voix : rien', majorite([]), null);
 verifier('la date affichable d\'un mois ne porte pas de jour', [texteDeIso('2016-11'), texteDeIso('2016-11-04')], ['November 2016', 'November 4, 2016']);
-verifier('les sources officielles citent leur page', Object.values(OFFICIELLES).every(x => /^https:\/\//.test(x.url) && x.citation && x.lu && jourComplet(x.jour) === x.jour), true);
+// une source officielle date un jour complet, ou un mois seul (jamais un jour fabriqué : « 2023-10 », pas « 2023-10-01 »)
+verifier('les sources officielles citent leur page', Object.values(OFFICIELLES).every(x => /^https:\/\//.test(x.url) && x.citation && x.lu && (jourComplet(x.jour) === x.jour || /^\d{4}-\d{2}$/.test(isoPartiel(x.jour) || ''))), true);
+
+// ── DATES-CORR (2026-10-13) : les trois decks « Pokémon Card Game Classic » et Pikachu World Collection
+const CLASSIC = ['Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck', 'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck', 'Pokemon-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck'];
+verifier('Classic : une ligne OFFICIELLE par deck, au MOIS (2023-10), adresse de pokemon-card.com',
+    CLASSIC.map(id => { const o = OFFICIELLES[id]; return o && [isoPartiel(o.jour), o.url, /2023年10月下旬以降予定/.test(o.citation), o.lu]; }),
+    CLASSIC.map(() => ['2023-10', 'https://www.pokemon-card.com/ex/classic/', true, '2026-10-13']));
+verifier('Classic : la majorité rend un MOIS, aucun jour', CLASSIC.map(id => { const r = majorite([{ source: 'officielle', iso: isoPartiel(OFFICIELLES[id]?.jour) }]); return r && [r.iso, r.precision]; }), CLASSIC.map(() => ['2023-10', 'mois']));
+verifier('Classic : le texte affichable du mois n\'a pas de jour', texteDeIso('2023-10'), 'October 2023');
+const PWC = RELEVES_BULBAPEDIA['Pikachu-World-Collection'];
+verifier('Pikachu World Collection : relevé Wayback 20260709110309, « Release date September 12, 2000 »',
+    PWC && [PWC.jour, /web\.archive\.org\/web\/20260709110309\//.test(PWC.url), /Release date September 12, 2000/.test(PWC.citation), !!PWC.lu], ['September 12, 2000', true, true, true]);
+verifier('Pikachu World Collection : la voix est le jour 2000-09-12', PWC && (() => { const r = majorite([{ source: 'bulbapedia', iso: isoPartiel(PWC.jour) }]); return [r.iso, r.precision]; })(), ['2000-09-12', 'jour']);
+verifier('Promos : aucune ligne (trou nommé)', [OFFICIELLES.Promos ?? null, RELEVES_BULBAPEDIA.Promos ?? null], [null, null]);
+// --sets= : l'écriture limitée à une liste d'identifiants
+const SANS = [{ _id: 'A' }, { _id: 'B' }, { _id: 'C' }];
+verifier('--sets : ne retient que les identifiants nommés, et dit ceux qui n\'y sont pas', (() => { const r = retenirSets(SANS, ['B', 'Z']); return [r.retenus.map(s => s._id), r.absents]; })(), [['B'], ['Z']]);
+verifier('--sets absent : tout est retenu', retenirSets(SANS, null).retenus.length, 3);
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exitCode = ko ? 1 : 0;
