@@ -30,13 +30,13 @@ const mort = () => { try { require('fs').writeSync(1, `COUPURE=${process.env.COU
     // p : la PASSE de rattrapage elle-même meurt, entre le claim `rb|scanId` (déjà inséré) et le rendu de la 1re unité (sa prise atomique)
     if (mode === 'p') db.col = nom => (nom === 'mouvements' ? new Proxy(orig(nom), { get: (t, k) => (k === 'findOneAndUpdate' ? async () => mort() : t[k]) }) : orig(nom));
     // r : la PASSE meurt entre la prise d'une unité (le ledger la pose `rendu-en-cours` depuis MOYENS-B2a, `rembourse` avant) et le rendu de son crédit (le $inc de la poche) — l'ordre du ledger, R4
-    if (mode === 'r') db.col = nom => (nom === 'installations' ? new Proxy(orig(nom), { get: (t, k) => (k === 'updateOne' ? async () => mort() : t[k]) }) : orig(nom));
+    if (mode === 'r') db.col = nom => (nom === 'quota_jour' ? new Proxy(orig(nom), { get: (t, k) => (k === 'updateOne' ? async () => mort() : t[k]) }) : orig(nom));
     const express = require('express');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret'); const M = require('../modeles');
     const { lireConfig } = require('../config');
     // 100 par défaut du banc (lots de 25 cartes) ; COUPURE_CARTES_MAX='defaut' ne pose AUCUNE variable : le serveur joue sa taille PAR DÉFAUT (20), pas une valeur recopiée
     const cartesMax = process.env.COUPURE_CARTES_MAX || '100';
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', ...(cartesMax === 'defaut' ? {} : { V2_LOT_CARTES_MAX: cartesMax }) });
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_SANS_COMPTE: '1000', ...(cartesMax === 'defaut' ? {} : { V2_LOT_CARTES_MAX: cartesMax }) });
     const PID = Number(process.env.COUPURE_PID);
     const carteCorps = { idProduct: PID, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false };
     const aff = { statutHttp: 200, corps: { success: true, question: null, carte: carteCorps, etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
