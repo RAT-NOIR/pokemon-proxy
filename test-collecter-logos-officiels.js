@@ -55,7 +55,7 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
     // LA LANGUE, PROUVÉE PAR L'ADRESSE (ruling du coordinateur) : /fr/ ou /ja/ chez TCGdex, préfixe jp- chez Bill's — jamais par le texte de la liste
     const ARC = 'https://billsarchive.com/assets/logos/arceus.webp', URL_TJ = 'https://assets.tcgdex.net/ja/sv/sv01/logo.png';
     const FR = (o = {}) => L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet', urls: [URL_T], urlChoisie: URL_T, source: 'tcgdex', ...o });
-    verifier('la forme des adresses : fr, ja, ja (jp-), rien (Bill\'s sans préfixe), rien (/en/ chez TCGdex)', [M.langueProuvee(URL_T), M.langueProuvee(URL_TJ), M.langueProuvee(URL_B), M.langueProuvee(ARC), M.langueProuvee('https://assets.tcgdex.net/en/sv/x/logo.png')], ['fr', 'ja', 'ja', null, null]);
+    verifier('la forme des adresses : fr, ja, ja (jp-), rien (Bill\'s sans préfixe), rien (/en/ chez TCGdex)', [M.langueProuvee(URL_T), M.langueProuvee(URL_TJ), M.langueProuvee(URL_B), M.langueProuvee(ARC), M.langueProuvee('https://assets.tcgdex.net/en/sv/x/logo.png')], ['fr', 'ja', 'ja', null, 'en']);   // (LOGOS-NIVEAU) /en/ chez TCGdex prouve désormais l'anglais ; Bill's sans préfixe ne prouve toujours rien
     verifier('Arceus (cible fr, langue en, adresse Bill\'s sans préfixe) : écartée par la règle, pas par une exception', [action(FR({ langue: 'en', urls: [ARC], urlChoisie: ARC, source: 'billsarchive' })), (M.planifier(FR({ langue: 'en', urls: [ARC], urlChoisie: ARC }), sets).raison ?? '').includes('langue')], ['ecartee', true]);
     verifier('une ligne dite fr (langue fr) dont l\'adresse TCGdex est /ja/ : écartée (contraire à la cible)', action(FR({ urls: [URL_TJ], urlChoisie: URL_TJ })), 'ecartee');
     verifier('une ligne dite fr dont l\'adresse Bill\'s ne prouve rien : écartée', action(FR({ urls: [ARC], urlChoisie: ARC, source: 'billsarchive' })), 'ecartee');
@@ -150,7 +150,8 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
     verifier('deux lignes pour un même set, fichiers DIFFÉRENTS : refus des deux', M.reduireDoublons([{ ligne: L({ fichier: 'a' }), sha256: 'x' }, { ligne: L({ fichier: 'b' }), sha256: 'y' }]).map(p => p.action), ['refus', 'refus']);
 
     // ───── 6. la phase 1 lue : les comptes de la liste réelle
-    const liste = path.resolve(__dirname, '..', 'pokemon-proxy', 'LISTE-LOGOS-A-CHERCHER.md');
+    // (le worktree n'a pas la liste : repli en LECTURE sur le dépôt principal)
+    const liste = [path.resolve(__dirname, '..', 'pokemon-proxy', 'LISTE-LOGOS-A-CHERCHER.md'), 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\LISTE-LOGOS-A-CHERCHER.md'].find(p => fs.existsSync(p)) ?? path.resolve(__dirname, '..', 'pokemon-proxy', 'LISTE-LOGOS-A-CHERCHER.md');
     if (!fs.existsSync(liste)) throw new Error(`liste de la phase 1 introuvable : ${liste}`);
     const lu = lireListe(fs.readFileSync(liste, 'utf8'));
     const compte = v => lu.filter(x => x.verdict === v).length;
@@ -162,7 +163,7 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
         const e = { cleR2: 'logos-officiels/ja/X-abc.png', vignette: { cleR2: 'vignettes/logos-officiels/ja/X-abc.webp', w: 400, h: 100 }, w: 800, h: 200, sha256: 'a', langue: 'ja', source: 'billsarchive', urlSource: 'https://billsarchive.com/x.webp', mention: '© Pokémon / The Pokémon Company', lot: 'l', le: new Date(), preuve: { secret: 1 }, octets: 5 };
         const sortie = typeof logosOfficielsDesSets === 'function' ? logosOfficielsDesSets([{ _id: 'B', logo: { cleR2: 'x' } }, { _id: 'A', logoOfficiel: { ja: e, fr: { lot: 'l' } } }]) : null;
         verifier('l\'export : un set sans logoOfficiel n\'y est pas ; une entrée incomplète (sans cleR2) est ignorée', Object.keys(sortie ?? {}).concat(Object.keys(sortie?.A ?? {})), ['A', 'ja']);
-        verifier('l\'export : la forme exacte (clé, vignette, tailles, empreinte, langue, source, mention, lot) — ni preuve ni date', sortie?.A?.ja, { cleR2: e.cleR2, vignette: e.vignette, w: 800, h: 200, sha256: 'a', langue: 'ja', source: 'billsarchive', urlSource: e.urlSource, mention: e.mention, lot: 'l' });
+        verifier('l\'export : la forme exacte (clé, vignette, tailles, empreinte, langue, source, mention, lot) — ni preuve ni date', sortie?.A?.ja, { cleR2: e.cleR2, vignette: e.vignette, w: 800, h: 200, sha256: 'a', langue: 'ja', source: 'billsarchive', urlSource: e.urlSource, mention: e.mention, lot: 'l', niveau: 'officiel' });   // (LOGOS-NIVEAU) `niveau`, officiel par défaut
     }
 
     // ───── 7. l'écriture et le retrait : base EN MÉMOIRE, faux R2
