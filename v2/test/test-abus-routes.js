@@ -207,6 +207,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/solde': { auth: 'bearer', base: () => ({}), nullables: [] },
         'POST /api/banc/correction': { auth: 'bearer', base: () => ({ scanId: new mongoose.Types.ObjectId().toHexString(), idProduct: ID_A, consentementBanc: { version: cfg.banc.versionsTexte[0], le: new Date().toISOString(), jeton: 'jeton-de-banc-abcdefghij1234' } }), nullables: [] },
         'DELETE /api/banc/contributions': { auth: 'bearer', base: () => ({ jeton: 'jeton-de-banc-abcdefghij9999' }), nullables: [] },
+        // ETIQUETAGE-A : réservée à l'administrateur (404 pour tout autre) — l'acteur est donc un compte ADMINISTRATEUR avec son installation liée, jamais une installation seule (elle ne verrait que des 404 : la validation ne serait jamais jouée)
+        'POST /api/banc/etiquette': { auth: 'admin', base: () => ({ scanId: new mongoose.Types.ObjectId().toHexString(), verdict: 'corrige', idProduct: ID_A, rev: 1 }), nullables: [], idem: true },
         'POST /api/scanner/analyses': { auth: 'session', multipart: true, idem: true, base: () => ({ source: 'camera' }), nullables: [] },
         'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` },
         // lot COLLECTION : le corps est un booléen (aucun champ texte à injecter : la cellule (a) est « sans objet », dite) ; le compte de l'acteur est vérifié ; la clé et le slug sont ceux d'une fiche plausible
@@ -223,6 +225,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     // ── l'acteur d'une cible : un NEUF à chaque requête (un limiteur par compte ou par installation ne masque donc jamais la validation)
     async function acteur(cible) {
         if (cible.auth === 'bearer') { const x = await inst(3); return { x, entetes: extH(x.jeton) }; }
+        if (cible.auth === 'admin') { const c = await compte({ role: 'administrateur' }); const x = await instLiee(c); return { c, x, entetes: extH(x.jeton) }; }
         if (cible.auth === 'session') { const c = await compte(); return { c, entetes: siteH(c.cookie) }; }
         if (cible.auth === 'site') return { entetes: siteH(null) };
         return { entetes: extH(null) };
@@ -408,6 +411,14 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
                 repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(a.jeton, { 'idempotency-key': K }), corps });
                 repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH((await inst(3)).jeton, { 'idempotency-key': K }), corps });
                 ciblesA = sc.json.scanId;
+            } else if (r.cle === 'POST /api/banc/etiquette') {
+                // deux administrateurs, chacun sur SON scan ; la même clé : B ne reçoit jamais la réponse de A
+                const semer = async ad => { const id = new mongoose.Types.ObjectId(); await raw('analyses').insertOne({ _id: id, porteur: `compte:${ad.c.c._id}`, surface: 'extension', statut: 'identifiee', cartes: [{ idProduct: ID_A, statut: 'identifiee' }], produits: [], facturation: null, creeLe: new Date(), expireLe: new Date(Date.now() + 86400e3) }); return String(id); };
+                const a = await acteur(cible), b = await acteur(cible);
+                const sa = await semer(a), sb = await semer(b);
+                repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: { ...a.entetes, 'idempotency-key': K }, corps: { scanId: sa, verdict: 'juste', rev: 1 } });
+                repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: { ...b.entetes, 'idempotency-key': K }, corps: { scanId: sb, verdict: 'juste', rev: 2 } });   // rev 2 : un corps différent, donc une réponse différente (l'octet pour octet de A serait un rejeu)
+                ciblesA = sa;
             } else if (r.cle === 'POST /api/scanner/analyses') {
                 const a = await compte(), b = await compte();
                 repA = await envoyerFormulaire(r.chemin, siteH(a.cookie, { 'idempotency-key': K }), formulaire());
@@ -443,6 +454,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         if (r.cle === 'POST /api/identifier/reponse') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, choix: 'a' } }); attendu = [404]; }
         else if (r.cle === 'POST /api/retour-live') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, prixLive: 5 } }); attendu = [404]; }
         else if (r.cle === 'POST /api/banc/correction') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, idProduct: ID_A } }); attendu = [404]; }
+        else if (r.cle === 'POST /api/banc/etiquette') { const ad = await acteur(cible); rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: ad.entetes, corps: { scanId: scanA, verdict: 'corrige', idProduct: ID_B, rev: 1 } }); attendu = [404]; }   // un AUTRE administrateur, le scan de la victime A
         else if (r.cle === 'DELETE /api/banc/contributions') { rep = await envoyer(V, { methode: 'DELETE', chemin: r.chemin, entetes: extH(B.jeton), corps: { jeton: 'jeton-banc-autrui-abcdefghij34' } }); attendu = [200]; }
         else if (r.cle === 'DELETE /api/compte/installations/:id') { rep = await envoyer(V, { methode: 'DELETE', chemin: `/api/compte/installations/${CAinst.i._id}`, entetes: siteH(CB.cookie) }); attendu = [404]; }
         else if (r.cle === 'PUT /api/collection/sets/:slug/fiches/:cle') {
@@ -752,6 +764,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_SANS_PRIX_JOUR: [c => c.plafonds.sansPrix, 5, 'abc', 'leve'], V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
             V2_COMPTE_HEURE: [c => c.limites.compteParPorteurHeure, 600, '0', 'leve'], V2_SOLDE_HEURE: [c => c.limites.soldeParPorteurHeure, 1200, '0', 'leve'],      // MOYENS-B1 (O4) : plafonds par porteur, posés sans mesure d'usage réel
             V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
+            V2_ETIQUETTE_HEURE: [c => c.limites.etiquetteParPorteurHeure, 600, '0', 'leve'],      // ETIQUETAGE-A : le plafond horaire de POST /api/banc/etiquette (administrateur), posé sans mesure d'usage réel
+            RENDER_GIT_COMMIT: [c => c.versions.chaine, null, 'pas-un-commit', 'ignore'], V2_VERSION_MODELE: [c => c.versions.modele, null, '%%', 'ignore'],   // ETIQUETAGE-A : informations internes, une valeur illisible vaut `null` (jamais invalide, jamais inventée)
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
             V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 30 jours au plus
@@ -816,7 +830,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             const racine = path.join(__dirname, '..'), noms = new Set(), fichiers = [path.join(racine, '..', 'collecte-cartes', 'r2.js')];
             (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!(['test', 'migrations', 'admin', 'mesures'].includes(e.name) && (e.name !== 'mesures' || path.relative(racine, p).replace(/\\/g, '/') === 'mesures'))) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);   // mesures/ : outillage manuel, jamais chargé par le serveur (voir l'assertion « aucun require de mesures/ »)
             for (const f of fichiers) { const s = fs.readFileSync(f, 'utf8'); for (const re of [/process\.env\.([A-Z][A-Z0-9_]{2,})/g, /\benv\.([A-Z][A-Z0-9_]{2,})/g, /'((?:R2|V2|MONGODB|TURNSTILE|BREVO|BANC|JETON|RM)_[A-Z0-9_]+)'/g]) for (const m of s.matchAll(re)) noms.add(m[1]); }
-            const doc = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            const audit = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            // tour 3 (F-1) : la variable doit figurer DANS LA TABLE §4 (de « ## 4. » à « ## 5. »), pas n'importe où dans le document (une ligne de table perdue passait si le nom était cité ailleurs)
+            const i4 = audit.indexOf('## 4. Table des valeurs par défaut'), i5 = audit.indexOf('\n## 5.', i4);
+            H.vrai('m2 instrument : la table §4 est bien délimitée (début trouvé, fin après lui)', i4 >= 0 && i5 > i4);
+            const doc = i4 >= 0 && i5 > i4 ? audit.slice(i4, i5) : '';
             const absents = [...noms].sort().filter(n => !doc.includes('`' + n + '`'));
             H.v(`m2 : ${noms.size} noms de variables lus par la production (${fichiers.length} fichiers) — tous dans la table des valeurs par défaut de AUDIT-SECURITE-V2.md (noms seulement)`, absents, []);
         }

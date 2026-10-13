@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "La réponse de la chaîne n'est pas une affirmation : corriger est exigé",
+    "detail": "juste-sans-affirmation"
+  },
+  "facturation": null
+}

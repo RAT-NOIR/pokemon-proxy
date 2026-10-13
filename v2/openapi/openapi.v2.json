@@ -1793,6 +1793,121 @@
         }
       }
     },
+    "/api/banc/etiquette": {
+      "post": {
+        "operationId": "etiqueterBanc",
+        "tags": [
+          "banc"
+        ],
+        "summary": "Administrateur seulement : dit « juste » ou corrige la réponse de la chaîne pour une carte d'un de SES scans (la réponse d'origine est gardée à côté)",
+        "description": "Route réservée à un compte ADMINISTRATEUR (rôle relu en base à chaque requête). Pour tout autre porteur — compte sans le rôle, rôle retiré depuis, installation non liée — la route n'existe pas : le 404 natif d'une route inexistante (même corps non JSON, mêmes en-têtes), rien d'écrit, jamais de 429. `juste` ne vaut que si la réponse d'origine de la chaîne pour cette carte est une AFFIRMATION (statut `identifiee`) : l'étiquette reprend l'idProduct affirmé ; sur une question ou un introuvable, 409 (`corrige` est exigé) ; une panne n'écrit aucune analyse : 404 (scan inconnu). L'étiquette juge la réponse D'ORIGINE : répondre à une question ne la transforme pas (après un OUI, `juste` rend toujours 409). Sur une carte `a-trancher`, y compris la question de confirmation à UN candidat (`question.code: confirmation`), l'extension PROPOSE chaque candidat en un clic : chaque proposition envoie `corrige` avec l'`idProduct` du candidat, prérempli ; un `corrige` égal à un candidat de `question.choix` signifie que la chaîne avait la bonne carte parmi ses candidats. `corrige` porte EXACTEMENT un de `idProduct` (validé au catalogue de l'API : inconnu 422, catalogue injoignable 503) ou `aucune` (`pas-une-carte` | `hors-catalogue`). `rev` est un entier strictement croissant par (scan, carte) : même `rev` et même contenu = `rejoue` (rien d'écrit) ; même `rev` et contenu différent, ou `rev` inférieur au dernier = 409 ; `rev` plus grand = écrase. La route ne débite ni ne rembourse rien. L'étiquette vit avec l'analyse (12 mois) et part avec elle (purge, suppression du compte). Plafond : 600 requêtes par heure et par porteur (429 DEBIT).",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteEtiquetteBanc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`ecrit` : l'étiquette est enregistrée. `rejoue` : même `rev`, même contenu, RIEN n'a été écrit (elle existait déjà). Jamais un 200 muet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseEtiquetteBanc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : champ inconnu, scanId/carte/verdict illisibles, rev hors de 1 à 1 000 000, `juste` accompagné d'un idProduct ou de `aucune`, `corrige` sans exactement un des deux. `detail` précise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "CODE_INVALIDE (corps JSON) : scan inconnu, scan d'un autre porteur, scan en panne (aucune analyse), carte absente du scan (jamais distingués). Pour un porteur qui n'est pas administrateur : le 404 natif d'une route inexistante, corps NON JSON (hors ce schéma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : `juste` sur une question ou un introuvable (`detail` juste-sans-affirmation) ; `rev` périmé (rev-perimee) ; même `rev` avec un autre contenu (rev-contredit) ; écriture concurrente perdue (concurrence). Rien n'est écrit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE (`detail` id-product-inconnu) : l'idProduct n'existe pas au catalogue de l'API ; ou Idempotency-Key réutilisée avec un autre corps (`detail` cle-reutilisee). Rien n'est écrit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plus de 600 requêtes dans l'heure pour ce porteur (avec `reessayerDans`, en-tête `Retry-After` aussi), ou requête identique en cours.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : base ou catalogue injoignable (rien d'écrit ; réessayer).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/banc/contributions": {
       "delete": {
         "operationId": "effacerContributionsBanc",
@@ -4596,6 +4711,74 @@
         "required": [
           "email"
         ]
+      },
+      "RequeteEtiquetteBanc": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "carte": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Le champ `index` de la carte DANS LA RÉPONSE de POST /api/identifier (sa position d'ENTRÉE), jamais sa position dans le tableau `analyse.cartes` (un lot est rangé par valeur décroissante). 0 par défaut. Une carte absente du scan = 404."
+          },
+          "verdict": {
+            "enum": [
+              "juste",
+              "corrige"
+            ]
+          },
+          "idProduct": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Seulement avec `corrige`, et sans `aucune`. Validé au catalogue de l'API."
+          },
+          "aucune": {
+            "enum": [
+              "pas-une-carte",
+              "hors-catalogue"
+            ],
+            "description": "Seulement avec `corrige`, et sans `idProduct`."
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "De 1 à 1 000 000 (400 au-delà). Strictement croissant par (scan, carte). Le rejeu d'une étiquette porte le MÊME rev. Un rejeu par Idempotency-Key rend la réponse d'origine, même périmée, sans rien écrire."
+          }
+        },
+        "required": [
+          "scanId",
+          "verdict",
+          "rev"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseEtiquetteBanc": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "etat": {
+            "enum": [
+              "ecrit",
+              "rejoue"
+            ]
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "success",
+          "etat",
+          "rev"
+        ],
+        "additionalProperties": false
       },
       "RequeteCorrectionBanc": {
         "type": "object",

@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "idProduct inconnu du catalogue",
+    "detail": "id-product-inconnu"
+  },
+  "facturation": null
+}

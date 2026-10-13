@@ -292,5 +292,47 @@
     "statut": 200,
     "schema": "ReponseCompte",
     "description": "Compte non vérifié : pas encore ses 25."
+  },
+  "etiquette-ecrite.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 200,
+    "schema": "ReponseEtiquetteBanc",
+    "description": "Étiquette administrateur enregistrée à côté de la réponse d'origine de la chaîne."
+  },
+  "etiquette-rejouee.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 200,
+    "schema": "ReponseEtiquetteBanc",
+    "description": "Même rev, même contenu : rien n'a été écrit, l'étiquette existait déjà."
+  },
+  "etiquette-introuvable.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 404,
+    "schema": "ReponseErreur",
+    "description": "Scan inconnu, d'un autre porteur, en panne (aucune analyse) ou carte absente : jamais distingués. (Un non-administrateur reçoit, lui, le 404 natif non JSON d'une route inexistante.)"
+  },
+  "etiquette-juste-sans-affirmation.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "« juste » sur une question ou un introuvable : corriger est exigé (une panne n'écrit pas d'analyse : 404)."
+  },
+  "etiquette-rev-contredit.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Même rev avec un autre contenu (rev-perimee pour un rev inférieur au dernier)."
+  },
+  "etiquette-id-product-inconnu.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "L'idProduct n'existe pas au catalogue de l'API : rien d'écrit."
+  },
+  "etiquette-limite.json": {
+    "route": "POST /api/banc/etiquette",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Plus de 600 requêtes dans l'heure pour ce porteur : attendre reessayerDans secondes."
   }
 }

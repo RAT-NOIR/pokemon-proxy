@@ -676,6 +676,34 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(V, 'DELETE /api/banc/contributions', 'jeton inconnu (200, supprimees 0)', 200, '/api/banc/contributions', { corps: { jeton: jetonContribution }, entetes: extH(x.jeton) });
         await jouer(V, 'DELETE /api/banc/contributions', 'forme de jeton invalide', 400, '/api/banc/contributions', { corps: { jeton: 'x' }, entetes: extH(x.jeton) });
         await jouer(V, 'DELETE /api/banc/contributions', 'sans Authorization', 401, '/api/banc/contributions', { corps: { jeton: jetonContribution }, entetes: extH(null) });
+        // ETIQUETAGE-A : l'étiquette d'un administrateur sur SON scan (compte administrateur + installation liée) ; tous les statuts documentés sont joués par un état réel (hors 503 : garde d'index)
+        {
+            const R = 'POST /api/banc/etiquette', CH = '/api/banc/etiquette';
+            const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm), adm2 = await compte({ role: 'administrateur' }), xa2 = await instLiee(adm2);
+            mode = 'affirmee';
+            const aff = await ident(V, 'analyse affirmée de l\'administrateur (pour l\'étiquette)', 200, xa.jeton);
+            mode = 'ambigue2';
+            const que = await ident(V, 'analyse à question de l\'administrateur (pour l\'étiquette)', 200, xa.jeton);
+            mode = 'affirmee';
+            await jouer(V, R, 'juste sur une affirmation (ecrit)', 200, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'même rev, même contenu (rejoue)', 200, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'corrige avec un idProduct du catalogue, rev plus grand (écrase)', 200, CH, { corps: { scanId: aff.json.scanId, verdict: 'corrige', idProduct: ID_B, rev: 2 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'corrige « hors catalogue » sur la question', 200, CH, { corps: { scanId: que.json.scanId, verdict: 'corrige', aucune: 'hors-catalogue', rev: 1 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'juste sur une question (corriger est exigé)', 409, CH, { corps: { scanId: que.json.scanId, verdict: 'juste', rev: 2 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'même rev, autre contenu', 409, CH, { corps: { scanId: aff.json.scanId, verdict: 'corrige', idProduct: ID_A, rev: 2 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'idProduct inconnu du catalogue', 422, CH, { corps: { scanId: aff.json.scanId, verdict: 'corrige', idProduct: 999999999, rev: 3 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'scanId mal formé', 400, CH, { corps: { scanId: 'x', verdict: 'juste', rev: 1 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'sans Authorization', 401, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(null) });
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await H.appel(V, CH, { methode: 'POST', corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(x.jeton) });
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
+            await jouer(V, R, 'scan d\'un autre administrateur', 404, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa2.jeton) });
+            const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);      // un compteur neuf : celui d'adm2 existe déjà (sa requête de 404 l'a ouvert)
+            await plafonner('banc-etiquette', 'compte', adm3.c._id, 600);
+            await jouer(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, CH, { corps: { scanId: aff.json.scanId, verdict: 'juste', rev: 1 }, entetes: extH(xa3.jeton) });
+        }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
@@ -701,6 +729,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/compte/delier': { chemin: '/api/compte/delier', corps: {} },
             'POST /api/compte/renvoyer-verification': { chemin: '/api/compte/renvoyer-verification', corps: { email: 'a@exemple.fr' } },
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
+            'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },
