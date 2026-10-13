@@ -106,20 +106,40 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         // sont assemblés à l'exécution. Un défaut de la garde ne peut donc écrire que dans le dossier temporaire du système (jamais chez le testeur).
         const LF = ['Logo', 'FR'].join(' '), AM = ['apport', 'manuel'].join('-'), LG = 'LO' + 'GO', JP = ['Logo', 'JP'].join(' '), ZH = ['Logo', 'ZH'].join(' ');
         const faux = (...s) => path.join(racine, 'faux-bureau', ...s);
-        for (const [nom, d] of [[LF, faux('pokemon-proxy', LF, 'export')], [AM, faux('pokemon-proxy', AM)], [LG, faux('Desktop', LG, 'x')], [`${LF} en minuscules`, faux(LF.toLowerCase(), 'x')], [JP, faux('z', JP)], [ZH, faux('z', ZH, 'a')], [['verrou', 'photos'].join(' + '), faux('api', 'verrou', 'photos', 'x')]])
-            H.v(`4. dossier d'apports « ${nom} » refusé, rien créé`, [await code(() => X.exporterBancAdmin({ ...base, dossier: d })), fs.existsSync(d)], ['DOSSIER-REFUSE', false]);
-        H.vrai('4. et le dossier temporaire des doubles n\'a rien reçu', !fs.existsSync(faux()));
+        // BANCS-EXPORT (I-2) : le PARENT du dossier de sortie EXISTE (fabriqué sous le temporaire de ce banc) — seul le jugement de la garde peut donc refuser (la création non récursive, elle, réussirait) ;
+        // chaque refus compte les créations TENTÉES (0) et nomme sa raison ; le témoin admis en tente une. `realpath` est le vrai (il lève ENOENT sur ce qui n'existe pas, comme en production).
+        const tente = async o => { let n = 0; try { await X.exporterBancAdmin({ ...base, ...o, mkdir: p => { n++; return fs.mkdirSync(p); } }); return ['FINI', n, '']; } catch (e) { return [e.code, n, String(e.message)]; } };
+        const RAISON_APPORTS = 'dossier d\'apports manuels', RAISON_VERROU = 'dossier de photos du verrou';
+        for (const [nom, d, raison] of [[LF, faux('pokemon-proxy', LF, 'export'), RAISON_APPORTS], [AM, faux('pokemon-proxy', AM), RAISON_APPORTS], [LG, faux('Desktop', LG, 'x'), RAISON_APPORTS], [`${LF} en minuscules`, faux(LF.toLowerCase(), 'x'), RAISON_APPORTS], [JP, faux('z', JP), RAISON_APPORTS], [ZH, faux('z', ZH, 'a'), RAISON_APPORTS], [['verrou', 'photos'].join(' + '), faux('api', 'verrou', 'photos', 'x'), RAISON_VERROU]]) {
+            fs.mkdirSync(path.dirname(d), { recursive: true });
+            const [r, n, msg] = await tente({ dossier: d });
+            H.v(`4. dossier d'apports « ${nom} » (parent présent) refusé par la garde : code, créations tentées 0, raison « ${raison} », rien créé`, [r, n, msg.includes(raison), fs.existsSync(d)], ['DOSSIER-REFUSE', 0, true, false]);
+        }
+        {
+            const temoin = faux('pokemon-proxy', 'temoin-neuf'); fs.mkdirSync(path.dirname(temoin), { recursive: true });
+            const [r, n] = await tente({ dossier: temoin });
+            H.v('4. témoin du même montage (parent présent, nom innocent, sous le temporaire) : admis, UNE création tentée', [r, n, fs.existsSync(temoin)], ['FINI', 1, true]);
+        }
         H.v('4. dossier relatif, vide, non textuel : refusés', [await code(() => X.exporterBancAdmin({ ...base, dossier: 'export' })), await code(() => X.exporterBancAdmin({ ...base, dossier: '' })), await code(() => X.exporterBancAdmin({ ...base, dossier: null }))], ['DOSSIER-REFUSE', 'DOSSIER-REFUSE', 'DOSSIER-REFUSE']);
         // M3 : la racine d'un disque est jugée par la fonction PURE sur une lettre fabriquée (aucun accès au disque), jamais par la vraie racine du poste
         H.v('4. la racine d\'un disque (lettre fabriquée) est refusée par la garde elle-même', [X.refusDeDossier('Z:\\'), X.refusDeDossier('Z:\\x') === null], ['racine d\'un disque', true]);
         // I1 : le chemin RÉEL est jugé. AUCUN lien n'est créé : la résolution `realpath` et `lstat` sont INJECTÉES (un lien réel, lui, ne se prouve que par ces deux appels).
         {
-            const cible = faux('sortie-lien');
-            const reel = r => ({ realpath: () => r });
-            for (const [nom, r] of [[LF, faux('ailleurs', LF, 'x')], [AM, faux('ailleurs', AM)], [LG, faux('ailleurs', LG, 'y')], [['verrou', 'photos'].join(' + '), faux('ailleurs', 'verrou', 'photos', 'x')], ['racine d\'un disque', 'Z:\\']])
-                H.v(`I1. chemin RÉEL dans un dossier d'apports (${nom}) alors que le chemin donné est innocent : refusé, rien écrit`, [await code(() => X.exporterBancAdmin({ ...base, dossier: cible, ...reel(r) })), fs.existsSync(cible)], ['DOSSIER-REFUSE', false]);
-            H.v('I1. une cible qui est elle-même un lien (lstat injecté) est refusée, rien écrit', [await code(() => X.exporterBancAdmin({ ...base, dossier: cible, lstat: () => ({ isSymbolicLink: () => true }) })), fs.existsSync(cible)], ['DOSSIER-REFUSE', false]);
-            H.v('I1. un chemin réel qui reste ailleurs et innocent est admis (témoin : la garde ne refuse pas tout)', await code(() => X.exporterBancAdmin({ ...base, dossier: sortie('reel-ok'), realpath: p => p })), null);
+            // BANCS-EXPORT : `realpath` RÉALISTE (voir aussi test-garde-export-ancetres.js) — le dossier de sortie n'existe pas encore : ENOENT sur la feuille, la garde remonte à l'ancêtre existant (une jonction fabriquée).
+            // Monde fabriqué sous `Z:` (rien n'y existe, rien n'y est écrit) ; la création est comptée et ne crée rien.
+            const enoent = () => Object.assign(new Error('absent'), { code: 'ENOENT' });
+            const monde = ex => p => { const k = Object.keys(ex).find(x => x.toLowerCase() === String(p).toLowerCase()); if (k === undefined) throw enoent(); return ex[k]; };
+            const existants = { 'Z:\\': 'Z:\\', 'Z:\\tmp': 'Z:\\tmp' };
+            const cible = 'Z:\\tmp\\jn\\sortie-lien';
+            const tenteZ = async o => { let n = 0; try { await X.exporterBancAdmin({ ...base, colFn: () => { throw Object.assign(new Error('arrêt'), { code: 'STOP' }); }, env: {}, tmpdir: () => 'Z:\\tmp', lstat: () => { throw enoent(); }, ...o, mkdir: () => { n++; } }); return ['FINI', n, '']; } catch (e) { return [e.code === 'STOP' ? 'ADMIS' : e.code, n, String(e.message)]; } };
+            const RAISON_REEL = 'chemin réel';
+            for (const [nom, r, raison] of [[LF, `Z:\\ailleurs\\${LF}\\x`, RAISON_REEL], [AM, `Z:\\ailleurs\\${AM}`, RAISON_REEL], [LG, 'Z:\\ailleurs\\' + LG + '\\y', RAISON_REEL], [['verrou', 'photos'].join(' + '), 'Z:\\ailleurs\\' + ['verrou', 'photos'].join('\\') + '\\x', RAISON_REEL], ['racine d\'un disque', 'Z:\\', 'hors des racines permises']]) {
+                const [res, n, msg] = await tenteZ({ dossier: cible, realpath: monde({ ...existants, 'Z:\\tmp\\jn': r }) });
+                H.v(`I1. ancêtre-jonction vers un chemin RÉEL d'apports (${nom}) alors que le chemin donné est innocent, feuille absente : refusé (créations tentées 0, raison « ${raison} »)`, [res, n, msg.includes(raison)], ['DOSSIER-REFUSE', 0, true]);
+            }
+            const [rl, nl, ml] = await tenteZ({ dossier: 'Z:\\tmp\\sortie-lien', realpath: monde(existants), lstat: () => ({ isSymbolicLink: () => true }) });
+            H.v('I1. une cible qui est elle-même un lien (lstat injecté) est refusée par la garde : créations tentées 0, raison « la cible est un lien »', [rl, nl, ml.includes('la cible est un lien')], ['DOSSIER-REFUSE', 0, true]);
+            H.v('I1. un chemin réel qui reste ailleurs et innocent est admis (témoin : la garde ne refuse pas tout) : une création tentée', (({ 0: a, 1: b }) => [a, b])(await tenteZ({ dossier: 'Z:\\tmp\\reel-ok', realpath: monde(existants) })), ['ADMIS', 1]);
         }
         // un dossier déjà rempli de choses qui ne sont pas un export : refusé, rien n'y est écrit
         const occupe = sortie('occupe'); fs.mkdirSync(occupe); fs.writeFileSync(path.join(occupe, 'important.txt'), 'x');
@@ -154,19 +174,28 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         const T = path.join(racine, 'perm');                        // un faux « temporaire du système » : sert de racine permise injectée
         fs.mkdirSync(T, { recursive: true });
         const permis = { ...identite, tmpdir: () => T, env: {} };
-        H.v('M1. hors de toute racine permise (nom innocent, dossier inexistant) : REFUSÉ', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: 'Z:\\quelconque\\export' })), 'DOSSIER-REFUSE');
-        H.v('M1. hors de toute racine permise, un dossier au nom inconnu (« Mes photos Vinted », rempli à la main) : REFUSÉ — la liste de refus ne suffit pas', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: 'Z:\\Mes photos Vinted\\export' })), 'DOSSIER-REFUSE');
-        H.v('M1. sous la racine permise (le temporaire injecté) : admis', await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: path.join(T, 'ok-1') })), null);
-        // seconde couche : les noms d'apports, normalisés
-        for (const [nom, seg] of [['point final', `${LF}.`], ['espace final', `${LF} `], ['points et espaces finaux', `${LF}. .`], ['nom court 8.3', 'LOGOFR~1']])
-            H.v(`M1. seconde couche : un segment d'apports avec ${nom} est refusé même sous la racine permise`, [await code(() => X.exporterBancAdmin({ ...base, ...permis, dossier: path.join(T, 'x', seg, 'export') })), fs.existsSync(path.join(T, 'x'))], ['DOSSIER-REFUSE', false]);
-        H.v('M1. seconde couche : un nom court 8.3 que la résolution RÉELLE développe en dossier d\'apports est refusé', await code(() => X.exporterBancAdmin({ ...base, ...permis, tmpdir: () => T, realpath: p => (p.includes('COURT~9') ? p.replace('COURT~9', LF) : p), lstat: identite.lstat, dossier: path.join(T, 'COURT~9', 'export') })), 'DOSSIER-REFUSE');
+        // BANCS-EXPORT (I-1, I-2) : un monde fabriqué sous `Z:` dont le `realpath` lève ENOENT sur ce qui n'existe pas (la sortie n'existe jamais au jugement) ; la création est comptée et ne crée rien.
+        const enoentZ = () => Object.assign(new Error('absent'), { code: 'ENOENT' });
+        const mondeZ = ex => p => { const k = Object.keys(ex).find(x => x.toLowerCase() === String(p).toLowerCase()); if (k === undefined) throw enoentZ(); return ex[k]; };
+        const existZ = { 'Z:\\': 'Z:\\', 'Z:\\tmp': 'Z:\\tmp', 'Z:\\Users': 'Z:\\Users', 'Z:\\Users\\Yung': 'Z:\\Users\\Yung', 'Z:\\Mes photos Vinted': 'Z:\\Mes photos Vinted', 'Z:\\quelconque': 'Z:\\quelconque' };
+        const tenteZ = async o => { let n = 0; try { await X.exporterBancAdmin({ ...base, colFn: () => { throw Object.assign(new Error('arrêt'), { code: 'STOP' }); }, env: {}, tmpdir: () => 'Z:\\tmp', realpath: mondeZ(existZ), lstat: () => { throw enoentZ(); }, ...o, mkdir: () => { n++; } }); return ['FINI', n, '']; } catch (e) { return [e.code === 'STOP' ? 'ADMIS' : e.code, n, String(e.message)]; } };
+        const refusZ = async (nom, o, raison) => { const [r, n, msg] = await tenteZ(o); H.v(`${nom} : refusé par la garde (créations tentées 0, raison « ${raison} »)`, [r, n, msg.includes(raison)], ['DOSSIER-REFUSE', 0, true]); };
+        const HORS = 'hors des racines permises';
+        await refusZ('M1. hors de toute racine permise (nom innocent, parent présent, sortie neuve)', { dossier: 'Z:\\quelconque\\export' }, HORS);
+        await refusZ('M1. hors de toute racine permise, un dossier au nom inconnu (« Mes photos Vinted », rempli à la main, présent) : la liste de refus ne suffit pas', { dossier: 'Z:\\Mes photos Vinted\\export' }, HORS);
+        H.v('M1. sous la racine permise (le temporaire injecté, sortie neuve, parent présent) : admis, une création tentée', (([a, b]) => [a, b])(await tenteZ({ dossier: 'Z:\\tmp\\ok-1' })), ['ADMIS', 1]);
+        // seconde couche : les noms d'apports, normalisés (le segment est un ancêtre PRÉSENT de la sortie, sous la racine permise)
+        for (const [nom, seg, raison] of [['point final', `${LF}.`, 'apports'], ['espace final', `${LF} `, 'apports'], ['points et espaces finaux', `${LF}. .`, 'apports'], ['nom court 8.3', 'LOGOFR~1', '8.3']])
+            await refusZ(`M1. seconde couche : un segment d'apports avec ${nom} est refusé même sous la racine permise (parent présent)`, { dossier: `Z:\\tmp\\x\\${seg}\\export`, realpath: mondeZ({ ...existZ, 'Z:\\tmp\\x': 'Z:\\tmp\\x', [`Z:\\tmp\\x\\${seg}`]: `Z:\\tmp\\x\\${seg}` }) }, raison);
+        // NB : un segment à tilde est refusé PAR LE NOM (8.3) avant toute résolution : le chemin réel ne peut pas en être l'auteur ; la jonction qui développe vers un dossier d'apports est éprouvée dans test-garde-export-ancetres.js (A6, A7).
+        await refusZ('M1. seconde couche : un nom court 8.3 (que la résolution réelle développerait) est refusé par son nom', { dossier: 'Z:\\tmp\\COURT~9\\export', realpath: mondeZ({ ...existZ, 'Z:\\tmp\\COURT~9': `Z:\\tmp\\${LF}` }) }, '8.3');
         H.v('M1. la fonction pure normalise point/espace finaux', [X.refusDeDossier(`Z:\\a\\${LF}.\\e`) !== null, X.refusDeDossier(`Z:\\a\\${LF} \\e`) !== null, X.refusDeDossier('Z:\\a\\LOGOFR~1\\e') !== null, X.refusDeDossier('Z:\\a\\autre\\e') === null], [true, true, true, true]);
         // la racine NOMMÉE
         const N = path.join(racine, 'racine-nommee'); fs.mkdirSync(N, { recursive: true });
         const autreTmp = { tmpdir: () => path.join(racine, 'un-autre-temporaire'), lstat: identite.lstat, realpath: p => p };       // le temporaire injecté n'est PAS N : seule la racine nommée peut admettre
         H.v('M1. racine nommée valide : un dossier sous elle est admis (le temporaire n\'y est pour rien)', await code(() => X.exporterBancAdmin({ ...base, ...autreTmp, env: { V2_EXPORT_RACINE: N }, dossier: path.join(N, 'export-n') })), null);
-        H.v('M1. racine nommée valide : un dossier HORS d\'elle (et hors du temporaire injecté) est refusé', await code(() => X.exporterBancAdmin({ ...base, ...autreTmp, env: { V2_EXPORT_RACINE: N }, dossier: path.join(racine, 'ailleurs', 'export') })), 'DOSSIER-REFUSE');
+        await refusZ('M1. racine nommée valide (Z:\\Users\\Yung) : un dossier HORS d\'elle et hors du temporaire (Z:\\tmp), parent présent, est refusé', { env: { V2_EXPORT_RACINE: 'Z:\\Users\\Yung' }, dossier: 'Z:\\quelconque\\export' }, HORS);
+        H.v('M1. témoin : sous cette racine nommée, sortie neuve, parent présent : admis, une création tentée', (([a, b]) => [a, b])(await tenteZ({ env: { V2_EXPORT_RACINE: 'Z:\\Users\\Yung' }, tmpdir: () => 'Z:\\autre', dossier: 'Z:\\Users\\Yung\\export' })), ['ADMIS', 1]);
         for (const [nom, v] of [['relative', 'export'], ['racine de disque', 'Z:\\'], ['contenant un dossier d\'apports', path.join(racine, LF, 'r')], ['sous un Bureau', path.join(racine, 'Desktop', 'r')], [['sous verrou', 'photos'].join(' puis '), path.join(racine, 'verrou', 'photos', 'r')], ['inexistante', path.join(racine, 'nexiste-pas')], ['vide', ' ']]) {
             const realpathNommee = nom === 'inexistante' ? (p => { if (p === v) throw Object.assign(new Error('absent'), { code: 'ENOENT' }); return p; }) : (p => p);
             H.v(`M1. racine nommée ${nom} : l'export est refusé (aucune écriture, même sous le temporaire permis)`, [await code(() => X.exporterBancAdmin({ ...base, ...permis, realpath: realpathNommee, env: { V2_EXPORT_RACINE: v }, dossier: path.join(T, `nommee-${nom.length}`) })), fs.existsSync(path.join(T, `nommee-${nom.length}`))], ['DOSSIER-REFUSE', false]);
@@ -227,7 +256,8 @@ const code = async f => { try { await f(); return null; } catch (e) { return e &
         H.v('5. sans --base, sans --sortie, argument inconnu, --base donné deux fois : code 1', [await lancer([`--sortie=${sortie('c2')}`]), await lancer(['--base=essai_lecture']), await lancer(['--base=essai_lecture', `--sortie=${sortie('c3')}`, '--force']), await lancer(['--base=a', '--base=b', `--sortie=${sortie('c4')}`])], [1, 1, 1, 1]);
         H.v('5. sans MONGODB_ESSAI_LECTURE_URI : code 1 (l\'URI de lecture est la seule admise)', await lancer(['--base=essai_lecture', `--sortie=${sortie('c5')}`], { env: { V2_BANC_BUCKET: 'bucket-banc-test', MONGODB_URI: 'mongodb://prod' } }), 1);
         const dApports = path.join(racine, 'faux-bureau-cli', 'LO' + 'GO', 'sortie');   // un double (voir section 4), jamais le vrai dossier
-        H.v('5. dossier d\'apports : code 1, rien créé', [await lancer(['--base=essai_lecture', `--sortie=${dApports}`]), fs.existsSync(dApports)], [1, false]);
+        fs.mkdirSync(path.dirname(dApports), { recursive: true });                     // BANCS-EXPORT (I-2) : le PARENT existe — la création de la sortie réussirait, seul le refus de la garde l'empêche
+        H.v('5. dossier d\'apports (parent présent) : code 1, rien créé', [await lancer(['--base=essai_lecture', `--sortie=${dApports}`]), fs.existsSync(dApports)], [1, false]);
         H.vrai('5. aucune valeur d\'URI ni de variable dans le journal', !sorties.join('\n').includes('mongodb://'));
     }
 
