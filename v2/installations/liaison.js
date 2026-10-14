@@ -81,6 +81,13 @@ async function lier({ installation, code, argent, maintenant = new Date(), rejeu
     return { ok: true, compte, jeton, emailMasque: masquer(compte.email) };
 }
 
+/** Après une liaison réussie dont la réponse ne peut pas partir : le nouveau jeton (jamais rendu) cède la place à l'ANCIEN, que le client détient encore. Ne défait ni la liaison ni la fusion. */
+async function remettreAncienJeton(installation, jetonNouveau) {
+    const r = await col('installations').updateOne({ _id: installation._id, jetonEmpreinte: J.empreinte(jetonNouveau) },
+        { $set: { jetonEmpreinte: installation.jetonEmpreinte, rejeuLiaison: installation.rejeuLiaison ?? null } });
+    if (r.modifiedCount !== 1) throw new Error('jeton-non-remis');
+}
+
 async function delier(installation) {
     await col('installations').updateOne({ _id: installation._id, revoqueeLe: null }, { $set: { compteId: null } });   // essais INCHANGÉS : pas de nouvel essai
 }
@@ -91,4 +98,4 @@ async function revoquer(compteId, id) {
         { $set: { revoqueeLe: new Date(), jetonEmpreinte: J.empreinte(`revoque|${J.genererJeton()}`) } });   // empreinte remplacée par une valeur que personne ne peut présenter
     return r.modifiedCount === 1;
 }
-module.exports = { creerCode, lier, delier, revoquer, masquer, porteurDeRejeu };
+module.exports = { creerCode, lier, delier, revoquer, masquer, porteurDeRejeu, remettreAncienJeton };

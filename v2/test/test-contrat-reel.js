@@ -173,7 +173,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(U, 'POST /api/installation', 'plafond par IP et par jour', 429, '/api/installation', { corps: { versionExtension: '2.0.0' }, entetes: mem });
         await jouer(U, 'POST /api/installation', 'versionExtension de mauvais type', 400, '/api/installation', { corps: { versionExtension: 7 }, entetes: ip() });
         // LOT IDEMPOTENCE-INSTALLATION : Idempotency-Key facultative (réponse scellée en base), champ `heritage`, 422 cle-reutilisee
-        const kI = cle(), ipI = ip(), corpsI = { versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'portefeuille-inexistant-contrat' };
+        const kI = `${cle()}-`.padEnd(40, 'k'), ipI = ip(), corpsI = { versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'portefeuille-inexistant-contrat' };
         const avecCle = await jouer(U, 'POST /api/installation', 'avec Idempotency-Key (heritage inconnu)', 201, '/api/installation', { corps: corpsI, entetes: { ...ipI, 'idempotency-key': kI } });
         const rejeuI = await jouer(U, 'POST /api/installation', 'rejeu de la même clé (même installation, même jeton)', 201, '/api/installation', { corps: corpsI, entetes: { ...ipI, 'idempotency-key': kI } });
         H.v('POST /api/installation : heritage "inconnu" rendu, le rejeu rend le même corps, marqué rejoué', [avecCle.json && avecCle.json.heritage, rejeuI.texte === avecCle.texte, rejeuI.entetes['idempotency-replayed']], ['inconnu', true, 'true']);

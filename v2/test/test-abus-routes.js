@@ -412,7 +412,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             // LOT IDEMPOTENCE-INSTALLATION : deux routes dont la réponse PORTE UN JETON honorent une clé facultative. Elles ne se jouent pas comme les autres : la réponse est un 201 (installation) ou un
             // 200 (liaison) qui contient le jeton de A. Ce que B ne doit JAMAIS recevoir : ce jeton. Installation : aucun porteur, la clé (aléatoire) est la capacité — B avec la même clé mais un AUTRE corps
             // est refusé (422) et ne voit rien ; liaison : le claim vit sous l'installation, B (une autre installation) exécute pour de bon.
-            const K = cle(); let repA, repB;
+            const K = r.cle === 'POST /api/installation' ? `${cle()}-`.padEnd(40, 'k') : cle(); let repA, repB;      // la clé de /api/installation tient lieu de secret : 32 caractères au moins
             if (r.cle === 'POST /api/installation') {
                 repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-A' } });
                 repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-B' } });
@@ -808,6 +808,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_ETIQUETTE_HEURE: [c => c.limites.etiquetteParPorteurHeure, 600, '0', 'leve'],      // ETIQUETAGE-A : le plafond horaire de POST /api/banc/etiquette (administrateur), posé sans mesure d'usage réel
             RENDER_GIT_COMMIT: [c => c.versions.chaine, null, 'pas-un-commit', 'ignore'], V2_VERSION_MODELE: [c => c.versions.modele, null, '%%', 'ignore'],   // ETIQUETAGE-A : informations internes, une valeur illisible vaut `null` (jamais invalide, jamais inventée)
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
+            V2_INSTALLATION_REQUETES_HEURE: [c => c.limites.installationRequetesIpHeure, 30, '0', 'leve'],      // IDEMPOTENCE-INSTALLATION r1 I1 : borne les devinettes de clé sur /api/installation
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
             V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 21 jours au plus (BANC-12 : « 30 » a été ramené à 21)
             V2_INSCRIPTION_IP_HEURE: [c => c.limites.inscriptionIpHeure, 10, '0', 'leve'], V2_OUBLI_IP_HEURE: [c => c.limites.oubliIpHeure, 10, '0', 'leve'], V2_REINIT_IP_HEURE: [c => c.limites.reinitIpHeure, 10, '0', 'leve'],

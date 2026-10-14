@@ -44,7 +44,7 @@ async function reclamer(cle, empreinteCorps, maintenant, cfg) {
  *  `porteur` (facultatif) : fonction (req) → texte, pour une route SANS porteur résolu (POST /api/installation : personne n'a encore de jeton). Sans lui : le porteur de la requête.
  *  `sceller` (facultatif) : la réponse conservée est SCELLÉE (transport/scelle.js) — pour une réponse qui porte un jeton, jamais en clair dans la base ; rejouée, elle est ouverte,
  *  et un scellé illisible ne se rejoue pas ET ne s'exécute pas de nouveau (503). */
-function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, sceller = false } = {}, cfg) {
+function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, sceller = false, forme = FORME } = {}, cfg) {
     const dureeFiniMs = cfg.retention.idempotenceHeures * 3600000;
     const secret = cfg.empreinte && cfg.empreinte.secret;
     if (sceller && (typeof secret !== 'string' || secret.length < 16)) throw new Error('idempotente : sceller exige cfg.empreinte.secret');
@@ -55,7 +55,7 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
                 if (!obligatoire) return next();
                 return repondreErreur(res, 'ENTREE', 'En-tête Idempotency-Key requis');
             }
-            if (typeof brute !== 'string' || !FORME.test(brute)) return repondreErreur(res, 'ENTREE', 'Idempotency-Key invalide');
+            if (typeof brute !== 'string' || !forme.test(brute)) return repondreErreur(res, 'ENTREE', 'Idempotency-Key invalide', forme === FORME ? {} : { detail: 'cle-trop-courte' });
             const porteur = porteurRoute ? porteurRoute(req) : porteurDe(req);
             if (!porteur) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');   // on ne partage jamais une clé entre inconnus
             const cle = `${porteur}|${route}|${brute}`, empreinteCorps = empreinteDuCorps(req.body), maintenant = new Date();
@@ -118,4 +118,5 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
         }
     };
 }
-module.exports = { idempotente, FORME, empreinteDuCorps };
+const FORME_FORTE = /^[A-Za-z0-9_-]{32,64}$/;   // une clé qui tient lieu de secret (POST /api/installation) : 32 caractères au moins
+module.exports = { idempotente, FORME, FORME_FORTE, empreinteDuCorps };

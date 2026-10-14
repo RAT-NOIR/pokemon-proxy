@@ -46,7 +46,7 @@
           "installations"
         ],
         "summary": "Crée une installation (jeton rendu UNE fois, 3 essais)",
-        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503.",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503. SUR CETTE ROUTE la clé tient lieu de secret : 32 à 64 caractères `[A-Za-z0-9_-]` (UUID v4 sans tirets ou 32 octets aléatoires en base64url/hex), sinon 400 ENTREE `detail: cle-trop-courte` ; toutes les requêtes d'une IP (rejeux compris) sont comptées (30 par heure, 429 DEBIT).",
         "security": [],
         "parameters": [
           {
@@ -4532,7 +4532,7 @@
               "absent",
               "plafond-global"
             ],
-            "description": "Ce qu'est devenu le `userIdHerite` de la 1.0.x. `repris` : portefeuille gratuit déplacé vers cette installation. `deja-migre` : déjà déplacé (ici ou ailleurs). `inconnu` : aucun portefeuille ne répond (ou valeur inutilisable). `plafond-global` : plafond global des essais du jour atteint, portefeuille intact. `absent` : aucun `userIdHerite` envoyé. Toujours présent dans un 201 (facultatif au schéma : les fausses réponses publiées avant ce champ restent valides)."
+            "description": "Ce qu'est devenu le `userIdHerite` de la 1.0.x. `repris` : portefeuille gratuit déplacé vers cette installation. `deja-migre` : déjà déplacé (ici ou ailleurs). `inconnu` : aucun portefeuille ne répond (ou valeur inutilisable). `plafond-global` : plafond global des essais du jour atteint, portefeuille intact. `absent` : aucun `userIdHerite` envoyé. Toujours présent dans un 201 du serveur ; facultatif au schéma SEULEMENT parce que la fausse réponse publiée `installation-creee.json` (stable, utilisée par l'extension) n'en porte pas."
           }
         },
         "required": [

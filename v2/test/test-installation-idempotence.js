@@ -14,9 +14,10 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     H.fixerHorlogeMilieu();
     const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_ESSAIS_GLOBAUX_JOUR: '500' });
     const fusions = []; let delaiFusion = 0, modeHeritage = 'reel'; const appelsHeritage = [];
+    const casse = { solde: false, offre: false };      // lectures fragiles de la route lier, mises en panne à la demande (r1 I2)
     A.registre.fournir('argent', {
-        solde: async p => ({ total: p.installation ? p.installation.essais : 0, essai: p.installation ? p.installation.essais : 0 }),
-        offre: p => Of.offre(p, cfg),
+        solde: async p => { if (casse.solde) throw new Error('solde en panne'); return { total: p.installation ? p.installation.essais : 0, essai: p.installation ? p.installation.essais : 0 }; },
+        offre: p => { if (casse.offre) throw new Error('offre en panne'); return Of.offre(p, cfg); },
         fusionnerALaLiaison: async o => { if (delaiFusion) await attendre(delaiFusion); return fusionFidele(fusions)(o); },
         reprendreHeritage: async o => {
             appelsHeritage.push(o.userId);
@@ -30,7 +31,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     let nIp = 0; const ipNeuve = () => ++nIp;
     const wallet = (userId, o = {}) => db.col('credits').insertOne({ userId, soldeGratuit: 2, soldeScans: 0, email: null, ...o });
     const nInst = () => db.col('installations').countDocuments({});
-    const cleI = (() => { let n = 0; return () => `banc-inst-${Date.now().toString(36)}-${++n}`; })();
+    const cleI = (() => { let n = 0; return () => `banc-inst-${Date.now().toString(36)}-${++n}-`.padEnd(40, 'x'); })();      // 40 caractères : la clé de /api/installation tient lieu de secret (32 au moins)
     const poster = (corps, ipn, cle) => H.appel(srv.url, '/api/installation', { methode: 'POST', corps, entetes: { ...A.ip(ipn), ...(cle ? { 'idempotency-key': cle } : {}) } });
     const rejoue = r => r.entetes['idempotency-replayed'] === 'true';
     const code = r => r.json && r.json.erreur && r.json.erreur.code;
@@ -182,7 +183,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         const echec = await lier(x6.jeton, c6, k6);
         const d6 = await db.col('installations').findOne({ _id: x6.i._id });
         H.v('B2-4e. la fusion échoue : 503, liaison défaite, l\'ancien jeton reste l\'empreinte courante, aucune fenêtre de rejeu laissée', [echec.statut, code(echec), d6.compteId, d6.jetonEmpreinte === J.empreinte(x6.jeton), d6.rejeuLiaison ?? null], [503, 'INDISPONIBLE', null, true, null]);
-        A.registre.fournir('argent', { solde: async p => ({ total: p.installation ? p.installation.essais : 0, essai: p.installation ? p.installation.essais : 0 }), offre: p => Of.offre(p, cfg), fusionnerALaLiaison: async o => { if (delaiFusion) await attendre(delaiFusion); return fusionFidele(fusions)(o); }, reprendreHeritage: async o => He.reprendreHeritage(o, cfg) });
+        A.registre.fournir('argent', { ...A.registre.obtenir('argent'), fusionnerALaLiaison: async o => { if (delaiFusion) await attendre(delaiFusion); return fusionFidele(fusions)(o); } });      // rétablit la fusion, garde solde/offre (et leurs pannes à la demande)
         const reessai = await lier(x6.jeton, c6, k6);
         H.v('     le nouvel essai (même clé, même code, ancien jeton), fusion rétablie : 200 — la 503 n\'avait rien conservé', [reessai.statut, rejoue(reessai)], [200, false]);
         // 4f. deux lier SIMULTANÉS de même clé (la fusion traîne) : une seule rotation, l'autre attend (429 DEBIT)
@@ -198,6 +199,46 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         H.v(`B2-4g. les ${rendus.length} jetons rendus par lier : aucun en clair dans la base (${tous.length} documents lus, idempotence comprise) ni dans la console (${sorties.length} lignes)`,
             [rendus.length, rendus.some(t => base.includes(t)), sorties.some(l => rendus.some(t => l.includes(t)))], [5, false, false]);
     }
+    // ═══ TOUR 1 (r1 I1) : la clé de /api/installation tient lieu de secret ═══
+    {
+        await db.col('limites').deleteMany({}); await db.col('installations').deleteMany({}); await db.col('idempotence').deleteMany({});
+        const courte = await poster({ versionExtension: '2.0.0' }, ipNeuve(), 'AbCdEfGh'), trente1 = await poster({ versionExtension: '2.0.0' }, ipNeuve(), 'a'.repeat(31)), trente2 = await poster({ versionExtension: '2.0.0' }, ipNeuve(), 'a'.repeat(32));
+        H.v('T1-I1a. clé de 8 et de 31 caractères : 400 ENTREE cle-trop-courte, rien créé ; 32 caractères : 201', [courte.statut, code(courte), courte.json.erreur?.detail, trente1.statut, trente1.json.erreur?.detail, trente2.statut, await nInst()], [400, 'ENTREE', 'cle-trop-courte', 400, 'cle-trop-courte', 201, 1]);
+        H.v('     65 caractères et caractères hors jeu : 400', [(await poster({ versionExtension: '2.0.0' }, ipNeuve(), 'a'.repeat(65))).statut, (await poster({ versionExtension: '2.0.0' }, ipNeuve(), 'é'.repeat(40))).statut], [400, 400]);
+        H.v('     la configuration : 30 requêtes par IP et par heure par défaut, V2_INSTALLATION_REQUETES_HEURE honorée', [cfg.limites.installationRequetesIpHeure, lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSTALLATION_REQUETES_HEURE: '7' }).limites.installationRequetesIpHeure], [30, 7]);
+        // devinettes : toutes les requêtes d'une IP comptent, rejeux compris
+        await db.col('limites').deleteMany({}); await db.col('installations').deleteMany({}); await db.col('idempotence').deleteMany({});
+        const cfg5 = lireConfig({ MONGODB_BASE: 'test_scratch', V2_ESSAIS_GLOBAUX_JOUR: '500', V2_INSTALLATION_REQUETES_HEURE: '5' }), srv5 = await A.demarrer(cfg5);
+        const ip5 = ipNeuve(), k5 = cleI(), vus = [];
+        for (let i = 0; i < 8; i++) { const r = await H.appel(srv5.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...A.ip(ip5), 'idempotency-key': i === 0 ? k5 : cleI() + i } }); vus.push([r.statut, code(r)]); }
+        const rejeuxHonnetes = []; await db.col('limites').deleteMany({}); await db.col('idempotence').deleteMany({});
+        const ip6 = ipNeuve(), k6 = cleI(); for (let i = 0; i < 7; i++) { const r = await H.appel(srv5.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...A.ip(ip6), 'idempotency-key': k6 } }); rejeuxHonnetes.push(r.statut); }
+        H.v('T1-I1b. 8 clés différentes depuis une IP (plafond 5 par heure) : la 6e requête et les suivantes sont refusées 429 DEBIT AVANT toute recherche de clé (3 refus) ; les 2 créations passent', [vus.slice(0, 2).map(v => v[0]), vus.slice(5).map(v => v.join(' '))], [[201, 201], Array(3).fill('429 DEBIT')]);
+        H.v('     un créateur + rejeux de la MÊME clé : les rejeux comptent (1 création + 4 rejeux rendus, puis 429)', rejeuxHonnetes, [201, 201, 201, 201, 201, 429, 429]);
+        await srv5.fermer();
+        H.vrai('     l\'en-tête Idempotency-Key n\'apparaît dans aucune ligne de console', !sorties.some(l => l.includes(k5) || l.includes(k6)));
+    }
+
+    // ═══ TOUR 1 (r1 I2) : lier — le nouveau jeton n'est JAMAIS perdu une fois la rotation écrite ═══
+    {
+        await db.col('limites').deleteMany({}); await db.col('installations').deleteMany({}); await db.col('idempotence').deleteMany({});
+        let n = 300;
+        const lierT = (jeton, codeLiaison, cle) => H.appel(srv.url, '/api/compte/lier', { methode: 'POST', corps: { code: codeLiaison }, entetes: { authorization: `Bearer ${jeton}`, ...A.ip(++n), ...(cle ? { 'idempotency-key': cle } : {}) } });
+        const c = M.nouveauCompte({ email: 'lier-t1@exemple.fr', emailCle: 'lier-t1@exemple.fr', motDePasse: {} }); c.verifie = true; await db.col('comptes').insertOne(c);
+        for (const quoi of ['solde', 'offre']) {
+            const jeton = J.genererJeton(), i = M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'Chrome' }); await db.col('installations').insertOne(i);
+            const texte = quoi === 'solde' ? 'TTT111' : 'TTT222', k = cleI();
+            await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(texte), compteId: c._id, generation: 0, creeLe: new Date(), expireLe: new Date(Date.now() + 600e3), utiliseLe: null });
+            casse[quoi] = true; sorties.length = 0;
+            const e = await lierT(jeton, texte, k);
+            casse[quoi] = false;
+            const doc = await db.col('installations').findOne({ _id: i._id });
+            H.v(`T1-I2 (${quoi} en panne après la rotation) : 503, la liaison au compte reste faite, l'ANCIEN jeton est remis en vigueur (empreinte d'origine), aucune fenêtre de rejeu`, [e.statut, code(e), String(doc.compteId) === String(c._id), doc.jetonEmpreinte === J.empreinte(jeton), doc.rejeuLiaison ?? null], [503, 'INDISPONIBLE', true, true, null]);
+            const apres = await lierT(jeton, texte, k), seul = await H.appel(srv.url, '/api/compte/delier', { methode: 'POST', corps: {}, entetes: { authorization: `Bearer ${jeton}`, ...A.ip(++n) } });
+            H.v(`     l'ancien jeton MARCHE encore (delier : 200) et le nouvel essai rend 409 DEJA_LIE, pas 401 JETON (le jeton n'est pas perdu)`, [apres.statut, code(apres), seul.statut], [409, 'DEJA_LIE', 200]);
+        }
+    }
+
     // ═══ 5. le scellé de la réponse conservée ═══
     {
         const Sc = require('../transport/scelle'); const sec = cfg.empreinte.secret;

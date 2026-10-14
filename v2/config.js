@@ -93,7 +93,7 @@ function lireConfig(env = process.env) {
                // MOYENS-B2a tour 1 (M-1) : la réparation d'un débit sans trace (`reparerDebitRembourseSansMouvement`) refuse tant qu'un mouvement du porteur sur la même poche date de moins de ce délai (minutes, entier de 5 à 1440,
                // défaut 15) : l'écart de poche est un agrégat, un mouvement en vol le fausserait. C'est aussi l'âge au-delà duquel une marque `reparation` laissée par un arrêt est REPRISE (la preuve est refaite).
                reparationAgeMs: entier('V2_REPARATION_AGE_MIN', env.V2_REPARATION_AGE_MIN, 15, 5, 1440) * 60e3 },
-        limites: { installationParIpJour: 2, essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
+        limites: { installationParIpJour: 2, installationRequetesIpHeure: entier('V2_INSTALLATION_REQUETES_HEURE', env.V2_INSTALLATION_REQUETES_HEURE, 30, 1), essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),

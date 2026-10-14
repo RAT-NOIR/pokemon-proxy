@@ -1,7 +1,7 @@
 'use strict';
 const { col } = require('../db'); const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('./service'); const liaison = require('./liaison');
-const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { idempotente } = require('../transport/idempotence');
+const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { idempotente, FORME_FORTE } = require('../transport/idempotence');
 
 // `heritage` (réponse 201 de /api/installation) : une valeur par issue RÉELLE de reprendreHeritage, aucune silencieuse.
 //   "repris"         le portefeuille 1.0.x est déplacé vers cette installation
@@ -33,8 +33,11 @@ function montrerInstallation(router, cfg, deps) {
     const limite = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: q => L.empreinteIp(q.ip) });
     // Idempotency-Key FACULTATIVE (l'extension en envoie une ; sans clé : comportement d'avant). AVANT le limiteur : un rejeu servi par la clé ne consomme pas le plafond 2/IP/jour.
     // Personne n'a encore de jeton : le claim vit sous un porteur unique « anonyme » (la clé, aléatoire côté client, est le secret). La réponse porte le jeton : elle est conservée SCELLÉE.
-    const idem = idempotente('installation', { obligatoire: false, porteur: () => 'anonyme', sceller: true }, cfg);
-    router.post('/api/installation', entree, idem, limite, async (req, res) => {
+    // La clé tient lieu de SECRET (aucun porteur) : 32 caractères au moins sur CETTE route (400 ENTREE detail `cle-trop-courte`), et un limiteur par IP AVANT la recherche de la clé compte TOUTES les
+    // requêtes, rejeux compris (V2_INSTALLATION_REQUETES_HEURE, 30 par heure) : les devinettes sont bornées. Le rejeu n'est pas lié à l'IP (une IP mobile change) : risque dit au contrat.
+    const toutes = L.limiteur({ nom: 'inst-req-ip', max: cfg.limites.installationRequetesIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) });
+    const idem = idempotente('installation', { obligatoire: false, porteur: () => 'anonyme', sceller: true, forme: FORME_FORTE }, cfg);
+    router.post('/api/installation', entree, toutes, idem, limite, async (req, res) => {
         let installation = null;
         try {
             const argent = registre.obtenir('argent');     // avant toute écriture : jamais d'installation sans de quoi dire son solde
@@ -95,11 +98,19 @@ function routesLiaison(router, cfg, deps) {
             const rejeu = typeof cleBrute === 'string' ? { cle: cleBrute, expireLe: new Date(Date.now() + cfg.retention.idempotenceHeures * 3600000) } : null;
             const r = await liaison.lier({ installation: inst, code: req.body && req.body.code, argent, rejeu });
             if (!r.ok) return repondreErreur(res, r.code, nom[r.code]);
-            const apres = await col('installations').findOne({ _id: inst._id });
-            const porteurLie = { type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' };
-            const solde = await argent.solde(porteurLie), offre = await argent.offre(porteurLie);      // OFFRE-QUOTA : l'offre du COMPTE lié (gratuit, ou pro), relue en base
-            res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde, offre });
+            // La rotation du jeton est ÉCRITE (et la fusion des crédits faite) : à partir d'ici le nouveau jeton n'est JAMAIS perdu. Si une lecture qui suit lève (solde, offre…), la réponse ne peut pas partir :
+            // on REMET l'ANCIEN jeton en vigueur (la liaison au compte et la fusion restent : elles ne se défont pas sans risque pour l'argent). Le client garde un jeton qui marche ; un nouvel essai rend 409 DEJA_LIE.
+            try {
+                const apres = await col('installations').findOne({ _id: inst._id });
+                const porteurLie = { type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' };
+                const solde = await argent.solde(porteurLie), offre = await argent.offre(porteurLie);      // OFFRE-QUOTA : l'offre du COMPTE lié (gratuit, ou pro), relue en base
+                res.setHeader('Cache-Control', 'no-store');
+                return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde, offre });
+            } catch (e) {
+                console.error(`❌ [v2 lier] lecture après la rotation : ${(e && (e.code || e.name)) || 'Error'} — ancien jeton remis en vigueur`);
+                try { await liaison.remettreAncienJeton(inst, r.jeton); } catch (e2) { console.error(`🔴 [v2 lier] ancien jeton NON remis (${(e2 && (e2.code || e2.name)) || 'erreur'}) — installation ${inst._id}, jeton perdu`); }
+                return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
+            }
         } catch (e) { console.error(`❌ [v2 lier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
     router.post('/api/compte/delier', resoudrePorteur(cfg), exigerInstallation, async (req, res) => {
