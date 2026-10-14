@@ -19,7 +19,19 @@ const booleen = (nom, v, defaut) => {
     throw new Error(`configuration invalide : ${nom}="${v}" (attendu 0 ou 1)`);
 };
 
+// PLAFOND-DECLARE : quatre variables n'ont plus d'objet (les pannes et les introuvables ne sont plus plafonnés ; question et sans-prix partagent le compteur des déclarations). Posées, elles ne rendent
+// JAMAIS la configuration invalide (un 503 pour un réglage mort serait pire que le réglage) : UN avertissement par processus, qui NOMME les variables et n'affiche jamais leur valeur.
+const VARIABLES_SANS_OBJET = Object.freeze(['V2_PLAFOND_PANNES', 'V2_PLAFOND_QUESTIONS', 'V2_SANS_PRIX_JOUR', 'V2_JUMEAUX_REMBOURSES_JOUR']);
+let obsoletesSignalees = false;
+function signalerVariablesSansObjet(env) {
+    if (obsoletesSignalees) return;
+    const posees = VARIABLES_SANS_OBJET.filter(n => env[n] !== undefined && env[n] !== '');
+    if (!posees.length) return;
+    obsoletesSignalees = true;
+    console.warn(`⚠️ [v2 config] variable(s) sans objet, ignorée(s) : ${posees.join(', ')} (les pannes et introuvables ne sont plus plafonnés ; les déclarations ont V2_DECLARES_SANS_COMPTE / V2_DECLARES_GRATUIT / V2_DECLARES_PRO)`);
+}
 function lireConfig(env = process.env) {
+    signalerVariablesSansObjet(env);
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
     for (const p of ordre) {
         if (POCHES_ANCIENNES.includes(p)) throw new Error(`configuration invalide : la poche "${p}" n'est plus débitée (quota quotidien : seule "jour" l'est)`);
@@ -72,13 +84,13 @@ function lireConfig(env = process.env) {
                   sansCompte: entier('V2_QUOTA_SANS_COMPTE', env.V2_QUOTA_SANS_COMPTE, 3, 1, 1000), gratuit: entier('V2_QUOTA_GRATUIT', env.V2_QUOTA_GRATUIT, 10, 1, 1000),
                   proPlafond: entier('V2_QUOTA_PRO_PLAFOND', env.V2_QUOTA_PRO_PLAFOND, 200, 1, 1000) },
         ordrePoches: [...ordre],
-        // Remboursements par JOUR UTC et par PORTEUR (le compte quand il y en a un, sinon l'installation) : panne 5, question 30, et deux compteurs PROPRES (lot PLAFONDS, 2026-10-11) —
-        // sansPrix : « prix illisible, définitif » déclaré par le client (5) ; lotTropGrand : refus `lot-trop-grand`, taille ou quota (10). Au-delà : pas de remboursement.
-        plafonds: { panne: entier('V2_PLAFOND_PANNES', env.V2_PLAFOND_PANNES, 5), question: entier('V2_PLAFOND_QUESTIONS', env.V2_PLAFOND_QUESTIONS, 30),
-                    sansPrix: entier('V2_SANS_PRIX_JOUR', env.V2_SANS_PRIX_JOUR, 5), lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10),
-                    // jumeaux : les refus de la garde des jumeaux (impression indéterminée, colonne indisponible) — NOS refus, remboursés dans un compteur dédié, UNE unité par carte (20 par jour et par porteur
-                    // par défaut, POSÉ SANS MESURE D'USAGE RÉEL) ; plein, le refus retombe sur le plafond de pannes ordinaire.
-                    jumeaux: entier('V2_JUMEAUX_REMBOURSES_JOUR', env.V2_JUMEAUX_REMBOURSES_JOUR, 20) },
+        // Remboursements, PLAFOND-DECLARE (décision du testeur, 2026-10-14). Deux sortes seulement sont plafonnées, par JOUR DE PARIS et par PORTEUR (le compte quand il y en a un, sinon l'installation) :
+        //   · `declares` : les analyses RENDUES sur DÉCLARATION du client (réponse « aucune » ou « ne-sait-pas », question abandonnée, prix illisible définitif déclaré) — UN SEUL compteur pour les trois,
+        //     plafonné par OFFRE (lue au moment du remboursement) : sans compte 1, gratuit 3, Pro 30 (dans la garde anti-abus de 200) ;
+        //   · `lotTropGrand` : refus `lot-trop-grand`, taille ou quota (10), INCHANGÉ, indépendant de l'offre.
+        // Ce que le SERVEUR constate (panne, introuvable, garde des jumeaux, carte identifiée sans prix au guide) est rendu SANS plafond. Au-delà d'un plafond : pas de remboursement.
+        plafonds: { declares: { sansCompte: entier('V2_DECLARES_SANS_COMPTE', env.V2_DECLARES_SANS_COMPTE, 1), gratuit: entier('V2_DECLARES_GRATUIT', env.V2_DECLARES_GRATUIT, 3), pro: entier('V2_DECLARES_PRO', env.V2_DECLARES_PRO, 30) },
+                    lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).

@@ -365,6 +365,25 @@ async function parcourir() {
         H.v('M4. répondre par le candidat SANS prix : identifiée, prixGuide null, { debite:0, rembourse:true, motif:sans-prix }, solde revenu à 25', [rep.json.carte.statut, rep.json.carte.carte.prixGuide, rep.json.facturation.debite, rep.json.facturation.rembourse, rep.json.facturation.motif, rep.json.offre.restant, await soldeCompte(c)], ['identifiee', null, 0, true, 'sans-prix', 25, 25]);
         const rej = await repondre(sv.url, cookie, j.scanId, { choix: sansPrix }, { nom: 'M4b' });
         H.v('   le rejeu de la réponse : même facturation, UN seul remboursement, solde 25', [rej.json.facturation, await nRb(), await soldeCompte(c)], [rep.json.facturation, 1, 25]);
+        // PLAFOND-DECLARE tour 1 (I2) : le client a CHOISI ce candidat sans prix : c'est une DÉCLARATION (compteur commun, plafond par offre, champ declaration), pas un constat du serveur
+        H.v('   (I2) ce rendu est compté au compteur COMMUN des déclarations (1), aucun compteur constaté, et la réponse dit declaration { rendue:true, plafondJour:3 } (compte gratuit)',
+            [(await raw('plafonds').findOne({ porteur: `compte:${c._id}`, type: 'declare' }) || {}).count, rep.json.declaration], [1, { rendue: true, raison: null, plafondJour: 3 }]);
+        {
+            const x = await compte(); const r3 = await scanner(sv.url, x.cookie, { nom: 'M4-I2' }), j3 = r3.json || {};
+            const ch3 = j3.analyse.cartes[0].question.choix, sp3 = ch3.find(y => y.idProduct === ID_C).id;
+            await raw('plafonds').insertOne({ porteur: `compte:${x.c._id}`, jour: Q.jourCourant(), type: 'declare', count: 3, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const rp = await repondre(sv.url, x.cookie, j3.scanId, { choix: sp3 }, { nom: 'M4-I2b' });
+            H.v('   (I2) plafond des déclarations ATTEINT : le candidat sans prix choisi n\'est PAS rendu (facturation plafond-jour, debite 1), declaration refusée, compteur resté à 3',
+                [rp.json.facturation.rembourse, rp.json.facturation.motif, rp.json.facturation.debite, rp.json.declaration, (await raw('plafonds').findOne({ porteur: `compte:${x.c._id}`, type: 'declare' })).count], [false, 'plafond-jour', 1, { rendue: false, raison: 'plafond-declarations', plafondJour: 3 }, 3]);
+        }
+        {
+            const y = await compte(); mode = 'sans-prix';
+            await raw('plafonds').insertOne({ porteur: `compte:${y.c._id}`, jour: Q.jourCourant(), type: 'declare', count: 3, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const r4 = await scanner(sv.url, y.cookie, { nom: 'M4-aff' }), j4 = r4.json || {};
+            H.v('   (I2) carte AFFIRMÉE sans prix par le serveur (aucune question) : reste CONSTATÉE, rendue même au plafond des déclarations, sans champ declaration',
+                [j4.facturation.rembourse, 'declaration' in j4], [true, false]);
+            mode = 'ambigue-sans-prix';
+        }
         const r2 = await scanner(sv.url, cookie, { nom: 'M4c' });
         const rep2 = await repondre(sv.url, cookie, r2.json.scanId, { choix: r2.json.analyse.cartes[0].question.choix.find(x => x.idProduct === ID_A).id }, { nom: 'M4d' });
         H.v('   répondre par le candidat AVEC prix : pas de remboursement (debite 1, motif question), solde 24', [rep2.json.facturation.debite, rep2.json.facturation.rembourse, rep2.json.facturation.motif, await soldeCompte(c)], [1, false, 'question', 24]);

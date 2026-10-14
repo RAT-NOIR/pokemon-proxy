@@ -21,6 +21,7 @@ function corpsErreur(code, message, extra = {}) {
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };
     if (extra.solde !== undefined) corps.solde = extra.solde;
     // OFFRE-QUOTA : `achat` n'existe plus (la vente est arrêtée) — un appelant qui en passerait un est ignoré, aucun lien de vente ne sort jamais d'un corps d'erreur
+    if (extra.declaration !== undefined) corps.declaration = extra.declaration;   // PLAFOND-DECLARE : le jugement d'un remboursement de DÉCLARATION (rendue, ou refusée par `plafond-declarations`)
     if (extra.offre !== undefined) corps.offre = extra.offre;   // OFFRE-QUOTA : { nom, restant, remiseAZero } — le refus QUOTA joint l'offre (restant 0)
     return corps;
 }

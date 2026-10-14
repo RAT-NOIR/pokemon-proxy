@@ -35,7 +35,8 @@ async function requete(p, scanId, { le = t } = {}) {
     // le plafond des pannes remonte avec SA cause (celle où l'utilisateur paie)
     const p3 = await compte({ solde: { accueil: 0, achete: 20 } }); const res = [];
     for (let i = 0; i < 6; i++) { const q = await requete(p3, `pont-p${i}`); res.push(await dansUnScan(async () => ({ rendu: await acces.rembourserScan(q, 'ia-echec'), cause: raisonNonRemboursement() }))); }
-    H.v('6 pannes : 5 rendues puis plafond-jour, la cause est celle de sources.js', res.map(r => r.rendu ? 'rendu' : r.cause), ['rendu', 'rendu', 'rendu', 'rendu', 'rendu', 'plafond-jour']);
+    // PLAFOND-DECLARE : une panne est CONSTATÉE par le serveur, rendue sans plafond (l'ancien plafond de 5 est levé)
+    H.v('6 pannes : les 6 rendues (constaté par le serveur, sans plafond), aucun compteur de plafond écrit', [res.map(r => r.rendu ? 'rendu' : r.cause), await db.col('plafonds').countDocuments({ porteur: `compte:${p3.id}` })], [Array(6).fill('rendu'), 0]);
     // une cause que v2 connaît seule se dit avec la liste fermée de sources.js (jamais une valeur refusée)
     // OFFRE-QUOTA : plus de poche qui « change de période » (l'abonnement mensuel, l'hebdo) — un remboursement tardif rend l'unité au compteur du JOUR OÙ ELLE A ÉTÉ PRISE, jamais à celui du jour courant
     const p4 = await compte();
@@ -43,10 +44,10 @@ async function requete(p, scanId, { le = t } = {}) {
     const q4 = { body: {}, scanId: 'pont-ab' }; q4.credit = Pont.creditPourReq(p4, d4.credit, cfg, { scanId: 'pont-ab', maintenant: new Date('2026-10-09T10:00:00Z') });
     const r4 = await dansUnScan(async () => ({ rendu: await acces.rembourserScan(q4, 'ia-echec'), cause: raisonNonRemboursement() }));
     H.v('remboursé le lendemain : rendu au compteur du jour du débit (08 : 0), aucun compteur du 09 créé', [r4.rendu, r4.cause, await Q.prisAujourdhui(`compte:${p4.id}`, '2026-10-08'), await Q.prisAujourdhui(`compte:${p4.id}`, '2026-10-09')], [true, null, 0, null]);
-    // 3. signalerIncertain => compteur QUESTION
+    // 3. signalerIncertain => décidé par le serveur : rendu sans plafond, aucun compteur
     const p5 = await compte({ solde: { accueil: 0, achete: 3 } }); const q5 = await requete(p5, 'pont-s5');
     const r5 = await dansUnScan(async () => await acces.signalerIncertain(q5, 'egalite'));
-    H.v('signalerIncertain : rendu, au compteur QUESTION (jamais celui des pannes)', [r5, (await db.col('plafonds').findOne({ porteur: `compte:${p5.id}`, type: 'question' }))?.count, await db.col('plafonds').countDocuments({ porteur: `compte:${p5.id}`, type: 'panne' })], [true, 1, 0]);
+    H.v('signalerIncertain : rendu, CONSTATÉ par le serveur (aucun compteur écrit : ni déclarations, ni pannes)', [r5, await db.col('plafonds').countDocuments({ porteur: `compte:${p5.id}` })], [true, 0]);
     // 4. poserQuestion d'acces.js => ligne dans questions v2, req.questionId posé
     const p6 = await compte({ solde: { accueil: 0, achete: 3 } }); const q6 = await requete(p6, 'pont-s6');
     const pq = await acces.poserQuestion(q6, { scanId: 'pont-s6', raison: 'egalite', candidats: [111, 222] });

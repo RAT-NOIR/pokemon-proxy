@@ -389,15 +389,21 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     // ── (tour 1, section 3) les états de FACTURATION que le premier jeu ne jouait pas
     {
         const aujourdhui = Q.jourCourant(), exp = new Date(Date.now() + 3 * 86400e3);
-        const plafond = async (x, type) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count: cfg.plafonds[type], expireLe: exp });
-        // introuvable NON remboursé : le plafond des pannes du jour est atteint, l'utilisateur PAIE (debite 1, motif plafond-jour, raisonNonRembourse)
+        // PLAFOND-DECLARE : seul un plafond de DÉCLARATIONS (ou de refus de lot) peut encore refuser un remboursement ; une panne ou un introuvable est CONSTATÉ par le serveur et rendu sans plafond
+        const plafond = async (x, type, count = 5) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count, expireLe: exp });
+        // introuvable : rendu MÊME avec un ancien compteur de pannes saturé (le plafond de pannes n'existe plus)
         mode = 'introuvable:aucun-prix'; const p1 = await inst(3); await plafond(p1, 'panne');
-        const r1 = await ident(V, 'introuvable NON remboursé (plafond du jour atteint : debite 1)', 200, p1.jeton);
-        H.v('   … facturation { debite:1, rembourse:false, motif:plafond-jour, raisonNonRembourse:plafond-jour }', r1.json && [r1.json.facturation.debite, r1.json.facturation.rembourse, r1.json.facturation.motif, r1.json.facturation.raisonNonRembourse], [1, false, 'plafond-jour', 'plafond-jour']);
-        // une exception de la chaîne dont le remboursement est refusé : 500 SERVEUR AVEC une facturation qui dit pourquoi
+        const r1 = await ident(V, 'introuvable rendu sans plafond (ancien compteur de pannes saturé, ignoré)', 200, p1.jeton);
+        H.v('   … facturation { debite:0, rembourse:true, motif:introuvable }', r1.json && [r1.json.facturation.debite, r1.json.facturation.rembourse, r1.json.facturation.motif, r1.json.facturation.raisonNonRembourse], [0, true, 'introuvable', null]);
+        // une exception de la chaîne : rendue sans plafond, 500 SERVEUR AVEC une facturation qui dit ce qui s'est passé
         mode = 'exception'; const p2 = await inst(3); await plafond(p2, 'panne');
-        const r2 = await ident(V, 'panne SERVEUR NON remboursée (plafond du jour atteint)', 500, p2.jeton);
-        H.v('   … facturation { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }', r2.json && [r2.json.facturation.debite, r2.json.facturation.rembourse, r2.json.facturation.raisonNonRembourse], [1, false, 'plafond-jour']);
+        const r2 = await ident(V, 'panne SERVEUR rendue sans plafond (ancien compteur de pannes saturé, ignoré)', 500, p2.jeton);
+        H.v('   … facturation { debite:0, rembourse:true }', r2.json && [r2.json.facturation.debite, r2.json.facturation.rembourse, r2.json.facturation.raisonNonRembourse], [0, true, null]);
+        // la DÉCLARATION refusée : « aucune » au-delà du plafond des déclarations (sans compte : 1) — le client PAIE, facturation plafond-jour + champ declaration
+        mode = 'refus-egalite'; const p6 = await inst(3); await plafond(p6, 'declare', 1);
+        const r6q = await ident(V, 'question à refuser (plafond des déclarations déjà atteint)', 200, p6.jeton);
+        const r6 = await repondre(V, '« aucune » au-delà du plafond des déclarations : 200, facturation plafond-jour, declaration refusée', 200, p6.jeton, { scanId: r6q.json.scanId, choix: 'aucune' });
+        H.v('   … facturation { debite:1, rembourse:false, motif:plafond-jour, raisonNonRembourse:plafond-jour } ET declaration { rendue:false, raison:plafond-declarations, plafondJour:1 }', r6.json && [r6.json.facturation.debite, r6.json.facturation.rembourse, r6.json.facturation.motif, r6.json.facturation.raisonNonRembourse, r6.json.declaration], [1, false, 'plafond-jour', 'plafond-jour', { rendue: false, raison: 'plafond-declarations', plafondJour: 1 }]);
         // un refus de la chaîne par égalité (≥ 2 candidats) devient une QUESTION réservée (ruling n°2 de B1b)
         mode = 'refus-egalite'; const p3 = await inst(3);
         const r3 = await ident(V, 'refus par égalité devenu question réservée', 200, p3.jeton);
@@ -411,10 +417,10 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             const r4 = await ident(V, 'repli de question REMBOURSÉ (question non écrite, crédit rendu : a-trancher gratuit)', 200, p4.jeton);
             db.col = colOrig;
             H.v('   … a-trancher, facturation { debite:0, rembourse:true, motif:question }', r4.json && [r4.json.analyse.statut, r4.json.facturation.debite, r4.json.facturation.rembourse, r4.json.facturation.motif], ['a-trancher', 0, true, 'question']);
-            const p5 = await inst(3); await plafond(p5, 'question'); sansEcritureQuestion();
-            const r5 = await ident(V, 'repli de question NON remboursé (question non écrite ET plafond atteint : panne SERVEUR)', 500, p5.jeton);
+            const p5 = await inst(3); await plafond(p5, 'declare', 1); sansEcritureQuestion();
+            const r5 = await ident(V, 'repli de question REMBOURSÉ même au plafond des déclarations (constaté : NOTRE écriture a échoué)', 200, p5.jeton);
             db.col = colOrig;
-            H.v('   … SERVEUR, jamais un a-trancher, facturation { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }', r5.json && [r5.json.erreur.code, r5.json.analyse, r5.json.facturation.debite, r5.json.facturation.rembourse, r5.json.facturation.raisonNonRembourse], ['SERVEUR', undefined, 1, false, 'plafond-jour']);
+            H.v('   … a-trancher, facturation { debite:0, rembourse:true, motif:question } (le repli ne dépend pas du plafond des déclarations)', r5.json && [r5.json.analyse.statut, r5.json.facturation.debite, r5.json.facturation.rembourse, r5.json.facturation.motif], ['a-trancher', 0, true, 'question']);
         } finally { db.col = colOrig; console.error = journalMute; }
         mode = 'affirmee';
         // une QUESTION dans un lot, et la RÉPONSE sur un lot (le prix du lot couvre la question : rien ne bouge)

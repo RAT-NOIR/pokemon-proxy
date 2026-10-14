@@ -4,8 +4,9 @@
 // elle l'appelle avec l'identité v2 (`userId = v2:<type>:<id>`, celle que la chaîne héritée a écrite dans le journal du scan) et traduit sa réponse en forme du contrat 2.
 // Ce que le contrat 2 AJOUTE :
 //   · `verdictAffiche` et `lectureRatee { cause, definitive }` : listes fermées (400 sinon) ;
-//   · une lecture ratée DÉFINITIVE rembourse (motif `sans-prix`), UNE fois par scan (le ledger refuse le second : `deja-rembourse`), sous un compteur PROPRE
-//     `sans-prix` (5/jour et par porteur, V2_SANS_PRIX_JOUR ; les questions abandonnées gardent le leur, 30/jour) ; une non définitive (un défi Cloudflare) ne rembourse rien ;
+//   · une lecture ratée DÉFINITIVE rembourse (motif `sans-prix`), UNE fois par scan (le ledger refuse le second : `deja-rembourse`), sous le compteur des DÉCLARATIONS du client (PLAFOND-DECLARE :
+//     un seul compteur par porteur et par jour de Paris avec « aucune », « ne-sait-pas » et l'abandon ; sans compte 1, gratuit 3, Pro 30) ; la réponse porte `declaration` (rendue, ou refusée par
+//     `plafond-declarations`) ; une non définitive (un défi Cloudflare) ne rembourse rien ;
 //   · un prix lu plus de 100 fois sous le guide du même produit est écrit `douteux: true` dans le journal : l'extension de la 1.0.5 renvoyait 1,18 € pour 1 180 €.
 // Le scan d'un autre porteur n'existe pas : 404 (la route héritée dit 403, qui révélerait son existence).
 const mongoose = require('mongoose');
@@ -82,7 +83,7 @@ function traiterRetourLive(cfg, deps = {}) {
         if (!ligne || ligne.userId !== userId) return repondreErreur(res, 'CODE_INVALIDE', 'Scan introuvable');
         if (ligne.prixLive != null) return repondreErreur(res, 'CONFLIT', 'Un prix live a déjà été renvoyé pour ce scan');
 
-        let facturation = null;
+        let facturation = null, declaration = null;
         if (aPrix) {
             // 1. le chemin hérité, inchangé : il valide, normalise et écrit (écriture conditionnelle : un second retour est refusé)
             const corps = { userId, scanId: b.scanId };
@@ -122,15 +123,17 @@ function traiterRetourLive(cfg, deps = {}) {
                 else {
                     let r;
                     // `credit` n'est lu que pour sa présence : le ledger juge sur les DÉBITS enregistrés de ce scan et de ce porteur, jamais sur l'objet présenté
-                    // compteur PROPRE `sans-prix` (5 par jour et par porteur, V2_SANS_PRIX_JOUR) : il ne vide pas celui des questions abandonnées (30), et inversement
+                    // PLAFOND-DECLARE : un prix illisible DÉFINITIF est une DÉCLARATION du client (c'est l'extension qui dit « je n'ai pas pu lire »). Il partage le compteur des déclarations (sans compte 1, gratuit 3,
+                    // Pro 30 par jour de Paris) avec « aucune », « ne-sait-pas » et l'abandon ; la réponse dit le jugement dans `declaration`.
                     try { r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' }); }
                     catch (e) { journalErreur('remboursement', e); return repondreErreur(res, 'INDISPONIBLE'); }
                     facturation = facturationDeLecture(r);
+                    declaration = r.declaration || null;
                 }
             }
         }
         const solde = await soldeSur(), offre = await offreSur(porteur, argent);      // OFFRE-QUOTA : relue APRÈS le remboursement `sans-prix` : l'unité rendue se voit
-        return res.status(200).json({ success: true, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
+        return res.status(200).json({ success: true, facturation, ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
     };
 }
 
