@@ -145,7 +145,9 @@ function jugerPage(brut, { table = TABLE_PIKAQIAN, attendu = c => attenduParTabl
     if (!verdict.ok) return { statut: 422, corps: { ok: false, code, url: o.url, motif: verdict.motif, tuilesLues: verdict.tuiles, tuilesAuCode: verdict.bonnes, ancres, diagnostic: P.diagnostiquerPage({ html: o.html, tuiles, code }), sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html) } };   // GARDE:verdict
     // lot PQ-SANSNUM : la complétude est LA règle de pikaqian.js (jugerCompletude) — tuiles = ancres AVEC numéro, à l'unité près ; les ancres sans numéro (définition fermée) sont listées, comptées, jamais importées
     const sansNumero = P.ancresSansNumero(o.html, code);
-    const completude = P.jugerCompletude({ ancres, tuiles, sansNumero });
+    // lot PQ-ANNONCE : le total « N of N cards » que la page annonce entre dans la même règle (obligatoire dès qu'une ancre est sans numéro) ; il est écrit dans la fiche (nombre, ou null s'il est absent)
+    const total = P.totalAnnonce(o.html);
+    const completude = P.jugerCompletude({ ancres, tuiles, sansNumero, total });
     // le refus des ancres EST une mesure (lot PQ-PROMO2) : il rend le même diagnostic que le refus du verdict, plus la description des ancres qui ne sont pas des tuiles et la liste des ancres sans numéro
     if (!completude.complete) return { statut: 422, corps: { ok: false, code, url: o.url, motif: completude.motif, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, ancres, sansNumero: completude.sansNumero, diagnostic: P.diagnostiquerPage({ html: o.html, tuiles, code }), sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html) } };   // GARDE:ancres
     const voulu = attendu(code);
@@ -158,9 +160,9 @@ function jugerPage(brut, { table = TABLE_PIKAQIAN, attendu = c => attenduParTabl
     const fiche = {
         schema: 1, code, url: o.url, le: new Date().toISOString(), titre,
         sha256: crypto.createHash('sha256').update(o.html).digest('hex'), octetsHtml: Buffer.byteLength(o.html),
-        verdict, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, flux, tuiles, origines, officielles, sansNumero
+        verdict, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, flux, tuiles, origines, officielles, sansNumero, totalAnnonce: total.ok === true ? total.total : null
     };
-    return { statut: 200, fiche, corps: { ok: true, code, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, sansNumero: completude.sansNumero, flux, officielles, natives: origines.filter(([, v]) => v.native).length, ...(anomalie ? { anomalie } : {}) } };
+    return { statut: 200, fiche, corps: { ok: true, code, ancres, tuilesLues: tuiles.length, tuilesAuCode: verdict.bonnes, sansNumero: completude.sansNumero, totalAnnonce: fiche.totalAnnonce, flux, officielles, natives: origines.filter(([, v]) => v.native).length, ...(anomalie ? { anomalie } : {}) } };
 }
 
 // ── LES IMAGES : le fichier de page, puis le jugement d'un lot ─────────────────────────────────────────────────────────────────
@@ -179,7 +181,7 @@ function creerPage(dossierImages, nomFiche, fiche) {
     const page = { schema: 2, code: fiche.code, url: fiche.url, le: fiche.le, fiche: nomFiche, sha256Html: fiche.sha256, titre: fiche.titre ?? null,
         tuiles: fiche.tuiles.map(t => ({ id: t.id, nom: t.nom, numero: t.numero, code: t.code, img: t.img })),
         // ce que la page déclare de l'ORIGINE des visuels (lireOrigines) et le dénominateur de la lecture : l'import n'a pas besoin d'une autre pièce pour la provenance
-        origines: fiche.origines, ancres: fiche.ancres, flux: fiche.flux, sansNumero: Array.isArray(fiche.sansNumero) ? fiche.sansNumero : [],
+        origines: fiche.origines, ancres: fiche.ancres, flux: fiche.flux, sansNumero: Array.isArray(fiche.sansNumero) ? fiche.sansNumero : [], totalAnnonce: fiche.totalAnnonce ?? null,
         sansImageDansLeNavigateur: null, lots: 0, recues: {}, refusees: {} };
     ecrireFichier(cheminPage(dossierImages, fiche.code, nomFiche), JSON.stringify(page));
     return page;
