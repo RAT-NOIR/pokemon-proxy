@@ -46,7 +46,7 @@ function routesLiaison(router, cfg, deps) {
             const porteurLie = { type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' };
             const solde = await argent.solde(porteurLie), offre = await argent.offre(porteurLie);      // OFFRE-QUOTA : l'offre du COMPTE lié (gratuit, ou pro), relue en base
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde, offre });
+            return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie, administrateur: Boolean(solde && solde.compte && solde.compte.administrateur === true) }, jetonInstallation: r.jeton, solde, offre });
         } catch (e) { console.error(`❌ [v2 lier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
     router.post('/api/compte/delier', ...base, async (req, res) => {

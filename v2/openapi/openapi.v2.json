@@ -3815,6 +3815,10 @@
               },
               "verifie": {
                 "type": "boolean"
+              },
+              "administrateur": {
+                "type": "boolean",
+                "description": "Additif (ADMIN-DRAPEAU) : true si le porteur est un compte administrateur (rôle relu en base, la même règle que le motif « administrateur » de la facturation). Aucun droit : il reflète un rôle déjà jugé côté serveur, et le serveur ne lit jamais un drapeau envoyé par le client. false sans compte lié. Absent des anciennes réponses : un lecteur lit son absence comme false."
               }
             },
             "required": [
@@ -4549,6 +4553,10 @@
               },
               "verifie": {
                 "type": "boolean"
+              },
+              "administrateur": {
+                "type": "boolean",
+                "description": "Additif (ADMIN-DRAPEAU) : true si le compte lié est un compte administrateur (même règle que solde.compte.administrateur). Aucun droit, jamais lu du client. Absent des anciennes réponses : lire comme false."
               }
             },
             "required": [

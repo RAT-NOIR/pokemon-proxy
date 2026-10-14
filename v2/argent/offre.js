@@ -42,13 +42,17 @@ function prochainMinuitParis(d) {
     throw new Error('offre : minuit de Paris introuvable');   // ne peut pas arriver (jamais deux minuits, jamais aucun) ; échoue fermé plutôt que d'inventer une heure
 }
 
+// LA règle « administrateur » : le porteur le déclare (posé côté serveur par resoudrePorteur, jamais lu d'une requête) ET le rôle du compte, relu en base, le confirme.
+// Source unique : l'offre (pro illimité) et le drapeau `compte.administrateur` du Solde l'appellent toutes deux.
+const estAdministrateur = (porteur, compte) => Boolean(porteur && porteur.administrateur === true && compte && compte.role === 'administrateur');
+
 // L'état d'un porteur, relu EN BASE. { nom, limite, nonVerifie?, administrateur? } — `limite` : ce que le compteur du jour autorise (0 = aucun débit). null = aucune offre.
 async function etatDe(porteur, cfg, maintenant = new Date()) {
     if (!porteur || typeof porteur !== 'object') return null;
     if (porteur.type === 'compte') {
         const c = await col('comptes').findOne({ _id: porteur.id }, { projection: { role: 1, verifie: 1, abonnement: 1 } });
         if (!c) return null;
-        if (porteur.administrateur === true && c.role === 'administrateur') return { nom: 'pro', limite: null, administrateur: true };
+        if (estAdministrateur(porteur, c)) return { nom: 'pro', limite: null, administrateur: true };
         if (c.verifie !== true) return { nom: 'gratuit', limite: 0, nonVerifie: true };
         const a = c.abonnement;
         if (a && a.actif === true && a.jusquAu instanceof Date && a.jusquAu.getTime() > valide(maintenant).getTime()) return { nom: 'pro', limite: cfg.quotas.proPlafond };
@@ -77,4 +81,4 @@ async function offre(porteur, cfg, maintenant = new Date()) {
     if (e.nonVerifie) return { nom: e.nom, restant: 0, remiseAZero };
     return { nom: e.nom, restant: Math.max(0, e.limite - await prisAuJour(porteur, jourDeParis(maintenant))), remiseAZero };
 }
-module.exports = { offre, etatDe, prisAuJour, jourDeParis, decalageParis, prochainMinuitParis, cleDe, FUSEAU };
+module.exports = { offre, etatDe, estAdministrateur, prisAuJour, jourDeParis, decalageParis, prochainMinuitParis, cleDe, FUSEAU };

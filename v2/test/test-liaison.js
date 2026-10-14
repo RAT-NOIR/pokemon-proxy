@@ -41,7 +41,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const { i: i1, jeton: j1 } = await creerInst(0);
     const rl = await lier(j1, r1.json.code);
     const apres = await db.col('installations').findOne({ _id: i1._id });
-    H.v('lier : 200, compte masqué, nouveau jeton', [rl.statut, rl.json.success, rl.json.compte, rl.json.jetonInstallation.length, rl.json.jetonInstallation !== j1], [200, true, { emailMasque: 'v•••@exemple.fr', verifie: true }, 43, true]);
+    H.v('lier : 200, compte masqué, nouveau jeton', [rl.statut, rl.json.success, rl.json.compte, rl.json.jetonInstallation.length, rl.json.jetonInstallation !== j1], [200, true, { emailMasque: 'v•••@exemple.fr', verifie: true, administrateur: false }, 43, true]);   // ADMIN-DRAPEAU : le drapeau additif (compte ordinaire : false)
     H.v('installation liée, empreinte du NOUVEAU jeton', [String(apres.compteId), apres.lieeLe instanceof Date, apres.jetonEmpreinte === J.empreinte(rl.json.jetonInstallation)], [String(cA._id), true, true]);
     // O3 tour 2 (I-B) : l'ancienne assertion figeait la MAUVAISE forme `{ installation, compteId }` (la vraie fusion attend `installationId` et rendait `ok:false` sans que rien ne le voie)
     H.v('fusionnerALaLiaison appelé UNE fois avec la forme RÉELLE { compteId, installationId } (et rien d\'autre)', [fusions.length, fusions[0].installationId === i1._id, String(fusions[0].compteId), Object.keys(fusions[0]).sort()], [1, true, String(cA._id), ['compteId', 'installationId']]);
