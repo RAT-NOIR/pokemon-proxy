@@ -55,7 +55,7 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
                 if (!obligatoire) return next();
                 return repondreErreur(res, 'ENTREE', 'En-tête Idempotency-Key requis');
             }
-            if (typeof brute !== 'string' || !forme.test(brute)) return repondreErreur(res, 'ENTREE', 'Idempotency-Key invalide', forme === FORME ? {} : { detail: 'cle-trop-courte' });
+            if (typeof brute !== 'string' || !forme.test(brute)) return repondreErreur(res, 'ENTREE', 'Idempotency-Key invalide', forme === FORME ? {} : { detail: detailCleForte(brute) });
             const porteur = porteurRoute ? porteurRoute(req) : porteurDe(req);
             if (!porteur) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');   // on ne partage jamais une clé entre inconnus
             const cle = `${porteur}|${route}|${brute}`, empreinteCorps = empreinteDuCorps(req.body), maintenant = new Date();
@@ -119,4 +119,8 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
     };
 }
 const FORME_FORTE = /^[A-Za-z0-9_-]{32,64}$/;   // une clé qui tient lieu de secret (POST /api/installation) : 32 caractères au moins
+function detailCleForte(brute) {                 // UN detail exact par cause : jeu de caractères d'abord, puis longueur
+    if (typeof brute !== 'string' || !/^[A-Za-z0-9_-]*$/.test(brute)) return 'cle-caractere-interdit';
+    return brute.length > 64 ? 'cle-trop-longue' : 'cle-trop-courte';
+}
 module.exports = { idempotente, FORME, FORME_FORTE, empreinteDuCorps };

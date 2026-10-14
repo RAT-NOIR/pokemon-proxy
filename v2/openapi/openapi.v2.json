@@ -46,7 +46,7 @@
           "installations"
         ],
         "summary": "Crée une installation (jeton rendu UNE fois, 3 essais)",
-        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503. SUR CETTE ROUTE la clé tient lieu de secret : 32 à 64 caractères `[A-Za-z0-9_-]` (UUID v4 sans tirets ou 32 octets aléatoires en base64url/hex), sinon 400 ENTREE `detail: cle-trop-courte` ; toutes les requêtes d'une IP (rejeux compris) sont comptées (30 par heure, 429 DEBIT).",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503. SUR CETTE ROUTE la clé tient lieu de secret : 32 à 64 caractères `[A-Za-z0-9_-]` (UUID v4 ou 32 octets aléatoires en base64url/hex), sinon 400 ENTREE avec `detail` `cle-caractere-interdit`, `cle-trop-longue` ou `cle-trop-courte` ; toutes les requêtes d'une IP (rejeux compris, IPv6 groupée par /56) sont comptées (30 par heure, 429 DEBIT).",
         "security": [],
         "parameters": [
           {

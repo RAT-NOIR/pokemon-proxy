@@ -1,7 +1,7 @@
 'use strict';
 const { col } = require('../db'); const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('./service'); const liaison = require('./liaison');
-const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { idempotente, FORME_FORTE } = require('../transport/idempotence');
+const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { idempotente, FORME_FORTE } = require('../transport/idempotence'); const { ipKeyGenerator } = require('express-rate-limit');
 
 // `heritage` (réponse 201 de /api/installation) : une valeur par issue RÉELLE de reprendreHeritage, aucune silencieuse.
 //   "repris"         le portefeuille 1.0.x est déplacé vers cette installation
@@ -30,12 +30,14 @@ function montrerInstallation(router, cfg, deps) {
             return repondreErreur(res, 'ENTREE', 'Requête invalide');
         next();
     };
-    const limite = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: q => L.empreinteIp(q.ip) });
+    // IPv6 regroupée par /56 (ipKeyGenerator d'express-rate-limit, la MÊME fonction que v2/limiteur-heritage.js) : un /64 ne multiplie pas les seaux ; une IPv4 reste telle quelle
+    const cleIp = q => L.empreinteIp(ipKeyGenerator(String(q.ip || '?')));
+    const limite = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: cleIp });
     // Idempotency-Key FACULTATIVE (l'extension en envoie une ; sans clé : comportement d'avant). AVANT le limiteur : un rejeu servi par la clé ne consomme pas le plafond 2/IP/jour.
     // Personne n'a encore de jeton : le claim vit sous un porteur unique « anonyme » (la clé, aléatoire côté client, est le secret). La réponse porte le jeton : elle est conservée SCELLÉE.
-    // La clé tient lieu de SECRET (aucun porteur) : 32 caractères au moins sur CETTE route (400 ENTREE detail `cle-trop-courte`), et un limiteur par IP AVANT la recherche de la clé compte TOUTES les
+    // La clé tient lieu de SECRET (aucun porteur) : 32 caractères au moins sur CETTE route (400 ENTREE, detail `cle-trop-courte` | `cle-trop-longue` | `cle-caractere-interdit`), et un limiteur par IP AVANT la recherche de la clé compte TOUTES les
     // requêtes, rejeux compris (V2_INSTALLATION_REQUETES_HEURE, 30 par heure) : les devinettes sont bornées. Le rejeu n'est pas lié à l'IP (une IP mobile change) : risque dit au contrat.
-    const toutes = L.limiteur({ nom: 'inst-req-ip', max: cfg.limites.installationRequetesIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) });
+    const toutes = L.limiteur({ nom: 'inst-req-ip', max: cfg.limites.installationRequetesIpHeure, fenetreMs: 3600e3, cle: cleIp });
     const idem = idempotente('installation', { obligatoire: false, porteur: () => 'anonyme', sceller: true, forme: FORME_FORTE }, cfg);
     router.post('/api/installation', entree, toutes, idem, limite, async (req, res) => {
         let installation = null;
