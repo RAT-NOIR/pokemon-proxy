@@ -202,8 +202,7 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
         [Array(4).fill([false, 'erreur']), 4, 0, 0]);
     const n19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: null, maintenant: t }, cfg);
     H.v('    compteur null : refusé aussi ; le défaut (sans compteur) reste « panne »', [n19.rendu, (await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', maintenant: t }, cfg)).rendu, await plaf(p19, '2026-10-08', 'panne')], [false, true, null]);
-    // 20. JUMEAU-V2 (C1 de la passe 2) : les refus de la garde des jumeaux ont un compteur DÉDIÉ `jumeaux` (20 par jour et par porteur, V2_JUMEAUX_REMBOURSES_JOUR), UNE unité par carte ;
-    //     au-delà, le refus retombe sur le plafond de pannes ORDINAIRE (mêmes règles de facturation) : jamais gratuit sans limite.
+    // 20. JUMEAU-V2 (C1 de la passe 2) : (texte d'origine, périmé : compteur dédié de 20 puis repli sur les pannes) ;
     //     PLAFOND-DECLARE (2026-10-14) : la garde des jumeaux est CONSTATÉE par le serveur : rendue SANS plafond, aucun compteur (l'ancien compteur dédié de 20 et son repli sur les pannes n'existent plus).
     H.v('20. plus de plafond jumeaux dans la configuration', [cfg.plafonds.jumeaux, cfg.plafonds.panne], [undefined, undefined]);
     const p20 = await compteN(100); const c20 = [];

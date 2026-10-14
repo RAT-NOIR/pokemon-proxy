@@ -7,7 +7,7 @@
 //   · plus de 3 produits → INTROUVABLE `impression-indeterminee` (jamais un choix de 3 parmi N : la question pourrait exclure la vérité), motif interne `jumeaux-trop-nombreux` ;
 //   · la colonne manque, est périmée, ne couvre pas le produit, le fournisseur lève ou rend une forme inconnue, un jumeau n'a pas de ligne au catalogue de l'API → PANNE INDISPONIBLE (c'est
 //     NOTRE infrastructure, pas la photo : « une panne n'est jamais un introuvable »), motif interne `jumeaux-indisponibles` / `jumeaux-perimes` / `jumeaux-incomplets`.
-// Un refus de la garde est NOTRE refus : il se rembourse dans le compteur DÉDIÉ `jumeaux` (une unité par carte), qui retombe sur le plafond de pannes quand il est plein (routes.js, lot.js, argent/ledger.js). Chaque refus est COMPTÉ (compteurs()) et journalisé (CLAUDE.md §21).
+// Un refus de la garde est NOTRE refus : il se rembourse SANS plafond (constaté par le serveur, PLAFOND-DECLARE : plus de compteur dédié), une unité par carte (routes.js, lot.js, argent/ledger.js). Chaque refus est COMPTÉ (compteurs()) et journalisé (CLAUDE.md §21).
 const MAX_PRODUITS = 3;                         // la limite d'une question : celle de l'adaptateur
 const MOTIFS = Object.freeze(['jumeaux-trop-nombreux', 'jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets', 'question-de-jumeaux']);
 const MOTIFS_PANNE = Object.freeze(['jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets']);

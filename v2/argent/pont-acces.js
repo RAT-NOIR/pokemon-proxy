@@ -11,7 +11,7 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
     return {
         // → true si un crédit a été RENDU ; sinon false, et la cause remonte par noterNonRemboursement (liste fermée de sources.js)
         // `compteur: 'jumeaux'` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — rendu sans plafond, `unites` (une par carte refusée) validé par le ledger.
-        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre nom retombe sur `panne`, comme avant.
+        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre nom retombe sur `panne` (aussi constatée, sans plafond) ; seul le grand livre refuse un nom inconnu.
         async rembourser(req, motif, { compteur, jourDe, unites } = {}) {
             if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }      // un seul par requête
             req.scanRembourse = true;
