@@ -123,16 +123,15 @@ const rendus = x => raw('mouvements').countDocuments({ installationId: x.i._id, 
         H.v('A3-3d. introuvable remboursé (200) : le rejeu rend la même réponse, quota 3 avant et après, la chaîne n\'a tourné qu\'une fois', [a.statut, a.json.facturation.rembourse, rejoue(b), b.texte === a.texte, await restant(x), appelsChaine], [200, true, true, true, 3, 1]);
     }
     {
-        // 3e. l'erreur a compté et l'unité N'A PAS PU être rendue (plafond de remboursements du jour atteint) : le client a perdu UNE unité, jamais deux — le rejeu ne reprend rien
+        // 3e. Train 8 (PLAFOND-DECLARE) : une exception est CONSTATÉE par le serveur, donc rendue SANS plafond. Même avec un ancien compteur `panne` bien au-delà de l'ancien plafond (5),
+        // l'unité est rendue : le cas « l'erreur a compté et l'unité n'a pas pu être rendue » n'existe plus sur cette route, et le rejeu de la même clé s'exécute pour de bon.
         reset(); mode = 'exception'; const x = await inst(); const k = cle();
-        await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'panne', count: 50, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const e = await poster(srv.url, x.jeton, k);
-        H.v('A3-3e. exception, remboursement REFUSÉ (plafond du jour) : 500, facturation { debite 1, rembourse false, plafond-jour }, quota 2', [e.statut, e.json.facturation.debite, e.json.facturation.rembourse, e.json.facturation.raisonNonRembourse, await restant(x)], [500, 1, false, 'plafond-jour', 2]);
+        H.v('A3-3e. exception au-delà de l\'ancien plafond des pannes : 500, facturation { debite 0, rembourse true }, quota revenu à 3 (le constaté n\'a plus de plafond)', [e.statut, e.json.facturation.debite, e.json.facturation.rembourse, await restant(x)], [500, 0, true, 3]);
         mode = 'ok';
         const r = await poster(srv.url, x.jeton, k);
-        H.v('      le rejeu de la même clé : 429 DEBIT reessayerDans 2 (l\'unité de cette clé est déjà prise), la chaîne n\'est PAS rappelée, rien de plus n\'est pris', [r.statut, r.json.erreur.code, r.json.erreur.reessayerDans, appelsChaine, await restant(x), await debits(x)], [429, 'DEBIT', 2, 1, 2, 1]);
-        const neuve = await poster(srv.url, x.jeton, cle());
-        H.v('      une CLÉ NEUVE est une analyse neuve : elle prend sa propre unité (restant 1)', [neuve.statut, await restant(x)], [200, 1]);
+        H.v('      le rejeu de la même clé s\'exécute pour de bon : 200, pas marqué rejoué, UNE unité prise en tout (restant 2)', [r.statut, rejoue(r), await restant(x)], [200, false, 2]);
     }
 
     await srv.fermer(); await mongoose.disconnect(); await H.arreterBanc(); H.bilan();
