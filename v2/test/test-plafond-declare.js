@@ -206,5 +206,38 @@ const capter = async f => { const l = []; const w = console.warn, e = console.er
         H.v('Q1. Pro : la déclaration rendue décrémente le compteur du jour (garde de 200) comme avant', [r.rendu, apresDebit.count, apresRendu.count], [true, 1, 0]);
         void avant;
     }
+    // ════════ tour 1 (M1) : le lot aux confirmations refusées est une DÉCLARATION (compteur commun, plafond par offre, champ declaration) ════════
+    {
+        const g = await gratuit(); const out = [], decl = [];
+        for (let i = 0; i < 4; i++) {
+            const sc = `lotc${i}-${g.id}`; const cr = await prendre(g, sc);
+            await db.col('analyses').insertOne({ _id: sc, cartes: [{ statut: 'a-trancher' }] });
+            await Q.reserverQuestion(g, cr, { scanId: sc, carte: 0, raison: 'x', candidats: [1], choix: [{ id: 'a', idProduct: 1 }], lot: true }, cfg, t);
+            const r = await Q.repondreQuestion(g, { scanId: sc, carte: 0, choix: 'aucune' }, cfg, t);
+            out.push(r.facturation && r.facturation.rembourse ? 'rendu' : r.facturation && r.facturation.raisonNonRembourse); decl.push(r.declaration);
+        }
+        H.v('LC1. 4 lots dont la confirmation est refusée (gratuit) : 3 rendus, le 4e plafond-jour', out, [...rep(3, 'rendu'), 'plafond-jour']);
+        H.v('    declaration : rendue x3 puis refusée (plafond 3) ; compteur commun « declare » = 3, aucun compteur panne', [decl, await cnt(g, 'declare'), await cnt(g, 'panne')],
+            [[...rep(3, { rendue: true, raison: null, plafondJour: 3 }), { rendue: false, raison: 'plafond-declarations', plafondJour: 3 }], 3, 0]);
+    }
+    // ════════ tour 1 (M2) : concurrence au plafond ════════
+    {
+        const verifs = [];
+        for (let essai = 0; essai < 5; essai++) {
+            const g = await gratuit();
+            for (let i = 0; i < 2; i++) { const sc = `ca${essai}-${i}-${g.id}`; await Lg.rembourser(g, await prendre(g, sc), 'x', { scanId: sc, compteur: 'question', maintenant: t }, cfg); }
+            const cr = []; for (let i = 0; i < 6; i++) cr.push(await prendre(g, `cc${essai}-${i}-${g.id}`));
+            const rs = await Promise.all(cr.map((c, i) => Lg.rembourser(g, c, 'x', { scanId: `cc${essai}-${i}-${g.id}`, compteur: i % 2 ? 'sans-prix' : 'question', maintenant: t }, cfg)));
+            verifs.push([rs.filter(r => r.rendu).length, rs.filter(r => !r.rendu && r.raisonNonRembourse === 'plafond-jour').length, await cnt(g, 'declare')]);
+        }
+        H.v('CC1. gratuit à 2/3, 6 déclarations SIMULTANÉES (deux noms de compteur) : exactement 1 rendue, 5 plafond-jour, compteur final 3 (5 essais)', verifs, Array(5).fill([1, 5, 3]));
+        const s = await sansCompte(); const cs = []; for (let i = 0; i < 8; i++) cs.push(await prendre(s, `cs${i}-${s.id}`));
+        const rs = await Promise.all(cs.map((c, i) => Lg.rembourser(s, c, 'x', { scanId: `cs${i}-${s.id}`, compteur: 'sans-prix', maintenant: t }, cfg)));
+        H.v('CC2. sans compte (plafond 1), 8 déclarations simultanées : exactement 1 rendue, compteur 1', [rs.filter(r => r.rendu).length, await cnt(s, 'declare')], [1, 1]);
+        const p = await pro(); await db.col('plafonds').insertOne({ porteur: `compte:${p.id}`, jour: JOUR, type: 'declare', count: 27, expireLe: new Date('2026-10-20') });
+        const cp = []; for (let i = 0; i < 10; i++) cp.push(await prendre(p, `cp${i}-${p.id}`));
+        const rp = await Promise.all(cp.map((c, i) => Lg.rembourser(p, c, 'x', { scanId: `cp${i}-${p.id}`, compteur: 'question', maintenant: t }, cfg)));
+        H.v('CC3. Pro à 27/30, 10 simultanées : exactement 3 rendues, compteur 30', [rp.filter(r => r.rendu).length, await cnt(p, 'declare')], [3, 30]);
+    }
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
