@@ -560,7 +560,7 @@ function traiterReponse(cfg, deps = {}) {
         if (!entree || entree.statut !== 'a-trancher') return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
         const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
 
-        let facturation, idProduct = null, le = new Date(), enAttente = false;
+        let facturation, idProduct = null, le = new Date(), enAttente = false, declaration = null;
         if (admin) {
             // un administrateur n'a rien débité : aucune question n'a été réservée. La réponse se résout sur la ligne analyses, et se rejoue / se contredit comme les autres.
             const ids = ((entree.question && entree.question.choix) || []);
@@ -579,9 +579,9 @@ function traiterReponse(cfg, deps = {}) {
             if (r.statut === 404) return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
             if (r.statut === 400) return entreeInvalide('choix');
             if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
-            if (r.statut === 410) { const s = await soldeSur(), o = await offreP(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) }); }
+            if (r.statut === 410) { const s = await soldeSur(), o = await offreP(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(r.declaration ? { declaration: r.declaration } : {}), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) }); }
             if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
-            facturation = r.facturation; enAttente = r.remboursementEnAttente === true;
+            facturation = r.facturation; enAttente = r.remboursementEnAttente === true; declaration = r.declaration || null;
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
@@ -593,7 +593,7 @@ function traiterReponse(cfg, deps = {}) {
         const solde = await soldeSur(), offre = await offreP();
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });
-        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
+        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
     };
 }
 

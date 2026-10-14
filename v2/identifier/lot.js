@@ -112,8 +112,8 @@ async function executerLot(p) {
         return { ...c, index: i, zone: zoneValide(corpsDe(r).zone) };
     });
     const lectures = resultats.map(r => ({ codeLangue: codeLangueDe(corpsDe(r)), reverseStrategie: corpsDe(r).reverse && typeof corpsDe(r).reverse.strategie === 'string' ? corpsDe(r).reverse.strategie : null }));
-    // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), le crédit est rendu dans le compteur DÉDIÉ `jumeaux`, UNE unité par carte
-    // (`every`, jamais `some` : une seule carte refusée par la garde ne fait pas rendre tout un lot hors de son plafond ordinaire)
+    // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), la nature du remboursement est `jumeaux`, UNE unité par carte
+    // (`every`, jamais `some`). PLAFOND-DECLARE : panne, introuvable et garde des jumeaux sont CONSTATÉS par le serveur : rendus sans plafond.
     const toutesParLaGarde = motifs.length === cartes.length && motifs.every(Boolean);
     if (pannes.length === cartes.length) return panne(pannes[0], false, toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});
     const lotInfo = compterLot(cartes, cfg);
@@ -138,7 +138,7 @@ async function executerLot(p) {
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un seul identifié ou une seule question et il ne l'est jamais
     let facturation;
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
-        const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : compteur dédié, une unité par carte ; un lot mixte reste jugé au plafond de pannes ordinaire
+        const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : une unité par carte ; constaté par le serveur, rendu sans plafond (PLAFOND-DECLARE)
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
         if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
     } else facturation = admin ? fabriquerFacturation({ motif: 'administrateur', rembourse: false }) : fabriquerFacturation({ debite: cout, motif: 'lot' });

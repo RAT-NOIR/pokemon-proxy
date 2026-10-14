@@ -196,7 +196,8 @@ function routesScanner(router, cfg, deps = {}) {
     const aRembourserReponse = c => Boolean(c && c.success === true && sansPrixIdentifiee(c.carte, c.facturation, 'question'));
     async function rembourserSansPrix(req, corps, idScan) {
         const argent = registre.obtenir('argent'), porteur = req.v2.porteur, scanId = new mongoose.Types.ObjectId(idScan);
-        const r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'question' });
+        // PLAFOND-DECLARE : ce remboursement est CONSTATÉ par le serveur (le prix du guide est absent : le client n'a rien déclaré) — rendu sans plafond, comme une panne
+        const r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'constate-question' });
         // un rejeu de la même réponse retrouve le scan DÉJÀ remboursé : la réponse dit ce qu'elle a dit la première fois
         const facturation = !r.rendu && r.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : facturationDeLecture(r);
         let solde; try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
