@@ -259,6 +259,24 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         verifier(`durée = ${RETENTION_JOURS} jours`, ttl.expireAfterSeconds, RETENTION_JOURS * 86400);
     }
 
+    // ---- 5. LE REFUS PORTE LE scanId v2 (2026-10-14) ---------------------------
+    // Un refus `egalite-parfaite` devient une QUESTION de la v2 ; retour-live cherche journal_scans par `_id: scanId`. Sans `_id`,
+    // la ligne du refus recevait un id tiré au hasard et retour-live rendait 404 CODE_INVALIDE.
+    console.log('\n=== 5. enregistrerEchec porte l\'_id imposé ===');
+    const idImpose = new mongoose.Types.ObjectId();
+    enregistrerEchec({ _id: idImpose, route: 'identifier', userId: MARQUEUR, cardInfo: null, motifEchec: 'egalite-parfaite', rembourse: false });
+    const ligneImposee = await attendreLigne({ _id: idImpose });
+    verifier('la ligne du refus est écrite SOUS l\'_id imposé', ligneImposee ? String(ligneImposee._id) : null, String(idImpose));
+    verifier('  ... et c\'est bien un refus', ligneImposee ? ligneImposee.motifEchec : null, 'egalite-parfaite');
+    // Garde de source : chaque appel de la route identifier passe `_id: req.scanIdImpose` (même règle que la voie du succès).
+    const srcIndex = require('fs').readFileSync(require('path').join(__dirname, 'index.js'), 'utf8');
+    const debutRoute = srcIndex.indexOf('async function gererIdentifier(');
+    const finRoute = srcIndex.indexOf("app.post('/api/identifier'");
+    const route = debutRoute >= 0 && finRoute > debutRoute ? srcIndex.slice(debutRoute, finRoute) : '';
+    const appels = [...route.matchAll(/enregistrerEchec\(\{/g)].map(m => route.slice(m.index, m.index + 200));
+    verifier('la route identifier compte 6 appels enregistrerEchec', appels.length, 6);
+    verifier('  ... tous portent _id: req.scanIdImpose', appels.filter(a => /_id:\s*req\.scanIdImpose/.test(a)).length, appels.length);
+
     // ---- NETTOYAGE -------------------------------------------------------------
     const supprimes = await JournalScan.deleteMany({ userId: MARQUEUR });
     const restants = await JournalScan.countDocuments({ userId: MARQUEUR });

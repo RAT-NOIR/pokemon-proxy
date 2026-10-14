@@ -1207,7 +1207,7 @@ function enregistrerScan(d = {}) {
  * @param {boolean}     o.rembourse   valeur de retour de rembourserScan, pas une intention
  * @returns {void}
  */
-function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl,
+function enregistrerEchec({ _id, route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl,
     // ⚠️ EXPLICITE, SINON IL SE PERD. Cette fonction déstructure ses paramètres : un champ
     // que les appelants passent par `...annonce` mais qui n'est pas nommé ici n'atteint
     // jamais le journal. C'est le même piège que `symboleSet`, `vivierIds` et l'état — la
@@ -1276,6 +1276,8 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     champsImage } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
+        // 2026-10-14 : l'id PRÉ-TIRÉ (le scanId v2 imposé) — sans lui, la ligne du refus reçoit un id au hasard et retour-live ne la retrouve pas.
+        _id,
         route, userId, motifEchec, imageUrl, vintedUrl, versionExtension, panneIA,
         ...(champsImage || {}),
         rembourse: rembourse != null ? Boolean(rembourse) : null,

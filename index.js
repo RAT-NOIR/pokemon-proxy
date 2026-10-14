@@ -3780,6 +3780,7 @@ async function gererIdentifier(req, res) {
             // ce que le vendeur a déclaré. Les trois champs d'origine IA seront nuls, et ce
             // null-là est une information : la lecture a échoué, pas l'annonce.
             enregistrerEchec({
+                _id: req.scanIdImpose,
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null,
                 motifEchec: 'ia-echec', rembourse: rendu, ...champsEtat(), ...champsCout()
             });
@@ -4142,6 +4143,7 @@ async function gererIdentifier(req, res) {
                 // en AMONT du validateur TCGdex, qui l'écrase plus bas. Les trois autres
                 // sorties de refus, elles, sont en aval et doivent passer la capture.
                 enregistrerEchec({
+                    _id: req.scanIdImpose,
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: motif, rembourse: rendu,
                     reverseLu: cardInfo.reverse === true, motifIA: cardInfo.motif, estDex: avisDex.estDex,
@@ -4735,6 +4737,7 @@ async function gererIdentifier(req, res) {
             const rendu = await rembourserScan(req, 'aucun-candidat');
             // `reverseLu` est la CAPTURE, pas `cardInfo.reverse` : on est en aval du validateur.
             enregistrerEchec({
+                _id: req.scanIdImpose,
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                 motifEchec: 'aucun-candidat', rembourse: rendu,
                 reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
@@ -4849,6 +4852,7 @@ async function gererIdentifier(req, res) {
                     console.warn(`🚫 [veto-nom] le vivier de preuve ${r.scores.length ? 'NE TRANCHE PAS (égalité au sommet)' : 'est VIDE'} -> refus.`);
                     const rendu = await rembourserScan(req, motifRefus);
                     enregistrerEchec({
+                        _id: req.scanIdImpose,
                         route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                         motifEchec: motifRefus, rembourse: rendu,
                         reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
@@ -5073,6 +5077,7 @@ async function gererIdentifier(req, res) {
                 // succès (`lireNumeros`), pas une seconde façon de les obtenir.
                 const numerosDesExAequo = await lireNumeros(exAequo.slice(0, 3).map(c => c.idProduct));
                 enregistrerEchec({
+                    _id: req.scanIdImpose,
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
                     fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
@@ -6314,6 +6319,7 @@ async function gererIdentifier(req, res) {
         // Render. La PREMIÈRE LIGNE DE PILE accompagne le message : sans elle on saurait
         // « quoi » sans savoir « où ». La réponse HTTP, elle, garde son texte générique.
         if (!ligneCorrigee) enregistrerEchec({
+            _id: req.scanIdImpose,
             route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
             // `req.scanRendu` : une QUESTION déjà remboursée avant l'exception (2026-10-06) — le scan EST remboursé, le journal le dit
             motifEchec: 'erreur-serveur', rembourse: rendu || Boolean(req.scanRendu),
