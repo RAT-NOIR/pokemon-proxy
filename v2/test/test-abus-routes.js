@@ -795,8 +795,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_URL_VERIFICATION: [c => c.urls.verification, 'https://rat-market.fr/fr/verification', 'http://rat-market.fr/x', 'leve'], V2_URL_REINIT: [c => c.urls.reinit, 'https://rat-market.fr/fr/reinitialisation', 'http://rat-market.fr/x', 'leve'],
             V2_EMPREINTE_JOURS: [c => c.empreinte.jours, 365, '0', 'leve'],
             V2_ORIGINE_EXTENSION_DEV: [c => c.origines.extensionDev, null, 'chrome-extension://intrus', { ferme: c => c.origines.extensionDev === null }, PROD],   // honorée SEULEMENT sur test_scratch : en production elle est ignorée
-            V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, true, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
-            V2_MARCHES: [c => c.marches.length, 16, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
+            V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, false, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
+            V2_MARCHES: [c => c.marches.length, 27, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
             V2_VERSION_MIN_EXTENSION: [c => c.versionMinExtension, '2.0.0', '%%', { ferme: c => require('../identifier/routes').comparerVersions('2.0.0', c.versionMinExtension) === null }],   // illisible : 400 pour tous
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
