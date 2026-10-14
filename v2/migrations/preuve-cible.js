@@ -13,7 +13,9 @@ const { ACTIONS_DE_LECTURE } = require('../chargeur/lecture-seule');
 const BASE_CIBLE = 'rm_essai', BASE_SOURCE = 'test';
 const ROLES_ADMIS = Object.freeze(['readWrite', 'read']);
 // Les 24 actions du rôle readWrite MESURÉES sur la grappe d'essai (relecture 3 d'AMORÇAGE), plus la lecture. Une action hors de cette liste, sur rm_essai même, refuse.
-const ACTIONS_READWRITE = Object.freeze(['collStats', 'compact', 'convertToCapped', 'createCollection', 'createIndex', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'remove', 'renameCollectionSameDB', 'update', 'collMod', 'changeStream', 'planCacheRead', 'planCacheWrite', 'bypassDocumentValidation', 'enableProfiler', 'reIndex']);
+// + cleanupStructuredEncryptionData (2026-10-14, décision du testeur) : elle fait partie du readWrite STANDARD des versions récentes de MongoDB (Queryable Encryption : nettoyage des
+//   métadonnées chiffrées de la base) ; la grappe d'essai la rend et l'étape 8 a été refusée sur elle. C'est la SEULE action ajoutée, et la ressource reste jugée (rm_essai seulement).
+const ACTIONS_READWRITE = Object.freeze(['collStats', 'compact', 'convertToCapped', 'createCollection', 'createIndex', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'remove', 'renameCollectionSameDB', 'update', 'collMod', 'changeStream', 'planCacheRead', 'planCacheWrite', 'bypassDocumentValidation', 'enableProfiler', 'reIndex', 'cleanupStructuredEncryptionData']);
 const ACTIONS_ECRITURE_ADMISES = Object.freeze(new Set([...ACTIONS_DE_LECTURE, ...ACTIONS_READWRITE]));
 const cause = e => (e && (e.codeName || e.code || e.name)) || 'erreur';     // jamais e.message : un pilote peut y mettre une adresse
 

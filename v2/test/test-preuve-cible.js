@@ -66,6 +66,13 @@ if (PC) (async () => {
     P('11d grantRole sur rm_essai', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['grantRole'] }]), false);
     P('11e sans insert (find, update, remove seulement)', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['find', 'update', 'remove'] }], true), false);
     P('11f sans update (find, insert seulement)', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['find', 'insert'] }], true), false);
+    // 2026-10-14 : la grappe d'essai rend cleanupStructuredEncryptionData dans le readWrite (Queryable Encryption) ; l'étape 8 du testeur a été refusée sur elle.
+    const ACT25 = [...ACT24, 'cleanupStructuredEncryptionData'];
+    const forme25 = (...extra) => i => { i.authenticatedUserPrivileges = [{ resource: { db: 'rm_essai', collection: '' }, actions: ACT25 }, { resource: { db: 'rm_essai', collection: 'system.js' }, actions: ACT25 }, ...extra]; };
+    P('11g forme MESURÉE le 2026-10-14 (readWrite récent : + cleanupStructuredEncryptionData sur rm_essai) : admise', forme25(), true);
+    P('11h la même forme + createUser sur rm_essai : toujours refusée (seule cette action est ajoutée)', forme25({ resource: { db: 'rm_essai', collection: '' }, actions: ['createUser'] }), false);
+    P('11i la même forme + dropDatabase hors base (db: "test") : toujours refusée', forme25({ resource: { db: 'test', collection: '' }, actions: ['dropDatabase'] }), false);
+    P('11j la même forme + cleanupStructuredEncryptionData hors base (db: "test") : refusée (admise sur rm_essai seulement)', forme25({ resource: { db: 'test', collection: '' }, actions: ['cleanupStructuredEncryptionData'] }), false);
     P('12 setName absent', () => { }, false, { setName: null });
     P('12b setName vide', () => { }, false, { setName: '' });
     P('12c setName = celui de la source (production sous un alias)', () => { }, false, { setName: 'set-prod' });
