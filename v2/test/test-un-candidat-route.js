@@ -165,15 +165,15 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         const k = await repondre(sv.url, s.jeton, { scanId: s.scanId, carte: 0, choix: 'a' });
         H.v('   OUI tardif : refusé (la question est réglée), aucun débit de plus (net 0)', [k.statut >= 400, (await livre(s)).net, (await livre(s)).remboursements], [true, 0, 1]);
     }
-    // ── 7. LE PLAFOND (règle existante d'une question répondue « aucune ») : 30 par jour ; plein, le NON ne rend rien et le dit
+    // ── 7. LE PLAFOND DES DÉCLARATIONS (PLAFOND-DECLARE : sans compte 1 par jour de Paris) : plein, le NON ne rend rien et le dit
     {
         const s = await scan('ambigue-seul');
-        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: Q.jourCourant(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${s.i._id}`, jour: Q.jourCourant(), type: 'declare', count: cfg.plafonds.declares.sansCompte, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const k = await repondre(sv.url, s.jeton, { scanId: s.scanId, choix: 'aucune' }), j = k.json || {};
-        H.v('7. compteur des abandons de questions PLEIN : NON répond 200 mais ne rend rien, et le dit { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }',
-            [k.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await livre(s)).essais, await compteurDe(s, 'question')], [200, 1, false, 'plafond-jour', 2, cfg.plafonds.question]);
-        // pour mémoire : avant D1 ce scan était un introuvable remboursé sous le plafond de PANNES (5/jour) — jamais plus généreux que les 30 d'ici
-        H.vrai(`   (mémoire) plafond des questions ${cfg.plafonds.question} >= plafond des pannes ${cfg.plafonds.panne} : un NON n'est jamais moins bien rendu qu'un introuvable d'avant`, cfg.plafonds.question >= cfg.plafonds.panne);
+        H.v('7. compteur des déclarations PLEIN (sans compte : 1) : NON répond 200 mais ne rend rien, et le dit { debite:1, rembourse:false, raisonNonRembourse:plafond-jour } + declaration refusée',
+            [k.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await livre(s)).essais, await compteurDe(s, 'declare'), j.declaration], [200, 1, false, 'plafond-jour', 2, cfg.plafonds.declares.sansCompte, { rendue: false, raison: 'plafond-declarations', plafondJour: 1 }]);
+        const kb = await repondre(sv.url, s.jeton, { scanId: s.scanId, choix: 'aucune' });
+        H.v('   le rejeu de la même réponse redit le même corps, declaration comprise, sans second jugement', [kb.texte === k.texte, await compteurDe(s, 'declare')], [true, 1]);
     }
     // ── 8. LE REFUS PAR ÉGALITÉ à UN candidat : MÊME argent que l'ambiguë à un candidat, à chaque étape
     {
@@ -197,8 +197,8 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         await svJ1.fermer();
         const svJ3 = await monter({ jumeaux: id => ({ conclu: true, ids: id === ID_A ? [ID_B, ID_C, ID_D] : [] }) });
         const b = await scan('ambigue-seul', 3, svJ3);
-        H.v('9b. trois jumeaux (4 produits) : introuvable impression-indeterminee, REMBOURSÉ (compteur dédié jumeaux), aucune question en attente',
-            [b.j.analyse.statut, b.c0.raison, b.j.facturation.rembourse, (await livre(b)).essais, await compteurDe(b, 'jumeaux'), await raw('questions_v2').countDocuments({ 'porteur.id': b.i._id, etat: 'en-attente' })], ['introuvable', 'impression-indeterminee', true, 3, 1, 0]);
+        H.v('9b. trois jumeaux (4 produits) : introuvable impression-indeterminee, REMBOURSÉ sans plafond (constaté, aucun compteur), aucune question en attente',
+            [b.j.analyse.statut, b.c0.raison, b.j.facturation.rembourse, (await livre(b)).essais, await compteurDe(b, 'jumeaux'), await raw('questions_v2').countDocuments({ 'porteur.id': b.i._id, etat: 'en-attente' })], ['introuvable', 'impression-indeterminee', true, 3, 0, 0]);
         H.v('   le motif interne jumeaux-trop-nombreux est écrit dans analyses, jamais servi', [(await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(b.scanId) })).motifJumeaux, JSON.stringify(b.j).includes('jumeaux-')], ['jumeaux-trop-nombreux', false]);
         await svJ3.fermer();
         const svP = await monter({ jumeaux: () => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }) });
@@ -377,16 +377,16 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             const b = await argentReg().balayerQuestions({ maintenant: new Date(), max: 500 });
             H.v('   le balayage rend le lot une fois et efface l\'état', [await livre(L), await listes(L), b.lotsRepris], [RENDU, 0, 1]);
         }
-        // S3 : le plafond du lot (compteur PANNE, 5/jour) — le 6e lot du jour n'est pas rendu et la réponse le dit
+        // S3 : le plafond du lot (PLAFOND-DECLARE : compteur des DÉCLARATIONS, sans compte 1/jour) — le 2e lot du jour n'est pas rendu et la réponse le dit
         {
-            const x = await inst(20); const res = []; let sixieme = null;
-            for (let k = 0; k < 6; k++) { const L = await lance([ID_A, ID_B], x); await rep(L, ID_A, 'aucune'); const r = await rep(L, ID_B, 'aucune'); res.push(r.json.facturation.rembourse); if (k === 5) sixieme = { L, r }; }
-            H.v('14c. 6 lots tout-NON du même porteur dans la journée : les 5 premiers rendus, le 6e non', res, [true, true, true, true, true, false]);
-            const f = sixieme.r.json.facturation;
-            H.v('   le 6e dit POURQUOI : plafond-jour, débité 1', [f.rembourse, f.debite, f.motif, f.raisonNonRembourse], [false, 1, 'plafond-jour', 'plafond-jour']);
-            H.v('   le compteur est celui des PANNES (5/jour), pas celui des questions (30/jour)', [await compteurDe(x, 'panne'), await compteurDe(x, 'question')], [cfg.plafonds.panne, 0]);
-            const rj = await rep(sixieme.L, ID_B, 'aucune');
-            H.v('   le rejeu redit le même résultat, rien de plus ; ce refus est définitif (non listé)', [rj.json.facturation, await listes(x)], [f, 0]);
+            const x = await inst(20); const res = []; let second = null;
+            for (let k = 0; k < 2; k++) { const L = await lance([ID_A, ID_B], x); await rep(L, ID_A, 'aucune'); const r = await rep(L, ID_B, 'aucune'); res.push(r.json.facturation.rembourse); if (k === 1) second = { L, r }; }
+            H.v('14c. 2 lots tout-NON du même porteur sans compte dans la journée : le 1er rendu, le 2e non', res, [true, false]);
+            const f = second.r.json.facturation;
+            H.v('   le 2e dit POURQUOI : plafond-jour, débité 1, et declaration refusée', [f.rembourse, f.debite, f.motif, f.raisonNonRembourse, second.r.json.declaration], [false, 1, 'plafond-jour', 'plafond-jour', { rendue: false, raison: 'plafond-declarations', plafondJour: 1 }]);
+            H.v('   le compteur est celui des DÉCLARATIONS (1/jour), ni celui des pannes ni celui des questions', [await compteurDe(x, 'declare'), await compteurDe(x, 'panne'), await compteurDe(x, 'question')], [1, 0, 0]);
+            const rj = await rep(second.L, ID_B, 'aucune');
+            H.v('   le rejeu redit le même résultat (declaration comprise), rien de plus ; ce refus est définitif (non listé)', [rj.json.facturation, rj.json.declaration, await listes(x)], [f, second.r.json.declaration, 0]);
         }
         await svT.fermer();
     }
@@ -501,7 +501,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         // un partiel RÉEL : un lot de 11 cartes (2 unités), compteur de pannes à 4/5, la 2e unité ne peut pas être rendue (poche « accueil » sur une installation)
         const partielReel = async () => {
             const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L);
-            await raw('plafonds').updateOne({ porteur: `installation:${L.i._id}`, jour: jourJ, type: 'panne' }, { $set: { count: 4, expireLe: plus(3 * 86400e3) } }, { upsert: true });
+            await raw('plafonds').updateOne({ porteur: `installation:${L.i._id}`, jour: jourJ, type: 'declare' }, { $set: { count: 0, expireLe: plus(3 * 86400e3) } }, { upsert: true });
             await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             for (const c of L.cartes) await repI(L, c.index, 'aucune');
             return { L, d, credit1: d[1].credit };
@@ -528,12 +528,12 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         // Important 2 : une reprise du MÊME scan ne recompte jamais le plafond
         {
             const { L, d, credit1 } = await partielReel();
-            H.v('16b. partiel réel (2 unités, la 2e ne peut pas être rendue), plafond de pannes à 4 → 5 : une unité rendue, marque « à rendre », claim libérée',
-                [await unitesRendues(L), await lignesQ(L, { lotARendre: { $exists: true } }), await compteurDe(L, 'panne')], [1, 11, 5]);
+            H.v('16b. partiel réel (2 unités, la 2e ne peut pas être rendue), plafond des déclarations (sans compte : 1) de 0 → 1 : une unité rendue, marque « à rendre », claim libérée',
+                [await unitesRendues(L), await lignesQ(L, { lotARendre: { $exists: true } }), await compteurDe(L, 'declare')], [1, 11, 1]);
             await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
             await balayer();
-            H.v('   la reprise ne recompte PAS le plafond : les 2 unités rendues (net 0), jamais plafond-jour, compteur toujours à 5',
-                [await unitesRendues(L), (await livre(L)).net, await lignesQ(L, { 'lotIssue.rendu': true }), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'panne')], [2, 0, 11, 0, 5]);
+            H.v('   la reprise ne recompte PAS le plafond : les 2 unités rendues (net 0), jamais plafond-jour, compteur toujours à 1',
+                [await unitesRendues(L), (await livre(L)).net, await lignesQ(L, { 'lotIssue.rendu': true }), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'declare')], [2, 0, 11, 0, 1]);
             const rj = await repI(L, L.cartes[0].index, 'aucune');
             H.v('   le rejeu dit rembourse: true', [rj.json.facturation.rembourse, rj.json.facturation.raisonNonRembourse], [true, null]);
         }
@@ -623,10 +623,10 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             H.v('   20 minutes après la dernière réponse, il est listé', (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).lotsNonJuges.length, 1);
         }
         // ── TOUR 1 (relecture 1)
-        const propo = (x, f) => raw('plafonds').updateOne({ porteur: `installation:${x.i._id}`, jour: jourJ, type: 'panne' }, { $set: { count: f, expireLe: plus(3 * 86400e3) } }, { upsert: true });
+        const propo = (x, f) => raw('plafonds').updateOne({ porteur: `installation:${x.i._id}`, jour: jourJ, type: 'declare' }, { $set: { count: f, expireLe: plus(3 * 86400e3) } }, { upsert: true });
         // S1 : arrêt du processus ENTRE deux unités d'un grand lot — la claim reste `rb|scan` (delta 1), jamais renommée « …|fait|… »
         {
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 0);
             const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             const colOrig = db.col; let armee = true;
             db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
@@ -638,7 +638,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             H.v('   avant le délai de reprise (5 min), le balayage ne touche pas à la claim : toujours 1 unité', await unitesRendues(L), 1);
             await balayer(plus(20 * 60e3));
             H.v('   au-delà du délai, le balayage CONTINUE le remboursement : 2 unités rendues (une par unité), net 0, lotIssue rendu, propre', [await unitesRendues(L), (await livre(L)).net, await lignesQ(L, { 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).propre], [2, 0, 11, true]);
-            H.v('   le plafond de pannes n\'a pas été recompté (toujours 5)', await compteurDe(L, 'panne'), 5);
+            H.v('   le plafond des déclarations n\'a pas été recompté (toujours 1)', await compteurDe(L, 'declare'), 1);
         }
         // S3 : « rendu » se juge sur les MOUVEMENTS — le perdant d'une course qui rejoue le NON pendant que le crédit du gagnant échoue
         {
@@ -663,12 +663,12 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         }
         // M5 / M5b : la dispense du plafond ne vaut que pour une claim « …|fait|… » DE CE SCAN
         {
-            const x = await inst(20); await propo({ i: x.i }, 5);
+            const x = await inst(20); await propo({ i: x.i }, 1);
             const autre = new mongoose.Types.ObjectId();
             await raw('mouvements').insertOne({ installationId: x.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-autre-scan', scanId: autre, etat: 'rembourse', cleIdempotence: `rb|${autre}|fait|x` });
             const L = await lance([ID_A, ID_B], x); await repI(L, L.cartes[0].index, 'aucune'); const r = await repI(L, L.cartes[1].index, 'aucune');
-            H.v('17d. une claim « fait » d\'un AUTRE scan ne dispense pas du plafond : plafond atteint, refus définitif et dit', [r.json.facturation.rembourse, r.json.facturation.motif, await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'panne')], [false, 'plafond-jour', 2, 5]);
-            const y = await inst(20); await propo({ i: y.i }, 5);
+            H.v('17d. une claim « fait » d\'un AUTRE scan ne dispense pas du plafond : plafond atteint, refus définitif et dit', [r.json.facturation.rembourse, r.json.facturation.motif, await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await compteurDe(L, 'declare')], [false, 'plafond-jour', 2, 1]);
+            const y = await inst(20); await propo({ i: y.i }, 1);
             const L2 = await lance([ID_A, ID_B], y);
             await raw('mouvements').insertOne({ installationId: y.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-sans-fait', scanId: sid(L2), etat: 'rembourse', cleIdempotence: `rb|${L2.j.scanId}|autre` });
             await repI(L2, L2.cartes[0].index, 'aucune'); const r2 = await repI(L2, L2.cartes[1].index, 'aucune');
@@ -676,13 +676,13 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         }
         // un scan à `cleOrigine` (nouvelle tentative après remboursement) : la clé de la claim change après un partiel — la reprise ne recompte pas le plafond
         {
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 0);
             await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
             const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             for (const c of L.cartes) await repI(L, c.index, 'aucune');
             await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
             await balayer();
-            H.v('17e. scan à cleOrigine, partiel puis reprise : 2 unités rendues, net 0, plafond compté UNE fois (5), jamais plafond-jour', [await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' })], [2, 0, 5, 0]);
+            H.v('17e. scan à cleOrigine, partiel puis reprise : 2 unités rendues, net 0, plafond compté UNE fois (1), jamais plafond-jour', [await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'declare'), await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' })], [2, 0, 1, 0]);
         }
         // M3 : la reprise d'un « en-reglement » qui ÉCHOUE rafraîchit priseLe — jamais deux essais dans le même passage, ni au passage suivant avant le délai
         {
@@ -696,17 +696,17 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         // ── TOUR 2 (relecture 2)
         // R2-C (argent) : un scan à `cleOrigine` interrompu entre deux unités — la continuation du MÊME scan ne recompte jamais le plafond, `cleOrigine` ou non
         {
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 0);
             await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
             const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             const colOrig = db.col; let armee = true;
             db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };
             try { for (const c of L.cartes) await repI(L, c.index, 'aucune'); } finally { armee = false; db.col = colOrig; }
             await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
-            const avant = [await unitesRendues(L), await compteurDe(L, 'panne')];
+            const avant = [await unitesRendues(L), await compteurDe(L, 'declare')];
             await balayer(plus(20 * 60e3));
-            H.v('18a. scan à cleOrigine interrompu entre deux unités : 1 unité, plafond 5 ; au balayage suivant le délai, TOUT est rendu (net 0), plafond jamais recompté (5), propre',
-                [avant, await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).propre], [[1, 5], 2, 0, 5, 11, true]);
+            H.v('18a. scan à cleOrigine interrompu entre deux unités : 1 unité, plafond 1 ; au balayage suivant le délai, TOUT est rendu (net 0), plafond jamais recompté (1), propre',
+                [avant, await unitesRendues(L), (await livre(L)).net, await compteurDe(L, 'declare'), await lignesQ(L, { 'lotIssue.rendu': true }), (await reconcilier(porteurDe(L), { cfg: cfgY, maintenant: plus(20 * 60e3) })).propre], [[1, 1], 2, 0, 1, 11, true]);
         }
         // M24 : une claim SANS unité rendue (delta 0) n'est JAMAIS libérée par la reprise — même vieille, même avec des débits ouverts
         {
@@ -742,23 +742,23 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         // R3-A + R3-1 : scan à `cleOrigine`, un jugement SIMULTANÉ voit la 1re unité PRISE (débit « rembourse », sa claim delta 0 : le gagnant n'a pas fini), plafond à la limite.
         // Le plafond est compté puis refusé : jamais un `plafond-jour` DÉFINITIF (le client est ou sera rendu), et une claim du groupe SANS unité rendue (delta 0) ne dispense pas du plafond
         {
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 5); await isoler(L);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 1); await isoler(L);
             await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
             await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rembourse' } });
             await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-gagnant', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}|${d[0]._id}` });
             for (const c of L.cartes) await repI(L, c.index, 'aucune');
-            H.v('19a. un jugement simultané d\'un scan à cleOrigine, plafond à la limite : aucun `plafond-jour` définitif, la 2e unité n\'est PAS rendue (la claim du groupe sans unité rendue ne dispense pas), compteur remis à 5, lot « à rendre »',
-                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'panne'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 5, 11]);
+            H.v('19a. un jugement simultané d\'un scan à cleOrigine, plafond à la limite : aucun `plafond-jour` définitif, la 2e unité n\'est PAS rendue (la claim du groupe sans unité rendue ne dispense pas), compteur remis à 1, lot « à rendre »',
+                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'declare'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 1, 11]);
         }
         // MOYENS-B2a : la même fenêtre avec l'état que le ledger pose DÉSORMAIS à la prise (« rendu-en-cours », avant le crédit) : le jugement simultané la lit comme une prise sans trace (`ambigus`), jamais `plafond-jour`
         {
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 5); await isoler(L);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 1); await isoler(L);
             await raw('mouvements').updateMany({ _id: { $in: d.map(m => m._id) } }, { $set: { cleOrigine: 'banc' } });
             await raw('mouvements').updateOne({ _id: d[0]._id }, { $set: { etat: 'rendu-en-cours' } });
             await raw('mouvements').insertOne({ installationId: L.i._id, le: new Date(), surface: 'extension', type: 'remboursement', delta: 0, poche: null, motif: 'banc-gagnant', scanId: sid(L), etat: 'rembourse', cleIdempotence: `rb|${L.j.scanId}|${d[0]._id}` });
             for (const c of L.cartes) await repI(L, c.index, 'aucune');
-            H.v('19a2. même fenêtre, unité « rendu-en-cours » (prise avant le crédit) : aucun `plafond-jour` définitif, rien rendu, compteur remis à 5, lot « à rendre »',
-                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'panne'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 5, 11]);
+            H.v('19a2. même fenêtre, unité « rendu-en-cours » (prise avant le crédit) : aucun `plafond-jour` définitif, rien rendu, compteur remis à 1, lot « à rendre »',
+                [await lignesQ(L, { 'lotIssue.raison': 'plafond-jour' }), await unitesRendues(L), await compteurDe(L, 'declare'), await lignesQ(L, { lotARendre: { $exists: true } })], [0, 0, 1, 11]);
         }
         // MOYENS-B2a tour 1 (I-1) : TOUTES les unités du lot sont « rendu-en-cours » (une coupure juste après la prise) : le remboursement répond « remboursement-en-cours », traité comme « déjà rendu » — le grand livre est relu,
         // le lot n'est jamais écrit rendu sans ses mouvements, il est marqué « à rendre » avec la cause « ambigu » (prises sans trace), pas avec une cause d'échec du ledger
@@ -775,8 +775,8 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             await raw('mouvements').updateMany({ scanId: sid(L), type: 'remboursement' }, { $unset: { installationId: '' }, $set: { compteId: new mongoose.Types.ObjectId().toString() } });
             await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: credit1 } });
             await balayer(plus(20 * 60e3));      // UN seul passage suffit : les autres lots sont écartés (isoler)
-            H.v('19b. claim passée à un compte entre deux unités : la continuation ne recompte pas le plafond (5), les 2 unités sont rendues, lotIssue rendu',
-                [await raw('mouvements').countDocuments({ scanId: sid(L), type: 'remboursement', delta: 1 }), await compteurDe(L, 'panne'), await lignesQ(L, { 'lotIssue.rendu': true })], [2, 5, 11]);
+            H.v('19b. claim passée à un compte entre deux unités : la continuation ne recompte pas le plafond (1), les 2 unités sont rendues, lotIssue rendu',
+                [await raw('mouvements').countDocuments({ scanId: sid(L), type: 'remboursement', delta: 1 }), await compteurDe(L, 'declare'), await lignesQ(L, { 'lotIssue.rendu': true })], [2, 1, 11]);
         }
         // R3-C : le ciblage de la claim par son `_id` — un balayage prend la place d'un processus vivant entre deux unités ; le processus d'origine renomme alors « la claim `rb|scan` » PAR SA CLÉ
         // (celle du balayage) juste avant que le balayage écrive le delta 1 de sa 1re unité : la trace du balayage doit quand même arriver (par `_id`)
@@ -784,7 +784,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
             // MOYENS-B2a (M1) : un lot rendable PLUS ANCIEN précède celui du scan visé dans le balayage (il écrit un delta 1 avant lui) : le crochet qui s'armerait au premier delta 1 se consommerait sur LUI
             // et la mutation « claim ciblée par la clé au lieu de l'`_id` » survivrait. Vu : sans le filtre de scan ci-dessous, cette mutation survit (voir le rapport du lot).
             const O = await partielReel(); await raw('mouvements').updateOne({ _id: O.d[1]._id }, { $set: { credit: O.credit1 } });
-            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 4); await isoler(L, [O.L]);
+            const L = await lance(Array(11).fill(ID_A)); const d = await debitsDe(L); await propo(L, 0); await isoler(L, [O.L]);
             const credit1 = d[1].credit; await raw('mouvements').updateOne({ _id: d[1]._id }, { $set: { credit: { poche: 'accueil' } } });
             let colOrig = db.col; let armee = true;
             db.col = nom => { const c = colOrig(nom); if (nom !== 'mouvements') return c; return new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, u, ...r) => { if (armee && u && u.$set && typeof u.$set.cleIdempotence === 'string' && u.$set.cleIdempotence.includes('|fait|')) throw new Error('arrêt simulé'); return t.updateOne(f, u, ...r); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); };

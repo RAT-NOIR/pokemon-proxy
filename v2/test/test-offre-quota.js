@@ -240,7 +240,7 @@ const futur = new Date('2027-06-01T00:00:00Z');
         for (const [nom, instant, parisJour, utcJour] of [['hiver', new Date('2026-01-14T23:30:00Z'), '2026-01-15', '2026-01-14'], ['été', new Date('2026-07-14T22:30:00Z'), '2026-07-15', '2026-07-14']]) {
             const pl = await compte(); const sid = `pl-${nom}`;
             const d = await Lg.debiter(pl, { scanId: sid, cleIdempotence: sid, maintenant: instant }, cfg);
-            const r = await Lg.rembourser(pl, d.credit, 'introuvable', { scanId: sid, maintenant: instant }, cfg);
+            const r = await Lg.rembourser(pl, d.credit, 'introuvable', { scanId: sid, compteur: 'question', maintenant: instant }, cfg);      // PLAFOND-DECLARE : seul le compteur des déclarations date au jour de Paris (un constaté n'en écrit pas)
             const docs = await db.col('plafonds').find({ porteur: `compte:${pl.id}` }).toArray();
             H.v(`PLAFOND ${nom} : le rendu à 00:30 Paris compte le jour de Paris (${parisJour}), jamais le jour UTC (${utcJour})`, [r.rendu, docs.map(x => x.jour)], [true, [parisJour]]);
         }

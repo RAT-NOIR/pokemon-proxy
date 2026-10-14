@@ -35,14 +35,14 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     const b = await poser(p1); await rep(p1, b.scanId, 'aucune');
     H.v('autre réponse sur une question remboursee : 409', (await rep(p1, b.scanId, 'c1', h(2))).statut, 409);
     H.v('   la même réponse « aucune » rejouée : 200 sans second remboursement', [(await rep(p1, b.scanId, 'aucune', h(2))).statut, (await restant(p1))], [200, 4]);
-    // 4. aucune / ne-sait-pas : crédit rendu au compteur QUESTION ; 30/jour
+    // 4. aucune / ne-sait-pas : DÉCLARATIONS du client, crédit rendu au compteur commun « declare » ; plafond par offre (PLAFOND-DECLARE : gratuit 3 par jour de Paris)
     const p4 = await compteN(40); const s4 = [];
-    for (let i = 0; i < 31; i++) s4.push(await poser(p4));
-    const out = []; for (let i = 0; i < 31; i++) out.push(await rep(p4, s4[i].scanId, i % 2 ? 'ne-sait-pas' : 'aucune'));
-    H.v('31 abandons (dénominateur 31) : 30 remboursées', out.filter(r => r.etat === 'remboursee').length, 30);
-    H.v('   la 31e : non-remboursee, cause plafond-jour', [out[30].etat, out[30].question.raisonNonRembourse], ['non-remboursee', 'plafond-jour']);
-    H.v('   solde : 40 - 31 + 30', (await restant(p4)), 39);
-    H.v('   compteur question = 30, compteur panne absent', [(await db.col('plafonds').findOne({ porteur: `compte:${p4.id}`, type: 'question' })).count, await db.col('plafonds').countDocuments({ porteur: `compte:${p4.id}`, type: 'panne' })], [30, 0]);
+    for (let i = 0; i < 4; i++) s4.push(await poser(p4));
+    const out = []; for (let i = 0; i < 4; i++) out.push(await rep(p4, s4[i].scanId, i % 2 ? 'ne-sait-pas' : 'aucune'));
+    H.v('4 abandons d\'un compte gratuit (dénominateur 4) : 3 remboursées', out.filter(r => r.etat === 'remboursee').length, 3);
+    H.v('   la 4e : non-remboursee, cause plafond-jour, et le champ declaration le dit', [out[3].etat, out[3].question.raisonNonRembourse, out[3].declaration], ['non-remboursee', 'plafond-jour', { rendue: false, raison: 'plafond-declarations', plafondJour: 3 }]);
+    H.v('   solde : 40 - 4 + 3', (await restant(p4)), 39);
+    H.v('   compteur declare = 3, aucun compteur question ni panne', [(await db.col('plafonds').findOne({ porteur: `compte:${p4.id}`, type: 'declare' })).count, await db.col('plafonds').countDocuments({ porteur: `compte:${p4.id}`, type: { $in: ['question', 'panne'] } })], [3, 0]);
     // 5. choix hors liste => 400 ENTREE ; question d'un AUTRE porteur => 404
     const p5 = await compteN(3), p5b = await compteN(3); const c5 = await poser(p5);
     const bad = await rep(p5, c5.scanId, 'zzz');
@@ -93,7 +93,7 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     // 12. la facturation rendue avec la réponse (forme CONTRAT-2, via argent/facturation.js)
     H.v('facturation d\'une réponse par un candidat : débitée', r1.facturation, { debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null });   // rembourse : BOOLÉEN (contrat, B1b.5)
     H.v('   d\'un abandon remboursé', out[0].facturation, { debite: 0, reserve: 0, rembourse: true, motif: 'question', raisonNonRembourse: null });
-    H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[30].facturation, { debite: 1, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
+    H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[3].facturation, { debite: 1, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
     H.v('   d\'un lot : rien de plus facturé', rl.facturation, { debite: 0, reserve: 0, rembourse: false, motif: 'lot', raisonNonRembourse: null });
     // 13. I3 — réserver DEUX FOIS la même (scanId, carte) est idempotent : ni crédit rendu, ni question touchée
     const p13 = await compteN(3); const d13 = await Lg.debiter(p13, { scanId: 'dup', cleIdempotence: 'd|dup', maintenant: t }, cfg);

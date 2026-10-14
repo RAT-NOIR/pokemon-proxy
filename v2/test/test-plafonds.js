@@ -1,5 +1,5 @@
 'use strict';
-// Banc PLAFONDS (2026-10-11) — « prix illisible, définitif » : 5 par jour et par compte (V2_SANS_PRIX_JOUR) ; lots trop grands : 10 refus par jour et par compte
+// Banc PLAFONDS (2026-10-11, révisé par PLAFOND-DECLARE le 2026-10-14) — « prix illisible, définitif » : une DÉCLARATION, compteur commun plafonné par offre (sans compte 1, gratuit 3, Pro 30) ; lots trop grands : 10 refus par jour et par compte
 // (V2_LOT_TROP_GRAND_JOUR), taille d'un lot 20 cartes (V2_LOT_CARTES_MAX, entier >= 2). Base EN MÉMOIRE (INT2), aucun réseau, résultats du crochet FABRIQUÉS.
 // « Un jour » = le jour UTC de ledger.js (`maintenant.toISOString().slice(0, 10)`), la définition des plafonds panne/question.
 const H = require('./_harnais');
@@ -64,19 +64,20 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
     // ════════ configuration ════════
     {
         const c = lireConfig(BASE);
-        H.v('C1. défauts : V2_SANS_PRIX_JOUR 5, V2_LOT_TROP_GRAND_JOUR 10, V2_LOT_CARTES_MAX 20 ; les plafonds panne 5 / question 30 ne bougent pas',
-            [c.plafonds.sansPrix, c.plafonds.lotTropGrand, c.lot.cartesMax, c.plafonds.panne, c.plafonds.question], [5, 10, 20, 5, 30]);
-        const c2 = lireConfig({ ...BASE, V2_SANS_PRIX_JOUR: '2', V2_LOT_TROP_GRAND_JOUR: '3', V2_LOT_CARTES_MAX: '30' });
-        H.v('C2. les trois variables changent les valeurs', [c2.plafonds.sansPrix, c2.plafonds.lotTropGrand, c2.lot.cartesMax], [2, 3, 30]);
-        const zero = lireConfig({ ...BASE, V2_SANS_PRIX_JOUR: '0', V2_LOT_TROP_GRAND_JOUR: '0' });
-        H.v('C3. 0 est valide pour les deux plafonds (aucun remboursement)', [zero.plafonds.sansPrix, zero.plafonds.lotTropGrand], [0, 0]);
+        // PLAFOND-DECLARE : « prix illisible, définitif » n'a plus de plafond propre (V2_SANS_PRIX_JOUR est sans objet) : il partage le compteur des déclarations (test-plafond-declare.js). Reste ici : lot-trop-grand et la taille d'un lot.
+        H.v('C1. défauts : V2_LOT_TROP_GRAND_JOUR 10, V2_LOT_CARTES_MAX 20',
+            [c.plafonds.lotTropGrand, c.lot.cartesMax], [10, 20]);
+        const c2 = lireConfig({ ...BASE, V2_LOT_TROP_GRAND_JOUR: '3', V2_LOT_CARTES_MAX: '30' });
+        H.v('C2. les deux variables changent les valeurs', [c2.plafonds.lotTropGrand, c2.lot.cartesMax], [3, 30]);
+        const zero = lireConfig({ ...BASE, V2_LOT_TROP_GRAND_JOUR: '0' });
+        H.v('C3. 0 est valide pour le plafond des refus de lot (aucun remboursement)', zero.plafonds.lotTropGrand, 0);
         const rejets = [];
-        for (const [nom, v] of [['V2_SANS_PRIX_JOUR', 'abc'], ['V2_SANS_PRIX_JOUR', '-1'], ['V2_SANS_PRIX_JOUR', '2.5'], ['V2_LOT_TROP_GRAND_JOUR', ' '], ['V2_LOT_TROP_GRAND_JOUR', '-3'],
+        for (const [nom, v] of [['V2_LOT_TROP_GRAND_JOUR', ' '], ['V2_LOT_TROP_GRAND_JOUR', '-3'],
             ['V2_LOT_CARTES_MAX', '1'], ['V2_LOT_CARTES_MAX', '0'], ['V2_LOT_CARTES_MAX', 'abc'], ['V2_LOT_CARTES_MAX', '20.5'], ['V2_LOT_CARTES_MAX', ' ']]) {
             let e = null; try { lireConfig({ ...BASE, [nom]: v }); } catch (x) { e = x.message; }
             rejets.push(/configuration invalide/.test(e || ''));
         }
-        H.v('C4. valeurs invalides (texte, négatif, décimal, espaces ; cartesMax 1 et 0 sous le minimum 2) : configuration invalide (10 sur 10)', rejets.filter(Boolean).length, 10);
+        H.v('C4. valeurs invalides (texte, négatif, décimal, espaces ; cartesMax 1 et 0 sous le minimum 2) : configuration invalide (7 sur 7)', rejets.filter(Boolean).length, 7);
         H.v('C5. V2_LOT_CARTES_MAX=2 est le minimum accepté', lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '2' }).lot.cartesMax, 2);
         let haut = null; try { lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '101' }); } catch (x) { haut = x.message; }
         H.v('C6. borne haute : 100 (l\'ancien plafond dur) accepté, 101 = configuration invalide', [lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '100' }).lot.cartesMax, /configuration invalide/.test(haut || '')], [100, true]);
@@ -116,25 +117,28 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         return r.json.scanId;
     };
 
-    // ════════ « prix illisible, définitif » : 5 par jour et par compte ════════
+    // ════════ « prix illisible, définitif » : DÉCLARATION du client, compteur commun, 3 par jour pour un compte gratuit (PLAFOND-DECLARE) ════════
     {
         const x = await compteLie({ accueil: 0, achete: 30 }); const pk = `compte:${x.c._id}`, uid = `v2:compte:${x.c._id}`;
         const issues = []; const ids = [];
-        for (let k = 0; k < 6; k++) ids.push(await scanIdentifie(x, uid));
+        for (let k = 0; k < 4; k++) ids.push(await scanIdentifie(x, uid));
         const { r: reps, lignes } = await capter(async () => { const o = []; for (const id of ids) o.push(await retour(svSimple.url, x.jeton, LR(id))); return o; });
         for (const r of reps) issues.push(r.json.facturation.rembourse ? 'rendu' : r.json.facturation.raisonNonRembourse);
-        H.v('S1. 6 « prix illisible, définitif » du même compte : 5 rendus, la 6e plafond-jour', issues, ['rendu', 'rendu', 'rendu', 'rendu', 'rendu', 'plafond-jour']);
-        const f6 = reps[5].json.facturation;
-        H.v('    la 6e : 200, facturation { debite:1, rembourse:false, motif plafond-jour, raisonNonRembourse plafond-jour }', [reps[5].statut, f6.debite, f6.rembourse, f6.motif, f6.raisonNonRembourse], [200, 1, false, 'plafond-jour', 'plafond-jour']);
-        H.v('    le crédit de la 6e reste débité (achete 30 - 6 + 5 = 29)', (await solde(x.c)).achete, 29);
-        H.v('    compteur PROPRE « sans-prix » = 5 ; compteur « question » = 0 (ces remboursements n\'y comptent plus) ; compteur « panne » = 0',
-            [await compteur(pk, 'sans-prix'), await compteur(pk, 'question'), await compteur(pk, 'panne')], [5, 0, 0]);
-        const refus = lignes.filter(l => /\[v2 plafond\]/.test(l) && /sans-prix/.test(l));
+        H.v('S1. 4 « prix illisible, définitif » du même compte gratuit : 3 rendus, le 4e plafond-jour', issues, ['rendu', 'rendu', 'rendu', 'plafond-jour']);
+        const f4 = reps[3].json.facturation;
+        H.v('    le 4e : 200, facturation { debite:1, rembourse:false, motif plafond-jour, raisonNonRembourse plafond-jour } ET declaration { rendue:false, raison plafond-declarations, plafondJour 3 }', [reps[3].statut, f4.debite, f4.rembourse, f4.motif, f4.raisonNonRembourse, reps[3].json.declaration], [200, 1, false, 'plafond-jour', 'plafond-jour', { rendue: false, raison: 'plafond-declarations', plafondJour: 3 }]);
+        H.v('    les trois premiers disent declaration { rendue:true, raison:null, plafondJour:3 }', reps.slice(0, 3).map(r => r.json.declaration), Array(3).fill({ rendue: true, raison: null, plafondJour: 3 }));
+        H.v('    le crédit du 4e reste débité (achete 30 - 4 + 3 = 29)', (await solde(x.c)).achete, 29);
+        H.v('    compteur COMMUN « declare » = 3 ; aucun compteur « sans-prix », « question » ni « panne »',
+            [await compteur(pk, 'declare'), await compteur(pk, 'sans-prix'), await compteur(pk, 'question'), await compteur(pk, 'panne')], [3, 0, 0, 0]);
+        const refus = lignes.filter(l => /\[v2 plafond\]/.test(l) && /declare/.test(l));
         H.v('    UNE ligne de journal pour l\'unique refus, sans e.message ni identifiant de compte', [refus.length, refus.some(l => l.includes(String(x.c._id)) || /Error:/.test(l))], [1, false]);
         const rejeu = await retour(svSimple.url, x.jeton, LR(ids[0]));
-        H.v('    rejeu d\'un scan déjà rendu : deja-rembourse, le compteur ne bouge pas (5)', [rejeu.json.facturation.raisonNonRembourse, await compteur(pk, 'sans-prix')], ['deja-rembourse', 5]);
+        H.v('    rejeu d\'un scan déjà rendu : deja-rembourse, le compteur ne bouge pas (3), aucun champ declaration', [rejeu.json.facturation.raisonNonRembourse, await compteur(pk, 'declare'), 'declaration' in rejeu.json], ['deja-rembourse', 3, false]);
+        const val = require('../openapi/valider').valider(reps[3].json, { $ref: '#/components/schemas/ReponseRetourLive' }, require('../openapi/openapi.v2.json'));
+        H.vrai(`    la réponse refusée valide contre ReponseRetourLive (${val.ok ? 'ok' : val.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')})`, val.ok);
     }
-    // deux installations d'un MÊME compte partagent le plafond (le porteur d'une installation liée EST le compte) ; une installation sans compte a le sien
+    // deux installations d'un MÊME compte partagent le plafond (le porteur d'une installation liée EST le compte) ; une installation sans compte a le sien (1)
     {
         const a = await compteLie({ accueil: 0, achete: 30 }); const b = await installationDe(a.c); const uid = `v2:compte:${a.c._id}`, pk = `compte:${a.c._id}`;
         const sa = [], sb = [];
@@ -143,26 +147,30 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         const out = [];
         for (const id of sa.slice(0, 3)) out.push((await retour(svSimple.url, a.jeton, LR(id))).json.facturation.rembourse);
         for (const id of sb) out.push((await retour(svSimple.url, b.jeton, LR(id))).json.facturation.rembourse);
-        const sixieme = await retour(svSimple.url, a.jeton, LR(sa[3]));
-        H.v('S2. deux installations du même compte (3 + 2 rendus) : la 6e lecture, depuis la première installation, est refusée', [out, sixieme.json.facturation.raisonNonRembourse, await compteur(pk, 'sans-prix')], [[true, true, true, true, true], 'plafond-jour', 5]);
-        H.v('    un seul compteur, celui du compte (aucun compteur d\'installation)', await raw('plafonds').countDocuments({ porteur: { $regex: '^installation:' }, type: 'sans-prix', jour: jourUTC() }), 0);
-        const z = await inst({ essais: 10 }); const zid = []; for (let k = 0; k < 6; k++) zid.push(await scanIdentifie(z, `v2:installation:${z.i._id}`));
+        const quatrieme = await retour(svSimple.url, a.jeton, LR(sa[3]));
+        H.v('S2. deux installations du même compte (3 rendus depuis la première, 2 refusés depuis la seconde) : le compteur est celui du compte, la 4e depuis la première est refusée', [out, quatrieme.json.facturation.raisonNonRembourse, await compteur(pk, 'declare')], [[true, true, true, false, false], 'plafond-jour', 3]);
+        H.v('    un seul compteur, celui du compte (aucun compteur d\'installation)', await raw('plafonds').countDocuments({ porteur: { $regex: '^installation:' }, type: 'declare', jour: jourUTC() }), 0);
+        const z = await inst({ essais: 10 }); const zid = []; for (let k = 0; k < 3; k++) zid.push(await scanIdentifie(z, `v2:installation:${z.i._id}`));
         const o2 = []; for (const id of zid) o2.push((await retour(svSimple.url, z.jeton, LR(id))).json.facturation);
-        H.v('S3. installation SANS compte (seul porteur possible) : son compteur propre, 5 rendus puis plafond-jour',
-            [o2.map(f => (f.rembourse ? 'rendu' : f.raisonNonRembourse)), await compteur(`installation:${z.i._id}`, 'sans-prix')], [['rendu', 'rendu', 'rendu', 'rendu', 'rendu', 'plafond-jour'], 5]);
+        H.v('S3. installation SANS compte (seul porteur possible) : son compteur propre, plafond 1 : une rendue puis plafond-jour',
+            [o2.map(f => (f.rembourse ? 'rendu' : f.raisonNonRembourse)), await compteur(`installation:${z.i._id}`, 'declare')], [['rendu', 'plafond-jour', 'plafond-jour'], 1]);
     }
-    // les deux sens : une salve de questions abandonnées ne vide pas le plafond sans-prix, et inversement
+    // indépendance : les refus de lot ne vident pas les déclarations, et inversement ; l'abandon d'une question partage le compteur des déclarations
     {
         const x = await compteLie({ accueil: 0, achete: 30 }); const pk = `compte:${x.c._id}`, uid = `v2:compte:${x.c._id}`;
-        await raw('plafonds').insertOne({ porteur: pk, jour: jourUTC(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: pk, jour: jourUTC(), type: 'lot-trop-grand', count: cfg.plafonds.lotTropGrand, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const id = await scanIdentifie(x, uid);
         const r = await retour(svSimple.url, x.jeton, LR(id));
-        H.v('S4. plafond des QUESTIONS saturé (30/30) : le « prix illisible, définitif » est quand même rendu', [r.json.facturation.rembourse, await compteur(pk, 'sans-prix')], [true, 1]);
+        H.v('S4. plafond des refus de lot saturé (10/10) : le « prix illisible, définitif » est quand même rendu', [r.json.facturation.rembourse, await compteur(pk, 'declare')], [true, 1]);
         const y = await compteLie({ accueil: 0, achete: 30 }); const pky = `compte:${y.c._id}`;
-        await raw('plafonds').insertOne({ porteur: pky, jour: jourUTC(), type: 'sans-prix', count: cfg.plafonds.sansPrix, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: pky, jour: jourUTC(), type: 'declare', count: cfg.plafonds.declares.gratuit, expireLe: new Date(Date.now() + 3 * 86400e3) });
         lot([qst([POOL[0], POOL[1]])]);
         const q = await poster(svLot.url, y.jeton); const ab = await repondre(svLot.url, y.jeton, { scanId: q.json.scanId, carte: 0, choix: 'ne-sait-pas' });
-        H.v('    plafond SANS-PRIX saturé (5/5) : l\'abandon d\'une question est quand même rendu (compteur question 1)', [ab.statut, ab.json.facturation && ab.json.facturation.rembourse, await compteur(pky, 'question')], [200, true, 1]);
+        H.v('    plafond des déclarations saturé (3/3) : l\'abandon d\'une question n\'est PAS rendu (200, plafond-jour, declaration refusée), le compteur reste à 3',
+            [ab.statut, ab.json.facturation && ab.json.facturation.rembourse, ab.json.facturation && ab.json.facturation.raisonNonRembourse, ab.json.declaration, await compteur(pky, 'declare')],
+            [200, false, 'plafond-jour', { rendue: false, raison: 'plafond-declarations', plafondJour: 3 }, 3]);
+        const valQ = require('../openapi/valider').valider(ab.json, { $ref: '#/components/schemas/ReponseQuestion' }, require('../openapi/openapi.v2.json'));
+        H.vrai(`    la réponse valide contre ReponseQuestion (${valQ.ok ? 'ok' : valQ.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')})`, valQ.ok);
     }
     // administrateur : rien débité, rien compté
     {
