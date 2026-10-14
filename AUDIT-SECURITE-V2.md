@@ -103,6 +103,7 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_DESCRIPTION_AU_MODELE` | `0` | rien de l'annonce n'est envoyé au modèle | invalide | oui |
 | `V2_DESCRIPTION_CONSERVEE` | `1` (90 jours) | conservation 90 jours | invalide | oui (purge quotidienne) |
 | `V2_REGLE_G` | `0` | la chaîne héritée décide | invalide | oui |
+| `V2_TAUX_BCE` | `0` | éteint : aucune minuterie, aucune lecture des taux de la BCE (hors euro : `versEUR` nul, aucun verdict) | invalide (autre chose que `0` ou `1`) | oui (lecture au démarrage si aucun taux récent, puis une par jour après 16 h Paris ; source publique unique) |
 | `V2_SECONDE_LECTURE` | `0` | éteinte : la garde des jumeaux rend sa question, octet pour octet comme avant le lot ; allumée sans fournisseur branché (`deps.secondeLecture`), elle ne fait rien et le dit au montage | invalide (autre chose que `0` ou `1`) | oui (§17) |
 | `V2_ESSAIS` / `V2_ACCUEIL` / `V2_HEBDO` / `V2_ABO_MENSUEL` | 3 / 25 / 2 / 100 | défauts | invalide (non entier, négatif) | oui ; `0` = aucune dotation |
 | `V2_PLAFOND_PANNES` / `V2_PLAFOND_QUESTIONS` | 5 / 30 | défauts | invalide | oui ; `0` refuse tout remboursement (le client paie) |

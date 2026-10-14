@@ -1,7 +1,7 @@
 'use strict';
 // B1b.6 — taux de change du jour (fichier de référence de la BCE) et règle de verdict.
 // Principe (§5 Q17) : le fichier donne « 1 EUR = X devise » ; versEUR = 1 / X, arrondi à 6 décimales.
-// Rien ici ne s'arme tout seul : rafraichirTaux() n'est appelée que par un déclencheur que monter() ne branche que si V2_TAUX_BCE=1 (autre lot).
+// Rien ici ne s'arme tout seul : rafraichirTaux() et amorcerTaux() ne sont appelées que par le déclencheur (taux-declencheur.js) que monter() ne branche que si V2_TAUX_BCE=1.
 const { col: colDefaut } = require('../db');
 
 const URL_BCE = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
@@ -79,17 +79,37 @@ async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new
         const pris = await c.updateOne(
             { devise: MARQUE, date: jour, ok: { $ne: true }, essais: { $lt: ESSAIS_MAX }, $or: [{ dernierEssaiLe: null }, { dernierEssaiLe: { $lte: new Date(maintenant.getTime() - PAUSE_ENTRE_ESSAIS_MS) } }] },
             { $inc: { essais: 1 }, $set: { dernierEssaiLe: maintenant } });
-        if (!pris || pris.modifiedCount !== 1) return { lu: false, raison: 'pas d\'essai permis aujourd\'hui (déjà lu, pause de 1 h, ou 3 essais faits)' };
+        if (!pris || pris.modifiedCount !== 1) return { lu: false, essaiRefuse: true, raison: 'pas d\'essai permis aujourd\'hui (déjà lu, pause de 1 h, ou 3 essais faits)' };
         try {
-            const r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) });
-            if (!r || !r.ok) throw Object.assign(new Error('réponse HTTP'), { code: `taux-http-${r && r.status}` });
-            const { date, taux } = lireTauxBCE(await r.text(), { journal });
-            if (!date) throw Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' });
-            for (const [devise, x] of Object.entries(taux)) await c.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true });
+            const r = await lireEtStocker({ lire, maintenant, col: c, journal });
             await c.updateOne({ devise: MARQUE, date: jour }, { $set: { ok: true } });
-            return { lu: true, date, devises: Object.keys(taux).length };
+            return r;
         } catch (e) { try { journal(`rafraîchissement des taux échoué : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
     } catch (e) { try { journal(`rafraîchissement des taux impossible : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
 }
 
-module.exports = { lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, parisDe, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };
+// La lecture elle-même (une seule source : URL_BCE) et l'écriture des taux ; lève en cas d'échec (le code, jamais l'URL ni le message). Journal : la date lue et le nombre de devises.
+async function lireEtStocker({ lire, maintenant, col, journal }) {
+    const r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) });
+    if (!r || !r.ok) throw Object.assign(new Error('réponse HTTP'), { code: `taux-http-${r && r.status}` });
+    const { date, taux } = lireTauxBCE(await r.text(), { journal });
+    if (!date) throw Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' });
+    for (const [devise, x] of Object.entries(taux)) await col.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true });
+    try { journal(`taux de la BCE lus : date ${date}, ${Object.keys(taux).length} devises`); } catch { /* muet */ }
+    return { lu: true, date, devises: Object.keys(taux).length };
+}
+
+// Lecture de DÉMARRAGE (la « graine » d'un service neuf ou réveillé) : si aucun taux n'est en base, ou si le plus récent est plus vieux que AGE_MAX_JOURS, une lecture tout de suite,
+// à n'importe quelle heure (la BCE sert alors le dernier fichier publié). Elle ne touche pas à la marque du jour : la lecture de 16 h reste due. Ne lève jamais.
+const RAISON_RECENT = 'taux récent en base';
+async function amorcerTaux({ fetch: lire = globalThis.fetch, maintenant = new Date(), col = null, journal = journalDefaut } = {}) {
+    try {
+        const { jour } = parisDe(maintenant);
+        const c = col || colDefaut('taux');
+        const dernier = await c.find({ devise: { $ne: MARQUE }, date: { $type: 'string' } }).sort({ date: -1 }).limit(1).next();
+        if (dernier && joursEntre(dernier.date, jour) <= AGE_MAX_JOURS) return { lu: false, raison: RAISON_RECENT };
+        return await lireEtStocker({ lire, maintenant, col: c, journal });
+    } catch (e) { try { journal(`lecture de démarrage des taux échouée : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
+}
+
+module.exports = { lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, amorcerTaux, parisDe, joursEntre, MARQUE, RAISON_RECENT, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };

@@ -153,6 +153,9 @@ function lireConfig(env = process.env) {
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
+        // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
+        // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
+        tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
         turnstile,
         cookieSecure
     });

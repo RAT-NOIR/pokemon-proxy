@@ -1373,6 +1373,17 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 
 ---
 
+## 9 bis. Les taux de change de la BCE : `V2_TAUX_BCE` (additif, aucun champ de réponse ne change)
+
+Une annonce hors euro n'a de verdict que si un taux du jour est en base (`versEUR` non nul, `tauxDate` renseigné) ; sinon `versEUR: null` et l'état `identifiee-sans-taux`, comme avant. Le déclencheur qui remplit la collection `taux` est **éteint par défaut** : la variable `V2_TAUX_BCE` (`0` ou `1`, toute autre valeur rend la configuration invalide) l'allume.
+
+- À `1`, au démarrage : une lecture tout de suite si aucun taux n'est en base ou si le plus récent a plus de 7 jours (`AGE_MAX_JOURS`) — la « graine » d'un service de test neuf ou réveillé après sommeil, sans copie de données. Un taux récent en base (y compris celui du jour) : aucune requête.
+- Puis une lecture par jour (jour de Paris) après 16 h 00 Paris, jamais plus d'une réussie par jour, avec au plus UN réessai une heure plus tard ; deux tentatives ratées le même jour : arrêt jusqu'au lendemain, écrit au journal.
+- Une seule source : le fichier public de la BCE. Le journal dit la date lue et le nombre de devises, ou le code de l'échec — jamais d'URL ni de message d'erreur.
+- À `0` ou absente : aucune minuterie, aucune lecture. À poser à `1` sur le service de test (variable à ajouter sur Render par le testeur).
+
+---
+
 ## 10. Ce qui n'est pas encore garanti
 
 - Les routes du scanner (`/api/scanner/…`) ne seront livrées que sur confirmation de l'éditeur.

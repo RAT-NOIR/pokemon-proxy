@@ -134,4 +134,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
