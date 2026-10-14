@@ -1,6 +1,7 @@
 'use strict';
 // Liaison d'une installation à un compte (PLAN-COMPTES §4.4). Le code est à usage unique, 10 min, 3 vivants au plus par compte.
 const { col } = require('../db'); const J = require('../comptes/jetons');
+const { RE_BEARER } = require('../porteur'); const { FORME } = require('../transport/idempotence');
 
 const RE_CODE = /^[A-Z0-9]{6}$/;
 const RE_ID = /^[0-9a-f]{32}$/;
@@ -28,8 +29,21 @@ async function creerCode(compteId, cfg, maintenant = new Date(), generation = un
     return { code, expire: expireLe.toISOString() };
 }
 
-/** → { statut, code } en cas de refus ; { ok:true, compte, jeton } sinon. `argent` est vérifié par l'appelant AVANT l'appel. */
-async function lier({ installation, code, argent, maintenant = new Date() }) {
+/** Idempotency-Key sur /api/compte/lier : la liaison fait TOURNER le jeton (l'ancien est révoqué dans la même écriture). Si la réponse se perd, le client n'a plus que l'ANCIEN jeton :
+ *  `rejeuLiaison` garde, 24 h, l'empreinte de l'ancien jeton et celle de la clé, pour que CE rejeu-là (même clé) retrouve l'installation et la réponse scellée — et rien d'autre. */
+async function porteurDeRejeu(req) {
+    const brute = req.headers['idempotency-key'], auth = req.get('authorization');
+    if (typeof brute !== 'string' || !FORME.test(brute)) return false;
+    const m = RE_BEARER.exec(auth || ''); if (!m) return false;
+    const inst = await col('installations').findOne({ 'rejeuLiaison.ancienneEmpreinte': J.empreinte(m[1]), 'rejeuLiaison.cle': J.empreinte(brute), 'rejeuLiaison.expireLe': { $gt: new Date() }, revoqueeLe: null });
+    if (!inst) return false;
+    req.v2 = { porteur: { type: 'installation', id: inst._id, compte: null, installation: inst, surface: 'extension', administrateur: false }, echec: null, rejeuLiaison: true };
+    return true;
+}
+
+/** → { statut, code } en cas de refus ; { ok:true, compte, jeton } sinon. `argent` est vérifié par l'appelant AVANT l'appel.
+ *  `rejeu` : { cle, expireLe } quand la requête porte une Idempotency-Key (la fenêtre de rejeu est posée dans la MÊME écriture que la rotation du jeton). */
+async function lier({ installation, code, argent, maintenant = new Date(), rejeu = null }) {
     if (installation.compteId) return { statut: 409, code: 'DEJA_LIE' };      // avant de toucher au code : il reste utilisable ailleurs
     const texte = typeof code === 'string' ? code.trim().toUpperCase() : '';
     if (!RE_CODE.test(texte)) return { statut: 404, code: 'CODE_INVALIDE' };
@@ -45,9 +59,10 @@ async function lier({ installation, code, argent, maintenant = new Date() }) {
     // O3 tour 2 (I-A) : un code d'une génération révolue (la réinitialisation est passée depuis sa création) ne lie rien, même vivant. Champ absent : jamais égal.
     if (!Number.isInteger(pris.generation) || !Number.isInteger(compte.generation) || pris.generation !== compte.generation) return { statut: 404, code: 'CODE_INVALIDE' };
     const jeton = J.genererJeton();
-    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0 } });
+    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0, rejeuLiaison: installation.rejeuLiaison ?? null } });
     const r = await col('installations').updateOne({ _id: installation._id, compteId: null, revoqueeLe: null, jetonEmpreinte: installation.jetonEmpreinte },
-        { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton), generation: pris.generation } });   // l'installation porte la génération du CODE
+        { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton), generation: pris.generation,
+            rejeuLiaison: rejeu ? { ancienneEmpreinte: installation.jetonEmpreinte, cle: J.empreinte(rejeu.cle), expireLe: rejeu.expireLe } : null } });   // l'installation porte la génération du CODE
     if (r.modifiedCount !== 1) { await rendre(); return { statut: 409, code: 'DEJA_LIE' }; }
     // relecture APRÈS l'écriture : si la réinitialisation est passée entre la lecture du compte et cette écriture, l'installation (déjà inerte : génération révolue) est déliée tout de suite,
     // faute de quoi elle resterait « liée » sans pouvoir ni se relier (DEJA_LIE) ni dépenser sa poche (compteId non nul)
@@ -76,4 +91,4 @@ async function revoquer(compteId, id) {
         { $set: { revoqueeLe: new Date(), jetonEmpreinte: J.empreinte(`revoque|${J.genererJeton()}`) } });   // empreinte remplacée par une valeur que personne ne peut présenter
     return r.modifiedCount === 1;
 }
-module.exports = { creerCode, lier, delier, revoquer, masquer };
+module.exports = { creerCode, lier, delier, revoquer, masquer, porteurDeRejeu };

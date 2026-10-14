@@ -191,12 +191,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     const CIBLES = {
         // libelle / userIdHerite de type non-texte : 201, libellé par défaut, aucun héritage — comportement VOULU et pinglé par test-installations.js (« libellé non-texte » → « Navigateur ») ;
         // la valeur n'est jamais stockée ni interrogée telle quelle (nettoyerLibelle ; l'héritage n'est tenté que pour une chaîne). Les OBJETS d'opérateur sont, eux, refusés (400) par la garde de clés.
-        'POST /api/installation': { auth: 'aucune', base: () => ({ versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'ancien-user-abus-0001' }), nullables: [],
+        'POST /api/installation': { auth: 'aucune', idemCle: true, base: () => ({ versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'ancien-user-abus-0001' }), nullables: [],
             tolere: {
                 libelle: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte → libellé par défaut « Navigateur » (voulu, test-installations.js) ; jamais stocké tel quel' },
-                userIdHerite: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte ignoré : l\'héritage n\'est tenté que pour une chaîne (installations/routes.js)' }
+                userIdHerite: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte : l\'héritage n\'est tenté que pour une chaîne, la réponse dit heritage « inconnu » (null : « absent ») (installations/routes.js)' }
             } },
-        'POST /api/compte/lier': { auth: 'bearer', base: () => ({ code: 'ABC123' }), nullables: [] },
+        'POST /api/compte/lier': { auth: 'bearer', idemCle: true, base: () => ({ code: 'ABC123' }), nullables: [] },
         'POST /api/compte/delier': { auth: 'bearer', base: () => ({}), nullables: [] },
         'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [] },   // D6 : l'inscription ne prend plus de mot de passe
         'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP }), nullables: [] },
@@ -408,7 +408,28 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     for (const r of ecritures) {
         const cible = CIBLES[r.cle]; if (!cible) continue;
         // ── (d) Idempotency-Key d'un AUTRE porteur : A joue une requête avec K ; B joue la même avec K ; B ne reçoit JAMAIS la réponse de A
-        if (cible.idem) {
+        if (cible.idemCle) {
+            // LOT IDEMPOTENCE-INSTALLATION : deux routes dont la réponse PORTE UN JETON honorent une clé facultative. Elles ne se jouent pas comme les autres : la réponse est un 201 (installation) ou un
+            // 200 (liaison) qui contient le jeton de A. Ce que B ne doit JAMAIS recevoir : ce jeton. Installation : aucun porteur, la clé (aléatoire) est la capacité — B avec la même clé mais un AUTRE corps
+            // est refusé (422) et ne voit rien ; liaison : le claim vit sous l'installation, B (une autre installation) exécute pour de bon.
+            const K = cle(); let repA, repB;
+            if (r.cle === 'POST /api/installation') {
+                repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-A' } });
+                repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-B' } });
+                if (repB.statut !== 422) ecart(r.cle, 'd', `B (même clé, autre corps) devait être refusée en 422 (statut ${repB.statut})`);
+            } else {
+                const a = await inst(0), b = await inst(0), CX = await compte();
+                const codeX = (await envoyer(V, { methode: 'POST', chemin: '/api/compte/code', entetes: siteH(CX.cookie), corps: {} })).json;
+                repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(a.jeton, { 'idempotency-key': K }), corps: { code: codeX && codeX.code } });
+                repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(b.jeton, { 'idempotency-key': K }), corps: { code: 'ZZZZZZ' } });
+                if (repB.statut !== 404) ecart(r.cle, 'd', `B (une autre installation, même clé) doit exécuter pour de bon : code inconnu 404 (statut ${repB.statut})`);
+            }
+            const attenduA = r.cle === 'POST /api/installation' ? 201 : 200, jetonA = repA.json && repA.json.jetonInstallation;
+            if (!(repA && repA.statut === attenduA && jetonA)) ecart(r.cle, 'd', `contrôle de l'instrument : la requête de A avec la clé devait réussir et rendre un jeton (statut ${repA && repA.statut})`);
+            if (!nonRejoue(repB)) ecart(r.cle, 'd', 'B a reçu un REJEU (Idempotency-Replayed) de la réponse de A');
+            if (jetonA && repB.texte.includes(jetonA)) ecart(r.cle, 'd', 'la réponse de B contient le jeton de A');
+            cellule(r.cle, 'd', 'jouee', 2, `A puis B, même clé (${repB.statut}) : B ne reçoit jamais le jeton de A`);
+        } else if (cible.idem) {
             const K = cle(); let repA, repB, ciblesA = null;
             if (r.cle === 'POST /api/identifier') {
                 const a = await inst(3), b = await inst(3);

@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const { col } = require('../db');
 const { repondreErreur } = require('../erreurs');
+const scelle = require('./scelle');
 
 const FORME = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -39,9 +40,14 @@ async function reclamer(cle, empreinteCorps, maintenant, cfg) {
     throw new Error('claim impossible');
 }
 
-/** @returns middleware Express */
-function idempotente(route, { obligatoire = true } = {}, cfg) {
+/** @returns middleware Express
+ *  `porteur` (facultatif) : fonction (req) → texte, pour une route SANS porteur résolu (POST /api/installation : personne n'a encore de jeton). Sans lui : le porteur de la requête.
+ *  `sceller` (facultatif) : la réponse conservée est SCELLÉE (transport/scelle.js) — pour une réponse qui porte un jeton, jamais en clair dans la base ; rejouée, elle est ouverte,
+ *  et un scellé illisible ne se rejoue pas ET ne s'exécute pas de nouveau (503). */
+function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, sceller = false } = {}, cfg) {
     const dureeFiniMs = cfg.retention.idempotenceHeures * 3600000;
+    const secret = cfg.empreinte && cfg.empreinte.secret;
+    if (sceller && (typeof secret !== 'string' || secret.length < 16)) throw new Error('idempotente : sceller exige cfg.empreinte.secret');
     return async function idempotenceV2(req, res, next) {
         try {
             const brute = req.headers['idempotency-key'];
@@ -50,7 +56,7 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
                 return repondreErreur(res, 'ENTREE', 'En-tête Idempotency-Key requis');
             }
             if (typeof brute !== 'string' || !FORME.test(brute)) return repondreErreur(res, 'ENTREE', 'Idempotency-Key invalide');
-            const porteur = porteurDe(req);
+            const porteur = porteurRoute ? porteurRoute(req) : porteurDe(req);
             if (!porteur) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');   // on ne partage jamais une clé entre inconnus
             const cle = `${porteur}|${route}|${brute}`, empreinteCorps = empreinteDuCorps(req.body), maintenant = new Date();
 
@@ -58,8 +64,15 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
             if (!r.gagne) {
                 const ex = r.existant;
                 if (ex.empreinteCorps !== empreinteCorps) return repondreErreur(res, 'ENTREE', 'Cette Idempotency-Key a déjà servi avec un autre contenu', { detail: 'cle-reutilisee' }, 422);
-                if (ex.etat === 'fini' && typeof ex.reponse === 'string')
-                    return res.status(ex.statut).set('Idempotency-Replayed', 'true').type('application/json').send(ex.reponse);
+                if (ex.etat === 'fini' && typeof ex.reponse === 'string') {
+                    let corps = ex.reponse;
+                    if (sceller) {
+                        try { corps = scelle.ouvrir(corps, secret, cle); }
+                        catch (e) { journal(e, 'ouverture'); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }   // jamais de nouvelle exécution : l'effet a déjà eu lieu
+                        res.set('Cache-Control', 'no-store');
+                    }
+                    return res.status(ex.statut).set('Idempotency-Replayed', 'true').type('application/json').send(corps);
+                }
                 return repondreErreur(res, 'DEBIT', 'Requête identique en cours de traitement', { reessayerDans: 2 });   // 2 s : le claim vit 2 min, mais le client doit réessayer vite
             }
 
@@ -84,7 +97,7 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
                 fini = true; clearInterval(battement); res.json = origJson; res.send = origSend;
                 const statut = this.statusCode;
                 const travail = statut < 300
-                    ? col('idempotence').updateOne(filtre, { $set: { etat: 'fini', statut, reponse: corps, expireLe: new Date(Date.now() + dureeFiniMs) } })
+                    ? col('idempotence').updateOne(filtre, { $set: { etat: 'fini', statut, reponse: sceller ? scelle.fermer(corps, secret, cle) : corps, expireLe: new Date(Date.now() + dureeFiniMs) } })
                     : col('idempotence').deleteOne(filtre);          // une panne ou un QUOTA n'est jamais rejoué figé
                 travail.catch(e => journal(e, 'fin')).then(() => origSend.call(this, corps));   // le rejeu doit trouver le résultat DÈS que le client a la réponse
                 return this;

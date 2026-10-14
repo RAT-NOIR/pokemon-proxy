@@ -46,7 +46,13 @@
           "installations"
         ],
         "summary": "Crée une installation (jeton rendu UNE fois, 3 essais)",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503.",
         "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -60,6 +66,17 @@
         "responses": {
           "201": {
             "description": "Installation créée.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une requête déjà traitée (même installation, même jeton).",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -69,7 +86,17 @@
             }
           },
           "400": {
-            "description": "Entrée invalide (ENTREE).",
+            "description": "Entrée invalide (ENTREE), dont une Idempotency-Key mal formée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `cle-reutilisee` : Idempotency-Key réutilisée avec un autre corps. Rien n'est créé.",
             "content": {
               "application/json": {
                 "schema": {
@@ -97,7 +124,7 @@
             }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "description": "INDISPONIBLE (index manquants, base injoignable, héritage en échec : l'installation créée est défaite, aucun jeton n'est perdu).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1431,9 +1458,15 @@
           "installations"
         ],
         "summary": "Lie l'installation au compte (le jeton est renouvelé, l'ancien révoqué)",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé et du même code, présenté avec l'ANCIEN jeton (la réponse s'est perdue), rend le MÊME nouveau jeton (`Idempotency-Replayed: true`) : une seule rotation. L'ancien jeton reste révoqué partout ailleurs (autre clé, sans clé, autre route, après 24 h : 401 JETON). La réponse conservée 24 h est scellée.",
         "security": [
           {
             "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
           }
         ],
         "requestBody": {
@@ -1449,10 +1482,31 @@
         "responses": {
           "200": {
             "description": "Installation liée.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une liaison déjà faite (même nouveau jeton).",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseLier"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `cle-reutilisee` : Idempotency-Key réutilisée avec un autre code. Rien n'est consommé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
                 }
               }
             }
@@ -4465,10 +4519,20 @@
           "jetonInstallation": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{43}$",
-            "description": "Rendu UNE fois ; le serveur n'en garde que l'empreinte."
+            "description": "Rendu UNE fois ; le serveur n'en garde que l'empreinte. Un rejeu de la même Idempotency-Key rend le MÊME jeton."
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "heritage": {
+            "enum": [
+              "repris",
+              "deja-migre",
+              "inconnu",
+              "absent",
+              "plafond-global"
+            ],
+            "description": "Ce qu'est devenu le `userIdHerite` de la 1.0.x. `repris` : portefeuille gratuit déplacé vers cette installation. `deja-migre` : déjà déplacé (ici ou ailleurs). `inconnu` : aucun portefeuille ne répond (ou valeur inutilisable). `plafond-global` : plafond global des essais du jour atteint, portefeuille intact. `absent` : aucun `userIdHerite` envoyé. Toujours présent dans un 201 (facultatif au schéma : les fausses réponses publiées avant ce champ restent valides)."
           }
         },
         "required": [

@@ -172,6 +172,12 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(U, 'POST /api/installation', 'deuxième de la même IP', 201, '/api/installation', { corps: { versionExtension: '2.0.0' }, entetes: mem });
         await jouer(U, 'POST /api/installation', 'plafond par IP et par jour', 429, '/api/installation', { corps: { versionExtension: '2.0.0' }, entetes: mem });
         await jouer(U, 'POST /api/installation', 'versionExtension de mauvais type', 400, '/api/installation', { corps: { versionExtension: 7 }, entetes: ip() });
+        // LOT IDEMPOTENCE-INSTALLATION : Idempotency-Key facultative (réponse scellée en base), champ `heritage`, 422 cle-reutilisee
+        const kI = cle(), ipI = ip(), corpsI = { versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'portefeuille-inexistant-contrat' };
+        const avecCle = await jouer(U, 'POST /api/installation', 'avec Idempotency-Key (heritage inconnu)', 201, '/api/installation', { corps: corpsI, entetes: { ...ipI, 'idempotency-key': kI } });
+        const rejeuI = await jouer(U, 'POST /api/installation', 'rejeu de la même clé (même installation, même jeton)', 201, '/api/installation', { corps: corpsI, entetes: { ...ipI, 'idempotency-key': kI } });
+        H.v('POST /api/installation : heritage "inconnu" rendu, le rejeu rend le même corps, marqué rejoué', [avecCle.json && avecCle.json.heritage, rejeuI.texte === avecCle.texte, rejeuI.entetes['idempotency-replayed']], ['inconnu', true, 'true']);
+        await jouer(U, 'POST /api/installation', 'clé réutilisée avec un autre corps', 422, '/api/installation', { corps: { ...corpsI, libelle: 'Firefox' }, entetes: { ...ipI, 'idempotency-key': kI } });
     }
     // identifier — la vraie chaîne
     const sc = await scanAmbigu(U);
@@ -517,6 +523,15 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(V, 'POST /api/compte/lier', 'code expiré', 410, '/api/compte/lier', { corps: { code: codeExpire }, entetes: extH(jetonInst) });
         const lie = await jouer(V, 'POST /api/compte/lier', 'code valide', 200, '/api/compte/lier', { corps: { code: code.json.code }, entetes: extH(jetonInst) });
         const jetonLie = lie.json && lie.json.jetonInstallation;
+        // LOT IDEMPOTENCE-INSTALLATION : lier avec Idempotency-Key, rejeu avec l'ANCIEN jeton (même nouveau jeton), puis la clé réutilisée avec un autre code (422)
+        {
+            const code2 = await jouer(V, 'POST /api/compte/code', 'code pour une liaison avec clé', 200, '/api/compte/code', { corps: {}, entetes: siteH(cookie) });
+            const x = await inst(0), kL = cle();
+            const l1 = await jouer(V, 'POST /api/compte/lier', 'avec Idempotency-Key', 200, '/api/compte/lier', { corps: { code: code2.json.code }, entetes: extH(x.jeton, { 'idempotency-key': kL }) });
+            const l2 = await jouer(V, 'POST /api/compte/lier', 'rejeu de la même clé avec l\'ancien jeton (même nouveau jeton)', 200, '/api/compte/lier', { corps: { code: code2.json.code }, entetes: extH(x.jeton, { 'idempotency-key': kL }) });
+            H.v('POST /api/compte/lier : le rejeu rend le même corps, marqué rejoué', [l2.texte === l1.texte, l2.entetes['idempotency-replayed']], [true, 'true']);
+            await jouer(V, 'POST /api/compte/lier', 'clé réutilisée avec un autre code', 422, '/api/compte/lier', { corps: { code: 'ABCDEF' }, entetes: extH(x.jeton, { 'idempotency-key': kL }) });
+        }
         await jouer(V, 'POST /api/compte/lier', 'installation déjà liée', 409, '/api/compte/lier', { corps: { code: 'ABCDEF' }, entetes: extH(jetonLie) });
         const seul = await inst(3);
         for (let k = 0; k < 5; k++) await jouer(V, 'POST /api/compte/lier', 'essais sous le plafond', 404, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
