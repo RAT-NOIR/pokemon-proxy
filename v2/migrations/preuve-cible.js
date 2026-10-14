@@ -4,7 +4,7 @@
 // donc il n'y en a qu'un, et il prend le PLUS STRICT des deux outils sur chaque point :
 //  · RÔLES (AMORÇAGE) : readWrite ou read, et SEULEMENT sur rm_essai — même `read` d'une autre base refuse ;
 //  · PRIVILÈGES (COMPTE-ESSAI) : toute action hors lecture doit viser { db: rm_essai, collection: <chaîne> } (ni cluster, ni anyResource, ni autre base) ET faire partie de la liste FERMÉE d'un
-//    readWrite MESURÉ sur la grappe d'essai ; `insert` et `update` sont exigés (un utilisateur qui ne peut pas écrire n'est pas celui qu'on croit) ;
+//    readWrite DOCUMENTÉ par MongoDB ; `insert` et `update` sont exigés (un utilisateur qui ne peut pas écrire n'est pas celui qu'on croit) ;
 //  · IDENTITÉ DE LA GRAPPE (AMORÇAGE) : hello.setName de la cible connu et DIFFÉRENT de celui de la production (la source) et de celui de cartes ; jugerHotes compare les hôtes sans connexion.
 // Écrite par ce qu'elle AUTORISE : tout cas non conclu (commande refusée, champ absent, erreur, cartes injoignable) BLOQUE et le dit.
 // Aucune raison ne contient un nom d'utilisateur, un setName, une URI ou le message d'un pilote.
@@ -12,10 +12,11 @@ const { ACTIONS_DE_LECTURE } = require('../chargeur/lecture-seule');
 
 const BASE_CIBLE = 'rm_essai', BASE_SOURCE = 'test';
 const ROLES_ADMIS = Object.freeze(['readWrite', 'read']);
-// Les 24 actions du rôle readWrite MESURÉES sur la grappe d'essai (relecture 3 d'AMORÇAGE), plus la lecture. Une action hors de cette liste, sur rm_essai même, refuse.
-// + cleanupStructuredEncryptionData (2026-10-14, décision du testeur) : elle fait partie du readWrite STANDARD des versions récentes de MongoDB (Queryable Encryption : nettoyage des
-//   métadonnées chiffrées de la base) ; la grappe d'essai la rend et l'étape 8 a été refusée sur elle. C'est la SEULE action ajoutée, et la ressource reste jugée (rm_essai seulement).
-const ACTIONS_READWRITE = Object.freeze(['collStats', 'compact', 'convertToCapped', 'createCollection', 'createIndex', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'remove', 'renameCollectionSameDB', 'update', 'collMod', 'changeStream', 'planCacheRead', 'planCacheWrite', 'bypassDocumentValidation', 'enableProfiler', 'reIndex', 'cleanupStructuredEncryptionData']);
+// SOURCE de la liste fermée : le rôle readWrite DOCUMENTÉ par MongoDB (doc « Built-In Roles », rôle readWrite, version actuelle ;
+// db.getRole("readWrite", { showPrivileges: true, showBuiltinRoles: true })), 25 actions — décision du testeur du 2026-10-14. Elle REMPLACE l'ancienne liste « mesurée » (relecture 3 d'AMORÇAGE) :
+// ses 6 actions absentes de la doc (bypassDocumentValidation, collMod, compact, enableProfiler, planCacheWrite, reIndex) sont désormais REFUSÉES.
+// Une action hors de cette liste refuse ; la ressource reste jugée (rm_essai seulement : ni cluster, ni anyResource, ni autre base).
+const ACTIONS_READWRITE = Object.freeze(['changeStream', 'cleanupStructuredEncryptionData', 'collStats', 'compactStructuredEncryptionData', 'convertToCapped', 'createCollection', 'createIndex', 'createSearchIndexes', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'dropSearchIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'listSearchIndexes', 'performRawDataOperations', 'planCacheRead', 'remove', 'renameCollectionSameDB', 'update', 'updateSearchIndex']);
 const ACTIONS_ECRITURE_ADMISES = Object.freeze(new Set([...ACTIONS_DE_LECTURE, ...ACTIONS_READWRITE]));
 const cause = e => (e && (e.codeName || e.code || e.name)) || 'erreur';     // jamais e.message : un pilote peut y mettre une adresse
 

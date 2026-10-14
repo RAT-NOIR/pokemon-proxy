@@ -11,9 +11,10 @@ if (PC) (async () => {
     H.vrai('0. amorcer-essai.js réexporte la fonction du module partagé (pas une copie)', A.prouverCible === PC.prouverCible && A.jugerHotes === PC.jugerHotes && A.clesDHotes === PC.clesDHotes && A.ouvrirCartesParDefaut === PC.ouvrirCartesParDefaut);
     H.vrai('   compte-essai.js appelle le module partagé (mêmes fonctions exportées)', E.prouverCible === PC.prouverCible && E.jugerHotes === PC.jugerHotes);
 
-    const ACT24 = ['collStats', 'compact', 'convertToCapped', 'createCollection', 'createIndex', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'remove', 'renameCollectionSameDB', 'update', 'collMod', 'changeStream', 'planCacheRead', 'planCacheWrite', 'bypassDocumentValidation', 'enableProfiler', 'reIndex'];
+    // 2026-10-14 : le rôle readWrite DOCUMENTÉ par MongoDB (Built-In Roles, version actuelle), 25 actions.
+    const ACT_DOC = ['changeStream', 'cleanupStructuredEncryptionData', 'collStats', 'compactStructuredEncryptionData', 'convertToCapped', 'createCollection', 'createIndex', 'createSearchIndexes', 'dbHash', 'dbStats', 'dropCollection', 'dropIndex', 'dropSearchIndex', 'find', 'insert', 'killCursors', 'listCollections', 'listIndexes', 'listSearchIndexes', 'performRawDataOperations', 'planCacheRead', 'remove', 'renameCollectionSameDB', 'update', 'updateSearchIndex'];
     const MESURE = { authenticatedUsers: [{ user: 'u', db: 'admin' }], authenticatedUserRoles: [{ role: 'readWrite', db: 'rm_essai' }],
-        authenticatedUserPrivileges: [{ resource: { db: 'rm_essai', collection: '' }, actions: ACT24 }, { resource: { db: 'rm_essai', collection: 'system.js' }, actions: ACT24 }] };
+        authenticatedUserPrivileges: [{ resource: { db: 'rm_essai', collection: '' }, actions: ACT_DOC }, { resource: { db: 'rm_essai', collection: 'system.js' }, actions: ACT_DOC }] };
     const clone = o => JSON.parse(JSON.stringify(o));
     const faux = ({ info, setName = 'set-essai', statutLeve = false, helloLeve = false, sansAuthInfo = false }) => ({ admin: () => ({ command: async c => {
         if (c.connectionStatus) { if (statutLeve) throw new Error('refus'); return sansAuthInfo ? {} : { authInfo: info }; }
@@ -26,7 +27,7 @@ if (PC) (async () => {
     const avecPriv = (extra, remplace) => i => { i.authenticatedUserPrivileges = remplace ? extra : [...i.authenticatedUserPrivileges, ...extra]; };
     const cas = [];
     const P = (nom, mod, attendu, opts = {}) => cas.push({ nom, mod, attendu, opts });
-    P('1 forme MESURÉE sur la grappe d\'essai (rm_essai + rm_essai.system.js, 24 actions chacune)', () => { }, true);
+    P('1 forme DOCUMENTÉE (readWrite MongoDB, 25 actions) sur rm_essai + rm_essai.system.js', () => { }, true);
     P('2 ressource { db: "", collection: "" } (toutes bases) + écriture', avecPriv([{ resource: { db: '', collection: '' }, actions: ['find', 'insert', 'remove'] }]), false);
     P('3 { anyResource: true } + écriture', avecPriv([{ resource: { anyResource: true }, actions: ['find', 'insert'] }]), false);
     P('4 { cluster: true } + écriture (shutdown, insert)', avecPriv([{ resource: { cluster: true }, actions: ['shutdown', 'insert'] }]), false);
@@ -66,13 +67,15 @@ if (PC) (async () => {
     P('11d grantRole sur rm_essai', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['grantRole'] }]), false);
     P('11e sans insert (find, update, remove seulement)', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['find', 'update', 'remove'] }], true), false);
     P('11f sans update (find, insert seulement)', avecPriv([{ resource: { db: 'rm_essai', collection: '' }, actions: ['find', 'insert'] }], true), false);
-    // 2026-10-14 : la grappe d'essai rend cleanupStructuredEncryptionData dans le readWrite (Queryable Encryption) ; l'étape 8 du testeur a été refusée sur elle.
-    const ACT25 = [...ACT24, 'cleanupStructuredEncryptionData'];
-    const forme25 = (...extra) => i => { i.authenticatedUserPrivileges = [{ resource: { db: 'rm_essai', collection: '' }, actions: ACT25 }, { resource: { db: 'rm_essai', collection: 'system.js' }, actions: ACT25 }, ...extra]; };
-    P('11g forme MESURÉE le 2026-10-14 (readWrite récent : + cleanupStructuredEncryptionData sur rm_essai) : admise', forme25(), true);
-    P('11h la même forme + createUser sur rm_essai : toujours refusée (seule cette action est ajoutée)', forme25({ resource: { db: 'rm_essai', collection: '' }, actions: ['createUser'] }), false);
-    P('11i la même forme + dropDatabase hors base (db: "test") : toujours refusée', forme25({ resource: { db: 'test', collection: '' }, actions: ['dropDatabase'] }), false);
-    P('11j la même forme + cleanupStructuredEncryptionData hors base (db: "test") : refusée (admise sur rm_essai seulement)', forme25({ resource: { db: 'test', collection: '' }, actions: ['cleanupStructuredEncryptionData'] }), false);
+    // 2026-10-14 : la liste fermée = le readWrite documenté par MongoDB, rien de plus, rien de moins.
+    const formeDoc = (...extra) => i => { i.authenticatedUserPrivileges = [{ resource: { db: 'rm_essai', collection: '' }, actions: ACT_DOC }, { resource: { db: 'rm_essai', collection: 'system.js' }, actions: ACT_DOC }, ...extra]; };
+    P('11g forme documentée seule : admise', formeDoc(), true);
+    P('11h la forme documentée + createUser sur rm_essai : refusée', formeDoc({ resource: { db: 'rm_essai', collection: '' }, actions: ['createUser'] }), false);
+    P('11i la forme documentée + dropDatabase hors base (db: "test") : refusée', formeDoc({ resource: { db: 'test', collection: '' }, actions: ['dropDatabase'] }), false);
+    P('11j la forme documentée + cleanupStructuredEncryptionData hors base (db: "test") : refusée', formeDoc({ resource: { db: 'test', collection: '' }, actions: ['cleanupStructuredEncryptionData'] }), false);
+    P('11k la forme documentée + compactStructuredEncryptionData sur { cluster: true } : refusée', formeDoc({ resource: { cluster: true }, actions: ['compactStructuredEncryptionData'] }), false);
+    ['bypassDocumentValidation', 'collMod', 'compact', 'enableProfiler', 'planCacheWrite', 'reIndex'].forEach((a, k) =>
+        P(`11${'lmnopq'[k]} la forme documentée + ${a} sur rm_essai (ancienne liste mesurée, hors doc) : refusée`, formeDoc({ resource: { db: 'rm_essai', collection: '' }, actions: [a] }), false));
     P('12 setName absent', () => { }, false, { setName: null });
     P('12b setName vide', () => { }, false, { setName: '' });
     P('12c setName = celui de la source (production sous un alias)', () => { }, false, { setName: 'set-prod' });
@@ -104,6 +107,7 @@ if (PC) (async () => {
 
     // jugerStatut seul (pur) : la même table, sans connexion
     H.vrai('15. jugerStatut(forme mesurée) : admis', PC.jugerStatut({ authInfo: clone(MESURE) }).ok === true);
+    H.vrai('16. ACTIONS_READWRITE = le readWrite documenté, exactement (25 actions)', JSON.stringify([...PC.ACTIONS_READWRITE].sort()) === JSON.stringify([...ACT_DOC].sort()));
     H.vrai('   jugerStatut(null) : refus', PC.jugerStatut(null).ok === false);
     // la connexion vers cartes est fermée après le hello (succès ET refus)
     let fermees = 0;
