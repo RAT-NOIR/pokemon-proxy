@@ -43,4 +43,4 @@ function resoudrePorteur(cfg) {
 }
 const exigerInstallation = (req, res, next) => (req.v2 && req.v2.porteur && req.v2.porteur.installation) ? next() : repondreErreur(res, 'JETON', 'Jeton d\'installation absent ou invalide');
 const exigerSession = (req, res, next) => (req.v2 && req.v2.porteur && req.v2.porteur.type === 'compte' && req.v2.porteur.surface === 'scanner') ? next() : repondreErreur(res, 'SESSION', 'Connexion requise');
-module.exports = { resoudrePorteur, exigerInstallation, exigerSession };
+module.exports = { resoudrePorteur, exigerInstallation, exigerSession, RE_BEARER };

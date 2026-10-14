@@ -16,12 +16,12 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 
 | route | qui l'appelle | identité | `Idempotency-Key` | corps → réponse |
 |---|---|---|---|---|
-| `POST /api/installation` | extension | aucune | non | `RequeteInstallation` → `201 ReponseInstallation` (le jeton n'est rendu qu'ICI) |
+| `POST /api/installation` | extension | aucune | facultative (§5 : un rejeu rend la MÊME installation et le MÊME jeton) | `RequeteInstallation` → `201 ReponseInstallation` (le jeton n'est rendu qu'ICI) |
 | `POST /api/identifier` (avec `contrat: 2`) | extension | Bearer | **oui** | `RequeteIdentifier` → `ReponseAnalyse` |
 | `POST /api/identifier/reponse` | extension | Bearer | facultative | `RequeteReponse` → `ReponseQuestion` |
 | `POST /api/retour-live` (avec Bearer) | extension | Bearer | facultative | `RequeteRetourLive` → `ReponseRetourLive` |
 | `POST /api/solde` (avec Bearer) | extension | Bearer | non | rien → `ReponseSolde` |
-| `POST /api/compte/lier` | extension | Bearer | non | `RequeteLier` → `ReponseLier` |
+| `POST /api/compte/lier` | extension | Bearer | facultative (§5 : un rejeu, même avec l'ANCIEN jeton, rend le MÊME nouveau jeton) | `RequeteLier` → `ReponseLier` |
 | `POST /api/compte/delier` | extension | Bearer | non | rien → `ReponseSolde` |
 | `POST /api/compte/inscription` | site | aucune (+ Turnstile) | non | `RequeteInscription` → `202 ReponseSimple` (toujours, que l'adresse existe ou non) |
 | `POST /api/compte/verification` | site | aucune (jeton du lien) | non | `RequeteVerification` → `ReponseVerification` |
@@ -74,9 +74,22 @@ Les deux routes du scanner sont **conditionnelles** : elles ne seront livrées q
     },
     "partage": false,
     "abonnement": null
-  }
+  },
+  "heritage": "absent"
 }
 ```
+
+**`heritage`** (additif ; toujours présent dans un `201`) dit ce qu'est devenu le `userIdHerite` de la 1.0.x, sans silence :
+
+| valeur | sens | ce que fait l'extension |
+|---|---|---|
+| `"repris"` | le portefeuille gratuit 1.0.x a été déplacé vers cette installation (jamais plus que la dotation d'une installation neuve) | effacer l'ancien `userId` |
+| `"deja-migre"` | ce portefeuille a déjà été déplacé (vers cette installation-ci ou vers une autre) | effacer l'ancien `userId` : rien à reprendre |
+| `"inconnu"` | aucun portefeuille 1.0.x ne répond à ce `userIdHerite` — ou la valeur envoyée est inutilisable (non-texte, vide, plus de 80 caractères) | effacer l'ancien `userId` |
+| `"plafond-global"` | *valeur additive* : le plafond global des essais du jour est atteint ; la reprise est refusée, le portefeuille 1.0.x reste INTACT | garder l'ancien `userId` (rien n'est consommé) ; aucune route ne rejoue la reprise sur une installation existante aujourd'hui |
+| `"absent"` | aucun `userIdHerite` n'a été envoyé (absent ou `null`) | — |
+
+**Si l'héritage échoue** (exception côté serveur), l'installation qui vient d'être créée est **défaite** et la route répond `503 INDISPONIBLE` : aucune installation orpheline, aucun jeton perdu, le portefeuille 1.0.x est intact (l'héritage est transactionnel). Un nouvel essai crée UNE installation. Choix : défaire plutôt que rendre un `201` avec un héritage « en erreur » — l'extension n'a aucune route pour réessayer la reprise sur une installation existante, un `201` aurait donc perdu les crédits hérités pour de bon. Exception unique : si l'héritage avait VALIDÉ avant que sa réponse ne se perde (l'installation porte alors les crédits déplacés), l'installation est gardée et la réponse est `201` avec `heritage: "repris"`. L'essai raté compte dans le plafond de `2` installations par IP et par jour (comme tout `POST` admis par le limiteur).
 
 ### 1.2 Identifier une annonce
 
@@ -1082,6 +1095,24 @@ Exception inchangée : `nom-contredit-sans-repli` reste `introuvable` / `photo-i
 
 La clé est conservée **24 h**, par porteur et par route : elle vaut par l'une ou l'autre adresse du serveur.
 
+### 5.1 Ce que rend un rejeu de `POST /api/identifier` : les trois cas de l'extension (quota du jour)
+
+Règle garantie et jouée par `test-idempotence-analyse.js` : **pour UNE clé, le client ne perd jamais plus d'UNE unité de son quota du jour ; une unité prise pour une analyse jamais rendue est rendue par le serveur.**
+
+| cas | réponse exacte | quota |
+|---|---|---|
+| **pendant** la première requête | `429 DEBIT`, `reessayerDans: 2`, en-tête `Retry-After: 2`. La première continue et se termine normalement. | une seule unité prise (par la première) |
+| **après un succès** (`200`, identifiée, question, ou « introuvable » remboursé : tout statut < 300) | la MÊME réponse, octet pour octet, même statut, `Idempotency-Replayed: true` ; la chaîne n'est pas rappelée | inchangé |
+| **après une erreur qui a compté ET rendue** (`500 SERVEUR` par exception, `503 INDISPONIBLE` par panne du catalogue : `facturation.rembourse: true`) | l'erreur n'est jamais conservée : le rejeu de la même clé **s'exécute pour de bon** (pas de `Idempotency-Replayed`). Il reprend UNE unité si son analyse aboutit, aucune si elle échoue de nouveau (elle est rendue à chaque fois) | au total : 1 unité si une analyse est enfin rendue, 0 sinon |
+| **après une erreur qui a compté et dont l'unité n'a PAS pu être rendue** (plafond de remboursements du jour atteint : `facturation: { debite: 1, rembourse: false, raisonNonRembourse: "plafond-jour" }`) | `429 DEBIT`, `reessayerDans: 2` : l'unité de cette clé est déjà prise, ni la chaîne ni un second débit ne sont rejoués. **Après ce `429 DEBIT`, l'extension doit prendre une CLÉ NEUVE** : rejouer la même clé ne finira jamais (une analyse neuve, qui prend sa propre unité) | l'unité perdue reste perdue (une seule) ; la clé ne coûte rien de plus |
+
+### 5.2 `POST /api/installation` et `POST /api/compte/lier` : `Idempotency-Key` facultative, réponse scellée
+
+Même motif de clé, même durée (24 h), mêmes règles que ci-dessus (`422 cle-reutilisee` pour un autre corps, `429 DEBIT reessayerDans: 2` si la première requête est en cours, `400 ENTREE` si la clé est mal formée). Sans clé : le comportement d'avant. **Comme ces deux réponses portent un jeton, la base ne les conserve jamais en clair** (AES-256-GCM, clé dérivée de `V2_SECRET_EMPREINTE`) ; une réponse conservée illisible (secret changé) rend `503 INDISPONIBLE`, sans rien ré-exécuter.
+
+- **`POST /api/installation` : la clé tient lieu de SECRET** (personne n'a encore de jeton, le rejeu rend le jeton à qui présente la clé et le même corps). Sur cette route, et elle seule, la clé doit avoir **32 à 64 caractères** `[A-Za-z0-9_-]` : `400 ENTREE` sinon, avec un `detail` exact par cause : `"cle-caractere-interdit"` (un caractère hors `[A-Za-z0-9_-]`, contrôlé en premier), `"cle-trop-longue"` (plus de 64) ou `"cle-trop-courte"` (moins de 32). Les limiteurs par IP de cette route (créations par jour, requêtes par heure) regroupent l'IPv6 par /56, comme le limiteur hérité ; une IPv4 compte telle quelle. **L'extension tire un UUID v4 ou 32 octets aléatoires (base64url ou hex)**, jamais une clé prévisible (horodatage, compteur). Un limiteur par IP, placé AVANT la recherche de la clé, compte TOUTES les requêtes de la route, rejeux compris (`V2_INSTALLATION_REQUETES_HEURE`, 30 par heure, `429 DEBIT`) : les devinettes sont bornées ; le plafond de 2 créations par IP et par jour ne change pas. L'en-tête n'est écrit dans aucun journal du serveur. **Risque restant, accepté** : le rejeu n'est pas lié à l'IP (une IP mobile change) ; qui lirait la clé dans un journal d'intermédiaire (CDN, proxy) dans les 24 h ET connaîtrait le corps exact obtiendrait le jeton. `422 cle-reutilisee` est gardé (avec 32 caractères aléatoires il ne révèle rien d'exploitable). La clé vaut sans jeton ; l'idempotence précède le plafond de 2 installations par IP et par jour : un rejeu ne le consomme pas. Un rejeu rend la même installation, le même `jetonInstallation`, le même `heritage` (`201`, `Idempotency-Replayed: true`) — jamais une deuxième installation, jamais un deuxième passage de l'héritage, même si la première réponse s'est perdue. Un `503` (héritage en échec) n'est pas conservé : le même `userIdHerite` peut être renvoyé avec la même clé.
+- **`POST /api/compte/lier`** : la liaison fait tourner le jeton ; si la réponse se perd, le client n'a plus que l'**ancien** jeton. Un rejeu (même clé, même code, ancien jeton dans `Authorization`) rend `200` avec **le même nouveau jeton**, `Idempotency-Replayed: true` : une seule rotation, une seule fusion, le code n'est consommé qu'une fois. **L'ancien jeton reste révoqué partout ailleurs** : avec une autre clé, sans clé, pour une autre route, ou après 24 h il rend `401 JETON` ; la clé n'ouvre jamais que ce rejeu-là, et jamais pour une autre installation. Un échec (`404` code invalide, `503` fusion refusée) n'est pas conservé et ne laisse aucune fenêtre de rejeu : la liaison défaite, l'ancien jeton reste le jeton courant. La réponse rejouée est celle d'origine : son `solde` et son `offre` sont ceux du moment de la liaison. **Une fois la rotation écrite, le nouveau jeton n'est jamais perdu** : si une lecture qui précède la réponse (`solde`, `offre`) échoue, la route répond `503 INDISPONIBLE` et remet l'**ancien** jeton en vigueur ; la liaison au compte et le déplacement des crédits restent faits (ils ne se défont pas sans risque pour l'argent). Le client garde donc un jeton qui marche, et un nouvel essai (même clé ou non) rend `409 DEJA_LIE` : le client le lit comme « déjà lié : garde ton jeton, relis ton compte ». Cas restant : un processus qui meurt entre la rotation et la remise de l'ancien jeton perd le jeton, comme avant le lot.
+
 ---
 
 ## 6. Les erreurs, et ce que chaque client doit faire
@@ -1106,7 +1137,7 @@ Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, messa
 | `MOT_DE_PASSE_FAIBLE` | 422 | mot de passe refusé à la confirmation (ou à la réinitialisation) : `detail` ∈ `trop-court` (moins de 10 caractères), `trop-long` (plus de 200), `egal-a-l-adresse`, et, à la confirmation seulement, `espaces-seulement` (D6) | afficher la règle |
 | `CODE_INVALIDE` | 404 | code de liaison ou jeton de lien inconnu ou déjà utilisé | redemander un code / un lien |
 | `CODE_EXPIRE` | 410 | code (10 min), lien (24 h) ou question (24 h) échu | redemander |
-| `DEJA_LIE` | 409 | l'installation est déjà liée | proposer de la délier d'abord |
+| `DEJA_LIE` | 409 | l'installation est déjà liée | **juste après un `503` de `POST /api/compte/lier`** (§5.2) : la liaison a réussi, c'est « déjà lié : garde ton jeton, relis ton compte » — ne PAS proposer de délier. Dans les autres cas : proposer de la délier d'abord |
 | `CONFLIT` | 409 | réponse différente sur une carte déjà tranchée ; **ou** `/api/retour-live` : prix live déjà renvoyé pour ce scan (sans `detail`) | ne pas rejouer ; afficher le résultat déjà obtenu |
 | `CONFLIT` + `detail: "borne-compte"` · `"borne-hors"` · `"borne-quantites"` · `"borne-sets"` · `"borne-service"` | 409 | `PUT /api/collection/…` : une borne de la collection est atteinte (§1.8) ; le message la nomme | **ne pas réessayer** : décocher d'abord, ou afficher le message |
 | `INDISPONIBLE` + `detail: "catalogue"` | 503 | `PUT /api/collection/…` : aucun catalogue de fiches n'est chargé (ou il ne répond pas) et la clé n'est pas encore au registre du set — rien n'est écrit ; avec `reessayerDans` (5 s) et `Retry-After` | **réessayer** dans quelques secondes (décocher, lire et recocher une clé déjà au registre passent) |

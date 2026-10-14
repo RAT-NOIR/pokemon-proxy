@@ -161,7 +161,8 @@ const FAC = 'components.parameters.IdempotencyKeyFacultative';
 H.v('Idempotency-Key FACULTATIVE : même nom, même en-tête, même motif, required:false', [aller(doc, `${FAC}.in`), aller(doc, `${FAC}.name`), aller(doc, `${FAC}.required`), aller(doc, `${FAC}.schema.pattern`)], ['header', 'Idempotency-Key', false, IDEM]);
 H.vrai('   la description dit POURQUOI elle est facultative', /facultative|non exigée|pas exigée/i.test(String(aller(doc, `${FAC}.description`))) && /rejeu/i.test(String(aller(doc, `${FAC}.description`))));
 const avecCleFac = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKeyFacultative')).map(o => `${o.methode} ${o.chemin}`).sort();
-H.v('Idempotency-Key facultative sur /reponse et /retour-live, et sur elles seules', avecCleFac, ['POST /api/identifier/reponse', 'POST /api/retour-live']);
+// LOT IDEMPOTENCE-INSTALLATION (additif) : /api/installation et /api/compte/lier honorent aussi une clé facultative (la réponse, qui porte un jeton, est conservée scellée)
+H.v('Idempotency-Key facultative sur /reponse, /retour-live, /api/installation et /api/compte/lier, et sur elles seules', avecCleFac, ['POST /api/compte/lier', 'POST /api/identifier/reponse', 'POST /api/installation', 'POST /api/retour-live']);
 // B1b.5 : les deux codes de détail que le serveur émet doivent être DITS au contrat, avec le sens à donner au client (définitif / à réessayer)
 const op = (chemin) => OPERATIONS.find(o => o.methode === 'POST' && o.chemin === chemin).op;
 const d409 = String(op('/api/retour-live').responses['409'].description), d503 = String(op('/api/identifier/reponse').responses['503'].description);
