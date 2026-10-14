@@ -42,7 +42,7 @@ async function solde(porteur, cfg, maintenant = new Date()) {
 // Contrôle SANS DÉBIT : ce porteur a-t-il au moins un crédit UTILISABLE (les mêmes poches que le débit, lues comme `solde` les annonce) ? Un administrateur (relu en base,
 // comme le débit) passe. Rien n'est écrit : le débit reste seul juge — ce contrôle ne fait qu'éviter de lire 12 Mo pour un refus d'argent certain.
 async function peutPayer(porteur, cfg, maintenant = new Date()) {
-    if (porteur.administrateur === true && porteur.type === 'compte' && (await col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' })) > 0) return { ok: true };
+    if (porteur.administrateur === true && porteur.type === 'compte' && Of.estAdministrateur(porteur, await col('comptes').findOne({ _id: porteur.id }, { projection: { role: 1 } }))) return { ok: true };
     // OFFRE-QUOTA : « peut-il payer ? » = lui reste-t-il une analyse aujourd'hui (même source que le débit : l'offre relue en base). Les anciens soldes ne comptent plus : ils ne se débitent plus.
     // Pro (restant: null) passe tant que le plafond technique n'est pas atteint (le débit reste seul juge) ; un compte non vérifié se voit demander de confirmer son adresse.
     const e = await Of.etatDe(porteur, cfg, maintenant);

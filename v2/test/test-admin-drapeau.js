@@ -69,6 +69,31 @@ const { emailCle } = require('../comptes/email-cle');
     const s6 = await solde(r6.json.jetonInstallation);
     H.v('   rôle rendu : true sans nouvelle liaison', [s6.json.solde.compte.administrateur], [true]);
 
+    // 6 bis. (M1 du tour 1) le drapeau et la FACTURATION ne divergent pas : sur un DÉBIT RÉEL (ledger.debiter), le motif « administrateur » du mouvement
+    // (d'où vient facturation.motif) existe si et seulement si solde.compte.administrateur est true. Garde-fou de toute divergence future entre les deux règles.
+    {
+        const argent = A.registre.obtenir('argent'); const { Types } = require('mongoose'); let k = 0;
+        const porteurDe = async (c, inst) => { const doc = await db.col('comptes').findOne({ _id: c._id }); return { type: 'compte', id: doc._id, compte: doc, installation: inst, surface: 'extension', administrateur: doc.role === 'administrateur' }; };
+        const cas = async (nom, c, pDeclare) => {
+            const inst = await creerInst({ compteId: c._id, lieeLe: new Date() });
+            const p = await porteurDe(c, inst.i); if (pDeclare !== undefined) p.administrateur = pDeclare;
+            const d = await argent.debiter(p, { scanId: String(new Types.ObjectId()), cleIdempotence: `drapeau-${nom}-${++k}`, surface: 'extension' });
+            const mv = await db.col('mouvements').findOne({ cleIdempotence: `drapeau-${nom}-${k}` });
+            const sd = await argent.solde(p);
+            return [d.ok === true && d.administrateur === true, Boolean(mv && mv.motif === 'administrateur'), sd.compte.administrateur];
+        };
+        const ordinaire = await creerCompte('debit-ordinaire@exemple.fr', { solde: { accueil: 5, achete: 5 } });
+        const admin = await creerCompte('debit-admin@exemple.fr', { role: 'administrateur' });
+        const rO = await cas('ord', ordinaire.c), rAd = await cas('adm', admin.c);
+        H.v('6 bis. débit réel d\'un administrateur : débit « administrateur », motif « administrateur », drapeau true', rAd, [true, true, true]);
+        H.v('   débit réel d\'un compte ordinaire : ni débit administrateur, ni motif, drapeau false', rO, [false, false, false]);
+        const obsolete = await creerCompte('debit-obsolete@exemple.fr', { role: 'administrateur', solde: { accueil: 5, achete: 5 } });
+        await db.col('comptes').updateOne({ _id: obsolete.c._id }, { $unset: { role: '' } });
+        const rOb = await cas('obs', obsolete.c, true);          // le porteur DÉCLARE encore administrateur (instantané périmé) : la base fait foi pour le débit ET pour le drapeau
+        H.v('   porteur périmé (déclare admin, rôle retiré en base) : débit ordinaire ET drapeau false', rOb, [false, false, false]);
+        for (const [nom, r] of [['administrateur', rAd], ['ordinaire', rO], ['périmé', rOb]]) H.vrai(`   cohérence (${nom}) : motif « administrateur » ⇔ drapeau`, r[1] === r[2]);
+    }
+
     // 7. la source unique : estAdministrateur est exporté par offre.js et solde/offre l'appliquent
     const Of = require('../argent/offre');
     H.v('7. offre.estAdministrateur : porteur déclaré ET rôle en base', [Of.estAdministrateur({ administrateur: true }, { role: 'administrateur' }), Of.estAdministrateur({ administrateur: true }, { role: 'x' }), Of.estAdministrateur({ administrateur: false }, { role: 'administrateur' }), Of.estAdministrateur({}, null), Of.estAdministrateur({ administrateur: 'true' }, { role: 'administrateur' })], [true, false, false, false, false]);

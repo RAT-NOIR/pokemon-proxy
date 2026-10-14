@@ -43,7 +43,8 @@ function prochainMinuitParis(d) {
 }
 
 // LA règle « administrateur » : le porteur le déclare (posé côté serveur par resoudrePorteur, jamais lu d'une requête) ET le rôle du compte, relu en base, le confirme.
-// Source unique : l'offre (pro illimité) et le drapeau `compte.administrateur` du Solde l'appellent toutes deux.
+// Source unique : l'offre (pro illimité), le drapeau `compte.administrateur` du Solde, le motif « administrateur » du débit (ledger.js) et `peutPayer` (solde.js) l'appellent.
+// Hors règle, volontairement : retour-live.js (l.45, l.121) ne lit que `porteur.administrateur` (le flag serveur du porteur déjà résolu, sans relecture du rôle) pour décrire une analyse DÉJÀ facturée.
 const estAdministrateur = (porteur, compte) => Boolean(porteur && porteur.administrateur === true && compte && compte.role === 'administrateur');
 
 // L'état d'un porteur, relu EN BASE. { nom, limite, nonVerifie?, administrateur? } — `limite` : ce que le compteur du jour autorise (0 = aucun débit). null = aucune offre.

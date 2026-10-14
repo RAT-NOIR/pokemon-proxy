@@ -65,7 +65,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     const mv = { ...base(porteur), le: maintenant, surface: surface ?? porteur.surface, type: 'debit', delta: -1, poche: null, credit: null, motif: null,
                  scanId, etat: 'debite', cleIdempotence: cleEff, ...(origine ? { cleOrigine: origine } : {}), expireLe: expireMouvement(maintenant, cfg) };
     // M3 — « administrateur » ne se croit pas sur l'objet porteur : il se relit en base (comptes.role), comme la vérification de l'hebdo
-    const admin = porteur.administrateur === true && porteur.type === 'compte' && (await col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' })) > 0;
+    const admin = porteur.administrateur === true && porteur.type === 'compte' && Of.estAdministrateur(porteur, await col('comptes').findOne({ _id: porteur.id }, { projection: { role: 1 } }));   // ADMIN-DRAPEAU : la règle d'offre.js, la même que compte.administrateur
     if (admin) {
         Object.assign(mv, { delta: 0, motif: 'administrateur' });
         try { await col('mouvements').insertOne(mv); } catch (e) { if (e.code !== 11000) throw e; }
