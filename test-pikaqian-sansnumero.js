@@ -29,7 +29,7 @@ const sansNum = (k, o = {}) => {
     return `<a class="w-full group" data-discover="true" href="/cards/${id}"><div class="x">${o.sansImg ? '' : o.imgSansSrc ? `<img alt="${nom}" loading="lazy"/>` : `<img alt="${nom}" src="${src}" loading="lazy"/>`}</div>${o.sansH2 ? '' : `<h2 class="t">${nom}</h2>`}${o.h2Double ? `<h2>autre</h2>` : ''}<p class="font-mono text-xs">${o.p ?? 'sv-p'}</p></a>`;
 };
 const ancresValides = n => Array.from({ length: n }, (_, i) => sansNum(i));
-const page = (nTuiles, ancresEnPlus) => `<!DOCTYPE html><html><head><title>${SV.diagnostic.title}</title></head><body><h1>${SV.diagnostic.h1}</h1><p>${SV.ancres} cards</p>${Array.from({ length: nTuiles }, (_, i) => tuileHtml(tuile(i + 1))).join('')}${ancresEnPlus.join('')}</body></html>`;
+const page = (nTuiles, ancresEnPlus) => `<!DOCTYPE html><html><head><title>${SV.diagnostic.title}</title></head><body><h1>${SV.diagnostic.h1}</h1><p>High to Low ${nTuiles + ancresEnPlus.length} of ${nTuiles + ancresEnPlus.length} cards</p>${Array.from({ length: nTuiles }, (_, i) => tuileHtml(tuile(i + 1))).join('')}${ancresEnPlus.join('')}</body></html>`;
 const juger = html => R.jugerPage(JSON.stringify({ url: `https://pikaqian.com/sets/${SV.code}`, html }));
 const appel = (nom, ...args) => (typeof P[nom] === 'function' ? P[nom](...args) : undefined);
 
@@ -70,8 +70,8 @@ verifier('ancresSansNumero : une page qui n\'est pas promo (code cs1bc) → l\'a
 // ── 2. LA FONCTION UNIQUE : jugerCompletude (tuiles = ancres AVEC numéro, à l'unité près) ─────────────────────────────────────────────
 const lien = k => ({ nom: `N${k}`, lien: `/cards/${UUID(200000 + k)}` });
 const ts = n => Array.from({ length: n }, (_, i) => tuile(i + 1));
-const jc = (ancres, nT, sansNumero) => appel('jugerCompletude', { ancres, tuiles: ts(nT), sansNumero }) ?? { complete: null };
-verifier('jugerCompletude : 758 ancres, 701 tuiles, 57 sans numéro → complète', [jc(758, 701, Array.from({ length: 57 }, (_, k) => lien(k))).complete, jc(758, 701, Array.from({ length: 57 }, (_, k) => lien(k))).sansNumero], [true, 57]);
+const jc = (ancres, nT, sansNumero) => appel('jugerCompletude', { ancres, tuiles: ts(nT), sansNumero, total: { ok: true, total: ancres } }) ?? { complete: null };   // lot PQ-ANNONCE : le total annoncé (ici « ancres of ancres ») est obligatoire dès qu'une ancre est sans numéro ; ses cas propres sont dans test-pikaqian-annonce.js
+verifier('jugerCompletude : 758 ancres, 701 tuiles, 57 sans numéro (total annoncé 758) → complète', [jc(758, 701, Array.from({ length: 57 }, (_, k) => lien(k))).complete, jc(758, 701, Array.from({ length: 57 }, (_, k) => lien(k))).sansNumero], [true, 57]);
 verifier('NON — 758 ancres, 700 tuiles, 57 sans numéro (une tuile en moins, à l\'unité près) → refusée, motif aux trois nombres', [jc(758, 700, Array.from({ length: 57 }, (_, k) => lien(k))).complete, jc(758, 700, Array.from({ length: 57 }, (_, k) => lien(k))).motif], [false, 'page partielle ou forme changée : 758 ancres, 700 tuiles, 57 sans numéro']);
 verifier('NON — 758 ancres, 701 tuiles, 56 sans numéro (une ancre sans numéro de moins listée) → refusée', jc(758, 701, Array.from({ length: 56 }, (_, k) => lien(k))).complete, false);
 verifier('NON — tuiles > ancres avec numéro (un fichier édité) → refusée : l\'égalité, pas une inégalité', jc(758, 702, Array.from({ length: 57 }, (_, k) => lien(k))).complete, false);
@@ -141,7 +141,7 @@ function envoyer(port, chemin, corps) {
     const L = require('./plan-pikaqian-appris');
     const b2 = fs.mkdtempSync(path.join(os.tmpdir(), 'lecteurs-sansnum-'));
     try {
-        const fiche = (sansNumero, ancres) => ({ schema: 1, code: 'promo-sv-p', url: 'https://pikaqian.com/sets/promo-sv-p', le: '2026-01-01T00:00:00.000Z', titre: SV.diagnostic.h1, ancres, tuilesLues: 701, tuiles: ts(701).map(t => ({ ...t })), origines: [], officielles: 0, ...(sansNumero === undefined ? {} : { sansNumero }) });
+        const fiche = (sansNumero, ancres) => ({ schema: 1, code: 'promo-sv-p', url: 'https://pikaqian.com/sets/promo-sv-p', le: '2026-01-01T00:00:00.000Z', titre: SV.diagnostic.h1, ancres, tuilesLues: 701, tuiles: ts(701).map(t => ({ ...t })), origines: [], officielles: 0, ...(sansNumero === undefined ? {} : { sansNumero }), ...(sansNumero === undefined || !sansNumero.length ? {} : { totalAnnonce: ancres }) });
         const sn57 = Array.from({ length: 57 }, (_, k) => lien(k));
         const cas = [['nouvelle fiche, 758 ancres, 57 sans numéro', sn57, 758, true], ['fiche ancienne (sans sansNumero), 758 ancres, 701 tuiles', undefined, 758, false], ['fiche ancienne, 701 ancres', undefined, 701, true], ['nouvelle fiche à 56 sans numéro seulement', sn57.slice(1), 758, false], ['nouvelle fiche, sansNumero = [] et 758 ancres', [], 758, false]];
         for (const [nom, sn, ancres, attendu] of cas) {
@@ -151,7 +151,7 @@ function envoyer(port, chemin, corps) {
             const lp = L.lireApprises(d1, () => null, []);
             const dp = path.join(b2, `passif-${Math.abs(nom.length * 31 + ancres)}-${nom.length}`);
             fs.mkdirSync(path.join(dp, 'promo-sv-p'), { recursive: true });
-            fs.writeFileSync(path.join(dp, 'promo-sv-p', 'page--20260101T000000Z.json'), JSON.stringify({ schema: 2, code: 'promo-sv-p', url: 'https://pikaqian.com/sets/promo-sv-p', le: '2026-01-01T00:00:00.000Z', fiche: 'x.json', sha256Html: 'x', titre: SV.diagnostic.h1, tuiles: ts(701), origines: [], ancres, flux: 'present', sansImageDansLeNavigateur: 0, lots: 0, recues: {}, refusees: {}, ...(sn === undefined ? {} : { sansNumero: sn }) }));
+            fs.writeFileSync(path.join(dp, 'promo-sv-p', 'page--20260101T000000Z.json'), JSON.stringify({ schema: 2, code: 'promo-sv-p', url: 'https://pikaqian.com/sets/promo-sv-p', le: '2026-01-01T00:00:00.000Z', fiche: 'x.json', sha256Html: 'x', titre: SV.diagnostic.h1, tuiles: ts(701), origines: [], ancres, flux: 'present', sansImageDansLeNavigateur: 0, lots: 0, recues: {}, refusees: {}, ...(sn === undefined ? {} : { sansNumero: sn }), ...(sn === undefined || !sn.length ? {} : { totalAnnonce: ancres }) }));
             const ji = await I.jugerCode({ code: 'promo-sv-p', dossierPassif: dp, db: null, M: null, table: [], attendu: () => null, racine: os.tmpdir() });
             const jr = R.jugerPage(JSON.stringify({ url: 'https://pikaqian.com/sets/promo-sv-p', html: page(701, Array.from({ length: ancres - 701 }, (_, i) => (sn === undefined || i >= sn.length ? `<a href="/cards/${UUID(400000 + i)}"></a>` : sansNum(i)))) }));
             verifier(`trois lecteurs — ${nom} : plan ${attendu ? 'lit' : 'refuse'}, importeur ${attendu ? 'passe la complétude' : 'page-partielle'}`, [lp.fiches.length === 1, ji.refus?.etat !== 'page-partielle'], [attendu, attendu]);

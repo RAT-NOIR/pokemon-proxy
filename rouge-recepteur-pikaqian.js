@@ -31,7 +31,11 @@ const MUTANTS_TEXTE = [
     { nom: 'définition élargie : code non exigé', fichier: 'pikaqian', texte: ['if (p == null || sansBalises(p) !== codeTuiles) continue;', 'if (p == null) continue;'] },
     { nom: 'complétude : égalité remplacée par ≤', fichier: 'pikaqian', texte: ['if (ts.length !== ancres - sans)', 'if (ts.length > ancres - sans)'] },
     { nom: 'complétude : sansNumero ignoré (la règle d\'avant)', fichier: 'pikaqian', texte: ['const ts = tuiles || [], sans = compterSansNumero(sansNumero, ts);', 'const ts = tuiles || [], sans = 0;'] },
-    { nom: 'récepteur : lecture d\'une copie (ancres > tuiles)', fichier: 'recepteur', texte: ['const completude = P.jugerCompletude({ ancres, tuiles, sansNumero });', 'const completude = { complete: !(ancres > tuiles.length), sansNumero: sansNumero.length, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles` };'] }
+    // LOT PQ-ANNONCE (2026-10-14) : « A of B cards » avec A ≠ B (vue filtrée) non comparé ; le total non comparé à tuiles + sans numéro ; le total jamais transmis à la règle par le récepteur
+    { nom: 'total : A === B non comparé', fichier: 'pikaqian', texte: ['const filtree = vues.find(v => v.a !== v.b);', 'const filtree = undefined;'] },
+    { nom: 'total : non comparé à tuiles + sans numéro', fichier: 'pikaqian', texte: ['if (ts.length + sans !== t.total) return', 'if (t.total < 0) return'] },
+    { nom: 'récepteur : total jamais transmis à la règle', fichier: 'recepteur', texte: ['P.jugerCompletude({ ancres, tuiles, sansNumero, total });', 'P.jugerCompletude({ ancres, tuiles, sansNumero });'] },
+    { nom: 'récepteur : lecture d\'une copie (ancres > tuiles)', fichier: 'recepteur', texte: ['const completude = P.jugerCompletude({ ancres, tuiles, sansNumero, total });','const completude = { complete: !(ancres > tuiles.length), sansNumero: sansNumero.length, motif: `page partielle ou forme changée : ${ancres} ancres, ${tuiles.length} tuiles` };'] }
 ];
 const mutants = [...nomsDesGardes.map(n => ({ nom: n, gardes: [n], fichier: 'recepteur' })), { nom: 'taille (déclaration + flux ensemble)', gardes: ['taille-declaree', 'taille-flux'], fichier: 'recepteur' },
     ...nomsP.map(n => ({ nom: n, gardes: [n], fichier: 'pikaqian' })), ...MUTANTS_TEXTE.map(m => ({ ...m, gardes: [] }))];
@@ -40,7 +44,7 @@ const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-recepteur-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));
 let anormaux = 0;
 // 2026-10-13 : QUATRE bancs (les pages, les images de /images, les pages promo du récepteur, le module pur des déclarations) ; un mutant « échoue » si l'un d'eux échoue
-const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js', 'test-pikaqian-sansnumero.js'];
+const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js', 'test-pikaqian-sansnumero.js', 'test-pikaqian-annonce.js'];
 const lance = (fichier, fichierP = null) => {
     const rs = BANCS.map(b => spawnSync(process.execPath, [path.join(__dirname, b)], { encoding: 'utf8', timeout: 180000, env: { ...process.env, PK_RECEPTEUR: fichier, ...(fichierP ? { PK_MODULE: fichierP } : {}) } }));
     const rate = rs.find(r => r.status !== 0);

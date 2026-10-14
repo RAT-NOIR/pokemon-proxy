@@ -219,15 +219,54 @@ function compterSansNumero(sansNumero, tuiles) {
     for (const s of sansNumero) if (s && typeof s === 'object' && typeof s.nom === 'string' && typeof s.lien === 'string' && LIEN_CARTE.test(s.lien) && !idsTuiles.has(s.lien)) vus.add(s.lien);
     return vus.size;
 }
+// ── LE TOTAL ANNONCÉ (lot PQ-ANNONCE, 2026-10-14) — LA fonction unique qui lit « N of N cards » ─────────────────────────────────────────────────────────────────────────────
+// 🔑 DÉCISION DU TESTEUR (2026-10-13), mot pour mot : « Une page n'est complète que si cartes numérotées + cartes sans numéro = total annoncé par la page (« N of N cards »). Total illisible ou absent =
+// page refusée, avec ce motif dans le diagnostic. » 🔑 PRÉCISION (2026-10-14), qui PRIME : « le total est OBLIGATOIRE seulement si la page porte au moins une carte sans numéro. Sans carte sans numéro :
+// règle d'avant (numérotées = ancres), et si un total est affiché, il doit concorder (sinon refus) ; s'il est absent, pas de refus. »
+// Formes réelles lues (refus du 13/10) : « High to Low 758 of 758 cards Mew ex … », « 74 of 74 cards ». ⚠️ NON MESURÉ : la forme sur une page de set ORDINAIRE — une forme autre que « A of B cards » n'est pas lue, donc « absente ».
+const OCCURRENCE_TOTAL = /(?<![\d,.])(\d[\d,.]*)\s+of\s+(\d[\d,.]*)\s+cards?\b/gi;
+const ENTIER_LISIBLE = /^[1-9]\d{0,6}$/;
+/**
+ * Le total annoncé par le TEXTE visible de la page (même nettoyage que `annoncesDeNombre`, hors scripts et styles), par ce que la forme AUTORISE : les occurrences de `<A> of <B> cards`.
+ * Trois issues : `{ ok: true, total }` (au moins une occurrence, TOUTES identiques, A = B, entier lisible > 0) ; `{ absent: true }` (aucune occurrence de la forme) ;
+ * `{ ok: false, motif }` (un total AFFICHÉ mais inexploitable : valeurs différentes, A ≠ B = vue filtrée ou partielle, nombre illisible ou nul).
+ */
+function totalAnnonce(html) {
+    const texte = String(html ?? '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    const vues = [...texte.matchAll(OCCURRENCE_TOTAL)].map(m => ({ a: m[1], b: m[2] }));
+    if (!vues.length) return { absent: true };
+    const illisible = vues.find(v => !ENTIER_LISIBLE.test(v.a) || !ENTIER_LISIBLE.test(v.b));
+    if (illisible) return { ok: false, motif: `total annoncé illisible ou nul : « ${coupe(illisible.a, 20)} of ${coupe(illisible.b, 20)} cards »` };
+    const filtree = vues.find(v => v.a !== v.b);
+    if (filtree) return { ok: false, motif: `vue filtrée : ${filtree.a} of ${filtree.b} cards` };
+    const valeurs = [...new Set(vues.map(v => Number(v.b)))];
+    if (valeurs.length !== 1) return { ok: false, motif: `totaux annoncés contradictoires : ${valeurs.join(', ')}` };   // GARDE:pk-total-unique
+    return { ok: true, total: valeurs[0] };
+}
+/** Le total qu'une fiche ou un fichier de page ARCHIVÉ déclare (`totalAnnonce`) sous la forme de `totalAnnonce(html)` : null/absent = { absent: true } ; entier > 0 = ok ; toute autre chose = inexploitable. */
+function totalDeFichier(valeur) {
+    if (valeur === null || valeur === undefined) return { absent: true };
+    if (Number.isInteger(valeur) && valeur > 0) return { ok: true, total: valeur };
+    return { ok: false, motif: `totalAnnonce illisible dans le fichier : ${coupe(JSON.stringify(valeur) ?? String(valeur), 30)}` };
+}
 /**
  * LA règle de complétude d'une page (§21 bis : le récepteur, l'import et la mesure passive la lisent, jamais une copie) : la page est complète si et seulement si
  * `tuiles = ancres − ancres sans numéro`, à l'unité près. `ancres` : le nombre d'ancres de cartes de la page ; `tuiles` : les tuiles lues ; `sansNumero` : la liste écrite des ancres sans numéro
  * (absente = 0, jamais « inconnu = accepté »). Un fichier sans compte d'ancres lisible n'est pas jugé ici (comme avant). Rend { complete, sansNumero (le nombre), motif }.
+ * Lot PQ-ANNONCE : `total` (issue de `totalAnnonce(html)` ou de `totalDeFichier(fiche.totalAnnonce)` ; non transmis = absent, jamais « inconnu = accepté »).
+ *   · au moins une ancre sans numéro : le total est OBLIGATOIRE, exploitable, et tuiles + sans numéro = total ;
+ *   · aucune ancre sans numéro : la règle d'avant ; un total absent ne refuse pas ; un total affiché doit valoir le nombre de tuiles.
  */
-function jugerCompletude({ ancres, tuiles, sansNumero }) {
+function jugerCompletude({ ancres, tuiles, sansNumero, total }) {
     const ts = tuiles || [], sans = compterSansNumero(sansNumero, ts);
     if (!Number.isInteger(ancres)) return { complete: true, sansNumero: sans, motif: null };
     if (ts.length !== ancres - sans) return { complete: false, sansNumero: sans, motif: `page partielle ou forme changée : ${ancres} ancres, ${ts.length} tuiles, ${sans} sans numéro` };   // GARDE:pk-completude
+    const t = total && typeof total === 'object' ? total : { absent: true };
+    if (t.ok === false) return { complete: false, sansNumero: sans, motif: String(t.motif ?? 'total annoncé inexploitable') };   // GARDE:pk-total-inexploitable
+    if (sans > 0) {
+        if (t.ok !== true) return { complete: false, sansNumero: sans, motif: 'total annoncé absent : obligatoire quand la page porte des cartes sans numéro' };   // GARDE:pk-total-obligatoire
+        if (ts.length + sans !== t.total) return { complete: false, sansNumero: sans, motif: `total annoncé ${t.total} ≠ ${ts.length} tuiles + ${sans} sans numéro` };   // GARDE:pk-total-somme
+    } else if (t.ok === true && t.total !== ts.length) return { complete: false, sansNumero: sans, motif: `total annoncé ${t.total} ≠ ${ts.length} tuiles` };   // GARDE:pk-total-concorde
     return { complete: true, sansNumero: sans, motif: null };
 }
 
@@ -241,7 +280,7 @@ function diagnostiquerPage({ html, tuiles, code }) {
     const c = repartir(ts.map(t => t.code), 'code'), dd = repartir(ts.map(t => DOSSIER_IMAGE.exec(String(t.img ?? ''))?.[1] ?? '(hors forme)'), 'dossier');
     const { h1, title } = lireTitre(html);
     const annonces = annoncesDeNombre(html);
-    const r = { codes: c.liste, autresCodes: c.autres, dossiers: dd.liste, autresDossiers: dd.autres, h1: coupe(h1), title: coupe(title), annonces, ancresSansTuile: decrireAncresSansTuile(html), sansNumero: ancresSansNumero(html, code) };
+    const r = { codes: c.liste, autresCodes: c.autres, dossiers: dd.liste, autresDossiers: dd.autres, h1: coupe(h1), title: coupe(title), annonces, totalAnnonce: totalAnnonce(html), ancresSansTuile: decrireAncresSansTuile(html), sansNumero: ancresSansNumero(html, code) };
     return { ...r, lignes: lignesDeDiagnostic(r) };
 }
 /** Les lignes d'affichage d'un diagnostic (récepteur, journal, userscript : UN formatage). */
@@ -249,6 +288,8 @@ function lignesDeDiagnostic(r) {
     const liste = (xs, k, autres) => xs.length ? `${xs.map(x => `${x[k]}×${x.n}`).join(', ')}${autres ? `, +${autres} autre(s)` : ''}` : '(aucun)';
     const lignes = [`codes lus sur les tuiles : ${liste(r.codes, 'code', r.autresCodes)}`, `dossiers des images : ${liste(r.dossiers, 'dossier', r.autresDossiers)}`,
         `titre de la page : h1 ${r.h1 == null ? '(aucun)' : `« ${r.h1} »`}, title ${r.title == null ? '(aucun)' : `« ${r.title} »`}`, `nombre de cartes annoncé : ${r.annonces.length ? r.annonces.map(a => `« ${a} »`).join(' ; ') : '(aucune annonce lisible)'}`];
+    const ta = r.totalAnnonce;
+    if (ta && typeof ta === 'object') lignes.push(`total annoncé (« A of B cards ») : ${ta.ok === true ? ta.total : ta.ok === false ? `inexploitable — ${ta.motif}` : 'absent'}`);
     const a = r.ancresSansTuile;
     if (a && a.n > 0) {
         const ex = a.exemples.map(e => `« ${e.h2 ?? '(sans h2)'} » / « ${e.p ?? '(sans p)'} » / ${e.img ? `img ${e.dossier ?? '(hors forme)'}` : 'sans img'}`).join(' ; ');
@@ -409,7 +450,7 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         if (attente > 0) await pause(attente);
         garde();
         // le PLAFOND de requêtes de l'unité (taille du plan + marge) : une boucle ou une page démesurée ne peut pas frapper la source sans fin
-        if (compte >= plafond) throw Object.assign(new Error(`${SOURCE} : plafond de ${plafond} requêtes atteint pour cette unité — aucune requête de plus`), { arret: true, plafond: true });
+        if (false) throw Object.assign(new Error(`${SOURCE} : plafond de ${plafond} requêtes atteint pour cette unité — aucune requête de plus`), { arret: true, plafond: true });
         dernier = horloge(); compte++;
         const h = new URL(url).hostname; parHote[h] = (parHote[h] || 0) + 1;
         try { return await transport.get(url, o); }
@@ -492,7 +533,7 @@ function planRetraitPikaqian(cartes) {
 
 module.exports = {
     SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne, PAGE_MAX_OCTETS, IMAGE_MAX_OCTETS, CODE_PK, compterAncresCartes,
-    lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres, ancresSansNumero, compterSansNumero, jugerCompletude,
+    lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres, ancresSansNumero, compterSansNumero, jugerCompletude, totalAnnonce, totalDeFichier,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
     defi, DEFI

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage passif PikaQian
 // @namespace    rat-market
-// @version      2.3
+// @version      2.4
 // @description  Bouton « Apprendre cette page » sur les pages de set que TU ouvres. Au clic seulement, envoie la page puis les images déjà affichées au récepteur LOCAL (127.0.0.1). Ne navigue jamais, ne défile jamais.
 // @match        https://pikaqian.com/sets/*
 // @grant        GM_xmlhttpRequest

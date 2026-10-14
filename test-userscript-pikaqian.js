@@ -25,7 +25,7 @@ const code = SRC.slice(m ? m[0].length : 0);
 const sansCommentaires = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\'"`])\/\/[^\n]*/g, '$1');
 
 // ── STATIQUE
-verifier('@version : 2.3', valeurs('version'), ['2.3']);
+verifier('@version : 2.4', valeurs('version'), ['2.4']);
 verifier('@match : les pages de set de pikaqian.com, rien d\'autre', valeurs('match'), ['https://pikaqian.com/sets/*']);
 verifier('@grant : GM_xmlhttpRequest seulement (ni cookie, ni stockage, ni GM_openInTab)', valeurs('grant'), ['GM_xmlhttpRequest']);
 verifier('@connect : 127.0.0.1 ET l\'hôte des images, rien d\'autre', valeurs('connect'), ['127.0.0.1', P.HOTE_IMAGES]);
