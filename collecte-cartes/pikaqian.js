@@ -450,7 +450,7 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         if (attente > 0) await pause(attente);
         garde();
         // le PLAFOND de requêtes de l'unité (taille du plan + marge) : une boucle ou une page démesurée ne peut pas frapper la source sans fin
-        if (false) throw Object.assign(new Error(`${SOURCE} : plafond de ${plafond} requêtes atteint pour cette unité — aucune requête de plus`), { arret: true, plafond: true });
+        if (compte >= plafond) throw Object.assign(new Error(`${SOURCE} : plafond de ${plafond} requêtes atteint pour cette unité — aucune requête de plus`), { arret: true, plafond: true });
         dernier = horloge(); compte++;
         const h = new URL(url).hostname; parHote[h] = (parHote[h] || 0) + 1;
         try { return await transport.get(url, o); }
