@@ -105,9 +105,9 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_REGLE_G` | `0` | la chaîne héritée décide | invalide | oui |
 | `V2_SECONDE_LECTURE` | `0` | éteinte : la garde des jumeaux rend sa question, octet pour octet comme avant le lot ; allumée sans fournisseur branché (`deps.secondeLecture`), elle ne fait rien et le dit au montage | invalide (autre chose que `0` ou `1`) | oui (§17) |
 | `V2_ESSAIS` / `V2_ACCUEIL` / `V2_HEBDO` / `V2_ABO_MENSUEL` | 3 / 25 / 2 / 100 | défauts | invalide (non entier, négatif) | oui ; `0` = aucune dotation |
-| `V2_PLAFOND_PANNES` / `V2_PLAFOND_QUESTIONS` | 5 / 30 | défauts | invalide | oui ; `0` refuse tout remboursement (le client paie) |
-| `V2_SANS_PRIX_JOUR` / `V2_LOT_TROP_GRAND_JOUR` | 5 / 10 | défauts | invalide | oui ; `0` refuse tout remboursement (le client paie) |
-| `V2_JUMEAUX_REMBOURSES_JOUR` | 20 | 20 refus de la garde des jumeaux remboursés par jour et par porteur, une unité par carte, **posé SANS mesure d'usage réel** ; plein, le refus retombe sur le plafond de pannes ordinaire | invalide | oui ; `0` renvoie tout au plafond de pannes |
+| `V2_DECLARES_SANS_COMPTE` / `V2_DECLARES_GRATUIT` / `V2_DECLARES_PRO` | 1 / 3 / 30 | déclarations du client (réponse « aucune » ou « ne-sait-pas », abandon, prix illisible déclaré) remboursées par jour de Paris et par porteur, UN compteur, plafond selon l'offre (PLAFOND-DECLARE, 2026-10-14) | invalide | oui ; `0` refuse tout remboursement de déclaration (le client paie) |
+| `V2_LOT_TROP_GRAND_JOUR` | 10 | défaut (inchangé) | invalide | oui ; `0` refuse tout remboursement (le client paie) |
+| `V2_PLAFOND_PANNES` / `V2_PLAFOND_QUESTIONS` / `V2_SANS_PRIX_JOUR` / `V2_JUMEAUX_REMBOURSES_JOUR` | sans objet | ignorées depuis PLAFOND-DECLARE : un seul avertissement au démarrage qui les nomme, jamais leur valeur | jamais invalide | non (pannes, introuvables et garde des jumeaux sont rendus sans plafond) |
 | `V2_LOT_CARTES_MAX` | 20 | 20 | invalide (non entier, < 2 ou > 100) | oui |
 | `V2_LECTURE_LIVE_MAX` | 5 | 5 | invalide | oui |
 | `V2_LOT_REPRISES_PASSAGE` | 200 | lots rejugés ou repris par phase et par passage du balayage (le plus ancien d'abord) ; entier de 1 à 5000 | invalide | oui |
