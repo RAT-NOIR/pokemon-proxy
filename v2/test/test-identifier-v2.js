@@ -460,6 +460,33 @@ async function semer(mode) {                                  // 'double' | 'sim
         for (const n of noms4) { const docs = await raw(n).find({}).toArray(); if (docs.some(d => JSON.stringify(d).includes(MARQUE))) trouvees.push(n); }
         H.v(`B6. défaut : 200 et la description n'est écrite dans AUCUNE des ${noms4.length} collections (dénominateur imprimé)`, [g4.statut, await raw('annonces').countDocuments({ _id: g4.json.scanId }), trouvees], [200, 0, []]);
         H.vrai('   le dénominateur contient analyses, idempotence et journal_scans', ['analyses', 'idempotence', 'journal_scans'].every(n => noms4.includes(n)));
+        // I1 (relecture r1) : le même balayage sur les chemins d'ÉCHEC et sur un lot — refus de quota, exception de la chaîne, refus délibéré, question, lot —
+        // collections ET lignes de journal capturées (console.error / warn / log) : le marqueur ne doit être nulle part.
+        const M2 = 'DESCRIPTION-MARQUEUR-ECHEC-5519';
+        const capt = []; const co = { e: console.error, w: console.warn, l: console.log };
+        const prendre = (...x) => { capt.push(x.map(a => (a instanceof Error ? `${a.message} ${a.stack}` : typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ')); };
+        console.error = prendre; console.warn = prendre; console.log = prendre;
+        const statuts = {};
+        try {
+            const q0 = await inst(3); await Q.poserRestant(`installation:${q0.i._id}`, 0, { limite: cfg.quotas.sansCompte });   // plus rien aujourd'hui : refus QUOTA
+            statuts.quota = (await poster(sv4.url, q0.jeton, corps({ title: 'Titre échec', description: M2 }), { nom: 'fuite-quota' })).statut;
+            for (const m of ['exception', 'introuvable', 'ambigue', 'produit-absent']) {
+                mode = m; const xe = await inst(3);
+                statuts[m] = (await poster(sv4.url, xe.jeton, corps({ title: 'Titre échec', description: M2 }), { nom: `fuite-${m}` })).statut;
+            }
+            const svLot = await appFabrique(cfgD, { identifierLot: async () => [{ statutHttp: 200, corps: { ...corpsAffirme(ID_A) } }, { statutHttp: 200, corps: { ...corpsAffirme(ID_B) } }, { statutHttp: 200, corps: { ...corpsAffirme(ID_A) } }] });
+            const xl = await inst(3);
+            statuts.lot = (await poster(svLot.url, xl.jeton, corps({ imageUrls: [IMAGE, IMAGE, IMAGE], title: 'Titre lot', description: M2 }), { nom: 'fuite-lot' })).statut;
+            await svLot.fermer();
+        } finally { console.error = co.e; console.warn = co.w; console.log = co.l; }
+        await attendre(500);
+        const noms5 = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name);
+        const trouvees5 = [];
+        for (const n of noms5) { const docs = await raw(n).find({}).toArray(); if (docs.some(d => JSON.stringify(d).includes(M2))) trouvees5.push(n); }
+        H.v('I1. chemins d\'échec : statuts rendus (quota 429, exception 500, introuvable/ambigue/produit-absent, lot 200) — les requêtes ont bien tourné', [statuts.quota, statuts.exception, statuts.lot], [429, 500, 200]);
+        H.v(`   le marqueur n'est dans AUCUNE des ${noms5.length} collections après ces ${Object.keys(statuts).length} requêtes`, trouvees5, []);
+        H.v(`   ni dans aucune des ${capt.length} lignes de journal capturées`, capt.filter(l => l.includes(M2)).length, 0);
+        H.vrai('   le journal capturé n\'est pas vide (le crochet capte bien)', capt.length > 0);
         await sv4.fermer();
     }
     H.v(`contrat : ${reponsesValidees} réponses d'analyse validées contre ReponseAnalyse, écarts`, ecartsContrat, 0);

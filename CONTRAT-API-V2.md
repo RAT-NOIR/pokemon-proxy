@@ -1248,7 +1248,7 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | A4 | question « débitée à la réponse, 0 à l'émission » | **réservée** à l'émission : `debite: 0, reserve: 1`, débitée à la réponse, rendue à l'abandon | C2 |
 | A5 | `POST /api/repondre-question { userId, scanId, idProduct }`, `POST /scanner/analyses/:id/choix { index, idInterne }` | **`POST /api/identifier/reponse`** et **`POST /api/scanner/analyses/{id}/reponse`**, même corps `{ scanId, carte, choix }` | C3 |
 | A6 | liaison `{ userId, code }` | `{ code }` + Bearer : le `userId` ne suffit plus à rien | C4 |
-| A7 | description « non conservée » / « 3 mois » | expurgée côté serveur, **conservée 90 jours** puis effacée (§8) | C5, C6 |
+| A7 | description « non conservée » / « 3 mois » | expurgée côté serveur, **non conservée par défaut** (depuis le 2026-10-14 ; **90 jours** puis effacée seulement avec `V2_DESCRIPTION_CONSERVEE=1`) (§8) | C5, C6 |
 | A8 | « secours `onrender.com` » listé parmi les origines CORS | adresse de secours du **serveur**, pas une origine | C18, Q6 |
 | A9 | `variante` toujours une valeur de la liste | **`null`** quand l'édition n'est pas connue (jamais `normale` deviné) | Q31 |
 | A10 | `liens.cardmarket` toujours une adresse | **`null`** tant que numéro ET rareté ne sont pas connus (jamais de lien anonyme) ; même règle pour `impressions[].lien` | Q31 |
