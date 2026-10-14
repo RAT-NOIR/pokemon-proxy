@@ -13,7 +13,7 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     const pi = await inst();
     const s1 = await S.solde(pi, cfg, t);
     H.v('installation non liée : 3 essais', sous(s1, { total: 0, essai: 0, accueil: 0, hebdo: 0, achete: 0, hebdoMax: 0, prochainHebdo: 0, compte: 0 }),
-        { total: 3, essai: 3, accueil: 0, hebdo: 0, achete: 0, hebdoMax: 0, prochainHebdo: null, compte: { lie: false, emailMasque: null, verifie: false } });
+        { total: 3, essai: 3, accueil: 0, hebdo: 0, achete: 0, hebdoMax: 0, prochainHebdo: null, compte: { lie: false, emailMasque: null, verifie: false, administrateur: false } });
     H.v('   partage true, abonnement null', [s1.partage, s1.abonnement], [true, null]);
     // 2. compte vérifié : 17 accueil, 1 hebdo consommé sur 2, 3 achetés
     const pc = await compte({ email: 'vincent@exemple.fr', solde: { accueil: 17, achete: 3 } });
@@ -21,7 +21,7 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     const s2 = await S.solde(pc, cfg, t);
     H.v('compte vérifié : 17 + 1 + 3', sous(s2, { total: 0, accueil: 0, hebdo: 0, achete: 0, hebdoMax: 0, prochainHebdo: 0, essai: 0 }), { total: 21, accueil: 17, hebdo: 1, achete: 3, hebdoMax: 2, prochainHebdo: '2026-10-12', essai: 0 });
     // 4. e-mail masqué
-    H.v('emailMasque', s2.compte, { lie: true, emailMasque: 'v•••@exemple.fr', verifie: true });
+    H.v('emailMasque', s2.compte, { lie: true, emailMasque: 'v•••@exemple.fr', verifie: true, administrateur: false });
     // 3. NON vérifié => accueil 0 et hebdo 0 même si la base dit autre chose
     const pn = await compte({ verifie: false, solde: { accueil: 25, achete: 4 } });
     const s3 = await S.solde(pn, cfg, t);

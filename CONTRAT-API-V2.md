@@ -648,6 +648,8 @@ Le mot de passe ne se donne PAS à l'inscription (décision D6, voir §1.6 ter) 
 { "email": "vous@exemple.fr", "motDePasse": "un mot de passe long" }
 ```
 
+**`compte.administrateur` (additif, ADMIN-DRAPEAU).** L'objet `compte` du Solde (`solde.compte`, présent dans toutes les réponses qui portent un Solde : `POST /api/solde`, `POST /api/compte/lier`, `POST /api/compte/delier`, `POST /api/identifier`, `GET /api/compte`…) et l'objet `compte` de `ReponseLier` portent un booléen optionnel `administrateur`. Il vaut `true` quand le porteur est un compte au rôle administrateur — le rôle est relu en base, par la MÊME règle que le motif `administrateur` de la `facturation` (`offre.estAdministrateur`) — et `false` sinon : compte ordinaire, installation sans compte lié (l'objet `compte` reste présent, `lie: false`). Il ne donne **aucun droit** : il ne fait que refléter un rôle déjà jugé côté serveur, et aucune route ne lit un drapeau venant du client (un corps ou un en-tête qui porte `administrateur: true` ne change rien). Une réponse qui ne le porte pas (anciennes fausses réponses) se lit comme `false`.
+
 `POST /api/compte/code` rend un code de liaison à afficher dans la page du compte ; l'extension le saisit :
 
 ```json schema=ReponseCodeLiaison
