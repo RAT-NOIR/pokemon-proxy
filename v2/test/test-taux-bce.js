@@ -13,7 +13,8 @@ const le = iso => new Date(iso);
 const J8_10H = le('2026-10-08T08:00:00Z');     // 10 h Paris (avant l'heure de lecture)
 const J8_17H = le('2026-10-08T15:00:00Z');     // 17 h Paris
 const H1 = 3600 * 1000;
-const faux = (corps = XML, ok = true) => { const o = { n: 0, fetch: async () => { o.n++; return { ok, status: ok ? 200 : 503, text: async () => corps }; } }; return o; };
+const faux = (corps = XML, ok = true) => { const o = { n: 0, corps, fetch: async () => { o.n++; return { ok, status: ok ? 200 : 503, text: async () => o.corps }; } }; return o; };
+const XML_VEILLE = XML.replace(/2026-10-08/g, '2026-10-07');
 const casse = () => { const o = { n: 0, fetch: async () => { o.n++; throw new Error('BCE en panne'); } }; return o; };
 
 (async () => {
@@ -93,6 +94,7 @@ const casse = () => { const o = { n: 0, fetch: async () => { o.n++; throw new Er
     {
         await vider();
         const f = faux(); const { d, h } = lancer(f, J8_17H); await d.amorce;
+        f.corps = XML.replace(/2026-10-08/g, '2026-10-09');
         h.t = le('2026-10-09T08:00:00Z'); await d.passe();
         v('le lendemain avant 16 h => pas de lecture', f.n, 1);
         h.t = le('2026-10-09T14:00:00Z'); await d.passe();
@@ -116,6 +118,82 @@ const casse = () => { const o = { n: 0, fetch: async () => { o.n++; throw new Er
         h.t = le('2026-10-09T15:00:00Z'); await d.passe();
         v('le jour suivant => nouvelle tentative', f.n, 3);
         d.arreter();
+    }
+    // ── C1 : le déclencheur est monté AVANT la connexion de la base (index.js) — rien ne part, rien ne se compte ; à la connexion, la graine part tout de suite
+    {
+        await vider(); journal.length = 0;
+        const f = faux(); let prete = false, cb = null;
+        const { d, h } = lancer(f, J8_17H, { pret: () => prete, quandPret: c => { cb = c; } });
+        await d.amorce;
+        v('base pas connectée à 17 h => 0 requête', f.n, 0);
+        vrai('un abonnement à la connexion est posé', typeof cb === 'function');
+        h.t = new Date(J8_17H.getTime() + 10 * 60000); await d.passe();
+        v('un coup d\'œil de la minuterie base non prête => toujours 0 requête', f.n, 0);
+        prete = true; cb(); await d.amorce;
+        v('à la connexion (10 min plus tard, sans attendre 1 h) => la graine part : UNE requête', f.n, 1);
+        v('le taux est en base', await db.col('taux').countDocuments({ devise: 'GBP', date: '2026-10-08' }), 1);
+        d.arreter();
+        // même scène à 10 h : la graine part à la connexion, sans attendre 16 h
+        await vider();
+        const g = faux(); let p2 = false, cb2 = null;
+        const b = lancer(g, J8_10H, { pret: () => p2, quandPret: c => { cb2 = c; } });
+        await b.d.amorce; p2 = true; cb2(); await b.d.amorce;
+        v('démarrage à 10 h base pas prête puis connectée => une graine', g.n, 1);
+        b.d.arreter();
+    }
+    // ── I1 : un fichier de la veille lu à 16 h 05 ne clôt pas le jour ; UN réessai à +1 h lit celui du jour
+    {
+        await vider(); journal.length = 0;
+        const f = faux(XML_VEILLE); const t0 = le('2026-10-08T14:05:00Z');          // 16 h 05 Paris
+        const { d, h } = lancer(f, t0); await d.amorce;
+        v('16 h 05, la BCE sert encore le fichier de la veille => 1 lecture, jour non clos', f.n, 1);
+        f.corps = XML;
+        h.t = new Date(t0.getTime() + 20 * 60000); await d.passe();
+        v('20 min plus tard => pas de relecture (pause)', f.n, 1);
+        h.t = new Date(t0.getTime() + H1 + 1000); await d.passe();
+        v('+1 h => UN réessai, il lit le fichier du jour', f.n, 2);
+        v('le taux du jour (2026-10-08) est en base', await db.col('taux').countDocuments({ devise: 'GBP', date: '2026-10-08' }), 1);
+        h.t = new Date(t0.getTime() + 3 * H1); await d.passe();
+        v('ensuite plus aucune lecture ce jour-là', f.n, 2);
+        d.arreter();
+    }
+    // ── M1 : un jour sans publication (fichier de la veille toute la journée) : 2 lectures au plus, journal véridique
+    {
+        await vider(); journal.length = 0;
+        const f = faux(XML_VEILLE); const t0 = le('2026-10-08T15:00:00Z');
+        const { d, h } = lancer(f, t0); await d.amorce;
+        for (const k of [1, 2, 3, 4]) { h.t = new Date(t0.getTime() + k * H1 + 5000); await d.passe(); }
+        v('fichier de la veille toute la journée => 2 lectures, pas plus', f.n, 2);
+        vrai('le journal dit « fichier du 2026-10-07, pas encore celui du jour »', journal.some(m => m.includes('fichier du 2026-10-07') && m.includes('pas encore celui du jour')));
+        vrai('le journal ne parle pas de requêtes échouées', !journal.some(m => /échou|ratée/.test(m)));
+        d.arreter();
+        // essai refusé par la marque en base (aucune requête) : message « aucune requête », pas d'alarme d'arrêt
+        await vider(); journal.length = 0;
+        await db.col('taux').insertOne({ devise: 'GBP', date: '2026-10-07', rate: 0.85 });
+        await db.col('taux').insertOne({ devise: T.MARQUE, date: '2026-10-08', essais: 1, dernierEssaiLe: new Date('2026-10-08T14:00:00Z'), ok: true });
+        const g = faux(); const b = lancer(g, J8_17H); await b.d.amorce;
+        for (const k of [1, 2, 3]) { b.h.t = new Date(J8_17H.getTime() + k * H1 + 5000); await b.d.passe(); }
+        v('marque ok en base => 0 requête', g.n, 0);
+        vrai('le journal dit « aucune requête »', journal.some(m => m.includes('aucune requête')));
+        vrai('et ne crie pas à l\'arrêt', !journal.some(m => m.includes('arrêt jusqu')));
+        b.d.arreter();
+    }
+    // ── M3 : un fichier non plausible n'est jamais écrit
+    {
+        const compte = () => db.col('taux').countDocuments({ devise: { $ne: T.MARQUE } });
+        await vider();
+        const futur = faux(XML.replace(/2026-10-08/g, '2026-10-20')); const a = lancer(futur, J8_17H); await a.d.amorce;
+        v('date future => rien d\'écrit', await compte(), 0); a.d.arreter();
+        await vider();
+        const nul = faux(XML.replace(/rate='[^']*'/g, "rate='0'")); const b = lancer(nul, J8_17H); await b.d.amorce;
+        v('aucun taux valable (tous à 0) => rien d\'écrit', await compte(), 0); b.d.arreter();
+        await vider();
+        const nan = faux(XML.replace(/rate='[^']*'/g, "rate='abc'")); const c = lancer(nan, J8_17H); await c.d.amorce;
+        v('taux non numériques => rien d\'écrit', await compte(), 0); c.d.arreter();
+        await vider();
+        await db.col('taux').insertOne({ devise: 'GBP', date: '2099-01-01', rate: 0.85 });
+        const g = faux(); const e = lancer(g, J8_10H); await e.d.amorce;
+        v('une date future en base ne masque pas la graine', g.n, 1); e.d.arreter();
     }
     // ── la minuterie ne retient pas le processus et s'arrête
     {

@@ -82,18 +82,26 @@ async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new
         if (!pris || pris.modifiedCount !== 1) return { lu: false, essaiRefuse: true, raison: 'pas d\'essai permis aujourd\'hui (déjà lu, pause de 1 h, ou 3 essais faits)' };
         try {
             const r = await lireEtStocker({ lire, maintenant, col: c, journal });
-            await c.updateOne({ devise: MARQUE, date: jour }, { $set: { ok: true } });
-            return r;
-        } catch (e) { try { journal(`rafraîchissement des taux échoué : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
+            // Le jour n'est clos que si le fichier est celui du jour de Paris : celui de la veille, servi entre 16 h 00 et la publication, laisse la marque ouverte (réessai permis après la pause).
+            if (r.date === jour) await c.updateOne({ devise: MARQUE, date: jour }, { $set: { ok: true } });
+            return { ...r, requete: true };
+        } catch (e) { try { journal(`rafraîchissement des taux échoué : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, requete: Boolean(e && e.requeteParti), raison: codeErr(e) }; }
     } catch (e) { try { journal(`rafraîchissement des taux impossible : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
 }
 
 // La lecture elle-même (une seule source : URL_BCE) et l'écriture des taux ; lève en cas d'échec (le code, jamais l'URL ni le message). Journal : la date lue et le nombre de devises.
+// Un fichier non plausible n'est JAMAIS écrit : date future (par rapport au jour de Paris), aucune devise valable (les devises au taux non numérique ou ≤ 0 sont ignorées une à une par lireTauxBCE).
+// Les erreurs levées après le départ de la requête portent `requeteParti` (le déclencheur ne compte une tentative que si une requête est partie).
 async function lireEtStocker({ lire, maintenant, col, journal }) {
-    const r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) });
-    if (!r || !r.ok) throw Object.assign(new Error('réponse HTTP'), { code: `taux-http-${r && r.status}` });
-    const { date, taux } = lireTauxBCE(await r.text(), { journal });
-    if (!date) throw Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' });
+    const marque = e => Object.assign(e, { requeteParti: true });
+    let r;
+    try { r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) }); } catch (e) { throw marque(e instanceof Error ? e : new Error('x')); }
+    if (!r || !r.ok) throw marque(Object.assign(new Error('réponse HTTP'), { code: `taux-http-${r && r.status}` }));
+    let texte;
+    try { texte = await r.text(); } catch (e) { throw marque(e instanceof Error ? e : new Error('x')); }
+    const { date, taux } = lireTauxBCE(texte, { journal });
+    if (!date) throw marque(Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' }));
+    if (date > parisDe(maintenant).jour) throw marque(Object.assign(new Error('date future'), { code: 'taux-date-future' }));
     for (const [devise, x] of Object.entries(taux)) await col.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true });
     try { journal(`taux de la BCE lus : date ${date}, ${Object.keys(taux).length} devises`); } catch { /* muet */ }
     return { lu: true, date, devises: Object.keys(taux).length };
@@ -106,10 +114,10 @@ async function amorcerTaux({ fetch: lire = globalThis.fetch, maintenant = new Da
     try {
         const { jour } = parisDe(maintenant);
         const c = col || colDefaut('taux');
-        const dernier = await c.find({ devise: { $ne: MARQUE }, date: { $type: 'string' } }).sort({ date: -1 }).limit(1).next();
-        if (dernier && joursEntre(dernier.date, jour) <= AGE_MAX_JOURS) return { lu: false, raison: RAISON_RECENT };
-        return await lireEtStocker({ lire, maintenant, col: c, journal });
-    } catch (e) { try { journal(`lecture de démarrage des taux échouée : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
+        const dernier = await c.find({ devise: { $ne: MARQUE }, date: { $type: 'string', $lte: jour } }).sort({ date: -1 }).limit(1).next();   // une date future (jamais écrite par ce code) ne compte pas comme « récent »
+        if (dernier && joursEntre(dernier.date, jour) <= AGE_MAX_JOURS) return { lu: false, requete: false, raison: RAISON_RECENT };
+        return { ...(await lireEtStocker({ lire, maintenant, col: c, journal })), requete: true };
+    } catch (e) { try { journal(`lecture de démarrage des taux échouée : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, requete: Boolean(e && e.requeteParti), raison: codeErr(e) }; }
 }
 
 module.exports = { lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, amorcerTaux, parisDe, joursEntre, MARQUE, RAISON_RECENT, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };
