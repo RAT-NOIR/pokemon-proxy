@@ -31,7 +31,8 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
     if (!credit) return { etat: null };                       // administrateur, ou rien de débité : rien à régler
     const repli = async cause => {
         console.warn(`⚠️ [v2 question-repli] ${scanId} : ${cause} -> remboursée à l'émission`);
-        const r = await rembourser(porteur, credit, `question:${raison}`, { scanId, compteur: 'question', maintenant }, cfg);
+        // PLAFOND-DECLARE : le repli est CONSTATÉ (c'est NOTRE écriture qui a échoué, le client n'a rien déclaré) : rendu sans plafond
+        const r = await rembourser(porteur, credit, `question:${raison}`, { scanId, compteur: 'constate-question', maintenant }, cfg);
         return { etat: r.rendu ? 'remboursee' : 'non-remboursee', repli: cause, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse };
     };
     if (!scanId) return repli('aucun identifiant de scan');
@@ -74,16 +75,21 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
 }
 
 // Règle une question PRISE (en-reglement) : rend le crédit (compteur QUESTION, au jour de pose) puis pose l'état final. Lève si l'état final ne s'écrit pas : la question reste en-reglement, comptée « bloquée ».
-async function regler(q, motif, cfg, maintenant) {
+// `sortie` (facultatif) reçoit `declaration` : le jugement du plafond des déclarations, que la réponse HTTP dit au client (jamais écrit dans la question).
+async function regler(q, motif, cfg, maintenant, sortie = {}) {
     const porteur = { type: q.porteur.type, id: q.porteur.id, surface: q.surface };
     if (q.lot) {
         const fin = await col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' }, { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: maintenant } }, { returnDocument: 'after' });
-        await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);      // l'abandon d'une confirmation peut être la DERNIÈRE du lot
+        const lot = await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);      // l'abandon d'une confirmation peut être la DERNIÈRE du lot
+        if (lot && lot.declaration) sortie.declaration = lot.declaration;
         return fin;
     }
+    // PLAFOND-DECLARE : « aucune », « ne-sait-pas » et l'abandon sont des DÉCLARATIONS du client (l'abandon est une déclaration par l'absence : sans lui, ne jamais répondre rendrait le plafond contournable)
     const r = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'question', jourDe: q.poseeLe, maintenant }, cfg);
+    if (r.declaration) sortie.declaration = r.declaration;
+    // `declaration` est gardée sur la question réglée : un rejeu de la même réponse redit le MÊME corps (le jugement du plafond compris)
     return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' },
-        { $set: { etat: r.rendu ? 'remboursee' : 'non-remboursee', rembourse: r.rendu, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse, regleeLe: maintenant } }, { returnDocument: 'after' });
+        { $set: { etat: r.rendu ? 'remboursee' : 'non-remboursee', rembourse: r.rendu, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse, regleeLe: maintenant, ...(r.declaration ? { declaration: r.declaration } : {}) } }, { returnDocument: 'after' });
 }
 // UN-CANDIDAT, tour 1 — un LOT est rendu UNE fois si, une fois tout réglé, CHACUNE de ses cartes est un `introuvable` OU une question de CONFIRMATION (un seul choix) non confirmée
 // (NON = `aucune`, `ne-sait-pas`, ou abandonnée au balayage). Avant D1 ces cartes étaient des introuvables : un lot qui n'avait que cela était rendu ; le client ne paie jamais plus qu'avant.
@@ -147,7 +153,8 @@ async function ecrireIssue(scanId, issue) {
     await col('questions_v2').updateMany({ scanId, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: issue } });
     await col('questions_v2').updateMany({ scanId, lot: true }, { $unset: { lotARendre: '' } });
 }
-const decisionDeLotIssue = i => ({ rendu: Boolean(i.rendu), ...(i.raison === 'plafond-jour' ? { raisonNonRembourse: 'plafond-jour', debite: i.debite || 1 } : {}) });
+const decisionDeLotIssue = i => ({ rendu: Boolean(i.rendu), ...(i.raison === 'plafond-jour' ? { raisonNonRembourse: 'plafond-jour', debite: i.debite || 1 } : {}),
+    ...(Number.isInteger(i.plafondJour) ? { declaration: { rendue: Boolean(i.rendu), raison: i.rendu ? null : 'plafond-declarations', plafondJour: i.plafondJour } } : {}) });      // la décision écrite redit son plafond au rejeu
 // Rend { rendu, raisonNonRembourse?, debite?, aRendre?, attente? }. Appelée quand une question de LOT est réglée, au rejeu d'un NON, et par le balayage.
 async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, maintenant) {
     try {
@@ -159,19 +166,21 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
         if (verdict === 'attente') return { rendu: false, attente: true };
         if (verdict === 'non') { await ecrireIssue(scanId, { rendu: false, raison: 'non-eligible', le: maintenant }); return { rendu: false }; }
         if (verdict !== 'rendre') { await marquerLot(scanId, verdict.doute, maintenant); console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot jugé impossible (${verdict.doute}) — écrit « lot à rendre », repris par le balayage`); return { rendu: false, aRendre: true }; }
-        let r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
+        // PLAFOND-DECLARE : un lot dont chaque carte est introuvable ou une confirmation REFUSÉE par le client (« aucune », « ne-sait-pas », abandon) est rendu SUR DÉCLARATION : compteur des déclarations (un lot = un remboursement)
+        let r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'question', maintenant }, cfg);
         let raison = (r && r.raisonNonRembourse) || 'erreur';
         if (!(r && r.rendu) && raison === 'deja-rembourse' && await reprendreClaimInterrompue(scanId, cfg, maintenant)) {
-            r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'panne', maintenant }, cfg);
+            r = await rembourser(porteur, credit, 'lot-confirmations-refusees', { scanId, compteur: 'question', maintenant }, cfg);
             raison = (r && r.raisonNonRembourse) || 'erreur';
         }
+        const declaration = r && r.declaration ? { declaration: r.declaration } : {};
         // MOYENS-B2a tour 1 : « remboursement-en-cours » (une unité « rendu-en-cours », ni rendue ni perdue) se traite comme « deja-rembourse » : on relit le grand livre, le lot n'est jamais écrit rendu sans les mouvements
         const dejaOuEnCours = raison === 'deja-rembourse' || raison === 'remboursement-en-cours';
         if ((r && r.rendu) || dejaOuEnCours) {          // « déjà rendu » : on RELIT le grand livre ; le lot n'est rendu que si TOUT son montant l'est
             let gl = await grandLivreDuLot(scanId, porteur);
             // UN-CANDIDAT-2 : le PERDANT d'une course a pu relire le grand livre avant que le gagnant du claim ait fini de rendre : il relit (courte pause, 3 fois au plus) avant d'écrire une marque
             for (let i = 0; i < 3 && dejaOuEnCours && !toutRendu(gl); i++) { await new Promise(fin => setTimeout(fin, ATTENTE_GAGNANT_MS)); gl = await grandLivreDuLot(scanId, porteur); }
-            if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant }); return { rendu: true }; }
+            if (toutRendu(gl)) { await ecrireIssue(scanId, { rendu: true, le: maintenant, ...(declaration.declaration ? { plafondJour: declaration.declaration.plafondJour } : {}) }); return { rendu: true, ...declaration }; }
             await marquerLot(scanId, gl.ambigus ? `ambigu:${gl.ambigus}:${gl.rendues}/${gl.total}` : `partiel:${gl.rendues}/${gl.total}`, maintenant);
             console.error(`🔴 [v2 lot-confirmations] ${scanId} : lot rendu en partie (${gl.rendues}/${gl.total}${gl.ambigus ? `, ${gl.ambigus} débit(s) « rembourse » sans mouvement` : ''}) — écrit « lot à rendre », repris par le balayage`);
             return { rendu: false, aRendre: true };
@@ -189,8 +198,8 @@ async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, ma
                 }
                 debite = gl.total;
             }
-            await ecrireIssue(scanId, { rendu: false, raison, debite, le: maintenant });
-            return { rendu: false, raisonNonRembourse: raison, debite };
+            await ecrireIssue(scanId, { rendu: false, raison, debite, le: maintenant, ...(declaration.declaration ? { plafondJour: declaration.declaration.plafondJour } : {}) });
+            return { rendu: false, raisonNonRembourse: raison, debite, ...declaration };
         }
         await marquerLot(scanId, `rembourser:${raison}`, maintenant);
         console.error(`🔴 [v2 lot-confirmations] ${scanId} : remboursement du lot en échec (${raison}) — écrit « lot à rendre », repris par le balayage`);
@@ -270,7 +279,7 @@ function facturationDuLot(r) {
 // La réponse d'une question de LOT réglée : sa facturation, et `remboursementEnAttente` tant qu'un remboursement dû n'est pas fait.
 function habillerLot(c, r) {
     const f = facturationDuLot(r);
-    return { ...c, ...(f ? { facturation: f } : {}), ...(r && r.aRendre && !r.rendu ? { remboursementEnAttente: true } : {}) };
+    return { ...c, ...(f ? { facturation: f } : {}), ...(r && r.aRendre && !r.rendu ? { remboursementEnAttente: true } : {}), ...(r && r.declaration ? { declaration: r.declaration } : {}) };
 }
 const limiteDe = (maintenant, cfg) => new Date(maintenant.getTime() - cfg.questionDelaiMs);
 
@@ -282,7 +291,8 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     const cand = (q0.choix || []).find(c => c.id === choix);
     if (!cand && !ABANDONS.includes(choix)) return { statut: 400, code: 'ENTREE' };      // une liste fermée : tout le reste est refusé
     const abandon = !cand;
-    const corps = (q, statut = 200) => ({ statut, etat: q.etat, question: nu(q), facturation: facturationDe(q) });
+    const sortie = {};                                                                   // PLAFOND-DECLARE : le jugement du plafond des déclarations, posé par `regler` ; absent pour un rejeu (la facturation redit le refus)
+    const corps = (q, statut = 200) => ({ statut, etat: q.etat, question: nu(q), facturation: facturationDe(q), ...(sortie.declaration || q.declaration ? { declaration: sortie.declaration || q.declaration } : {}) });
     // la prise conditionnelle : un seul gagnant, quel que soit le nombre de requêtes et de balayages
     const reponse = { choix, idProduct: cand ? cand.idProduct : null, aucune: abandon, le: maintenant };
     if (q0.lot) {
@@ -300,7 +310,7 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     } else {
         const q = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $gt: limite } }, { $set: { etat: 'en-reglement', priseLe: maintenant, reponse } }, { returnDocument: 'after' });
         if (q) {
-            const fin = await regler(q, 'question-aucune', cfg, maintenant);
+            const fin = await regler(q, 'question-aucune', cfg, maintenant, sortie);
             return corps(fin || (await col('questions_v2').findOne(sien)));
         }
     }
@@ -309,7 +319,7 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     if (!l) return { statut: 404 };
     if (l.etat === 'en-attente') {                                                       // seule la limite de 24 h reste : la question est abandonnée
         const pris = await col('questions_v2').findOneAndUpdate({ ...sien, etat: 'en-attente', poseeLe: { $lte: limite } }, { $set: { etat: 'en-reglement', priseLe: maintenant } }, { returnDocument: 'after' });
-        if (pris) { const fin = await regler(pris, 'question-abandonnee', cfg, maintenant); return corps(fin || (await col('questions_v2').findOne(sien)), 410); }
+        if (pris) { const fin = await regler(pris, 'question-abandonnee', cfg, maintenant, sortie); return corps(fin || (await col('questions_v2').findOne(sien)), 410); }
         return { statut: 409, etat: (await col('questions_v2').findOne(sien))?.etat, code: 'CONFLIT' };   // quelqu'un l'a prise entre-temps
     }
     const memeReponse = l.reponse && l.reponse.choix === choix;

@@ -8,7 +8,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const appels = [];
     const fauxArgent = {
         solde: async p => ({ total: p.installation.essais, essai: p.installation.essais }),
-        reprendreHeritage: async o => { appels.push(o); return { rendu: 0 }; }
+        reprendreHeritage: async o => { appels.push(o); return { ok: true, essais: 3, excedent: 0 }; }     // faux FIDÈLE à la forme réelle (heritage.js) : la route lit `ok` / `raison`
     };
     A.registre.fournir('argent', fauxArgent);
     const srv = await A.demarrer(cfg);

@@ -5,7 +5,7 @@
 // RÈGLE D'ARBITRAGE (en tête, parce qu'elle décide de tout le reste) :
 //   · une suite qui a la forme d'un téléphone ET la forme d'une liste de numéros est AMBIGUË : la vie privée l'emporte, on la RETIRE
 //     (« lot 05 10 15 20 25 » = 0 + 4 groupes de 2 chiffres = un numéro français : retiré). Le coût est borné : la description n'est
-//     pas envoyée au modèle par défaut (V2_DESCRIPTION_AU_MODELE=0) et n'est conservée que 90 jours.
+//     pas envoyée au modèle par défaut (V2_DESCRIPTION_AU_MODELE=0) et n'est pas conservée par défaut (V2_DESCRIPTION_CONSERVEE=0 ; allumée : 90 jours).
 //   · ce qui n'a PAS la forme d'un téléphone reste : « 025/165 », « SV-P 143 », « PSA 10 », un prix, une DATE (jj/mm/aaaa n'est jamais un
 //     téléphone, même suivie d'un nombre), une liste à TROIS chiffres (« 001 002 003 004 »), une liste commençant par 1-9
 //     (« 25 30 45 60 80 101 »), une liste séparée par « , » + espace (« 05, 10, 15 »). Les préfixes « + », « 00 » + indicatif, « 0x » sont EXIGÉS.

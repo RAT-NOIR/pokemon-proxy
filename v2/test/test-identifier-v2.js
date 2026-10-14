@@ -20,7 +20,7 @@ const charges = require(CHARGES).charges;
 const IMAGE = charges.find(c => c.cellule === 'occidentale').imageUrl;      // Tropius PBL 001 : la lecture rejouée par le faux réseau
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le service de lecture « tombe »
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1', V2_DESCRIPTION_CONSERVEE: '1' });   // B6 : le défaut est éteint ; ce banc éprouve l'option allumée (le défaut a son assertion plus bas)
 const ORIGINE = cfg.origines.extension;
 let nIp = 0;
 const ip = () => { nIp++; return { 'x-forwarded-for': `10.7.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -96,7 +96,7 @@ async function semer(mode) {                                  // 'double' | 'sim
     // (la référence d'A0.5 se rejoue sur un catalogue réel de test_scratch ; ici la base est en mémoire et fabriquée : la référence ne se rejoue pas, on compare
     //  DEUX serveurs vivants — v2 éteinte / allumée — sur les mêmes requêtes. Un écart d'un octet, scanId normalisé, échoue.)
     const srvOff = await demarrer(FAUX, { ...base, RM_API_V2: '' });
-    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
+    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1', V2_DESCRIPTION_CONSERVEE: '1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
     if (!await srvOff.attendreMongo() || !await srvOn.attendreMongo()) throw new Error('Mongo non connecté');
     const urlOn = `http://127.0.0.1:${srvOn.port}`;
     const { appeler } = require('../../verrou/serveur');
@@ -277,11 +277,11 @@ async function semer(mode) {                                  // 'double' | 'sim
         // introuvable remboursé par la chaîne via le pont
         const b = await aff('introuvable');
         H.v('table : introuvable remboursé par la chaîne', [b.j.analyse.statut, b.j.facturation.debite, b.j.facturation.rembourse, b.j.facturation.motif, b.j.offre.restant], ['introuvable', 0, true, 'introuvable', 3]);
-        // remboursement refusé : plafond du jour atteint
+        // PLAFOND-DECLARE : l'introuvable est CONSTATÉ par le serveur : rendu même quand un ancien compteur de pannes est saturé (le plafond de pannes n'existe plus)
         mode = 'introuvable'; const pl = await inst(3);
-        await raw('plafonds').insertOne({ porteur: `installation:${pl.i._id}`, jour: Q.jourCourant(), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${pl.i._id}`, jour: Q.jourCourant(), type: 'panne', count: 5, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const c = await poster(sv.url, pl.jeton, corps(), { nom: 'fab-plafond' });
-        H.v('table : remboursement refusé (plafond-jour) : motif plafond-jour, non rendu', [c.json.facturation.debite, c.json.facturation.rembourse, c.json.facturation.motif, c.json.facturation.raisonNonRembourse, c.json.offre.restant], [1, false, 'plafond-jour', 'plafond-jour', 2]);
+        H.v('table : introuvable rendu sans plafond (ancien compteur de pannes saturé, ignoré) : motif introuvable, rendu', [c.json.facturation.debite, c.json.facturation.rembourse, c.json.facturation.motif, c.json.facturation.raisonNonRembourse, c.json.offre.restant], [0, true, 'introuvable', null, 3]);
         // exception de la chaîne : panne SERVEUR remboursée
         const d = await aff('exception');
         H.v('table : exception de la chaîne héritée : 500 SERVEUR, panne remboursée', [d.r.statut, d.j.erreur && d.j.erreur.code, d.j.facturation.motif, d.j.facturation.rembourse, d.j.offre.restant], [500, 'SERVEUR', 'panne', true, 3]);
@@ -334,39 +334,34 @@ async function semer(mode) {                                  // 'double' | 'sim
             await svZ.fermer();
             // C2 de la relecture 1 : le refus de la garde est NOTRE refus, pas un échec du client — remboursé SANS compter dans le plafond de pannes. Le plafond du jour est PLEIN avant le scan :
             // le remboursement doit quand même partir, et le compteur ne bouge pas (le 6e de la journée est encore rendu).
-            const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'panne', count: 5, expireLe: new Date(Date.now() + 3 * 86400e3) });      // PLAFOND-DECLARE : un ancien compteur saturé, ignoré
             const compteurDe = async (x, type) => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type }) || {}).count ?? 0;
             const compteurPanne = x => compteurDe(x, 'panne');
             const refusJ = async (jumeaux, nom, motifAttendu) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
                 const an = j.scanId ? await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) }) : null;
-                H.v(`   ${nom} : introuvable / impression-indeterminee REMBOURSÉ, plafond de pannes PLEIN mais compteur DÉDIÉ jumeaux à 1 (essai 3, compteur de pannes inchangé), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
+                H.v(`   ${nom} : introuvable / impression-indeterminee REMBOURSÉ sans plafond (constaté ; ancien compteur de pannes saturé ignoré, aucun compteur dédié) (essai 3), motif « ${motifAttendu} » dans analyses, absent de la réponse`,
                     [j.analyse && j.analyse.statut, j.analyse && j.analyse.raison, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux'), an && an.motifJumeaux, JSON.stringify(j).includes('jumeaux-')],
-                    ['introuvable', 'impression-indeterminee', true, 0, 3, cfg.plafonds.panne, 1, motifAttendu, false]);
+                    ['introuvable', 'impression-indeterminee', true, 0, 3, 5, 0, motifAttendu, false]);
                 await s.fermer();
             };
-            // C1 de la passe 2 : le 21e refus de la journée n'est plus remboursé quand le plafond de pannes ordinaire est plein aussi (jamais gratuit sans limite)
+            // PLAFOND-DECLARE : le « 21e refus de la journée » n'existe plus — la garde des jumeaux est constatée par le serveur et rendue sans plafond, quels que soient d'anciens compteurs saturés
             {
                 const s = await serveurJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] })); const x = await inst(3); await plafondPlein(x);
-                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
+                await raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: Q.jourCourant(), type: 'jumeaux', count: 20, expireLe: new Date(Date.now() + 3 * 86400e3) });
                 const r = await poster(s.url, x.jeton, corps(), { nom: 'jumeau-21e' }), j = r.json || {};
-                H.v('   le 21e refus de la journée (compteur jumeaux plein ET pannes plein) : PAS remboursé — { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }, essai 2, les deux compteurs inchangés',
+                H.v('   un refus de la garde avec d\'anciens compteurs jumeaux (20) ET pannes (5) saturés : REMBOURSÉ — { debite:0, rembourse:true }, essai 3, anciens compteurs inchangés',
                     [j.analyse && j.analyse.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
-                    ['introuvable', 1, false, 'plafond-jour', 2, cfg.plafonds.panne, cfg.plafonds.jumeaux]);
-                // compteur dédié plein mais plafond de pannes libre : le refus est jugé comme un introuvable ORDINAIRE (rendu, et c'est le compteur de pannes qui monte)
-                const y = await inst(3); await raw('plafonds').insertOne({ porteur: `installation:${y.i._id}`, jour: Q.jourCourant(), type: 'jumeaux', count: cfg.plafonds.jumeaux, expireLe: new Date(Date.now() + 3 * 86400e3) });
-                const r2 = await poster(s.url, y.jeton, corps(), { nom: 'jumeau-21e-repli' }), j2 = r2.json || {};
-                H.v('   compteur jumeaux plein mais pannes libre : rendu comme un introuvable ordinaire (essai 3), le compteur de pannes monte à 1, celui des jumeaux reste plein',
-                    [j2.facturation && j2.facturation.rembourse, (await solde(y.i._id)).essais, await compteurPanne(y), await compteurDe(y, 'jumeaux')], [true, 3, 1, cfg.plafonds.jumeaux]);
+                    ['introuvable', 0, true, null, 3, 5, 20]);
                 await s.fermer();
             }
             await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
             // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi dans le compteur des jumeaux (puis au plafond de pannes quand il est plein), pas un introuvable
             const panneJ = async (jumeaux, nom) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
-                H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE dans le compteur dédié jumeaux (1) alors que le plafond de pannes est plein et inchangé (essai 3), aucune analyse`,
+                H.v(`   ${nom} : 503 INDISPONIBLE (jamais un introuvable), REMBOURSÉE sans plafond (ancien compteur de pannes saturé ignoré, aucun compteur dédié) (essai 3), aucune analyse`,
                     [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, (await solde(x.i._id)).essais, await compteurPanne(x), await compteurDe(x, 'jumeaux')],
-                    [503, 'INDISPONIBLE', undefined, true, 'panne', 3, cfg.plafonds.panne, 1]);
+                    [503, 'INDISPONIBLE', undefined, true, 'panne', 3, 5, 0]);
                 await s.fermer();
             };
             await panneJ(() => ({ conclu: false, ids: [] }), 'colonne absente (le fournisseur ne conclut pas)');
@@ -420,15 +415,13 @@ async function semer(mode) {                                  // 'double' | 'sim
             const a = await inst(3); sansEcritureQuestion(); let ra;
             try { ra = await poster(sv.url, a.jeton, corps(), { nom: 'fab-repli-rembourse' }); } finally { db.col = colOrig; }
             H.v('m1a. question non écrite, repli REMBOURSÉ : a-trancher gratuit { debite:0, rembourse:true }, essai 3', [ra.json.analyse && ra.json.analyse.statut, ra.json.facturation.debite, ra.json.facturation.rembourse, ra.json.facturation.motif, (await solde(a.i._id)).essais], ['a-trancher', 0, true, 'question', 3]);
-            // (b) repli NON remboursé (plafond des questions atteint) : plus un a-trancher, une panne SERVEUR, ligne 🔴
+            // (b) PLAFOND-DECLARE : le repli est CONSTATÉ (NOTRE écriture a échoué) : il est rendu même quand le plafond des déclarations est atteint (sans compte : 1)
             const b = await inst(3);
-            await raw('plafonds').insertOne({ porteur: `installation:${b.i._id}`, jour: Q.jourCourant(), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
-            const journal = []; const errOrig = console.error; console.error = (...x) => { journal.push(x.join(' ')); };
+            await raw('plafonds').insertOne({ porteur: `installation:${b.i._id}`, jour: Q.jourCourant(), type: 'declare', count: cfg.plafonds.declares.sansCompte, expireLe: new Date(Date.now() + 3 * 86400e3) });
             sansEcritureQuestion(); let rb;
-            try { rb = await poster(sv.url, b.jeton, corps(), { nom: 'fab-repli-non-rembourse' }); } finally { db.col = colOrig; console.error = errOrig; }
+            try { rb = await poster(sv.url, b.jeton, corps(), { nom: 'fab-repli-non-rembourse' }); } finally { db.col = colOrig; }
             const jb = rb.json || {};
-            H.v('m1b. question non écrite ET remboursement refusé : 500 SERVEUR (jamais un a-trancher), facturation de non-remboursement', [rb.statut, jb.erreur && jb.erreur.code, jb.analyse, jb.facturation && jb.facturation.debite, jb.facturation && jb.facturation.rembourse, jb.facturation && jb.facturation.raisonNonRembourse, (await solde(b.i._id)).essais], [500, 'SERVEUR', undefined, 1, false, 'plafond-jour', 2]);
-            H.vrai('   une ligne 🔴 au journal pour la réconciliation', journal.some(l => l.startsWith('🔴')));
+            H.v('m1b. question non écrite, plafond des déclarations ATTEINT : le repli est quand même rendu (a-trancher gratuit, constaté), essai 3, aucun champ declaration', [rb.statut, jb.analyse && jb.analyse.statut, jb.facturation && jb.facturation.debite, jb.facturation && jb.facturation.rembourse, (await solde(b.i._id)).essais, 'declaration' in jb], [200, 'a-trancher', 0, true, 3, false]);
         }
         // QUOTA d'un compte gratuit vérifié (OFFRE-QUOTA) : épuisé, il garde son code QUOTA, joint l'offre à 0, et n'a plus d'adresse de recharge (la vente est arrêtée)
         const cq = await compte({ solde: { accueil: 0, achete: 0 } });          // vérifié, sans abonnement : offre gratuit (10 par jour)
@@ -449,6 +442,45 @@ async function semer(mode) {                                  // 'double' | 'sim
         await attendre(300);
         H.v('14. V2_DESCRIPTION_CONSERVEE=0 : aucune ligne dans annonces', [g.statut, await raw('annonces').countDocuments({ _id: g.json.scanId })], [200, 0]);
         await sv3.fermer();
+        // B6 : défaut éteint — la description reçue n'est écrite NULLE PART (aucune collection de la base, idempotence et journaux compris)
+        const cfgD = lireConfig({ MONGODB_BASE: 'test_scratch' });
+        const sv4 = await appFabrique(cfgD);
+        mode = 'affirmee'; const x4 = await inst(3); const MARQUE = 'DESCRIPTION-MARQUEUR-B6-7731';
+        const g4 = await poster(sv4.url, x4.jeton, corps({ title: 'Titre B6', description: MARQUE }), { nom: 'fab-description-nulle-part' });
+        await attendre(500);
+        const noms4 = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name);
+        const trouvees = [];
+        for (const n of noms4) { const docs = await raw(n).find({}).toArray(); if (docs.some(d => JSON.stringify(d).includes(MARQUE))) trouvees.push(n); }
+        H.v(`B6. défaut : 200 et la description n'est écrite dans AUCUNE des ${noms4.length} collections (dénominateur imprimé)`, [g4.statut, await raw('annonces').countDocuments({ _id: g4.json.scanId }), trouvees], [200, 0, []]);
+        H.vrai('   le dénominateur contient analyses, idempotence et journal_scans', ['analyses', 'idempotence', 'journal_scans'].every(n => noms4.includes(n)));
+        // I1 (relecture r1) : le même balayage sur les chemins d'ÉCHEC et sur un lot — refus de quota, exception de la chaîne, refus délibéré, question, lot —
+        // collections ET lignes de journal capturées (console.error / warn / log) : le marqueur ne doit être nulle part.
+        const M2 = 'DESCRIPTION-MARQUEUR-ECHEC-5519';
+        const capt = []; const co = { e: console.error, w: console.warn, l: console.log };
+        const prendre = (...x) => { capt.push(x.map(a => (a instanceof Error ? `${a.message} ${a.stack}` : typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ')); };
+        console.error = prendre; console.warn = prendre; console.log = prendre;
+        const statuts = {};
+        try {
+            const q0 = await inst(3); await Q.poserRestant(`installation:${q0.i._id}`, 0, { limite: cfg.quotas.sansCompte });   // plus rien aujourd'hui : refus QUOTA
+            statuts.quota = (await poster(sv4.url, q0.jeton, corps({ title: 'Titre échec', description: M2 }), { nom: 'fuite-quota' })).statut;
+            for (const m of ['exception', 'introuvable', 'ambigue', 'produit-absent']) {
+                mode = m; const xe = await inst(3);
+                statuts[m] = (await poster(sv4.url, xe.jeton, corps({ title: 'Titre échec', description: M2 }), { nom: `fuite-${m}` })).statut;
+            }
+            const svLot = await appFabrique(cfgD, { identifierLot: async () => [{ statutHttp: 200, corps: { ...corpsAffirme(ID_A) } }, { statutHttp: 200, corps: { ...corpsAffirme(ID_B) } }, { statutHttp: 200, corps: { ...corpsAffirme(ID_A) } }] });
+            const xl = await inst(3);
+            statuts.lot = (await poster(svLot.url, xl.jeton, corps({ imageUrls: [IMAGE, IMAGE, IMAGE], title: 'Titre lot', description: M2 }), { nom: 'fuite-lot' })).statut;
+            await svLot.fermer();
+        } finally { console.error = co.e; console.warn = co.w; console.log = co.l; }
+        await attendre(500);
+        const noms5 = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name);
+        const trouvees5 = [];
+        for (const n of noms5) { const docs = await raw(n).find({}).toArray(); if (docs.some(d => JSON.stringify(d).includes(M2))) trouvees5.push(n); }
+        H.v('I1. chemins d\'échec : statuts rendus (quota 429, exception 500, introuvable/ambigue/produit-absent, lot 200) — les requêtes ont bien tourné', [statuts.quota, statuts.exception, statuts.lot], [429, 500, 200]);
+        H.v(`   le marqueur n'est dans AUCUNE des ${noms5.length} collections après ces ${Object.keys(statuts).length} requêtes`, trouvees5, []);
+        H.v(`   ni dans aucune des ${capt.length} lignes de journal capturées`, capt.filter(l => l.includes(M2)).length, 0);
+        H.vrai('   le journal capturé n\'est pas vide (le crochet capte bien)', capt.length > 0);
+        await sv4.fermer();
     }
     H.v(`contrat : ${reponsesValidees} réponses d'analyse validées contre ReponseAnalyse, écarts`, ecartsContrat, 0);
     H.v(`   Produit.set.tirage null (nullable au contrat) : ${tiragesNuls} produit(s) sur ${produitsVus} servis, tous validés`, [tiragesNuls, produitsVus].every(n => n > 0) && tiragesNuls === produitsVus, true);

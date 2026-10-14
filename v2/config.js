@@ -19,7 +19,19 @@ const booleen = (nom, v, defaut) => {
     throw new Error(`configuration invalide : ${nom}="${v}" (attendu 0 ou 1)`);
 };
 
+// PLAFOND-DECLARE : quatre variables n'ont plus d'objet (les pannes et les introuvables ne sont plus plafonnés ; question et sans-prix partagent le compteur des déclarations). Posées, elles ne rendent
+// JAMAIS la configuration invalide (un 503 pour un réglage mort serait pire que le réglage) : UN avertissement par processus, qui NOMME les variables et n'affiche jamais leur valeur.
+const VARIABLES_SANS_OBJET = Object.freeze(['V2_PLAFOND_PANNES', 'V2_PLAFOND_QUESTIONS', 'V2_SANS_PRIX_JOUR', 'V2_JUMEAUX_REMBOURSES_JOUR']);
+let obsoletesSignalees = false;
+function signalerVariablesSansObjet(env) {
+    if (obsoletesSignalees) return;
+    const posees = VARIABLES_SANS_OBJET.filter(n => env[n] !== undefined && env[n] !== '');
+    if (!posees.length) return;
+    obsoletesSignalees = true;
+    console.warn(`⚠️ [v2 config] variable(s) sans objet, ignorée(s) : ${posees.join(', ')} (les pannes et introuvables ne sont plus plafonnés ; les déclarations ont V2_DECLARES_SANS_COMPTE / V2_DECLARES_GRATUIT / V2_DECLARES_PRO)`);
+}
 function lireConfig(env = process.env) {
+    signalerVariablesSansObjet(env);
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
     for (const p of ordre) {
         if (POCHES_ANCIENNES.includes(p)) throw new Error(`configuration invalide : la poche "${p}" n'est plus débitée (quota quotidien : seule "jour" l'est)`);
@@ -72,13 +84,13 @@ function lireConfig(env = process.env) {
                   sansCompte: entier('V2_QUOTA_SANS_COMPTE', env.V2_QUOTA_SANS_COMPTE, 3, 1, 1000), gratuit: entier('V2_QUOTA_GRATUIT', env.V2_QUOTA_GRATUIT, 10, 1, 1000),
                   proPlafond: entier('V2_QUOTA_PRO_PLAFOND', env.V2_QUOTA_PRO_PLAFOND, 200, 1, 1000) },
         ordrePoches: [...ordre],
-        // Remboursements par JOUR UTC et par PORTEUR (le compte quand il y en a un, sinon l'installation) : panne 5, question 30, et deux compteurs PROPRES (lot PLAFONDS, 2026-10-11) —
-        // sansPrix : « prix illisible, définitif » déclaré par le client (5) ; lotTropGrand : refus `lot-trop-grand`, taille ou quota (10). Au-delà : pas de remboursement.
-        plafonds: { panne: entier('V2_PLAFOND_PANNES', env.V2_PLAFOND_PANNES, 5), question: entier('V2_PLAFOND_QUESTIONS', env.V2_PLAFOND_QUESTIONS, 30),
-                    sansPrix: entier('V2_SANS_PRIX_JOUR', env.V2_SANS_PRIX_JOUR, 5), lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10),
-                    // jumeaux : les refus de la garde des jumeaux (impression indéterminée, colonne indisponible) — NOS refus, remboursés dans un compteur dédié, UNE unité par carte (20 par jour et par porteur
-                    // par défaut, POSÉ SANS MESURE D'USAGE RÉEL) ; plein, le refus retombe sur le plafond de pannes ordinaire.
-                    jumeaux: entier('V2_JUMEAUX_REMBOURSES_JOUR', env.V2_JUMEAUX_REMBOURSES_JOUR, 20) },
+        // Remboursements, PLAFOND-DECLARE (décision du testeur, 2026-10-14). Deux sortes seulement sont plafonnées, par JOUR DE PARIS et par PORTEUR (le compte quand il y en a un, sinon l'installation) :
+        //   · `declares` : les analyses RENDUES sur DÉCLARATION du client (réponse « aucune » ou « ne-sait-pas », question abandonnée, prix illisible définitif déclaré) — UN SEUL compteur pour les trois,
+        //     plafonné par OFFRE (lue au moment du remboursement) : sans compte 1, gratuit 3, Pro 30 (dans la garde anti-abus de 200) ;
+        //   · `lotTropGrand` : refus `lot-trop-grand`, taille ou quota (10), INCHANGÉ, indépendant de l'offre.
+        // Ce que le SERVEUR constate (panne, introuvable, garde des jumeaux, carte identifiée sans prix au guide) est rendu SANS plafond. Au-delà d'un plafond : pas de remboursement.
+        plafonds: { declares: { sansCompte: entier('V2_DECLARES_SANS_COMPTE', env.V2_DECLARES_SANS_COMPTE, 1), gratuit: entier('V2_DECLARES_GRATUIT', env.V2_DECLARES_GRATUIT, 3), pro: entier('V2_DECLARES_PRO', env.V2_DECLARES_PRO, 30) },
+                    lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).
@@ -93,7 +105,7 @@ function lireConfig(env = process.env) {
                // MOYENS-B2a tour 1 (M-1) : la réparation d'un débit sans trace (`reparerDebitRembourseSansMouvement`) refuse tant qu'un mouvement du porteur sur la même poche date de moins de ce délai (minutes, entier de 5 à 1440,
                // défaut 15) : l'écart de poche est un agrégat, un mouvement en vol le fausserait. C'est aussi l'âge au-delà duquel une marque `reparation` laissée par un arrêt est REPRISE (la preuve est refaite).
                reparationAgeMs: entier('V2_REPARATION_AGE_MIN', env.V2_REPARATION_AGE_MIN, 15, 5, 1440) * 60e3 },
-        limites: { installationParIpJour: 2, essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
+        limites: { installationParIpJour: 2, installationRequetesIpHeure: entier('V2_INSTALLATION_REQUETES_HEURE', env.V2_INSTALLATION_REQUETES_HEURE, 30, 1), essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),
@@ -142,17 +154,20 @@ function lireConfig(env = process.env) {
         // BANC-12 : le LIEN entre une contribution du banc et un compte dure bancLienMois (12 au plus) ; l'IMAGE reste bancMois (24 au plus). `analysesMois` (la ligne qui porte le scanId et le compte)
         // s'aligne sur le lien : une seule source. `mouvementsMois` reste 24 (somme des deltas = solde) mais le scanId des mouvements est retiré au bout de bancLienMois (v2/banc/anonymisation.js).
         retention: { octroiJours: 730, annonceJours: 90, analysesMois: bancLienMois, mouvementsMois: 24, bancMois: BANC_MOIS, bancLienMois, bancGraceJours, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
-        annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
+        annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, false), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
         banc: { versionsTexte: ['2026-10-07-v1'] },
         verdict: { bonneAffaireSous: -30, cherAuDela: 15 },
-        devises: ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK'],
+        devises: ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK', 'AUD'],
         marches: (env.V2_MARCHES ? env.V2_MARCHES.split(',').map(s => s.trim()) :
-            ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'uk'].map(t => `vinted.${t}`)),
+            ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'ie', 'co.uk', 'hu', 'ro', 'si', 'hr', 'gr', 'lv', 'ee', 'dk', 'fi', 'com.au'].map(t => `vinted.${t}`)),
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
+        // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
+        // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
+        tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
         turnstile,
         cookieSecure
     });

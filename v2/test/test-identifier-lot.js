@@ -226,7 +226,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
     // ── JUMEAU-V2 (C1 de la relecture 1) : la garde des jumeaux du LOT. Chaque carte affirmée par la chaîne passe par elle ; sans elle (un lot « tout affirmé »), ces assertions rougissent.
     {
         const aujourdhui = Q.jourCourant();
-        const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type: 'panne', count: cfg.plafonds.panne, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        const plafondPlein = async x => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type: 'panne', count: 5, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const compteurPanne = async x => (await raw('plafonds').findOne({ porteur: `installation:${x.i._id}`, type: 'panne' }) || {}).count;
         const parIndex = j => Object.fromEntries(((j.analyse || {}).cartes || []).map(c => [c.index, c]));
         const analyseDe = async j => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
@@ -256,34 +256,35 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         await avec(J3, async s => {
             const x = await inst(); await plafondPlein(x); lot([aff(P5), aff(P5)]);
             const r = await poster(s.url, x.jeton), j = r.json || {};
-            H.v('JUMEAU-V2 lot ENTIÈREMENT refusé par la garde (2 cartes) : remboursé dans le compteur DÉDIÉ jumeaux, UNE unité par carte (2), plafond de pannes plein et inchangé (essai 3, debite 0)',
-                [r.statut, (j.analyse || {}).lot && j.analyse.lot.introuvables, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, 2, true, 0, 3, cfg.plafonds.panne, 2]);
+            // PLAFOND-DECLARE : la garde des jumeaux est CONSTATÉE par le serveur, rendue sans plafond ; un ancien compteur de pannes saturé (posé à 5) est ignoré et reste intact, aucun compteur dédié
+            H.v('JUMEAU-V2 lot ENTIÈREMENT refusé par la garde (2 cartes) : remboursé sans plafond, aucun compteur dédié, ancien compteur de pannes (5) ignoré et inchangé (essai 3, debite 0)',
+                [r.statut, (j.analyse || {}).lot && j.analyse.lot.introuvables, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, 2, true, 0, 3, 5, 0]);
         });
         // C1 de la passe 2 (M2) : UNE seule carte refusée par la garde dans un lot de déchets ne fait pas rendre tout le lot (`every`, pas `some`) — la sonde du relecteur, [200, true, 3, 5], doit changer
         await avec(J3, async s => {
             const x = await inst(); await plafondPlein(x); lot([aff(P5), intro(), intro(), intro(), intro()]);
             const r = await poster(s.url, x.jeton), j = r.json || {};
-            H.v('JUMEAU-V2 lot MIXTE (1 carte refusée par la garde + 4 introuvables de la chaîne), plafond de pannes PLEIN : PAS remboursé (plafond-jour, essai 2), le compteur dédié n\'est pas touché',
-                [r.statut, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, false, 1, 'plafond-jour', 2, cfg.plafonds.panne, 0]);
+            H.v('JUMEAU-V2 lot MIXTE (1 carte refusée par la garde + 4 introuvables de la chaîne) : remboursé comme un lot introuvable ordinaire (constaté, sans plafond : l\'ancien compteur de pannes plein est ignoré), aucun compteur dédié',
+                [r.statut, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [200, true, 0, null, 3, 5, 0]);
         });
         await avec(J3, async s => {
             const x = await inst(); lot([aff(P5), aff(P5), intro()]);
             const r = await poster(s.url, x.jeton), j = r.json || {};
-            H.v('JUMEAU-V2 lot mixte, plafond de pannes LIBRE : remboursé comme un lot introuvable ordinaire (une unité du plafond de pannes, rien dans le compteur dédié)',
-                [j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [true, 3, 1, 0]);
+            H.v('JUMEAU-V2 lot mixte : remboursé comme un lot introuvable ordinaire (aucun compteur écrit)',
+                [j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [true, 3, undefined, 0]);
         });
-        // le 21e : compteur dédié à 19 + un lot de 2 cartes refusées (19 + 2 > 20) et plafond de pannes plein : PAS remboursé, jamais gratuit sans limite
+        // PLAFOND-DECLARE : un ancien compteur « jumeaux » à 19 et un ancien compteur de pannes plein n'empêchent plus rien : le refus de la garde est constaté, rendu sans plafond
         await avec(J3, async s => {
             const x = await inst(); await plafondPlein(x); await poserCompteur(x, 'jumeaux', 19); lot([aff(P5), aff(P5)]);
             const r = await poster(s.url, x.jeton), j = r.json || {};
-            H.v('JUMEAU-V2 lot de 2 cartes refusées, compteur dédié à 19 (19 + 2 > 20) et pannes plein : PAS remboursé { debite:1, plafond-jour, essai 2 }, compteur dédié resté à 19',
-                [j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurDe(x, 'jumeaux')], [false, 1, 'plafond-jour', 2, 19]);
+            H.v('JUMEAU-V2 lot de 2 cartes refusées, anciens compteurs (jumeaux 19, pannes plein) ignorés : remboursé { debite:0, essai 3 }, ancien compteur resté à 19',
+                [j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await compteurDe(x, 'jumeaux')], [true, 0, null, 3, 19]);
         });
         await avec(() => ({ conclu: false, ids: [] }), async s => {
             const x = await inst(); await plafondPlein(x); lot([aff(P5), aff(P20A)]);
             const r = await poster(s.url, x.jeton), j = r.json || {};
-            H.v('JUMEAU-V2 lot dont aucune carte n\'a de colonne : PANNE 503 INDISPONIBLE (jamais un lot d\'introuvables), remboursée dans le compteur dédié (2 cartes = 2 unités), pannes inchangé (essai 3)',
-                [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [503, 'INDISPONIBLE', undefined, true, 3, cfg.plafonds.panne, 2]);
+            H.v('JUMEAU-V2 lot dont aucune carte n\'a de colonne : PANNE 503 INDISPONIBLE (jamais un lot d\'introuvables), remboursée sans plafond, aucun compteur dédié (essai 3)',
+                [r.statut, j.erreur && j.erreur.code, j.analyse, j.facturation && j.facturation.rembourse, await essais(x), await compteurPanne(x), await compteurDe(x, 'jumeaux')], [503, 'INDISPONIBLE', undefined, true, 3, 5, 0]);
         });
         await avec(undefined, async s => {
             const x = await inst(); lot([aff(P5), aff(P20A)]);
@@ -544,15 +545,15 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
             H.v('   réservation de question qui échoue dans un lot : 500 SERVEUR remboursée (essai 3, somme 0), aucune question en attente', [r3.statut, r3.json.erreur && r3.json.erreur.code, await essais(z), await net(z, 'réservation qui échoue'), ouvertes], [500, 'SERVEUR', 3, 0, 0]);
         } finally { argentReg.debiterSupplement = origS; argentReg.reserverQuestion = origQ; console.error = e; }
     }
-    // ── 3d. le remboursement d'un lot introuvable est refusé (plafond du jour atteint) : le client paie TOUT le lot, et on le dit
+    // ── 3d. PLAFOND-DECLARE : un lot introuvable est CONSTATÉ par le serveur : rendu en entier SANS plafond (V2_PLAFOND_PANNES=0, posée, est sans objet : un seul avertissement, jamais un refus)
     {
         const svPlaf = await monter(lireConfig({ ...BASE, V2_PLAFOND_PANNES: '0' }), { identifierLot });
         const x = await compteLie({ accueil: 0, achete: 10 }); lot(nIntro(25));
         const r = await poster(svPlaf.url, x.jeton); await svPlaf.fermer();
         // le registre « argent » est global au processus et LIÉ à la configuration du dernier montage : on le relie à la configuration ordinaire pour la suite
         await (await monter(cfg, {})).fermer();
-        H.v('3d. lot de 25 introuvable, plafond de remboursements atteint : facturation { debite:3 (le coût du lot), rembourse:false, motif plafond-jour, cause plafond-jour }, achete 7',
-            [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 3, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' }, 7]);
+        H.v('3d. lot de 25 introuvable, ancienne variable de plafond de pannes à 0 (sans objet) : rendu en entier { debite:0, rembourse:true, motif introuvable }, achete 10',
+            [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null }, 10]);
     }
     // ── N1. un résultat unique NON CONFORME ne rappelle JAMAIS la vraie chaîne (une seconde lecture payante) : 500 SERVEUR remboursé
     {

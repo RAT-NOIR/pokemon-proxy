@@ -46,7 +46,13 @@
           "installations"
         ],
         "summary": "Crée une installation (jeton rendu UNE fois, 3 essais)",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé (même corps) rend la MÊME installation, le MÊME jeton et le MÊME `heritage` (`Idempotency-Replayed: true`), sans second passage de l'héritage ni second compte du plafond d'installations par IP. La réponse conservée 24 h est scellée (le jeton n'est jamais en clair en base). Si l'héritage échoue, l'installation créée est défaite et la route répond 503. SUR CETTE ROUTE la clé tient lieu de secret : 32 à 64 caractères `[A-Za-z0-9_-]` (UUID v4 ou 32 octets aléatoires en base64url/hex), sinon 400 ENTREE avec `detail` `cle-caractere-interdit`, `cle-trop-longue` ou `cle-trop-courte` ; toutes les requêtes d'une IP (rejeux compris, IPv6 groupée par /56) sont comptées (30 par heure, 429 DEBIT).",
         "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -60,6 +66,17 @@
         "responses": {
           "201": {
             "description": "Installation créée.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une requête déjà traitée (même installation, même jeton).",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -69,7 +86,17 @@
             }
           },
           "400": {
-            "description": "Entrée invalide (ENTREE).",
+            "description": "Entrée invalide (ENTREE), dont une Idempotency-Key mal formée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `cle-reutilisee` : Idempotency-Key réutilisée avec un autre corps. Rien n'est créé.",
             "content": {
               "application/json": {
                 "schema": {
@@ -97,7 +124,7 @@
             }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "description": "INDISPONIBLE (index manquants, base injoignable, héritage en échec : l'installation créée est défaite, aucun jeton n'est perdu).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1431,9 +1458,15 @@
           "installations"
         ],
         "summary": "Lie l'installation au compte (le jeton est renouvelé, l'ancien révoqué)",
+        "description": "`Idempotency-Key` facultative : un rejeu de la même clé et du même code, présenté avec l'ANCIEN jeton (la réponse s'est perdue), rend le MÊME nouveau jeton (`Idempotency-Replayed: true`) : une seule rotation. L'ancien jeton reste révoqué partout ailleurs (autre clé, sans clé, autre route, après 24 h : 401 JETON). La réponse conservée 24 h est scellée.",
         "security": [
           {
             "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
           }
         ],
         "requestBody": {
@@ -1449,10 +1482,31 @@
         "responses": {
           "200": {
             "description": "Installation liée.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une liaison déjà faite (même nouveau jeton).",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseLier"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `cle-reutilisee` : Idempotency-Key réutilisée avec un autre code. Rien n'est consommé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
                 }
               }
             }
@@ -3767,6 +3821,38 @@
         "additionalProperties": false,
         "description": "L'offre du porteur et son quota quotidien (OFFRE-QUOTA). Une analyse RENDUE compte 1 (un lot : 1 par tranche de 10 cartes) ; un introuvable, une panne et un prix illisible définitif sont rendus au quota. Sans compte : 3 par jour ; compte gratuit (vérifié) : 10 ; Pro : illimité. Un compte non vérifié se voit `gratuit` avec `restant: 0`."
       },
+      "Declaration": {
+        "type": "object",
+        "properties": {
+          "rendue": {
+            "type": "boolean",
+            "description": "`true` : l'analyse déclarée a été rendue au quota. `false` : le plafond du jour des déclarations est atteint, l'analyse COMPTE."
+          },
+          "raison": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "plafond-declarations",
+              null
+            ],
+            "description": "CODE (jamais une phrase) : `null` quand rendue ; `plafond-declarations` quand refusée. L'extension écrit le texte."
+          },
+          "plafondJour": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Le plafond de déclarations remboursées par jour de Paris pour l'offre du porteur : 1 sans compte, 3 gratuit, 30 Pro."
+          }
+        },
+        "required": [
+          "rendue",
+          "raison",
+          "plafondJour"
+        ],
+        "additionalProperties": false,
+        "description": "PLAFOND-DECLARE (2026-10-14). Le jugement d'un remboursement sur DÉCLARATION du client (réponse `aucune` ou `ne-sait-pas`, question abandonnée, prix illisible définitif, lot dont toutes les confirmations sont refusées) : UN compteur par porteur et par jour de Paris, plafonné par offre. ADDITIF, à la racine à côté de `offre` ; présent sur la réponse qui a jugé le remboursement, absent pour un remboursement constaté par le serveur, un rejeu et une réponse par un candidat. `facturation` reste inchangé (`motif: plafond-jour`, `raisonNonRembourse: plafond-jour` quand refusé)."
+      },
       "Solde": {
         "type": "object",
         "properties": {
@@ -3815,6 +3901,10 @@
               },
               "verifie": {
                 "type": "boolean"
+              },
+              "administrateur": {
+                "type": "boolean",
+                "description": "Additif (ADMIN-DRAPEAU) : true si le porteur est un compte administrateur (rôle relu en base, la même règle que le motif « administrateur » de la facturation). Aucun droit : il reflète un rôle déjà jugé côté serveur, et le serveur ne lit jamais un drapeau envoyé par le client. false sans compte lié. Absent des anciennes réponses : un lecteur lit son absence comme false."
               }
             },
             "required": [
@@ -3966,6 +4056,9 @@
             "const": true,
             "description": "Additif, présent SEULEMENT quand le lot de cette carte doit être remboursé et ne l'est pas encore (le remboursement a échoué ou n'a pas pu être jugé : le serveur le reprend). Absent sinon. `facturation.rembourse` reste faux ; lire le solde plus tard."
           },
+          "declaration": {
+            "$ref": "#/components/schemas/Declaration"
+          },
           "solde": {
             "$ref": "#/components/schemas/Solde"
           },
@@ -4043,6 +4136,9 @@
                 "$ref": "#/components/schemas/Facturation"
               }
             ]
+          },
+          "declaration": {
+            "$ref": "#/components/schemas/Declaration"
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
@@ -4465,10 +4561,20 @@
           "jetonInstallation": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{43}$",
-            "description": "Rendu UNE fois ; le serveur n'en garde que l'empreinte."
+            "description": "Rendu UNE fois ; le serveur n'en garde que l'empreinte. Un rejeu de la même Idempotency-Key rend le MÊME jeton."
           },
           "solde": {
             "$ref": "#/components/schemas/Solde"
+          },
+          "heritage": {
+            "enum": [
+              "repris",
+              "deja-migre",
+              "inconnu",
+              "absent",
+              "plafond-global"
+            ],
+            "description": "Ce qu'est devenu le `userIdHerite` de la 1.0.x. `repris` : portefeuille gratuit déplacé vers cette installation. `deja-migre` : déjà déplacé (ici ou ailleurs). `inconnu` : aucun portefeuille ne répond (ou valeur inutilisable). `plafond-global` : plafond global des essais du jour atteint, portefeuille intact. `absent` : aucun `userIdHerite` envoyé. Toujours présent dans un 201 du serveur ; facultatif au schéma SEULEMENT parce que la fausse réponse publiée `installation-creee.json` (stable, utilisée par l'extension) n'en porte pas."
           }
         },
         "required": [
@@ -4549,6 +4655,10 @@
               },
               "verifie": {
                 "type": "boolean"
+              },
+              "administrateur": {
+                "type": "boolean",
+                "description": "Additif (ADMIN-DRAPEAU) : true si le compte lié est un compte administrateur (même règle que solde.compte.administrateur). Aucun droit, jamais lu du client. Absent des anciennes réponses : lire comme false."
               }
             },
             "required": [
@@ -4593,6 +4703,9 @@
               }
             ]
           },
+          "declaration": {
+            "$ref": "#/components/schemas/Declaration"
+          },
           "solde": {
             "$ref": "#/components/schemas/Solde"
           },
@@ -4605,7 +4718,7 @@
           "offre"
         ],
         "additionalProperties": false,
-        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
+        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true sous le plafond des déclarations du jour ; au-delà `plafond-jour`), `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
       },
       "ReponsePing": {
         "type": "object",
@@ -4670,7 +4783,8 @@
               "HUF",
               "RON",
               "SEK",
-              "DKK"
+              "DKK",
+              "AUD"
             ]
           },
           "vintedEtat": {

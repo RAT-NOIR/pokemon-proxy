@@ -196,13 +196,16 @@ function routesScanner(router, cfg, deps = {}) {
     const aRembourserReponse = c => Boolean(c && c.success === true && sansPrixIdentifiee(c.carte, c.facturation, 'question'));
     async function rembourserSansPrix(req, corps, idScan) {
         const argent = registre.obtenir('argent'), porteur = req.v2.porteur, scanId = new mongoose.Types.ObjectId(idScan);
-        const r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'question' });
+        // PLAFOND-DECLARE : carte AFFIRMÉE sans prix par le serveur (facturation `affirmee`, aucune question) = CONSTATÉ, rendu sans plafond comme une panne ; carte tranchée par la RÉPONSE du client
+        // (facturation `question`) = DÉCLARÉ : le client a choisi ce candidat sans prix, donc compteur commun des déclarations, plafond par offre, champ `declaration` (tour 1, I2)
+        const declare = Boolean(corps && corps.facturation && corps.facturation.motif === 'question');
+        const r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: declare ? 'sans-prix' : 'constate-question' });
         // un rejeu de la même réponse retrouve le scan DÉJÀ remboursé : la réponse dit ce qu'elle a dit la première fois
         const facturation = !r.rendu && r.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : facturationDeLecture(r);
         let solde; try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { await col('analyses').updateOne({ _id: scanId }, { $set: { facturation } }); } catch (e) { journalErreur('analyses', e); }
         const offre = await offreSur(porteur, argent);      // l'offre est relue APRÈS le remboursement : l'unité rendue se voit
-        return { ...corps, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
+        return { ...corps, facturation, ...(r.declaration ? { declaration: r.declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
     }
     // Habille res.json : `transformer` (null au scanner), puis le remboursement sans-prix si `aRembourser(corps)`. Un remboursement qui échoue sert la réponse d'origine (jamais une panne).
     function habiller(transformer, aRembourser, idScan) {

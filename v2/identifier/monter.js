@@ -104,7 +104,10 @@ module.exports = {
         // O5 : la passe de rattrapage des scans dont la réponse n'est jamais partie — une passe différée au démarrage, puis toutes les 5 min (≤ le seuil de 15 min). `deps.rattrapage` ne règle que
         // les DÉLAIS (les bancs de coupure) : aucune panne n'est injectable par là.
         require('../argent/marque-scan').demarrerRattrapage({ ...(deps && deps.rattrapage && typeof deps.rattrapage === 'object' ? { differeMs: deps.rattrapage.differeMs, intervalleMs: deps.rattrapage.intervalleMs } : {}) });
+        // TAUX-BCE (B4) : le déclencheur quotidien des taux, SEULEMENT si V2_TAUX_BCE=1 (cfg.tauxBce). `deps.tauxBce` ne règle que les injections des bancs (fetch, horloge) : aucune panne n'est injectable par là.
+        require('./taux-declencheur').demarrerPourConfig(cfg, deps && deps.tauxBce && typeof deps.tauxBce === 'object' ? deps.tauxBce : {});
         require('../chargeur/montage').demarrerPourConfig(cfg);        // COTES-VISUELS : ne lit RIEN ici (premier chargement différé) ; en banc : aucun réseau
     },
-    balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge
+    balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge,
+    arreterTaux: () => require('./taux-declencheur').arreterTaux()
 };

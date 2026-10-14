@@ -11,7 +11,7 @@ H.v('accueil', c.quotas.accueil, 25);
 H.v('hebdo', c.quotas.hebdo, 2);
 H.v('ordre des poches par défaut (OFFRE-QUOTA : la seule poche débitable est le quota du jour)', c.ordrePoches, ['jour']);
 H.v('quotas quotidiens par défaut : sans compte 3, gratuit 10, plafond technique Pro 200', [c.quotas.sansCompte, c.quotas.gratuit, c.quotas.proPlafond], [3, 10, 200]);
-H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30, sansPrix: 5, lotTropGrand: 10, jumeaux: 20 });
+H.v('plafonds de remboursement', c.plafonds, { declares: { sansCompte: 1, gratuit: 3, pro: 30 }, lotTropGrand: 10 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
 H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
 H.v('idempotence : au plus 10 min', c.retention.idempotenceBattementMaxMinutes, 10);
@@ -22,12 +22,12 @@ H.v('annonce conservée 90 jours', c.retention.annonceJours, 90);
 H.v('seuils du verdict', c.verdict, { bonneAffaireSous: -30, cherAuDela: 15 });
 H.v('mot de passe : 10 caractères', c.comptes.motDePasseMin, 10);
 H.v('lot : paliers de 10', c.lot.tranche, 10);
-H.v('devises', c.devises, ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK']);
+H.v('devises', c.devises, ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK', 'AUD']);
 // un nombre fait d'espaces ne vaut PAS 0 : refus
 let l0 = null; try { lireConfig({ V2_ACCUEIL: '   ' }); } catch (e) { l0 = e.message; }
 H.vrai('V2_ACCUEIL="   " lève (jamais 0 silencieux)', /configuration invalide/.test(l0 || ''));
 // variables booléennes : seulement '0' et '1' ; toute autre valeur (false, off, non, oui, vrai…) rend la configuration invalide
-H.v('V2_DESCRIPTION_CONSERVEE défaut : allumée', c.annonce.conservee, true);
+H.v('V2_DESCRIPTION_CONSERVEE défaut : éteinte (B6, décision de l\'éditeur)', c.annonce.conservee, false);
 H.v('V2_DESCRIPTION_CONSERVEE=0 : éteinte', lireConfig({ V2_DESCRIPTION_CONSERVEE: '0' }).annonce.conservee, false);
 H.v('V2_DESCRIPTION_CONSERVEE=1 : allumée', lireConfig({ V2_DESCRIPTION_CONSERVEE: '1' }).annonce.conservee, true);
 for (const nom of ['V2_DESCRIPTION_CONSERVEE', 'V2_DESCRIPTION_AU_MODELE', 'V2_REGLE_G', 'V2_COOKIE_SECURE']) {

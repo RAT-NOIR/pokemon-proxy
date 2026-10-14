@@ -2,7 +2,7 @@
 const H = require('./_harnais'); const db = require('../db'); const M = require('../modeles'); const { lireConfig } = require('../config'); const C = require('../annonce/conservation');
 (async () => {
     await H.ouvrirBac('test-annonce-purge.js'); await M.creerIndex();
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' }), t0 = new Date('2026-07-01T00:00:00Z');
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_DESCRIPTION_CONSERVEE: '1' }), t0 = new Date('2026-07-01T00:00:00Z');
     await C.conserverAnnonce('s1', { titre: 'Pikachu', description: 'neuve', expurgeeParServeur: false }, cfg, t0);
     const d = await db.col('annonces').findOne({ _id: 's1' });
     H.v('expireLe = création + 90 jours exactement', (d.expireLe - t0) / 86400e3, 90);

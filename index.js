@@ -116,7 +116,7 @@ const PORT = process.env.PORT || 3000;
 //    de la page (https://www.vinted.fr) et NON "chrome-extension://".
 const ORIGINES_AUTORISEES = [
     /^chrome-extension:\/\/[a-p]+$/,                       // l'extension elle-même
-    /^https:\/\/(www\.)?vinted\.(fr|be|com|de|es|it|nl|lu|at|pl|pt|se|cz|sk|lt|uk)$/ // Vinted, domaines officiels
+    /^https:\/\/(www\.)?vinted\.(fr|be|com|de|es|it|nl|lu|at|pl|pt|se|cz|sk|lt|ie|co\.uk|hu|ro|si|hr|gr|lv|ee|dk|fi|com\.au)$/ // Vinted, domaines officiels
 ];
 const corsHeritage = cors({
     origin: (origin, callback) => {

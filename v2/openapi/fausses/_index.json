@@ -87,7 +87,7 @@
     "route": "POST /api/identifier",
     "statut": 200,
     "schema": "ReponseAnalyse",
-    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé dans le compteur des jumeaux, qui retombe sur le plafond de pannes quand il est plein."
+    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé sans plafond (refus de la garde des jumeaux, constaté par le serveur)."
   },
   "introuvable-panne-lecture.json": {
     "route": "POST /api/identifier",
@@ -117,7 +117,7 @@
     "route": "POST /api/identifier",
     "statut": 500,
     "schema": "ReponseErreur",
-    "description": "Panne dont le remboursement est refusé (plafond de 5 pannes par jour atteint) : reste débitée, la cause s'écrit."
+    "description": "Panne dont le remboursement est refusé : reste débitée, la cause s'écrit (forme conservée ; une panne n'est plus plafonnée depuis PLAFOND-DECLARE, le refus ne survient plus que sur un échec d'écriture ou un scan déjà rendu)."
   },
   "quota-compte.json": {
     "route": "POST /api/identifier",
@@ -225,7 +225,7 @@
     "route": "POST /api/identifier/reponse",
     "statut": 200,
     "schema": "ReponseQuestion",
-    "description": "Abandon dont le remboursement est refusé (30 par jour atteints) : motif plafond-jour."
+    "description": "Abandon dont le remboursement est refusé (plafond des déclarations du jour atteint : 1 sans compte, 3 gratuit, 30 Pro) : motif plafond-jour."
   },
   "retour-live.json": {
     "route": "POST /api/retour-live",
@@ -237,7 +237,13 @@
     "route": "POST /api/retour-live",
     "statut": 200,
     "schema": "ReponseRetourLive",
-    "description": "Lecture ratée DÉFINITIVE : remboursée une fois par scan (sans-prix)."
+    "description": "Lecture ratée DÉFINITIVE : remboursée une fois par scan (sans-prix), sous le plafond des déclarations du jour."
+  },
+  "retour-live-declaration-plafond.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "Lecture ratée DÉFINITIVE dont le remboursement est refusé : le plafond des déclarations du jour est atteint (3 pour un compte gratuit ; 1 sans compte, 30 Pro). L'analyse COMPTE (facturation plafond-jour, offre.restant non remonté) et `declaration` dit le refus par un code (`plafond-declarations`) et le plafond du jour."
   },
   "solde-installation-non-liee.json": {
     "route": "POST /api/solde",

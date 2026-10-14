@@ -191,12 +191,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     const CIBLES = {
         // libelle / userIdHerite de type non-texte : 201, libellé par défaut, aucun héritage — comportement VOULU et pinglé par test-installations.js (« libellé non-texte » → « Navigateur ») ;
         // la valeur n'est jamais stockée ni interrogée telle quelle (nettoyerLibelle ; l'héritage n'est tenté que pour une chaîne). Les OBJETS d'opérateur sont, eux, refusés (400) par la garde de clés.
-        'POST /api/installation': { auth: 'aucune', base: () => ({ versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'ancien-user-abus-0001' }), nullables: [],
+        'POST /api/installation': { auth: 'aucune', idemCle: true, base: () => ({ versionExtension: '2.0.0', libelle: 'Chrome · Windows', userIdHerite: 'ancien-user-abus-0001' }), nullables: [],
             tolere: {
                 libelle: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte → libellé par défaut « Navigateur » (voulu, test-installations.js) ; jamais stocké tel quel' },
-                userIdHerite: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte ignoré : l\'héritage n\'est tenté que pour une chaîne (installations/routes.js)' }
+                userIdHerite: { variantes: ['tableau', 'nombre', 'null'], ecriture: true, raison: 'type non-texte : l\'héritage n\'est tenté que pour une chaîne, la réponse dit heritage « inconnu » (null : « absent ») (installations/routes.js)' }
             } },
-        'POST /api/compte/lier': { auth: 'bearer', base: () => ({ code: 'ABC123' }), nullables: [] },
+        'POST /api/compte/lier': { auth: 'bearer', idemCle: true, base: () => ({ code: 'ABC123' }), nullables: [] },
         'POST /api/compte/delier': { auth: 'bearer', base: () => ({}), nullables: [] },
         'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [] },   // D6 : l'inscription ne prend plus de mot de passe
         'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP }), nullables: [] },
@@ -408,7 +408,28 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     for (const r of ecritures) {
         const cible = CIBLES[r.cle]; if (!cible) continue;
         // ── (d) Idempotency-Key d'un AUTRE porteur : A joue une requête avec K ; B joue la même avec K ; B ne reçoit JAMAIS la réponse de A
-        if (cible.idem) {
+        if (cible.idemCle) {
+            // LOT IDEMPOTENCE-INSTALLATION : deux routes dont la réponse PORTE UN JETON honorent une clé facultative. Elles ne se jouent pas comme les autres : la réponse est un 201 (installation) ou un
+            // 200 (liaison) qui contient le jeton de A. Ce que B ne doit JAMAIS recevoir : ce jeton. Installation : aucun porteur, la clé (aléatoire) est la capacité — B avec la même clé mais un AUTRE corps
+            // est refusé (422) et ne voit rien ; liaison : le claim vit sous l'installation, B (une autre installation) exécute pour de bon.
+            const K = r.cle === 'POST /api/installation' ? `${cle()}-`.padEnd(40, 'k') : cle(); let repA, repB;      // la clé de /api/installation tient lieu de secret : 32 caractères au moins
+            if (r.cle === 'POST /api/installation') {
+                repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-A' } });
+                repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(null, { 'idempotency-key': K }), corps: { versionExtension: '2.0.0', libelle: 'idem-B' } });
+                if (repB.statut !== 422) ecart(r.cle, 'd', `B (même clé, autre corps) devait être refusée en 422 (statut ${repB.statut})`);
+            } else {
+                const a = await inst(0), b = await inst(0), CX = await compte();
+                const codeX = (await envoyer(V, { methode: 'POST', chemin: '/api/compte/code', entetes: siteH(CX.cookie), corps: {} })).json;
+                repA = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(a.jeton, { 'idempotency-key': K }), corps: { code: codeX && codeX.code } });
+                repB = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(b.jeton, { 'idempotency-key': K }), corps: { code: 'ZZZZZZ' } });
+                if (repB.statut !== 404) ecart(r.cle, 'd', `B (une autre installation, même clé) doit exécuter pour de bon : code inconnu 404 (statut ${repB.statut})`);
+            }
+            const attenduA = r.cle === 'POST /api/installation' ? 201 : 200, jetonA = repA.json && repA.json.jetonInstallation;
+            if (!(repA && repA.statut === attenduA && jetonA)) ecart(r.cle, 'd', `contrôle de l'instrument : la requête de A avec la clé devait réussir et rendre un jeton (statut ${repA && repA.statut})`);
+            if (!nonRejoue(repB)) ecart(r.cle, 'd', 'B a reçu un REJEU (Idempotency-Replayed) de la réponse de A');
+            if (jetonA && repB.texte.includes(jetonA)) ecart(r.cle, 'd', 'la réponse de B contient le jeton de A');
+            cellule(r.cle, 'd', 'jouee', 2, `A puis B, même clé (${repB.statut}) : B ne reçoit jamais le jeton de A`);
+        } else if (cible.idem) {
             const K = cle(); let repA, repB, ciblesA = null;
             if (r.cle === 'POST /api/identifier') {
                 const a = await inst(3), b = await inst(3);
@@ -779,14 +800,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_SECRET_EMPREINTE: [c => c.empreinte.secret, null, 'trop-court', 'leve', {}],
             V2_TURNSTILE: [c => c.turnstile, 'on', 'peut-etre', 'leve'],
             V2_ESSAIS: [c => c.quotas.essai, 3, 'abc', 'leve'], V2_ACCUEIL: [c => c.quotas.accueil, 25, 'abc', 'leve'], V2_HEBDO: [c => c.quotas.hebdo, 2, 'abc', 'leve'], V2_ABO_MENSUEL: [c => c.quotas.aboMensuel, 100, 'abc', 'leve'],
-            V2_PLAFOND_PANNES: [c => c.plafonds.panne, 5, 'abc', 'leve'], V2_PLAFOND_QUESTIONS: [c => c.plafonds.question, 30, 'abc', 'leve'], V2_LECTURE_LIVE_MAX: [c => c.lot.lectureLiveMax, 5, 'abc', 'leve'],
-            V2_JUMEAUX_REMBOURSES_JOUR: [c => c.plafonds.jumeaux, 20, 'abc', 'leve'], V2_LOT_REPRISES_PASSAGE: [c => c.lot.reprisesParPassage, 200, '0', 'leve'], V2_LOT_REGLEMENT_REPRISE_MIN: [c => c.lot.reglementBloqueMs, 15 * 60e3, '0', 'leve'], V2_CLAIM_ORPHELINE_MIN: [c => c.lot.claimOrphelineMs, 60 * 60e3, '59', 'leve'], V2_REPARATION_AGE_MIN: [c => c.lot.reparationAgeMs, 15 * 60e3, '4', 'leve'],
-            V2_SANS_PRIX_JOUR: [c => c.plafonds.sansPrix, 5, 'abc', 'leve'], V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
+            V2_DECLARES_SANS_COMPTE: [c => c.plafonds.declares.sansCompte, 1, 'abc', 'leve'], V2_DECLARES_GRATUIT: [c => c.plafonds.declares.gratuit, 3, 'abc', 'leve'], V2_DECLARES_PRO: [c => c.plafonds.declares.pro, 30, 'abc', 'leve'],      // PLAFOND-DECLARE : les déclarations du client, par offre (V2_PLAFOND_PANNES / _QUESTIONS, V2_SANS_PRIX_JOUR, V2_JUMEAUX_REMBOURSES_JOUR n'ont plus d'objet : test-plafond-declare.js)
+            V2_LECTURE_LIVE_MAX: [c => c.lot.lectureLiveMax, 5, 'abc', 'leve'],
+            V2_LOT_REPRISES_PASSAGE: [c => c.lot.reprisesParPassage, 200, '0', 'leve'], V2_LOT_REGLEMENT_REPRISE_MIN: [c => c.lot.reglementBloqueMs, 15 * 60e3, '0', 'leve'], V2_CLAIM_ORPHELINE_MIN: [c => c.lot.claimOrphelineMs, 60 * 60e3, '59', 'leve'], V2_REPARATION_AGE_MIN: [c => c.lot.reparationAgeMs, 15 * 60e3, '4', 'leve'],
+            V2_LOT_TROP_GRAND_JOUR: [c => c.plafonds.lotTropGrand, 10, 'abc', 'leve'], V2_LOT_CARTES_MAX: [c => c.lot.cartesMax, 20, '1', 'leve'],
             V2_COMPTE_HEURE: [c => c.limites.compteParPorteurHeure, 600, '0', 'leve'], V2_SOLDE_HEURE: [c => c.limites.soldeParPorteurHeure, 1200, '0', 'leve'],      // MOYENS-B1 (O4) : plafonds par porteur, posés sans mesure d'usage réel
             V2_REPONSE_HEURE: [c => c.limites.reponseParPorteurHeure, 600, '0', 'leve'], V2_RETOUR_LIVE_HEURE: [c => c.limites.retourLiveParPorteurHeure, 600, '0', 'leve'],
             V2_ETIQUETTE_HEURE: [c => c.limites.etiquetteParPorteurHeure, 600, '0', 'leve'],      // ETIQUETAGE-A : le plafond horaire de POST /api/banc/etiquette (administrateur), posé sans mesure d'usage réel
             RENDER_GIT_COMMIT: [c => c.versions.chaine, null, 'pas-un-commit', 'ignore'], V2_VERSION_MODELE: [c => c.versions.modele, null, '%%', 'ignore'],   // ETIQUETAGE-A : informations internes, une valeur illisible vaut `null` (jamais invalide, jamais inventée)
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
+            V2_INSTALLATION_REQUETES_HEURE: [c => c.limites.installationRequetesIpHeure, 30, '0', 'leve'],      // IDEMPOTENCE-INSTALLATION r1 I1 : borne les devinettes de clé sur /api/installation
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois
             V2_BANC_GRACE_JOURS: [c => c.retention.bancGraceJours, 7, '31', 'leve'],   // BANC-12 tour 1 : la grâce avant suppression d'une ligne non réécrite, 21 jours au plus (BANC-12 : « 30 » a été ramené à 21)
             V2_INSCRIPTION_IP_HEURE: [c => c.limites.inscriptionIpHeure, 10, '0', 'leve'], V2_OUBLI_IP_HEURE: [c => c.limites.oubliIpHeure, 10, '0', 'leve'], V2_REINIT_IP_HEURE: [c => c.limites.reinitIpHeure, 10, '0', 'leve'],
@@ -795,12 +818,13 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_URL_VERIFICATION: [c => c.urls.verification, 'https://rat-market.fr/fr/verification', 'http://rat-market.fr/x', 'leve'], V2_URL_REINIT: [c => c.urls.reinit, 'https://rat-market.fr/fr/reinitialisation', 'http://rat-market.fr/x', 'leve'],
             V2_EMPREINTE_JOURS: [c => c.empreinte.jours, 365, '0', 'leve'],
             V2_ORIGINE_EXTENSION_DEV: [c => c.origines.extensionDev, null, 'chrome-extension://intrus', { ferme: c => c.origines.extensionDev === null }, PROD],   // honorée SEULEMENT sur test_scratch : en production elle est ignorée
-            V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, true, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
-            V2_MARCHES: [c => c.marches.length, 16, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
+            V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, false, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
+            V2_MARCHES: [c => c.marches.length, 27, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
             V2_VERSION_MIN_EXTENSION: [c => c.versionMinExtension, '2.0.0', '%%', { ferme: c => require('../identifier/routes').comparerVersions('2.0.0', c.versionMinExtension) === null }],   // illisible : 400 pour tous
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
+            V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
             V2_PHOTO_ADMIN_DELAI_S: [c => c.photoAdmin.delaiS, 15, '301', 'leve'], V2_PHOTO_ADMIN_INTERVALLE_S: [c => c.photoAdmin.intervalleS, 10, '-1', 'leve'], V2_PHOTO_ADMIN_MAX_JOUR: [c => c.photoAdmin.maxJour, 400, '-1', 'leve']     // PHOTO-EXTENSION : le repli du téléchargement serveur (entiers, 0 à 3 600 et 0 à 100 000)
         };
