@@ -20,7 +20,7 @@ const charges = require(CHARGES).charges;
 const IMAGE = charges.find(c => c.cellule === 'occidentale').imageUrl;      // Tropius PBL 001 : la lecture rejouée par le faux réseau
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le service de lecture « tombe »
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1', V2_DESCRIPTION_CONSERVEE: '1' });   // B6 : le défaut est éteint ; ce banc éprouve l'option allumée (le défaut a son assertion plus bas)
 const ORIGINE = cfg.origines.extension;
 let nIp = 0;
 const ip = () => { nIp++; return { 'x-forwarded-for': `10.7.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -96,7 +96,7 @@ async function semer(mode) {                                  // 'double' | 'sim
     // (la référence d'A0.5 se rejoue sur un catalogue réel de test_scratch ; ici la base est en mémoire et fabriquée : la référence ne se rejoue pas, on compare
     //  DEUX serveurs vivants — v2 éteinte / allumée — sur les mêmes requêtes. Un écart d'un octet, scanId normalisé, échoue.)
     const srvOff = await demarrer(FAUX, { ...base, RM_API_V2: '' });
-    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
+    const srvOn = await demarrer(FAUX, { ...base, RM_API_V2: '1', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1', V2_DESCRIPTION_CONSERVEE: '1' });   // ETIQUETAGE-A : le serveur ENFANT lit ces deux variables (versions de la chaîne gardées dans analyses)
     if (!await srvOff.attendreMongo() || !await srvOn.attendreMongo()) throw new Error('Mongo non connecté');
     const urlOn = `http://127.0.0.1:${srvOn.port}`;
     const { appeler } = require('../../verrou/serveur');
@@ -449,6 +449,18 @@ async function semer(mode) {                                  // 'double' | 'sim
         await attendre(300);
         H.v('14. V2_DESCRIPTION_CONSERVEE=0 : aucune ligne dans annonces', [g.statut, await raw('annonces').countDocuments({ _id: g.json.scanId })], [200, 0]);
         await sv3.fermer();
+        // B6 : défaut éteint — la description reçue n'est écrite NULLE PART (aucune collection de la base, idempotence et journaux compris)
+        const cfgD = lireConfig({ MONGODB_BASE: 'test_scratch' });
+        const sv4 = await appFabrique(cfgD);
+        mode = 'affirmee'; const x4 = await inst(3); const MARQUE = 'DESCRIPTION-MARQUEUR-B6-7731';
+        const g4 = await poster(sv4.url, x4.jeton, corps({ title: 'Titre B6', description: MARQUE }), { nom: 'fab-description-nulle-part' });
+        await attendre(500);
+        const noms4 = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name);
+        const trouvees = [];
+        for (const n of noms4) { const docs = await raw(n).find({}).toArray(); if (docs.some(d => JSON.stringify(d).includes(MARQUE))) trouvees.push(n); }
+        H.v(`B6. défaut : 200 et la description n'est écrite dans AUCUNE des ${noms4.length} collections (dénominateur imprimé)`, [g4.statut, await raw('annonces').countDocuments({ _id: g4.json.scanId }), trouvees], [200, 0, []]);
+        H.vrai('   le dénominateur contient analyses, idempotence et journal_scans', ['analyses', 'idempotence', 'journal_scans'].every(n => noms4.includes(n)));
+        await sv4.fermer();
     }
     H.v(`contrat : ${reponsesValidees} réponses d'analyse validées contre ReponseAnalyse, écarts`, ecartsContrat, 0);
     H.v(`   Produit.set.tirage null (nullable au contrat) : ${tiragesNuls} produit(s) sur ${produitsVus} servis, tous validés`, [tiragesNuls, produitsVus].every(n => n > 0) && tiragesNuls === produitsVus, true);

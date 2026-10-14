@@ -965,7 +965,7 @@ Toutes sont des `enum` du schéma, comparées au code du serveur par `test-opena
 | `etat.confiance` (nullable) | `haute` · `moyenne` · `basse` |
 | états Cardmarket (`estime`, `retenu`, `etatVise`, `prixLiveEtat`) | `MT` · `NM` · `EX` · `GD` · `LP` · `PL` · `PO` |
 | `facturation.motif` | `affirmee` · `question` · `lot` · `introuvable` · `sans-prix` · `panne` · `plafond-jour` · `administrateur` |
-| `devise` | `EUR` · `GBP` · `USD` · `PLN` · `CZK` · `HUF` · `RON` · `SEK` · `DKK` |
+| `devise` | `EUR` · `GBP` · `USD` · `PLN` · `CZK` · `HUF` · `RON` · `SEK` · `DKK` · `AUD` (ajoutée avec `vinted.com.au`) |
 | `verdictAffiche` | `bonne-affaire` · `correct` · `cher` · `aucun` |
 | `lectureRatee.cause` | `defi` · `blocage` · `grille-vide` · `sans-prix` · `sans-offre-reverse` · `onglet` |
 | `originePrix` | `grille` · `plancher-toutes-langues` · `tendance` |
@@ -1254,7 +1254,7 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | A10 | `liens.cardmarket` toujours une adresse | **`null`** tant que numéro ET rareté ne sont pas connus (jamais de lien anonyme) ; même règle pour `impressions[].lien` | Q31 |
 | A11 | « réponse commune » (banc RatMarket) | pas d'issue de ce nom : une carte `a-trancher` avec la question `visuel` | Q34 |
 | A12 | `IMAGE` et `IA` en erreur HTTP | `IMAGE` et `IA` gardent le statut **200** (`success: false`) ; `VERSION` 426, `MARCHE` 422 | Q12 |
-| A13 | 24 marchés (extension) / 16 domaines (CORS hérité) | la liste est celle du serveur (`V2_MARCHES`, 16 domaines Vinted + `vinted.com` par défaut) ; hors liste : `422 MARCHE` | C13, Q26 |
+| A13 | 24 marchés (extension) / 16 domaines (CORS hérité) | la liste est celle du serveur (`V2_MARCHES`, 27 domaines Vinted par défaut depuis le 2026-10-14 : `vinted.uk`, qui n'existe pas, est remplacé par `vinted.co.uk`, et `ie hu ro si hr gr lv ee dk fi com.au` s'ajoutent) ; hors liste : `422 MARCHE` | C13, Q26 |
 | A15 | « une carte identifiée absente du guide » : rien de dit côté clients | une carte identifiée dont `prixGuide` est `null` est **remboursée**, `motif: sans-prix` (règle de l'éditeur « un résultat sans aucun prix lisible est remboursé », valable aux deux surfaces ; à confirmer par l'éditeur) | CONTRAT-2 §6 |
 | A16 | valeur d'un lot au scanner : fourchette ou total inventé | la **somme des tendances du guide** des cartes chiffrées, avec sa **couverture** (« 2 cartes sur 3 ») ; une carte à trancher ou sans tendance n'est pas comptée ; aucune fourchette inventée | CONTRAT-2 §6 |
 | A14 | codes d'erreur propres à chaque document | l'union, 20 codes (§6) | C9, Q13 |
@@ -1342,7 +1342,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 
 | donnée | durée | à l'échéance |
 |---|---|---|
-| titre et description d'annonce, **expurgés** des coordonnées du vendeur | **90 jours** | effacés (purge testée) ; ce sont des données, jamais des consignes ; la description ne part pas au modèle par défaut |
+| titre et description d'annonce, **expurgés** des coordonnées du vendeur | **aucune par défaut** (`V2_DESCRIPTION_CONSERVEE` éteinte depuis le 2026-10-14 : la description reçue n'est écrite nulle part) ; avec `V2_DESCRIPTION_CONSERVEE=1` : **90 jours** | effacés (purge testée) ; ce sont des données, jamais des consignes ; la description ne part pas au modèle par défaut ; l'extension ne l'envoie plus, une requête sans description reste valide |
 | image redressée versée au banc (avec consentement explicite) | **24 mois** au plus ; son LIEN à un compte ou une installation : **10 à 11 mois** (cohorte mensuelle décalée d'un mois, toujours sous 12 mois, BANC-12) | effacée à 24 mois ; à la bascule de sa cohorte la ligne est anonymisée (identifiant aléatoire, plus de jeton ni de jour, objet réécrit) ; effacement à la demande par le jeton (immédiat) **seulement avant la bascule** |
 | analyses (sans texte d'annonce) | **10 à 11 mois** en pratique (supprimées à la bascule du mois ; TTL de 12 mois = filet, `V2_BANC_LIEN_MOIS` ; la politique du site : « douze mois au plus ») | effacées |
 | mouvements de crédits | **24 mois**, mais leur `scanId` (champ et clé) est retiré à la bascule (10 à 11 mois), sauf un débit encore utile (marque de livraison non close, question ouverte, rendu non confirmé) | le mouvement RESTE jusqu'à 24 mois (somme des deltas = solde), sans `scanId` ; effacé à 24 mois |
