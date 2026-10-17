@@ -10,6 +10,8 @@
 // trois effets qu'on oublierait un par un dans une copie — l'upsert des lignes, le REMPLACEMENT des restes
 // du set (sinon un reste corrigé survit à sa correction), et `liens.idProduct` / `liens.idMetacards`.
 
+const { garderMatiereSpeciale } = require('./matiere-speciale');
+
 /**
  * @param M        modèles mongoose (modeles(cx))
  * @param slug     le slugSet de la ligne — les restes lui appartiennent
@@ -17,6 +19,8 @@
  * @param produits les produits Cardmarket de l'expansion (pour les métacartes)
  */
 async function ecrireJointure(M, { slug, J, produits }) {
+    // 🔴 LOT METAL : défense en profondeur — `joindre()` n'attache jamais un produit de la table fermée ; si un lot en contenait quand même, on refuse AVANT toute écriture.
+    garderMatiereSpeciale(J.lignes.map(l => l.idProduct), `ecrireJointure ${slug}`);
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     // Les restes du set sont REMPLACÉS, jamais ajoutés : un reste qu'une correction a fait disparaître
     // doit disparaître de la base, sinon le compte des trous ne descend jamais.
