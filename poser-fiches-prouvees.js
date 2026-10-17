@@ -2,7 +2,7 @@
 // DES FICHES POSÉES D'UNE LISTE FERMÉE, PROUVÉES AU MOMENT D'ÉCRIRE (lot CAND-FICHES, 2026-10-17)
 // ============================================================
 //   node poser-fiches-prouvees.js --decision=2026-10-17                                   (SIMULATION : lecture seule, rien n'est écrit)
-//   node lot-additif.js --quoi="CAND-FICHES : 8 fiches prouvées" --collections=cartes,cartes_produits -- node poser-fiches-prouvees.js --decision=2026-10-17 --attendu=8 --ecrire
+//   node lot-additif.js --quoi="CAND-FICHES : 8 fiches prouvées" --collections=cartes,cartes_produits -- node poser-fiches-prouvees.js --decision=2026-10-17 --attendu=8 --attendu-sets=1 --ecrire
 //
 // UNE LISTE FERMÉE PAR DÉCISION (comme detacher-lignes-prouvees.js) : l'outil ne décide pas ce qui est juste, il applique une décision prise sur une preuve et la
 // REJOUE à l'écriture avec les fonctions de production — la clé nom + attaques (cle-nom-attaques.js), le témoin du nom de joindre() (jointure.js: temoinDuNom),
@@ -82,6 +82,59 @@ async function ecrireFiches(db, lignes, metaDe, ajoutsSets = new Map()) {
     return { lignes: n, cartes: rc.modifiedCount };
 }
 
+/**
+ * L'APPARTENANCE AU SET (`cartes.sets`) — ARBITRAGE DU TESTEUR, RÈGLE R (regle-r-fiches.js, 2026-10-08) : « tout le reste BLOQUE ». Une carte ne rejoint un set que si
+ * `juger(entree)` (= R.jugerRegleR, la règle de PRODUCTION, jamais une copie) l'autorise ; sinon sa LIGNE est écrite quand même, sans l'appartenance, et la cause est nommée.
+ * @returns {{ ajouts: Map<number, Set<string>>, decisions: object[], autorisees: number, refusees: number, parCause: object }}
+ */
+function appartenances({ entrees, lignes, juger }) {
+    const ajouts = new Map(), decisions = [], parCause = {};
+    let autorisees = 0, refusees = 0;
+    for (const e of entrees) {
+        if (!e.ajoutSet || !lignes.some(l => l._id === `${e.carteId}|${e.idProduct}`)) continue;
+        const j = juger(e);
+        decisions.push({ idProduct: e.idProduct, carteId: e.carteId, code: e.code, slugSet: e.slugSet, autorise: !!j.autorise, regle: j.regle ?? null, cause: j.cause, raison: j.raison });
+        if (j.autorise) { autorisees++; (ajouts.get(e.carteId) || ajouts.set(e.carteId, new Set()).get(e.carteId)).add(e.slugSet); }
+        else { refusees++; parCause[j.cause] = (parCause[j.cause] || 0) + 1; }
+    }
+    return { ajouts, decisions, autorisees, refusees, parCause };
+}
+
+/**
+ * LA RELECTURE APRÈS ÉCRITURE : les lignes, et sur `cartes` les `liens.idProduct`, `liens.idMetacards` et `sets` attendus, et le repère d'adresse
+ * (`liens.idProduct[0]`) tel qu'il était avant. `repereAvant` : carteId → premier idProduct lu avant d'écrire.
+ */
+async function relire(db, lignes, metaDe, ajoutsSets, repereAvant) {
+    const presentes = await db.collection('cartes_produits').countDocuments({ _id: { $in: lignes.map(l => l._id) } });
+    const parCarte = new Map();
+    for (const l of lignes) (parCarte.get(l.carteId) || parCarte.set(l.carteId, []).get(l.carteId)).push(l);
+    let bonnes = 0; const reperesBouges = [], manques = [];
+    for (const [id, ls] of parCarte) {
+        const c = await db.collection('cartes').findOne({ _id: id }, { projection: { liens: 1, sets: 1 } });
+        const ids = c?.liens?.idProduct || [], metas = c?.liens?.idMetacards || [], sets = c?.sets || [];
+        const manque = [
+            ...ls.filter(l => !ids.includes(l.idProduct)).map(l => `liens.idProduct ${l.idProduct}`),
+            ...ls.filter(l => metaDe.get(l.idProduct) != null && !metas.includes(metaDe.get(l.idProduct))).map(l => `liens.idMetacards ${metaDe.get(l.idProduct)}`),
+            ...(ajoutsSets.get(id) || []).filter(s => !sets.includes(s)).map(s => `sets ${s}`),
+        ];
+        if (repereAvant.has(id) && ids[0] !== repereAvant.get(id)) reperesBouges.push(id);
+        if (manque.length) manques.push([id, manque]);
+        if (!manque.length && !reperesBouges.includes(id)) bonnes++;
+    }
+    return { ok: presentes === lignes.length && bonnes === parCarte.size, lignes: `${presentes}/${lignes.length}`, cartes: `${bonnes}/${parCarte.size}`, reperesBouges, manques };
+}
+
+/** Les trois fonctions du site que la règle R lit (regle-r-fiches.js `chargerSite` les cherche à côté du dépôt ; ici le site vit sur le Bureau) — IMPORTÉES, jamais recopiées. */
+async function siteDeR() {
+    const { pathToFileURL } = require('url'), path = require('path');
+    const lib = 'C:/Users/Yung/Desktop/rat-market-site/lib';
+    const lireTs = f => import(pathToFileURL(path.join(lib, f)).href);
+    const [e, i] = await Promise.all([lireTs('entreesDuSet.ts'), lireTs('imageDeLImpression.ts')]);
+    const site = { tirageDuSet: e.tirageDuSet, expansionsDuSet: e.expansionsDuSet, normaliserNumero: i.normaliserNumero };
+    for (const [k, f] of Object.entries(site)) if (typeof f !== 'function') throw new Error(`${k} absent de ${lib}`);
+    return site;
+}
+
 async function lire({ cartesDb, prodDb, entrees }) {
     const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
     const cartes = await cartesDb.collection('cartes').find({}, { projection: { nomEn: 1, niveau: 1, 'attaques.nom': 1, impressions: 1, sets: 1, liens: 1, images: 1, 'bulba.titre': 1 } }).toArray();
@@ -98,12 +151,10 @@ async function lire({ cartesDb, prodDb, entrees }) {
 }
 
 /** Le gain en produits SERVIS, par la règle du site importée (collecte-cartes/simuler-servis.js) — avant, après, et ce qui bougerait AILLEURS. */
-async function simulerServis({ cartesDb, lecture, plan, entrees }) {
+async function simulerServis({ cartesDb, lecture, plan, entrees, ajoutsSets }) {
     const S = require('./collecte-cartes/simuler-servis');
     const regles = await S.reglesDuSite();
     const slugs = [...new Set(entrees.map(e => e.slugSet))];
-    const ajoutsSets = new Map(entrees.filter(e => e.ajoutSet).map(e => [e.carteId, []]));
-    for (const e of entrees) if (e.ajoutSet) ajoutsSets.get(e.carteId).push(e.slugSet);
     const sorties = [];
     for (const slug of slugs) {
         const set = await cartesDb.collection('sets').findOne({ _id: slug });
@@ -119,7 +170,7 @@ async function simulerServis({ cartesDb, lecture, plan, entrees }) {
 }
 
 async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log, err = console.error }) {
-    const AUTORISES = [/^--decision=[\d-]+$/, /^--attendu=\d+$/, /^--ecrire$/];
+    const AUTORISES = [/^--decision=[\d-]+$/, /^--attendu=\d+$/, /^--attendu-sets=\d+$/, /^--ecrire$/];
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     if (inconnus.length || !arg('decision')) { err(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--decision=<date> obligatoire (décisions : ${Object.keys(DECISIONS).join(', ')})`); return 2; }
@@ -137,18 +188,32 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log
         for (const d of plan.deja) log(`   = déjà là ${d._id} (${d.preuve}) : jamais réécrite`);
         const sansRepere = R.cartesSansRepere(lecture.cartes, plan.lignes.map(l => l.carteId));
         log(`\n   PLAN : ${plan.lignes.length} ligne(s) à poser · ${plan.refus.length} refus · ${plan.deja.length} déjà · cartes sans repère d'adresse (liens.idProduct vide) : ${sansRepere.length}${sansRepere.length ? ` — ${sansRepere.join(', ')}` : ''}`);
-        const ajoutsSets = new Map();
-        for (const e of entrees) if (e.ajoutSet && plan.lignes.some(l => l._id === `${e.carteId}|${e.idProduct}`)) { const s = ajoutsSets.get(e.carteId) || ajoutsSets.set(e.carteId, new Set()).get(e.carteId); s.add(e.slugSet); }
-        for (const [c, s] of ajoutsSets) log(`   appartenance ajoutée : carte ${c} → ${[...s].join(', ')} (cartes.sets, $addToSet)`);
-        for (const s of await simulerServis({ cartesDb, lecture, plan, entrees })) log(`   SERVIS ${s.slug} : ${s.avant} → ${s.apres} sur ${s.produitsDuSet} lignes · gagnés ${JSON.stringify(s.gagnes)} · perdus ${JSON.stringify(s.perdus)} · lignes posées ${JSON.stringify(s.lignesPosees)}`);
+        // LA RÈGLE R DE PRODUCTION décide de chaque appartenance (importée : regle-r-fiches.js, lireBases/construireContexte/jugerRegleR)
+        const { ligne: ligneDeTable } = require('./collecte-cartes/table-sets');
+        const { lireMongo } = require('./collecte-cartes/lecture-sure');
+        const ctxR = R.construireContexte(await R.lireBases(cartesDb, lireMongo), await siteDeR());
+        const parId = new Map(lecture.cartes.map(c => [c._id, c]));
+        const juger = e => {
+            const lecturesExp = lecture.produits.get(e.idExpansion) || [];
+            const p = lecturesExp.find(x => x.idProduct === e.idProduct);
+            return R.jugerRegleR(ctxR, { L: ligneDeTable(e.code), p, X: parId.get(e.carteId), numDe: new Map(lecturesExp.map(x => [x.idProduct, x.numero])) });
+        };
+        const ap = appartenances({ entrees, lignes: plan.lignes, juger });
+        for (const d of ap.decisions) log(`   ${d.autorise ? '✅ appartenance AUTORISÉE' : '⛔ appartenance REFUSÉE (la ligne s\'écrit quand même)'} · produit ${d.idProduct} carte ${d.carteId} → ${d.slugSet} · règle R ${d.regle ?? '—'} cause ${d.cause} : ${d.raison}`);
+        log(`   APPARTENANCES : ${ap.autorisees} autorisée(s) par la règle R · ${ap.refusees} refusée(s) ${JSON.stringify(ap.parCause)} · (cartes.sets, $addToSet seulement ; liens.idProduct[0] et nomEn ne bougent pas)`);
+        const ajoutsSets = new Map([...ap.ajouts].map(([c, s]) => [c, [...s]]));
+        for (const s of await simulerServis({ cartesDb, lecture, plan, entrees, ajoutsSets })) log(`   SERVIS ${s.slug} : ${s.avant} → ${s.apres} sur ${s.produitsDuSet} lignes · gagnés ${JSON.stringify(s.gagnes)} · perdus ${JSON.stringify(s.perdus)} · lignes posées ${JSON.stringify(s.lignesPosees)}`);
         if (!ecrire) { log('   (simulation — lot-additif.js … -- node poser-fiches-prouvees.js --decision=… --attendu=N --ecrire)'); return 0; }
         const v = verifierAttendu(plan, arg('attendu') === undefined ? undefined : Number(arg('attendu')));
         if (!v.ok) { err(`❌ ARRÊT : ${v.raison} — rien n'est écrit`); return 1; }
+        if (arg('attendu-sets') === undefined || ap.autorisees !== Number(arg('attendu-sets'))) { err(`❌ ARRÊT : ${ap.autorisees} appartenance(s) autorisée(s) par la règle R, --attendu-sets=${arg('attendu-sets') ?? 'non donné'} — rien n'est écrit`); return 1; }
         const metaDe = new Map([...lecture.produits.values()].flat().map(p => [p.idProduct, p.idMetacard]));
-        const r = await ecrireFiches(cartesDb, plan.lignes, metaDe, new Map([...ajoutsSets].map(([c, s]) => [c, [...s]])));
-        const relues = await cartesDb.collection('cartes_produits').countDocuments({ _id: { $in: plan.lignes.map(l => l._id) }, preuve: 'fiche-prouvee', route: ROUTE });
-        log(`\n   ✅ lignes posées ${r.lignes}/${plan.lignes.length} · cartes modifiées ${r.cartes} · relu : ${relues}/${plan.lignes.length}`);
-        return r.lignes === plan.lignes.length && relues === plan.lignes.length ? 0 : 1;
+        const repereAvant = new Map(plan.lignes.map(l => [l.carteId, parId.get(l.carteId)?.liens?.idProduct?.[0]]).filter(([, v]) => v !== undefined));
+        const r = await ecrireFiches(cartesDb, plan.lignes, metaDe, ajoutsSets);
+        const rl = await relire(cartesDb, plan.lignes, metaDe, ajoutsSets, repereAvant);
+        const routees = await cartesDb.collection('cartes_produits').countDocuments({ _id: { $in: plan.lignes.map(l => l._id) }, preuve: 'fiche-prouvee', route: ROUTE });
+        log(`\n   ✅ lignes posées ${r.lignes}/${plan.lignes.length} · cartes modifiées ${r.cartes} · relu : lignes ${rl.lignes} (dont à notre route ${routees}) · cartes (liens, métacartes, sets) ${rl.cartes} · repères d'adresse bougés ${JSON.stringify(rl.reperesBouges)}${rl.manques.length ? ` · MANQUES ${JSON.stringify(rl.manques)}` : ''}`);
+        return r.lignes === plan.lignes.length && rl.ok && routees === plan.lignes.length ? 0 : 1;
     } finally { await cx.fermer(); }
 }
 
@@ -164,7 +229,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { planifier, verifierAttendu, ecrireFiches, executer, DECISIONS, ROUTE };
+module.exports = { planifier, verifierAttendu, ecrireFiches, appartenances, relire, executer, DECISIONS, ROUTE };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });

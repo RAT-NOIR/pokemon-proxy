@@ -9,6 +9,9 @@
 const { clesNom, nomJointDe, temoinDuNom } = require('./jointure');
 const { indexer, candidats } = require('./cle-nom-attaques');
 
+/** Le témoin du nom, celui de la PRODUCTION (jointure.js) — injectable pour l'observer (il ne contredit jamais une carte que la clé vient de désigner : mêmes clés de nom). */
+const TEMOIN_PRODUCTION = temoinDuNom;
+
 const VOIES = ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage'];
 
 /** Numéro comparable : minuscules, zéros de tête ôtés, SUFFIXE GARDÉ (« 143a » n'est pas « 143 »). */
@@ -47,7 +50,7 @@ const parseTitre = t => { const m = /^(.*) \(([^()]*) ([^\s()]+)\)\s*$/.exec(Str
  * @param {{pages: object[]}|null} o.etatSetlist  `collecte_etat` du set, pour la voie « setlist »
  * @returns {{ ok: boolean, temoins: string[], refus: string[] }}
  */
-function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [], etatSetlist = null }) {
+function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [], etatSetlist = null, temoin = TEMOIN_PRODUCTION }) {
     // (`produit` est réassigné par ⓪ : une COPIE avec l'attaque corrigée, jamais le document lu)
     const temoins = [], refus = [];
     if (!VOIES.includes(entree.voie)) return { ok: false, temoins, refus: [`voie « ${entree.voie} » inconnue : la liste des voies est fermée (${VOIES.join(', ')})`] };
@@ -83,7 +86,7 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     // ④ LE TÉMOIN DU NOM DE PRODUCTION (joindre().temoinDuNom) : il ne doit pas contredire
     if (variante) {
         const jeu = [...new Map([...cartesDuSet, carte].map(c => [c._id, c])).values()];
-        const contre = temoinDuNom(jeu, produit.idExpansion)(carte, variante);
+        const contre = temoin(jeu, produit.idExpansion)(carte, variante);
         if (contre) refus.push(`témoin du nom de joindre() : le nom du produit désigne ${contre.slice(0, 2).map(c => `${c._id} « ${c.nomEn} »`).join(', ')} plus que la carte`);
         else temoins.push('témoin du nom de joindre() : ne contredit pas');
     }
@@ -133,4 +136,4 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     return { ok: refus.length === 0, temoins, refus };
 }
 
-module.exports = { prouver, VOIES, variantesDuProduit, parseTitre, nu };
+module.exports = { prouver, VOIES, TEMOIN_PRODUCTION, variantesDuProduit, parseTitre, nu };

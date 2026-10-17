@@ -79,6 +79,44 @@ verifier('impression-du-tirage : le produit porte un numéro → refus (ce n\'es
 verifier('une voie inconnue → refus nommé (liste fermée)', (() => { const r = prouver({ entree: { ...E5, voie: 'devine' }, produit: pPal, carte: pal, ...ctx([pal]) }); return [r.ok, /voie/.test(r.refus.join())]; })(), [false, true]);
 verifier('les voies sont une liste fermée de quatre', VOIES, ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage']);
 
+// ═════ TOUR 1 — les trois mutants qui survivaient ═════
+// (a) LE TÉMOIN DU NOM DE PRODUCTION : par construction il ne contredit jamais une carte que la clé vient de désigner (mêmes clés de nom) ; il ne se prouve donc qu'en
+//     l'observant : `prouver` reçoit la fonction (par défaut la fonction de PRODUCTION, vérifiée par identité) et un espion voit ce qu'on lui demande.
+const { TEMOIN_PRODUCTION } = require('./collecte-cartes/fiches-prouvees');
+verifier('le témoin par défaut EST temoinDuNom de joindre(), pas une copie', TEMOIN_PRODUCTION === require('./collecte-cartes/jointure').temoinDuNom, true);
+verifier('un témoin qui contredit refuse, et le dit', (() => { const r = prouver({ entree: E1, produit: pTog, carte: togepi, ...ctx([togepi]), temoin: () => () => [{ _id: 99, nomEn: 'Autre' }] }); return [r.ok, /témoin du nom/.test(r.refus.join())]; })(), [false, true]);
+verifier('le témoin est APPELÉ avec l\'expansion du produit, la carte et la variante du nom ; sans contradiction → prouvé', (() => {
+    const vu = []; const r = prouver({ entree: E1, produit: pTog, carte: togepi, ...ctx([togepi]), temoin: (jeu, exp) => (c, p) => { vu.push([jeu.map(x => x._id), exp, c._id, p.nom]); return null; } });
+    return [r.ok, vu];
+})(), [true, [[[10], 9, 10, 'Togepi GX']]]);
+// (b) LE SUFFIXE DU NUMÉRO : 143a n'est jamais 143, dans aucun sens
+const seule143 = carte(10, 'Togepi GX', ['Rolling Panic'], [imp('intl', 'Cosmic', '143', '236')]);
+const seule143a = carte(10, 'Togepi GX', ['Rolling Panic'], [imp('intl', 'Yellow A', '143a', '236')]);
+verifier('le produit 143a ne s\'accroche JAMAIS à une carte qui ne déclare que 143', prouver({ entree: E1, produit: pTog, carte: seule143, ...ctx([seule143]) }).ok, false);
+verifier('le produit 143 ne s\'accroche JAMAIS à une carte qui ne déclare que 143a', prouver({ entree: E1, produit: produit(20, 'Togepi GX [Rolling Panic | Supreme Puff GX]', '143'), carte: seule143a, ...ctx([seule143a]) }).ok, false);
+verifier('les zéros de tête ne comptent pas (0143a = 143a), la lettre compte', [prouver({ entree: E1, produit: produit(20, 'Togepi GX [Rolling Panic | Supreme Puff GX]', '0143a'), carte: seule143a, ...ctx([seule143a]) }).ok, prouver({ entree: E1, produit: produit(20, 'Togepi GX [Rolling Panic | Supreme Puff GX]', '143b'), carte: seule143a, ...ctx([seule143a]) }).ok], [true, false]);
+// (c) LA BORNE DE LA FAUTE DE FRAPPE : une lettre passe, deux lettres refusent, zéro (déclarée à tort) passe
+const faute = (mal, bien) => prouver({ entree: { ...E2b, fautesDeFrappe: [[mal, bien]] }, produit: produit(45, `Chikorita [${mal} | Double Scratch]`, 'S05', 212835), carte: chiko, ...ctx([chiko]) }).ok;
+verifier('faute : distance 1 passe, distance 2 refuse (Hyptntic ≠ Hypnotic), distance 0 passe', [faute('Hyptnotic Gaze', 'Hypnotic Gaze'), faute('Hyptntic Gaze', 'Hypnotic Gaze'), faute('Hypnotic Gaze', 'Hypnotic Gaze')], [true, false, true]);
+
+// (d) L'APPARTENANCE AU SET : seulement quand la règle R de PRODUCTION l'autorise ; les lignes s'écrivent quand même
+const { appartenances, relire } = require('./poser-fiches-prouvees');
+const RR = require('./collecte-cartes/regle-r-fiches');
+const lignesP = [{ _id: '1|10', carteId: 1, idProduct: 10, slugSet: 'S-A' }, { _id: '2|11', carteId: 2, idProduct: 11, slugSet: 'S-B' }, { _id: '3|12', carteId: 3, idProduct: 12, slugSet: 'S-C' }];
+const ents = [{ idProduct: 10, carteId: 1, code: 'A', slugSet: 'S-A', ajoutSet: true }, { idProduct: 11, carteId: 2, code: 'B', slugSet: 'S-B', ajoutSet: true }, { idProduct: 12, carteId: 3, code: 'C', slugSet: 'S-C', ajoutSet: false }];
+const jugeStub = (e) => (e.code === 'A' ? { autorise: true, regle: 'R2', cause: 'C3a', raison: 'ok' } : { autorise: false, regle: null, cause: 'C4a', raison: 'non' });
+const ap = appartenances({ entrees: ents, lignes: lignesP, juger: jugeStub });
+verifier('appartenance : seule la décision AUTORISÉE par R ajoute le set ; l\'autre est refusée avec sa cause ; sans ajoutSet, R n\'est pas consultée', [[...ap.ajouts].map(([c, s]) => [c, [...s]]), ap.decisions.map(d => [d.idProduct, d.autorise, d.cause])], [[[1, ['S-A']]], [[10, true, 'C3a'], [11, false, 'C4a']]]);
+verifier('appartenance : les compteurs sont séparés (autorisées / refusées par cause)', [ap.autorisees, ap.refusees, ap.parCause], [1, 1, { C4a: 1 }]);
+// la règle R RÉELLE (jugerRegleR de regle-r-fiches.js), sur un contexte fabriqué : Setlist vide → C4b, lien rouge au bon nom et numéro → C3a (R2), jamais une copie
+const siteFaux = { tirageDuSet: s => s.tirage, expansionsDuSet: s => [].concat(s.bulba.expansion), normaliserNumero: n => (n == null ? null : String(n).replace(/^0+/, '')) };
+const setDoc = { _id: 'S-T', tirage: 'th', bulba: { expansion: 'Promo' } };
+const ctxR = (pages) => RR.construireContexte({ cartes: [{ _id: 60, nomEn: 'Toxtricity ex', sets: [], impressions: [] }], lignes: [], etats: pages ? [{ _id: 'S-T', pages }] : [], sets: [setDoc] }, siteFaux);
+const LR = { code: 'T', slugSet: 'S-T', bulba: { tirage: 'th', expansion: 'Promo' }, verifie: { le: '2026-10-17', page: 'P' } };
+const jr = pages => RR.jugerRegleR(ctxR(pages), { L: LR, p: { numero: '253' }, X: { _id: 60, nomEn: 'Toxtricity ex', sets: [] }, numDe: new Map() });
+verifier('R réelle : aucune Setlist lue → bloque (C4b)', [jr(null).autorise, jr(null).cause], [false, 'C4b']);
+verifier('R réelle : lien rouge au bon nom et au bon numéro → R2 autorise', [jr([{ titre: 'Toxtricity ex (Promo 253)', etat: 'manquant', pageid: null }]).autorise, jr([{ titre: 'Toxtricity ex (Promo 253)', etat: 'manquant', pageid: null }]).regle], [true, 'R2']);
+
 // ── planifier : une ligne par produit prouvé, des REFUS nommés, des « déjà » jamais réécrits
 const entrees = [E1, { ...E5, idProduct: 72 }];
 const lecture = { cartes: [togepi, pal, palX], produits: new Map([[9, [pTog, pPal]]]), existants: new Map(), etats: new Map() };
@@ -109,6 +147,11 @@ verifier('la décision du jour est une liste fermée de 8 produits distincts', (
         await db.collection('cartes_produits').updateOne({ _id: '10|20' }, { $set: { preuve: 'autre' } });
         await ecrireFiches(db, lignes, new Map([[20, 500]]), new Map());
         verifier('une ligne posée entre-temps par un autre outil n\'est JAMAIS réécrite', (await db.collection('cartes_produits').findOne({ _id: '10|20' })).preuve, 'autre');
+        // la RELECTURE après écriture : lignes, liens ET sets sur cartes, et le repère d'adresse (liens.idProduct[0]) inchangé
+        const ok1 = await relire(db, lignes, new Map([[20, 500], [72, 215371]]), new Map([[70, ['B-neuf']]]), new Map([[10, 1], [70, 4]]));
+        verifier('relecture : tout concorde (lignes, liens, métacartes, sets, repère)', [ok1.ok, ok1.lignes, ok1.cartes, ok1.reperesBouges], [true, '2/2', '2/2', []]);
+        verifier('relecture : un repère d\'adresse qui a bougé est signalé', (await relire(db, lignes, new Map([[20, 500]]), new Map(), new Map([[10, 999]]))).ok, false);
+        verifier('relecture : un set attendu mais absent est signalé', (await relire(db, lignes, new Map([[20, 500], [72, 215371]]), new Map([[70, ['jamais-pose']]]), new Map())).ok, false);
         verifier('l\'écriture sur cartes ne nomme ni nomEn ni autre champ que liens/sets (garde du site)', (await db.collection('cartes').findOne({ _id: 10 })).nomEn, 'Togepi GX');
     } finally { await client.close(); await banc.arreter(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
