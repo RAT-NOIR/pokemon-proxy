@@ -102,7 +102,7 @@ function cleMesure(n) { const m = /^([A-Za-z]*)0*(\d+)([a-zA-Z]?)$/.exec(String(
 /** Le nom côté Pokumon : sans le préfixe du programme, sans « Holofoil », normalisé. */
 function nomPokumon(e) {
     let n = e.nom;
-    n = n.replace(/^(Play Pokemon|Trick or Trade|Professor Program|Staff|Non-holo|Non Holo|Reverse Holo|Holofoil)\s+/gi, '').replace(/^(Play Pokemon|Staff)\s+/gi, '');
+    n = n.replace(/^(Play Pokemon|Trick or Trade|Professor Program|Staff|Non-holo|Non Holo|Reverse Holo|Holofoil|Burger King)\s+/gi, '').replace(/^(Play Pokemon|Staff)\s+/gi, '');
     n = n.replace(/\s+\d+\s+Stamp\s+/i, ' Stamp ').replace(/^(Pikachu|Charizard|Mewtwo)\s+(\d+\s+)?Stamp\s+/i, '');
     return norm(n);
 }
@@ -300,9 +300,25 @@ const REGLES = Object.freeze({
         anneeProduit: p => (/-BOO(\d\d)[A-Z]/.exec(p.slugProduit || '') ? 2000 + Number(/-BOO(\d\d)[A-Z]/.exec(p.slugProduit)[1]) : 2022),
         impression: true
     },
+    // PK-PROMOS : `l.motifSet` (optionnel) est le descripteur de set d'une AUTRE ligne de la même famille (« prof-reverse » : « Reverse Holo Professor promo ») ; sans lui, la règle d'origine.
     prof: {
         produit: p => numeroOrigine(p.slugProduit),
-        entree: e => /Professor (Program|Stamp)|Professor University|"Professor Program" stamp/.test(e.set) && !/Excellence Award|Professor Cup/.test(e.set),
+        entree: (e, l) => (l?.motifSet ? l.motifSet.test(e.set) : /Professor (Program|Stamp)|Professor University|"Professor Program" stamp/.test(e.set)) && !/Excellence Award|Professor Cup/.test(e.set),
+        impression: true
+    },
+    // PK-PROMOS : Burger King (DP 2008, Platinum 2009). Cardmarket écrit le niveau dans le nom (« Prinplup Lv.20 »), Pokumon non ; le numéro est celui du slug (BKPR58, BKPPR26) ; le bloc de
+    // téléversement (`plageS`) et la liste des dénominateurs (`totaux`) séparent les deux millésimes, que Pokumon range sous le MÊME événement.
+    bk: {
+        nom: p => norm(nomNu(p.nomCm).replace(/\s+Lv\.?\s*\d+\s*$/i, '')),
+        produit: p => { const m = /-BKP?PR0*(\d+)$/.exec(p.slugProduit || ''); return m ? { n: m[1], code: '', prefixe: '' } : null; },
+        entree: (e, l) => /Burger King/.test(e.set) && dansPlage(sDuFichier(e), l.plageS) && Array.isArray(l.totaux) && l.totaux.includes(e.total),
+        impression: true
+    },
+    // PK-PROMOS : W Promos (cartes Wizards 1999-2001 reparues en magazine). Le slug Cardmarket ne donne pas le numéro (« Wartortle-B263 » = Base Set 2 n° 63) : la ligne ÉNUMÈRE les numéros d'origine,
+    // l'événement (magazine) est le descripteur, et l'impression de la carte (numéro ET total chez TCGdex/Bulbapedia) reste le témoin.
+    w: {
+        produit: (p, l) => (l?.numeros && Object.hasOwn(l.numeros, p.slugProduit || '') ? { n: l.numeros[p.slugProduit], code: '', prefixe: '' } : null),
+        entree: (e, l) => l.evenements instanceof RegExp && l.evenements.test(e.set),
         impression: true
     },
     bsp: {
@@ -348,7 +364,7 @@ function apparierFamille({ lignes, produits, index }) {
         const R = REGLES[ls[0].famille];
         const nm = R.produit(p, ls[0]);
         if (!nm) return { p, l: ls[0], motif: 'sans-numero-origine' };
-        const nom = norm(nomNu(p.nomCm));
+        const nom = R.nom ? R.nom(p) : norm(nomNu(p.nomCm));
         const memes = index.filter(e => e.numero && cleMesure(e.numero) === cleMesure(nm.n) && nomPokumon(e) === nom);
         const reels = ls.flatMap(l => memes.filter(e => !estPlaceholder(e) && R.entree(e, l)).map(e => ({ e, l })));
         const phs = reels.length ? [] : ls.flatMap(l => memes.filter(e => R.placeholder?.(e, l)).map(e => ({ e, l })));
@@ -378,7 +394,9 @@ function apparierFamille({ lignes, produits, index }) {
             else if (r.l.famille === 'tot' && REGLES.tot.anneeProduit(r.p) !== r.l.annee) r.motif = 'annee-contredite';
             else {
                 const t = temoinImpression(r.R.impression, r.p, e, r.l);
-                if (t.etat !== 'concorde') r.motif = `impression-${t.etat}`;
+                // PK-PROMOS : `absentAdmis` (une phrase, écrite par la ligne) admet l'ABSENCE de témoin — jamais une contradiction — quand la carte ne porte que l'impression du set promo, sans numéro
+                if (t.etat === 'absent' && typeof r.l.absentAdmis === 'string' && r.l.absentAdmis.length > 20) { r.temoin = r.l.absentAdmis; r.numeroFiche = null; }
+                else if (t.etat !== 'concorde') r.motif = `impression-${t.etat}`;
                 else { r.temoin = `impression de la carte : n° ${t.numero} imprimé${e.total ? ` sur ${e.total}` : ''}`; r.numeroFiche = t.numero; }
             }
         }
@@ -405,6 +423,12 @@ const MC = an => `carte McDonald's du millésime ${an} : copyright et numéro im
 const TOT_TAMPON = 'citrouille (tête de Pikachu en citrouille) imprimée en bas à droite de l\'illustration, visible sur chaque image';
 const PROF_TAMPON = 'logo « PROFESSOR PROGRAM » imprimé dans le bas de l\'illustration, visible sur chaque image';
 const BSP_MARQUE = 'étoile noire « PROMO » et code du set imprimés en bas de la carte';
+const BK_MARQUE = m => `logo « ${m} » imprimé sur l'illustration (promotion Burger King), visible sur chaque image regardée`;
+const BK_ABSENT = 'aucune impression de la carte à ce numéro (sa seule impression connue est celle du set Burger King, sans numéro) : nom, numéro du slug Cardmarket et dénominateur du set d\'origine lus sur l\'entrée, bloc Burger King du millésime';
+const W_MARQUE = 'tampon « W » doré des promotions Wizards imprimé sur la carte, visible sur chaque image regardée';
+// les numéros d'origine des W Promos, ÉNUMÉRÉS (le slug « B263 » = Base Set 2 n° 63 ne se lit pas) ; chacun est confirmé par une impression de la carte (Bulbapedia/TCGdex) au même numéro ET total
+const ech = (id, nom, chemin, w) => Object.freeze({ id, nom, url: `${HOTE_IMG}/wp-content/uploads/${chemin}`, w });   // une image de l'échantillon à regarder (adresse admise par la liste fermée du client)
+const W_NUMEROS = Object.freeze({ 'Wartortle-B263': '63', 'Kabuto-FO50': '50', 'Brocks-Vulpix-GC37': '37', 'Mistys-Psyduck-GH54': '54', 'Pikachu-WPRJU-60': '60' });
 const LIGNES_AUTRES = Object.freeze([
     { id: 'mcd-2014', famille: 'mcd', slugs: ['McDonalds-Collection-2014'], total: '12', plageS: [37, 48], expansionsImpression: ["McDonald's Collection 2014"], jeu: 'mcd', tampon: MC(2014), lu: '2026-10-17', temoins: [tm('Weedle', '1/12'), tm('Pikachu', '5/12'), tm('Furfrou', '12/12')] },
     { id: 'mcd-2015', famille: 'mcd', slugs: ['McDonalds-Collection-2015'], total: '12', plageS: [49, 60], expansionsImpression: ["McDonald's Collection 2015"], jeu: 'mcd', tampon: MC(2015), lu: '2026-10-17', temoins: [tm('Treecko', '1/12'), tm('Pikachu', '6/12'), tm('Skitty', '12/12')] },
@@ -416,7 +440,17 @@ const LIGNES_AUTRES = Object.freeze([
     { id: 'prof', famille: 'prof', slugs: ['Professor-Program'], jeu: 'speciale', tampon: PROF_TAMPON, lu: '2026-10-17', temoins: [tm('Judge', '108/131'), tm('Gym Trainer', '059/072'), tm('League Staff', '153/185'), tm('Roseanne\'s Backup', '148/172'), tm('Professor Laventon', '162/195'), tm('Judge', '235/264')] },
     { id: 'bsp-swsh', famille: 'bsp', prefixe: 'SWSH', slugs: ['SWSH-Black-Star-Promos'], jeu: 'swsh', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Unown V', 'SWSH300'), tm('Zamazenta V', 'SWSH293'), tm('Moltres', 'SWSH185')] },
     { id: 'bsp-svp', famille: 'bsp', prefixe: 'SVP', slugs: ['SV-Black-Star-Promos'], jeu: 'svp', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Black Belt\'s Training', 'SVP219'), tm('Black Belt\'s Training', 'SVP220'), tm('Mewtwo', 'SVP052')] },
-    { id: 'bsp-mep', famille: 'bsp', prefixe: 'MEP', slugs: ['MEP-Black-Star-Promos'], jeu: 'mep', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Mega Charizard X ex', 'MEP023'), tm('Mega Gardevoir ex', 'MEP032'), tm('Mega Lucario ex', 'MEP033')] }
+    { id: 'bsp-mep', famille: 'bsp', prefixe: 'MEP', slugs: ['MEP-Black-Star-Promos'], jeu: 'mep', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Mega Charizard X ex', 'MEP023'), tm('Mega Gardevoir ex', 'MEP032'), tm('Mega Lucario ex', 'MEP033')] },
+    // ── LOT PK-PROMOS (2026-10-17) : lignes MESURÉES sur l'index en cache (zéro requête), images REGARDÉES par le coordinateur le 2026-10-17 (12 sur 12 conformes). La garde de planifierFamilles ne pose rien d'une ligne sans `lu` ; elle avait été fermée tant que le coordinateur n'avait pas
+    // ouvert l'`echantillon` (3 images par ligne, téléchargées à part) et écrit la date de lecture et les `temoins` vus. Aucune ligne n'est « prouvée » avant cela.
+    { id: 'bk-2008', famille: 'bk', slugs: ['Burger-King-DP-Promos-2008'], plageS: [149, 175], totaux: ['130', '123'], jeu: 'speciale', tampon: BK_MARQUE('DIAMOND & PEARL'), absentAdmis: BK_ABSENT, lu: '2026-10-17', temoins: [tm('Prinplup', '58/130'), tm('Pachirisu', '35/130'), tm('Chimchar', '76/130')],
+      echantillon: [ech(35491, 'Prinplup (témoin : impression DP 58/130)', '2021/07/EN_S156Burger-KingSpecial-Print.jpg', 400), ech(35484, 'Pachirisu (absence admise par la ligne)', '2021/07/EN_S152Burger-KingSpecial-Print.jpg', 398), ech(35495, 'Chimchar (1078 px)', '2021/07/EN_S158Burger-KingSpecial-Print.jpg', 1078)] },
+    { id: 'bk-2009', famille: 'bk', slugs: ['Burger-King-Platinum-Promos-2009'], plageS: [195, 234], totaux: ['106', '100', '146'], jeu: 'speciale', tampon: BK_MARQUE('PLATINUM'), absentAdmis: BK_ABSENT, lu: '2026-10-17', temoins: [tm('Chimchar', '56/100'), tm('Pikachu', '70/100'), tm('Dialga', '16/106')],
+      echantillon: [ech(35563, 'Chimchar (titre sans « Burger King » : à confirmer)', '2021/07/EN_S204Special-Print.jpg', 397), ech(35568, 'Pikachu (1446 px)', '2021/07/EN_S209Burger-KingSpecial-Print.jpg', 1446), ech(35548, 'Dialga (16/106 ; sa carte porte une impression DP 1/130 : l\'absence est admise par la ligne)', '2021/07/EN_S195Burger-KingSpecial-Print.jpg', 400)] },
+    { id: 'prof-reverse', famille: 'prof', slugs: ['Professor-Program'], motifSet: /Reverse Holo Professor promo/, jeu: 'speciale', tampon: PROF_TAMPON, lu: '2026-10-17', temoins: [tm('Roxanne', '150/189'), tm('Kamado', '149/189'), tm('Gym Trainer', '059/072')],
+      echantillon: [ech(110271, 'Roxanne ASR 150/189', '2026/07/EN_S1853Professor-ProgramSpecial-Print.png', 737), ech(110268, 'Kamado ASR 149/189', '2026/07/EN_S1850Professor-ProgramSpecial-Print.png', 744), ech(110078, 'Gym Trainer (référence : déjà posée par PK-AUTRES, même famille « Professor Program promo »)', '2026/07/EN_S1665Professor-ProgramSpecial-Print.png', 990)] },
+    { id: 'w-promos', famille: 'w', slugs: ['W-Promos'], evenements: /Top Deck Magazine|Duelist Magazine/, numeros: W_NUMEROS, jeu: 'speciale', tampon: W_MARQUE, lu: '2026-10-17', temoins: [tm('Wartortle', '63/130'), tm('Kabuto', '50/62'), tm("Brock's Vulpix", '37/132')],
+      echantillon: [ech(34847, 'Wartortle (Base Set 2 63/130, 1296 px)', '2021/07/EN_S047Special-Print.jpg', 1296), ech(34844, 'Kabuto (Fossil 50/62)', '2021/07/EN_S044Special-Print.jpg', 400), ech(34853, 'Brock\'s Vulpix (Gym Challenge 37/132, 1296 px)', '2021/07/EN_S053Special-Print.jpg', 1296)] }
 ].map(l => Object.freeze(l)));
 const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
 const { largeurMinDe } = require('./seuils-images');
@@ -442,6 +476,8 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         const carte = cartes.get(p.carteId);
         if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
         const e = r.entree, l = lignes.find(x => x.id === r.ligne);
+        // PK-PROMOS : une ligne dont les images n'ont pas été REGARDÉES (`lu` absent) ne pose rien — écrit par ce qu'il autorise : seule une date de lecture ouvre la ligne
+        if (!l.lu) { restes.push({ ...base, motif: 'ligne-non-regardee' }); continue; }
         const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
         if ((carte.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(cleFiche(p));
@@ -455,7 +491,7 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
             ? `partagée holo/non-holo : produits ${r.produitsPartages.join(' + ')} (slugs V1 / V2 d'une même carte), entrée ${e.id} (non-holo) choisie, entrée ${r.entreeHoloIgnoree.id} (Holofoil) laissée de côté — même nom, même numéro, mêmes événements, aucun mot de tampon, seul le brillant diffère ; `
             : 'une seule entrée candidate pour ce produit ; ';
         plan.push({ ...base, nomEn: carte.nomEn ?? null, famille: r.famille, ligne: l.id, marque: `${l.id} : ${l.tampon}`, numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: `pokumon+nom+numero+${r.famille}`, ...partage,
-            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro ${e.numero} (produit ${p.slugProduit ?? ''}, n° ${p.numero ?? ''}) ; ${r.temoin} ; ${choix}ligne ${l.id} prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; marque : ${l.tampon}` });
+            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro ${e.numero} (produit ${p.slugProduit ?? ''}, n° ${p.numero ?? ''}) ; ${r.temoin} ; ${choix}ligne ${l.id} prouvée à l'œil le ${l.lu} sur ${(l.temoins || []).map(w => `${w.nom} ${w.imprime}`).join(', ')} ; marque : ${l.tampon}` });
     }
     return { plan, restes, comptes: { ...comptes, trous: restes.length, plan: plan.length, sousSeuil: restes.filter(x => x.motif === 'sous-le-seuil').length } };
 }

@@ -28,7 +28,9 @@ const essayer = async f => { try { return await f(); } catch (e) { return e; } }
 
     // ── 2. la TABLE : une ligne par famille et année/série, prouvée à l'œil ────────────────────────────────────────────────
     const T = P.LIGNES_AUTRES;
-    verifier('table : identifiants uniques, chaque ligne a une famille connue, 3 témoins distincts au moins, un tampon/marque lu, la date de lecture', [new Set(T.map(l => l.id)).size === T.length, T.every(l => ['mcd', 'tot', 'prof', 'bsp'].includes(l.famille) && new Set(l.temoins.map(t => `${t.nom}|${t.imprime}`)).size >= 3 && l.tampon.length > 20 && l.lu === '2026-10-17' && l.slugs.length === 1)], [true, true]);
+    verifier('table : identifiants uniques, chaque ligne a une famille connue, 3 témoins distincts au moins, un tampon/marque lu, la date de lecture', [new Set(T.map(l => l.id)).size === T.length, T.every(l => ['mcd', 'tot', 'prof', 'bsp', 'bk', 'w'].includes(l.famille) && l.tampon.length > 20 && l.slugs.length === 1
+        // une ligne REGARDÉE porte ses témoins vus ; une ligne du lot PK-PROMOS (lu = null) porte l'échantillon à regarder et ne pose rien (test-pokumon-promos.js)
+        && (l.lu === '2026-10-17' ? new Set(l.temoins.map(t => `${t.nom}|${t.imprime}`)).size >= 3 : l.lu === null && l.echantillon.length >= 3))], [true, true]);
     verifier('table : une ligne McDonald\'s a un total, un bloc de téléversement et des impressions de millésime ; trick or trade une année ; black star un préfixe', [
         T.filter(l => l.famille === 'mcd').every(l => l.total && l.plageS[0] <= l.plageS[1] && l.expansionsImpression.length), T.filter(l => l.famille === 'tot').map(l => l.annee), T.filter(l => l.famille === 'bsp').map(l => l.prefixe)], [true, [2022, 2023], ['SWSH', 'SVP', 'MEP']]);
     verifier('table : les années McDonald\'s non prouvées n\'ont PAS de ligne (2013 : aucun bloc ; 2019/2022/2024 : placeholders ; 25th : holo et non-holo)', T.filter(l => l.famille === 'mcd').map(l => l.slugs[0]).sort(), ['McDonald-s-Collection-2018-2', 'McDonalds-Collection-2014', 'McDonalds-Collection-2015', 'McDonalds-Collection-2017', 'McDonalds-Match-Battle-2023']);
