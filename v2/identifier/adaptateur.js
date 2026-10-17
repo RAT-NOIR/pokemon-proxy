@@ -20,6 +20,7 @@ const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
 const { garde, candidatUniqueDe } = require('./jumeaux');
+const { garderCompatibles } = require('./nom-compatible');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -110,10 +111,11 @@ function traduire(statutHttp, corps, ctx) {
             const produit = construireProduit(sourceP, pctx(ctx));
             return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
         }
-        const ids = entiers(corps.candidats);
+        // CONFIRMATION-SURE : un candidat dont le nom est CONTREDIT par le nom lu n'est jamais montré (nom-compatible.js) ; il est retiré AVANT la construction de la question.
+        const ids = garderCompatibles(entiers(corps.candidats), corps, ctx.produits);
         // UN-CANDIDAT (D1, 2026-10-13) : un seul candidat n'est plus un introuvable (ancien §5 Q32) — « ce qui n'est pas affirmé devient une question ». Il passe par la garde des
         // jumeaux (comme une affirmation) : sans jumeau, la question « est-ce cette carte ? » ; avec jumeaux, la question de départage ; trop de jumeaux, impression-indeterminee.
-        const unique = candidatUniqueDe(corps);
+        const unique = candidatUniqueDe({ ...corps, candidats: ids.map(idProduct => ({ idProduct })) });
         if (unique !== null) return candidatUnique(unique, etat, ctx);
         if (ids.length < 2) return introuvable('photo-illisible');       // aucun candidat : on ne sait rien
         return question(ids, etat, ctx);
@@ -129,7 +131,9 @@ function traduire(statutHttp, corps, ctx) {
             if (motif === 'nom-contredit-sans-repli') return introuvable('photo-illisible');
             // Candidats : ceux du corps (egalite-parfaite : index.js:5127), complétés par ctx.candidatsDeRefus. Une question exige 2 ou 3
             // candidats DISTINCTS dans l'UNION ; plus de 3 ne se tronque pas en silence ; un seul ne fait pas une question à choix.
-            const union = [...new Set([...entiers(corps.candidats), ...entiers(ctx.candidatsDeRefus)])];
+            const brute = [...new Set([...entiers(corps.candidats), ...entiers(ctx.candidatsDeRefus)])];
+            const union = garderCompatibles(brute, corps, ctx.produits);           // CONFIRMATION-SURE : les candidats que le nom lu contredit sont retirés d'abord
+            if (brute.length > 0 && union.length === 0) return introuvable('photo-illisible');     // tous contredits : on ne sait pas, jamais une absence affirmée (« hors-catalogue »)
             if (union.length === 1) return candidatUnique(union[0], etatDe(corps.etat), ctx);     // UN-CANDIDAT (D1) : la même règle que l'ambiguë à un candidat (sans-repli est sorti plus haut : le nom CONTREDIT)
             if (union.length >= 2 && union.length <= 3) return question(union, etatDe(corps.etat), ctx);
             if (union.length > 3 || motif !== 'egalite-parfaite') return introuvable('photo-illisible');   // on ne sait pas : pas d'absence affirmée
