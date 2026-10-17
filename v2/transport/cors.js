@@ -10,7 +10,7 @@ function profils(cfg) {
     return [
         { nom: 'extension', origines: new Set(ext), credentials: false,
           // PHOTOS-MULTIPLES (7d) : /api/photo n'a de profil CORS que si la route existe (drapeau allumé) ; éteint, aucun en-tête propre à v2 pour ce chemin
-          chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/, ...(cfg.photosMultiples === true ? [/^\/api\/photo$/] : [])],
+          chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/, ...(cfg.photosMultiples === true ? [/^\/api\/photo(\/.+)?$/] : [])],      // le sous-arbre entier, comme /api/banc/.+ : un chemin voisin inexistant porte les mêmes en-têtes que la route (le 404 natif d'un non-administrateur ne se distingue pas)
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
           chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/],
