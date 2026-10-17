@@ -94,6 +94,7 @@ const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe } = require('./adaptateur');
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
+const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
@@ -380,14 +381,17 @@ function traiterIdentifier(cfg, deps = {}) {
                     lecture = { codeLangue: codeLangueDe(c), reverseStrategie: c.reverse && typeof c.reverse.strategie === 'string' ? c.reverse.strategie : null };
                     // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
                     // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
-                    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), idsAffirmes(c));
-                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux), ...idsDeLaGarde(c)];     // GARDE-CONTRADICTION : le vivier lu par la chaîne, pour juger les champs lus contre les autres candidats
+                    const jumeaux0 = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), idsAffirmes(c));
+                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux0), ...idsDeLaGarde(c)];     // GARDE-CONTRADICTION : le vivier lu par la chaîne, pour juger les champs lus contre les autres candidats
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
+                    // LANGUE-DECISIVE (B1, M2) : les jumeaux des candidats que la photo pourrait laisser seuls, et l'index code × numéro du catalogue entier (R4)
+                    let jumeaux = jumeaux0, ctxLD = {};
+                    if (produits !== null) { const pr = await preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: etatChargeur.version(), deps }); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD });
                     // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
                     if (resultat.issue === 'question') {
-                        const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum });
+                        const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum, ...ctxLD });
                         let sl = null;
                         try { sl = await consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer }); } catch (e) { journalErreur('seconde lecture', e); }
                         if (sl) { traceSeconde = sl.trace; if (sl.resultat) resultat = sl.resultat; }
