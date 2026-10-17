@@ -58,8 +58,33 @@ const CIBLES = Object.freeze([
 
 const urlSonde = (id, n) => `https://${HOTE}/pokemon/${id}-${n}/large`;
 
-/** Le plan, pur : une sonde par identifiant candidat, une adresse chacune. */
-function construirePlan() {
+// ── LES TÉMOINS (2026-10-17, après la sonde : clb, clv, clc RÉPONDENT) : 3 par deck, n° 1, milieu, n° 34 ; la carte attendue est celle de NOS produits (numeros_cartes, lecture du 2026-10-17). ──
+// Le coordinateur les REGARDE (nom, numéro imprimé /034, code, dos de carte refusé) ; tant qu'ils ne le sont pas, la ligne TABLE_PTCGIO du deck reste inactive (`lu: null`).
+const ID_DECK = Object.freeze({ [BLASTOISE]: 'clb', [VENUSAUR]: 'clv', [CHARIZARD]: 'clc' });
+const tm = (n, nom, idProduct) => ({ n, carteAttendue: { nom, idProduct, numeroCm: String(n).padStart(3, '0') } });
+const TEMOINS = Object.freeze([
+    { slug: BLASTOISE, temoins: [tm(1, 'Squirtle', 745727), tm(17, 'Kangaskhan', 745743), tm(34, 'Basic Psychic Energy', 745760)] },
+    { slug: VENUSAUR, temoins: [tm(1, 'Bulbasaur', 745659), tm(16, 'Snorlax', 745674), tm(34, 'Basic Fighting Energy', 745692)] },   // 17 (Lugia ex) est déjà vu : le milieu est le 16
+    { slug: CHARIZARD, temoins: [tm(1, 'Charmander', 745693), tm(17, 'Miltank Lv32', 745709), tm(34, 'Basic Lightning Energy', 745726)] }
+]);
+const MODES = Object.freeze(['candidats', 'temoins']);
+
+/** Le plan, pur : mode « candidats » = une sonde par identifiant candidat, une adresse chacune ; mode « temoins » = 3 adresses par deck sur l'identifiant qui a répondu. */
+function construirePlan(mode = 'candidats') {
+    if (!MODES.includes(mode)) throw new Error(`mode de plan inconnu « ${mode} »`);
+    if (mode === 'temoins') {
+        const sondes = [];
+        for (const c of TEMOINS) for (const w of c.temoins) {
+            const id = ID_DECK[c.slug];
+            sondes.push({ slug: c.slug, id, n: w.n, url: urlSonde(id, w.n), carteAttendue: w.carteAttendue, raison: `témoin n°${w.n} du deck (${id}) : notre produit ${w.carteAttendue.idProduct} « ${w.carteAttendue.nom} » au numéro Cardmarket ${w.carteAttendue.numeroCm} ; à regarder : nom, numéro imprimé /034, code ${id.toUpperCase()}, pas le dos de carte` });
+        }
+        return {
+            mode: 'temoins', objet: 'SCRYDEX-DECKS : 9 témoins (n° 1, milieu, 34) des trois decks TCG Classic sur le serveur d\'images (jamais d\'API)',
+            hote: HOTE, robots: `https://${HOTE}/robots.txt`, cadenceMinMs: CADENCE_MIN_MS, agent: UA,
+            regles: 'robots.txt d\'abord et respecté ; ≥ 5 s entre deux requêtes ; redirections non suivies ; arrêt définitif au 1er 403/429/défi ; le dos de carte est refusé par empreinte ; seules les adresses ci-dessous',
+            sondes
+        };
+    }
     const sondes = [];
     for (const c of CIBLES) for (const k of c.candidats) {
         sondes.push({ slug: c.slug, id: k.id, n: c.n, url: urlSonde(k.id, c.n), carteAttendue: c.carteAttendue, raison: k.raison });
@@ -76,6 +101,8 @@ function construirePlan() {
 function validerPlan(plan) {
     const faute = m => { throw new Error(`plan de sonde refusé : ${m}`); };
     if (!plan || typeof plan !== 'object') faute('pas un plan');
+    const mode = plan.mode ?? 'candidats';
+    if (!MODES.includes(mode)) faute(`mode « ${mode} » inconnu`);
     if (plan.robots !== `https://${HOTE}/robots.txt`) faute('robots.txt doit être celui de l\'hôte d\'images, et lui seul');
     if (!Array.isArray(plan.sondes) || !plan.sondes.length) faute('aucune sonde');
     if (plan.sondes.length > MAX_SONDES) faute(`${plan.sondes.length} sondes (au plus ${MAX_SONDES})`);
@@ -86,12 +113,17 @@ function validerPlan(plan) {
         if (!Number.isInteger(s.n) || s.n < 1 || s.n > 999) faute(`numéro « ${s.n} » illisible`);
         if (s.url !== urlSonde(s.id, s.n)) faute(`l'adresse « ${s.url} » n'est pas exactement /pokemon/${s.id}-${s.n}/large de l'hôte d'images`);
         if (!H.hoteDeLUrl(s.url)) faute(`l'adresse « ${s.url} » n'est pas un hôte d'images permis (https, sans identifiants ni port)`);
-        if (ids.has(s.id)) faute(`identifiant « ${s.id} » sondé deux fois (UNE adresse par identifiant)`);
+        if (mode === 'candidats' && ids.has(s.id)) faute(`identifiant « ${s.id} » sondé deux fois (UNE adresse par identifiant)`);
+        if (mode === 'temoins') {
+            if (ID_DECK[s.slug] !== s.id) faute(`témoins : l'identifiant de ${s.slug} est « ${ID_DECK[s.slug]} », pas « ${s.id} » (My First Battle n'a pas de témoins numérotés)`);
+            if (s.n > 34) faute(`témoins : numéro ${s.n} hors de 1–34`);
+        }
         if (urls.has(s.url)) faute(`adresse en double « ${s.url} »`);
         ids.add(s.id); urls.add(s.url);
         parSet.set(s.slug, (parSet.get(s.slug) || 0) + 1);
     }
-    for (const [slug, n] of parSet) if (n > MAX_IDS_PAR_SET) faute(`${n} identifiants pour ${slug} (au plus ${MAX_IDS_PAR_SET})`);
+    if (mode === 'candidats') for (const [slug, n] of parSet) if (n > MAX_IDS_PAR_SET) faute(`${n} identifiants pour ${slug} (au plus ${MAX_IDS_PAR_SET})`);
+    if (mode === 'temoins') for (const [slug, n] of parSet) if (n > 3) faute(`${n} témoins pour ${slug} (au plus 3)`);
     return true;
 }
 
@@ -139,6 +171,8 @@ async function sonder({ plan, transport = TRANSPORT_PAR_DEFAUT, pause = ms => ne
         if (r.status >= 300 && r.status < 400) { x.etat = 'redirection'; x.location = r.location || null; continue; }
         if (r.status === 404 || r.status === 410) { x.etat = 'absent'; continue; }
         if (r.status >= 400) { x.etat = 'erreur'; x.detail = `HTTP ${r.status}`; continue; }
+        // 2026-10-17 : l'« introuvable » de ce serveur est le DOS d'une carte en HTTP 200 (six adresses, un fichier) — refusé par empreinte, jamais « repond »
+        if (r.status === 200 && r.octets && H.estDosDeCarte(r.octets)) { x.etat = 'dos-de-carte'; x.octets = r.octets.length; continue; }
         if (r.status === 200 && r.octets && /^image\//.test(r.type || '')) {
             x.etat = 'repond'; x.type = r.type; x.octets = r.octets.length; x.sha256 = crypto.createHash('sha256').update(r.octets).digest('hex');
             try { const m = await require('sharp')(r.octets).metadata(); x.w = m.width; x.h = m.height; x.fmt = m.format; } catch (e) { x.detail = `dimensions illisibles : ${e.message}`.slice(0, 200); }
@@ -159,10 +193,10 @@ function lireArgs(argv) {
 
 if (require.main === module) (async () => {
     const o = lireArgs(process.argv.slice(2));
-    const permis = new Set(['ecrire-plan', 'lancer', 'plan', 'sortie']);
+    const permis = new Set(['ecrire-plan', 'lancer', 'plan', 'sortie', 'mode']);
     for (const k of Object.keys(o)) if (!permis.has(k)) throw new Error(`argument inconnu « --${k} » — aucune requête`);
     if (o['ecrire-plan']) {
-        const p = construirePlan(); validerPlan(p);
+        const p = construirePlan(o.mode === undefined ? 'candidats' : o.mode); validerPlan(p);
         fs.writeFileSync(o['ecrire-plan'], JSON.stringify(p, null, 1) + '\n');
         console.log(`plan écrit : ${p.sondes.length} sondes + robots.txt, aucune requête`);
         return;
@@ -171,7 +205,7 @@ if (require.main === module) (async () => {
     if (typeof o.plan !== 'string' || typeof o.sortie !== 'string') throw new Error('--lancer exige --plan=<fichier> et --sortie=<dossier> — aucune requête');
     const plan = JSON.parse(fs.readFileSync(o.plan, 'utf8'));
     validerPlan(plan);
-    if (JSON.stringify(plan) !== JSON.stringify(JSON.parse(JSON.stringify(construirePlan())))) throw new Error('le plan lu n\'est pas celui que ce script construit — aucune requête');
+    if (JSON.stringify(plan) !== JSON.stringify(JSON.parse(JSON.stringify(construirePlan(plan.mode ?? 'candidats'))))) throw new Error('le plan lu n\'est pas celui que ce script construit — aucune requête');
     fs.mkdirSync(o.sortie, { recursive: true });
     console.log(`sonde : ${plan.sondes.length} adresses + robots.txt, ≥ ${CADENCE_MIN_MS / 1000} s entre deux requêtes`);
     const r = await sonder({ plan, dossierImages: path.join(o.sortie, 'img') });

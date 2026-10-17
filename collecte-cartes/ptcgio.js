@@ -28,7 +28,9 @@ const HOTE_NOM = 'images.pokemontcg.io';
 // le serveur d'images du même jeu de données —, mention « © Pokémon / The Pokémon Company », jamais le nom de l'hôte dans un champ public). L'hôte se lit dans `urlOriginal`.
 const HOTE_SCRYDEX_NOM = 'images.scrydex.com';
 const HOTE_SCRYDEX = `https://${HOTE_SCRYDEX_NOM}`;
-const SETS_SCRYDEX = Object.freeze(['me55c']);       // les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision)
+// les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision). clb/clv/clc (SCRYDEX-DECKS, 2026-10-17) : répondent (sonde du coordinateur, cartes vues) ;
+// leurs lignes de TABLE_PTCGIO sont INACTIVES (`lu: null`) tant que les témoins ne sont pas regardés : sans ligne active, rien ne les adresse.
+const SETS_SCRYDEX = Object.freeze(['me55c', 'clb', 'clv', 'clc']);
 const LOT = 'ptcgio-2026-10';
 const MENTION = T.MENTION;                                  // une seule mention pour toutes nos sources de scans (§75)
 const CADENCE_MS = 3000;
@@ -155,11 +157,24 @@ const TABLE_PTCGIO = Object.freeze([
       refuses: [{ idProduct: 907958, nom: 'Genesect-EX', motif: 'numero-contredit-par-l-image', vu: 'me55c-11g imprime 11/101, le produit porte 97' },
           { idProduct: 907954, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-99 : 99/102 juste ; une fiche sans numéro pour les deux moitiés' },
           { idProduct: 907955, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-100 : 100/102 juste ; une fiche sans numéro pour les deux moitiés' }],
-      ouvertes: 30 }
+      ouvertes: 30 },
+    // ── SCRYDEX-DECKS (2026-10-17) : les trois decks TCG Classic. La sonde du coordinateur (10 requêtes) a RÉPONDU sous clb, clv, clc : clb-10 = Suicune ex 010/034, clv-17 = Lugia ex 017/034, clc-7 = Ho-Oh ex 007/034,
+    // code imprimé CLB / CLV / CLC, 596×834. Les autres identifiants essayés (clk, clf, cll, mfb, mfba, mfbb) ont rendu le DOS de carte du serveur (refusé par empreinte). My First Battle : non trouvé sous ces identifiants.
+    // 🔴 INACTIVES : `lu: null` — aucun témoin (n° 1, milieu, 34) n'est encore REGARDÉ. Sans `lu`, la ligne n'est pas prouvée (lignesDe l'écarte, verdictDuSet dit « non-apparie ») : aucun plan, aucune adresse.
+    // Le jour où les trois témoins du set sont regardés : poser `lu` (la date) et lister les `temoins` lus à l'œil ; le segment [[1, 34]] ne vaut que si les témoins le couvrent (1 et 34 compris).
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck', id: 'clb', hote: HOTE_SCRYDEX_NOM, idServeur: 'clb', segments: [[1, 34]], lu: null,
+      marque: 'Pokémon TCG Classic, deck Blastoise & Suicune ex : code CLB imprimé sur la carte, numérotation /034 (clb-10 = Suicune ex 010/034, vu le 2026-10-17)',
+      temoins: [t(10, 'Suicune ex', '10/34')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck', id: 'clv', hote: HOTE_SCRYDEX_NOM, idServeur: 'clv', segments: [[1, 34]], lu: null,
+      marque: 'Pokémon TCG Classic, deck Venusaur & Lugia ex : code CLV imprimé sur la carte, numérotation /034 (clv-17 = Lugia ex 017/034, vu le 2026-10-17)',
+      temoins: [t(17, 'Lugia ex', '17/34')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', id: 'clc', hote: HOTE_SCRYDEX_NOM, idServeur: 'clc', segments: [[1, 34]], lu: null,
+      marque: 'Pokémon TCG Classic, deck Charizard & Ho-Oh ex : code CLC imprimé sur la carte, numérotation /034 (clc-7 = Ho-Oh ex 007/034, vu le 2026-10-17)',
+      temoins: [t(7, 'Ho-Oh ex', '7/34')] }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l, ...(l.parProduit ? { temoins: l.parProduit.map(e => t(Number(e.numero), e.nom, e.imprime)) } : {}) })));   // une ligne par produit : chaque produit prouvé EST un témoin
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
-const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
+const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug && l.lu != null);   // une ligne sans `lu` (null) est INACTIVE : aucun témoin regardé, elle ne prouve rien
 
 /** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
 function lireNumero(ligne, numeroFiche) {
@@ -227,8 +242,9 @@ function numerosDuSet(lignes, numerosCm) {
  * même numéro, ou sans numéro dans le set) n'y figure jamais — additif.
  * @param {{slug: string, trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>}} o
  */
-function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
-    const V = verdictDuSet(slug), lignes = lignesDe(slug);
+function planifierPtcgio({ slug, trous, tousNumerosCm = null, lignes: lignesImposees = null }) {
+    // `lignes` (banc seulement) : rejouer le plan avec des lignes données, sans toucher à la table gelée (une ligne imposée est prise pour prouvée)
+    const V = lignesImposees ? { verdict: 'prouve' } : verdictDuSet(slug), lignes = lignesImposees || lignesDe(slug);
     // 🔑 T2 : la source n'a qu'UN fichier par numéro ; quand 2 produits Cardmarket du set ou plus portent ce numéro (V1/V2/V3), le choix de la variante n'est
     // pas prouvé et l'entrée le DIT (`noteVariante`, lue par le site). Compté par le numéro du PRODUIT (l'adresse qu'il fait), jamais par le nom ; sans la
     // liste des numéros du set, aucune note n'est inventée.
@@ -286,8 +302,8 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
         const cle = `${x.carte._id}|${hit.l.id}|${hit.n}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
-        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton, hit.l.suffixeUrl || ''), voie: 'set-prouve+numero',
-            preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (${hit.l.numeroDe === 'fiche' ? `fiche ${x.numeroFiche}, nom « ${x.carte.nomEn} » = celui du témoin lu à l'œil` : `Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}`}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
+        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: hit.l.hote ? urlScrydex(`${hit.l.idServeur}-${hit.n}`) : urlHires(hit.l.id, hit.n, hit.l.jeton, hit.l.suffixeUrl || ''), voie: 'set-prouve+numero',
+            preuve: `${hit.l.hote || 'images.pokemontcg.io'} set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (${hit.l.numeroDe === 'fiche' ? `fiche ${x.numeroFiche}, nom « ${x.carte.nomEn} » = celui du témoin lu à l'œil` : `Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}`}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
     }
     return { plan, restes };
 }
@@ -393,6 +409,7 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
             if (r.status === 404 || r.status === 410) return null;
             if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${c.url}`), { status: r.status });
             if (!r.octets) throw new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${c.url})`);
+            if (H.estDosDeCarte(r.octets)) return null;     // 2026-10-17 : le « introuvable » du serveur d'images scrydex est le dos d'une carte, en HTTP 200 — un trou ne le reçoit jamais
             return r.octets;
         });
     }

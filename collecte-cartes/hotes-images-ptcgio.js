@@ -14,4 +14,13 @@ function hoteDeLUrl(url) {
     return HOTES_IMAGES.includes(u.hostname) ? u.hostname : null;
 }
 
-module.exports = { HOTES_IMAGES, hoteDeLUrl };
+// ➕ 2026-10-17 (SCRYDEX-DECKS) — LE DOS DE CARTE : pour une adresse qu'il ne connaît pas, le serveur d'images d'images.scrydex.com répond HTTP 200 avec le DOS d'une carte Pokémon
+// (image, 640×892, 186 316 octets), pas un 404 — six adresses sondées, un seul fichier. Ce n'est pas une carte : un trou ne doit JAMAIS le recevoir. Liste FERMÉE d'empreintes sha256 ;
+// le client le traite comme un 404 (null), la sonde le note « dos-de-carte ». Banc : fixtures/dos-de-carte-serveur-images.png (copie du fichier réel).
+const EMPREINTES_DOS_DE_CARTE = Object.freeze(['fd7c3800f9b8ebadf4b31a735f569a180e66201741b00fafa17879967884ad2c']);
+function estDosDeCarte(octets) {
+    if (!Buffer.isBuffer(octets) || !octets.length) return false;
+    return EMPREINTES_DOS_DE_CARTE.includes(require('crypto').createHash('sha256').update(octets).digest('hex'));
+}
+
+module.exports = { HOTES_IMAGES, hoteDeLUrl, EMPREINTES_DOS_DE_CARTE, estDosDeCarte };

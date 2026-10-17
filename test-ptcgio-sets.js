@@ -24,6 +24,6 @@ verifier('Shining Legends : 76 et 77 couverts, 78 et 77a non', ['76', '77', '78'
 verifier('Lost Origin : TG02 adressé, TG01 non', ['TG02', 'TG01'].map(n => P.adresseDe(L1('Lost-Origin'), n)), [2, null]);
 verifier('Lost Origin : l\'adresse de TG02', P.planifierPtcgio({ slug: 'Lost-Origin', trous: [trou(carte(40, 'Roserade'), 'TG02', 140)] }).plan.map(p => p.url), [`${H}swsh11tg/TG02_hires.png`]);
 verifier('McDonald\'s 2014, 2015, 2017, 2018 : refusés (aucune ligne)', ['McDonalds-Collection-2014', 'McDonalds-Collection-2015', 'McDonalds-Collection-2017', 'McDonalds-Collection-2018'].map(s => P.verdictDuSet(s).verdict), ['non-apparie', 'non-apparie', 'non-apparie', 'non-apparie']);
-verifier('scrydex : aucun autre set que me55c n\'est autorisé', [...P.SETS_SCRYDEX], ['me55c']);
+verifier('scrydex : seuls me55c (ligne active) et clb, clv, clc (SCRYDEX-DECKS : lignes inactives, lu null) sont autorisés', [[...P.SETS_SCRYDEX], P.TABLE_PTCGIO.filter(l => l.hote && l.lu != null).map(l => l.idServeur)], [['me55c', 'clb', 'clv', 'clc'], ['me55c']]);
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
