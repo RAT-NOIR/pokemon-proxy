@@ -36,7 +36,12 @@ const CASES_RELEVEES = CASES;
 // Le dossier d'image d'une case quand il diffère du code (équivalence FERMÉE, vue sur le relevé réel) : le dossier d'image de la Trainer Gallery est celui de l'extension.
 const DOSSIER_IMAGE = Object.freeze({ swsh11tg: 'swsh11' });
 // Les sets dont le numéro d'origine du slug Cardmarket n'est PAS celui de pokemon.com (la Classic Collection y est numérotée 1…N dans son ordre propre).
-const SETS_SANS_NUMERO_COMPARABLE = Object.freeze(['30th-Celebration']);
+const SETS_SANS_NUMERO_DE_SLUG = Object.freeze(['30th-Celebration']);
+// 🔑 « numéro non comparable » se déclare par CASE pokemon.com (jamais par set à nous) : la case 30th-c numérote la Classic Collection 1…N dans son ordre propre. Une fiche
+// numérotée appariée à la case 30th (n°N) est comparée au numéro ; une fiche appariée à 30th-c ne l'est jamais.
+const CASES_SANS_NUMERO_COMPARABLE = Object.freeze(['30th-c']);
+// La règle par défaut quand le site n'est pas injecté : un scan japonais ne sert pas un set occidental (le plan de production injecte refusDuVisuel du site, comme la simulation).
+const REFUS_PAR_DEFAUT = e => (String(e?.langue ?? '').trim().toLowerCase() === 'ja' ? 'langue:ja' : null);
 // Les sets dont chaque image doit être REGARDÉE avant l'écriture (la marque « 30 » de la Classic Collection).
 const SETS_A_REGARDER = Object.freeze(['30th-Celebration']);
 
@@ -139,22 +144,28 @@ const nomApprox = (c, t) => { const miens = new Set([t.carte.nomEn, nomDuSlug(t.
  *   cartes : cartesDesReleves().cartes ; noms : Map(slugSet -> Map(nomNormalisé -> Set(carteId))) = les fiches du set chez nous.
  * @returns {{plan: object[], restes: object[]}}
  */
-function apparier({ trous, cartes, noms = new Map() }) {
+function apparier({ trous, cartes, noms = new Map(), refus = REFUS_PAR_DEFAUT }) {
     const restes = [];
-    const resolus = [];                                                    // { t, card, voie, preuve }
+    const resolus = [];                                                    // { t, card, voie, preuve, refusees }
     const reste = (t, motif, detail) => restes.push({ idProduct: t.idProduct, carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, motif, ...(detail ? { detail } : {}) });
     for (const t of trous) {
-        if (T.dejaServi(t.carte, t.slugSet, t.numeroFiche ?? null)) { reste(t, 'deja-servi'); continue; }
+        // 🔑 « DÉJÀ SERVI » = une entrée que la règle du site ADMET au même numéro (refus injecté : refusDuVisuel du site). Une entrée refusée (scan japonais sous un set
+        // occidental…) ne sert pas la fiche : le produit reste un trou, et son remplacement est une MODIFICATION (feu vert du testeur) — jamais silencieusement « déjà servi ».
+        const auNumero = (t.carte.images || []).filter(e => e && e.set === t.slugSet && (e.numero == null || cleNumero(e.numero) === cleNumero(t.numeroFiche ?? null)));
+        const jugees = auNumero.map(e => ({ e, motif: refus(e, t.slugSet) }));
+        if (jugees.some(x => x.motif === null)) { reste(t, 'deja-servi'); continue; }
+        const refusees = jugees.map(x => ({ cleR2: x.e.cleR2 ?? null, source: x.e.source ?? null, numero: x.e.numero ?? null, langue: x.e.langue ?? null, motif: x.motif }));
         const duSet = cartes.filter(c => !c.numeroDoute && slugDeLaCase(c.set) === t.slugSet);
         const douteuxNomme = cartes.some(c => c.numeroDoute && nomApprox(c, t));
         const distinctes = l => new Set(l.map(c => c.img)).size;
         const avecNom = duSet.filter(c => nomOk(c, t));
         let choisie = null, voie = null, preuve = null;
         const numFiche = t.numeroFiche != null && String(t.numeroFiche).trim() !== '' ? t.numeroFiche : null;
-        const numSlug = numFiche == null && !SETS_SANS_NUMERO_COMPARABLE.includes(t.slugSet) ? numeroDuSlug(t.slugProduit) : null;
+        const numSlug = numFiche == null && !SETS_SANS_NUMERO_DE_SLUG.includes(t.slugSet) ? numeroDuSlug(t.slugProduit) : null;
         const numeroRef = numFiche ?? numSlug;
         if (numeroRef != null) {
-            const parNum = duSet.filter(c => cleNumero(c.numero) === cleNumero(numeroRef));
+            // un numéro ne se compare JAMAIS à une carte d'une case à numérotation propre (30th-c : 1…N) ; il se compare aux autres cases du même set (30th)
+            const parNum = duSet.filter(c => !CASES_SANS_NUMERO_COMPARABLE.includes(String(c.set).toLowerCase()) && cleNumero(c.numero) === cleNumero(numeroRef));
             if (!parNum.length) {
                 if (numFiche == null && avecNom.length) { reste(t, 'numero-du-slug-contredit', `slug ${numSlug}, relevé ${[...new Set(avecNom.map(c => `${c.set} n°${c.numero}`))].join(', ')}`); continue; }
                 reste(t, douteuxNomme && !duSet.length ? 'numero-douteux' : (duSet.length || cartes.some(c => slugDeLaCase(c.set) === t.slugSet) ? 'numero-absent-du-releve' : (douteuxNomme ? 'numero-douteux' : 'set-non-releve'))); continue;
@@ -172,10 +183,10 @@ function apparier({ trous, cartes, noms = new Map() }) {
             const chezNous = noms.get(t.slugSet)?.get(nomNorm(t.carte.nomEn));
             if (distinctes(avecNom) > 1 || !chezNous || chezNous.size !== 1 || !chezNous.has(t.carte._id)) { reste(t, 'nom-non-unique', `${distinctes(avecNom)} carte(s) relevée(s), ${chezNous?.size ?? '?'} fiche(s) chez nous`); continue; }
             choisie = avecNom[0]; voie = 'set+nom-unique';
-            preuve = `case ${choisie.set} : le nom « ${choisie.nom} » est unique dans le relevé ET chez nous (une seule fiche au set) ; pas de numéro comparable${SETS_SANS_NUMERO_COMPARABLE.includes(t.slugSet) ? ' (la case numérote ses cartes 1…N dans son ordre propre)' : ''}`;
+            preuve = `case ${choisie.set} : le nom « ${choisie.nom} » est unique dans le relevé ET chez nous (une seule fiche au set) ; pas de numéro comparable${CASES_SANS_NUMERO_COMPARABLE.includes(String(choisie.set).toLowerCase()) ? ' (la case numérote ses cartes 1…N dans son ordre propre)' : ''}`;
         }
         if (!urlImageValide(choisie.img)) { reste(t, 'adresse-hors-regle', 'adresse du relevé hors des règles'); continue; }
-        resolus.push({ t, card: choisie, voie, preuve });
+        resolus.push({ t, card: choisie, voie, preuve, refusees });
     }
     // ── les groupes : une FICHE = (carte, numéro) ; une seule image par fiche ; une image pour une seule fiche ─────────────
     const cleGroupe = t => `${t.carte._id}|${t.numeroFiche == null ? '∅' : cleNumero(t.numeroFiche)}`;
@@ -187,12 +198,18 @@ function apparier({ trous, cartes, noms = new Map() }) {
     const parImg = new Map();
     for (const [k, g] of groupes) { const i = g[0].card.img; (parImg.get(i) || parImg.set(i, new Set()).get(i)).add(k); }
     for (const [, ks] of parImg) if (ks.size > 1) for (const k of ks) { for (const r of groupes.get(k) || []) reste(r.t, 'carte-pour-deux-fiches'); groupes.delete(k); }
-    const plan = [...groupes.values()].map(g => {
+    const plan = [], remplacements = [];
+    for (const g of groupes.values()) {
         const { t, card, voie, preuve } = g[0];
-        return { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, slugSet: t.slugSet, numero: t.numeroFiche ?? null, produits: g.map(r => r.t.idProduct), ligne: card.set, numeroReleve: card.numero, url: card.img,
+        const refusees = [...new Map(g.flatMap(r => r.refusees).map(e => [e.cleR2, e])).values()];
+        const unite = { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, slugSet: t.slugSet, numero: t.numeroFiche ?? null, produits: g.map(r => r.t.idProduct), ligne: card.set, numeroReleve: card.numero, url: card.img,
             voie, preuve, aRegarder: SETS_A_REGARDER.includes(t.slugSet), releve: card.fichier ?? null };
-    });
-    return { plan, restes };
+        if (!refusees.length) { plan.push(unite); continue; }
+        const detail = `entrée(s) refusée(s) par la règle du site au même numéro (${refusees.map(e => `${e.cleR2} [${e.source}, ${e.motif}]`).join(' ; ')}) ; image pokemon.com prête : ${card.img} ; remplacement = modification, feu vert du testeur requis`;
+        remplacements.push({ ...unite, refusees, motif: 'entree-refusee-au-numero' });
+        for (const r of g) reste(r.t, 'entree-refusee-au-numero', detail);
+    }
+    return { plan, restes, remplacements };
 }
 
 // ── identifiants, langue, retrait ───────────────────────────────────────────────────────────────────────────────────────
@@ -217,5 +234,5 @@ function planRetrait(cartes) {
     return { cartes: touchees, entrees, cles };
 }
 
-module.exports = { SOURCE, LOT, MENTION, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, DOSSIER_RELEVES, DOSSIER_CACHE, DOSSIER_LOT, CASES, CASES_RELEVEES, DOSSIER_IMAGE, SETS_SANS_NUMERO_COMPARABLE, SETS_A_REGARDER,
+module.exports = { SOURCE, LOT, MENTION, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, DOSSIER_RELEVES, DOSSIER_CACHE, DOSSIER_LOT, CASES, CASES_RELEVEES, DOSSIER_IMAGE, SETS_SANS_NUMERO_DE_SLUG, CASES_SANS_NUMERO_COMPARABLE, REFUS_PAR_DEFAUT, SETS_A_REGARDER,
     slugDeLaCase, urlImageValide, lireLiensDuHtml, relireDouteux, cartesDesReleves, lireReleves, nomDuSlug, numeroDuSlug, apparier, nomNorm, idImagePokemoncom, cleNum, langueDe, planRetrait };

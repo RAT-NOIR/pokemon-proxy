@@ -115,8 +115,24 @@ const SOURCE_URL = img('EX10', 'EX10_EN_Unown_B.png');
     r = PK.apparier({ trous: [trou(62, 620, 'Basic Darkness Energy', HG, null, 'Darkness-Energy-HS121'), trou(63, 620, 'Basic Darkness Energy', HG, null, 'Darkness-Energy-HS122')], cartes: cartesReleve([releve([carte('Darkness Energy', '121', 'hgss1', 'HGSS1_EN_121.png'), carte('Darkness Energy', '122', 'hgss1', 'HGSS1_EN_122.png')])]), noms: nomsDe([HG, 'Basic Darkness Energy', 620]) });
     verifier('une fiche, deux produits, deux numéros de slug, deux images → « deux-images-une-fiche »', [r.plan.length, motifs(r)], [0, [[62, 'deux-images-une-fiche'], [63, 'deux-images-une-fiche']]]);
     r = PK.apparier({ trous: [trou(70, 700, 'Mew', T30, 'R', 'Mew-V1-30CRRGB'), trou(71, 700, 'Mew', T30, 'G', 'Mew-V2-30CGRGB'), trou(72, 700, 'Mew', T30, 'B', 'Mew-V3-30CBRGB')],
-        cartes: cartesReleve([releve([carte('Mew', 'R', '30th-c', '30TH-C_EN_R.png'), carte('Mew', 'G', '30th-c', '30TH-C_EN_G.png'), carte('Mew', 'B', '30th-c', '30TH-C_EN_B.png'), carte('Mew', '65', '30th', '30TH_EN_65.png')])]), noms: nomsDe([T30, 'Mew', 700]) });
-    verifier('Mew R, G, B : trois fiches (lettres gardées), trois images ; le Mew n° 65 de la case 30th n\'est pas pris', r.plan.map(p => [p.numero, p.url.split('/').pop()]).sort(), [['B', '30TH-C_EN_B.png'], ['G', '30TH-C_EN_G.png'], ['R', '30TH-C_EN_R.png']]);
+        cartes: cartesReleve([releve([carte('Mew', 'R', '30th', '30TH_EN_R.png'), carte('Mew', 'G', '30th', '30TH_EN_G.png'), carte('Mew', 'B', '30th', '30TH_EN_B.png'), carte('Mew', '65', '30th', '30TH_EN_65.png')])]), noms: nomsDe([T30, 'Mew', 700]) });
+    verifier('Mew R, G, B : trois fiches (lettres gardées), trois images de la case 30th (numérotation comparable) ; le Mew n° 65 n\'est pas pris', r.plan.map(p => [p.numero, p.url.split('/').pop()]).sort(), [['B', '30TH_EN_B.png'], ['G', '30TH_EN_G.png'], ['R', '30TH_EN_R.png']]);
+    // 🔑 « numéro non comparable » se déclare par CASE pokemon.com (30th-c), pas par set à nous (30th-Celebration)
+    const rm = (fiche, cas, dossier) => PK.apparier({ trous: [trou(75, 750, 'Mewtwo ex', T30, fiche, null)], cartes: cartesReleve([releve([carte('Mewtwo ex', '64', cas, `${dossier}_EN_64.png`)])]), noms: nomsDe([T30, 'Mewtwo ex', 750]) });
+    verifier('Mewtwo ex fiche 64 : appariée à la case 30th n°64 → le numéro est COMPARÉ (accord) ; fiche 65 contre le même relevé → « numero-absent-du-releve »', [rm('64', '30th', '30TH').plan.map(p => p.voie), motifs(rm('65', '30th', '30TH'))], [['set+numero+nom'], [[75, 'numero-absent-du-releve']]]);
+    verifier('   la même fiche 64 contre la case 30th-c n°64 : le numéro ne sert JAMAIS (numérotation propre 1…N)', motifs(rm('64', '30th-c', '30TH-C')), [[75, 'numero-absent-du-releve']]);
+
+    // ── 5 ter. entrée REFUSÉE par la règle du site au même numéro : jamais « deja-servi » (remplacer = modifier, feu vert du testeur) ──
+    const JA = { set: SET, source: 'bulbapedia', numero: 'B', cleR2: 'bulbapedia/EX/ja-B.webp', langue: 'ja' };
+    r = PK.apparier({ trous: [trou(1, 11, 'Unown', SET, 'B', 'Unown-B-UFB-28', [JA])], cartes: cartesReleve([R]), noms: nomsDe([SET, 'Unown', 11]) });
+    verifier('entrée japonaise au même numéro : PAS « deja-servi » ; hors plan, listée aux remplacements avec la cleR2 refusée et l\'adresse', [r.plan.length, motifs(r), r.remplacements.map(x => [x.produits, x.url.split('/').pop(), x.refusees.map(e => [e.cleR2, e.motif])])], [0, [[1, 'entree-refusee-au-numero']], [[[1], 'EX10_EN_Unown_B.png', [['bulbapedia/EX/ja-B.webp', 'langue:ja']]]]]);
+    verifier('   le motif dit pourquoi : remplacement = modification, feu vert du testeur requis', /remplacement = modification, feu vert du testeur requis/.test(r.restes[0].detail || ''), true);
+    r = PK.apparier({ trous: [trou(1, 11, 'Unown', SET, 'B', 'Unown-B-UFB-28', [JA, { set: SET, source: 'tcgdex', numero: 'B', cleR2: 'tcgdex/B.webp', langue: 'en' }])], cartes: cartesReleve([R]), noms: nomsDe([SET, 'Unown', 11]) });
+    verifier('   une entrée ADMISE au même numéro (tcgdex en) reste « deja-servi » : rien à remplacer', [motifs(r), r.remplacements.length], [[[1, 'deja-servi']], 0]);
+    r = PK.apparier({ trous: [trou(1, 11, 'Unown', SET, 'B', 'Unown-B-UFB-28', [JA])], cartes: cartesReleve([R]), noms: nomsDe([SET, 'Unown', 11]), refus: e => (e.cleR2 === 'bulbapedia/EX/ja-B.webp' ? 'format:868×1212' : null) });
+    verifier('   la règle du site est INJECTÉE (refus) : son motif est celui qui s\'écrit', r.remplacements[0].refusees[0].motif, 'format:868×1212');
+    r = PK.apparier({ trous: [trou(1, 11, 'Unown', SET, 'B', 'Unown-B-UFB-28', [JA])], cartes: cartesReleve([releve([carte('Gengar', 'B', 'ex10', 'EX10_EN_Unown_B.png')])]), noms: nomsDe([SET, 'Unown', 11]) });
+    verifier('   si l\'appariement échoue (nom qui contredit), le motif est celui de l\'appariement, pas un remplacement', [motifs(r), r.remplacements.length], [[[1, 'nom-contredit']], 0]);
 
     // fiche SANS numéro et SANS numéro de slug : un nom UNIQUE chez le relevé ET chez nous (Terapagos & Friends, Pikachu at the Museum)
     const SV = 'SV-Black-Star-Promos';

@@ -23,6 +23,8 @@ const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { marqueDe } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici)
+const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
@@ -40,7 +42,7 @@ function lireCibles(fichier = CIBLES_PAR_DEFAUT) {
     return ids;
 }
 /** Les trous des cibles et leur appariement aux cartes relevées. `db` : la base `cartes`, LECTURE SEULE. */
-async function planifierDepuisBase(db, { cartes, cibles }) {
+async function planifierDepuisBase(db, { cartes, cibles, refusSite = null }) {
     const lignes = await db.collection('cartes_produits').find({ idProduct: { $in: cibles } }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1, slugSet: 1, slug: 1 } }).toArray();
     if (!lignes.length) throw new Error(`cartes_produits : 0 ligne pour ${cibles.length} cibles — une clé fausse (§41)`);
     const retenues = lignes.filter(l => Object.values(PK.CASES).includes(l.slugSet));
@@ -55,7 +57,10 @@ async function planifierDepuisBase(db, { cartes, cibles }) {
         noms.set(slug, m);
     }
     const trous = retenues.filter(l => parId.has(l.carteId)).map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
-    const r = PK.apparier({ trous, cartes, noms });
+    // 🔑 la règle du site (refusDuVisuel, importée du site : collecte-cartes/simuler-servis.js reglesDuSite) juge les entrées au numéro ; sans elle, la règle minimale (scan japonais)
+    const sets = new Map((await db.collection('sets').find({ _id: { $in: [...new Set(retenues.map(l => l.slugSet))] } }, { projection: { tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s.tirage ?? s.region]));
+    const refus = refusSite ? (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) : undefined;
+    const r = PK.apparier({ trous, cartes, noms, ...(refus ? { refus } : {}) });
     const horsTable = lignes.filter(l => !Object.values(PK.CASES).includes(l.slugSet)).map(l => ({ idProduct: l.idProduct, motif: 'set-hors-table' }));
     const sansFiche = cibles.filter(id => !lignes.some(l => l.idProduct === id)).map(id => ({ idProduct: id, motif: 'produit-sans-ligne' }));
     return { cibles: cibles.length, ...r, restes: [...r.restes, ...horsTable, ...sansFiche] };
@@ -102,13 +107,13 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS, plafond: plafondMax = null }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !PK.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
     const afaire = [...new Set(urls)].filter(u => PK.urlImageValide(u) && !['ok', 'absent'].includes(index.images[u]?.statut));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
-    const plafond = afaire.length + 1;
+    const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);     // (`plafondMax` : un garde-fou plus bas, pour le banc ; jamais plus haut que adresses + 1)
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, PK.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
     const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (r.status < 500 && (/html/i.test(r.type || '') || (typeof r.texte === 'string' && /<html|just a moment|captcha/i.test(r.texte.slice(0, 3000)))));
@@ -155,7 +160,20 @@ async function compterEntrees(db, carteIds, slug) {
     const autres = [];
     let siennes = 0;
     for (const c of cs) for (const e of c.images || []) { if (!(e?.source === PK.SOURCE && e.lot === PK.LOT)) autres.push(`${c._id}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`); else if (e.set === slug) siennes++; }
-    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes };
+    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes, liste: autres };
+}
+const cleEntree = (carteId, e) => `${carteId}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`;
+
+/**
+ * L'ANNONCE de baisses pour `lot-additif.js --annonce=` quand des remplacements sont demandés : ce que la garde de lot verrait si les entrées refusées sortaient et que les
+ * nôtres entraient (compterEtat / comparer, les fonctions de la garde). Sans remplacement : rien. @returns {Object<string, number>}
+ */
+function annonceRemplacement(cartes, remplacements) {
+    if (!remplacements?.length) return {};
+    const cles = new Set(remplacements.flatMap(u => u.refusees.map(e => `${u.slugSet}|${e.cleR2}`)));
+    const apres = cartes.map(c => ({ ...c, images: [...(c.images || []).filter(e => !cles.has(`${e.set}|${e.cleR2}`)), ...remplacements.filter(u => u.carteId === c._id).map(u => ({ set: u.slugSet, source: PK.SOURCE, lot: PK.LOT, numero: u.numero, cleR2: `${PK.SOURCE}/${u.slugSet}/${PK.cleNum(u.numero)}-${u.carteId}-en.webp` }))] }));
+    const { baisses } = comparer(compterEtat({ cartes }), compterEtat({ cartes: apres }));
+    return Object.fromEntries(baisses.map(b => [b.cle, b.baisse]));
 }
 
 /**
@@ -164,15 +182,23 @@ async function compterEntrees(db, carteIds, slug) {
  * @param {{dossierCache: string, attendu?: number, deposer: Function, vignetter: Function, fabriquerVerrouSet?: Function, stopOctets?: number}} o
  * @returns {Promise<{code: number, etat?: string, resultats: object[], attendu: number, reel: number, horsCache: number, altere: number}>}
  */
-async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS } = {}) {
+async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS, remplacements = [], remplacer = [] } = {}) {
     if (typeof deposer !== 'function' || typeof vignetter !== 'function') throw new Error('ecrire : deposer et vignetter sont exigés');
     const db = M.Carte.db.db;
     const index = lireIndex(dossierCache);
     const seuil = largeurMinDe(PK.SOURCE);
+    // ---- REMPLACER : liste FERMÉE — chaque idProduct doit figurer dans le motif « entree-refusee-au-numero » du plan, sinon rien n'est écrit ; sans --remplacer, rien ne bouge ----
+    const idsRemplaçables = new Set((remplacements || []).flatMap(u => u.produits));
+    const inconnus = (remplacer || []).filter(id => !idsRemplaçables.has(id));
+    if (inconnus.length) {
+        console.error(`❌ --remplacer : ${inconnus.join(', ')} ne figure(nt) pas dans le motif « entree-refusee-au-numero » du plan — rien n'est écrit.`);
+        return { code: 2, etat: 'refuse-remplacer', resultats: [], attendu: attendu ?? 0, reel: 0, horsCache: 0, altere: 0, inconnus };
+    }
+    const choisies = (remplacements || []).filter(u => u.produits.some(id => (remplacer || []).includes(id))).map(u => ({ ...u, _remplace: true }));
     // ---- 0. le PRÉ-PASSAGE : ce que le cache permet d'écrire, avant la moindre écriture ------------------------------------------------------------------
     const prets = [];
     let horsCache = 0, altere = 0, retires = 0;
-    for (const u of plan) {
+    for (const u of [...plan, ...choisies]) {
         const e = index.images[u.url];
         if (!PK.urlImageValide(u.url) || e?.statut !== 'ok') { horsCache++; continue; }
         let buffer; try { buffer = fs.readFileSync(path.join(dossierCache, e.fichier)); } catch { horsCache++; continue; }
@@ -205,8 +231,9 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
         if (verrouSet) { const tenu = await verrouSet.prendre(); if (tenu) { resultats.push({ code: slug, etat: 'refuse-verrou' }); continue; } }
         try {
             let telecharges = 0, sautes = 0, tropPetits = 0;
-            const ecrits = [];
+            const ecrits = [], uniteDe = new Map();
             for (const p of unites) {
+                uniteDe.set(p._id, p.u);
                 const { u, _id, meta, buffer } = p;
                 const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
                 if (p.petit) {
@@ -224,6 +251,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     caseReleve: u.ligne, numeroReleve: u.numeroReleve, releve: u.releve, ...(u.aRegarder ? { aRegarder: true } : {}),
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
+                    ...marqueDe({ wOriginal: meta.width }),
                     langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, telechargeLe: new Date(), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
                 telecharges++; ecrits.push(_id);
             }
@@ -231,27 +259,37 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
             const avant = await compterEntrees(db, carteIds, slug);
             const images = (await M.Image.find({ source: PK.SOURCE, set: slug, etat: 'ok', lot: PK.LOT }).lean()).filter(im => ecrits.includes(im._id));
-            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, remplacees = 0;
+            const retirees = [];                              // les entrées refusées sorties par --remplacer (clé de compterEntrees) : la garde les attend absentes
             try {
                 for (const im of images) {
                     const c = await M.Carte.findById(im.carteId).select('images').lean();
                     if (!c) { cartesAbsentes++; continue; }
+                    const u = uniteDe.get(im._id);
+                    const refCles = new Set(u?._remplace ? (u.refusees || []).map(e => e.cleR2) : []);
                     const nous = e => e?.source === PK.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
-                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    const admises = autres.filter(e => !refCles.has(e.cleR2));        // (sans --remplacer, refCles est vide : toute entrée au numéro sert la fiche)
+                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: PK.SOURCE, numero: im.numero ?? null } } });
-                    if (T.dejaServi({ images: autres }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source sert ce numéro : intacte, la nôtre cède
+                    if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
+                    for (const e of autres.filter(x => refCles.has(x.cleR2))) {
+                        await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, cleR2: e.cleR2 } } });
+                        await M.Image.updateOne({ source: e.source, set: slug, carteId: im.carteId, cleR2: e.cleR2 }, { $set: { etat: 'remplace', remplaceMotif: `entrée refusée par la règle du site au numéro ${im.numero ?? '∅'}, remplacée sur décision du testeur (--remplacer, lot ${PK.LOT})`, remplaceePar: im._id, remplaceeLe: new Date() } });
+                        retirees.push(cleEntree(im.carteId, e)); remplacees++;
+                    }
                     await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                     joints++;
                 }
             } catch (e) { erreurJointure = e.message; console.error(`🔴 ${slug} : jointure interrompue — ${e.message}`); }
             const apres = await compterEntrees(db, carteIds, slug);
-            const garde = avant.autres === apres.autres && apres.siennes === joints;
-            if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${PK.SOURCE} ${apres.siennes} pour ${joints} jointes`);
+            const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');
+            const garde = attenduesAutres === apres.autres && apres.siennes === joints;
+            if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${attenduesAutres === apres.autres ? '' : ' (CHANGÉES)'} (attendu ${avant.nAutres - retirees.length}), entrées ${PK.SOURCE} ${apres.siennes} pour ${joints} jointes`);
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)`}`);
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0 && telecharges + sautes + tropPetits === unites.length, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokemoncom: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });
@@ -263,18 +301,18 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere };
 }
 
-module.exports = { lireCibles, planifierDepuisBase, urlsAutorisees, telecharger, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, CIBLES_PAR_DEFAUT };
+module.exports = { lireCibles, planifierDepuisBase, urlsAutorisees, telecharger, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, CIBLES_PAR_DEFAUT };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--cibles=.+$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/];
+const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--cibles=.+$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const modes = ['--plan', '--telecharger', '--ecrire'].filter(m => args.includes(m));
 if (inconnus.length || modes.length > 1 || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu=')))) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte). Options : --cibles=, --releves=, --cache=, --sortie=.`);
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte). Options : --cibles=, --releves=, --cache=, --sortie=, --remplacer=<idProduct,…> (liste fermée : seulement le motif « entree-refusee-au-numero » du plan ; avec --plan : écrit l'annonce ; avec --ecrire : remplace).`);
     process.exit(2);
 }
 const val = (nom, defaut) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3) ?? defaut;
@@ -282,7 +320,10 @@ const dossierReleves = val('releves', PK.DOSSIER_RELEVES), dossierCache = val('c
 
 async function planComplet(db) {
     const lu = PK.lireReleves(dossierReleves);
-    const p = await planifierDepuisBase(db, { cartes: lu.cartes, cibles: lireCibles(val('cibles', CIBLES_PAR_DEFAUT)) });
+    // la règle du site (refusDuVisuel) est IMPORTÉE du site, comme la simulation des produits servis : si elle ne se charge pas, le plan LÈVE (jamais un repli silencieux)
+    const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
+    const R = await reglesDuSite();
+    const p = await planifierDepuisBase(db, { cartes: lu.cartes, cibles: lireCibles(val('cibles', CIBLES_PAR_DEFAUT)), refusSite: R.refusDuVisuel });
     return { lu, ...p };
 }
 (async () => {
@@ -291,7 +332,7 @@ async function planComplet(db) {
         // le plan s'est écrit en --plan ; le téléchargement le RELIT avec les relevés (jamais d'adresse hors des deux)
         const j = JSON.parse(fs.readFileSync(fichierPlan, 'utf8'));
         const lu = PK.lireReleves(dossierReleves);
-        const a = urlsAutorisees(j.plan, lu.cartes);
+        const a = urlsAutorisees([...j.plan, ...(j.remplacements || [])], lu.cartes);       // (les adresses des remplacements préparés se téléchargent aussi : le remplacement, lui, reste inactif sans --remplacer)
         console.log(`${a.ok.length} adresse(s) autorisée(s) (plan ∩ relevés), ${a.refusees.length} refusée(s) : ${JSON.stringify(a.refusees)}`);
         const r = await telecharger({ urls: a.ok, dossierCache });
         console.log(`TÉLÉCHARGEMENT : ${r.etat} · ${r.requetes} requête(s) (plafond ${r.plafond}) ${r.motif ? `· ${r.motif}` : ''}`);
@@ -305,11 +346,20 @@ async function planComplet(db) {
         const parSet = {}; for (const u of p.plan) parSet[u.slugSet] = (parSet[u.slugSet] || 0) + u.produits.length;
         const motifs = {}; for (const r of p.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         console.log(`relevés : ${p.lu.fichiers} lus, ${p.lu.ignores.length} ignoré(s) ${JSON.stringify(p.lu.ignores.map(x => `${x.fichier} (${x.motif})`))}, ${p.lu.cartes.length} cartes dédoublonnées`);
-        console.log(`PLAN : ${p.plan.length} image(s) pour ${p.plan.reduce((n, u) => n + u.produits.length, 0)} produit(s) sur ${p.cibles} cibles · par set ${JSON.stringify(parSet)} · restes ${JSON.stringify(motifs)}`);
+        console.log(`PLAN : ${p.plan.length} image(s) pour ${p.plan.reduce((n, u) => n + u.produits.length, 0)} produit(s) sur ${p.cibles} cibles · par set ${JSON.stringify(parSet)} · restes ${JSON.stringify(motifs)} · remplacements préparés (INACTIFS sans --remplacer) ${p.remplacements.length} image(s) pour ${p.remplacements.reduce((n, u) => n + u.produits.length, 0)} produit(s)`);
+        const voulus = (val('remplacer', '') || '').split(',').filter(Boolean).map(Number);
         if (mode === '--plan') {
+            const urls = [...new Set([...p.plan, ...p.remplacements].map(u => u.url))];
             fs.mkdirSync(path.dirname(fichierPlan), { recursive: true });
-            fs.writeFileSync(fichierPlan, JSON.stringify({ le: new Date().toISOString(), releves: { fichiers: p.lu.fichiers, ignores: p.lu.ignores }, cibles: p.cibles, plan: p.plan, restes: p.restes, urls: [...new Set(p.plan.map(u => u.url))] }, null, 1));
-            console.log(`plan écrit : ${fichierPlan} · requêtes à faire : ${new Set(p.plan.map(u => u.url)).size} images + 1 robots.txt, ≥ ${PK.CADENCE_MS / 1000} s entre deux (≈ ${Math.ceil((new Set(p.plan.map(u => u.url)).size + 1) * PK.CADENCE_MS / 60000)} min)`);
+            fs.writeFileSync(fichierPlan, JSON.stringify({ le: new Date().toISOString(), releves: { fichiers: p.lu.fichiers, ignores: p.lu.ignores }, cibles: p.cibles, plan: p.plan, remplacements: p.remplacements, restes: p.restes, urls }, null, 1));
+            console.log(`plan écrit : ${fichierPlan} · requêtes à faire : ${urls.length} images + 1 robots.txt, ≥ ${PK.CADENCE_MS / 1000} s entre deux (≈ ${Math.ceil((urls.length + 1) * PK.CADENCE_MS / 60000)} min)`);
+            if (voulus.length) {
+                const choisies = p.remplacements.filter(u => u.produits.some(id => voulus.includes(id)));
+                const annonce = annonceRemplacement(await cx.db.collection('cartes').find({ _id: { $in: choisies.map(u => u.carteId) } }, { projection: { sets: 1, nomEn: 1, images: 1 } }).toArray(), choisies);
+                const fa = path.join(PK.DOSSIER_LOT, 'annonce-remplacement.json');
+                fs.writeFileSync(fa, JSON.stringify(annonce, null, 1));
+                console.log(`annonce des baisses du remplacement (${Object.keys(annonce).length} groupe(s)) → ${fa} · pour lot-additif.js --annonce=`);
+            }
             return;
         }
         const r2 = require('./collecte-cartes/r2');
@@ -317,7 +367,7 @@ async function planComplet(db) {
         const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
         if (!process.env.R2_BUCKET_IMAGES) throw new Error('R2_BUCKET_IMAGES : nom de bucket absent — aucune écriture');
         await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
-        const r = await ecrire(p.plan, modeles(cx), { dossierCache, attendu: Number(val('attendu')), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure,
+        const r = await ecrire(p.plan, modeles(cx), { dossierCache, attendu: Number(val('attendu')), remplacements: p.remplacements, remplacer: voulus, deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure,
             fabriquerVerrouSet: ({ Modele, id }) => fabriquerVerrou({ Modele, id, dureeMs: 10 * 60 * 1000, surInsertion: { debute: new Date(), phase: 'plan' }, nom: `verrou de set ${id}` }) });
         console.log(`ÉCRITURE : code ${r.code} · attendu ${r.attendu} · réel ${r.reel} · hors cache ${r.horsCache} · altérées ${r.altere} · REQUÊTES 0`);
         process.exitCode = r.code;

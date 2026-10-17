@@ -35,8 +35,10 @@ const LARGEUR_MIN = 350;
 // automatiquement dès qu'une source la fournit. Le seuil de 350 px des autres sources ne change pas. » (300 → 257 ; 255 `trop-petit` TPC à rejuger.)
 const LARGEUR_MIN_OFFICIELLE = 257;
 // §21 bis : les sites TPC viennent de la SOURCE UNIQUE (`SITES` de tpc.js) — un site TPC ajouté là passe à 257 sans autre geste.
-// `pokemon-com` n'a pas encore de collecteur, donc pas de site : il s'ajoute ici, à la main.
-const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);
+// 2026-10-17 (PKMCOM-IMPORT) : le nom de la source est celui que le collecteur ÉCRIT dans `images.source` : `pokemon.com` (collecte-cartes/pokemoncom.js SOURCE). L'ancien nom
+// `pokemon-com` n'était écrit par personne : les images de pokemon.com étaient donc jugées à 350. Elles sont jugées à LARGEUR_MIN_OFFICIELLE (257), et celles sous 350 portent
+// la marque basseDefinition (collecteur-images-pokemoncom.js, `marqueDe`).
+const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon.com']);
 // ➕ 2026-10-11, DÉCISION DU TESTEUR : « PikaQian : seuil de 300 px pour cette source (usage : vignette de 157 px) ». PikaQian n'est
 // PAS une source officielle (un site de prix tiers qui copie les visuels de pokemon.cn, images 300 × 419) : elle n'entre donc pas dans
 // SOURCES_OFFICIELLES (que test-seuils-images garde = TPC + pokemon-com) mais dans sa propre liste, fermée, qui ne touche aucune autre source.
