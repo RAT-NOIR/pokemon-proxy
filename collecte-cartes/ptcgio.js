@@ -28,7 +28,9 @@ const HOTE_NOM = 'images.pokemontcg.io';
 // le serveur d'images du même jeu de données —, mention « © Pokémon / The Pokémon Company », jamais le nom de l'hôte dans un champ public). L'hôte se lit dans `urlOriginal`.
 const HOTE_SCRYDEX_NOM = 'images.scrydex.com';
 const HOTE_SCRYDEX = `https://${HOTE_SCRYDEX_NOM}`;
-const SETS_SCRYDEX = Object.freeze(['me55c']);       // les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision)
+// les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision). clb/clv/clc (SCRYDEX-DECKS, 2026-10-17) : répondent (sonde du coordinateur, cartes vues) ;
+// leurs lignes de TABLE_PTCGIO sont ACTIVES depuis les 12 témoins regardés le 2026-10-17 (date lu).
+const SETS_SCRYDEX = Object.freeze(['me55c', 'clb', 'clv', 'clc']);
 const LOT = 'ptcgio-2026-10';
 const MENTION = T.MENTION;                                  // une seule mention pour toutes nos sources de scans (§75)
 const CADENCE_MS = 3000;
@@ -155,11 +157,25 @@ const TABLE_PTCGIO = Object.freeze([
       refuses: [{ idProduct: 907958, nom: 'Genesect-EX', motif: 'numero-contredit-par-l-image', vu: 'me55c-11g imprime 11/101, le produit porte 97' },
           { idProduct: 907954, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-99 : 99/102 juste ; une fiche sans numéro pour les deux moitiés' },
           { idProduct: 907955, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-100 : 100/102 juste ; une fiche sans numéro pour les deux moitiés' }],
-      ouvertes: 30 }
+      ouvertes: 30 },
+    // ── SCRYDEX-DECKS (2026-10-17) : les trois decks TCG Classic, serveur d'images. 12 images ouvertes à l'œil le 2026-10-17 (4 par deck : n° 1, 34, un milieu, et la carte de la première sonde), toutes avec le code du deck
+    // et le numéro « nnn/034 » imprimés, 596×834, nom = celui de NOTRE produit au même numéro. Les identifiants clk, clf, cll, mfb, mfba, mfbb ont rendu le DOS de carte du serveur (refusé par empreinte). My First Battle : non trouvé.
+    // lu (date AAAA-MM-JJ, exigée par ligneActive) est la décision : sans date, la ligne est inactive et ne prouve rien. Le segment [[1, 34]] est couvert par les témoins (1 et 34 compris).
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck', id: 'clb', hote: HOTE_SCRYDEX_NOM, idServeur: 'clb', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Blastoise & Suicune ex : code CLB imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Squirtle', '001/034'), t(10, 'Suicune ex', '010/034'), t(17, 'Kangaskhan', '017/034'), t(34, 'Psychic Energy', '034/034')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck', id: 'clv', hote: HOTE_SCRYDEX_NOM, idServeur: 'clv', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Venusaur & Lugia ex : code CLV imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Bulbasaur', '001/034'), t(16, 'Snorlax', '016/034'), t(17, 'Lugia ex', '017/034'), t(34, 'Fighting Energy', '034/034')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', id: 'clc', hote: HOTE_SCRYDEX_NOM, idServeur: 'clc', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Charizard & Ho-Oh ex : code CLC imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Charmander', '001/034'), t(7, 'Ho-Oh ex', '007/034'), t(17, 'Miltank Lv.32', '017/034'), t(34, 'Lightning Energy', '034/034')] }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l, ...(l.parProduit ? { temoins: l.parProduit.map(e => t(Number(e.numero), e.nom, e.imprime)) } : {}) })));   // une ligne par produit : chaque produit prouvé EST un témoin
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
-const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
+/** Une ligne est ACTIVE si et seulement si son lu est une DATE réelle AAAA-MM-JJ (pas toute chaîne non vide) : écrite par ce qu'elle autorise. */
+const ligneActive = l => !!l && typeof l.lu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(l.lu) && (d => !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === l.lu)(new Date(l.lu + 'T00:00:00Z'));
+const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug && ligneActive(l));   // une ligne sans date de lecture est INACTIVE : aucun témoin regardé, elle ne prouve rien
 
 /** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
 function lireNumero(ligne, numeroFiche) {
@@ -227,8 +243,9 @@ function numerosDuSet(lignes, numerosCm) {
  * même numéro, ou sans numéro dans le set) n'y figure jamais — additif.
  * @param {{slug: string, trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>}} o
  */
-function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
-    const V = verdictDuSet(slug), lignes = lignesDe(slug);
+function planifierPtcgio({ slug, trous, tousNumerosCm = null, lignes: lignesImposees = null }) {
+    // `lignes` (banc seulement) : rejouer le plan avec des lignes données, sans toucher à la table gelée (une ligne imposée est prise pour prouvée)
+    const V = lignesImposees ? { verdict: 'prouve' } : verdictDuSet(slug), lignes = lignesImposees || lignesDe(slug);
     // 🔑 T2 : la source n'a qu'UN fichier par numéro ; quand 2 produits Cardmarket du set ou plus portent ce numéro (V1/V2/V3), le choix de la variante n'est
     // pas prouvé et l'entrée le DIT (`noteVariante`, lue par le site). Compté par le numéro du PRODUIT (l'adresse qu'il fait), jamais par le nom ; sans la
     // liste des numéros du set, aucune note n'est inventée.
@@ -286,8 +303,8 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
         const cle = `${x.carte._id}|${hit.l.id}|${hit.n}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
-        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton, hit.l.suffixeUrl || ''), voie: 'set-prouve+numero',
-            preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (${hit.l.numeroDe === 'fiche' ? `fiche ${x.numeroFiche}, nom « ${x.carte.nomEn} » = celui du témoin lu à l'œil` : `Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}`}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
+        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: hit.l.hote ? urlScrydex(`${hit.l.idServeur}-${hit.n}`) : urlHires(hit.l.id, hit.n, hit.l.jeton, hit.l.suffixeUrl || ''), voie: 'set-prouve+numero',
+            preuve: `${hit.l.hote || 'images.pokemontcg.io'} set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (${hit.l.numeroDe === 'fiche' ? `fiche ${x.numeroFiche}, nom « ${x.carte.nomEn} » = celui du témoin lu à l'œil` : `Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}`}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
     }
     return { plan, restes };
 }
@@ -393,6 +410,7 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
             if (r.status === 404 || r.status === 410) return null;
             if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${c.url}`), { status: r.status });
             if (!r.octets) throw new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${c.url})`);
+            if (H.estDosDeCarte(r.octets)) return null;     // 2026-10-17 : le « introuvable » du serveur d'images scrydex est le dos d'une carte, en HTTP 200 — un trou ne le reçoit jamais
             return r.octets;
         });
     }
@@ -414,7 +432,7 @@ function planRetraitPtcgio(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, hoteDeLUrl: H.hoteDeLUrl, urlScrydex, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
+    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, ligneActive, hoteDeLUrl: H.hoteDeLUrl, urlScrydex, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
     TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, numerosDuSet, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };
