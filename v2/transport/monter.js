@@ -6,7 +6,7 @@ module.exports = {
     enTete(app, cfg) {
         app.disable('x-powered-by');                 // pas de signature du serveur sur aucune réponse
         app.use(cors.middlewareV2(cfg));             // d'abord : les en-têtes CORS figurent sur toutes les réponses, erreurs comprises
-        app.use(entetes.middleware());
+        app.use(entetes.middleware(cfg));
     },
     routes(router, cfg, deps) { }
 };
