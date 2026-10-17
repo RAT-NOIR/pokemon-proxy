@@ -196,6 +196,12 @@ async function collecterSet(code, M, dossierRapport) {
     }
     const liberer = () => verrouSet.rendre();
 
+    // 🔴 W-RESIL2 : toute sortie après la prise, retour nommé OU exception (lecture Mongo coupée, réseau), arrête le battement et TENTE le
+    // rendu. Sans cela, l'exception remontait au superviseur avec le minuteur armé : après SIGTERM le processus ne sortait pas seul. `rendre`
+    // arrête le battement AVANT d'écrire et attrape ses propres échecs : un rendu raté ne masque pas l'erreur d'origine. Les `liberer()` des
+    // retours nommés restent (idempotents : le second rendu répond « jamais pris »).
+    try {
+    return await (async () => {
     const requetesAuDebut = src.compteRequetes();
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
     const etat = await M.EtatImages.findById(idEtat).lean();
@@ -358,6 +364,8 @@ async function collecterSet(code, M, dossierRapport) {
     console.log(`   requêtes ${SOURCE} : ${src.compteRequetes() - requetesAuDebut} pour CE set (2 par carte + 4) · ${src.compteRequetes()} cumulées depuis le démarrage du processus`);
     await liberer();
     return { code, etat: 'verifie', complet };
+    })();
+    } finally { await liberer(); }
 }
 
 /**
