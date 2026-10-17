@@ -42,23 +42,27 @@ const listeEmbarquee = (() => { const r = /var LISTE = (\{[\s\S]*?\n    \});/.ex
 verifier('liste embarquée : 128 adresses', listeEmbarquee ? Object.keys(listeEmbarquee).length : -1, 128);
 verifier('liste embarquée == collecte-cartes/cm-passif-liste.json (une seule vérité)', (() => { const idx = CM.indexer(LISTE); const ids = Object.keys(idx); return listeEmbarquee && ids.length === Object.keys(listeEmbarquee).length && ids.every(k => { const e = listeEmbarquee[k]; const i = idx[k]; return e && e.n === i.n && e.v === i.v && e.i === i.idProduct && e.t === i.tampon && e.s === i.set && e.o === i.numero; }); })(), true);
 
-const apresPort = charge => SRC.replace('var PORT = 8768;', 'var PORT = 8768;\n' + charge);
-const dansEntete = ligne => SRC.replace('// @noframes', '// @noframes\n' + ligne);
+// Les mutants se fabriquent sur le texte en fins de ligne LF : git peut livrer le script en CRLF (Windows), et un `replace('…\n', '')` ne trouverait alors rien — un « mutant » IDENTIQUE au script,
+// que la garde n'a aucune raison de refuser. Un mutant sans effet fait échouer le banc (assertion plus bas).
+{
+const SRC_LF = SRC.replace(/\r\n/g, '\n');
+const apresPort = charge => SRC_LF.replace('var PORT = 8768;', 'var PORT = 8768;\n' + charge);
+const dansEntete = ligne => SRC_LF.replace('// @noframes', '// @noframes\n' + ligne);
 const mutants = [
-    ['en-tête : @match hors fiches (tout Cardmarket)', SRC.replace('// @match        https://www.cardmarket.com/*/Pokemon/Products/Singles/*', '// @match        https://www.cardmarket.com/*')],
-    ['en-tête : @match tous sites', SRC.replace('// @match        https://www.cardmarket.com/*/Pokemon/Products/Singles/*', '// @match        *://*/*')],
+    ['en-tête : @match hors fiches (tout Cardmarket)', SRC_LF.replace('// @match        https://www.cardmarket.com/*/Pokemon/Products/Singles/*', '// @match        https://www.cardmarket.com/*')],
+    ['en-tête : @match tous sites', SRC_LF.replace('// @match        https://www.cardmarket.com/*/Pokemon/Products/Singles/*', '// @match        *://*/*')],
     ['en-tête : second @match', dansEntete('// @match        https://evil.example/*')],
-    ['en-tête : @match d\'une autre catégorie (Magic)', SRC.replace('/Pokemon/Products/Singles/*', '/Magic/Products/Singles/*')],
-    ['en-tête : @connect autre que 127.0.0.1', SRC.replace('// @connect      127.0.0.1', '// @connect      www.cardmarket.com')],
+    ['en-tête : @match d\'une autre catégorie (Magic)', SRC_LF.replace('/Pokemon/Products/Singles/*', '/Magic/Products/Singles/*')],
+    ['en-tête : @connect autre que 127.0.0.1', SRC_LF.replace('// @connect      127.0.0.1', '// @connect      www.cardmarket.com')],
     ['en-tête : second @connect', dansEntete('// @connect      evil.example')],
-    ['en-tête : @connect *', SRC.replace('// @connect      127.0.0.1', '// @connect      *')],
+    ['en-tête : @connect *', SRC_LF.replace('// @connect      127.0.0.1', '// @connect      *')],
     ['en-tête : @require', dansEntete('// @require      https://evil.example/x.js')],
     ['en-tête : @resource', dansEntete('// @resource     css https://evil.example/a.css')],
     ['en-tête : @updateURL', dansEntete('// @updateURL    https://evil.example/u.js')],
     ['en-tête : directive inconnue (@unwrap)', dansEntete('// @unwrap')],
-    ['en-tête : @grant GM_download', SRC.replace('// @grant        GM_xmlhttpRequest', '// @grant        GM_xmlhttpRequest\n// @grant        GM_download')],
-    ['en-tête : @grant unsafeWindow', SRC.replace('// @grant        GM_xmlhttpRequest', '// @grant        unsafeWindow')],
-    ['en-tête : sans @noframes', SRC.replace('// @noframes\n', '')],
+    ['en-tête : @grant GM_download', SRC_LF.replace('// @grant        GM_xmlhttpRequest', '// @grant        GM_xmlhttpRequest\n// @grant        GM_download')],
+    ['en-tête : @grant unsafeWindow', SRC_LF.replace('// @grant        GM_xmlhttpRequest', '// @grant        unsafeWindow')],
+    ['en-tête : sans @noframes', SRC_LF.replace('// @noframes\n', '')],
     ['corps : new Image', apresPort('var a = new Image();')],
     ['corps : crossOrigin posé', apresPort('var i = document.createElement(\'canvas\'); i.crossOrigin = PORT;')],
     ['corps : fetch', apresPort('var f = fetch(\'http://127.0.0.1:1/\');')],
@@ -90,8 +94,13 @@ const mutants = [
     ['corps : fonction non déclarée appelée par un nom nu', apresPort('quelqueChose(PORT);')],
     ['corps : méthode hors liste (.postMessage)', apresPort('document.postMessage(PORT);')]
 ];
-for (const [nom, texteMute] of mutants) verifier(`la garde REFUSE : ${nom}`, G.violations(texteMute, P).length > 0, true);
+for (const [nom, texteMute] of mutants) {
+    verifier(`le mutant « ${nom} » DIFFÈRE du script (un mutant sans effet n'éprouve rien)`, texteMute !== SRC_LF && texteMute !== SRC, true);
+    verifier(`la garde REFUSE : ${nom}`, G.violations(texteMute, P).length > 0, true);
+}
 verifier('contrôle du banc : un texte sans mutation reste admis', G.violations(apresPort(''), P), []);
+verifier('contrôle du banc : le script en fins de ligne CRLF est admis comme en LF', G.violations(SRC_LF.replace(/\n/g, '\r\n'), P), []);
+}
 
 // ── COMPORTEMENT
 const SIG = Buffer.from('89504e470d0a1a0a', 'hex');

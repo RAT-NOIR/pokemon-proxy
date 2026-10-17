@@ -172,16 +172,24 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
         if (!/^application\/json(\s*;.*)?$/i.test(req.headers['content-type'] || '')) return refuser(415, 'Content-Type application/json exigé');   // GARDE:contenttype
         const declare = Number(req.headers['content-length']);
         if (declare > maxOctets) return refuser(413, `corps de ${declare} octets : au-delà de ${maxOctets}`);   // GARDE:taille-declaree
-        const morceaux = []; let total = 0, trop = false;
+        const morceaux = []; let total = 0, trop = false, minuteur = null, repondu413 = false;
+        const refuser413 = () => { if (repondu413) return; repondu413 = true; clearTimeout(minuteur); refuser(413, `corps de plus de ${maxOctets} octets`); };
         req.on('data', c => {
-            if (trop) return;
             total += c.length;
-            if (total > maxOctets) { trop = true; morceaux.length = 0; refuser(413, `corps de plus de ${maxOctets} octets`); setTimeout(() => req.destroy(), 50); return; }   // GARDE:taille-flux
-            morceaux.push(c);
+            if (trop) { if (total > 2 * maxOctets) refuser413(); return; }   // déjà trop gros : le flux est JETÉ, jamais stocké
+            if (total > maxOctets) {   // GARDE:taille-flux
+                // On cesse de STOCKER (jamais plus que la borne en mémoire) mais on lit (et jette) la suite du flux avant de répondre : une connexion fermée avec des octets
+                // non lus fait un RST qui EFFACE la réponse chez le client (banc instable, 2 passages sur 3). La réponse 413 (Connection: close) part à la fin du flux, à 2 × la borne,
+                // ou après 2 s — au plus ; la connexion se ferme ensuite, une fois la réponse envoyée.
+                trop = true; morceaux.length = 0;
+                minuteur = setTimeout(refuser413, 2000);
+                minuteur.unref();
+            }
+            else morceaux.push(c);
         });
         req.on('error', () => { /* coupure : rien à écrire */ });
         req.on('end', async () => {
-            if (trop) return;
+            if (trop) return refuser413();
             try {
                 const j = jugerMessage(Buffer.concat(morceaux).toString('utf8'));
                 if (j.statut !== 200) return refuser(j.statut, j.corps.motif);
