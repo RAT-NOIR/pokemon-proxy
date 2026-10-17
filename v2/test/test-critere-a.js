@@ -136,6 +136,41 @@ const IDS = [4001, 4002];
     const c = CA.compteurs();
     vrai('(11)     les compteurs existent (jugees, affirmees)', Number.isInteger(c.jugees) && Number.isInteger(c.affirmees));
 }
+// ── (13) TOUR 1 (I2) : la couverture. Chaque cas qui doit REFUSER a son TÉMOIN : la même donnée, changée d'un seul point, qui AFFIRME (le refus ne vient donc que de ce point ; aucune mutation du code de production).
+{
+    const issue = (lignes, lecture, extra = {}) => { const ids = lignes.map(l => l.idProduct); return jouer(corpsDe({ gagnant: ids[0], lecture, vivierIds: ids, ...extra }), lignes, ids).issue; };
+    const duo = (codeP, numP, codeJ, numJ, extra = {}) => [ligne(5001, 'Carte [Un | Deux]', codeP, numP, '100'), ligne(5002, 'Carte [Un | Deux]', codeJ, numJ, '100', extra)];
+    // convention X : le jumeau « xASC » au MÊME numéro que P (le code lu « ASC » concorde avec les deux par la convention X)
+    v('(13) convention X : le jumeau xASC porte le même numéro => refusé', issue(duo('ASC', '12', 'xASC', '12'), { setCode: 'ASC' }), 'question');
+    v('(13)     témoin : le même jumeau xASC à un AUTRE numéro => affirmé', issue(duo('ASC', '12', 'xASC', '99'), { setCode: 'ASC' }), 'affirmee');
+    // une variante (reverse) au même numéro ET au même code, que la colonne compte dans le groupe
+    v('(13) une variante au même numéro et au même code dans le groupe => refusée', issue(duo('ASC', '12', 'ASC', '12'), { setCode: 'ASC' }), 'question');
+    v('(13)     témoin : un jumeau au même code mais à un autre numéro => affirmé', issue(duo('ASC', '12', 'ASC', '99'), { setCode: 'ASC' }), 'affirmee');
+    // « 025 » contre « 25 » : égaux au sens de comparer (zéros de tête)
+    v('(13) « 25 » lu, P « 025 » : numéro exact, jumeau « 99 » => affirmé', issue(duo('AAA', '025', 'BBB', '99'), { numero: '25', setCode: 'AAA' }), 'affirmee');
+    v('(13)     « 025 » lu, jumeau « 25 » : le numéro lu est celui du jumeau (P porte « 99 ») => P non affirmé', issue([ligne(5101, 'Carte [Un | Deux]', 'AAA', '99', '100'), ligne(5102, 'Carte [Un | Deux]', 'BBB', '25', '100')], { numero: '025', setCode: 'AAA' }), 'question');
+    // un préfixe alphabétique d'un seul côté n'est NI égal NI contredit : jamais d'affirmation
+    v('(13) « 05 » lu, P « 05 », jumeau « TG05 » (mêmes chiffres, préfixe d\'un seul côté) => refusé', issue(duo('AAA', '05', 'BBB', 'TG05'), { numero: '05', setCode: 'AAA' }), 'question');
+    v('(13)     témoin : le jumeau « TG06 » (chiffres différents) => affirmé', issue(duo('AAA', '05', 'BBB', 'TG06'), { numero: '05', setCode: 'AAA' }), 'affirmee');
+    v('(13) « 028 » lu, P « SV028 » : pas exact => pas d\'affirmation', issue(duo('AAA', 'SV028', 'BBB', '99'), { numero: '028', setCode: 'AAA' }), 'question');
+    v('(13)     témoin : « SV028 » lu, P « SV028 » => affirmé', issue(duo('AAA', 'SV028', 'BBB', '99'), { numero: 'SV028', setCode: 'AAA' }), 'affirmee');
+    // l'autre langue de tirage : P est du tirage intl, le jumeau du tirage jp ; la langue lue contredit P (statut langue)
+    const L = lang => issue(duo('AAA', '12', 'BBB', '99', { tirageSource: 'jp' }), { setCode: 'AAA', langue: lang });
+    v('(13) langue lue JP, P tirage intl => refusé', L('JP'), 'question');
+    v('(13)     témoin : langue lue EN => affirmé', L('EN'), 'affirmee');
+}
+// ── (14) TOUR 1 (I1) : le risque suivi en production — un compteur des affirmations du critère, PAR CODE DE SET lu
+{
+    const avant = CA.compteurs().parCode;
+    vrai('(14) compteurs().parCode existe (objet)', avant && typeof avant === 'object');
+    const n0 = (avant && avant.AAA) || 0;
+    const ids = [4001, 4002];
+    jouer(corpsDe({ gagnant: 4001, vivierIds: ids }), [P, J], ids);
+    v('(14)     une affirmation du critère sur le code lu « AAA » : +1 sous AAA', ((CA.compteurs().parCode || {}).AAA || 0) - n0, 1);
+    const n1 = (CA.compteurs().parCode || {}).AAA || 0;
+    jouer(corpsDe({ gagnant: 4001, lecture: { setCode: null }, vivierIds: ids }), [P, J], ids);
+    v('(14)     un refus ne compte pas', ((CA.compteurs().parCode || {}).AAA || 0) - n1, 0);
+}
 // ── (12) l'état du drapeau est tenu : allumé (mesure du 2026-10-17 : 0 faux sur le banc étiqueté) ; éteint, un banc doit le dire
 vrai('(12) CRITERE_A est allumé (0 faux mesuré) — l\'éteindre exige de changer ce banc ET de le dire au rapport', CA.CRITERE_A === true);
 bilan();
