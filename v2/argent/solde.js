@@ -45,6 +45,9 @@ async function peutPayer(porteur, cfg, maintenant = new Date()) {
     if (porteur.administrateur === true && porteur.type === 'compte' && Of.estAdministrateur(porteur, await col('comptes').findOne({ _id: porteur.id }, { projection: { role: 1 } }))) return { ok: true };
     // OFFRE-QUOTA : « peut-il payer ? » = lui reste-t-il une analyse aujourd'hui (même source que le débit : l'offre relue en base). Les anciens soldes ne comptent plus : ils ne se débitent plus.
     // Pro (restant: null) passe tant que le plafond technique n'est pas atteint (le débit reste seul juge) ; un compte non vérifié se voit demander de confirmer son adresse.
+    // ACHETE-AVANT-JOUR : une analyse achetée restante suffit (le débit la prend AVANT le quota du jour), même quota épuisé et même compte non vérifié — la même poche, lue par la même définition (poches.acheteDe)
+    const a = P.acheteDe(porteur);
+    if (a && await col(a.collection).findOne({ ...a.filtre, [a.champ]: { $gte: 1 } }, { projection: { _id: 1 } })) return { ok: true };
     const e = await Of.etatDe(porteur, cfg, maintenant);
     if (!e) return { ok: false, code: P.codeRefus(porteur) };
     if (e.nonVerifie) return { ok: false, code: 'VERIFICATION' };
