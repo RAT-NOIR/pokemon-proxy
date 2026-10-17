@@ -62,7 +62,7 @@ const sha256Octets = b => crypto.createHash('sha256').update(b).digest('hex');
     const octets = plan.ecritures.reduce((n, e) => n + BSON.calculateObjectSize({ $set: e.champs, $unset: Object.fromEntries(e.retraits.map(r => [r, ''])) }), 0);
     console.log(`COÛT EN BASE : ${(octets / 1e6).toFixed(2)} Mo de BSON écrits (${plan.ecritures.length ? Math.round(octets / plan.ecritures.length) : 0} octets par document, ${C.champsAEcrire ? (octets / C.champsAEcrire).toFixed(1) : 0} par champ)`);
     // AUCUNE valeur existante n'est modifiée : tout chemin écrit ou retiré est sous provenance.
-    const hors = plan.ecritures.flatMap(e => [...Object.keys(e.champs), ...e.retraits]).filter(k => !k.startsWith('provenance.'));
+    const hors = plan.ecritures.flatMap(e => [...Object.keys(e.champs), ...e.retraits]).filter(k => k !== 'provenance' && !k.startsWith('provenance.'));
     if (hors.length) throw new Error(`chemins hors provenance : ${hors.slice(0, 3).join(', ')} — refus`);
     // AUCUNE confirmation en base : ni confirmePar ni accord dans un $set
     if (plan.ecritures.some(e => /confirmePar|"accord"/.test(JSON.stringify(e.champs)))) throw new Error('une confirmation est dans un $set : refus (les confirmations vont au fichier)');

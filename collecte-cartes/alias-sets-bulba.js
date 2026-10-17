@@ -17,8 +17,12 @@ const { norm, cn } = require('./confronter-bulba');
 // Extra Regulation Box → bw : 12 paires, couverture Bulbapedia 0,255). Elle n'est admise qu'à ≥ 0,8 DANS LES DEUX SENS (alors la première règle suffit), ou à ≥ `minPairesContenue`
 // paires dont le nom concorde ; en dessous, refus motivé « inclusion-a-sens-unique ».
 const SEUILS = { minPaires: 5, couvBulbaMin: 0.8, couvExterneMin: 0.5, couvExterneContenue: 0.8, minPairesContenue: 20, rivalMin: 0.5 };
-const preuveSuffisante = (e, s) => e.paires >= s.minPaires && ((e.couvBulba >= s.couvBulbaMin && e.couvExterne >= s.couvExterneMin)
-    || (e.couvExterne >= s.couvExterneContenue && (e.couvBulba >= s.couvBulbaMin || e.paires >= s.minPairesContenue)));
+// Relecture 2 (M2) : la règle « Bulbapedia ≥ 0,8 ET source ≥ 0,5 » ne suffit plus seule non plus (McDonald's Collection / MCD11 : 7 paires, 1 / 0,583). Un alias est retenu
+// seulement à ≥ 0,8 DANS LES DEUX SENS, ou à ≥ `minPairesContenue` paires dont le nom concorde ET l'un des deux sens à ≥ 0,8.
+const preuveSuffisante = (e, s) => e.paires >= s.minPaires && ((e.couvBulba >= s.couvBulbaMin && e.couvExterne >= s.couvExterneContenue)
+    || (e.paires >= s.minPairesContenue && (e.couvBulba >= s.couvBulbaMin || e.couvExterne >= s.couvExterneContenue)));
+// la règle LARGE d'avant : ce qu'un alias a pu être sans l'être plus (refus motivé), et ce qui fait d'un candidat un RIVAL
+const regleLarge = (e, s) => preuveSuffisante(e, s) || (e.paires >= s.minPaires && ((e.couvBulba >= s.couvBulbaMin && e.couvExterne >= s.couvExterneMin) || e.couvExterne >= s.couvExterneContenue));
 
 const cleNum = n => cn(n);
 const clePaire = (num, nom) => cleNum(num) + '\u0000' + norm(nom);
@@ -61,10 +65,10 @@ function prouverAlias(bulba, index, seuils = SEUILS) {
     }).sort((a, b) => b.paires - a.paires || b.couvExterne - a.couvExterne || (a.cle < b.cle ? -1 : 1));
     const el = evalues.filter(e => preuveSuffisante(e, seuils));
     const sortie = (retenus, refus) => ({ retenus: retenus.map(({ cle, paires, couvBulba, couvExterne }) => ({ cle, paires, couvBulba, couvExterne })), refus, evalues: evalues.slice(0, 3).map(({ cle, paires, couvBulba, couvExterne }) => ({ cle, paires, couvBulba, couvExterne })) });
-    if (!el.length) return sortie([], evalues.some(e => e.paires >= seuils.minPaires && e.couvExterne >= seuils.couvExterneContenue) ? 'inclusion-a-sens-unique' : 'aucun-candidat');
+    if (!el.length) return sortie([], evalues.some(e => regleLarge(e, seuils)) ? 'inclusion-a-sens-unique' : 'aucun-candidat');
     const retenus = [el[0]]; const pris = new Set(el[0].nums);
     // un RIVAL est jugé sur la règle large (ancienne) : une inclusion trop mince pour être RETENUE reste un concurrent qui rend le choix ambigu
-    const rivaux = evalues.filter(e => e !== el[0] && e.paires >= seuils.minPaires && ((e.couvBulba >= seuils.couvBulbaMin && e.couvExterne >= seuils.couvExterneMin) || e.couvExterne >= seuils.couvExterneContenue));
+    const rivaux = evalues.filter(e => e !== el[0] && regleLarge(e, seuils));
     for (const e of rivaux) {
         const chevauche = [...e.nums].some(n => pris.has(n));
         if (!chevauche) { if (el.includes(e)) { retenus.push(e); e.nums.forEach(n => pris.add(n)); } continue; }

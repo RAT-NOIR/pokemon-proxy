@@ -46,6 +46,18 @@ function suite(M) {
     verifier('12 paires contenues dans 47 cartes : inclusion à sens unique, refusée', [ids(r), r.refus], [[], 'inclusion-a-sens-unique']);
     verifier('la même inclusion à 20 paires (nom concordant) est admise', ids(prouverAlias(set(80), indexerExternes([{ cle: 'bw', cartes: set(20) }]))), ['bw']);
 
+    // 5 ter. (relecture 2, M2) la « règle 1 » (Bulbapedia ≥ 0,8 ET source ≥ 0,5) ne suffit plus seule : ≥ 0,8 dans les DEUX sens, ou ≥ 20 paires dont le nom concorde
+    //        McDonald's Collection / MCD11 : 7 paires, couvertures 1 / 0,583 · exstarter… / svc : 15 paires, 0,938 / 0,714
+    idx = indexerExternes([{ cle: 'MCD11', cartes: set(12) }]);
+    r = prouverAlias(set(7), idx);
+    verifier('7 paires, couvertures 1 / 0,583 : refus motivé (plus un alias)', [ids(r), r.refus, r.evalues[0].couvExterne], [[], 'inclusion-a-sens-unique', 0.583]);
+    idx = indexerExternes([{ cle: 'svc', cartes: set(21) }]);
+    r = prouverAlias(set(16), idx);
+    verifier('15 paires, couvertures 0,938 / 0,714 : refus motivé', [ids(r), r.refus], [[], 'inclusion-a-sens-unique']);
+    verifier('20 paires, couvertures 0,8 / 0,5 : admis (≥ 20 paires dont le nom concorde)', ids(prouverAlias(set(25), indexerExternes([{ cle: 'ok20', cartes: set(40) }]))), ['ok20']);
+    verifier('table : 7 paires 1 / 0,583 rejetée', verifierTable({ intl: { alpha: { expansion: 'A', pkc: [{ cle: 'MCD11', paires: 7, couvBulba: 1, couvExterne: 0.583 }] } }, jp: {} }).length, 1);
+    verifier('table : 20 paires 0,85 / 0,6 admise', verifierTable({ intl: { alpha: { expansion: 'A', pkc: [{ cle: 'x', paires: 20, couvBulba: 0.85, couvExterne: 0.6 }] } }, jp: {} }), []);
+
     // 6. trop peu de cartes pour prouver
     idx = indexerExternes([{ cle: 'PETIT', cartes: set(3) }]);
     r = prouverAlias(set(3), idx);

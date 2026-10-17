@@ -20,6 +20,10 @@
 // 🔑 FORME ÉTRANGÈRE : une provenance déjà présente sous une autre forme (non objet, autre `source`, entrée qui n'est pas une marque minimale — y compris l'ancienne forme à
 // `confirmePar` —, impressions non tableau) n'est NI écrasée NI fusionnée NI retirée : le document ou le champ est SAUTÉ, compté (`formeEtrangere`) et listé.
 // 🔑 `provenance` est un champ INTERNE : le site ne le lit pas, la garde de lot ne le compte pas (aucun set revalidé). Le nom d'une source n'apparaît dans AUCUN champ public.
+//    Vérifié en lecture seule dans rat-market-site (relecture 2, F6) : la SEULE lecture de `cartes` sans projection est lib/cartes.ts:885 (`findOne`, la fiche). `lireCarte` copie les
+//    champs inconnus (lib/lireDonnee.ts:99 : « un champ inconnu d'un objet n'est jamais touché »), donc `provenance` entre dans `doc` — mais la fiche publique `carte` est reconstruite
+//    CHAMP PAR CHAMP (lib/cartes.ts:952-989), `doc` n'est ni étalé ni renvoyé ni sérialisé, et aucune route de app/ ne lit `cartes`. `provenance.source` ne sort donc pas : la valeur
+//    'bulbapedia' reste lisible (pas de code neutre). Si un lecteur renvoyait un jour `doc` tel quel, il faudrait remplacer 'bulbapedia' par un code neutre (ex. 'b').
 // 🔑 UN CHAMP `aReconfirmer` NE DOIT JAMAIS ÊTRE LA SEULE PREUVE D'UNE IDENTIFICATION (décision du testeur).
 // 🔑 La garde s'écrit par ce qu'elle AUTORISE : « confirmé » = une source qui concorde ou un arbitrage « juste » ; tout le reste est « à reconfirmer ». La valeur n'est JAMAIS modifiée ici.
 // IDEMPOTENT : rejouer sur son propre résultat n'écrit rien. Le fichier des confirmations est RECALCULÉ à chaque passe (état complet, pas un diff).
@@ -161,9 +165,11 @@ function planifierProvenance({ cartes, sets, lignes, appariements, arbitrages, m
         if (a === 'poser') { doc.champs['provenance.' + nom] = minimale(d); compte.champsAEcrire++; }
         else if (a === 'retirer') { doc.retraits.push('provenance.' + nom); compte.champsRetires++; compte.champsAEcrire++; }
     };
-    const clore = (collection, _id, doc) => {
+    const clore = (collection, _id, doc, estNull) => {
         if (!Object.keys(doc.champs).length && !doc.retraits.length) return false;
         if (Object.keys(doc.champs).length) { doc.champs['provenance.source'] = SOURCE; doc.champs['provenance.le'] = maintenant; }
+        // `provenance: null` : un `$set` de sous-chemin échouerait (« cannot create field in element {provenance: null} ») — l'objet entier est posé d'un coup
+        if (estNull) doc.champs = { provenance: Object.fromEntries(Object.entries(doc.champs).map(([k, v]) => [k.slice('provenance.'.length), v])) };
         ecritures.push({ collection, _id, champs: doc.champs, retraits: doc.retraits }); return true;
     };
 
@@ -221,7 +227,7 @@ function planifierProvenance({ cartes, sets, lignes, appariements, arbitrages, m
             }
         });
         if (changeI) { const res = sortie.filter(Boolean); if (res.length) doc.champs['provenance.impressions'] = res; else doc.retraits.push('provenance.impressions'); }
-        if (clore('cartes', k._id, doc)) compte.cartes++;
+        if (clore('cartes', k._id, doc, k.provenance === null)) compte.cartes++;
     }
 
     for (const s of sets) {
@@ -234,7 +240,7 @@ function planifierProvenance({ cartes, sets, lignes, appariements, arbitrages, m
             const cle = 'set.' + ch;
             traiter('sets', s._id, p0, doc, ch, decider(L.get(cle + '\u0000' + String(s._id)), A.get(cle + '\u0000' + String(s._id)), s[ch]), cle);
         }
-        if (clore('sets', s._id, doc)) compte.sets++;
+        if (clore('sets', s._id, doc, s.provenance === null)) compte.sets++;
     }
     compte.documents = ecritures.length;
     return { ecritures, confirmations, compte };

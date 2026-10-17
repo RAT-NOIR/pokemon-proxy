@@ -122,17 +122,6 @@
     }
    ]
   },
-  "mcdonaldscollection": {
-   "expansion": "McDonald's Collection",
-   "pkc": [
-    {
-     "cle": "Black & White/MCD11",
-     "paires": 7,
-     "couvBulba": 1,
-     "couvExterne": 0.583
-    }
-   ]
-  },
   "pokemonrumble": {
    "expansion": "Pokémon Rumble",
    "pkc": [
@@ -726,14 +715,14 @@
     }
    ]
   },
-  "exstartersetpikachuexandpawmot": {
-   "expansion": "ex Starter Set Pikachu ex & Pawmot",
+  "generationsstartdeckxerneasexandnoivernex": {
+   "expansion": "Generations Start Deck Xerneas ex & Noivern ex",
    "dossiers": [
     {
-     "cle": "svc",
-     "paires": 15,
-     "couvBulba": 0.938,
-     "couvExterne": 0.714
+     "cle": "svm",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 0.114
     }
    ]
   },

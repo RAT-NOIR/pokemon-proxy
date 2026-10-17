@@ -110,6 +110,12 @@ function suite(M) {
     verifier('confirmationValide d’une impression par sa clé', [M.confirmationValide(confs, 'cartes', carte(), 'rarete', 'intl|Fossil|42'), M.confirmationValide(confs, 'cartes', carte({ impressions: [{ ...carte().impressions[0], rarete: 'Rare' }, carte().impressions[1]] }), 'rarete', 'intl|Fossil|42')], [true, false]);
 
     // ── 6 bis. FORME ÉTRANGÈRE : une provenance déjà présente sous une AUTRE forme n’est ni écrasée ni fusionnée — sautée, comptée, listée
+    // (relecture 2, M1) `provenance: null` : un `$set` de sous-chemin échouerait sur null — le document reçoit l'objet ENTIER par un `$set` de `provenance`
+    p = plan({ cartes: [carte({ provenance: null })] });
+    verifier('provenance: null : un seul $set de « provenance » (objet entier), jamais de sous-chemin', [Object.keys(ecr(p).champs), ecr(p).champs.provenance.source, ecr(p).champs.provenance.le, ecr(p).champs.provenance.retraite, Array.isArray(ecr(p).champs.provenance.impressions)], [['provenance'], 'bulbapedia', T0, reco(1), true]);
+    const apresNull = appliquer(carte({ provenance: null }), ecr(p).champs);
+    verifier('provenance: null : appliqué puis rejoué, rien à écrire', planifierProvenance({ cartes: [apresNull], sets: [], lignes: lignesDe(), appariements: appar, arbitrages: [], maintenant: T1 }).ecritures.length, 0);
+    verifier('provenance absente (undefined) : sous-chemins, comme avant', Object.keys(ecr(plan()).champs).every(k => k.startsWith('provenance.')), true);
     p = plan({ cartes: [carte({ provenance: 'texte libre' })] });
     verifier('provenance non objet : le document est sauté, compté, listé', [p.ecritures.length, p.compte.formeEtrangere.documents, p.compte.formeEtrangere.liste[0]], [0, 1, { collection: 'cartes', _id: 1, chemin: 'provenance' }]);
     p = plan({ cartes: [carte({ provenance: { source: 'autre-fournisseur', pv: { valeur: 1 } } })] });
