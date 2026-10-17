@@ -151,7 +151,7 @@ const essayer = async f => { try { return await f(); } catch (e) { return e; } }
         const SAINE = (w, o = {}) => ({ ...MARQUEE, basseDefinition: undefined, w, wOriginal: w, ...o });
         verifier('plan : image saine de 400 px + image annoncée de 600 px (1,5 ×) → au plan ; 596 px (1,49 ×) → « deja-servi »', [unePlan(L14l, p14, PIKA(600), [SAINE(400)]).plan.length, unePlan(L14l, p14, PIKA(596), [SAINE(400)]).restes.map(r => r.motif)], [1, ['deja-servi']]);
         verifier('plan : JAMAIS une image correcte au-dessus du seuil par une équivalente (600 px face à 600 px, 500 face à 700)', [unePlan(L14l, p14, PIKA(600), [SAINE(600)]).restes.map(r => r.motif), unePlan(L14l, p14, PIKA(700), [SAINE(500)]).restes.map(r => r.motif)], [['deja-servi'], ['deja-servi']]);
-        verifier('plan : entrée EMPRUNTÉE (600 px, non marquée) + image propre de 496 px → au plan', unePlan(L14l, p14, PIKA(496), [SAINE(600, { imageEmprunteeTirage: true })]).plan.length, 1);
+        verifier('plan (correction 4) : entrée EMPRUNTÉE + image de 496 px → « deja-servi » (aucun marqueur positif de tampon : rien ne la remplace)', unePlan(L14l, p14, PIKA(496), [SAINE(600, { imageEmprunteeTirage: true })]).restes.map(r => r.motif), ['deja-servi']);
         verifier('plan : entrée marquée d\'une autre LANGUE → « deja-servi »', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, langue: 'ja' }]).restes.map(r => r.motif), ['deja-servi']);
         verifier('plan : entrée marquée de SA PROPRE source (pokumon) → « deja-servi » (le même fichier reviendrait)', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, source: 'pokumon' }]).restes.map(r => r.motif), ['deja-servi']);
     }

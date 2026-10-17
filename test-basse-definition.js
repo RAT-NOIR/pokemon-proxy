@@ -51,7 +51,26 @@ const sr = (carte, o = {}) => (B.sansRemplacables(carte, { set: 'S', numero: '1'
 verifier('RATIO_NETTEMENT_PLUS_GRANDE = 1,5 (constante nommée, exportée)', B.RATIO_NETTEMENT_PLUS_GRANDE, 1.5);
 const sain = (o = {}) => ({ set: 'S', source: 'artofpkm', numero: '001', cleR2: 'artofpkm/S/001.webp', w: 400, wOriginal: 400, langue: 'id', ...o });
 const cand = (w, o = {}) => bonne({ w, wOriginal: w, ...o });
-verifier('EMPRUNTÉE : une entrée `imageEmprunteeTirage` (au-dessus du seuil, non marquée) est remplacée par une image propre de même set / numéro / langue', rem([sain({ w: 600, wOriginal: 600, imageEmprunteeTirage: true })], cand(600)), ['artofpkm/S/001.webp']);
+// ➕ correction 4 : une entrée EMPRUNTÉE n'est remplacée que par le VRAI scan tamponné — la candidate doit porter un marqueur POSITIF de tampon égal au `tamponNonRepresente` de l'entrée. AUCUN collecteur n'écrit
+// aujourd'hui un tel champ sur ses entrées (le tampon d'un scan Pokumon vit sur le DOCUMENT, `marque`, en texte libre ; `tamponNonRepresente` dit ce que l'image NE montre PAS) : CHAMPS_TAMPON_POSITIFS est
+// donc VIDE, et AUCUN remplacement d'une entrée empruntée ne sort tant qu'un collecteur n'écrit pas ce champ (et ne l'ajoute pas à la liste).
+const EMPR = (o = {}) => sain({ w: 600, wOriginal: 600, imageEmprunteeTirage: true, tamponNonRepresente: 'Staff', ...o });
+verifier('CHAMPS_TAMPON_POSITIFS : liste fermée et VIDE (aucun champ positif de tampon n\'existe sur les candidates)', [Array.isArray(B.CHAMPS_TAMPON_POSITIFS), (B.CHAMPS_TAMPON_POSITIFS || ['x']).length, Object.isFrozen(B.CHAMPS_TAMPON_POSITIFS)], [true, 0, true]);
+verifier('EMPRUNTÉE : une image SIMPLE non tamponnée ne remplace JAMAIS une empruntée (elle serait aussi fausse, et effacerait le marquage)', [rem([EMPR()], cand(600)), rem([EMPR()], cand(900))], [[], []]);
+verifier('EMPRUNTÉE : même une candidate qui porte une `noteVariante` ou un `tamponNonRepresente` ne prouve pas le tampon (rien de positif) → rien', [rem([EMPR()], cand(600, { noteVariante: 'Staff' })), rem([EMPR()], cand(600, { tamponNonRepresente: 'Staff' }))], [[], []]);
+verifier('EMPRUNTÉE : avec un champ POSITIF déclaré (injecté au banc) égal au tampon de l\'entrée → remplacée ; tampon différent, absent, ou entrée sans tampon connu → rien', [
+    rem([EMPR()], cand(600, { tamponRepresente: 'Staff' }), { champsTampon: ['tamponRepresente'] }),
+    rem([EMPR()], cand(600, { tamponRepresente: 'Play! Pokémon' }), { champsTampon: ['tamponRepresente'] }),
+    rem([EMPR()], cand(600), { champsTampon: ['tamponRepresente'] }),
+    rem([EMPR({ tamponNonRepresente: undefined })], cand(600, { tamponRepresente: 'Staff' }), { champsTampon: ['tamponRepresente'] })], [['artofpkm/S/001.webp'], [], [], []]);
+verifier('EMPRUNTÉE : les AUTRES marqueurs de variante doivent être identiques des deux côtés (hors imageEmprunteeTirage et tamponNonRepresente)', [
+    rem([EMPR({ noteVariante: 'a' })], cand(600, { tamponRepresente: 'Staff' }), { champsTampon: ['tamponRepresente'] }),
+    rem([EMPR({ noteVariante: 'a' })], cand(600, { tamponRepresente: 'Staff', noteVariante: 'a' }), { champsTampon: ['tamponRepresente'] })], [[], ['artofpkm/S/001.webp']]);
+verifier('EMPRUNTÉE : sans tampon connu sur l\'entrée ET sans champ positif sur la candidate (undefined === undefined) → rien', rem([EMPR({ tamponNonRepresente: undefined })], cand(600), { champsTampon: ['tamponRepresente'] }), []);
+// ➕ correction 4 : les branches « basse définition » et « fausse » exigent aussi les mêmes marqueurs de variante (une variante tamponnée de basse définition n'est pas évincée par l'image d'une autre impression)
+verifier('BASSE DÉFINITION : une entrée marquée porteuse d\'une variante (noteVariante / partageeHoloNonHolo) n\'est PAS remplacée par une candidate qui n\'en porte pas', [rem([basse({ noteVariante: 'Staff' })], bonne()), rem([basse({ partageeHoloNonHolo: true })], bonne())], [[], []]);
+verifier('   ... mais l\'est par une candidate qui porte les MÊMES marqueurs ; et l\'inverse (candidate tamponnée, entrée simple) → rien', [rem([basse({ noteVariante: 'Staff' })], bonne({ noteVariante: 'Staff' })), rem([basse()], bonne({ noteVariante: 'Staff' }))], [['tpc-asie/S/001-1-id.webp'], []]);
+verifier('FAUSSE : même exigence — une entrée fausse porteuse d\'une variante n\'est pas remplacée par une candidate sans elle', [rem([sain({ w: 600, noteVariante: 'x' })], cand(600), { fausses: new Set(['artofpkm|artofpkm/S/001.webp']) }), rem([sain({ w: 600, noteVariante: 'x' })], cand(600, { noteVariante: 'x' }), { fausses: new Set(['artofpkm|artofpkm/S/001.webp']) })], [[], ['artofpkm/S/001.webp']]);
 verifier('   une entrée empruntée d\'une AUTRE langue / d\'un autre numéro ne l\'est pas', [rem([sain({ w: 600, imageEmprunteeTirage: true, langue: 'th' })], cand(600)), rem([sain({ w: 600, imageEmprunteeTirage: true, numero: '002' })], cand(600))], [[], []]);
 verifier('   et une candidate MARQUÉE ne remplace jamais une empruntée', rem([sain({ w: 600, imageEmprunteeTirage: true })], cand(300, { basseDefinition: true })), []);
 verifier('FAUSSE : une entrée listée dans la table fermée (source|cleR2) est remplacée, même au-dessus du seuil et sans être plus grande', rem([sain({ w: 600, wOriginal: 600 })], cand(600), { fausses: new Set(['artofpkm|artofpkm/S/001.webp']) }), ['artofpkm/S/001.webp']);
@@ -76,7 +95,7 @@ for (const k of ['noteVariante', 'tamponNonRepresente', 'partageeHoloNonHolo', '
 }
 verifier('noteVariante : deux valeurs DIFFÉRENTES → rien ; marqueurs absents des deux côtés → remplacée', [rem([sain({ noteVariante: 'a' })], cand(600, { noteVariante: 'b' })), rem([sain()], cand(600))], [[], ['artofpkm/S/001.webp']]);
 verifier('un marqueur de FAUX type (null / false / chaîne vide) vaut absent : même identité qu\'un côté sans marqueur', rem([sain({ noteVariante: null, partageeHoloNonHolo: false, tamponNonRepresente: '' })], cand(600)), ['artofpkm/S/001.webp']);
-verifier('les autres motifs ne sont pas concernés (basse définition, empruntée) : le marqueur de la candidate ne les bloque pas', [rem([basse()], bonne({ noteVariante: 'x' })), rem([sain({ w: 600, imageEmprunteeTirage: true })], cand(600))], [['tpc-asie/S/001-1-id.webp'], ['artofpkm/S/001.webp']]);
+verifier('(supprimé en correction 4) : les branches basse définition et fausse exigent désormais les mêmes marqueurs — cf. plus haut', true, true);
 verifier('candidate sans `wOriginal` : repli PRUDENT sur `w` servi (≤ 700), qui sous-estime — jamais un remplacement de trop', rem([sain()], bonne({ w: 599, wOriginal: undefined })), []);
 
 verifier('sansRemplacables : une entrée marquée d\'une AUTRE source, même set/numéro/langue, ne compte pas comme « servie »', sr(carteAvec([basse()])), []);

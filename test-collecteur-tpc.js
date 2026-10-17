@@ -157,7 +157,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
         { const { Bx } = await course(SAINE(480)); verifier('NETTEMENT PLUS GRANDE : 734 px face à une image saine de 480 px (1,53 ×) → remplacée', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
         { const { Bx } = await course(SAINE(500)); verifier('   734 px face à 500 px (1,47 ×) → l\'image saine reste (équivalente), la nôtre cède', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
         { const { Bx } = await course(SAINE(734)); verifier('   JAMAIS une image correcte au-dessus du seuil par une équivalente : 734 face à 734 → rien', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
-        { const { Bx } = await course({ ...SAINE(734), imageEmprunteeTirage: true }); verifier('EMPRUNTÉE : une entrée `imageEmprunteeTirage` (même largeur) est remplacée par l\'image du tirage', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
+        { const { Bx } = await course({ ...SAINE(734), imageEmprunteeTirage: true }); verifier('EMPRUNTÉE (correction 4) : aucun collecteur n\'écrit de marqueur POSITIF de tampon → une image simple ne remplace jamais une entrée empruntée, la nôtre cède', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
     }
 
     // ── 4. un visuel RETIRÉ n'est jamais repris ───────────────────────────────────────────────────────────────────────

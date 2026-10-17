@@ -243,7 +243,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         { const Bx = monde([{ ...MARQ, source: 'pokemontcg.io' }]); const trX = reseau(normal); await lancer(Bx, trX);
           verifier('une entrée marquée de pokemontcg.io lui-même n\'est pas retéléchargée', [trX.appels.some(u => /\/1_hires/.test(u))], [false]); }
         { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600, imageEmprunteeTirage: true }]); const r = await lancer(Bx, reseau(normal));
-          verifier('EMPRUNTÉE (doctrine 2026-10-17) : une entrée `imageEmprunteeTirage` (600 px, non marquée) est remplacée par l\'image HD du tirage ; garde verte', [des(Bx), Bx.col('images').get('mq').etat, r.b.garde?.ok], [['pokemontcg.io:false'], 'remplace', true]); }
+          verifier('EMPRUNTÉE (correction 4) : une image simple ne remplace pas une entrée `imageEmprunteeTirage` (aucun marqueur positif de tampon) ; garde verte', [des(Bx), Bx.col('images').get('mq').etat, r.b.garde?.ok], [['tcgdex:false'], 'ok', true]); }
         { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600 }]); const trX = reseau(normal); await lancer(Bx, trX);
           verifier('JAMAIS une image correcte au-dessus du seuil par une équivalente : 600 px sain face à 734 px (1,22 ×) → rien n\'est même demandé', [des(Bx), trX.appels.some(u => /\/1_hires/.test(u))], [['tcgdex:false'], false]); }
         { // course : l'entrée marquée est posée PENDANT le téléchargement ; la jointure arbitre

@@ -234,7 +234,7 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
             [(await essai(400, 600))[1], (await essai(400, 596))[1]], ['remplace', 'ok']);
         const Be = fausseBase(); const imse = semerTcg(Be, [SAIN({ w: 600, wOriginal: 600, imageEmprunteeTirage: true })], [DOC_SAIN({ wOriginal: 600, w: 600 })], tcg());
         await joindreImagesTcgdex(Be.M, SLUG, imse, { langue: 'id', LANGUE: LANG });
-        verifier('TCGDEX remplacement : une entrée EMPRUNTÉE (même largeur) est remplacée par l\'image du tirage', [imagesDe(Be), Be.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat], [['tcgdex:001:id'], 'remplace']);
+        verifier('TCGDEX (correction 4) : une entrée EMPRUNTÉE n\'est PAS remplacée par une image simple (aucun marqueur positif de tampon)', [imagesDe(Be), Be.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat], [['tpc-asie:001:id', 'tcgdex:001:id'], 'ok']);
     }
     {
         const B = fausseBase(); semerAop(B, [], [], aop());

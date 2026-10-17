@@ -45,7 +45,17 @@ const FAUSSES = new Set(IMAGES_DECLAREES_FAUSSES);
 // trouve pas — un collecteur qui ajoute un marqueur de variante à ses entrées doit l'ajouter ICI.
 const MARQUEURS_DE_VARIANTE = Object.freeze(['noteVariante', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages']);
 const marqueurDe = (x, k) => { const v = x?.[k]; return v === undefined || v === null || v === false || v === '' || (Array.isArray(v) && !v.length) ? null : JSON.stringify(v); };
-const memeVariante = (a, b) => MARQUEURS_DE_VARIANTE.every(k => marqueurDe(a, k) === marqueurDe(b, k));
+const memeVarianteHors = (a, b, exclus = []) => MARQUEURS_DE_VARIANTE.every(k => exclus.includes(k) || marqueurDe(a, k) === marqueurDe(b, k));
+const memeVariante = (a, b) => memeVarianteHors(a, b);
+
+// ➕ Correction 4 — LE TAMPON D'UNE ENTRÉE EMPRUNTÉE. Une entrée `imageEmprunteeTirage` montre l'image d'un AUTRE tirage (un scan simple sous une réimpression tamponnée) ; `tamponNonRepresente` dit le tampon
+// qu'elle NE montre PAS (« Staff », « Play! Pokémon »). Elle n'est remplacée que par le VRAI scan tamponné : la candidate doit porter un marqueur POSITIF de tampon, égal à ce libellé. Une image simple
+// non tamponnée ne la remplace JAMAIS (elle serait aussi fausse, et le marquage s'effacerait).
+// MESURÉ (2026-10-17) : AUCUN collecteur n'écrit un champ positif de tampon sur ses entrées — Pokumon garde le tampon sur le DOCUMENT (`marque`, texte libre), `partageeHoloNonHolo` n'est pas un tampon,
+// `noteVariante` (pokemontcg.io) note une variante non séparée, pas un tampon. La liste est donc VIDE et AUCUN remplacement d'une entrée empruntée ne sort, tant qu'un collecteur n'écrit pas ce champ
+// (et ne l'ajoute pas ici). Écrit par ce qu'il autorise : liste vide = rien n'est autorisé.
+const CHAMPS_TAMPON_POSITIFS = Object.freeze([]);
+const tamponPositifEgal = (e, c, champs) => typeof e?.tamponNonRepresente === 'string' && e.tamponNonRepresente !== '' && champs.some(k => c?.[k] === e.tamponNonRepresente);
 
 // Largeur de la candidate. SANS `wOriginal` (une entrée de jointure dont le document n'avait pas la largeur de l'original) : repli sur `w`, la largeur SERVIE (≤ 700), qui SOUS-ESTIME l'original.
 // C'est volontaire et prudent : une largeur sous-estimée ne fait jamais remplacer de trop (le ratio n'est atteint qu'avec plus de pixels). Ce n'est pas « l'original des deux côtés » — on ne le prétend pas.
@@ -59,7 +69,7 @@ const largeurDeCandidate = c => {
  * définition (`basseDefinition`), empruntée à un autre tirage (`imageEmprunteeTirage`), déclarée fausse (table fermée), ou nettement plus petite que la candidate (RATIO_NETTEMENT_PLUS_GRANDE).
  * Tout le reste ne bouge pas — en particulier une image correcte au-dessus du seuil face à une équivalente.
  */
-function entreesARemplacer(images, candidat, { fausses = FAUSSES } = {}) {
+function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon = CHAMPS_TAMPON_POSITIFS } = {}) {
     if (!Array.isArray(images) || !candidat || typeof candidat !== 'object') return [];
     if (candidat.basseDefinition === true || estBasseDefinition(largeurOriginaleDe(candidat))) return [];      // une image basse ne remplace jamais
     if (typeof candidat.langue !== 'string' || !candidat.langue) return [];                                     // langue inconnue : on ne remplace pas
@@ -69,7 +79,10 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES } = {}) {
         if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
         if (!(typeof e.langue === 'string' && e.langue === candidat.langue)) return false;
         if (e.source === candidat.source && e.cleR2 === candidat.cleR2) return false;
-        if (e.basseDefinition === true || e.imageEmprunteeTirage === true || fausses.has(`${e.source}|${e.cleR2}`)) return true;
+        // basse définition ou fausse : seulement à IMPRESSION identique (mêmes marqueurs de variante / de tampon des deux côtés) — une variante tamponnée n'est pas évincée par l'image d'une autre impression
+        if (e.basseDefinition === true || fausses.has(`${e.source}|${e.cleR2}`)) return memeVariante(e, candidat);
+        // empruntée : seulement par le VRAI scan tamponné (marqueur positif égal), les autres marqueurs identiques
+        if (e.imageEmprunteeTirage === true) return tamponPositifEgal(e, candidat, champsTampon) && memeVarianteHors(e, candidat, ['imageEmprunteeTirage', 'tamponNonRepresente']);
         const wE = largeurOriginaleDe(e);
         return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE && memeVariante(e, candidat);
     });
@@ -130,4 +143,4 @@ function arbitrer(autres, candidat, servi) {
     return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE };
+module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS };
