@@ -178,11 +178,16 @@ function tableDesSets(liste, slugs) {
  * = « McDonald's Promos <année> » (forme vue sur la liste réelle). @param liste [{ nom, langue }] @returns {Set<string>} les slugs réservés
  */
 function slugsReserves(slugs, liste) {
-    const cles = new Set(liste.filter(s => String(s.langue).toUpperCase() === 'ENGLISH').map(s => cleNomSet(s.nom)));
+    // ALIAS FERMÉS, chacun vu sur la liste réelle : « & » ne compte pas (« Sun & Moon » = « Sun-Moon ») ; « Promos » = « Promo » (« Sun & Moon Black Star Promo ») ;
+    // « McDonalds-Collection-<année> » = « McDonald's Promos <année> » ; les sets EX s'écrivent SANS « EX » chez pokedata (« Emerald », « Deoxys », « Unseen Forces »). Dans le doute : RÉSERVER.
+    const cr = s => cleNomSet(String(s).replace(/&/g, ' ').replace(/\bPromos\b/gi, 'Promo'));
+    const cles = new Set(liste.filter(s => String(s.langue).toUpperCase() === 'ENGLISH').map(s => cr(s.nom)));
     const out = new Set();
     for (const slug of slugs) {
         const m = /^McDonalds-Collection-(\d{4})$/.exec(slug);
-        if (cles.has(cleNomSet(String(slug).replace(/-/g, ' '))) || (m && cles.has(cleNomSet(`McDonald's Promos ${m[1]}`)))) out.add(slug);
+        const nu = String(slug).replace(/-/g, ' ');
+        const exSansPrefixe = /^EX /.test(nu) ? nu.slice(3) : null;
+        if (cles.has(cr(nu)) || (m && cles.has(cr(`McDonald's Promos ${m[1]}`))) || (exSansPrefixe && cles.has(cr(exSansPrefixe)))) out.add(slug);
     }
     return out;
 }
@@ -320,7 +325,7 @@ function construireReleve(dossierPages = DOSSIER_PAGES) {
 // ── jugement d'une réponse : l'arrêt est DÉFINITIF sur une preuve de la liste fermée ─────────────────────────────────────────────────────
 const MARQUEUR_DE_DEFI = /just a moment|captcha|cf-chl|cf-browser-verification|challenge-platform|_incapsula|incapsula incident|attention required/i;
 /** @returns {{etat: 'ok'|'absent'|'arret'|'interrompu', motif?: string}} — arret : 401/403/410/429, 3xx, cf-mitigated, Imperva/Incapsula, marqueur de défi ; une image attendue qui arrive en HTML. */
-function jugerReponse(r, { image = false } = {}) {
+function jugerReponse(r, { image = false, forme = null } = {}) {
     const s = r?.status;
     if ([401, 403, 410, 429].includes(s)) return { etat: 'arret', motif: `HTTP ${s}` };
     if (s >= 300 && s < 400) return { etat: 'arret', motif: `HTTP ${s} (redirection non suivie)` };
@@ -328,15 +333,32 @@ function jugerReponse(r, { image = false } = {}) {
     if (r?.imperva) return { etat: 'arret', motif: 'Imperva/Incapsula' };
     if (typeof r?.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000))) return { etat: 'arret', motif: 'page de défi anti-robot' };
     if (s === 404) return { etat: 'absent', motif: 'HTTP 404' };
-    if (s >= 500 || typeof s !== 'number') return { etat: 'interrompu', motif: `HTTP ${s ?? '?'}` };
-    if (s !== 200) return { etat: 'interrompu', motif: `HTTP ${s} : réponse inattendue` };
+    if (typeof s !== 'number') return { etat: 'interrompu', motif: 'pas de statut' };
+    if (s >= 500 && s < 600) return { etat: 'interrompu', motif: `HTTP ${s}`, cinq: true };      // le compte des 5xx RÉPÉTÉS se tient dans le flux (deux de suite => arrêt)
+    // ⛔ L'ARRÊT S'ÉCRIT PAR CE QU'IL AUTORISE : seuls un 200 CONFORME et un 404 laissent continuer ; tout le reste (401, 403, 410, 429, 407, 451, 400…, mur de connexion) arrête.
+    if (s !== 200) return { etat: 'arret', motif: `HTTP ${s} : ni 200 ni 404` };
     if (image) {
         if (/html/i.test(r.type || '')) return { etat: 'arret', motif: 'HTML au lieu d\'une image' };
-        if (!Buffer.isBuffer(r.octets)) return { etat: 'interrompu', motif: 'corps illisible' };
+        if (!Buffer.isBuffer(r.octets)) return { etat: 'arret', motif: '200 qui n\'est pas une image' };
         return { etat: 'ok' };
     }
-    if (!/html/i.test(r.type || '') || typeof r.texte !== 'string') return { etat: 'interrompu', motif: 'une page était attendue' };
+    if (typeof r.texte !== 'string') return { etat: 'arret', motif: '200 sans texte : une page était attendue' };
+    if (forme === 'robots') return /html/i.test(r.type || '') ? { etat: 'arret', motif: 'robots.txt servi en HTML' } : { etat: 'ok' };
+    if (!/html/i.test(r.type || '')) return { etat: 'arret', motif: '200 non HTML : une page était attendue' };
+    const st = STRUCTURES[forme];
+    if (!st || !st.test(r.texte)) return { etat: 'arret', motif: `200 sans la structure attendue d'une page « ${forme ?? '?'} » (mur de connexion probable)` };
     return { etat: 'ok' };
+}
+/** Ce qu'une page conforme PORTE (relevé sur les fixtures de la sonde) ; sans elle, un 200 HTML est un mur. */
+const STRUCTURES = Object.freeze({ liste: /<a class="button" name="[^"]*" href="\/[^"]+"/, set: /class="content cardlisting/, carte: /class="content cardinfo"/, overlay: /class="card-detail"/ });
+/** La forme attendue d'une adresse : liste, set (ou collection), carte, overlay, robots ; null si elle n'est d'aucune. */
+function formeDeLaPage(url) {
+    let u; try { u = new URL(url); } catch { return null; }
+    if (u.pathname === '/robots.txt') return 'robots';
+    if (u.pathname === '/sets') return 'liste';
+    if (u.pathname === '/ajax/views/card-overlay') return 'overlay';
+    if (/-Card-[^/]+$/.test(u.pathname)) return 'carte';
+    return /-(Expansion|Collection)\/$/.test(u.pathname) ? 'set' : null;
 }
 const MAGIE_PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 const estUneImage = b => Buffer.isBuffer(b) && b.length > 8 && (b.subarray(0, 8).equals(MAGIE_PNG) || (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff));
@@ -369,4 +391,4 @@ const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, HOTES, UA, CADENCE_MS, LARGEUR_PLEINE_TAILLE, DOSSIER_CACHE, DOSSIER_PAGES, DOSSIER_IMAGES, DOSSIER_LOT, REFUS_PAR_DEFAUT,
     analyserNomImage, urlImageValide, urlPageValide, adressesDeLaPage, lireListeSets, lirePageSet, lirePageCarte, lireOverlay, tableDesSets, slugsReserves, nomNorm, nomDuSlug, numeroDuSlug, origineDuSlug, apparier,
-    fichierSet, fichierCarte, fichierOverlay, construireReleve, jugerReponse, MARQUEUR_DE_DEFI, estUneImage, estPleineTaille, estUnDos, cleNum, cleR2, idImage, langueDe, tracer, planRetrait, sha };
+    fichierSet, fichierCarte, fichierOverlay, construireReleve, jugerReponse, formeDeLaPage, STRUCTURES, MARQUEUR_DE_DEFI, estUneImage, estPleineTaille, estUnDos, cleNum, cleR2, idImage, langueDe, tracer, planRetrait, sha };

@@ -187,8 +187,32 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
     for (const [nom, rep] of [['403', { status: 403, type: 'text/html', texte: 'non' }], ['429', { status: 429, type: 'text/html', texte: 'non' }], ['302', { status: 302, location: 'https://autre.example/' }], ['défi dans la page', pageOk('<title>Just a moment...</title>')], ['une image à la place de la page', { status: 200, type: 'image/png', octets: grand }]]) {
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep);
         r = await C.releverPages({ etapes: [etape1, etape2], dossierCache: d, transport: tr, plafond: 10, pause: async () => { }, now: Date.now });
-        verifier(`relever : ${nom} => ARRÊT DÉFINITIF, une seule page demandée`, [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], [nom === 'une image à la place de la page' ? 'interrompu' : 'arret-definitif', 2, nom !== 'une image à la place de la page']);
+        verifier(`relever : ${nom} => ARRÊT DÉFINITIF, une seule page demandée`, [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 2, true]);
     }
+    // CORRECTION 2 : l'arrêt s'écrit par ce que le flux AUTORISE
+    for (const [nom, rep] of [['200 « connexion obligatoire » (HTML sans la structure attendue, sans marqueur de défi)', pageOk('<html><title>Sign in required</title>Please log in</html>')], ['451', { status: 451, type: 'text/html', texte: 'x' }], ['407', { status: 407, type: 'text/html', texte: 'x' }], ['200 JSON', { status: 200, type: 'application/json', texte: '{}' }]]) {
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep);
+        r = await C.releverPages({ etapes: [etape1, etape2], dossierCache: d, transport: tr, plafond: 10, pause: async () => { }, now: Date.now });
+        verifier(`relever : ${nom} => ARRÊT DÉFINITIF, fichier d'arrêt écrit`, [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 2, true]);
+    }
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : sitePages(url));
+    r = await C.releverPages({ etapes: [etape1, etape2], dossierCache: d, transport: tr, plafond: 10, pause: async () => { }, now: Date.now });
+    verifier('relever : les pages CONFORMES (liste, set réels) passent sans arrêt', [r.etat, fs.existsSync(C.fichierArret(d))], ['termine', false]);
+    { const d5 = tmp(); const t5 = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' });
+      const r1 = await C.releverPages({ etapes: [etape1], dossierCache: d5, transport: t5, plafond: 10, pause: async () => { }, now: Date.now });
+      const a1 = fs.existsSync(C.fichierArret(d5));
+      const r2 = await C.releverPages({ etapes: [etape1], dossierCache: d5, transport: t5, plafond: 10, pause: async () => { }, now: Date.now });
+      verifier('5xx RÉPÉTÉS : le premier interrompt sans arrêt, le second (relance) est un ARRÊT DÉFINITIF avec fichier', [r1.etat, a1, r2.etat, fs.existsSync(C.fichierArret(d5))], ['interrompu', false, 'arret-definitif', true]);
+      const d6 = tmp(); let n6 = 0; const t6 = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : (++n6 === 1 ? { status: 503, type: 'text/html', texte: 'x' } : sitePages(url)));
+      await C.releverPages({ etapes: [etape1], dossierCache: d6, transport: t6, plafond: 10, pause: async () => { }, now: Date.now });
+      const r6 = await C.releverPages({ etapes: [etape1, etape2], dossierCache: d6, transport: t6, plafond: 10, pause: async () => { }, now: Date.now });
+      verifier('un succès remet le compte des 5xx à zéro (reprise normale après un 5xx isolé)', [r6.etat, fs.existsSync(C.fichierArret(d6)), fs.existsSync(path.join(d6, 'ERREURS-5XX.json'))], ['termine', false, false]); }
+    { const d8 = tmp(); const t8 = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'application/octet-stream', texte: 'pas une image' });
+      const r8 = await lancer([plan[0].url], t8, d8);
+      verifier('télécharger : un 200 qui n\'est pas une image => ARRÊT DÉFINITIF', [r8.etat, fs.existsSync(C.fichierArret(d8))], ['arret-definitif', true]);
+      const d9 = tmp(); const t9 = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 502, type: 'text/html', texte: 'x' });
+      const r9a = await lancer([plan[0].url], t9, d9), r9b = await lancer([plan[0].url], t9, d9);
+      verifier('télécharger : 5xx répétés (deux lancements) => ARRÊT DÉFINITIF', [r9a.etat, r9b.etat, fs.existsSync(C.fichierArret(d9))], ['interrompu', 'arret-definitif', true]); }
     { let eP = null; try { await C.releverPages({ etapes: [etape1], dossierCache: tmp(), transport: reseau(sitePages) }); } catch (x) { eP = x; }
       verifier('relever : sans plafond de requêtes, il refuse de partir (il lève, aucune requête)', /plafond/.test(eP?.message || ''), true); }
     d = tmp(); fs.writeFileSync(C.fichierArret(d), '{}'); tr = reseau(sitePages);
@@ -239,6 +263,12 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
       verifier('plan pokedata absent (dossier vide ou introuvable) : NE LÈVE PLUS, rend zéro fichier (la liste prend le relais)', [sans.fichiers, absent.fichiers, sans.produits.size], [0, 0, 0]);
       fs.writeFileSync(path.join(dd, 'plan-p.json'), JSON.stringify({ plan: [{ produits: [7] }] })); const avec = C.lireCouvertsPokedata(dd);
       verifier('plan pokedata présent : ses produits sont lus', [avec.fichiers, [...avec.produits]], [1, [7]]); }
+    // CORRECTION 2 : les sets réservés ne donnent JAMAIS lieu à une requête de page (étapes du relevé)
+    { const dr = tmp(); fs.cpSync(pages, path.join(dr, 'pages'), { recursive: true });
+      const nomsCibles = async (pokedataSets) => { const et = C.fabriquerEtapesReleve({ db: B.db, dossierCache: dr, cv: { produits: new Set(), pokedataSets }, slugsSeulement: null }); const e2 = await et[1](), e3 = await et[2](); return { sets: e2.cibles.map(c => c.fichier), cartes: e3.cibles.map(c => c.fichier) }; };
+      const libre = await nomsCibles(null), reservee = await nomsCibles([{ nom: 'Twilight Masquerade', langue: 'ENGLISH' }]);
+      verifier('étapes du relevé SANS réservation : la page du set Twilight et la page de la carte Tangela n°1 sont à demander (témoin)', [libre.sets.includes('set--Twilight-Masquerade-Expansion.html'), libre.cartes.includes(P.fichierCarte('53158'))], [true, true]);
+      verifier('étapes du relevé AVEC Twilight réservé : ni sa page de set, ni AUCUNE de ses pages de carte ne sont demandées', [reservee.sets.includes('set--Twilight-Masquerade-Expansion.html'), reservee.cartes.includes(P.fichierCarte('53158'))], [false, false]); }
     // les plans des autres sources
     { const dd = tmp(); fs.writeFileSync(path.join(dd, 'plan-a.json'), JSON.stringify({ plan: [{ produits: [1, 2] }], remplacements: [{ produits: [3] }] })); fs.writeFileSync(path.join(dd, 'plan-b.json'), JSON.stringify({ plan: [{ produits: [4] }] })); fs.writeFileSync(path.join(dd, 'autre.json'), '{}');
       const cv = C.lireCouverts([dd]); verifier('couverts : les produits des plans pkmncards / pokedata (plan-*.json, plan et remplacements), dénominateur imprimé', [[...cv.produits].sort(), cv.fichiers], [[1, 2, 3, 4], 2]); }
@@ -290,6 +320,11 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
     B = fausseBase(); semer(B);
     ({ b, dp: dpe } = await ecrire(B, { dossierCache: dc2, attendu: 1 }));
     verifier('un fichier du cache dont le sha256 ne correspond plus est refusé', [b.altere, dpe.l.length], [1, 1]);
+    // CORRECTION 2 : collecteLe = la date du TÉLÉCHARGEMENT (lue dans le cache), pas celle de l'écriture
+    { const dcd = tmp(); await lancer([plan[0].url], reseau(normal), dcd);
+      const ix = JSON.parse(fs.readFileSync(path.join(dcd, 'images', 'index.json'), 'utf8')); ix.images[plan[0].url].le = '2026-10-01T08:00:00.000Z'; fs.writeFileSync(path.join(dcd, 'images', 'index.json'), JSON.stringify(ix));
+      const Bd = fausseBase(); semer(Bd); await ecrire(Bd, { plan: [plan[0]], dossierCache: dcd, attendu: 1 });
+      verifier('collecteLe (document ET entrée de carte) = la date du téléchargement lue dans le cache', [Bd.col('images').get(P.idImage('Twilight-Masquerade', 100, '010')).collecteLe.toISOString(), Bd.col('cartes').get(100).images.find(e => e.source === 'pokellector').collecteLe.toISOString()], ['2026-10-01T08:00:00.000Z', '2026-10-01T08:00:00.000Z']); }
     // le tirage non intl, la base trop grosse
     B = fausseBase(); semer(B); B.col('sets').get('Twilight-Masquerade').tirage = 'jp'; B.col('sets').get('Twilight-Masquerade').region = 'jp';
     ({ b, dp: dpe } = await ecrire(B, { attendu: 3 }));

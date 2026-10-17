@@ -73,6 +73,19 @@ function creerFlux({ dossierCache, transport = transportFetch, pause = ms => new
         dernier = now(); requetes++;
         try { return { r: await transport.get(url, o) }; } catch (e) { return { etat: 'interrompu', motif: e.message }; }
     };
+    // ⛔ L'ARRÊT S'ÉCRIT PAR CE QU'IL AUTORISE (P.jugerReponse) ; un 5xx isolé interrompt, DEUX de suite (même entre deux lancements : ERREURS-5XX.json) arrêtent pour de bon ; un succès remet le compte à zéro
+    const fichier5xx = path.join(dossierCache, 'ERREURS-5XX.json');
+    const traiter = (url, b, o) => {
+        const j = P.jugerReponse(b.r, o);
+        if (j.etat === 'arret') return { fin: arret(url, j.motif, b.r.status) };
+        if (j.cinq) {
+            let n = 0; try { n = JSON.parse(fs.readFileSync(fichier5xx, 'utf8')).n || 0; } catch { }
+            n++; fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichier5xx, JSON.stringify({ n, url, status: b.r.status, le: new Date().toISOString() }));
+            return { fin: n >= 2 ? arret(url, `5xx répétés (${n} de suite) : ${j.motif}`, b.r.status) : { etat: 'interrompu', motif: j.motif } };
+        }
+        if ((j.etat === 'ok' || j.etat === 'absent') && o.forme !== 'robots') { try { fs.unlinkSync(fichier5xx); } catch { } }
+        return { j };
+    };
     /** @returns {Promise<{etat: 'ok'|'absent'|'arret-definitif'|'interrompu'|'plafond'|'robots-interdit'|'refuse-arret', r?: object, motif?: string}>} */
     flux.demander = async (url, { image = false } = {}) => {
         if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
@@ -82,10 +95,10 @@ function creerFlux({ dossierCache, transport = transportFetch, pause = ms => new
             const ru = `https://${hote}/robots.txt`;
             const b = await brut(ru, {});
             if (b.etat) return b;
-            const j = P.jugerReponse(b.r);
-            if (j.etat === 'arret') return arret(ru, `robots.txt : ${j.motif}`, b.r.status);
+            const t = traiter(ru, b, { forme: 'robots' });
+            if (t.fin) return t.fin;
             if (b.r.status === 200) robots.set(hote, b.r.texte ?? '');
-            else if (j.etat === 'absent') robots.set(hote, null);
+            else if (t.j.etat === 'absent') robots.set(hote, null);
             else return { etat: 'interrompu', motif: `robots.txt illisible (HTTP ${b.r.status}) : on ne peut pas conclure` };
             const delai = T.delaiDesRobots(robots.get(hote), P.UA);
             if (delai && delai > CRAWL_DELAY_MAX_S) { robots.delete(hote); return { etat: 'robots-interdit', motif: `Crawl-delay de ${delai} s` }; }
@@ -94,9 +107,9 @@ function creerFlux({ dossierCache, transport = transportFetch, pause = ms => new
         if (!T.autoriseParRobots(robots.get(hote), new URL(url).pathname, P.UA)) return { etat: 'robots-interdit', motif: `robots.txt interdit ${new URL(url).pathname}` };
         const b = await brut(url, { binaire: image });
         if (b.etat) return b;
-        const j = P.jugerReponse(b.r, { image });
-        if (j.etat === 'arret') return arret(url, j.motif, b.r.status);
-        return { etat: j.etat, r: b.r, motif: j.motif };
+        const t = traiter(url, b, { image, forme: image ? null : P.formeDeLaPage(url) });
+        if (t.fin) return t.fin;
+        return { etat: t.j.etat, r: b.r, motif: t.j.motif };
     };
     flux.arreter = arret;
     return flux;
@@ -231,6 +244,34 @@ async function planifierDepuisBase(db, { dossierPages = P.DOSSIER_PAGES, couvert
     return { ...r, aReleve, reserves: [...reserves], sets: [...table].map(([slugSet, v]) => ({ slugSet, ...v })).filter(s => lignes.some(l => l.slugSet === s.slugSet)), examines: trous.length, cartesReleve: rel.cartes.length, ignorees: rel.ignorees };
 }
 
+// ── LES ÉTAPES DU RELEVÉ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/**
+ * ÉTAPE 1 : la liste ; ÉTAPE 2 : les pages de set qui ont de VRAIS trous (ni servis, ni couverts, ni RÉSERVÉS à une source plus grande) ; ÉTAPE 3 : les pages de carte (ou panneaux de détail)
+ * des cartes appariées. Les trois lisent le MÊME plan (mêmes plans couverts, même liste de sets réservés) : un set réservé ne donne jamais lieu à une requête de page.
+ */
+function fabriquerEtapesReleve({ db, dossierCache, cv, slugsSeulement = null }) {
+    const dp = dossierPagesDe(dossierCache);
+    const lireP = f => { try { return fs.readFileSync(path.join(dp, f), 'utf8'); } catch { return ''; } };
+    const SETS = `https://${P.HOTE_PAGES}/sets`, abs = h => `https://${P.HOTE_PAGES}${h}`;
+    const plan = () => planifierDepuisBase(db, { dossierPages: dp, couverts: cv.produits, refusSite: null, slugsSeulement, pokedataSets: cv.pokedataSets });
+    return [
+        async () => ({ cibles: [{ url: SETS, fichier: 'liste-sets.html' }], autorisees: new Set([SETS]) }),
+        async () => {
+            const p = await plan();
+            const slugsTrous = new Set(p.restes.filter(x => !['deja-servi', 'couvert-par-une-source-plus-grande', 'reserve-a-une-source-plus-grande-en-attente'].includes(x.motif)).map(x => x.slugSet));
+            const cibles = p.sets.filter(s => slugsTrous.has(s.slugSet)).map(s => ({ url: abs(s.href), fichier: P.fichierSet(s.href) }));
+            return { cibles, autorisees: P.adressesDeLaPage(lireP('liste-sets.html')) };
+        },
+        async () => {
+            const p = await plan();
+            const tout = new Set(fs.existsSync(dp) ? fs.readdirSync(dp).filter(f => /^(liste-sets|set--.*)\.html$/.test(f)).flatMap(f => [...P.adressesDeLaPage(lireP(f))]) : []);
+            const cibles = p.aReleve.map(x => ({ url: abs(x.url), fichier: /card-overlay/.test(x.url) ? P.fichierOverlay(x.cardId) : P.fichierCarte(x.cardId) }));
+            console.log(`relevé : ${cibles.length} page(s) de carte / panneau(x) de détail à demander (hors cache)`);
+            return { cibles, autorisees: tout };
+        }
+    ];
+}
+
 // ── LA PLANCHE ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** Une planche-contact d'un échantillon régulier des images du cache appartenant au plan (50 par planche, 10 colonnes) ; `planche.json` dit quelle case est quelle carte. */
 async function faireLaPlanche({ plan, dossierCache, sortie: dossierSortie, echantillon = 50 }) {
@@ -297,14 +338,14 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
         if (!P.urlImageValide(u.url)) { horsCache++; continue; }
         const _id = P.idImage(u.slugSet, u.carteId, u.numero);
         const deja0 = await M.Image.findById(_id).select('etat').lean();
-        if (e?.statut === 'trop-petit') { if (deja0?.etat === 'retire') { retires++; continue; } prets.push({ u, _id, buffer: null, meta: { width: e.w, height: e.h }, petit: true }); continue; }
+        if (e?.statut === 'trop-petit') { if (deja0?.etat === 'retire') { retires++; continue; } prets.push({ u, _id, buffer: null, meta: { width: e.w, height: e.h }, petit: true, le: e.le }); continue; }
         if (e?.statut !== 'ok') { horsCache++; continue; }
         let buffer; try { buffer = fs.readFileSync(path.join(dossierImagesDe(dossierCache), e.fichier)); } catch { horsCache++; continue; }
         if (P.sha('sha256', buffer) !== e.sha256) { altere++; console.error(`❌ cache altéré (sha256) : ${u.url}`); continue; }
         const meta = await sharp(buffer).metadata();
         if (meta.format !== 'png' && meta.format !== 'jpeg') { altere++; continue; }
         if (deja0?.etat === 'retire') { retires++; continue; }
-        prets.push({ u, _id, buffer, meta, petit: !P.estPleineTaille(meta.width) });
+        prets.push({ u, _id, buffer, meta, petit: !P.estPleineTaille(meta.width), le: e.le });
     }
     const reel = prets.filter(p => !p.petit).length;
     if (attendu != null && attendu !== reel) {
@@ -331,7 +372,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             for (const p of unites) {
                 uniteDe.set(p._id, p.u);
                 const { u, _id, meta, buffer } = p;
-                const tr = P.tracer({ url: u.url });
+                const tr = P.tracer({ url: u.url, collecteLe: p.le ? new Date(p.le) : new Date() });          // la date du TÉLÉCHARGEMENT, lue dans le cache
                 const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
                 if (p.petit) {
                     tropPetits++;
@@ -399,7 +440,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere };
 }
 
-module.exports = { creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, lireCouvertsPokedata, sourcesPlusGrandes, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
+module.exports = { creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, lireCouvertsPokedata, sourcesPlusGrandes, fabriquerEtapesReleve, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
@@ -454,28 +495,8 @@ if (!erreurArgs) (async () => {
     try {
         if (mode === '--releve') {
             // ÉTAPE 1 : la liste ; ÉTAPE 2 : les pages de set utiles (la table des sets, lue sur la liste) ; ÉTAPE 3 : les pages de carte (ou panneaux de détail) des cartes appariées
-            const dp = dossierPagesDe(dossierCache);
-            const lireP = f => { try { return fs.readFileSync(path.join(dp, f), 'utf8'); } catch { return ''; } };
-            const SETS = `https://${P.HOTE_PAGES}/sets`, abs = h => `https://${P.HOTE_PAGES}${h}`;
-            const sets = (await cx.db.collection('sets').find({}, { projection: { tirage: 1, region: 1 } }).toArray()).filter(s => (s.tirage ?? s.region) === 'intl').map(s => s._id).filter(s => !slugsSeuls || slugsSeuls.includes(s));
             const cv = sourcesPlusGrandes(dossiersCouverts);
-            const etapes = [
-                async () => ({ cibles: [{ url: SETS, fichier: 'liste-sets.html' }], autorisees: new Set([SETS]) }),
-                async () => {
-                    const table = P.tableDesSets(P.lireListeSets(lireP('liste-sets.html')), sets);
-                    const utiles = (await planifierDepuisBase(cx.db, { dossierPages: dp, couverts: cv.produits, refusSite: null, slugsSeulement: slugsSeuls, pokedataSets: cv.pokedataSets })).restes;   // (sert à nommer les sets qui ont de vrais trous)
-                    const slugsTrous = new Set(utiles.filter(x => !['deja-servi', 'couvert-par-une-source-plus-grande', 'reserve-a-une-source-plus-grande-en-attente'].includes(x.motif)).map(x => x.slugSet));
-                    const cibles = [...table].filter(([slug]) => slugsTrous.has(slug)).map(([, v]) => ({ url: abs(v.href), fichier: P.fichierSet(v.href) }));
-                    return { cibles, autorisees: P.adressesDeLaPage(lireP('liste-sets.html')) };
-                },
-                async () => {
-                    const p = await planifierDepuisBase(cx.db, { dossierPages: dp, couverts: cv.produits, refusSite: null, slugsSeulement: slugsSeuls });
-                    const tout = new Set(fs.readdirSync(dp).filter(f => /^(liste-sets|set--.*)\.html$/.test(f)).flatMap(f => [...P.adressesDeLaPage(lireP(f))]));
-                    const cibles = p.aReleve.map(x => ({ url: abs(x.url), fichier: /card-overlay/.test(x.url) ? P.fichierOverlay(x.cardId) : P.fichierCarte(x.cardId) }));
-                    console.log(`relevé : ${cibles.length} page(s) de carte / panneau(x) de détail à demander (hors cache)`);
-                    return { cibles, autorisees: tout };
-                }
-            ];
+            const etapes = fabriquerEtapesReleve({ db: cx.db, dossierCache, cv, slugsSeulement: slugsSeuls });
             const r = await releverPages({ etapes, dossierCache, plafond: Number(val('plafond')) });
             console.log(`RELEVÉ : ${r.etat} · ${r.requetes} requête(s) (plafond ${r.plafond}) ${r.motif ? `· ${r.motif}` : ''} · refusées ${JSON.stringify(r.refusees.slice(0, 20))}`);
             process.exitCode = r.etat === 'termine' ? 0 : 1;
