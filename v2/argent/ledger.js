@@ -23,8 +23,14 @@ async function incrementerJour(porteurCle, jour, now) {
     try { return await col('quota_jour').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
     catch (e) { if (e.code !== 11000) throw e; return col('quota_jour').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
 }
-// Seule la poche `jour` se DÉBITE. Les anciennes (essai, accueil, hebdo, abonnement, achete) ne le sont plus : leurs soldes restent en base, lisibles, intacts.
+// Deux poches se DÉBITENT : `achete` (les analyses payées avec la 1.0.5, prise atomique `>= 1`, jamais sous 0) puis `jour` (le quota du jour). Les autres anciennes (essai, accueil, hebdo, abonnement) ne le sont plus :
+// leurs soldes restent en base, lisibles, intacts. Une analyse payée sur `achete` ne touche NI le compteur du jour NI `offre.restant`.
 async function essayerPoche(poche, p, cfg, now) {
+    if (poche === 'achete') {
+        const a = P.acheteDe(p); if (!a) return null;
+        const pris = await col(a.collection).findOneAndUpdate({ ...a.filtre, [a.champ]: { $gte: 1 } }, { $inc: { [a.champ]: -1 } });   // lire-puis-écrire serait une course : la condition et le décrément sont UNE écriture
+        return pris ? { poche } : null;
+    }
     if (poche !== 'jour') return null;   // poche inconnue ou ancienne : on n'invente rien
     // la limite se lit EN BASE à chaque débit (offre.etatDe) : l'instantané du porteur n'est jamais la preuve de son offre
     const e = await Of.etatDe(p, cfg, now);
