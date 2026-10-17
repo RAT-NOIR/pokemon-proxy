@@ -12,6 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const P = require('./collecte-cartes/pokedata');
+// mêmes gardes de chemin que recepteur-pokemoncom.js (liste blanche : UNE racine ; chemin RÉEL jugé, jonctions et liens résolus)
+const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE } = require('./recepteur-pikaqian');
 
 const HOTE = '127.0.0.1';
 const PORT_DEFAUT = 8767;
@@ -42,16 +44,35 @@ function validerReleve(o) {
         if (P.nomDeSegment(new URL(c.img).pathname.slice(P.PREFIXE_CHEMIN.length).split('/')[0]) !== o.set) return non(422, `carte ${i} : l'image n'est pas celle du set déclaré`);
     }
     const d = o.diag;
-    if (!d || typeof d !== 'object' || Array.isArray(d) || cles(d) !== 'complet,exemples,imgs') return non(400, 'diag : clés exactes complet,exemples,imgs exigées');
-    if (typeof d.complet !== 'boolean' || !Number.isInteger(d.imgs) || !Array.isArray(d.exemples) || d.exemples.length > 5 || !d.exemples.every(x => estChaine(x, 3000))) return non(400, 'diag : complet booléen, imgs entier, au plus 5 exemples de 3000 caractères');
+    if (!d || typeof d !== 'object' || Array.isArray(d) || cles(d) !== 'complet,imgs,structure') return non(400, 'diag : clés exactes complet,imgs,structure exigées');
+    if (typeof d.complet !== 'boolean' || !Number.isInteger(d.imgs) || !Array.isArray(d.structure) || d.structure.length > 5 || !d.structure.every(x => estChaine(x, 300) && STRUCTURE.test(x))) return non(400, 'diag : complet booléen, imgs entier, au plus 5 chemins « BALISE.classe / … / IMG[src,alt] » de 300 caractères (aucun texte, aucun autre attribut)');
     return { ok: true };
+}
+// un résumé STRUCTUREL seulement : des balises (et leurs classes) de haut en bas, jusqu'à l'image ; jamais un texte, jamais un attribut autre que src/alt de l'image
+const STRUCTURE = /^(?:[A-Z][A-Z0-9]*(?:\.[A-Za-z0-9_.-]*)? \/ ){0,4}IMG\[src,alt\]$/;
+/** Le numéro porté par le nom de fichier d'une adresse d'image valable (« …/037a.webp » -> « 037a »). */
+const numeroDuFichier = img => new URL(img).pathname.split('/').pop().replace(/\.webp$/, '');
+/** Fusionne un relevé reçu dans le fichier existant du même set SANS PERTE : union par adresse, la lecture neuve l'emporte si son nom est non vide, « complet » ne redescend jamais. */
+function fusionner(ancien, o) {
+    const par = new Map();
+    for (const c of ancien?.cartes ?? []) par.set(c.img, c);
+    for (const c of o.cartes) {
+        const fichier = numeroDuFichier(c.img);
+        const neuve = { numero: fichier, nom: c.nom, img: c.img, ...(c.numero !== fichier ? { numeroDoute: true } : {}) };      // le numéro du fichier fait foi ; un numéro envoyé qui le contredit marque la carte douteuse
+        const vieille = par.get(c.img);
+        par.set(c.img, vieille && !neuve.nom ? { ...neuve, nom: vieille.nom } : neuve);
+    }
+    return { cartes: [...par.values()], complet: (ancien?.complet === true) || o.diag.complet === true };
 }
 
 const slugFichier = s => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
 /** Le serveur (non démarré). `dossier` : où écrire. */
-function creerServeur({ dossier = DOSSIER_DEFAUT } = {}) {
+function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE } = {}) {
+    if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les relevés n'y entrent jamais`);
+    if (!dansRacineAutorisee(dossier, racine)) throw new Error(`le dossier « ${dossier} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);
+    if (dansApportsManuels(dossier)) throw new Error(`le dossier « ${dossier} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     return http.createServer((req, res) => {
         const fin = (statut, texte) => { res.writeHead(statut, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' }); res.end(texte); req.resume(); };
         if (req.method !== 'POST') return fin(405, 'POST seulement');
@@ -72,14 +93,16 @@ function creerServeur({ dossier = DOSSIER_DEFAUT } = {}) {
             if (!v.ok) return fin(v.statut, v.motif);
             fs.mkdirSync(dossier, { recursive: true });
             const nom = slugFichier(o.set);
-            fs.writeFileSync(path.join(dossier, `releve--${nom}.json`), JSON.stringify({ schema: 1, set: o.set, complet: o.diag.complet, le: new Date().toISOString(), cartes: o.cartes }, null, 1));
+            let ancien = null; try { ancien = JSON.parse(fs.readFileSync(path.join(dossier, `releve--${nom}.json`), 'utf8')); } catch { /* premier relevé de ce set */ }
+            const f = fusionner(ancien, o);
+            fs.writeFileSync(path.join(dossier, `releve--${nom}.json`), JSON.stringify({ schema: 1, set: o.set, complet: f.complet, le: new Date().toISOString(), cartes: f.cartes }, null, 1));
             fs.writeFileSync(path.join(dossier, `diag--${nom}--${horodatage()}.json`), JSON.stringify({ set: o.set, url: o.url, cartes: o.cartes.length, diag: o.diag }, null, 1));
             fin(200, `${o.cartes.length} carte(s) enregistrée(s) pour ${o.set}`);
         });
     });
 }
 
-module.exports = { validerReleve, creerServeur, HOTE, PORT_DEFAUT, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT };
+module.exports = { validerReleve, fusionner, creerServeur, HOTE, PORT_DEFAUT, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT };
 
 if (require.main !== module) return;
 const arg = n => process.argv.slice(2).find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -87,5 +110,7 @@ const inconnus = process.argv.slice(2).filter(a => !/^--(port|dossier)=.+$/.test
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exitCode = 2; }
 else {
     const port = Number(arg('port') ?? PORT_DEFAUT);
-    creerServeur({ dossier: arg('dossier') ?? DOSSIER_DEFAUT }).listen(port, HOTE, () => console.log(`récepteur sur http://${HOTE}:${port}/releve → ${arg('dossier') ?? DOSSIER_DEFAUT} (aucune requête sortante)`));
+    try {
+        creerServeur({ dossier: arg('dossier') ?? DOSSIER_DEFAUT }).listen(port, HOTE, () => console.log(`récepteur sur http://${HOTE}:${port}/releve → ${arg('dossier') ?? DOSSIER_DEFAUT} (aucune requête sortante)`));
+    } catch (e) { console.error(`❌ ${e.message}`); process.exitCode = 1; }
 }

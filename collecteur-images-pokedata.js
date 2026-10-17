@@ -74,33 +74,48 @@ const transportFetch = {
     }
 };
 
+// ── LA DÉCISION « que faire de cette réponse » : UNE fonction, pour qu'une règle commune (collecte-cartes/reponse-hote.js, lot REPONSE-HOTE) la remplace par un simple branchement ──
+// ⚠️ NE PAS implémenter ici « 200 text/html = absente » ni la pause après 20 absences : cette règle viendra du module partagé. Aujourd'hui : un 200 qui n'est pas une image reste un ARRÊT (plus bas, dans le corps).
+// Un défi s'écrit par ce qui le PROUVE (liste fermée) : 401, 403, 410, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404 compris).
+const estDefi = r => [401, 403, 410, 429].includes(r.status) || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+/** @returns {{action: 'arret'|'absent'|'interrompu'|'recevoir', motif?: string}} */
+function jugerReponse(r, url = '') {
+    if (estDefi(r)) return { action: 'arret', motif: `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}` };
+    if (r.status === 404) return { action: 'absent' };
+    if (r.status >= 500) return { action: 'interrompu', motif: `HTTP ${r.status} sur ${url}` };
+    if (r.status !== 200) return { action: 'interrompu', motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
+    return { action: 'recevoir' };
+}
+// L'EMPLACEMENT FIXE du fichier d'arrêt de la source : le dossier de cache par défaut, quel que soit --cache. Seuls les bancs le déplacent (fixerDossierArret).
+let ARRET_FIXE = P.DOSSIER_CACHE;
+const fixerDossierArret = d => { ARRET_FIXE = d; };
+
 /**
  * LA PHASE RÉSEAU (images ou pages). @param {{urls: string[], dossierCache: string, genre?: 'image'|'page', transport?: object, pause?: Function, now?: Function, cadenceMs?: number, plafond?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, genre = 'image', transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, robotsDejaLu = null }) {
+async function telecharger({ urls, dossierCache, genre = 'image', transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null }) {
     const G = GENRES[genre];
-    // robots.txt DÉJÀ LU et sans règle (404, lu le 2026-10-17 à 19:22 UTC) : seule cette lecture dispense de le redemander (l'échantillon de 20 adresses fait 20 requêtes)
-    const sansRobots = robotsDejaLu?.status === 404;
     if (!G) throw new Error(`telecharger : genre inconnu « ${genre} »`);
-    if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
+    // 🔑 l'arrêt se lit à DEUX endroits : le dossier de travail ET l'emplacement FIXE de la source — `--cache=<autre dossier>` ne contourne pas un arrêt définitif
+    const arretPose = [dossierCache, ARRET_FIXE].map(fichierArret).find(x => fs.existsSync(x));
+    if (arretPose) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${arretPose} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !G.valide(u) || (genre === 'page' && /robots\.txt$/.test(u))).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache, genre);
     const afaire = [...new Set(urls)].filter(u => G.valide(u) && !(genre === 'page' && /robots\.txt$/.test(u)) && !['ok', 'absent', 'dos-de-carte', 'forme-inattendue'].includes(index.images[u]?.statut));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
-    const plafond = Math.min(afaire.length + (sansRobots ? 0 : 1), plafondMax ?? Infinity);
+    const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MIN_MS);
-    const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, genre, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    // un défi s'écrit par ce qui le PROUVE (liste fermée) : 401, 403, 410, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404 compris)
-    const defi = r => [401, 403, 410, 429].includes(r.status) || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+    const arret = (url, r, motif) => { for (const d of new Set([dossierCache, ARRET_FIXE])) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(fichierArret(d), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, genre, requetes }, null, 1)); } return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
+    const defi = estDefi;
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
         dernier = now(); requetes++;
         return transport.get(url, { genre, ...o });
     };
-    let robots = sansRobots ? { status: 404 } : null;
-    if (!robots) { try { robots = await demander(robotsDe(genre), {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; } }
+    let robots;
+    try { robots = await demander(robotsDe(genre), {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
     if (defi(robots)) return arret(robotsDe(genre), robots, `robots.txt : HTTP ${robots.status} — défi ou refus`);
     let texteRobots = null;
     if (robots.status === 200) texteRobots = robots.texte ?? '';
@@ -114,10 +129,10 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
     for (const url of permises) {
         let r;
         try { r = await demander(url, { binaire: genre === 'image' }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
-        if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}`);
-        if (r.status === 404) { index.images[url] = { statut: 'absent', status: 404, le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
-        if (r.status >= 500) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` };
-        if (r.status !== 200) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
+        const j = jugerReponse(r, url);
+        if (j.action === 'arret') return arret(url, r, j.motif);
+        if (j.action === 'absent') { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
+        if (j.action === 'interrompu') return { etat: 'interrompu', requetes, plafond, refusees, motif: j.motif };
         const fichier = path.join(G.sous, nomFichier(url, genre));
         if (genre === 'page') {
             if (!/html/i.test(r.type || '') || typeof r.texte !== 'string' || !/<html/i.test(r.texte)) return arret(url, r, 'la réponse n\'est pas une page HTML (rien d\'autre qu\'une page n\'est attendu)');
@@ -335,22 +350,6 @@ async function fabriquerPlanche({ dossierCache, sortie, n = 50 }) {
     return { images: choix.length, total: toutes.length, sortie, adresses: choix.map(([u]) => u) };
 }
 
-// ── CORRECTION 1 : l'échantillon de la construction directe ──────────────────────────────────────────────────────────────
-const ROBOTS_LU = Object.freeze({ le: '2026-10-17T19:22:16Z', status: 404 });          // robots.txt de l'hôte d'images : lu avant le lot (preuve robots-2026-10-17-19-22-16.json), aucune règle
-const GRAINE = 20261017;
-/** Le taux de réponse d'un échantillon, lu dans l'index du cache : 200 + WebP valide = « répond » ; 404 = « absent » ; tout le reste (dos, forme, non demandé) = « autres ». */
-function tauxDeReponse(dossierCache, echantillon) {
-    const index = lireIndex(dossierCache, 'image');
-    const t = { total: echantillon.length, repondent: 0, absents: 0, autres: 0 };
-    for (const u of echantillon) { const s = index.images[u.url]?.statut; if (s === 'ok') t.repondent++; else if (s === 'absent') t.absents++; else t.autres++; }
-    return { ...t, taux: t.total ? t.repondent / t.total : 0 };
-}
-/** L'ÉCHANTILLON : n adresses du plan construit tirées à graine fixe et réparties, demandées sur l'hôte d'images SEUL (robots.txt déjà lu). Arrêt définitif au premier 401/403/410/429/défi. */
-async function sonderEchantillon({ plan, n = 20, graine = GRAINE, dossierCache, transport = transportFetch, pause, now, cadenceMs = P.CADENCE_MS }) {
-    const echantillon = P.choisirEchantillon(plan, n, graine);
-    const resultat = await telecharger({ urls: echantillon.map(u => u.url), dossierCache, genre: 'image', transport, pause, now, cadenceMs, robotsDejaLu: ROBOTS_LU });
-    return { graine, echantillon, resultat, taux: tauxDeReponse(dossierCache, echantillon) };
-}
 const echapper = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** La planche des images de l'échantillon : la vignette, puis « set + numéro de la source » et « fiche : nom de NOTRE fiche » (à regarder à l'œil). Une adresse sans image = tuile grise « absent ». */
 async function fabriquerPlancheEtiquetee({ dossierCache, echantillon, sortie }) {
@@ -371,20 +370,18 @@ async function fabriquerPlancheEtiquetee({ dossierCache, echantillon, sortie }) 
     return { images, total: echantillon.length, sortie, etiquettes };
 }
 
-module.exports = { sonderEchantillon, tauxDeReponse, fabriquerPlancheEtiquetee, ROBOTS_LU, GRAINE, urlsAutorisees, telecharger, releverDepuisPages, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
+module.exports = { jugerReponse, fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees, telecharger, releverDepuisPages, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--construire$/, /^--sonde-echantillon=\d{1,2}$/, /^--construit$/, /^--produits=.+$/, /^--plan-construit=.+$/, /^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
+const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
-const sondeArg = args.find(a => a.startsWith('--sonde-echantillon='));
-const modes = ['--construire', '--plan', '--releve', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m)).concat(sondeArg ? ['--sonde-echantillon'] : []);
-const construitMal = args.includes('--construit') && !modes.some(m => ['--telecharger', '--planche', '--ecrire'].includes(m));
-if (inconnus.length || modes.length > 1 || construitMal || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu='))) || (args.some(a => a.startsWith('--echantillon=')) && !args.includes('--planche'))) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --releve, --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche. Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
+const modes = ['--plan', '--releve', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
+if (inconnus.length || modes.length > 1 || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu='))) || (args.some(a => a.startsWith('--echantillon=')) && !args.includes('--planche'))) {
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --releve, --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche (la planche du lot, étiquetée : set, numéro, nom de NOTRE fiche). Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
     process.exitCode = 2;
 }
 const argsValides = process.exitCode !== 2;
@@ -394,32 +391,6 @@ const dossierCache = val('cache', P.DOSSIER_CACHE), dossierReleves = val('releve
 if (argsValides) (async () => {
     const mode = modes[0] || '--plan';
     const lirePlan = () => JSON.parse(fs.readFileSync(fichierPlan, 'utf8'));
-    const construit = args.includes('--construit');
-    const fichierConstruit = val('plan-construit', path.join(P.DOSSIER_LOT, 'plan-construit.json'));
-    const lireConstruit = () => JSON.parse(fs.readFileSync(fichierConstruit, 'utf8'));
-    if (mode === '--construire') {
-        const reserves = JSON.parse(fs.readFileSync(val('produits', path.join(P.DOSSIER_LOT, 'produits-reserves.json')), 'utf8'));
-        const c = P.construire(reserves);
-        const motifs = c.restes.reduce((m, r) => ({ ...m, [r.motif]: (m[r.motif] || 0) + 1 }), {});
-        fs.mkdirSync(path.dirname(fichierConstruit), { recursive: true });
-        fs.writeFileSync(fichierConstruit, JSON.stringify({ le: new Date().toISOString(), regle: 'numéro d\'origine en 3 chiffres ; suffixe « a » seulement pour Trick or Trade 2024 (seul exemple vu)', plan: c.plan, restes: c.restes }, null, 1));
-        const parSet = c.plan.reduce((m, u) => ({ ...m, [u.slugSet]: (m[u.slugSet] || 0) + 1 }), {});
-        console.log(`CONSTRUIRE (0 requête) : ${c.plan.length} adresse(s) pour ${c.plan.length + c.restes.length} produit(s) · restes ${JSON.stringify(motifs)} · par set ${JSON.stringify(parSet)} → ${fichierConstruit}`);
-        return;
-    }
-    if (mode === '--sonde-echantillon') {
-        const n = Number(sondeArg.split('=')[1]);
-        const j = lireConstruit();
-        const s = await sonderEchantillon({ plan: j.plan, n, dossierCache });
-        console.log(`ÉCHANTILLON : graine ${s.graine} · ${s.echantillon.length} adresse(s) sur ${new Set(s.echantillon.map(u => u.slugSet)).size} set(s) · ${s.resultat.etat} · ${s.resultat.requetes} requête(s) ${s.resultat.motif ? `· ${s.resultat.motif}` : ''}`);
-        console.log(`TAUX : ${s.taux.repondent}/${s.taux.total} répondent (${Math.round(s.taux.taux * 100)} %) · ${s.taux.absents} absent(s) (404) · ${s.taux.autres} autre(s)`);
-        for (const u of s.echantillon) console.log(`   ${(lireIndex(dossierCache, 'image').images[u.url]?.statut ?? 'non demandée').padEnd(18)} ${u.ligne} ${u.numeroReleve} — ${u.nomEn}`);
-        fs.writeFileSync(path.join(path.dirname(fichierConstruit), 'echantillon.json'), JSON.stringify({ le: new Date().toISOString(), graine: s.graine, taux: s.taux, resultat: s.resultat, echantillon: s.echantillon }, null, 1));
-        const pl = await fabriquerPlancheEtiquetee({ dossierCache, echantillon: s.echantillon, sortie: path.join(path.dirname(fichierConstruit), 'planche-echantillon.png') });
-        console.log(`PLANCHE : ${pl.images} image(s) → ${pl.sortie}`);
-        process.exitCode = s.resultat.etat === 'termine' || s.resultat.etat === 'rien-a-faire' ? 0 : 1;
-        return;
-    }
     if (mode === '--releve') {
         const j = lirePlan();
         const urls = (j.setsAReleve || []).map(P.urlPageDuSet).filter(Boolean);
@@ -432,23 +403,13 @@ if (argsValides) (async () => {
         return;
     }
     if (mode === '--telecharger') {
-        const j = construit ? lireConstruit() : lirePlan();
-        const lu = construit ? { cartes: j.plan.map(u => ({ img: u.url })) } : P.lireReleves(dossierReleves);     // (le plan construit est sa propre liste : chaque adresse est revalidée par urlImageValide)
+        const j = lirePlan();
+        const lu = P.lireReleves(dossierReleves);          // (SEULES les adresses du relevé passif sont demandées : aucune adresse ne se construit)
         const a = urlsAutorisees([...j.plan, ...(j.remplacements || [])], lu.cartes);
         console.log(`${a.ok.length} adresse(s) autorisée(s) (plan ∩ relevés), ${a.refusees.length} refusée(s) : ${JSON.stringify(a.refusees)}`);
         const r = await telecharger({ urls: a.ok, dossierCache, genre: 'image' });
         console.log(`TÉLÉCHARGEMENT : ${r.etat} · ${r.requetes} requête(s) (plafond ${r.plafond}) ${r.motif ? `· ${r.motif}` : ''}`);
         process.exitCode = r.etat === 'termine' || r.etat === 'rien-a-faire' ? 0 : 1;
-        return;
-    }
-    if (mode === '--planche' && construit) {
-        const j = lireConstruit();
-        const index = lireIndex(dossierCache, 'image');
-        const ok = j.plan.filter(u => index.images[u.url]?.statut === 'ok');
-        const n = Number(val('echantillon', 50));
-        const choix = P.choisirEchantillon(ok, n, GRAINE);
-        const pl = await fabriquerPlancheEtiquetee({ dossierCache, echantillon: choix, sortie: path.join(path.dirname(fichierConstruit), 'planche-lot.png') });
-        console.log(`PLANCHE : ${pl.images} image(s) sur ${ok.length} en cache (graine ${GRAINE}) → ${pl.sortie}`);
         return;
     }
     if (mode === '--planche') {
@@ -460,14 +421,10 @@ if (argsValides) (async () => {
     const { modeles } = require('./collecte-cartes/schemas');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: mode === '--ecrire' ? ['R2_BUCKET_IMAGES'] : [] });
     try {
-        const lu = construit ? { fichiers: 0, ignores: [], cartes: [] } : P.lireReleves(dossierReleves);
-        let p;
-        if (construit) { const j = lireConstruit(); p = { produits: j.plan.length, plan: j.plan, remplacements: [], restes: j.restes, setsAReleve: [] }; }      // (produits SANS visuel par construction : le plan construit est la liste)
-        else {
-            const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
-            const R = await reglesDuSite();
-            p = await planifierDepuisBase(cx.db, { cartes: lu.cartes, refusSite: R.refusDuVisuel });
-        }
+        const lu = P.lireReleves(dossierReleves);
+        const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
+        const R = await reglesDuSite();
+        const p = await planifierDepuisBase(cx.db, { cartes: lu.cartes, refusSite: R.refusDuVisuel });
         const motifs = {}; for (const r of p.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         console.log(`relevés : ${lu.fichiers} lu(s), ${lu.ignores.length} ignoré(s), ${lu.cartes.length} cartes · ${p.produits} produits des sets de la table`);
         console.log(`PLAN : ${p.plan.length} ajout(s) pour ${p.plan.reduce((n, u) => n + u.produits.length, 0)} produit(s) · remplacements préparés (INACTIFS sans --remplacer) ${p.remplacements.length} · restes ${JSON.stringify(motifs)} · pages à relever ${p.setsAReleve.length}`);

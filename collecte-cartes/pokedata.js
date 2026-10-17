@@ -44,7 +44,7 @@ const SETS_UTILES = Object.freeze({
 // Les pages à ouvrir à la main pour le relevé passif au clic : 10 au plus, les plus gros trous d'abord (produits sans visuel au 2026-10-17 : 2019 : 80, 2018 : 51, ToT 2024 : 34, Unseen Forces : 26, Dragon Discovery : 15, 2014 : 12, 2015 : 10, ToT 2023 : 10, 2023 : 8, 2017 : 4).
 const PAGES_A_OUVRIR = Object.freeze(["McDonald's Promos 2019", "McDonald's Promos 2018", 'Trick or Trade 2024', 'Unseen Forces', "Mcdonald's Dragon Discovery", "McDonald's Promos 2014", "McDonald's Promos 2015", 'Trick or Trade 2023', "McDonald's Promos 2023", "McDonald's Promos 2017"]
     .map(n => `https://www.pokedata.io/set/${encodeURIComponent(n).replace(/%20/g, '+').replace(/'/g, '%27')}`));
-// ➕ CORRECTION 1 (décision du testeur, 2026-10-17 soir) : la CONSTRUCTION directe des adresses. La liste FERMÉE des sets anglais de la source (183, lus dans la liste réelle) :
+// ➕ CORRECTION 2 (décision du testeur, 2026-10-18) : la CONSTRUCTION directe des adresses est ABANDONNÉE (les noms de set de la source diffèrent des nôtres) : aucune adresse ne se fabrique, elles viennent toutes d'un relevé. La liste FERMÉE des sets anglais de la source (183, lus dans la liste réelle) :
 // une adresse d'image n'est valable que sous l'un d'eux. Le fichier est généré depuis la fixture de la sonde ; le banc compare les deux.
 const SETS_ANGLAIS = Object.freeze([...require('./pokedata-sets-anglais.json').noms]);
 const nomsDuSlug = slug => Object.keys(SETS_UTILES).filter(n => SETS_UTILES[n].includes(slug));
@@ -112,16 +112,19 @@ function lireCartesDeLaPage(html) {
 /** Les relevés déposés (schéma 1) : releve--*.json = { schema: 1, set: <nom du set>, complet: bool, cartes: [{ numero, nom, img }] }. Jamais d'écriture. */
 function lireReleves(dossier = path.join(DOSSIER_CACHE, 'releves')) {
     const cartes = [], ignores = [];
-    let fichiers = 0;
-    if (!fs.existsSync(dossier)) return { cartes, ignores, fichiers };
+    let fichiers = 0, douteuses = 0;
+    if (!fs.existsSync(dossier)) return { cartes, ignores, fichiers, douteuses };
     for (const f of fs.readdirSync(dossier).filter(x => /^releve--.*\.json$/.test(x)).sort()) {
         let o; try { o = JSON.parse(fs.readFileSync(path.join(dossier, f), 'utf8')); } catch { ignores.push({ fichier: f, motif: 'illisible' }); continue; }
         if (o?.schema !== 1 || !Array.isArray(o.cartes)) { ignores.push({ fichier: f, motif: 'schéma inconnu' }); continue; }
         if (!Object.hasOwn(SETS_UTILES, o.set)) { ignores.push({ fichier: f, motif: `set « ${o.set} » hors de la table` }); continue; }
         fichiers++;
-        for (const c of o.cartes) cartes.push({ set: o.set, numero: String(c.numero ?? ''), nom: c.nom ?? null, img: c.img, releveComplet: o.complet === true, fichier: f });
+        for (const c of o.cartes) {
+            if (c.numeroDoute === true) { douteuses++; continue; }          // un numéro qui contredit le nom de fichier de l'image : jamais utilisé pour apparier
+            cartes.push({ set: o.set, numero: String(c.numero ?? ''), nom: c.nom ?? null, img: c.img, releveComplet: o.complet === true, fichier: f });
+        }
     }
-    return { cartes, ignores, fichiers };
+    return { cartes, ignores, fichiers, douteuses };
 }
 
 // ── l'appariement ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -208,49 +211,6 @@ function apparier({ trous, cartes, noms = new Map(), refus = REFUS_PAR_DEFAUT, l
     return { plan, remplacements, restes };
 }
 
-// ── LA CONSTRUCTION DIRECTE (correction 1) : l'adresse candidate d'un produit, depuis NOS données, sans relevé ─────────────────────
-// La règle des numéros, DÉDUITE de la seule fixture disponible (l'exemple du testeur : Mimikyu, slug …-BOO24PAF-037, Trick or Trade 2024 => 037a.webp) : le numéro d'origine en TROIS chiffres,
-// zéros à gauche ; le suffixe « a » n'est posé que pour le set où il a été VU. Ailleurs la règle est une GÉNÉRALISATION (trois chiffres, sans suffixe) : c'est l'échantillon qui la juge.
-// Un numéro à préfixe de lettres (TG05) ou à barre n'est pas déductible => AUCUNE adresse pour ce produit, motif écrit. Jamais deux essais pour un produit.
-const SUFFIXE_PAR_SET = Object.freeze({ 'Trick or Trade 2024': 'a' });
-function construireAdresse(nomSet, p) {
-    if (!SETS_ANGLAIS.includes(nomSet)) return { motif: 'set-hors-liste' };
-    const fiche = p.numeroFiche != null && String(p.numeroFiche).trim() !== '' ? String(p.numeroFiche).trim() : null;
-    const brut = fiche != null ? (/^\d{1,4}$/.test(fiche) ? fiche : null) : numeroDuSlug(p.slugProduit);
-    if (brut == null || !/^\d{1,4}$/.test(brut)) return { motif: 'numero-non-deductible' };
-    const numeroSource = `${brut.padStart(3, '0')}${SUFFIXE_PAR_SET[nomSet] ?? ''}`;
-    const url = `https://${HOTE_IMAGES}${PREFIXE_CHEMIN}${segmentDeSet(nomSet)}/${numeroSource}.webp`;
-    if (!urlImageValide(url)) return { motif: 'adresse-hors-regle' };
-    return { url, numeroSource, numeroFiche: String(parseInt(brut, 10)) };
-}
-/** Le plan construit : { plan (unités prêtes pour l'écriture, à REGARDER), restes } depuis { sets: { <slugSet>: { pokedata, produits: [{ idProduct, carteId, numeroFiche, slug, nomEn }] } } }. */
-function construire(reserves) {
-    const plan = [], restes = [];
-    for (const [slugSet, s] of Object.entries(reserves.sets)) {
-        for (const p of s.produits) {
-            const a = construireAdresse(s.pokedata, { numeroFiche: p.numeroFiche, slugProduit: p.slug });
-            if (a.motif) { restes.push({ idProduct: p.idProduct, carteId: p.carteId, nomEn: p.nomEn ?? null, slugSet, motif: a.motif }); continue; }
-            plan.push({ carteId: p.carteId, nomEn: p.nomEn ?? null, slugSet, numero: p.numeroFiche ?? null, produits: [p.idProduct], ligne: s.pokedata, numeroReleve: a.numeroSource, url: a.url, voie: 'adresse-construite',
-                preuve: `adresse construite depuis nos données (set « ${s.pokedata} », numéro ${a.numeroSource}) : l'identité se juge à l'œil sur la planche`, genre: 'ajout', releve: null, aRegarder: true,
-                ...(p.numeroFiche == null ? { correspondance: { relevee: a.numeroSource, fiche: a.numeroFiche, preuve: 'numéro d\'origine du slug, trois chiffres' } } : {}) });
-        }
-    }
-    return { plan, restes };
-}
-/** n adresses tirées à graine fixe (mulberry32), réparties : un tour de chaque set avant le second tour. */
-function choisirEchantillon(plan, n, graine) {
-    let a = graine >>> 0;
-    const alea = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-    const groupes = new Map();
-    for (const u of plan) (groupes.get(u.slugSet) || groupes.set(u.slugSet, []).get(u.slugSet)).push(u);
-    for (const g of groupes.values()) for (let i = g.length - 1; i > 0; i--) { const j = Math.floor(alea() * (i + 1)); [g[i], g[j]] = [g[j], g[i]]; }
-    const choix = [], vus = new Set();
-    for (let tour = 0; choix.length < n && [...groupes.values()].some(g => tour < g.length); tour++) {
-        for (const g of groupes.values()) if (tour < g.length && choix.length < n && !vus.has(g[tour].url)) { choix.push(g[tour]); vus.add(g[tour].url); }
-    }
-    return choix;
-}
-
 // ── clé R2, traçabilité, langue, retrait ───────────────────────────────────────────────────────────────────────────────
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';
 /** La clé R2 NEUVE : neutre, sans le nom de la source. */
@@ -282,6 +242,6 @@ function planRetrait(cartes) {
 }
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, CADENCE_MIN_MS, LARGEUR_ATTENDUE, PLUS_GRANDE, DOSSIER_CACHE, DOSSIER_LOT, SETS_UTILES, REFUS_PAR_DEFAUT,
-    PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet, construireAdresse, construire, choisirEchantillon, SUFFIXE_PAR_SET,
+    PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet,
     nomsDuSlug, nomNorm, nomDeSegment, urlImageValide, urlPageValide, urlPageDuSet, lireNextData, lireListeDesSets, lireCartesDeLaPage, lireReleves, numeroDuSlug, baseNumero, raisonDeRemplacement,
     apparier, cleNum, cleR2, idImage, tracer, langueDe, duLot, planRetrait, estDosDeCarte };
