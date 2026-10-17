@@ -104,7 +104,10 @@ function parContradiction(idProduct, etat, ctx, corps) {
     const g = contredire({ corps, gagnant: idProduct, produits: ctx.produits });
     if (!g) return null;
     console.warn(`⚠️ [garde-contradiction-v2] produit=${idProduct} ${g.resume}`);
-    return { ...question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx), contradiction: g.resume };
+    // Un candidat DÉSIGNÉ : la question entre P et lui. Numéro ou total seul (personne de désigné) : l'issue la plus prudente existante, la question de confirmation « est-ce cette carte ? » à UN candidat — après la garde
+    // des jumeaux (si P a des jumeaux, leur question ou leur refus passe d'abord) — jamais une affirmation.
+    const r = g.designe.length ? question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx) : (apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx));
+    return { ...r, contradiction: g.resume };
 }
 // UN candidat non affirmé P : la source de P est lue d'abord (absent du catalogue de l'API : panne SERVEUR, on n'invente pas), puis la contradiction, puis la garde ; sans jumeau, une question à UN choix.
 function candidatUnique(idProduct, etat, ctx, corps) {
