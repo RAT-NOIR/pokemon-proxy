@@ -44,16 +44,11 @@ verifier('ancresSansNumero : la page fabriquée depuis le jeu (701 tuiles + 57 a
 verifier('… une page SANS ancre en trop, html vide, null → liste vide', [(appel('ancresSansNumero', page(701, []), 'promo-sv-p') ?? ['?']).length, (appel('ancresSansNumero', '', 'promo-sv-p') ?? ['?']).length, (appel('ancresSansNumero', null, 'promo-sv-p') ?? ['?']).length], [0, 0, 0]);
 const NON = {
     'ancre vide (aucun contenu)': `<a href="/cards/${UUID(300001)}"></a>`,
-    'ancre sans image': sansNum(1, { sansImg: true }),
-    'ancre dont l\'<img> n\'a pas de src': sansNum(1, { imgSansSrc: true }),
-    'ancre dont l\'image est dans un autre dossier (sv-p/)': sansNum(1, { dossier: 'sv-p' }),
-    'ancre dont l\'image est dans un autre dossier promo (promo-s-p/)': sansNum(1, { dossier: 'promo-s-p' }),
-    'ancre dont l\'image est sur un autre hôte': sansNum(1, { src: `https://exemple.test/promo-sv-p/${UUID(200001)}.webp` }),
-    'ancre dont l\'image porte un autre identifiant': sansNum(1, { idImage: UUID(999999) }),
+    // PQ-SANSNUM2 (2026-10-17) : l'image (absente, sans src, autre dossier, autre hôte, autre identifiant) et le nombre de <h2> ne font plus partie de la définition (ruling du coordinateur :
+    // la carte sans numéro se définit par son code et l'absence de numéro) ; ces cas sont comptés, et leur équivalence avec la sonde est prouvée dans test-pikaqian-sansnumero2.js.
     'ancre au mauvais code (s-p sur la page promo-sv-p)': sansNum(1, { p: 's-p' }),
     'ancre au code complet de l\'adresse (promo-sv-p) : ce n\'est pas le code des tuiles': sansNum(1, { p: 'promo-sv-p' }),
     'ancre sans <h2>': sansNum(1, { sansH2: true }),
-    'ancre à deux <h2>': sansNum(1, { h2Double: true }),
     'ancre au <h2> vide': sansNum(1, { nom: '   ' }),
     'ancre dont le <p> porte « code · » sans numéro': sansNum(1, { p: 'sv-p<!-- --> · ' }),
     'ancre dont le <p> porte un numéro (c\'est une tuile ou une tuile cassée, pas une ancre sans numéro)': sansNum(1, { p: 'sv-p<!-- --> · 12' }),
@@ -96,7 +91,7 @@ for (const [nom, html] of Object.entries(NON)) {
 }
 const tuileCassee = juger(page(700, [`<a href="/cards/${UUID(701)}"><div><img alt="x" src="${tuile(701).img}"/></div><h2>Carte 701</h2><p>sv-p<!-- --> · 701</p></a>`.replace('<img alt="x" src="' + tuile(701).img + '"/>', ''), ...ancresValides(57)]));
 verifier('jugerPage NON — une TUILE en moins (700 tuiles lues, une tuile sans image, 57 ancres sans numéro) → 422, à l\'unité près', [tuileCassee.statut, tuileCassee.corps.motif], [422, 'page partielle ou forme changée : 758 ancres, 700 tuiles, 57 sans numéro']);
-const refusDiag = juger(page(701, [...ancresValides(56), NON['ancre sans image']])).corps.diagnostic;
+const refusDiag = juger(page(701, [...ancresValides(56), NON['ancre sans <h2>']])).corps.diagnostic;
 verifier('le refus liste les 56 ancres sans numéro, une par une (nom, lien), dans son diagnostic, et le dit dans ses lignes', [refusDiag?.sansNumero?.length, Object.keys(refusDiag?.sansNumero?.[0] ?? {}).sort(), (refusDiag?.lignes ?? []).filter(l => /^ancres sans numéro .*: 56\b/.test(l)).length, refusDiag?.ancresSansTuile?.n], [56, ['lien', 'nom'], 1, 57]);
 verifier('diagnostiquerPage sans code (appel ancien) : sansNumero vide, aucune ligne', [(P.diagnostiquerPage({ html: tout, tuiles: [] }).sansNumero ?? ['?']).length, P.diagnostiquerPage({ html: tout, tuiles: [] }).lignes.filter(l => /sans numéro/.test(l)).length], [0, 0]);
 
@@ -130,10 +125,10 @@ function envoyer(port, chemin, corps) {
         const lot = await envoyer(srv.port, '/images', { fichier: r.json.fichier, sansImage: 0, images: [{ id: idSn, src: `https://images.pikaqian.com/promo-sv-p/${idSn}.webp`, nom: sn0.nom, numero: '', voie: 'canvas', b64: 'AAAA' }] });
         verifier('POST /images pour l\'uuid d\'une ancre sans numéro : 200, 0 reçue, refusée « tuile inconnue de la page apprise », aucun fichier d\'image écrit', [lot.status, lot.json?.recues, lot.json?.refusees?.map(x => x.motif), fs.readdirSync(path.join(dossierImages, 'promo-sv-p')).filter(n => !/^page--/.test(n)).length], [200, 0, ['tuile inconnue de la page apprise'], 0]);
         // un refus écrit sa liste
-        const rf = await envoyer(srv.port, '/apprendre', { url: 'https://pikaqian.com/sets/promo-sv-p', html: page(701, [...ancresValides(56), NON['ancre sans image']]) });
+        const rf = await envoyer(srv.port, '/apprendre', { url: 'https://pikaqian.com/sets/promo-sv-p', html: page(701, [...ancresValides(56), NON['ancre sans <h2>']]) });
         const fichiersRefus = fs.existsSync(dossierRefusees) ? fs.readdirSync(dossierRefusees) : [];
         const f = fichiersRefus.length ? JSON.parse(fs.readFileSync(path.join(dossierRefusees, fichiersRefus[0]), 'utf8')) : null;
-        verifier('un refus (56 valides + 1 ancre sans image) : 422 et refusees\\ liste les 56 ancres sans numéro (nom, lien)', [rf.status, f?.diagnostic?.sansNumero?.length, f?.diagnostic?.sansNumero?.[0]?.lien], [422, 56, `/cards/${UUID(200000)}`]);
+        verifier('un refus (56 valides + 1 ancre sans h2) : 422 et refusees\\ liste les 56 ancres sans numéro (nom, lien)', [rf.status, f?.diagnostic?.sansNumero?.length, f?.diagnostic?.sansNumero?.[0]?.lien], [422, 56, `/cards/${UUID(200000)}`]);
     } finally { await srv.fermer(); fs.rmSync(base, { recursive: true, force: true }); }
 
     // ── 5. LES TROIS LECTEURS, UN VERDICT ──────────────────────────────────────────────────────────────────────────────────────────────

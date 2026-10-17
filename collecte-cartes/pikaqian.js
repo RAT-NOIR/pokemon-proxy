@@ -164,6 +164,16 @@ const EXEMPLES_ANCRES_MAX = 5, TEXTE_ANCRE_MAX = 60;
 const CONTROLE_OU_BALISE = /[\u0000-\u001f\u007f-\u009f<>]/g;
 /** Un texte d'exemple : sans balises, sans caractères de contrôle, sans chevrons, espaces normalisés, tronqué (null s'il ne reste rien). */
 const texteAncre = s => { const t = sansBalises(s).replace(CONTROLE_OU_BALISE, ' ').replace(/\s+/g, ' ').trim().slice(0, TEXTE_ANCRE_MAX).trim(); return t || null; };
+/**
+ * LA lecture du `<p>` d'une ancre (lot PQ-SANSNUM2, §21 bis : le diagnostic ET la garde `ancresSansNumero` la lisent, jamais deux copies) : le texte du PREMIER `<p>` du corps, normalisé comme
+ * `texteAncre` (balises retirées, contrôles et espaces réduits, rogné), ou null (aucun `<p>`, ou rien de lisible).
+ */
+function codeDeAncre(corps) {
+    const p = /<p[^>]*>([\s\S]{0,400}?)<\/p>/.exec(corps)?.[1];
+    return p == null ? null : texteAncre(p);
+}
+/** LA définition de « référence complète » d'une ancre (PQ-SANSNUM2 tour 1, §21 bis) : `lireAncres` y a lu un « code · numéro » dont le code ET le numéro sont non vides. Le compteur `sansRef` du diagnostic et la garde `ancresSansNumero` la partagent. */
+const refComplete = a => !!(a.ref && a.ref[1] && a.ref[2]);
 function decrireAncresSansTuile(html) {
     const r = { n: 0, sansImg: 0, sansH2: 0, sansRef: 0, imgSansSrc: 0, srcHorsHote: 0, exemples: [] };
     for (const a of lireAncres(html)) {
@@ -172,14 +182,13 @@ function decrireAncresSansTuile(html) {
         const aUneImg = /<img[\s/>]/i.test(a.corps);
         if (!aUneImg) r.sansImg++;
         if (a.titre == null || !T.entites(a.titre).trim()) r.sansH2++;
-        if (!a.ref || !a.ref[1] || !a.ref[2]) r.sansRef++;
+        if (!refComplete(a)) r.sansRef++;
         const src = a.img == null ? null : T.entites(a.img);
         if (aUneImg && src == null) r.imgSansSrc++;
         if (src != null && !src.startsWith(`https://${HOTE_IMAGES}/`)) r.srcHorsHote++;
         if (r.exemples.length < EXEMPLES_ANCRES_MAX) {
-            const p = /<p[^>]*>([\s\S]{0,400}?)<\/p>/.exec(a.corps)?.[1];
             const dossier = src == null ? null : DOSSIER_IMAGE.exec(src)?.[1] ?? null;
-            r.exemples.push({ h2: a.titre == null ? null : texteAncre(a.titre), p: p == null ? null : texteAncre(p), img: aUneImg, dossier: dossier == null ? null : texteAncre(dossier) });
+            r.exemples.push({ h2: a.titre == null ? null : texteAncre(a.titre), p: codeDeAncre(a.corps), img: aUneImg, dossier: dossier == null ? null : texteAncre(dossier) });
         }
     }
     return r;
@@ -190,23 +199,22 @@ function decrireAncresSansTuile(html) {
 // près. Les ancres sans numéro sont listées une par une dans le diagnostic (nom, lien), comptées dans le panneau, et jamais importées : un doute est un trou. Aucun autre assouplissement. »
 // Mesuré (récepteur, 18:20 UTC, promo-sv-p) : 758 ancres, 701 tuiles, 57 ancres qui ont une image du dossier de la page, un nom, le code des tuiles, et AUCUN numéro (« 758 of 758 cards »).
 /**
- * Les ancres SANS NUMÉRO d'une page, par ce que la définition AUTORISE (rien de plus large) : une ancre `/cards/<uuid>` du découpage UNIQUE (`lireAncres`) qui n'est pas une tuile ET qui a
- * exactement un `<h2>` non vide (le nom), exactement une `<img>` dont la `src` est `images.pikaqian.com/<code de la page>/<son uuid>.webp`, exactement un `<p>` dont le texte est le code que
- * portent les tuiles de la page — le code de la page, ou `codeDesTuilesPromo(code)` (la fonction unique) pour une page promo — SANS « · numéro ». Toute autre ancre qui n'est pas une tuile
- * n'en est PAS une : elle compte comme une ancre AVEC numéro manquante, et la page est refusée. Rend [{ nom, lien }] dans l'ordre de la page (nom tronqué comme le diagnostic, lien `/cards/<uuid>`).
+ * Les ancres SANS NUMÉRO d'une page, par ce que la définition AUTORISE (rien de plus large) : une ancre `/cards/<uuid>` du découpage UNIQUE (`lireAncres`) qui n'est pas une tuile, qui a un
+ * `<h2>` non vide (le nom), sans référence « code · numéro » complète (`refComplete`, la définition du compteur `sansRef` du diagnostic), et dont le `<p>` — lu par `codeDeAncre`, la MÊME lecture que le diagnostic — est EXACTEMENT le code que portent les tuiles de la page (le code de la page, ou
+ * `codeDesTuilesPromo(code)`, la fonction unique, pour une page promo), SANS « · numéro ». (PQ-SANSNUM2, ruling du coordinateur : le nombre de h2/img/p et l'adresse exacte de l'image ne
+ * font plus partie de la définition — le testeur définit la carte sans numéro par son code et l'absence de numéro ; la page reste protégée par le total annoncé, obligatoire, et ces
+ * cartes ne sont jamais importées.) Toute autre ancre qui n'est pas une tuile n'en est PAS une : elle compte comme une ancre AVEC numéro manquante, et la page est refusée.
+ * Rend [{ nom, lien }] dans l'ordre de la page (nom tronqué comme le diagnostic, lien `/cards/<uuid>`).
  */
 function ancresSansNumero(html, code) {
     if (typeof code !== 'string' || !CODE_PK.test(code)) return [];
     const codeTuiles = codeDesTuilesPromo(code) ?? code, sortie = [];
     for (const a of lireAncres(html)) {
         if (a.tuile !== null) continue;   // une tuile n'est jamais « sans numéro »
-        const nombre = re => (a.corps.match(re) || []).length;
-        if (nombre(/<h2[\s>]/gi) !== 1 || nombre(/<img[\s/>]/gi) !== 1 || nombre(/<p[\s>]/gi) !== 1) continue;   // GARDE:pk-sn-forme
+        if (refComplete(a)) continue;   // GARDE:pk-sn-ref — une référence « code · numéro » complète (même dans un second <p>) est un numéro : carte numérotée dont il manque l'image, pas une carte sans numéro
         const nom = a.titre == null || !T.entites(a.titre).trim() ? null : texteAncre(a.titre);
         if (nom === null) continue;   // GARDE:pk-sn-nom
-        if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;   // GARDE:pk-sn-image
-        const p = /<p[^>]*>([\s\S]{0,400}?)<\/p>/.exec(a.corps)?.[1];
-        if (p == null || sansBalises(p) !== codeTuiles) continue;   // GARDE:pk-sn-code
+        if (codeDeAncre(a.corps) !== codeTuiles) continue;   // GARDE:pk-sn-code
         sortie.push({ nom, lien: `/cards/${a.id}` });
     }
     return sortie;
