@@ -18,7 +18,8 @@ verifier('576772 (la carte normale) ne l\'est pas', M.estMatiereSpeciale(576772)
 verifier('un idProduct en chaîne est lu comme le nombre', M.estMatiereSpeciale('580162'), true);
 verifier('undefined / null : jamais', [M.estMatiereSpeciale(undefined), M.estMatiereSpeciale(null)], [false, false]);
 verifier('la table est gelée', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE), true);
-verifier('chaque entrée porte motif, décision, date et frère normal', Object.values(M.PRODUITS_MATIERE_SPECIALE).every(e => e.motif && e.decision && /^\d{4}-\d\d-\d\d$/.test(e.date) && Number.isInteger(e.frereNormal)), true);
+verifier('chaque entrée porte motif, décision, date, frère comparé et sa nature (normal | jumbo)', Object.values(M.PRODUITS_MATIERE_SPECIALE).every(e => e.motif && e.decision && /^\d{4}-\d\d-\d\d$/.test(e.date) && Number.isInteger(e.frereCompare) && ['normal', 'jumbo'].includes(e.frereNature) && !('frereNormal' in e)), true);
+verifier('580162 est comparé à la NORMALE 576772, 580161 au JUMBO 605985', [M.PRODUITS_MATIERE_SPECIALE[580162], M.PRODUITS_MATIERE_SPECIALE[580161]].map(e => [e.frereCompare, e.frereNature]), [[576772, 'normal'], [605985, 'jumbo']]);
 verifier('l\'entrée est gelée aussi', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE[580162]), true);
 
 // 1 bis. 580161 « Pikachu [Gnaw | Thunder Jolt] » (métal doré, Celebrations Ultra-Premium) : ruling du coordinateur 2026-10-18

@@ -80,6 +80,14 @@ function monde() {
     verifier('la CLI lit la table fermée du module (580162 y est)', Object.keys(R.TABLE_REELLE).includes('580162'), true);
     verifier('la garde d\'écriture des poseurs refuse 580162 (même table)', (() => { try { garderMatiereSpeciale([580162], 'banc'); return false; } catch (e) { return true; } })(), true);
 
+    // 6. M1 : `--ecrire` refuse de tourner hors de lot-additif.js (qui pose LOT_ADDITIF_PID = son pid ; le retrait en est l'enfant direct)
+    const refuse = (env, ppid, ecrire) => { try { R.verifierSousLot(env, ppid, ecrire); return false; } catch (e) { return /lot-additif/.test(e.message); } };
+    verifier('--ecrire lancé à la main (aucune variable) : refusé', refuse({}, 4242, true), true);
+    verifier('--ecrire avec un pid de lot qui n\'est pas celui du parent : refusé', refuse({ LOT_ADDITIF_PID: '1' }, 4242, true), true);
+    verifier('--ecrire sous lot-additif (pid = parent) : accepté', refuse({ LOT_ADDITIF_PID: '4242' }, 4242, true), false);
+    verifier('à blanc : jamais refusé', refuse({}, 4242, false), false);
+    verifier('lot-additif.js pose LOT_ADDITIF_PID pour la commande', /LOT_ADDITIF_PID:\s*String\(process\.pid\)/.test(require('fs').readFileSync(require('path').join(__dirname, 'lot-additif.js'), 'utf8')), true);
+
     console.log(`\ntest-retirer-scan-faux-metal : ${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

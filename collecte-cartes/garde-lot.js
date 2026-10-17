@@ -16,6 +16,7 @@
 // restaurerait), le « après » dans la base, et le banc (test-garde-lot.js) dans des documents fabriqués. Même code partout :
 // la sonde ne diverge pas de la production (en tête du catalogue).
 const { EJSON } = require('mongodb').BSON;
+const { estMatiereSpeciale } = require('./matiere-speciale');
 
 // L'ordre est celui de l'impression ; chaque compteur nomme son groupe.
 const COMPTEURS = Object.freeze({
@@ -52,6 +53,10 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
     const m = new Map();
     const inc = k => m.set(k, (m.get(k) || 0) + 1);
     const vus = new Set();
+    // 🔴 LOT METAL (correction 1, I1) : les lignes et les liens.idProduct qui portent un produit de la table fermée (matiere-speciale.js, lue, jamais recopiée) sont comptés à part ;
+    // `comparer` arrête tout lot qui en FAIT AUGMENTER le compte (une ligne déjà là avant n'est pas le fait du lot).
+    for (const l of cartesProduits) if (estMatiereSpeciale(l.idProduct)) inc(`matiere-speciale prod:${Number(l.idProduct)} ligne`);
+    for (const c of cartes) for (const id of new Set(c.liens?.idProduct || [])) if (estMatiereSpeciale(id)) inc(`matiere-speciale prod:${Number(id)} lien`);
     for (const l of cartesProduits) {
         const k = `${l.idExpansion}|${l.idProduct}`;
         if (vus.has(k)) continue;
@@ -104,7 +109,7 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
-        if (compteur === 'entrees-cles' || compteur === 'vignettes-set') continue;   // interne / traité après
+        if (compteur === 'entrees-cles' || compteur === 'vignettes-set' || compteur === 'matiere-speciale') continue;   // interne / traité après
         // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
         if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, setDe(groupe), n - m); continue; }
         const baisse = n - m, annonce = annonces[cle] || 0;
@@ -131,7 +136,12 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
     }
     for (const [cle, m] of apres) {
         const d = m - (avant.get(cle) || 0);
-        if (d > 0) { const [compteur] = decouper(cle); if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d; }
+        if (d > 0) {
+            const [compteur, groupe] = decouper(cle);
+            // LOT METAL : une ligne ou un lien sur un produit en matière spéciale POSÉ par ce lot = ARRÊT (jamais autorisé, jamais annonçable)
+            if (compteur === 'matiere-speciale') { baisses.push({ cle, compteur, groupe, avant: avant.get(cle) || 0, apres: m, baisse: 0, annonce: 0, autorisee: null, motif: 'produit en matière spéciale (table fermée) : un trou, jamais la fiche de la carte normale' }); continue; }
+            if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d;
+        }
     }
     const annoncesNonRealisees = Object.entries(annonces)
         .map(([cle, a]) => ({ cle, annonce: a, baisse: baisses.find(b => b.cle === cle)?.baisse || 0 }))

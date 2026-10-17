@@ -152,7 +152,8 @@ function journaliser(t, dossier, combien, sortie) {
     if (comptes.length) console.log(`      comptes avant : ${comptes.map((c, i) => `${c.libelle} = ${comptesAvant[i]}`).join(' · ')}`);
     console.log(`   3. ${commande.join(' ')}`);
     const [exe, ...args] = commande;
-    const c = spawnSync(exe === 'node' ? process.execPath : exe, args, { stdio: 'inherit', cwd: __dirname });
+    // LOT_ADDITIF_PID : la commande sait qu'elle tourne SOUS ce lot (retirer-scan-faux-metal.js --ecrire refuse sans lui)
+    const c = spawnSync(exe === 'node' ? process.execPath : exe, args, { stdio: 'inherit', cwd: __dirname, env: { ...process.env, LOT_ADDITIF_PID: String(process.pid) } });
 
     ({ db, fermer } = await ouvrir());
     let apres = await etatDeLaBase(db), sw = await setsDuWorker(db, depuis);

@@ -56,6 +56,12 @@ function verifierAttendu(attendu, n, ecrire = false) {
  * L'exécution, sur collections INJECTÉES (L = cartes_produits, C = cartes, R = restes). `ecrireFichier(nom, contenu)` : 'plan' et 'annonce' à blanc ; 'sauvegarde' avant toute suppression.
  * @returns {{aDetacher: number, sansLigne: number[], annonce: object, detachees?: number}}
  */
+/** `--ecrire` ne tourne que SOUS lot-additif.js (sauvegarde de base, garde avant/après, restauration, revalidation) : il pose LOT_ADDITIF_PID = son pid, et le retrait en est l'enfant direct. */
+function verifierSousLot(env, ppid, ecrire) {
+    if (!ecrire) return;
+    if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="METAL : N lignes détachées" --collections=cartes_produits,cartes,restes --annonce=<fichier.json> -- node retirer-scan-faux-metal.js --ecrire --attendu=N (rien n\'est écrit)');
+}
+
 async function executer({ L, C, R, table = TABLE_REELLE, ecrire = false, attendu, ecrireFichier, log = console.log }) {
     const ids = Object.keys(table).map(Number);
     const lignes = await L.find({ idProduct: { $in: ids } }).toArray();
@@ -97,6 +103,7 @@ async function main() {
     const ecrire = process.argv.includes('--ecrire');
     const attendu = process.argv.find(a => a.startsWith('--attendu='))?.slice(10);
     const annonce = process.argv.find(a => a.startsWith('--annonce='))?.slice(10);
+    try { verifierSousLot(process.env, process.ppid, ecrire); } catch (e) { console.error('❌', e.message); process.exit(2); }
     // à blanc : l'utilisateur de LECTURE seule (aucune écriture possible) ; --ecrire : la connexion de la garde (lot-additif.js a sauvegardé avant)
     let cx, fermer;
     if (ecrire) { const { ouvrirConnexions } = require('./collecte-cartes/garde'); const o = await ouvrirConnexions({ production: false, buckets: [] }); cx = o.cartes; fermer = o.fermer; }
@@ -107,5 +114,5 @@ async function main() {
         await executer({ L: cx.db.collection('cartes_produits'), C: cx.db.collection('cartes'), R: cx.db.collection('restes'), ecrire, attendu: attendu === undefined ? undefined : Number(attendu), ecrireFichier });
     } finally { await fermer(); }
 }
-module.exports = { planRetrait, annonceDuRetrait, verifierAttendu, executer, TABLE_REELLE, RACINE_METAL };
+module.exports = { planRetrait, annonceDuRetrait, verifierAttendu, verifierSousLot, executer, TABLE_REELLE, RACINE_METAL };
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });

@@ -23,6 +23,13 @@ const MUTANTS = [
     { nom: 'retrait : la sauvegarde n\'est plus écrite', fichier: 'retirer-scan-faux-metal.js', de: "ecrireFichier('sauvegarde',", vers: "void ('sauvegarde',", banc: 'test-retirer-scan-faux-metal.js' },
     { nom: 'retrait : l\'à blanc écrit en base (le mode « ecrire » est forcé)', fichier: 'retirer-scan-faux-metal.js', de: 'if (!ecrire) {\n        ecrireFichier(\'plan\'', vers: 'if (false) {\n        ecrireFichier(\'plan\'', banc: 'test-retirer-scan-faux-metal.js' },
     { nom: 'retrait : liens.idProduct n\'est plus nettoyé', fichier: 'retirer-scan-faux-metal.js', de: "for (const x of plan.liens) await C.updateOne(", vers: "for (const x of []) await C.updateOne(", banc: 'test-retirer-scan-faux-metal.js' },
+    // correction 1
+    { nom: 'garde-lot : les lignes de la table ne sont plus comptées', fichier: 'collecte-cartes/garde-lot.js', de: "if (estMatiereSpeciale(l.idProduct)) inc(", vers: "if (false) inc(", banc: 'test-garde-matiere-speciale.js' },
+    { nom: 'garde-lot : les liens.idProduct de la table ne sont plus comptés', fichier: 'collecte-cartes/garde-lot.js', de: "if (estMatiereSpeciale(id)) inc(", vers: "if (false) inc(", banc: 'test-garde-matiere-speciale.js' },
+    { nom: 'garde-lot : une hausse « matiere-speciale » n\'arrête plus le lot', fichier: 'collecte-cartes/garde-lot.js', de: "if (compteur === 'matiere-speciale') { baisses.push(", vers: "if (compteur === 'matiere-speciale') { void (", banc: 'test-garde-matiere-speciale.js' },
+    { nom: 'retrait : --ecrire accepté hors lot-additif', fichier: 'retirer-scan-faux-metal.js', de: 'if (!ecrire) return;\n    if (!env ||', vers: 'if (true) return;\n    if (!env ||', banc: 'test-retirer-scan-faux-metal.js' },
+    { nom: 'lot-additif : ne pose plus LOT_ADDITIF_PID', fichier: 'lot-additif.js', de: 'LOT_ADDITIF_PID: String(process.pid)', vers: 'LOT_X: String(process.pid)', banc: 'test-retirer-scan-faux-metal.js' },
+    { nom: 'table : frereNature absente', fichier: 'collecte-cartes/matiere-speciale.js', de: "frereNature: 'jumbo',", vers: '', banc: 'test-matiere-speciale.js' },
 ];
 
 let tues = 0, survivants = [];
