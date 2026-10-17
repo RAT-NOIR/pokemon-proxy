@@ -2105,7 +2105,31 @@ function scorerCandidat(candidat, lu) {
  * Pas de table d'abréviations devinée, pas de sous-suite (ADV1 / ADVex1, CSM2c / CSM2bC : non prouvées). Rend le code normalisé du vivier, ou null.
  */
 const LONGUEUR_MIN_RAPPROCHE = 2;
-function codeRapprocheDuVivier(setCodeLu, candidats) {
+// 🔑 UNE CONSTANTE (décision du testeur, tour 2) : allumée tant que la remesure sur le vrai classement montre 0 faux et 0 sûr juste perdu ; la passer à false éteint le rapprochement sans le retirer.
+const RAPPROCHEMENT_CODES = true;
+/**
+ * Le code lu est-il RATTACHÉ à un code Cardmarket connu ? (la donnée de `setCodeResolution`, journalisée : une seule écriture, index.js la lit aussi)
+ * @param codesReels  tous les codes de set connus (normalisés). Liste vide : on ne sait pas => resolution null (jamais « inconnu » sur une liste qu'on n'a pas pu lire).
+ * @returns {{ resolution: 'exact'|'convention-x'|'parente'|'inconnu'|'mot-non-code'|null, parente: string|null }}
+ */
+const MOTS_CATEGORIE = new Set(['promo', 'holo', 'reverse', 'rare', 'commune', 'common', 'uncommon', 'normale', 'normal', 'ir', 'sr', 'sir', 'ar', 'ur', 'secret', 'fullart', 'full art']);
+function resolutionDuCodeLu(setCodeLu, codesReels) {
+    if (!setCodeLu) return { resolution: null, parente: null };
+    if (MOTS_CATEGORIE.has(String(setCodeLu).trim().toLowerCase())) return { resolution: 'mot-non-code', parente: null };
+    if (!Array.isArray(codesReels) || !codesReels.length) return { resolution: null, parente: null };
+    const brut = normaliserCodeSet(setCodeLu);
+    const codeLu = ALIAS_CODES_LUS.get(brut) || brut;
+    if (codesReels.includes(codeLu)) return { resolution: 'exact', parente: null };
+    const parConvention = codesReels.filter(c => memeCodeParConventionX(codeLu, c));
+    if (parConvention.length) return { resolution: 'convention-x', parente: `${codeLu}=${parConvention.slice(0, 5).join('/')}` };
+    const cousins = codesReels.filter(c => codesApparentes(codeLu, c));
+    if (cousins.length) return { resolution: 'parente', parente: `${codeLu}~${cousins.slice(0, 5).join('/')}` };
+    return { resolution: 'inconnu', parente: null };
+}
+// ÉCRIT PAR CE QU'IL AUTORISE (tour 2, I-A) : le rapprochement ne joue QUE si la chaîne n'a pu rattacher le code lu à aucun code connu (`resolution` === 'inconnu', jamais par défaut) : un code lu qui est lui-même un vrai
+// code Cardmarket (SVP, WC…) ne se rapproche de rien.
+function codeRapprocheDuVivier(setCodeLu, candidats, resolution, actif = RAPPROCHEMENT_CODES) {
+    if (!actif || resolution !== 'inconnu') return null;
     const brut = normaliserCodeSet(setCodeLu);
     if (!brut || !Array.isArray(candidats)) return null;
     const luCode = ALIAS_CODES_LUS.get(brut) || brut;
@@ -2177,7 +2201,7 @@ function placerDerriereLectures(scores, vises = []) {
  */
 function choisirMeilleur(candidats, luBrut) {
     // RAPPROCHEMENT DES CODES LUS : décidé UNE fois, sur tout le vivier (un seul code du vivier doit satisfaire le code lu), puis lu par chaque candidat dans scorerCandidat.
-    const lu = luBrut.codeRapproche === undefined ? { ...luBrut, codeRapproche: codeRapprocheDuVivier(luBrut.setCode, candidats) } : luBrut;
+    const lu = luBrut.codeRapproche === undefined ? { ...luBrut, codeRapproche: codeRapprocheDuVivier(luBrut.setCode, candidats, luBrut.setCodeResolution) } : luBrut;   // sans `setCodeResolution` (appelants qui ne le savent pas) : jamais de rapprochement
     const strategies = lu.motif?.strategieParIdProduct instanceof Map
         ? lu.motif.strategieParIdProduct
         : new Map();
@@ -2305,7 +2329,7 @@ function sontExAequo(scoreA, scoreB) {
 
 module.exports = {
     scorerCandidat, choisirMeilleur, POIDS, certitudeDuNumero, placerDerriereLectures, cleNumeroExpansion,
-    normaliserCodeSet, codesApparentes, codeRapprocheDuVivier, LONGUEUR_MIN_RAPPROCHE,
+    normaliserCodeSet, codesApparentes, codeRapprocheDuVivier, resolutionDuCodeLu, RAPPROCHEMENT_CODES, LONGUEUR_MIN_RAPPROCHE,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
