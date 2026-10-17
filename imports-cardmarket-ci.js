@@ -25,7 +25,9 @@ function masquerSecrets(texte, env = process.env) {
     const valeurs = VARIABLES_SECRETES.map(n => String(env[n] ?? '').trim()).filter(v => v.length >= 4).sort((x, y) => y.length - x.length);
     for (const v of valeurs) s = s.split(v).join('***');
     // défense : un reste d'URI dont le préfixe a été coupé (« …:mot@hôte ») — identifiants avant un @
-    return s.replace(/[^\s@/]*:[^\s@/]*@[^\s/]+/g, '***');
+    s = s.replace(/[^\s@/]*:[^\s@/]*@[^\s/]+/g, '***');
+    // dernier filet : tout mot contenant « @ » suivi d'un nom d'hôte (le début de l'URI peut avoir été coupé DANS le mot de passe, sans « : »)
+    return s.replace(/\S*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\S*/g, '***');
 }
 /** Masque le texte ENTIER, puis tronque (jamais l'inverse : une coupure dans « mongodb+srv:// » cacherait l'URI à la regex), puis masque encore. */
 const extraitSur = (texte, env, n = 1500) => masquerSecrets(masquerSecrets(texte, env).slice(-n), env);
