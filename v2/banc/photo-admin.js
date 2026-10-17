@@ -54,6 +54,17 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
         let banc; try { banc = registre.obtenir('banc'); } catch { return 'ignore'; }
         if (!banc || typeof banc.conserverPhoto !== 'function') return 'ignore';
         const reg = reglages(deps);
+        // PHOTOS-MULTIPLES (7d) : des photos ont été REÇUES pour ce scan (POST /api/photo, avant le scan) — AUCUN téléchargement, quoi qu'il arrive. L'index 0 reçu devient la photo du banc (le chemin du téléchargement,
+        // sans le GET) ; sans index 0 reçu, il n'y a pas de photo du banc : rien n'est téléchargé pour la remplacer. Le rôle est relu en base, comme plus bas.
+        const recues = req && req.entree && Array.isArray(req.entree.photosRecues) ? req.entree.photosRecues : [];
+        if (recues.length) {
+            const p0 = recues.find(p => p.index === 0);
+            if (!p0 || !Buffer.isBuffer(p0.octets)) return 'ignore';
+            let n0; try { n0 = await db.col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' }); } catch (e) { journal('rôle', e); return 'echec'; }
+            if (!(n0 > 0)) return 'ignore';
+            const r0 = await banc.conserverPhoto({ scanId: String(scanId), buffer: p0.octets });
+            return r0 === 'ecrit' || r0 === 'deja' ? 'ecrit' : 'echec';
+        }
         const urls = req && req.entree && Array.isArray(req.entree.imageUrls) ? req.entree.imageUrls : [];
         if (!urls.length || !urlAutorisee(urls[0], reg)) return 'ignore';
         const ms = ((cfg && cfg.photoAdmin && cfg.photoAdmin.delaiS) || 0) * 1000;
