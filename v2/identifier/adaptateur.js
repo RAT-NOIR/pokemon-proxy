@@ -23,6 +23,7 @@ const { garde, candidatUniqueDe, noter } = require('./jumeaux');
 const { choisirTrois } = require('./jumeaux-nombreux');
 const { garderCompatibles } = require('./nom-compatible');
 const { contredire } = require('./garde-contradiction');
+const { critereA, CRITERE_A } = require('./critere-a');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -109,10 +110,28 @@ function parContradiction(idProduct, etat, ctx, corps) {
     const r = g.designe.length ? question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx) : (apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx));
     return { ...r, contradiction: g.resume };
 }
+// CRITÈRE A (2026-10-17) : la garde des jumeaux refuse d'affirmer P (question de départage ou plus de 3 produits) ; si le code ET le numéro lus le désignent SEUL (critere-a.js : après la garde
+// contradiction, qui est passée AVANT), P est affirmé à la place. Le lieu : ici, là où la garde des jumeaux refuse — il couvre d'un seul endroit la route d'une carte, le lot (qui passe par adapter())
+// et le candidat unique ; la règle G et la seconde lecture ne voient qu'un résultat. Aucune règle recopiée : critere-a.js appelle les fonctions de production.
+function parCritereA(g, idProduct, ctx, corps) {
+    if (g.action !== 'question' && g.action !== 'nombreux') return null;
+    const r = critereA({ corps, gagnant: idProduct, jumeaux: g.ids.slice(1), produits: ctx.produits, actif: ctx.critereA === undefined ? CRITERE_A : ctx.critereA });
+    return r.affirme ? r.raison : null;
+}
+function affirmer(idProduct, etat, ctx, corps, critere = null) {
+    const produit = construireProduit(source(ctx, idProduct), pctx(ctx));
+    const r = enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, idProduct, etat) }));
+    return critere ? { ...r, critere } : r;
+}
 // UN candidat non affirmé P : la source de P est lue d'abord (absent du catalogue de l'API : panne SERVEUR, on n'invente pas), puis la contradiction, puis la garde ; sans jumeau, une question à UN choix.
 function candidatUnique(idProduct, etat, ctx, corps) {
     source(ctx, idProduct);
-    return parContradiction(idProduct, etat, ctx, corps) || apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx);
+    const parChamp = parContradiction(idProduct, etat, ctx, corps);
+    if (parChamp) return parChamp;
+    const g = garde(ctx, idProduct);
+    const critere = parCritereA(g, idProduct, ctx, corps);
+    if (critere) return affirmer(idProduct, etat, ctx, corps, critere);
+    return apresGarde(g, etat, ctx, corps) || question([idProduct], etat, ctx);
 }
 
 function traduire(statutHttp, corps, ctx) {
@@ -128,13 +147,15 @@ function traduire(statutHttp, corps, ctx) {
             if (premier !== undefined && premier !== c.idProduct) panne('SERVEUR', `carte.idProduct ${c.idProduct} != candidats[0] ${premier}`);
             // JUMEAU-V2 : P n'est affirmé que s'il n'a AUCUN jumeau (jumeaux.js : un seul chemin mène à « affirmer »). Sinon une question de départage entre P et ses jumeaux,
             // ou un introuvable au motif distinct. La source de P est lue d'abord : un P absent du catalogue de l'API reste la panne SERVEUR d'avant.
-            const sourceP = source(ctx, c.idProduct);
+            source(ctx, c.idProduct);
             const parChamp = parContradiction(c.idProduct, etat, ctx, corps);              // GARDE-CONTRADICTION : avant celle des jumeaux (la lecture désigne un AUTRE candidat que P, pas un jumeau)
             if (parChamp) return parChamp;
-            const refusGarde = apresGarde(garde(ctx, c.idProduct), etat, ctx, corps);
+            const gJumeaux = garde(ctx, c.idProduct);
+            const critere = parCritereA(gJumeaux, c.idProduct, ctx, corps);                // CRITÈRE A : après la contradiction (ci-dessus), à la place du refus de la garde des jumeaux
+            if (critere) return affirmer(c.idProduct, etat, ctx, corps, critere);
+            const refusGarde = apresGarde(gJumeaux, etat, ctx, corps);
             if (refusGarde) return refusGarde;
-            const produit = construireProduit(sourceP, pctx(ctx));
-            return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
+            return affirmer(c.idProduct, etat, ctx, corps);
         }
         // CONFIRMATION-SURE : un candidat dont le nom est CONTREDIT par le nom lu n'est jamais montré (nom-compatible.js) ; il est retiré AVANT la construction de la question.
         const ids = garderCompatibles(entiers(corps.candidats), corps, ctx.produits);
