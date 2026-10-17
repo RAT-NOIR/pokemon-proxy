@@ -22,6 +22,7 @@ const { choixPour } = require('../choix');
 const { garde, candidatUniqueDe, noter } = require('./jumeaux');
 const { choisirTrois } = require('./jumeaux-nombreux');
 const { garderCompatibles } = require('./nom-compatible');
+const { contredire } = require('./garde-contradiction');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -97,10 +98,18 @@ function apresGarde(g, etat, ctx, corps) {
     if (g.action === 'introuvable') return { ...introuvable('impression-indeterminee'), motif: g.motif };     // la carte est reconnue, son impression ne se tranche pas (plus de 3 produits) : on ne ment pas par « photo-illisible »
     return panne('INDISPONIBLE', `jumeaux : ${g.motif || 'indisponibles'}`, g.motif || 'jumeaux-indisponibles');     // notre infrastructure (colonne absente, périmée, incomplète), jamais un introuvable
 }
-// UN candidat non affirmé P : la source de P est lue d'abord (absent du catalogue de l'API : panne SERVEUR, on n'invente pas), puis la garde ; sans jumeau, une question à UN choix.
+// GARDE-CONTRADICTION : un champ lu sur la photo (total, attaque, set TCGdex, numéro, code) contredit P ET désigne un autre candidat du vivier => jamais une affirmation de P, une QUESTION entre P et ce que les champs désignent
+// (3 au plus : P d'abord, puis les plus étayés). Le résultat porte `contradiction` (le résumé, pour le journal) ; la seconde lecture ne s'y applique pas (routes.js). null : rien ne contredit P.
+function parContradiction(idProduct, etat, ctx, corps) {
+    const g = contredire({ corps, gagnant: idProduct, produits: ctx.produits });
+    if (!g) return null;
+    console.warn(`⚠️ [garde-contradiction-v2] produit=${idProduct} ${g.resume}`);
+    return { ...question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx), contradiction: g.resume };
+}
+// UN candidat non affirmé P : la source de P est lue d'abord (absent du catalogue de l'API : panne SERVEUR, on n'invente pas), puis la contradiction, puis la garde ; sans jumeau, une question à UN choix.
 function candidatUnique(idProduct, etat, ctx, corps) {
     source(ctx, idProduct);
-    return apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx);
+    return parContradiction(idProduct, etat, ctx, corps) || apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx);
 }
 
 function traduire(statutHttp, corps, ctx) {
@@ -117,6 +126,8 @@ function traduire(statutHttp, corps, ctx) {
             // JUMEAU-V2 : P n'est affirmé que s'il n'a AUCUN jumeau (jumeaux.js : un seul chemin mène à « affirmer »). Sinon une question de départage entre P et ses jumeaux,
             // ou un introuvable au motif distinct. La source de P est lue d'abord : un P absent du catalogue de l'API reste la panne SERVEUR d'avant.
             const sourceP = source(ctx, c.idProduct);
+            const parChamp = parContradiction(c.idProduct, etat, ctx, corps);              // GARDE-CONTRADICTION : avant celle des jumeaux (la lecture désigne un AUTRE candidat que P, pas un jumeau)
+            if (parChamp) return parChamp;
             const refusGarde = apresGarde(garde(ctx, c.idProduct), etat, ctx, corps);
             if (refusGarde) return refusGarde;
             const produit = construireProduit(sourceP, pctx(ctx));
