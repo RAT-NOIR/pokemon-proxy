@@ -178,6 +178,21 @@ const tout = d => { const sortie = []; const rec = x => { for (const e of fs.rea
     verifier('corps en morceaux au-dessus du plafond : 413 ou coupure, rien d\'écrit', [chunk === 413 || chunk === 0 || chunk === 'ECONNRESET', tout(dossierTmp).length === nPetit], [true, true]);
     await petit.fermer();
 
+    // ── un plafond du NOMBRE DE PAQUETS sur disque : un paquet de plus que le plafond est refusé (507), un paquet déjà ouvert continue
+    const dossierPq = fs.mkdtempSync(path.join(os.tmpdir(), 'recepteur-cv-pq-'));
+    const lim = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierPq, maxPaquets: 2, journal: () => { } });
+    const pq = i => `20261017T16000${i}Z-0000000${i}`;
+    const sousDossiers = () => fs.readdirSync(dossierPq).length;
+    const a1 = await envoyer(lim.port, { entetes: BON, corps: msgImage(1, { paquet: pq(1) }) });
+    const a2 = await envoyer(lim.port, { entetes: BON, corps: msgImage(1, { paquet: pq(2) }) });
+    const a3 = await envoyer(lim.port, { entetes: BON, corps: msgImage(1, { paquet: pq(3) }) });
+    verifier('plafond de 2 paquets : les deux premiers passent, le troisième est refusé (507), rien créé pour lui', [a1.status, a2.status, a3.status, a3.json?.motif && /plafond/.test(a3.json.motif), sousDossiers()], [200, 200, 507, true, 2]);
+    verifier('… un paquet DÉJÀ ouvert continue (image 2 du paquet 1)', (await envoyer(lim.port, { entetes: BON, corps: msgImage(2, { paquet: pq(1) }) })).status, 200);
+    verifier('… la clôture d\'un paquet NEUF est refusée aussi (507), celle d\'un paquet ouvert passe', [(await envoyer(lim.port, { entetes: BON, corps: msgPage([entree(1)], { paquet: pq(3) }) })).status, (await envoyer(lim.port, { entetes: BON, corps: msgPage([entree(1)], { paquet: pq(1) }) })).status, sousDossiers()], [507, 200, 2]);
+    await lim.fermer();
+    fs.rmSync(dossierPq, { recursive: true, force: true });
+    verifier('le plafond par défaut existe et est borné', [Number.isInteger(R.MAX_PAQUETS_DEFAUT), R.MAX_PAQUETS_DEFAUT > 0, R.MAX_PAQUETS_DEFAUT <= 5000], [true, true, true]);
+
     verifier('demarrer ignore une option « hote » (jamais 0.0.0.0)', await (async () => { const s = await R.demarrer({ racine: os.tmpdir(), port: 0, dossier: dossierTmp, hote: '0.0.0.0', journal: () => { } }); const a = s.adresse; await s.fermer(); return a; })(), '127.0.0.1');
 
     // ── ÉCRITURE DANS LE SEUL DOSSIER PRÉVU

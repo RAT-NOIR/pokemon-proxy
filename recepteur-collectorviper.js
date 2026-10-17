@@ -33,6 +33,10 @@ const HOTE = '127.0.0.1';
 const PORT_DEFAUT = 8767;            // = PORT du userscript : les deux changent ensemble (PikaQian 8765, pokemon.com 8766)
 const ORIGINE_ATTENDUE = 'https://collectorviper.livejournal.com';   // SUPPOSITION : aucune requête n'a vérifié cette adresse
 const HOTE_PAGES = 'collectorviper.livejournal.com';
+const MAX_PAQUETS_DEFAUT = 500;      // paquets (= pages relevées) gardés sur disque ; au-delà, un paquet neuf est refusé (507)
+// Origine d'EXTENSION admise parce que le modèle (recepteur-pokemoncom.js, recepteur-pikaqian.js) l'admet : un gestionnaire de userscripts peut faire partir la requête
+// GM_xmlhttpRequest avec l'origine de l'extension et non celle de la page. Cela N'A PAS été vérifié ici (aucun gestionnaire lancé) : c'est une hypothèse héritée, pas un constat.
+// Le risque est borné par les autres gardes (en-tête X-Rat-Market, Host, adresse de page exacte, 127.0.0.1 seul) ; à resserrer si le testeur voit l'origine réelle dans le journal.
 const ORIGINE_EXTENSION = /^(chrome|moz)-extension:\/\/[A-Za-z0-9-]+$/;
 const { ENTETE_MARQUE, VALEUR_MARQUE } = PK;
 const DOSSIER_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\collectorviper-passif';
@@ -119,17 +123,25 @@ function jugerMessage(brut) {
     return { statut: 200, type: o.type, message: o, octets: v.octets };
 }
 
-function ecrireImage(dossier, o, octets) {
+/** Plafond du nombre de paquets sur disque : un paquet NEUF au-delà du plafond est refusé (507) ; un paquet déjà ouvert continue. Rend null si on peut ouvrir. */
+function plafondAtteint(dossier, sub, maxPaquets) {
+    if (fs.existsSync(sub)) return null;
+    return fs.readdirSync(dossier).length >= maxPaquets ? { statut: 507, motif: `plafond de ${maxPaquets} paquets sur disque atteint : archive ou supprime des paquets, puis recommence` } : null;   // GARDE:paquets
+}
+
+function ecrireImage(dossier, o, octets, maxPaquets = MAX_PAQUETS_DEFAUT) {
     const sub = sousDossier(dossier, o.url, o.paquet);
     if (fs.existsSync(path.join(sub, 'page.json'))) return { statut: 409, motif: 'ce paquet est déjà clos (page.json existe)' };
+    const plein = plafondAtteint(dossier, sub, maxPaquets); if (plein) return plein;
     fs.mkdirSync(sub, { recursive: true });
     const fichier = nomImage(o.indice);
     try { fs.writeFileSync(path.join(sub, fichier), octets, { flag: 'wx' }); } catch (e) { if (e.code === 'EEXIST') return { statut: 409, motif: `${fichier} existe déjà dans ce paquet` }; throw e; }
     return { statut: 200, sub: path.basename(sub), fichier };
 }
 
-function ecrirePage(dossier, o, le = new Date()) {
+function ecrirePage(dossier, o, le = new Date(), maxPaquets = MAX_PAQUETS_DEFAUT) {
     const sub = sousDossier(dossier, o.url, o.paquet);
+    const plein = plafondAtteint(dossier, sub, maxPaquets); if (plein) return plein;
     fs.mkdirSync(sub, { recursive: true });
     const comptes = { vues: o.images.length, lues: 0, illisibles: 0, sousSeuil: 0, manquantes: 0 };
     const images = o.images.map(e => {
@@ -151,7 +163,7 @@ function ecrirePage(dossier, o, le = new Date()) {
     return { statut: 200, sub: path.basename(sub), comptes, etat };
 }
 
-async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, maxOctets = CORPS_MAX_OCTETS, journal = m => console.log(m) } = {}) {
+async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, maxOctets = CORPS_MAX_OCTETS, maxPaquets = MAX_PAQUETS_DEFAUT, journal = m => console.log(m) } = {}) {
     if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les relevés n'y entrent jamais`);
     if (!dansRacineAutorisee(dossier, racine)) throw new Error(`le dossier « ${dossier} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);   // GARDE:racine
     if (dansApportsManuels(dossier)) throw new Error(`le dossier « ${dossier} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
@@ -187,11 +199,11 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
                 const j = jugerMessage(Buffer.concat(morceaux).toString('utf8'));
                 if (j.statut !== 200) return refuser(j.statut, j.corps.motif);
                 if (j.type === 'image') {
-                    const w = ecrireImage(dossier, j.message, j.octets);
+                    const w = ecrireImage(dossier, j.message, j.octets, maxPaquets);
                     if (w.statut !== 200) return refuser(w.statut, w.motif);
                     return repondre(200, { ok: true, fichier: w.fichier });
                 }
-                const w = ecrirePage(dossier, j.message);
+                const w = ecrirePage(dossier, j.message, new Date(), maxPaquets);
                 if (w.statut !== 200) return refuser(w.statut, w.motif);
                 const c = w.comptes;
                 journal(`✅ ${slugDe(j.message.url)} : ${c.vues} image(s), ${c.lues} lue(s), ${c.illisibles} illisible(s), ${c.sousSeuil} sous le seuil, ${c.manquantes} manquante(s) — ${w.etat.toUpperCase()} → ${w.sub}`);
@@ -205,7 +217,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerMessage, validerImage, validerPage, ecrirePage, ecrireImage, slugDe, dansLeDepot, dansApportsManuels, dansRacineAutorisee, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, HOTE_PAGES, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, CORPS_MAX_OCTETS, IMAGE_OCTETS_MAX, IMAGES_MAX, LARGEUR_MIN };
+module.exports = { demarrer, jugerMessage, validerImage, validerPage, ecrirePage, ecrireImage, slugDe, dansLeDepot, dansApportsManuels, dansRacineAutorisee, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, HOTE_PAGES, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, CORPS_MAX_OCTETS, IMAGE_OCTETS_MAX, IMAGES_MAX, LARGEUR_MIN, MAX_PAQUETS_DEFAUT };
 
 if (require.main === module) {
     const args = process.argv.slice(2);
