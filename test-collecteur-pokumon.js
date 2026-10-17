@@ -12,7 +12,8 @@ const { spawnSync } = require('child_process');
 const sharp = require('sharp');
 const DIR = process.env.TOOL_DIR || __dirname;
 const P = require(path.join(DIR, 'collecte-cartes', 'pokumon.js'));
-const { lancerEcriture } = require(path.join(DIR, 'collecteur-images-pokumon.js'));
+const C = require(path.join(DIR, 'collecteur-images-pokumon.js'));
+const { lancerEcriture } = C;
 const { retirerLot } = require(path.join(DIR, 'retirer-visuels-pokumon.js'));
 const { vignetterApresJointure } = require(path.join(DIR, 'collecte-cartes', 'vignettes-apres-jointure'));
 const { RAW, CDN } = require('./test-pokumon-donnees');
@@ -225,10 +226,51 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
     verifier('le plafond fixé par la collecte suit le plan : 5 requêtes déjà parties (robots + 4 listes) + 1 robots d\'images + 4 fichiers distincts + 10 % (1) + 3 de marge', [R1.c.plafond(), R1.c.compteRequetes()], [14, 10]);
 
     // ── 9. la ligne de commande s'écrit par ce qu'elle AUTORISE ───────────────────────────────────────────────────────────────────────────────────
-    for (const args of [['--ecrire', '--tout'], ['--plan', '--ecrire'], [], ['--series=5', '--plan'], ['--ecrire', '--series=1,2;x']]) {
+    for (const args of [['--ecrire', '--tout'], ['--plan', '--ecrire'], [], ['--series=5', '--plan'], ['--ecrire', '--series=1,2;x'], ['--plan', '--lignes=prof'], ['--plan', '--familles', '--series=1'], ['--plan', '--familles', '--lignes=a;b']]) {
         const r = spawnSync(process.execPath, [path.join(DIR, 'collecteur-images-pokumon.js'), ...args], { encoding: 'utf8', timeout: 30000 });
         verifier(`ligne de commande « ${args.join(' ') || '(rien)'} » : refusée avant toute connexion (code 2)`, r.status, 2);
     }
+
+    // ── 9 bis. les AUTRES familles de BOUT EN BOUT : une carte Black Star MEP033, l'image posée au numéro de la FICHE, la marque de sa ligne, le substitut intact ──
+    {
+        const { wp } = require('./test-pokumon-donnees');
+        const SL = 'MEP-Black-Star-Promos';
+        const LUC = P.lireEntree(wp(113100, 'Mega Lucario ex (MEP033 English Promo)', `${CDN}/2026/08/EN_033MEP.jpg`, 717, 1000, [9606]));
+        const BF = fausseBase();
+        BF.col('sets').set(SL, { _id: SL, tirage: 'intl', region: 'intl' });
+        BF.col('cartes').set(7, { _id: 7, nomEn: 'Mega Lucario ex', images: [{ set: SL, source: 'bulbapedia', numero: '012', cleR2: 'b.webp', langue: 'en' }], impressions: [{ tirage: 'intl', expansion: 'MEP Black Star Promos', numero: '033', total: null }] });
+        BF.col('cartes_produits').set('7|873710', { _id: '7|873710', carteId: 7, idProduct: 873710, slugSet: SL, visuelSubstitut: substitut(873710) });
+        const prodMep = async () => [{ idProduct: 873710, slugSet: SL, slugProduit: 'Mega-Lucario-ex-MEP033', numero: '033', nomCm: 'Mega Lucario ex [Aura Jab | Mega Brave]' }];
+        const fich = { [`${CDN}/2026/08/EN_033MEP.jpg`]: await png(717, 1000) };
+        const tr = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : fich[url] ? { status: 200, type: 'image/png', octets: fich[url] } : { status: 404, type: 'text/html' }; } };
+        const rest = silencieux(); let RF; const cF = client(tr);
+        try { RF = await C.lancerEcritureFamilles(['bsp-mep'], BF.M, { verrou, client: cF, lireProduits: prodMep, index: [LUC], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest(); }
+        const cartePosee = BF.col('cartes').get(7), pk = cartePosee.images.filter(e => e.source === 'pokumon');
+        verifier('autres familles : l\'unité MEP est vérifiée, UNE image posée, au numéro de la FICHE (033), avec la marque de sa ligne, le lot et la mention', [RF.resultats.map(r => r.etat), pk.length, pk[0]?.numero, /^bsp-mep : /.test(BF.col('images').get(`pokumon/${SL}/7/033/en`)?.marque || ''), pk[0]?.lot, pk[0]?.mention === P.MENTION], [['verifie'], 1, '033', true, P.LOT, true]);
+        verifier('autres familles : l\'image d\'un AUTRE numéro de la carte (012, bulbapedia) et le substitut ne bougent pas', [cartePosee.images.filter(e => e.source === 'bulbapedia').length, BF.col('cartes_produits').get('7|873710').visuelSubstitut.cleR2], [1, 'tcgdex/Origine/873710.webp']);
+        verifier('autres familles : une requête d\'image seulement (robots de deux hôtes + 1 fichier), plafond fixé par le plan', [tr.appels.filter(u => /\.jpg$/.test(u)).length, cF.compteRequetes() <= cF.plafond()], [1, true]);
+        const BG = fausseBase();
+        BG.col('sets').set(SL, { _id: SL, tirage: 'intl', region: 'intl' });
+        BG.col('cartes').set(7, structuredClone({ ...BF.col('cartes').get(7), images: [{ set: SL, source: 'bulbapedia', numero: '012', cleR2: 'b.webp', langue: 'en' }] }));
+        BG.col('cartes_produits').set('7|873710', structuredClone(BF.col('cartes_produits').get('7|873710')));
+        BF.M = BG.M; BF.col = BG.col;
+        const jamais = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : { status: 404, type: 'text/html' }; } };
+        const rest2 = silencieux(); try { await C.lancerEcritureFamilles(['bsp-mep'], BF.M, { verrou, client: client(jamais), lireProduits: prodMep, index: [{ ...LUC, w: 322, h: 449 }], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest2(); }
+        verifier('autres familles : une image sous le seuil (322 px) ne part JAMAIS en requête (comptée au plan), rien n\'est posé', [jamais.appels.filter(u => /\.jpg$/.test(u)).length, BF.col('cartes').get(7).images.filter(e => e.source === 'pokumon').length], [0, 0]);
+    }
+
+    // ── 10. les AUTRES familles : l'index par jeu de promos compare le total annoncé, et la table ne cite que des jeux énumérés ─────────────────────────
+    const jeuxTable = [...new Set(P.LIGNES_AUTRES.map(l => l.jeu))];
+    verifier('chaque ligne cite un jeu de promos énuméré (adresses admises par la liste fermée du client)', jeuxTable.every(j => P.urlIndexAutorisee(P.urlIndexPromoSet(j, 1))), true);
+    const faux = (total, n) => ({ indexPromoSet: async () => ({ entrees: Array.from({ length: n }, (_, i) => ({ id: i + 1, title: { rendered: `Pikachu (${i + 1}/12 McDonald's McDonalds Collection)` }, _embedded: {} })), pages: 1, total, depuisCache: false }) });
+    let e3 = null; try { await C.chargerIndexFamilles(faux(5, 3), [P.LIGNES_AUTRES[0]]); } catch (e) { e3 = e.message; }
+    verifier('index des autres familles : 3 entrées lues pour 5 annoncées — la liste est incomplète, on s\'arrête', /3 entrées lues pour 5 annoncées/.test(e3 || ''), true);
+    let e4 = null; try { await C.chargerIndexFamilles(faux(0, 0), [P.LIGNES_AUTRES[0]]); } catch (e) { e4 = e.message; }
+    verifier('index des autres familles : une liste VIDE est une clé fausse, pas une absence (§41)', /aucune entrée lue/.test(e4 || ''), true);
+    const ok3 = await C.chargerIndexFamilles(faux(3, 3), [P.LIGNES_AUTRES[0]]);
+    verifier('index des autres familles : total concordant → les entrées sont lues', [ok3.entrees.length, ok3.requetes], [3, 1]);
+    let e5 = null; try { await C.lancerEcritureFamilles(['nexistepas'], null, { lireProduits: async () => [], bucket: 'b' }); } catch (e) { e5 = e.message; }
+    verifier('une ligne inconnue refuse avant toute requête, et nomme les lignes de la table', [/ligne\(s\) inconnue\(s\) : nexistepas/.test(e5 || ''), /mcd-2015/.test(e5 || '')], [true, true]);
 
     console.log(`\n${ko ? '❌' : '✅'} ${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

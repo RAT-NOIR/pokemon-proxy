@@ -74,12 +74,32 @@ function cacheSurDisque(dossier = DOSSIER_CACHE, ageMaxH = 12) {
         ecrire(cle, texte) { fs.writeFileSync(f(cle), texte); }
     };
 }
-const fichierIndex = (dossier = DOSSIER_CACHE) => path.join(dossier, 'index.json');
-function ecrireIndex(entrees, dossier = DOSSIER_CACHE) { fs.mkdirSync(dossier, { recursive: true }); fs.writeFileSync(fichierIndex(dossier), JSON.stringify({ le: new Date().toISOString(), entrees })); }
-function lireIndexEnCache(dossier = DOSSIER_CACHE) {
-    let v; try { v = JSON.parse(fs.readFileSync(fichierIndex(dossier), 'utf8')); } catch { throw new Error(`index absent (${fichierIndex(dossier)}) : le plan se fait sur l'index lu, jamais sur un index deviné — il se télécharge avec --ecrire (≈ 9 requêtes) ou par le client`); }
-    if (!Array.isArray(v.entrees) || !v.entrees.length) throw new Error(`index illisible ou vide (${fichierIndex(dossier)})`);
+const fichierIndex = (dossier = DOSSIER_CACHE, nom = 'index.json') => path.join(dossier, nom);
+function ecrireIndex(entrees, dossier = DOSSIER_CACHE, nom = 'index.json') { fs.mkdirSync(dossier, { recursive: true }); fs.writeFileSync(fichierIndex(dossier, nom), JSON.stringify({ le: new Date().toISOString(), entrees })); }
+function lireIndexEnCache(dossier = DOSSIER_CACHE, nom = 'index.json') {
+    let v; try { v = JSON.parse(fs.readFileSync(fichierIndex(dossier, nom), 'utf8')); } catch { throw new Error(`index absent (${fichierIndex(dossier, nom)}) : le plan se fait sur l'index lu, jamais sur un index deviné — il se télécharge avec --ecrire (≈ 9 requêtes pour S1-S4, ≈ 45 pour les autres familles) ou par le client`); }
+    if (!Array.isArray(v.entrees) || !v.entrees.length) throw new Error(`index illisible ou vide (${fichierIndex(dossier, nom)})`);
     return v;
+}
+/** L'index des AUTRES familles : les listes anglaises des jeux de promos que les lignes citent (≈ 45 requêtes), ordre total par id, total annoncé comparé à ce qui est lu. */
+async function chargerIndexFamilles(client, lignes = P.LIGNES_AUTRES) {
+    const brutes = [];
+    let requetes = 0;
+    for (const jeu of [...new Set(lignes.map(l => l.jeu))]) {
+        let pages = 1, total = null;
+        const ids = new Set();
+        for (let page = 1; page <= pages && page <= 30; page++) {
+            const r = await client.indexPromoSet(jeu, page);
+            if (!r.depuisCache) requetes++;
+            pages = r.pages || 1; total = r.total ?? total;
+            for (const c of r.entrees) ids.add(c?.id);
+            brutes.push(...r.entrees);
+        }
+        if (pages > 30) throw new Error(`jeu ${jeu} : ${pages} pages annoncées, au-delà de ce que le client lit (30) — on s'arrête`);
+        if (total != null && ids.size !== total) throw new Error(`jeu ${jeu} : ${ids.size} entrées lues pour ${total} annoncées par la source — la liste est incomplète, on s'arrête`);
+        if (!ids.size) throw new Error(`jeu ${jeu} : aucune entrée lue — une clé fausse, pas une absence`);
+    }
+    return { entrees: P.construireIndex(brutes), requetes };
 }
 
 // ── LE PLAN : lecture seule ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -88,12 +108,29 @@ function lireIndexEnCache(dossier = DOSSIER_CACHE) {
  * Il LÈVE quand la lecture ne rend rien : une clé fausse, pas une absence (§41).
  */
 async function lireProduitsCm(prod, slugs) {
-    const nc = await prod.collection('numeros_cartes').find({ slugSet: { $in: slugs } }, { projection: { idProduct: 1, slug: 1, slugSet: 1 } }).toArray();
+    const nc = await prod.collection('numeros_cartes').find({ slugSet: { $in: slugs } }, { projection: { idProduct: 1, slug: 1, slugSet: 1, numero: 1 } }).toArray();
     if (!nc.length) throw new Error(`numeros_cartes : 0 ligne pour ${slugs.length} sets — une clé fausse (§41)`);
     const cat = await prod.collection('catalogue_produits').find({ idProduct: { $in: nc.map(x => x.idProduct) } }, { projection: { idProduct: 1, name: 1 } }).toArray();
     if (!cat.length) throw new Error('catalogue_produits : 0 ligne pour les produits des Prize Packs — une clé fausse (§41)');
     const noms = new Map(cat.map(c => [c.idProduct, c.name]));
-    return nc.map(x => ({ idProduct: x.idProduct, slugSet: x.slugSet, slugProduit: x.slug, nomCm: noms.get(x.idProduct) ?? null }));
+    return nc.map(x => ({ idProduct: x.idProduct, slugSet: x.slugSet, slugProduit: x.slug, numero: x.numero ?? null, nomCm: noms.get(x.idProduct) ?? null }));
+}
+/** Le plan des AUTRES familles (lecture seule de `cartes`) : TOUS les produits des sets des lignes, avec les impressions de leur carte (le témoin indépendant de la clé). */
+async function planifierToutFamilles(db, produitsCm, index, lignes = P.LIGNES_AUTRES) {
+    const slugs = [...new Set(lignes.flatMap(l => l.slugs))];
+    const lp = await db.collection('cartes_produits').find({ slugSet: { $in: slugs } }, { projection: { carteId: 1, idProduct: 1, slugSet: 1 } }).toArray();
+    if (!lp.length) throw new Error('cartes_produits : 0 ligne pour les sets des lignes — une clé fausse (§41)');
+    const cm = new Map(produitsCm.map(p => [p.idProduct, p]));
+    const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lp.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
+    const sansNom = [], produits = [], vus = new Set();
+    for (const l of lp) {
+        if (vus.has(l.idProduct)) continue; vus.add(l.idProduct);
+        const p = cm.get(l.idProduct);
+        if (!p || !p.nomCm || !p.slugProduit) { sansNom.push({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, motif: 'sans-nom-catalogue' }); continue; }
+        produits.push({ idProduct: l.idProduct, carteId: l.carteId, unite: l.slugSet, nomCm: p.nomCm, slugProduit: p.slugProduit, numero: p.numero, impressions: cartes.get(l.carteId)?.impressions || [] });
+    }
+    const r = P.planifierFamilles({ lignes, produits, cartes, index });
+    return { ...r, restes: [...r.restes, ...sansNom], produits: lp.length, comptes: { ...r.comptes, sansNomCatalogue: sansNom.length } };
 }
 /** Le plan des séries (toutes, pour le témoin) : lecture seule de la base `cartes`. */
 async function planifierTout(db, produitsCm, index) {
@@ -128,8 +165,13 @@ const compterSubstituts = (db, slug) => db.collection('cartes_produits').countDo
 /**
  * La collecte d'UNE série, sur le plan déjà calculé. `plan` : les entrées de CETTE série. Les options autres que `verrou`/`client` n'existent que pour le banc.
  */
-async function collecterSerie(serie, planSerie, restesSerie, M, { verrou, client, vignetter = vignetterApresJointure, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, comptesPlan = null, memo = new Map() } = {}) {
-    const ligne = P.ligneDe(serie), slug = ligne.slug;
+function collecterSerie(serie, planSerie, restesSerie, M, o = {}) {
+    const slug = P.ligneDe(serie).slug;
+    return collecterUnite({ slug, serie, label: `S${serie}`, marque: p => `Prize Pack Series ${p.serie} : tampon « Play! Pokémon »` }, planSerie, restesSerie, M, o);
+}
+/** Une UNITÉ = un set Cardmarket à écrire (une série de Prize Pack, une année McDonald's, Trick or Trade 2022, Black Star MEP…). `unite.marque(p)` : le texte de marque de l'image `p` du plan. */
+async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client, vignetter = vignetterApresJointure, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, comptesPlan = null, memo = new Map() } = {}) {
+    const slug = unite.slug, serie = unite.serie ?? null;
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
     const refus = (etat, erreur) => { console.error(`❌ ${slug} : ${erreur}.`); return { code: slug, etat, erreur, sansJointure: true }; };
@@ -153,7 +195,7 @@ async function collecterSerie(serie, planSerie, restesSerie, M, { verrou, client
     let bloque = null;
     try {
         const motifs = {}; for (const r of restesSerie) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
-        console.log(`\n══ ${slug} (S${serie}) : ${produits} produits · PROUVÉS ${planSerie.length} · restes ${JSON.stringify(motifs)} ══`);
+        console.log(`\n══ ${slug} (S${serie}) : ${produits} produits · PROUVÉS ${planSerie.length} · restes ${JSON.stringify(motifs)} ══`.replace(`(S${serie})`, `(${unite.label})`));
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'telechargement', restes: restesSerie.slice(0, 1000), derniereRequete: new Date() } });
         const substitutsAvant = await compterSubstituts(db, slug);
 
@@ -211,7 +253,7 @@ async function collecterSerie(serie, planSerie, restesSerie, M, { verrou, client
             await M.Image.updateOne({ _id: o._id }, {
                 $set: {
                     source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct, preuve: p.preuve, voie: p.voie, urlOriginal: p.url, pokumonId: p.entreeId, pokumonLien: p.lien,
-                    marque: `Prize Pack Series ${p.serie} : tampon « Play! Pokémon »`,
+                    marque: unite.marque(p),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
@@ -233,7 +275,8 @@ async function collecterSerie(serie, planSerie, restesSerie, M, { verrou, client
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
                     numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
-                const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2);
+                // (« cette fiche » = ce numéro : l'image d'un AUTRE numéro de la même carte — MEP012 pour MEP033 — ne sert pas la fiche, la règle du site la compare au numéro de la fiche)
+                const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2 && (P.nImage(e.numero) === null || P.nImage(e.numero) === P.nImage(im.numero)));
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 if (autres.length) { dejaParAutre++; continue; }
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
@@ -318,17 +361,60 @@ async function lancerEcriture(series, M, { verrou, client, lireProduits, index =
     return { code, resultats, plan };
 }
 
-module.exports = { chargerIndex, cacheSurDisque, ecrireIndex, lireIndexEnCache, lireProduitsCm, planifierTout, collecterSerie, lancerEcriture, STOP_OCTETS, DOSSIER_CACHE };
+/**
+ * LE LANCEMENT des AUTRES familles (McDonald's, Trick or Trade, Professor Program, Black Star) : même garde que les Prize Packs (bucket d'abord, alerte de blocage, plafond qui suit le plan), un set après
+ * l'autre. `ids` : les lignes à écrire (défaut : toute la table) ; le plan se calcule toujours sur toutes les lignes (le groupe se compte sur tous les produits).
+ */
+async function lancerEcritureFamilles(ids, M, { verrou, client, lireProduits, index = null, R2 = r2, bucket = process.env.R2_BUCKET_IMAGES, vignetter, fabriquerVerrouSet, stopOctets, ecrireIndexEnCache = null } = {}) {
+    if (!bucket) throw new Error('R2_BUCKET_IMAGES : nom de bucket absent — aucune requête, aucune écriture');
+    if (typeof lireProduits !== 'function') throw new Error('aucune lecture des produits Cardmarket fournie : sans elle, la clé ne se construit pas');
+    const inconnues = (ids || []).filter(i => !P.LIGNES_AUTRES.some(l => l.id === i));
+    if (inconnues.length) throw new Error(`ligne(s) inconnue(s) : ${inconnues.join(', ')} — la table dit : ${P.LIGNES_AUTRES.map(l => l.id).join(', ')}`);
+    await R2.verifierBucket(bucket);
+    const db = M.Carte.db.db;
+    const E = db.collection('collecte_images_etat');
+    const bloquee = await E.findOne({ _id: P.ID_ALERTE, active: true });
+    if (bloquee) throw new Error(`${P.SOURCE} a bloqué le ${new Date(bloquee.depuis).toISOString()} (${bloquee.motif}) — aucune requête`);
+    let entrees = index;
+    if (!entrees) {
+        const r = await chargerIndexFamilles(client);
+        entrees = r.entrees;
+        if (ecrireIndexEnCache) ecrireIndexEnCache(entrees);
+        console.log(`index : ${entrees.length} entrées, ${r.requetes} requête(s) (le reste vient du cache)`);
+    }
+    const plan = await planifierToutFamilles(db, await lireProduits(), entrees);
+    console.log(`PLAN : ${plan.plan.length} prouvés sur ${plan.produits} produits · restes ${JSON.stringify(plan.comptes.parMotif)} · sous le seuil ${plan.comptes.sousSeuil} · placeholders rejetés ${plan.comptes.placeholders}`);
+    const voulues = P.LIGNES_AUTRES.filter(l => !ids || !ids.length || ids.includes(l.id));
+    const unites = [...new Set(voulues.flatMap(l => l.slugs))];
+    const distinctes = new Set(plan.plan.filter(p => unites.includes(p.slugSet)).map(p => p.url)).size;
+    client.fixerPlafond(Math.min(P.PLAFOND_MAX, client.compteRequetes() + 1 + distinctes + Math.ceil(distinctes * 0.1) + 3));
+    console.log(`REQUÊTES PRÉVUES : ${distinctes} fichiers distincts + 1 robots.txt · plafond ${client.plafond()} · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil((distinctes + 1) * P.CADENCE_MS / 60000)} min`);
+    const resultats = [], memo = new Map();
+    let code = 0;
+    for (const slug of unites) {
+        if (arretDemande) break;
+        const labels = voulues.filter(l => l.slugs.includes(slug)).map(l => l.id).join('+');
+        const r = await collecterUnite({ slug, label: labels, marque: p => p.marque }, plan.plan.filter(p => p.slugSet === slug), plan.restes.filter(x => x.slugSet === slug), M, { verrou, client, vignetter, fabriquerVerrouSet, stopOctets, memo, comptesPlan: plan.comptes, deposer: (b, c, d, t) => R2.deposerBinaire(b, c, d, t) });
+        resultats.push(r);
+        console.log(`UNITÉ ${labels} (${slug}) → ${r.etat}`);
+        if (r.etat !== 'verifie') code = 1;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+    }
+    return { code, resultats, plan };
+}
+
+module.exports = { chargerIndex, chargerIndexFamilles, cacheSurDisque, ecrireIndex, lireIndexEnCache, lireProduitsCm, planifierTout, planifierToutFamilles, collecterSerie, collecterUnite, lancerEcriture, lancerEcritureFamilles, STOP_OCTETS, DOSSIER_CACHE };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--series=[1-4](,[1-4])*$/];
+const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--series=[1-4](,[1-4])*$/, /^--familles$/, /^--lignes=[a-z0-9-]+(,[a-z0-9-]+)*$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const modes = ['--plan', '--verrou', '--ecrire'].filter(m => args.includes(m));
-if (inconnus.length || modes.length !== 1) {
+const lignesSansFamilles = args.some(a => a.startsWith('--lignes=')) && !args.includes('--familles');
+if (inconnus.length || modes.length !== 1 || lignesSansFamilles || (args.includes('--familles') && args.some(a => a.startsWith('--series=')))) {
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan, --verrou, --ecrire ; --series=1,2,3,4 (défaut : les quatre). Ex. : --plan`);
     process.exit(2);
 }
@@ -339,7 +425,18 @@ if (inconnus.length || modes.length !== 1) {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: !args.includes('--verrou'), buckets: args.includes('--ecrire') ? ['R2_BUCKET_IMAGES'] : [] });
     const M = modeles(cx);
     const series = (args.find(a => a.startsWith('--series='))?.slice(9).split(',').map(Number)) || [1, 2, 3, 4];
-    const lireProduits = () => lireProduitsCm(prod.db, P.TABLE_POKUMON.map(l => l.slug));
+    const familles = args.includes('--familles');
+    const lignesVoulues = args.find(a => a.startsWith('--lignes='))?.slice(9).split(',') ?? null;
+    if (lignesVoulues && !familles) { console.error('❌ --lignes n\'a de sens qu\'avec --familles'); process.exit(2); }
+    const lireProduits = () => lireProduitsCm(prod.db, familles ? [...new Set(P.LIGNES_AUTRES.flatMap(l => l.slugs))] : P.TABLE_POKUMON.map(l => l.slug));
+    if (args.includes('--plan') && familles) {
+        const v = lireIndexEnCache(DOSSIER_CACHE, 'index-familles.json');
+        const plan = await planifierToutFamilles(cx.db, await lireProduits(), v.entrees);
+        const parLigne = {};
+        for (const p of plan.plan) parLigne[p.ligne] = (parLigne[p.ligne] || 0) + 1;
+        console.log(`SIMULATION (zéro requête ; index du ${v.le}, ${v.entrees.length} entrées) : ${plan.plan.length} fichiers prouvés sur ${plan.produits} produits · par ligne ${JSON.stringify(parLigne)} · restes ${JSON.stringify(plan.comptes.parMotif)} · sous le seuil ${plan.comptes.sousSeuil} · placeholders rejetés ${plan.comptes.placeholders}`);
+        await fermer(); return;
+    }
     if (args.includes('--verrou')) {
         const v = (await M.EtatImages.findById(P.VERROU_GLOBAL).lean())?.verrou;
         const b = await cx.db.collection('collecte_images_etat').findOne({ _id: P.ID_ALERTE, active: true });
@@ -361,7 +458,11 @@ if (inconnus.length || modes.length !== 1) {
     if (tenuPar) { console.error(`❌ ${P.VERROU_GLOBAL} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}`); await fermer(); process.exit(1); }
     const client = P.fabriquerClientPokumon({ verrou, cache: cacheSurDisque() });
     let code = 0;
-    try { code = (await lancerEcriture(series, M, { verrou, client, lireProduits, ecrireIndexEnCache: e => ecrireIndex(e) })).code; }
+    try {
+        code = (familles
+            ? await lancerEcritureFamilles(lignesVoulues, M, { verrou, client, lireProduits, ecrireIndexEnCache: e => ecrireIndex(e, DOSSIER_CACHE, 'index-familles.json') })
+            : await lancerEcriture(series, M, { verrou, client, lireProduits, ecrireIndexEnCache: e => ecrireIndex(e) })).code;
+    }
     catch (e) { console.error('❌', e.message); code = 1; }
     finally { await verrou.rendre(); await fermer(); }
     console.log(`REQUÊTES : ${client.compteRequetes()} (plafond ${P.PLAFOND_REQUETES}) vers ${P.HOTES.join(' + ')}`);
