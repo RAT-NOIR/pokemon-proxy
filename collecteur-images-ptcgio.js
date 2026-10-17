@@ -22,7 +22,7 @@ const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');   // les vignettes de 200 px des images neuves, après la jointure (règle du dépôt, 2026-10-06)
@@ -283,7 +283,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         const complet = {
             vignettes: W.vg,
             source: P.SOURCE, mention: P.MENTION, lot: LOT, lignes: P.lignesDe(slug).map(l => l.id), produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs,
-            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes, preseanceRemplacees, basseDefRemplacees,
+            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes, preseanceRemplacees, basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attendues === apres.autres, siennesApres: apres.siennes, ok: garde,
                 ...(remplacerJumeau ? { nJaRetirees: retirees.length, nEnPosees: joints } : {}) },
             ...(remplacerJumeau ? { mode: 'remplacement-jumeau', jumeaux: Pl.jumeaux, ecartes: Pl.ecartes.length } : {}),

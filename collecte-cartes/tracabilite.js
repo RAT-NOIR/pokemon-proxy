@@ -24,7 +24,14 @@ function champsTracabilite({ urlOriginal, collecteLe } = {}) {
 
 /** Les mêmes champs pour l'ENTRÉE d'une jointure, relus sur le document `images` : sa date de collecte, sinon son téléchargement, sinon la date d'écriture (`maintenant`). */
 function champsDeLEntree(doc, maintenant = new Date()) {
+    // Correction 3 : l'exigence vaut pour une écriture NEUVE (le document : `champsTracabilite`). Le REJEU d'un document ANCIEN sans adresse d'origine ne s'arrête pas : l'entrée garde ses champs
+    // tels quels (aucune `urlOriginal` inventée, pas de `retirable`), et le bilan de la jointure COMPTE ces documents (`compterSansAdresse`).
+    if (!aUneAdresse(doc)) return {};
     return champsTracabilite({ urlOriginal: doc?.urlOriginal, collecteLe: dateDe(doc?.collecteLe) ?? dateDe(doc?.telechargeLe) ?? maintenant });
 }
 
-module.exports = { champsTracabilite, champsDeLEntree };
+const aUneAdresse = doc => typeof doc?.urlOriginal === 'string' && doc.urlOriginal.trim() !== '';
+/** Le nombre de documents sans adresse d'origine (le bilan d'un rejeu de jointure). */
+const compterSansAdresse = docs => (Array.isArray(docs) ? docs : []).filter(d => !aUneAdresse(d)).length;
+
+module.exports = { champsTracabilite, champsDeLEntree, compterSansAdresse };

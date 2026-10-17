@@ -24,7 +24,10 @@ verifier('appel sans argument : LÈVE', /traçabilité/.test(leve(() => Tr.champ
 verifier('champsDeLEntree : reprend urlOriginal et la date de téléchargement du document', (e => [e.urlOriginal, e.collecteLe.toISOString(), e.retirable])(Tr.champsDeLEntree({ urlOriginal: 'u', telechargeLe: D }, new Date('2030-01-01'))), ['u', D.toISOString(), true]);
 verifier('champsDeLEntree : `collecteLe` du document prime sur `telechargeLe`', Tr.champsDeLEntree({ urlOriginal: 'u', collecteLe: D, telechargeLe: new Date('2000-01-01') }).collecteLe.toISOString(), D.toISOString());
 verifier('champsDeLEntree : document ancien sans date → la date d\'écriture (injectée)', Tr.champsDeLEntree({ urlOriginal: 'u' }, new Date('2030-01-01')).collecteLe.toISOString(), '2030-01-01T00:00:00.000Z');
-verifier('champsDeLEntree : document sans adresse → LÈVE', /traçabilité/.test(leve(() => Tr.champsDeLEntree({ telechargeLe: D })) || ''), true);
+// ➕ correction 3 : l'exigence vaut pour une écriture NEUVE (champsTracabilite, ci-dessus) ; le REJEU d'un document ancien sans adresse ne s'arrête pas : il garde ses champs tels quels, sans inventer d'adresse
+{ const e = Tr.champsDeLEntree({ telechargeLe: D }, new Date('2030-01-01'));
+  verifier('champsDeLEntree : document ancien sans adresse → ne LÈVE pas, n\'invente AUCUNE urlOriginal, ne pose pas retirable', [leve(() => Tr.champsDeLEntree({ telechargeLe: D })), 'urlOriginal' in e, 'retirable' in e], [null, false, false]); }
+verifier('compterSansAdresse : compte les documents sans adresse d\'origine (absente, vide, non chaîne) — le bilan du rejeu', [Tr.compterSansAdresse([{ urlOriginal: 'u' }, {}, { urlOriginal: '' }, { urlOriginal: 3 }, null]), Tr.compterSansAdresse([]), Tr.compterSansAdresse(undefined)], [4, 0, 0]);
 
 // ── CHAQUE collecteur d'images l'appelle, pour le document ET pour l'entrée ──────────────────────────────────────────
 const lire = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
@@ -34,6 +37,7 @@ for (const f of COLLECTEURS) {
     const t = sansCommentaires(lire(f));
     verifier(`${f} : le document \`images\` (champsTracabilite) ET l'entrée de la carte (champsDeLEntree) passent par le module`, [/\bchampsTracabilite\(/.test(t), /\bchampsDeLEntree\(/.test(t)], [true, true]);
     verifier(`${f} : aucune copie de la règle (« retirable: true » écrit en dur)`, /retirable\s*:\s*true/.test(t), false);
+    verifier(`${f} : le bilan de la jointure compte les documents sans urlOriginal (compterSansAdresse)`, /\bcompterSansAdresse\(/.test(t), true);
 }
 // aucun champ ajouté ne nomme une source
 verifier('tracabilite.js n\'écrit aucun nom de source dans ses champs', /Bulbapedia|TCGdex|artofpkm|TPC|PikaQian|pokemontcg|Pokumon|pokemon\.com/i.test(sansCommentaires(lire('collecte-cartes/tracabilite.js'))), false);

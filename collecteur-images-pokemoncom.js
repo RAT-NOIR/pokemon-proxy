@@ -25,7 +25,7 @@ const { largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cart
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
@@ -300,7 +300,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)`}`);
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, basseDefRemplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, sansUrlOriginal: compterSansAdresse(images), telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, basseDefRemplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0 && telecharges + sautes + tropPetits === unites.length, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokemoncom: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });

@@ -42,7 +42,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { numerosServisParRemplacement } = require('./collecte-cartes/jumeau-en');
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
 const SOURCE = 'bulbapedia';
@@ -157,7 +157,7 @@ async function joindreImagesBulba(M, slug, images) {
         await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
         if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
     }
-    return { parCarte, entreesMultiples };
+    return { parCarte, entreesMultiples, sansUrlOriginal: compterSansAdresse(images) };   // bilan du REJEU : documents anciens sans adresse d'origine (correction 3)
 }
 
 async function collecterSet(code, M, { mesurerSeulement }) {
@@ -245,7 +245,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
 
         // ---- 5. jointure -------------------------------------------------------------------------
         const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();
-        const { parCarte, entreesMultiples } = await joindreImagesBulba(M, slug, images);
+        const { parCarte, entreesMultiples, sansUrlOriginal } = await joindreImagesBulba(M, slug, images);
 
         // ---- 6. complétude -----------------------------------------------------------------------
         const couvertes = new Set(parCarte.keys());
@@ -257,7 +257,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         const complet = {
             source: SOURCE, impressions: R.impressions, classes: R.classes, aCollecter: R.plan.length,
             sousSeuil: sousSeuil.length, fichiersAbsents: fichiersAbsents.length, imagesOk: images.length, echecs,
-            cartesDuSet: R.cartes.length, cartesCouvertes: couvertes.size, cartesSansImage: cartesSansImage.length, entreesMultiples,
+            cartesDuSet: R.cartes.length, cartesCouvertes: couvertes.size, cartesSansImage: cartesSansImage.length, entreesMultiples, sansUrlOriginal,
             mesure: { mediane, min: largeurs[0] ?? null, max: largeurs.at(-1) ?? null },
             requetesDuSet: bulba.compteRequetes() - requetesAuDebut,
             // Trois égalités : ce qui devait être collecté l'est ; rien n'a échoué ; chaque image joint sa carte.

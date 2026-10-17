@@ -39,6 +39,16 @@ const RATIO_NETTEMENT_PLUS_GRANDE = 1.5;
 const { IMAGES_DECLAREES_FAUSSES } = require('./corrections-images');
 const FAUSSES = new Set(IMAGES_DECLAREES_FAUSSES);
 
+// ➕ Correction 3 — « MÊME IMPRESSION » ne se réduit pas à (set, numéro, langue) : une variante tamponnée / non séparée / à note de variante est une AUTRE impression, et « une réimpression tamponnée ne reçoit
+// JAMAIS l'image d'une autre impression ». Le remplacement « nettement plus grande » n'est donc permis que si les DEUX côtés portent EXACTEMENT les mêmes marqueurs (absents des deux côtés compris) ;
+// un marqueur de faux type (null, false, chaîne vide, liste vide) vaut absent. Liste FERMÉE des marqueurs que les collecteurs écrivent sur une entrée : une variante qu'on ne sait pas nommer ne s'y
+// trouve pas — un collecteur qui ajoute un marqueur de variante à ses entrées doit l'ajouter ICI.
+const MARQUEURS_DE_VARIANTE = Object.freeze(['noteVariante', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages']);
+const marqueurDe = (x, k) => { const v = x?.[k]; return v === undefined || v === null || v === false || v === '' || (Array.isArray(v) && !v.length) ? null : JSON.stringify(v); };
+const memeVariante = (a, b) => MARQUEURS_DE_VARIANTE.every(k => marqueurDe(a, k) === marqueurDe(b, k));
+
+// Largeur de la candidate. SANS `wOriginal` (une entrée de jointure dont le document n'avait pas la largeur de l'original) : repli sur `w`, la largeur SERVIE (≤ 700), qui SOUS-ESTIME l'original.
+// C'est volontaire et prudent : une largeur sous-estimée ne fait jamais remplacer de trop (le ratio n'est atteint qu'avec plus de pixels). Ce n'est pas « l'original des deux côtés » — on ne le prétend pas.
 const largeurDeCandidate = c => {
     const w = typeof c?.wOriginal === 'number' && c.wOriginal > 0 ? c.wOriginal : (typeof c?.w === 'number' && c.w > 0 ? c.w : null);
     return w;
@@ -61,7 +71,7 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES } = {}) {
         if (e.source === candidat.source && e.cleR2 === candidat.cleR2) return false;
         if (e.basseDefinition === true || e.imageEmprunteeTirage === true || fausses.has(`${e.source}|${e.cleR2}`)) return true;
         const wE = largeurOriginaleDe(e);
-        return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE;
+        return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE && memeVariante(e, candidat);
     });
 }
 
@@ -120,4 +130,4 @@ function arbitrer(autres, candidat, servi) {
     return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE };
+module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE };

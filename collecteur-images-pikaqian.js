@@ -24,7 +24,7 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
@@ -156,7 +156,7 @@ async function joindreAdditif(db, M, slug, nom = slug) {
     const apres = await compterEntrees(db, carteIds, slug);
     const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
     const garde = attenduesAutres === apres.autres && apres.siennes === joints;
-    return { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages: images.length, carteIds, basseDefRemplacees, retirees };
+    return { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages: images.length, carteIds, basseDefRemplacees, retirees, sansUrlOriginal: compterSansAdresse(images) };
 }
 
 /**
@@ -262,7 +262,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
-        const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages, basseDefRemplacees } = await joindreAdditif(db, M, slug, unite._id);
+        const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages, basseDefRemplacees, sansUrlOriginal } = await joindreAdditif(db, M, slug, unite._id);
         if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes`);
         // ---- LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que le worker (§21 bis) ----
         const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
@@ -272,7 +272,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             source: P.SOURCE, langue: P.LANGUE, code: L.code, codePk: L.codePk, mention: P.MENTION, lot: P.LOT, provenance: P.PROVENANCE_PAR_DEFAUT,
             page: { tuiles: V.tuiles, auCodeDuSet: V.bonnes }, vignettes: W.vg,
             produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs, suffixesInconnus: Pl.suffixesInconnus.length, exemplesSuffixesInconnus: Pl.suffixesInconnus.slice(0, 5).map(s => s.nom),
-            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
+            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes, sansUrlOriginal,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres || garde, basseDefRemplacees, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, arret: arretClient ? arretClient.message : null, erreurJointure,
             concordance: garde && !erreurJointure && !bloque && !arretClient && vignettesOk && echecs === 0 && cartesAbsentes === 0

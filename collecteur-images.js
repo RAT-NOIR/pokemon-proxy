@@ -53,7 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { retirerChezLesAutres, preuveDeCorrection, preuveEstUneCorrection } = require('./collecte-cartes/retirer-chez-les-autres');
@@ -647,7 +647,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const emplacements = cartes.length > 0 && nEntrees / cartes.length >= 1.5;
     const complet = {
         entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length,
-        rattachements: jointes, clesRefusees, contredites: contredites.length, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
+        rattachements: jointes, sansUrlOriginal: compterSansAdresse(images), clesRefusees, contredites: contredites.length, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
         cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
         // Sur un set à cartes : chaque original joint UNE carte. Sur un set à emplacements : toutes
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.

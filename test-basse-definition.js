@@ -65,6 +65,20 @@ verifier('   « plus grande » exige AUSSI la même impression : autre langue, a
 verifier('   une candidate de langue inconnue ne remplace rien, même 3 × plus grande', rem([sain({ w: 200, wOriginal: 200 })], cand(700, { langue: null })), []);
 verifier('   sansRemplacables : une entrée nettement plus petite que l\'image annoncée (largeur connue du plan) n\'est pas « servie »', [sr(carteAvec([sain()]), { langue: 'id', wOriginal: 700 }), sr(carteAvec([sain()]), { langue: 'id', wOriginal: 500 })], [[], ['artofpkm/S/001.webp']]);
 
+// ➕ correction 3 : « même impression » = set + numéro + langue ET les mêmes marqueurs de variante / de tampon des deux côtés (absents des deux côtés compris). Une réimpression tamponnée ne reçoit
+// jamais l'image d'une autre impression ; dans le doute, pas de remplacement (écrit par ce qu'il autorise).
+verifier('MARQUEURS_DE_VARIANTE : la liste fermée des marqueurs connus des entrées', [...(B.MARQUEURS_DE_VARIANTE || [])].sort(), ['imageEmprunteeTirage', 'noteVariante', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente']);
+for (const k of ['noteVariante', 'tamponNonRepresente', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages']) {
+    const v = k === 'noteVariante' ? 'V1/V2 non séparables' : k === 'produitsPartages' ? [1, 2] : true;
+    verifier(`${k} : la candidate le porte, l'entrée saine (1,5 ×) non → RIEN (une variante n'évince pas l'impression simple)`, rem([sain()], cand(600, { [k]: v })), []);
+    verifier(`${k} : l'entrée le porte, la candidate non → RIEN (l'impression simple n'évince pas la variante)`, rem([sain({ [k]: v })], cand(600)), []);
+    verifier(`${k} : les DEUX côtés le portent à l'identique → remplacée (même impression)`, rem([sain({ [k]: v })], cand(600, { [k]: v })), ['artofpkm/S/001.webp']);
+}
+verifier('noteVariante : deux valeurs DIFFÉRENTES → rien ; marqueurs absents des deux côtés → remplacée', [rem([sain({ noteVariante: 'a' })], cand(600, { noteVariante: 'b' })), rem([sain()], cand(600))], [[], ['artofpkm/S/001.webp']]);
+verifier('un marqueur de FAUX type (null / false / chaîne vide) vaut absent : même identité qu\'un côté sans marqueur', rem([sain({ noteVariante: null, partageeHoloNonHolo: false, tamponNonRepresente: '' })], cand(600)), ['artofpkm/S/001.webp']);
+verifier('les autres motifs ne sont pas concernés (basse définition, empruntée) : le marqueur de la candidate ne les bloque pas', [rem([basse()], bonne({ noteVariante: 'x' })), rem([sain({ w: 600, imageEmprunteeTirage: true })], cand(600))], [['tpc-asie/S/001-1-id.webp'], ['artofpkm/S/001.webp']]);
+verifier('candidate sans `wOriginal` : repli PRUDENT sur `w` servi (≤ 700), qui sous-estime — jamais un remplacement de trop', rem([sain()], bonne({ w: 599, wOriginal: undefined })), []);
+
 verifier('sansRemplacables : une entrée marquée d\'une AUTRE source, même set/numéro/langue, ne compte pas comme « servie »', sr(carteAvec([basse()])), []);
 verifier('   les autres entrées restent (non marquée, autre numéro, autre set, autre langue)', sr(carteAvec([basse(), bonne({ cleR2: 'n.webp', source: 'artofpkm' }), basse({ numero: '2', cleR2: 'b2' }), basse({ set: 'A', cleR2: 'b3' }), basse({ langue: 'th', cleR2: 'b4' })])), ['n.webp', 'b2', 'b3', 'b4']);
 verifier('   sa PROPRE entrée marquée reste : la même source redonnerait le même fichier (aucun téléchargement pour rien)', sr(carteAvec([basse({ source: 'tcgdex', cleR2: 'mienne' })])), ['mienne']);

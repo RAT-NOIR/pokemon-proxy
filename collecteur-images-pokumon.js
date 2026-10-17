@@ -24,7 +24,7 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
@@ -312,7 +312,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         const complet = {
             vignettes: W.vg, source: P.SOURCE, mention: P.MENTION, lot: P.LOT, serie, produits, prouves: planSerie.length, restes: motifs, comptesPlan,
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, mauvaisFormat, joints, dejaParAutre, cartesAbsentes,
-            basseDefRemplacees,
+            basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
             concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,

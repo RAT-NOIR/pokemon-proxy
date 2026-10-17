@@ -218,16 +218,16 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
         await joindreImagesBulba(B.M, SLUG, ims);
         verifier('TRAÇABILITÉ Bulbapedia : l\'entrée porte retirable, urlOriginal, collecteLe', trace(B.cols.cartes.get(1).images[0]), [true, true, true]);
         const B2 = fausseBase(); const ims2 = semerBulba(B2, [], [], bulba({ urlOriginal: undefined }));
-        let err = null; try { await joindreImagesBulba(B2.M, SLUG, ims2); } catch (e) { err = e.message; }
-        verifier('   une image SANS adresse d\'origine : la jointure LÈVE, rien n\'est posé', [/traçabilité/.test(err || ''), (B2.cols.cartes.get(1).images || []).length], [true, 0]);
+        let err = null, r2 = null; try { r2 = await joindreImagesBulba(B2.M, SLUG, ims2); } catch (e) { err = e.message; }
+        verifier('   REJEU d\'un document ancien SANS adresse d\'origine : la jointure ne s\'arrête pas, l\'entrée est posée SANS urlOriginal inventée, et le bilan le compte', [err, (B2.cols.cartes.get(1).images || []).length, B2.cols.cartes.get(1).images[0]?.urlOriginal ?? null, r2?.sansUrlOriginal], [null, 1, null, 1]);
     }
     {
         const B = fausseBase(); const ims = semerTcg(B, [], [], tcg());
         await joindreImagesTcgdex(B.M, SLUG, ims, { langue: 'id', LANGUE: LANG });
         verifier('TRAÇABILITÉ TCGdex : l\'entrée porte retirable, urlOriginal, collecteLe', trace(B.cols.cartes.get(1).images[0]), [true, true, true]);
         let err = null; const B2 = fausseBase(); const ims2 = semerTcg(B2, [], [], tcg({ urlOriginal: undefined }));
-        try { await joindreImagesTcgdex(B2.M, SLUG, ims2, { langue: 'id', LANGUE: LANG }); } catch (e) { err = e.message; }
-        verifier('   une image SANS adresse d\'origine : la jointure LÈVE', /traçabilité/.test(err || ''), true);
+        let r2 = null; try { r2 = await joindreImagesTcgdex(B2.M, SLUG, ims2, { langue: 'id', LANGUE: LANG }); } catch (e) { err = e.message; }
+        verifier('   REJEU d\'un document ancien SANS adresse d\'origine : pas d\'arrêt, entrée posée sans urlOriginal inventée, bilan : 1 document sans adresse', [err, B2.cols.cartes.get(1).images[0]?.urlOriginal ?? null, r2?.sansUrlOriginal], [null, null, 1]);
         // nettement plus grande : 400 → 600 (1,5 ×) remplace ; 400 → 599 non ; une saine face à une équivalente (600 / 600) ne bouge pas
         const essai = async (wOrig, wDoc) => { const Bx = fausseBase(); const imsx = semerTcg(Bx, [SAIN()], [DOC_SAIN()], tcg({ wOriginal: wDoc, w: Math.min(wDoc, 700) })); await joindreImagesTcgdex(Bx.M, SLUG, imsx, { langue: 'id', LANGUE: LANG }); return [imagesDe(Bx), Bx.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat]; };
         verifier('TCGDEX remplacement : 1,5 × (400 → 600) remplace l\'image saine ; 1,49 × (400 → 596) la laisse (l\'ancienne reste `ok`, la nouvelle est écartée comme avant)',

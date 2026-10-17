@@ -356,7 +356,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
           const e = Bm.col('cartes').get(3).images.find(x => x.source === P.SOURCE);
           verifier('TRAÇABILITÉ : l\'entrée posée porte retirable, urlOriginal, collecteLe', [e.retirable, e.urlOriginal, e.collecteLe instanceof Date], [true, 'https://images.pikaqian.com/x.webp', true]); }
         { const { Bm, id } = monde(400); delete Bm.col('images').get(id).urlOriginal; const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
-          verifier('une image SANS adresse d\'origine ne s\'écrit pas : la jointure s\'interrompt (erreurJointure « traçabilité »), aucune entrée posée', [/traçabilité/.test(J.erreurJointure || ''), Bm.col('cartes').get(3).images.some(x => x.source === P.SOURCE)], [true, false]); }
+          verifier('REJEU d\'un document ancien SANS adresse d\'origine : la jointure ne s\'arrête pas (pas d\'erreur), l\'entrée est posée SANS urlOriginal inventée, le bilan compte 1 document sans adresse', [J.erreurJointure, Bm.col('cartes').get(3).images.find(x => x.source === P.SOURCE)?.urlOriginal ?? null, J.sansUrlOriginal], [null, null, 1]); }
         { const { Bm: B149 } = monde(596, [{ ...MARQ, basseDefinition: undefined, w: 400, wOriginal: 400 }]); const { Bm: B15 } = monde(600, [{ ...MARQ, basseDefinition: undefined, w: 400, wOriginal: 400 }]);
           const r = silencieux(); try { await joindreAdditif(B149.db, B149.M, SLUG); await joindreAdditif(B15.db, B15.M, SLUG); } finally { r(); }
           verifier('NETTEMENT PLUS GRANDE : 400 → 596 (1,49 ×) refusé, 400 → 600 (1,5 ×) admis (même impression)', [des(B149), des(B15)], [['tcgdex:false'], ['pikaqian:false']]); }

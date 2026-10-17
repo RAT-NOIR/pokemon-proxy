@@ -28,7 +28,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { marqueDe, arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
-const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
@@ -320,7 +320,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             site, langue: L.langue, code: L.code, mention: T.MENTION, lot: T.LOT,
             liste: { lues: liste.ids.length, total: liste.total, complete: liste.complete }, fiches: fiches.length, fiches404, produits: P.produits, trous: P.trous,
             prouves: P.plan.length, voies, restes: motifs, telecharges, sautes, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
-            basseDefRemplacees,
+            basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, tpcApres: apres.siennes, ok: garde }, compteurs,
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
             concordance: garde && !erreurJointure && telecharges + sautes + tropPetits + retires === P.plan.length && echecs === 0 && fiches404 === 0 && cartesAbsentes === 0
