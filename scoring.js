@@ -1973,6 +1973,12 @@ function scorerCandidat(candidat, lu) {
     } else if (codeIA && codeCand && codesApparentes(codeIA, codeCand)) {
         score += POIDS.setPartiel;
         detail.set = `+${POIDS.setPartiel} (code ${candidat.codeSet} apparenté au stamp lu ${lu.setCode}, mais pas identique)`;
+    } else if (codeIA && codeCand && lu.codeRapproche && codeCand === lu.codeRapproche && comparerNumeros(lu.numero, candidat.numeroCardmarket) !== null) {
+        // (le candidat doit AUSSI porter le numéro lu : un code court ne s'apparente jamais seul — « SV » est un préfixe de « SVP » sans en être le set)
+        // RAPPROCHEMENT DES CODES LUS (tour 1, 2026-10-17) : « AQU » lu pour « AQ », « XY » pour « XYPR ». Un préfixe d'au moins 2 caractères ne s'apparente QUE si un seul code du vivier le satisfait (voir codeRapprocheDuVivier).
+        // Même poids que l'apparenté : jamais le bonus plein.
+        score += POIDS.setPartiel;
+        detail.set = `+${POIDS.setPartiel} (code ${candidat.codeSet} rapproché du code lu ${lu.setCode} : préfixe de 2 caractères ou plus, seul code du vivier à le satisfaire)`;
     } else if (codeIA && codeCand) {
         score -= POIDS.set; detail.set = `-${POIDS.set} (code ${candidat.codeSet} ≠ stamp lu ${lu.setCode})`;
     } else if (attendues.length && candidat.idExpansion != null) {
@@ -2092,6 +2098,23 @@ function scorerCandidat(candidat, lu) {
     return { score, detail };
 }
 
+/**
+ * RAPPROCHEMENT DES CODES LUS (tour 1, 2026-10-17 ; décision du testeur : « c'est lui qui aurait évité le Magneton »).
+ * Écrit par ce qu'il AUTORISE : le code lu (après alias) se rapproche d'un code du vivier seulement si (1) AUCUN code du vivier ne lui est égal, apparenté ou convention X (les règles existantes passent d'abord),
+ * (2) le plus court des deux codes a au moins LONGUEUR_MIN_RAPPROCHE (2) caractères et est un PRÉFIXE du plus long (« AQ » ⊂ « AQU », « XY » ⊂ « XYPR », « DP » ⊂ « DPPR »), et (3) UN SEUL code distinct du vivier le satisfait.
+ * Pas de table d'abréviations devinée, pas de sous-suite (ADV1 / ADVex1, CSM2c / CSM2bC : non prouvées). Rend le code normalisé du vivier, ou null.
+ */
+const LONGUEUR_MIN_RAPPROCHE = 2;
+function codeRapprocheDuVivier(setCodeLu, candidats) {
+    const brut = normaliserCodeSet(setCodeLu);
+    if (!brut || !Array.isArray(candidats)) return null;
+    const luCode = ALIAS_CODES_LUS.get(brut) || brut;
+    const codes = [...new Set(candidats.map(c => normaliserCodeSet(c && c.codeSet)).filter(Boolean))];
+    if (codes.some(cm => cm === luCode || memeCodeParConventionX(luCode, cm) || codesApparentes(luCode, cm))) return null;
+    const satisfont = codes.filter(cm => { const [court, long] = luCode.length <= cm.length ? [luCode, cm] : [cm, luCode]; return court.length >= LONGUEUR_MIN_RAPPROCHE && long.startsWith(court); });
+    return satisfont.length === 1 ? satisfont[0] : null;
+}
+
 /** La clé « même numéro d'une expansion » d'un candidat (null sans expansion ou sans numéro) — une seule écriture. */
 function cleNumeroExpansion(c) {
     const num = c.numeroCardmarket == null ? '' : String(c.numeroCardmarket).trim().toUpperCase();
@@ -2152,7 +2175,9 @@ function placerDerriereLectures(scores, vises = []) {
  *   Une stratégie globale serait donc forcément fausse pour une partie du classement.
  *   `strategieReverse` est celle du GAGNANT, par commodité pour la route.
  */
-function choisirMeilleur(candidats, lu) {
+function choisirMeilleur(candidats, luBrut) {
+    // RAPPROCHEMENT DES CODES LUS : décidé UNE fois, sur tout le vivier (un seul code du vivier doit satisfaire le code lu), puis lu par chaque candidat dans scorerCandidat.
+    const lu = luBrut.codeRapproche === undefined ? { ...luBrut, codeRapproche: codeRapprocheDuVivier(luBrut.setCode, candidats) } : luBrut;
     const strategies = lu.motif?.strategieParIdProduct instanceof Map
         ? lu.motif.strategieParIdProduct
         : new Map();
@@ -2280,7 +2305,7 @@ function sontExAequo(scoreA, scoreB) {
 
 module.exports = {
     scorerCandidat, choisirMeilleur, POIDS, certitudeDuNumero, placerDerriereLectures, cleNumeroExpansion,
-    normaliserCodeSet, codesApparentes,
+    normaliserCodeSet, codesApparentes, codeRapprocheDuVivier, LONGUEUR_MIN_RAPPROCHE,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
