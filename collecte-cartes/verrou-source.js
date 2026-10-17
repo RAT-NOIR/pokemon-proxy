@@ -53,7 +53,7 @@ const IDENTITE = Object.freeze({ pid: process.pid, hote: os.hostname(), jeton: c
  */
 function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertion = null, surPerte = () => { }, nom = id, identite = IDENTITE }) {
     const aMoi = () => ({ _id: id, 'verrou.pid': identite.pid, 'verrou.hote': identite.hote, 'verrou.jeton': identite.jeton });
-    let battement = null, tenu = false, perdu = false, echecsBattement = 0;
+    let battement = null, tenu = false, perdu = false, echecsBattement = 0, derniereErreur = null;   // derniereErreur : l'exception de la dernière revérification (base injoignable ≠ autre détenteur)
 
     function perte(motif) {
         if (perdu) return;
@@ -113,12 +113,14 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
      * avant chaque unité de travail : la possession prise au démarrage ne dit rien de l'heure qui suit.
      */
     async function tient() {
+        derniereErreur = null;
         if (!tenu || perdu) return false;
         try {
             const r = await Modele.updateOne(aMoi(), { $set: { 'verrou.depuis': new Date(), 'verrou.commit': identite.commit } });
             if (r.matchedCount === 0) { perte('revérification : 0 document'); return false; }
             return true;
         } catch (e) {
+            derniereErreur = e;
             console.warn(`⚠️ revérification ${nom} impossible : ${e.message} — traitée comme non tenue`);
             return false;
         }
@@ -140,7 +142,7 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
         }
     }
 
-    return { prendre, tient, rendre, get perdu() { return perdu; }, get tenu() { return tenu; } };
+    return { prendre, tient, rendre, get perdu() { return perdu; }, get tenu() { return tenu; }, get derniereErreur() { return derniereErreur; } };
 }
 
 module.exports = { fabriquerVerrou, IDENTITE };
