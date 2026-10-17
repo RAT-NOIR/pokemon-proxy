@@ -2,7 +2,7 @@
 // L'ADAPTATEUR vers acces.js (A0.6) : acces.js appelle `req.credit.v2.rembourser(req, motif, opts)` et `req.credit.v2.poserQuestion(req, q)` quand il existe.
 // Il garde sa forme d'aujourd'hui (booléen, cause par le contexte de scan de sources.js) ; ici on n'écrit AUCUNE collection héritée.
 const db = require('../db'); const { noterNonRemboursement } = require('../../sources');
-const { rembourser } = require('./ledger'); const { reserverQuestion } = require('./questions'); const { raisonPublique } = require('./facturation');
+const { rembourser } = require('./ledger'); const { natureDuMotif } = require('./nature-du-motif'); const { reserverQuestion } = require('./questions'); const { raisonPublique } = require('./facturation');
 const col = nom => db.col(nom);
 const quand = ctx => { const m = ctx && ctx.maintenant; return (typeof m === 'function' ? m() : m) || new Date(); };
 
@@ -23,8 +23,8 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
             }
             // PLAFOND-DECLARE : tout ce qui passe par ce pont est décidé par le SERVEUR (la chaîne héritée juge un résultat incertain, une panne, un introuvable) : `constate-question` pour une question (rendu sans
             // plafond), `jumeaux` ou `panne` sinon. Les DÉCLARATIONS du client (réponse, abandon, prix illisible) ne passent jamais ici : questions.js et retour-live.js appellent le grand livre directement.
-            // sans nature nommée (chaîne héritée) : seule une panne (`ia-echec`, `panne-*`) est hors plafond ; tout autre refus est un constat sur la photo (plafonné)
-            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : compteur === 'indisponible' ? 'indisponible' : compteur === 'panne' || compteur === 'introuvable' ? compteur : /^(ia-echec|panne)/.test(String(motif)) ? 'panne' : 'introuvable', jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
+            // la nature vient du MOTIF, par l'unique fonction `natureDuMotif` (nature-du-motif.js) : une panne de NOTRE côté est hors plafond, tout le reste (motif inconnu compris) est un constat plafonné
+            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : natureDuMotif(motif), jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
             if (r.rendu) { req.scanRendu = true; return true; }
             noterNonRemboursement(raisonPublique(r.raisonNonRembourse));
             return false;

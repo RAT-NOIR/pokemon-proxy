@@ -30,12 +30,12 @@ const poster = (url, jeton) => H.appel(url, '/api/identifier', { methode: 'POST'
     db.brancher(mongoose.connection.db); await M.creerIndex();
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels', 'depense_modele', 'alertes']) await raw(c).deleteMany({});
     const express = require('express'); const pret = require('../pret'); const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const D = require('../argent/depense-modele');
-    let appelsChaine = 0;
+    let appelsChaine = 0, motifChaine = null;       // motifChaine : le motif dont la chaîne HÉRITÉE rembourse (elle appelle req.credit.v2.rembourser sans nommer de compteur)
     const depense = D.creer({ cfg });
     const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(require('../modeles').verifierIndex);
     app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { depenseModele: depense, jumeaux: () => ({ conclu: true, ids: [] }),
-        gererIdentifier: async (req, res) => { appelsChaine++; res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible', scanId: String(req.scanIdImpose) }); }, gererRetourLive: async (q, s) => s.json({ success: true }) }));
+        gererIdentifier: async (req, res) => { appelsChaine++; if (motifChaine) await req.credit.v2.rembourser(req, motifChaine, {}); res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible', scanId: String(req.scanIdImpose) }); }, gererRetourLive: async (q, s) => s.json({ success: true }) }));
     const sv = await H.serveur(app);
     const jour = Q.jourCourant();
     const pose = (porteur, n) => raw('plafonds').updateOne({ porteur, jour, type: 'constate' }, { $set: { count: n }, $setOnInsert: { expireLe: new Date(Date.now() + 3 * 86400e3) } }, { upsert: true });
@@ -72,6 +72,15 @@ const poster = (url, jeton) => H.appel(url, '/api/identifier', { methode: 'POST'
         await raw('depense_modele').updateOne({ _id: `jour:${jour}` }, { $set: { microUsd: 10000, appels: 3 } }, { upsert: true });
         const avant = appelsChaine; const r = await poster(sv.url, x.jeton);
         H.v('Q5. administrateur, dépense atteinte : 503 INDISPONIBLE, motif administrateur (aucun crédit), aucun appel à la chaîne', [r.statut, r.json.facturation && r.json.facturation.motif, appelsChaine - avant], [503, 'administrateur', 0]);
+    }
+    // (4) chaque motif de la chaîne héritée par la ROUTE v2, plafond des constatés épuisé (20 d'une installation... ici un compte gratuit à 50) : une panne de NOTRE côté est rendue, un constat non
+    {
+        await raw('depense_modele').deleteMany({});                  // la dépense du jour posée plus haut couperait la chaîne : ce bloc juge les MOTIFS, pas la coupure
+        const PANNE = ['ia-echec', 'erreur-serveur', 'tcgdex-injoignable', 'panne-SERVEUR'];
+        const CONSTAT = ['numero-illisible', 'carte-introuvable', 'aucun-prix', 'aucun-candidat', 'nom-contredit-egalite', 'nom-contredit-sans-repli', 'egalite-parfaite', 'motif-jamais-vu'];
+        const sortie = async m => { motifChaine = m; const x = await compteLie(); await pose(`compte:${x.c._id}`, 50); const r = await poster(sv.url, x.jeton); motifChaine = null; if (process.env.DEBUG_FC) console.log('DBG', m, JSON.stringify(r.json.facturation), JSON.stringify(await raw('plafonds').find({ porteur: `compte:${x.c._id}` }).toArray()), JSON.stringify((await raw('mouvements').find({ compteId: x.c._id }).toArray()).map(d => [d.type, d.motif, d.etat, d.cleIdempotence]))); return [r.json.facturation.rembourse, r.json.facturation.raisonNonRembourse]; };
+        for (const m of PANNE) H.v(`N1. route v2, motif de la chaîne « ${m} », constatés épuisés : rendu (panne de notre côté)`, await sortie(m), [true, null]);
+        for (const m of CONSTAT) H.v(`N2. route v2, motif de la chaîne « ${m} », constatés épuisés : NON rendu (plafond-jour)`, await sortie(m), [false, 'plafond-jour']);
     }
     await sv.fermer(); await mongoose.disconnect(); await H.arreterBanc(); H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

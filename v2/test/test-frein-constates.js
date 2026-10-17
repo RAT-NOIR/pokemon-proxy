@@ -159,5 +159,5 @@ async function constater(p, n, { compteur = 'introuvable', prefixe = 'k', mainte
         H.v('R1. un rejeu du même scan : une prise, « deja-rembourse »', [r1.rendu, r2.raisonNonRembourse, await cnt(s, 'constate')], [true, 'deja-rembourse', 1]);
     }
 
-    await H.arreterBanc(); H.bilan();
+    await H.fermerBac(); H.bilan();      // M5 (relecture 1) : fermerBac vide le préfixe, déconnecte, puis arrête la base de banc — arreterBanc seul laissait le nettoyage de sortie attendre une base arrêtée
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

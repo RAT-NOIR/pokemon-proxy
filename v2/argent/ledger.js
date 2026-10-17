@@ -2,6 +2,7 @@
 // LE CHEMIN DE L'ARGENT v2. Tout compteur est un findOneAndUpdate CONDITIONNEL atomique (jamais lire-puis-écrire) ;
 // un remboursement ne rend jamais plus que ce qui a été pris ; un cas non classé => QUOTA / non remboursé, et la cause s'écrit.
 const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches'); const Of = require('./offre'); const { ObjectId } = require('mongoose').Types;
+const { natureDuMotif } = require('./nature-du-motif');
 const col = nom => db.col(nom);   // indirection VOLONTAIRE : les bancs y glissent une panne simulée (db.col remplacé)
 const expireMouvement =(now, cfg) => new Date(now.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
@@ -218,7 +219,7 @@ async function plafondParOffre(porteur, cfg, maintenant, table) {
 const plafondDesDeclarations = (porteur, cfg, maintenant) => plafondParOffre(porteur, cfg, maintenant, cfg.plafonds.declares);
 const plafondDesConstates = (porteur, cfg, maintenant) => plafondParOffre(porteur, cfg, maintenant, cfg.plafonds.constates);
 // rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique « rendu-en-cours », crédit, trace +1, PUIS « rembourse») → si rien rendu, libérer claim ET compteur.
-async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, unites = 1, maintenant = new Date() } = {}, cfg) {
+async function rendreLeScan(porteur, motif, { scanId, compteur, jourDe, sansPlafond = false, unites = 1, maintenant = new Date() } = {}, cfg) {
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     // `unites` : combien d'unités du compteur ce remboursement consomme (JUMEAU-V2 : UNE par carte refusée par la garde). Un entier >= 1, sinon refus : un compteur qui ne monterait pas serait gratuit sans limite.
     if (!Number.isInteger(unites) || unites < 1) { console.error('❌ [v2 rembourser] unites invalides : refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
@@ -227,6 +228,8 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     // La NATURE du remboursement (voir NATURES) : `panne` est le défaut quand aucun compteur n'est nommé. `unites` : combien d'unités du compteur ce remboursement consomme (une par carte refusée par la garde
     // des jumeaux, qui n'a plus de compteur : la forme reste validée) — un seul compteur plafonné en consomme TOUJOURS une (un scan = un remboursement).
     // Une garde s'écrit par ce qu'elle AUTORISE : un compteur qui n'est pas dans la table est REFUSÉ (jamais rabattu sur `panne`, qui imputerait en silence une faute de frappe)
+    // FREIN-CONSTATES tour 2 : un compteur ABSENT n'est plus rabattu sur `panne` (hors plafond) : la nature vient du MOTIF, par l'unique fonction (v2/argent/nature-du-motif.js) ; un motif inconnu est plafonné
+    if (compteur === undefined) compteur = natureDuMotif(motif);
     if (!Object.hasOwn(NATURES, compteur)) { console.error(`❌ [v2 rembourser] compteur inconnu (${typeof compteur === 'string' ? compteur.slice(0, 30) : typeof compteur}) : refusé`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     const nature = NATURES[compteur], classe = nature.classe, type = classe === 'declare' || classe === 'constate' ? classe : compteur, porteurCle = `${porteur.type}:${porteur.id}`, pas = 1;
     let declaration = null;      // le jugement d'une DÉCLARATION, posé quand le compteur a été consulté (jamais pour un remboursement constaté, un rejeu ou une reprise)

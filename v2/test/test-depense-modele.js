@@ -122,5 +122,21 @@ const attraper = async p => { try { await p; return null; } catch (e) { return e
         H.v('Z1. v2 sans configuration valide (cfg absente) : l\'appel part tel quel, corps inchangé', [f.appels, f.corps[0]], [1, { b: 1 }]);
     }
 
-    await H.arreterBanc(); H.bilan();
+    // M3 (relecture 1) : le câblage RACINE avec une configuration VALIDE. v2/index.js lit la configuration (monterEnTete) ; `V2.depenseModele.appeler` — ce qu'appelle `appelerModele` d'index.js — passe alors
+    // sous le plafond : le faux fournisseur n'est plus appelé une fois la dépense atteinte.
+    {
+        const V2 = require('../index'); const express = require('express');
+        V2.monterEnTete(express(), { MONGODB_BASE: 'test_scratch', V2_DEPENSE_MODELE_JOUR_USD: '0.01', V2_COUT_APPEL_ESTIME_USD: '0.004' });
+        await db.col('depense_modele').deleteMany({}); D.reinitialiserDefaut();
+        const f = fournisseur(0.004); const issues = [];
+        for (let i = 0; i < 5; i++) issues.push((await attraper(V2.depenseModele.appeler(f.post, 'u', { b: 1 }, {})) || { code: 'ok' }).code);
+        H.v('Z2. v2 avec configuration VALIDE : l\'appel de la chaîne passe sous le plafond (3 partent, les suivants DEPENSE_MODELE_PLAFOND, le fournisseur n\'en reçoit que 3)', [issues, f.appels, f.corps[0].usage], [['ok', 'ok', 'ok', 'DEPENSE_MODELE_PLAFOND', 'DEPENSE_MODELE_PLAFOND'], 3, { include: true }]);
+        // le texte d'index.js : l'unique appel OpenRouter passe par appelerModele, qui délègue à V2.depenseModele, et l'erreur de plafond n'ouvre pas la lecture de secours
+        const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'index.js'), 'utf8');
+        H.v('Z3. index.js : plus d\'axios.post direct vers openrouter ; appelerModele délègue à V2.depenseModele.appeler ; DEPENSE_MODELE_PLAFOND est relancée avant la lecture de secours',
+            [/axios\.post\(\s*["']https:\/\/openrouter/.test(src), /appelerModele\(\s*["']https:\/\/openrouter\.ai/.test(src), /V2\.depenseModele\.appeler\(axios\.post\.bind\(axios\)/.test(src), /e\.code === 'DEPENSE_MODELE_PLAFOND'\) throw e/.test(src)], [false, true, true, true]);
+        V2.arreter();
+    }
+
+    await H.fermerBac(); H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });
