@@ -1,30 +1,31 @@
 // ============================================================
-// LA PROVENANCE PAR CHAMP DES DONNÉES D'ORIGINE BULBAPEDIA, ET LA MARQUE « À RECONFIRMER » — fonction PURE (aucune base)
+// LA PROVENANCE DES DONNÉES D'ORIGINE BULBAPEDIA : EN BASE LA MARQUE « À RECONFIRMER », DANS UN FICHIER LES CONFIRMATIONS — fonction PURE (aucune base)
 // ============================================================
 // Décision du testeur (2026-10-17) : « pour les cas sans aucun remplaçant, garde la valeur, marque-la à reconfirmer, et ne la sers pas comme seule preuve d'une
 // identification ». Ce module PLANIFIE l'écriture ; poser-provenance-bulba.js l'exécute (à blanc par défaut, puis sur un plan SIGNÉ).
+// Correction 2 (coordinateur, 2026-10-18) : la grappe `cartes` est sur l'offre gratuite (212 Mo sur 512, +4,7 Mo par jour). La décision ne demande EN BASE que la marque ;
+// les confirmations (~200 000 champs) vont dans un fichier JSON daté avec son empreinte sha256, que le plan d'écriture référence : ce fichier est la preuve de ce qui est confirmé.
 //
-//   provenance.source = 'bulbapedia' · provenance.le = date de la dernière passe       ← au niveau du DOCUMENT (jamais répétés par champ : −1/3 du poids)
-//   provenance.<champ> = { confirmePar: ['pkmncards', 'tcgdex'], accord: 'plein'|'partiel'|'arbitrage', empreinteValeur }        au moins une source INDÉPENDANTE concorde
-//   provenance.<champ> = { confirmePar: [], aReconfirmer: true, motif: 'desaccord'|'non-couvert', empreinteValeur }               aucune source ne confirme
-//   (+ `contredit: [sources]` quand une source dit autre chose · `via` quand l'arbitrage a tranché)
-//     accord « plein »   : une source donne la même valeur · « partiel » : elle ne confirme qu'une inclusion (attaques, date au mois) · « arbitrage » : un vocabulaire, jugé
+//   EN BASE (cartes et sets) :
+//     provenance.source = 'bulbapedia' · provenance.le = date de la dernière passe        ← posés UNE fois, au document
+//     provenance.<champ> = { aReconfirmer: true, motif: 'desaccord'|'non-couvert', v: <empreinteValeur> }      c'est TOUT : ni confirmePar, ni accord
+//     provenance.impressions = [{ k: 'intl|Fossil|42', rarete: { aReconfirmer, motif, v }, … }]   clé = tirage|expansion|numéro (#n au n-ième doublon), jamais l'index ;
+//                                                                                                  seulement les impressions qui ont une marque, jamais d'entrée { k } vide
 //     motif « desaccord » : des sources disent autre chose · « non-couvert » : aucune source n'a interrogé ce champ (un doute d'INSTRUMENT, pas de source)
-//   provenance.impressions = [{ k: 'intl|Fossil|42', numero: {…}, total: {…}, rarete: {…} }]   clé = tirage|expansion|numéro (#n au n-ième doublon), jamais l'index ; jamais d'entrée { k } vide
+//   DANS LE FICHIER (jamais en base) : { collection, _id, champ, [k], confirmePar, accord: 'plein'|'partiel'|'arbitrage', empreinteValeur, [via], [contredit] }
+//     accord « plein » : une source donne la même valeur · « partiel » : elle ne confirme qu'une inclusion (attaques, date au mois) · « arbitrage » : un vocabulaire, jugé
 //
-// 🔑 `empreinteValeur` (sha1 court de la valeur JSON normalisée) : la provenance mémorise CE QU'ELLE CERTIFIE. Une valeur changée plus tard (lot 5, recollecte) ne porte plus de
-// confirmation valide : `confirmationValide(doc, champ)` rend faux, et la passe suivante REMPLACE l'entrée périmée par la décision d'aujourd'hui.
-// 🔑 FORME ÉTRANGÈRE : une provenance déjà présente sous une autre forme (non objet, autre `source`, entrée sans `confirmePar` / `empreinteValeur`, impressions non tableau) n'est NI
-// écrasée NI fusionnée : le document ou le champ est SAUTÉ, compté (`formeEtrangere`) et listé.
+// 🔑 `v` / `empreinteValeur` (sha1 court de la valeur JSON normalisée) : la provenance mémorise CE QU'ELLE MET EN DOUTE / CERTIFIE. Une valeur changée plus tard (lot 5, recollecte)
+// rend la marque périmée : la passe suivante la REMPLACE (ou la RETIRE si la valeur est confirmée aujourd'hui) ; `confirmationValide` rend faux pour une confirmation périmée.
+// 🔑 FORME ÉTRANGÈRE : une provenance déjà présente sous une autre forme (non objet, autre `source`, entrée qui n'est pas une marque minimale — y compris l'ancienne forme à
+// `confirmePar` —, impressions non tableau) n'est NI écrasée NI fusionnée NI retirée : le document ou le champ est SAUTÉ, compté (`formeEtrangere`) et listé.
 // 🔑 `provenance` est un champ INTERNE : le site ne le lit pas, la garde de lot ne le compte pas (aucun set revalidé). Le nom d'une source n'apparaît dans AUCUN champ public.
 // 🔑 UN CHAMP `aReconfirmer` NE DOIT JAMAIS ÊTRE LA SEULE PREUVE D'UNE IDENTIFICATION (décision du testeur).
 // 🔑 La garde s'écrit par ce qu'elle AUTORISE : « confirmé » = une source qui concorde ou un arbitrage « juste » ; tout le reste est « à reconfirmer ». La valeur n'est JAMAIS modifiée ici.
-// ADDITIF ET MONOTONE : un champ absent se pose ; « à reconfirmer » devient confirmé quand une source concorde ; une confirmation s'enrichit (union, meilleur accord) tant que la VALEUR
-// certifiée est celle d'aujourd'hui.
+// IDEMPOTENT : rejouer sur son propre résultat n'écrit rien. Le fichier des confirmations est RECALCULÉ à chaque passe (état complet, pas un diff).
 const crypto = require('crypto');
 const NOMS = { pkc: 'pkmncards', tdx: 'tcgdex', jp: 'pokemon-card.com' };
 const SOURCE = 'bulbapedia';
-const RANG = { partiel: 1, arbitrage: 2, plein: 3 };
 
 const vide = v => v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
 const nomsSources = srcs => [...new Set(srcs.map(s => NOMS[String(s).split('.')[0]]).filter(Boolean))].sort();
@@ -35,33 +36,25 @@ function canon(v, ignorer = []) {
     const s = JSON.stringify(t(v));
     return s === undefined ? 'undefined' : s;
 }
-/** L'empreinte de la valeur certifiée : sha1 court du JSON canonique. */
+/** L'empreinte de la valeur : sha1 court du JSON canonique. */
 const empreinteValeur = v => crypto.createHash('sha1').update(canon(v)).digest('hex').slice(0, 10);
-/** L'empreinte d'un plan d'écriture : sha256 du JSON canonique des écritures, SANS les dates (`le`, `provenance.le`) — un rejeu à une autre date a la même empreinte. */
+/** L'empreinte d'un plan d'écriture : sha256 du JSON canonique des écritures (champs ET retraits), SANS les dates (`le`, `provenance.le`). */
 const empreintePlan = ecritures => crypto.createHash('sha256').update(canon(ecritures, ['le', 'provenance.le'])).digest('hex');
+/** L'empreinte des confirmations : sha256 du JSON canonique de la liste (aucune date dedans). */
+const empreinteConfirmations = entrees => crypto.createHash('sha256').update(canon(entrees)).digest('hex');
 
-/** Une entrée de champ que NOUS avons écrite : un objet avec `confirmePar` (tableau) et `empreinteValeur`. Tout le reste est une forme étrangère. */
-const formeConnue = x => !!x && typeof x === 'object' && !Array.isArray(x) && Array.isArray(x.confirmePar) && typeof x.empreinteValeur === 'string';
+/** Une marque que NOUS avons écrite en base : { aReconfirmer: true, motif, v }. Tout le reste est une forme étrangère. */
+const formeConnue = x => !!x && typeof x === 'object' && !Array.isArray(x) && x.aReconfirmer === true && typeof x.motif === 'string' && typeof x.v === 'string';
+const minimale = d => ({ aReconfirmer: true, motif: d.motif, v: d.empreinteValeur });
 
-/** Fusion monotone de l'ancienne entrée et de la nouvelle. Rend { entree, change }. */
-function fusionner(ancienne, neuve) {
-    if (!ancienne) return { entree: neuve, change: true };
-    // la VALEUR a changé depuis la confirmation : elle ne certifie plus rien, la décision d'aujourd'hui la remplace (même si c'est « à reconfirmer »)
-    if (ancienne.empreinteValeur !== neuve.empreinteValeur) return { entree: neuve, change: true };
-    if (ancienne.aReconfirmer && !neuve.aReconfirmer) return { entree: neuve, change: true };
-    if (!ancienne.aReconfirmer && !neuve.aReconfirmer) {
-        const union = [...new Set([...(ancienne.confirmePar || []), ...neuve.confirmePar])].sort();
-        const mieux = (RANG[neuve.accord] || 0) > (RANG[ancienne.accord] || 0);
-        if (union.length > (ancienne.confirmePar || []).length || mieux) {
-            const e = { ...ancienne, confirmePar: union };
-            if (mieux) { e.accord = neuve.accord; if (neuve.via) e.via = neuve.via; else delete e.via; }
-            return { entree: e, change: true };
-        }
-    }
-    return { entree: ancienne, change: false };
+/** Que faire d'une marque existante face à la décision d'aujourd'hui ? 'rien' | 'poser' | 'retirer'. (La forme étrangère est traitée avant.) */
+function action(ancienne, decision) {
+    if (!decision.aReconfirmer) return ancienne ? 'retirer' : 'rien';                      // confirmé aujourd'hui : une marque périmée ne reste pas
+    if (!ancienne) return 'poser';
+    return (ancienne.v !== decision.empreinteValeur || ancienne.motif !== decision.motif) ? 'poser' : 'rien';   // valeur changée ou motif changé : la marque est remplacée
 }
 
-/** La décision d'un champ à partir de sa ligne de confrontation et de l'arbitrage éventuel. `valeur` = la valeur Bulbapedia certifiée (son empreinte est mémorisée). */
+/** La décision d'un champ à partir de sa ligne de confrontation et de l'arbitrage éventuel. `valeur` = la valeur Bulbapedia (son empreinte est mémorisée). */
 function decider(ligne, arbitrage, valeur) {
     const emp = empreinteValeur(valeur);
     const reconf = (motif, extra = {}) => ({ confirmePar: [], aReconfirmer: true, motif, empreinteValeur: emp, ...extra });
@@ -135,123 +128,155 @@ function etatProvenance(p0) {
 /**
  * @param {{cartes:object[], sets:object[], lignes:object[], appariements:object[], arbitrages:object[], maintenant:Date}} d
  *   lignes / appariements : confronter-bulba.js · arbitrages : les entrées de arbitrerTout (champ, cle, verdict, temoins, raison)
- * @returns {{ecritures:{collection:string,_id:*,champs:Object}[], compte:object}}
+ * @returns {{ecritures:{collection:string,_id:*,champs:Object,retraits:string[]}[], confirmations:object[], compte:object}}
+ *   ecritures : ce qui s'écrit EN BASE (marques « à reconfirmer » seulement, et le retrait de celles devenues périmées) · confirmations : ce qui va au FICHIER
  */
 function planifierProvenance({ cartes, sets, lignes, appariements, arbitrages, maintenant }) {
     const L = new Map(lignes.map(l => [l.champ + '\u0000' + String(l.cle), l]));
     const A = new Map((arbitrages || []).map(a => [a.champ + '\u0000' + String(a.cle), a]));
     const parCarte = new Map();
     for (const a of appariements || []) { if (!parCarte.has(a.carteId)) parCarte.set(a.carteId, []); parCarte.get(a.carteId).push(a); }
-    const compte = { cartes: 0, sets: 0, documents: 0, champsAEcrire: 0, doublonsCle: 0, clesEnDouble: 0, parChamp: {}, setsSansOrigine: {}, formeEtrangere: { documents: 0, champs: 0, liste: [] } };
-    const tally = (champ, entree, ecrit) => {
+    const compte = { cartes: 0, sets: 0, documents: 0, champsAEcrire: 0, champsRetires: 0, confirmes: 0, doublonsCle: 0, clesEnDouble: 0, parChamp: {}, setsSansOrigine: {}, formeEtrangere: { documents: 0, champs: 0, liste: [] } };
+    const tally = (champ, d, ecrit) => {
         const p = (compte.parChamp[champ] ||= { plein: 0, partiel: 0, arbitrage: 0, aReconfirmerDesaccord: 0, aReconfirmerNonCouvert: 0, ecrits: 0 });
-        if (entree.aReconfirmer) { if (entree.motif === 'desaccord') p.aReconfirmerDesaccord++; else p.aReconfirmerNonCouvert++; } else p[entree.accord] = (p[entree.accord] || 0) + 1;
+        if (d.aReconfirmer) { if (d.motif === 'desaccord') p.aReconfirmerDesaccord++; else p.aReconfirmerNonCouvert++; } else p[d.accord] = (p[d.accord] || 0) + 1;
         if (ecrit) p.ecrits++;
     };
     const etrangere = (collection, _id, chemin, doc) => { if (doc) compte.formeEtrangere.documents++; else compte.formeEtrangere.champs++; compte.formeEtrangere.liste.push({ collection, _id, chemin }); };
-    const ecritures = [];
-
-    /** Pose un champ : l'entrée existante de forme étrangère n'est jamais touchée. */
-    const poser = (collection, _id, p0, champs, nom, neuve, tag) => {
-        const ancienne = p0?.[nom];
-        if (ancienne !== undefined && !formeConnue(ancienne)) { etrangere(collection, _id, 'provenance.' + nom, false); return; }
-        const { entree, change } = fusionner(ancienne, neuve);
-        tally(tag || nom, entree, change);
-        if (change) { champs['provenance.' + nom] = entree; compte.champsAEcrire++; }
+    const ecritures = [], confirmations = [];
+    const confirmer = (collection, _id, champ, k, d) => {
+        if (d.aReconfirmer) return;
+        const c = { collection, _id, champ }; if (k !== undefined) c.k = k;
+        Object.assign(c, { confirmePar: d.confirmePar, accord: d.accord, empreinteValeur: d.empreinteValeur }); if (d.via) c.via = d.via; if (d.contredit) c.contredit = d.contredit;
+        confirmations.push(c); compte.confirmes++;
     };
-    const clore = (collection, _id, champs, nb) => {
-        if (!nb) return false;
-        champs['provenance.source'] = SOURCE; champs['provenance.le'] = maintenant;
-        ecritures.push({ collection, _id, champs }); return true;
+
+    /** Un champ de premier niveau : confirmation au fichier ; en base, la marque seulement (posée, remplacée ou retirée). */
+    const traiter = (collection, _id, p0, doc, nom, d, tag) => {
+        confirmer(collection, _id, nom, undefined, d);
+        const ancienne = p0?.[nom];
+        if (ancienne !== undefined && !formeConnue(ancienne)) { tally(tag, d, false); etrangere(collection, _id, 'provenance.' + nom, false); return; }
+        const a = action(ancienne, d);
+        tally(tag, d, a !== 'rien');
+        if (a === 'poser') { doc.champs['provenance.' + nom] = minimale(d); compte.champsAEcrire++; }
+        else if (a === 'retirer') { doc.retraits.push('provenance.' + nom); compte.champsRetires++; compte.champsAEcrire++; }
+    };
+    const clore = (collection, _id, doc) => {
+        if (!Object.keys(doc.champs).length && !doc.retraits.length) return false;
+        if (Object.keys(doc.champs).length) { doc.champs['provenance.source'] = SOURCE; doc.champs['provenance.le'] = maintenant; }
+        ecritures.push({ collection, _id, champs: doc.champs, retraits: doc.retraits }); return true;
     };
 
     for (const k of cartes) {
         const etat = etatProvenance(k.provenance);
         if (etat === 'etrangere') { etrangere('cartes', k._id, 'provenance', true); continue; }
-        const champs = {}; const p0 = etat === 'bulbapedia' ? k.provenance : {}; const avantN = compte.champsAEcrire;
+        const doc = { champs: {}, retraits: [] }; const p0 = etat === 'bulbapedia' ? k.provenance : {};
         const mes = parCarte.get(k._id) || [];
         const confirmeNom = tir => nomsSources(mes.filter(a => a.tirage === tir && a.nomOk).map(a => a.src));
         const interroge = tir => mes.some(a => a.tirage === tir);
         for (const [nom, tir] of [['nomEn', 'intl'], ['nomJa', 'jp']]) {
             if (vide(k[nom])) continue;
             const c = confirmeNom(tir); const emp = empreinteValeur(k[nom]);
-            poser('cartes', k._id, p0, champs, nom, c.length ? { confirmePar: c, accord: 'plein', empreinteValeur: emp } : { confirmePar: [], aReconfirmer: true, motif: interroge(tir) ? 'desaccord' : 'non-couvert', empreinteValeur: emp }, 'carte.' + nom);
+            traiter('cartes', k._id, p0, doc, nom, c.length ? { confirmePar: c, accord: 'plein', empreinteValeur: emp } : { confirmePar: [], aReconfirmer: true, motif: interroge(tir) ? 'desaccord' : 'non-couvert', empreinteValeur: emp }, 'carte.' + nom);
         }
         for (const ch of CHAMPS_CARTE) {
             if (vide(k[ch])) continue;
             const cle = 'carte.' + ch;
-            poser('cartes', k._id, p0, champs, ch, decider(L.get(cle + '\u0000' + String(k._id)), A.get(cle + '\u0000' + String(k._id)), k[ch]), cle);
+            traiter('cartes', k._id, p0, doc, ch, decider(L.get(cle + '\u0000' + String(k._id)), A.get(cle + '\u0000' + String(k._id)), k[ch]), cle);
         }
-        // impressions : par clé tirage|expansion|numéro, jamais par index
-        let impressionsEtrangeres = false;
-        if (p0.impressions !== undefined && !Array.isArray(p0.impressions)) { impressionsEtrangeres = true; etrangere('cartes', k._id, 'provenance.impressions', false); }
-        if (!impressionsEtrangeres) {
-            const sortie = (p0.impressions || []).map(x => x); const index = new Map();
-            sortie.forEach((x, i) => { if (x && typeof x.k === 'string' && !index.has(x.k)) index.set(x.k, i); });
-            let changeI = false;
-            const cles = clesImpressions(k.impressions);
-            (k.impressions || []).forEach((im, idx) => {
-                const kk = cles[idx]; if (!kk) return;
-                if (kk.includes('#')) compte.clesEnDouble++;
-                const ikey = `${k._id}#${idx}`;
-                const existe = index.has(kk);
-                const cur = existe ? { ...sortie[index.get(kk)] } : { k: kk };
-                const apps = mes.filter(a => a.idx === idx && a.nomOk).map(a => a.src);
-                const desaccordNom = mes.some(a => a.idx === idx);
-                const champsI = {};
-                if (!vide(im.numero)) champsI.numero = apps.length ? { confirmePar: nomsSources(apps), accord: 'plein', empreinteValeur: empreinteValeur(im.numero) } : { confirmePar: [], aReconfirmer: true, motif: desaccordNom ? 'desaccord' : 'non-couvert', empreinteValeur: empreinteValeur(im.numero) };
-                if (numerique(im.total)) champsI.total = decider(L.get('impression.total\u0000' + ikey), A.get('impression.total\u0000' + ikey), im.total);
-                if (!vide(im.rarete)) champsI.rarete = decider(L.get('impression.rarete\u0000' + ikey), A.get('impression.rarete\u0000' + ikey), im.rarete);
-                let changeCet = false;
-                for (const [nom, neuve] of Object.entries(champsI)) {
-                    const ancienne = cur[nom];
-                    if (ancienne !== undefined && !formeConnue(ancienne)) { etrangere('cartes', k._id, `provenance.impressions[${kk}].${nom}`, false); continue; }
-                    const { entree, change } = fusionner(ancienne, neuve);
-                    tally('impression.' + nom, entree, change);
-                    if (change) { cur[nom] = entree; changeCet = true; compte.champsAEcrire++; }
-                }
-                if (changeCet) {
-                    changeI = true;
-                    if (existe) sortie[index.get(kk)] = cur; else { index.set(kk, sortie.length); sortie.push(cur); }   // jamais d'entrée { k } vide : on n'arrive ici que s'il y a un champ
-                }
-            });
-            if (changeI) champs['provenance.impressions'] = sortie;
-        }
-        if (clore('cartes', k._id, champs, compte.champsAEcrire - avantN)) compte.cartes++;
+        // impressions : par clé tirage|expansion|numéro, jamais par index ; seulement celles qui portent une marque
+        if (p0.impressions !== undefined && !Array.isArray(p0.impressions)) etrangere('cartes', k._id, 'provenance.impressions', false);
+        const impressionsEtrangeres = p0.impressions !== undefined && !Array.isArray(p0.impressions);
+        const sortie = impressionsEtrangeres ? [] : (p0.impressions || []).map(x => x); const index = new Map();
+        sortie.forEach((x, i) => { if (x && typeof x.k === 'string' && !index.has(x.k)) index.set(x.k, i); });
+        let changeI = false;
+        const cles = clesImpressions(k.impressions);
+        (k.impressions || []).forEach((im, idx) => {
+            const kk = cles[idx]; if (!kk) return;
+            if (kk.includes('#')) compte.clesEnDouble++;
+            const ikey = `${k._id}#${idx}`;
+            const existe = !impressionsEtrangeres && index.has(kk);
+            const cur = existe ? { ...sortie[index.get(kk)] } : { k: kk };
+            const apps = mes.filter(a => a.idx === idx && a.nomOk).map(a => a.src);
+            const desaccordNom = mes.some(a => a.idx === idx);
+            const decisions = {};
+            if (!vide(im.numero)) { const emp = empreinteValeur(im.numero); decisions.numero = apps.length ? { confirmePar: nomsSources(apps), accord: 'plein', empreinteValeur: emp } : { confirmePar: [], aReconfirmer: true, motif: desaccordNom ? 'desaccord' : 'non-couvert', empreinteValeur: emp }; }
+            if (numerique(im.total)) decisions.total = decider(L.get('impression.total\u0000' + ikey), A.get('impression.total\u0000' + ikey), im.total);
+            if (!vide(im.rarete)) decisions.rarete = decider(L.get('impression.rarete\u0000' + ikey), A.get('impression.rarete\u0000' + ikey), im.rarete);
+            let changeCet = false;
+            for (const [nom, d] of Object.entries(decisions)) {
+                confirmer('cartes', k._id, nom, kk, d);
+                const ancienne = cur[nom];
+                if (impressionsEtrangeres) { tally('impression.' + nom, d, false); continue; }
+                if (ancienne !== undefined && !formeConnue(ancienne)) { tally('impression.' + nom, d, false); etrangere('cartes', k._id, `provenance.impressions[${kk}].${nom}`, false); continue; }
+                const a = action(ancienne, d);
+                tally('impression.' + nom, d, a !== 'rien');
+                if (a === 'poser') { cur[nom] = minimale(d); changeCet = true; compte.champsAEcrire++; }
+                else if (a === 'retirer') { delete cur[nom]; changeCet = true; compte.champsRetires++; compte.champsAEcrire++; }
+            }
+            if (changeCet) {
+                changeI = true;
+                const aDesChamps = Object.keys(cur).length > 1;                                   // jamais d'entrée { k } vide
+                if (existe) sortie[index.get(kk)] = aDesChamps ? cur : null; else if (aDesChamps) { index.set(kk, sortie.length); sortie.push(cur); }
+            }
+        });
+        if (changeI) { const res = sortie.filter(Boolean); if (res.length) doc.champs['provenance.impressions'] = res; else doc.retraits.push('provenance.impressions'); }
+        if (clore('cartes', k._id, doc)) compte.cartes++;
     }
 
     for (const s of sets) {
         const etat = etatProvenance(s.provenance);
         if (etat === 'etrangere') { etrangere('sets', s._id, 'provenance', true); continue; }
-        const champs = {}; const p0 = etat === 'bulbapedia' ? s.provenance : {}; const avantN = compte.champsAEcrire;
+        const doc = { champs: {}, retraits: [] }; const p0 = etat === 'bulbapedia' ? s.provenance : {};
         const { retenus, sansOrigine } = champsDuSet(s);
         for (const ch of sansOrigine) compte.setsSansOrigine[ch] = (compte.setsSansOrigine[ch] || 0) + 1;
         for (const ch of retenus) {
             const cle = 'set.' + ch;
-            poser('sets', s._id, p0, champs, ch, decider(L.get(cle + '\u0000' + String(s._id)), A.get(cle + '\u0000' + String(s._id)), s[ch]), cle);
+            traiter('sets', s._id, p0, doc, ch, decider(L.get(cle + '\u0000' + String(s._id)), A.get(cle + '\u0000' + String(s._id)), s[ch]), cle);
         }
-        if (clore('sets', s._id, champs, compte.champsAEcrire - avantN)) compte.sets++;
+        if (clore('sets', s._id, doc)) compte.sets++;
     }
     compte.documents = ecritures.length;
-    return { ecritures, compte };
+    return { ecritures, confirmations, compte };
 }
 
 /**
- * La provenance certifie-t-elle encore LA valeur d'aujourd'hui ? Faux si le champ est « à reconfirmer », sans provenance, de forme étrangère, ou si la valeur a changé
- * depuis (l'empreinte mémorisée ne correspond plus). Pour une impression : `cle` = sa clé tirage|expansion|numéro.
+ * LE FICHIER DES CONFIRMATIONS : { version, source, genereLe, nombre, empreinte, entrees }. Il est la preuve de ce qui est confirmé (les confirmations ne vont pas en base).
+ * `empreinte` = sha256 des entrées ; le plan d'écriture référence le fichier par le sha256 de ses octets ET par cette empreinte.
  */
-function confirmationValide(doc, champ, cle) {
-    const p = doc && doc.provenance;
-    if (etatProvenance(p) !== 'bulbapedia') return false;
-    let x, valeur;
-    if (cle === undefined) { x = p[champ]; valeur = doc[champ]; }
+function construireFichierConfirmations(entrees, genereLe) {
+    return { version: 1, source: SOURCE, genereLe: genereLe.toISOString(), nombre: entrees.length, empreinte: empreinteConfirmations(entrees), entrees };
+}
+/** Le fichier est-il complet et intact ? Rend la liste des erreurs (vide = accord). */
+function verifierFichierConfirmations(f) {
+    const e = [];
+    if (!f || f.source !== SOURCE || f.version !== 1 || !Array.isArray(f.entrees)) return ['fichier des confirmations illisible (source, version ou entrées)'];
+    if (f.nombre !== f.entrees.length) e.push(`le fichier annonce ${f.nombre} confirmations et en porte ${f.entrees.length}`);
+    if (f.empreinte !== empreinteConfirmations(f.entrees)) e.push('l\'empreinte du fichier ne correspond pas à ses entrées (fichier modifié ou incomplet)');
+    return e;
+}
+
+/**
+ * La confirmation (du fichier) vaut-elle encore pour LA valeur d'aujourd'hui ? Faux si aucune confirmation, si la valeur a changé depuis (empreinte), ou si le document porte
+ * une marque « à reconfirmer » sur cette même valeur. Pour une impression : `cle` = sa clé tirage|expansion|numéro.
+ * @param {object[]} entrees  les entrées du fichier des confirmations
+ */
+function confirmationValide(entrees, collection, doc, champ, cle) {
+    const c = entrees.find(x => x.collection === collection && x._id === doc._id && x.champ === champ && x.k === cle);
+    if (!c) return false;
+    let valeur, marque;
+    const p = doc.provenance;
+    if (cle === undefined) { valeur = doc[champ]; marque = p && typeof p === 'object' ? p[champ] : undefined; }
     else {
         const i = clesImpressions(doc.impressions).indexOf(cle);
-        const item = Array.isArray(p.impressions) ? p.impressions.find(it => it && it.k === cle) : null;
-        if (i < 0 || !item) return false;
-        x = item[champ]; valeur = doc.impressions[i][champ];
+        if (i < 0) return false;
+        valeur = doc.impressions[i][champ];
+        const item = p && Array.isArray(p.impressions) ? p.impressions.find(it => it && it.k === cle) : null;
+        marque = item ? item[champ] : undefined;
     }
-    return formeConnue(x) && !x.aReconfirmer && x.empreinteValeur === empreinteValeur(valeur);
+    const emp = empreinteValeur(valeur);
+    if (formeConnue(marque) && marque.v === emp) return false;
+    return c.empreinteValeur === emp;
 }
 
 /** Les champs de documents que le planificateur LIT : le chargeur (charger-bulba.js) doit tous les projeter (une projection trop étroite se lit « absent »). */
@@ -260,19 +285,24 @@ const CHAMPS_LUS = {
     sets: ['dateSortieEn', 'dateSortieEnSource', 'dateSortieJa', 'dateSortieJaSource', 'totalImprime', 'type', 'typeSource', 'provenance'],
 };
 
-/** Applique un `$set` à chemins pointés à une COPIE d'un document (pour les bancs et la relecture à blanc). */
-function appliquer(doc, champs) {
+/** Applique un `$set` à chemins pointés, puis les retraits (`$unset`), à une COPIE d'un document (pour les bancs et la relecture à blanc). */
+function appliquer(doc, champs, retraits = []) {
     for (const [chemin, v] of Object.entries(champs)) {
         const parts = chemin.split('.'); let o = doc;
         for (const p of parts.slice(0, -1)) o = (o[p] ||= {});
         o[parts[parts.length - 1]] = v;
     }
+    for (const chemin of retraits) {
+        const parts = chemin.split('.'); let o = doc;
+        for (const p of parts.slice(0, -1)) { o = o?.[p]; if (!o) break; }
+        if (o) delete o[parts[parts.length - 1]];
+    }
     return doc;
 }
 
 // ── LA LIGNE DE COMMANDE (écrite par ce qu'elle AUTORISE).
-//   essai à blanc :  --sortie=<plan.json>  (écrit le plan et imprime son sha256)
-//   écriture      :  --ecrire --attendu=<n> --plan=<plan.json> --empreinte=<sha256 du fichier>  — `--attendu` (nombre de champs) reste obligatoire ; `--sources=` / `--variants=`
+//   essai à blanc :  --sortie=<plan.json>  (écrit le plan ET le fichier des confirmations à côté, imprime leurs sha256)
+//   écriture      :  --ecrire --attendu=<n> --plan=<plan.json> --empreinte=<sha256 du fichier de plan>  — `--attendu` (nombre de champs) reste obligatoire ; `--sources=` / `--variants=`
 //                    ne sont acceptés que s'ils sont ceux du plan ; l'écriture RECALCULE le plan et refuse s'il diffère (verifierPlanFichier).
 const OPTIONS = /^(--ecrire|--lecture-via-ecriture|--attendu=.*|--sources=.+|--variants=.+|--sortie=.+|--plan=.+|--empreinte=.*)$/;
 function analyserArguments(argv) {
@@ -306,18 +336,23 @@ const verifierRelecture = ({ ecrits, attendu, restants, modifies, documents }) =
 
 /**
  * Le plan signé : l'écriture recalcule le plan et le compare à celui de l'essai à blanc. Rend la liste des refus (vide = accord).
- * @param {{plan:object, shaFichier:string, empreinteDonnee:string, recalcul:{attendu:number, empreinteEcritures:string, entrees:Object}, options:{sources:?string, variants:?string}}} d
- *   `entrees` = sha256 des fichiers lus (index des sources, variantes, table d'alias) ; `options` = ce que la ligne de commande de l'écriture donne (null = non donné).
+ * @param {{plan:object, shaFichier:string, empreinteDonnee:string, recalcul:{attendu:number, empreinteEcritures:string, empreinteConfirmations:string, entrees:Object},
+ *          confirmationsFichier:{sha256:string, empreinteInterne:string}, options:{sources:?string, variants:?string}}} d
+ *   `entrees` = sha256 des fichiers lus (index des sources, variantes, table d'alias) ; `confirmationsFichier` = le fichier des confirmations tel qu'il est LU sur disque
+ *   (sha256 de ses octets, empreinte écrite dedans) ; `options` = ce que la ligne de commande de l'écriture donne (null = non donné).
  */
-function verifierPlanFichier({ plan, shaFichier, empreinteDonnee, recalcul, options }) {
+function verifierPlanFichier({ plan, shaFichier, empreinteDonnee, recalcul, confirmationsFichier, options }) {
     const e = [];
     if (shaFichier !== empreinteDonnee) e.push('l\'empreinte donnée n\'est pas le sha256 du fichier de plan (fichier modifié ou mauvaise empreinte)');
     if (plan.attendu !== recalcul.attendu) e.push(`le plan recalculé écrirait ${recalcul.attendu} champs, celui de l'essai à blanc ${plan.attendu}`);
     if (plan.empreinteEcritures !== recalcul.empreinteEcritures) e.push('le contenu des écritures recalculées diffère de celui du plan (les données ont changé depuis l\'essai à blanc)');
+    if (plan.empreinteConfirmations !== recalcul.empreinteConfirmations) e.push('les confirmations recalculées diffèrent de celles du plan (les données ont changé depuis l\'essai à blanc)');
+    if (!confirmationsFichier || confirmationsFichier.sha256 !== (plan.confirmations || {}).sha256) e.push('le fichier des confirmations n\'est plus celui du plan (sha256 des octets)');
+    else if (confirmationsFichier.empreinteInterne !== plan.empreinteConfirmations) e.push('le fichier des confirmations porte une autre empreinte que celle du plan');
     if (canon(plan.entrees) !== canon(recalcul.entrees)) e.push('un fichier d\'entrée (index des sources, variantes, table d\'alias) n\'est plus celui du plan');
     for (const o of ['sources', 'variants']) if (options && options[o] != null && options[o] !== (plan.options || {})[o]) e.push(`--${o}=${options[o]} n'est pas celui du plan (${(plan.options || {})[o] ?? 'défaut'})`);
     return e;
 }
 
-module.exports = { planifierProvenance, appliquer, decider, fusionner, champsDuSet, confirmationValide, clesImpressions, empreinteValeur, empreintePlan, verifierPlanFichier,
-    analyserArguments, verifierPlan, verifierRelecture, formeConnue, CHAMPS_LUS, ORIGINE_SET, NOMS };
+module.exports = { planifierProvenance, appliquer, decider, champsDuSet, confirmationValide, clesImpressions, empreinteValeur, empreintePlan, empreinteConfirmations, construireFichierConfirmations,
+    verifierFichierConfirmations, verifierPlanFichier, analyserArguments, verifierPlan, verifierRelecture, formeConnue, CHAMPS_LUS, ORIGINE_SET, NOMS };
