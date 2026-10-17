@@ -71,6 +71,15 @@ async function ouvrirConnexions(options = {}) {
         await cartes.close();
         arret(`le cluster connecté porte ${bases.filter(b => b === BASE_PRODUCTION || b === 'test_scratch').join(' et ')} : c'est la PRODUCTION.`);
     }
+    // GARDE-ATLAS (2026-10-18) : à 90 % de 512 Mo, aucune écriture non essentielle. Les imports Cardmarket traversent par
+    // le drapeau `essentiel` nommé + `fichier` (liste fermée, garde-taille-atlas.js). `lectureSeule: true` = outil qui n'écrit pas.
+    // « Je ne sais pas mesurer » BLOQUE (garde-taille-atlas.js). La production n'est jamais écrite ici : seule la grappe `cartes` est mesurée.
+    if (!options.lectureSeule) {
+        const T = require('./garde-taille-atlas');
+        const v = await T.verifierEcriture({ client: cartes.getClient?.(), grappe: 'cartes', noms: bases, estimationMo: options.estimationMo ?? 0, essentiel: options.essentiel, fichier: options.fichier });
+        if (!v.autorise) { await cartes.close(); arret(`GARDE-ATLAS (grappe cartes) — ${v.raison}.`); }
+        if (v.niveau === 'alerte') console.log(`⚠️  GARDE-ATLAS : ${v.raison}`);
+    }
     const prod = options.production === false ? null : await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE_PRODUCTION }).asPromise();
     console.log(`🗄️  cible : "${reelle}" sur ${cartes.host} (écriture)${prod ? `  ·  production : "${prod.db.databaseName}" sur ${prod.host} (LECTURE SEULE)` : ''}`);
     return {

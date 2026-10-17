@@ -51,7 +51,7 @@ async function principal() {
     fs.mkdirSync(DOSSIER_JOURNAUX, { recursive: true });
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     // la base `cartes` seule (là où vit `collecte_images_etat`) ; l'écriture en production est faite par les scripts d'import eux-mêmes (--base=test --confirmer-production)
-    const { cartes, fermer } = await ouvrirConnexions({ production: false });
+    const { cartes, fermer } = await ouvrirConnexions({ production: false, essentiel: 'import-cardmarket', fichier: __filename });   // GARDE-ATLAS : le journal des imports est essentiel, jamais bloqué
     try {
         const r = await passe({ E: cartes.db.collection('collecte_images_etat'), journal });
         journal.log(`fin de passe : ${r.etat}`);

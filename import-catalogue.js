@@ -72,7 +72,7 @@ async function main() {
     console.log("Connexion à MongoDB...");
     // Base nommée explicitement, sinon refus (voir mongo-connexion.js) : ce script
     // ÉCRIT, et la base de production s'appelle `test`.
-    await connecterMongo({ script: 'import-catalogue.js', ecrit: true, confirmationProduction: true });
+    await connecterMongo({ script: 'import-catalogue.js', ecrit: true, confirmationProduction: true, essentiel: 'import-cardmarket', fichier: __filename });   // GARDE-ATLAS : un import est essentiel, jamais bloqué
     console.log("✅ Connecté.");
 
     console.log(`Lecture de ${cheminFichier}...`);
