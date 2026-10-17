@@ -41,6 +41,7 @@ const { ligne, TABLE } = require('./collecte-cartes/table-sets');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
@@ -151,7 +152,7 @@ async function joindreImagesTcgdex(M, slug, images, { langue, LANGUE }) {
     for (const [carteId, ims] of parCarte) {
         const numeros = ims.map(im => im.numero);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — sinon un rejeu (pull puis push) l'effacerait
-        const toutes = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() }));
+        const toutes = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() }));
         // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place à ce scan — la règle est celle du module
         for (const e of toutes) basseDefRemplacees += await remplacerBasseDefinition(M, carteId, e);
         const avant = await M.Carte.findById(carteId).select('images').lean();
@@ -235,7 +236,7 @@ async function collecterSet(unite, M, { verrou }) {
                         preuve: `TCGdex ${p.tcg.id} : numéro ${p.numero}, nom « ${p.tcg.name} » en témoin`, urlOriginal: url,
                         wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
-                        langue: LANGUE.langue, languePreuve: LANGUE.preuve, attribution: 'TCGdex', telechargeLe: new Date(), etat: 'ok',
+                        langue: LANGUE.langue, languePreuve: LANGUE.preuve, attribution: 'TCGdex', telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: url, collecteLe: new Date() }),
                         // un fichier NEUF (ou changé) d'une langue sans témoin du nom repart « à contrôler » : un verdict ne vaut que pour
                         // le fichier qu'il a regardé
                         ...(CONTROLE_PAR_IMAGE.has(langue) ? { controle: { etat: 'a-controler', methode: 'dense', motif: `le nom ${langue} ne se compare pas : contrôle par l'image (testeur, 2026-10-03)`, le: new Date() } } : {})

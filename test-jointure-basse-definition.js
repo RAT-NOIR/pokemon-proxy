@@ -85,7 +85,7 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
     }
     {
         const B = fausseBase(); const ims = semerBulba(B, [TPC({ basseDefinition: undefined })], [{ ...DOC_TPC(), basseDefinition: undefined }]);
-        delete B.cols.cartes.get(1).images[0].basseDefinition;
+        delete B.cols.cartes.get(1).images[0].basseDefinition; B.cols.cartes.get(1).images[0].w = 600;   // (une image saine, 600 px : face à une équivalente (600 px) elle ne bouge pas — doctrine 2026-10-17, article 4)
         await joindreImagesBulba(B.M, SLUG, ims);
         verifier('BULBAPEDIA (b) une entrée NON marquée au même (set, numéro, langue) → rien ne bouge, son document reste `ok`', [imagesDe(B), B.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat], [['tpc-asie:001:id', 'bulbapedia:001:id'], 'ok']);
     }
@@ -131,7 +131,7 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
     }
     {
         const B = fausseBase(); const ims = semerTcg(B, [TPC()], [{ ...DOC_TPC(), basseDefinition: undefined }]);
-        delete B.cols.cartes.get(1).images[0].basseDefinition;
+        delete B.cols.cartes.get(1).images[0].basseDefinition; B.cols.cartes.get(1).images[0].w = 600;   // (une image saine, 600 px : face à une équivalente (600 px) elle ne bouge pas — doctrine 2026-10-17, article 4)
         await joindreImagesTcgdex(B.M, SLUG, ims, { langue: 'id', LANGUE: LANG });
         verifier('TCGDEX (b) une entrée NON marquée au même (set, numéro, langue) → rien ne bouge, son document reste `ok`', [imagesDe(B), B.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat], [['tpc-asie:001:id', 'tcgdex:001:id'], 'ok']);
     }
@@ -174,7 +174,7 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
     }
     {
         const B = fausseBase(); semerAop(B, [TPCJA({ basseDefinition: undefined })], [{ ...DOC_TPCJA(), basseDefinition: undefined }]);
-        delete B.cols.cartes.get(1).images[0].basseDefinition;
+        delete B.cols.cartes.get(1).images[0].basseDefinition; B.cols.cartes.get(1).images[0].w = 600;   // (une image saine, 600 px : face à une équivalente (600 px) elle ne bouge pas — doctrine 2026-10-17, article 4)
         await joindre(B);
         verifier('ARTOFPKM (b) une entrée NON marquée au même (set, numéro, langue) → son DOCUMENT reste `ok` (le $pull {set, numero} d\'artofpkm retire l\'entrée, geste d\'AVANT, inchangé)',
             [B.cols.images.get('doc:pokemon-card-com/Set-Banc/001-1-ja.webp').etat], ['ok']);
@@ -207,6 +207,42 @@ const silencieux = async f => { const l = console.log, w = console.warn; console
         const B = fausseBase(); semerAop(B, [], [], aop());
         const r = await joindre(B);
         verifier('le banc ne tourne pas à vide : une image jointe, une carte couverte, concordance', [r.rattachements, r.cartesCouvertes, r.concordance], [1, 1, true]);
+    }
+
+    // ════════════════ ➕ DOCTRINE DE COLLECTE (2026-10-17) : traçabilité commune + remplacement « nettement plus grande » / « empruntée », par la MÊME fonction ════════════════
+    const trace = e => [e.retirable, typeof e.urlOriginal === 'string' && e.urlOriginal.length > 0, e.collecteLe instanceof Date];
+    const SAIN = (o = {}) => ({ set: SLUG, source: 'tpc-asie', numero: '001', cleR2: 'tpc-asie/Set-Banc/001-1-id.webp', w: 400, wOriginal: 400, langue: 'id', ...o });
+    const DOC_SAIN = (o = {}) => ({ ...DOC_TPC(), basseDefinition: undefined, wOriginal: 400, w: 400, ...o });
+    {
+        const B = fausseBase(); const ims = semerBulba(B, [], [], bulba());
+        await joindreImagesBulba(B.M, SLUG, ims);
+        verifier('TRAÇABILITÉ Bulbapedia : l\'entrée porte retirable, urlOriginal, collecteLe', trace(B.cols.cartes.get(1).images[0]), [true, true, true]);
+        const B2 = fausseBase(); const ims2 = semerBulba(B2, [], [], bulba({ urlOriginal: undefined }));
+        let err = null; try { await joindreImagesBulba(B2.M, SLUG, ims2); } catch (e) { err = e.message; }
+        verifier('   une image SANS adresse d\'origine : la jointure LÈVE, rien n\'est posé', [/traçabilité/.test(err || ''), (B2.cols.cartes.get(1).images || []).length], [true, 0]);
+    }
+    {
+        const B = fausseBase(); const ims = semerTcg(B, [], [], tcg());
+        await joindreImagesTcgdex(B.M, SLUG, ims, { langue: 'id', LANGUE: LANG });
+        verifier('TRAÇABILITÉ TCGdex : l\'entrée porte retirable, urlOriginal, collecteLe', trace(B.cols.cartes.get(1).images[0]), [true, true, true]);
+        let err = null; const B2 = fausseBase(); const ims2 = semerTcg(B2, [], [], tcg({ urlOriginal: undefined }));
+        try { await joindreImagesTcgdex(B2.M, SLUG, ims2, { langue: 'id', LANGUE: LANG }); } catch (e) { err = e.message; }
+        verifier('   une image SANS adresse d\'origine : la jointure LÈVE', /traçabilité/.test(err || ''), true);
+        // nettement plus grande : 400 → 600 (1,5 ×) remplace ; 400 → 599 non ; une saine face à une équivalente (600 / 600) ne bouge pas
+        const essai = async (wOrig, wDoc) => { const Bx = fausseBase(); const imsx = semerTcg(Bx, [SAIN()], [DOC_SAIN()], tcg({ wOriginal: wDoc, w: Math.min(wDoc, 700) })); await joindreImagesTcgdex(Bx.M, SLUG, imsx, { langue: 'id', LANGUE: LANG }); return [imagesDe(Bx), Bx.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat]; };
+        verifier('TCGDEX remplacement : 1,5 × (400 → 600) remplace l\'image saine ; 1,49 × (400 → 596) la laisse (l\'ancienne reste `ok`, la nouvelle est écartée comme avant)',
+            [(await essai(400, 600))[1], (await essai(400, 596))[1]], ['remplace', 'ok']);
+        const Be = fausseBase(); const imse = semerTcg(Be, [SAIN({ w: 600, wOriginal: 600, imageEmprunteeTirage: true })], [DOC_SAIN({ wOriginal: 600, w: 600 })], tcg());
+        await joindreImagesTcgdex(Be.M, SLUG, imse, { langue: 'id', LANGUE: LANG });
+        verifier('TCGDEX remplacement : une entrée EMPRUNTÉE (même largeur) est remplacée par l\'image du tirage', [imagesDe(Be), Be.cols.images.get('doc:tpc-asie/Set-Banc/001-1-id.webp').etat], [['tcgdex:001:id'], 'remplace']);
+    }
+    {
+        const B = fausseBase(); semerAop(B, [], [], aop());
+        await joindre(B);
+        verifier('TRAÇABILITÉ artofpkm : l\'entrée porte retirable, urlOriginal, collecteLe', trace(B.cols.cartes.get(1).images[0]), [true, true, true]);
+        const Bx = fausseBase(); semerAop(Bx, [SAIN({ source: 'pokemon-card-com', langue: 'ja', cleR2: 'pokemon-card-com/x.webp' })], [{ ...DOC_SAIN(), source: 'pokemon-card-com', langue: 'ja', cleR2: 'pokemon-card-com/x.webp', _id: 'doc:x' }], aop({ wOriginal: 600, w: 600 }));
+        await joindre(Bx);
+        verifier('ARTOFPKM remplacement : 400 → 600 (1,5 ×) remplace l\'image saine d\'une autre source (même set, numéro, langue)', [Bx.cols.images.get('doc:x').etat, imagesDe(Bx)], ['remplace', ['artofpkm:001:ja']]);
     }
 
     console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);

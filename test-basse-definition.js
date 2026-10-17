@@ -25,7 +25,7 @@ verifier('marqueDe : largeur inconnue → pas de marque (inconnu n\'est pas bas)
 // ── la règle de remplacement (pure) ────────────────────────────────────────────────────────────────────────────────
 const basse = (o = {}) => ({ set: 'S', source: 'tpc-asie', numero: '001', cleR2: 'tpc-asie/S/001-1-id.webp', w: 300, langue: 'id', basseDefinition: true, ...o });
 const bonne = (o = {}) => ({ set: 'S', source: 'tcgdex', numero: '001', cleR2: 'tcgdex/S/001-1.webp', w: 600, langue: 'id', ...o });
-const rem = (images, cand) => B.entreesARemplacer(images, cand).map(e => e.cleR2);
+const rem = (images, cand, o) => B.entreesARemplacer(images, cand, o).map(e => e.cleR2);
 verifier('une entrée marquée + une candidate non marquée, même set, même numéro, même langue → l\'entrée marquée est à remplacer', rem([basse()], bonne()), ['tpc-asie/S/001-1-id.webp']);
 verifier('le numéro se compare par la clé de la jointure (« 001 » = « 1 »)', rem([basse({ numero: '001' })], bonne({ numero: '1' })), ['tpc-asie/S/001-1-id.webp']);
 verifier('un autre numéro → rien', rem([basse()], bonne({ numero: '002' })), []);
@@ -46,6 +46,25 @@ verifier('candidate absente → rien, sans exception', [rem([basse()], null), re
 // ── ➕ 2026-10-17 (BASSE-DEF) : le PLAN d'un collecteur « combleur » et l'ARBITRAGE de sa jointure — la même règle (entreesARemplacer), jamais une copie ─────────────
 const carteAvec = images => ({ _id: 7, nomEn: 'X', images });
 const sr = (carte, o = {}) => (B.sansRemplacables(carte, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex', ...o }) ?? {}).images?.map(e => e.cleR2);
+// ── ➕ 2026-10-17 (doctrine de collecte, article 4) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée, ou si la nouvelle est la même impression et
+// nettement plus grande. Une image correcte au-dessus du seuil n'est jamais remplacée par une image équivalente. » — par la MÊME fonction (entreesARemplacer) ──────────────────────────────
+verifier('RATIO_NETTEMENT_PLUS_GRANDE = 1,5 (constante nommée, exportée)', B.RATIO_NETTEMENT_PLUS_GRANDE, 1.5);
+const sain = (o = {}) => ({ set: 'S', source: 'artofpkm', numero: '001', cleR2: 'artofpkm/S/001.webp', w: 400, wOriginal: 400, langue: 'id', ...o });
+const cand = (w, o = {}) => bonne({ w, wOriginal: w, ...o });
+verifier('EMPRUNTÉE : une entrée `imageEmprunteeTirage` (au-dessus du seuil, non marquée) est remplacée par une image propre de même set / numéro / langue', rem([sain({ w: 600, wOriginal: 600, imageEmprunteeTirage: true })], cand(600)), ['artofpkm/S/001.webp']);
+verifier('   une entrée empruntée d\'une AUTRE langue / d\'un autre numéro ne l\'est pas', [rem([sain({ w: 600, imageEmprunteeTirage: true, langue: 'th' })], cand(600)), rem([sain({ w: 600, imageEmprunteeTirage: true, numero: '002' })], cand(600))], [[], []]);
+verifier('   et une candidate MARQUÉE ne remplace jamais une empruntée', rem([sain({ w: 600, imageEmprunteeTirage: true })], cand(300, { basseDefinition: true })), []);
+verifier('FAUSSE : une entrée listée dans la table fermée (source|cleR2) est remplacée, même au-dessus du seuil et sans être plus grande', rem([sain({ w: 600, wOriginal: 600 })], cand(600), { fausses: new Set(['artofpkm|artofpkm/S/001.webp']) }), ['artofpkm/S/001.webp']);
+verifier('   la table livrée est FERMÉE et vide (rien n\'est inventé : une entrée n\'est « fausse » que sur décision écrite)', [Array.isArray(require('./collecte-cartes/corrections-images').IMAGES_DECLAREES_FAUSSES), require('./collecte-cartes/corrections-images').IMAGES_DECLAREES_FAUSSES.length, Object.isFrozen(require('./collecte-cartes/corrections-images').IMAGES_DECLAREES_FAUSSES)], [true, 0, true]);
+verifier('NETTEMENT PLUS GRANDE : 1,49 × refusé (400 → 596), 1,5 × admis (400 → 600), au-delà admis (400 → 700)', [rem([sain()], cand(596)), rem([sain()], cand(599)), rem([sain()], cand(600)), rem([sain()], cand(700))], [[], [], ['artofpkm/S/001.webp'], ['artofpkm/S/001.webp']]);
+verifier('   à la limite basse : 1,49 × (240 → 358) refusé, 1,5 × (240 → 360) admis', [rem([sain({ w: 240, wOriginal: 240 })], cand(358)), rem([sain({ w: 240, wOriginal: 240 })], cand(360))], [[], ['artofpkm/S/001.webp']]);
+verifier('JAMAIS une image correcte au-dessus du seuil par une équivalente : 600 → 600, 500 → 700 (1,4 ×), 400 → 450', [rem([sain({ w: 600, wOriginal: 600 })], cand(600)), rem([sain({ w: 500, wOriginal: 500 })], cand(700)), rem([sain()], cand(450))], [[], [], []]);
+verifier('   largeur de l\'entrée INCONNUE ou plafonnée au servi (700) : on ne sait pas qu\'elle est plus petite → rien', [rem([sain({ w: undefined, wOriginal: undefined })], cand(700)), rem([sain({ w: 700, wOriginal: undefined })], cand(700))], [[], []]);
+verifier('   la largeur de la candidate est celle de l\'ORIGINAL (`wOriginal`), pas du fichier servi (700 plafonné)', [rem([sain()], bonne({ w: 700, wOriginal: 1000 })), rem([sain()], bonne({ w: 700, wOriginal: 500 }))], [['artofpkm/S/001.webp'], []]);
+verifier('   « plus grande » exige AUSSI la même impression : autre langue, autre numéro, autre set → rien', [rem([sain({ langue: 'th' })], cand(700)), rem([sain({ numero: '002' })], cand(700)), rem([sain({ set: 'A' })], cand(700))], [[], [], []]);
+verifier('   une candidate de langue inconnue ne remplace rien, même 3 × plus grande', rem([sain({ w: 200, wOriginal: 200 })], cand(700, { langue: null })), []);
+verifier('   sansRemplacables : une entrée nettement plus petite que l\'image annoncée (largeur connue du plan) n\'est pas « servie »', [sr(carteAvec([sain()]), { langue: 'id', wOriginal: 700 }), sr(carteAvec([sain()]), { langue: 'id', wOriginal: 500 })], [[], ['artofpkm/S/001.webp']]);
+
 verifier('sansRemplacables : une entrée marquée d\'une AUTRE source, même set/numéro/langue, ne compte pas comme « servie »', sr(carteAvec([basse()])), []);
 verifier('   les autres entrées restent (non marquée, autre numéro, autre set, autre langue)', sr(carteAvec([basse(), bonne({ cleR2: 'n.webp', source: 'artofpkm' }), basse({ numero: '2', cleR2: 'b2' }), basse({ set: 'A', cleR2: 'b3' }), basse({ langue: 'th', cleR2: 'b4' })])), ['n.webp', 'b2', 'b3', 'b4']);
 verifier('   sa PROPRE entrée marquée reste : la même source redonnerait le même fichier (aucun téléchargement pour rien)', sr(carteAvec([basse({ source: 'tcgdex', cleR2: 'mienne' })])), ['mienne']);
@@ -96,7 +115,7 @@ function fauxModeles(carte, docs) {
     verifier('l\'entrée marquée sort de cartes.images ; les autres (autre numéro, autre set) restent', carte.images.map(e => `${e.set}:${e.source}:${e.numero}`), ['S:tcgdex:002', 'Autre:tpc-asie:001']);
     verifier('le document `images` RESTE, marqué remplacé, avec par quoi', [docs[0].etat, docs[0].remplacePar, docs[0].remplaceLe?.toISOString?.()], ['remplace', { source: 'tcgdex', cleR2: 'tcgdex/S/001-1.webp' }, '2026-10-12T10:00:00.000Z']);
     verifier('le document d\'un autre set n\'est pas touché', docs[1].etat, 'ok');
-    verifier('le $pull est précis : il porte set, source, cleR2 ET la marque (jamais une entrée non marquée)', journal.find(j => j[0] === 'carte')[2].$pull.images, { set: 'S', source: 'tpc-asie', cleR2: 'tpc-asie/S/001-1-id.webp', basseDefinition: true });
+    verifier('le $pull est précis : il porte set, source, cleR2 ET la marque (jamais une entrée non marquée)', journal.find(j => j[0] === 'carte')[2].$pull.images, { set: 'S', source: 'tpc-asie', cleR2: 'tpc-asie/S/001-1-id.webp' });
     const n2 = await B.remplacerBasseDefinition(M, 1, bonne(), { maintenant });
     verifier('rejouée : rien à remplacer, aucune écriture de plus', [n2, journal.length], [0, 2]);
     const avant = JSON.stringify(carte);

@@ -53,6 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { retirerChezLesAutres, preuveDeCorrection, preuveEstUneCorrection } = require('./collecte-cartes/retirer-chez-les-autres');
@@ -338,7 +339,7 @@ async function collecterSet(code, M, dossierRapport) {
                         source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, cleR2,
                         sha256: img.sha256, octets: img.octets, w: img.w, h: img.h, fmt: img.fmt,
                         numero: faits.numero, total: faits.total, nomEn: faits.nomEn, nomJa: faits.nomJa, illustrateur: faits.illustrateur, rarete: faits.rarete,
-                        setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok',
+                        setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: e.original, collecteLe: new Date() }),
                         langue: LANGUE.langue, languePreuve: LANGUE.preuve,
                         ...(deja?.cleCdn && deja.cleCdn !== e.cleCdn ? { cleCdnPrecedente: deja.cleCdn } : {})
                     }
@@ -601,7 +602,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
             // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
             // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
             // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur

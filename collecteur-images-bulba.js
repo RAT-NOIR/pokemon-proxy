@@ -42,6 +42,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { numerosServisParRemplacement } = require('./collecte-cartes/jumeau-en');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
 const SOURCE = 'bulbapedia';
@@ -150,7 +151,7 @@ async function joindreImagesBulba(M, slug, images) {
         const servisParTcgdex = numerosServisParRemplacement(avant?.images, slug);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — un rejeu fait $pull puis $push d'une entrée neuve,
         // et sans elle la marque posée par le rattrapage serait effacée (le site agrandirait l'image)
-        const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), jointeLe: new Date() }));
+        const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() }));
         // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place — règle du module, langue connue exigée
         for (const e of entrees) await remplacerBasseDefinition(M, carteId, e);
         await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
@@ -228,7 +229,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
                         fichier: p.fichier, page: p.page, preuve: p.preuve, urlOriginal: info.url, langue: L.langue, languePreuve: L.preuve,
                         wOriginal: info.w, hOriginal: info.h, sha1Original: sha1, octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
-                        attribution: 'Bulbapedia', telechargeLe: new Date(), etat: 'ok'
+                        attribution: 'Bulbapedia', telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: info.url, collecteLe: new Date() })
                     }, $unset: { erreur: 1 }
                 }, { upsert: true });
                 telecharges++;

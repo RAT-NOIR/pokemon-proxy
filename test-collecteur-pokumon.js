@@ -147,6 +147,7 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
         ['pokumon', 'en', '© Pokémon / The Pokémon Company', 'pokumon-2026-10', 'ok', RAW.kricketune._embedded['wp:featuredmedia'][0].source_url, 75661, true]);
     verifier('l\'entrée de la carte : mention, lot, langue, attribution, source, numéro, vignette', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source, e.numero, /^vignettes\/pokumon\//.test(e.vignette?.cleR2 || '')])(B.col('cartes').get(100).images[0]),
         ['© Pokémon / The Pokémon Company', 'pokumon-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokumon', '006', true]);
+    verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.collecteLe instanceof Date, B.col('cartes').get(100).images[0].retirable, B.col('cartes').get(100).images[0].urlOriginal === im.urlOriginal && im.urlOriginal.length > 0, B.col('cartes').get(100).images[0].collecteLe instanceof Date], [true, true, true, true, true]);
     verifier('SEUIL : un original de 200 px est écarté, COMPTÉ, écrit « trop-petit » avec la largeur et le seuil ; la carte ne reçoit rien',
         [B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.etat, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.wOriginal, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.seuilApplique, B.col('cartes').get(102).images.length, R.resultats[0].tropPetits],
         ['trop-petit', 200, 350, 0, 1]);

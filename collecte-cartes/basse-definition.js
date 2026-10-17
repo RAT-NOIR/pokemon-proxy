@@ -31,29 +31,50 @@ function marqueDe(doc) {
     return estBasseDefinition(largeurOriginaleDe(doc)) ? { basseDefinition: true } : {};
 }
 
-/** Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. */
-function entreesARemplacer(images, candidat) {
+// ➕ 2026-10-17, DOCTRINE DE COLLECTE du testeur (article 4) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée, ou si la nouvelle est la même impression
+// et nettement plus grande. Une image correcte au-dessus du seuil n'est jamais remplacée par une image équivalente. Cela s'applique à toutes les sources. »
+// « Nettement » = au moins RATIO_NETTEMENT_PLUS_GRANDE fois la largeur de l'ORIGINAL de l'image actuelle (400 → 600 admis, 400 → 599 refusé). Une largeur inconnue ne prouve rien : rien ne sort.
+const RATIO_NETTEMENT_PLUS_GRANDE = 1.5;
+// « fausse » : une entrée de la table fermée de corrections (`corrections-images.js`, clés `source|cleR2`) — jamais déduite.
+const { IMAGES_DECLAREES_FAUSSES } = require('./corrections-images');
+const FAUSSES = new Set(IMAGES_DECLAREES_FAUSSES);
+
+const largeurDeCandidate = c => {
+    const w = typeof c?.wOriginal === 'number' && c.wOriginal > 0 ? c.wOriginal : (typeof c?.w === 'number' && c.w > 0 ? c.w : null);
+    return w;
+};
+
+/**
+ * Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. Une entrée de MÊME impression (set, numéro, langue connue et égale) sort si elle est : de basse
+ * définition (`basseDefinition`), empruntée à un autre tirage (`imageEmprunteeTirage`), déclarée fausse (table fermée), ou nettement plus petite que la candidate (RATIO_NETTEMENT_PLUS_GRANDE).
+ * Tout le reste ne bouge pas — en particulier une image correcte au-dessus du seuil face à une équivalente.
+ */
+function entreesARemplacer(images, candidat, { fausses = FAUSSES } = {}) {
     if (!Array.isArray(images) || !candidat || typeof candidat !== 'object') return [];
     if (candidat.basseDefinition === true || estBasseDefinition(largeurOriginaleDe(candidat))) return [];      // une image basse ne remplace jamais
     if (typeof candidat.langue !== 'string' || !candidat.langue) return [];                                     // langue inconnue : on ne remplace pas
     const numero = cleNumero(candidat.numero);
-    return images.filter(e => e && e.basseDefinition === true
-        && e.set === candidat.set
-        && cleNumero(e.numero) === numero
-        && typeof e.langue === 'string' && e.langue === candidat.langue
-        && !(e.source === candidat.source && e.cleR2 === candidat.cleR2));
+    const wC = largeurDeCandidate(candidat);
+    return images.filter(e => {
+        if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
+        if (!(typeof e.langue === 'string' && e.langue === candidat.langue)) return false;
+        if (e.source === candidat.source && e.cleR2 === candidat.cleR2) return false;
+        if (e.basseDefinition === true || e.imageEmprunteeTirage === true || fausses.has(`${e.source}|${e.cleR2}`)) return true;
+        const wE = largeurOriginaleDe(e);
+        return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE;
+    });
 }
 
 /**
- * Applique le remplacement pour UNE candidate sur UNE carte : retire de `cartes.images` les entrées marquées qu'elle remplace (le `$pull` porte
- * la marque : il ne peut jamais retirer une entrée non marquée), et marque leurs documents `images` « remplace ». Rend le nombre d'entrées remplacées.
+ * Applique le remplacement pour UNE candidate sur UNE carte : retire de `cartes.images` les entrées que `entreesARemplacer` désigne (le `$pull` porte
+ * (set, source, cleR2) : UNE entrée, jamais plus), et marque leurs documents `images` « remplace ». Rend le nombre d'entrées remplacées.
  * À appeler AVANT de poser la candidate. `M` : les modèles de la base `cartes` (Carte, Image).
  */
 async function remplacerBasseDefinition(M, carteId, candidat, { maintenant = new Date() } = {}) {
     const c = await M.Carte.findById(carteId).select('images').lean();
     const aRemplacer = entreesARemplacer(c?.images, candidat);
     for (const e of aRemplacer) {
-        await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: e.set, source: e.source, cleR2: e.cleR2, basseDefinition: true } } });
+        await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: e.set, source: e.source, cleR2: e.cleR2 } } });   // (set, source, cleR2) désigne UNE entrée
         await M.Image.updateOne({ source: e.source, set: e.set, cleR2: e.cleR2, etat: 'ok' }, { $set: { etat: 'remplace', remplacePar: { source: candidat.source, cleR2: candidat.cleR2 }, remplaceLe: maintenant } });
     }
     return aRemplacer.length;
@@ -99,4 +120,4 @@ function arbitrer(autres, candidat, servi) {
     return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer };
+module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE };

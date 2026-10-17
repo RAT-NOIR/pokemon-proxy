@@ -28,6 +28,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { marqueDe, arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
@@ -258,7 +259,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est le site
                         langueSource: L.langue, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: site, langueSource: L.langue })),
-                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
+                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok', ...marque, ...champsTracabilite({ urlOriginal: url, collecteLe: new Date() })
                     }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
                 }, { upsert: true });
                 telecharges++;
@@ -288,7 +289,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 if (!c) { cartesAbsentes++; continue; }            // une image sans sa carte : comptée, elle fait tomber la concordance
                 const autres = (c.images || []).filter(e => !(e.source === site && e.set === slug && e.numero === im.numero));
                 const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
-                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() };
+                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                 // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
                 const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero));
                 if (arb.servie) {

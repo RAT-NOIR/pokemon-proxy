@@ -24,6 +24,7 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
@@ -266,7 +267,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                     // ➕ BASSE-DEF : la marque d'après la largeur de l'ORIGINAL (200 à 349 px : basseDefinition: true) ; une marque qui ne décrit plus l'image (refournie plus large) s'efface du document
                     ...marqueDe({ wOriginal: o.meta.width }),
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
-                    attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok'
+                    attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: p.url, collecteLe: new Date() })
                 }, $unset: { erreur: 1, ...(marqueDe({ wOriginal: o.meta.width }).basseDefinition ? {} : { basseDefinition: 1 }) }
             }, { upsert: true });
             telecharges++;
@@ -283,7 +284,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...marqueDe(im),
+                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}),
                     // PP-HOLO : le champ explicite suit l'image (une image Prize Packs ordinaire n'a NI l'un NI l'autre)
                     ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}) };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place

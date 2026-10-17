@@ -101,6 +101,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     const c1 = B.col('cartes').get(1), c2 = B.col('cartes').get(2);
     verifier('la carte reçoit SON visuel, et garde celui de l\'autre set', c1.images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `tpc-asie:${SLUG}:001`]);
     verifier('   l\'entrée porte la mention, le lot, la langue', [c1.images[1].mention, c1.images[1].lot, c1.images[1].langue, c1.images[1].attribution], ['© Pokémon / The Pokémon Company', 'tpc-2026-10', 'id', '© Pokémon / The Pokémon Company']);
+    verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.urlOriginal, im.collecteLe instanceof Date, c1.images[1].retirable, c1.images[1].urlOriginal, c1.images[1].collecteLe instanceof Date], [true, 'https://asia.pokemon-card.com/id/card-img/id00007125.png', true, true, 'https://asia.pokemon-card.com/id/card-img/id00007125.png', true]);
     verifier('une carte déjà servie à ce numéro par une autre source : intacte (additif)', c2.images.map(e => `${e.source}:${e.numero}`), ['tcgdex:002']);
     verifier('le bilan du set : 1 prouvé, garde verte', [B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.prouves, B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.garde?.ok], [1, true]);
     verifier('la fiche lue est gardée (`tpc_fiches`)', [...B.col('tpc_fiches').keys()], ['tpc-asie/id/7125']);
@@ -148,6 +149,15 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
           const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(MARQ)); Bx.col('images').set('mq', { _id: 'mq', source: 'pikaqian', set: SLUG, carteId: 1, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return normal(url); });
           const r = await lancer(Bx, trX);
           verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (même arbitrage), garde verte', [des(Bx), Bx.col('images').get('mq')?.etat, r.b.garde?.ok], [['tpc-asie:false'], 'remplace', true]); }
+        // ➕ doctrine 2026-10-17 : « nettement plus grande » (1,5 ×) et « empruntée », à la jointure (course : l'entrée est posée après le plan)
+        const course = async (entree, wDoc = 734) => { const Bx = fausseBase(); semer(Bx);
+            const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(entree)); Bx.col('images').set('mq', { _id: 'mq', source: entree.source, set: SLUG, carteId: 1, cleR2: entree.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: entree.w }); } return normal(url); });
+            const r = await lancer(Bx, trX); return { Bx, r }; };
+        const SAINE = w => ({ set: SLUG, source: 'pikaqian', numero: '001', cleR2: 'pikaqian/saine.webp', langue: 'id', w, wOriginal: w });
+        { const { Bx } = await course(SAINE(480)); verifier('NETTEMENT PLUS GRANDE : 734 px face à une image saine de 480 px (1,53 ×) → remplacée', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
+        { const { Bx } = await course(SAINE(500)); verifier('   734 px face à 500 px (1,47 ×) → l\'image saine reste (équivalente), la nôtre cède', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
+        { const { Bx } = await course(SAINE(734)); verifier('   JAMAIS une image correcte au-dessus du seuil par une équivalente : 734 face à 734 → rien', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
+        { const { Bx } = await course({ ...SAINE(734), imageEmprunteeTirage: true }); verifier('EMPRUNTÉE : une entrée `imageEmprunteeTirage` (même largeur) est remplacée par l\'image du tirage', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
     }
 
     // ── 4. un visuel RETIRÉ n'est jamais repris ───────────────────────────────────────────────────────────────────────

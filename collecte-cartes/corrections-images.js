@@ -71,4 +71,8 @@ const CORRECTIONS = [
 ];
 const PAR_CLE = new Map(CORRECTIONS.map(c => [c.cleR2, c]));
 
-module.exports = { CORRECTIONS, correctionDe: cleR2 => PAR_CLE.get(cleR2) || null };
+// ➕ 2026-10-17, doctrine de collecte (article 4) : « un remplacement est permis si l'image actuelle est FAUSSE ». Une image n'est fausse que sur décision ÉCRITE, une ligne par entrée, clé `source|cleR2`
+// (comme CORRECTIONS ci-dessus, lue à l'œil) — jamais déduite d'une mesure (§54 : un témoin ne vaut que sa donnée). Table FERMÉE ; livrée VIDE : aucune décision n'est encore écrite.
+const IMAGES_DECLAREES_FAUSSES = Object.freeze([]);
+
+module.exports = { CORRECTIONS, IMAGES_DECLAREES_FAUSSES, correctionDe: cleR2 => PAR_CLE.get(cleR2) || null };

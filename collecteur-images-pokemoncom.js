@@ -25,6 +25,7 @@ const { largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cart
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
@@ -257,7 +258,8 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                     ...marqueDe({ wOriginal: meta.width }),
-                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, telechargeLe: new Date(), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
+                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, telechargeLe: new Date(), etat: 'ok',
+                    ...champsTracabilite({ urlOriginal: u.url, collecteLe: index.images[u.url]?.le ?? new Date() }) }, $unset: { erreur: 1 } }, { upsert: true });
                 telecharges++; ecrits.push(_id);
             }
             // ---- JOINTURE ADDITIVE, sous sa garde -----------------------------------------------------------------------------------------------------
@@ -275,7 +277,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     const nous = e => e?.source === PK.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
                     const admises = autres.filter(e => !refCles.has(e.cleR2));        // (sans --remplacer, refCles est vide : toute entrée au numéro sert la fiche)
-                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: PK.SOURCE, numero: im.numero ?? null } } });
                     // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source, même (set, numéro, langue connue), n'est pas « servie » face à une image NON marquée : elle sort
                     // (la même fonction que artofpkm / Bulbapedia / TCGdex). Une image marquée (245 px…) ne remplace jamais rien et cède.

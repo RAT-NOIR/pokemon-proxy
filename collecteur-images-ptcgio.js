@@ -22,6 +22,7 @@ const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');   // les vignettes de 200 px des images neuves, après la jointure (règle du dépôt, 2026-10-06)
@@ -218,7 +219,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en', urlOriginal: p.url })),
-                    attribution: P.MENTION, mention: P.MENTION, lot: LOT, telechargeLe: new Date(), etat: 'ok'
+                    attribution: P.MENTION, mention: P.MENTION, lot: LOT, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: p.url, collecteLe: new Date() })
                 }, $unset: { erreur: 1 }
             }, { upsert: true });
             telecharges++;
@@ -238,7 +239,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 const jumeauxIci = remplacerJumeau ? (c.images || []).filter(e => e && e.set === slug && e.source !== P.SOURCE && e.numero != null && cleNumero(e.numero) === cleNumero(im.numero) && J.scanJumeau(e, set.tirage ?? set.region)) : [];
                 const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero) && !jumeauxIci.includes(e));
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                 // ➕ 2026-10-13 (décision 4 du testeur) : LA PRÉSÉANCE DE RÉSOLUTION (collecte-cartes/preseance-images.js — la règle du worker TCGdex aussi). Contre une AUTRE source
                 // jugeable (TCGdex) au même numéro : la plus grande aire garde sa place, à égalité TCGdex. Notre entrée qui perd CÈDE (comme avant) ; qui gagne, elle retire la perdante.
                 const pres = preseance.contre(autres, entree);
