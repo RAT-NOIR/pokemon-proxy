@@ -83,7 +83,7 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     const robotsLibre = { status: 200, type: 'text/plain', texte: robotsReel };           // le VRAI robots.txt de la source : « Disallow: /*?s= » seul
     const normal = (url, o) => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: /m23_en_003/.test(url) ? petit : grand };
     const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, avance: ms => { t += ms; }, attentes }; };
-    const lancer = (urls, tr, d, h = horloge(), o = {}) => C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o });
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => (require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
     const urls = plan.map(p => p.url);
 
     let d = tmp(), h = horloge(), tr = reseau(normal);
@@ -125,7 +125,31 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /m23_en_002/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : normal(url));
         r = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
         const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
-        verifier('REPONSE-HOTE : un 200 text/html SANS marqueur → absente (empreinte gardée), on passe à la suivante, AUCUN arrêt', [r.etat, Object.values(idxF).filter(e => e.statut === 'absent' && e.fausseAbsente === true && /^[0-9a-f]{64}$/.test(e.empreinte || '')).length, Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])], ['termine', 1, 2, false, [['pkmncards.com', 1, 1]]]);
+        verifier('REPONSE-HOTE : un 200 text/html SANS marqueur → absente (empreinte gardée), on passe à la suivante, AUCUN arrêt', [r.etat, Object.values(idxF).filter(e => e.statut === 'fausse-absente' && e.n === 1 && /^[0-9a-f]{64}$/.test(e.empreinte || '')).length, Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])], ['termine', 1, 2, false, [['pkmncards.com', 1, 1]]]);
+        // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
+        {
+            const hM = horloge(), fausseB = url => (/m23_en_002/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : null);
+            const dM = tmp(); const mk = f => reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : (f(url) ?? normal(url))));
+            await lancer(urls, mk(fausseB), dM, hM, { dossierPauses: dp() });
+            const lireB = () => Object.values(JSON.parse(fs.readFileSync(path.join(dM, 'index.json'), 'utf8')).images).find(e => e.statut !== 'ok');
+            const e1 = lireB();
+            hM.avance(3600 * 1000);
+            let trM = mk(fausseB); let rM = await lancer(urls, trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : une heure plus tard, la fausse absence n\'est PAS redemandée (moins de 24 h) : rien à faire, zéro requête', [e1.statut, e1.n, /^[0-9a-f]{64}$/.test(e1.empreinte || ''), typeof e1.le, rM.etat, trM.appels.length], ['fausse-absente', 1, true, 'string', 'rien-a-faire', 0]);
+            hM.avance(25 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(urls, trM, dM, hM, { dossierPauses: dp() });
+            const e2 = lireB();
+            verifier('M4 : 25 h plus tard, elle est redemandée UNE fois (robots + 1 image) ; une SECONDE fausse absence la rend DÉFINITIVE (absent, secondeFois)', [rM.etat, trM.appels.length, e2.statut, e2.fausseAbsente, e2.secondeFois], ['termine', 2, 'absent', true, true]);
+            hM.avance(48 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(urls, trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : devenue définitive, elle ne se redemande plus jamais', [rM.etat, trM.appels.length], ['rien-a-faire', 0]);
+            const dM2 = tmp(); const hM2 = horloge();
+            await lancer(urls, mk(fausseB), dM2, hM2, { dossierPauses: dp() });
+            hM2.avance(25 * 3600 * 1000);
+            trM = mk(() => null); await lancer(urls, trM, dM2, hM2, { dossierPauses: dp() });
+            const e3 = JSON.parse(fs.readFileSync(path.join(dM2, 'index.json'), 'utf8')).images[urls[1]];
+            verifier('M4 : si la page redonne l\'image à la seconde demande, elle entre au cache (ok)', [e3.statut, trM.appels.length], ['ok', 2]);
+        }
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' });
         r = await lancer(urls, tr, d, horloge(), { suivi: RH.suiviHote({ seuil: 1 }), dossierPauses: dp() });
         verifier('REPONSE-HOTE : au-delà du seuil de fausses absences d\'affilée → PAUSE de l\'hôte (« pause-hote »), AUCUN fichier d\'arrêt définitif, robots + 2 images seulement (le seuil du banc est 1 : le plan n\'a que 3 fichiers ; le 21 est prouvé au module)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.hote, r.reponsesHotes[0].fausses], ['pause-hote', false, 3, 'pkmncards.com', 2]);

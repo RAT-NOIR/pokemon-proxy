@@ -20,7 +20,7 @@ const page = (...tuiles) => `<!DOCTYPE html><html><head><title>Set</title></head
 
 // ── le réseau simulé et l'horloge ───────────────────────────────────────────────────────────────────────────────────
 function monde({ repondre, cadence = 10000, verrou = { tenu: true, perdu: false }, dossierPauses = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pq-pauses-')) } = {}) {
-    let t = 1_000_000;
+    require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); let t = 1_000_000;
     const appels = [];
     const transport = { async get(url, o) { appels.push({ url, t, binaire: !!o?.binaire }); return repondre(url, o, appels.length); } };
     const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; }, dossierPauses });

@@ -352,7 +352,7 @@ const CHEMINS_PAR_HOTE = Object.freeze({ [HOTE_NOM]: CHEMIN_AUTORISE, [HOTE_SCRY
  * (robots.txt, /<id>/<n>_hires.png) ; robots.txt lu avant la première image et respecté ; cadence tenue dans une file (jamais sous 2 s) ;
  * un réessai sur une coupure ou un 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête.
  */
-function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null;
     const robotsDe = new Map();                                // ➕ 2026-10-17 : le robots.txt de CHAQUE hôte ; absent = pas encore lu, null = pas de robots.txt (404)
     const parHote = {};
@@ -402,7 +402,7 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
         garde();
         const c = chemin(url);
         return enFile(async () => {
-            RH.garderHote(c.hote, dossierPauses);            // une pause persistante tient : aucune requête
+            RH.garderHote(c.hote, dossierPauses, suivi);            // une pause persistante tient : aucune requête
             const robots = await assurerRobots(c.hote);
             if (!T.autoriseParRobots(robots, c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt de ${c.hote} interdit ${c.chemin} — aucune requête`), { robots: true });
             let r;

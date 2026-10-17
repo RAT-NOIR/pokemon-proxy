@@ -33,8 +33,22 @@ verifier('404 sans corps ni type → absente', issue({ statut: 404 }), 'absente'
     verifier('la même page deux fois → la même empreinte', cl({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.from(PAGE) }).empreinte, c.empreinte);
     verifier('une autre page → une autre empreinte', cl({ statut: 200, typeContenu: 'text/html', debutCorps: html('Une autre page') }).empreinte === c.empreinte, false);
 }
-verifier('l\'empreinte porte sur le corps BORNÉ à 64 Ko', cl({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.concat([PAGE, Buffer.alloc(100000, 0x20)]) }).empreinte,
-    sha(Buffer.concat([PAGE, Buffer.alloc(100000, 0x20)]).subarray(0, 64 * 1024)));
+// M3 (correction 1) : la recherche des marqueurs porte sur 512 Ko ; un corps COUPÉ à la borne, sans marqueur, ne prouve rien → inattendue (pause), jamais une absence
+const GROS = Buffer.concat([PAGE, Buffer.alloc(R.BORNE_CORPS + 1000, 0x20)]);
+verifier('M3 : la borne de lecture est 512 Ko', R.BORNE_CORPS, 512 * 1024);
+verifier('M3 : un corps plus grand que la borne, sans marqueur dans les 512 premiers Ko → inattendue (pas fausse-absente)', cl({ statut: 200, typeContenu: 'text/html', debutCorps: GROS }).issue, 'inattendue');
+verifier('M3 : un marqueur à 100 Ko (au-delà de 64 Ko) est vu → defi', issue({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.concat([Buffer.from('<html>'), Buffer.alloc(100000, 0x20), Buffer.from('<div class="g-recaptcha"></div></html>')]) }), 'defi');
+verifier('M3 : un corps de la taille de la borne moins un octet (non coupé) reste une fausse-absente', issue({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.concat([PAGE, Buffer.alloc(R.BORNE_CORPS - PAGE.length - 1, 0x20)]) }), 'fausse-absente');
+{
+    const u16 = t => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(t, 'utf16le')]);
+    const u16be = t => { const b = Buffer.from(t, 'utf16le'); for (let i = 0; i < b.length; i += 2) { const x = b[i]; b[i] = b[i + 1]; b[i + 1] = x; } return Buffer.concat([Buffer.from([0xfe, 0xff]), b]); };
+    verifier('M3 : une page UTF-16 (BOM) sans marqueur est décodée → fausse-absente', issue({ statut: 200, typeContenu: 'text/html', debutCorps: u16('<html>Page introuvable</html>') }), 'fausse-absente');
+    verifier('M3 : une page UTF-16 (BOM) portant un captcha → defi', issue({ statut: 200, typeContenu: 'text/html', debutCorps: u16('<html><div class="g-recaptcha"></div></html>') }), 'defi');
+    verifier('M3 : une page UTF-16 BE (BOM) portant « Just a moment » → defi', issue({ statut: 200, typeContenu: 'text/html', debutCorps: u16be('<html>Just a moment...</html>') }), 'defi');
+    verifier('M3 : une page UTF-16 (BOM) portant « Gym Challenge » → ambigue', issue({ statut: 200, typeContenu: 'text/html', debutCorps: u16('<html>Gym Challenge</html>') }), 'ambigue');
+    verifier('M3 : un corps indécodable (octets de contrôle, ni BOM ni texte) sous text/html → inattendue', issue({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.from([0x00, 0x01, 0x02, 0x00, 0x03, 0x00, 0xff, 0x00, 0x00, 0x04, 0x00, 0x00, 0x05]) }), 'inattendue');
+    verifier('M3 : une page UTF-16 sans BOM (NUL entre les lettres) → inattendue (indécodable)', issue({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.from('<html>Page</html>', 'utf16le') }), 'inattendue');
+}
 verifier('le type est lu sans tenir compte de la casse ni du charset', issue({ statut: 200, typeContenu: 'TEXT/HTML; Charset=UTF-8', debutCorps: PAGE }), 'fausse-absente');
 
 // ── le défi : les marqueurs TECHNIQUES, à tout statut ─────────────────────────────────────────────────────────────────────
@@ -152,7 +166,10 @@ const ABSENTE = cl({ statut: 404 });
     for (let i = 0; i < 20; i++) R.reagir(t, 'h.example', FAUSSE);
     const dernier = R.reagir(t, 'h.example', FAUSSE);
     verifier('réaction : la 21e fausse absence → pause, motif qui nomme le compte et l\'hôte', [dernier.action, /21/.test(dernier.motif), /h\.example/.test(dernier.motif)], ['pause', true, true]);
-    verifier('réaction : sans suivi, la réaction ne lève pas (l\'issue seule décide)', R.reagir(null, 'h.example', FAUSSE).action, 'absente');
+    verifier('M2 : sans suivi, RIEN ne passe (fermé par défaut) : fausse-absente, image et absente → pause', ['fausse', 'image', 'absente'].map(k => R.reagir(null, 'h.example', { fausse: FAUSSE, image: IMAGE, absente: ABSENTE }[k]).action), ['pause', 'pause', 'pause']);
+    verifier('M2 : sans suivi, un défi reste un arrêt définitif (jamais plus ouvert)', R.reagir(null, 'h.example', cl({ statut: 403 })).action, 'arret-definitif');
+    verifier('M2 : une issue INCONNUE bloque (pause), elle ne passe pas', [R.reagir(R.suiviHote(), 'h.example', { issue: 'zzz', motif: 'x' }).action, R.reagir(R.suiviHote(), 'h.example', null).action, R.reagir(R.suiviHote(), 'h.example', {}).action], ['pause', 'pause', 'pause']);
+    verifier('M2 : les seules actions qui laissent continuer sont continuer et absente', (() => { const out = new Set(); for (const i of [...R.ISSUES, 'zzz', undefined]) out.add(R.reagir(R.suiviHote(), 'h', { issue: i, motif: 'm' }).action); return [...out].sort(); })(), ['absente', 'arret-definitif', 'continuer', 'pause', 'pause-persistante', 'transitoire']);
 }
 
 // ── l'adaptateur des clients (transports { status, type, texte | octets, cfMitigated, imperva }) ────────────────────────────
@@ -164,7 +181,50 @@ const ABSENTE = cl({ statut: 404 });
     verifier('adaptateur : imperva devient x-cdn: Imperva (corps non image → defi, vraie image → image)', [issue(R.entreeDepuisClient({ status: 200, type: 'text/html', texte: 'page', imperva: true })), issue(R.entreeDepuisClient({ status: 200, type: 'image/png', octets: PNG, imperva: true }))], ['defi', 'image']);
     verifier('adaptateur : un 404 sans corps lu', issue(R.entreeDepuisClient({ status: 404, type: 'text/html' })), 'absente');
     verifier('adaptateur : borne optionnelle (5000 caractères pour une page, comme avant)', R.entreeDepuisClient({ status: 200, type: 'text/html', texte: 'x'.repeat(9000) }, { borne: 5000 }).debutCorps.length, 5000);
-    verifier('adaptateur : le corps ne dépasse jamais 64 Ko', R.entreeDepuisClient({ status: 200, type: 'application/octet-stream', octets: Buffer.alloc(200000) }).debutCorps.length, 64 * 1024);
+    verifier('adaptateur : le corps ne dépasse jamais la borne (512 Ko)', R.entreeDepuisClient({ status: 200, type: 'application/octet-stream', octets: Buffer.alloc(700000) }).debutCorps.length, 512 * 1024);
+}
+
+// ── I2 : l'ARRÊT DURABLE d'un hôte (le même fichier persistant que la pause ambiguë, nature distincte) ─────────────────────
+{
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-arret-'));
+    verifier('I2 : aucun arrêt tant que rien n\'est écrit', [R.hoteArrete('h.example', d), R.hoteArrete('autre.example', d)], [null, null]);
+    const f = R.arretHote('h.example', 'HTTP 403 sur https://h.example/x.png', { dossier: d, url: 'https://h.example/x.png?jeton=secret' });
+    const a = R.hoteArrete('h.example', d);
+    verifier('I2 : l\'arrêt est écrit (nature « arret-definitif », motif, adresse sans paramètres, date)', [fs.existsSync(f), a.nature, a.motif, a.url, typeof a.le], [true, 'arret-definitif', 'HTTP 403 sur https://h.example/x.png', 'https://h.example/x.png', 'string']);
+    verifier('I2 : le fichier d\'arrêt n\'est pas celui de la pause (nature distincte)', [R.fichierArret(d, 'h.example') !== R.fichierPause(d, 'h.example'), R.lirePausePersistante(d, 'h.example')], [true, null]);
+    verifier('I2 : l\'arrêt d\'un hôte ne vaut pas pour un autre', R.hoteArrete('autre.example', d), null);
+    verifier('I2 : un fichier d\'arrêt illisible vaut ARRÊT (je ne sais pas = arrêt)', (() => { fs.writeFileSync(R.fichierArret(d, 'casse.example'), '{pas du json'); return R.hoteArrete('casse.example', d)?.illisible === true; })(), true);
+    verifier('I2 : garderHote lève un arrêt DÉFINITIF (bloque) avant toute requête', (() => { try { R.garderHote('h.example', d); return null; } catch (e) { return [e.bloque, e.arretDefinitif, !!e.pauseHote, e.fichier === R.fichierArret(d, 'h.example')]; } })(), [true, true, false, true]);
+    verifier('I2 : l\'écriture d\'un arrêt qui échoue LÈVE (jamais un silence)', (() => { try { R.arretHote('h.example', 'm', { dossier: path.join(f, 'impossible') }); return 'rendu'; } catch { return 'levé'; } })(), 'levé');
+    verifier('I2 : la racine d\'un hôte (artofpkm.com pour cdn.artofpkm.com)', [R.hoteRacine('cdn.artofpkm.com'), R.hoteRacine('www.artofpkm.com'), R.hoteRacine('archives.bulbagarden.net'), R.hoteRacine('localhost'), R.hoteRacine('h.example')], ['artofpkm.com', 'artofpkm.com', 'bulbagarden.net', 'localhost', 'h.example']);
+    fs.rmSync(d, { recursive: true, force: true });
+}
+
+// ── I3 : le suivi vit par HÔTE pour toute la durée du PROCESSUS ──────────────────────────────────────────────────────────────
+{
+    R.reinitialiserSuiviProcessus();
+    const S = R.suiviDuProcessus();
+    verifier('I3 : le registre du processus est UN objet, le même à chaque appel', R.suiviDuProcessus() === S, true);
+    for (let i = 0; i < 21; i++) S.noter('h.example', FAUSSE);
+    verifier('I3 : une pause « plus de 20 » du registre tient pour tout le processus', [R.suiviDuProcessus().rapport('h.example').pause, (() => { try { R.garderHote('h.example', os.tmpdir(), R.suiviDuProcessus()); return null; } catch (e) { return [!!e.pauseHote, !!e.pausePersistante, !!e.bloque]; } })()], [true, [true, false, false]]);
+    verifier('I3 : …et ne touche pas un autre hôte', (() => { try { R.garderHote('b.example', os.tmpdir(), R.suiviDuProcessus()); return 'passe'; } catch { return 'bloque'; } })(), 'passe');
+    verifier('I3 : un nouveau suiviHote() (un banc, un nouveau processus) repart de zéro', R.suiviHote().rapport('h.example').pause, false);
+    R.reinitialiserSuiviProcessus();
+    verifier('I3 : le registre se réinitialise (nouveau processus simulé)', R.suiviDuProcessus().rapport('h.example').pause, false);
+    const S2 = R.suiviDuProcessus();
+    R.reagir(S2, 'i.example', cl({ statut: 302 }));
+    verifier('I3 : une issue « inattendue » met AUSSI l\'hôte en pause pour le processus', [S2.rapport('i.example').pause, (() => { try { R.garderHote('i.example', os.tmpdir(), S2); return null; } catch (e) { return !!e.pauseHote; } })()], [true, true]);
+    R.reinitialiserSuiviProcessus();
+}
+
+// ── M2 : l'écriture d'une pause qui échoue LÈVE une pauseHote ─────────────────────────────────────────────────────────────────
+{
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-ecr-'));
+    const fichierObstacle = path.join(d, 'obstacle'); fs.writeFileSync(fichierObstacle, 'x');
+    const menu = html('<nav>Gym Challenge</nav>');
+    let e = null; try { R.traiterImage({ status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' }, { suivi: R.suiviHote(), hote: 'h.example', url: 'https://h.example/a.png', dossierPauses: path.join(fichierObstacle, 'sous') }); } catch (x) { e = x; }
+    verifier('M2 : l\'écriture de la pause persistante impossible → LÈVE une pauseHote (le client s\'arrête), pas une exception ordinaire', [!!e?.pauseHote, !!e?.ecritureEchouee], [true, true]);
+    void menu; fs.rmSync(d, { recursive: true, force: true });
 }
 
 // ── la détection de défi pour les requêtes qui ne sont PAS des images (robots.txt, listes, pages) ─────────────────────────

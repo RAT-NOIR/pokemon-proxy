@@ -382,7 +382,7 @@ const RH = require('./reponse-hote');
  * première page et respecté ; cadence tenue dans une FILE (deux appelants concurrents attendent leur tour) ; un réessai sur une coupure
  * ou un 5xx, puis l'échec LÈVE ; 403, 429, défi ou captcha : BLOQUÉ — l'erreur est retenue et plus aucune requête ne part.
  */
-function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
     const hoteNom = new URL(S.hote).hostname;
@@ -464,7 +464,7 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
     async function obtenir(url, o) {
         return enFile(async () => {
             const c = chemin(url);
-            RH.garderHote(hoteNom, dossierPauses);                    // une pause persistante tient : aucune requête
+            RH.garderHote(hoteNom, dossierPauses, suivi);                    // une pause persistante tient : aucune requête
             await assurerRobots();
             if (!autoriseParRobots(robots, c.chemin, agent)) throw Object.assign(new Error(`${site} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
             return requete(c.url, o);

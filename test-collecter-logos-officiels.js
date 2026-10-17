@@ -112,6 +112,13 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
         try { await c.get('https://billsarchive.com/a.webp'); } catch (e) { e2 = e; }
         verifier('défi anti-robot (403 Cloudflare) : arrêt, et PLUS AUCUNE requête ensuite', [e1?.arret === true, e2?.arret === true, R.appels.length === n], [true, true, true]);
     }
+    // F3 (correction 1) : la définition du défi est celle du module commun — 401 et 410 sont des défis, comme 403 et 429
+    for (const st of [401, 410, 429]) {
+        const R = reseau({ 'https://billsarchive.com/robots.txt': rep(404), [URL_B]: rep(st, '<html>non</html>') });
+        const c = M.creerClient({ fetch: R.fetch, ...R.horloge });
+        let e1 = null; try { await c.get(URL_B); } catch (e) { e1 = e; }
+        verifier('F3 : HTTP ' + st + ' = défi anti-robot (module commun) : arrêt', e1?.arret === true, true);
+    }
     {
         const R = reseau({ 'https://billsarchive.com/robots.txt': rep(503) });
         const c = M.creerClient({ fetch: R.fetch, ...R.horloge });

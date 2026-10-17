@@ -209,7 +209,7 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     const attentes = [];
     let maintenant = 1e12;                                          // l'horloge du banc ne bouge que par les pauses : la cadence se mesure exactement
     const pause = async ms => { attentes.push(ms); maintenant += ms; };
-    const client = (tr, v = verrou, o = {}) => P.fabriquerClientPokumon({ transport: tr, verrou: v, pause, horloge: () => maintenant, dossierPauses: DOSSIER_PAUSES_BANC, ...o });
+    const client = (tr, v = verrou, o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), P.fabriquerClientPokumon({ transport: tr, verrou: v, pause, horloge: () => maintenant, dossierPauses: DOSSIER_PAUSES_BANC, ...o }));
     const essayer = async f => { try { await f(); return null; } catch (e) { return e; } };
 
     let tr = reseau(normal), c = client(tr, null);

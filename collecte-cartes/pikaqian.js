@@ -422,7 +422,7 @@ const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i
  * lent la relève) ; redirections suivies dans l'hôte seulement, trois sauts, robots relu ; 403, 429, `cf-mitigated`, page de défi : BLOQUÉ ;
  * DEUX échecs de suite (5xx, coupure, réponse illisible) : ARRÊT — un arrêt, dans les deux cas, ne se lève pas tout seul.
  */
-function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADENCE_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, agent = UA, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADENCE_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     let lie = verrou, file = Promise.resolve(), dernier = -Infinity, compte = 0, bloque = null, arret = null, suite = 0, plafond = Infinity, pauseHote = null;
     const parHote = {}, robots = new Map();
     let cadenceEff = Math.max(CADENCE_MS, Number(cadenceMs) || 0);        // relevée par un Crawl-delay plus lent, jamais abaissée sous 10 s
@@ -490,7 +490,7 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         return enFile(async () => {
             let courant = c;
             for (let saut = 0; ; saut++) {
-                RH.garderHote(courant.hote, dossierPauses);       // une pause persistante tient : aucune requête
+                RH.garderHote(courant.hote, dossierPauses, suivi);       // une pause persistante tient : aucune requête
                 await assurerRobots(courant.hote);
                 if (!T.autoriseParRobots(robots.get(courant.hote), courant.chemin, agent)) throw Object.assign(new Error(`${SOURCE} : robots.txt de ${courant.hote} interdit ${courant.chemin} — aucune requête`), { robots: true });
                 const r = await une(courant.url, o);

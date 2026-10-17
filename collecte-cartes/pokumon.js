@@ -599,7 +599,7 @@ const RH = require('./reponse-hote');
  * 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête ; une redirection n'est JAMAIS suivie ; plafond de requêtes ; la liste d'une série se rejoue
  * depuis le CACHE (`cache` : { lire(cle) → texte|null, ecrire(cle, texte) }) sans requête.
  */
-function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null;
     const robots = new Map();                                 // hôte → texte | null (404) ; absent = pas encore lu
     let cadenceEff = Math.max(CADENCE_MIN_MS, Number(cadenceMs) || 0);
@@ -647,7 +647,7 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         garde();
         const c = cheminAutorise(url);
         return enFile(async () => {
-            RH.garderHote(new URL(c.url).hostname, dossierPauses);          // une pause persistante tient : aucune requête
+            RH.garderHote(new URL(c.url).hostname, dossierPauses, suivi);          // une pause persistante tient : aucune requête
             await assurerRobots(c.hote);
             if (!T.autoriseParRobots(robots.get(c.hote), c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
             const r = await essayer(c.url, { binaire });

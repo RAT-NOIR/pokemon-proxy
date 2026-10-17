@@ -42,6 +42,7 @@ const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemo
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans collecte-cartes/reponse-hote.js — ce collecteur les APPELLE, il n'en garde aucune copie.
 const RH = require('./collecte-cartes/reponse-hote');
+const fausseAbsenceRecente = RH.fausseAbsenceRecente;
 const MAGIES = { png: [Buffer.from('89504e470d0a1a0a', 'hex')], jpg: [Buffer.from('ffd8ff', 'hex')], jpeg: [Buffer.from('ffd8ff', 'hex')], webp: [Buffer.from('52494646', 'hex')] };
 /** Les octets reçus sont-ils l'image que l'extension de l'adresse annonce ? (un défi servi sous une adresse d'image ne l'est pas) */
 function octetsConformes(url, octets) {
@@ -113,11 +114,11 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number, plafond?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, octetsMax = OCTETS_MAX_PAR_IMAGE, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, octetsMax = OCTETS_MAX_PAR_IMAGE, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !P.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
-    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent', 'refuse'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent', 'refuse'].includes(index.images[u]?.statut) && !fausseAbsenceRecente(index.images[u], now()));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MS);
@@ -141,7 +142,7 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         return transport.get(url, o);
     };
     // 0. une pause persistante de l'hôte tient : AUCUNE requête (pas même robots.txt)
-    try { RH.garderHote(hoteImages, dossierPauses); } catch (e) { return { etat: 'pause-hote', requetes, plafond, refusees, motif: e.message, pauseHote: { hote: hoteImages, persistante: true, empreinte: e.empreinte ?? null }, reponsesHotes: [] }; }
+    try { RH.garderHote(hoteImages, dossierPauses, suivi); } catch (e) { return { etat: 'pause-hote', requetes, plafond, refusees, motif: e.message, pauseHote: { hote: hoteImages, persistante: true, empreinte: e.empreinte ?? null }, reponsesHotes: [] }; }
     // 1. robots.txt, d'abord
     let robots;
     try { robots = await demander(P.ROBOTS, {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
@@ -169,7 +170,7 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         if (x.action === 'arret-definitif') return { ...arret(url, r, `${x.motif} (HTTP ${r.status})`), ...rapportReponses() };
         if (x.action === 'pause' || x.action === 'pause-persistante') return { etat: 'pause-hote', requetes, plafond, refusees, motif: x.motif, pauseHote: { hote: hoteImages, issue: x.issue, empreinte: x.empreinte ?? null, persistante: x.action === 'pause-persistante', fichier: x.fichier ?? null }, ...rapportReponses() };
         if (x.action === 'transitoire') return erreur5xx(url, r);
-        if (x.action === 'absente') { index.images[url] = { statut: 'absent', status: r.status, ...(x.issue === 'fausse-absente' ? { fausseAbsente: true, empreinte: x.empreinte } : {}), le: new Date().toISOString() }; delete index.cinqCents; ecrireIndex(dossierCache, index); continue; }       // les SEULS « absent » : un 404, ou une fausse page introuvable (200 text/html sans marqueur)
+        if (x.action === 'absente') { index.images[url] = RH.entreeAbsence(index.images[url], x, r.status, now()); delete index.cinqCents; ecrireIndex(dossierCache, index); continue; }       // les SEULS « absent » : un 404, ou une fausse page introuvable (200 text/html sans marqueur)
         if (r.tropVolumineux) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octetsAnnonces ?? null, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, plafond ${octetsMax} octets) : ${url}`); continue; }
         // une image valide mais pas celle que l'extension annonce : « inattendue » (REPONSE-HOTE) — PAUSE de l'hôte, plus un arrêt définitif (les marqueurs de défi, eux, ont déjà été jugés)
         if (!octetsConformes(url, r.octets)) return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus ne sont pas l\'image que l\'adresse annonce (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapportReponses() };

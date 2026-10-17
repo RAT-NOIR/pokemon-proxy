@@ -305,7 +305,6 @@ async function collecterSet(code, M, dossierRapport) {
     // pleine carte existera on saura lesquelles reprendre sans redemander un octet au tiers.
     let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
     let arretHote = null;          // REPONSE-HOTE : un défi (arrêt définitif de l'hôte) ou une pause de l'hôte arrête la passe de ce set
-    src.nouvellePasse();           // une nouvelle passe : le compteur de fausses absences repart de zéro
     // 🔴 CHAQUE ENTRÉE SOUS SON SET SOURCE (relecture du 2026-10-06) : une sous-section de kit est un set à part chez artofpkm
     // (/sets/643/card/1 sous la liste 206). L'id de la LISTE ne désigne pas la carte — sa page, sa clé et son document se prennent sous
     // `e.sourceSetId`. Sur les 27 969 entrées déjà en base, les deux sont égaux : rien ne change pour elles.

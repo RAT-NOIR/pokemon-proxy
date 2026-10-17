@@ -28,23 +28,38 @@ let DELAI_MS = 5000;
 const TAILLE_PAGE = 100;   // /sets/{id}/cards : 100 entrées par page, mesuré sur 4 listes le 2026-09-13
 
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+// CORRECTION 1 : le suivi vit pour tout le PROCESSUS (un registre par hôte, celui du module) ; un défi écrit un ARRÊT DURABLE (le même dossier que les pauses persistantes), lu avant toute requête.
+// L'hôte se juge par sa RACINE (artofpkm.com) : www.artofpkm.com (pages) et cdn.artofpkm.com (images) sont une seule source.
 const RH = require('./reponse-hote');
 let _derniere = 0, _file = Promise.resolve(), _compte = 0;
 let transportAxios = (url, o) => axios.get(url, o);          // le transport réseau, remplaçable par un banc (aucune requête réelle)
-let suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null;
-/** Une nouvelle passe (une unité) : le compteur de fausses absences repart de zéro. Les options ne servent qu'aux bancs. */
-let pauseHote = null;       // la pause de la passe (collante) : plus aucune requête d'image vers l'hôte jusqu'à la prochaine passe
-function nouvellePasse(o = {}) { suivi = o.suivi || RH.suiviHote(); pauseHote = null; if (o.dossierPauses) dossierPauses = o.dossierPauses; connues = o.connues ?? null; }
-function regler(o = {}) { if (o.transport) transportAxios = o.transport; if (o.delaiMs != null) DELAI_MS = o.delaiMs; nouvellePasse(o); }
-const rapportReponses = () => suivi.hotes().map(h => suivi.rapport(h));
-const hoteDe = url => new URL(url).hostname;
-/** Une IMAGE (octets d'une réponse axios) jugée par la règle commune : { octets } | { absente } | exception typée (bloque, pauseHote). */
-function juger(r, url) {
-    try { return RH.lireImage({ status: r.status, type: r.headers?.['content-type'], octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }, { suivi, hote: hoteDe(url), url, dossierPauses, connues }); }
-    catch (e) { if (e.pauseHote) pauseHote = e; throw e; }
+let dossierPauses = RH.DOSSIER_PAUSES, connues = null, REESSAI_MS = 30000;
+const suivi = RH.suiviDuProcessus();
+/** Pour les bancs SEULEMENT : transport simulé, cadence, réessai, dossier des pauses ; le registre du processus repart de zéro (un nouveau processus simulé). */
+function regler(o = {}) {
+    if (o.transport) transportAxios = o.transport;
+    if (o.delaiMs != null) DELAI_MS = o.delaiMs;
+    if (o.reessaiMs != null) REESSAI_MS = o.reessaiMs;
+    if (o.dossierPauses) dossierPauses = o.dossierPauses;
+    connues = o.connues ?? null;
+    RH.reinitialiserSuiviProcessus();
 }
-/** Avant TOUTE requête d'image : la pause de la passe, ou la pause persistante de l'hôte, tient — aucune requête. */
-function garderImage(url) { if (pauseHote) throw pauseHote; RH.garderHote(hoteDe(url), dossierPauses); }
+const rapportReponses = () => suivi.hotes().map(h => suivi.rapport(h));
+const racineDe = url => RH.hoteRacine(new URL(url).hostname);
+/** Avant TOUTE requête (page, liste ou image) : l'arrêt durable, la pause du processus et la pause persistante de la source tiennent — aucune requête. */
+function garderSource(url) { RH.garderHote(racineDe(url), dossierPauses, suivi); }
+/** Une IMAGE (octets d'une réponse axios) jugée par la règle commune : { octets } | { absente } | exception typée (bloque + arrêt durable, pauseHote). */
+function juger(r, url) {
+    return RH.lireImage({ status: r.status, type: r.headers?.['content-type'], octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }, { suivi, hote: racineDe(url), url, dossierPauses, connues });
+}
+/** Un défi dans une réponse qui n'est pas une image (liste, page de carte) : arrêt DURABLE de la source, puis erreur `bloque`. Rend le motif ou null. */
+function defiDePage(r, url) {
+    const motif = RH.detecterDefi({ statut: r.status, typeContenu: r.headers?.['content-type'], entetes: { 'cf-mitigated': r.headers?.['cf-mitigated'] }, debutCorps: Buffer.from(String(typeof r.data === 'string' ? r.data : Buffer.from(r.data || '').toString('utf8')).slice(0, 5000)) });
+    if (!motif) return null;
+    let fichier = null, ecriture = null;
+    try { fichier = RH.arretHote(racineDe(url), `${motif} (HTTP ${r.status})`, { dossier: dossierPauses, url }); } catch (e) { ecriture = e.message; }
+    throw Object.assign(new Error(`${racineDe(url)} BLOQUÉ (${motif}) sur ${url} — arrêt définitif de l'hôte${fichier ? '' : ` ; ÉCRITURE DE L'ARRÊT IMPOSSIBLE (${ecriture})`}`), { bloque: true, arretDefinitif: true, definitif: true, status: r.status, hote: racineDe(url), motif, fichier });
+}
 const dodo = ms => new Promise(r => setTimeout(r, ms));
 const decode = s => String(s || '').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&eacute;/g, 'é').replace(/&nbsp;/g, ' ');
 
@@ -52,26 +67,33 @@ const decode = s => String(s || '').replace(/&#39;|&apos;/g, "'").replace(/&amp;
 function requete(url, { bin = false, range = null } = {}) {
     const tache = _file.then(async () => {
         for (let essai = 0; essai < 2; essai++) {
-            if (bin) garderImage(url);
+            garderSource(url);
             const attente = _derniere + DELAI_MS - Date.now();
             if (attente > 0) await dodo(attente);
             _derniere = Date.now(); _compte++;
             try {
-                const r = await transportAxios(url, { headers: { 'User-Agent': UA, ...(range ? { Range: range } : {}) }, timeout: 60000, responseType: bin ? 'arraybuffer' : 'text', validateStatus: s => s < 500 });
-                // une IMAGE se juge par la règle commune (juger), sur tous les statuts < 500 ; une page ou une liste garde son erreur
-                if (r.status >= 400 && !bin) throw Object.assign(new Error(`HTTP ${r.status} sur ${url}`), { status: r.status, definitif: true });
+                // I1 : TOUS les statuts passent par le module (un 503 « Just a moment » est un défi) ; seul un 5xx SANS défi reprend l'ancien chemin (réessai unique)
+                const r = await transportAxios(url, { headers: { 'User-Agent': UA, ...(range ? { Range: range } : {}) }, timeout: 60000, responseType: bin ? 'arraybuffer' : 'text', validateStatus: () => true });
+                if (bin) {
+                    // une IMAGE se classe par la règle commune (juger, après le retour) ; un 5xx sans défi se réessaie comme avant
+                    const motif5xx = r.status >= 500 ? RH.detecterDefi({ statut: r.status, typeContenu: r.headers?.['content-type'], entetes: { 'cf-mitigated': r.headers?.['cf-mitigated'] }, debutCorps: Buffer.from(r.data || '').subarray(0, 5000) }) : null;
+                    if (r.status >= 500 && !motif5xx) throw Object.assign(new Error(`HTTP ${r.status} sur ${url}`), { status: r.status });
+                    return r;
+                }
+                defiDePage(r, url);
+                if (r.status >= 500) throw Object.assign(new Error(`HTTP ${r.status} sur ${url}`), { status: r.status });
+                if (r.status >= 400) throw Object.assign(new Error(`HTTP ${r.status} sur ${url}`), { status: r.status, definitif: true });
                 return r;
             } catch (e) {
-                if (e.definitif || essai === 1) throw e;
-                console.warn(`   ↻ ${e.code || e.message} sur ${url} — un seul réessai dans 30 s`);
-                await dodo(30000);
+                if (e.definitif || e.bloque || essai === 1) throw e;
+                console.warn(`   ↻ ${e.code || e.message} sur ${url} — un seul réessai dans ${REESSAI_MS / 1000} s`);
+                await dodo(REESSAI_MS);
             }
         }
     });
     _file = tache.catch(() => { });
     return tache;
-}
-const compteRequetes = () => _compte;
+}const compteRequetes = () => _compte;
 
 /**
  * Les entrées d'un set, TOUTES PAGES.
@@ -247,4 +269,4 @@ async function telecharger(url) {
     return { buffer: buf, octets: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), ...dimensions(buf), type: r.headers['content-type'] || null };
 }
 
-module.exports = { regler, nouvellePasse, rapportReponses, listerSet, parcourirListe, releveComplet, cleEntree, pageCarte, lireListe, lirePageCarte, enTeteImage, telecharger, dimensions, compteRequetes, BASE, UA };
+module.exports = { regler, rapportReponses, listerSet, parcourirListe, releveComplet, cleEntree, pageCarte, lireListe, lirePageCarte, enTeteImage, telecharger, dimensions, compteRequetes, BASE, UA };

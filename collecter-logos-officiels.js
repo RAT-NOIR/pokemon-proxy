@@ -338,9 +338,11 @@ function autorise(regles, chemin) {
     }
     return !meilleure || meilleure.allow;
 }
+// F3 (correction 1) : la définition du défi est celle du module commun (collecte-cartes/reponse-hote.js) — plus de copie ici. Le corps n'est pas lu à ce stade : statut et en-têtes seuls.
+const RH = require('./collecte-cartes/reponse-hote');
 const defi = r => {
     const h = k => (r.headers?.get ? r.headers.get(k) : null) ?? '';
-    return !!h('cf-mitigated') || /imperva/i.test(h('x-cdn')) || [403, 429].includes(r.status);
+    return RH.detecterDefi({ statut: r.status, typeContenu: h('content-type'), entetes: { 'cf-mitigated': h('cf-mitigated'), 'x-cdn': h('x-cdn'), 'x-iinfo': h('x-iinfo') } }) !== null;
 };
 class ArretDefi extends Error { constructor(m) { super(m); this.arret = true; } }
 // L'arrêt D'UN HÔTE (§75 : arrêt au premier blocage) : erreur réseau, 5xx, robots.txt illisible. Les autres hôtes continuent ; rien n'est redemandé à celui-ci.

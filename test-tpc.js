@@ -180,7 +180,7 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
         const RH = require('./collecte-cartes/reponse-hote');
         const PNG_T = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
         const dp = () => require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tpc-pauses-'));
-        const clientI = (rep, o = {}) => { const t = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep(u)); return { t, c: T.fabriquerClientTpc({ site: 'tpc-asie', transport: t, cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp(), ...o }) }; };
+        const clientI = (rep, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const t = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep(u)); return { t, c: T.fabriquerClientTpc({ site: 'tpc-asie', transport: t, cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp(), ...o }) }; };
         const FAUSSE = ok200('<html>Page introuvable</html>');
         let x = clientI(() => FAUSSE);
         verifier('REPONSE-HOTE : 200 text/html pour une image = fausse page introuvable → null, ni bloqué ni en pause, comptée', [await x.c.image('/id/card-img/a.png'), !!x.c.bloque(), !!x.c.pause(), x.c.suivi().rapport('asia.pokemon-card.com').fausses], [null, false, false, 1]);
@@ -214,7 +214,7 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
         x = clientI(() => ({ status: 200, type: 'image/png', octets: Buffer.from('pas une image') }));
         e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
         verifier('REPONSE-HOTE : 200 image/png aux octets faux = inattendue → pause', [!!e?.pauseHote, e?.issue], [true, 'inattendue']);
-        void RH;
+        RH.reinitialiserSuiviProcessus();      // le registre du processus ne déborde pas sur la suite du banc
     }
     let n5 = 0;
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : (++n5 === 1 ? { status: 503, texte: '' } : ok200('enfin')));

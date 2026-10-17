@@ -207,7 +207,6 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         const bucket = process.env.R2_BUCKET_IMAGES;
         const aFaire = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w >= largeurMin);
         let telecharges = 0, sautes = 0, echecs = 0, arretHote = null;
-        bulba.nouvellePasse();          // REPONSE-HOTE : une nouvelle passe, le compteur de fausses absences repart de zéro
         for (const p of aFaire) {
             if (arretDemande) break;
             const _id = `${SOURCE}/${slug}/${p.carteId}/${numeroEntier(p.numero)}`;

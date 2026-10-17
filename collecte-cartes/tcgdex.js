@@ -27,7 +27,7 @@ const transportAxios = {
     async get(url, { binaire = false } = {}) {
         try {
             // une IMAGE rend la réponse entière (statut, type, octets) : la règle commune la classe (reponse-hote.js) ; le reste rend ses données comme avant
-            if (binaire) { const r = await axios.get(url, { timeout: 30000, responseType: 'arraybuffer', headers: { 'User-Agent': 'rat-market-catalogue/1.0' }, validateStatus: s => s < 500 }); return { status: r.status, type: r.headers?.['content-type'] || '', octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }; }
+            if (binaire) { const r = await axios.get(url, { timeout: 30000, responseType: 'arraybuffer', headers: { 'User-Agent': 'rat-market-catalogue/1.0' }, validateStatus: () => true }); return { status: r.status, type: r.headers?.['content-type'] || '', octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }; }
             return (await axios.get(url, { timeout: 30000, responseType: 'json', headers: { 'User-Agent': 'rat-market-catalogue/1.0' } })).data;
         }
         catch (e) { throw Object.assign(new Error(`${e.response?.status ?? e.code} ${url}`), { status: e.response?.status }); }
@@ -60,8 +60,9 @@ const verifierIdSet = id => { if (!/^[\w.-]+$/.test(String(id))) throw new Error
 
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
 const RH = require('./reponse-hote');
+const SOURCE_RACINE = 'tcgdex.net';       // CORRECTION 1 : api.tcgdex.net et assets.tcgdex.net sont UNE source ; le suivi (registre du processus) et l'arrêt durable se jugent sur cette racine
 
-function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     let pauseHote = null, arretHote = null;
     let lie = verrou, file = Promise.resolve(), dernierDepart = 0, compte = 0;
     const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -69,6 +70,7 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
     function garde() {
         if (arretHote) throw arretHote;                    // un défi : arrêt définitif, plus aucune requête
         if (pauseHote) throw pauseHote;                    // la pause de la passe : plus aucune requête (pas un arrêt définitif)
+        RH.garderHote(SOURCE_RACINE, dossierPauses, suivi);   // l'arrêt durable, la pause du processus et la pause persistante : aucune requête
         if (!lie) throw new Error(`TCGdex : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`TCGdex : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -95,11 +97,10 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
     const getJSON = url => enFile(() => transport.get(url));
     // UNE IMAGE se CLASSE (image · absente → null · défi · ambiguë · transitoire · inattendue) ; un Buffer nu (transport de banc) est jugé comme un 200 image/png
     const telecharger = url => enFile(async () => {
-        RH.garderHote(new URL(url).hostname, dossierPauses);
         const r = await transport.get(url, { binaire: true });
         if (r == null) return null;
         const rep = Buffer.isBuffer(r) || r instanceof Uint8Array ? { status: 200, type: 'image/png', octets: Buffer.from(r) } : r;
-        try { const j = RH.lireImage(rep, { suivi, hote: new URL(url).hostname, url, dossierPauses, connues }); return j.absente ? null : j.octets; }
+        try { const j = RH.lireImage(rep, { suivi, hote: SOURCE_RACINE, url, dossierPauses, connues }); return j.absente ? null : j.octets; }
         catch (e) { if (e.bloque) arretHote = e; else if (e.pauseHote) pauseHote = e; throw e; }
     });
     const graphql = query => enFile(() => transport.post(`${API}/graphql`, { query }), Math.max(cadenceMs, cadenceGraphqlMs));

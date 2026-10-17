@@ -106,7 +106,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const verrou = { tenu: true, perdu: false };
     const attentes = [];
     const pause = async ms => { attentes.push(ms); };
-    const client = (tr, v = verrou, o = {}) => P.fabriquerClientPtcgio({ transport: tr, verrou: v, pause, ...o });
+    const client = (tr, v = verrou, o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), P.fabriquerClientPtcgio({ transport: tr, verrou: v, pause, ...o }));
 
     let tr = reseau(normal);
     let c = client(tr, null);
@@ -173,7 +173,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const vignetterBanc = (erreur = null) => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, assurer: assurerBanc(erreur), journal: { error() { } } });
     const lancer = async (B, transport, o = {}) => {
         const depots = [];
-        const cl = P.fabriquerClientPtcgio({ transport, verrou, pause });
+        require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const cl = P.fabriquerClientPtcgio({ transport, verrou, pause });
         const r = silencieux();
         try { return { b: await collecterSlug(o.slug || SLUG, B.M, { verrou, client: cl, vignetter: vignetterBanc(o.erreurVignettes), lireNumeros: o.sansNumeros ? undefined : lireNumeros, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets }), depots, cl }; }
         finally { r(); }
@@ -267,7 +267,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         const RH = require('./collecte-cartes/reponse-hote');
         const dp = () => require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'ptcgio-pauses-'));
         const PAGE = { status: 200, type: 'text/html; charset=utf-8', texte: '<html>Page introuvable</html>' };
-        const lancerRH = async (B_, transport, o = {}) => { const cl = P.fabriquerClientPtcgio({ transport, verrou, pause, dossierPauses: dp(), ...o }); const r = silencieux(); try { return { b: await collecterSlug(SLUG, B_.M, { verrou, client: cl, vignetter: vignetterBanc(), lireNumeros, deposer: async () => { }, fabriquerVerrouSet: verrouSet }), cl }; } finally { r(); } };
+        const lancerRH = async (B_, transport, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const cl = P.fabriquerClientPtcgio({ transport, verrou, pause, dossierPauses: dp(), ...o }); const r = silencieux(); try { return { b: await collecterSlug(SLUG, B_.M, { verrou, client: cl, vignetter: vignetterBanc(), lireNumeros, deposer: async () => { }, fabriquerVerrouSet: verrouSet }), cl }; } finally { r(); } };
         // client
         tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : PAGE); c = client(tr, verrou, { dossierPauses: dp() });
         verifier('REPONSE-HOTE client : 200 text/html sans marqueur = fausse page introuvable → null, ni bloqué ni en pause, comptée', [await c.image(P.urlHires('cel25', 5)), !!c.bloque(), !!c.pause(), c.suivi().rapport('images.pokemontcg.io').fausses], [null, false, false, 1]);

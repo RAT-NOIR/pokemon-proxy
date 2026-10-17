@@ -88,7 +88,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const robotsLibre = { status: 404, type: 'application/xml', texte: '' };       // le robots.txt de l'hôte d'images, vu le 17/10 : 404 (AmazonS3), aucune règle
     const normal = (url, o) => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand };
     const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, avance: ms => { t += ms; }, attentes }; };
-    const lancer = (urls, tr, d, h = horloge(), o = {}) => C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o });
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => (require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
 
     let d = tmp(), h = horloge(), tr = reseau(normal);
     let r = await lancer(plan.map(p => p.url), tr, d, h);
@@ -140,8 +140,37 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : { status: 200, type: 'image/png', octets: grand });
         r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
         const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
-        verifier('REPONSE-HOTE : un 200 text/html sans marqueur → absente (empreinte gardée), les autres continuent, AUCUN arrêt', [r.etat, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.fausseAbsente, /^[0-9a-f]{64}$/.test(idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.empreinte || ''), Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])],
-            ['termine', 'absent', true, true, 3, false, [['assets.pokemon.com', 1, 1]]]);
+        verifier('REPONSE-HOTE : un 200 text/html sans marqueur → absente (empreinte gardée), les autres continuent, AUCUN arrêt', [r.etat, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.n, /^[0-9a-f]{64}$/.test(idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.empreinte || ''), Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])],
+            ['termine', 'fausse-absente', 1, true, 3, false, [['assets.pokemon.com', 1, 1]]]);
+        // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — notée « fausse-absente » (empreinte, date), redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
+        {
+            const hM = horloge(), fausseB = url => (/Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : null);
+            const dM = tmp(); const mk = f => reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : (f(url) ?? { status: 200, type: 'image/png', octets: grand })));
+            await lancer(plan.map(p => p.url), mk(fausseB), dM, hM, { dossierPauses: dp() });
+            const lireB = () => JSON.parse(fs.readFileSync(path.join(dM, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_B.png')];
+            const e1 = lireB();
+            hM.avance(3600 * 1000);
+            let trM = mk(fausseB); let rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : une heure plus tard, la fausse absence n\'est PAS redemandée (moins de 24 h) : rien à faire, zéro requête', [e1.statut, e1.n, /^[0-9a-f]{64}$/.test(e1.empreinte || ''), typeof e1.le, rM.etat, trM.appels.length], ['fausse-absente', 1, true, 'string', 'rien-a-faire', 0]);
+            hM.avance(25 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            const e2 = lireB();
+            verifier('M4 : 25 h plus tard, elle est redemandée UNE fois (robots + 1 image) ; une SECONDE fausse absence la rend DÉFINITIVE (absent, secondeFois)', [rM.etat, trM.appels.length, e2.statut, e2.fausseAbsente, e2.secondeFois], ['termine', 2, 'absent', true, true]);
+            hM.avance(48 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : devenue définitive, elle ne se redemande plus jamais', [rM.etat, trM.appels.length], ['rien-a-faire', 0]);
+            const dM2 = tmp(); const hM2 = horloge();
+            await lancer(plan.map(p => p.url), mk(fausseB), dM2, hM2, { dossierPauses: dp() });
+            hM2.avance(25 * 3600 * 1000);
+            trM = mk(() => null); await lancer(plan.map(p => p.url), trM, dM2, hM2, { dossierPauses: dp() });
+            const e3 = JSON.parse(fs.readFileSync(path.join(dM2, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_B.png')];
+            verifier('M4 : si la page redonne l\'image à la seconde demande, elle entre au cache (ok)', [e3.statut, trM.appels.length], ['ok', 2]);
+        }
+        // M1 : aucune image non PNG n'entre au cache (la garde amont de pokemoncom, restaurée)
+        { d = tmp(); const jpg = await require('sharp')({ create: { width: 700, height: 980, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+          tr = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: jpg }));
+          r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+          verifier('M1 : un JPEG valide n\'entre PAS au cache pokemoncom (hôte en pause, réponse inattendue), aucun fichier d\'arrêt, aucune image cachée', [r.etat, r.pauseHote?.issue, fs.existsSync(C.fichierArret(d)), fs.existsSync(path.join(d, 'index.json')) ? Object.values(JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images).filter(e => e.statut === 'ok').length : 0, tr.appels.length], ['pause-hote', 'inattendue', false, 0, 2]); }
         // (b) un défi → arrêt définitif par le fichier d'arrêt (couvert par la liste « défis » ci-dessous)
         // (c) trop de fausses absences d'affilée → PAUSE, sans fichier d'arrêt définitif (seuil du banc : 2, le plan n'a que 4 fichiers ; le 21 est prouvé au module)
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' });

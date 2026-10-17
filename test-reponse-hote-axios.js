@@ -24,7 +24,8 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     // ════════════ ARTOFPKM ════════════
     const rep = (status, type, data, h = {}) => ({ status, headers: { 'content-type': type, ...h }, data });
     const appels = [];
-    const brancher = f => { appels.length = 0; AP.regler({ transport: async (url) => { appels.push(url); return f(url); }, delaiMs: 0, dossierPauses: dp() }); };
+    let dirA = null;
+    const brancher = (f, dir = dp()) => { appels.length = 0; dirA = dir; AP.regler({ transport: async (url) => { appels.push(url); return f(url); }, delaiMs: 0, reessaiMs: 0, dossierPauses: dir }); };
     const U = i => `https://cdn.artofpkm.com/x${i}`;
     brancher(() => rep(200, 'text/html; charset=utf-8', Buffer.from(FAUSSE)));
     let x = await sansLever(() => AP.telecharger(U(1)));
@@ -35,9 +36,14 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     verifier('ARTOFPKM : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un arrêt définitif)', [nuls, !!x.e?.pauseHote, !!x.e?.bloque], [20, true, false]);
     const av0 = appels.length; const xs = await sansLever(() => AP.telecharger(U(21.5)));
     verifier('ARTOFPKM : …et la pause TIENT pour le reste de la passe : aucune requête de plus', [!!xs.e?.pauseHote, appels.length === av0], [true, true]);
-    const av = appels.length; AP.nouvellePasse({ dossierPauses: dp() });
+    // I3 : l'unité SUIVANTE (le collecteur n'a plus de « nouvelle passe ») ne fait AUCUNE requête : la pause vit pour le processus
+    const av = appels.length;
     x = await sansLever(() => AP.telecharger(U(22)));
-    verifier('ARTOFPKM : une nouvelle passe repart (compteur à zéro) ; …', [appels.length - av, x.e?.absente], [1, true]);
+    const xl = await sansLever(() => AP.pageCarte(1, 2));
+    verifier('I3 ARTOFPKM : deux unités de suite — la seconde, après la pause, ne fait AUCUNE requête (image ni page)', [appels.length - av, !!x.e?.pauseHote, !!xl.e?.pauseHote], [0, true, true]);
+    AP.regler({ dossierPauses: dp(), delaiMs: 0, reessaiMs: 0 });
+    x = await sansLever(() => AP.telecharger(U(23)));
+    verifier('I3 ARTOFPKM : un NOUVEAU processus (registre vierge) repart à zéro', [x.e?.absente, !!x.e?.pauseHote], [true, false]);
     brancher(u => (/img/.test(u) ? rep(200, 'image/png', PNG) : rep(200, 'text/html', Buffer.from(FAUSSE))));
     for (let i = 0; i < 20; i++) await sansLever(() => AP.telecharger(U(i)));
     const im = await AP.telecharger('https://cdn.artofpkm.com/img');
@@ -52,11 +58,12 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         ['Just a moment', rep(200, 'text/html', Buffer.from('<title>Just a moment...</title>'))], ['cf-mitigated', rep(200, 'image/png', PNG, { 'cf-mitigated': 'challenge' })], ['captcha', rep(200, 'text/html', Buffer.from('<div class="g-recaptcha">'))]]) {
         brancher(() => r);
         x = await sansLever(() => AP.telecharger(U(1)));
-        verifier(`ARTOFPKM : défi (${nom}) → arrêt DÉFINITIF (erreur « bloque »)`, [!!x.e?.bloque, !!x.e?.arretDefinitif], [true, true]);
+        const nD = appels.length; const yD = await sansLever(() => AP.telecharger(U(2))); const pD = await sansLever(() => AP.pageCarte(1, 2));
+        verifier(`ARTOFPKM : défi (${nom}) → arrêt DÉFINITIF (erreur « bloque ») ET DURABLE (I2) : fichier d'arrêt écrit, l'unité suivante (image ou page) ne fait AUCUNE requête`, [!!x.e?.bloque, !!x.e?.arretDefinitif, !!RH.hoteArrete('artofpkm.com', dirA), !!yD.e?.bloque, !!pD.e?.bloque, appels.length === nD], [true, true, true, true, true, true]);
     }
     brancher(() => rep(200, 'text/html', Buffer.from('<nav>Gym Challenge</nav>')));
     x = await sansLever(() => AP.telecharger(U(1)));
-    const dpa = dp(); AP.nouvellePasse({ dossierPauses: dpa });
+    brancher(() => rep(200, 'text/html', Buffer.from('<nav>Gym Challenge</nav>')));
     x = await sansLever(() => AP.telecharger(U(1)));
     const n1 = appels.length; const x2 = await sansLever(() => AP.telecharger(U(2)));
     verifier('ARTOFPKM : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), puis AUCUNE requête tant qu\'il tient', [!!x.e?.pauseHote, !!x.e?.pausePersistante, !!x.e?.bloque, fs.existsSync(x.e?.fichier || ''), !!x2.e?.pauseHote, appels.length === n1], [true, true, false, true, true, true]);
@@ -66,6 +73,25 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     brancher(() => rep(206, 'image/png', PNG, { 'content-range': 'bytes 0-48/49' }));
     x = await sansLever(() => AP.enTeteImage(U(1)));
     verifier('ARTOFPKM : un 206 (début de fichier pour la mesure) est jugé comme un 200 image', [!!x.e, x.ok?.fmt], [false, 'png']);
+    // I1 : un 503 « Just a moment » est un DÉFI (axios ne lève plus sur un 5xx) ; un 503 sans marqueur garde l'ancien chemin (UN réessai)
+    brancher(() => rep(503, 'text/html', Buffer.from('<title>Just a moment...</title>')));
+    x = await sansLever(() => AP.telecharger(U(1)));
+    verifier('I1 ARTOFPKM : 503 avec « Just a moment » (image) → arrêt DÉFINITIF et durable, UNE seule requête (pas de réessai)', [!!x.e?.bloque, !!RH.hoteArrete('artofpkm.com', dirA), appels.length], [true, true, 1]);
+    brancher(() => rep(503, 'text/html', Buffer.from('<title>Just a moment...</title>')));
+    x = await sansLever(() => AP.pageCarte(1, 2));
+    verifier('I1 ARTOFPKM : 503 avec « Just a moment » (page) → arrêt DÉFINITIF et durable, UNE seule requête', [!!x.e?.bloque, !!RH.hoteArrete('artofpkm.com', dirA), appels.length], [true, true, 1]);
+    brancher(() => rep(503, 'text/html', Buffer.from('maintenance')));
+    x = await sansLever(() => AP.telecharger(U(1)));
+    verifier('I1 ARTOFPKM : 503 SANS marqueur → l\'ancien chemin : UN réessai puis une erreur ordinaire (ni blocage, ni pause, aucun arrêt durable)', [!!x.e?.bloque, !!x.e?.pauseHote, appels.length, RH.hoteArrete('artofpkm.com', dirA)], [false, false, 2, null]);
+    brancher(() => rep(500, 'application/json', Buffer.from('{"e":1}')));
+    x = await sansLever(() => AP.pageCarte(1, 2));
+    verifier('I1 ARTOFPKM : 500 JSON (page) → erreur ordinaire après UN réessai', [!!x.e?.bloque, appels.length], [false, 2]);
+    // I2 : l'arrêt durable survit à un NOUVEAU processus (registre vierge) tant que le fichier est là
+    brancher(() => rep(403, 'text/html', Buffer.from('non')));
+    x = await sansLever(() => AP.telecharger(U(1)));
+    AP.regler({ dossierPauses: dirA, delaiMs: 0, reessaiMs: 0 });
+    const nP = appels.length; const z = await sansLever(() => AP.telecharger(U(2)));
+    verifier('I2 ARTOFPKM : après un redémarrage (registre vierge), le fichier d\'arrêt retient l\'hôte : AUCUNE requête', [!!z.e?.bloque, appels.length === nP], [true, true]);
 
     // le COLLECTEUR artofpkm (collecteur-images.js) : le câblage de l'arrêt, de la pause et de la fausse absence
     {
@@ -109,39 +135,66 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         const mk = f => { const a = []; return { a, t: async url => { a.push(url); return f(url); } }; };
         const opt = (t, extra = {}) => ({ transport: t.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dp(), ...extra });
         const H = 'https://archives.bulbagarden.net/media/upload';
-        let t = mk(() => rep(200, 'text/html', Buffer.from(FAUSSE))); BU.nouvellePasse();
+        let t = mk(() => rep(200, 'text/html', Buffer.from(FAUSSE))); BU.regler();
         x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t)));
         verifier('BULBAPEDIA : 200 text/html sans marqueur → fichier ABSENT (« absente »), ni blocage ni pause, comptée', [x.e?.absente, !!x.e?.bloque, !!x.e?.pauseHote, BU.rapportReponses()[0]?.fausses], [true, false, false, 1]);
-        BU.nouvellePasse(); let n = 0; const o20 = opt(t);
+        BU.regler(); let n = 0; const o20 = opt(t);
         for (let i = 0; i < 20; i++) if ((await sansLever(() => BU.telecharger(`${H}/a${i}.png`, o20))).e?.absente) n++;
         x = await sansLever(() => BU.telecharger(`${H}/a21.png`, o20));
         verifier('BULBAPEDIA : 20 fausses absences → on continue ; la 21e → PAUSE (pas un arrêt)', [n, !!x.e?.pauseHote, !!x.e?.bloque], [20, true, false]);
         for (const [nom, r] of [['403', rep(403, 'text/html', Buffer.from('non'))], ['429', rep(429, 'text/html', Buffer.from('non'))], ['410', rep(410, 'text/html', Buffer.from('g'))], ['401', rep(401, 'text/html', Buffer.from('l'))], ['cf-mitigated', rep(200, 'image/png', PNG, { 'cf-mitigated': 'challenge' })], ['Just a moment', rep(200, 'text/html', Buffer.from('Just a moment...'))]]) {
-            t = mk(() => r); BU.nouvellePasse();
+            t = mk(() => r); BU.regler();
             x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t)));
             verifier(`BULBAPEDIA : défi (${nom}) → arrêt DÉFINITIF (erreur « bloque »), sans réessai (une seule requête)`, [!!x.e?.bloque, t.a.length], [true, 1]);
         }
-        t = mk(() => rep(404, 'text/html', Buffer.from('non'))); BU.nouvellePasse();
+        t = mk(() => rep(404, 'text/html', Buffer.from('non'))); BU.regler();
         x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t)));
         verifier('BULBAPEDIA : 404 → absente (plus une erreur de transport), sans réessai', [x.e?.absente, t.a.length], [true, 1]);
-        t = mk(() => rep(200, 'image/png', PNG)); BU.nouvellePasse();
+        t = mk(() => rep(200, 'image/png', PNG)); BU.regler();
         x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t)));
         verifier('BULBAPEDIA : une image rend ses octets', [x.ok?.buffer.length], [PNG.length]);
-        t = mk(() => rep(200, 'text/html', Buffer.from('<nav>Gym Challenge</nav>'))); BU.nouvellePasse();
+        t = mk(() => rep(200, 'text/html', Buffer.from('<nav>Gym Challenge</nav>'))); BU.regler();
         const dB = dp();
         x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t, { dossierPauses: dB })));
-        BU.nouvellePasse();       // une AUTRE passe : seul le fichier de pause persistante retient l'hôte
+        BU.regler();       // une AUTRE passe : seul le fichier de pause persistante retient l'hôte
         const x2 = await sansLever(() => BU.telecharger(`${H}/b.png`, opt(t, { dossierPauses: dB })));
         verifier('BULBAPEDIA : « Gym Challenge » seul = ambiguë → pause PERSISTANTE, puis aucune requête tant que le fichier tient', [!!x.e?.pausePersistante, !!x2.e?.pauseHote, t.a.length], [true, true, 1]);
+    }
+
+    // ── Bulbapedia : I1 (503), I2 (arrêt durable), I3 (le registre du processus) ──
+    {
+        const mk2 = fn => { const a = []; return { a, t: async url => { a.push(url); return fn(url); } }; };
+        const H = 'https://archives.bulbagarden.net/media/upload';
+        const dB = dp();
+        const opt2 = tt => ({ transport: tt.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dB });
+        BU.regler();
+        let t = mk2(() => rep(503, 'text/html', Buffer.from('<title>Just a moment...</title>')));
+        let x = await sansLever(() => BU.telecharger(H + '/a.png', opt2(t)));
+        verifier('I1 BULBAPEDIA : 503 avec « Just a moment » → arrêt DÉFINITIF et durable (fichier), UNE seule requête (pas de réessai de 60 s)', [!!x.e?.bloque, !!RH.hoteArrete('bulbagarden.net', dB), t.a.length], [true, true, 1]);
+        const t2 = mk2(() => rep(200, 'image/png', PNG));
+        const y = await sansLever(() => BU.telecharger(H + '/b.png', opt2(t2)));
+        BU.regler({ dossierPauses: dB });
+        const yApi = await sansLever(() => BU.api({ action: 'query' }));
+        const z = await sansLever(() => BU.telecharger('https://bulbapedia.bulbagarden.net/media/upload/c.png', opt2(t2)));
+        verifier('I2 BULBAPEDIA : l\'unité suivante (autre hôte de la même source, nouveau processus) ne fait AUCUNE requête tant que le fichier d\'arrêt tient — image comme API', [!!y.e?.bloque, !!yApi.e?.bloque, !!z.e?.bloque, t2.a.length], [true, true, true, 0]);
+        const t3 = mk2(() => rep(503, 'text/html', Buffer.from('maintenance'))); BU.regler();
+        x = await sansLever(() => BU.telecharger(H + '/a.png', { transport: t3.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dp() }));
+        verifier('I1 BULBAPEDIA : 503 SANS marqueur → l\'ancien chemin : UN réessai (2 requêtes) puis une erreur ordinaire, ni blocage ni pause', [!!x.e?.bloque, !!x.e?.pauseHote, t3.a.length], [false, false, 2]);
+        BU.regler(); const dC = dp();
+        const t4 = mk2(() => rep(200, 'text/html', Buffer.from(FAUSSE)));
+        for (let i = 0; i < 21; i++) await sansLever(() => BU.telecharger(H + '/f' + i + '.png', { transport: t4.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dC }));
+        const av = t4.a.length; const u2 = await sansLever(() => BU.telecharger(H + '/autre-unite.png', { transport: t4.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dC }));
+        verifier('I3 BULBAPEDIA : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!u2.e?.pauseHote, t4.a.length - av], [true, 0]);
+        BU.regler();
     }
 
     // ════════════ TCGDEX ════════════
     {
         const URLT = i => `https://assets.tcgdex.net/en/sv/sv1/${i}/high.png`;
-        const mkc = (f, o = {}) => { const a = []; return { a, c: TG.fabriquerClient({ transport: { async get(url, opt) { a.push(url); return f(url); } }, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, dossierPauses: dp(), ...o }) }; };
+        const mkc = (f, o = {}) => { if (!o.processus) RH.reinitialiserSuiviProcessus(); const a = []; return { a, c: TG.fabriquerClient({ transport: { async get(url, opt) { a.push(url); return f(url); } }, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, dossierPauses: dp(), ...o }) }; };
         const img = (status, type, octets, extra = {}) => ({ status, type, octets, ...extra });
         let k = mkc(() => img(200, 'text/html; charset=utf-8', Buffer.from(FAUSSE)));
-        verifier('TCGDEX : 200 text/html sans marqueur → null (absent), ni blocage ni pause, comptée', [await k.c.telecharger(URLT(1)), !!k.c.bloque(), !!k.c.pause(), k.c.suivi().rapport('assets.tcgdex.net').fausses], [null, false, false, 1]);
+        verifier('TCGDEX : 200 text/html sans marqueur → null (absent), ni blocage ni pause, comptée', [await k.c.telecharger(URLT(1)), !!k.c.bloque(), !!k.c.pause(), k.c.suivi().rapport('tcgdex.net').fausses], [null, false, false, 1]);
         k = mkc(() => img(200, 'text/html', Buffer.from(FAUSSE)));
         n = 0; for (let i = 0; i < 20; i++) if ((await k.c.telecharger(URLT(i))) === null) n++;
         x = await sansLever(() => k.c.telecharger(URLT(21)));
@@ -174,6 +227,25 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         verifier('TCGDEX : 200 image/png aux octets faux = inattendue → pause', [!!x.e?.pauseHote, x.e?.issue], [true, 'inattendue']);
         k = mkc(() => PNG);
         verifier('TCGDEX : un Buffer nu (transport de banc) est jugé comme une image', Buffer.isBuffer(await k.c.telecharger(URLT(1))), true);
+        // I1 / I2 / I3 : 503 défi, arrêt durable pour l'unité suivante, registre du processus
+        const dD = dp();
+        k = mkc(() => img(503, 'text/html', Buffer.from('<title>Just a moment...</title>')), { dossierPauses: dD });
+        x = await sansLever(() => k.c.telecharger(URLT(1)));
+        verifier('I1 TCGDEX : 503 avec « Just a moment » → arrêt DÉFINITIF et durable (fichier), UNE seule requête (pas de réessai)', [!!x.e?.bloque, !!RH.hoteArrete('tcgdex.net', dD), k.a.length], [true, true, 1]);
+        const kSuite = mkc(() => PNG, { dossierPauses: dD, processus: true });
+        const ySuite = await sansLever(() => kSuite.c.telecharger(URLT(2)));
+        const jSuite = await sansLever(() => kSuite.c.getJSON('https://api.tcgdex.net/v2/en/sets'));
+        verifier('I2 TCGDEX : l\'unité suivante (nouveau client) ne fait AUCUNE requête tant que le fichier d\'arrêt tient — fichier comme API', [!!ySuite.e?.bloque, !!jSuite.e?.bloque, kSuite.a.length], [true, true, 0]);
+        k = mkc(() => img(503, 'text/html', Buffer.from('maintenance')), { dossierPauses: dp() });
+        x = await sansLever(() => k.c.telecharger(URLT(1)));
+        verifier('I1 TCGDEX : 503 SANS marqueur → l\'ancien chemin : un réessai (2 requêtes) puis une erreur ordinaire, ni blocage ni pause', [!!x.e?.bloque, !!x.e?.pauseHote, k.a.length], [false, false, 2]);
+        const dE = dp();
+        k = mkc(() => img(200, 'text/html', Buffer.from(FAUSSE)), { dossierPauses: dE });
+        for (let i = 0; i < 21; i++) await sansLever(() => k.c.telecharger(URLT(i)));
+        const kBis = mkc(() => PNG, { dossierPauses: dE, processus: true });
+        const uBis = await sansLever(() => kBis.c.telecharger(URLT(99)));
+        verifier('I3 TCGDEX : deux unités de suite (deux clients) — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!uBis.e?.pauseHote, kBis.a.length], [true, 0]);
+        RH.reinitialiserSuiviProcessus();
         void sha;
     }
     console.log(`\n${ok} passés, ${ko} en échec`);

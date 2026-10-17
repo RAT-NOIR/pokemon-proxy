@@ -33,12 +33,15 @@ const dodo = ms => new Promise(r => setTimeout(r, ms));
 // https, et l'hôte de départ OU la liste fermée Bulbagarden ci-dessous, 3 sauts au plus. Tout autre cas est un REFUS NOMMÉ (`refusRedirection`), ni un succès ni un défi.
 const HOTES_BULBAGARDEN = Object.freeze(['archives.bulbagarden.net', 'bulbapedia.bulbagarden.net']);
 const SAUTS_MAX = 3;
-const transportAxios = url => axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000, maxRedirects: 0, validateStatus: s => s < 500 });
+const transportAxios = url => axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000, maxRedirects: 0, validateStatus: () => true });   // I1 : TOUS les statuts passent par le module (un 503 « Just a moment » est un défi)
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
 const RH = require('./reponse-hote');
-let suivi = RH.suiviHote(), pauseHote = null;      // pauseHote : la pause de la passe (collante) — plus aucune requête vers l'hôte jusqu'à la prochaine passe
-/** Une nouvelle passe (une unité) : le compteur de fausses absences repart de zéro. `o` ne sert qu'aux bancs. */
-function nouvellePasse(o = {}) { suivi = o.suivi || RH.suiviHote(); pauseHote = null; }
+// CORRECTION 1 : le suivi vit pour tout le PROCESSUS (un registre par hôte, celui du module) ; un défi écrit un ARRÊT DURABLE lu avant toute requête (api comprise) ; la source se juge par sa RACINE (bulbagarden.net).
+const suivi = RH.suiviDuProcessus();
+const SOURCE_RACINE = 'bulbagarden.net';
+/** Pour les bancs SEULEMENT : le registre du processus repart de zéro (un nouveau processus simulé). */
+let dossierDefaut;       // le dossier des pauses de l'API (undefined = celui du module)
+function regler(o = {}) { dossierDefaut = o.dossierPauses; RH.reinitialiserSuiviProcessus(); }
 const rapportReponses = () => suivi.hotes().map(h => suivi.rapport(h));
 const refusRedirection = m => Object.assign(new Error(m), { refusRedirection: true });
 
@@ -52,11 +55,12 @@ function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, atte
                 const hoteDepart = new URL(url).hostname;
                 for (let saut = 0; ; saut++) {
                     if (saut > 0) await attendreFile();
-                    if (pauseHote) throw pauseHote;
-                    RH.garderHote(new URL(courant).hostname, dossierPauses);        // une pause persistante tient : aucune requête
+                    RH.garderHote(SOURCE_RACINE, dossierPauses ?? dossierDefaut, suivi);        // l'arrêt durable, la pause du processus et la pause persistante tiennent : aucune requête
                     _derniere = Date.now();
                     _compte++;
                     const r = await transport(courant);
+                    // I1 : un 5xx SANS défi reprend l'ancien chemin (réessai unique) ; avec un défi (503 « Just a moment »), il est classé par le module
+                    if (r.status >= 500 && !RH.detecterDefi({ statut: r.status, typeContenu: r.headers?.['content-type'], entetes: { 'cf-mitigated': r.headers?.['cf-mitigated'] }, debutCorps: Buffer.from(r.data || '').subarray(0, 5000) })) throw Object.assign(new Error('HTTP ' + r.status), { response: { status: r.status } });
                     if (r.status >= 300 && r.status < 400) {
                         if (saut >= SAUTS_MAX) throw refusRedirection(`Bulbagarden redirection refusée sur ${url} : plus de ${SAUTS_MAX} sauts`);
                         const loc = r.headers?.location;
@@ -67,10 +71,7 @@ function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, atte
                         continue;
                     }
                     // LA RÈGLE COMMUNE : image · absente (404, fausse page introuvable) · défi (arrêt définitif) · ambiguë/inattendue (pause) — un 4xx n'est plus une exception de transport
-                    const hote = new URL(courant).hostname;
-                    let j;
-                    try { j = RH.lireImage({ status: r.status, type: r.headers?.['content-type'], octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }, { suivi, hote, url: courant, dossierPauses, connues }); }
-                    catch (e) { if (e.pauseHote) pauseHote = e; throw e; }
+                    const j = RH.lireImage({ status: r.status, type: r.headers?.['content-type'], octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }, { suivi, hote: SOURCE_RACINE, url: courant, dossierPauses, connues });
                     if (j.absente) throw Object.assign(new Error(`Bulbagarden absent (${j.issue}) sur ${url}`), { absente: true });
                     return { buffer: j.octets, type: r.headers?.['content-type'] || null };
                 }
@@ -90,6 +91,7 @@ function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, atte
 function api(params) {
     const tache = _file.then(async () => {
         for (let essai = 0; essai < REESSAIS_MAXLAG; essai++) {
+            RH.garderHote(SOURCE_RACINE, dossierDefaut, suivi);        // l'arrêt durable de la source tient aussi pour l'API
             const attente = _derniere + DELAI_MS - Date.now();
             if (attente > 0) await dodo(attente);
             _derniere = Date.now();
@@ -181,4 +183,4 @@ async function imageinfoDe(fichiers) {
     return infos;
 }
 
-module.exports = { nouvellePasse, rapportReponses, api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS, HOTES_BULBAGARDEN, SAUTS_MAX };
+module.exports = { regler, rapportReponses, api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS, HOTES_BULBAGARDEN, SAUTS_MAX };
