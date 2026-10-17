@@ -97,8 +97,10 @@ function lancerEnfant(script, args = ARGS, { racine = RACINE, delaiMs = DELAI_MA
  * Un passage : pour chaque import qui doit tourner, l'essai compté, le script lancé, le journal et l'alerte écrits. Ne lève pas : un
  * import en échec ne doit pas arrêter le worker (il crie dans l'alerte). @param E la collection `collecte_images_etat`.
  */
-async function importsQuotidiens({ E, lancerScript = lancerEnfant, maintenant = () => new Date(), journal = console }) {
+async function importsQuotidiens({ E, lancerScript = lancerEnfant, maintenant = () => new Date(), journal = console, seulement = null }) {
+    // `seulement` (optionnel, GitHub Actions) : ne considère que ces imports ; absent = les deux, comme le worker
     for (const { nom, script, heure, minute } of IMPORTS) {
+        if (seulement && !seulement.includes(nom)) continue;
         const id = `import-quotidien/${nom}`, idAlerte = `alerte/import-${nom}`;
         const etat = await E.findOne({ _id: id });
         const now = maintenant(), d = aLancer(etat, now, { heure, minute });
