@@ -35,9 +35,16 @@ function idBalise() { return `${PREFIXE}${identite.hote}/${identite.pid}`; }
  * @param {*} db  la base `cartes` (driver natif)
  * @param {'travail'|'repos'} etat  ce que le worker est en train de faire
  */
-async function battre(db, etat = 'travail') {
+// 🔑 (2026-10-17, collecte locale) Le commit est FIGÉ AU DÉMARRAGE du processus (commit-local.js, `fabriquerResolveur`, créé au premier battement =
+// démarrage de la boucle) ; chaque battement vérifie que l'arbre suivi est propre et que HEAD n'a pas bougé, sinon le champ disparaît pour de bon.
+// Sans commit vérifiable, le champ est ABSENT (jamais « local », jamais null) et `raisonSansCommit` dit pourquoi : la garde bloque et le répète.
+// `resoudre` est injectable pour les bancs.
+let resolveurDuProcessus = null;
+async function battre(db, etat = 'travail', { commit: resoudre = () => (resolveurDuProcessus ??= require('./commit-local').fabriquerResolveur())() } = {}) {
+    const { commit, raison } = resoudre();
+    const { commit: _ignore, ...sansCommit } = identite;
     await db.collection(COLLECTION).updateOne({ _id: idBalise() },
-        { $set: { balise: { ...identite, etat, depuis: new Date() } } }, { upsert: true });
+        { $set: { balise: { ...sansCommit, ...(commit ? { commit } : { raisonSansCommit: String(raison || '') }), etat, depuis: new Date() } } }, { upsert: true });
 }
 
 /** Retire la balise de CE processus. Un arrêt propre ne laisse pas de fantôme. */

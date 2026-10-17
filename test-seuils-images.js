@@ -121,5 +121,47 @@ if (typeof S.sourceDeUnite === 'function') {
 }
 for (const f of ['remettre-en-file.js', 'reste-visuels.js']) verifier(`${f} déduit la source de l'unité par sourceDeUnite`, sansCommentaires(lire(f)).includes('sourceDeUnite('), true);
 
+// ➕ 2026-10-17 (BASSE-DEF) — LE PLANCHER ABSOLU DE 200 PX : « Basse définition : accordée. Les 39 images pokemon.com (245×342) et les McDonald's en 320 px sont écrites avec le champ
+// basseDefinition: true. Le seuil de 257 px reste la norme. Plancher absolu : 200 px de large. En dessous, on refuse toujours. »
+// Ruling : il vaut pour DEUX familles nommées (la source pokemon.com ; les lignes McDonald's 2014, 2015, 2017, 2018-2 du collecteur Pokumon), et nulle part ailleurs.
+verifier('PLANCHER_BASSE_DEFINITION = 200 (exporté, nommé)', S.PLANCHER_BASSE_DEFINITION, 200);
+verifier('largeurAdmiseDe est exportée', typeof S.largeurAdmiseDe, 'function');
+if (typeof S.largeurAdmiseDe === 'function') {
+    const a = S.largeurAdmiseDe;
+    verifier('pokemon.com → 200 (au lieu de 257)', a('pokemon.com'), 200);
+    for (const l of ['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2']) verifier(`pokumon, ligne ${l} → 200`, a('pokumon', l), 200);
+    verifier('pokumon, ligne McDonald\'s 2023 (hors de la liste fermée du ruling) → 350', a('pokumon', 'mcd-match-battle-2023'), 350);
+    for (const l of ['tot-2022', 'prof', 'bsp-svp', 'bk-2008', 'w-promos', 'inconnue', '', null, undefined]) verifier(`pokumon, ligne ${l === '' ? '(vide)' : l} → 350 (aucune autre famille Pokumon ne change)`, a('pokumon', l), 350);
+    verifier('pokumon sans ligne (les Prize Packs) → 350', a('pokumon'), 350);
+    verifier('une ligne McDonald\'s sous une AUTRE source → la règle de cette source (350 / 257 / 300)', [a('artofpkm', 'mcd-2014'), a('tpc-asie', 'mcd-2014'), a('pikaqian', 'mcd-2014')], [350, 257, 300]);
+    for (const s of ['tpc-asie', 'pokemon-card-com']) verifier(`les AUTRES officielles gardent 257 (${s})`, a(s), 257);
+    verifier('bulbapedia, artofpkm, tcgdex, source inconnue, absente → 350', [a('bulbapedia'), a('artofpkm'), a('tcgdex'), a('quelque-part'), a(undefined), a(null)], [350, 350, 350, 350, 350, 350]);
+    verifier('casse différente (« POKEMON.COM », « Pokumon ») et propriétés héritées → 350 : liste fermée, comparaison exacte', [a('POKEMON.COM'), a('Pokumon', 'mcd-2014'), a('constructor'), a('__proto__', 'mcd-2014')], [350, 350, 350, 350]);
+    verifier('largeurMinDe n\'a pas bougé pour pokemon.com et pokumon (257 / 350) : le plancher est une AUTRE fonction', [S.largeurMinDe('pokemon.com'), S.largeurMinDe('pokumon')], [257, 350]);
+}
+// la liste fermée se dérive du réel : les identifiants cités existent dans la table Pokumon, famille McDonald's, et la source porte ce nom
+{ const PK = require('./collecte-cartes/pokumon');
+  const mcd = (S.LIGNES_POKUMON_A_PLANCHER || []);
+  verifier('LIGNES_POKUMON_A_PLANCHER = les quatre lignes du ruling, toutes famille « mcd » de LIGNES_AUTRES', [[...mcd].sort(), mcd.map(id => PK.LIGNES_AUTRES.find(l => l.id === id)?.famille)], [['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2'], ['mcd', 'mcd', 'mcd', 'mcd']]);
+  verifier('SOURCES_A_PLANCHER = [pokemon.com] ; le nom « pokumon » écrit ici est celui que le collecteur ÉCRIT (SOURCE)', [[...(S.SOURCES_A_PLANCHER || [])], S.SOURCE_POKUMON, PK.SOURCE], [['pokemon.com'], 'pokumon', 'pokumon']); }
+// une décision de seuil se relit (§23) : un `trop-petit` pokemon.com jugé à 257 entre 200 et 256 px est à rejuger ; sous 200 il reste refusé ; l'ancienne règle de pokumon (non McD) ne bouge pas
+if (typeof S.aRejuger === 'function') {
+    const r = S.aRejuger;
+    verifier('pokemon.com, 245 px, jugé à 257 → à rejuger (le plancher a baissé)', r({ wOriginal: 245, seuilApplique: 257, etat: 'trop-petit' }, 'pokemon.com'), true);
+    verifier('pokemon.com, 199 px, jugé à 257 → reste refusé', r({ wOriginal: 199, seuilApplique: 257, etat: 'trop-petit' }, 'pokemon.com'), false);
+    verifier('pokemon.com, 200 px pile, jugé à 257 → à rejuger', r({ wOriginal: 200, seuilApplique: 257 }, 'pokemon.com'), true);
+    verifier('pokemon.com, 245 px, jugé à 200 → rien à relire', r({ wOriginal: 245, seuilApplique: 200 }, 'pokemon.com'), false);
+    verifier('pokumon McDonald\'s 2014, 320 px, jugé à 350 (sans seuilApplique) → à rejuger', r({ wOriginal: 320, etat: 'trop-petit' }, 'pokumon', 'mcd-2014'), true);
+    verifier('pokumon McDonald\'s 2014, 199 px → reste refusé', r({ wOriginal: 199, etat: 'trop-petit' }, 'pokumon', 'mcd-2014'), false);
+    verifier('pokumon, ligne non McDonald\'s, 320 px → PAS rejugé', r({ wOriginal: 320, etat: 'trop-petit' }, 'pokumon', 'tot-2022'), false);
+    verifier('pokumon sans ligne, 320 px → PAS rejugé', r({ wOriginal: 320, etat: 'trop-petit' }, 'pokumon'), false);
+}
+// les appelants : AUCUN collecteur ne compare une largeur à 200 lui-même (§21 bis) ; pokemon.com et pokumon passent par la fonction
+for (const [f, appel] of Object.entries({ 'collecteur-images-pokemoncom.js': 'largeurAdmiseDe(', 'collecteur-images-pokumon.js': 'largeurAdmiseDe(', 'collecte-cartes/pokumon.js': 'largeurAdmiseDe(' })) {
+    const t = sansCommentaires(lire(f));
+    verifier(`${f} appelle ${appel}`, t.includes(appel), true);
+    verifier(`${f} ne compare à aucun nombre 200 écrit en dur`, /[<>]=?\s*200\b/.test(t), false);
+}
+
 console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);
 process.exit(ko ? 1 : 0);

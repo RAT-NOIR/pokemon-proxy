@@ -27,7 +27,8 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
-const { marqueDe } = require('./collecte-cartes/basse-definition');
+const { marqueDe, arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
@@ -121,7 +122,11 @@ async function lireFiches(db, client, site, L, ids, { compter }) {
 async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
-    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
+    // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une AUTRE source, même set / numéro / langue que celle que nous écrirons, ne « sert » pas la fiche : c'est un trou que TPC peut combler — à
+    // la jointure l'image n'entre que si elle sort NON marquée (sinon elle cède). La langue est celle que la règle de langue donnera à l'image écrite.
+    const langue = langueDuVisuel({ source: L.site, langueSource: L.langue }).langue;
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: slug }).toArray());   // correction 5 : les documents des entrées du set (leur tampon, leur variante)
+    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(sansRemplacables(cartes.get(l.carteId), { set: slug, numero: l.numeroFiche, langue, source: L.site, documents }), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
     // règle B (pokemon-card.com) : le dictionnaire nomEn -> nomJa de nos cartes À PAGE (_id > 0), pour les fiches simples sans nomJa
     const temoinNomJa = L.site === 'pokemon-card-com' ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
     // LA VOIE SECONDE nomJa + PV (lot PCC-JP) : pokemon-card.com seulement, pour les produits sans numéro ; ses gardes sont dans tpc.js
@@ -136,7 +141,7 @@ async function compterEntrees(db, carteIds, site, slug) {
     const autres = [];
     let siennes = 0;
     for (const c of cs) for (const e of c.images || []) { if (e?.source !== site) autres.push(`${c._id}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`); else if (e.set === slug) siennes++; }
-    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes };
+    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes, liste: autres };
 }
 
 /**
@@ -255,7 +260,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est le site
                         langueSource: L.langue, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: site, langueSource: L.langue })),
-                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
+                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok', ...marque, ...champsTracabilite({ urlOriginal: url, collecteLe: new Date() })
                     }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
                 }, { upsert: true });
                 telecharges++;
@@ -277,22 +282,27 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, site, slug);
         const images = await M.Image.find({ source: site, set: slug, etat: 'ok', langue: langueImage, lot: T.LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
+        const retirees = [];                                // BASSE-DEF : les entrées marquées sorties par le remplacement (empreintes de compterEntrees) : la garde les attend absentes
         try {
             for (const im of images) {
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }            // une image sans sa carte : comptée, elle fait tomber la concordance
                 const autres = (c.images || []).filter(e => !(e.source === site && e.set === slug && e.numero === im.numero));
-                if (T.dejaServi({ images: autres }, slug, im.numero)) {
+                const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
+                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
+                // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero), { documents: await documentsDesEntrees(M, autres) });
+                if (arb.servie) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre, s'il y en avait une,
                     // lui CÈDE la place — deux visuels pour une impression, c'est un de trop
                     dejaParAutre++;
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: site, numero: im.numero } } });
                     continue;
                 }
-                const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
-                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: site, numero: im.numero } } });
+                if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
             }
@@ -304,14 +314,16 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         }
         const apres = await compterEntrees(db, carteIds, site, slug);
         // les entrées des autres sources : les MÊMES, empreinte par empreinte ; les nôtres : celles de ce passage, et rien d'autre
-        const garde = avant.autres === apres.autres && apres.siennes === joints;
-        if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${site} ${apres.siennes} pour ${joints} jointes`);
+        const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // BASSE-DEF : MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
+        const garde = attenduesAutres === apres.autres && apres.siennes === joints;
+        if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres} (attendu ${avant.nAutres - retirees.length})${attenduesAutres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${site} ${apres.siennes} pour ${joints} jointes`);
         const fiches404 = compteurs['fiche-404'] || 0;
         const complet = {
             site, langue: L.langue, code: L.code, mention: T.MENTION, lot: T.LOT,
             liste: { lues: liste.ids.length, total: liste.total, complete: liste.complete }, fiches: fiches.length, fiches404, produits: P.produits, trous: P.trous,
             prouves: P.plan.length, voies, restes: motifs, telecharges, sautes, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
-            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, tpcApres: apres.siennes, ok: garde }, compteurs,
+            basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
+            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, tpcApres: apres.siennes, ok: garde }, compteurs,
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
             concordance: garde && !erreurJointure && telecharges + sautes + tropPetits + retires === P.plan.length && echecs === 0 && fiches404 === 0 && cartesAbsentes === 0
                 && joints + dejaParAutre === images.length && liste.complete && !bloque,

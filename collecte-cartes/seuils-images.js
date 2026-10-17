@@ -54,6 +54,32 @@ function largeurMinDe(source) {
     if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;
     return LARGEUR_MIN;
 }
+/**
+ * LA LARGEUR MINIMALE ADMISE d'une image (une image plus étroite est refusée), plancher de basse définition compris. `ligne` : l'identifiant de la ligne de la table Pokumon
+ * (`pokumon` seulement ; ignoré pour toute autre source). Hors des deux familles nommées ci-dessus : exactement `largeurMinDe(source)`.
+ */
+function largeurAdmiseDe(source, ligne = null) {
+    if (typeof source !== 'string') return LARGEUR_MIN;
+    if (SOURCES_A_PLANCHER.includes(source)) return Math.min(largeurMinDe(source), PLANCHER_BASSE_DEFINITION);
+    if (source === SOURCE_POKUMON && typeof ligne === 'string' && LIGNES_POKUMON_A_PLANCHER.includes(ligne)) return PLANCHER_BASSE_DEFINITION;
+    return largeurMinDe(source);
+}
+
+// ➕ 2026-10-17 (BASSE-DEF) — LE PLANCHER ABSOLU DE 200 PX, DÉCISION DU TESTEUR (mot pour mot) :
+// « Basse définition : accordée. Les 39 images pokemon.com (245×342) et les McDonald's en 320 px sont écrites avec le champ basseDefinition: true. Le seuil de 257 px reste la norme.
+// Plancher absolu : 200 px de large. En dessous, on refuse toujours. Une image basseDefinition est remplacée automatiquement dès qu'une source au-dessus du seuil existe pour ce
+// produit, avec l'ancienne adresse gardée dans l'historique. »
+// RULING du coordinateur : ce plancher vaut pour DEUX familles NOMMÉES et nulle part ailleurs — la source `pokemon.com` (toutes ses images) et, dans le collecteur Pokumon, les
+// quatre lignes McDonald's 2014, 2015, 2017 et 2018-2. Toute autre source, toute autre ligne Pokumon (Prize Packs, Trick or Trade, Professor Program, Black Star, Burger King, W Promos,
+// McDonald's Match Battle 2023) garde SA règle (`largeurMinDe`, inchangée). 🔑 Les listes sont FERMÉES et la comparaison EXACTE (une garde s'écrit par ce qu'elle autorise) : une
+// famille ajoutée demain ne bénéficie pas du plancher tant qu'une décision ne la nomme pas ici.
+// Une image admise SOUS le seuil de sa source (donc < 257 pour pokemon.com, < 350 pour Pokumon) est de basse définition : `marqueDe` (basse-definition.js) la marque d'après la
+// largeur de l'ORIGINAL, comme toute image sous 350 px.
+const PLANCHER_BASSE_DEFINITION = 200;
+const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com']);
+// le nom que le collecteur Pokumon ÉCRIT dans `images.source` (collecte-cartes/pokumon.js SOURCE ; le banc le compare) — pokumon.js charge CE module, il ne peut donc pas être requis ici
+const SOURCE_POKUMON = 'pokumon';
+const LIGNES_POKUMON_A_PLANCHER = Object.freeze(['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2']);
 
 // ➕ 2026-10-12 — « BASSE DÉFINITION » : UNE fonction, toutes sources confondues (§21 bis : aucun collecteur ne compare un nombre lui-même).
 // Une image est de basse définition quand la largeur de son ORIGINAL est sous LARGEUR_MIN (350). C'est la largeur de l'ORIGINAL qui compte, pas
@@ -72,9 +98,9 @@ function largeurOriginaleDe(doc) {
 // champ est antérieur à ce commit et a été jugé à LARGEUR_MIN (350) — l'absence du champ est l'information.
 // À rejuger si le seuil d'aujourd'hui est plus BAS que celui qui a jugé, ET que la largeur stockée ne suffit pas à conclure
 // « toujours trop petit » (largeur inconnue, ou au moins égale au seuil d'aujourd'hui). Sans effet de bord, sans requête.
-function aRejuger(doc, source) {
+function aRejuger(doc, source, ligne = null) {
     const avant = doc?.seuilApplique ?? LARGEUR_MIN;
-    const maintenant = largeurMinDe(source);
+    const maintenant = largeurAdmiseDe(source, ligne);
     if (maintenant >= avant) return false;
     const w = doc?.wOriginal ?? doc?.w;
     return !w || w >= maintenant;
@@ -101,4 +127,4 @@ function sourceDeUnite(unite, defaut) {
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, LARGEUR_MIN_PIKAQIAN, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, estBasseDefinition, largeurOriginaleDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, LARGEUR_MIN_PIKAQIAN, PLANCHER_BASSE_DEFINITION, SOURCES_A_PLANCHER, SOURCE_POKUMON, LIGNES_POKUMON_A_PLANCHER, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, largeurAdmiseDe, estBasseDefinition, largeurOriginaleDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };

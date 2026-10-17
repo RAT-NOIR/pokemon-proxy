@@ -41,6 +41,7 @@ const { ligne, TABLE } = require('./collecte-cartes/table-sets');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
@@ -151,7 +152,7 @@ async function joindreImagesTcgdex(M, slug, images, { langue, LANGUE }) {
     for (const [carteId, ims] of parCarte) {
         const numeros = ims.map(im => im.numero);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — sinon un rejeu (pull puis push) l'effacerait
-        const toutes = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() }));
+        const toutes = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() }));
         // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place à ce scan — la règle est celle du module
         for (const e of toutes) basseDefRemplacees += await remplacerBasseDefinition(M, carteId, e);
         const avant = await M.Carte.findById(carteId).select('images').lean();
@@ -181,7 +182,7 @@ async function joindreImagesTcgdex(M, slug, images, { langue, LANGUE }) {
         }
         if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
     }
-    return { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees };
+    return { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees, sansUrlOriginal: compterSansAdresse(images) };   // bilan du REJEU (correction 3)
 }
 
 async function collecterSet(unite, M, { verrou }) {
@@ -235,7 +236,7 @@ async function collecterSet(unite, M, { verrou }) {
                         preuve: `TCGdex ${p.tcg.id} : numéro ${p.numero}, nom « ${p.tcg.name} » en témoin`, urlOriginal: url,
                         wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
-                        langue: LANGUE.langue, languePreuve: LANGUE.preuve, attribution: 'TCGdex', telechargeLe: new Date(), etat: 'ok',
+                        langue: LANGUE.langue, languePreuve: LANGUE.preuve, attribution: 'TCGdex', telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: url, collecteLe: new Date() }),
                         // un fichier NEUF (ou changé) d'une langue sans témoin du nom repart « à contrôler » : un verdict ne vaut que pour
                         // le fichier qu'il a regardé
                         ...(CONTROLE_PAR_IMAGE.has(langue) ? { controle: { etat: 'a-controler', methode: 'dense', motif: `le nom ${langue} ne se compare pas : contrôle par l'image (testeur, 2026-10-03)`, le: new Date() } } : {})
@@ -259,11 +260,11 @@ async function collecterSet(unite, M, { verrou }) {
         const filtreImages = { source: SOURCE, set: slug, etat: 'ok', ...(langue === 'en' ? {} : { langue: LANGUE.langue }), ...(CONTROLE_PAR_IMAGE.has(langue) ? { 'controle.etat': 'accepte' } : {}) };
         const images = await M.Image.find(filtreImages).lean();
         const controle = CONTROLE_PAR_IMAGE.has(langue) ? Object.fromEntries(await Promise.all(['a-controler', 'accepte', 'refuse'].map(async e => [e, await M.Image.countDocuments({ source: SOURCE, set: slug, etat: 'ok', langue: LANGUE.langue, 'controle.etat': e })]))) : null;
-        const { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees } = await joindreImagesTcgdex(M, slug, images, { langue, LANGUE });
+        const { bulbaRetirees, basseDefRemplacees, preseancePerdues, preseanceRemplacees, sansUrlOriginal } = await joindreImagesTcgdex(M, slug, images, { langue, LANGUE });
         const complet = {
             langue, tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
             impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
-            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, basseDefinitionRemplacees: basseDefRemplacees, preseancePerdues, preseanceRemplacees, restes: P.motifs, sansScanAnglais: P.restes,
+            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, basseDefinitionRemplacees: basseDefRemplacees, sansUrlOriginal, preseancePerdues, preseanceRemplacees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             // une langue contrôlée par l'image : la concordance porte sur le TÉLÉCHARGEMENT (tout le plan est sur R2), le contrôle se compte
             // à part — un visuel refusé par l'image n'est pas un échec de collecte, c'est « ce qui ne passe pas reste vide »

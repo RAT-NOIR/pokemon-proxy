@@ -66,6 +66,7 @@ const { estCarteCode } = require('./collecte-cartes/jointure');
 // écrite. C'est la seule route qui touche au journal autrement qu'en y ajoutant — d'où
 // les trois gardes qui l'entourent, et l'écriture conditionnelle plutôt qu'un update sec.
 const { enregistrerScan, enregistrerEchec, JournalScan, VERSION } = require('./journal-scans');
+const { etatGuide: etatGuidePing } = require('./ping-guide');   // fraîcheur du guide des prix dans /ping
 
 // « Rien trouvé » et « pas pu chercher » sont deux états, jamais un seul. Voir sources.js :
 // six requêtes catalogue rendaient `[]` dans les deux cas, et l'aval lisait ce vide comme
@@ -7184,7 +7185,21 @@ app.post('/api/solde', verifierJeton, async (req, res) => {
 // `version` est la MÊME constante que celle écrite au journal (`VERSION`, exportée par
 // `journal-scans.js`), jamais un second calcul : sinon les deux dériveraient et on
 // croirait dater une ligne alors qu'on daterait une route.
-app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION }));
+// (2026-10-17) + la FRAÎCHEUR DU GUIDE DES PRIX (ping-guide.js) : `guideDu`, `guideAgeHeures`, `guideAJour` (false au-delà de 36 h, null si
+// inconnue). Lecture bornée (1,5 s), mise en cache, jamais d'exception : elle ne peut pas faire échouer ce keep-alive.
+const _cacheGuidePing = {};
+app.get('/ping', async (req, res) => {
+    let guide;
+    try {
+        guide = await etatGuidePing({
+            cache: _cacheGuidePing,
+            lire: async () => mongoose.connection.readyState === 1
+                ? (await mongoose.connection.db.collection('guide_prix_meta').findOne({ _id: 'dernier' }, { projection: { guideDu: 1 }, maxTimeMS: 1500 }))?.guideDu ?? null
+                : null
+        });
+    } catch { guide = { guideDu: null, guideAgeHeures: null, guideAJour: null }; }
+    res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION, ...guide });
+});
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
 

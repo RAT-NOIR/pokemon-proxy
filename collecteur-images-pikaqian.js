@@ -24,8 +24,9 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe } = require('./collecte-cartes/basse-definition');
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
@@ -78,7 +79,7 @@ async function compterEntrees(db, carteIds, slug) {
     const autres = [];
     let siennes = 0;
     for (const c of cs) for (const e of c.images || []) { if (e?.source !== P.SOURCE) autres.push(`${c._id}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`); else if (e.set === slug) siennes++; }
-    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes };
+    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes, liste: autres };
 }
 
 /** La provenance d'un visuel : ce que la page DÉCLARE pour cette carte (`lireOrigines`), sinon la phrase de la mesure du 2026-10-10. */
@@ -114,7 +115,7 @@ async function poserOriginal({ M, deposer, bucket, slug, p, buffer, deja, origin
             cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
             // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est la langue de la page
             langueSource: P.LANGUE, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: P.LANGUE })),
-            attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque, ...extra
+            attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque, ...champsTracabilite({ urlOriginal: p.url, collecteLe: new Date() }), ...extra
         }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
     }, { upsert: true });
     return { etat: 'ok', meta };
@@ -128,29 +129,35 @@ async function joindreAdditif(db, M, slug, nom = slug) {
     const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
     const avant = await compterEntrees(db, carteIds, slug);
     const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: P.LOT }).lean();
-    let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+    let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
+    const retirees = [];                                                              // BASSE-DEF : les entrées marquées sorties par le remplacement (empreintes de compterEntrees) : la garde les attend absentes
     try {
         for (const im of images) {
             const c = await M.Carte.findById(im.carteId).select('images').lean();
             if (!c) { cartesAbsentes++; continue; }                                   // une image sans sa carte : comptée, elle fait tomber la concordance
             const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero));
-            if (T.dejaServi({ images: autres }, slug, im.numero)) {
+            const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
+                numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
+                provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
+            // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
+            // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+            const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero), { documents: await documentsDesEntrees(M, autres) });
+            if (arb.servie) {
                 // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 dejaParAutre++;
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 continue;
             }
-            const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
-                provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date() };
             await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
+            if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
             await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
             joints++;
         }
     } catch (e) { erreurJointure = e.message; console.error(`🔴 ${nom} : jointure interrompue — ${e.message}`); }
     const apres = await compterEntrees(db, carteIds, slug);
-    const garde = avant.autres === apres.autres && apres.siennes === joints;
-    return { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages: images.length, carteIds };
+    const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
+    const garde = attenduesAutres === apres.autres && apres.siennes === joints;
+    return { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages: images.length, carteIds, basseDefRemplacees, retirees, sansUrlOriginal: compterSansAdresse(images) };
 }
 
 /**
@@ -256,7 +263,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
-        const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages } = await joindreAdditif(db, M, slug, unite._id);
+        const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages, basseDefRemplacees, sansUrlOriginal } = await joindreAdditif(db, M, slug, unite._id);
         if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes`);
         // ---- LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que le worker (§21 bis) ----
         const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
@@ -266,8 +273,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             source: P.SOURCE, langue: P.LANGUE, code: L.code, codePk: L.codePk, mention: P.MENTION, lot: P.LOT, provenance: P.PROVENANCE_PAR_DEFAUT,
             page: { tuiles: V.tuiles, auCodeDuSet: V.bonnes }, vignettes: W.vg,
             produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs, suffixesInconnus: Pl.suffixesInconnus.length, exemplesSuffixesInconnus: Pl.suffixesInconnus.slice(0, 5).map(s => s.nom),
-            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
-            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, ok: garde },
+            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes, sansUrlOriginal,
+            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres || garde, basseDefRemplacees, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, arret: arretClient ? arretClient.message : null, erreurJointure,
             concordance: garde && !erreurJointure && !bloque && !arretClient && vignettesOk && echecs === 0 && cartesAbsentes === 0
                 && telecharges + sautes + tropPetits + retires + absents === Pl.plan.length && joints + dejaParAutre === nImages,

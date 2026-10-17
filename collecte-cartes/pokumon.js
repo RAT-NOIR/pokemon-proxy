@@ -453,22 +453,25 @@ const LIGNES_AUTRES = Object.freeze([
       echantillon: [ech(34847, 'Wartortle (Base Set 2 63/130, 1296 px)', '2021/07/EN_S047Special-Print.jpg', 1296), ech(34844, 'Kabuto (Fossil 50/62)', '2021/07/EN_S044Special-Print.jpg', 400), ech(34853, 'Brock\'s Vulpix (Gym Challenge 37/132, 1296 px)', '2021/07/EN_S053Special-Print.jpg', 1296)] }
 ].map(l => Object.freeze(l)));
 const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
-const { largeurMinDe } = require('./seuils-images');
-const nImage = n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
+const { largeurAdmiseDe } = require('./seuils-images');
+const { sansRemplacables, normaliserTampon } = require('./basse-definition');
+// Correction 5 : le tampon d'un scan Pokumon = sa `marque` normalisée (document ET entrée). Une famille McDonald's n'a pas de tampon (une année, pas une réimpression tamponnée).
+const marqueDeSerie = serie => `Prize Pack Series ${serie} : tampon « Play! Pokémon »`;
+const tamponDeLaMarque = marque => (typeof marque === 'string' && !/^mcd-/.test(marque) ? normaliserTampon(marque) : null);
+const nImage =n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
 
 /**
  * LE PLAN des autres familles (pur). `produits` : TOUS les produits des sets des lignes (servis ou non : un groupe se compte sur tous) ; `cartes` : Map(carteId → { nomEn, images }).
  * 🔑 Le numéro posé sur l'image est celui de la FICHE (l'impression de la carte : « 033 » pour MEP033, « 009 » pour 9/15) — le site compare ce numéro à celui de la fiche — ; Trick or Trade et
  * Professor Program n'ont pas de fiche numérotée, l'image garde le numéro imprimé de l'entrée. Une image sous le seuil de largeur est un reste COMPTÉ (« sous-le-seuil »), jamais téléchargée.
  */
-function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) {
+function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index, documents }) {
     const { resultats, comptes } = apparierFamille({ lignes, produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const cleFiche = p => `${p.carteId}|${p.unite}|${cleMesure(p.numero) ?? ''}`;
     const parFiche = new Map();
     for (const r of resultats) { const k = cleFiche(parId.get(r.idProduct)); (parFiche.get(k) || parFiche.set(k, []).get(k)).push(r); }
     const plan = [], restes = [];
-    const seuil = largeurMinDe(SOURCE);
     for (const r of resultats) {
         const p = parId.get(r.idProduct);
         const base = { idProduct: p.idProduct, carteId: p.carteId, slugSet: p.unite, nomCm: p.nomCm };
@@ -479,11 +482,14 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         // PK-PROMOS : une ligne dont les images n'ont pas été REGARDÉES (`lu` absent) ne pose rien — écrit par ce qu'il autorise : seule une date de lecture ouvre la ligne
         if (!l.lu) { restes.push({ ...base, motif: 'ligne-non-regardee' }); continue; }
         const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
-        if ((carte.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : le SEUIL est celui de la LIGNE (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 ailleurs) ; une entrée MARQUÉE (basse définition) d'une autre source ne « sert »
+        // pas la fiche face à une image qui sortira NON marquée — la largeur est connue ICI (l'index la porte), donc une image sous 350 px (qui sera marquée) ne remplace rien : « deja-servi » reste
+        const visible = sansRemplacables(carte, { set: p.unite, numero, langue: 'en', source: SOURCE, wOriginal: e.w, documents, tampon: tamponDeLaMarque(`${l.id} : ${l.tampon}`) });
+        if ((visible.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(cleFiche(p));
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === e.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(e.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
-        if (!(e.w >= seuil)) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
+        if (!(e.w >= largeurAdmiseDe(SOURCE, l.id))) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
         if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.unite && nImage(x.numero) === nImage(numero))) continue;
         // BS-HOLO : l'image est celle de TOUT le couple ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
         const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
@@ -539,7 +545,7 @@ const urlImageValide = url => { try { return cheminAutorise(url).genre === 'imag
  * 🔑 LE SITE AFFICHE UN SEUL VISUEL PAR FICHE (carte, set) : une fiche sans numéro (les Prize Packs) montre la première image du set. Une fiche qui porte plusieurs produits dont un n'est pas
  * prouvé du même visuel montrerait notre image sur le produit d'à côté : TROU « fiche-partagee ». Une carte qui a déjà un visuel dans CE set n'est jamais touchée (additif).
  */
-function planifierPokumon({ produits, cartes, index }) {
+function planifierPokumon({ produits, cartes, index, documents }) {
     const { resultats, comptes } = apparier({ produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const parFiche = new Map();
@@ -551,7 +557,8 @@ function planifierPokumon({ produits, cartes, index }) {
         if (r.verdict !== 'prouve') { restes.push({ ...base, motif: r.motif }); continue; }
         const carte = cartes.get(p.carteId);
         if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
-        if ((carte.images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : une entrée marquée (basse définition) d'une autre source, même set / numéro / langue, ne « sert » pas la fiche face à une image qui sortira non marquée (largeur de l'index)
+        if ((sansRemplacables(carte, { set: p.slugSet, numero: r.entree.numero, langue: 'en', source: SOURCE, wOriginal: r.entree.w, documents, tampon: tamponDeLaMarque(marqueDeSerie(p.serie)) }).images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(`${p.carteId}|${p.slugSet}`);
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === r.entree.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(r.entree.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
@@ -734,5 +741,5 @@ function planRetraitPokumon(cartes, { seulementPartagees = false, sets = null } 
 module.exports = {
     SOURCE, HOTE_API, HOTE_IMG, HOTES, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, REESSAI_MS, PLAFOND_REQUETES, PLAFOND_MAX, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, EVENEMENTS,
     TABLE_POKUMON, ligneDe, seriesAdmises, lireEntree, estPlaceholder, construireIndex, cleMesure, nomPokumon, numeroOrigine, codeOrigine, temoinsDeLEntree, denominateurDuCode,
-    LIGNES_AUTRES, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
+    LIGNES_AUTRES, marqueDeSerie, tamponDeLaMarque, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
 };
