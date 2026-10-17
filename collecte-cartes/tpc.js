@@ -195,7 +195,7 @@ function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu
  * (carte, numéro) ne font qu'un visuel ; deux fiches au même numéro à la source ne désignent rien.
  * @param {{trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>, fiches: object[], code: string, site: string}} o
  */
-function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa = null }) {
+function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa = null, nomJaPv = null }) {
     // ce que porte la majorité de la liste (preuveDeCorrespondance, `attendu`) ; une égalité de voix n'élit personne
     const majorite = xs => { const m = new Map(); for (const x of xs) if (x != null) m.set(x, (m.get(x) || 0) + 1); const t = [...m].sort((a, b) => b[1] - a[1]); return t.length && (t.length === 1 || t[0][1] > t[1][1]) ? t[0][0] : null; };
     const attenduDe = fs => ({ denominateur: majorite(fs.map(f => /^\d+$/.test(f.denominateur || '') ? f.denominateur : null)), symbole: majorite(fs.map(f => f.symbole ?? null)) });
@@ -212,14 +212,14 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa 
         const kk = multi ? `${String(f.prefixe ?? '').toUpperCase()}${k}` : k;
         (parNumero.get(kk) || parNumero.set(kk, []).get(kk)).push(f);
     }
-    const vus = new Set(), plan = [], restes = [];
+    const vus = new Set(), plan = [], restes = [], essais = [];
     for (const t of trous) {
         const k = t.numeroFiche ? cleNumero(t.numeroFiche) : null;
         const cle = `${t.carte._id}|${k ?? `sans-numero:${t.idProduct}`}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
         const base = { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, idProduct: t.idProduct };
-        if (!k) { restes.push({ ...base, motif: 'sans-numero' }); continue; }
+        if (!k) { if (voieNomJaPvOuverte(nomJaPv, site, multi, t.carte)) essais.push({ t, base }); else restes.push({ ...base, motif: 'sans-numero' }); continue; }
         let pref = null;
         if (multi) {
             pref = /^([A-Z]*)\d/.exec(k)?.[1] ?? '';
@@ -235,6 +235,73 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa 
         const p = preuveDeCorrespondance({ fiche: f, carte: t.carte, numeroFiche: t.numeroFiche, code: multi ? (c[0].listeCode ?? code) : code, site, attendu: multi ? attendu.get(pref) : attendu, temoinNomJa });
         if (!p.ok) { restes.push({ ...base, motif: p.motif, detail: p.detail }); continue; }
         plan.push({ ...base, fiche: c[0], voie: p.voie, preuve: p.preuve });
+    }
+    if (essais.length) { const s = jugerNomJaPv({ essais, fiches, code, nomJaPv, temoinNomJa }); plan.push(...s.plan); restes.push(...s.restes); }
+    return { plan, restes };
+}
+
+// ── LA VOIE SECONDE « nomJa + PV » (lot PCC-JP, 2026-10-17) — pokemon-card.com, produits SANS NUMÉRO seulement ───────────────────────
+// Cardmarket ne numérote pas tous ses produits (DP1, EP08 : aucun). La voie par le numéro n'a alors rien à lire ; ceci est la SECONDE voie, jamais
+// la première : un produit qui a un numéro n'y passe jamais. Calibrée avant d'être câblée (PCC-JP-report.md) : la clé nom + PV seule, sans les
+// gardes ci-dessous, acceptait 424 fiches fausses sur 3 019 quand la vraie fiche était retirée de la liste — chaque garde a donc sa ligne :
+//   · option explicite (`nomJaPv`), pokemon-card.com seulement, ligne à UNE liste                    → `voieNomJaPvOuverte`
+//   · le set a une part notable de produits sans numéro (≥ 20 %) : sinon le numéro manquant est une exception, pas la règle
+//   · la carte n'a AUCUNE image dans ce set (ni de l'autre source, ni de la nôtre) : jamais deux visuels pour une impression
+//   · un seul nom japonais égal dans la liste, PV égaux (ou aucun des deux)                          → ambigu / contradiction-pv
+//   · la marque imprimée est le code de l'unité                                                      → set
+//   · le numéro de la fiche n'est PAS pris par un produit numéroté ni par une image du set, et l'identifiant de la fiche n'est pas celui d'une image
+//     déjà posée                                                                                      → fiche-prise
+//   · le nomJa de NOTRE carte n'est pas contredit par nos autres cartes de même nomEn (témoin)       → nom-non-comparable
+//   · bijection : une fiche réclamée par deux cartes n'en désigne aucune                             → fiche-revendiquee
+const SEUIL_PART_SANS_NUMERO = 0.2;
+const pvDe = x => Number(x) || null;
+function voieNomJaPvOuverte(nomJaPv, site, multi, carte) {
+    if (!nomJaPv || site !== 'pokemon-card-com' || multi) return false;
+    if (!(nomJaPv.partSansNumero >= SEUIL_PART_SANS_NUMERO)) return false;
+    if (!carte?.nomJa) return false;
+    if ((carte.images || []).some(e => e.set === nomJaPv.slug)) return false;
+    return true;
+}
+/** Ce que la voie lit dans la base, pur : la part de produits sans numéro, les numéros pris, les fiches déjà posées. */
+function contexteNomJaPv({ lignes, cartes, slug }) {
+    const numerosPris = new Set(), fichesPrises = new Set();
+    for (const l of lignes) if (l.numeroFiche) { const k = cleNumero(l.numeroFiche); if (k) numerosPris.add(k); }
+    for (const c of cartes) for (const e of c.images || []) {
+        if (e.set !== slug) continue;
+        if (e.numero != null) { const k = cleNumero(e.numero); if (k) numerosPris.add(k); }
+        const m = /\/card\/(\d+)\//.exec(e.urlFiche || ''); if (m) fichesPrises.add(m[1]);
+    }
+    return { slug, partSansNumero: lignes.length ? lignes.filter(l => !l.numeroFiche).length / lignes.length : 0, numerosPris, fichesPrises };
+}
+function jugerNomJaPv({ essais, fiches, code, nomJaPv, temoinNomJa }) {
+    const plan = [], restes = [], acceptes = [];
+    const premiere = new Map();                                      // carte -> son premier produit : un seul visuel par carte
+    for (const e of essais) {
+        const id = e.t.carte._id;
+        if (premiere.has(id)) { restes.push({ ...e.base, motif: 'meme-carte', detail: `servi par la fiche de la carte ${id} (produit ${premiere.get(id).base.idProduct})` }); continue; }
+        premiere.set(id, e);
+        const c = e.t.carte, refus = (motif, detail) => restes.push({ ...e.base, motif, detail });
+        const memeNom = fiches.filter(f => f.nom && nomCompare(f.nom) === nomCompare(c.nomJa));
+        if (!memeNom.length) { refus('nomja-pv-absente', `aucune fiche « ${c.nomJa} » dans la liste de ${code}`); continue; }
+        const pvN = pvDe(c.pv);
+        const memePv = memeNom.filter(f => pvDe(f.pv) === pvN);
+        if (!memePv.length) { refus('contradiction-pv', `PV ${pvN ?? 'aucun'} chez nous ; la source : ${memeNom.map(f => pvDe(f.pv) ?? 'aucun').join('/')}`); continue; }
+        if (memePv.length > 1) { refus('nomja-pv-ambigu', `fiches ${memePv.map(f => f.idFiche).join(', ')} portent « ${c.nomJa} » et les mêmes PV`); continue; }
+        const f = memePv[0];
+        if (!f.marque || f.marque.toUpperCase() !== String(code).toUpperCase()) { refus('set', `marque « ${f.marque ?? '—'} » pour le code ${code}`); continue; }
+        if (!f.image) { refus('fiche-sans-image', `la fiche ${f.idFiche} ne porte aucune image`); continue; }
+        const kf = f.numero ? cleNumero(f.numero) : null;
+        if ((kf && nomJaPv.numerosPris.has(kf)) || nomJaPv.fichesPrises.has(String(f.idFiche))) { refus('fiche-prise', `la fiche ${f.idFiche}${kf ? ` (n° ${f.numero})` : ''} est déjà celle d'un produit numéroté ou d'une image du set`); continue; }
+        if (temoinNomJa && c.nomEn) { const t = temoinNomJa(c.nomEn); if (t?.divergent) { refus('nom-non-comparable', `les nomJa de « ${c.nomEn} » divergent entre nos cartes (${t.noms.join(' | ')}) : le dictionnaire ne témoigne pas`); continue; } }
+        acceptes.push({ e, f });
+    }
+    const parFiche = new Map();
+    for (const a of acceptes) (parFiche.get(String(a.f.idFiche)) || parFiche.set(String(a.f.idFiche), []).get(String(a.f.idFiche))).push(a);
+    for (const [idFiche, as] of parFiche) {
+        if (as.length > 1) { for (const a of as) restes.push({ ...a.e.base, motif: 'fiche-revendiquee', detail: `la fiche ${idFiche} est réclamée par ${as.length} cartes` }); continue; }
+        const { e, f } = as[0], c = e.t.carte, pv = pvDe(f.pv);
+        plan.push({ ...e.base, fiche: f, voie: 'nomja+pv',
+            preuve: `pokemon-card-com fiche ${f.idFiche} : nom « ${f.nom} » = nomJa « ${c.nomJa} » + PV ${pv ?? 'aucun (dresseur/énergie)'} = les nôtres (voie seconde nomJa + PV, produit sans numéro) ; fiche unique de ce nom et de ces PV dans la liste filtrée, marque ${f.marque} = ${code}, n° ${f.numero ?? 'sans numéro'} non pris` });
     }
     return { plan, restes };
 }
@@ -409,6 +476,6 @@ function planRetrait(cartes) {
 module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
-    preuveDeCorrespondance, planifierTpc, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
+    preuveDeCorrespondance, planifierTpc, contexteNomJaPv, SEUIL_PART_SANS_NUMERO, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
     autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait
 };
