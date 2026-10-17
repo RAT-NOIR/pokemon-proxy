@@ -29,6 +29,45 @@ const urlAmbigue = (u) => {
     try { const p = new URL(u); return p.username !== '' || p.password !== '' || p.port !== ''; } catch { return true; }
 };
 
+// PHOTOS-MULTIPLES (7d) : `photoIds: [{ index, photoId }]` (au plus 8, un par index, l'index existe dans imageUrls et va de 0 à 7) ou l'ancien `photoId` seul (= l'index 0). Pure ; ne lit PAS le magasin.
+// Un `photoId` qui n'a pas la forme de 32 hexadécimaux est `photo-id` ; toute autre forme absurde est `photo-ids`. Bien formé mais inconnu, expiré, d'un autre porteur ou servi : jugé PLUS TARD (rattacherPhotos), ignoré.
+const FORME_PHOTO_ID = /^[0-9a-f]{32}$/;
+const PHOTO_INDEX_MAX = 7;
+function lirePhotoIds(corps, nUrls) {
+    const a = k => Object.prototype.hasOwnProperty.call(corps, k);
+    if (a('photoId') && a('photoIds')) return { erreur: 'photo-ids' };
+    if (a('photoId')) return typeof corps.photoId === 'string' && FORME_PHOTO_ID.test(corps.photoId) ? { photoIds: [{ index: 0, photoId: corps.photoId }] } : { erreur: 'photo-id' };
+    if (!a('photoIds')) return { photoIds: [] };
+    const l = corps.photoIds;
+    if (!Array.isArray(l) || l.length > PHOTO_INDEX_MAX + 1) return { erreur: 'photo-ids' };
+    const vus = new Set(), sortie = [];
+    for (const e of l) {
+        if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some(k => k !== 'index' && k !== 'photoId')) return { erreur: 'photo-ids' };
+        if (!Number.isInteger(e.index) || e.index < 0 || e.index > PHOTO_INDEX_MAX || e.index >= nUrls) return { erreur: 'photo-ids' };
+        if (typeof e.photoId !== 'string' || !FORME_PHOTO_ID.test(e.photoId)) return { erreur: 'photo-id' };
+        if (vus.has(e.index)) return { erreur: 'photo-ids' };
+        vus.add(e.index); sortie.push({ index: e.index, photoId: e.photoId });
+    }
+    return { photoIds: sortie };
+}
+
+// PHOTOS-MULTIPLES (7d) : après validerEntree, AVANT le débit : les photos reçues pour ce scan sortent du magasin (UNE FOIS chacune) et rejoignent `req.entree` : `photosRecues` ([{ index, octets }], l'index DÉCLARÉ ici)
+// et `imageOctets` (celle d'index le plus bas : la seconde lecture lit une carte). Absente, expirée, d'un autre porteur, déjà servie : ignorée, sans erreur (le magasin ne la rend pas). Ne lève jamais.
+function rattacherPhotos(deps = {}) {
+    return (req, res, next) => {
+        try {
+            const demandees = req.entree && Array.isArray(req.entree.photoIds) ? req.entree.photoIds : [];
+            const p = req.v2 && req.v2.porteur;
+            if (demandees.length && p) {
+                const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
+                for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) recues.push({ index: d.index, octets: x.octets }); }
+                if (recues.length) { recues.sort((a, b) => a.index - b.index); req.entree.photosRecues = recues; req.entree.imageOctets = recues[0].octets; }
+            }
+        } catch (e) { console.error(`❌ [v2 photos-recues] rattachement (${(e && (e.code || e.name)) || 'erreur'})`); }
+        next();
+    };
+}
+
 // Fonction pure : { entree } ou { erreur: { code, message, detail? } }. Ordre : forme, version, marché, champs, images.
 function verifierEntree(corps, cfg) {
     if (!corps || typeof corps !== 'object' || Array.isArray(corps)) return refus('ENTREE', 'corps de requête invalide');
@@ -60,7 +99,15 @@ function verifierEntree(corps, cfg) {
         if (urlAmbigue(u)) return refus('ENTREE', 'imageUrls : URL ambiguë (identifiant, port, barre inverse ou espace)', 'image-url');
     }
     if (!urls || !urls.length) return refus('IMAGE', 'aucune image à analyser', 'aucune-image');
+    // PHOTOS-MULTIPLES (7d) : SEULEMENT drapeau allumé. Éteint, `photoIds` et `photoId` sont des champs inconnus comme aujourd'hui (ignorés, jamais une erreur) et `entree` n'a pas une clé de plus.
+    let photoIds = null;
+    if (cfg.photosMultiples === true) {
+        const p = lirePhotoIds(corps, urls.length);
+        if (p.erreur) return refus('ENTREE', 'photoIds invalide', p.erreur);
+        photoIds = p.photoIds;
+    }
     return { entree: {
+        ...(photoIds ? { photoIds } : {}),
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
         vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // CONTRAT-2.md l. 24 : passé à la chaîne héritée (B1b.3) ; borné (mineur reporté de B1b.1)
@@ -114,6 +161,7 @@ const { natureDuMotif } = require('../argent/nature-du-motif');
 // FREIN-CONSTATES : la garde de dépense du modèle de cette configuration (un banc en injecte une par deps.depenseModele ; sinon celle du processus)
 const depenseDe = (cfg, deps) => (deps && deps.depenseModele && typeof deps.depenseModele.autorise === 'function' ? deps.depenseModele : DEPENSE.pourConfig(cfg));
 const { cartesParScanMax } = require('./cartes-par-scan');
+const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les images que la chaîne reçoit (les octets des photos reçues, ou les URLs de l'annonce)
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
@@ -230,7 +278,7 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
     let d;
     try {
         const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
-        const v = await avecBorne(() => deps.voisins({ imageUrls: entree.imageUrls, scanId: String(scanId) }), ms);
+        const v = await avecBorne(() => deps.voisins({ imageUrls: imagesDeLaChaine(entree), scanId: String(scanId) }), ms);
         if (!v) return null;
         d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils);
     } catch (e) { journalErreur('règle G', e); return null; }
@@ -355,7 +403,7 @@ function traiterIdentifier(cfg, deps = {}) {
             // comme réponse de la chaîne — sans la rappeler (un seul appel de lecture).
             if (!sortie && !erreurLot) {
             reqH = {
-                body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
+                body: { imageUrls: imagesDeLaChaine(entree), title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
                 ip: req.ip, headers: {}, scanIdImpose: scanId,
                 credit: argent.creditPourReq(porteur, credit, { scanId })
             };
@@ -626,4 +674,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, rattacherPhotos, lirePhotoIds, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
