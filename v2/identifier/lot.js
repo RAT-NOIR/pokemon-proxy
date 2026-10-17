@@ -20,6 +20,7 @@ const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { natureDuMotif } = require('../argent/nature-du-motif');
 
+const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan (octets) à la place des URLs, quand il y en a
 const { cartesParScanMax } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
 const journal = (ou, e) => console.error(`❌ [v2 lot] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
@@ -71,7 +72,7 @@ async function executerLot(p) {
         return { sortie: { resultat: { issue: 'panne', analyse: null, erreur: { code } }, facturation: p.facturationDe('panne', { admin, rendu: r.rendu, question: false, cause: r.cause }), lecture: null, desaccord: null } };
     };
     // 1. la lecture des cartes — APRÈS le débit, sans crédit dans la requête
-    const reqLot = { body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId: p.userId },
+    const reqLot = { body: { imageUrls: imagesDeLaChaine(entree), title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId: p.userId },
                      ip: p.ip, headers: {}, scanIdImpose: scanId };
     let resultats;
     try { resultats = await dansUnScan(async () => deps.identifierLot(reqLot)); }
