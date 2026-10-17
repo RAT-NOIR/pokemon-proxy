@@ -25,6 +25,16 @@ const PRODUITS_MATIERE_SPECIALE = Object.freeze({
         frereNormal: 576772,
         idExpansion: 4347,
     }),
+    // PREUVE : planche 01 de S7\METAL (rang 1), vignette 580161 comparée à son frère 605985 (même idExpansion 4347, même idMetacard) : bordure dorée sombre (V 0,37) contre jaune vif, scan doré métallique
+    // à l'œil ; ruling du coordinateur 2026-10-18 (même décision du testeur que 580162 : un trou, ou le vrai scan).
+    580161: entree({
+        nom: 'Pikachu [Gnaw | Thunder Jolt]',
+        motif: 'carte en métal doré du coffret Ultra-Premium de Celebrations (ajoutée chez Cardmarket avec 580162), rangée V2 d\'une carte normale : vignette dorée, pas le scan normal',
+        decision: 'coordinateur, 2026-10-18 : ajout sur la planche 01 ; décision du testeur : un trou, ou le vrai scan',
+        date: '2026-10-18',
+        frereNormal: 605985,
+        idExpansion: 4347,
+    }),
 });
 
 /** Le produit est-il en matière spéciale ? Accepte un nombre ou une chaîne de chiffres ; tout le reste est faux. */

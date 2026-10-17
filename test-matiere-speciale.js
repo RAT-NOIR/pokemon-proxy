@@ -21,6 +21,17 @@ verifier('la table est gelée', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE), tr
 verifier('chaque entrée porte motif, décision, date et frère normal', Object.values(M.PRODUITS_MATIERE_SPECIALE).every(e => e.motif && e.decision && /^\d{4}-\d\d-\d\d$/.test(e.date) && Number.isInteger(e.frereNormal)), true);
 verifier('l\'entrée est gelée aussi', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE[580162]), true);
 
+// 1 bis. 580161 « Pikachu [Gnaw | Thunder Jolt] » (métal doré, Celebrations Ultra-Premium) : ruling du coordinateur 2026-10-18
+verifier('580161 est en matière spéciale', M.estMatiereSpeciale(580161), true);
+{
+    const c = (id, n, num) => ({ _id: id, nomEn: n, attaques: [], impressions: [{ tirage: 'intl', expansion: 'Celebrations', numero: num }] });
+    const p = (id, num) => ({ idProduct: id, name: 'Pikachu', nom: 'Pikachu', attaques: [], numero: num });
+    const J161 = joindre([c(1, 'Pikachu', '5')], [p(576750, '5'), p(580161, '5')], { idExpansion: 4347, expansionBulba: 'Celebrations', tirage: 'intl' });
+    verifier('joindre : 580161 ne se joint jamais, son frère normal oui', J161.lignes.map(l => `${l.carteId}|${l.idProduct}`), ['1|576750']);
+    let m161 = null; try { M.garderMatiereSpeciale([580161], 'poseur'); } catch (e) { m161 = e.message; }
+    verifier('les poseurs câblés (garde) refusent 580161', /580161/.test(m161 || ''), true);
+}
+
 // 2. la garde d'écriture : elle LÈVE en nommant le produit (rien n'est écrit)
 let msg = null; try { M.garderMatiereSpeciale([576772, 580162], 'test'); } catch (e) { msg = e.message; }
 verifier('la garde lève sur un lot qui contient 580162', /580162/.test(msg || ''), true);
