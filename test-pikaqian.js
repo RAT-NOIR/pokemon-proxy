@@ -19,8 +19,8 @@ const tuile = (n, code, num, nom, { src } = {}) => `<a class="w-full group" data
 const page = (...tuiles) => `<!DOCTYPE html><html><head><title>Set</title></head><body><nav><a href="/sets">Sets</a></nav>${tuiles.join('')}</body></html>`;
 
 // ── le réseau simulé et l'horloge ───────────────────────────────────────────────────────────────────────────────────
-function monde({ repondre, cadence = 10000, verrou = { tenu: true, perdu: false }, dossierPauses = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pq-pauses-')) } = {}) {
-    require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); let t = 1_000_000;
+function monde({ repondre, processus = false, cadence = 10000, verrou = { tenu: true, perdu: false }, dossierPauses = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pq-pauses-')) } = {}) {
+    if (!processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); let t = 1_000_000;
     const appels = [];
     const transport = { async get(url, o) { appels.push({ url, t, binaire: !!o?.binaire }); return repondre(url, o, appels.length); } };
     const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; }, dossierPauses });
@@ -177,7 +177,13 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
         verifier('REPONSE-HOTE : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un blocage, pas d\'arrêt)', [nuls, e?.pauseHote === true, !!e?.bloque, w.client.bloque(), w.client.arret(), !!w.client.pause()], [20, true, false, null, null, true]);
         const e22 = await leve(() => w.client.image(U(22)));
         verifier('REPONSE-HOTE : …plus aucune requête pendant la pause', [e22?.pauseHote === true], [true]);
-        w = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal({})(url)) });
+        { const U1 = 'https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp';
+      const wa = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'application/json', texte: '{}' } : normal({})(url)) });
+      const ea = await leve(() => wa.client.image(U1));
+      const wb = monde({ repondre: normal({}), processus: true });
+      const eb = await leve(() => wb.client.image(U1));
+      verifier('I3 pikaqian : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [ea?.pauseHote === true, eb?.pauseHote === true, wb.appels.length], [true, true, 0]); }
+    w = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal({})(url)) });
         e = await leve(() => w.client.image(U(1)));
         verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), pas un blocage', [e?.pauseHote === true, e?.pausePersistante === true, !!e?.bloque], [true, true, false]);
         void RH;

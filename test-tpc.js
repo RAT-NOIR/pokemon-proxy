@@ -211,6 +211,10 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
         x = clientI(() => ({ status: 200, type: 'application/json', texte: '{}' }));
         e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
         verifier('REPONSE-HOTE : 200 JSON pour une image = inattendue → pause', [!!e?.pauseHote, e?.issue], [true, 'inattendue']);
+        x = clientI(() => ({ status: 200, type: 'application/json', texte: '{}' }));
+        e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+        { const x2 = clientI(() => ({ status: 200, type: 'image/png', octets: PNG_T }), { processus: true }); let e2 = null; try { await x2.c.image('/id/card-img/b.png'); } catch (y) { e2 = y; }
+          verifier('I3 tpc : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!e?.pauseHote, !!e2?.pauseHote, x2.t.appels.length], [true, true, 0]); }
         x = clientI(() => ({ status: 200, type: 'image/png', octets: Buffer.from('pas une image') }));
         e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
         verifier('REPONSE-HOTE : 200 image/png aux octets faux = inattendue → pause', [!!e?.pauseHote, e?.issue], [true, 'inattendue']);

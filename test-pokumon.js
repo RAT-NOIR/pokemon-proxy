@@ -303,6 +303,11 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr);
     err = await essayer(() => c.image(E.kricketune.img));
     verifier('REPONSE-HOTE : 200 JSON pour une image = inattendue → PAUSE de la passe (pas de blocage)', [!!err?.pauseHote, !!err?.bloque, err?.issue], [true, false, 'inattendue']);
+    // I3 (correction 1) : le suivi vit pour le PROCESSUS — une SECONDE unité (un second client, le registre par défaut) ne fait AUCUNE requête après la pause de la première
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    { const tr2 = reseau(normal), c2 = client(tr2, verrou, { processus: true }); const e2 = await essayer(() => c2.image(E.kricketune.img));
+      verifier('I3 pokumon : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!err?.pauseHote, !!e2?.pauseHote, tr2.appels.length], [true, true, 0]); }
     tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: Buffer.from('ceci n\'est pas une image') }); c = client(tr);
     err = await essayer(() => c.image(E.kricketune.img));
     verifier('REPONSE-HOTE : 200 image/png aux octets faux = inattendue → pause', [!!err?.pauseHote, err?.issue], [true, 'inattendue']);

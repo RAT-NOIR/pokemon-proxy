@@ -25,7 +25,7 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     const rep = (status, type, data, h = {}) => ({ status, headers: { 'content-type': type, ...h }, data });
     const appels = [];
     let dirA = null;
-    const brancher = (f, dir = dp()) => { appels.length = 0; dirA = dir; AP.regler({ transport: async (url) => { appels.push(url); return f(url); }, delaiMs: 0, reessaiMs: 0, dossierPauses: dir }); };
+    const brancher = (f, dir = dp()) => { appels.length = 0; dirA = dir; AP.regler({ transport: async (url, opt) => { appels.push(url); const r = f(url); if (opt?.validateStatus && !opt.validateStatus(r.status)) throw Object.assign(new Error('Request failed with status code ' + r.status), { response: r }); return r; }, delaiMs: 0, reessaiMs: 0, dossierPauses: dir }); };
     const U = i => `https://cdn.artofpkm.com/x${i}`;
     brancher(() => rep(200, 'text/html; charset=utf-8', Buffer.from(FAUSSE)));
     let x = await sansLever(() => AP.telecharger(U(1)));
@@ -186,6 +186,17 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         const av = t4.a.length; const u2 = await sansLever(() => BU.telecharger(H + '/autre-unite.png', { transport: t4.t, delaiMs: 0, attendre: async () => { }, dossierPauses: dC }));
         verifier('I3 BULBAPEDIA : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!u2.e?.pauseHote, t4.a.length - av], [true, 0]);
         BU.regler();
+        // I1 : le transport PAR DÉFAUT (axios simulé qui honore validateStatus) laisse passer un 503 « Just a moment » jusqu'au module
+        const axiosOrigine = require('axios').get; const dD = dp(); const appD = [];
+        require('axios').get = async (url, o) => { appD.push(url); const r = rep(503, 'text/html', Buffer.from('<title>Just a moment...</title>')); if (o?.validateStatus && !o.validateStatus(r.status)) throw Object.assign(new Error('Request failed with status code 503'), { response: r }); return r; };
+        try {
+            const xD = await sansLever(() => BU.telecharger(H + '/a.png', { delaiMs: 0, attendre: async () => { }, dossierPauses: dD }));
+            verifier('I1 BULBAPEDIA (transport par défaut) : un 503 « Just a moment » atteint le module → arrêt DÉFINITIF et durable, UNE requête', [!!xD.e?.bloque, !!RH.hoteArrete('bulbagarden.net', dD), appD.length], [true, true, 1]);
+            BU.regler();
+            appD.length = 0; require('axios').get = async (url, o) => { appD.push(url); const r = rep(503, 'text/html', Buffer.from('maintenance')); if (o?.validateStatus && !o.validateStatus(r.status)) throw Object.assign(new Error('Request failed with status code 503'), { response: r }); return r; };
+            const xE = await sansLever(() => BU.telecharger(H + '/a.png', { delaiMs: 0, attendre: async () => { }, dossierPauses: dp() }));
+            verifier('I1 BULBAPEDIA (transport par défaut) : un 503 SANS marqueur est réessayé UNE fois (2 requêtes) puis erreur ordinaire', [!!xE.e?.bloque, !!xE.e?.pauseHote, appD.length], [false, false, 2]);
+        } finally { require('axios').get = axiosOrigine; BU.regler(); }
     }
 
     // ════════════ TCGDEX ════════════

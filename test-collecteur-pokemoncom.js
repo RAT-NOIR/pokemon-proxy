@@ -88,7 +88,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const robotsLibre = { status: 404, type: 'application/xml', texte: '' };       // le robots.txt de l'hôte d'images, vu le 17/10 : 404 (AmazonS3), aucune règle
     const normal = (url, o) => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand };
     const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, avance: ms => { t += ms; }, attentes }; };
-    const lancer = (urls, tr, d, h = horloge(), o = {}) => (require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
 
     let d = tmp(), h = horloge(), tr = reseau(normal);
     let r = await lancer(plan.map(p => p.url), tr, d, h);
@@ -142,6 +142,13 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
         const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
         verifier('REPONSE-HOTE : un 200 text/html sans marqueur → absente (empreinte gardée), les autres continuent, AUCUN arrêt', [r.etat, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.n, /^[0-9a-f]{64}$/.test(idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.empreinte || ''), Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])],
             ['termine', 'fausse-absente', 1, true, 3, false, [['assets.pokemon.com', 1, 1]]]);
+        // I3 (correction 1) : deux unités de suite — la seconde, après la pause de la première (réponse inattendue), ne fait AUCUNE requête
+        {
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'application/json', texte: '{}' }));
+            const a = await lancer(plan.map(p => p.url), t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(plan.map(p => p.url), t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('I3 pokemoncom : deux unités de suite — la seconde ne fait AUCUNE requête (pas même robots.txt)', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
         // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — notée « fausse-absente » (empreinte, date), redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
         {
             const hM = horloge(), fausseB = url => (/Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : null);

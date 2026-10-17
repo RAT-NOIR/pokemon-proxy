@@ -290,6 +290,10 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
             err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
             verifier(`REPONSE-HOTE client : ${nom} = défi → BLOQUÉ`, [!!err?.bloque], [true]);
         }
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr, verrou, { dossierPauses: dp() });
+        err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
+        { const tr2 = reseau(normal), c2 = client(tr2, verrou, { dossierPauses: dp(), processus: true }); let e2 = null; try { await c2.image(P.urlHires('cel25', 6)); } catch (e) { e2 = e; }
+          verifier('I3 ptcgio : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!err?.pauseHote, !!e2?.pauseHote, tr2.appels.length], [true, true, 0]); }
         tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: Buffer.from('pas une image') }); c = client(tr, verrou, { dossierPauses: dp() });
         err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
         verifier('REPONSE-HOTE client : 200 image/png aux octets faux = inattendue → pause', [!!err?.pauseHote, err?.issue], [true, 'inattendue']);

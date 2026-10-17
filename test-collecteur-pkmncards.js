@@ -83,7 +83,7 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     const robotsLibre = { status: 200, type: 'text/plain', texte: robotsReel };           // le VRAI robots.txt de la source : « Disallow: /*?s= » seul
     const normal = (url, o) => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: /m23_en_003/.test(url) ? petit : grand };
     const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, avance: ms => { t += ms; }, attentes }; };
-    const lancer = (urls, tr, d, h = horloge(), o = {}) => (require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
     const urls = plan.map(p => p.url);
 
     let d = tmp(), h = horloge(), tr = reseau(normal);
@@ -126,6 +126,13 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
         r = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
         const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
         verifier('REPONSE-HOTE : un 200 text/html SANS marqueur → absente (empreinte gardée), on passe à la suivante, AUCUN arrêt', [r.etat, Object.values(idxF).filter(e => e.statut === 'fausse-absente' && e.n === 1 && /^[0-9a-f]{64}$/.test(e.empreinte || '')).length, Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])], ['termine', 1, 2, false, [['pkmncards.com', 1, 1]]]);
+        // I3 (correction 1) : deux unités de suite — la seconde, après la pause de la première (réponse inattendue), ne fait AUCUNE requête
+        {
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'application/json', texte: '{}' }));
+            const a = await lancer(urls, t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(urls, t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('I3 pkmncards : deux unités de suite — la seconde ne fait AUCUNE requête (pas même robots.txt)', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
         // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
         {
             const hM = horloge(), fausseB = url => (/m23_en_002/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : null);
