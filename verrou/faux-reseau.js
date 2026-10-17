@@ -106,10 +106,19 @@ if (fs.existsSync(FICHIER_TCGDEX)) {
     }
 }
 
+const IMAGE_PANNE_FOURNISSEUR = 'https://images1.vinted.net/t/00_rm-b1b3/f800/panne-fournisseur.webp';
+
 axios.post = async function (url, corps) {
     if (String(url).includes('openrouter.ai')) {
         const contenu = corps?.messages?.[0]?.content ?? [];
         const image = contenu.find(p => p.type === 'image_url')?.image_url?.url;
+        // UN MARQUEUR DÉDIÉ (FREIN-CONSTATES, correction du banc test-identifier-v2) : une panne PROUVÉE du fournisseur — une erreur de forme axios, sans réponse (ECONNRESET), que `classerPanneIA` classe en panne
+        // du service. Un ajout : aucune autre image n'est touchée (une image non enregistrée lève toujours l'erreur ordinaire ci-dessous, une lecture VIDE et non une panne).
+        if (image === IMAGE_PANNE_FOURNISSEUR) {
+            const e = new Error('read ECONNRESET');
+            e.code = 'ECONNRESET';
+            throw e;
+        }
         const lecture = parImage.get(image);
         if (!lecture) {
             throw new Error(`[faux-reseau] aucune lecture enregistrée pour l'image ${image}`);

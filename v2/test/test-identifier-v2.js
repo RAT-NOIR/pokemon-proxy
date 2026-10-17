@@ -18,7 +18,8 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const charges = require(CHARGES).charges;
 const IMAGE = charges.find(c => c.cellule === 'occidentale').imageUrl;      // Tropius PBL 001 : la lecture rejouée par le faux réseau
-const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le service de lecture « tombe »
+const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b1b3/f800/inconnue.webp';   // aucune lecture enregistrée : le faux réseau lève une erreur ORDINAIRE (non classée) — la lecture est VIDE, pas une panne du fournisseur
+const IMAGE_PANNE_FOURNISSEUR = 'https://images1.vinted.net/t/00_rm-b1b3/f800/panne-fournisseur.webp';   // marqueur DÉDIÉ de verrou/faux-reseau.js : le faux réseau lève une erreur de forme axios (ECONNRESET, sans réponse) que classerPanneIA classe
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
 const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', RENDER_GIT_COMMIT: '0123456789abcdef0123456789abcdef01234567', V2_VERSION_MODELE: 'modele-test.1', V2_DESCRIPTION_CONSERVEE: '1' });   // B6 : le défaut est éteint ; ce banc éprouve l'option allumée (le défaut a son assertion plus bas)
 const ORIGINE = cfg.origines.extension;
@@ -144,12 +145,24 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.vrai('   ni le jeton ni son empreinte dans la ligne du journal', jl && !JSON.stringify(jl).includes(jeton) && !JSON.stringify(jl).includes(J.empreinte(jeton)));
     }
 
-    // ── 5. panne de lecture : jamais « introuvable », remboursée
+    // ── 5. lecture vide (erreur non classée) : FREIN-CONSTATES tour 3 — ce n'est PAS une panne du fournisseur (rien ne la prouve) : un constat sur la photo, introuvable / photo-illisible, rendu SOUS le plafond des constatés
     {
         const { i, jeton } = await inst(3);
         const r = await poster(urlOn, jeton, corps({ imageUrls: [IMAGE_INCONNUE] }), { nom: '5' }), j = r.json || {};
-        H.v('5. panne de lecture : success:false, IA, motif panne, remboursée', [j.success, j.erreur && j.erreur.code, j.facturation && j.facturation.motif, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite], [false, 'IA', 'panne', true, 0]);
-        H.v('   solde.essai revenu à 3, et surtout pas un introuvable', [j.solde && j.offre.restant, (await solde(i._id)).essais, j.analyse], [3, 3, undefined]);
+        const c0 = j.analyse && j.analyse.cartes && j.analyse.cartes[0];
+        H.v('5. lecture vide (erreur non classée) : success:true, introuvable / photo-illisible, jamais une panne IA', [r.statut, j.success, j.erreur, c0 && c0.statut, c0 && c0.raison], [200, true, undefined, 'introuvable', 'photo-illisible']);
+        H.v('   constat rendu sous le plafond : facturation { motif introuvable, rembourse, debite 0 }', [j.facturation && j.facturation.motif, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite], ['introuvable', true, 0]);
+        H.v('   le solde revient à 3', [j.offre && j.offre.restant, (await solde(i._id)).essais], [3, 3]);
+    }
+
+    // ── 5b. panne PROUVÉE du fournisseur (erreur de forme axios que classerPanneIA classe) : success:false, IA, motif panne, rendue HORS plafond, jamais un introuvable
+    {
+        const { i, jeton } = await inst(3);
+        const r = await poster(urlOn, jeton, corps({ imageUrls: [IMAGE_PANNE_FOURNISSEUR] }), { nom: '5b' }), j = r.json || {};
+        H.v('5b (fournisseur). panne du fournisseur prouvée : success:false, IA, motif panne, remboursée', [j.success, j.erreur && j.erreur.code, j.facturation && j.facturation.motif, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.debite], [false, 'IA', 'panne', true, 0]);
+        H.v('   le solde revient à 3, et surtout pas un introuvable', [j.offre && j.offre.restant, (await solde(i._id)).essais, j.analyse], [3, 3, undefined]);
+        const plafond = await raw('plafonds').countDocuments({ porteur: `installation:${i._id}`, type: 'constate' });
+        H.v('   hors plafond : aucun compteur « constate » écrit', plafond, 0);
     }
 
     // ── 6. panne du catalogue : INDISPONIBLE, remboursée
