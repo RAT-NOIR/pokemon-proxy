@@ -1,0 +1,4523 @@
+{
+ "source": "copie anonymisee de la lecture seule de rm_essai (177 questions stockees) : noms lus, idProduct, noms de produits, verite",
+ "questions": [
+  {
+   "n": 1,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Togepi & Cleffa & Igglybuff-GX",
+    "nomBrut": "Togepi, Mélo et Toudoudou GX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 398484,
+     "nomCardmarket": "Togepi & Cleffa & Igglybuff GX [Rolling Panic | Supreme Puff GX]",
+     "nom": "Togepi & Cleffa & Igglybuff GX"
+    },
+    {
+     "idProduct": 582672,
+     "nomCardmarket": "Togepi & Cleffa & Igglybuff GX [Rolling Panic | Supreme Puff GX]",
+     "nom": "Togepi & Cleffa & Igglybuff GX"
+    }
+   ],
+   "verite": 398484
+  },
+  {
+   "n": 2,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Togepi & Cleffa & Igglybuff-GX",
+    "nomBrut": "Togepi, Mélo et Toudoudou-GX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 398484,
+     "nomCardmarket": "Togepi & Cleffa & Igglybuff GX [Rolling Panic | Supreme Puff GX]",
+     "nom": "Togepi & Cleffa & Igglybuff GX"
+    },
+    {
+     "idProduct": 582672,
+     "nomCardmarket": "Togepi & Cleffa & Igglybuff GX [Rolling Panic | Supreme Puff GX]",
+     "nom": "Togepi & Cleffa & Igglybuff GX"
+    }
+   ],
+   "verite": 398484
+  },
+  {
+   "n": 3,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Regigigas VSTAR",
+    "nomBrut": "Regigigas VSTAR",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 691833,
+     "nomCardmarket": "Regigigas VSTAR [Giga Impact | Star Guardian]",
+     "nom": "Regigigas VSTAR"
+    },
+    {
+     "idProduct": 691935,
+     "nomCardmarket": "Regigigas VSTAR [Giga Impact | Star Guardian]",
+     "nom": "Regigigas VSTAR"
+    }
+   ],
+   "verite": 691935
+  },
+  {
+   "n": 4,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Gardevoir-EX",
+    "nomBrut": "Gardevoir EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 290993,
+     "nomCardmarket": "Gardevoir EX [Link Blast | Luminous Blade]",
+     "nom": "Gardevoir EX"
+    },
+    {
+     "idProduct": 291558,
+     "nomCardmarket": "Gardevoir EX [Link Blast | Luminous Blade]",
+     "nom": "Gardevoir EX"
+    },
+    {
+     "idProduct": 291563,
+     "nomCardmarket": "Gardevoir EX [Link Blast | Luminous Blade]",
+     "nom": "Gardevoir EX"
+    }
+   ],
+   "verite": 291563
+  },
+  {
+   "n": 5,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Zeraora VMAX",
+    "nomBrut": "Zeraora VMAX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 669839,
+     "nomCardmarket": "Zeraora VMAX [Reactive Pulse | Max Fist]",
+     "nom": "Zeraora VMAX"
+    },
+    {
+     "idProduct": 691771,
+     "nomCardmarket": "Zeraora VMAX [Reactive Pulse | Max Fist]",
+     "nom": "Zeraora VMAX"
+    },
+    {
+     "idProduct": 691922,
+     "nomCardmarket": "Zeraora VMAX [Reactive Pulse | Max Fist]",
+     "nom": "Zeraora VMAX"
+    }
+   ],
+   "verite": 691771
+  },
+  {
+   "n": 6,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Armored Mewtwo",
+    "nomBrut": "アーマードミュウツー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 471459,
+     "nomCardmarket": "Armored Mewtwo [Psychic Raid]",
+     "nom": "Armored Mewtwo"
+    }
+   ],
+   "verite": 471459
+  },
+  {
+   "n": 7,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Tyranitar",
+    "nomBrut": "バンギラス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 705356,
+     "nomCardmarket": "Tyranitar [Rout | Dread Mountain]",
+     "nom": "Tyranocif"
+    },
+    {
+     "idProduct": 707675,
+     "nomCardmarket": "Tyranitar [Rout | Dread Mountain]",
+     "nom": "Tyranocif"
+    }
+   ],
+   "verite": 707675
+  },
+  {
+   "n": 8,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Enamorus V",
+    "nomBrut": "AmovénusV",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 674095,
+     "nomCardmarket": "Enamorus V [Guardian of Love | Blossom Tail]",
+     "nom": "Amovénus V"
+    },
+    {
+     "idProduct": 674187,
+     "nomCardmarket": "Enamorus V [Guardian of Love | Blossom Tail]",
+     "nom": "Amovénus V"
+    },
+    {
+     "idProduct": 674236,
+     "nomCardmarket": "Enamorus V [Guardian of Love | Blossom Tail]",
+     "nom": "Amovénus V"
+    }
+   ],
+   "verite": 674187
+  },
+  {
+   "n": 9,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Darkrai LV.X",
+    "nomBrut": "Darkrai NIV.X",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275566,
+     "nomCardmarket": "Darkrai LV.X [Dark Shadow | Endless Darkness]",
+     "nom": "Darkrai LV.X"
+    },
+    {
+     "idProduct": 278006,
+     "nomCardmarket": "Darkrai LV.X [Dark Shadow | Endless Darkness]",
+     "nom": "Darkrai LV.X"
+    }
+   ],
+   "verite": 275566
+  },
+  {
+   "n": 10,
+   "cas": null,
+   "code": "numero",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Bulbasaur",
+    "nomBrut": "フシギダネ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 561997,
+     "nomCardmarket": "Bulbasaur [Lunge | Scratch]",
+     "nom": "Bulbasaur"
+    },
+    {
+     "idProduct": 654763,
+     "nomCardmarket": "Bulbasaur [Tackle | Poison Seed]",
+     "nom": "Bulbizarre"
+    },
+    {
+     "idProduct": 832288,
+     "nomCardmarket": "Bulbasaur [Tackle | Razor Leaf | Intro Pack]",
+     "nom": "Bulbizarre"
+    }
+   ],
+   "verite": 548491
+  },
+  {
+   "n": 11,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Kabutops",
+    "nomBrut": "カブトプス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 584737,
+     "nomCardmarket": "Kabutops [Sharp Sickle | Absorb]",
+     "nom": "Kabutops"
+    },
+    {
+     "idProduct": 606559,
+     "nomCardmarket": "Kabutops [Slash | Hydrocutter]",
+     "nom": "Kabutops"
+    },
+    {
+     "idProduct": 653965,
+     "nomCardmarket": "Kabutops [Primal Aura | Dual Cut]",
+     "nom": "Kabutops"
+    }
+   ],
+   "verite": 584737
+  },
+  {
+   "n": 12,
+   "cas": "porygon2",
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Dark Feraligatr",
+    "nomBrut": "わるいオーダイル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606831,
+     "nomCardmarket": "Dark Feraligatr [Scare | Crushing Blow]",
+     "nom": "Aligatueur obscur"
+    },
+    {
+     "idProduct": 606889,
+     "nomCardmarket": "Dark Porygon2 [Spatial Distortion | Curve Attack]",
+     "nom": "Porygon2 obscur"
+    }
+   ],
+   "verite": 606831
+  },
+  {
+   "n": 13,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Dark Alakazam",
+    "nomBrut": "Alakazam obscur",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 274054,
+     "nomCardmarket": "Dark Alakazam [Teleport Blast | Mind Shock]",
+     "nom": "Alakazam obscur"
+    },
+    {
+     "idProduct": 274071,
+     "nomCardmarket": "Dark Alakazam [Teleport Blast | Mind Shock]",
+     "nom": "Alakazam obscur"
+    }
+   ],
+   "verite": 274071
+  },
+  {
+   "n": 14,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Toxtricity ex",
+    "nomBrut": "ストリンダー ex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 810563,
+     "nomCardmarket": "Toxtricity ex [Strumming Thunder]",
+     "nom": "Salarsen ex"
+    },
+    {
+     "idProduct": 859904,
+     "nomCardmarket": "Toxtricity ex [Strumming Thunder]",
+     "nom": "Salarsen ex"
+    }
+   ],
+   "verite": 810563
+  },
+  {
+   "n": 15,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Entei",
+    "nomBrut": "エンテイ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606684,
+     "nomCardmarket": "Entei [Howl | Searing Flames]",
+     "nom": "Entei"
+    },
+    {
+     "idProduct": 652020,
+     "nomCardmarket": "Entei [Pure Body | Burning Fang]",
+     "nom": "Entei"
+    },
+    {
+     "idProduct": 652021,
+     "nomCardmarket": "Entei [Pure Body | Burning Fang]",
+     "nom": "Entei"
+    }
+   ],
+   "verite": 571909
+  },
+  {
+   "n": 16,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Kadabra",
+    "nomBrut": "ユンゲラー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 549016,
+     "nomCardmarket": "Kadabra [Psycho Panic | Blink]",
+     "nom": "Kadabra"
+    },
+    {
+     "idProduct": 549021,
+     "nomCardmarket": "Kadabra [Energy Restore | Energy Shock]",
+     "nom": "Kadabra"
+    },
+    {
+     "idProduct": 557697,
+     "nomCardmarket": "Kadabra [Recover | Super Psy]",
+     "nom": "Kadabra"
+    }
+   ],
+   "verite": 549021
+  },
+  {
+   "n": 17,
+   "cas": null,
+   "code": "visuel",
+   "voie": "cle-pokedex-sans-numero",
+   "lu": {
+    "nom": "Dark Charizard",
+    "nomBrut": "わるいリザードン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571492,
+     "nomCardmarket": "Dark Charizard [Nail Flick | Continuous Fireball]",
+     "nom": "Dracaufeu obscur"
+    },
+    {
+     "idProduct": 585047,
+     "nomCardmarket": "Dark Charizard [Nail Flick | Continuous Fireball]",
+     "nom": "Dracaufeu obscur"
+    }
+   ],
+   "verite": 585047
+  },
+  {
+   "n": 18,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Yveltal-EX",
+    "nomBrut": "Yveltal EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 281415,
+     "nomCardmarket": "Yveltal [Oblivion Wing | Darkness Blade]",
+     "nom": "Yveltal"
+    },
+    {
+     "idProduct": 281416,
+     "nomCardmarket": "Yveltal EX [Evil Ball | Y Cyclone]",
+     "nom": "Yveltal EX"
+    },
+    {
+     "idProduct": 281481,
+     "nomCardmarket": "Yveltal EX [Evil Ball | Y Cyclone]",
+     "nom": "Yveltal EX"
+    }
+   ],
+   "verite": 281329
+  },
+  {
+   "n": 19,
+   "cas": null,
+   "code": "symbole",
+   "voie": "nom",
+   "lu": {
+    "nom": "Gengar Prime",
+    "nomBrut": "Ectoplasma",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 279624,
+     "nomCardmarket": "Gengar [Catastrophe | Hurl into Darkness | Cursed Drop | Prime]",
+     "nom": "Ectoplasma"
+    },
+    {
+     "idProduct": 907953,
+     "nomCardmarket": "Gengar [Catastrophe | Hurl into Darkness | Cursed Drop | Prime]",
+     "nom": "Gengar"
+    }
+   ],
+   "verite": 907953
+  },
+  {
+   "n": 20,
+   "cas": null,
+   "code": "visuel",
+   "voie": "cle-pokedex-sans-numero",
+   "lu": {
+    "nom": "Dark Alakazam",
+    "nomBrut": "わるいフーディン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571487,
+     "nomCardmarket": "Dark Alakazam [Teleport Blast | Mind Shock]",
+     "nom": "Alakazam obscur"
+    },
+    {
+     "idProduct": 585103,
+     "nomCardmarket": "Dark Alakazam [Teleport Blast | Mind Shock]",
+     "nom": "Alakazam obscur"
+    }
+   ],
+   "verite": 585103
+  },
+  {
+   "n": 21,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Houndoom",
+    "nomBrut": "ヘルガー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 669045,
+     "nomCardmarket": "Houndoom [Fire Counterattack | Dark Roar]",
+     "nom": "Démolosse"
+    },
+    {
+     "idProduct": 669091,
+     "nomCardmarket": "Houndoom [Fire Breath | Dark Clamp | Prime]",
+     "nom": "Demolosse"
+    },
+    {
+     "idProduct": 773757,
+     "nomCardmarket": "Houndoom [Bite | Snarl]",
+     "nom": "Démolosse"
+    }
+   ],
+   "verite": 669091
+  },
+  {
+   "n": 22,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Sabrina's Alakazam",
+    "nomBrut": "ナツメのフーディン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 605357,
+     "nomCardmarket": "Sabrina's Alakazam [Psylink | Mega Burn]",
+     "nom": "Sabrina's Alakazam"
+    },
+    {
+     "idProduct": 902316,
+     "nomCardmarket": "Sabrina's Alakazam [Psylink | Mega Burn]",
+     "nom": "Sabrina's Alakazam"
+    }
+   ],
+   "verite": 605357
+  },
+  {
+   "n": 23,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Victini V",
+    "nomBrut": "Victini V",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 545011,
+     "nomCardmarket": "Victini V [V Bullet | Flare Shot]",
+     "nom": "Victini V"
+    },
+    {
+     "idProduct": 546176,
+     "nomCardmarket": "Victini V [V Bullet | Flare Shot]",
+     "nom": "Victini V"
+    }
+   ],
+   "verite": 545011
+  },
+  {
+   "n": 24,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mimikyu VMAX",
+    "nomBrut": "ミミッキュVMAX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 586593,
+     "nomCardmarket": "Mimikyu VMAX [Ominous Numbers | Max Shadow]",
+     "nom": "Mimiqui VMAX"
+    },
+    {
+     "idProduct": 587032,
+     "nomCardmarket": "Mimikyu VMAX [Ominous Numbers | Max Shadow]",
+     "nom": "Mimiqui VMAX"
+    }
+   ],
+   "verite": 586593
+  },
+  {
+   "n": 25,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Umbreon",
+    "nomBrut": "ブラッキー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606581,
+     "nomCardmarket": "Umbreon [Bite | Feint Attack]",
+     "nom": "Noctali"
+    },
+    {
+     "idProduct": 651969,
+     "nomCardmarket": "Umbreon [Dark Moon | Shadow Bind]",
+     "nom": "Noctali"
+    },
+    {
+     "idProduct": 651970,
+     "nomCardmarket": "Umbreon [Dark Moon | Shadow Bind]",
+     "nom": "Noctali"
+    }
+   ],
+   "verite": 650580
+  },
+  {
+   "n": 26,
+   "cas": null,
+   "code": "symbole",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Radiant Hawlucha",
+    "nomBrut": "Brutalibré Radieux",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 658690,
+     "nomCardmarket": "Radiant Hawlucha [Big Match | Spiral Kick]",
+     "nom": "Brutalibré Radieux"
+    },
+    {
+     "idProduct": 731681,
+     "nomCardmarket": "Radiant Hawlucha [Big Match | Spiral Kick]",
+     "nom": "Brutalibré Radieux"
+    }
+   ],
+   "verite": 658690
+  },
+  {
+   "n": 27,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Machoke",
+    "nomBrut": "ゴーリキー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548921,
+     "nomCardmarket": "Machoke [Mega Kick | Steady Punch]",
+     "nom": "Machoke"
+    },
+    {
+     "idProduct": 549061,
+     "nomCardmarket": "Machoke [Wicked Jab | Focus Blast]",
+     "nom": "Machoke"
+    },
+    {
+     "idProduct": 557706,
+     "nomCardmarket": "Machoke [Karate Chop | Submission]",
+     "nom": "Machopeur"
+    }
+   ],
+   "verite": 548921
+  },
+  {
+   "n": 28,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Palkia",
+    "nomBrut": "パルキア",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 577373,
+     "nomCardmarket": "Palkia [Absolute Space | Overdrive Smash]",
+     "nom": "Palkia"
+    }
+   ],
+   "verite": 577373
+  },
+  {
+   "n": 29,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Zeraora",
+    "nomBrut": "ゼラオラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 908369,
+     "nomCardmarket": "Zeraora [Rapid Draw | Electrobullet]",
+     "nom": "Zeraora"
+    },
+    {
+     "idProduct": 908409,
+     "nomCardmarket": "Zeraora [Rapid Draw | Electrobullet]",
+     "nom": "Zeraora"
+    }
+   ],
+   "verite": 908409
+  },
+  {
+   "n": 30,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Shining Genesect",
+    "nomBrut": "ひかるゲノセクト",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 560168,
+     "nomCardmarket": "Shining Genesect [Energy Reload | Gaia Blaster]",
+     "nom": "Shining Genesect"
+    }
+   ],
+   "verite": 560168
+  },
+  {
+   "n": 31,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Sneasel",
+    "nomBrut": "ニューラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606456,
+     "nomCardmarket": "Sneasel [Fury Swipes | Beat Up]",
+     "nom": "Farfuret"
+    },
+    {
+     "idProduct": 652063,
+     "nomCardmarket": "Sneasel [Rob | Claw]",
+     "nom": "Farfuret"
+    }
+   ],
+   "verite": 654125
+  },
+  {
+   "n": 32,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Kabutops",
+    "nomBrut": "カブトプス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 584737,
+     "nomCardmarket": "Kabutops [Sharp Sickle | Absorb]",
+     "nom": "Kabutops"
+    },
+    {
+     "idProduct": 606559,
+     "nomCardmarket": "Kabutops [Slash | Hydrocutter]",
+     "nom": "Kabutops"
+    },
+    {
+     "idProduct": 653965,
+     "nomCardmarket": "Kabutops [Primal Aura | Dual Cut]",
+     "nom": "Kabutops"
+    }
+   ],
+   "verite": 606559
+  },
+  {
+   "n": 33,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Giratina",
+    "nomBrut": "ギラティナ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 698486,
+     "nomCardmarket": "Giratina Lv.52 [Shadow Force | Brutal Edge]",
+     "nom": "Giratina Lv.52"
+    }
+   ],
+   "verite": 678505
+  },
+  {
+   "n": 34,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Ivysaur",
+    "nomBrut": "フシギソウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 557646,
+     "nomCardmarket": "Ivysaur [Vine Whip | Poisonpowder]",
+     "nom": "Herbizarre"
+    },
+    {
+     "idProduct": 571450,
+     "nomCardmarket": "Ivysaur [Leech Seed | Vine Whip]",
+     "nom": "Herbizarre"
+    },
+    {
+     "idProduct": 571758,
+     "nomCardmarket": "Ivysaur [Strange Scent | Razor Leaf]",
+     "nom": "Ivysaur"
+    }
+   ],
+   "verite": 571758
+  },
+  {
+   "n": 35,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Light Wigglytuff",
+    "nomBrut": "やさしいプクリン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606882,
+     "nomCardmarket": "Light Wigglytuff [Evolution Song | Body Slam]",
+     "nom": "Grodoudou lumineux"
+    }
+   ],
+   "verite": 606882
+  },
+  {
+   "n": 36,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Nidoran F",
+    "nomBrut": "ニドラン♀",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548516,
+     "nomCardmarket": "Nidoran [F] [Tail Whip | Poison Sting]",
+     "nom": "Nidoran [F]"
+    },
+    {
+     "idProduct": 557643,
+     "nomCardmarket": "Nidoran [M] [Horn Hazard]",
+     "nom": "Nidoran [M]"
+    },
+    {
+     "idProduct": 584578,
+     "nomCardmarket": "Nidoran [F] [Fury Swipes | Call for Family]",
+     "nom": "Nidoran [F]"
+    }
+   ],
+   "verite": 548516
+  },
+  {
+   "n": 37,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Team Magma's Aron",
+    "nomBrut": "マグマ団のココドラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 563732,
+     "nomCardmarket": "Team Magma's Aron [Gnaw]",
+     "nom": "Team Magma's Aron"
+    }
+   ],
+   "verite": 563732
+  },
+  {
+   "n": 38,
+   "cas": "porygon2",
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Dark Quilava",
+    "nomBrut": "わるいマグマラシ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606812,
+     "nomCardmarket": "Dark Quilava [Incinerate | Rushing Magma]",
+     "nom": "Feurisson obscur"
+    },
+    {
+     "idProduct": 606889,
+     "nomCardmarket": "Dark Porygon2 [Spatial Distortion | Curve Attack]",
+     "nom": "Porygon2 obscur"
+    }
+   ],
+   "verite": 606812
+  },
+  {
+   "n": 39,
+   "cas": "porygon2",
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Dark Quilava",
+    "nomBrut": "わるいマグマラシ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606812,
+     "nomCardmarket": "Dark Quilava [Incinerate | Rushing Magma]",
+     "nom": "Feurisson obscur"
+    },
+    {
+     "idProduct": 606889,
+     "nomCardmarket": "Dark Porygon2 [Spatial Distortion | Curve Attack]",
+     "nom": "Porygon2 obscur"
+    }
+   ],
+   "verite": 606812
+  },
+  {
+   "n": 40,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Heracross",
+    "nomBrut": "ヘラクロス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606417,
+     "nomCardmarket": "Heracross [Final Blow | Megahorn]",
+     "nom": "Heracross"
+    },
+    {
+     "idProduct": 606801,
+     "nomCardmarket": "Heracross [Tackle | Charging Horn]",
+     "nom": "Scarhino"
+    },
+    {
+     "idProduct": 653908,
+     "nomCardmarket": "Heracross [Slash | Angry Horn]",
+     "nom": "Scarhino"
+    }
+   ],
+   "verite": 606417
+  },
+  {
+   "n": 41,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Dark Pupitar",
+    "nomBrut": "わるいサナギラス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 783247,
+     "nomCardmarket": "Dark Pupitar [Dark Streak | Rock Tumble]",
+     "nom": "Ymphect obscur"
+    }
+   ],
+   "verite": 783247
+  },
+  {
+   "n": 42,
+   "cas": "sans-rapport-confirmation",
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Whitney's Clefable",
+    "nomBrut": "アカネのピクシー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 554506,
+     "nomCardmarket": "Will's Jynx [Hypnosis | Meditate]",
+     "nom": "Will's Jynx"
+    }
+   ],
+   "verite": 554327
+  },
+  {
+   "n": 43,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Slowking",
+    "nomBrut": "ヤドキング",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571749,
+     "nomCardmarket": "Slowking [Revelation | Psychic]",
+     "nom": "Slowking"
+    },
+    {
+     "idProduct": 606449,
+     "nomCardmarket": "Slowking [Mind Games | Mind Blast]",
+     "nom": "Slowking"
+    },
+    {
+     "idProduct": 652046,
+     "nomCardmarket": "Slowking [Bursting Hand | Shuffle Attack]",
+     "nom": "Roigada"
+    }
+   ],
+   "verite": 571749
+  },
+  {
+   "n": 44,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Palkia LV.X",
+    "nomBrut": "パルキア LV.X",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 698733,
+     "nomCardmarket": "Palkia Lv.67 [Spacial Rend | Transback]",
+     "nom": "Palkia Lv.67"
+    },
+    {
+     "idProduct": 698734,
+     "nomCardmarket": "Palkia Lv.67 [Spacial Rend | Transback]",
+     "nom": "Palkia Lv.67"
+    },
+    {
+     "idProduct": 698813,
+     "nomCardmarket": "Palkia LV.X [Restructure | Hydro Reflect]",
+     "nom": "Palkia LV.X"
+    }
+   ],
+   "verite": 698733
+  },
+  {
+   "n": 45,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Skarmory",
+    "nomBrut": "エアームド",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 562294,
+     "nomCardmarket": "Skarmory [Cargo Jet | Steel Wing]",
+     "nom": "Skarmory"
+    }
+   ],
+   "verite": 562294
+  },
+  {
+   "n": 46,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Celebi",
+    "nomBrut": "セレビィ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 471439,
+     "nomCardmarket": "Celebi [Call for Greatness | Psy Bolt]",
+     "nom": "Celebi"
+    }
+   ],
+   "verite": 471439
+  },
+  {
+   "n": 47,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Celebi",
+    "nomBrut": "セレビィ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606710,
+     "nomCardmarket": "Celebi [Time Travel | Psychic Damage]",
+     "nom": "Celebi"
+    },
+    {
+     "idProduct": 654091,
+     "nomCardmarket": "Celebi [Crystal Type | Empathic Healing | Mind Bend]",
+     "nom": "Celebi"
+    },
+    {
+     "idProduct": 699004,
+     "nomCardmarket": "Celebi Lv.39 [Sprouting | Leaf Tornado]",
+     "nom": "Celebi Lv.39"
+    }
+   ],
+   "verite": 654124
+  },
+  {
+   "n": 48,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Sabrina's Jynx",
+    "nomBrut": "ナツメのルージュラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 605356,
+     "nomCardmarket": "Sabrina's Jynx [Helping Hand | Hug]",
+     "nom": "Sabrina's Jynx"
+    }
+   ],
+   "verite": 605356
+  },
+  {
+   "n": 49,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Jigglypuff",
+    "nomBrut": "プリン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571761,
+     "nomCardmarket": "Jigglypuff [Tempting Eyes | Sing]",
+     "nom": "Jigglypuff"
+    },
+    {
+     "idProduct": 584684,
+     "nomCardmarket": "Jigglypuff [Lullaby | Pound]",
+     "nom": "Rondoudou"
+    },
+    {
+     "idProduct": 606877,
+     "nomCardmarket": "Jigglypuff [Expand]",
+     "nom": "Rondoudou"
+    }
+   ],
+   "verite": 571761
+  },
+  {
+   "n": 50,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Simisear VSTAR",
+    "nomBrut": "バオッキーVSTAR",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 687501,
+     "nomCardmarket": "Simisear VSTAR [Fireball Fever | Ember Star]",
+     "nom": "Flamoutan VSTAR"
+    },
+    {
+     "idProduct": 687776,
+     "nomCardmarket": "Simisear VSTAR [Fireball Fever | Ember Star]",
+     "nom": "Flamoutan VSTAR"
+    }
+   ],
+   "verite": 687776
+  },
+  {
+   "n": 51,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Bunnelby",
+    "nomBrut": "Sapereau",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 483629,
+     "nomCardmarket": "Bunnelby [Mad Party]",
+     "nom": "Sapereau"
+    },
+    {
+     "idProduct": 697164,
+     "nomCardmarket": "Bunnelby [Mad Party]",
+     "nom": "Sapereau"
+    },
+    {
+     "idProduct": 845425,
+     "nomCardmarket": "Bunnelby [Mad Party]",
+     "nom": "Sapereau"
+    }
+   ],
+   "verite": 483629
+  },
+  {
+   "n": 52,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Duraludon",
+    "nomBrut": "ジュラルドン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 466824,
+     "nomCardmarket": "Duraludon [Metal Sharpener | Power Beam]",
+     "nom": "Duraludon"
+    },
+    {
+     "idProduct": 521575,
+     "nomCardmarket": "Duraludon [Metal Sharpener | Power Beam]",
+     "nom": "Duraludon"
+    },
+    {
+     "idProduct": 522355,
+     "nomCardmarket": "Duraludon [Metal Sharpener | Power Beam]",
+     "nom": "Duraludon"
+    }
+   ],
+   "verite": 522355
+  },
+  {
+   "n": 53,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Hitmonlee",
+    "nomBrut": "サワムラー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 467509,
+     "nomCardmarket": "Hitmonlee [Low Sweep | Coordinated Strike]",
+     "nom": "Kicklee"
+    },
+    {
+     "idProduct": 743175,
+     "nomCardmarket": "Hitmonlee [Low Sweep | Coordinated Strike]",
+     "nom": "Kicklee"
+    }
+   ],
+   "verite": 743175
+  },
+  {
+   "n": 54,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Ditto",
+    "nomBrut": "メタモン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 907857,
+     "nomCardmarket": "Ditto [Surprisingly Transform]",
+     "nom": "Ditto"
+    },
+    {
+     "idProduct": 907886,
+     "nomCardmarket": "Ditto [Surprisingly Transform]",
+     "nom": "Ditto"
+    }
+   ],
+   "verite": 907886
+  },
+  {
+   "n": 55,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Pikachu",
+    "nomBrut": "Pikachu",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 780209,
+     "nomCardmarket": "Pikachu [Scrappy Spark]",
+     "nom": "Pikachu"
+    },
+    {
+     "idProduct": 784938,
+     "nomCardmarket": "Pikachu [Scrappy Spark]",
+     "nom": "Pikachu"
+    }
+   ],
+   "verite": 780209
+  },
+  {
+   "n": 56,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Togepi",
+    "nomBrut": "トゲピー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571757,
+     "nomCardmarket": "Togepi [Bawl]",
+     "nom": "Togepi"
+    },
+    {
+     "idProduct": 606880,
+     "nomCardmarket": "Togepi [Charm | Spike Ball Tackle]",
+     "nom": "Togepi"
+    },
+    {
+     "idProduct": 761855,
+     "nomCardmarket": "Togepi δ Delta Species [Charm]",
+     "nom": "Togepi δ Delta Species"
+    }
+   ],
+   "verite": 606880
+  },
+  {
+   "n": 57,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Mew",
+    "nomBrut": "ミュウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571754,
+     "nomCardmarket": "Mew [Rainbow Wave]",
+     "nom": "Mew"
+    },
+    {
+     "idProduct": 584730,
+     "nomCardmarket": "Mew [Psywave | Devolution Beam]",
+     "nom": "Mew"
+    },
+    {
+     "idProduct": 650677,
+     "nomCardmarket": "Mew [Super Psywave]",
+     "nom": "Mew"
+    }
+   ],
+   "verite": 571770
+  },
+  {
+   "n": 58,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Dedenne",
+    "nomBrut": "Dedenne",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 281876,
+     "nomCardmarket": "Dedenne [Nuzzle | Spiral Drain]",
+     "nom": "Dedenne"
+    },
+    {
+     "idProduct": 288519,
+     "nomCardmarket": "Dedenne [Rest | Pachi]",
+     "nom": "Dedenne"
+    },
+    {
+     "idProduct": 295146,
+     "nomCardmarket": "Dedenne [Nuzzle | Spiral Drain]",
+     "nom": "Dedenne"
+    }
+   ],
+   "verite": 288519
+  },
+  {
+   "n": 59,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Jigglypuff",
+    "nomBrut": "プリン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571761,
+     "nomCardmarket": "Jigglypuff [Tempting Eyes | Sing]",
+     "nom": "Jigglypuff"
+    },
+    {
+     "idProduct": 584684,
+     "nomCardmarket": "Jigglypuff [Lullaby | Pound]",
+     "nom": "Rondoudou"
+    },
+    {
+     "idProduct": 606877,
+     "nomCardmarket": "Jigglypuff [Expand]",
+     "nom": "Rondoudou"
+    }
+   ],
+   "verite": 606877
+  },
+  {
+   "n": 60,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Venonat",
+    "nomBrut": "コンパン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548941,
+     "nomCardmarket": "Venonat [Disable | Psybeam]",
+     "nom": "Venonat"
+    },
+    {
+     "idProduct": 584581,
+     "nomCardmarket": "Venonat [Stun Spore | Leech Life]",
+     "nom": "Mimitoss"
+    },
+    {
+     "idProduct": 606793,
+     "nomCardmarket": "Venonat [Gnaw | Poisonpowder]",
+     "nom": "Mimitoss"
+    }
+   ],
+   "verite": 548941
+  },
+  {
+   "n": 61,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Ho-Oh ex",
+    "nomBrut": "Ho-Oh ex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 276750,
+     "nomCardmarket": "Ho-oh ex [Golden Wing | Rainbow Burn]",
+     "nom": "Ho-oh ex"
+    },
+    {
+     "idProduct": 277465,
+     "nomCardmarket": "Ho-oh ex [Golden Wing | Rainbow Burn]",
+     "nom": "Ho-oh ex"
+    }
+   ],
+   "verite": null
+  },
+  {
+   "n": 62,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Arceus",
+    "nomBrut": "アルセウス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 566409,
+     "nomCardmarket": "Arceus Lv.100 [Ripple Swell | Sky Spear]",
+     "nom": "Arceus Lv.100"
+    },
+    {
+     "idProduct": 676226,
+     "nomCardmarket": "Arceus Lv.100 [Ripple Swell | Sky Spear]",
+     "nom": "Arceus Lv.100"
+    }
+   ],
+   "verite": 676226
+  },
+  {
+   "n": 63,
+   "cas": null,
+   "code": "visuel",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Umbreon",
+    "nomBrut": "Noctali",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 279884,
+     "nomCardmarket": "Umbreon [Shadow Drain | Slashing Strike]",
+     "nom": "Noctali"
+    },
+    {
+     "idProduct": 280388,
+     "nomCardmarket": "Umbreon [Shadow Drain | Slashing Strike]",
+     "nom": "Noctali"
+    },
+    {
+     "idProduct": 450448,
+     "nomCardmarket": "Umbreon [Shadow Drain | Slashing Strike]",
+     "nom": "Noctali"
+    }
+   ],
+   "verite": 279884
+  },
+  {
+   "n": 64,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Plusle",
+    "nomBrut": "プラスル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 567431,
+     "nomCardmarket": "Plusle [Tag Draw | Positive Ion]",
+     "nom": "Posipi"
+    },
+    {
+     "idProduct": 569259,
+     "nomCardmarket": "Plusle [Tag Draw | Positive Ion]",
+     "nom": "Posipi"
+    }
+   ],
+   "verite": 567431
+  },
+  {
+   "n": 65,
+   "cas": null,
+   "code": "symbole",
+   "voie": "nom",
+   "lu": {
+    "nom": "Erika's Jigglypuff",
+    "nomBrut": "Rondoudou d'Erika",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 274337,
+     "nomCardmarket": "Erika's Jigglypuff [Group Therapy | Pulled Punch]",
+     "nom": "Erika's Jigglypuff"
+    },
+    {
+     "idProduct": 907942,
+     "nomCardmarket": "Erika's Jigglypuff [Group Therapy | Pulled Punch]",
+     "nom": "Erika's Jigglypuff"
+    }
+   ],
+   "verite": 907942
+  },
+  {
+   "n": 66,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Sylveon EX",
+    "nomBrut": "Nymphali EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 288530,
+     "nomCardmarket": "Sylveon EX [Dress Up | Precious Ribbon]",
+     "nom": "Nymphali EX"
+    },
+    {
+     "idProduct": 288541,
+     "nomCardmarket": "Sylveon EX [Dress Up | Precious Ribbon]",
+     "nom": "Nymphali EX"
+    },
+    {
+     "idProduct": 659063,
+     "nomCardmarket": "Sylveon [Time Out Kick | Symphony Whip]",
+     "nom": "Nymphali"
+    }
+   ],
+   "verite": 288530
+  },
+  {
+   "n": 67,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Snubbull",
+    "nomBrut": "ブルー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606462,
+     "nomCardmarket": "Snubbull [Roar | Lick]",
+     "nom": "Snubbull"
+    },
+    {
+     "idProduct": 606722,
+     "nomCardmarket": "Snubbull [Bite | Raging Headbutt]",
+     "nom": "Snubbull"
+    },
+    {
+     "idProduct": 653977,
+     "nomCardmarket": "Snubbull [Scary Face | Bite]",
+     "nom": "Snubbull"
+    }
+   ],
+   "verite": 653977
+  },
+  {
+   "n": 68,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Twins",
+    "nomBrut": "Jumelles",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 279619,
+     "nomCardmarket": "Twins",
+     "nom": "Jumelles"
+    },
+    {
+     "idProduct": 868202,
+     "nomCardmarket": "Twins",
+     "nom": "Jumelles"
+    },
+    {
+     "idProduct": 868203,
+     "nomCardmarket": "Twins",
+     "nom": "Jumelles"
+    }
+   ],
+   "verite": 279619
+  },
+  {
+   "n": 69,
+   "cas": null,
+   "code": "visuel",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Alolan Vulpix",
+    "nomBrut": "Goupix d'Alola",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 479734,
+     "nomCardmarket": "Alolan Vulpix [Roar | Icy Snow]",
+     "nom": "Goupix d'Alola"
+    },
+    {
+     "idProduct": 581856,
+     "nomCardmarket": "Alolan Vulpix [Roar | Icy Snow]",
+     "nom": "Goupix d'Alola"
+    }
+   ],
+   "verite": null
+  },
+  {
+   "n": 70,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Chikorita M",
+    "nomBrut": "チコリータM",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 561999,
+     "nomCardmarket": "Chikorita [Rollout | Double Headbutt]",
+     "nom": "Chikorita"
+    },
+    {
+     "idProduct": 606402,
+     "nomCardmarket": "Chikorita [Tackle | Deflector]",
+     "nom": "Chikorita"
+    },
+    {
+     "idProduct": 654767,
+     "nomCardmarket": "Chikorita [Hyptnotic Gaze | Double Scratch]",
+     "nom": "Germignon"
+    }
+   ],
+   "verite": 566339
+  },
+  {
+   "n": 71,
+   "cas": null,
+   "code": "numero",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Hypno",
+    "nomBrut": "スリーパー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 783691,
+     "nomCardmarket": "Hypno [Eerie Aura | Hypnotic Ray]",
+     "nom": "Hypnomade"
+    },
+    {
+     "idProduct": 783751,
+     "nomCardmarket": "Hypno [Eerie Aura | Hypnotic Ray]",
+     "nom": "Hypnomade"
+    }
+   ],
+   "verite": 783751
+  },
+  {
+   "n": 72,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Kadabra",
+    "nomBrut": "ユンゲラー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 803171,
+     "nomCardmarket": "Kadabra [Psychic]",
+     "nom": "Kadabra"
+    },
+    {
+     "idProduct": 837692,
+     "nomCardmarket": "Kadabra [Psychic]",
+     "nom": "Kadabra"
+    },
+    {
+     "idProduct": 837693,
+     "nomCardmarket": "Kadabra [Psychic]",
+     "nom": "Kadabra"
+    }
+   ],
+   "verite": 837693
+  },
+  {
+   "n": 73,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Doduo",
+    "nomBrut": "ドードー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548626,
+     "nomCardmarket": "Doduo [Growl | Peck]",
+     "nom": "Doduo"
+    },
+    {
+     "idProduct": 557712,
+     "nomCardmarket": "Doduo [Fury Attack]",
+     "nom": "Doduo"
+    },
+    {
+     "idProduct": 699078,
+     "nomCardmarket": "Doduo Lv.18 [Double Stab | Accelerating Stab]",
+     "nom": "Doduo Lv.18"
+    }
+   ],
+   "verite": 548626
+  },
+  {
+   "n": 74,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Exeggutor",
+    "nomBrut": "ナッシー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571469,
+     "nomCardmarket": "Exeggutor [Teleport | Big Eggsplosion]",
+     "nom": "Noadkoko"
+    },
+    {
+     "idProduct": 584606,
+     "nomCardmarket": "Exeggutor [Teleport | Big Eggsplosion]",
+     "nom": "Noadkoko"
+    },
+    {
+     "idProduct": 698998,
+     "nomCardmarket": "Exeggutor Lv.46 [String Bomb | Nutritional Support]",
+     "nom": "Noadkoko Lv.46"
+    }
+   ],
+   "verite": 783693
+  },
+  {
+   "n": 75,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Totodile M",
+    "nomBrut": "ワニノコ M",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 562004,
+     "nomCardmarket": "Totodile [Wave Splash | Stomp]",
+     "nom": "Totodile"
+    },
+    {
+     "idProduct": 606424,
+     "nomCardmarket": "Totodile [Leer | Fury Swipes]",
+     "nom": "Totodile"
+    },
+    {
+     "idProduct": 699025,
+     "nomCardmarket": "Totodile Lv.15 [Bite | Shining Fang]",
+     "nom": "Kaiminus Lv.15"
+    }
+   ],
+   "verite": 566344
+  },
+  {
+   "n": 76,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Unown R",
+    "nomBrut": "アンノーンR",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606564,
+     "nomCardmarket": "Unown [I] [Increase | Hidden Power]",
+     "nom": "Unown [I]"
+    },
+    {
+     "idProduct": 606566,
+     "nomCardmarket": "Unown [D] [Darkness | Hidden Power]",
+     "nom": "Unown [D]"
+    },
+    {
+     "idProduct": 606567,
+     "nomCardmarket": "Unown [F] [Find | Hidden Power]",
+     "nom": "Unown [F]"
+    }
+   ],
+   "verite": 571915
+  },
+  {
+   "n": 77,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Suicune",
+    "nomBrut": "スイクン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606695,
+     "nomCardmarket": "Suicune [Crystal Body | Aurora Wave]",
+     "nom": "Suicune"
+    },
+    {
+     "idProduct": 651932,
+     "nomCardmarket": "Suicune [Pure Body | Hypno Wave]",
+     "nom": "Suicune"
+    },
+    {
+     "idProduct": 651933,
+     "nomCardmarket": "Suicune [Pure Body | Hypno Wave]",
+     "nom": "Suicune"
+    }
+   ],
+   "verite": 606695
+  },
+  {
+   "n": 78,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Conkeldurr V",
+    "nomBrut": "ローブシンV",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 664580,
+     "nomCardmarket": "Conkeldurr V [Counter | Dynamic Punch]",
+     "nom": "Bétochef V"
+    },
+    {
+     "idProduct": 664692,
+     "nomCardmarket": "Conkeldurr V [Counter | Dynamic Punch]",
+     "nom": "Bétochef V"
+    },
+    {
+     "idProduct": 664694,
+     "nomCardmarket": "Conkeldurr V [Counter | Dynamic Punch]",
+     "nom": "Bétochef V"
+    }
+   ],
+   "verite": 664694
+  },
+  {
+   "n": 79,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Dodrio",
+    "nomBrut": "Dodrio",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 279264,
+     "nomCardmarket": "Dodrio [Retreat Aid | Incessant Peck]",
+     "nom": "Dodrio"
+    },
+    {
+     "idProduct": 745672,
+     "nomCardmarket": "Dodrio [Retreat Aid | Incessant Peck]",
+     "nom": "Dodrio"
+    }
+   ],
+   "verite": 279264
+  },
+  {
+   "n": 80,
+   "cas": "sans-rapport-confirmation",
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Alto Mare's Latias",
+    "nomBrut": "水の都のラティアス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 784246,
+     "nomCardmarket": "Team Magma's Baltoy [Psymist | Pain Amplifier]",
+     "nom": "Balbuto de Team Magma"
+    }
+   ],
+   "verite": 566545
+  },
+  {
+   "n": 81,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Imakuni?'s Nasty Plot",
+    "nomBrut": "イマクニ？のわるだくみ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 549141,
+     "nomCardmarket": "Imakuni?'s Nasty Plot",
+     "nom": "Imakuni?'s Nasty Plot"
+    },
+    {
+     "idProduct": 605389,
+     "nomCardmarket": "Imakuni?'s Doduo [Frienzied Escape | Harmonize]",
+     "nom": "Imakuni?'s Doduo"
+    }
+   ],
+   "verite": 549141
+  },
+  {
+   "n": 82,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "veto-nom-reclasse",
+   "lu": {
+    "nom": "Imakuni?'s Exploud ex",
+    "nomBrut": "イマクニ？のバクオングex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571154,
+     "nomCardmarket": "Imakuni?'s Exploud ex [Jaw Drop | \"\"______\"\" (←Write the name of a person you like)]",
+     "nom": "Imakuni?'s Exploud ex"
+    }
+   ],
+   "verite": 571154
+  },
+  {
+   "n": 83,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Gardevoir-EX",
+    "nomBrut": "Gardevoir EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 278429,
+     "nomCardmarket": "Gardevoir Lv.61 [Psychic Connect | Energy Burst | Psychic Protection]",
+     "nom": "Gardevoir Lv.61"
+    },
+    {
+     "idProduct": 288539,
+     "nomCardmarket": "Gardevoir EX [Life Leap | Shining Wind]",
+     "nom": "Gardevoir EX"
+    },
+    {
+     "idProduct": 567169,
+     "nomCardmarket": "Gardevoir [Shining Arcana | Brainwave]",
+     "nom": "Gardevoir"
+    }
+   ],
+   "verite": 288539
+  },
+  {
+   "n": 84,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Rayquaza",
+    "nomBrut": "Rayquaza",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 280567,
+     "nomCardmarket": "Rayquaza [Dragon Pulse | Shred]",
+     "nom": "Rayquaza"
+    },
+    {
+     "idProduct": 281011,
+     "nomCardmarket": "Rayquaza [Dragon Pulse | Shred]",
+     "nom": "Rayquaza"
+    },
+    {
+     "idProduct": 281244,
+     "nomCardmarket": "Rayquaza [Dragon Pulse | Shred]",
+     "nom": "Rayquaza"
+    }
+   ],
+   "verite": 281011
+  },
+  {
+   "n": 85,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Meganium",
+    "nomBrut": "メガニウム",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606414,
+     "nomCardmarket": "Meganium [Wild Growth | Soothing Scent]",
+     "nom": "Meganium"
+    },
+    {
+     "idProduct": 650660,
+     "nomCardmarket": "Meganium [Soothing Aroma | Poisonpowder]",
+     "nom": "Meganium"
+    },
+    {
+     "idProduct": 650692,
+     "nomCardmarket": "Meganium [Soothing Aroma | Poisonpowder]",
+     "nom": "Meganium"
+    }
+   ],
+   "verite": 606414
+  },
+  {
+   "n": 86,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Gallade V",
+    "nomBrut": "Gallame V",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 670831,
+     "nomCardmarket": "Gallade V [Rising Sword | Buster Swing]",
+     "nom": "Gallame V"
+    },
+    {
+     "idProduct": 674186,
+     "nomCardmarket": "Gallade V [Rising Sword | Buster Swing]",
+     "nom": "Gallame V"
+    },
+    {
+     "idProduct": 674374,
+     "nomCardmarket": "Gallade V [Rising Sword | Buster Swing]",
+     "nom": "Gallame V"
+    }
+   ],
+   "verite": 670831
+  },
+  {
+   "n": 87,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Meganium",
+    "nomBrut": "Meganium",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275613,
+     "nomCardmarket": "Meganium [Leaf Trans | Solarbeam | Prime]",
+     "nom": "Meganium"
+    },
+    {
+     "idProduct": 279081,
+     "nomCardmarket": "Meganium [Leaf Trans | Solarbeam | Prime]",
+     "nom": "Meganium"
+    }
+   ],
+   "verite": 275613
+  },
+  {
+   "n": 88,
+   "cas": "porygon2",
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Dark Crobat",
+    "nomBrut": "わるいクロバット",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606804,
+     "nomCardmarket": "Dark Crobat [Surprise Bite | Dark Drain]",
+     "nom": "Nostenfer obscur"
+    },
+    {
+     "idProduct": 606889,
+     "nomCardmarket": "Dark Porygon2 [Spatial Distortion | Curve Attack]",
+     "nom": "Porygon2 obscur"
+    }
+   ],
+   "verite": 606804
+  },
+  {
+   "n": 89,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Mimikyu-GX",
+    "nomBrut": "Mimiqui GX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 365786,
+     "nomCardmarket": "Mimikyu GX [Perplex | Let's Snuggle & Fall | Dream Fear GX]",
+     "nom": "Mimiqui GX"
+    },
+    {
+     "idProduct": 765785,
+     "nomCardmarket": "Mimikyu GX [Perplex | Let's Snuggle & Fall | Dream Fear GX]",
+     "nom": "Mimiqui GX"
+    }
+   ],
+   "verite": null
+  },
+  {
+   "n": 90,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mewtwo",
+    "nomBrut": "Mewtwo",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 313452,
+     "nomCardmarket": "Mewtwo [Pressure | Super Psy Bolt]",
+     "nom": "Mewtwo"
+    }
+   ],
+   "verite": 313452
+  },
+  {
+   "n": 91,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "N's Zorua",
+    "nomBrut": "Zorua de N",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 817780,
+     "nomCardmarket": "N's Zorua [Scratch]",
+     "nom": "Zorua de N"
+    },
+    {
+     "idProduct": 819540,
+     "nomCardmarket": "N's Zorua [Scratch]",
+     "nom": "Zorua de N"
+    }
+   ],
+   "verite": 817780
+  },
+  {
+   "n": 92,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Hoopa-EX",
+    "nomBrut": "Hoopa EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 284217,
+     "nomCardmarket": "Hoopa EX [Scoundrel Ring | Hyperspace Fury]",
+     "nom": "Hoopa EX"
+    },
+    {
+     "idProduct": 289810,
+     "nomCardmarket": "Hoopa EX [Hyperspace Ring | Wonder Trick]",
+     "nom": "Hoopa EX"
+    },
+    {
+     "idProduct": 363928,
+     "nomCardmarket": "Hoopa EX [Scoundrel Ring | Hyperspace Fury]",
+     "nom": "Hoopa EX"
+    }
+   ],
+   "verite": 289810
+  },
+  {
+   "n": 93,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Shinx",
+    "nomBrut": "Lixy",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275555,
+     "nomCardmarket": "Shinx Lv.7 [Spark]",
+     "nom": "Lixy Lv.7"
+    },
+    {
+     "idProduct": 275629,
+     "nomCardmarket": "Shinx Lv.7 [Spark]",
+     "nom": "Lixy Lv.7"
+    },
+    {
+     "idProduct": 277597,
+     "nomCardmarket": "Shinx Lv.7 [Spark]",
+     "nom": "Lixy Lv.7"
+    }
+   ],
+   "verite": 277727
+  },
+  {
+   "n": 94,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Electivire",
+    "nomBrut": "Élekable",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 608497,
+     "nomCardmarket": "Electivire [Explosive Bolt | High-Voltage Current]",
+     "nom": "Élekable"
+    },
+    {
+     "idProduct": 691887,
+     "nomCardmarket": "Electivire [Explosive Bolt | High-Voltage Current]",
+     "nom": "Élekable"
+    }
+   ],
+   "verite": 691887
+  },
+  {
+   "n": 95,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Absol",
+    "nomBrut": "アブソル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 765305,
+     "nomCardmarket": "Absol [Shining Horn | Extra Call | Feint Attack]",
+     "nom": "Absol"
+    }
+   ],
+   "verite": 765305
+  },
+  {
+   "n": 96,
+   "cas": null,
+   "code": "visuel",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Lt. Surge's Rattata",
+    "nomBrut": "マチスのコラッタ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 744640,
+     "nomCardmarket": "Lt. Surge's Rattata [Focus Energy | Gnaw]",
+     "nom": "Lt. Surge's Rattata"
+    },
+    {
+     "idProduct": 760260,
+     "nomCardmarket": "Lt. Surge's Rattata [Focus Energy | Gnaw]",
+     "nom": "Lt. Surge's Rattata"
+    }
+   ],
+   "verite": 744640
+  },
+  {
+   "n": 97,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Blaziken",
+    "nomBrut": "バシャーモ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 570440,
+     "nomCardmarket": "Blaziken [Fire Punch | Double Kick]",
+     "nom": "Brasegali"
+    }
+   ],
+   "verite": 698671
+  },
+  {
+   "n": 98,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Sabrina's Jynx",
+    "nomBrut": "ナツメのルージュラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 605356,
+     "nomCardmarket": "Sabrina's Jynx [Helping Hand | Hug]",
+     "nom": "Sabrina's Jynx"
+    }
+   ],
+   "verite": 760279
+  },
+  {
+   "n": 99,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Rayquaza",
+    "nomBrut": "Rayquaza",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 289722,
+     "nomCardmarket": "Rayquaza [Ozone Wall | Dragon Pulse]",
+     "nom": "Rayquaza"
+    },
+    {
+     "idProduct": 363673,
+     "nomCardmarket": "Rayquaza [Ozone Wall | Dragon Pulse]",
+     "nom": "Rayquaza"
+    }
+   ],
+   "verite": 363673
+  },
+  {
+   "n": 100,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Hitmonchan",
+    "nomBrut": "エビワラー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548871,
+     "nomCardmarket": "Hitmonchan [Mach Punch]",
+     "nom": "Hitmonchan"
+    },
+    {
+     "idProduct": 557709,
+     "nomCardmarket": "Hitmonchan [Jab | Special Punch]",
+     "nom": "Tygnon"
+    },
+    {
+     "idProduct": 606862,
+     "nomCardmarket": "Hitmonchan [Dodge | Supersonic Jab]",
+     "nom": "Tygnon"
+    }
+   ],
+   "verite": 606862
+  },
+  {
+   "n": 101,
+   "cas": null,
+   "code": "visuel",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mewtwo",
+    "nomBrut": "ミュウツー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 557701,
+     "nomCardmarket": "Mewtwo [Psychic | Barrier]",
+     "nom": "Mewtwo"
+    },
+    {
+     "idProduct": 562505,
+     "nomCardmarket": "Mewtwo [Psychic | Barrier]",
+     "nom": "Mewtwo"
+    },
+    {
+     "idProduct": 744639,
+     "nomCardmarket": "Mewtwo [Psychic | Barrier]",
+     "nom": "Mewtwo"
+    }
+   ],
+   "verite": 744639
+  },
+  {
+   "n": 102,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Metagross",
+    "nomBrut": "メタグロス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 563562,
+     "nomCardmarket": "Metagross [Machine Gun Stomp | Guard Press]",
+     "nom": "Métalosse"
+    }
+   ],
+   "verite": 563562
+  },
+  {
+   "n": 103,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Korrina's Focus",
+    "nomBrut": "コルニの気合い",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 538703,
+     "nomCardmarket": "Korrina's Motivation",
+     "nom": "Korrina's Motivation"
+    },
+    {
+     "idProduct": 538738,
+     "nomCardmarket": "Korrina's Motivation",
+     "nom": "Korrina's Motivation"
+    }
+   ],
+   "verite": 538738
+  },
+  {
+   "n": 104,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Darkrai",
+    "nomBrut": "ダークライ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 550826,
+     "nomCardmarket": "Darkrai [Hypnoblast | Dark Raid]",
+     "nom": "Darkrai"
+    },
+    {
+     "idProduct": 561098,
+     "nomCardmarket": "Darkrai [Hypnoblast | Dark Raid]",
+     "nom": "Darkrai"
+    },
+    {
+     "idProduct": 564949,
+     "nomCardmarket": "Darkrai [Hypnoblast | Dark Raid]",
+     "nom": "Darkrai"
+    }
+   ],
+   "verite": 561098
+  },
+  {
+   "n": 105,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Torkoal",
+    "nomBrut": "コータス",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 784330,
+     "nomCardmarket": "Torkoal [Power Generation | Scorching Smoke]",
+     "nom": "Chartor"
+    }
+   ],
+   "verite": 784330
+  },
+  {
+   "n": 106,
+   "cas": null,
+   "code": "symbole",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Dark Tyranitar",
+    "nomBrut": "Tyranocif obscur",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 276311,
+     "nomCardmarket": "Dark Tyranitar [Grind | Spinning Tail | Bite Off]",
+     "nom": "Tyranocif obscur"
+    },
+    {
+     "idProduct": 871537,
+     "nomCardmarket": "Dark Tyranitar [Grind | Spinning Tail | Bite Off]",
+     "nom": "Tyranocif obscur"
+    },
+    {
+     "idProduct": 907947,
+     "nomCardmarket": "Dark Tyranitar [Grind | Spinning Tail | Bite Off]",
+     "nom": "Dark Tyranitar"
+    }
+   ],
+   "verite": 907947
+  },
+  {
+   "n": 107,
+   "cas": null,
+   "code": "symbole",
+   "voie": "nom",
+   "lu": {
+    "nom": "Giratina",
+    "nomBrut": "Giratina",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 295173,
+     "nomCardmarket": "Giratina [Devour Light | Shadow Claw]",
+     "nom": "Giratina"
+    },
+    {
+     "idProduct": 865353,
+     "nomCardmarket": "Giratina [Devour Light | Shadow Claw]",
+     "nom": "Giratina"
+    }
+   ],
+   "verite": 295173
+  },
+  {
+   "n": 108,
+   "cas": null,
+   "code": "numero",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Sneasel",
+    "nomBrut": "ニューラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 571226,
+     "nomCardmarket": "Sneasel [Rob | Claw]",
+     "nom": "Farfuret"
+    },
+    {
+     "idProduct": 652063,
+     "nomCardmarket": "Sneasel [Rob | Claw]",
+     "nom": "Farfuret"
+    }
+   ],
+   "verite": 652063
+  },
+  {
+   "n": 109,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Granbull",
+    "nomBrut": "グランブル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606469,
+     "nomCardmarket": "Granbull [Tackle | Raging Charge]",
+     "nom": "Granbull"
+    },
+    {
+     "idProduct": 653978,
+     "nomCardmarket": "Granbull [Fling | Mega Punch]",
+     "nom": "Granbull"
+    }
+   ],
+   "verite": 653978
+  },
+  {
+   "n": 110,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Umbreon",
+    "nomBrut": "Noctali",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 280388,
+     "nomCardmarket": "Umbreon [Shadow Drain | Slashing Strike]",
+     "nom": "Noctali"
+    },
+    {
+     "idProduct": 450448,
+     "nomCardmarket": "Umbreon [Shadow Drain | Slashing Strike]",
+     "nom": "Noctali"
+    }
+   ],
+   "verite": 280388
+  },
+  {
+   "n": 111,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Staraptor M",
+    "nomBrut": "ムクホークM",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 481519,
+     "nomCardmarket": "Staraptor [Hurricane Blender | Brave Bird]",
+     "nom": "Étouraptor"
+    },
+    {
+     "idProduct": 560352,
+     "nomCardmarket": "Staraptor [Clutch | Sky Hunting]",
+     "nom": "Étouraptor"
+    },
+    {
+     "idProduct": 567822,
+     "nomCardmarket": "Staraptor [Wing Attack | Strong Breeze]",
+     "nom": "Étouraptor"
+    }
+   ],
+   "verite": 566356
+  },
+  {
+   "n": 112,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Roserade",
+    "nomBrut": "Roserade",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 674026,
+     "nomCardmarket": "Roserade [Poisonous Whip | Assassin's Rose]",
+     "nom": "Roserade"
+    },
+    {
+     "idProduct": 674224,
+     "nomCardmarket": "Roserade [Poisonous Whip | Assassin's Rose]",
+     "nom": "Roserade"
+    }
+   ],
+   "verite": 674224
+  },
+  {
+   "n": 113,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Raichu",
+    "nomBrut": "ライチュウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 548806,
+     "nomCardmarket": "Raichu [Short Circuit | Sparking Kick]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 557689,
+     "nomCardmarket": "Raichu [Agility | Thunder]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 584721,
+     "nomCardmarket": "Raichu [Gigashock]",
+     "nom": "Raichu"
+    }
+   ],
+   "verite": 584721
+  },
+  {
+   "n": 114,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Combusken",
+    "nomBrut": "Galifeu",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275676,
+     "nomCardmarket": "Combusken [Natural Cure | Lunge]",
+     "nom": "Galifeu"
+    },
+    {
+     "idProduct": 277335,
+     "nomCardmarket": "Combusken [Natural Cure | Lunge]",
+     "nom": "Galifeu"
+    }
+   ],
+   "verite": 277335
+  },
+  {
+   "n": 115,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Arceus",
+    "nomBrut": "Arceus",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 291973,
+     "nomCardmarket": "Arceus [Type Switch | Power Blast]",
+     "nom": "Arceus"
+    },
+    {
+     "idProduct": 295186,
+     "nomCardmarket": "Arceus [Type Switch | Power Blast]",
+     "nom": "Arceus"
+    }
+   ],
+   "verite": 291973
+  },
+  {
+   "n": 116,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Floette",
+    "nomBrut": "Floette",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 281547,
+     "nomCardmarket": "Floette [Flower Veil | Fairy Wind]",
+     "nom": "Floette"
+    },
+    {
+     "idProduct": 281548,
+     "nomCardmarket": "Floette [Petal Blizzard | Razor Leaf]",
+     "nom": "Floette"
+    },
+    {
+     "idProduct": 288527,
+     "nomCardmarket": "Floette [Petal Blizzard | Razor Leaf]",
+     "nom": "Floette"
+    }
+   ],
+   "verite": 288527
+  },
+  {
+   "n": 117,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Serperior V",
+    "nomBrut": "Majaspic V",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 682046,
+     "nomCardmarket": "Serperior V [Noble Light | Solar Beam]",
+     "nom": "Majaspic V"
+    },
+    {
+     "idProduct": 682217,
+     "nomCardmarket": "Serperior V [Noble Light | Solar Beam]",
+     "nom": "Majaspic V"
+    },
+    {
+     "idProduct": 682277,
+     "nomCardmarket": "Serperior V [Noble Light | Solar Beam]",
+     "nom": "Majaspic V"
+    }
+   ],
+   "verite": 682277
+  },
+  {
+   "n": 118,
+   "cas": null,
+   "code": "visuel",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Shining Celebi",
+    "nomBrut": "ひかるセレビィ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606805,
+     "nomCardmarket": "Shining Celebi [Healing Water | Miracle Leaf]",
+     "nom": "Celebi brillant"
+    },
+    {
+     "idProduct": 907906,
+     "nomCardmarket": "Shining Celebi [Healing Water | Miracle Leaf]",
+     "nom": "Shining Celebi"
+    }
+   ],
+   "verite": 907906
+  },
+  {
+   "n": 119,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Chikorita",
+    "nomBrut": "チコリータ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 563116,
+     "nomCardmarket": "Chikorita [Run Around | Vine Whip]",
+     "nom": "Chikorita"
+    }
+   ],
+   "verite": 563116
+  },
+  {
+   "n": 120,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Kecleon",
+    "nomBrut": "カクレオン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 899972,
+     "nomCardmarket": "Kecleon [Colorful Whip]",
+     "nom": "Kecleon"
+    },
+    {
+     "idProduct": 900114,
+     "nomCardmarket": "Kecleon [Colorful Whip]",
+     "nom": "Kecleon"
+    }
+   ],
+   "verite": 900114
+  },
+  {
+   "n": 121,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Farfetch'd",
+    "nomBrut": "カモネギ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 557714,
+     "nomCardmarket": "Farfetch'd [Leek Slap | Pot Smash]",
+     "nom": "Canarticho"
+    },
+    {
+     "idProduct": 606720,
+     "nomCardmarket": "Farfetch'd [Gust | Leek Jab]",
+     "nom": "Farfetch'd"
+    },
+    {
+     "idProduct": 654061,
+     "nomCardmarket": "Farfetch'd [Whirlwind | Leek Rush]",
+     "nom": "Canarticho"
+    }
+   ],
+   "verite": 654061
+  },
+  {
+   "n": 122,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Volcanion",
+    "nomBrut": "ボルケニオン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 560382,
+     "nomCardmarket": "Volcanion [Concentrated Fire | Combustion Impact]",
+     "nom": "Volcanion"
+    },
+    {
+     "idProduct": 560383,
+     "nomCardmarket": "Volcanion [Concentrated Fire | Combustion Impact]",
+     "nom": "Volcanion"
+    }
+   ],
+   "verite": 560382
+  },
+  {
+   "n": 123,
+   "cas": "porygon2",
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Dark Exeggutor",
+    "nomBrut": "わるいナッシー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 606848,
+     "nomCardmarket": "Dark Exeggutor [Triple Headbutt | MAX Burst]",
+     "nom": "Noadkoko obscur"
+    },
+    {
+     "idProduct": 606889,
+     "nomCardmarket": "Dark Porygon2 [Spatial Distortion | Curve Attack]",
+     "nom": "Porygon2 obscur"
+    }
+   ],
+   "verite": 606848
+  },
+  {
+   "n": 124,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Marowak",
+    "nomBrut": "ガラガラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 668832,
+     "nomCardmarket": "Marowak [Bonemerang | Bone Impact]",
+     "nom": "Ossatueur"
+    }
+   ],
+   "verite": 668832
+  },
+  {
+   "n": 125,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Exeggcute",
+    "nomBrut": "タマタマ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 584583,
+     "nomCardmarket": "Exeggcute [Hypnosis | Leech Seed]",
+     "nom": "Noeunoeuf"
+    },
+    {
+     "idProduct": 606841,
+     "nomCardmarket": "Exeggcute [Sleep Powder | Psyshock]",
+     "nom": "Nœufnœuf"
+    },
+    {
+     "idProduct": 652044,
+     "nomCardmarket": "Exeggcute [Continuous Eggsplosion | Energy Support]",
+     "nom": "Nœufnœuf"
+    }
+   ],
+   "verite": 652044
+  },
+  {
+   "n": 126,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Vulpix",
+    "nomBrut": "ロコン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 557665,
+     "nomCardmarket": "Vulpix [Confuse Ray]",
+     "nom": "Goupix"
+    },
+    {
+     "idProduct": 652015,
+     "nomCardmarket": "Vulpix [Collect Fire]",
+     "nom": "Goupix"
+    },
+    {
+     "idProduct": 699012,
+     "nomCardmarket": "Vulpix Lv.16 [Fire Soul]",
+     "nom": "Goupix Lv.16"
+    }
+   ],
+   "verite": 652015
+  },
+  {
+   "n": 127,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Altaria",
+    "nomBrut": "Altaria",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 277914,
+     "nomCardmarket": "Altaria Lv.42 [Dragonbreath | Cotton Cloud]",
+     "nom": "Altaria Lv.42"
+    },
+    {
+     "idProduct": 278439,
+     "nomCardmarket": "Altaria Lv.48 [Midnight Eyes | Perish Song | Healing Song]",
+     "nom": "Altaria Lv.48"
+    },
+    {
+     "idProduct": 288533,
+     "nomCardmarket": "Altaria [Flap | Fairy Friend]",
+     "nom": "Altaria"
+    }
+   ],
+   "verite": 288533
+  },
+  {
+   "n": 128,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Typhlosion",
+    "nomBrut": "Typhlosion",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275507,
+     "nomCardmarket": "Typhlosion [Burning Aura | Flickering Flames | Rage]",
+     "nom": "Typhlosion"
+    },
+    {
+     "idProduct": 276663,
+     "nomCardmarket": "Typhlosion [Burning Aura | Flickering Flames | Rage]",
+     "nom": "Typhlosion"
+    }
+   ],
+   "verite": 276663
+  },
+  {
+   "n": 129,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Pikachu",
+    "nomBrut": "Pikachu",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275763,
+     "nomCardmarket": "Pikachu [Scratch | Pika Bolt]",
+     "nom": "Pikachu"
+    },
+    {
+     "idProduct": 293322,
+     "nomCardmarket": "Pikachu [Tail Whip | Electro Ball]",
+     "nom": "Pikachu"
+    },
+    {
+     "idProduct": 295142,
+     "nomCardmarket": "Pikachu [Tail Whip | Electro Ball]",
+     "nom": "Pikachu"
+    }
+   ],
+   "verite": 275763
+  },
+  {
+   "n": 130,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Raichu",
+    "nomBrut": "Raichu",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 288465,
+     "nomCardmarket": "Raichu [Circle Circuit | Thunderbolt]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 288518,
+     "nomCardmarket": "Raichu [Circle Circuit | Thunderbolt]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 745701,
+     "nomCardmarket": "Raichu [Pain-Full Punch | Mach Bolt]",
+     "nom": "Raichu"
+    }
+   ],
+   "verite": 288518
+  },
+  {
+   "n": 131,
+   "cas": null,
+   "code": "visuel",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Oshawott",
+    "nomBrut": "ミジュマル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 569867,
+     "nomCardmarket": "Oshawott [Tackle | Water Gun]",
+     "nom": "Moustillon"
+    },
+    {
+     "idProduct": 569868,
+     "nomCardmarket": "Oshawott [Tackle | Water Gun]",
+     "nom": "Moustillon"
+    },
+    {
+     "idProduct": 569926,
+     "nomCardmarket": "Oshawott [Razor Shell]",
+     "nom": "Moustillon"
+    }
+   ],
+   "verite": 569868
+  },
+  {
+   "n": 132,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Ditto",
+    "nomBrut": "Métamorph",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 273864,
+     "nomCardmarket": "Ditto [Transform]",
+     "nom": "Metamorph"
+    },
+    {
+     "idProduct": 276803,
+     "nomCardmarket": "Ditto [Squirtle | Duplicate | Smash Turn]",
+     "nom": "Métamorph"
+    },
+    {
+     "idProduct": 289703,
+     "nomCardmarket": "Ditto [Metamorphosis Gene | Stick On]",
+     "nom": "Métamorph"
+    }
+   ],
+   "verite": 289703
+  },
+  {
+   "n": 133,
+   "cas": null,
+   "code": "visuel",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Lucario LV.X",
+    "nomBrut": "ルカリオ LV.X",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 566563,
+     "nomCardmarket": "Lucario LV.X [Stance | Close Combat]",
+     "nom": "Lucario LV.X"
+    },
+    {
+     "idProduct": 699077,
+     "nomCardmarket": "Lucario LV.X [Stance | Close Combat]",
+     "nom": "Lucario LV.X"
+    }
+   ],
+   "verite": 699077
+  },
+  {
+   "n": 134,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "The Rocket's Trap",
+    "nomBrut": "ロケット団のワナ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 605207,
+     "nomCardmarket": "The Rocket's Trap",
+     "nom": "The Rocket's Trap"
+    }
+   ],
+   "verite": 605207
+  },
+  {
+   "n": 135,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Drifblim FB",
+    "nomBrut": "Grodrive FB",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 278694,
+     "nomCardmarket": "Drifblim [FB] Lv.50 [Pump Up | Shadow Ball]",
+     "nom": "Grodrive [FB] Lv.50"
+    },
+    {
+     "idProduct": 677601,
+     "nomCardmarket": "Drifblim [FB] Lv.50 [Pump Up | Shadow Ball]",
+     "nom": "Grodrive [FB] Lv.50"
+    }
+   ],
+   "verite": 278694
+  },
+  {
+   "n": 136,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Kecleon",
+    "nomBrut": "カクレオン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 567890,
+     "nomCardmarket": "Kecleon [Color Change | Imittack]",
+     "nom": "Kecleon"
+    }
+   ],
+   "verite": 567890
+  },
+  {
+   "n": 137,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Solgaleo",
+    "nomBrut": "ソルガレオ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 577381,
+     "nomCardmarket": "Solgaleo [Rush In | Solar Geyser]",
+     "nom": "Solgaleo"
+    }
+   ],
+   "verite": null
+  },
+  {
+   "n": 138,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Rayquaza C",
+    "nomBrut": "レックウザ C",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 677629,
+     "nomCardmarket": "Rayquaza [C] Lv.73 [Trash Burst | Twister]",
+     "nom": "Rayquaza [C] Lv.73"
+    }
+   ],
+   "verite": 677629
+  },
+  {
+   "n": 139,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Blaine's Last Stand",
+    "nomBrut": "カツラの一発勝負",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 559364,
+     "nomCardmarket": "Blaine's Last Stand",
+     "nom": "Dernière Chance d'Auguste"
+    },
+    {
+     "idProduct": 559385,
+     "nomCardmarket": "Blaine's Last Stand",
+     "nom": "Dernière Chance d'Auguste"
+    }
+   ],
+   "verite": 559385
+  },
+  {
+   "n": 140,
+   "cas": "numero-substitue",
+   "code": "visuel",
+   "voie": "numero-substitue",
+   "lu": {
+    "nom": "Zinnia's Resolve",
+    "nomBrut": "ヒガナの信頼",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 464399,
+     "nomCardmarket": "Boss's Orders - Giovanni",
+     "nom": "Ordres du Boss - Giovanni"
+    },
+    {
+     "idProduct": 481659,
+     "nomCardmarket": "Eternatus VMAX [Eternal Zone | Dread End]",
+     "nom": "Éthernatos VMAX"
+    },
+    {
+     "idProduct": 900145,
+     "nomCardmarket": "Zinnia's Trust",
+     "nom": "Zinnia's Trust"
+    }
+   ],
+   "verite": 900145
+  },
+  {
+   "n": 141,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Dragonite FB",
+    "nomBrut": "カイリュー FB",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 566387,
+     "nomCardmarket": "Dragonite [FB] Lv.50 [Mach Blow | Giant Tail]",
+     "nom": "Dracolosse [FB] Lv.50"
+    },
+    {
+     "idProduct": 677624,
+     "nomCardmarket": "Dragonite [FB] Lv.50 [Mach Blow | Giant Tail]",
+     "nom": "Dracolosse [FB] Lv.50"
+    }
+   ],
+   "verite": 677624
+  },
+  {
+   "n": 142,
+   "cas": null,
+   "code": "numero",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Red & Blue",
+    "nomBrut": "赤红&青绿",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 850777,
+     "nomCardmarket": "Red & Blue",
+     "nom": "Red et Blue"
+    },
+    {
+     "idProduct": 850834,
+     "nomCardmarket": "Red & Blue",
+     "nom": "Red et Blue"
+    },
+    {
+     "idProduct": 889036,
+     "nomCardmarket": "Red & Blue",
+     "nom": "Red & Blue"
+    }
+   ],
+   "verite": 850834
+  },
+  {
+   "n": 143,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Mega Diancie ex",
+    "nomBrut": "メガディアンシーex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 846780,
+     "nomCardmarket": "Mega Diancie ex [Diamond Coat | Garland Ray]",
+     "nom": "Mega Diancie ex"
+    },
+    {
+     "idProduct": 861470,
+     "nomCardmarket": "Mega Diancie ex [Diamond Coat | Garland Ray]",
+     "nom": "Mega Diancie ex"
+    },
+    {
+     "idProduct": 861481,
+     "nomCardmarket": "Mega Diancie ex [Diamond Coat | Garland Ray]",
+     "nom": "Mega Diancie ex"
+    }
+   ],
+   "verite": 861481
+  },
+  {
+   "n": 144,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mismagius",
+    "nomBrut": "ムウマージ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 701089,
+     "nomCardmarket": "Mismagius [Magical Flick | Psychic Sphere]",
+     "nom": "Magirêve"
+    },
+    {
+     "idProduct": 701541,
+     "nomCardmarket": "Mismagius [Magical Flick | Psychic Sphere]",
+     "nom": "Magirêve"
+    }
+   ],
+   "verite": 701541
+  },
+  {
+   "n": 145,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Flareon EX",
+    "nomBrut": "Pyroli EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 273800,
+     "nomCardmarket": "Flareon [Quick Attack | Flamethrower]",
+     "nom": "Pyroli"
+    },
+    {
+     "idProduct": 288515,
+     "nomCardmarket": "Flareon EX [Flash Fire | Blaze Ball]",
+     "nom": "Pyroli-EX"
+    },
+    {
+     "idProduct": 288537,
+     "nomCardmarket": "Flareon EX [Flash Fire | Blaze Ball]",
+     "nom": "Pyroli-EX"
+    }
+   ],
+   "verite": 288515
+  },
+  {
+   "n": 146,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Guzma & Hala",
+    "nomBrut": "グズマ＆ハラ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 463209,
+     "nomCardmarket": "Guzma & Hala",
+     "nom": "Guzma et Pectorius"
+    },
+    {
+     "idProduct": 555009,
+     "nomCardmarket": "Guzma & Hala",
+     "nom": "Guzma et Pectorius"
+    },
+    {
+     "idProduct": 555071,
+     "nomCardmarket": "Guzma & Hala",
+     "nom": "Guzma et Pectorius"
+    }
+   ],
+   "verite": 555071
+  },
+  {
+   "n": 147,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Rosa's Encouragement",
+    "nomBrut": "メイのはげまし",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 868078,
+     "nomCardmarket": "Rosa's Encouragement",
+     "nom": "Encouragement d'Écho"
+    },
+    {
+     "idProduct": 868117,
+     "nomCardmarket": "Rosa's Encouragement",
+     "nom": "Encouragement d'Écho"
+    },
+    {
+     "idProduct": 868125,
+     "nomCardmarket": "Rosa's Encouragement",
+     "nom": "Encouragement d'Écho"
+    }
+   ],
+   "verite": 868125
+  },
+  {
+   "n": 148,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Darkrai-EX",
+    "nomBrut": "ダークライEX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 561880,
+     "nomCardmarket": "Darkrai EX [Dark Pulse | Dark Head]",
+     "nom": "Darkrai EX"
+    },
+    {
+     "idProduct": 563202,
+     "nomCardmarket": "Darkrai EX [Dark Pulse | Dark Head]",
+     "nom": "Darkrai EX"
+    },
+    {
+     "idProduct": 563232,
+     "nomCardmarket": "Darkrai EX [Dark Pulse | Dark Head]",
+     "nom": "Darkrai EX"
+    }
+   ],
+   "verite": 563202
+  },
+  {
+   "n": 149,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Whitney",
+    "nomBrut": "Blanche",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 365826,
+     "nomCardmarket": "Whitney",
+     "nom": "Blanche"
+    },
+    {
+     "idProduct": 365847,
+     "nomCardmarket": "Whitney",
+     "nom": "Blanche"
+    }
+   ],
+   "verite": 365847
+  },
+  {
+   "n": 150,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Raichu",
+    "nomBrut": "ライチュウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 705322,
+     "nomCardmarket": "Raichu [Electrocharge | Thunderbolt]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 707670,
+     "nomCardmarket": "Raichu [Electrocharge | Thunderbolt]",
+     "nom": "Raichu"
+    },
+    {
+     "idProduct": 721047,
+     "nomCardmarket": "Raichu [Electrocharge | Thunderbolt]",
+     "nom": "Raichu"
+    }
+   ],
+   "verite": 707670
+  },
+  {
+   "n": 151,
+   "cas": "numero-substitue",
+   "code": "visuel",
+   "voie": "numero-substitue",
+   "lu": {
+    "nom": "Electivire",
+    "nomBrut": "エレキブル",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 521635,
+     "nomCardmarket": "Oranguru [Primate Wisdom | Whap Down]",
+     "nom": "Gouroutan"
+    },
+    {
+     "idProduct": 544371,
+     "nomCardmarket": "Misty & Lorelei",
+     "nom": "Ondine et Olga"
+    },
+    {
+     "idProduct": 551231,
+     "nomCardmarket": "Beast Energy ◇ [Prism]",
+     "nom": "Énergie Chimère ◇"
+    }
+   ],
+   "verite": 699296
+  },
+  {
+   "n": 152,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Zapdos G",
+    "nomBrut": "サンダー G",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 676166,
+     "nomCardmarket": "Zapdos [G] Lv.60 [Charge Beam | Lightning Strike]",
+     "nom": "Électhor [G] Lv.60"
+    }
+   ],
+   "verite": 676166
+  },
+  {
+   "n": 153,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Jolteon",
+    "nomBrut": "サンダース",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 765027,
+     "nomCardmarket": "Jolteon δ Delta Species [Delta Search | Return Spark]",
+     "nom": "Voltali δ Delta Species"
+    }
+   ],
+   "verite": 765027
+  },
+  {
+   "n": 154,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Glaceon VSTAR",
+    "nomBrut": "グレイシアVSTAR",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 604995,
+     "nomCardmarket": "Glaceon VSTAR [Icicle Shot | Crystal Star]",
+     "nom": "Givrali VSTAR"
+    },
+    {
+     "idProduct": 687779,
+     "nomCardmarket": "Glaceon VSTAR [Icicle Shot | Crystal Star]",
+     "nom": "Givrali VSTAR"
+    }
+   ],
+   "verite": 687779
+  },
+  {
+   "n": 155,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Mew",
+    "nomBrut": "ミュウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 550281,
+     "nomCardmarket": "Mew [Psyshot]",
+     "nom": "Mew"
+    },
+    {
+     "idProduct": 696011,
+     "nomCardmarket": "Mew [Memories of Dawn | Encounter]",
+     "nom": "Mew"
+    },
+    {
+     "idProduct": 696058,
+     "nomCardmarket": "Mew [Mysterious Tail | Psyshot]",
+     "nom": "Mew"
+    }
+   ],
+   "verite": null
+  },
+  {
+   "n": 156,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Golem",
+    "nomBrut": "ゴローニャ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 784354,
+     "nomCardmarket": "Golem [Rock Vengeance | Rock Slide]",
+     "nom": "Grolem"
+    }
+   ],
+   "verite": 784354
+  },
+  {
+   "n": 157,
+   "cas": "numero-substitue",
+   "code": "visuel",
+   "voie": "numero-substitue",
+   "lu": {
+    "nom": "M Gardevoir-EX",
+    "nomBrut": "MGardevoir EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 273636,
+     "nomCardmarket": "Gardevoir EX [Life Leap | Shining Wind]",
+     "nom": "Gardevoir EX"
+    },
+    {
+     "idProduct": 274028,
+     "nomCardmarket": "Pokémon Breeder",
+     "nom": "Éleveur de Pokémon"
+    },
+    {
+     "idProduct": 274241,
+     "nomCardmarket": "Blaine's Last Resort",
+     "nom": "Blaine's Last Resort"
+    }
+   ],
+   "verite": 907959
+  },
+  {
+   "n": 158,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Professor Birch's Observations",
+    "nomBrut": "Observations du Professeur Seko",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 273665,
+     "nomCardmarket": "Professor Birch's Observations",
+     "nom": "Observations du Professeur Seko"
+    },
+    {
+     "idProduct": 273690,
+     "nomCardmarket": "Professor Birch's Observations",
+     "nom": "Observations du Professeur Seko"
+    }
+   ],
+   "verite": 273690
+  },
+  {
+   "n": 159,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Acerola's Mischief",
+    "nomBrut": "アセロラのいたずら",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 840618,
+     "nomCardmarket": "Acerola's Mischief",
+     "nom": "Espièglerie de Margie"
+    },
+    {
+     "idProduct": 840643,
+     "nomCardmarket": "Acerola's Mischief",
+     "nom": "Espièglerie de Margie"
+    },
+    {
+     "idProduct": 840649,
+     "nomCardmarket": "Acerola's Mischief",
+     "nom": "Espièglerie de Margie"
+    }
+   ],
+   "verite": 840649
+  },
+  {
+   "n": 160,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mega Clefable ex",
+    "nomBrut": "メガピクシーex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 867952,
+     "nomCardmarket": "Mega Clefable ex [Luminous Wing | Shooting Moons]",
+     "nom": "Mega Mélodelfe ex"
+    },
+    {
+     "idProduct": 868106,
+     "nomCardmarket": "Mega Clefable ex [Luminous Wing | Shooting Moons]",
+     "nom": "Mega Mélodelfe ex"
+    },
+    {
+     "idProduct": 868122,
+     "nomCardmarket": "Mega Clefable ex [Luminous Wing | Shooting Moons]",
+     "nom": "Mega Mélodelfe ex"
+    }
+   ],
+   "verite": 868122
+  },
+  {
+   "n": 161,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Cinccino ex",
+    "nomBrut": "チラチーノex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 562895,
+     "nomCardmarket": "Cinccino [Sweeping Cure | Knock Away]",
+     "nom": "Pashmilla"
+    },
+    {
+     "idProduct": 752864,
+     "nomCardmarket": "Cinccino [Gentle Slap | Special Roll]",
+     "nom": "Pashmilla"
+    },
+    {
+     "idProduct": 877379,
+     "nomCardmarket": "Cinccino ex [Smooth Coat | Energized Slap]",
+     "nom": "Pashmilla ex"
+    }
+   ],
+   "verite": 877379
+  },
+  {
+   "n": 162,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mega Dragalge EX",
+    "nomBrut": "Méga-Kravarech EX",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 886457,
+     "nomCardmarket": "Mega Dragalge ex [Corrosive Liquid | Pernicious Poison]",
+     "nom": "Mega Kravarech ex"
+    },
+    {
+     "idProduct": 886496,
+     "nomCardmarket": "Mega Dragalge ex [Corrosive Liquid | Pernicious Poison]",
+     "nom": "Mega Kravarech ex"
+    },
+    {
+     "idProduct": 886511,
+     "nomCardmarket": "Mega Dragalge ex [Corrosive Liquid | Pernicious Poison]",
+     "nom": "Méga-Kravarech-ex"
+    }
+   ],
+   "verite": 886511
+  },
+  {
+   "n": 163,
+   "cas": null,
+   "code": "visuel",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Lucario GL",
+    "nomBrut": "Lucario GL",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 278582,
+     "nomCardmarket": "Lucario [GL] Lv.32 [Boundary Aura | Combo Throw]",
+     "nom": "Lucario [GL] Lv.32"
+    },
+    {
+     "idProduct": 868751,
+     "nomCardmarket": "Lucario [GL] Lv.32 [Boundary Aura | Combo Throw]",
+     "nom": "Lucario [GL] Lv.32"
+    },
+    {
+     "idProduct": 868960,
+     "nomCardmarket": "Lucario [GL] Lv.32 [Boundary Aura | Combo Throw]",
+     "nom": "Lucario [GL] Lv.32"
+    }
+   ],
+   "verite": 278582
+  },
+  {
+   "n": 164,
+   "cas": null,
+   "code": "numero",
+   "voie": "local-nom-numero",
+   "lu": {
+    "nom": "Sylveon ex",
+    "nomBrut": "ニンフィアex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 563140,
+     "nomCardmarket": "Sylveon EX [Dress Up | Precious Ribbon]",
+     "nom": "Nymphali EX"
+    },
+    {
+     "idProduct": 563141,
+     "nomCardmarket": "Sylveon EX [Dress Up | Precious Ribbon]",
+     "nom": "Nymphali EX"
+    }
+   ],
+   "verite": 907895
+  },
+  {
+   "n": 165,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Mimikyu",
+    "nomBrut": "Mimiqui",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 398514,
+     "nomCardmarket": "Mimikyu [Impersonation | Mischievous Hands]",
+     "nom": "Mimiqui"
+    },
+    {
+     "idProduct": 408124,
+     "nomCardmarket": "Mimikyu [Impersonation | Mischievous Hands]",
+     "nom": "Mimiqui"
+    }
+   ],
+   "verite": 398514
+  },
+  {
+   "n": 166,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Altaria ex",
+    "nomBrut": "チルタリスex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 741873,
+     "nomCardmarket": "Altaria ex [Humming Heal | Light Pulse]",
+     "nom": "Altaria ex"
+    },
+    {
+     "idProduct": 741910,
+     "nomCardmarket": "Altaria ex [Humming Heal | Light Pulse]",
+     "nom": "Altaria ex"
+    },
+    {
+     "idProduct": 741918,
+     "nomCardmarket": "Altaria ex [Humming Heal | Light Pulse]",
+     "nom": "Altaria ex"
+    }
+   ],
+   "verite": 741918
+  },
+  {
+   "n": 167,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Leafeon ex",
+    "nomBrut": "リーフィアex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 803116,
+     "nomCardmarket": "Leafeon ex [Verdant Storm | Moss Agate]",
+     "nom": "Phyllali ex"
+    },
+    {
+     "idProduct": 803313,
+     "nomCardmarket": "Leafeon ex [Verdant Storm | Moss Agate]",
+     "nom": "Phyllali ex"
+    },
+    {
+     "idProduct": 863329,
+     "nomCardmarket": "Leafeon ex [Verdant Storm | Moss Agate]",
+     "nom": "Phyllali ex"
+    }
+   ],
+   "verite": 803313
+  },
+  {
+   "n": 168,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Leafeon VSTAR",
+    "nomBrut": "リーフィアVSTAR",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 604993,
+     "nomCardmarket": "Leafeon VSTAR [Leaf Guard | Ivy Star]",
+     "nom": "Phyllali VSTAR"
+    },
+    {
+     "idProduct": 687492,
+     "nomCardmarket": "Leafeon VSTAR [Leaf Guard | Ivy Star]",
+     "nom": "Phyllali VSTAR"
+    },
+    {
+     "idProduct": 687772,
+     "nomCardmarket": "Leafeon VSTAR [Leaf Guard | Ivy Star]",
+     "nom": "Phyllali VSTAR"
+    }
+   ],
+   "verite": 687772
+  },
+  {
+   "n": 169,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Magikarp",
+    "nomBrut": "コイキング",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 701076,
+     "nomCardmarket": "Magikarp [Expert Splasher]",
+     "nom": "Magicarpe"
+    },
+    {
+     "idProduct": 701536,
+     "nomCardmarket": "Magikarp [Expert Splasher]",
+     "nom": "Magicarpe"
+    },
+    {
+     "idProduct": 907930,
+     "nomCardmarket": "Magikarp [Expert Splasher]",
+     "nom": "Magikarp"
+    }
+   ],
+   "verite": 701536
+  },
+  {
+   "n": 170,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Hydreigon ex",
+    "nomBrut": "サザンドラex",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 793506,
+     "nomCardmarket": "Hydreigon ex [Crashing Headbutt | Obsidian]",
+     "nom": "Trioxhydre ex"
+    },
+    {
+     "idProduct": 793598,
+     "nomCardmarket": "Hydreigon ex [Crashing Headbutt | Obsidian]",
+     "nom": "Trioxhydre ex"
+    },
+    {
+     "idProduct": 829530,
+     "nomCardmarket": "Hydreigon ex [Greed Eater | Dark Bite]",
+     "nom": "Trioxhydre ex"
+    }
+   ],
+   "verite": 829530
+  },
+  {
+   "n": 171,
+   "cas": null,
+   "code": "numero",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Starmie V",
+    "nomBrut": "スターミーV",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 609726,
+     "nomCardmarket": "Starmie V [Swift | Energy Spiral]",
+     "nom": "Staross V"
+    },
+    {
+     "idProduct": 609843,
+     "nomCardmarket": "Starmie V [Swift | Energy Spiral]",
+     "nom": "Staross V"
+    },
+    {
+     "idProduct": 609851,
+     "nomCardmarket": "Starmie V [Swift | Energy Spiral]",
+     "nom": "Staross V"
+    }
+   ],
+   "verite": 609851
+  },
+  {
+   "n": 172,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "setcode-numero",
+   "lu": {
+    "nom": "Charizard",
+    "nomBrut": "リザードン",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 525395,
+     "nomCardmarket": "Charizard [Brave Flame]",
+     "nom": "Dracaufeu"
+    }
+   ],
+   "verite": 525395
+  },
+  {
+   "n": 173,
+   "cas": "numero-substitue",
+   "code": "visuel",
+   "voie": "numero-substitue",
+   "lu": {
+    "nom": "Dragonite",
+    "nomBrut": "カイリュー",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 521800,
+     "nomCardmarket": "Training Court",
+     "nom": "Court d'Entraînement"
+    },
+    {
+     "idProduct": 586696,
+     "nomCardmarket": "Single Strike Energy",
+     "nom": "Énergie Poing Final"
+    },
+    {
+     "idProduct": 587890,
+     "nomCardmarket": "Baltoy [Self-Destruct]",
+     "nom": "Baltoy"
+    }
+   ],
+   "verite": 698502
+  },
+  {
+   "n": 174,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Bellossom",
+    "nomBrut": "Bellossom",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275059,
+     "nomCardmarket": "Bellossom [Flower Supplement | Knife Leaf]",
+     "nom": "Bellossom"
+    },
+    {
+     "idProduct": 275077,
+     "nomCardmarket": "Bellossom [Flower Supplement | Knife Leaf]",
+     "nom": "Bellossom"
+    }
+   ],
+   "verite": 275077
+  },
+  {
+   "n": 175,
+   "cas": null,
+   "code": "numero",
+   "voie": "nom",
+   "lu": {
+    "nom": "Bellossom",
+    "nomBrut": "Bellossom",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 275059,
+     "nomCardmarket": "Bellossom [Flower Supplement | Knife Leaf]",
+     "nom": "Bellossom"
+    },
+    {
+     "idProduct": 275077,
+     "nomCardmarket": "Bellossom [Flower Supplement | Knife Leaf]",
+     "nom": "Bellossom"
+    }
+   ],
+   "verite": 275077
+  },
+  {
+   "n": 176,
+   "cas": null,
+   "code": "confirmation",
+   "voie": "perimetre-vintage",
+   "lu": {
+    "nom": "Arcanine",
+    "nomBrut": "ウインディ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 784216,
+     "nomCardmarket": "Arcanine [Fire Veil | Burn Up]",
+     "nom": "Arcanin"
+    }
+   ],
+   "verite": 784216
+  },
+  {
+   "n": 177,
+   "cas": null,
+   "code": "visuel",
+   "voie": "nom",
+   "lu": {
+    "nom": "Ampharos",
+    "nomBrut": "デンリュウ",
+    "nomConfiance": "haute"
+   },
+   "candidats": [
+    {
+     "idProduct": 562578,
+     "nomCardmarket": "Ampharos [Shocking Light | Gigavolt]",
+     "nom": "Ampharos"
+    },
+    {
+     "idProduct": 606443,
+     "nomCardmarket": "Ampharos [Gigaspark]",
+     "nom": "Ampharos"
+    },
+    {
+     "idProduct": 877317,
+     "nomCardmarket": "Ampharos [Synchro Pulse | Flashing Bolt]",
+     "nom": "Pharamp"
+    }
+   ],
+   "verite": 877317
+  }
+ ]
+}
