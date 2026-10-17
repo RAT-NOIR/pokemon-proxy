@@ -141,7 +141,7 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     // le drapeau `essentiel` nommé + `fichier` (liste fermée, collecte-cartes/garde-taille-atlas.js). « Je ne sais pas mesurer » bloque.
     if (ecrit) {
         const T = require('./collecte-cartes/garde-taille-atlas');
-        const v = await T.verifierEcriture({ client: mongoose.connection.getClient?.(), estimationMo: estimationMo ?? 0, essentiel, fichier });
+        const v = await T.verifierEcriture({ client: mongoose.connection.getClient?.(), grappe: variable, estimationMo: estimationMo ?? 0, essentiel, fichier });
         if (!v.autorise) {
             console.error(`\n❌ ARRÊT : GARDE-ATLAS (grappe de "${reelle}") — ${v.raison}.`);
             console.error(`   Aucune opération n'a été effectuée.`);

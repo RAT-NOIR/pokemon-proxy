@@ -49,7 +49,7 @@ const sep = process.argv.indexOf('--');
 const options = sep < 0 ? process.argv.slice(2) : process.argv.slice(2, sep);
 const commande = sep < 0 ? [] : process.argv.slice(sep + 1);
 const AUTORISES = [/^--quoi=.+/, /^--collections=[\w,]+$/, /^--compte=\w+(:\w+=[^\s]+)?$/, /^--annonce=.+\.json$/,
-    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/, /^--estimation-mo=\d+(\.\d+)?$/];
+    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/, /^--estimation-mo=\d+(\.\d+)?$/, /^--degagement$/];
 const inconnus = options.filter(a => !AUTORISES.some(r => r.test(a)));
 const val = nom => options.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const quoi = val('quoi'), collections = val('collections'), BASE = val('base') || 'cartes';
@@ -81,6 +81,12 @@ if (BASE === 'test_scratch' && process.env.BANC_ISOLE !== '1') {
 }
 const annonces = val('annonce') ? JSON.parse(fs.readFileSync(path.resolve(val('annonce')), 'utf8')) : {};
 try { validerAnnonces(annonces); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); }
+// DÉGAGEMENT (GARDE-ATLAS, testeur 2026-10-18) : `--degagement` laisse un lot qui RETIRE des données passer entre 90 et 98 % — à trois conditions :
+// une --annonce= de baisse non vide, une mesure LUE sous 98 %, et données+index qui ne REMONTENT pas après la commande (sinon arrêt + restauration).
+// Ce drapeau n'existe qu'ici : ni connecterMongo ni ouvrirConnexions n'en ont.
+const DEGAGEMENT = options.includes('--degagement');
+{ const e = T.validerDegagement({ degagement: DEGAGEMENT, annonces }); if (e) { console.error(`❌ ${e}`); process.exit(2); } }
+let MO_AVANT = null;
 const aSauver = [...new Set([...collections.split(','), ...GARDEES])];
 
 async function ouvrir() {
@@ -150,7 +156,7 @@ function journaliser(t, dossier, combien, sortie) {
     // 0. GARDE-ATLAS, AVANT la sauvegarde : la grappe cible est-elle sous 90 % de 512 Mo, estimation du lot comprise ?
     {
         let o = null, v;
-        try { o = await ouvrir(); v = await T.verifierEcriture({ client: o.client, estimationMo: ESTIMATION_MO }); }
+        try { o = await ouvrir(); v = await T.verifierEcriture({ client: o.client, estimationMo: ESTIMATION_MO, sansCache: true }); if (DEGAGEMENT) v = T.autoriserDegagement(v); MO_AVANT = v.mesure?.mo ?? null; }
         catch (e) { v = { autorise: false, niveau: 'inconnu', raison: `je ne sais pas mesurer la grappe (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 150)})` }; }
         finally { try { await o?.fermer(); } catch { /* fermeture sans importance */ } }
         if (!v.autorise) { console.error(`❌ GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}. Rien n'a été sauvegardé ni écrit.`); process.exit(5); }
@@ -174,7 +180,8 @@ function journaliser(t, dossier, combien, sortie) {
     let client;
     ({ db, fermer, client } = await ouvrir());
     // GARDE-ATLAS : où en est la grappe APRÈS l'écriture ? (imprimé et mis au journal ; une mesure impossible se dit, elle ne fait pas échouer le lot)
-    const atlasApres = T.ligneAtlasApres(await T.mesurerGrappe(client).catch(() => null), GRAPPE);
+    const mesureApres = await T.mesurerGrappe(client).catch(() => null);
+    const atlasApres = T.ligneAtlasApres(mesureApres, GRAPPE) + (DEGAGEMENT ? ` · dégagement : données+index ${MO_AVANT?.toFixed(1)} → ${mesureApres ? mesureApres.mo.toFixed(1) : '?'} Mo` : '');
     console.log(`   ${atlasApres}`);
     let apres = await etatDeLaBase(db), sw = await setsDuWorker(db, depuis);
     let cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
@@ -185,6 +192,8 @@ function journaliser(t, dossier, combien, sortie) {
         apres = await etatDeLaBase(db); sw = await setsDuWorker(db, depuis);
         cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     }
+    // un dégagement qui FAIT MONTER la taille n'en est pas un : arrêt et restauration depuis la sauvegarde (comme une baisse non annoncée)
+    if (DEGAGEMENT && !T.degagementTenu({ avantMo: MO_AVANT, apresMo: mesureApres?.mo })) cmp.nonAutorisees.push({ compteur: 'atlas', groupe: `degagement ${GRAPPE}`, cle: 'atlas-degagement (données+index en hausse)', avant: MO_AVANT?.toFixed(1), apres: mesureApres ? mesureApres.mo.toFixed(1) : 'illisible' });
     const comptesApres = await compter(db);
     const hausses = Object.entries(cmp.hausses).map(([k, v]) => `${k} +${v}`).join(', ') || 'aucune';
     const autorisees = cmp.baisses.filter(b => b.autorisee).map(b => `${decrire(b)} [${b.autorisee}]`);

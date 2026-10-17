@@ -25,17 +25,34 @@ async function rapporter(nom, client, ecrire = console.log) {
     let m;
     try { m = await T.mesurerGrappe(client); } catch (e) { ecrire(`🔴 grappe ${nom} : mesure impossible (${masquer(e.message)})`); return 1; }
     const j = T.juger({ mesure: m });
-    ecrire(`${j.autorise ? (j.niveau === 'alerte' ? '⚠️ ' : '✅') : '🔴'} grappe ${nom} : ${m.pourcent.toFixed(1)} % de ${T.LIMITE_MO} Mo (données+index ${f(m.detail.donneesIndexMo * MO)} Mo ; stockage+index ${f(m.detail.stockageIndexMo * MO)} Mo ; retenu ${f(m.mo * MO)} Mo) — ${j.niveau}`);
+    ecrire(`${j.autorise ? (j.niveau === 'alerte' ? '⚠️ ' : '✅') : '🔴'} grappe ${nom} : ${m.pourcent.toFixed(1)} % de ${T.LIMITE_MO} Mo (données+index ${f(m.detail.donneesIndexMo * MO)} Mo = valeur retenue ; stockage+index ${f(m.detail.stockageIndexMo * MO)} Mo, à titre d'information) — ${j.niveau}`);
     for (const b of m.detail.bases) ecrire(`   base ${b.nom} : données+index ${f(b.donneesIndexMo * MO)} Mo`);
     try { for (const l of await plusGrosses(client)) ecrire(`   ${l.base}.${l.coll} : ${f(l.octets)} Mo (${l.docs} docs, dont index ${f(l.index)} Mo)`); }
     catch (e) { ecrire(`   plus grosses collections illisibles (${masquer(e.message)})`); }
     return j.autorise ? 0 : 1;
 }
 
+/** Pure. Les variables de connexion : par défaut les utilisateurs de LECTURE ; `ecriture` = ceux des outils d'écriture (la preuve que la garde, elle, peut mesurer). Toujours des actes de lecture. */
+function variablesDe(connexion) {
+    return connexion === 'ecriture' ? [['production', 'MONGODB_URI'], ['cartes', 'MONGODB_CARTES_URI']] : [['production', 'MONGODB_LECTURE_URI'], ['cartes', 'MONGODB_CARTES_LECTURE_URI']];
+}
+function lireArguments(argv) {
+    let connexion = 'lecture';
+    for (const a of argv) {
+        const m = /^--connexion=(lecture|ecriture)$/.exec(a);
+        if (!m) return { erreur: `argument inconnu « ${String(a).slice(0, 30)} » (seul --connexion=lecture|ecriture existe)` };
+        connexion = m[1];
+    }
+    return { connexion };
+}
+
 async function principal() {
+    const A = lireArguments(process.argv.slice(2));
+    if (A.erreur) { console.error(`❌ ${A.erreur}`); return 2; }
     const { MongoClient } = require('mongodb');
     let code = 0;
-    for (const [nom, variable] of [['production', 'MONGODB_URI'], ['cartes', 'MONGODB_CARTES_URI']]) {
+    console.log(`connexion : ${A.connexion} (actes de lecture seulement : listDatabases, dbStats, collStats)`);
+    for (const [nom, variable] of variablesDe(A.connexion)) {
         if (!process.env[variable]) { console.log(`🔴 grappe ${nom} : ${variable} absente de l'environnement`); code = 1; continue; }
         let client;
         try { client = await new MongoClient(process.env[variable], { serverSelectionTimeoutMS: 20000 }).connect(); }
@@ -46,5 +63,5 @@ async function principal() {
     return code;
 }
 
-module.exports = { plusGrosses, rapporter };
+module.exports = { plusGrosses, rapporter, variablesDe, lireArguments };
 if (require.main === module) principal().then(c => process.exit(c), e => { console.error(`🔴 ${masquer(e.message)}`); process.exit(1); });

@@ -76,7 +76,7 @@ async function ouvrirConnexions(options = {}) {
     // « Je ne sais pas mesurer » BLOQUE (garde-taille-atlas.js). La production n'est jamais écrite ici : seule la grappe `cartes` est mesurée.
     if (!options.lectureSeule) {
         const T = require('./garde-taille-atlas');
-        const v = await T.verifierEcriture({ client: cartes.getClient?.(), estimationMo: options.estimationMo ?? 0, essentiel: options.essentiel, fichier: options.fichier });
+        const v = await T.verifierEcriture({ client: cartes.getClient?.(), grappe: 'cartes', noms: bases, estimationMo: options.estimationMo ?? 0, essentiel: options.essentiel, fichier: options.fichier });
         if (!v.autorise) { await cartes.close(); arret(`GARDE-ATLAS (grappe cartes) — ${v.raison}.`); }
         if (v.niveau === 'alerte') console.log(`⚠️  GARDE-ATLAS : ${v.raison}`);
     }

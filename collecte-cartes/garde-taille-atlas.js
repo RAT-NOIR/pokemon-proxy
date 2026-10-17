@@ -21,10 +21,11 @@ const masquer = m => String(m).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masqué
 const estNombre = x => typeof x === 'number' && Number.isFinite(x) && x >= 0;
 
 /** Mesure UNE grappe à partir d'un client déjà ouvert (MongoClient) : listDatabases, puis dbStats de chaque base. Lève si elle ne peut pas conclure. */
-async function mesurerGrappe(client) {
+async function mesurerGrappe(client, { noms: dejaLus } = {}) {
     if (!client || typeof client.db !== 'function') throw new Error('aucun client ouvert : je ne sais pas mesurer la grappe');
-    const liste = await client.db('admin').admin().listDatabases();
-    const noms = (liste?.databases || []).map(d => d.name).filter(n => !BASES_IGNOREES.includes(n));
+    // `noms` : la liste des bases déjà lue par l'appelant (garde.js), pour ne pas refaire un listDatabases
+    const lus = Array.isArray(dejaLus) && dejaLus.length ? dejaLus : ((await client.db('admin').admin().listDatabases())?.databases || []).map(d => d.name);
+    const noms = lus.filter(n => !BASES_IGNOREES.includes(n));
     if (!noms.length) throw new Error('aucune base lue sur la grappe : un zéro fabriqué ne mesure rien');
     const bases = [];
     let donnees = 0, stockage = 0;
@@ -35,7 +36,8 @@ async function mesurerGrappe(client) {
         donnees += s.dataSize + s.indexSize;
         stockage += s.storageSize + s.indexSize;
     }
-    const mo = Math.max(donnees, stockage) / MO;
+    // I2 (testeur) : le REFUS se décide sur données+index, ce qu'Atlas compte ; le stockage+index n'est qu'AFFICHÉ (il ne baisse qu'au compactage)
+    const mo = donnees / MO;
     return { mo, pourcent: mo / LIMITE_MO * 100, detail: { bases, donneesIndexMo: donnees / MO, stockageIndexMo: stockage / MO } };
 }
 
@@ -60,10 +62,16 @@ function juger({ mesure, estimationMo = 0, essentiel, fichier } = {}) {
 }
 
 /** Mesure puis juge. NE LÈVE JAMAIS : une mesure impossible rend { autorise: false, niveau: 'inconnu' }. Un import essentiel ne mesure même pas. */
-async function verifierEcriture({ client, estimationMo = 0, essentiel, fichier } = {}) {
+const CACHE_MS = 5 * 60000;
+const cacheProcessus = new Map();   // grappe -> { le, mesure } : par processus et par grappe, 5 min, jamais un échec
+async function verifierEcriture({ client, estimationMo = 0, essentiel, fichier, grappe, noms, sansCache = false, cache = cacheProcessus, maintenant = Date.now } = {}) {
     if (essentielValide(essentiel, fichier)) return { ...juger({ essentiel, fichier }), mesure: null };
     let mesure = null, erreur = null;
-    try { mesure = await mesurerGrappe(client); } catch (e) { erreur = masquer(e.message); }
+    const prise = grappe && !sansCache ? cache.get(grappe) : null;
+    if (prise && maintenant() - prise.le < CACHE_MS) mesure = prise.mesure;
+    else {
+        try { mesure = await mesurerGrappe(client, { noms }); if (grappe && !sansCache) cache.set(grappe, { le: maintenant(), mesure }); } catch (e) { erreur = masquer(e.message); }
+    }
     const j = juger({ mesure, estimationMo });
     return { ...j, mesure, ...(erreur ? { raison: `${j.raison} — ${erreur}` } : {}) };
 }
@@ -74,4 +82,41 @@ function ligneAtlasApres(mesure, grappe) {
     return `Atlas après : ${mesure.pourcent.toFixed(1).replace('.', ',')} % (grappe ${grappe})`;
 }
 
-module.exports = { mesurerGrappe, juger, verifierEcriture, ligneAtlasApres, fichierEssentiel, LIMITE_MO, ALERTE, REFUS, ESSENTIEL, FICHIERS_ESSENTIELS, BASES_IGNOREES };
+// ── DÉGAGEMENT (lot-additif.js SEULEMENT) : un lot qui RETIRE des données doit pouvoir passer à ≥ 90 %, sous conditions
+const MARGE_DEGAGEMENT = 98, TOLERANCE_MO = 0.1;
+/** Pure. null si `--degagement` est recevable (ou non demandé) ; sinon la raison du refus. Il exige une annonce de BAISSE non nulle. */
+function validerDegagement({ degagement, annonces }) {
+    if (!degagement) return null;
+    const baisse = Object.values(annonces || {}).some(v => typeof v === 'number' && v > 0);
+    return baisse ? null : '--degagement exige une --annonce= de baisse non vide (un dégagement se déclare et se vérifie)';
+}
+/** Pure. Rend le verdict de verifierEcriture tel quel, sauf un REFUS lu (mesure lue, jamais « inconnu ») sous 98 % : autorisé en « dégagement ». */
+function autoriserDegagement(v) {
+    if (v?.niveau === 'refus' && v.mesure && estNombre(v.mesure.pourcent) && v.mesure.pourcent < MARGE_DEGAGEMENT)
+        return { ...v, autorise: true, niveau: 'degagement', raison: `DÉGAGEMENT autorisé — ${v.raison}` };
+    return v;
+}
+/** Pure. Le lot a-t-il fait baisser (ou tenu) données+index ? Une hausse de plus de 0,1 Mo, ou une mesure illisible : non. */
+function degagementTenu({ avantMo, apresMo }) {
+    return estNombre(avantMo) && estNombre(apresMo) && apresMo <= avantMo + TOLERANCE_MO;
+}
+
+// ── M1 : le scan de la liste fermée. TOUTE forme de la valeur (quelle que soit la citation, l'espacement) ou de la constante hors des fichiers admis.
+const contientDrapeauEssentiel = texte => /import-cardmarket/.test(String(texte)) || /\bESSENTIEL\b/.test(String(texte));
+/** Chemins relatifs (« / ») des fichiers .js/.mjs/.cjs de `racine` (hors test-*, ce module, node_modules, .git, sauvegardes) qui portent le drapeau. */
+function porteursDuDrapeau(racine) {
+    const fs = require('fs');
+    const trouves = [];
+    const parcourir = d => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const p = path.join(d, e.name);
+            if (e.isDirectory()) { if (!['node_modules', '.git', '.banc-local'].includes(e.name) && !e.name.startsWith('backup-')) parcourir(p); continue; }
+            if (!/\.(js|mjs|cjs)$/.test(e.name) || /^test/.test(e.name) || e.name === 'garde-taille-atlas.js') continue;
+            if (contientDrapeauEssentiel(fs.readFileSync(p, 'utf8'))) trouves.push(path.relative(racine, p).split(path.sep).join('/'));
+        }
+    };
+    parcourir(racine);
+    return trouves;
+}
+
+module.exports = { validerDegagement, autoriserDegagement, degagementTenu, contientDrapeauEssentiel, porteursDuDrapeau, MARGE_DEGAGEMENT, mesurerGrappe, juger, verifierEcriture, ligneAtlasApres, fichierEssentiel, LIMITE_MO, ALERTE, REFUS, ESSENTIEL, FICHIERS_ESSENTIELS, BASES_IGNOREES };

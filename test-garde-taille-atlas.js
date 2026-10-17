@@ -35,10 +35,12 @@ const grappeA = p => faux({ test: { data: p * 5.12 * 0.9, index: p * 5.12 * 0.1 
 
     // la référence du coordinateur : 415,2 + 21,0 = 436,2 Mo -> 85,2 %
     let m = await M.mesurerGrappe(faux({ test: { data: 415.2, index: 21.0, stockage: 423.6 }, test_scratch: { data: 0, index: 0, stockage: 0 } }));
-    verifier('mesure de référence : données+index 436,2 (85,2 %), stockage+index 444,6 (86,8 %) -> la garde retient 86,8 %', [Math.round(m.donneesIndexMo ?? m.detail.donneesIndexMo), Math.round(m.mo * 10) / 10, Math.round(m.pourcent * 10) / 10], [436, 444.6, 86.8]);
-    // le MAXIMUM de (données+index) et (stockage+index)
+    verifier('mesure de référence : la garde retient données+index 436,2 Mo = 85,2 % ; le stockage+index (444,6) n\'est qu\'affiché', [Math.round(m.mo * 10) / 10, Math.round(m.pourcent * 10) / 10, Math.round(m.detail.stockageIndexMo * 10) / 10], [436.2, 85.2, 444.6]);
+    // I2 : le REFUS se décide sur données+index (ce qu'Atlas compte) ; le stockage ne baisse qu'au compactage
     m = await M.mesurerGrappe(faux({ test: { data: 400, index: 20, stockage: 450 } }));
-    verifier('maximum de données+index et stockage+index (470 Mo, pas 420)', Math.round(m.mo), 470);
+    verifier('I2 : données+index (420) décide, stockage+index (470) seulement affiché', [Math.round(m.mo), Math.round(m.detail.stockageIndexMo)], [420, 470]);
+    const jStock = M.juger({ mesure: await M.mesurerGrappe(faux({ test: { data: 400, index: 20, stockage: 500 } })) });
+    verifier('I2 : stockage+index à 101 % mais données+index à 82 % : pas de refus', jStock.autorise, true);
     // admin/local/config ne comptent pas (le faux leur donne 9999 Mo)
     m = await M.mesurerGrappe(faux({ test: { data: 100, index: 0 } }));
     verifier('admin, local et config ne sont pas comptés', Math.round(m.mo), 100);
@@ -111,6 +113,70 @@ const grappeA = p => faux({ test: { data: p * 5.12 * 0.9, index: p * 5.12 * 0.1 
     verifier('garde.js (ouvrirConnexions) : porte la garde', /verifierEcriture/.test(gc), true);
     const mc = fs.readFileSync(path.join(__dirname, 'mongo-connexion.js'), 'utf8');
     verifier('mongo-connexion.js (connecterMongo, ecrit) : porte la garde', /verifierEcriture/.test(mc), true);
+
+    // ── CORRECTION 1
+    // I2 dégagement : seulement avec une annonce de baisse, mesure lue et < 98 %
+    const ann = { 'fiches set:X': 3 };
+    verifier('dégagement sans annonce : refusé', M.validerDegagement({ degagement: true, annonces: {} }) !== null, true);
+    verifier('dégagement avec annonce nulle (0) : refusé', M.validerDegagement({ degagement: true, annonces: { 'fiches set:X': 0 } }) !== null, true);
+    verifier('dégagement avec annonce de baisse : accepté', M.validerDegagement({ degagement: true, annonces: ann }), null);
+    verifier('pas de dégagement demandé : rien à valider', M.validerDegagement({ degagement: false, annonces: {} }), null);
+    const refus93 = await M.verifierEcriture({ client: grappeA(93) });
+    verifier('sans --degagement, 93 % : refusé', refus93.autorise, false);
+    let dg = M.autoriserDegagement(refus93);
+    verifier('dégagement à 93 % : PASSE', [dg.autorise, dg.niveau], [true, 'degagement']);
+    dg = M.autoriserDegagement(await M.verifierEcriture({ client: grappeA(98) }));
+    verifier('dégagement à 98 % : refusé (pas de marge pour restaurer)', dg.autorise, false);
+    dg = M.autoriserDegagement(await M.verifierEcriture({ client: faux({}, { refuseListe: true }) }));
+    verifier('dégagement avec mesure impossible : refusé', dg.autorise, false);
+    verifier('dégagement : un verdict « inconnu » (estimation illisible) n\'est jamais levé', M.autoriserDegagement({ autorise: false, niveau: 'inconnu', mesure: { mo: 100, pourcent: 50 }, raison: 'x' }).autorise, false);
+    verifier('dégagement qui BAISSE (476 -> 470 Mo) : tenu', M.degagementTenu({ avantMo: 476, apresMo: 470 }), true);
+    verifier('dégagement qui fait MONTER la taille : pas tenu (arrêt + restauration)', M.degagementTenu({ avantMo: 476, apresMo: 480 }), false);
+    verifier('dégagement : apres illisible = pas tenu', M.degagementTenu({ avantMo: 476, apresMo: null }), false);
+    verifier('lot-additif.js : --degagement exige l\'annonce, restaure sur hausse', [/--degagement/.test(src), /validerDegagement/.test(src), /degagementTenu/.test(src), /compteur: 'atlas'/.test(src)], [true, true, true, true]);
+
+    // M1 : le scan attrape TOUTE forme de la valeur hors des fichiers admis
+    const formes = { 'guillemets simples': "const x = { essentiel: 'import-cardmarket' };", 'guillemets doubles': 'const x = { essentiel: "import-cardmarket" };', 'gabarit': 'const x = { essentiel: `import-cardmarket` };',
+        'espaces': "const x = { essentiel   :   'import-cardmarket' };", 'constante réexportée': 'const { ESSENTIEL } = require("./collecte-cartes/garde-taille-atlas"); f({ essentiel: ESSENTIEL })', 'accès T.ESSENTIEL': 'f({ essentiel: T.ESSENTIEL })' };
+    for (const [nom, texte] of Object.entries(formes)) verifier(`M1 forme « ${nom} » : détectée`, M.contientDrapeauEssentiel(texte), true);
+    verifier('M1 : un texte sans le drapeau n\'est pas détecté', M.contientDrapeauEssentiel("const imports = 'imports-cardmarket-ci.js'; // essentiel pour tous"), false);
+    const os = require('os'); const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-atlas-'));
+    fs.mkdirSync(path.join(tmp, 'sous'));
+    for (const [f, t] of [['a.js', formes['gabarit']], ['b.mjs', formes['guillemets doubles']], ['c.cjs', formes['constante réexportée']], ['sous/d.js', formes['espaces']], ['propre.js', 'x'], ['test-z.js', formes['gabarit']]]) fs.writeFileSync(path.join(tmp, f), t);
+    verifier('M1 : le scan voit .js, .mjs, .cjs et les sous-dossiers (les test-* exclus)', M.porteursDuDrapeau(tmp).sort(), ['a.js', 'b.mjs', 'c.cjs', 'sous/d.js']);
+    fs.rmSync(tmp, { recursive: true, force: true });
+    verifier('M1 : le dépôt réel : seuls les 3 fichiers admis', M.porteursDuDrapeau(__dirname).filter(f => !M.FICHIERS_ESSENTIELS.includes(f)), []);
+
+    // M4 : cache de mesure 5 min par grappe ; la liste déjà lue est réutilisée
+    let appels = 0;
+    const compte = bases => { const c = faux(bases); const db0 = c.db; return { db: n => { const d = db0(n); const lister = d.admin; d.admin = () => { const a = lister(); const ld = a.listDatabases; a.listDatabases = async () => { appels++; return ld(); }; return a; }; return d; } }; };
+    const horloge = { t: 1000000 };
+    const cache = new Map();
+    const opt = { cache, maintenant: () => horloge.t };
+    await M.verifierEcriture({ client: compte({ test: { data: 100, index: 1 } }), grappe: 'g1', ...opt });
+    horloge.t += 4 * 60000;
+    const deux = await M.verifierEcriture({ client: compte({ test: { data: 100, index: 1 } }), grappe: 'g1', ...opt });
+    verifier('M4 : deux ouvertures dans les 5 min = UNE mesure', [appels, deux.autorise], [1, true]);
+    await M.verifierEcriture({ client: compte({ test: { data: 100, index: 1 } }), grappe: 'g2', ...opt });
+    verifier('M4 : une autre grappe a sa propre mesure', appels, 2);
+    horloge.t += 2 * 60000;
+    await M.verifierEcriture({ client: compte({ test: { data: 100, index: 1 } }), grappe: 'g1', ...opt });
+    verifier('M4 : après 5 min, on remesure', appels, 3);
+    await M.verifierEcriture({ client: compte({ test: { data: 100, index: 1 } }), grappe: 'g1', sansCache: true, ...opt });
+    verifier('M4 : sansCache (le lot) mesure toujours', appels, 4);
+    const echec = faux({}, { refuseListe: true });
+    await M.verifierEcriture({ client: echec, grappe: 'g3', ...opt });
+    const encore = await M.verifierEcriture({ client: faux({ test: { data: 1, index: 1 } }), grappe: 'g3', ...opt });
+    verifier('M4 : un échec de mesure n\'est jamais mis en cache', encore.autorise, true);
+    appels = 0;
+    await M.mesurerGrappe(compte({ test: { data: 100, index: 1 } }), { noms: ['admin', 'local', 'test'] });
+    verifier('M4 : avec la liste déjà lue, aucun listDatabases de plus', appels, 0);
+    verifier('M4 : garde.js ne refait plus son propre listDatabases pour la garde (liste transmise)', /noms: bases/.test(gc), true);
+
+    // I1 : mesurer-atlas.js --connexion=ecriture
+    const ma = require('./mesurer-atlas');
+    verifier('I1 : --connexion=ecriture choisit les URI d\'écriture, le défaut celles de lecture', [ma.variablesDe('ecriture'), ma.variablesDe('lecture')], [[['production', 'MONGODB_URI'], ['cartes', 'MONGODB_CARTES_URI']], [['production', 'MONGODB_LECTURE_URI'], ['cartes', 'MONGODB_CARTES_LECTURE_URI']]]);
+    verifier('I1 : argument inconnu refusé', [ma.lireArguments(['--connexion=ecriture']).erreur, typeof ma.lireArguments(['--x']).erreur], [undefined, 'string']);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
