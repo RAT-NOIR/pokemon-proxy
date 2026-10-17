@@ -92,11 +92,12 @@ verifier('page ordinaire avec un total qui concorde → 200, totalAnnonce 701', 
 const jOrd300 = juger(page(290, [], ann(300)));
 verifier('page ordinaire « 300 of 300 » pour 290 tuiles → 422, motif cite 300 et 290', [jOrd300.statut, /300/.test(jOrd300.corps.motif ?? '') && /290/.test(jOrd300.corps.motif ?? '')], [422, true]);
 verifier('page ordinaire avec une annonce de forme différente (« 701 cards ») → lue absente, 200', juger(page(701, [], '701 cards')).statut, 200);
-// les deux cas qui manquaient au banc PQ-SANSNUM : une ancre « sans numéro » à DEUX <p>, et à DEUX <img>
-verifier('ancresSansNumero : une ancre à DEUX <p> n\'en est pas une ; à DEUX <img> non plus', [(appel('ancresSansNumero', page(701, [sansNum(1, { deuxP: true })], ann(702)), 'promo-sv-p') ?? ['?']).length, (appel('ancresSansNumero', page(701, [sansNum(1, { deuxImg: true })], ann(702)), 'promo-sv-p') ?? ['?']).length], [0, 0]);
+// PQ-SANSNUM2 (2026-10-17) : ces deux cas codaient l'ancienne définition (exactement un <p>, exactement une <img>). Ruling du coordinateur : le testeur définit la carte sans numéro par son code et
+// l'absence de numéro ; une ancre à DEUX <p> (le code, puis un prix) ou à DEUX <img> EST sans numéro, et la page reste protégée par le total annoncé (obligatoire).
+verifier('ancresSansNumero : une ancre à DEUX <p> (le premier est le code) en est une ; à DEUX <img> aussi', [(appel('ancresSansNumero', page(701, [sansNum(1, { deuxP: true })], ann(702)), 'promo-sv-p') ?? ['?']).length, (appel('ancresSansNumero', page(701, [sansNum(1, { deuxImg: true })], ann(702)), 'promo-sv-p') ?? ['?']).length], [1, 1]);
 for (const [nom, o] of [['DEUX <p>', { deuxP: true }], ['DEUX <img>', { deuxImg: true }]]) {
     const r = juger(page(701, [...ancresValides(56), sansNum(56, o)], ann(758)));
-    verifier(`jugerPage NON — 56 ancres valides + une ancre à ${nom} → 422, 56 sans numéro, 701 tuiles, 758 ancres`, [r.statut, r.corps.sansNumero, r.corps.motif], [422, 56, 'page partielle ou forme changée : 758 ancres, 701 tuiles, 56 sans numéro']);
+    verifier(`jugerPage — 56 ancres valides + une ancre à ${nom} → 200, 57 sans numéro, 701 tuiles, 758 ancres`, [r.statut, r.corps.sansNumero, r.corps.tuilesLues, r.corps.ancres], [200, 57, 701, 758]);
 }
 
 // ── 4. LE DISQUE : la fiche et le fichier de page portent totalAnnonce ─────────────────────────────────────────────────────────────────

@@ -26,9 +26,12 @@ const nomsP = [...new Set(SRC_P.map(l => /GARDE:([a-z-]+)/.exec(l)?.[1]).filter(
 // LOT PQ-SANSNUM (2026-10-13) : des mutants qui ne sont pas un « if retiré » — la définition ÉLARGIE d'une ancre sans numéro (image non exigée, dossier non exigé), l'égalité de la complétude
 // remplacée par ≤ (tuiles ≤ ancres avec numéro), et un récepteur qui relit la règle d'avant (ancres > tuiles, une COPIE au lieu de la fonction unique). `texte` : [source exacte, remplacement].
 const MUTANTS_TEXTE = [
-    { nom: 'définition élargie : image non exigée', fichier: 'pikaqian', texte: ['if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;', 'if (a.img != null && T.entites(a.img) !== urlImage(code, a.id)) continue;'] },
-    { nom: 'définition élargie : dossier non exigé', fichier: 'pikaqian', texte: ['if (a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;', 'if (a.img == null || !DOSSIER_IMAGE.test(T.entites(a.img))) continue;'] },
-    { nom: 'définition élargie : code non exigé', fichier: 'pikaqian', texte: ['if (p == null || sansBalises(p) !== codeTuiles) continue;', 'if (p == null) continue;'] },
+    // LOT PQ-SANSNUM2 (2026-10-17) : la définition ne dépend plus de l'image ni du nombre de h2/img/p ; ces mutants la RÉTRÉCISSENT à nouveau (la garde diverge de la sonde) et doivent tomber
+    { nom: 'définition rétrécie : image exigée à l\'adresse exacte', fichier: 'pikaqian', texte: ['if (codeDeAncre(a.corps) !== codeTuiles) continue;', 'if (codeDeAncre(a.corps) !== codeTuiles || a.img == null || T.entites(a.img) !== urlImage(code, a.id)) continue;'] },
+    { nom: 'définition rétrécie : une seule image exigée', fichier: 'pikaqian', texte: ['if (codeDeAncre(a.corps) !== codeTuiles) continue;', 'if (codeDeAncre(a.corps) !== codeTuiles || (a.corps.match(/<img[\\s/>]/gi) || []).length !== 1) continue;'] },
+    { nom: 'définition rétrécie : un seul <p> exigé', fichier: 'pikaqian', texte: ['if (codeDeAncre(a.corps) !== codeTuiles) continue;', 'if (codeDeAncre(a.corps) !== codeTuiles || (a.corps.match(/<p[\\s>]/gi) || []).length !== 1) continue;'] },
+    { nom: 'définition élargie : code non exigé', fichier: 'pikaqian', texte: ['if (codeDeAncre(a.corps) !== codeTuiles) continue;', 'if (codeDeAncre(a.corps) === null) continue;'] },
+    { nom: 'lecture du <p> non normalisée (la garde ne lit plus comme la sonde)', fichier: 'pikaqian', texte: ['return p == null ? null : texteAncre(p);', 'return p == null ? null : p;'] },
     { nom: 'complétude : égalité remplacée par ≤', fichier: 'pikaqian', texte: ['if (ts.length !== ancres - sans)', 'if (ts.length > ancres - sans)'] },
     { nom: 'complétude : sansNumero ignoré (la règle d\'avant)', fichier: 'pikaqian', texte: ['const ts = tuiles || [], sans = compterSansNumero(sansNumero, ts);', 'const ts = tuiles || [], sans = 0;'] },
     // LOT PQ-ANNONCE (2026-10-14) : « A of B cards » avec A ≠ B (vue filtrée) non comparé ; le total non comparé à tuiles + sans numéro ; le total jamais transmis à la règle par le récepteur
@@ -44,7 +47,7 @@ const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rouge-recepteur-'));
 const absolu = rel => JSON.stringify(path.join(__dirname, rel).replace(/\\/g, '/'));
 let anormaux = 0;
 // 2026-10-13 : QUATRE bancs (les pages, les images de /images, les pages promo du récepteur, le module pur des déclarations) ; un mutant « échoue » si l'un d'eux échoue
-const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js', 'test-pikaqian-sansnumero.js', 'test-pikaqian-annonce.js'];
+const BANCS = ['test-recepteur-pikaqian.js', 'test-recepteur-images-pikaqian.js', 'test-recepteur-pikaqian-promo.js', 'test-pikaqian-promo.js', 'test-pikaqian-promo2.js', 'test-pikaqian-sansnumero.js', 'test-pikaqian-sansnumero2.js', 'test-pikaqian-annonce.js'];
 const lance = (fichier, fichierP = null) => {
     const rs = BANCS.map(b => spawnSync(process.execPath, [path.join(__dirname, b)], { encoding: 'utf8', timeout: 180000, env: { ...process.env, PK_RECEPTEUR: fichier, ...(fichierP ? { PK_MODULE: fichierP } : {}) } }));
     const rate = rs.find(r => r.status !== 0);
