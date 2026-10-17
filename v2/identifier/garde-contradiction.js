@@ -17,7 +17,10 @@ const { idsAffirmes } = require('./jumeaux');
 const CHAMPS = Object.freeze(['numero', 'code', 'total', 'attaque', 'setTcgdex', 'symbole', 'langue']);
 // TOUR 1 : l'ATTAQUE n'est plus un veto. Mesuré sur tout le banc étiqueté : avec elle, les 3 Dark Tyranitar affirmés 908322 (vérité 907909) restent sûrs, la lecture « Crush » écartant aussi la vraie carte (Grind | Spinning Tail |
 // Bite Off) ; sans elle, les 3 sont rétrogradés en question qui contient la vérité, 0 sûr juste perdu. Elle reste une CONTRADICTION du gagnant (et un soutien d'un candidat), jamais un motif d'écarter un candidat désigné.
-const VETOS = Object.freeze(['numero', 'total', 'setTcgdex', 'langue']);             // le code, le symbole et l'attaque étayent ou contredisent le GAGNANT ; ils ne retirent jamais un candidat
+// 🔑 UNE CONSTANTE (décision du testeur, tour 2) : le veto de LANGUE (un candidat dont le tirage contredit la langue lue n'est jamais désigné). Allumé : 0 désaccord sur 291 cartes étiquetées au tirage connu. L'éteindre ne retire pas
+// la langue des champs qui contredisent le GAGNANT. Tenu par un banc (cas Dark Tyranitar 7a).
+const VETO_LANGUE = true;
+const VETOS = Object.freeze(['numero', 'total', 'setTcgdex', ...(VETO_LANGUE ? ['langue'] : [])]);   // le code, le symbole et l'attaque étayent ou contredisent le GAGNANT ; ils ne retirent jamais un candidat
 const FORTS = Object.freeze(['numero', 'total']);                                    // une contradiction sur l'un d'eux ôte le sûr même sans candidat désigné
 // 🔑 UNE CONSTANTE, pas une variable d'environnement (décision du testeur, I0) : false = le sûr est gardé quand un champ autre que numéro/total contredit sans désigner personne (comportement livré) ;
 // true = variante (a) STRICTE : toute contradiction d'un champ FIABLE (numéro, total, attaque lue en confiance HAUTE, set TCGdex) ôte le sûr même sans candidat désigné. Le code (variante b) est écarté. Les deux sont testés.
@@ -131,7 +134,7 @@ function valeurLue(champ, lu) {
  * @returns null (rien : l'affirmation reste permise) | { gagnant, contredit: [{ champ, lu, gagnant }], designe: [{ idProduct, soutiens: [champ] }] (triés : le plus étayé d'abord ; vide si `fort` seul), fort: boolean, resume }
  *          `fort` : le numéro ou le total contredit le gagnant — le verdict sûr est ôté même sans candidat désigné.
  */
-function contredire({ corps, gagnant, produits, vetos = VETOS, stricte = VARIANTE_STRICTE } = {}) {
+function contredire({ corps, gagnant, produits, vetos = VETOS, stricte = VARIANTE_STRICTE, triAttaque = true } = {}) {
     const lu = lectureDe(corps);
     if (!lu || !Number.isInteger(gagnant) || !(produits instanceof Map) || !produits.has(gagnant)) return null;
     const lg = produits.get(gagnant);
@@ -152,15 +155,20 @@ function contredire({ corps, gagnant, produits, vetos = VETOS, stricte = VARIANT
         const soutiens = contredit.filter(k => sc[k] === 'ok');
         if (!soutiens.length) continue;                                                // il faut qu'un champ qui contredit le gagnant soit CONCORDANT sur lui
         if (formes.length && !nomCompatible(formes, ligne)) continue;                  // CONFIRMATION-SURE : le nom lu en confiance haute le contredit
-        designe.push({ idProduct: id, soutiens });
+        designe.push({ idProduct: id, soutiens, attaque: sc.attaque });
     }
+    // TOUR 2 (I-C) : l'attaque n'est pas un veto, mais elle TRIE et ÉCARTE avec repli. Parmi les désignés, un candidat que l'attaque lue CONTREDIT n'est retiré que s'il en reste au moins un autre dont l'attaque ne le contredit pas ;
+    // si tous sont contredits (Dark Tyranitar : « Crush » contredisait la vérité elle-même) on les garde tous. À soutiens égaux, l'attaque qui concorde passe devant l'inconnue, devant celle qui contredit.
+    if (triAttaque && designe.some(d => d.attaque !== 'ko')) { for (let i = designe.length - 1; i >= 0; i--) if (designe[i].attaque === 'ko') designe.splice(i, 1); }
     if (!designe.length && !fort) return null;                                         // contradiction que personne n'étaye, hors numéro et total : pas de question fabriquée
     const rangs = new Map(entiers((corps.classement || []).map(c => c && c.idProduct)).map((id, i) => [id, i]));
-    designe.sort((a, b) => b.soutiens.length - a.soutiens.length || (rangs.has(a.idProduct) ? rangs.get(a.idProduct) : Infinity) - (rangs.has(b.idProduct) ? rangs.get(b.idProduct) : Infinity) || a.idProduct - b.idProduct);
+    const poidsAttaque = d => (triAttaque ? (d.attaque === 'ok' ? 0 : d.attaque === 'ko' ? 2 : 1) : 0);
+    designe.sort((a, b) => b.soutiens.length - a.soutiens.length || poidsAttaque(a) - poidsAttaque(b) || (rangs.has(a.idProduct) ? rangs.get(a.idProduct) : Infinity) - (rangs.has(b.idProduct) ? rangs.get(b.idProduct) : Infinity) || a.idProduct - b.idProduct);
+    for (const d of designe) delete d.attaque;                                         // interne : la forme rendue est { idProduct, soutiens }
     compte.contradictions++;
     if (!designe.length) compte.fortes++;
     const detail = contredit.map(k => ({ champ: k, lu: valeurLue(k, lu), gagnant: valeurDe(k, lg) }));
     return { gagnant, contredit: detail, designe, fort, resume: `contredit par ${detail.map(d => `${d.champ} (lu ${d.lu}, gagnant ${d.gagnant})`).join(', ')} ; ${designe.length ? `désigne ${designe.map(d => d.idProduct).join(', ')}` : 'ne désigne personne (numéro ou total : le sûr est ôté)'}` };
 }
 
-module.exports = { contredire, statuts, lectureDe, blocLectureGarde, idsDeLaGarde, langueCompatible, memeSetTcgdex, compteurs, CHAMPS, VETOS, FORTS, STRICTS, VARIANTE_STRICTE, VIVIER_MAX };
+module.exports = { contredire, statuts, lectureDe, blocLectureGarde, idsDeLaGarde, langueCompatible, memeSetTcgdex, compteurs, CHAMPS, VETOS, FORTS, STRICTS, VARIANTE_STRICTE, VETO_LANGUE, VIVIER_MAX };
