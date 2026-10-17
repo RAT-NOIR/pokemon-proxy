@@ -19,6 +19,8 @@ const crypto = require('crypto');
 const { cleNumero, normaliserNom } = require('./jointure');
 const T = require('./tpc');
 const { estDosDeCarte } = require('./hotes-images-ptcgio');
+const { sansRemplacables } = require('./basse-definition');                 // LA règle commune de « déjà servi » / remplacement (basse définition, empruntée, fausse, nettement plus petite)
+const { champsTracabilite } = require('./tracabilite');                      // LA traçabilité commune (retirable, adresse d'origine, date de collecte — une écriture sans date LÈVE)
 
 const SOURCE = 'pokellector';
 const LOT = 'pokellector-2026-10';
@@ -180,7 +182,8 @@ function tableDesSets(liste, slugs) {
 function slugsReserves(slugs, liste) {
     // ALIAS FERMÉS, chacun vu sur la liste réelle : « & » ne compte pas (« Sun & Moon » = « Sun-Moon ») ; « Promos » = « Promo » (« Sun & Moon Black Star Promo ») ;
     // « McDonalds-Collection-<année> » = « McDonald's Promos <année> » ; les sets EX s'écrivent SANS « EX » chez pokedata (« Emerald », « Deoxys », « Unseen Forces »). Dans le doute : RÉSERVER.
-    const cr = s => cleNomSet(String(s).replace(/&/g, ' ').replace(/\bPromos\b/gi, 'Promo'));
+    // « and », « & » et l'absence de liant sont ÉQUIVALENTS (« Ruby and Sapphire » = « EX-Ruby-Sapphire » = « Diamond & Pearl » = « Diamond-Pearl »)
+    const cr = s => cleNomSet(String(s).replace(/&/g, ' ').replace(/\band\b/gi, ' ').replace(/\bPromos\b/gi, 'Promo'));
     const cles = new Set(liste.filter(s => String(s.langue).toUpperCase() === 'ENGLISH').map(s => cr(s.nom)));
     const out = new Set();
     for (const slug of slugs) {
@@ -226,20 +229,29 @@ function nomOk(c, t) {
  *   tableSets : Map(href -> { slugSet, collection }) ; couverts : les idProduct déjà pris par une source plus grande (plans pkmncards / pokedata).
  * @returns {{plan: object[], restes: object[], remplacements: object[], aReleve: object[]}}
  */
-function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new Set(), reserves = new Set(), refus = REFUS_PAR_DEFAUT }) {
+function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new Set(), reserves = new Set(), refus = REFUS_PAR_DEFAUT, documents = new Map() }) {
     const restes = [], aReleve = [];
     const resolus = [];
     const reste = (t, motif, detail) => restes.push({ idProduct: t.idProduct, carteId: t.carte._id, slugSet: t.slugSet, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, motif, ...(detail ? { detail } : {}) });
     const slugDe = c => tableSets.get(c.setHref) ?? null;
     for (const t of trous) {
         if (couverts.has(t.idProduct)) { reste(t, 'couvert-par-une-source-plus-grande'); continue; }
+        const duSet = cartes.filter(c => slugDe(c)?.slugSet === t.slugSet);
+        const hrefCollection = [...tableSets.entries()].find(([, v]) => v.slugSet === t.slugSet && v.collection)?.[0] ?? null;
+        const collection = duSet.some(c => slugDe(c).collection) || (!duSet.length && hrefCollection != null);
+        // ⛔ « DÉJÀ SERVI » ET REMPLACEMENT : UNE seule règle, la commune (collecte-cartes/basse-definition.js) — basse définition, empruntée (par le VRAI scan tamponné seulement), fausse, nettement plus petite (≥ 1,5×).
+        // Une entrée admise par la règle du site que la règle commune ne fait pas sortir SERT la fiche. Le candidat nominal : 570 px, anglais, tampon de la collection si c'est une collection.
+        const numFicheC = t.numeroFiche != null && String(t.numeroFiche).trim() !== '' ? t.numeroFiche : null;
+        const tampon = collection ? tamponDeLHref(hrefCollection) : null;
+        const numeroCand = collection ? (t.numeroFiche ?? null) : (numFicheC ?? numeroDuSlug(t.slugProduit));
         const auNumero = (t.carte.images || []).filter(e => e && e.set === t.slugSet && (e.numero == null || cleNumero(e.numero) === cleNumero(t.numeroFiche ?? null)));
         const jugees = auNumero.map(e => ({ e, motif: refus(e, t.slugSet) }));
-        if (!t.empruntee && jugees.some(x => x.motif === null)) { reste(t, 'deja-servi'); continue; }
+        const admises = jugees.filter(x => x.motif === null).map(x => x.e);
+        const vue = sansRemplacables(t.carte, { set: t.slugSet, numero: numeroCand, langue: 'en', source: SOURCE, wOriginal: LARGEUR_PLEINE_TAILLE, documents, ...(tampon ? { tampon } : {}) });
+        const sortantes = admises.filter(e => !vue.images.includes(e));
+        if (admises.length > sortantes.length) { reste(t, 'deja-servi'); continue; }
         if (reserves.has(t.slugSet)) { reste(t, 'reserve-a-une-source-plus-grande-en-attente'); continue; }
         const refusees = jugees.filter(x => x.motif !== null).map(x => ({ cleR2: x.e.cleR2 ?? null, source: x.e.source ?? null, numero: x.e.numero ?? null, langue: x.e.langue ?? null, motif: x.motif }));
-        const duSet = cartes.filter(c => slugDe(c)?.slugSet === t.slugSet);
-        const collection = duSet.some(c => slugDe(c).collection) || (!duSet.length && [...tableSets.values()].some(v => v.slugSet === t.slugSet && v.collection));
         let choisie = null, voie = null, preuve = null;
         if (collection) {
             const o = origineDuSlug(t.slugProduit);
@@ -268,7 +280,7 @@ function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new S
             reste(t, 'page-de-carte-a-relever', collection ? 'panneau de détail à relever' : 'page de carte à relever'); continue;
         }
         if (!urlImageValide(choisie.img)) { reste(t, 'adresse-hors-regle', 'adresse relevée hors des règles (vignette, autre hôte…)'); continue; }
-        resolus.push({ t, card: choisie, voie, preuve, refusees, collection });
+        resolus.push({ t, card: choisie, voie, preuve, refusees, collection, sortantes, tampon });
     }
     // une FICHE = (carte, set, numéro) ; une seule image par fiche ; une image pour une seule fiche
     const cleGroupe = t => `${t.carte._id}|${t.slugSet}|${t.numeroFiche == null ? '∅' : cleNumero(t.numeroFiche)}`;
@@ -280,10 +292,11 @@ function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new S
     for (const [, ks] of parImg) if (ks.size > 1) for (const k of ks) { for (const r of groupes.get(k) || []) reste(r.t, 'carte-pour-deux-fiches'); groupes.delete(k); }
     const plan = [], remplacements = [];
     for (const g of groupes.values()) {
-        const { t, card, voie, preuve, collection } = g[0];
+        const { t, card, voie, preuve, collection, tampon } = g[0];
         const refusees = [...new Map(g.flatMap(r => r.refusees).map(e => [e.cleR2, e])).values()];
+        const remplace = [...new Map(g.flatMap(r => r.sortantes).map(e => [`${e.source}|${e.cleR2}`, { source: e.source, cleR2: e.cleR2, numero: e.numero ?? null, w: e.w ?? null, langue: e.langue ?? null, ...(e.imageEmprunteeTirage ? { empruntee: true } : {}) }])).values()];
         const unite = { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, slugSet: t.slugSet, numero: t.numeroFiche ?? null, produits: g.map(r => r.t.idProduct), ligne: card.setHref, numeroReleve: card.numero, cardId: card.cardId, url: card.img, forme: card.forme ?? null,
-            voie, preuve, aRegarder: collection || g.some(r => r.t.empruntee === true), ...(g.some(r => r.t.empruntee === true) ? { empruntee: true } : {}), anglais: card.anglais !== false };
+            voie, preuve, aRegarder: collection || remplace.length > 0, ...(tampon ? { tampon } : {}), ...(remplace.length ? { remplace } : {}), anglais: card.anglais !== false };
         if (!refusees.length) { plan.push(unite); continue; }
         remplacements.push({ ...unite, refusees, motif: 'entree-refusee-au-numero' });
         for (const r of g) reste(r.t, 'entree-refusee-au-numero', `entrée(s) refusée(s) par la règle du site au même numéro (${refusees.map(e => `${e.cleR2} [${e.source}, ${e.motif}]`).join(' ; ')}) ; remplacement = modification, feu vert du testeur requis`);
@@ -376,7 +389,9 @@ function langueDe({ anglais, img }) {
         : { langue: null, preuve: 'la page ne déclare pas le catalogue anglais' };
 }
 /** La traçabilité : UNE fonction locale (le module commun arrive par un autre lot ; bascule à la fusion). `urlOriginal` ne va que dans le document `images`, jamais sur la carte. */
-function tracer({ url, collecteLe = new Date() }) { return { source: SOURCE, lot: LOT, retirable: true, urlOriginal: url, collecteLe }; }
+function tracer({ url, collecteLe }) { return { source: SOURCE, lot: LOT, ...champsTracabilite({ urlOriginal: url, collecteLe }) }; }          // (sans date : LÈVE, jamais de repli sur `new Date()`)
+/** Le libellé du tampon d'une collection, par son adresse : liste FERMÉE (la collection « Trick or Trade <année> » = le tampon « Trick or Trade »). Rien d'autre n'est tamponné. */
+const tamponDeLHref = href => (typeof href === 'string' && /^\/Trick-or-Trade(-\d{4})?-Collection\/$/.test(href) ? 'Trick or Trade' : null);
 function planRetrait(cartes) {
     const touchees = [], cles = [];
     let entrees = 0;
@@ -391,4 +406,4 @@ const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, HOTES, UA, CADENCE_MS, LARGEUR_PLEINE_TAILLE, DOSSIER_CACHE, DOSSIER_PAGES, DOSSIER_IMAGES, DOSSIER_LOT, REFUS_PAR_DEFAUT,
     analyserNomImage, urlImageValide, urlPageValide, adressesDeLaPage, lireListeSets, lirePageSet, lirePageCarte, lireOverlay, tableDesSets, slugsReserves, nomNorm, nomDuSlug, numeroDuSlug, origineDuSlug, apparier,
-    fichierSet, fichierCarte, fichierOverlay, construireReleve, jugerReponse, formeDeLaPage, STRUCTURES, MARQUEUR_DE_DEFI, estUneImage, estPleineTaille, estUnDos, cleNum, cleR2, idImage, langueDe, tracer, planRetrait, sha };
+    fichierSet, fichierCarte, fichierOverlay, construireReleve, jugerReponse, formeDeLaPage, STRUCTURES, MARQUEUR_DE_DEFI, estUneImage, estPleineTaille, estUnDos, cleNum, cleR2, idImage, langueDe, tracer, tamponDeLHref, planRetrait, sha };

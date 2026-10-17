@@ -146,8 +146,29 @@ const ID = (n, c, num, id, f = '.png') => `${IMG}/${n}.${c}.${num}.${id}${f}`;
     verifier('collection : le nom contredit => « nom-contredit »', motifs(r), [[7, 'nom-contredit']]);
     r = P.apparier({ trous: [trou(7, 21, 'Fezandipiti', TT, null, 'Fezandipiti-BOO24TWM-096')], cartes: [relC('Fezandipiti', 'TWM', '96', { img: null })], tableSets, noms: nomsDe([TT, 'Fezandipiti', 21]) });
     verifier('collection : image pas encore relevée => la page à relever est le PANNEAU DE DÉTAIL (relevé sur la page du set, jamais construit ici)', r.aReleve.map(a => a.url), ['/ajax/views/card-overlay?cardid=54075']);
-    r = P.apparier({ trous: [trou(7, 21, 'Fezandipiti', TT, null, 'Fezandipiti-BOO24TWM-096', [], { empruntee: true })], cartes: [relC('Fezandipiti', 'TWM', '96')], tableSets, noms: nomsDe([TT, 'Fezandipiti', 21]) });
-    verifier('un produit servi avec l\'image EMPRUNTÉE au tirage normal reste un trou : la source montre le tirage tamponné => au plan, marqué', r.plan.map(p => [p.empruntee, p.aRegarder]), [[true, true]]);
+    // CORRECTION 3 : LA RÈGLE COMMUNE (collecte-cartes/basse-definition.js) décide du « déjà servi » et du remplacement — aucune logique locale
+    const { documentsDeLaListe } = require('./collecte-cartes/basse-definition');
+    const ent = (o = {}) => ({ set: TT, source: 'pokumon', cleR2: 'k/e.webp', numero: null, langue: 'en', w: 600, wOriginal: 600, ...o });
+    const docs = (...es) => documentsDeLaListe(es.map(e => ({ ...e, etat: 'ok' })));
+    const empr = ent({ imageEmprunteeTirage: true, tamponNonRepresente: 'Trick or Trade' });
+    const uneCarte = images => r2 => P.apparier({ trous: [trou(7, 21, 'Fezandipiti', TT, null, 'Fezandipiti-BOO24TWM-096', images)], cartes: [relC('Fezandipiti', 'TWM', '96')], tableSets, noms: nomsDe([TT, 'Fezandipiti', 21]), documents: docs(...images), ...(r2 || {}) });
+    r = uneCarte([empr])();
+    verifier('une entrée `imageEmprunteeTirage` (tampon non représenté « Trick or Trade ») est REMPLACÉE par le vrai scan tamponné de la collection : au plan, avec la sortante nommée', [r.plan.length, r.plan[0]?.remplace?.map(e => e.cleR2), r.plan[0]?.aRegarder, motifs(r)], [1, ['k/e.webp'], true, []]);
+    r = uneCarte([ent({ imageEmprunteeTirage: true, tamponNonRepresente: 'Staff' })])();
+    verifier('une empruntée dont le tampon NE CONCORDE PAS avec celui de la collection n\'est jamais remplacée => « deja-servi »', [r.plan.length, motifs(r)], [0, [[7, 'deja-servi']]]);
+    r = uneCarte([ent({ w: 800, wOriginal: 800 })])();
+    verifier('une entrée CORRECTE au-dessus du seuil (800 px) n\'est JAMAIS remplacée => « deja-servi »', [r.plan.length, motifs(r)], [0, [[7, 'deja-servi']]]);
+    r = uneCarte([ent({ basseDefinition: true, w: 300, wOriginal: 300 })])();
+    verifier('une basse définition de MÊME impression (sans tampon des deux côtés) n\'est pas remplacée par un scan TAMPONNÉ (autre impression) => « deja-servi »', [r.plan.length, motifs(r)], [0, [[7, 'deja-servi']]]);
+    r = uneCarte([empr])({ documents: new Map() });
+    verifier('sans le DOCUMENT `images` de l\'entrée, la règle commune ne remplace rien (garde qui ne peut pas conclure bloque) => « deja-servi »', [r.plan.length, motifs(r)], [0, [[7, 'deja-servi']]]);
+    // standard : une basse définition (300 px) et une nettement plus petite (380 px) sortent ; une correcte (500) reste ; la candidate nominale fait 570 px
+    r = P.apparier({ trous: [trou(1, 11, 'Fezandipiti', SET, '096', null, [{ set: SET, source: 'artofpkm', cleR2: 'a/b.webp', numero: '096', langue: 'en', basseDefinition: true, w: 300, wOriginal: 300 }])], cartes: [rel('Fezandipiti', '96')], tableSets, noms: nomsDe([SET, 'Fezandipiti', 11]), documents: docs({ set: SET, source: 'artofpkm', cleR2: 'a/b.webp' }) });
+    verifier('set standard : une basse définition d\'une autre source, de même numéro et même langue, est remplacée (au plan, `remplace` nomme l\'entrée)', [r.plan.length, r.plan[0]?.remplace?.map(e => e.cleR2)], [1, ['a/b.webp']]);
+    r = P.apparier({ trous: [trou(1, 11, 'Fezandipiti', SET, '096', null, [{ set: SET, source: 'artofpkm', cleR2: 'a/c.webp', numero: '096', langue: 'en', w: 500, wOriginal: 500 }])], cartes: [rel('Fezandipiti', '96')], tableSets, noms: nomsDe([SET, 'Fezandipiti', 11]), documents: docs({ set: SET, source: 'artofpkm', cleR2: 'a/c.webp' }) });
+    verifier('set standard : 500 px (correcte, 570/500 < 1,5) n\'est jamais remplacée', motifs(r), [[1, 'deja-servi']]);
+    r = P.apparier({ trous: [trou(1, 11, 'Fezandipiti', SET, '096', null, [{ set: SET, source: 'pokellector', cleR2: 'a/d.webp', numero: '096', langue: 'en', basseDefinition: true, w: 300, wOriginal: 300 }])], cartes: [rel('Fezandipiti', '96')], tableSets, noms: nomsDe([SET, 'Fezandipiti', 11]), documents: docs({ set: SET, source: 'pokellector', cleR2: 'a/d.webp' }) });
+    verifier('une basse définition de NOTRE source n\'est pas remplaçable par elle-même (le même fichier reviendrait) => « deja-servi »', motifs(r), [[1, 'deja-servi']]);
     verifier('origine du slug : BOO24TWM-096 => TWM 096 ; sans la forme => null', [P.origineDuSlug('Fezandipiti-BOO24TWM-096'), P.origineDuSlug('Gengar-BOO24PAF-057'), P.origineDuSlug('Fezandipiti-TWM096'), P.origineDuSlug(null)], [{ code: 'TWM', numero: '96' }, { code: 'PAF', numero: '57' }, null, null]);
 
     // CORRECTION 1 : les sets que pokedata LISTE sont réservés à la plus grande image (728 px > 570 px)
@@ -174,6 +195,7 @@ const ID = (n, c, num, id, f = '.png') => `${IMG}/${n}.${c}.${num}.${id}${f}`;
     verifier('langue : sans preuve (page non anglaise ou adresse hors règle) => null', [P.langueDe({ anglais: false, img: ID('F', 'TWM', 96, 1) }).langue, P.langueDe({ anglais: true, img: 'https://autre.example/x.png' }).langue], [null, null]);
     const tr = P.tracer({ url: construite, collecteLe: new Date('2026-10-17T20:00:00Z') });
     verifier('traçabilité : tracer() porte source, adresse d\'origine, date, retirable:true et le lot', [tr.source, tr.urlOriginal, tr.collecteLe.toISOString(), tr.retirable, tr.lot], ['pokellector', construite, '2026-10-17T20:00:00.000Z', true, 'pokellector-2026-10']);
+    { let e = null; try { P.tracer({ url: construite }); } catch (x) { e = x; } verifier('traçabilité commune : SANS date de collecte tracer() LÈVE (jamais `new Date()` en repli)', /date de collecte/.test(e?.message || ''), true); }
     verifier('clé R2 NEUTRE : pkl/<slugSet>/<n°>-<carteId>-en.webp (aucun nom de source)', [P.cleR2('Twilight-Masquerade', 11, '096'), P.cleR2('Trick-or-Trade-2024', 21, null), /pokellector/i.test(P.cleR2('Twilight-Masquerade', 11, '096'))], ['pkl/Twilight-Masquerade/096-11-en.webp', 'pkl/Trick-or-Trade-2024/sans-numero-21-en.webp', false]);
     verifier('les parties PUBLIQUES de l\'entrée (mention, attribution, clé) ne nomment pas la source', /pokellector/i.test(JSON.stringify([P.MENTION, P.cleR2('S', 1, '1')])), false);
 
@@ -191,6 +213,11 @@ const ID = (n, c, num, id, f = '.png') => `${IMG}/${n}.${c}.${num}.${id}${f}`;
     verifier('200 « connexion obligatoire » SANS marqueur de défi (la structure attendue manque) => ARRÊT, pour chaque forme de page', ['liste', 'set', 'carte', 'overlay'].map(f => j({ status: 200, type: 'text/html', texte: '<html><title>Sign in required</title>Please log in to continue</html>' }, { forme: f }).etat), ['arret', 'arret', 'arret', 'arret']);
     verifier('200 HTML sans forme déclarée => ARRÊT (on n\'invente pas une conformité) ; 200 non HTML pour une page => ARRÊT ; robots.txt 200 en texte => ok, en HTML => ARRÊT', [j({ status: 200, type: 'text/html', texte: '<html>vrai</html>' }).etat, j({ status: 200, type: 'application/json', texte: '{}' }, { forme: 'set' }).etat, j({ status: 200, type: 'text/plain', texte: 'User-agent: *' }, { forme: 'robots' }).etat, j({ status: 200, type: 'text/html', texte: '<html>login</html>' }, { forme: 'robots' }).etat], ['arret', 'arret', 'ok', 'arret']);
     verifier('forme d\'une adresse : liste, set, collection, carte, overlay, robots', ['https://www.pokellector.com/sets', 'https://www.pokellector.com/Twilight-Masquerade-Expansion/', 'https://www.pokellector.com/Trick-or-Trade-2024-Collection/', 'https://www.pokellector.com/Twilight-Masquerade-Expansion/Fezandipiti-Card-96', 'https://www.pokellector.com/ajax/views/card-overlay?cardid=54075', 'https://www.pokellector.com/robots.txt', 'https://den-cards.pokellector.com/robots.txt'].map(P.formeDeLaPage), ['liste', 'set', 'set', 'carte', 'overlay', 'robots', 'robots']);
+    // CORRECTION 3 : « and », « & » et l'absence de liant sont équivalents (« Ruby and Sapphire » = « EX-Ruby-Sapphire » ; dans le doute on réserve)
+    { const L = JSON.parse(lire('pokedata-liste-sets.json')).sets;
+      verifier('réservés : « EX-Ruby-Sapphire » contre « Ruby and Sapphire » ; voisins « Black-White » (« Black and White »), « Diamond-Pearl » (« Diamond & Pearl »), « EX-Team-Magma-vs-Team-Aqua » (« Team Magma vs Team Aqua »)', [...P.slugsReserves(['EX-Ruby-Sapphire', 'Black-White', 'Diamond-Pearl', 'EX-Team-Magma-vs-Team-Aqua'], L)].sort(), ['Black-White', 'Diamond-Pearl', 'EX-Ruby-Sapphire', 'EX-Team-Magma-vs-Team-Aqua']);
+      verifier('   et un nom voisin qui n\'est PAS dans la liste reste libre : « EX-Ruby-Only », « Black-Gold »', [...P.slugsReserves(['EX-Ruby-Only', 'Black-Gold'], L)], []);
+      verifier('   « and » écrit, « & » et rien sont le même liant des deux côtés', [...P.slugsReserves(['Foo-and-Bar', 'Foo-Bar', 'Foo-&-Bar'], [{ nom: 'Foo & Bar', langue: 'ENGLISH' }])].sort(), ['Foo-&-Bar', 'Foo-Bar', 'Foo-and-Bar']); }
     verifier('réservés : « Sun-Moon-Black-Star-Promos » contre « Sun & Moon Black Star Promo » (singulier chez pokedata) : alias « Promos » = « Promo »', [...P.slugsReserves(['Sun-Moon-Black-Star-Promos', 'Pokemon-GO'], JSON.parse(lire('pokedata-liste-sets.json')).sets)].sort(), ['Pokemon-GO', 'Sun-Moon-Black-Star-Promos']);
     verifier('une IMAGE attendue qui arrive en 200 sans octets (type quelconque) => ARRÊT', j({ status: 200, type: 'application/octet-stream', texte: 'x' }, { image: true }).etat, 'arret');
     verifier('404 qui cache un défi => ARRÊT', j({ status: 404, type: 'text/html', texte: 'Just a moment' }).etat, 'arret');

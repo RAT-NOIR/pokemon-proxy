@@ -301,8 +301,8 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
     verifier('le document de la vignette : « trop-petit », seuil 570, largeur lue, rien de joint', [B.col('images').get(P.idImage('Twilight-Masquerade', 102, '012'))?.etat, B.col('images').get(P.idImage('Twilight-Masquerade', 102, '012'))?.seuilApplique, B.col('images').get(P.idImage('Twilight-Masquerade', 102, '012'))?.wOriginal, B.col('cartes').get(102).images.length], ['trop-petit', 570, 300, 1]);
     const e1 = B.col('cartes').get(100).images.find(e => e.source === 'pokellector');
     verifier('l\'entrée de la carte : set, source, lot, retirable, collecteLe, mention, langue, numéro, vignette ; l\'autre source INTACTE', [e1.set, e1.source, e1.lot, e1.retirable, e1.collecteLe instanceof Date, e1.mention, e1.langue, e1.numero, !!e1.vignette?.cleR2, B.col('cartes').get(100).images.find(e => e.source === 'tcgdex').cleR2], ['Twilight-Masquerade', 'pokellector', 'pokellector-2026-10', true, true, '© Pokémon / The Pokémon Company', 'en', '010', true, 'tcgdex/x.webp']);
-    const publics = { ...e1 }; delete publics.source; delete publics.lot;
-    verifier('AUCUN champ public (clé R2, vignette, mention, attribution, preuve de langue, adresse d\'origine) ne nomme la source ni l\'hôte', [JSON.stringify(publics).match(/pokellector|den-cards/i), 'urlOriginal' in e1], [null, false]);
+    const publics = { ...e1 }; delete publics.source; delete publics.lot; delete publics.urlOriginal;
+    verifier('AUCUN champ public (clé R2, vignette, mention, attribution, preuve de langue) ne nomme la source ni l\'hôte ; l\'adresse d\'origine suit la TRAÇABILITÉ COMMUNE (champs internes `source`, `lot`, `urlOriginal`, que le site ne lit que pour la langue et que l\'API n\'expose pas)', [JSON.stringify(publics).match(/pokellector|den-cards/i), e1.urlOriginal, e1.retirable], [null, plan[0].url, true]);
     verifier('le bilan : dans la collection d\'état interne seulement, jamais sur `sets` (aucun champ de set ne porte le nom de la source)', [JSON.stringify(B.col('sets').get('Twilight-Masquerade')).includes('okellector'), B.col('collecte_images_etat').get('pokellector/Twilight-Masquerade')?.bilan?.garde?.ok, B.col('collecte_images_etat').get('pokellector/Twilight-Masquerade')?.bilan?.joints], [false, true, 3]);
     const avant0 = compterEtat({ cartes: [{ _id: 1, sets: ['Twilight-Masquerade'], images: [] }] }), apres0 = compterEtat({ cartes: [{ _id: 1, sets: ['Twilight-Masquerade'], images: [e1] }] });
     verifier('la garde de lot VOIT la hausse des images, et ne signale aucune baisse', [apres0.get('images set:Twilight-Masquerade') - (avant0.get('images set:Twilight-Masquerade') || 0), comparer(avant0, apres0).baisses.length], [1, 0]);
@@ -325,6 +325,42 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
       const ix = JSON.parse(fs.readFileSync(path.join(dcd, 'images', 'index.json'), 'utf8')); ix.images[plan[0].url].le = '2026-10-01T08:00:00.000Z'; fs.writeFileSync(path.join(dcd, 'images', 'index.json'), JSON.stringify(ix));
       const Bd = fausseBase(); semer(Bd); await ecrire(Bd, { plan: [plan[0]], dossierCache: dcd, attendu: 1 });
       verifier('collecteLe (document ET entrée de carte) = la date du téléchargement lue dans le cache', [Bd.col('images').get(P.idImage('Twilight-Masquerade', 100, '010')).collecteLe.toISOString(), Bd.col('cartes').get(100).images.find(e => e.source === 'pokellector').collecteLe.toISOString()], ['2026-10-01T08:00:00.000Z', '2026-10-01T08:00:00.000Z']); }
+    // CORRECTION 3 : LA RÈGLE COMMUNE à l'écriture (arbitrer / remplacerBasseDefinition) — basse définition, empruntée : remplacées ; correcte : jamais
+    { const unitC = plan[0];                                                                  // Twilight-Masquerade, n° 010, carte 100
+      const dcR = tmp(); await lancer([unitC.url], reseau(normal), dcR);
+      const avecEntree = (entree, doc) => { const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(100).images.push(entree); if (doc) Bx.col('images').set('doc-x', { _id: 'doc-x', etat: 'ok', carteId: 100, ...doc }); return Bx; };
+      const BAS = { set: 'Twilight-Masquerade', source: 'artofpkm', cleR2: 'artofpkm/low.webp', numero: '010', langue: 'en', basseDefinition: true, w: 300, wOriginal: 300 };
+      let Bx = avecEntree(BAS, { source: 'artofpkm', set: 'Twilight-Masquerade', cleR2: BAS.cleR2, basseDefinition: true });
+      await ecrire(Bx, { plan: [unitC], dossierCache: dcR, attendu: 1 });
+      verifier('écrire : une BASSE DÉFINITION d\'une autre source (même set, numéro, langue) est REMPLACÉE par la règle commune ; le document garde son historique (« remplace », remplacée par)', [Bx.col('cartes').get(100).images.map(e => e.source).sort(), Bx.col('images').get('doc-x').etat, Bx.col('images').get('doc-x').remplacePar?.source], [['pokellector', 'tcgdex'], 'remplace', 'pokellector']);
+      const CORR = { ...BAS, cleR2: 'artofpkm/ok.webp', basseDefinition: undefined, w: 800, wOriginal: 800 };
+      Bx = avecEntree(CORR, { source: 'artofpkm', set: 'Twilight-Masquerade', cleR2: CORR.cleR2 });
+      const rC = await ecrire(Bx, { plan: [unitC], dossierCache: dcR, attendu: 1 });
+      verifier('écrire : une entrée CORRECTE au-dessus du seuil (800 px) n\'est JAMAIS remplacée : la nôtre CÈDE, l\'entrée et son document sont intacts', [Bx.col('cartes').get(100).images.map(e => e.source).sort(), Bx.col('images').get('doc-x').etat, rC.b.resultats[0].dejaParAutre], [['artofpkm', 'tcgdex'], 'ok', 1]);
+      Bx = avecEntree(BAS, null);
+      await ecrire(Bx, { plan: [unitC], dossierCache: dcR, attendu: 1 });
+      verifier('écrire : sans le DOCUMENT `images` de la basse définition, la règle commune ne remplace rien : la nôtre cède', Bx.col('cartes').get(100).images.map(e => e.source).sort(), ['artofpkm', 'tcgdex']);
+      // empruntée : la collection Trick or Trade
+      const TTS = 'Trick-or-Trade-2024', uT = { carteId: 300, nomEn: 'Fezandipiti', slugSet: TTS, numero: null, produits: [990], ligne: '/Trick-or-Trade-2024-Collection/', numeroReleve: '96', cardId: '54075', url: URLI('Fezandipiti', 'TWM', 96, 54075, '.mobile.jpg'), forme: 'mobile', voie: 'collection+origine+numero+nom', preuve: 'x', aRegarder: true, tampon: 'Trick or Trade', anglais: true };
+      const dcT = tmp(); await lancer([uT.url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: grandJpg }), dcT);
+      const semerT = (entree, doc) => { const Bt = fausseBase(); Bt.col('sets').set(TTS, { _id: TTS, tirage: 'intl', region: 'intl' }); Bt.col('cartes').set(300, { _id: 300, nomEn: 'Fezandipiti', images: [entree] }); Bt.col('cartes_produits').set('300|990', { _id: '300|990', carteId: 300, idProduct: 990, numeroFiche: null, slugSet: TTS }); if (doc) Bt.col('images').set('doc-t', { _id: 'doc-t', etat: 'ok', carteId: 300, ...doc }); return Bt; };
+      const EMP = { set: TTS, source: 'pokumon', cleR2: 'pokumon/emp.webp', numero: null, langue: 'en', imageEmprunteeTirage: true, tamponNonRepresente: 'Trick or Trade', w: 600, wOriginal: 600 };
+      let Bt = semerT(EMP, { source: 'pokumon', set: TTS, cleR2: EMP.cleR2, imageEmprunteeTirage: true, tamponNonRepresente: 'Trick or Trade' });
+      await ecrire(Bt, { plan: [uT], dossierCache: dcT, attendu: 1 });
+      verifier('écrire : une entrée `imageEmprunteeTirage` est REMPLACÉE par le vrai scan tamponné (règle commune) ; son document passe à « remplace »', [Bt.col('cartes').get(300).images.map(e => e.source), Bt.col('images').get('doc-t').etat, Bt.col('cartes').get(300).images[0].tampon], [['pokellector'], 'remplace', 'Trick or Trade']);
+      Bt = semerT({ ...EMP, tamponNonRepresente: 'Staff' }, { source: 'pokumon', set: TTS, cleR2: EMP.cleR2, imageEmprunteeTirage: true, tamponNonRepresente: 'Staff' });
+      await ecrire(Bt, { plan: [uT], dossierCache: dcT, attendu: 1 });
+      verifier('écrire : une empruntée dont le tampon est un AUTRE (« Staff ») n\'est pas remplacée : la nôtre cède', Bt.col('cartes').get(300).images.map(e => e.source), ['pokumon']); }
+    // CORRECTION 3 : une entrée du cache SANS date de téléchargement n'est PAS écrite, elle est COMPTÉE ; jamais `new Date()` en repli
+    { const dcN = tmp(); await lancer(plan.slice(0, 2).map(p => p.url), reseau(normal), dcN);
+      const ix = JSON.parse(fs.readFileSync(path.join(dcN, 'images', 'index.json'), 'utf8')); delete ix.images[plan[0].url].le; fs.writeFileSync(path.join(dcN, 'images', 'index.json'), JSON.stringify(ix));
+      const Bn = fausseBase(); semer(Bn);
+      const rn = await ecrire(Bn, { plan: plan.slice(0, 2), dossierCache: dcN, attendu: 1 });
+      verifier('cache sans date `le` : l\'entrée n\'est PAS écrite, elle est comptée « date de collecte inconnue » ; --attendu ne la compte pas', [rn.b.code, rn.b.sansDate, rn.dp.l.length, Bn.col('images').has(P.idImage('Twilight-Masquerade', 100, '010')), Bn.col('images').has(P.idImage('Twilight-Masquerade', 101, '011'))], [1, 1, 1, false, true]);
+      const rn2 = await ecrire(fausseBase(), { plan: plan.slice(0, 2), dossierCache: dcN, attendu: 2 });
+      verifier('   et --attendu=2 est REFUSÉ (une seule image est écrivable)', [rn2.b.code, rn2.b.etat], [2, 'refuse-attendu']); }
+    // CORRECTION 3 : la décision « que faire de cette réponse » vit dans UNE fonction (la règle commune de réponse arrivera là)
+    verifier('une seule fonction décide d\'une réponse : `decisionDeLaReponse` est exportée, et P.jugerReponse n\'est appelée qu\'à UN endroit du collecteur', [typeof C.decisionDeLaReponse, (fs.readFileSync(path.join(__dirname, 'collecteur-images-pokellector.js'), 'utf8').match(/P\.jugerReponse\(/g) || []).length, C.decisionDeLaReponse({ status: 404, type: 'text/html', texte: 'x' }).etat], ['function', 1, 'absent']);
     // le tirage non intl, la base trop grosse
     B = fausseBase(); semer(B); B.col('sets').get('Twilight-Masquerade').tirage = 'jp'; B.col('sets').get('Twilight-Masquerade').region = 'jp';
     ({ b, dp: dpe } = await ecrire(B, { attendu: 3 }));

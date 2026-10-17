@@ -23,7 +23,10 @@ const P = require('./collecte-cartes/pokellector');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const { WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
-const { marqueDe } = require('./collecte-cartes/basse-definition');
+const { marqueDe, arbitrer, remplacerBasseDefinition, documentsDesEntrees, documentsDeLaListe, empreinteEntree } = require('./collecte-cartes/basse-definition');    // LA règle commune (basse définition, empruntée, fausse, nettement plus petite)
+const { champsDeLEntree } = require('./collecte-cartes/tracabilite');
+const { largeurOriginaleDe } = require('./collecte-cartes/seuils-images');
+const RATIO_NETTEMENT_PLUS_GRANDE = require('./collecte-cartes/basse-definition').RATIO_NETTEMENT_PLUS_GRANDE;                                                                                              // LA traçabilité commune
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -61,6 +64,10 @@ const transportFetch = {
     }
 };
 
+// ── LA DÉCISION « QUE FAIRE DE CETTE RÉPONSE » : UNE seule fonction ───────────────────────────────────────────────────────────────────────
+// Toute réponse (robots.txt, page, image) passe par ici et nulle part ailleurs : la règle commune de réponse d'hôte (lot REPONSE-HOTE) se branchera dans cette seule fonction.
+const decisionDeLaReponse = (r, o) => P.jugerReponse(r, o);
+
 // ── LE FLUX UNIQUE : cadence, plafond, robots, jugement, arrêt définitif ─────────────────────────────────────────────────────────────────
 function creerFlux({ dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond = Infinity }) {
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MS);
@@ -76,7 +83,7 @@ function creerFlux({ dossierCache, transport = transportFetch, pause = ms => new
     // ⛔ L'ARRÊT S'ÉCRIT PAR CE QU'IL AUTORISE (P.jugerReponse) ; un 5xx isolé interrompt, DEUX de suite (même entre deux lancements : ERREURS-5XX.json) arrêtent pour de bon ; un succès remet le compte à zéro
     const fichier5xx = path.join(dossierCache, 'ERREURS-5XX.json');
     const traiter = (url, b, o) => {
-        const j = P.jugerReponse(b.r, o);
+        const j = decisionDeLaReponse(b.r, o);
         if (j.etat === 'arret') return { fin: arret(url, j.motif, b.r.status) };
         if (j.cinq) {
             let n = 0; try { n = JSON.parse(fs.readFileSync(fichier5xx, 'utf8')).n || 0; } catch { }
@@ -238,7 +245,13 @@ async function planifierDepuisBase(db, { dossierPages = P.DOSSIER_PAGES, couvert
     const trous = lignes.filter(l => parId.has(l.carteId)).map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, empruntee: l.imageEmprunteeTirage === true, carte: parId.get(l.carteId) }));
     const rel = P.construireReleve(dossierPages);
     const reserves = pokedataSets ? P.slugsReserves(intl, pokedataSets) : new Set();
-    const r = P.apparier({ trous, cartes: rel.cartes, tableSets, couverts, reserves, ...(refus ? { refus } : {}) });
+    // les DOCUMENTS `images` des entrées qui pourraient sortir (la règle commune les exige) : marquées, empruntées, fausses ou assez petites pour qu'une image de 570 px soit « nettement plus grande »
+    const peutSortir = e => e && (e.basseDefinition === true || e.imageEmprunteeTirage === true || (largeurOriginaleDe(e) != null && P.LARGEUR_PLEINE_TAILLE >= RATIO_NETTEMENT_PLUS_GRANDE * largeurOriginaleDe(e)));
+    const aDocumenter = [...parId.values()].flatMap(c => (c.images || []).filter(peutSortir));
+    const docs = [];
+    for (const lot of par([...new Set(aDocumenter.map(e => e.cleR2).filter(Boolean))], 1000)) docs.push(...await db.collection('images').find({ cleR2: { $in: lot } }).toArray());
+    const documents = documentsDeLaListe([...docs.filter(d => d.etat !== 'ok'), ...docs.filter(d => d.etat === 'ok')]);
+    const r = P.apparier({ trous, cartes: rel.cartes, tableSets, couverts, reserves, documents, ...(refus ? { refus } : {}) });
     const vusA = new Set();
     const aReleve = r.aReleve.filter(a => !vusA.has(a.cardId) && vusA.add(a.cardId));
     return { ...r, aReleve, reserves: [...reserves], sets: [...table].map(([slugSet, v]) => ({ slugSet, ...v })).filter(s => lignes.some(l => l.slugSet === s.slugSet)), examines: trous.length, cartesReleve: rel.cartes.length, ignorees: rel.ignorees };
@@ -332,12 +345,14 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     const choisies = (remplacements || []).filter(u => u.produits.some(id => (remplacer || []).includes(id))).map(u => ({ ...u, _remplace: true }));
     // ---- 0. le PRÉ-PASSAGE : ce que le cache permet d'écrire, avant la moindre écriture ----------------------------------------------------------
     const prets = [];
-    let horsCache = 0, altere = 0, retires = 0;
+    let horsCache = 0, altere = 0, retires = 0, sansDate = 0;
     for (const u of [...plan, ...choisies]) {
         const e = index.images[u.url];
         if (!P.urlImageValide(u.url)) { horsCache++; continue; }
         const _id = P.idImage(u.slugSet, u.carteId, u.numero);
         const deja0 = await M.Image.findById(_id).select('etat').lean();
+        // 🔑 UNE image sans date de téléchargement dans le cache ne s'écrit PAS (jamais `new Date()` en repli) : elle est COMPTÉE « date de collecte inconnue »
+        if ((e?.statut === 'trop-petit' || e?.statut === 'ok') && !(e.le && !Number.isNaN(new Date(e.le).getTime()))) { sansDate++; continue; }
         if (e?.statut === 'trop-petit') { if (deja0?.etat === 'retire') { retires++; continue; } prets.push({ u, _id, buffer: null, meta: { width: e.w, height: e.h }, petit: true, le: e.le }); continue; }
         if (e?.statut !== 'ok') { horsCache++; continue; }
         let buffer; try { buffer = fs.readFileSync(path.join(dossierImagesDe(dossierCache), e.fichier)); } catch { horsCache++; continue; }
@@ -349,8 +364,8 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     }
     const reel = prets.filter(p => !p.petit).length;
     if (attendu != null && attendu !== reel) {
-        console.error(`❌ --attendu=${attendu} mais ${reel} image(s) à écrire (hors cache ${horsCache}, altérées ${altere}, retirées ${retires}, sous ${P.LARGEUR_PLEINE_TAILLE} px ${prets.filter(p => p.petit).length}) — rien n'est écrit.`);
-        return { code: 2, etat: 'refuse-attendu', resultats: [], attendu, reel, horsCache, altere };
+        console.error(`❌ --attendu=${attendu} mais ${reel} image(s) à écrire (hors cache ${horsCache}, altérées ${altere}, retirées ${retires}, date de collecte inconnue ${sansDate}, sous ${P.LARGEUR_PLEINE_TAILLE} px ${prets.filter(p => p.petit).length}) — rien n'est écrit.`);
+        return { code: 2, etat: 'refuse-attendu', resultats: [], attendu, reel, horsCache, altere, sansDate };
     }
     // ---- 1. un set après l'autre -----------------------------------------------------------------------------------------------------------------
     const bucket = process.env.R2_BUCKET_IMAGES;
@@ -372,7 +387,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             for (const p of unites) {
                 uniteDe.set(p._id, p.u);
                 const { u, _id, meta, buffer } = p;
-                const tr = P.tracer({ url: u.url, collecteLe: p.le ? new Date(p.le) : new Date() });          // la date du TÉLÉCHARGEMENT, lue dans le cache
+                const tr = P.tracer({ url: u.url, collecteLe: p.le });          // la date du TÉLÉCHARGEMENT, lue dans le cache (le pré-passage a écarté toute image sans date)
                 const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
                 if (p.petit) {
                     tropPetits++;
@@ -386,7 +401,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                 const lg = P.langueDe({ anglais: u.anglais, img: u.url });
                 await M.Image.updateOne({ _id }, { $set: {
                     ...tr, set: slug, carteId: u.carteId, numero: u.numero, nomEn: u.nomEn, idProduct: u.produits[0], produits: u.produits, preuve: u.preuve, voie: u.voie, ligneReleve: u.ligne, numeroReleve: u.numeroReleve, cardIdSource: u.cardId, formeSource: u.forme,
-                    ...(u.aRegarder ? { aRegarder: true } : {}), ...(u.empruntee ? { empruntee: true } : {}),
+                    ...(u.aRegarder ? { aRegarder: true } : {}), ...(u.tampon ? { tampon: u.tampon } : {}),
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: P.sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: P.sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                     ...marqueDe({ wOriginal: meta.width }),
@@ -407,12 +422,17 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     const refCles = new Set(u?._remplace ? (u.refusees || []).map(e => e.cleR2) : []);
                     const nous = e => e?.source === P.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
-                    const admises = autres.filter(e => !refCles.has(e.cleR2));
-                    const tr = P.tracer({ url: im.urlOriginal, collecteLe: im.collecteLe });
-                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, retirable: tr.retirable, collecteLe: tr.collecteLe, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), ...(im.tampon ? { tampon: im.tampon } : {}) };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero ?? null } } });
-                    if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }
-                    for (const e of autres.filter(x => refCles.has(x.cleR2))) {
+                    // 🔑 LA RÈGLE COMMUNE (basse-definition.js) : `arbitrer` décide (basse définition, empruntée par le vrai scan tamponné, fausse, nettement plus petite — le DOCUMENT `images` de chaque entrée est exigé),
+                    // `remplacerBasseDefinition` fait le geste (le document reste, « remplace »). Les entrées refusées par la règle du site ne sortent que sur --remplacer (feu vert du testeur).
+                    const documents = await documentsDesEntrees(M, autres);
+                    const arb = arbitrer(autres, entree, () => false, { documents });
+                    const parSite = autres.filter(x => refCles.has(x.cleR2) && !arb.sortantes.includes(x));
+                    const admises = autres.filter(x => !arb.sortantes.includes(x) && !parSite.includes(x));
+                    if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une entrée qui reste sert ce numéro : intacte, la nôtre cède
+                    if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree, { documents }); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); remplacees++; } await M.Image.updateOne({ _id: im._id }, { $set: { remplaceDes: arb.sortantes } }); }
+                    for (const e of parSite) {
                         await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, cleR2: e.cleR2 } } });
                         await M.Image.updateOne({ source: e.source, set: slug, carteId: im.carteId, cleR2: e.cleR2 }, { $set: { etat: 'remplace', remplaceMotif: `entrée refusée par la règle du site au numéro ${im.numero ?? '∅'}, remplacée sur décision du testeur (--remplacer, lot ${P.LOT})`, remplaceePar: im._id, remplaceeLe: new Date() } });
                         retirees.push(cleEntree(im.carteId, e)); remplacees++;
@@ -436,11 +456,11 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             resultats.push({ code: slug, etat: erreurJointure ? 'incomplet' : !garde ? 'non-concordant' : complet.concordance ? 'verifie' : 'incomplet', ...complet });
         } finally { if (verrouSet) await verrouSet.rendre(); }
     }
-    const code = resultats.every(r => r.etat === 'verifie') && !horsCache && !altere ? 0 : 1;
-    return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere };
+    const code = resultats.every(r => r.etat === 'verifie') && !horsCache && !altere && !sansDate ? 0 : 1;
+    return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere, sansDate };
 }
 
-module.exports = { creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, lireCouvertsPokedata, sourcesPlusGrandes, fabriquerEtapesReleve, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
+module.exports = { decisionDeLaReponse, creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, lireCouvertsPokedata, sourcesPlusGrandes, fabriquerEtapesReleve, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
