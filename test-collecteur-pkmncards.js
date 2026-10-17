@@ -355,6 +355,21 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
 
     // ── 5. RETIRER : exactement le lot ────────────────────────────────────────────────────────────────────────────────────────────
     const { retirerLot } = require('./retirer-visuels-pkmncards');
+    // (BASSE-DEF) la règle commune exige le DOCUMENT `images` de l'entrée actuelle : sans lui, rien ne sort et la nôtre CÈDE ; avec un document qui porte un tampon, c'est une autre impression
+    { const Bs = fausseBase(); semer(Bs); Bs.cols.get('images').delete('pokumon-old-2');
+      const { b: bs } = await ecrire(Bs, { plan: [plan[1]], attendu: 1 });
+      verifier('SANS le document de l\'entrée basse définition : rien ne sort (elle reste), la nôtre cède ; garde verte', [Bs.col('cartes').get(2).images.map(e => e.source).sort(), bs.resultats[0].dejaParAutre, bs.code], [['pokumon', 'tcgdex'], 1, 0]);
+      const Bt = fausseBase(); semer(Bt); Bt.col('images').get('pokumon-old-2').tampon = 'Staff';
+      await ecrire(Bt, { plan: [plan[1]], attendu: 1 });
+      verifier('le DOCUMENT de l\'entrée porte un tampon que notre scan n\'a pas : une autre impression, rien ne sort', [Bt.col('cartes').get(2).images.some(e => e.source === 'pokumon'), Bt.col('cartes').get(2).images.some(e => e.source === 'pkc')], [true, false]);
+      const Bw = fausseBase(); semer(Bw); Bw.col('cartes').get(2).images = Bw.col('cartes').get(2).images.map(e => e.source === 'pokumon' ? { ...e, w: 400, basseDefinition: undefined } : e);
+      await ecrire(Bw, { plan: [plan[1]], attendu: 1 });
+      verifier('une entrée de 400 px (document présent), notre image de 733 : NETTEMENT plus grande (>= 1,5 x) -> elle sort', [Bw.col('cartes').get(2).images.some(e => e.source === 'pokumon'), Bw.col('cartes').get(2).images.some(e => e.source === 'pkc')], [false, true]);
+      const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(2).images = Bx.col('cartes').get(2).images.map(e => e.source === 'pokumon' ? { ...e, w: 600, basseDefinition: undefined } : e);
+      await ecrire(Bx, { plan: [plan[1]], attendu: 1 });
+      verifier('une entrée de 600 px, correcte au-dessus du seuil : JAMAIS remplacée par une équivalente (733 < 900) ; la nôtre cède', [Bx.col('cartes').get(2).images.some(e => e.source === 'pokumon'), Bx.col('cartes').get(2).images.some(e => e.source === 'pkc')], [true, false]); }
+    // la traçabilité vient du module COMMUN (une seule définition) : aucune copie locale des champs
+    verifier('traçabilité : le collecteur appelle collecte-cartes/tracabilite.js et ne réécrit pas `retirable: true` lui-même', [/require\('\.\/collecte-cartes\/tracabilite'\)/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pkmncards.js'), 'utf8')), /retirable: true/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pkmncards.js'), 'utf8').replace(/\/\/.*$/gm, ''))], [true, false]);
     // un remplacement d'une image FAUSSE (scan japonais refusé) : l'unité du plan la nomme, elle sort, l'ancienne est gardée (état « remplace »)
     { const Bj = fausseBase(); semer(Bj);
       Bj.col('cartes').get(1).images.push({ set: 'McDonalds-Match-Battle-2023', source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/ja-1.webp', langue: 'ja', w: 868 });
