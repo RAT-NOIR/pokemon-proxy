@@ -76,8 +76,9 @@ function visuelAutreTirage(images, set, setsBase) {
 // de l'impression : une impression du set SANS numéro (vieux sets japonais, Expansion Pack) excluait tous ses produits, alors que le site
 // les sert sur une fiche « n° ? » (`fichesDuDocument`, `produitsDeLaFiche` : une fiche sans numéro garde ses produits). Node 24 lit le
 // TypeScript du dépôt voisin ; une fonction absente lève (une règle qui manque n'est pas une règle vide).
-async function regleDuSite(racine = __dirname) {
-    const SITE_LIB = path.join(racine, '..', 'rat-market-site', 'lib');
+async function regleDuSite(racine = __dirname, siteLib = null) {
+    // `siteLib` (2026-10-17, lot ENERGIES-SP) : le `lib` d'une branche du site non fusionnée, lu en lecture seule ; absent : le dépôt voisin.
+    const SITE_LIB = siteLib || path.join(racine, '..', 'rat-market-site', 'lib');
     const { pathToFileURL } = require('url');
     const lire = f => import(pathToFileURL(path.join(SITE_LIB, f)).href);
     const [I, C, L, N] = await Promise.all([lire('impressionsDuSet.ts'), lire('cardmarket.ts'), lire('langueDuVisuel.ts'), lire('imageDeLImpression.ts')]);
