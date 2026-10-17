@@ -107,6 +107,10 @@ const RG = require('./regle-g');                 // appelée À TRAVERS l'objet 
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
 const MS = require('../argent/marque-scan');
+const DEPENSE = require('../argent/depense-modele');
+const DEPENSE_MOTIF = DEPENSE.MOTIF;
+// FREIN-CONSTATES : la garde de dépense du modèle de cette configuration (un banc en injecte une par deps.depenseModele ; sinon celle du processus)
+const depenseDe = (cfg, deps) => (deps && deps.depenseModele && typeof deps.depenseModele.autorise === 'function' ? deps.depenseModele : DEPENSE.pourConfig(cfg));
 const { cartesParScanMax } = require('./cartes-par-scan');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
@@ -319,7 +323,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
-        const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
+        // `infra` (FREIN-CONSTATES) : une panne de NOTRE infrastructure (INDISPONIBLE) ne se facture jamais : nature `indisponible`, hors plafond.
+        const rembourserMoi = (motif, parLaGarde = false, infra = false) => reqH.credit.v2.rembourser(reqH, motif, infra ? { compteur: 'indisponible' } : parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
@@ -328,7 +333,19 @@ function traiterIdentifier(cfg, deps = {}) {
         const modeLot = typeof deps.identifierLot === 'function';
         let erreurLot = null, injecte = null;
         try {
-            if (modeLot) {
+            // FREIN-CONSTATES : le plafond GLOBAL de dépense du modèle, relu en base AVANT toute lecture. Atteint (ou compte illisible : échec fermé), AUCUN appel au modèle n'a lieu : le scan rend la panne
+            // INDISPONIBLE (503), remboursée HORS plafond (c'est notre limite, pas la faute du client), avec le motif interne `depense-modele-plafond` (jamais servi).
+            const depense = depenseDe(cfg, deps);
+            if (depense && !(await depense.autorise()).ok) {
+                sortie = await dansUnScan(async () => {
+                    reqH = { ip: req.ip, headers: {}, scanIdImpose: scanId, credit: argent.creditPourReq(porteur, credit, { scanId }) };
+                    if (credit) { try { await rembourserMoi('panne-INDISPONIBLE', false, true); } catch (e) { journalErreur('remboursement', e); } }
+                    const faits = { admin, rendu: Boolean(reqH.scanRendu), question: false, cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                    return { resultat: { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }, facturation: facturationDe('panne', faits), lecture: null, desaccord: null, motifInterne: DEPENSE_MOTIF };
+                });
+                reqH = null;
+            }
+            if (modeLot && !sortie) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
                 if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
             }
@@ -417,7 +434,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 // le filet : une panne ou un « introuvable » sont TOUJOURS rendus ; si la chaîne ne l'a pas tenté, c'est ici (annule aussi une question réservée)
                 if (!admin && credit && (resultat.issue === 'panne' || resultat.issue === 'introuvable') && !reqH.scanRembourse) {
                     // un refus de la garde des jumeaux (resultat.motif) est NOTRE refus : rendu dans le compteur dédié `jumeaux` (l'unicité par scan reste)
-                    try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
+                    try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif), resultat.issue === 'panne' && resultat.erreur.code === 'INDISPONIBLE'); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}) };

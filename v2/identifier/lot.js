@@ -65,7 +65,8 @@ async function executerLot(p) {
         return { code, detail, facturation };
     };
     const panne = async (code, dejaRendu = false, o = {}) => {
-        const r = dejaRendu ? { rendu: true, cause: null } : await rendre(`panne-${code}`, o);
+        // FREIN-CONSTATES : une panne INDISPONIBLE est celle de NOTRE infrastructure : nature `indisponible`, hors plafond
+        const r = dejaRendu ? { rendu: true, cause: null } : await rendre(`panne-${code}`, code === 'INDISPONIBLE' && !o.compteur ? { ...o, compteur: 'indisponible' } : o);
         return { sortie: { resultat: { issue: 'panne', analyse: null, erreur: { code } }, facturation: p.facturationDe('panne', { admin, rendu: r.rendu, question: false, cause: r.cause }), lecture: null, desaccord: null } };
     };
     // 1. la lecture des cartes — APRÈS le débit, sans crédit dans la requête

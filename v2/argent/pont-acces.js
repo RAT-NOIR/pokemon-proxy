@@ -23,7 +23,7 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
             }
             // PLAFOND-DECLARE : tout ce qui passe par ce pont est décidé par le SERVEUR (la chaîne héritée juge un résultat incertain, une panne, un introuvable) : `constate-question` pour une question (rendu sans
             // plafond), `jumeaux` ou `panne` sinon. Les DÉCLARATIONS du client (réponse, abandon, prix illisible) ne passent jamais ici : questions.js et retour-live.js appellent le grand livre directement.
-            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : 'panne', jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
+            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : compteur === 'indisponible' ? 'indisponible' : 'panne', jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
             if (r.rendu) { req.scanRendu = true; return true; }
             noterNonRemboursement(raisonPublique(r.raisonNonRembourse));
             return false;

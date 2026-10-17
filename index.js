@@ -304,6 +304,8 @@ const SEUIL_PRIX_CORRECT  = 1.10; // jusqu'à 10% plus cher -> prix correct
 // résultats qui se dégradent d'un coup, repasse sur "google/gemini-3.5-flash"
 // (stable, plus chère). L'ancien "google/gemini-2.5-flash" est arrêté oct. 2026.
 const MODELE_IA = "google/gemini-3-flash-preview";
+// FREIN-CONSTATES : l'appel au modèle passe SOUS le plafond global de dépense quotidienne (v2/argent/depense-modele.js) quand l'API v2 est allumée ; éteinte, rien ne change
+const appelerModele = (url, corps, config) => (V2 ? V2.depenseModele.appeler(axios.post.bind(axios), url, corps, config) : axios.post(url, corps, config));
 
 // ============================================================
 // MONGODB — connexion + schéma de cache
@@ -816,7 +818,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
     try {
         let response;
         try {
-            response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+            response = await appelerModele("https://openrouter.ai/api/v1/chat/completions", {
                 model: MODELE_IA,
                 // Température 0 : lire un numéro sur une carte n'est pas une tâche
                 // créative. Sans ça, le modèle "improvise" et donne des résultats
@@ -842,6 +844,8 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
                 timeout: 30000
             });
         } catch (e) {
+            // FREIN-CONSTATES : le plafond de dépense du modèle n'est PAS une panne du service : la lecture de secours (titre) ne le contourne pas, l'erreur remonte
+            if (e && e.code === 'DEPENSE_MODELE_PLAFOND') throw e;
             // LA PANNE DU SERVICE, et elle seule, ouvre la lecture de secours ; tout le reste repart au catch d'avant (null)
             const panne = secours ? classerPanneIA(e) : null;
             if (!panne) throw e;

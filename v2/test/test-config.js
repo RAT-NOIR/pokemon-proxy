@@ -11,7 +11,7 @@ H.v('accueil', c.quotas.accueil, 25);
 H.v('hebdo', c.quotas.hebdo, 2);
 H.v('ordre des poches par défaut (OFFRE-QUOTA : la seule poche débitable est le quota du jour)', c.ordrePoches, ['jour']);
 H.v('quotas quotidiens par défaut : sans compte 3, gratuit 10, plafond technique Pro 200', [c.quotas.sansCompte, c.quotas.gratuit, c.quotas.proPlafond], [3, 10, 200]);
-H.v('plafonds de remboursement', c.plafonds, { declares: { sansCompte: 1, gratuit: 3, pro: 30 }, lotTropGrand: 10 });
+H.v('plafonds de remboursement', c.plafonds, { declares: { sansCompte: 1, gratuit: 3, pro: 30 }, constates: { sansCompte: 20, gratuit: 50, pro: 100 }, lotTropGrand: 10 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
 H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
 H.v('idempotence : au plus 10 min', c.retention.idempotenceBattementMaxMinutes, 10);

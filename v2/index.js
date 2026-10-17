@@ -133,5 +133,7 @@ function assembler(lots, cfgLots, deps = {}) {
     });
     return router;
 }
+// FREIN-CONSTATES : l'appel au modèle de la chaîne héritée, SOUS le plafond global de dépense. Sans configuration valide (v2 fermée), l'appel part tel quel : la production reste inchangée.
+const depenseModele = { appeler: (post, url, corps, config) => (cfg ? require('./argent/depense-modele').pourConfig(cfg).appeler(post, url, corps, config) : post(url, corps, config)) };
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
