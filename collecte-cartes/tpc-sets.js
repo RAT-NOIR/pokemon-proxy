@@ -17,7 +17,9 @@ const TABLE_TPC = Object.freeze([
       mesure: "251 cartes chez TPC Asie id pour SV-P « Kartu Promo », 296 trous sur 296 produits (2026-10-07)" },
     { slug: "Sword-Shield-Indonesian-Promos", site: "tpc-asie", langue: "id", code: "S-P", tirage: "id", trous: 266, cartes: 320,
       mesure: "320 cartes chez TPC Asie id pour S-P « Kartu Promo », 266 trous sur 266 produits (2026-10-07)" },
-    { slug: "M-P-Traditional-Chinese-Promos", site: "tpc-asie", langue: "tw", code: "M-P", tirage: "zh-hant", trous: 197, cartes: 208,
+    // `sansRemplacement: true` (LOT TAIWAN, décision du testeur du 2026-10-17 : « Taïwan reste ouvert, mais uniquement pour ce qui nous manque ») : tout TPC Asie tw ne comble que les
+    // numéros SANS aucune entrée ; une entrée existante (basse définition, empruntée, fausse, correcte) n'est jamais remplacée. Lu par le plan ET par la jointure du collecteur.
+    { slug: "M-P-Traditional-Chinese-Promos", site: "tpc-asie", langue: "tw", code: "M-P", tirage: "zh-hant", trous: 197, cartes: 208, sansRemplacement: true,
       mesure: "208 cartes chez TPC Asie tw pour M-P « 特典卡 超級進化 », 197 trous sur 197 produits (2026-10-07)" },
     { slug: "30th-Celebration-IDTH", site: "tpc-asie", langue: "id", code: "MA6", tirage: "idth", trous: 191, cartes: 199,
       mesure: "199 cartes chez TPC Asie id pour MA6 « Booster Pack \"30th CELEBRATION\" », 191 trous sur 191 produits (2026-10-07)" },
