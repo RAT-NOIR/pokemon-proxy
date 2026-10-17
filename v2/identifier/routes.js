@@ -51,21 +51,19 @@ function lirePhotoIds(corps, nUrls) {
     return { photoIds: sortie };
 }
 
-// PHOTOS-MULTIPLES (7d) : après validerEntree, AVANT le débit : les photos reçues pour ce scan sortent du magasin (UNE FOIS chacune) et rejoignent `req.entree` : `photosRecues` ([{ index, octets }], l'index DÉCLARÉ ici)
-// et `imageOctets` (celle d'index le plus bas : la seconde lecture lit une carte). Absente, expirée, d'un autre porteur, déjà servie : ignorée, sans erreur (le magasin ne la rend pas). Ne lève jamais.
-function rattacherPhotos(deps = {}) {
-    return (req, res, next) => {
-        try {
-            const demandees = req.entree && Array.isArray(req.entree.photoIds) ? req.entree.photoIds : [];
-            const p = req.v2 && req.v2.porteur;
-            if (demandees.length && p) {
-                const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
-                for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) recues.push({ index: d.index, octets: x.octets }); }
-                if (recues.length) { recues.sort((a, b) => a.index - b.index); req.entree.photosRecues = recues; req.entree.imageOctets = recues[0].octets; }
-            }
-        } catch (e) { console.error(`❌ [v2 photos-recues] rattachement (${(e && (e.code || e.name)) || 'erreur'})`); }
-        next();
-    };
+// PHOTOS-MULTIPLES (7d) : appelée par traiterIdentifier une fois la requête ACCEPTÉE (après la validation du corps, les plafonds, la prise de la clé d'idempotence, le débit ou le passage de l'administrateur, et le frein de dépense du modèle),
+// JUSTE AVANT la chaîne : les photos reçues pour ce scan sortent alors du magasin (UNE FOIS chacune) et rejoignent `req.entree` : `photosRecues` ([{ index, octets, modele }], l'index DÉCLARÉ ici) et `imageOctets` (celle d'index le plus bas,
+// 1 600 px : la seconde lecture lit une carte). Une requête refusée avant cet endroit laisse ses photos au magasin pour son rejeu (120 s). Absente, expirée, d'un autre porteur, déjà servie : ignorée, sans erreur. Ne lève jamais.
+function rattacherPhotos(req, deps = {}) {
+    try {
+        const entree = req && req.entree;
+        const demandees = entree && Array.isArray(entree.photoIds) ? entree.photoIds : [];
+        const p = req.v2 && req.v2.porteur;
+        if (!demandees.length || !p || entree.photosRecues) return;
+        const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
+        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) recues.push({ index: d.index, octets: x.octets, modele: x.modele }); }
+        if (recues.length) { recues.sort((a, b) => a.index - b.index); entree.photosRecues = recues; entree.imageOctets = recues[0].octets; }
+    } catch (e) { console.error(`❌ [v2 photos-recues] rattachement (${(e && (e.code || e.name)) || 'erreur'})`); }
 }
 
 // Fonction pure : { entree } ou { erreur: { code, message, detail? } }. Ordre : forme, version, marché, champs, images.
@@ -395,6 +393,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 });
                 reqH = null;
             }
+            // PHOTOS-MULTIPLES (7d) : la requête est ACCEPTÉE (corps validé, plafonds passés, clé d'idempotence prise, débit fait, dépense du modèle permise) : c'est ICI, et pas avant, que les photos sortent du magasin.
+            if (!sortie) rattacherPhotos(req, deps);
             if (modeLot && !sortie) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
                 if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
