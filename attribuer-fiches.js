@@ -10,7 +10,7 @@
 // numeroFiche posé SEULEMENT là où il est nul ; liens.idProduct/idMetacards en $addToSet, repère d'adresse intact ; jamais un nomEn, une image, un set).
 const fs = require('fs');
 const path = require('path');
-const { preparerSet, calibrer, MOTIFS, PREUVE } = require('./collecte-cartes/regle-attribution-fiches');
+const { preparerSet, calibrer, calibrerCarteRetiree, MOTIFS, PREUVE } = require('./collecte-cartes/regle-attribution-fiches');
 const { estCarteCode } = require('./collecte-cartes/jointure');
 
 const ROUTE = 'FICHES-2026-10-17';
@@ -44,14 +44,28 @@ function construireManifeste({ surs, lignesAvant, cartesAvant, le = new Date() }
 }
 
 /** L'ÉCRITURE ADDITIVE. Les lignes neuves et les liens passent par `ecrireFiches` (poser-fiches-prouvees.js : $setOnInsert, $addToSet en liste fermée) ; le numeroFiche ne se pose que sur un nul. */
+/** Relecture AU MOMENT D'ÉCRIRE, ligne par ligne : un produit qui a déjà une ligne sur une AUTRE carte que celle du plan n'est pas écrit (§32 : un produit, une carte). */
+async function produitsDejaSurAutreCarte(db, surs) {
+    const L = db.collection('cartes_produits');
+    const refus = [];
+    for (const s of surs) {
+        const autres = await L.find({ idProduct: s.idProduct, carteId: { $ne: s.carteId } }, { projection: { carteId: 1 } }).toArray();
+        if (autres.length) refus.push({ idProduct: s.idProduct, carteVisee: s.carteId, surCartes: autres.map(x => x.carteId) });
+    }
+    return refus;
+}
+
 async function ecrire(db, surs, manifeste) {
+    // refus AVANT toute écriture : un seul produit en conflit arrête le lot entier (le plan n'est plus celui qu'on a annoncé)
+    const refus = await produitsDejaSurAutreCarte(db, surs);
+    if (refus.length) return { lignes: 0, cartes: 0, numerosFiche: 0, refus };
     const { ecrireFiches } = require('./poser-fiches-prouvees');
     const r = await ecrireFiches(db, manifeste.lignesNeuves, new Map(manifeste.metaDe), new Map());
     let n = 0;
     for (const x of manifeste.numerosFiche) {
         n += (await db.collection('cartes_produits').updateOne({ _id: x._id, $or: [{ numeroFiche: null }, { numeroFiche: { $exists: false } }] }, { $set: { numeroFiche: x.apres } })).modifiedCount;
     }
-    return { lignes: r.lignes, cartes: r.cartes, numerosFiche: n };
+    return { lignes: r.lignes, cartes: r.cartes, numerosFiche: n, refus: [] };
 }
 
 /** La RELECTURE après écriture, d'après le manifeste. */
@@ -193,7 +207,8 @@ function planifier({ D, S, site, cibles }) {
 function calibrerTout({ D, S, site, passes, tirageDe }) {
     const setsDeExp = new Map();
     for (const s of D.sets) for (const e of [].concat(s.idExpansion ?? [])) (setsDeExp.get(e) || setsDeExp.set(e, []).get(e)).push(s._id);
-    const bilan = { sets: 0, total: 0, justes: 0, faux: [], muets: 0, motifsMuets: {}, numeroFicheDifferent: [], parPreuve: {} };
+    const bilan = { sets: 0, total: 0, justes: 0, faux: [], muets: 0, motifsMuets: {}, numeroFicheDifferent: [], parPreuve: {},
+        sansSlug: { total: 0, justes: 0, muets: 0, faux: 0 }, veriteDouteuse: {}, veriteDouteuseListe: [], retiree: { total: 0, faux: [], muets: 0, motifsMuets: {} } };
     const produitsParSet = new Map();
     for (const p of S.produits) (produitsParSet.get(p.setResolu) || produitsParSet.set(p.setResolu, []).get(p.setResolu)).push(p);
     for (const [sid, prods] of produitsParSet) {
@@ -207,8 +222,24 @@ function calibrerTout({ D, S, site, passes, tirageDe }) {
         }
         if (!verite.size) continue;
         const lignes = prods.flatMap(p => S.lignesDe.get(p.idProduct) || []);
-        const ctx = preparerSet({ set, cartes: cartesDuSet(S, set), produits: prods, lignes, segmentDuSlug: site.segmentDuSlug, estAdditionals: site.estAdditionals });
+        const cartesSet = cartesDuSet(S, set);
+        const construire = (cartes, lignesCtx) => preparerSet({ set, cartes, produits: prods, lignes: lignesCtx, segmentDuSlug: site.segmentDuSlug, estAdditionals: site.estAdditionals });
+        const ctx = construire(cartesSet, lignes);
+        // la VÉRITÉ doit être confirmée par une donnée que la clé (set + numéro) n'a pas utilisée : le nom et les attaques. Une ligne posée par une clé de même famille,
+        // fausse, ne devient pas une vérité : elle est écartée, COMPTÉE et LISTÉE (dénominateur imprimé).
+        for (const [id, t] of [...verite]) {
+            const bons = t.filter(x => { const m = ctx.temoinVerite(id, x.carteId); if (m === 'ok') return true; bilan.veriteDouteuse[m] = (bilan.veriteDouteuse[m] || 0) + 1; bilan.veriteDouteuseListe.push({ set: sid, idProduct: id, carteId: x.carteId, motif: m, preuve: x.preuve }); return false; });
+            if (bons.length) verite.set(id, bons); else verite.delete(id);
+        }
+        if (!verite.size) continue;
         const r = calibrer(ctx, [...verite.keys()], verite);
+        // strate « comme les cibles » : produits SANS slug (numéro non lu sur un slug Cardmarket) — la population où la règle écrit réellement
+        const idsSansSlug = prods.filter(p => verite.has(p.idProduct) && !p.slug).map(p => p.idProduct);
+        if (idsSansSlug.length) { const rs = calibrer(ctx, idsSansSlug, verite); bilan.sansSlug.total += rs.total; bilan.sansSlug.justes += rs.justes; bilan.sansSlug.muets += rs.muets; bilan.sansSlug.faux += rs.faux.length; }
+        const rr = calibrerCarteRetiree({ construire, cartes: cartesSet, lignes, ids: [...verite.keys()], verite });
+        bilan.retiree.total += rr.total; bilan.retiree.muets += rr.muets;
+        for (const f of rr.faux) bilan.retiree.faux.push({ set: sid, ...f });
+        for (const [m, n] of Object.entries(rr.motifsMuets)) bilan.retiree.motifsMuets[m] = (bilan.retiree.motifsMuets[m] || 0) + n;
         bilan.sets++; bilan.total += r.total; bilan.justes += r.justes; bilan.muets += r.muets;
         for (const f of r.faux) bilan.faux.push({ set: sid, ...f });
         for (const x of r.numeroFicheDifferent) bilan.numeroFicheDifferent.push({ set: sid, ...x });
@@ -288,6 +319,9 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log
         const cal = calibrerTout({ D, S, site, passes, tirageDe });
         log(`\n   CALIBRATION (lignes déjà attribuées par le site, cachées puis rejouées) : ${cal.sets} sets · ${cal.total} produits · justes ${cal.justes} · FAUX ${cal.faux.length} · muets ${cal.muets} · numeroFiche différent (carte juste) ${cal.numeroFicheDifferent.length}`);
         log(`      vérité par preuve de la ligne cachée : ${JSON.stringify(cal.parPreuve)}`);
+        log(`      vérité ÉCARTÉE faute de témoin hors clé (nom / attaques) : ${Object.values(cal.veriteDouteuse).reduce((a, b) => a + b, 0)} ${JSON.stringify(cal.veriteDouteuse)}`);
+        log(`      strate sans slug (comme les cibles) : ${JSON.stringify(cal.sansSlug)}`);
+        log(`   CALIBRATION « VRAIE CARTE RETIRÉE » (la carte vraie et ses lignes sont enlevées ; toute affirmation est fausse) : ${cal.retiree.total} produits · FAUX ${cal.retiree.faux.length} · muets ${cal.retiree.muets} (${JSON.stringify(cal.retiree.motifsMuets)})`);
         log(`      muets par motif : ${JSON.stringify(cal.motifsMuets)}`);
         const avantPlus = produitsAPlusieursCartes(D.lignes);
         const apresLignes = [...D.lignes, ...plan.surs.filter(s => s.action === 'ligne-neuve').map(s => ({ idProduct: s.idProduct, carteId: s.carteId }))];
@@ -305,11 +339,14 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log
         fs.writeFileSync(path.join(sortie, 'fiches-calibration.json'), JSON.stringify(cal, null, 1));
         fs.writeFileSync(path.join(sortie, 'fiches-diff.json'), JSON.stringify(d, null, 1));
         log(`\n   ÉCRIT dans ${sortie} : fiches-ecritures.json (${plan.surs.length}) · fiches-doutes.json (${plan.doutes.length}) · fiches-calibration.json · fiches-diff.json`);
-        if (cal.faux.length) { err(`🔴 CALIBRATION : ${cal.faux.length} FAUX — la règle se resserre avant toute écriture`); if (ecrireM) return 1; }
-        if (!ecrireM) { log('   (simulation — rien n\'est écrit. Écriture : lot-additif.js … -- node attribuer-fiches.js --ecrire --attendu=N)'); return cal.faux.length ? 1 : 0; }
+        const nFaux = cal.faux.length + cal.retiree.faux.length;
+        if (nFaux) { err(`🔴 CALIBRATION : ${nFaux} FAUX (${cal.faux.length} carte présente, ${cal.retiree.faux.length} carte retirée) — la règle se resserre avant toute écriture`); if (ecrireM) return 1; }
+        if (!ecrireM) { log('   (simulation — rien n\'est écrit. Écriture : lot-additif.js … -- node attribuer-fiches.js --ecrire --attendu=N)'); return nFaux ? 1 : 0; }
         const v = verifierAttendu(plan, arg('attendu') === undefined ? undefined : Number(arg('attendu')));
         if (!v.ok) { err(`❌ ARRÊT : ${v.raison} — rien n'est écrit`); return 1; }
         if (avantPlus.length < apresPlus.length) { err('❌ ARRÊT : le contrôle transversal monterait — rien n\'est écrit'); return 1; }
+        const refus = await produitsDejaSurAutreCarte(cx.cartes.db, plan.surs);
+        if (refus.length) { err(`❌ ARRÊT : ${refus.length} produit(s) ont déjà une ligne sur une AUTRE carte — rien n'est écrit : ${JSON.stringify(refus)}`); return 1; }
         const manifeste = construireManifeste({ surs: plan.surs, lignesAvant: D.lignes, cartesAvant: D.cartes });
         const fm = path.join(sortie, `fiches-manifeste-${Date.now()}.json`);
         fs.writeFileSync(fm, JSON.stringify(manifeste, null, 1));   // FIGÉ avant la première écriture
@@ -332,7 +369,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { verifierAttendu, construireManifeste, ecrire, relire, retirer, executer, ROUTE, planifier, causes, structure };
+module.exports = { verifierAttendu, construireManifeste, produitsDejaSurAutreCarte, ecrire, relire, retirer, executer, ROUTE, planifier, causes, structure };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });

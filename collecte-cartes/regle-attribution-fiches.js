@@ -19,7 +19,7 @@ const { aliasDe } = require('./alias-noms');
 const { numerosDuSet } = require('./numero-fiche');
 
 const MOTIFS = ['carte-code', 'set-inconnu', 'set-additionals', 'plusieurs-lignes', 'numero-fiche-deja-pose', 'produit-sans-numero', 'set-sans-impression', 'variante-suffixee',
-    'numero-absent', 'nom-contredit', 'nom-non-confirme', 'numero-ambigu', 'deux-candidates', 'deux-produits-revendiquent', 'ligne-sur-une-autre-carte'];
+    'numero-absent', 'nom-contredit', 'attaques-contredites', 'nom-non-confirme', 'numero-ambigu', 'deux-candidates', 'deux-produits-revendiquent', 'ligne-sur-une-autre-carte'];
 const PREUVE = 'set+numero+nom';
 
 // La position d'une pièce V-UNION (« SWSH215 (Top Left) ») n'est pas le numéro : même retrait que joindre().
@@ -27,6 +27,11 @@ const sansPosition = n => String(n).trim().toUpperCase().replace(/\s*\([^)]*\)\s
 // « Pikachu-V2-LS5 » et « Pikachu-V1-LS5 » sont deux versions d'UNE fiche : la base du slug retire le « -Vn » (au milieu ou à la fin).
 // Les zéros de tête d'un numéro collé au code ne distinguent pas deux fiches (« Alcremie-RCL87 » et « Alcremie-V2-RCL087 » : Cardmarket a changé de graphie).
 const baseDuSlug = slug => (slug ? String(slug).replace(/-V\d+(?=-|$)/i, '').replace(/(?<=\D)0+(?=\d)/g, '') : null);
+const motsA = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');   // « Gather Snow » = « Snow Gather »
+const attaquesContredites = (c, attaquesProduit) => {
+    const pa = attaquesProduit || [], ca = (c.attaques || []).map(a => a && a.nom).filter(Boolean);
+    return pa.length > 0 && ca.length > 0 && !pa.some(a => ca.some(b => motsA(a) === motsA(b)));
+};
 const lit = n => (n == null || String(n).trim() === '' ? null : String(n).trim());
 
 /**
@@ -49,11 +54,12 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
     const tousNumeros = cs.flatMap(c => numerosDe.get(c._id).map(sansPosition));
     const prefixes = new Set(tousNumeros.map(n => (n.match(/^([A-Z]+)(?=\d)/) || [])[1] ?? null));
     const prefixeDuSet = tousNumeros.length && prefixes.size === 1 && !prefixes.has(null) ? [...prefixes][0] : null;
-    const clesImpression = (c) => numerosDe.get(c._id).map(raw => {
+    const clesDeNumero = raw => {
         const nu = sansPosition(raw);
         const sans = prefixeDuSet ? nu.replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : nu;
-        return { raw, cles: new Set([cleNumero(sans), cleNumero(nu)].filter(Boolean)) };
-    });
+        return new Set([cleNumero(sans), cleNumero(nu)].filter(Boolean));
+    };
+    const clesImpression = (c) => numerosDe.get(c._id).map(raw => ({ raw, cles: clesDeNumero(raw) }));
     const impCles = new Map(cs.map(c => [c._id, clesImpression(c)]));
     const lignesDe = new Map();
     for (const l of lignes) (lignesDe.get(l.idProduct) || lignesDe.set(l.idProduct, []).get(l.idProduct)).push(l);
@@ -62,10 +68,13 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
         const d = decomposerNomCardmarket(p.name);
         const numero = lit(p.numero) ?? (segmentDuSlug && p.slug ? lit(segmentDuSlug(p.slug, set.code)) : null);
         const alias = aliasDe(d.nom, p.idExpansion);
-        return [p.idProduct, { d, numero, cle: numero ? cleNumero(numero) : null, kp: [...new Set([...clesNom(d.nom), ...(alias ? clesNom(alias) : [])])] }];
+        // le numéro d'un produit a, comme celui d'une impression, ses DEUX écritures (avec / sans le préfixe commun du set) : « SM18 » et « 18 » sont le même
+        // numéro. Un produit n'est comparé à un autre (condition d) ni à une impression (condition b) que par ces clés — la règle de joindre(), pas une copie.
+        const cles = numero ? clesDeNumero(numero) : new Set();
+        return [p.idProduct, { d, numero, cle: numero ? cleNumero(numero) : null, cles, kp: [...new Set([...clesNom(d.nom), ...(alias ? clesNom(alias) : [])])] }];
     }));
     const parCle = new Map();
-    for (const p of produitsReels) { const k = info.get(p.idProduct).cle; if (k) (parCle.get(k) || parCle.set(k, []).get(k)).push(p); }
+    for (const p of produitsReels) for (const k of info.get(p.idProduct).cles) (parCle.get(k) || parCle.set(k, []).get(k)).push(p);
     const concorde = (c, kp) => clesNom(nomJointDe(c)).some(k => kp.includes(k));
     const parId = new Map(produits.map(p => [p.idProduct, p]));
 
@@ -89,7 +98,8 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
         if (i.numero == null) return doute('produit-sans-numero', `ni numeros_cartes.numero ni segment de slug lisible (slug ${p.slug ?? '—'})${ls.length ? ` ; la carte ${ls[0].carteId} de sa ligne a ${(numerosDe.get(ls[0].carteId) || []).length} impression(s) numérotée(s) dans le set : fiche non séparable par le numéro` : ''}`);
         if (!cs.length) return doute('set-sans-impression', `aucune carte du set « ${set._id} » ne déclare d'impression numérotée dans ce set (tirage ${set.tirage ?? set.region}, ${[].concat(set.bulba?.expansion ?? []).join(' / ')})`);
         const memeNom = cs.filter(c => concorde(c, i.kp));
-        const matches = cs.filter(c => impCles.get(c._id).some(x => x.cles.has(i.cle)));
+        const partage = (cles) => [...cles].some(k => i.cles.has(k));
+        const matches = cs.filter(c => impCles.get(c._id).some(x => partage(x.cles)));
         if (!matches.length) {
             const motif = /\d[A-Za-z]$/.test(String(i.numero).trim()) ? 'variante-suffixee' : 'numero-absent';
             const connu = memeNom.length ? ` ; ${memeNom.slice(0, 4).map(c => `« ${c.nomEn} » (${c._id}) est connue aux n° ${numerosDe.get(c._id).join('/')}`).join(' ; ')}` : '';
@@ -102,6 +112,9 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
         for (const c of matches) {
             const autres = temoin(c, { nom: i.d.nom, attaques: i.d.attaques });
             if (autres) { cause.push(['nom-contredit', `le numéro désigne « ${c.nomEn} » (${c._id}), le nom « ${i.d.nom} » est celui de ${autres.slice(0, 3).map(x => `« ${x.nomEn} »`).join(', ')}`]); continue; }
+            // témoin POSITIF des attaques : si le produit en liste et que la carte en a, au moins une doit être commune (ordre des mots ignoré). Sinon le numéro ment
+            // (358427 : numéro SM18, attaques de la SM127) — jamais une fiche.
+            if (attaquesContredites(c, i.d.attaques)) { cause.push(['attaques-contredites', `le numéro désigne « ${c.nomEn} » (${c._id}) mais aucune de ses attaques n'est celle du produit (${(i.d.attaques || []).join(' | ')})`]); continue; }
             if (concorde(c, i.kp)) { ok.push({ c, par: 'nom' }); continue; }
             // le témoin se tait : soit le nom ne désigne AUCUNE carte (écart de forme : rien ne confirme), soit il en désigne une autre et les attaques l'ont emporté (joindre())
             const designees = csTemoin.filter(x => concorde(x, i.kp));
@@ -112,10 +125,12 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
         // (d)
         if (ok.length > 1) return doute('deux-candidates', `${ok.length} cartes satisfont le set, le numéro et le nom : ${ok.map(x => `« ${x.c.nomEn} » (${x.c._id})`).join(', ')}`);
         const { c, par } = ok[0];
-        const raws = impCles.get(c._id).filter(x => x.cles.has(i.cle)).map(x => x.raw);
+        const raws = impCles.get(c._id).filter(x => partage(x.cles)).map(x => x.raw);
         if (new Set(raws).size > 1) return doute('numero-ambigu', `la carte ${c._id} porte plusieurs impressions de même clé (${raws.join(' / ')}) : on ne choisit pas`);
         if (action === 'numeroFiche' && ls[0].carteId !== c._id) return doute('ligne-sur-une-autre-carte', `la ligne ${ls[0]._id} est sur la carte ${ls[0].carteId}, le set + numéro + nom désignent ${c._id} : rien n'est modifié`);
-        for (const q of parCle.get(i.cle) || []) {
+        const revendiquants = new Map();
+        for (const k of i.cles) for (const q of parCle.get(k) || []) revendiquants.set(q.idProduct, q);
+        for (const q of revendiquants.values()) {
             if (q.idProduct === idProduct) continue;
             const iq = info.get(q.idProduct);
             const lq = lignesDe.get(q.idProduct) || [];
@@ -132,12 +147,50 @@ function preparerSet({ set, cartes, produits, lignes, segmentDuSlug = null, estA
         };
     }
 
+    // TÉMOINS HORS DE LA CLÉ (nom, attaques) : la vérité d'une calibration ne vaut que si une donnée que la clé (set + numéro) n'a PAS utilisée la confirme.
+    const cartesParId = new Map(cartes.map(c => [c._id, c]));
+    function temoinVerite(idProduct, carteId) {
+        const c = cartesParId.get(carteId), i = info.get(idProduct);
+        if (!i) return 'produit-absent';
+        if (!c) return 'carte-absente';
+        if (!concorde(c, i.kp)) return 'nom-ne-concorde-pas';
+        if (attaquesContredites(c, i.d.attaques)) return 'attaques-contredites';
+        return 'ok';
+    }
+
     function evaluerCibles(ids) {
         const surs = [], doutes = [];
         for (const id of ids) { const r = evaluer(id); (r.verdict === 'sur' ? surs : doutes).push(r); }
         return { surs, doutes };
     }
-    return { evaluer, evaluerCibles, set, produits: produitsReels };
+    return { evaluer, evaluerCibles, temoinVerite, set, produits: produitsReels };
+}
+
+/**
+ * CALIBRATION « LA VRAIE CARTE RETIRÉE » (§67) : pour chaque produit dont la vérité est connue, la carte vraie est ENLEVÉE de la base (avec toutes ses lignes) et la
+ * règle est rejouée. Elle ne PEUT plus désigner la bonne carte : toute affirmation est donc fausse par construction (un faux = un cas qu'elle aurait écrit à tort),
+ * et le seul résultat honnête est un doute (muet). La calibration « ligne cachée, carte présente » ne voit que les justes ; celle-ci voit le danger.
+ * @param construire (cartesSans, lignesSans) => ctx   @param cartes les cartes du set   @param lignes ses lignes   @param verite Map(idProduct → [{carteId}])
+ */
+function calibrerCarteRetiree({ construire, cartes, lignes, ids, verite }) {
+    const r = { total: 0, faux: [], muets: 0, motifsMuets: {} };
+    const groupes = new Map();
+    for (const id of ids) {
+        const t = verite.get(id);
+        if (!t || !t.length) continue;
+        const k = [...new Set(t.map(x => x.carteId))].sort((a, b) => a - b).join(',');
+        (groupes.get(k) || groupes.set(k, { retirees: new Set(t.map(x => x.carteId)), ids: [] }).get(k)).ids.push(id);
+    }
+    for (const g of groupes.values()) {
+        const ctx = construire(cartes.filter(c => !g.retirees.has(c._id)), lignes.filter(l => !g.retirees.has(l.carteId)));
+        for (const id of g.ids) {
+            r.total++;
+            const v = ctx.evaluer(id, { cacher: true });
+            if (v.verdict === 'sur') r.faux.push({ idProduct: id, rendu: v.carteId, numeroFiche: v.numeroFiche, detail: v.detail, verite: verite.get(id) });
+            else { r.muets++; r.motifsMuets[v.motif] = (r.motifsMuets[v.motif] || 0) + 1; }
+        }
+    }
+    return r;
 }
 
 /**
@@ -161,4 +214,4 @@ function calibrer(ctx, ids, verite) {
     return r;
 }
 
-module.exports = { preparerSet, calibrer, MOTIFS, PREUVE, baseDuSlug, sansPosition };
+module.exports = { preparerSet, calibrer, calibrerCarteRetiree, MOTIFS, PREUVE, baseDuSlug, sansPosition };

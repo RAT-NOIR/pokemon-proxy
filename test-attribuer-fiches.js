@@ -40,7 +40,7 @@ verifier('(b) le numéro absent mais le NOM est connu sous un autre numéro : le
 verifier('(b) numéro lu par le slug (fonction du SITE injectée) quand numeros_cartes n\'en porte pas → sûr', plan([pika], [produit(113, 'Pikachu', null, 'Pikachu-LS5')], [], [113], { segmentDuSlug: (slug, code) => (slug === 'Pikachu-LS5' && code === 'LS' ? '5' : null) }).surs.map(s => s.numeroFiche), ['5']);
 verifier('(b) numéro suffixé « 5a » absent des impressions : variante tamponnée possible, pas de numeroFiche (M2) → « variante-suffixee »', motifs(plan([pika], [produit(114, 'Pikachu', '5a')], [], [114])), ['variante-suffixee']);
 verifier('(b) deux impressions de la carte portent la même clé sous deux écritures (« 005 » et « 5 ») → numéro ambigu', motifs(plan([carte(12, 'Pichu', ['005', '5'])], [produit(115, 'Pichu', '5')], [], [115])), ['numero-ambigu']);
-verifier('(b) le préfixe COMMUN à toutes les impressions du set se retire (« SM18 » ↔ « 18 »), comme joindre()', plan([carte(13, 'Alolan Sandslash', ['SM18', 'SM19'])], [produit(116, 'Alolan Sandslash [Metal Claw | Tumbling Attack]', '18')], [], [116]).surs.map(s => s.numeroFiche), ['SM18']);
+verifier('(b) le préfixe COMMUN à toutes les impressions du set se retire (« SM18 » ↔ « 18 »), comme joindre()', plan([carte(13, 'Alolan Sandslash', ['SM18', 'SM19'])], [produit(116, 'Alolan Sandslash [Tackle]', '18')], [], [116]).surs.map(s => s.numeroFiche), ['SM18']);
 verifier('(b) un préfixe NON commun (« SM18 » et « 19 ») ne se retire pas → « numero-absent »', motifs(plan([carte(13, 'Alolan Sandslash', ['SM18', '19'])], [produit(116, 'Alolan Sandslash', '18')], [], [116])), ['numero-absent']);
 
 // ── (c) LE NOM — le témoin de joindre() et une concordance POSITIVE
@@ -64,6 +64,30 @@ verifier('(d) deux produits NON attachés qui revendiquent la même (carte, num�
 verifier('(d) un produit au même numéro mais à un AUTRE nom ne revendique pas la carte (Hop et Potion, tous deux « C42 »)', plan([carte(24, 'Hop', ['C42'])], [produit(138, 'Hop', 'C42', 'Hop-V2-BA-C42'), produit(139, 'Potion', 'C42', 'Potion-BA-C42')], [], [138]).surs.length, 1);
 verifier('(d) le produit a déjà une ligne sur une AUTRE carte que celle du numéro → « ligne-sur-une-autre-carte » (rien n\'est modifié)', motifs(plan([pika, rai], [produit(140, 'Pikachu', '5')], [ligne(11, 140, null)], [140])), ['ligne-sur-une-autre-carte']);
 verifier('(d) un produit à DEUX lignes n\'est jamais touché → « plusieurs-lignes »', motifs(plan([pika, rai], [produit(141, 'Pikachu', '5')], [ligne(10, 141, null), ligne(11, 141, null)], [141])), ['plusieurs-lignes']);
+
+// ── CORRECTION 1 (relecture) : « SM18 » et « 18 » sont DEUX ÉCRITURES du même numéro (cleNumero + préfixe commun du set, comme la jointure)
+(function () {
+    const SMS = { _id: 'SM-Black-Star-Promos', idExpansion: 1757, tirage: 'intl', code: 'SM', bulba: { expansion: 'SM Black Star Promos' } };
+    const impS = n => ({ tirage: 'intl', expansion: 'SM Black Star Promos', numero: n, total: null });
+    const c18 = { _id: 221206, nomEn: 'Alolan Sandslash', niveau: null, attaques: [{ nom: 'Smash Turn' }], impressions: [impS('SM18')], sets: [SMS._id], liens: {} };
+    const c127 = { _id: 228226, nomEn: 'Alolan Sandslash', niveau: null, attaques: [{ nom: 'Metal Claw' }, { nom: 'Tumbling Attack' }], impressions: [impS('SM127')], sets: [SMS._id], liens: {} };
+    const pS = (idProduct, name, numero, slug, slugSet) => ({ idProduct, idExpansion: 1757, idMetacard: 700 + idProduct, name, numero, slug, slugSet });
+    const p297 = pS(297618, 'Alolan Sandslash [Slush Rush | Smash Turn]', '18', 'Alolan-Sandslash-SM18', SMS._id);
+    const p358 = pS(358427, 'Alolan Sandslash [Metal Claw | Tumbling Attack]', 'SM18', null, null);
+    const l297 = [{ _id: '221206|297618', carteId: 221206, idProduct: 297618, idExpansion: 1757, numeroFiche: 'SM18' }];
+    const ev = (produits, lignes, id) => preparerSet({ set: SMS, cartes: [c18, c127], produits, lignes }).evaluer(id);
+    // le revendiquant « SM18 » a ICI les attaques de la carte (sinon le témoin des attaques le refuserait avant la condition d) : seule la condition (d) peut dire non
+    const pR = pS(358428, 'Alolan Sandslash [Slush Rush | Smash Turn]', 'SM18', null, null);
+    verifier('(d) un produit écrit « SM18 » revendique la même (carte, numéro) que « 18 » (297618, attaché) : deux écritures du même numéro → « deux-produits-revendiquent »', ev([p297, pR], l297, 358428).motif, 'deux-produits-revendiquent');
+    verifier('(d) symétrie : le produit « 18 » en cible, le revendiquant écrit « SM18 » → « deux-produits-revendiquent » aussi', ev([p297, pR], [], 297618).motif, 'deux-produits-revendiquent');
+    verifier('(d) symétrie : les deux produits en cible, sans ligne → les DEUX en doute', preparerSet({ set: SMS, cartes: [c18, c127], produits: [p297, pR], lignes: [] }).evaluerCibles([297618, 358428]).doutes.map(d => d.motif), ['deux-produits-revendiquent', 'deux-produits-revendiquent']);
+    verifier('LE CAS RÉEL : 358427 (numéro SM18, attaques de la SM127) avec 297618 attaché à 221206 → doute (jamais une fiche)', ev([p297, p358], l297, 358427).verdict, 'doute');
+    verifier('(b) le produit écrit « SM127 » trouve l\'impression « SM127 » ; écrit « 127 », la même (préfixe commun) → même carte', [ev([pS(1, 'Alolan Sandslash [Metal Claw]', 'SM127', null, null)], [], 1).carteId, ev([pS(2, 'Alolan Sandslash [Metal Claw]', '127', null, null)], [], 2).carteId], [228226, 228226]);
+    verifier('(d) sans revendiquant, un produit « SM18 » dont les attaques sont celles de la carte reste SÛR (la correction ne ferme pas tout)', ev([pS(300, 'Alolan Sandslash [Slush Rush | Smash Turn]', 'SM18', null, null)], [], 300).carteId, 221206);
+    // TÉMOIN POSITIF DES ATTAQUES (défense en profondeur) : 358427 porte les attaques de la carte SM127 mais le numéro SM18 — le numéro ment, les attaques le disent
+    verifier('(c) les attaques du produit (Metal Claw | Tumbling Attack) ne sont celles d\'AUCUNE attaque de la carte désignée par le numéro (Smash Turn) → « attaques-contredites »', ev([p358], [], 358427).motif, 'attaques-contredites');
+    verifier('(c) « Gather Snow » / « Snow Gather » : l\'ordre des mots ne contredit pas (Cardmarket ≠ Bulbapedia) → SÛR', preparerSet({ set: SMS, cartes: [{ ...c18, attaques: [{ nom: 'Snow Gather' }] }], produits: [pS(301, 'Alolan Sandslash [Gather Snow]', 'SM18', null, null)], lignes: [] }).evaluer(301).verdict, 'sur');
+})();
 
 // ── le mode « numeroFiche » : la ligne existe (bonne carte), son numeroFiche est nul → il se POSE, rien d'autre
 const mn = plan([pika], [produit(150, 'Pikachu', '5')], [ligne(10, 150, null)], [150]);
@@ -100,6 +124,19 @@ verifier('chaque doute émis porte un motif de la liste fermée', (() => {
     verifier('calibration : sans la carte, le produit est MUET (jamais faux)', [r3.faux.length, r3.muets], [0, 2]);
     verifier('calibration : « X1 (Top Left) » et « X1 » sont le même numéro (la position n\'est pas le numéro)', (() => { const c2 = carte(26, 'Pieza', ['X1 (Top Left)']); const l2 = ligne(26, 204, 'X1'); return calibrer(preparerSet({ set: SET, cartes: [c2], produits: [produit(204, 'Pieza', 'X1')], lignes: [l2] }), [204], new Map([[204, [{ carteId: 26, numeroFiche: 'X1' }]]])).numeroFicheDifferent.length; })(), 0);
     verifier('calibration : le numeroFiche rejoué diffère de celui de la ligne → compté à part (numeroFicheDifferent)', (() => { const v = new Map(verite); v.set(200, [{ carteId: 10, numeroFiche: '60' }]); return calibrer(preparerSet({ set: SET, cartes, produits, lignes }), [200], v).numeroFicheDifferent.length; })(), 1);
+})();
+
+// ── CALIBRATION « VRAIE CARTE RETIRÉE » (§67) : sait-elle dire NON ? Une affirmation sans la vraie carte est un FAUX.
+(function () {
+    const { calibrerCarteRetiree } = require('./collecte-cartes/regle-attribution-fiches');
+    const produits = [produit(300, 'Pikachu', '5'), produit(301, 'Raichu', '6')];
+    const verite = new Map([[300, [{ carteId: 10 }]], [301, [{ carteId: 11 }]]]);
+    const construireSur = cartesBase => (cs, ls) => preparerSet({ set: SET, cartes: cs, produits, lignes: ls });
+    const sain = calibrerCarteRetiree({ construire: construireSur(), cartes: [pika, rai], lignes: [], ids: [300, 301], verite });
+    verifier('retirée : sans leur vraie carte, 2 produits sur 2 sont MUETS, 0 faux', [sain.total, sain.faux.length, sain.muets], [2, 0, 2]);
+    const homonyme = carte(31, 'Pikachu', ['5']);   // une AUTRE carte au même numéro et au même nom : la règle affirmerait la mauvaise
+    const piege = calibrerCarteRetiree({ construire: construireSur(), cartes: [pika, rai, homonyme], lignes: [], ids: [300, 301], verite });
+    verifier('retirée : une homonyme au même numéro fait AFFIRMER la mauvaise carte → comptée FAUSSE (la calibration sait dire non)', [piege.faux.map(f => [f.idProduct, f.rendu]), piege.muets], [[[300, 31]], 1]);
 })();
 
 // ── ÉCRITURE / RETRAIT sur la base du banc (mémoire) — additif, idempotent, retrait EXACT, --attendu
@@ -143,6 +180,18 @@ verifier('chaque doute émis porte un motif de la liste fermée', (() => {
         verifier('le retrait ne touche JAMAIS une ligne qui n\'est pas à notre route (une ligne ordinaire survit)', [await db.collection('cartes_produits').countDocuments({ _id: '10|1' }), ret2.lignes], [1, 1]);
         const idemRet = await A.retirer(db, manifeste);
         verifier('retrait idempotent', [idemRet.lignes, idemRet.numerosFiche], [0, 0]);
+        // CORRECTION 1 : l'écriture REVÉRIFIE, ligne par ligne, qu'aucune ligne n'existe déjà pour ce produit sur une AUTRE carte
+        await db.collection('cartes_produits').insertOne({ _id: '11|500', carteId: 11, idProduct: 500, idExpansion: 9, slugSet: 'Le-Set', tirage: 'intl', numeroFiche: '6', preuve: 'set+numero' });
+        const surs2 = [
+            { idProduct: 500, carteId: 10, action: 'ligne-neuve', numeroFiche: '5', preuve: 'set+numero+nom', detail: 'banc', idExpansion: 9, slugSet: 'Le-Set', tirage: 'intl', slug: 'p-500', idMetacard: 702 },
+            { idProduct: 501, carteId: 10, action: 'ligne-neuve', numeroFiche: '60', preuve: 'set+numero+nom', detail: 'banc', idExpansion: 9, slugSet: 'Le-Set', tirage: 'intl', slug: 'p-501', idMetacard: 703 },
+        ];
+        const m2 = A.construireManifeste({ surs: surs2, lignesAvant: await db.collection('cartes_produits').find({}).toArray(), cartesAvant: await db.collection('cartes').find({}).toArray() });
+        const avant2 = JSON.stringify([await db.collection('cartes_produits').find({}).sort({ _id: 1 }).toArray(), await db.collection('cartes').find({}).sort({ _id: 1 }).toArray()]);
+        const r4 = await A.ecrire(db, surs2, m2);
+        verifier('écriture : un produit déjà lié à une AUTRE carte est REFUSÉ et listé, et RIEN n\'est écrit (même pas le produit voisin sain)', [r4.refus.map(x => [x.idProduct, x.surCartes]), r4.lignes, r4.numerosFiche, r4.cartes], [[[500, [11]]], 0, 0, 0]);
+        verifier('refus : la base est identique à celle d\'avant la tentative', JSON.stringify([await db.collection('cartes_produits').find({}).sort({ _id: 1 }).toArray(), await db.collection('cartes').find({}).sort({ _id: 1 }).toArray()]), avant2);
+        verifier('la même vérification, appelée seule, rend la liste sans rien écrire', (await A.produitsDejaSurAutreCarte(db, surs2)).map(x => x.idProduct), [500]);
     } finally { await client.close(); await banc.arreter(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;
