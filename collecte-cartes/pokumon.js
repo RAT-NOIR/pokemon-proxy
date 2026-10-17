@@ -194,9 +194,187 @@ function apparier({ produits, index }) {
     return { resultats, comptes: { produits: produits.length, prouves: resultats.filter(r => r.verdict === 'prouve').length, placeholders, placeholdersIndex, parMotif } };
 }
 
+// ============================================================
+// LES AUTRES FAMILLES (lot PK-AUTRES, 2026-10-17) — McDonald's, Trick or Trade, Professor Program, Black Star, variantes « a »
+// ============================================================
+// 🔑 MÊME CLÉ QUE LES PRIZE PACKS (nom + numéro d'origine + UN produit / UNE entrée), MÊMES VETOS, et un TÉMOIN INDÉPENDANT qu'on avait déjà en base : les IMPRESSIONS de la carte du produit
+// (cartes.impressions : numéro et total imprimés, lus chez TCGdex/Bulbapedia, jamais chez Pokumon). C'est lui qui sépare le Gengar de Trick or Trade 2022 (Chilling Reign 057/198) de celui de
+// 2024 (Paldean Fates 057/091), même nom, même numéro. Une ligne de table = UNE famille et UNE année ou série, prouvée par des images OUVERTES à l'œil.
+const sDuFichier = e => { const m = /\/EN_S(\d+)[A-Za-z]/.exec(e?.img || ''); return m ? Number(m[1]) : null; };
+const dansPlage = (n, plage) => Array.isArray(plage) && n != null && n >= plage[0] && n <= plage[1];
+const total0 = t => String(t ?? '').replace(/^0+(?=\d)/, '');
+const lettres = n => (/^([A-Za-z]*)/.exec(String(n ?? '')) || [])[1] || '';
+/** Trick or Trade : l'année que l'entrée dit d'elle-même (« BOOster Bundle 2023 exclusive » = 2023 ; « BOOster Bundle exclusive » seul = 2022) ; null quand elle n'en dit aucune. */
+const anneeToT = e => { const m = /BOOster Bundle (\d{4}) exclusive/.exec(e.set); return m ? Number(m[1]) : /BOOster Bundle exclusive/.test(e.set) ? 2022 : null; };
+const code0 = code => String(code || '').replace(/^PPP/, '').replace(/^BOO\d*/, '').replace(/^PPS\d/, '');
+/** Les règles de famille : ce que la famille lit du produit (`produit`), ce qui peut le désigner (`entree`), et le témoin de la carte (`impression`). Écrites par ce qu'elles AUTORISENT. */
+const REGLES = Object.freeze({
+    mcd: {
+        produit: p => { const n = cleMesure(p.numero); return n ? { n, code: '', prefixe: lettres(p.numero).toLowerCase() } : null; },
+        entree: (e, l) => /McDonald/.test(e.set) && e.total === l.total && dansPlage(sDuFichier(e), l.plageS),
+        placeholder: (e, l) => /McDonald/.test(e.set) && e.total === l.total && estPlaceholder(e),
+        impression: 'mcd'
+    },
+    tot: {
+        produit: p => numeroOrigine(p.slugProduit),
+        entree: (e, l) => /Trick or Trade/.test(`${e.set} ${e.titre}`) && [null, l.annee].includes(anneeToT(e)),
+        anneeProduit: p => (/-BOO(\d\d)[A-Z]/.exec(p.slugProduit || '') ? 2000 + Number(/-BOO(\d\d)[A-Z]/.exec(p.slugProduit)[1]) : 2022),
+        impression: true
+    },
+    prof: {
+        produit: p => numeroOrigine(p.slugProduit),
+        entree: e => /Professor (Program|Stamp)|Professor University|"Professor Program" stamp/.test(e.set) && !/Excellence Award|Professor Cup/.test(e.set),
+        impression: true
+    },
+    bsp: {
+        produit: (p, l) => { const n = cleMesure(p.numero ?? (/-[A-Z]*?(\d+[a-z]?)$/.exec(p.slugProduit || '') || [])[1]); return n ? { n, code: '', prefixe: (lettres(p.numero) || l.prefixe).toUpperCase() } : null; },
+        entree: (e, l) => /English Promo/.test(e.set) && lettres(e.numero).toUpperCase() === l.prefixe,
+        impression: 'bsp'
+    }
+    // ⛔ « a » (variantes de promotion à numéro à lettre : 124a, 152b…) N'EST PAS UNE FAMILLE DE CETTE TABLE : mesuré le 2026-10-17, le site n'a AUCUNE fiche pour ces produits (l'impression « 124a/145 » vit sous
+    // « Yellow A Alternate cards », pas sous le set Cardmarket) ; poser une image ne servirait aucun produit. Voir le rapport PK-AUTRES.
+});
+/**
+ * Le témoin de la carte : une de ses impressions porte ce numéro (et ce total) imprimés — lus chez TCGdex/Bulbapedia, jamais chez Pokumon. Rend { etat: 'concorde' | 'contredit' | 'absent', numero }
+ * où `numero` est le numéro de l'impression telle qu'écrite chez nous (celui de la FICHE : « 033 » pour MEP033, « 009 » pour 9/15).
+ * mode 'mcd' : l'impression est celle du millésime de la ligne (`l.expansionImpression`, « McDonald's Collection 2017 »), numéro ET total ; 'bsp' : une impression « … Black Star Promos » au même numéro ;
+ * true : numéro ET total, n'importe quelle impression.
+ */
+function temoinImpression(mode, p, e, l = {}) {
+    const imps = Array.isArray(p.impressions) ? p.impressions : [];
+    const memeNumero = imps.filter(i => cleMesure(i.numero) === cleMesure(e.numero) && (mode === 'mcd' ? (l.expansionsImpression || []).includes(i.expansion) : mode !== 'bsp' || String(i.expansion || '').startsWith(`${l.prefixe} Black Star`)));
+    if (!memeNumero.length) return { etat: 'absent', numero: null };
+    if (mode === 'bsp') return { etat: 'concorde', numero: memeNumero[0].numero };
+    // McDonald's : certaines impressions n'ont pas de total (« McDonald s Collection 2018 2 ») ; l'absence d'un total ne contredit pas, un AUTRE total contredit
+    const bonne = memeNumero.find(i => (mode === 'mcd' && (i.total == null || i.total === '')) || total0(i.total) === total0(e.total));
+    return bonne ? { etat: 'concorde', numero: bonne.numero } : { etat: 'contredit', numero: null };
+}
+/** Les lignes d'un set Cardmarket. Deux FAMILLES sur un même set sont une erreur de table (on ne choisit pas entre deux règles). */
+function lignesDuSet(lignes, unite) {
+    const ls = lignes.filter(l => l.slugs.includes(unite));
+    if (new Set(ls.map(l => l.famille)).size > 1) throw new Error(`${SOURCE} : le set « ${unite} » est revendiqué par deux familles (${[...new Set(ls.map(l => l.famille))].join(', ')}) — erreur de table`);
+    return ls;
+}
+
+/**
+ * L'APPARIEMENT des autres familles, pur. `lignes` : la table (une par famille et année/série) ; `produits` : { idProduct, unite (slug du set Cardmarket), nomCm, slugProduit, numero, impressions } ;
+ * `index` : des entrées lues. Rend un verdict par produit (« prouve » + l'entrée, ou « reste » + son MOTIF) et des comptes. Un produit n'est prouvé que si : sa ligne existe ; un seul produit et
+ * une seule entrée dans son groupe (nom, numéro, set) ; l'entrée est admise par la ligne (année, plage, descripteur, total) ; l'image n'est pas un placeholder ; elle est anglaise ; son préfixe
+ * de numéro concorde ; aucune autre origine ne la réclame ; et la carte du produit porte, dans ses impressions, ce numéro et ce total (le témoin indépendant de la clé).
+ */
+function apparierFamille({ lignes, produits, index }) {
+    const recs = produits.map(p => {
+        const ls = lignesDuSet(lignes, p.unite);
+        if (!ls.length) return { p, motif: 'ligne-absente' };
+        const R = REGLES[ls[0].famille];
+        const nm = R.produit(p, ls[0]);
+        if (!nm) return { p, l: ls[0], motif: 'sans-numero-origine' };
+        const nom = norm(nomNu(p.nomCm));
+        const memes = index.filter(e => e.numero && cleMesure(e.numero) === cleMesure(nm.n) && nomPokumon(e) === nom);
+        const reels = ls.flatMap(l => memes.filter(e => !estPlaceholder(e) && R.entree(e, l)).map(e => ({ e, l })));
+        const phs = reels.length ? [] : ls.flatMap(l => memes.filter(e => R.placeholder?.(e, l)).map(e => ({ e, l })));
+        return { p, l: ls[0], R, nm, cands: reels.length ? reels : phs, nom };
+    });
+    const groupes = new Map();
+    for (const r of recs) if (r.nm) { const k = [r.p.unite, r.nom, r.nm.n].join('|'); (groupes.get(k) || groupes.set(k, []).get(k)).push(r); }
+    let placeholders = 0;
+    for (const g of groupes.values()) {
+        const c = g[0].cands;
+        const statut = !c.length ? 'non-couvert' : g.length === 1 && c.length === 1 ? 'couvert' : g.length === c.length ? 'douteux-variantes-non-separables' : 'douteux-multiplicite';
+        for (const r of g) {
+            if (statut !== 'couvert') { r.motif = statut; continue; }
+            const e = c[0].e;
+            r.l = c[0].l;
+            r.entree = e;
+            if (estPlaceholder(e)) { r.motif = 'placeholder'; placeholders++; }
+            else if (!e.anglais) r.motif = 'langue';
+            else if (r.l.famille !== 'mcd' && prefixeDuNumero(e.numero).toLowerCase() !== (r.nm.prefixe ?? '').toLowerCase()) r.motif = 'prefixe-contredit';
+            else if (r.l.famille === 'tot' && REGLES.tot.anneeProduit(r.p) !== r.l.annee) r.motif = 'annee-contredite';
+            else {
+                const t = temoinImpression(r.R.impression, r.p, e, r.l);
+                if (t.etat !== 'concorde') r.motif = `impression-${t.etat}`;
+                else { r.temoin = `impression de la carte : n° ${t.numero} imprimé${e.total ? ` sur ${e.total}` : ''}`; r.numeroFiche = t.numero; }
+            }
+        }
+    }
+    // une entrée réclamée par deux ORIGINES (codes différents) ne désigne aucun des deux (Gengar 2022 / 2024)
+    const vivants = recs.filter(r => r.entree && !r.motif).map(r => ({ idProduct: r.p.idProduct, entree: r.entree, code: code0(r.nm.code), r }));
+    for (const w of temoinsDeLEntree(vivants)) if (w.motif) recs.find(r => r.p.idProduct === w.idProduct).motif = w.motif;
+    const placeholdersIndex = index.filter(estPlaceholder).length;
+    const resultats = recs.map(r => (r.motif || !r.entree
+        ? { idProduct: r.p.idProduct, verdict: 'reste', motif: r.motif ?? 'non-couvert' }
+        : { idProduct: r.p.idProduct, verdict: 'prouve', entree: r.entree, ligne: r.l.id, famille: r.l.famille, numeroOrigine: r.nm, temoin: r.temoin, numeroFiche: r.numeroFiche }));
+    const parMotif = {};
+    for (const r of resultats) if (r.verdict === 'reste') parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
+    return { resultats, comptes: { produits: produits.length, prouves: resultats.filter(r => r.verdict === 'prouve').length, placeholders, placeholdersIndex, parMotif } };
+}
+
+// ── LA TABLE DES AUTRES FAMILLES : une ligne par famille ET par année ou série, prouvée par des images OUVERTES à l'œil le 2026-10-17 (planches S7/PK-AUTRES/planches/) ─────────────────────
+// Sur chaque image témoin : le nom et le numéro imprimés sont ceux de NOTRE produit ; pour une famille TAMPONNÉE (Trick or Trade : citrouille, Professor Program : « PROFESSOR PROGRAM ») le tampon
+// est VISIBLE sur chaque témoin ; pour McDonald's le millésime se lit dans le copyright de la carte et dans le numéro (x/12, x/15), et la plage `plageS` est le bloc de téléversement de ce millésime
+// chez Pokumon (numéros imprimés consécutifs, couverts à 12/12 ou 7/7 par les produits de l'année). Une famille non écrite ici est un trou, et le rapport dit pourquoi.
+const tm = (nom, imprime) => ({ n: imprime.split('/')[0], nom, imprime });
+const MC = an => `carte McDonald's du millésime ${an} : copyright et numéro imprimés lus sur l'image`;
+const TOT_TAMPON = 'citrouille (tête de Pikachu en citrouille) imprimée en bas à droite de l\'illustration, visible sur chaque image';
+const PROF_TAMPON = 'logo « PROFESSOR PROGRAM » imprimé dans le bas de l\'illustration, visible sur chaque image';
+const BSP_MARQUE = 'étoile noire « PROMO » et code du set imprimés en bas de la carte';
+const LIGNES_AUTRES = Object.freeze([
+    { id: 'mcd-2014', famille: 'mcd', slugs: ['McDonalds-Collection-2014'], total: '12', plageS: [37, 48], expansionsImpression: ["McDonald's Collection 2014"], jeu: 'mcd', tampon: MC(2014), lu: '2026-10-17', temoins: [tm('Weedle', '1/12'), tm('Pikachu', '5/12'), tm('Furfrou', '12/12')] },
+    { id: 'mcd-2015', famille: 'mcd', slugs: ['McDonalds-Collection-2015'], total: '12', plageS: [49, 60], expansionsImpression: ["McDonald's Collection 2015"], jeu: 'mcd', tampon: MC(2015), lu: '2026-10-17', temoins: [tm('Treecko', '1/12'), tm('Pikachu', '6/12'), tm('Skitty', '12/12')] },
+    { id: 'mcd-2017', famille: 'mcd', slugs: ['McDonalds-Collection-2017'], total: '12', plageS: [73, 84], expansionsImpression: ["McDonald's Collection 2017"], jeu: 'mcd', tampon: MC(2017), lu: '2026-10-17', temoins: [tm('Rowlet', '1/12'), tm('Pikachu', '5/12'), tm('Yungoos', '12/12')] },
+    { id: 'mcd-2018-2', famille: 'mcd', slugs: ['McDonald-s-Collection-2018-2'], total: '12', plageS: [85, 96], expansionsImpression: ["McDonald's Collection 2018", 'McDonald s Collection 2018 2'], jeu: 'mcd', tampon: MC(2018), lu: '2026-10-17', temoins: [tm('Growlithe', '1/12'), tm('Machop', '6/12'), tm('Porygon', '12/12')] },
+    { id: 'mcd-match-battle-2023', famille: 'mcd', slugs: ['McDonalds-Match-Battle-2023'], total: '15', plageS: [237, 243], expansionsImpression: ["McDonald's Collection 2023"], jeu: 'mcd', tampon: MC(2023), lu: '2026-10-17', temoins: [tm('Flittle', '009/015'), tm('Blissey', '012/015'), tm('Kirlia', '015/015')] },
+    { id: 'tot-2022', famille: 'tot', annee: 2022, slugs: ['Trick-or-Trade'], jeu: 'speciale', tampon: TOT_TAMPON, lu: '2026-10-17', temoins: [tm('Pikachu', '049/203'), tm('Gastly', '055/198'), tm('Gengar', '057/198'), tm('Dusknoir', '062/172'), tm('Trevenant', '015/192'), tm('Mimikyu', '081/189')] },
+    { id: 'tot-2023', famille: 'tot', annee: 2023, slugs: ['Trick-or-Trade-2023'], jeu: 'speciale', tampon: TOT_TAMPON, lu: '2026-10-17', temoins: [tm('Sinistea', '089/202'), tm('Dusknoir', '071/185'), tm('Marshadow', '080/203'), tm('Gastly', '064/196'), tm('Gengar', '066/196'), tm('Zubat', '103/195')] },
+    { id: 'prof', famille: 'prof', slugs: ['Professor-Program'], jeu: 'speciale', tampon: PROF_TAMPON, lu: '2026-10-17', temoins: [tm('Judge', '108/131'), tm('Gym Trainer', '059/072'), tm('League Staff', '153/185'), tm('Roseanne\'s Backup', '148/172'), tm('Professor Laventon', '162/195'), tm('Judge', '235/264')] },
+    { id: 'bsp-swsh', famille: 'bsp', prefixe: 'SWSH', slugs: ['SWSH-Black-Star-Promos'], jeu: 'swsh', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Unown V', 'SWSH300'), tm('Zamazenta V', 'SWSH293'), tm('Moltres', 'SWSH185')] },
+    { id: 'bsp-svp', famille: 'bsp', prefixe: 'SVP', slugs: ['SV-Black-Star-Promos'], jeu: 'svp', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Black Belt\'s Training', 'SVP219'), tm('Black Belt\'s Training', 'SVP220'), tm('Mewtwo', 'SVP052')] },
+    { id: 'bsp-mep', famille: 'bsp', prefixe: 'MEP', slugs: ['MEP-Black-Star-Promos'], jeu: 'mep', tampon: BSP_MARQUE, lu: '2026-10-17', temoins: [tm('Mega Charizard X ex', 'MEP023'), tm('Mega Gardevoir ex', 'MEP032'), tm('Mega Lucario ex', 'MEP033')] }
+].map(l => Object.freeze(l)));
+const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
+const { largeurMinDe } = require('./seuils-images');
+const nImage = n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
+
+/**
+ * LE PLAN des autres familles (pur). `produits` : TOUS les produits des sets des lignes (servis ou non : un groupe se compte sur tous) ; `cartes` : Map(carteId → { nomEn, images }).
+ * 🔑 Le numéro posé sur l'image est celui de la FICHE (l'impression de la carte : « 033 » pour MEP033, « 009 » pour 9/15) — le site compare ce numéro à celui de la fiche — ; Trick or Trade et
+ * Professor Program n'ont pas de fiche numérotée, l'image garde le numéro imprimé de l'entrée. Une image sous le seuil de largeur est un reste COMPTÉ (« sous-le-seuil »), jamais téléchargée.
+ */
+function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) {
+    const { resultats, comptes } = apparierFamille({ lignes, produits, index });
+    const parId = new Map(produits.map(p => [p.idProduct, p]));
+    const cleFiche = p => `${p.carteId}|${p.unite}|${cleMesure(p.numero) ?? ''}`;
+    const parFiche = new Map();
+    for (const r of resultats) { const k = cleFiche(parId.get(r.idProduct)); (parFiche.get(k) || parFiche.set(k, []).get(k)).push(r); }
+    const plan = [], restes = [];
+    const seuil = largeurMinDe(SOURCE);
+    for (const r of resultats) {
+        const p = parId.get(r.idProduct);
+        const base = { idProduct: p.idProduct, carteId: p.carteId, slugSet: p.unite, nomCm: p.nomCm };
+        if (r.verdict !== 'prouve') { restes.push({ ...base, motif: r.motif }); continue; }
+        const carte = cartes.get(p.carteId);
+        if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
+        const e = r.entree, l = lignes.find(x => x.id === r.ligne);
+        const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
+        if ((carte.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        const fiche = parFiche.get(cleFiche(p));
+        if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === e.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
+        if (!urlImageValide(e.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
+        if (!(e.w >= seuil)) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
+        if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.unite && nImage(x.numero) === nImage(numero))) continue;
+        plan.push({ ...base, nomEn: carte.nomEn ?? null, famille: r.famille, ligne: l.id, marque: `${l.id} : ${l.tampon}`, numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: `pokumon+nom+numero+${r.famille}`,
+            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro ${e.numero} (produit ${p.slugProduit ?? ''}, n° ${p.numero ?? ''}) ; ${r.temoin} ; une seule entrée candidate pour ce produit ; ligne ${l.id} prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; marque : ${l.tampon}` });
+    }
+    return { plan, restes, comptes: { ...comptes, trous: restes.length, plan: plan.length, sousSeuil: restes.filter(x => x.motif === 'sous-le-seuil').length } };
+}
+
 // ── L'ADRESSE D'UNE IMAGE ET D'UNE LISTE : écrites par ce qu'elles AUTORISENT ───────────────────────────────────────────────────────────────────
 const CHAMPS_INDEX = 'id,title,slug,link,release_event,promo_set,language,_links,_embedded';
 const RE_INDEX = new RegExp(`^\\?release_event=(${Object.values(EVENEMENTS).join('|')})&per_page=100&page=([1-9])&orderby=id&order=asc&_embed=wp:featuredmedia&_fields=${CHAMPS_INDEX}$`);
+// ── LES AUTRES FAMILLES (2026-10-17, lot PK-AUTRES) : la liste d'un JEU DE PROMOS (taxonomie « promo_set »), anglais seulement. Identifiants lus le 2026-10-17 (promo_set?per_page=100, MESURE-OCC). ──
+const PROMO_SETS = Object.freeze({ speciale: 2346, mcd: 9231, sm: 4625, xy: 4285, swsh: 6678, svp: 7826, mep: 9606 });
+const PAGES_PROMO_MAX = 30;
+const RE_INDEX_PS = new RegExp(`^\\?promo_set=(${Object.values(PROMO_SETS).join('|')})&language=${LANGUE_ANGLAIS}&per_page=100&page=([1-9]|[12][0-9]|30)&orderby=id&order=asc&_embed=wp:featuredmedia&_fields=${CHAMPS_INDEX}$`);
 const RE_IMAGE = /^\/wp-content\/uploads\/\d{4}\/\d{2}\/[A-Za-z0-9_.-]{1,120}\.(png|jpe?g|webp)$/;
 /**
  * L'adresse de la page `page` (1-9) de la liste des cartes d'une série (1-4).
@@ -209,15 +387,22 @@ function urlIndex(serie, page) {
     if (!Number.isInteger(page) || page < 1 || page > 9) throw new Error(`${SOURCE} : page ${page} hors de 1-9`);
     return `${HOTE_API}/wp-json/wp/v2/card?release_event=${EVENEMENTS[serie]}&per_page=100&page=${page}&orderby=id&order=asc&_embed=wp:featuredmedia&_fields=${CHAMPS_INDEX}`;
 }
+/** L'adresse de la page `page` (1-30) de la liste d'un jeu de promos ANGLAIS (`PROMO_SETS`). Même ordre total que urlIndex (`orderby=id`). */
+function urlIndexPromoSet(jeu, page) {
+    if (!Object.hasOwn(PROMO_SETS, jeu)) throw new Error(`${SOURCE} : le jeu de promos « ${jeu} » n'est pas dans la liste (${Object.keys(PROMO_SETS).join(', ')})`);
+    if (!Number.isInteger(page) || page < 1 || page > PAGES_PROMO_MAX) throw new Error(`${SOURCE} : page ${page} hors de 1-${PAGES_PROMO_MAX}`);
+    return `${HOTE_API}/wp-json/wp/v2/card?promo_set=${PROMO_SETS[jeu]}&language=${LANGUE_ANGLAIS}&per_page=100&page=${page}&orderby=id&order=asc&_embed=wp:featuredmedia&_fields=${CHAMPS_INDEX}`;
+}
 function cheminAutorise(url) {
     let u; try { u = new URL(url); } catch { throw new Error(`${SOURCE} : adresse illisible`); }
     const refus = () => new Error(`${SOURCE} : « ${u.origin}${u.pathname}${u.search} » hors de ce que le client autorise (${HOTES.join(', ')} ; robots.txt, la liste des cartes d'une série S1-S4, /wp-content/uploads/…)`);
     if (u.username || u.password || u.hash || !HOTES.includes(u.origin)) throw refus();
     if (u.pathname === '/robots.txt' && !u.search) return { hote: u.origin, chemin: u.pathname, url: u.href, genre: 'robots' };
-    if (u.origin === HOTE_API && u.pathname === '/wp-json/wp/v2/card' && RE_INDEX.test(u.search)) return { hote: u.origin, chemin: u.pathname, url: u.href, genre: 'index' };
+    if (u.origin === HOTE_API && u.pathname === '/wp-json/wp/v2/card' && (RE_INDEX.test(u.search) || RE_INDEX_PS.test(u.search))) return { hote: u.origin, chemin: u.pathname, url: u.href, genre: 'index' };
     if (u.origin === HOTE_IMG && !u.search && RE_IMAGE.test(u.pathname)) return { hote: u.origin, chemin: u.pathname, url: u.href, genre: 'image' };
     throw refus();
 }
+const urlIndexAutorisee = url => { try { return cheminAutorise(url).genre === 'index'; } catch { return false; } };
 const urlImageValide = url => { try { return cheminAutorise(url).genre === 'image'; } catch { return false; } };
 
 // ── LE PLAN, pur ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -335,8 +520,10 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         return r;
     }
     /** La page `page` de la liste de la série `serie` : { entrees (brutes), pages, total (annoncé par la source), depuisCache }. */
-    async function index(serie, page) {
-        const url = urlIndex(serie, page), cle = `s${serie}-p${page}`;
+    const index = (serie, page) => lirePage(urlIndex(serie, page), `s${serie}-p${page}`);
+    /** La page `page` de la liste d'un jeu de promos anglais (PROMO_SETS) : même forme, même cache (clé `ps-<jeu>-p<page>`). */
+    const indexPromoSet = (jeu, page) => lirePage(urlIndexPromoSet(jeu, page), `ps-${jeu}-p${page}`);
+    async function lirePage(url, cle) {
         const garde0 = cache?.lire(cle);
         if (garde0) { const v = JSON.parse(garde0); return { entrees: v.entrees, pages: v.pages, total: v.total ?? null, depuisCache: true }; }
         const r = await brut(url);
@@ -359,7 +546,7 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         if (!Number.isInteger(n) || n < compte || n > PLAFOND_MAX) throw new Error(`${SOURCE} : plafond ${n} refusé (déjà ${compte} requêtes, maximum ${PLAFOND_MAX})`);
         plafond = n;
     }
-    return { index, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque };
+    return { index, indexPromoSet, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque };
 }
 
 // ── LA RÈGLE DU SITE : l'image propre l'emporte sur le substitut ───────────────────────────────────────────────────────────────────────────────
@@ -406,5 +593,5 @@ function planRetraitPokumon(cartes) {
 module.exports = {
     SOURCE, HOTE_API, HOTE_IMG, HOTES, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, REESSAI_MS, PLAFOND_REQUETES, PLAFOND_MAX, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, EVENEMENTS,
     TABLE_POKUMON, ligneDe, seriesAdmises, lireEntree, estPlaceholder, construireIndex, cleMesure, nomPokumon, numeroOrigine, codeOrigine, temoinsDeLEntree, denominateurDuCode,
-    apparier, planifierPokumon, urlIndex, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon
+    LIGNES_AUTRES, nImage, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon
 };
