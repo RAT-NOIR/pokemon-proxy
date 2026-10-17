@@ -116,7 +116,9 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
         ['Imperva', () => ({ status: 200, type: 'image/png', octets: grand, imperva: true })], ['redirection 302', () => ({ status: 302, location: 'https://autre.example/x' })],
         ['octets qui ne sont pas une image', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>defi</html>') })], ['403 à corps VIDE', () => ({ status: 403, type: '', texte: '' })],
         ['403 dont le corps est une IMAGE', () => ({ status: 403, type: 'image/png', octets: grand })], ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })],
-        ['une PNG déclarée .png mais dont les octets sont ceux d\'un JPEG', () => ({ status: 200, type: 'image/jpeg', octets: Buffer.from('ffd8ffe000104a464946', 'hex') })]];
+        ['401 (connexion obligatoire)', () => ({ status: 401, type: 'text/html', texte: 'login' })], ['410 (disparue : pas un « absent »)', () => ({ status: 410, type: 'text/html', texte: 'gone' })], ['402 (mur payant)', () => ({ status: 402, type: 'text/html', texte: 'pay' })],
+        ['451 (statut inattendu)', () => ({ status: 451, type: 'text/html', texte: 'x' })],
+        ['une PNG déclarée .png mais dont les octets sont ceux d\'un JPEG',() => ({ status: 200, type: 'image/jpeg', octets: Buffer.from('ffd8ffe000104a464946', 'hex') })]];
     for (const [nom, rep] of defis) {
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep());
         r = await lancer(urls, tr, d);
@@ -125,9 +127,27 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
         const r2 = await lancer(urls, tr, d);
         verifier('   le lancement suivant REFUSE de partir tant que le fichier existe (zéro requête)', [r2.etat, tr.appels.length], ['refuse-arret', 0]);
     }
-    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? { status: 403, type: 'text/html', texte: 'non' } : normal(url));
-    r = await lancer(urls, tr, d);
-    verifier('robots.txt en 403 : arrêt définitif, une seule requête', [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 1, true]);
+    for (const st of [403, 401, 410, 429, 402]) {
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? { status: st, type: 'text/html', texte: 'non' } : normal(url));
+        r = await lancer(urls, tr, d);
+        verifier(`robots.txt en ${st} : arrêt définitif, une seule requête, fichier d'arrêt, relance refusée`, [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d)), (await lancer(urls, reseau(normal), d)).etat], ['arret-definitif', 1, true, 'refuse-arret']);
+    }
+    // un 5xx INTERROMPT une fois ; le deuxième de suite (sans réussite entre) est un arrêt définitif
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' });
+    r = await lancer(urls, tr, d); const r5 = await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' }), d);
+    verifier('5xx deux lancements de suite sans réussite entre : 1er « interrompu », 2e ARRÊT DÉFINITIF avec fichier', [r.etat, r5.etat, fs.existsSync(C.fichierArret(d))], ['interrompu', 'arret-definitif', true]);
+    d = tmp(); await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' }), d);
+    const r6 = await lancer(urls, reseau(normal), d); const r7 = await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' }), tmp());
+    verifier('5xx puis une réussite : le compteur repart (pas d\'arrêt)', [r6.etat, r7.etat, fs.existsSync(C.fichierArret(d))], ['termine', 'interrompu', false]);
+    // plafond d'octets : une image trop volumineuse est refusée et notée, la collecte continue
+    d = tmp(); tr = reseau(normal);
+    r = await lancer(urls, tr, d, horloge(), { octetsMax: 100 });
+    const idxV = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
+    verifier('plafond d\'octets : toute image au-delà est refusée (« trop-volumineuse », notée), rien n\'est écrit dans img/, pas d\'arrêt ; la constante est nommée', [r.etat, Object.values(idxV).filter(e => e.statut === 'refuse' && e.motif === 'trop-volumineuse').length, fs.readdirSync(path.join(d, 'img')).length, C.OCTETS_MAX_PAR_IMAGE > 1e6], ['termine', 3, 0, true]);
+    d = tmp(); tr = reseau(normal); r = await lancer(urls, tr, d);
+    d = tmp(); await lancer(urls, reseau(normal), d, horloge(), { octetsMax: 100 });
+    tr = reseau(normal); const rr2 = await lancer(urls, tr, d);
+    verifier('   (une image refusée pour son poids n\'est pas redemandée à la relance)', [rr2.etat, tr.appels.length], ['rien-a-faire', 0]);
     d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? { status: 404, type: 'text/html', texte: '<html>404 - Not Found</html>' } : normal(url));
     r = await lancer(urls, tr, d);
     verifier('robots.txt 404 sans marqueur de défi : aucune règle, le téléchargement se POURSUIT', [r.etat, tr.appels.length], ['termine', 4]);
@@ -256,7 +276,9 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
       verifier('traçabilité : chaque ENTRÉE de cartes.images porte retirable: true et collecteLe', [entreesEcrites.length, entreesEcrites.every(e => e.retirable === true && e.collecteLe instanceof Date && !isNaN(e.collecteLe))], [2, true]); }
     verifier('REMPLACEMENT : l\'entrée basse définition sort de cartes.images, la nôtre entre au même (set, numéro) sans marque ; les autres sources restent', [B.col('cartes').get(2).images.map(e => `${e.source}:${e.numero ?? ''}:${e.basseDefinition === true}`).sort()], [['pkc:002:false', 'tcgdex:1:false']]);
     verifier('   le document de l\'ancienne image N\'EST PAS supprimé : état « remplace », la remplaçante, son adresse d\'origine intacte ; le nouveau document garde l\'historique', [B.col('images').get('pokumon-old-2')?.etat, B.col('images').get('pokumon-old-2')?.remplacePar, B.col('images').get('pkc/McDonalds-Match-Battle-2023/2/002/en')?.remplaceDes?.[0]?.cleR2], ['remplace', { source: 'pkc', cleR2: 'pkc/McDonalds-Match-Battle-2023/002-2-en.webp' }, 'pokumon/old-2.webp']);
-    verifier('AUCUN champ public ne nomme la source : ni cartes.images, ni la preuve de langue ; seul `urlOriginal` du document images porte l\'hôte', [JSON.stringify(B.col('cartes').get(1).images).includes('pkmncards'), JSON.stringify(B.col('cartes').get(2).images).includes('pkmncards'), /pkmn|cards\.com/i.test(e1.languePreuve || ''), Object.entries(doc).filter(([, v]) => /pkmncards/i.test(JSON.stringify(v))).map(([k]) => k)], [false, false, false, ['urlOriginal']]);
+    // (correction 2, doctrine) l'adresse d'origine est sur CHAQUE image, document ET entrée ; elle est le SEUL champ qui porte l'hôte
+    verifier('traçabilité : l\'entrée de cartes.images porte urlOriginal = l\'adresse d\'origine ; aucun AUTRE champ (entrée, document, preuve de langue) ne nomme la source', [e1.urlOriginal === plan[0].url, B.col('cartes').get(2).images.filter(e => e.source === 'pkc').every(e => P.urlImageValide(e.urlOriginal)),
+        Object.entries(e1).filter(([k, v]) => k !== 'urlOriginal' && /pkmncards/i.test(JSON.stringify(v))).map(([k]) => k), /pkmn|cards\.com/i.test(e1.languePreuve || ''), Object.entries(doc).filter(([, v]) => /pkmncards/i.test(JSON.stringify(v))).map(([k]) => k)], [true, true, [], false, ['urlOriginal']]);
     verifier('le bilan du set : garde verte, 2 joints, 1 remplacée ; la garde de lot VOIT les images', [B.col('sets').get('McDonalds-Match-Battle-2023').visuelsPkc?.garde?.ok, B.col('sets').get('McDonalds-Match-Battle-2023').visuelsPkc?.joints, B.col('sets').get('McDonalds-Match-Battle-2023').visuelsPkc?.garde?.remplacees], [true, 2, 1]);
     const avant0 = compterEtat({ cartes: [{ _id: 1, sets: ['McDonalds-Match-Battle-2023'], images: [] }] }), apres0 = compterEtat({ cartes: [{ _id: 1, sets: ['McDonalds-Match-Battle-2023'], images: [e1] }] });
     verifier('la garde de lot compte la hausse des images (par set), aucune baisse', [apres0.get('images set:McDonalds-Match-Battle-2023'), comparer(avant0, apres0).baisses.length], [1, 0]);
@@ -273,7 +295,17 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     verifier('additif : une autre source a servi ce numéro entre-temps => la nôtre CÈDE, l\'entrée de l\'autre est intacte', [b.resultats[0].dejaParAutre, B.col('cartes').get(1).images.filter(e => e.source === 'pkc').length, B.col('cartes').get(1).images.find(e => e.cleR2 === 'tcgdex/b.webp')?.w], [1, 0, 600]);
     // rejets du coordinateur et contrôle
     B = fausseBase(); semer(B);
-    ({ b, dp } = await ecrire(B, { attendu: 1, rejets: new Map([[902, 'filigrane']]) }));
+    const dcR = tmp(); fs.cpSync(dc, dcR, { recursive: true });                  // le rejet se PERSISTE dans le cache : celui-ci a donc le sien
+    ({ b, dp } = await ecrire(B, { dossierCache: dcR, attendu: 1, rejets: new Map([[902, 'filigrane']]) }));
+    const persiste = fs.existsSync(C.fichierRejets(dcR)) ? [...C.lireRejets(dcR)] : null;
+    // 🔑 (correction 2) un rejet du coordinateur est définitif : un --ecrire relancé SANS --rejets=, sur la même base, sur une base neuve (même cache) ou après qu'un autre processus a remis la base à neuf, ne l'écrit jamais
+    { const { b: b2, dp: dp2 } = await ecrire(B, { dossierCache: dcR, attendu: 1 });
+      verifier('rejet PERSISTÉ : le motif est dans REJETS.json du cache ; relancé SANS --rejets= (même base), l\'image rejetée n\'est pas écrite', [persiste, b2.code, dp2.l.length, B.col('images').get('pkc/McDonalds-Match-Battle-2023/2/002/en')?.etat], [[[902, 'filigrane']], 0, 0, 'rejete']);
+      const B2 = fausseBase(); semer(B2); const { b: b3 } = await ecrire(B2, { dossierCache: dcR, attendu: 1 });
+      verifier('rejet PERSISTÉ : relancé SANS --rejets= sur une base NEUVE (même cache), toujours pas écrite ; --attendu compte sans elle', [b3.code, B2.col('cartes').get(2).images.some(e => e.source === 'pkc')], [0, false]);
+      const B3 = fausseBase(); semer(B3); B3.col('images').set('pkc/McDonalds-Match-Battle-2023/2/002/en', { _id: 'pkc/McDonalds-Match-Battle-2023/2/002/en', source: 'pkc', etat: 'rejete', rejetPar: 'coordinateur', rejetMotif: 'étiquette' });
+      const { b: b4 } = await ecrire(B3, { dossierCache: dc, attendu: 1 });
+      verifier('rejet inscrit sur le DOCUMENT (état « rejete », par le coordinateur) : sauté même sans fichier de rejets', [b4.code, B3.col('cartes').get(2).images.some(e => e.source === 'pkc')], [0, false]); }
     verifier('rejets : l\'image rejetée à la planche n\'est pas écrite, son document dit « rejete » et le motif ; l\'ancienne entrée basse reste', [b.code, dp.l.length, B.col('images').get('pkc/McDonalds-Match-Battle-2023/2/002/en')?.etat, B.col('images').get('pkc/McDonalds-Match-Battle-2023/2/002/en')?.rejetMotif, B.col('cartes').get(2).images.some(e => e.source === 'pokumon' && e.cleR2 === VIEUX.cleR2)], [0, 1, 'rejete', 'filigrane', true]);
     const dd = tmp(); await lancer([urls[0]], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: dos }), dd);
     B = fausseBase(); semer(B);

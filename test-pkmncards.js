@@ -153,6 +153,12 @@ verifier('règle du site : la MÊME fiche pour les deux produits -> restent saut
 r = P.apparier({ trous: deuxAcro, entrees: idx.lues, lot: 'kits', ficheDuSite: id => (id === 6 ? { numero: '20A', rang: 1 } : null) });
 verifier('règle du site : un produit que la règle ne sert nulle part -> les deux restent sautés (jamais deviné)', [r.plan.length], [0]);
 
+// 5q. (correction 2) le témoin du nom est la règle de PRODUCTION sur le nom de NOTRE carte seul : le nom du slug Cardmarket n'est pas un témoin
+r = app([trou(95, 91, 'XY-Trainer-Kit-Latias-Latios', '24', 'Delcatty-TK824O', 'Skitty')], { lot: 'kits' });
+verifier('nom de la carte « Skitty » contre la source « Delcatty » : SAUTÉ même si le slug Cardmarket dit « Delcatty » (le slug n\'est pas un témoin)', [r.plan.length, motifs(r)], [0, ['95:nom-contredit']]);
+r = app([trou(96, 92, 'XY-Trainer-Kit-Latias-Latios', '2', 'Fighting-Energy-TK82O', 'Basic Fighting Energy')], { lot: 'kits' });
+verifier('« Basic Fighting Energy » (notre carte) = « fighting energy » (la source) : la seule tolérance écrite (préfixe Basic) passe', [r.plan.length, r.plan[0]?.pkcSet], [1, 'xy-trainer-kit-latios']);
+
 // ── 6. IDENTIFIANTS PUBLICS : le nom de la source n'y est jamais ────────────────────────────────────────────────────────────
 verifier('identifiants : source « pkc », lot « pkc-2026-10 », clé R2 pkc/<set>/<n°>-<carte>-en.webp, _id du document images', [P.SOURCE, P.LOT, P.cleR2('XY-Trainer-Kit', '24', 10), P.idImage('XY-Trainer-Kit', 10, '24'), P.cleNum(null)], ['pkc', 'pkc-2026-10', 'pkc/XY-Trainer-Kit/24-10-en.webp', 'pkc/XY-Trainer-Kit/10/24/en', 'sans-numero']);
 verifier('identifiants : aucun ne contient le nom de la source', [P.SOURCE, P.LOT, P.cleR2('S', '1', 1), P.idImage('S', 1, '1'), P.MENTION].some(s => /pkmn|cards\.com/i.test(s)), false);

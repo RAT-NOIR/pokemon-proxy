@@ -30,6 +30,7 @@ const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
+const OCTETS_MAX_PAR_IMAGE = 8 * 1024 * 1024;           // un scan de carte pèse < 2 Mo : au-delà, ce n'est pas l'image attendue (refusée, notée « trop-volumineuse »)
 const CIBLES_PKMCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-IMPORT\\plan.json';
 const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemoncom-cache';
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
@@ -64,6 +65,11 @@ const nomFichier = url => new URL(url).pathname.slice(P.PREFIXE_CHEMIN.length);
 function lireIndex(dossier) { try { const j = JSON.parse(fs.readFileSync(fichierIndex(dossier), 'utf8')); return j?.images ? j : { version: 1, images: {} }; } catch { return { version: 1, images: {} }; } }
 function ecrireIndex(dossier, index) { fs.mkdirSync(dossier, { recursive: true }); fs.writeFileSync(fichierIndex(dossier), JSON.stringify(index, null, 1)); }
 
+const fichierRejets = dossier => path.join(dossier, 'REJETS.json');
+/** @returns {Map<number, string>} idProduct -> motif, les rejets du coordinateur déjà prononcés pour ce cache. */
+function lireRejets(dossier) { try { return new Map((JSON.parse(fs.readFileSync(fichierRejets(dossier), 'utf8')).rejets || []).map(x => [x.idProduct, String(x.motif)])); } catch { return new Map(); } }
+function ecrireRejets(dossier, map) { fs.mkdirSync(dossier, { recursive: true }); fs.writeFileSync(fichierRejets(dossier), JSON.stringify({ le: new Date().toISOString(), rejets: [...map].map(([idProduct, motif]) => ({ idProduct, motif })) }, null, 1)); }
+
 // ── le transport RÉEL : l'agent du dépôt seul, aucune redirection suivie, robots.txt et les images SEULEMENT ────────────────
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
@@ -86,17 +92,19 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number, plafond?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, octetsMax = OCTETS_MAX_PAR_IMAGE }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !P.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
-    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent', 'refuse'].includes(index.images[u]?.statut));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
     // un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : un 404 sans marqueur est « absent ». Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps.
     const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+    // un 5xx INTERROMPT (compté dans l'index) ; le DEUXIÈME de suite, sans une seule réussite entre, est un arrêt définitif
+    const erreur5xx = (url, r) => { index.cinqCents = (index.cinqCents || 0) + 1; ecrireIndex(dossierCache, index); return index.cinqCents >= 2 ? arret(url, r, `HTTP ${r.status} deux fois de suite sans réussite entre : arrêt définitif`) : { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` }; };
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
@@ -107,9 +115,12 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     let robots;
     try { robots = await demander(P.ROBOTS, {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
     if (defi(robots)) return arret(P.ROBOTS, robots, `robots.txt : HTTP ${robots.status} — défi ou refus`);
+    // 🔑 DOCTRINE (17/10) : « 401, 403, 410, 429, défi, connexion obligatoire ou mur payant : arrêt définitif, sans réessai ». L'arrêt s'écrit par ce qu'il AUTORISE : pour robots.txt, seuls 200 (lu) et 404 sans
+    // marqueur (« pas de règle ») laissent continuer ; un 5xx interrompt (compté) ; TOUT le reste est un arrêt définitif.
     let texteRobots = null;
     if (robots.status === 200) texteRobots = robots.texte ?? '';
-    else if (robots.status !== 404 && robots.status !== 410) return { etat: 'interrompu', requetes, plafond, refusees, motif: `robots.txt illisible (HTTP ${robots.status}) : on ne peut pas conclure, aucune image` };
+    else if (robots.status >= 500) return erreur5xx(P.ROBOTS, robots);
+    else if (robots.status !== 404) return arret(P.ROBOTS, robots, `robots.txt : HTTP ${robots.status} — ni lu (200) ni absent (404) : arrêt définitif`);
     const delai = T.delaiDesRobots(texteRobots, P.UA);
     if (delai && delai > CRAWL_DELAY_MAX_S) return { etat: 'robots-interdit', requetes, plafond, refusees, motif: `Crawl-delay de ${delai} s` };
     if (delai) cadence = Math.max(cadence, delai * 1000);
@@ -121,10 +132,12 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         let r;
         try { r = await demander(url, { binaire: true }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
         if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}${/html/i.test(r.type || '') ? ', HTML au lieu d\'une image' : ''}`);
-        if (r.status === 404 || r.status === 410) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }
-        if (r.status >= 500) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` };
-        if (r.status !== 200) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
+        if (r.status === 404) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }       // le SEUL « absent » : un 404 sans marqueur de défi
+        if (r.status >= 500) return erreur5xx(url, r);
+        if (r.status !== 200) return arret(url, r, `HTTP ${r.status} : ni l'image (200) ni l'absence (404) — 401, 410 et tout autre statut sont un arrêt définitif`);
         if (!octetsConformes(url, r.octets)) return arret(url, r, 'les octets reçus ne sont pas l\'image que l\'adresse annonce (page de défi probable)');
+        if (r.octets.length > octetsMax) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octets.length, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, ${r.octets.length} octets) : ${url}`); continue; }
+        index.cinqCents = 0;
         const meta = await sharp(r.octets).metadata();
         const fichier = path.join('img', nomFichier(url));
         fs.writeFileSync(path.join(dossierCache, fichier), r.octets);
@@ -313,6 +326,9 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     const index = lireIndex(dossierCache);
     const seuil = largeurMinDe(P.SOURCE);
     // ---- 0. le PRÉ-PASSAGE : ce que le cache permet d'écrire, avant la moindre écriture ----------------------------------------------------------------
+    // les rejets du coordinateur sont PERSISTÉS dans le dossier du cache (REJETS.json) et relus à chaque écriture
+    const tousRejets = new Map([...lireRejets(dossierCache), ...rejets]);
+    if (rejets.size) ecrireRejets(dossierCache, tousRejets);
     const lus = [];
     let horsCache = 0, altere = 0, retires = 0;
     for (const u of plan) {
@@ -322,14 +338,15 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
         if (sha('sha256', buffer) !== e.sha256) { altere++; console.error(`❌ cache altéré (sha256) : ${u.url}`); continue; }
         const meta = await sharp(buffer).metadata();
         const _id = P.idImage(u.slugSet, u.carteId, u.numero);
-        const deja = await M.Image.findById(_id).select('etat').lean();
+        const deja = await M.Image.findById(_id).select('etat rejetPar rejetMotif').lean();
         if (deja?.etat === 'retire') { retires++; continue; }
-        lus.push({ u, _id, buffer, meta, e, dejaEtat: deja?.etat ?? null });
+        // une image REJETÉE par le coordinateur (planche) ne s'écrit jamais : ni avec, ni sans --rejets=, ni sur une base où son document le dit
+        lus.push({ u, _id, buffer, meta, e, dejaEtat: deja?.etat ?? null, rejetBase: deja?.etat === 'rejete' && deja.rejetPar === 'coordinateur' ? (deja.rejetMotif || 'rejet du coordinateur') : null });
     }
     const identiques = P.imagesIdentiques(lus.map(p => ({ url: p.u.url, sha256: p.e.sha256 })));
     const prets = [], rejetes = [];
     for (const p of lus) {
-        const parCoordinateur = p.u.produits.map(id => rejets.get(id)).find(Boolean);
+        const parCoordinateur = p.u.produits.map(id => tousRejets.get(id)).find(Boolean) ?? p.rejetBase;
         const ctl = P.controlerImage({ octets: p.buffer, w: p.meta.width, h: p.meta.height });
         if (parCoordinateur) rejetes.push({ ...p, motif: parCoordinateur, auto: false });
         else if (ctl && ctl !== 'trop-petit') rejetes.push({ ...p, motif: ctl, auto: true });
@@ -405,7 +422,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     const nommees = new Set((uniteDe.get(im._id)?.remplace || []).map(r => `${r.source}|${r.cleR2}`));
                     const sortantes = new Set(autres.filter(e => nommees.has(`${e.source}|${e.cleR2}`)).map(e => `${e.source}|${e.cleR2}`));
                     const admises = autres.filter(e => !sortantes.has(`${e.source}|${e.cleR2}`));
-                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, retirable: true, collecteLe: im.collecteLe, jointeLe: new Date() };
+                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, retirable: true, collecteLe: im.collecteLe, urlOriginal: im.urlOriginal, jointeLe: new Date() };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero ?? null } } });
                     if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source sert ce numéro : intacte, la nôtre cède
                     const sorties = [];
@@ -438,7 +455,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere, rejetes: rejetes.length };
 }
 
-module.exports = { urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, GRAINE_ECHANTILLON, fichesDuSiteDesSets, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
+module.exports = { OCTETS_MAX_PAR_IMAGE, lireRejets, fichierRejets, urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, GRAINE_ECHANTILLON, fichesDuSiteDesSets, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
