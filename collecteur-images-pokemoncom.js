@@ -31,7 +31,8 @@ const CRAWL_DELAY_MAX_S = 60;
 const CIBLES_PAR_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-CLICS\\croisement-reel.json';
 const ROBOTS = `https://${PK.HOTE_IMAGES}/robots.txt`;
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
-const PNG_MAGIE = Buffer.from('89504e470d0a1a0a', 'hex');
+const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident/i;
+const PNG_MAGIE =Buffer.from('89504e470d0a1a0a', 'hex');
 
 // ── le plan (lecture seule de la base) ────────────────────────────────────────────────────────────────────────────────────
 /** Les cibles : les idProduct du croisement (clé `chez[].produits[].idProduct`). */
@@ -97,7 +98,8 @@ const transportFetch = {
         const imperva = /imperva|incapsula/i.test(`${r.headers.get('x-cdn') || ''} ${r.headers.get('set-cookie') || ''}`) || !!r.headers.get('x-iinfo');
         const type = r.headers.get('content-type') || '';
         if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location'), cfMitigated, imperva };
-        if (r.status === 404 || r.status === 410) return { status: r.status, type, cfMitigated, imperva };
+        // un 404/410 rend aussi son corps (borné) : un défi caché derrière un 404 doit se voir ; la page « 404 - Not Found » d'AmazonS3 n'en porte aucun
+        if (r.status === 404 || r.status === 410) return { status: r.status, type, texte: (await r.text()).slice(0, 3000), cfMitigated, imperva };
         if (binaire && r.ok && /^image\//.test(type)) return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()), cfMitigated, imperva };
         return { status: r.status, type, texte: await r.text(), cfMitigated, imperva };
     }
@@ -116,7 +118,10 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);     // (`plafondMax` : un garde-fou plus bas, pour le banc ; jamais plus haut que adresses + 1)
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, PK.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (r.status < 500 && (/html/i.test(r.type || '') || (typeof r.texte === 'string' && /<html|just a moment|captcha/i.test(r.texte.slice(0, 3000)))));
+    // 🔴 TOUR 2 : un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : le robots.txt réel de l'hôte répond 404 avec la page HTML d'AmazonS3, et un 404/410
+    // est « absent » (robots.txt : aucune règle). Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404/410 compris). Pour une IMAGE attendue,
+    // un 200 qui n'est pas un PNG est jugé plus bas (octets) : arrêt aussi.
+    const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
@@ -313,8 +318,9 @@ const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const modes = ['--plan', '--telecharger', '--ecrire'].filter(m => args.includes(m));
 if (inconnus.length || modes.length > 1 || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu=')))) {
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte). Options : --cibles=, --releves=, --cache=, --sortie=, --remplacer=<idProduct,…> (liste fermée : seulement le motif « entree-refusee-au-numero » du plan ; avec --plan : écrit l'annonce ; avec --ecrire : remplace).`);
-    process.exit(2);
+    process.exitCode = 2;                  // (jamais de sortie forcée du processus : les poignées de fetch/libuv se ferment d'elles-mêmes, sinon « Assertion failed: !(handle->flags & UV_HANDLE_CLOSING) »)
 }
+const argsValides = process.exitCode !== 2;
 const val = (nom, defaut) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3) ?? defaut;
 const dossierReleves = val('releves', PK.DOSSIER_RELEVES), dossierCache = val('cache', PK.DOSSIER_CACHE), fichierPlan = val('sortie', path.join(PK.DOSSIER_LOT, 'plan.json'));
 
@@ -326,7 +332,7 @@ async function planComplet(db) {
     const p = await planifierDepuisBase(db, { cartes: lu.cartes, cibles: lireCibles(val('cibles', CIBLES_PAR_DEFAUT)), refusSite: R.refusDuVisuel });
     return { lu, ...p };
 }
-(async () => {
+if (argsValides) (async () => {
     const mode = modes[0] || '--plan';
     if (mode === '--telecharger') {
         // le plan s'est écrit en --plan ; le téléchargement le RELIT avec les relevés (jamais d'adresse hors des deux)
@@ -336,7 +342,8 @@ async function planComplet(db) {
         console.log(`${a.ok.length} adresse(s) autorisée(s) (plan ∩ relevés), ${a.refusees.length} refusée(s) : ${JSON.stringify(a.refusees)}`);
         const r = await telecharger({ urls: a.ok, dossierCache });
         console.log(`TÉLÉCHARGEMENT : ${r.etat} · ${r.requetes} requête(s) (plafond ${r.plafond}) ${r.motif ? `· ${r.motif}` : ''}`);
-        process.exit(r.etat === 'termine' || r.etat === 'rien-a-faire' ? 0 : 1);
+        process.exitCode = r.etat === 'termine' || r.etat === 'rien-a-faire' ? 0 : 1;
+        return;
     }
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { modeles } = require('./collecte-cartes/schemas');
@@ -372,4 +379,4 @@ async function planComplet(db) {
         console.log(`ÉCRITURE : code ${r.code} · attendu ${r.attendu} · réel ${r.reel} · hors cache ${r.horsCache} · altérées ${r.altere} · REQUÊTES 0`);
         process.exitCode = r.code;
     } finally { await fermer(); }
-})().catch(e => { console.error('❌', e.message); process.exit(1); });
+})().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
