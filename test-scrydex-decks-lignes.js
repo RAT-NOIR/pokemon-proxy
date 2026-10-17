@@ -13,23 +13,30 @@ const HOTE = P.HOTE_SCRYDEX_NOM;
 const DECKS = [['Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck', 'clb'], ['Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck', 'clv'], ['Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', 'clc']];
 const brutes = DECKS.map(([slug, id]) => [slug, id, P.TABLE_PTCGIO.find(l => l.slug === slug)]);
 
-// ── les lignes ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── les lignes : ACTIVES depuis le 2026-10-17 (12 témoins REGARDÉS par le coordinateur : 9 de la sonde des témoins + les 3 de la première sonde) ──────────────────────────────────
+const TEMOINS_VUS = {
+    clb: [[1, 'Squirtle', '001/034'], [10, 'Suicune ex', '010/034'], [17, 'Kangaskhan', '017/034'], [34, 'Psychic Energy', '034/034']],
+    clv: [[1, 'Bulbasaur', '001/034'], [16, 'Snorlax', '016/034'], [17, 'Lugia ex', '017/034'], [34, 'Fighting Energy', '034/034']],
+    clc: [[1, 'Charmander', '001/034'], [7, 'Ho-Oh ex', '007/034'], [17, 'Miltank Lv.32', '017/034'], [34, 'Lightning Energy', '034/034']]
+};
 verifier('une ligne par deck, sur l\'hôte d\'images, serveur clb / clv / clc, segment [[1, 34]]', brutes.map(([, id, l]) => [l?.id, l?.hote, l?.idServeur, JSON.stringify(l?.segments)]), DECKS.map(([, id]) => [id, HOTE, id, '[[1,34]]']));
-verifier('INACTIVES : lu vaut null (aucun témoin regardé)', brutes.map(([, , l]) => (l ? l.lu : 'ligne absente')), [null, null, null]);
-verifier('inactive = non prouvée : verdictDuSet « non-apparie », aucune ligne servie', DECKS.map(([s]) => [P.verdictDuSet(s).verdict, P.lignesDe(s).length]), DECKS.map(() => ['non-apparie', 0]));
-verifier('SETS_SCRYDEX porte les quatre serveurs (une décision : le client PEUT les demander) mais aucune ligne active ne les adresse', [[...P.SETS_SCRYDEX], P.urlScrydex('clb-10')], [['me55c', 'clb', 'clv', 'clc'], `https://${HOTE}/pokemon/clb-10/large`]);
+verifier('ACTIVES : lu = 2026-10-17', brutes.map(([, , l]) => (l ? l.lu : 'ligne absente')), ['2026-10-17', '2026-10-17', '2026-10-17']);
+verifier('les 12 témoins regardés (4 par deck : n°, nom, numéro imprimé /034), dont n° 1 et n° 34', brutes.map(([, id, l]) => (l ? l.temoins.map(w => [w.n, w.nom, w.imprime]) : null)), DECKS.map(([, id]) => TEMOINS_VUS[id]));
+verifier('prouvées : verdictDuSet « prouve », une ligne servie par deck', DECKS.map(([s, id]) => [P.verdictDuSet(s).verdict, P.lignesDe(s).map(l => l.id).join()]), DECKS.map(([, id]) => ['prouve', id]));
+verifier('SETS_SCRYDEX porte les quatre serveurs', [[...P.SETS_SCRYDEX], P.urlScrydex('clb-10')], [['me55c', 'clb', 'clv', 'clc'], `https://${HOTE}/pokemon/clb-10/large`]);
+// 🔑 la garde `lu` exige une DATE AAAA-MM-JJ réelle, pas toute chaîne non vide
+verifier('ligneActive : une date ISO oui ; null, vide, « oui », « 17/10/2026 », « 2026-13-40 », un nombre non', [P.ligneActive({ lu: '2026-10-17' }), P.ligneActive({ lu: null }), P.ligneActive({ lu: '' }), P.ligneActive({ lu: 'oui' }), P.ligneActive({ lu: '17/10/2026' }), P.ligneActive({ lu: '2026-13-40' }), P.ligneActive({ lu: 20261017 }), P.ligneActive({})], [true, false, false, false, false, false, false, false]);
+verifier('une ligne à lu non daté est écartée par lignesDe (jamais « prouvée »)', P.TABLE_PTCGIO.filter(l => !P.ligneActive(l)).every(l => !P.lignesDe(l.slug).includes(l)), true);
 const trou = (slug, nom, numeroCm, idProduct) => ({ slug, trous: [{ carte: { _id: idProduct + 1000, nomEn: nom, images: [] }, numeroFiche: null, numeroCm, idProduct }] });
-verifier('inactive : un trou n\'obtient aucune adresse (reste « non-apparie »)', (() => { const r = P.planifierPtcgio(trou(DECKS[0][0], 'Suicune ex', '010', 745736)); return [r.plan.length, r.restes[0]?.motif]; })(), [0, 'non-apparie']);
-
-// ── ACTIVÉE (copie du banc : on pose lu, comme le coordinateur le fera après avoir REGARDÉ les témoins) : l'adresse est celle du serveur d'images, jamais celle de l'autre hôte ──────
 {
-    const activee = { ...brutes[0][2], lu: '2026-10-17' };
-    const r = P.planifierPtcgio({ ...trou(DECKS[0][0], 'Suicune ex', '010', 745736), lignes: [activee] });
-    verifier('activée : Suicune ex n°010 → /pokemon/clb-10/large du serveur d\'images', [r.plan.length, r.plan[0]?.url, r.plan[0]?.n], [1, `https://${HOTE}/pokemon/clb-10/large`, 10]);
-    const r35 = P.planifierPtcgio({ ...trou(DECKS[0][0], 'Basic Water Energy', '035', 1), lignes: [activee] });
-    verifier('activée : le n° 35 (hors du segment [1, 34]) reste un trou nommé', [r35.plan.length, r35.restes[0]?.motif], [0, 'non-couvert-par-un-temoin']);
+    const r = P.planifierPtcgio(trou(DECKS[0][0], 'Suicune ex', '010', 745736));
+    verifier('Suicune ex n°010 → /pokemon/clb-10/large du serveur d\'images', [r.plan.length, r.plan[0]?.url, r.plan[0]?.n], [1, `https://${HOTE}/pokemon/clb-10/large`, 10]);
+    verifier('la preuve nomme l\'hôte d\'images et la marque, pas l\'autre hôte', [/images\.scrydex\.com set clb/.test(r.plan[0]?.preuve || ''), /pokemontcg/.test(r.plan[0]?.preuve || '')], [true, false]);
+    const r35 = P.planifierPtcgio(trou(DECKS[0][0], 'Basic Water Energy', '035', 1));
+    verifier('le n° 35 (hors du segment [1, 34]) reste un trou nommé', [r35.plan.length, r35.restes[0]?.motif], [0, 'non-couvert-par-un-temoin']);
+    const r34 = P.planifierPtcgio(trou(DECKS[1][0], 'Basic Fighting Energy', '034', 745692));
+    verifier('le n° 34 (Venusaur) → /pokemon/clv-34/large', r34.plan[0]?.url, `https://${HOTE}/pokemon/clv-34/large`);
 }
-
 // ── le plan de TÉMOINS ─────────────────────────────────────────────────────────────────────────────────────────────────
 const tem = S.construirePlan('temoins');
 const parSlug = new Map();

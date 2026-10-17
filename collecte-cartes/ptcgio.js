@@ -29,7 +29,7 @@ const HOTE_NOM = 'images.pokemontcg.io';
 const HOTE_SCRYDEX_NOM = 'images.scrydex.com';
 const HOTE_SCRYDEX = `https://${HOTE_SCRYDEX_NOM}`;
 // les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision). clb/clv/clc (SCRYDEX-DECKS, 2026-10-17) : répondent (sonde du coordinateur, cartes vues) ;
-// leurs lignes de TABLE_PTCGIO sont INACTIVES (`lu: null`) tant que les témoins ne sont pas regardés : sans ligne active, rien ne les adresse.
+// leurs lignes de TABLE_PTCGIO sont ACTIVES depuis les 12 témoins regardés le 2026-10-17 (date lu).
 const SETS_SCRYDEX = Object.freeze(['me55c', 'clb', 'clv', 'clc']);
 const LOT = 'ptcgio-2026-10';
 const MENTION = T.MENTION;                                  // une seule mention pour toutes nos sources de scans (§75)
@@ -158,23 +158,24 @@ const TABLE_PTCGIO = Object.freeze([
           { idProduct: 907954, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-99 : 99/102 juste ; une fiche sans numéro pour les deux moitiés' },
           { idProduct: 907955, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-100 : 100/102 juste ; une fiche sans numéro pour les deux moitiés' }],
       ouvertes: 30 },
-    // ── SCRYDEX-DECKS (2026-10-17) : les trois decks TCG Classic. La sonde du coordinateur (10 requêtes) a RÉPONDU sous clb, clv, clc : clb-10 = Suicune ex 010/034, clv-17 = Lugia ex 017/034, clc-7 = Ho-Oh ex 007/034,
-    // code imprimé CLB / CLV / CLC, 596×834. Les autres identifiants essayés (clk, clf, cll, mfb, mfba, mfbb) ont rendu le DOS de carte du serveur (refusé par empreinte). My First Battle : non trouvé sous ces identifiants.
-    // 🔴 INACTIVES : `lu: null` — aucun témoin (n° 1, milieu, 34) n'est encore REGARDÉ. Sans `lu`, la ligne n'est pas prouvée (lignesDe l'écarte, verdictDuSet dit « non-apparie ») : aucun plan, aucune adresse.
-    // Le jour où les trois témoins du set sont regardés : poser `lu` (la date) et lister les `temoins` lus à l'œil ; le segment [[1, 34]] ne vaut que si les témoins le couvrent (1 et 34 compris).
-    { slug: 'Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck', id: 'clb', hote: HOTE_SCRYDEX_NOM, idServeur: 'clb', segments: [[1, 34]], lu: null,
-      marque: 'Pokémon TCG Classic, deck Blastoise & Suicune ex : code CLB imprimé sur la carte, numérotation /034 (clb-10 = Suicune ex 010/034, vu le 2026-10-17)',
-      temoins: [t(10, 'Suicune ex', '10/34')] },
-    { slug: 'Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck', id: 'clv', hote: HOTE_SCRYDEX_NOM, idServeur: 'clv', segments: [[1, 34]], lu: null,
-      marque: 'Pokémon TCG Classic, deck Venusaur & Lugia ex : code CLV imprimé sur la carte, numérotation /034 (clv-17 = Lugia ex 017/034, vu le 2026-10-17)',
-      temoins: [t(17, 'Lugia ex', '17/34')] },
-    { slug: 'Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', id: 'clc', hote: HOTE_SCRYDEX_NOM, idServeur: 'clc', segments: [[1, 34]], lu: null,
-      marque: 'Pokémon TCG Classic, deck Charizard & Ho-Oh ex : code CLC imprimé sur la carte, numérotation /034 (clc-7 = Ho-Oh ex 007/034, vu le 2026-10-17)',
-      temoins: [t(7, 'Ho-Oh ex', '7/34')] }
+    // ── SCRYDEX-DECKS (2026-10-17) : les trois decks TCG Classic, serveur d'images. 12 images ouvertes à l'œil le 2026-10-17 (4 par deck : n° 1, 34, un milieu, et la carte de la première sonde), toutes avec le code du deck
+    // et le numéro « nnn/034 » imprimés, 596×834, nom = celui de NOTRE produit au même numéro. Les identifiants clk, clf, cll, mfb, mfba, mfbb ont rendu le DOS de carte du serveur (refusé par empreinte). My First Battle : non trouvé.
+    // lu (date AAAA-MM-JJ, exigée par ligneActive) est la décision : sans date, la ligne est inactive et ne prouve rien. Le segment [[1, 34]] est couvert par les témoins (1 et 34 compris).
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck', id: 'clb', hote: HOTE_SCRYDEX_NOM, idServeur: 'clb', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Blastoise & Suicune ex : code CLB imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Squirtle', '001/034'), t(10, 'Suicune ex', '010/034'), t(17, 'Kangaskhan', '017/034'), t(34, 'Psychic Energy', '034/034')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck', id: 'clv', hote: HOTE_SCRYDEX_NOM, idServeur: 'clv', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Venusaur & Lugia ex : code CLV imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Bulbasaur', '001/034'), t(16, 'Snorlax', '016/034'), t(17, 'Lugia ex', '017/034'), t(34, 'Fighting Energy', '034/034')] },
+    { slug: 'Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', id: 'clc', hote: HOTE_SCRYDEX_NOM, idServeur: 'clc', segments: [[1, 34]], lu: '2026-10-17',
+      marque: 'Pokémon TCG Classic, deck Charizard & Ho-Oh ex : code CLC imprimé sur chaque carte, numérotation nnn/034',
+      temoins: [t(1, 'Charmander', '001/034'), t(7, 'Ho-Oh ex', '007/034'), t(17, 'Miltank Lv.32', '017/034'), t(34, 'Lightning Energy', '034/034')] }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l, ...(l.parProduit ? { temoins: l.parProduit.map(e => t(Number(e.numero), e.nom, e.imprime)) } : {}) })));   // une ligne par produit : chaque produit prouvé EST un témoin
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
-const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug && l.lu != null);   // une ligne sans `lu` (null) est INACTIVE : aucun témoin regardé, elle ne prouve rien
+/** Une ligne est ACTIVE si et seulement si son lu est une DATE réelle AAAA-MM-JJ (pas toute chaîne non vide) : écrite par ce qu'elle autorise. */
+const ligneActive = l => !!l && typeof l.lu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(l.lu) && (d => !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === l.lu)(new Date(l.lu + 'T00:00:00Z'));
+const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug && ligneActive(l));   // une ligne sans date de lecture est INACTIVE : aucun témoin regardé, elle ne prouve rien
 
 /** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
 function lireNumero(ligne, numeroFiche) {
@@ -431,7 +432,7 @@ function planRetraitPtcgio(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, hoteDeLUrl: H.hoteDeLUrl, urlScrydex, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
+    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, ligneActive, hoteDeLUrl: H.hoteDeLUrl, urlScrydex, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
     TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, numerosDuSet, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };
