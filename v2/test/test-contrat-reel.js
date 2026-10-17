@@ -20,7 +20,7 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100' });   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1' });      // RESOUDRE-CARDMARKET : le drapeau est allumé pour les serveurs de ce banc (éteint, la route n'existe pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
 const EXT = cfg.origines.extension, SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
@@ -794,6 +794,30 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await plafonner('banc-photo', 'compte', adm3.c._id, 600);
             await jouerBinaire(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, q2, JPG, 'image/jpeg', extH(xa3.jeton));
         }
+        // RESOUDRE-CARDMARKET : l'adresse d'une page produit → idProduct (administrateur, drapeau V2_RESOLUTION_CARDMARKET=1 allumé dans `cfg` pour ce banc) ; tous les statuts documentés sont joués par un état réel
+        // (le 503 « lecture du catalogue en panne » ne se fabrique pas ici sans doublure : il est joué par la garde d'index, et par test-banc-resoudre-cardmarket.js l.162-166 avec le catalogue et la recherche du couple en panne)
+        {
+            const R = 'POST /api/banc/resoudre-cardmarket', CH = '/api/banc/resoudre-cardmarket';
+            const ID_D = 895792, adresse = (ens, slug) => `https://www.cardmarket.com/fr/Pokemon/Products/Singles/${ens}/${slug}`;
+            await raw('catalogue_produits').insertOne({ idProduct: ID_D, name: 'Dark Tyranitar (m6a TRR 144)', idExpansion: 990002, idMetacard: 990201 });
+            await raw('numeros_cartes').insertOne({ idProduct: ID_D, idExpansion: 990002, numero: '144', numeroUrl: 'TRR144', codeSet: 'm6a', nomFr: 'Tyranocif Obscur', slug: 'Dark-Tyranitar-m6aTRR-144', slugSet: '30th-Celebration-JP', source: 'cardmarket', certitude: 'exacte' });
+            const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm);
+            await jouer(V, R, 'adresse d\'un produit connu (200, idProduct + lien canonique)', 200, CH, { corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144') }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'champ de plus dans le corps (400)', 400, CH, { corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144'), en_plus: 1 }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'sans Authorization', 401, CH, { corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144') }, entetes: extH(null) });
+            await jouer(V, R, 'aucun produit ne porte ce couple (404 CODE_INVALIDE, detail produit-inconnu)', 404, CH, { corps: { url: adresse('Banc-Set', 'Inconnu-PBL999') }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'deux produits portent ce couple (409 CONFLIT, detail ambigu)', 409, CH, { corps: { url: adresse('Banc-Set', 'Tropius-PBL001') }, entetes: extH(xa.jeton) });
+            await jouer(V, R, 'adresse de recherche, pas d\'un produit (422 adresse-non-produit)', 422, CH, { corps: { url: 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=dark+tyranitar' }, entetes: extH(xa.jeton) });
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await H.appel(V, CH, { methode: 'POST', corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144') }, entetes: extH(x.jeton) });
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
+            const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);
+            await plafonner('banc-resoudre-cardmarket', 'compte', adm3.c._id, 600);
+            await jouer(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, CH, { corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144') }, entetes: extH(xa3.jeton) });
+            await raw('catalogue_produits').deleteOne({ idProduct: ID_D }); await raw('numeros_cartes').deleteOne({ idProduct: ID_D });      // le catalogue de ce banc reste celui que les blocs suivants attendent
+        }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
@@ -821,6 +845,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
             'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'POST /api/banc/photo': { chemin: `/api/banc/photo?scanId=${fauxId}`, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'POST /api/banc/resoudre-cardmarket': { chemin: '/api/banc/resoudre-cardmarket', corps: { url: 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Banc-Set/Tropius-PBL001' }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },

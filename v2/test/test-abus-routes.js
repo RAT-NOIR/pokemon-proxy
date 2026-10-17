@@ -828,6 +828,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
+            V2_RESOLUTION_CARDMARKET: [c => c.resolutionCardmarket, false, 'true', 'ignore'],      // RESOUDRE-CARDMARKET : éteint par défaut ; seul « 1 » l'allume, toute autre valeur l'éteint sans invalider la configuration
             V2_PHOTO_ADMIN_DELAI_S: [c => c.photoAdmin.delaiS, 15, '301', 'leve'], V2_PHOTO_ADMIN_INTERVALLE_S: [c => c.photoAdmin.intervalleS, 10, '-1', 'leve'], V2_PHOTO_ADMIN_MAX_JOUR: [c => c.photoAdmin.maxJour, 400, '-1', 'leve']     // PHOTO-EXTENSION : le repli du téléchargement serveur (entiers, 0 à 3 600 et 0 à 100 000)
         };
         H.v('step 6 : chaque variable lue par v2/config.js a une ligne de la table (et réciproquement)', [noms.filter(n => !T[n]), Object.keys(T).filter(n => !noms.includes(n))], [[], []]);
