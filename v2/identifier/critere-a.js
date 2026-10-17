@@ -14,6 +14,8 @@
 const { contredire, statuts, lectureDe } = require('./garde-contradiction');
 const { comparer } = require('./seconde-lecture');
 const { formesLuesDe, nomCompatible } = require('./nom-compatible');
+const LD = require('./langue-decisive');
+const { codeSansDesignation } = LD;
 
 // 🔑 UNE CONSTANTE (comme VARIANTE_STRICTE) : le critère n'est allumé que si la mesure sur tout le banc étiqueté rend 0 faux. Mesuré le 2026-10-17 sur les 307 cartes par le vrai chemin (adaptateur + groupes de jumeaux de
 // l'archive) : 58 affirmations nouvelles, 58 justes, 0 variante fausse, 0 faux, 0 sûr perdu ni changé => ALLUMÉ. Au premier faux, `false` l'éteint sans rien retirer. Un banc (test-critere-a) tient l'état livré.
@@ -30,7 +32,7 @@ const compteurs = () => ({ ...compte, parCode: { ...compte.parCode } });
  * @param actif     le drapeau (défaut : la constante CRITERE_A) ; seul `true` allume
  * @returns { affirme: boolean, raison: string }
  */
-function critereA({ corps, gagnant, jumeaux, produits, actif = CRITERE_A } = {}) {
+function critereA({ corps, gagnant, jumeaux, produits, actif = CRITERE_A, r4 = LD.REGLES.R4 } = {}) {
     const non = raison => ({ affirme: false, raison });
     try {
         if (actif !== true) return non('critère éteint');
@@ -44,12 +46,15 @@ function critereA({ corps, gagnant, jumeaux, produits, actif = CRITERE_A } = {})
         compte.jugees++;
         const P = produits.get(gagnant);
         if (contredire({ corps, gagnant, produits })) return non('la garde contradiction répond');
-        const sp = statuts(lu, P), ko = Object.keys(sp).filter(k => sp[k] === 'ko');
+        const sp = statuts(lu, P);
+        // LANGUE-DECISIVE R4 : un code lu qui ne désigne AUCUN produit du vivier (« s8a-P » lu pour un logo) ne bloque pas ; un code qui désigne un AUTRE produit bloque toujours.
+        const sansDesignation = r4 === true && codeSansDesignation({ corps, produits });
+        const ko = Object.keys(sp).filter(k => sp[k] === 'ko' && !(sansDesignation && k === 'code'));
         if (ko.length) return non(`un champ lu contredit P (${ko.join(', ')})`);
         const luNC = { numero: lu.numero, setCode: lu.setCode };
         const cp = comparer(luNC, P);
         if (!cp.concorde.includes('numero')) return non('le numéro lu ne concorde pas exactement avec P');
-        if (!cp.concorde.includes('code')) return non('le code lu ne concorde pas avec P (ou n\'est pas lu)');
+        if (!cp.concorde.includes('code') && !sansDesignation) return non('le code lu ne concorde pas avec P (ou n\'est pas lu)');
         for (const id of autres) {
             const cj = comparer(luNC, produits.get(id));
             if (cj.concorde.includes('numero')) return non(`le numéro lu est aussi celui du produit ${id}`);
@@ -61,6 +66,7 @@ function critereA({ corps, gagnant, jumeaux, produits, actif = CRITERE_A } = {})
         const codeLu = String(lu.setCode).trim().toUpperCase();
         compte.parCode[codeLu] = (compte.parCode[codeLu] || 0) + 1;
         console.warn(`ℹ️ [critere-a-v2] affirmation produit=${gagnant} code=${codeLu} groupe=${autres.length + 1}`);
+        if (!cp.concorde.includes('code')) return { affirme: true, raison: `critère A (R4) : le numéro (${lu.numero}) lu concorde avec ${gagnant} seul parmi ${autres.length + 1} produits, le code lu (${lu.setCode}) ne désigne aucun produit du vivier` };
         return { affirme: true, raison: `critère A : le numéro (${lu.numero}) et le code (${lu.setCode}) lus concordent avec ${gagnant} seul parmi ${autres.length + 1} produits` };
     } catch (e) {
         return non(`décision impossible (${(e && e.name) || 'erreur'})`);                 // une exception n'est jamais une affirmation
