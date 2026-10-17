@@ -11,7 +11,7 @@
 // Un refus de la garde est NOTRE refus : il se rembourse SANS plafond (constaté par le serveur, PLAFOND-DECLARE : plus de compteur dédié), une unité par carte (routes.js, lot.js, argent/ledger.js). Chaque refus est COMPTÉ (compteurs()) et journalisé (CLAUDE.md §21).
 const MAX_PRODUITS = 3;                         // la limite d'une question : celle de l'adaptateur
 const MAX_CHARGE = 60;                          // au plus 60 jumeaux chargés pour choisir les 3 d'une question (au-delà : le repli introuvable d'avant, jamais un chargement sans fin)
-const MOTIFS = Object.freeze(['jumeaux-trop-nombreux', 'jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets', 'question-de-jumeaux', 'question-de-jumeaux-nombreux']);
+const MOTIFS = Object.freeze(['jumeaux-trop-nombreux', 'jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets', 'question-de-jumeaux']);
 const MOTIFS_PANNE = Object.freeze(['jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets']);
 const compte = Object.fromEntries(MOTIFS.map(m => [m, 0]));
 const compteurs = () => ({ ...compte });

@@ -42,7 +42,7 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
     H.vrai(`${grosses.length} des 72 cartes ont plus de 3 produits avec leurs jumeaux selon la VRAIE colonne (le reste : groupe réel plus petit que le proxy)`, grosses.length >= 60);
 
     // ── (a) plus de 3 produits : une question à 3, P parmi les 3 — rouge avant : introuvable
-    let questions = 0, introuvables = 0, pAbsent = 0, pas3 = 0, hors = 0;
+    const raisonsI = []; let questions = 0, introuvables = 0, pAbsent = 0, pas3 = 0, hors = 0;
     for (const c of grosses) {
         const m = monde(c), r = adapter({ statutHttp: 200, corps: corpsDe(c) }, m.ctx);
         if (r.issue === 'question') {
@@ -51,9 +51,10 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
             if (!cs.includes(c.tete)) pAbsent++;
             if (cs.length > 3) pas3++;
             if (!cs.every(i => groupe.has(i))) hors++;
-        } else introuvables++;
+        } else { introuvables++; raisonsI.push(r.analyse.cartes[0].raison); }
     }
-    H.v(`(a) ${grosses.length} cartes à plus de 3 produits : toutes deviennent une question (introuvables restants : ${introuvables})`, [questions, introuvables], [grosses.length, 0]);
+    // TOUR 1 : les 3 cartes dont la tête est contredite par le nom lu (Lucario/Klink, Cresselia/Hop's Zacian ex, Bebe's Search/Celio's Network) ne deviennent plus une question
+    H.v(`(a) ${grosses.length} cartes à plus de 3 produits : les autres deviennent une question, les 3 dont la tête est contredite par le nom lu un introuvable photo-illisible`, [questions, introuvables, raisonsI], [grosses.length - 3, 3, ['photo-illisible', 'photo-illisible', 'photo-illisible']]);
     H.v('(a) chaque question a au plus 3 candidats, contient P, et ne contient que des produits du groupe', [pas3, pAbsent, hors], [0, 0, 0]);
     const un = grosses[0], mu = monde(un), ru = adapter({ statutHttp: 200, corps: corpsDe(un) }, mu.ctx);
     H.v('(a) la question est une vraie question de départage : statut a-trancher, question non nulle, jamais une carte identifiée', [ru.analyse.cartes[0].statut, ru.analyse.cartes[0].carte, Boolean(ru.question)], ['a-trancher', null, true]);
@@ -100,9 +101,23 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
         H.v('(e) « Charizard VMAX » porte le numéro lu (704) mais son nom est contredit par « Roaring Moon ex » (confiance haute) : il n\'est PAS montré', [r.issue, ids(r).includes(704), ids(r).includes(700)], ['question', false, true]);
         const bas = adapter({ statutHttp: 200, corps: corpsDe(c, { carte: { numero: '704', nomConfiance: 'basse' } }) }, m.ctx);
         H.v('   nom lu en confiance basse : le veto est désarmé (704 reste candidat, il porte le numéro lu)', [bas.issue, ids(bas).includes(704)], ['question', true]);
+        // TOUR 1 (I2) : un seul candidat restant après le filtre => le repli d'avant (jamais une confirmation à 1 candidat dans la voie « plus de 3 jumeaux »)
         const tous = { ...c, produits: [ligneB(700), ligneB(704, 'Charizard VMAX'), ligneB(705, 'Charizard VMAX'), ligneB(706, 'Charizard VMAX'), ligneB(707, 'Charizard VMAX')] };
         const mt = monde(tous), rt = adapter({ statutHttp: 200, corps: corpsDe(tous) }, mt.ctx);
-        H.v('   tous les jumeaux contredits : la question reste « est-ce cette carte ? » sur P seul — jamais une affirmation', [rt.issue, ids(rt)], ['question', [700]]);
+        H.v('   (I2) tous les jumeaux contredits, P compatible : UN seul restant => introuvable impression-indeterminee / jumeaux-trop-nombreux, jamais une question à 1 candidat', [rt.issue, rt.analyse.cartes[0].raison, rt.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
+        // TOUR 1 (I1) : P passe AUSSI par le filtre ; plus aucun candidat => introuvable photo-illisible
+        const toutContredit = { ...c, produits: [ligneB(700, 'Klink'), ligneB(704, 'Charizard VMAX'), ligneB(705, 'Charizard VMAX'), ligneB(706, 'Charizard VMAX'), ligneB(707, 'Charizard VMAX')] };
+        const mc = monde(toutContredit), rc = adapter({ statutHttp: 200, corps: corpsDe(toutContredit, { carte: { nom: 'Lucario', nomBrut: 'Lucario' } }) }, mc.ctx);
+        H.v('   (I1) P ET tous les jumeaux contredits par le nom lu : introuvable photo-illisible, aucun candidat proposé', [rc.issue, rc.analyse.cartes[0].raison, rc.analyse.cartes[0].candidats], ['introuvable', 'photo-illisible', []]);
+        const pSeul = { ...c, produits: [ligneB(700, 'Klink'), ligneB(701), ligneB(702), ligneB(703), ligneB(705)] };
+        const mp = monde(pSeul), rpp = adapter({ statutHttp: 200, corps: corpsDe(pSeul, { carte: { nom: 'Roaring Moon ex', nomBrut: 'Roaring Moon ex' } }) }, mp.ctx);
+        H.v('   (I1) P contredit mais 4 jumeaux compatibles : question à 3 SANS P (jamais proposé)', [rpp.issue, ids(rpp).includes(700), ids(rpp).length], ['question', false, 3]);
+        // les cas réels de la fixture : lu « Lucario » (P = Klink) et « Cresselia » (P = Hop's Zacian ex)
+        for (const [tete, nom] of [[863808, 'Klink'], [863829, 'Hop\'s Zacian ex']]) {
+            const cf = FIX.find(x => x.tete === tete), mf = monde(cf), rf = adapter({ statutHttp: 200, corps: corpsDe(cf) }, mf.ctx);
+            H.v(`   (I1) fixture réelle, P = « ${nom} » contredit par « ${cf.lu.nom} » : aucune question ne le propose`, rf.issue === 'question' && ids(rf).includes(tete), false);
+            H.v('      issue de ce cas', [rf.issue, rf.analyse.cartes[0].raison], ['introuvable', 'photo-illisible']);
+        }
     }
 
     // ── repli : un jumeau sans ligne au catalogue de l'API => comme avant (introuvable impression-indeterminee, motif jumeaux-trop-nombreux), jamais un choix tronqué
@@ -112,8 +127,14 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
     }
     // ── les compteurs : une question née d'un groupe trop grand est comptée à part
     {
-        const avant = J.compteurs(); unPair(4); const apres = J.compteurs();
-        H.v('compteurs : +1 question-de-jumeaux-nombreux, aucun jumeaux-trop-nombreux', [apres['question-de-jumeaux-nombreux'] - avant['question-de-jumeaux-nombreux'], apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux']], [1, 0]);
+        // TOUR 1 (M2) : un seul journal, au repli. Une question rendue normalement n'écrit RIEN (ni compteur ni ligne de journal)
+        const lignes = []; const w = console.warn; console.warn = (...a) => lignes.push(a.join(' '));
+        const avant = J.compteurs(); try { unPair(4); } finally { console.warn = w; } const apres = J.compteurs();
+        H.v('compteurs : une question à 3 ne compte rien (aucun jumeaux-trop-nombreux)', apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux'], 0);
+        H.v('   et n\'écrit aucune ligne de journal', lignes, []);
+        const l2 = []; console.warn = (...a) => l2.push(a.join(' '));
+        try { const m = monde(petit, { sansLigne: [703] }); adapter({ statutHttp: 200, corps: corpsDe(petit) }, m.ctx); } finally { console.warn = w; }
+        H.v('   le repli écrit UNE ligne, sans donnée de scan (ni nom lu, ni numéro lu)', [l2.length, /Roaring/.test(l2.join(' '))], [1, false]);
     }
     // ── la route charge les jumeaux d'un groupe trop grand pour une question (jusqu'à la borne), pas au-delà
     {
@@ -200,6 +221,24 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
     const ns = await repondre(s4.jeton, { scanId: r4b.json.scanId, choix: 'ne-sait-pas' }), jns = ns.json || {};
     H.v('(d) « ne-sait-pas » : la carte reste à trancher, crédit rendu une fois', [jns.carte && jns.carte.statut, jns.facturation && jns.facturation.rembourse, (await livre(s4)).remboursements], ['a-trancher', true, 1]);
     H.v('toutes les réponses de la route sont conformes au contrat publié', ecartsContrat, 0);
+    // TOUR 1 (M1) : au-delà de 60 jumeaux la route ne charge rien (borne de chargement) : le repli d'avant, au niveau de la ROUTE, remboursé sans plafond, aucune question
+    {
+        const ids61 = [B, C, D, E, ...Array.from({ length: 57 }, (_, i) => 960000 + i)];
+        const mk = n => (async () => {
+            const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, nx) => dansUnScan(nx));
+            pret.armer(require('../modeles').verifierIndex);
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgR, { jumeaux: id => ({ conclu: true, ids: id === A ? n : [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }) }));
+            return H.serveur(app);
+        })();
+        const svG = await mk(ids61), svH = await mk([...ids61, 960900]);
+        const posterSur = async (s, jeton) => H.appel(s.url, '/api/identifier', { methode: 'POST', corps: { contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr' }, entetes: { origin: cfgR.origines.extension, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': cle() } });
+        const xg = await inst(), rg = await posterSur(svG, xg.jeton), jg = rg.json || {};
+        H.v('(M1) 61 jumeaux (borne de chargement 60 dépassée) : la route ne charge pas les jumeaux, repli introuvable impression-indeterminee, remboursé, aucune question',
+            [jg.analyse && jg.analyse.cartes[0].statut, jg.analyse && jg.analyse.cartes[0].raison, jg.facturation && jg.facturation.rembourse, (await livre(xg)).essais, await raw('questions_v2').countDocuments({ 'porteur.id': xg.i._id, etat: 'en-attente' })], ['introuvable', 'impression-indeterminee', true, 3, 0]);
+        const xh = await inst(), rh = await posterSur(svH, xh.jeton), jh = rh.json || {};
+        H.v('   62 jumeaux : de même', [jh.analyse && jh.analyse.cartes[0].raison, jh.facturation && jh.facturation.rembourse], ['impression-indeterminee', true]);
+        await svG.fermer(); await svH.fermer();
+    }
     await sv.fermer();
     await mongoose.disconnect(); await H.arreterBanc();
     H.bilan();

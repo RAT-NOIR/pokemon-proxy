@@ -87,8 +87,11 @@ function apresGarde(g, etat, ctx, corps) {
     if (g.action === 'nombreux') {
         // JUMEAUX-QUESTION : plus de 3 produits => une QUESTION à 3 (P d'abord, puis l'ordre nommé de jumeaux-nombreux.js), jamais une affirmation. Une ligne de catalogue manquante : le repli d'avant.
         const trois = choisirTrois({ p: g.ids[0], jumeaux: g.ids.slice(1), corps, produits: ctx.produits });
-        if (trois) { noter('question-de-jumeaux-nombreux', g.ids[0], `(${g.ids.length} produits, ${trois.length} montrés)`); return question(trois, etat, ctx); }
-        noter('jumeaux-trop-nombreux', g.ids[0], `(${g.ids.length} produits, lignes de catalogue incomplètes)`);
+        // TOUR 1 : le filtre de nom vaut pour P aussi. Aucun candidat ne reste => introuvable photo-illisible (la règle du lot CONFIRMATION-SURE : tous contredits, on ne sait pas) ;
+        // UN seul reste, ou une ligne manque => le repli d'avant (jamais une confirmation à 1 candidat dans cette voie) ; 2 ou plus => la question. Seul le repli écrit au journal.
+        if (trois && trois.length === 0) return introuvable('photo-illisible');
+        if (trois && trois.length >= 2) return question(trois, etat, ctx);
+        noter('jumeaux-trop-nombreux', g.ids[0], trois ? '(un seul candidat compatible)' : '(lignes de catalogue incomplètes)');
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
     }
     if (g.action === 'introuvable') return { ...introuvable('impression-indeterminee'), motif: g.motif };     // la carte est reconnue, son impression ne se tranche pas (plus de 3 produits) : on ne ment pas par « photo-illisible »

@@ -118,7 +118,7 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     A(700, table(new Map([[700, [701]]])));
     adapter({ statutHttp: 200, corps: succes(700) }, ctx(table(new Map([[700, [701, 702, 999999]]]))));
     const apres = C.compteurs();
-    H.v('compteurs : +1 question-de-jumeaux-nombreux, +1 jumeaux-trop-nombreux (le repli), +1 question-de-jumeaux', [apres['question-de-jumeaux-nombreux'] - avant['question-de-jumeaux-nombreux'], apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux'], apres['question-de-jumeaux'] - avant['question-de-jumeaux']], [1, 1, 1]);
+    H.v('compteurs : la question à 3 ne compte rien (M2), +1 jumeaux-trop-nombreux (le repli), +1 question-de-jumeaux', [apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux'], apres['question-de-jumeaux'] - avant['question-de-jumeaux']], [1, 1]);
 
     // ── 4. le fournisseur de la route : lit la version EN PLACE, une version à la fois
     const four = C.fournisseurDe(v);
