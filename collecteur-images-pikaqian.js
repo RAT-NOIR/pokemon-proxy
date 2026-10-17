@@ -26,7 +26,7 @@ const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collec
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
@@ -140,7 +140,8 @@ async function joindreAdditif(db, M, slug, nom = slug) {
                 numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
                 provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
             // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
-            const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero));
+            // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+            const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero), { documents: await documentsDesEntrees(M, autres) });
             if (arb.servie) {
                 // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 dejaParAutre++;

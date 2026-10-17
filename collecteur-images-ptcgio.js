@@ -31,7 +31,7 @@ const P = require('./collecte-cartes/ptcgio');
 const J = require('./collecte-cartes/jumeau-en');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const preseance = require('./collecte-cartes/preseance-images');   // ➕ 2026-10-13 : la préséance de résolution (une règle, lue par pokemontcg.io ET par le worker TCGdex)
-const { arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // ➕ 2026-10-17 (BASSE-DEF) : une entrée marquée est REMPLAÇABLE par une image non marquée
+const { arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // ➕ 2026-10-17 (BASSE-DEF) : une entrée marquée est REMPLAÇABLE par une image non marquée
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -50,7 +50,8 @@ async function planifierSlug(db, slug, numerosCm) {
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une AUTRE source, même set / numéro, en anglais (la langue que nous écrivons), ne « sert » pas la fiche : pokemontcg.io sert des PNG
     // haute définition (admis dès 350 px, donc jamais marqués) qui la remplaceront à la jointure. `planifierPtcgio` regarde la même carte vue sans elle (son propre `dejaServi`).
-    const vue = (carte, numero) => sansRemplacables(carte, { set: slug, numero, langue: 'en', source: P.SOURCE });
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: slug }).toArray());   // correction 5 : les documents des entrées du set
+    const vue = (carte, numero) => sansRemplacables(carte, { set: slug, numero, langue: 'en', source: P.SOURCE, documents });
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(vue(cartes.get(l.carteId), l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null), slug, l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null))
         .map(l => ({ carte: vue(cartes.get(l.carteId), l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null), numeroFiche: l.numeroFiche ?? null, numeroCm: numerosCm.get(l.idProduct) ?? null, idProduct: l.idProduct }));
     return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous, tousNumerosCm: P.numerosDuSet(lignes, numerosCm) }) };
@@ -246,7 +247,8 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 const restantes = autres.filter(e => !pres.aRetirer.includes(e));
                 // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à notre image (haute définition, jamais marquée) : elle sort — la même fonction que artofpkm /
                 // Bulbapedia / TCGdex. Une image marquée ne remplace rien et cède.
-                const arb = arbitrer(restantes, entree, rest => T.dejaServi({ images: rest }, slug, im.numero));
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(restantes, entree, rest => T.dejaServi({ images: rest }, slug, im.numero), { documents: await documentsDesEntrees(M, restantes) });
                 if (pres.perd || arb.servie) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                     dejaParAutre++;

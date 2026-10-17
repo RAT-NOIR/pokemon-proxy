@@ -23,7 +23,7 @@ const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const { largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 
@@ -281,7 +281,8 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: PK.SOURCE, numero: im.numero ?? null } } });
                     // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source, même (set, numéro, langue connue), n'est pas « servie » face à une image NON marquée : elle sort
                     // (la même fonction que artofpkm / Bulbapedia / TCGdex). Une image marquée (245 px…) ne remplace jamais rien et cède.
-                    const arb = arbitrer(admises, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero ?? null));
+                    // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                    const arb = arbitrer(admises, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero ?? null), { documents: await documentsDesEntrees(M, admises) });
                     if (arb.servie) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
                     if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                     for (const e of autres.filter(x => refCles.has(x.cleR2))) {

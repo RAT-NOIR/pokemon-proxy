@@ -25,7 +25,11 @@ verifier('marqueDe : largeur inconnue → pas de marque (inconnu n\'est pas bas)
 // ── la règle de remplacement (pure) ────────────────────────────────────────────────────────────────────────────────
 const basse = (o = {}) => ({ set: 'S', source: 'tpc-asie', numero: '001', cleR2: 'tpc-asie/S/001-1-id.webp', w: 300, langue: 'id', basseDefinition: true, ...o });
 const bonne = (o = {}) => ({ set: 'S', source: 'tcgdex', numero: '001', cleR2: 'tcgdex/S/001-1.webp', w: 600, langue: 'id', ...o });
-const rem = (images, cand, o) => B.entreesARemplacer(images, cand, o).map(e => e.cleR2);
+// ➕ correction 5 : le tampon d'une entrée vit parfois sur son DOCUMENT `images` (Pokumon : `marque`) — l'identité d'impression lit les deux. `docsLisibles` : un document lisible SANS marqueur pour chaque entrée
+// (le cas ordinaire) ; `documents` absent ou sans la clé d'une entrée = document INTROUVABLE = pas de remplacement (une garde qui ne peut pas conclure bloque).
+const cleDoc = e => `${e.source}|${e.set}|${e.cleR2}`;
+const docsLisibles = (images, plus = {}) => new Map((Array.isArray(images) ? images : []).filter(Boolean).map(e => [cleDoc(e), { ...(plus[cleDoc(e)] || {}) }]));
+const rem = (images, cand, o = {}) => B.entreesARemplacer(images, cand, { documents: docsLisibles(images), ...o }).map(e => e.cleR2);
 verifier('une entrée marquée + une candidate non marquée, même set, même numéro, même langue → l\'entrée marquée est à remplacer', rem([basse()], bonne()), ['tpc-asie/S/001-1-id.webp']);
 verifier('le numéro se compare par la clé de la jointure (« 001 » = « 1 »)', rem([basse({ numero: '001' })], bonne({ numero: '1' })), ['tpc-asie/S/001-1-id.webp']);
 verifier('un autre numéro → rien', rem([basse()], bonne({ numero: '002' })), []);
@@ -45,7 +49,7 @@ verifier('candidate absente → rien, sans exception', [rem([basse()], null), re
 
 // ── ➕ 2026-10-17 (BASSE-DEF) : le PLAN d'un collecteur « combleur » et l'ARBITRAGE de sa jointure — la même règle (entreesARemplacer), jamais une copie ─────────────
 const carteAvec = images => ({ _id: 7, nomEn: 'X', images });
-const sr = (carte, o = {}) => (B.sansRemplacables(carte, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex', ...o }) ?? {}).images?.map(e => e.cleR2);
+const sr = (carte, o = {}) => (B.sansRemplacables(carte, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex', documents: docsLisibles(carte?.images), ...o }) ?? {}).images?.map(e => e.cleR2);
 // ── ➕ 2026-10-17 (doctrine de collecte, article 4) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée, ou si la nouvelle est la même impression et
 // nettement plus grande. Une image correcte au-dessus du seuil n'est jamais remplacée par une image équivalente. » — par la MÊME fonction (entreesARemplacer) ──────────────────────────────
 verifier('RATIO_NETTEMENT_PLUS_GRANDE = 1,5 (constante nommée, exportée)', B.RATIO_NETTEMENT_PLUS_GRANDE, 1.5);
@@ -55,7 +59,7 @@ const cand = (w, o = {}) => bonne({ w, wOriginal: w, ...o });
 // aujourd'hui un tel champ sur ses entrées (le tampon d'un scan Pokumon vit sur le DOCUMENT, `marque`, en texte libre ; `tamponNonRepresente` dit ce que l'image NE montre PAS) : CHAMPS_TAMPON_POSITIFS est
 // donc VIDE, et AUCUN remplacement d'une entrée empruntée ne sort tant qu'un collecteur n'écrit pas ce champ (et ne l'ajoute pas à la liste).
 const EMPR = (o = {}) => sain({ w: 600, wOriginal: 600, imageEmprunteeTirage: true, tamponNonRepresente: 'Staff', ...o });
-verifier('CHAMPS_TAMPON_POSITIFS : liste fermée et VIDE (aucun champ positif de tampon n\'existe sur les candidates)', [Array.isArray(B.CHAMPS_TAMPON_POSITIFS), (B.CHAMPS_TAMPON_POSITIFS || ['x']).length, Object.isFrozen(B.CHAMPS_TAMPON_POSITIFS)], [true, 0, true]);
+verifier('CHAMPS_TAMPON_POSITIFS : liste fermée, gelée : le seul champ positif est `tampon` (posé par le collecteur Pokumon, correction 5)', [[...(B.CHAMPS_TAMPON_POSITIFS || [])], Object.isFrozen(B.CHAMPS_TAMPON_POSITIFS)], [['tampon'], true]);
 verifier('EMPRUNTÉE : une image SIMPLE non tamponnée ne remplace JAMAIS une empruntée (elle serait aussi fausse, et effacerait le marquage)', [rem([EMPR()], cand(600)), rem([EMPR()], cand(900))], [[], []]);
 verifier('EMPRUNTÉE : même une candidate qui porte une `noteVariante` ou un `tamponNonRepresente` ne prouve pas le tampon (rien de positif) → rien', [rem([EMPR()], cand(600, { noteVariante: 'Staff' })), rem([EMPR()], cand(600, { tamponNonRepresente: 'Staff' }))], [[], []]);
 verifier('EMPRUNTÉE : avec un champ POSITIF déclaré (injecté au banc) égal au tampon de l\'entrée → remplacée ; tampon différent, absent, ou entrée sans tampon connu → rien', [
@@ -86,7 +90,27 @@ verifier('   sansRemplacables : une entrée nettement plus petite que l\'image a
 
 // ➕ correction 3 : « même impression » = set + numéro + langue ET les mêmes marqueurs de variante / de tampon des deux côtés (absents des deux côtés compris). Une réimpression tamponnée ne reçoit
 // jamais l'image d'une autre impression ; dans le doute, pas de remplacement (écrit par ce qu'il autorise).
-verifier('MARQUEURS_DE_VARIANTE : la liste fermée des marqueurs connus des entrées', [...(B.MARQUEURS_DE_VARIANTE || [])].sort(), ['imageEmprunteeTirage', 'noteVariante', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente']);
+verifier('MARQUEURS_DE_VARIANTE : la liste fermée des marqueurs connus des entrées ET des documents', [...(B.MARQUEURS_DE_VARIANTE || [])].sort(), ['imageEmprunteeTirage', 'marque', 'noteVariante', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tampon', 'tamponNonRepresente']);
+// ➕ correction 5 — LE CAS DU RELECTEUR : un scan tamponné Pokumon (400 px, tampon sur son DOCUMENT) face à une image simple de 900 px d'une autre source, même set, numéro, langue = INTERDIT
+const POK = (o = {}) => sain({ source: 'pokumon', cleR2: 'pokumon/S/1-9-en.webp', langue: 'id', w: 400, wOriginal: 400, ...o });
+const MARQUE_PP = 'Prize Pack Series 1 : tampon « Play! Pokémon »';
+verifier('RELECTEUR : scan tamponné Pokumon 400 px (tampon sur son DOCUMENT) + image simple 900 px d\'une autre source → RIEN', rem([POK()], cand(900), { documents: docsLisibles([POK()], { [cleDoc(POK())]: { marque: MARQUE_PP } }) }), []);
+verifier('   le même scan SANS tampon au document (cas ordinaire) → remplacé : le garde-fou ne bloque que ce qu\'il voit', rem([POK()], cand(900)), ['pokumon/S/1-9-en.webp']);
+verifier('   DOCUMENT INTROUVABLE (clé absente) ou documents absents → RIEN, quelle que soit la branche (ratio, basse définition, fausse)', [
+    rem([POK()], cand(900), { documents: new Map() }), rem([POK({ basseDefinition: true, w: 300, wOriginal: 300 })], cand(900), { documents: new Map() }),
+    rem([POK()], cand(900), { documents: undefined }), rem([POK()], cand(900), { documents: new Map(), fausses: new Set(['pokumon|pokumon/S/1-9-en.webp']) })], [[], [], [], []]);
+verifier('   document ILLISIBLE (null, non objet) → RIEN', [rem([POK()], cand(900), { documents: new Map([[cleDoc(POK()), null]]) }), rem([POK()], cand(900), { documents: new Map([[cleDoc(POK()), 'x']]) })], [[], []]);
+verifier('   entrée et document qui se CONTREDISENT sur un marqueur (noteVariante a / b) → RIEN (on ne sait pas laquelle est l\'impression)', rem([POK({ noteVariante: 'a' })], cand(900, { noteVariante: 'a' }), { documents: docsLisibles([POK()], { [cleDoc(POK())]: { noteVariante: 'b' } }) }), []);
+for (const k of ['marque', 'noteVariante', 'tamponNonRepresente', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tampon']) {
+    const v = k === 'produitsPartages' ? [1, 2] : (k === 'partageeHoloNonHolo' || k === 'partageeTamponNonSepare') ? true : 'valeur';
+    const d = { documents: docsLisibles([POK()], { [cleDoc(POK())]: { [k]: v } }) };
+    verifier(`DOCUMENT porteur de ${k} seul : ni le ratio, ni la basse définition ne remplacent par une candidate qui ne l'a pas`, [rem([POK()], cand(900), d), rem([POK({ basseDefinition: true, w: 300, wOriginal: 300 })], cand(900), d)], [[], []]);
+    verifier(`   ... mais la candidate qui porte ${k} à l'identique remplace`, rem([POK()], cand(900, { [k]: v }), d), ['pokumon/S/1-9-en.webp']);
+}
+verifier('CANDIDATE porteuse d\'un tampon (tampon) face à une entrée simple → RIEN (identité différente)', rem([POK()], cand(900, { tampon: 'x' })), []);
+verifier('LARGEUR CONNUE exigée aussi sur les branches basse définition et fausse : candidate sans w ni wOriginal → RIEN', [rem([basse()], bonne({ w: undefined, wOriginal: undefined })), rem([sain({ w: 600 })], bonne({ w: undefined, wOriginal: undefined }), { fausses: new Set(['artofpkm|artofpkm/S/001.webp']) })], [[], []]);
+verifier('normaliserTampon : minuscules, espaces compactés, bords retirés ; vide → null', [B.normaliserTampon('  Prize  Pack « X » '), B.normaliserTampon(''), B.normaliserTampon(null)], ['prize pack « x »', null, null]);
+verifier('EMPRUNTÉE : le champ positif par défaut est `tampon`, égal au libellé tamponNonRepresente → remplacée (documents lisibles)', rem([EMPR()], cand(600, { tampon: 'Staff' })), ['artofpkm/S/001.webp']);
 for (const k of ['noteVariante', 'tamponNonRepresente', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages']) {
     const v = k === 'noteVariante' ? 'V1/V2 non séparables' : k === 'produitsPartages' ? [1, 2] : true;
     verifier(`${k} : la candidate le porte, l'entrée saine (1,5 ×) non → RIEN (une variante n'évince pas l'impression simple)`, rem([sain()], cand(600, { [k]: v })), []);
@@ -104,7 +128,7 @@ verifier('   sa PROPRE entrée marquée reste : la même source redonnerait le m
 verifier('   langue du candidat inconnue (null / absente) : rien n\'est remplaçable, la carte est inchangée', [sr(carteAvec([basse()]), { langue: null }), sr(carteAvec([basse()]), { langue: undefined })], [['tpc-asie/S/001-1-id.webp'], ['tpc-asie/S/001-1-id.webp']]);
 verifier('   la carte d\'origine n\'est pas modifiée (copie)', (() => { const c = carteAvec([basse()]); B.sansRemplacables(c, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex' }); return c.images.length; })(), 1);
 verifier('   carte absente / sans images → rendue sans exception', [B.sansRemplacables(null, { set: 'S', numero: '1', langue: 'id', source: 'x' }), B.sansRemplacables({ _id: 1 }, { set: 'S', numero: '1', langue: 'id', source: 'x' })], [{ images: [] }, { _id: 1, images: [] }]);
-const arb = (autres, cand, servi = r => r.length > 0) => { const r = B.arbitrer(autres, cand, servi); return { sortantes: r.sortantes.map(e => e.cleR2), servie: r.servie }; };
+const arb = (autres, cand, servi = r => r.length > 0) => { const r = B.arbitrer(autres, cand, servi, { documents: docsLisibles(autres) }); return { sortantes: r.sortantes.map(e => e.cleR2), servie: r.servie }; };
 verifier('arbitrer : candidate non marquée + une entrée marquée → elle sort, la fiche n\'est plus servie : la candidate prend la place', arb([basse()], bonne()), { sortantes: ['tpc-asie/S/001-1-id.webp'], servie: false });
 verifier('arbitrer : candidate MARQUÉE → rien ne sort, la fiche reste servie (elle cède) — jamais l\'inverse', arb([basse()], basse({ source: 'pikaqian', cleR2: 'p.webp' })), { sortantes: [], servie: true });
 verifier('arbitrer : une AUTRE entrée non marquée sert déjà → la marquée sort quand même de la liste, mais la fiche reste servie : la candidate cède', arb([basse(), bonne({ source: 'artofpkm', cleR2: 'a.webp' })], bonne()), { sortantes: ['tpc-asie/S/001-1-id.webp'], servie: true });
@@ -133,6 +157,7 @@ function fauxModeles(carte, docs) {
             updateOne: async (f, u) => { journal.push(['carte', f, u]); for (const [k, v] of Object.entries(u.$pull || {})) carte[k] = carte[k].filter(e => !accepte(e, v)); return { modifiedCount: 1 }; }
         },
         Image: {
+            find: f => ({ lean: async () => structuredClone(docs.filter(d => accepte(d, f))) }),
             updateOne: async (f, u) => { journal.push(['image', f, u]); const d = docs.find(x => accepte(x, f)); if (d) Object.assign(d, u.$set || {}); return { modifiedCount: d ? 1 : 0 }; }
         }
     };

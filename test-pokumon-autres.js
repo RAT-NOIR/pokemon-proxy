@@ -134,7 +134,7 @@ const essayer = async f => { try { return await f(); } catch (e) { return e; } }
         const L14l = lm(L14), LMBl = lm(LMB);
         const PIKA = w => MCD(107429, 'Pikachu', 5, 12, 41, w);
         const p14 = { ...P14, carteId: 5 };
-        const unePlan = (ligne, prodt, entree, images = []) => P.planifierFamilles({ lignes: [ligne], produits: [prodt], cartes: new Map([[prodt.carteId, carte(prodt.carteId, 'Pikachu', images)]]), index: [entree] });
+        const unePlan = (ligne, prodt, entree, images = [], docs = undefined) => P.planifierFamilles({ lignes: [ligne], produits: [prodt], cartes: new Map([[prodt.carteId, carte(prodt.carteId, 'Pikachu', images)]]), index: [entree], documents: docs ?? new Map(images.map(e => [`${e.source}|${e.set}|${e.cleR2}`, {}])) });
         for (const [w, admis] of [[199, false], [200, true], [250, true], [320, true], [322, true], [349, true], [350, true]]) {
             const pl = unePlan(L14l, p14, PIKA(w));
             verifier(`McDonald's 2014, ${w} px : ${admis ? 'au PLAN (téléchargeable)' : 'reste « sous-le-seuil » (plancher absolu 200)'}`, [pl.plan.length, pl.restes.map(r => [r.motif, r.w])], admis ? [1, []] : [0, [['sous-le-seuil', w]]]);
@@ -151,6 +151,10 @@ const essayer = async f => { try { return await f(); } catch (e) { return e; } }
         const SAINE = (w, o = {}) => ({ ...MARQUEE, basseDefinition: undefined, w, wOriginal: w, ...o });
         verifier('plan : image saine de 400 px + image annoncée de 600 px (1,5 ×) → au plan ; 596 px (1,49 ×) → « deja-servi »', [unePlan(L14l, p14, PIKA(600), [SAINE(400)]).plan.length, unePlan(L14l, p14, PIKA(596), [SAINE(400)]).restes.map(r => r.motif)], [1, ['deja-servi']]);
         verifier('plan : JAMAIS une image correcte au-dessus du seuil par une équivalente (600 px face à 600 px, 500 face à 700)', [unePlan(L14l, p14, PIKA(600), [SAINE(600)]).restes.map(r => r.motif), unePlan(L14l, p14, PIKA(700), [SAINE(500)]).restes.map(r => r.motif)], [['deja-servi'], ['deja-servi']]);
+        // ➕ correction 5 : le tampon d'une entrée vit sur son DOCUMENT ; document introuvable → pas de remplacement
+        verifier('plan : entrée marquée dont le DOCUMENT est introuvable → « deja-servi » (une garde qui ne peut pas conclure bloque)', unePlan(L14l, p14, PIKA(496), [MARQUEE], new Map()).restes.map(r => r.motif), ['deja-servi']);
+        verifier('plan : entrée marquée dont le DOCUMENT porte un tampon (marque) → « deja-servi » ; sans tampon → au plan', [unePlan(L14l, p14, PIKA(496), [MARQUEE], new Map([[`${MARQUEE.source}|${MARQUEE.set}|${MARQUEE.cleR2}`, { marque: 'Prize Pack Series 1' }]])).restes.map(r => r.motif), unePlan(L14l, p14, PIKA(496), [MARQUEE]).plan.length], [['deja-servi'], 1]);
+        verifier('plan : famille McDonald\'s sans tampon (tamponDeLaMarque) ; Prize Pack avec', [P.tamponDeLaMarque('mcd-2014 : carte McDonald\'s'), P.tamponDeLaMarque(P.marqueDeSerie(1))], [null, 'prize pack series 1 : tampon « play! pokémon »']);
         verifier('plan (correction 4) : entrée EMPRUNTÉE + image de 496 px → « deja-servi » (aucun marqueur positif de tampon : rien ne la remplace)', unePlan(L14l, p14, PIKA(496), [SAINE(600, { imageEmprunteeTirage: true })]).restes.map(r => r.motif), ['deja-servi']);
         verifier('plan : entrée marquée d\'une autre LANGUE → « deja-servi »', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, langue: 'ja' }]).restes.map(r => r.motif), ['deja-servi']);
         verifier('plan : entrée marquée de SA PROPRE source (pokumon) → « deja-servi » (le même fichier reviendrait)', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, source: 'pokumon' }]).restes.map(r => r.motif), ['deja-servi']);

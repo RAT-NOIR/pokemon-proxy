@@ -23,7 +23,7 @@ const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
-const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
@@ -131,7 +131,8 @@ async function planifierToutFamilles(db, produitsCm, index, lignes = P.LIGNES_AU
         if (!p || !p.nomCm || !p.slugProduit) { sansNom.push({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, motif: 'sans-nom-catalogue' }); continue; }
         produits.push({ idProduct: l.idProduct, carteId: l.carteId, unite: l.slugSet, nomCm: p.nomCm, slugProduit: p.slugProduit, numero: p.numero, impressions: cartes.get(l.carteId)?.impressions || [] });
     }
-    const r = P.planifierFamilles({ lignes, produits, cartes, index });
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: { $in: slugs } }).toArray());   // correction 5
+    const r = P.planifierFamilles({ lignes, produits, cartes, index, documents });
     return { ...r, restes: [...r.restes, ...sansNom], produits: lp.length, comptes: { ...r.comptes, sansNomCatalogue: sansNom.length } };
 }
 /** Le plan des séries (toutes, pour le témoin) : lecture seule de la base `cartes`. */
@@ -148,7 +149,8 @@ async function planifierTout(db, produitsCm, index) {
         produits.push({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, serie: serieDe.get(l.slugSet), nomCm: p.nomCm, slugProduit: p.slugProduit });
     }
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
-    const r = P.planifierPokumon({ produits, cartes, index });
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: { $in: slugs } }).toArray());   // correction 5
+    const r = P.planifierPokumon({ produits, cartes, index, documents });
     return { ...r, restes: [...r.restes, ...sansNom], produits: lignes.length, comptes: { ...r.comptes, sansNomCatalogue: sansNom.length } };
 }
 
@@ -169,7 +171,7 @@ const compterSubstituts = (db, slug) => db.collection('cartes_produits').countDo
  */
 function collecterSerie(serie, planSerie, restesSerie, M, o = {}) {
     const slug = P.ligneDe(serie).slug;
-    return collecterUnite({ slug, serie, label: `S${serie}`, marque: p => `Prize Pack Series ${p.serie} : tampon « Play! Pokémon »` }, planSerie, restesSerie, M, o);
+    return collecterUnite({ slug, serie, label: `S${serie}`, marque: p => P.marqueDeSerie(p.serie) }, planSerie, restesSerie, M, o);
 }
 /** Une UNITÉ = un set Cardmarket à écrire (une série de Prize Pack, une année McDonald's, Trick or Trade 2022, Black Star MEP…). `unite.marque(p)` : le texte de marque de l'image `p` du plan. */
 async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client, vignetter = vignetterApresJointure, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, comptesPlan = null, memo = new Map() } = {}) {
@@ -286,14 +288,17 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
                     numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}),
                     // PP-HOLO : le champ explicite suit l'image (une image Prize Packs ordinaire n'a NI l'un NI l'autre)
-                    ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}) };
+                    ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}),
+                    // correction 5 : le TAMPON sur l'entrée (sa `marque` normalisée) — il vit déjà sur le document ; pas pour les McDonald's (une année, pas un tampon)
+                    ...(P.tamponDeLaMarque(im.marque) ? { tampon: P.tamponDeLaMarque(im.marque) } : {}) };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 // (« cette fiche » = ce numéro : l'image d'un AUTRE numéro de la même carte — MEP012 pour MEP033 — ne sert pas la fiche, la règle du site la compare au numéro de la fiche)
                 const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2 && (P.nImage(e.numero) === null || P.nImage(e.numero) === P.nImage(im.numero)));
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source ne « sert » pas la fiche face à une image NON marquée : elle sort (la même fonction que artofpkm / Bulbapedia / TCGdex)
                 // et la nôtre entre ; une image marquée (200 à 349 px) ne remplace jamais rien et cède
-                const arb = arbitrer(autres, entree, restantes => restantes.length > 0);
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(autres, entree, restantes => restantes.length > 0, { documents: await documentsDesEntrees(M, autres) });
                 if (arb.servie) { dejaParAutre++; continue; }
                 if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });

@@ -148,6 +148,7 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
     verifier('l\'entrée de la carte : mention, lot, langue, attribution, source, numéro, vignette', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source, e.numero, /^vignettes\/pokumon\//.test(e.vignette?.cleR2 || '')])(B.col('cartes').get(100).images[0]),
         ['© Pokémon / The Pokémon Company', 'pokumon-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokumon', '006', true]);
     verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.collecteLe instanceof Date, B.col('cartes').get(100).images[0].retirable, B.col('cartes').get(100).images[0].urlOriginal === im.urlOriginal && im.urlOriginal.length > 0, B.col('cartes').get(100).images[0].collecteLe instanceof Date], [true, true, true, true, true]);
+    verifier('TAMPON (correction 5) : l\'entrée d\'un Prize Pack porte `tampon` = sa `marque` normalisée (celle du document)', [B.col('cartes').get(100).images[0].tampon, im.marque === 'Prize Pack Series 1 : tampon « Play! Pokémon »'], ['prize pack series 1 : tampon « play! pokémon »', true]);
     verifier('SEUIL : un original de 200 px est écarté, COMPTÉ, écrit « trop-petit » avec la largeur et le seuil ; la carte ne reçoit rien',
         [B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.etat, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.wOriginal, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.seuilApplique, B.col('cartes').get(102).images.length, R.resultats[0].tropPetits],
         ['trop-petit', 200, 350, 0, 1]);
@@ -284,6 +285,7 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
             return { RM, trM };
         };
         const posees = Bm => Bm.col('cartes').get(9).images.filter(e => e.source === 'pokumon');
+        { const Bm = monde(); await lancerM(Bm, 320); verifier('TAMPON (correction 5) : une entrée McDonald\'s ne porte PAS de `tampon` (une année, pas une réimpression tamponnée) mais garde sa `marque` sur le document', [posees(Bm)[0]?.tampon ?? null, /^mcd-2014 : /.test(Bm.col('images').get(`pokumon/${SLM}/9/5/en`)?.marque || '')], [null, true]); }
         for (const [w, admis, marque] of [[199, false, null], [200, true, true], [320, true, true], [349, true, true], [350, true, false], [496, true, false]]) {
             const Bm = monde(); const { RM, trM } = await lancerM(Bm, w);
             const doc = Bm.col('images').get(`pokumon/${SLM}/9/5/en`), ent = posees(Bm)[0];

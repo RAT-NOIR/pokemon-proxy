@@ -27,7 +27,7 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
-const { marqueDe, arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
+const { marqueDe, arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : une entrée marquée est REMPLAÇABLE par une image non marquée
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
@@ -125,7 +125,8 @@ async function planifier(db, slug, L, fiches) {
     // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une AUTRE source, même set / numéro / langue que celle que nous écrirons, ne « sert » pas la fiche : c'est un trou que TPC peut combler — à
     // la jointure l'image n'entre que si elle sort NON marquée (sinon elle cède). La langue est celle que la règle de langue donnera à l'image écrite.
     const langue = langueDuVisuel({ source: L.site, langueSource: L.langue }).langue;
-    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(sansRemplacables(cartes.get(l.carteId), { set: slug, numero: l.numeroFiche, langue, source: L.site }), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: slug }).toArray());   // correction 5 : les documents des entrées du set (leur tampon, leur variante)
+    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(sansRemplacables(cartes.get(l.carteId), { set: slug, numero: l.numeroFiche, langue, source: L.site, documents }), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
     // règle B (pokemon-card.com) : le dictionnaire nomEn -> nomJa de nos cartes À PAGE (_id > 0), pour les fiches simples sans nomJa
     const temoinNomJa = L.site === 'pokemon-card-com' ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
     // LA VOIE SECONDE nomJa + PV (lot PCC-JP) : pokemon-card.com seulement, pour les produits sans numéro ; ses gardes sont dans tpc.js
@@ -291,7 +292,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
                     numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                 // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
-                const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero));
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero), { documents: await documentsDesEntrees(M, autres) });
                 if (arb.servie) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre, s'il y en avait une,
                     // lui CÈDE la place — deux visuels pour une impression, c'est un de trop

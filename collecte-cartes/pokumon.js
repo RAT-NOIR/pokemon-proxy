@@ -454,7 +454,10 @@ const LIGNES_AUTRES = Object.freeze([
 ].map(l => Object.freeze(l)));
 const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
 const { largeurAdmiseDe } = require('./seuils-images');
-const { sansRemplacables } = require('./basse-definition');
+const { sansRemplacables, normaliserTampon } = require('./basse-definition');
+// Correction 5 : le tampon d'un scan Pokumon = sa `marque` normalisée (document ET entrée). Une famille McDonald's n'a pas de tampon (une année, pas une réimpression tamponnée).
+const marqueDeSerie = serie => `Prize Pack Series ${serie} : tampon « Play! Pokémon »`;
+const tamponDeLaMarque = marque => (typeof marque === 'string' && !/^mcd-/.test(marque) ? normaliserTampon(marque) : null);
 const nImage =n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
 
 /**
@@ -462,7 +465,7 @@ const nImage =n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+
  * 🔑 Le numéro posé sur l'image est celui de la FICHE (l'impression de la carte : « 033 » pour MEP033, « 009 » pour 9/15) — le site compare ce numéro à celui de la fiche — ; Trick or Trade et
  * Professor Program n'ont pas de fiche numérotée, l'image garde le numéro imprimé de l'entrée. Une image sous le seuil de largeur est un reste COMPTÉ (« sous-le-seuil »), jamais téléchargée.
  */
-function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) {
+function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index, documents }) {
     const { resultats, comptes } = apparierFamille({ lignes, produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const cleFiche = p => `${p.carteId}|${p.unite}|${cleMesure(p.numero) ?? ''}`;
@@ -481,7 +484,7 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
         // ➕ BASSE-DEF : le SEUIL est celui de la LIGNE (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 ailleurs) ; une entrée MARQUÉE (basse définition) d'une autre source ne « sert »
         // pas la fiche face à une image qui sortira NON marquée — la largeur est connue ICI (l'index la porte), donc une image sous 350 px (qui sera marquée) ne remplace rien : « deja-servi » reste
-        const visible = sansRemplacables(carte, { set: p.unite, numero, langue: 'en', source: SOURCE, wOriginal: e.w });
+        const visible = sansRemplacables(carte, { set: p.unite, numero, langue: 'en', source: SOURCE, wOriginal: e.w, documents, tampon: tamponDeLaMarque(`${l.id} : ${l.tampon}`) });
         if ((visible.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(cleFiche(p));
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === e.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
@@ -542,7 +545,7 @@ const urlImageValide = url => { try { return cheminAutorise(url).genre === 'imag
  * 🔑 LE SITE AFFICHE UN SEUL VISUEL PAR FICHE (carte, set) : une fiche sans numéro (les Prize Packs) montre la première image du set. Une fiche qui porte plusieurs produits dont un n'est pas
  * prouvé du même visuel montrerait notre image sur le produit d'à côté : TROU « fiche-partagee ». Une carte qui a déjà un visuel dans CE set n'est jamais touchée (additif).
  */
-function planifierPokumon({ produits, cartes, index }) {
+function planifierPokumon({ produits, cartes, index, documents }) {
     const { resultats, comptes } = apparier({ produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const parFiche = new Map();
@@ -555,7 +558,7 @@ function planifierPokumon({ produits, cartes, index }) {
         const carte = cartes.get(p.carteId);
         if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
         // ➕ BASSE-DEF : une entrée marquée (basse définition) d'une autre source, même set / numéro / langue, ne « sert » pas la fiche face à une image qui sortira non marquée (largeur de l'index)
-        if ((sansRemplacables(carte, { set: p.slugSet, numero: r.entree.numero, langue: 'en', source: SOURCE, wOriginal: r.entree.w }).images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        if ((sansRemplacables(carte, { set: p.slugSet, numero: r.entree.numero, langue: 'en', source: SOURCE, wOriginal: r.entree.w, documents, tampon: tamponDeLaMarque(marqueDeSerie(p.serie)) }).images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(`${p.carteId}|${p.slugSet}`);
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === r.entree.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(r.entree.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
@@ -738,5 +741,5 @@ function planRetraitPokumon(cartes, { seulementPartagees = false, sets = null } 
 module.exports = {
     SOURCE, HOTE_API, HOTE_IMG, HOTES, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, REESSAI_MS, PLAFOND_REQUETES, PLAFOND_MAX, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, EVENEMENTS,
     TABLE_POKUMON, ligneDe, seriesAdmises, lireEntree, estPlaceholder, construireIndex, cleMesure, nomPokumon, numeroOrigine, codeOrigine, temoinsDeLEntree, denominateurDuCode,
-    LIGNES_AUTRES, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
+    LIGNES_AUTRES, marqueDeSerie, tamponDeLaMarque, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
 };
