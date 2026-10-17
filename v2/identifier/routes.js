@@ -93,6 +93,7 @@ const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe } = require('./adaptateur');
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
+const { idsDeLaGarde } = require('./garde-contradiction');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
@@ -175,7 +176,7 @@ const DELAI_SECONDE_MS = 20000;
 async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine, produits, jumeaux, rejouer }) {
     if (!(cfg && cfg.secondeLecture === true && deps && typeof deps.secondeLecture === 'function')) return null;
     const c = corpsChaine && typeof corpsChaine === 'object' ? corpsChaine : null, carte = c && c.carte;
-    if (!resultat || resultat.issue !== 'question' || resultat.motif || !c || c.success !== true || !carte || carte.ambigu !== false || !Number.isInteger(carte.idProduct)) return null;
+    if (!resultat || resultat.issue !== 'question' || resultat.motif || resultat.contradiction || !c || c.success !== true || !carte || carte.ambigu !== false || !Number.isInteger(carte.idProduct)) return null;
     let p, js;
     try {
         const r = typeof jumeaux === 'function' ? jumeaux(carte.idProduct) : null;
@@ -379,7 +380,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
                     // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
                     const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), idsAffirmes(c));
-                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)];
+                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux), ...idsDeLaGarde(c)];     // GARDE-CONTRADICTION : le vivier lu par la chaîne, pour juger les champs lus contre les autres candidats
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux });
