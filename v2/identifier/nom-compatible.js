@@ -10,15 +10,40 @@
 // « Zinnia's Resolve » / « Zinnia's Trust », « Palkia LV.X » / « Palkia Lv.67 » (même Pokémon, autre carte). Le complément ci-dessous est donc un test de MOTS : un mot significatif
 // commun (hors mots génériques : Dark, Team, ex, Energy, Lv…) suffit à ne PAS contredire. Il est plus permissif que la règle de production, jamais plus sévère.
 const { nomConcorde } = require('../../scoring');
+const { dexIdsDuNom } = require('../../pokedex');
 
 // Les mots qui ne désignent aucune carte à eux seuls : un qualificatif, un type, une règle ou un nombre. Deux noms qui ne partagent que ceux-là n'ont aucun rapport
 // (« Dark Porygon2 » / « Dark Feraligatr », « Fire Energy » / « Water Energy »).
 const MOTS_GENERIQUES = new Set(['the', 'and', 'dark', 'light', 'team', 'rocket', 'rockets', 'magma', 'aqua', 'galactic', 'plasma', 'flare', 'skull', 'mega', 'shining', 'radiant', 'alolan',
     'galarian', 'hisuian', 'paldean', 'delta', 'species', 'ex', 'gx', 'vmax', 'vstar', 'vunion', 'break', 'prime', 'legend', 'star', 'lv', 'level', 'energy', 'basic', 'special', 'trainer',
-    'supporter', 'stadium', 'tool', 'item', 'pokemon', 'pokémon', 'card', 'promo']);
+    'supporter', 'stadium', 'tool', 'item', 'pokemon', 'pokémon', 'card', 'promo', 'professor', 'prof']);
 
 const normaliser = s => String(s || '').toLowerCase().replace(/[’'`]/g, '');
 const motsDe = s => normaliser(s).split(/[^\p{L}\p{N}]+/u).filter(m => m.length >= 3 && !/^\d+$/.test(m) && !MOTS_GENERIQUES.has(m));
+
+// I1 (relecture r1) : un PROPRIÉTAIRE en préfixe (« Whitney's », « Team Magma's », « Imakuni?'s ») n'est pas un rapport entre deux cartes. Le possessif est retiré AVANT le test des mots ;
+// s'il est partagé, on compare les RESTES par l'espèce, avec la table et la normalisation de la production (pokedex.js : dexIdsDuNom -> pokedex-dexids.json, scoring.js).
+const POSSESSIF = /(\S+?)['’]s(?=\s|$)/giu;
+function sansPropriete(nom) {
+    const proprietaires = new Set();
+    const reste = String(nom || '').replace(POSSESSIF, (_, p) => { const k = p.toLowerCase().replace(/[^\p{L}]+/gu, ''); if (k) proprietaires.add(k); return ' '; }).replace(/\s+/g, ' ').trim();
+    return { proprietaires, reste };
+}
+/** Les numéros de Pokédex que désignent les restes (le reste entier, puis chacun de ses mots de 3 lettres ou plus). Vide : aucun Pokémon reconnu. */
+function especesDe(reste) {
+    const ids = new Set();
+    for (const cle of [reste, ...String(reste).split(/[^\p{L}\p{N}]+/u).filter(m => m.length >= 3)]) for (const d of dexIdsDuNom(cle) || []) ids.add(d);
+    return ids;
+}
+function pairesCompatibles(lue, cand) {
+    const L = sansPropriete(lue), C = sansPropriete(cand);
+    const motsC = new Set(motsDe(C.reste));
+    if (motsDe(L.reste).some(m => motsC.has(m))) return true;                              // un mot significatif commun, hors propriétaire : même carte (traduite) ou même Pokémon
+    if (![...L.proprietaires].some(p => C.proprietaires.has(p))) return false;            // ni mot commun ni propriétaire commun : aucun rapport
+    const eL = especesDe(L.reste), eC = especesDe(C.reste);
+    if (eL.size && eC.size) return [...eL].some(d => eC.has(d));                           // deux Pokémon : la même espèce
+    return eL.size === 0 && eC.size === 0;                                                 // un Pokémon contre un non-Pokémon : contredit ; deux non-Pokémon du même propriétaire : toléré (Focus / Motivation)
+}
 
 /** Les formes du nom d'un candidat, comme le veto de la production les prend (index.js:2463) : le nom Cardmarket sans ses attaques entre crochets, et le nom français. */
 function formesDuCandidat(ligne) {
@@ -36,8 +61,7 @@ function nomCompatible(formesLues, ligne) {
     const cands = formesDuCandidat(ligne);
     if (!lues.length || !cands.length) return true;                       // rien à comparer : on ne contredit pas
     if (nomConcorde(lues, cands)) return true;                            // LA règle de la production
-    const motsLus = new Set(lues.flatMap(motsDe));
-    return cands.flatMap(motsDe).some(m => motsLus.has(m));               // un mot significatif commun : même carte (traduite) ou même Pokémon
+    return lues.some(l => cands.some(c => pairesCompatibles(l, c)));
 }
 
 /** Les formes lues dans le corps de la chaîne héritée : `carte` (succès, index.js:6167) ou `cardInfo` (refus, index.js:5161). Rend [] si la confiance n'est pas 'haute' (veto désarmé, index.js:2457). */
