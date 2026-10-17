@@ -339,7 +339,8 @@ const transportFetch = {
         return { status: r.status, type, texte: await r.text(), cfMitigated };
     }
 };
-const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
 // …et, SEUL, `cel25c/<n>_A_hires.png` (Classic Collection de Celebrations, lot CEL du 2026-10-13) : le suffixe `_A` n'est autorisé sur aucun autre set.
 const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETONS_URL.join('|')})\\d{1,3}|\\d{1,3})_hires\\.png|cel25c/[1-9]\\d{0,2}_A_hires\\.png)$`);
 // ➕ 2026-10-17 — images.scrydex.com : robots.txt et `/pokemon/<set énuméré>-<n>[lettre]/large` (la forme relevée dans les réponses déjà en cache), rien d'autre.
@@ -351,13 +352,14 @@ const CHEMINS_PAR_HOTE = Object.freeze({ [HOTE_NOM]: CHEMIN_AUTORISE, [HOTE_SCRY
  * (robots.txt, /<id>/<n>_hires.png) ; robots.txt lu avant la première image et respecté ; cadence tenue dans une file (jamais sous 2 s) ;
  * un réessai sur une coupure ou un 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête.
  */
-function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null;
+function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null;
     const robotsDe = new Map();                                // ➕ 2026-10-17 : le robots.txt de CHAQUE hôte ; absent = pas encore lu, null = pas de robots.txt (404)
     const parHote = {};
     let cadenceEff = Math.max(CADENCE_MIN_MS, Number(cadenceMs) || 0);
     function garde() {
         if (bloque) throw bloque;
+        if (pauseHote) throw pauseHote;                       // la pause de la passe : plus aucune requête (pas un arrêt définitif)
         if (!lie) throw new Error(`${SOURCE} : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`${SOURCE} : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -378,7 +380,8 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
         return transport.get(url, o);
     }
     const bloquer = (r, url) => { bloque = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, status: r.status }); throw bloque; };
-    const defi = r => r.status === 403 || r.status === 429 || !!r.cfMitigated || (typeof r.texte === 'string' && DEFI.test(r.texte.slice(0, 5000)));
+    // le jugement d'un défi sur robots.txt : la définition du module commun, sur les 5 000 premiers caractères comme avant
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null;
     // 🔑 2026-10-17 : robots.txt se lit POUR CHAQUE HÔTE (le robots.txt d'un hôte ne parle pas pour l'autre) ; renvoie ses règles (null = pas de robots.txt)
     async function assurerRobots(hote) {
         if (robotsDe.has(hote)) return robotsDe.get(hote);
@@ -399,22 +402,24 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
         garde();
         const c = chemin(url);
         return enFile(async () => {
+            RH.garderHote(c.hote, dossierPauses);            // une pause persistante tient : aucune requête
             const robots = await assurerRobots(c.hote);
             if (!T.autoriseParRobots(robots, c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt de ${c.hote} interdit ${c.chemin} — aucune requête`), { robots: true });
             let r;
             try { r = await une(c.url, { binaire: true }); }
             catch (e) { if (!e.reseau) throw e; await pause(reessaiMs); r = await une(c.url, { binaire: true }); }
             if (r.status >= 500) { await pause(reessaiMs); r = await une(c.url, { binaire: true }); }
-            if (defi(r)) bloquer(r, c.url);
-            if (r.status >= 300 && r.status < 400) throw new Error(`${SOURCE} : redirection ${r.status} non suivie sur ${c.url}`);
-            if (r.status === 404 || r.status === 410) return null;
-            if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${c.url}`), { status: r.status });
-            if (!r.octets) throw new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${c.url})`);
+            // LA RÈGLE COMMUNE : image · absente (404) · fausse page introuvable (200 text/html sans marqueur → absente, et le compteur) · défi · ambiguë · transitoire · inattendue
+            const x = RH.traiterImage(r, { suivi, hote: c.hote, url: c.url, dossierPauses, connues });
+            if (x.action === 'arret-definitif') bloquer(r, c.url);
+            if (x.action === 'pause' || x.action === 'pause-persistante') { pauseHote = RH.erreurPause(x, c.hote, c.url, x.fichier ? { fichier: x.fichier } : {}); throw pauseHote; }
+            if (x.action === 'transitoire') throw Object.assign(new Error(`${r.status} ${c.url}`), { status: r.status });
+            if (x.action === 'absente') return null;
             if (H.estDosDeCarte(r.octets)) return null;     // 2026-10-17 : le « introuvable » du serveur d'images scrydex est le dos d'une carte, en HTTP 200 — un trou ne le reçoit jamais
             return r.octets;
         });
     }
-    return { image, lier(v) { lie = v; }, compteRequetes: () => compte, requetesParHote: () => ({ ...parHote }), cadence: () => cadenceEff, bloque: () => bloque };
+    return { image, lier(v) { lie = v; }, compteRequetes: () => compte, requetesParHote: () => ({ ...parHote }), cadence: () => cadenceEff, bloque: () => bloque, pause: () => pauseHote, suivi: () => suivi };
 }
 
 // ── L'IDENTIFIANT ET LE RETRAIT EN UN LOT ───────────────────────────────────────────────────────────────────────────────

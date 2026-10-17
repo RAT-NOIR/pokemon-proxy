@@ -408,9 +408,10 @@ async function lireBorne(reponse, max, url = '') {
     }
     return Buffer.concat(morceaux);
 }
-const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|Attention Required/i;
-/** Une réponse est-elle un BLOCAGE (403, 429, `cf-mitigated`, page de défi) ? `r` = { status, cfMitigated, texte }. Définition unique : le client ET le réessai espacé. */
-const defi = r => r.status === 403 || r.status === 429 || !!r.cfMitigated || (typeof r.texte === 'string' && DEFI.test(r.texte.slice(0, 5000)));
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
+/** Une réponse est-elle un BLOCAGE (401, 403, 410, 429, `cf-mitigated`, marqueur technique de défi) ? `r` = { status, cfMitigated, texte }. Définition unique : celle du module commun, pour le client ET le réessai espacé. */
+const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null;
 // robots.txt d'un hôte de fichiers (S3) : « AccessDenied » d'un S3 sans cette clé veut dire « pas de robots.txt » — pas un défi (aucune marque Cloudflare)
 const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
 
@@ -421,12 +422,13 @@ const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i
  * lent la relève) ; redirections suivies dans l'hôte seulement, trois sauts, robots relu ; 403, 429, `cf-mitigated`, page de défi : BLOQUÉ ;
  * DEUX échecs de suite (5xx, coupure, réponse illisible) : ARRÊT — un arrêt, dans les deux cas, ne se lève pas tout seul.
  */
-function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADENCE_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, agent = UA } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = -Infinity, compte = 0, bloque = null, arret = null, suite = 0, plafond = Infinity;
+function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADENCE_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, agent = UA, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+    let lie = verrou, file = Promise.resolve(), dernier = -Infinity, compte = 0, bloque = null, arret = null, suite = 0, plafond = Infinity, pauseHote = null;
     const parHote = {}, robots = new Map();
     let cadenceEff = Math.max(CADENCE_MS, Number(cadenceMs) || 0);        // relevée par un Crawl-delay plus lent, jamais abaissée sous 10 s
     function garde() {
         if (arret) throw arret;
+        if (pauseHote) throw pauseHote;                       // la pause de la passe : plus aucune requête vers cet hôte (pas un arrêt définitif)
         if (!lie) throw new Error(`${SOURCE} : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`${SOURCE} : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -488,6 +490,7 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         return enFile(async () => {
             let courant = c;
             for (let saut = 0; ; saut++) {
+                RH.garderHote(courant.hote, dossierPauses);       // une pause persistante tient : aucune requête
                 await assurerRobots(courant.hote);
                 if (!T.autoriseParRobots(robots.get(courant.hote), courant.chemin, agent)) throw Object.assign(new Error(`${SOURCE} : robots.txt de ${courant.hote} interdit ${courant.chemin} — aucune requête`), { robots: true });
                 const r = await une(courant.url, o);
@@ -499,8 +502,17 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
                     courant = cible(new URL(r.location, courant.url).href, c.hote);          // lève hors de l'hôte de départ, hors des chemins autorisés, sur /api/
                     continue;
                 }
-                if (r.status === 404 || r.status === 410) { suite = 0; return null; }
-                if (r.status >= 400) return echec(Object.assign(new Error(`${r.status} ${courant.url}`), { status: r.status }));
+                if (o?.binaire) {
+                    // UNE IMAGE se CLASSE : image · absente (404) · fausse page introuvable (200 text/html sans marqueur → absente, et le compteur) · défi · ambiguë · transitoire · inattendue
+                    const x = RH.traiterImage(r, { suivi, hote: courant.hote, url: courant.url, dossierPauses, connues });
+                    if (x.action === 'arret-definitif') bloquer(r, courant.url);
+                    if (x.action === 'pause' || x.action === 'pause-persistante') { suite = 0; pauseHote = RH.erreurPause(x, courant.hote, courant.url, x.fichier ? { fichier: x.fichier } : {}); throw pauseHote; }
+                    if (x.action === 'transitoire') return echec(Object.assign(new Error(`${r.status} ${courant.url}`), { status: r.status }));
+                    if (x.action === 'absente') { suite = 0; return null; }
+                } else {
+                    if (r.status === 404) { suite = 0; return null; }
+                    if (r.status >= 400) return echec(Object.assign(new Error(`${r.status} ${courant.url}`), { status: r.status }));
+                }
                 if (o?.binaire && !r.octets) return echec(new Error(`${SOURCE} : « ${r.type} » n'est pas une image webp (${courant.url})`));
                 // un fichier que l'appelant ne sait pas lire (sharp) est un échec, pas un succès : il compte dans les « deux de suite »
                 if (o?.verifier) { try { await o.verifier(r.octets); } catch (e) { return echec(Object.assign(new Error(`${SOURCE} : image illisible (${e.message}) ${courant.url}`), { illisible: true })); } }
@@ -521,7 +533,9 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         requetesParHote: () => ({ ...parHote }),
         cadence: () => cadenceEff,
         bloque: () => bloque,
-        arret: () => arret
+        arret: () => arret,
+        pause: () => pauseHote,
+        suivi: () => suivi
     };
 }
 
@@ -544,5 +558,5 @@ module.exports = {
     lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres, ancresSansNumero, compterSansNumero, jugerCompletude, totalAnnonce, totalDeFichier,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
-    defi, DEFI
+    defi
 };

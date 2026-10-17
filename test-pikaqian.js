@@ -19,11 +19,11 @@ const tuile = (n, code, num, nom, { src } = {}) => `<a class="w-full group" data
 const page = (...tuiles) => `<!DOCTYPE html><html><head><title>Set</title></head><body><nav><a href="/sets">Sets</a></nav>${tuiles.join('')}</body></html>`;
 
 // ── le réseau simulé et l'horloge ───────────────────────────────────────────────────────────────────────────────────
-function monde({ repondre, cadence = 10000, verrou = { tenu: true, perdu: false } } = {}) {
+function monde({ repondre, cadence = 10000, verrou = { tenu: true, perdu: false }, dossierPauses = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pq-pauses-')) } = {}) {
     let t = 1_000_000;
     const appels = [];
     const transport = { async get(url, o) { appels.push({ url, t, binaire: !!o?.binaire }); return repondre(url, o, appels.length); } };
-    const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; } });
+    const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; }, dossierPauses });
     return { client, appels, avancer: ms => { t += ms; } };
 }
 const ROBOTS = 'User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /auth/\nDisallow: /login\nDisallow: /logout\nDisallow: /currency\nSitemap: https://pikaqian.com/sitemap.xml\n';
@@ -32,7 +32,7 @@ const normal = (extra = {}) => (url, o) => {
     if (extra[url]) return extra[url](url, o);
     if (url.endsWith('/robots.txt')) return url.startsWith('https://pikaqian.com') ? { status: 200, texte: ROBOTS } : { status: 404, texte: '' };
     if (url.includes('/sets/')) return { status: 200, type: 'text/html', texte: HTML };
-    if (url.endsWith('.webp')) return { status: 200, type: 'image/webp', octets: Buffer.from('webp') };
+    if (url.endsWith('.webp')) return { status: 200, type: 'image/webp', octets: Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(8)]) };   // (REPONSE-HOTE : la règle commune exige les OCTETS d'un webp, pas le mot « webp »)
     return { status: 404, texte: 'non' };
 };
 const chemins = appels => appels.map(a => a.url.replace('https://', ''));
@@ -161,8 +161,27 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     const rs = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
     verifier('deux coupures réseau de suite → arrêt aussi', [rs?.arret === true, rs?.repetee === true], [true, true]);
     w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp']: () => ({ status: 200, type: 'text/html', texte: '<html>pas une image</html>' }) }) });
+    verifier('REPONSE-HOTE : un 200 text/html à la place de l\'image = fausse page introuvable → null (absente), ni erreur ni blocage, comptée', [await w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'), !!w.client.bloque(), !!w.client.pause(), w.client.suivi().rapport('images.pikaqian.com').fausses], [null, false, false, 1]);
+    w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp']: () => ({ status: 200, type: 'application/json', texte: '{"a":1}' }) }) });
     e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
-    verifier('une réponse qui n\'est pas une image : une erreur nommée', /n'est pas une image/.test(e?.message ?? ''), true);
+    verifier('une réponse qui n\'est pas une image (JSON) : une erreur nommée — une PAUSE de l\'hôte (inattendue), pas un blocage', [/n'est pas une image/.test(e?.message ?? ''), e?.pauseHote === true, !!e?.bloque, e?.issue], [true, true, false, 'inattendue']);
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const U = n => `https://images.pikaqian.com/cs1bc/${UUID(n)}.webp`;
+        const PAGE = { status: 200, type: 'text/html; charset=utf-8', texte: '<html>Page introuvable</html>' };
+        // (on prouve les 20/21 sur des adresses distinctes, toutes servies par la même fausse page)
+        w = monde({ repondre: url => (url.endsWith('.webp') ? PAGE : normal({})(url)) });
+        w.client.fixerSuite(0);
+        let nuls = 0; for (let i = 1; i <= 20; i++) if ((await w.client.image(U(i))) === null) nuls++;
+        e = await leve(() => w.client.image(U(21)));
+        verifier('REPONSE-HOTE : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un blocage, pas d\'arrêt)', [nuls, e?.pauseHote === true, !!e?.bloque, w.client.bloque(), w.client.arret(), !!w.client.pause()], [20, true, false, null, null, true]);
+        const e22 = await leve(() => w.client.image(U(22)));
+        verifier('REPONSE-HOTE : …plus aucune requête pendant la pause', [e22?.pauseHote === true], [true]);
+        w = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal({})(url)) });
+        e = await leve(() => w.client.image(U(1)));
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), pas un blocage', [e?.pauseHote === true, e?.pausePersistante === true, !!e?.bloque], [true, true, false]);
+        void RH;
+    }
     w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp']: () => ({ status: 404, texte: '<Error/>' }) }) });
     verifier('image en 404 → null', await w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp'), null);
 

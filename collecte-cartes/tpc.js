@@ -374,22 +374,25 @@ const transportFetch = {
         return { status: r.status, type, texte: await r.text() };
     }
 };
-const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha/i;
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
 
 /**
  * Le SEUL chemin vers un site TPC. Garde FERMÉE : aucune requête sans verrou global lié, tenu et non perdu ; robots.txt lu avant la
  * première page et respecté ; cadence tenue dans une FILE (deux appelants concurrents attendent leur tour) ; un réessai sur une coupure
  * ou un 5xx, puis l'échec LÈVE ; 403, 429, défi ou captcha : BLOQUÉ — l'erreur est retenue et plus aucune requête ne part.
  */
-function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA } = {}) {
+function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, robots;   // robots : undefined = pas encore lu
+    const hoteNom = new URL(S.hote).hostname;
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null, robots;   // robots : undefined = pas encore lu
     const statuts = {};
     let cadenceEff = cadenceMs;                                     // relevée par un Crawl-delay plus lent, jamais abaissée
     const pause = ms => new Promise(r => setTimeout(r, ms));
     function garde() {
         if (bloque) throw bloque;
+        if (pauseHote) throw pauseHote;                              // la pause de la passe : plus aucune requête vers cet hôte (pas un arrêt définitif)
         if (!lie) throw new Error(`${site} : aucun verrou global lié (${S.verrou}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`${site} : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -411,7 +414,8 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
             try { r = await une(courant, o); }
             catch (e) { if (!e.reseau) throw e; await pause(reessaiMs); r = await une(courant, o); }
             if (r.status >= 500) { await pause(reessaiMs); r = await une(courant, o); }
-            if (r.status === 403 || r.status === 429 || (typeof r.texte === 'string' && DEFI.test(r.texte.slice(0, 5000)))) bloquer(r, courant);
+            // le défi : la définition du module commun (401, 403, 410, 429, marqueurs techniques), sur les 5 000 premiers caractères comme avant
+            if (RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null) bloquer(r, courant);
             // une REDIRECTION (relecture du 2026-10-07) : suivie seulement sur le même site, le chemin d'arrivée relu par robots.txt
             if (r.status >= 300 && r.status < 400) {
                 if (saut >= 3) throw new Error(`${site} : plus de 3 redirections depuis ${url} — on ne suit pas une boucle`);
@@ -421,7 +425,16 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
                 courant = c.url;
                 continue;
             }
-            if (r.status === 404 || r.status === 410) return null;
+            if (o.binaire) {
+                // UNE IMAGE se CLASSE : image · absente (404) · fausse page introuvable (200 text/html sans marqueur → absente, et le compteur) · défi · ambiguë · transitoire · inattendue
+                const x = RH.traiterImage(r, { suivi, hote: hoteNom, url: courant, dossierPauses, connues });
+                if (x.action === 'arret-definitif') bloquer(r, courant);
+                if (x.action === 'pause' || x.action === 'pause-persistante') { pauseHote = RH.erreurPause(x, hoteNom, courant, x.fichier ? { fichier: x.fichier } : {}); throw pauseHote; }
+                if (x.action === 'transitoire') throw Object.assign(new Error(`${r.status} ${courant}`), { status: r.status });
+                if (x.action === 'absente') return null;
+                return r;
+            }
+            if (r.status === 404) return null;
             if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${courant}`), { status: r.status });
             return r;
         }
@@ -451,6 +464,7 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
     async function obtenir(url, o) {
         return enFile(async () => {
             const c = chemin(url);
+            RH.garderHote(hoteNom, dossierPauses);                    // une pause persistante tient : aucune requête
             await assurerRobots();
             if (!autoriseParRobots(robots, c.chemin, agent)) throw Object.assign(new Error(`${site} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
             return requete(c.url, o);
@@ -465,7 +479,9 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         compteRequetes: () => compte,
         statuts: () => ({ ...statuts }),
         cadence: () => cadenceEff,
-        bloque: () => bloque
+        bloque: () => bloque,
+        pause: () => pauseHote,
+        suivi: () => suivi
     };
 }
 

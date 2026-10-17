@@ -225,7 +225,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     const BI = fausseBase(); semer(BI);
     BI.col('cartes_produits').set('9|99', { _id: '9|99', carteId: 9, idProduct: 99, numeroFiche: '002', slugSet: SLUG });
     BI.col('cartes').set(9, { _id: 9, nomEn: 'Raichu', images: [] }); BI.col('cartes').get(2).images = [];
-    ({ b } = await lancer(BI, reseau(url => url.endsWith('.webp') ? { status: 200, type: 'image/webp', octets: Buffer.from('pas une image') } : normal()(url))));
+    ({ b } = await lancer(BI, reseau(url => url.endsWith('.webp') ? { status: 200, type: 'image/webp', octets: Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPcorrompu'), Buffer.alloc(8)]) } : normal()(url))));   // (REPONSE-HOTE : un webp CORROMPU — l'en-tête RIFF/WEBP passe la règle commune, sharp refuse le fichier)
     verifier('deux fichiers illisibles de suite → arrêt, alerte posée', [BI.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian')?.active, [...BI.col('images').values()].filter(d => d.etat === 'echec').length], [true, 2]);
     // le plafond de requêtes de l'unité : une page qui ne mène qu'à 1 image ne peut pas déclencher d'avalanche
     const BL = fausseBase(); semer(BL);

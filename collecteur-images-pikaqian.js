@@ -202,13 +202,15 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     // 🔑 « DEUX ÉCHECS DE SUITE » SE COMPTENT ENTRE LES UNITÉS : le client est neuf à chaque unité, le compteur est relu ici et réécrit à la fin
     // (un succès le remet à zéro). Un arrêt par erreur répétée pose l'alerte de blocage ; la reprise est une décision (enfiler-pikaqian.js --reprendre).
     client.fixerSuite((await E.findOne({ _id: P.ID_SUITE }))?.suite ?? 0);
-    let bloque = null, arretClient = null;
+    let bloque = null, arretClient = null, pauseHote = null;
     try {
         // ---- 1. LA PAGE du set ------------------------------------------------------------------------------------------
         let html;
         try { html = await client.page(P.urlSet(L.codePk)); }
         catch (e) {
             if (e.bloque || (e.arret && !e.plafond)) { bloque = e; return await conclureBloque(E, unite, bloque, client); }   // défi, ou erreur répétée entre unités : l'alerte
+            // REPONSE-HOTE : une pause de l'hôte (persistante) arrête l'unité AVANT toute requête de plus — pas un arrêt définitif, aucune alerte
+            if (e.pauseHote) return { code: unite._id, etat: 'incomplet', erreur: e.message, pauseHote: { hote: e.hote, issue: e.issue ?? null, motif: e.motif ?? e.message, empreinte: e.empreinte ?? null, persistante: !!e.pausePersistante }, sansJointure: true };
             // une erreur passagère (5xx, coupure) n'est pas un verdict sur le set (§58) : l'unité revient en file ; sinon elle refuse, la cause écrite
             console.error(`🔴 ${unite._id} : page illisible — ${e.message}`);
             return { code: unite._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
@@ -247,6 +249,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${p.url}) : ${err.message}`);
@@ -260,7 +263,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         else if (arretClient && !arretClient.plafond) await conclureBloque(E, unite, arretClient, client, { seulementAlerte: true });   // l'erreur répétée pose l'alerte aussi
         // une collecte réellement réussie (page lue + au moins une image téléchargée) remet le compte des blocages à zéro
         if (!bloque && !arretClient && telecharges > 0) await reinitialiserBlocages(E);
-        if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
+        if (!bloque && !arretClient && !pauseHote && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
         const { avant, apres, garde, joints, dejaParAutre, cartesAbsentes, erreurJointure, nImages, basseDefRemplacees, sansUrlOriginal } = await joindreAdditif(db, M, slug, unite._id);
@@ -276,7 +279,9 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes, sansUrlOriginal,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres || garde, basseDefRemplacees, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, arret: arretClient ? arretClient.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && !arretClient && vignettesOk && echecs === 0 && cartesAbsentes === 0
+            // REPONSE-HOTE : le rapport des réponses des hôtes d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
+            concordance: garde && !erreurJointure && !bloque && !arretClient && !pauseHote && vignettesOk && echecs === 0 && cartesAbsentes === 0
                 && telecharges + sautes + tropPetits + retires + absents === Pl.plan.length && joints + dejaParAutre === nImages,
             verifieLe: new Date()
         };
@@ -285,6 +290,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         console.log(`   ${P.SOURCE} ${slug} : prouvés ${Pl.plan.length} · téléchargés ${telecharges} · repris ${sautes} · absents (404) ${absents} · sous le seuil ${tropPetits} · échecs ${echecs} · joints ${joints} · garde ${garde ? '✅' : '❌'} · requêtes ${client.compteRequetes()}`);
         // bloquée en cours de route : ce qui a été prouvé et téléchargé AVANT est joint ; l'unité est `incomplet`, l'alerte est écrite
         if (bloque) return { code: unite._id, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: unite._id, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: unite._id, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: unite._id, etat: 'non-concordant', ...complet };
         // un arrêt par erreur répétée n'est un verdict sur rien : transitoire (5xx, coupure) → l'unité revient en file (issue-unite.js, §58)
@@ -324,7 +330,7 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
         resultats.push(r);
         console.log(`SET ${slug} → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
-        if (client.arret()) break;
+        if (client.arret() || client.pause()) break;
     }
     return { code, resultats };
 }
