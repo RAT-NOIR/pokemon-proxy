@@ -24,4 +24,18 @@ function lienServi(u, numero) {
     return typeof numero === 'string' && numero.trim() && lienExact(u) ? u : null;
 }
 
-module.exports = { lienExact, lienServi };
+/** RESOUDRE-CARDMARKET : { slugSet, slug } d'une adresse collée, ou null. La requête (?…) et l'ancre (#…) sont COUPÉES d'abord (elles ne désignent pas le produit) ; le reste doit être la page
+ *  exacte d'un produit au sens de `lienExact` (une seule garde, pas de seconde copie du motif). Rien d'autre n'est lu. */
+function couplePourLien(u) {
+    if (typeof u !== 'string') return null;
+    const i = u.search(/[?#]/);
+    const nu = i === -1 ? u : u.slice(0, i);
+    if (!lienExact(nu)) return null;
+    const m = FORME.exec(nu);
+    return m ? { slugSet: m[1], slug: m[2] } : null;
+}
+
+/** L'adresse canonique servie pour un couple (langue /fr/, comme chargeur/regle-site/cardmarket.mjs), passée par la même garde. */
+const lienCanonique = (slugSet, slug) => lienExact(`https://www.cardmarket.com/fr/Pokemon/Products/Singles/${slugSet}/${slug}`);
+
+module.exports = { lienExact, lienServi, couplePourLien, lienCanonique, SEG, LANGUES };
