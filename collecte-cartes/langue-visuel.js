@@ -50,6 +50,11 @@ function langueDuVisuel(im) {
     if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'
         ? { langue: 'zh-hans', preuve: 'pikaqian.com : scan de la carte chinoise imprimée (sinogrammes simplifiés lisibles sur 3 images ouvertes à l\'œil le 2026-10-10), sous un set au tirage zh-hans' }
         : { langue: null, preuve: `pikaqian, langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-17 — pokumon.com (lot PK-PP, Prize Packs S1-S4) : la langue est DÉCLARÉE par la taxonomie « language » de l'entrée (English, id 1260), que le collecteur ne lit qu'en la
+    // portant sur `langueSource: 'en'` ; 17 images ouvertes à l'œil le 2026-10-17, toutes en anglais (S7/PK-PP/img). Par ce qu'elle autorise : toute autre valeur n'a pas de règle (null).
+    if (im.source === 'pokumon') return im.langueSource === 'en'
+        ? { langue: 'en', preuve: 'pokumon.com : entrée de la taxonomie « language » English (id 1260), carte anglaise tamponnée (17 images ouvertes à l\'œil le 2026-10-17, toutes en anglais)' }
+        : { langue: null, preuve: `pokumon, langue source « ${im.langueSource} » sans règle` };
     if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };
