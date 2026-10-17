@@ -1,0 +1,1082 @@
+{
+ "version": 1,
+ "intl": {
+  "heartgoldandsoulsilver": {
+   "expansion": "HeartGold & SoulSilver",
+   "tdx": [
+    {
+     "cle": "HeartGold & SoulSilver/HeartGold SoulSilver",
+     "paires": 116,
+     "couvBulba": 0.951,
+     "couvExterne": 0.935
+    }
+   ]
+  },
+  "expeditionbaseset": {
+   "expansion": "Expedition Base Set",
+   "pkc": [
+    {
+     "cle": "E-Card/EX",
+     "paires": 158,
+     "couvBulba": 0.958,
+     "couvExterne": 0.958
+    }
+   ]
+  },
+  "extrainerkit2": {
+   "expansion": "EX Trainer Kit 2",
+   "pkc": [
+    {
+     "cle": "EX/TK2M",
+     "paires": 6,
+     "couvBulba": 0.545,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "sunandmoontrainerkitlycanrocandalolanraichu": {
+   "expansion": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu",
+   "tdx": [
+    {
+     "cle": "Trainer kits/SM trainer Kit (Lycanroc)",
+     "paires": 17,
+     "couvBulba": 0.567,
+     "couvExterne": 0.944
+    }
+   ]
+  },
+  "swshblackstarpromos": {
+   "expansion": "SWSH Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Sword & Shield/Promo_SWSH",
+     "paires": 282,
+     "couvBulba": 0.919,
+     "couvExterne": 0.919
+    }
+   ]
+  },
+  "dpblackstarpromos": {
+   "expansion": "DP Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Promos/Diamond & Pearl Promos",
+     "paires": 56,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "mepblackstarpromos": {
+   "expansion": "MEP Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Promos/MEP",
+     "paires": 83,
+     "couvBulba": 0.728,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "svpblackstarpromos": {
+   "expansion": "SVP Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Scarlet & Violet/SVP",
+     "paires": 222,
+     "couvBulba": 0.996,
+     "couvExterne": 0.991
+    }
+   ]
+  },
+  "yellowaalternatecards": {
+   "expansion": "Yellow A Alternate cards",
+   "tdx": [
+    {
+     "cle": "XY/Yellow A Alternate",
+     "paires": 6,
+     "couvBulba": 0.087,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "mcdonaldscollection2023": {
+   "expansion": "McDonald's Collection 2023",
+   "pkc": [
+    {
+     "cle": "Scarlet & Violet/M23",
+     "paires": 15,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "smblackstarpromos": {
+   "expansion": "SM Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Sun & Moon/SMP",
+     "paires": 248,
+     "couvBulba": 1,
+     "couvExterne": 0.988
+    }
+   ]
+  },
+  "xyblackstarpromos": {
+   "expansion": "XY Black Star Promos",
+   "pkc": [
+    {
+     "cle": "XY/XYP",
+     "paires": 211,
+     "couvBulba": 1,
+     "couvExterne": 0.977
+    }
+   ]
+  },
+  "bwblackstarpromos": {
+   "expansion": "BW Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Black & White/BWP",
+     "paires": 99,
+     "couvBulba": 0.98,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "hgssblackstarpromos": {
+   "expansion": "HGSS Black Star Promos",
+   "pkc": [
+    {
+     "cle": "Promos/HeartGold & SoulSilver Promos",
+     "paires": 25,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "mcdonaldscollection": {
+   "expansion": "McDonald's Collection",
+   "pkc": [
+    {
+     "cle": "Black & White/MCD11",
+     "paires": 7,
+     "couvBulba": 1,
+     "couvExterne": 0.583
+    }
+   ]
+  },
+  "pokemonrumble": {
+   "expansion": "Pokémon Rumble",
+   "pkc": [
+    {
+     "cle": "Platinum/RM",
+     "paires": 16,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "pokemonfutsal": {
+   "expansion": "Pokémon Futsal",
+   "pkc": [
+    {
+     "cle": "Sword & Shield/FUT20",
+     "paires": 5,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ],
+   "tdx": [
+    {
+     "cle": "Sword & Shield/Pokémon Futsal 2020",
+     "paires": 5,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  }
+ },
+ "jp": {
+  "heartgoldcollection": {
+   "expansion": "HeartGold Collection",
+   "dossiers": [
+    {
+     "cle": "l1-bhg",
+     "paires": 67,
+     "couvBulba": 0.957,
+     "couvExterne": 0.971
+    }
+   ]
+  },
+  "hailblizzard": {
+   "expansion": "Hail Blizzard",
+   "dossiers": [
+    {
+     "cle": "bw3-bh",
+     "paires": 52,
+     "couvBulba": 0.912,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "blastoisekyuremexcombodeck": {
+   "expansion": "Blastoise + Kyurem-EX Combo Deck",
+   "dossiers": [
+    {
+     "cle": "kk",
+     "paires": 18,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "collectiony": {
+   "expansion": "Collection Y",
+   "dossiers": [
+    {
+     "cle": "xy1-by",
+     "paires": 62,
+     "couvBulba": 0.984,
+     "couvExterne": 0.984
+    }
+   ]
+  },
+  "mmasterdeckbuildboxpowerstyle": {
+   "expansion": "M Master Deck Build Box Power Style",
+   "dossiers": [
+    {
+     "cle": "mmb-p",
+     "paires": 48,
+     "couvBulba": 0.98,
+     "couvExterne": 0.98
+    }
+   ]
+  },
+  "mmasterdeckbuildboxspeedstyle": {
+   "expansion": "M Master Deck Build Box Speed Style",
+   "dossiers": [
+    {
+     "cle": "mmb-s",
+     "paires": 48,
+     "couvBulba": 0.98,
+     "couvExterne": 0.98
+    }
+   ]
+  },
+  "enhancedexpansionpacksunandmoon": {
+   "expansion": "Enhanced Expansion Pack Sun & Moon",
+   "dossiers": [
+    {
+     "cle": "sm1p",
+     "paires": 58,
+     "couvBulba": 0.853,
+     "couvExterne": 0.921
+    }
+   ]
+  },
+  "shininglegends": {
+   "expansion": "Shining Legends",
+   "dossiers": [
+    {
+     "cle": "sm3p",
+     "paires": 77,
+     "couvBulba": 0.939,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "gxbattleboost": {
+   "expansion": "GX Battle Boost",
+   "dossiers": [
+    {
+     "cle": "sm4p",
+     "paires": 120,
+     "couvBulba": 0.96,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "steelixconstructedstandarddeck": {
+   "expansion": "Steelix Constructed Standard Deck",
+   "dossiers": [
+    {
+     "cle": "l2-sh",
+     "paires": 19,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "tyranitarconstructedstandarddeck": {
+   "expansion": "Tyranitar Constructed Standard Deck",
+   "dossiers": [
+    {
+     "cle": "l2-sb",
+     "paires": 19,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "dptppromotionalcards": {
+   "expansion": "DPt-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "dptp",
+     "paires": 48,
+     "couvBulba": 0.941,
+     "couvExterne": 0.941
+    }
+   ]
+  },
+  "lppromotionalcards": {
+   "expansion": "L-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "lp",
+     "paires": 71,
+     "couvBulba": 0.986,
+     "couvExterne": 0.899
+    }
+   ]
+  },
+  "bwppromotionalcards": {
+   "expansion": "BW-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "bwp",
+     "paires": 214,
+     "couvBulba": 0.986,
+     "couvExterne": 0.93
+    }
+   ]
+  },
+  "smppromotionalcards": {
+   "expansion": "SM-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "smp",
+     "paires": 403,
+     "couvBulba": 0.988,
+     "couvExterne": 0.985
+    }
+   ]
+  },
+  "intensefightinthedestroyedsky": {
+   "expansion": "Intense Fight in the Destroyed Sky",
+   "dossiers": [
+    {
+     "cle": "dps-b",
+     "paires": 92,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "galacticsconquest": {
+   "expansion": "Galactic's Conquest",
+   "dossiers": [
+    {
+     "cle": "dpt1-b",
+     "paires": 94,
+     "couvBulba": 0.979,
+     "couvExterne": 0.979
+    }
+   ]
+  },
+  "blackcollection": {
+   "expansion": "Black Collection",
+   "dossiers": [
+    {
+     "cle": "bw1-bb",
+     "paires": 53,
+     "couvBulba": 0.946,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "xyppromotionalcards": {
+   "expansion": "XY-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "xyp",
+     "paires": 279,
+     "couvBulba": 0.933,
+     "couvExterne": 0.933
+    }
+   ]
+  },
+  "vstartersets": {
+   "expansion": "V Starter Sets",
+   "dossiers": [
+    {
+     "cle": "sa",
+     "paires": 24,
+     "couvBulba": 1,
+     "couvExterne": 0.828
+    }
+   ]
+  },
+  "startdeck100": {
+   "expansion": "Start Deck 100",
+   "dossiers": [
+    {
+     "cle": "si",
+     "paires": 415,
+     "couvBulba": 0.983,
+     "couvExterne": 0.972
+    }
+   ]
+  },
+  "pokemoncardgamebattleacademy": {
+   "expansion": "Pokémon Card Game Battle Academy",
+   "dossiers": [
+    {
+     "cle": "svi",
+     "paires": 66,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "revivinglegends": {
+   "expansion": "Reviving Legends",
+   "dossiers": [
+    {
+     "cle": "l2-b",
+     "paires": 69,
+     "couvBulba": 0.896,
+     "couvExterne": 0.896
+    }
+   ]
+  },
+  "soulsilvercollection": {
+   "expansion": "SoulSilver Collection",
+   "dossiers": [
+    {
+     "cle": "l1-bss",
+     "paires": 68,
+     "couvBulba": 0.958,
+     "couvExterne": 0.986
+    }
+   ]
+  },
+  "whitecollection": {
+   "expansion": "White Collection",
+   "dossiers": [
+    {
+     "cle": "bw1-bw",
+     "paires": 53,
+     "couvBulba": 0.946,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "dragonblast": {
+   "expansion": "Dragon Blast",
+   "dossiers": [
+    {
+     "cle": "bw5-brz",
+     "paires": 50,
+     "couvBulba": 0.909,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "awakeningpsychicking": {
+   "expansion": "Awakening Psychic King",
+   "dossiers": [
+    {
+     "cle": "xy10-b",
+     "paires": 80,
+     "couvBulba": 0.92,
+     "couvExterne": 0.92
+    }
+   ]
+  },
+  "coldflare": {
+   "expansion": "Cold Flare",
+   "dossiers": [
+    {
+     "cle": "bw6-bc",
+     "paires": 59,
+     "couvBulba": 0.908,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "extraregulationbox": {
+   "expansion": "Extra Regulation Box",
+   "dossiers": [
+    {
+     "cle": "bw",
+     "paires": 12,
+     "couvBulba": 0.255,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "arceuslvxdeckgrassandfire": {
+   "expansion": "Arceus LV.X Deck: Grass & Fire",
+   "dossiers": [
+    {
+     "cle": "dpt4-sgf",
+     "paires": 16,
+     "couvBulba": 1,
+     "couvExterne": 0.941
+    }
+   ]
+  },
+  "arceuslvxdecklightningandpsychic": {
+   "expansion": "Arceus LV.X Deck: Lightning & Psychic",
+   "dossiers": [
+    {
+     "cle": "dpt4-slp",
+     "paires": 17,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "sunandmoonfamilypokemoncardgame": {
+   "expansion": "Sun & Moon Family Pokémon Card Game",
+   "dossiers": [
+    {
+     "cle": "sml",
+     "paires": 50,
+     "couvBulba": 0.98,
+     "couvExterne": 0.877
+    }
+   ]
+  },
+  "pokemoncard151": {
+   "expansion": "Pokémon Card 151",
+   "dossiers": [
+    {
+     "cle": "sv2a",
+     "paires": 210,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "bondstotheendoftime": {
+   "expansion": "Bonds to the End of Time",
+   "dossiers": [
+    {
+     "cle": "dpt2-b",
+     "paires": 83,
+     "couvBulba": 0.922,
+     "couvExterne": 0.922
+    }
+   ]
+  },
+  "gaiavolcano": {
+   "expansion": "Gaia Volcano",
+   "dossiers": [
+    {
+     "cle": "xy5-bg",
+     "paires": 75,
+     "couvBulba": 0.949,
+     "couvExterne": 0.962
+    }
+   ]
+  },
+  "flareongxstartersetfire": {
+   "expansion": "Flareon-GX Starter Set Fire",
+   "dossiers": [
+    {
+     "cle": "smi",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 0.526
+    }
+   ]
+  },
+  "jolteongxstartersetlightning": {
+   "expansion": "Jolteon-GX Starter Set Lightning",
+   "dossiers": [
+    {
+     "cle": "smi",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 0.526
+    }
+   ]
+  },
+  "grimmsnarlvmaxstarterset": {
+   "expansion": "Grimmsnarl VMAX Starter Set",
+   "dossiers": [
+    {
+     "cle": "scs",
+     "paires": 19,
+     "couvBulba": 0.95,
+     "couvExterne": 0.905
+    }
+   ]
+  },
+  "vstarpremiumtrainerbox": {
+   "expansion": "VSTAR Premium Trainer Box",
+   "dossiers": [
+    {
+     "cle": "sk",
+     "paires": 28,
+     "couvBulba": 0.933,
+     "couvExterne": 0.933
+    }
+   ]
+  },
+  "exstartersetmarniesmorpekoandgrimmsnarlex": {
+   "expansion": "ex Starter Set Marnie's Morpeko & Grimmsnarl ex",
+   "dossiers": [
+    {
+     "cle": "svom",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "exstartersetstevensbeldumandmetagrossex": {
+   "expansion": "ex Starter Set Steven's Beldum & Metagross ex",
+   "dossiers": [
+    {
+     "cle": "svod",
+     "paires": 19,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "premiumtrainerboxmega": {
+   "expansion": "Premium Trainer Box MEGA",
+   "dossiers": [
+    {
+     "cle": "ma",
+     "paires": 42,
+     "couvBulba": 0.977,
+     "couvExterne": 0.977
+    }
+   ]
+  },
+  "adventofarceus": {
+   "expansion": "Advent of Arceus",
+   "dossiers": [
+    {
+     "cle": "dpt4-b",
+     "paires": 83,
+     "couvBulba": 0.933,
+     "couvExterne": 0.922
+    }
+   ]
+  },
+  "collectionx": {
+   "expansion": "Collection X",
+   "dossiers": [
+    {
+     "cle": "xy1-bx",
+     "paires": 62,
+     "couvBulba": 0.984,
+     "couvExterne": 0.984
+    }
+   ]
+  },
+  "blueshock": {
+   "expansion": "Blue Shock",
+   "dossiers": [
+    {
+     "cle": "xy8-bb",
+     "paires": 60,
+     "couvBulba": 0.923,
+     "couvExterne": 0.938
+    }
+   ]
+  },
+  "beatofthefrontier": {
+   "expansion": "Beat of the Frontier",
+   "dossiers": [
+    {
+     "cle": "dpt3-b",
+     "paires": 92,
+     "couvBulba": 0.929,
+     "couvExterne": 0.92
+    }
+   ]
+  },
+  "ultraforce": {
+   "expansion": "Ultra Force",
+   "dossiers": [
+    {
+     "cle": "sm5p",
+     "paires": 54,
+     "couvBulba": 0.857,
+     "couvExterne": 0.964
+    }
+   ]
+  },
+  "redcollection": {
+   "expansion": "Red Collection",
+   "dossiers": [
+    {
+     "cle": "bw2-b",
+     "paires": 65,
+     "couvBulba": 0.929,
+     "couvExterne": 0.985
+    }
+   ]
+  },
+  "dragonselection": {
+   "expansion": "Dragon Selection",
+   "dossiers": [
+    {
+     "cle": "ds",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "noivernbreakevolutionpack": {
+   "expansion": "Noivern BREAK Evolution Pack",
+   "dossiers": [
+    {
+     "cle": "snpo",
+     "paires": 9,
+     "couvBulba": 1,
+     "couvExterne": 0.9
+    }
+   ]
+  },
+  "psychodrive": {
+   "expansion": "Psycho Drive",
+   "dossiers": [
+    {
+     "cle": "bw3-bp",
+     "paires": 52,
+     "couvBulba": 0.912,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "tidalstorm": {
+   "expansion": "Tidal Storm",
+   "dossiers": [
+    {
+     "cle": "xy5-bt",
+     "paires": 75,
+     "couvBulba": 0.949,
+     "couvExterne": 0.962
+    }
+   ]
+  },
+  "exstartersetpikachuexandpawmot": {
+   "expansion": "ex Starter Set Pikachu ex & Pawmot",
+   "dossiers": [
+    {
+     "cle": "svc",
+     "paires": 15,
+     "couvBulba": 0.938,
+     "couvExterne": 0.714
+    }
+   ]
+  },
+  "darkrush": {
+   "expansion": "Dark Rush",
+   "dossiers": [
+    {
+     "cle": "bw4-b",
+     "paires": 69,
+     "couvBulba": 0.908,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "garchomphalfdeck": {
+   "expansion": "Garchomp Half Deck",
+   "dossiers": [
+    {
+     "cle": "gbr",
+     "paires": 15,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "megalocannon": {
+   "expansion": "Megalo Cannon",
+   "dossiers": [
+    {
+     "cle": "bw9-b",
+     "paires": 75,
+     "couvBulba": 0.872,
+     "couvExterne": 0.987
+    }
+   ]
+  },
+  "dpppromotionalcards": {
+   "expansion": "DP-P Promotional cards",
+   "dossiers": [
+    {
+     "cle": "dpp",
+     "paires": 120,
+     "couvBulba": 0.945,
+     "couvExterne": 0.945
+    }
+   ]
+  },
+  "megadreamex": {
+   "expansion": "MEGA Dream ex",
+   "dossiers": [
+    {
+     "cle": "m2a",
+     "paires": 236,
+     "couvBulba": 0.944,
+     "couvExterne": 0.944
+    }
+   ]
+  },
+  "terastalfestex": {
+   "expansion": "Terastal Fest ex",
+   "dossiers": [
+    {
+     "cle": "sv8a",
+     "paires": 237,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "spiralforce": {
+   "expansion": "Spiral Force",
+   "dossiers": [
+    {
+     "cle": "bw8-brf",
+     "paires": 51,
+     "couvBulba": 0.879,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "vaporeongxstartersetwater": {
+   "expansion": "Vaporeon-GX Starter Set Water",
+   "dossiers": [
+    {
+     "cle": "smi",
+     "paires": 20,
+     "couvBulba": 1,
+     "couvExterne": 0.526
+    }
+   ]
+  },
+  "dragonblade": {
+   "expansion": "Dragon Blade",
+   "dossiers": [
+    {
+     "cle": "bw5-brn",
+     "paires": 50,
+     "couvBulba": 0.909,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "freezebolt": {
+   "expansion": "Freeze Bolt",
+   "dossiers": [
+    {
+     "cle": "bw6-bf",
+     "paires": 59,
+     "couvBulba": 0.908,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "facinganewtrial": {
+   "expansion": "Facing a New Trial",
+   "dossiers": [
+    {
+     "cle": "sm2p",
+     "paires": 57,
+     "couvBulba": 0.864,
+     "couvExterne": 0.934
+    }
+   ]
+  },
+  "plasmagale": {
+   "expansion": "Plasma Gale",
+   "dossiers": [
+    {
+     "cle": "bw7-b",
+     "paires": 70,
+     "couvBulba": 0.886,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "thebestofxy": {
+   "expansion": "The Best of XY",
+   "dossiers": [
+    {
+     "cle": "xy",
+     "paires": 170,
+     "couvBulba": 0.919,
+     "couvExterne": 0.914
+    }
+   ]
+  },
+  "thunderknuckle": {
+   "expansion": "Thunder Knuckle",
+   "dossiers": [
+    {
+     "cle": "bw8-brn",
+     "paires": 51,
+     "couvBulba": 0.879,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "crueltraitor": {
+   "expansion": "Cruel Traitor",
+   "dossiers": [
+    {
+     "cle": "xy11-br",
+     "paires": 56,
+     "couvBulba": 0.949,
+     "couvExterne": 0.966
+    }
+   ]
+  },
+  "redflash": {
+   "expansion": "Red Flash",
+   "dossiers": [
+    {
+     "cle": "xy8-br",
+     "paires": 60,
+     "couvBulba": 0.923,
+     "couvExterne": 0.938
+    }
+   ]
+  },
+  "rageofthebrokenheavens": {
+   "expansion": "Rage of the Broken Heavens",
+   "dossiers": [
+    {
+     "cle": "xy9-b",
+     "paires": 84,
+     "couvBulba": 0.944,
+     "couvExterne": 0.955
+    }
+   ]
+  },
+  "feverburstfighter": {
+   "expansion": "Fever-Burst Fighter",
+   "dossiers": [
+    {
+     "cle": "xy11-bb",
+     "paires": 56,
+     "couvBulba": 0.949,
+     "couvExterne": 0.966
+    }
+   ]
+  },
+  "exbattleboost": {
+   "expansion": "EX Battle Boost",
+   "dossiers": [
+    {
+     "cle": "bw10-b",
+     "paires": 91,
+     "couvBulba": 0.919,
+     "couvExterne": 0.968
+    }
+   ]
+  },
+  "shinycollection": {
+   "expansion": "Shiny Collection",
+   "dossiers": [
+    {
+     "cle": "sc",
+     "paires": 20,
+     "couvBulba": 0.8,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "shayminlvxcollectionpack": {
+   "expansion": "Shaymin LV.X Collection Pack",
+   "dossiers": [
+    {
+     "cle": "cps",
+     "paires": 12,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "regigigaslvxcollectionpack": {
+   "expansion": "Regigigas LV.X Collection Pack",
+   "dossiers": [
+    {
+     "cle": "cpr",
+     "paires": 11,
+     "couvBulba": 0.917,
+     "couvExterne": 0.917
+    }
+   ]
+  },
+  "clashatthesummit": {
+   "expansion": "Clash at the Summit",
+   "dossiers": [
+    {
+     "cle": "l3-b",
+     "paires": 70,
+     "couvBulba": 0.897,
+     "couvExterne": 0.909
+    }
+   ]
+  },
+  "11thmoviecommemorationset": {
+   "expansion": "11th Movie Commemoration Set",
+   "dossiers": [
+    {
+     "cle": "mps08",
+     "paires": 9,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  },
+  "moviecommemorationrandompack": {
+   "expansion": "Movie Commemoration Random Pack",
+   "dossiers": [
+    {
+     "cle": "dpt-mrp09",
+     "paires": 18,
+     "couvBulba": 0.818,
+     "couvExterne": 0.818
+    }
+   ]
+  },
+  "mewtwolvxcollectionpack": {
+   "expansion": "Mewtwo LV.X Collection Pack",
+   "dossiers": [
+    {
+     "cle": "cpm",
+     "paires": 11,
+     "couvBulba": 0.917,
+     "couvExterne": 0.917
+    }
+   ]
+  },
+  "ppppromotionalcards": {
+   "expansion": "PPP Promotional cards",
+   "dossiers": [
+    {
+     "cle": "ppp",
+     "paires": 7,
+     "couvBulba": 1,
+     "couvExterne": 1
+    }
+   ]
+  }
+ }
+}
