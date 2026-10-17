@@ -339,6 +339,60 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
         verifier('PP-HOLO retrait complet : retire le reste du lot (Great Ball, et l\'image ordinaire de la même carte en S2) et ferme la source', [BH.col('cartes').get(30360).images.length, BH.col('cartes').get(244998).images.length, BH.col('collecte_images_etat').get(P.ID_ALERTE)?.active, rrAll.reste], [0, 0, true, 0]);
     }
 
+    // ── 12. BS-HOLO de BOUT EN BOUT : le scan non-holo d'une promo Black Star sert les DEUX produits ; la garde de lot voit la hausse ; le retrait peut viser les SEULES promos Black Star ─────────
+    // (le couple pur est CONSTRUIT : sur les 64 groupes réels, aucun n'en est un — voir test-pokumon-autres.js, section 5 ; le chemin d'écriture n'en est pas moins prouvé ici)
+    {
+        const { wp } = require('./test-pokumon-donnees');
+        const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+        const SB = 'SV-Black-Star-Promos', SP = SLUG[1];
+        const URL_PLAIN = `${CDN}/2024/03/EN_S0570Mimikyu.png`, URL_HOLO = `${CDN}/2024/03/EN_S9571Mimikyu.png`;
+        const plain = P.lireEntree(wp(80570, 'Mimikyu ex (SVP004 English Promo)', URL_PLAIN, 785, 1099, [7836]));
+        const holoPur = P.lireEntree(wp(99571, 'Holofoil Mimikyu ex (SVP004 English Promo)', URL_HOLO, 754, 1052, [7836]));
+        const BS = fausseBase();
+        BS.col('sets').set(SB, { _id: SB, tirage: 'intl', region: 'intl' });
+        BS.col('cartes').set(278879, { _id: 278879, nomEn: 'Mimikyu ex', images: [], impressions: [{ tirage: 'intl', expansion: 'SVP Black Star Promos', numero: '004', total: null }] });
+        for (const id of [701130, 701131]) BS.col('cartes_produits').set(`278879|${id}`, { _id: `278879|${id}`, carteId: 278879, idProduct: id, slugSet: SB, visuelSubstitut: substitut(id) });
+        // une image Prize Pack « partagée holo/non-holo » déjà posée sur une AUTRE carte : le retrait des seules promos Black Star n'y touche pas
+        const pp = { set: SP, source: 'pokumon', cleR2: `pokumon/${SP}/056-244998-en.webp`, numero: '056', lot: P.LOT, langue: 'en', partageeHoloNonHolo: true, produitsPartages: [697089, 835825], vignette: { cleR2: `vignettes/pokumon/${SP}/056-244998-en.webp`, w: 200, h: 279 } };
+        BS.col('cartes').set(244998, { _id: 244998, nomEn: 'Drizzile', images: [structuredClone(pp)] });
+        BS.col('images').set(`pokumon/${SP}/244998/056/en`, { _id: `pokumon/${SP}/244998/056/en`, source: 'pokumon', set: SP, carteId: 244998, numero: '056', lot: P.LOT, etat: 'ok', cleR2: pp.cleR2, partageeHoloNonHolo: true, produitsPartages: [697089, 835825] });
+        const prodSv = async () => [701130, 701131].map(id => ({ idProduct: id, slugSet: SB, slugProduit: `Mimikyu-ex-V${id - 701129}-SVPen004`, numero: 'SVP004', nomCm: 'Mimikyu ex [Void Return | Energy Burst]' }));
+        const trS = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : url === URL_PLAIN ? { status: 200, type: 'image/png', octets: await png(785, 1099) } : { status: 404, type: 'text/html' }; } };
+        const etatAvant = compterEtat({ cartes: [...BS.col('cartes').values()] });
+        const sSub = JSON.stringify([...BS.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut]));
+        const rest = silencieux(); let RS;
+        try { RS = await C.lancerEcritureFamilles(['bsp-svp'], BS.M, { verrou, client: client(trS), lireProduits: prodSv, index: [plain, holoPur], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest(); }
+        verifier('BS-HOLO bout en bout : l\'unité Black Star est « verifie » ; SEUL le fichier non-holo est demandé, le scan holo ne l\'est JAMAIS', [RS.resultats.map(r => r.etat), trS.appels.filter(u => /\.png$/.test(u)).map(u => /EN_S(\d+)/.exec(u)[1])], [['verifie'], ['0570']]);
+        const dS = BS.col('images').get(`pokumon/${SB}/278879/004/en`), eS = BS.col('cartes').get(278879).images.filter(e => e.source === 'pokumon');
+        verifier('BS-HOLO : le document `images` ET l\'entrée `cartes.images` portent le champ explicite et la liste exacte des deux produits (UNE entrée pour la fiche, au numéro de la fiche)',
+            [dS?.partageeHoloNonHolo, dS?.produitsPartages, dS?.pokumonId, eS.length, eS[0]?.partageeHoloNonHolo, eS[0]?.produitsPartages, eS[0]?.numero, /^bsp-svp : /.test(dS?.marque || '')], [true, [701130, 701131], 80570, 1, true, [701130, 701131], '004', true]);
+        verifier('BS-HOLO : les substituts ne bougent pas d\'un octet', JSON.stringify([...BS.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut])) === sSub, true);
+        const etatApres = compterEtat({ cartes: [...BS.col('cartes').values()] });
+        const cmp = comparer(etatAvant, etatApres);
+        verifier('BS-HOLO garde de lot : la POSE est une hausse visible du compteur « images-partagees-holo » (par set), aucune baisse', [etatApres.get(`images-partagees-holo set:${SB}`), cmp.nonAutorisees.length, cmp.hausses['images-partagees-holo']], [1, 0, 1]);
+        // la reprise : aucun fichier, le champ reste
+        const trS2 = { appels: [], get: trS.get };
+        const rest2 = silencieux(); try { await C.lancerEcritureFamilles(['bsp-svp'], BS.M, { verrou, client: client(trS2), lireProduits: prodSv, index: [plain, holoPur], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest2(); }
+        verifier('BS-HOLO : la reprise ne demande aucun fichier et garde le champ (une entrée par fiche)', [trS2.appels.filter(u => /\.png$/.test(u)).length, BS.col('cartes').get(278879).images.filter(e => e.source === 'pokumon').length, BS.col('cartes').get(278879).images.find(e => e.source === 'pokumon').partageeHoloNonHolo], [0, 1, true]);
+        // le retrait : les SEULES promos Black Star, puis tout
+        // la MÊME carte Mimikyu porte aussi une image Prize Pack « partagée » dans un autre set (réimpression) : le retrait restreint aux promos Black Star ne doit pas y toucher
+        const ppMim = { ...structuredClone(pp), cleR2: `pokumon/${SP}/004-278879-en.webp`, numero: '004', vignette: { cleR2: `vignettes/pokumon/${SP}/004-278879-en.webp`, w: 200, h: 279 } };
+        BS.col('cartes').get(278879).images.push(structuredClone(ppMim));
+        BS.col('images').set(`pokumon/${SP}/278879/004/en`, { _id: `pokumon/${SP}/278879/004/en`, source: 'pokumon', set: SP, carteId: 278879, numero: '004', lot: P.LOT, etat: 'ok', cleR2: ppMim.cleR2, partageeHoloNonHolo: true, produitsPartages: [1, 2] });
+        const simAll = await retirerLot(BS.db, { seulementPartagees: true });
+        const simSv = await retirerLot(BS.db, { seulementPartagees: true, lignes: ['bsp-svp'] });
+        verifier('BS-HOLO retrait (simulation) : « --partagees-holo » seul retire les partagées des Prize Packs ET des Black Star ; restreint à la ligne Black Star, il ne retire QUE l\'entrée Black Star de la fiche Mimikyu (pas son image Prize Pack)', [simAll.cartes.sort(), simAll.entrees, simSv.cartes, simSv.entrees, simSv.docs, simSv.parSet], [[244998, 278879], 3, [278879], 1, 1, { [SB]: 1 }]);
+        const clesS = [];
+        const rrS = await retirerLot(BS.db, { ecrire: true, effacerR2: true, seulementPartagees: true, lignes: ['bsp-svp'], supprimer: async (b, c) => clesS.push(...c), verifierBucket: async () => { }, bucket: 'bucket-banc' });
+        verifier('BS-HOLO retrait restreint : la fiche Mimikyu perd son entrée et son document passe « retire » ; le Prize Pack (entrée, document) est INTACT ; seules les clés Black Star sont effacées ; la source reste ouverte',
+            [BS.col('cartes').get(278879).images.map(e => e.set), BS.col('images').get(`pokumon/${SB}/278879/004/en`).etat, BS.col('cartes').get(244998).images.length, BS.col('images').get(`pokumon/${SP}/244998/056/en`).etat, BS.col('images').get(`pokumon/${SP}/278879/004/en`).etat, clesS.length > 0 && clesS.every(c => /Black-Star/.test(c)), BS.col('collecte_images_etat').get(P.ID_ALERTE)?.active ?? null, rrS.reste],
+            [[SP], 'retire', 1, 'ok', 'ok', true, null, 0]);
+        for (const [args, motifAttendu] of [[['--lignes=bsp-svp'], /--lignes n'a de sens qu'avec --partagees-holo/], [['--partagees-holo', '--lignes=nexistepas'], /ligne\(s\) inconnue\(s\) : nexistepas/], [['--partagees-holo', '--lignes=bsp-svp;x'], /argument inconnu/]]) {
+            const r = spawnSync(process.execPath, [path.join(DIR, 'retirer-visuels-pokumon.js'), ...args], { encoding: 'utf8', timeout: 30000 });
+            verifier(`ligne de commande du retrait « ${args.join(' ')} » : refusée avant toute connexion (code 2), pour la bonne raison`, [r.status, motifAttendu.test(r.stderr || '')], [2, true]);
+        }
+    }
+
     console.log(`\n${ko ? '❌' : '✅'} ${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ le banc a levé :', e.stack); process.exit(1); });
