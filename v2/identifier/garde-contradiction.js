@@ -159,7 +159,8 @@ function contredire({ corps, gagnant, produits, vetos = VETOS, stricte = VARIANT
     }
     // TOUR 2 (I-C) : l'attaque n'est pas un veto, mais elle TRIE et ÉCARTE avec repli. Parmi les désignés, un candidat que l'attaque lue CONTREDIT n'est retiré que s'il en reste au moins un autre dont l'attaque ne le contredit pas ;
     // si tous sont contredits (Dark Tyranitar : « Crush » contredisait la vérité elle-même) on les garde tous. À soutiens égaux, l'attaque qui concorde passe devant l'inconnue, devant celle qui contredit.
-    if (triAttaque && designe.some(d => d.attaque !== 'ko')) { for (let i = designe.length - 1; i >= 0; i--) if (designe[i].attaque === 'ko') designe.splice(i, 1); }
+    // CRITERE-A (réserve I-C de la relecture r3) : le repli ne retire un contredit que si un AUTRE désigné a une attaque qui CONCORDE ; un désigné d'attaque inconnue ne suffit pas (l'attaque est contredite sur 32 % des lignes de vérité).
+    if (triAttaque && designe.some(d => d.attaque === 'ok')) { for (let i = designe.length - 1; i >= 0; i--) if (designe[i].attaque === 'ko') designe.splice(i, 1); }
     if (!designe.length && !fort) return null;                                         // contradiction que personne n'étaye, hors numéro et total : pas de question fabriquée
     const rangs = new Map(entiers((corps.classement || []).map(c => c && c.idProduct)).map((id, i) => [id, i]));
     const poidsAttaque = d => (triAttaque ? (d.attaque === 'ok' ? 0 : d.attaque === 'ko' ? 2 : 1) : 0);
