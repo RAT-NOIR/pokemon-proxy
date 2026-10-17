@@ -8,7 +8,7 @@ const { repondreErreur } = require('../erreurs');
 const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const L = require('../transport/limites');
 const { idempotente } = require('../transport/idempotence');
-const { validerEntree, traiterIdentifier, traiterReponse } = require('./routes');
+const { validerEntree, rattacherPhotos, traiterIdentifier, traiterReponse } = require('./routes');
 const { traiterRetourLive } = require('./retour-live');
 
 // Sans `Authorization: Bearer`, la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
@@ -84,7 +84,10 @@ module.exports = {
         const parPorteur = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/identifier',
             aiguilleur(req => Boolean(req.body && typeof req.body === 'object' && req.body.contrat === 2)),
-            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
+            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg),
+            // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan sortent du magasin ICI (une fois chacune), avant le débit ; drapeau éteint : la pile de la route est celle d'aujourd'hui, pas un maillon de plus
+            ...(cfg.photosMultiples === true ? [rattacherPhotos(deps)] : []),
+            traiterIdentifier(cfg, deps));
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
@@ -99,6 +102,14 @@ module.exports = {
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }
             return res.status(200).json({ success: true, solde, offre });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
         });
+        // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7>, derrière V2_PHOTOS_MULTIPLES=1. Drapeau éteint : la route N'EXISTE PAS (404 natif pour tous, administrateur compris). Phase 1 : MÊME garde de rôle que
+        // /api/banc/photo (exigerAdministrateurPhoto : 404 natif sans lire le corps), AVANT le limiteur (le plafond horaire de /api/banc/photo, compteur à part) ; aucune idempotence (corps binaire), aucun argent.
+        if (cfg.photosMultiples === true) {
+            const { exigerAdministrateurPhoto } = require('../banc/photo');
+            const { traiterPhotoAvantScan } = require('./photo-avant-scan');
+            const parPorteurPhoto = parPorteurDe('photo-avant-scan', cfg.limites.etiquetteParPorteurHeure);
+            router.post('/api/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhotoAvantScan(cfg, deps));
+        }
         demarrerBalayage();
         demarrerPurge();
         // O5 : la passe de rattrapage des scans dont la réponse n'est jamais partie — une passe différée au démarrage, puis toutes les 5 min (≤ le seuil de 15 min). `deps.rattrapage` ne règle que
