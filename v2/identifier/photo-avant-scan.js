@@ -13,18 +13,28 @@ const { lireCorpsBorne } = require('../banc/lecture-corps');
 const { magasin } = require('./photos-recues');
 const { TTL_S } = require('./photos-recues').creerPhotosRecues;
 
-const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000, INDEX_FORME = /^[0-7]$/;
+const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000, INDEX_FORME = /^[0-7]$/, COTE_MODELE = 800;
 const journal = (ou, e) => console.error(`❌ [v2 photo-avant-scan] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
 
 /** Réencode l'image validée en JPEG sans métadonnées, orientation appliquée, 1 600 px au plus (jamais agrandie) ; si elle dépasse encore `max`, une seconde fois plus petite. null si rien ne tient. */
+// Rend { octets, modele } : `octets` (1 600 px au plus) sert la photo du banc de l'administrateur et la seconde lecture ; `modele` (800 px de grand côté au plus, jamais agrandie : la définition f800 que Vinted sert) est la seule
+// version qui part au modèle, pour que le coût du modèle reste celui d'aujourd'hui. TOUT le réencodage (jusqu'à trois décodages) tient dans UNE place du sémaphore des décodages de photo-extension.js (2 au plus dans le processus) :
+// plein, il lève { code: 'occupe' } tout de suite (la route répond 429 DEBIT, jamais une attente).
 async function epurer(octets, max) {
-    const sharp = require('sharp');
-    for (const [cote, qualite] of [[1600, 85], [1200, 60]]) {
-        const sortie = await sharp(octets, { failOn: 'error', limitInputPixels: PE.PIXELS_MAX }).rotate().flatten({ background: '#ffffff' })
-            .resize({ width: cote, height: cote, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: qualite }).toBuffer();
-        if (sortie.length <= max) return sortie;
-    }
-    return null;
+    const r = await PE.sousSemaphore(async () => {
+        const sharp = require('sharp');
+        const base = () => sharp(octets, { failOn: 'error', limitInputPixels: PE.PIXELS_MAX }).rotate().flatten({ background: '#ffffff' });
+        let grande = null;
+        for (const [cote, qualite] of [[1600, 85], [1200, 60]]) {
+            const sortie = await base().resize({ width: cote, height: cote, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: qualite }).toBuffer();
+            if (sortie.length <= max) { grande = sortie; break; }
+        }
+        if (!grande) return null;
+        const modele = await base().resize({ width: COTE_MODELE, height: COTE_MODELE, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+        return { octets: grande, modele };
+    });
+    if (r.occupe) throw Object.assign(new Error('occupe'), { code: 'occupe' });
+    return r.valeur;
 }
 
 function traiterPhotoAvantScan(cfg, deps = {}) {
@@ -82,10 +92,13 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
         }
         let propre;
         try { propre = await epurer(v.octets, octetsMax); }
-        catch (e) { journal('épuration', e); return repondreErreur(res, 'IMAGE', 'Image illisible', { detail: 'illisible' }, 422); }
+        catch (e) {
+            if (e && e.code === 'occupe') return repondreErreur(res, 'DEBIT', 'Trop de photos en cours de traitement', { reessayerDans: 2 });
+            journal('épuration', e); return repondreErreur(res, 'IMAGE', 'Image illisible', { detail: 'illisible' }, 422);
+        }
         if (!propre) return repondreErreur(res, 'IMAGE', 'Image illisible', { detail: 'illisible' }, 422);
         let photoId;
-        try { photoId = magasin(deps).deposer(cle, index, propre); }
+        try { photoId = magasin(deps).deposer(cle, index, propre.octets, propre.modele); }
         catch (e) { journal('magasin', e); return repondreErreur(res, 'INDISPONIBLE'); }
         PE.noter('ok');
         return res.status(200).json({ success: true, photoId, expireDans: TTL_S });
