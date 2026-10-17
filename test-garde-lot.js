@@ -231,9 +231,11 @@ verifier('BS-STAFF : le compteur « holo » ne compte pas une image « tampon »
 verifier('BS-STAFF (setsTouches) : le marquage change ce que le site lit (mention) : le set de l\'image est touché, pas le catalogue', (r => [r.sets, r.catalogue, r.especes])(setsTouches({ avant: docs0, apres: etatT })), [['Set-A'], false, false]);
 verifier('BS-STAFF (setsTouches) : le retrait du marquage touche aussi le set', setsTouches({ avant: etatT, apres: lotTRetire }).sets, ['Set-A']);
 // lot-additif.js lit les cartes par une projection : un champ absent de la projection est un compteur qui ne voit rien (§41)
+// (correction 2 du lot METAL : la projection est la constante partagée PROJECTION_ETAT, lue par lot-additif.js)
 { const src = require('fs').readFileSync(require('path').join(__dirname, 'lot-additif.js'), 'utf8');
-  const proj = /db\.collection\('cartes'\)\.find\(\{\}\)\.project\(\{([^}]*)\}\)/.exec(src)?.[1] ?? '';
-  verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj.includes(`'${c}': 1`)), [true, true, true]); }
+  const proj = require('./collecte-cartes/garde-lot').PROJECTION_ETAT.cartes;
+  verifier('lot-additif.js lit les cartes par la projection partagée', /\.project\(\{ \.\.\.PROJECTION_ETAT\.cartes \}\)/.test(src), true);
+  verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj[c] === 1), [true, true, true]); }
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

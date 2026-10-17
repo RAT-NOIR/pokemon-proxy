@@ -23,6 +23,7 @@ require('dotenv').config();
 const fs = require('fs');
 const { estCarteCode, decomposerNomCardmarket } = require('./collecte-cartes/jointure');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
+const { garderMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
 const K = require('./collecte-cartes/cle-freres-metacarte');
 const Cal = require('./collecte-cartes/calibration-freres-metacarte');
 const { planDuSet, simulerSet } = require('./collecte-cartes/plan-freres-metacarte');
@@ -141,6 +142,8 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
         const ctl = R.controlerRepere(cartes, parCarte);
         log(`   REPÈRES D'ADRESSE : ${ctl.cartes} cartes touchées · ${ctl.avecRepere} ont un liens.idProduct · repère ET ordre conservés ${ctl.repereConserve}/${ctl.avecRepere} · déplacés ${ctl.deplaces.length} · liens.idProduct vide ${ctl.sansRepere.length}`);
         if (ctl.deplaces.length || ctl.sansRepere.length) { err(`❌ le repère d'adresse de ${ctl.deplaces.length + ctl.sansRepere.length} carte(s) bougerait (${[...ctl.deplaces, ...ctl.sansRepere].slice(0, 5).join(', ')}) — rien n'est écrit`); if (ecrire) return 1; }
+        // 🔴 LOT METAL : les « frères de métacarte » sont exactement le chemin qui donnerait la fiche de la carte normale à un produit en matière spéciale (table fermée) : refus, même à blanc
+        try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-fiches-par-freres'); } catch (e) { err(e.message); return 1; }
         if (!ecrire || !aEcrire.length) return 0;
 
         // ── l'écriture, ADDITIVE et idempotente ──
