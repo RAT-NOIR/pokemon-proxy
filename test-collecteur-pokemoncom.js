@@ -117,10 +117,12 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     // arrêt définitif
     const png8 = Buffer.from('89504e470d0a1a0a', 'hex');
     const defis = [['403', () => ({ status: 403, type: 'text/html', texte: 'non' })], ['429', () => ({ status: 429, type: 'text/html', texte: 'non' })], ['HTML au lieu d\'une image', () => ({ status: 200, type: 'text/html', texte: '<html>Just a moment</html>' })],
-        ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })], ['Imperva', () => ({ status: 200, type: 'image/png', octets: grand, imperva: true })], ['redirection 302', () => ({ status: 302, location: 'https://autre.example/x' })],
-        ['octets qui ne sont pas un PNG', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>defi</html>') })],
+        ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })], ['Imperva avec un corps qui n\'est pas une image (REPONSE-HOTE : l\'en-tête seul ne prouve rien)', () => ({ status: 200, type: 'text/html', texte: '<html><body>page</body></html>', imperva: true })],
+        ['octets qui ne sont pas un PNG mais portent un marqueur de défi', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>Just a moment</html>') })],
         ['403 à corps VIDE (ni HTML ni image)', () => ({ status: 403, type: '', texte: '' })], ['403 dont le corps est une IMAGE', () => ({ status: 403, type: 'image/png', octets: grand })],
-        ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })]];
+        ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })],
+        ['401 (REPONSE-HOTE)', () => ({ status: 401, type: 'text/html', texte: 'login' })], ['410 sur une image (REPONSE-HOTE : 410 est un défi, plus un absent)', () => ({ status: 410, type: 'text/html', texte: 'gone' })],
+        ['marqueur technique « _Incapsula_Resource »', () => ({ status: 200, type: 'text/html', texte: '<script src="/_Incapsula_Resource?x=1"></script>' })]];
     for (const [nom, rep] of defis) {
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep());
         r = await lancer(plan.map(p => p.url), tr, d);
@@ -129,6 +131,40 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
         tr = reseau(normal);
         const r2 = await lancer(plan.map(p => p.url), tr, d);
         verifier(`   le lancement suivant REFUSE de partir tant que le fichier existe (zéro requête)`, [r2.etat, tr.appels.length], ['refuse-arret', 0]);
+    }
+    // REPONSE-HOTE (2026-10-18) : la règle commune de réponse, vue par le collecteur
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => tmp();
+        // (a) 200 text/html sans marqueur : fausse page introuvable → absente, on passe à la suivante, AUCUN arrêt
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : { status: 200, type: 'image/png', octets: grand });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
+        verifier('REPONSE-HOTE : un 200 text/html sans marqueur → absente (empreinte gardée), les autres continuent, AUCUN arrêt', [r.etat, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.fausseAbsente, /^[0-9a-f]{64}$/.test(idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.empreinte || ''), Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])],
+            ['termine', 'absent', true, true, 3, false, [['assets.pokemon.com', 1, 1]]]);
+        // (b) un défi → arrêt définitif par le fichier d'arrêt (couvert par la liste « défis » ci-dessous)
+        // (c) trop de fausses absences d'affilée → PAUSE, sans fichier d'arrêt définitif (seuil du banc : 2, le plan n'a que 4 fichiers ; le 21 est prouvé au module)
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { suivi: RH.suiviHote({ seuil: 2 }), dossierPauses: dp() });
+        verifier('REPONSE-HOTE : au-delà du seuil de fausses absences → PAUSE de l\'hôte (etat « pause-hote »), AUCUN fichier d\'arrêt définitif, plus de requête (robots + 3 images)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.hote, r.pauseHote?.persistante, r.reponsesHotes[0].fausses], ['pause-hote', false, 4, 'assets.pokemon.com', false, 3]);
+        tr = reseau(normal); const r2p = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : …et la passe SUIVANTE repart (la pause n\'est pas un arrêt définitif) : compteur à zéro ; les 2 absences déjà notées au cache ne se redemandent pas (robots + les 2 images restantes)', [r2p.etat, tr.appels.length], ['termine', 3]);
+        // (d) « Gym Challenge » seul : ambiguë → pause PERSISTANTE ; aucune requête tant qu'elle tient
+        d = tmp(); const dPause = dp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<nav>Gym Heroes · Gym Challenge</nav>' });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier daté), pas d\'arrêt définitif (robots + 1 image seulement)', [r.etat, r.pauseHote?.persistante, fs.existsSync(C.fichierArret(d)), tr.appels.length, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(dPause, 'assets.pokemon.com')?.empreinte || '')], ['pause-hote', true, false, 2, true]);
+        tr = reseau(normal); const r3p = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : …la passe suivante, tant que le fichier de pause tient : AUCUNE requête', [r3p.etat, tr.appels.length], ['pause-hote', 0]);
+        // (e) inattendue : redirection, JSON, octets faux sans marqueur → PAUSE (pas d'arrêt définitif)
+        for (const [nom, rep] of [['redirection 302', { status: 302, location: 'https://autre.example/x' }], ['200 JSON', { status: 200, type: 'application/json', texte: '{}' }], ['octets qui ne sont pas une image', { status: 200, type: 'image/png', octets: Buffer.from('pas une image') }]]) {
+            d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep);
+            r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+            verifier(`REPONSE-HOTE : ${nom} = inattendue → PAUSE de l'hôte, jamais un arrêt définitif (robots + 1 image)`, [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.issue], ['pause-hote', false, 2, 'inattendue']);
+        }
+        // une VRAIE image derrière Imperva reste une image
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand, imperva: true });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : une vraie image servie derrière Imperva est une image (l\'en-tête seul ne prouve rien)', [r.etat, fs.existsSync(C.fichierArret(d))], ['termine', false]);
     }
     // 404 : absent, on continue ; 5xx : interrompu sans arrêt
     d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /Unown_B/.test(url) ? { status: 404, type: 'image/png' } : { status: 200, type: 'image/png', octets: grand });
@@ -165,7 +201,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     verifier('image 404 AVEC marqueur de défi (challenge) : arrêt définitif', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
     d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : { status: 200, type: 'text/html', texte: '<html><body>page</body></html>' });
     r = await lancer(plan.map(p => p.url), tr, d);
-    verifier('image 200 qui n\'est pas une image (HTML sans marqueur) : arrêt définitif (une IMAGE était attendue)', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
+    verifier('image 200 qui n\'est pas une image (HTML sans marqueur) : fausse page introuvable → absente, JAMAIS un arrêt définitif (REPONSE-HOTE ; pause au-delà de 20 d\'affilée, ici 4)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length], ['termine', false, 5]);
     // le transport RÉEL rend aussi le corps des 404/410 (sinon un marqueur de défi y serait invisible)
     { const fo = global.fetch; global.fetch = async () => new Response('<html>Just a moment</html>', { status: 404, headers: { 'content-type': 'text/html' } });
       try { const t = await C.transportFetch.get('https://assets.pokemon.com/robots.txt', {}); verifier('transport réel : un 404 rend son corps (le défi caché derrière un 404 se voit)', [t.status, /just a moment/i.test(t.texte || '')], [404, true]); } finally { global.fetch = fo; } }

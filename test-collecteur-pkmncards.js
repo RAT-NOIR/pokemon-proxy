@@ -10,6 +10,7 @@ const path = require('path');
 const sharp = require('sharp');
 const P = require('./collecte-cartes/pkmncards');
 const C = require('./collecteur-images-pkmncards');
+const RH = require('./collecte-cartes/reponse-hote');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 
@@ -112,13 +113,40 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     verifier('télécharger : autre hôte, recherche (?s=), page de carte, remontée, paramètre -> refusés AVANT toute requête (même pas robots.txt)', [r.etat, tr.appels.length, r.refusees.length], ['rien-a-faire', 0, 5]);
     // arrêt définitif
     const defis = [['403', () => ({ status: 403, type: 'text/html', texte: 'non' })], ['429', () => ({ status: 429, type: 'text/html', texte: 'non' })], ['HTML au lieu d\'une image', () => ({ status: 200, type: 'text/html', texte: '<html>Just a moment</html>' })],
-        ['HTML SANS marqueur', () => ({ status: 200, type: 'text/html', texte: '<html><body>page</body></html>' })], ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })],
-        ['Imperva', () => ({ status: 200, type: 'image/png', octets: grand, imperva: true })], ['redirection 302', () => ({ status: 302, location: 'https://autre.example/x' })],
-        ['octets qui ne sont pas une image', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>defi</html>') })], ['403 à corps VIDE', () => ({ status: 403, type: '', texte: '' })],
+        ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })],
+        ['Imperva avec un corps qui n\'est pas une image (REPONSE-HOTE : l\'en-tête seul ne prouve rien)', () => ({ status: 200, type: 'text/html', texte: '<html><body>page</body></html>', imperva: true })],
+        ['octets qui ne sont pas une image mais portent un marqueur de défi', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>Just a moment</html>') })], ['403 à corps VIDE', () => ({ status: 403, type: '', texte: '' })],
         ['403 dont le corps est une IMAGE', () => ({ status: 403, type: 'image/png', octets: grand })], ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })],
-        ['401 (connexion obligatoire)', () => ({ status: 401, type: 'text/html', texte: 'login' })], ['410 (disparue : pas un « absent »)', () => ({ status: 410, type: 'text/html', texte: 'gone' })], ['402 (mur payant)', () => ({ status: 402, type: 'text/html', texte: 'pay' })],
-        ['451 (statut inattendu)', () => ({ status: 451, type: 'text/html', texte: 'x' })],
-        ['une PNG déclarée .png mais dont les octets sont ceux d\'un JPEG',() => ({ status: 200, type: 'image/jpeg', octets: Buffer.from('ffd8ffe000104a464946', 'hex') })]];
+        ['401 (connexion obligatoire)', () => ({ status: 401, type: 'text/html', texte: 'login' })], ['410 (disparue : pas un « absent »)', () => ({ status: 410, type: 'text/html', texte: 'gone' })],
+        ['captcha dans une page à la place de l\'image', () => ({ status: 200, type: 'text/html', texte: '<div class="g-recaptcha"></div>' })]];
+    // REPONSE-HOTE (2026-10-18) : ce qui n'était plus un arrêt définitif — la fausse page introuvable (absente), l'inattendu (PAUSE de l'hôte), l'ambigu (pause persistante)
+    {
+        const dp = () => tmp();
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /m23_en_002/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : normal(url));
+        r = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
+        const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
+        verifier('REPONSE-HOTE : un 200 text/html SANS marqueur → absente (empreinte gardée), on passe à la suivante, AUCUN arrêt', [r.etat, Object.values(idxF).filter(e => e.statut === 'absent' && e.fausseAbsente === true && /^[0-9a-f]{64}$/.test(e.empreinte || '')).length, Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])], ['termine', 1, 2, false, [['pkmncards.com', 1, 1]]]);
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' });
+        r = await lancer(urls, tr, d, horloge(), { suivi: RH.suiviHote({ seuil: 1 }), dossierPauses: dp() });
+        verifier('REPONSE-HOTE : au-delà du seuil de fausses absences d\'affilée → PAUSE de l\'hôte (« pause-hote »), AUCUN fichier d\'arrêt définitif, robots + 2 images seulement (le seuil du banc est 1 : le plan n\'a que 3 fichiers ; le 21 est prouvé au module)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.hote, r.reponsesHotes[0].fausses], ['pause-hote', false, 3, 'pkmncards.com', 2]);
+        tr = reseau(normal); const rSuite = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : …et la passe SUIVANTE repart (une pause n\'est pas un arrêt définitif)', [rSuite.etat, tr.appels.length], ['termine', 2]);
+        d = tmp(); const dPause = dp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<nav>Gym Heroes · Gym Challenge</nav>' });
+        r = await lancer(urls, tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier daté qui nomme l\'empreinte), pas d\'arrêt définitif', [r.etat, r.pauseHote?.persistante, fs.existsSync(C.fichierArret(d)), tr.appels.length, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(dPause, 'pkmncards.com')?.empreinte || '')], ['pause-hote', true, false, 2, true]);
+        tr = reseau(normal); const rP = await lancer(urls, tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : …tant que le fichier de pause tient, AUCUNE requête (pas même robots.txt)', [rP.etat, tr.appels.length], ['pause-hote', 0]);
+        for (const [nom, rep] of [['redirection 302', () => ({ status: 302, location: 'https://autre.example/x' })], ['octets qui ne sont pas une image (sans marqueur)', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>defi</html>') })],
+            ['402 (mur payant)', () => ({ status: 402, type: 'text/html', texte: 'pay' })], ['451 (statut inattendu)', () => ({ status: 451, type: 'text/html', texte: 'x' })], ['200 JSON', () => ({ status: 200, type: 'application/json', texte: '{}' })],
+            ['une PNG déclarée .png mais dont les octets sont ceux d\'un JPEG', () => ({ status: 200, type: 'image/jpeg', octets: Buffer.from('ffd8ffe000104a464946000101000001', 'hex') })]]) {
+            d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep());
+            r = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
+            verifier(`REPONSE-HOTE : ${nom} = inattendue → PAUSE de l'hôte, jamais un arrêt définitif (robots + 1 image)`, [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length], ['pause-hote', false, 2]);
+        }
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand, imperva: true });
+        r = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : une vraie image servie derrière Imperva est une image', [r.etat, fs.existsSync(C.fichierArret(d))], ['termine', false]);
+    }
     for (const [nom, rep] of defis) {
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep());
         r = await lancer(urls, tr, d);

@@ -32,8 +32,8 @@ const CRAWL_DELAY_MAX_S = 60;
 const CIBLES_PAR_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-CLICS\\croisement-reel.json';
 const ROBOTS = `https://${PK.HOTE_IMAGES}/robots.txt`;
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
-const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident/i;
-const PNG_MAGIE =Buffer.from('89504e470d0a1a0a', 'hex');
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans collecte-cartes/reponse-hote.js — ce collecteur les APPELLE, il n'en garde aucune copie.
+const RH = require('./collecte-cartes/reponse-hote');
 
 // ── le plan (lecture seule de la base) ────────────────────────────────────────────────────────────────────────────────────
 /** Les cibles : les idProduct du croisement (clé `chez[].produits[].idProduct`). */
@@ -110,7 +110,7 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS, plafond: plafondMax = null }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS, plafond: plafondMax = null, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !PK.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
@@ -119,16 +119,19 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);     // (`plafondMax` : un garde-fou plus bas, pour le banc ; jamais plus haut que adresses + 1)
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, PK.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    // 🔴 TOUR 2 : un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : le robots.txt réel de l'hôte répond 404 avec la page HTML d'AmazonS3, et un 404/410
-    // est « absent » (robots.txt : aucune règle). Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404/410 compris). Pour une IMAGE attendue,
-    // un 200 qui n'est pas un PNG est jugé plus bas (octets) : arrêt aussi.
-    const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+    // 🔴 TOUR 2 : un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : le robots.txt réel de l'hôte répond 404 avec la page HTML d'AmazonS3, et un 404
+    // est « absent » (robots.txt : aucune règle). REPONSE-HOTE (2026-10-18) : la preuve est celle du module commun (401, 403, 410, 429, cf-mitigated, Imperva avec un corps de défi, marqueurs
+    // techniques dans le corps — 404 compris) ; une IMAGE attendue se CLASSE (image · absente · fausse page introuvable · défi · ambiguë · transitoire · inattendue).
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 3000 })) !== null;
+    const hoteImages = new URL(ROBOTS).hostname;
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
         dernier = now(); requetes++;
         return transport.get(url, o);
     };
+    // 0. une pause persistante de l'hôte tient : AUCUNE requête (pas même robots.txt)
+    try { RH.garderHote(hoteImages, dossierPauses); } catch (e) { return { etat: 'pause-hote', requetes, plafond, refusees, motif: e.message, pauseHote: { hote: hoteImages, persistante: true, empreinte: e.empreinte ?? null }, reponsesHotes: [] }; }
     // 1. robots.txt, d'abord
     let robots;
     try { robots = await demander(ROBOTS, {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
@@ -146,18 +149,20 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     for (const url of permises) {
         let r;
         try { r = await demander(url, { binaire: true }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
-        if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}${/html/i.test(r.type || '') ? ', HTML au lieu d\'une image' : ''}`);
-        if (r.status === 404 || r.status === 410) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }
-        if (r.status >= 500) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` };
-        if (r.status !== 200) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
-        if (!Buffer.isBuffer(r.octets) || r.octets.length < 8 || !r.octets.subarray(0, 8).equals(PNG_MAGIE)) return arret(url, r, 'les octets reçus ne sont pas un PNG (page de défi probable)');
+        // LA RÈGLE COMMUNE : une seule décision pour la réponse à une image
+        const x = RH.traiterImage(r, { suivi, hote: hoteImages, url, dossierPauses, connues });
+        const rapportReponses = () => ({ reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) });
+        if (x.action === 'arret-definitif') return { ...arret(url, r, `${x.motif} (HTTP ${r.status})`), ...rapportReponses() };
+        if (x.action === 'pause' || x.action === 'pause-persistante') return { etat: 'pause-hote', requetes, plafond, refusees, motif: x.motif, pauseHote: { hote: hoteImages, issue: x.issue, empreinte: x.empreinte ?? null, persistante: x.action === 'pause-persistante', fichier: x.fichier ?? null }, ...rapportReponses() };
+        if (x.action === 'transitoire') return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}`, ...rapportReponses() };
+        if (x.action === 'absente') { index.images[url] = { statut: 'absent', status: r.status, ...(x.issue === 'fausse-absente' ? { fausseAbsente: true, empreinte: x.empreinte } : {}), le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }
         const meta = await sharp(r.octets).metadata();
         const fichier = path.join('img', nomFichier(url));
         fs.writeFileSync(path.join(dossierCache, fichier), r.octets);
         index.images[url] = { statut: 'ok', fichier, sha256: sha('sha256', r.octets), octets: r.octets.length, w: meta.width, h: meta.height, le: new Date().toISOString() };
         ecrireIndex(dossierCache, index);
     }
-    return { etat: 'termine', requetes, plafond, refusees };
+    return { etat: 'termine', requetes, plafond, refusees, reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) };
 }
 
 // ── L'ÉCRITURE, depuis le cache seulement ─────────────────────────────────────────────────────────────────────────────────────
