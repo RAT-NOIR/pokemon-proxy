@@ -154,13 +154,12 @@ function denominateurDuCode(items) {
 // diffère et aucun scan ne le montre. Marque ces images « partagée holo/non-holo » (champ explicite), pour que l'API ne tente jamais de trancher le brillant par l'image. »
 // 🔴 La décision couvre UNE différence — holo / non-holo — et rien d'autre : un groupe n'est résolu que si TOUT ceci est vrai (écrit par ce qu'il AUTORISE ; le reste est un trou NOMMÉ) :
 //   · EXACTEMENT deux produits (une carte, un set : `carteId` et `slugSet` fournis et identiques), même nom Cardmarket, slugs identiques à V1 / V2 près ;
-//   · EXACTEMENT deux entrées Pokumon : l'une « Holofoil », l'autre non, même nom, même numéro, même total, même texte de set, MÊMES séries et MÊMES événements ; aucun « Reverse » ;
+//   · EXACTEMENT deux entrées Pokumon : l'une « Holofoil », l'autre non, même nom, même numéro, même total, même texte de set, la série du produit dans les DEUX entrées et dans leurs événements ; aucun « Reverse » ;
 //   · l'entrée choisie passe ensuite tous les vetos et témoins habituels (placeholder, langue, préfixe, séries, événements, une origine, dénominateur).
 // RÈGLE DE CHOIX, écrite et déterministe : la NON-holo. Le scan holo porte le brillant CUIT dans l'image (visible sur Drizzile) : servi au produit non-holo il affirmerait un brillant qui n'y est
 // pas ; le scan plat servi au produit holo omet seulement le brillant, ce que la décision accepte. (Contrepartie nommée au rapport : la non-holo est souvent plus étroite, 576 px en médiane.)
 const MOTIF_HOLO = Object.freeze({ carte: 'holo-carte-non-prouvee', forme: 'holo-forme-non-prouvee', reverse: 'holo-reverse', series: 'holo-series-differentes' });
 const sansSeries = s => String(s ?? '').replace(/Play Pokemon Prize Pack Series \d/g, '').replace(/[,\s]+/g, ' ').trim();
-const memeListe = (a, b) => JSON.stringify([...a].sort((x, y) => x - y)) === JSON.stringify([...b].sort((x, y) => x - y));
 /**
  * Un groupe (série, nom, numéro d'origine) qui a autant de produits que d'entrées : est-ce UN couple holo / non-holo ? `g` : les enregistrements de l'apparieur ({ p, nm }) ; `c` : ses entrées.
  * @returns {{ entree: object, holo: object, produits: number[] } | { motif: string }}
@@ -177,7 +176,9 @@ function groupeHoloNonHolo(g, c) {
     if (hs.length !== 1 || ps.length !== 1) return { motif: MOTIF_HOLO.forme };
     const [h, e] = [hs[0], ps[0]];
     if (h.nom !== e.nom || h.numero !== e.numero || h.total !== e.total || sansSeries(h.set) !== sansSeries(e.set)) return { motif: MOTIF_HOLO.forme };
-    if (!memeListe(h.series, e.series) || !memeListe(h.evenements, e.evenements)) return { motif: MOTIF_HOLO.series };
+    // 🔑 décision du coordinateur (tour 1) : le tampon est identique d'une série à l'autre (PK-PP, paires 1-2, 2-3, 3-4) ; deux ensembles de séries différents ne font donc pas une autre impression.
+    // La condition : les DEUX entrées contiennent la série du produit ET leurs événements portent cette série.
+    if (![h, e].every(x => x.series.includes(a.serie) && x.evenements.includes(EVENEMENTS[a.serie]))) return { motif: MOTIF_HOLO.series };
     return { entree: e, holo: h, produits: [a.idProduct, b.idProduct].sort((x, y) => x - y) };
 }
 
@@ -479,7 +480,7 @@ function planifierPokumon({ produits, cartes, index }) {
         // PP-HOLO : l'image est celle de TOUT le groupe ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
         const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
         const choix = r.partageeHoloNonHolo
-            ? `partagée holo/non-holo : produits ${r.produitsPartages.join(' + ')} (slugs V1 / V2 d'une même carte), entrée ${e.id} (non-holo) choisie, entrée ${r.entreeHoloIgnoree.id} (Holofoil) laissée de côté — même nom, même numéro, mêmes séries, seul le brillant diffère ; `
+            ? `partagée holo/non-holo : produits ${r.produitsPartages.join(' + ')} (slugs V1 / V2 d'une même carte), entrée ${e.id} (non-holo) choisie, entrée ${r.entreeHoloIgnoree.id} (Holofoil) laissée de côté — même nom, même numéro, la série du produit dans les deux entrées, seul le brillant diffère ; `
             : 'une seule entrée candidate pour ce produit ; ';
         plan.push({ ...base, nomEn: carte.nomEn ?? null, serie: p.serie, numero: e.numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: 'pokumon+nom+numero+serie', ...partage,
             preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro d'origine ${r.numeroOrigine.n} (slug Cardmarket ${p.slugProduit ?? ''}) = n° imprimé ${e.numero} ; Prize Pack Series ${p.serie} (entrée ${e.series.map(s => `Series ${s}`).join(' + ')}) ; ${r.temoin} ; ${choix}série prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; tampon : ${l.tampon}` });

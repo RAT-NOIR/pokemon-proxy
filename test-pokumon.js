@@ -135,11 +135,15 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     const HD = (id, v) => pc(id, 259245, 2, 'Houndoom [Single Strike Roar | Darkness Fang]', `Houndoom-${v}-PPS2BST-096`);
     const KRIC1 = pc(697064, 100, 1, 'Kricketune V [Exciting Stage | X-Scissor]', 'Kricketune-V-PPS1BST-006');
     A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, E.houndoomHolo, E.kricketune] });
-    verifier('PP-HOLO : holo S2 seule et non-holo S1+S2 (Houndoom 096/163) — la SÉRIE diffère : trou « holo-series-differentes », rien n\'est résolu', [parId(A, 705155).motif, parId(A, 835797).motif], ['holo-series-differentes', 'holo-series-differentes']);
+    verifier('PP-HOLO : holo S2 seule et non-holo S1+S2 (Houndoom 096/163) — les deux entrées contiennent la série S2 du produit : PROUVÉS, sur la non-holo (75673), le tampon étant identique d\'une série à l\'autre', [parId(A, 705155).verdict, parId(A, 835797).verdict, parId(A, 705155).entree.id, parId(A, 835797).produitsPartages], ['prouve', 'prouve', 75673, [705155, 835797]]);
+    A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, { ...E.houndoomHolo, series: [3], evenements: [7838] }, E.kricketune] });
+    verifier('PP-HOLO : une entrée qui ne contient PAS la série du produit (holo S3 pour des produits S2) n\'est pas candidate : un seul candidat pour deux produits, trou « multiplicité »', [parId(A, 705155).motif, parId(A, 835797).motif], ['douteux-multiplicite', 'douteux-multiplicite']);
+    A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, { ...E.houndoomHolo, series: [1, 2], evenements: [7720] }, E.kricketune] });
+    verifier('PP-HOLO : une entrée dont les événements ne portent pas la série du produit (S2 dite, seul l\'événement S1 posé) : trou « holo-series-differentes »', [parId(A, 705155).motif, parId(A, 835797).motif], ['holo-series-differentes', 'holo-series-differentes']);
     // la décision ne contourne AUCUN veto : l'entrée choisie les passe tous
     const sous = (modN, modH = {}) => P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [{ ...E.drizzileHolo, ...modH }, { ...E.drizzile, ...modN }, E.greatBall] });
     verifier('PP-HOLO vetos : placeholder · langue · événement contredit · série non prouvée — chacun garde le groupe en trou, avec son motif habituel',
-        [sous({ img: `${CDN}/2021/03/PlaceholderCard.jpg` }), sous({ anglais: false }), sous({ evenements: [] }, { evenements: [] }), sous({ series: [1, 3], evenements: [7720, 7838] }, { series: [1, 3], evenements: [7720, 7838] })].map(r => [parId(r, 697089).motif, parId(r, 835825).motif]),
+        [sous({ img: `${CDN}/2021/03/PlaceholderCard.jpg` }), sous({ anglais: false }), sous({ series: [1, 2], evenements: [7720] }, { series: [1, 2], evenements: [7720] }), sous({ series: [1, 3], evenements: [7720, 7838] }, { series: [1, 3], evenements: [7720, 7838] })].map(r => [parId(r, 697089).motif, parId(r, 835825).motif]),
         [['placeholder', 'placeholder'], ['langue', 'langue'], ['evenement-contredit', 'evenement-contredit'], ['serie-non-prouvee', 'serie-non-prouvee']]);
     A = P.apparier({ produits: [{ ...DRZ1, slugProduit: 'Drizzile-V1-PPS1SSH-TG056' }, { ...DRZ2, slugProduit: 'Drizzile-V2-PPS1SSH-TG056' }, GB1], index: idxH });
     verifier('PP-HOLO vetos : un numéro d\'origine à préfixe (TG056) ne reçoit pas l\'entrée « 056 » (le groupe lui-même reste un trou)', [parId(A, 697089).verdict, parId(A, 835825).verdict], ['reste', 'reste']);

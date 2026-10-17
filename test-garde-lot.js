@@ -93,6 +93,18 @@ verifier('worker actif sur CE set (même preuve que pour les images) : la baisse
 }
 verifier('images, cartes, noms de cartes, nom affiché : par set', [avant.get('images set:Set-A'), avant.get('images set:Set-B'), avant.get('cartes set:Set-A'), avant.get('noms-cartes set:Set-B'), avant.get('nom-affiche set:Set-A'), avant.get('nom-affiche set:Set-C') ?? 0], [1, 1, 2, 1, 1, 0]);
 
+// PP-HOLO (2026-10-17) : le champ « partagée holo/non-holo » se compte par set. Un rejeu qui l'efface laisse `images` et la vignette intacts : seul ce compteur le voit.
+const etatPH = copie(etat0); etatPH.cartes[0].images[0].partageeHoloNonHolo = true; etatPH.cartes[0].images[0].produitsPartages = [100, 101];
+const lotPHefface = copie(etatPH); delete lotPHefface.cartes[0].images[0].partageeHoloNonHolo; delete lotPHefface.cartes[0].images[0].produitsPartages;
+verifier('PP-HOLO compteur : une image marquée « partagée holo/non-holo » se compte par set ; une ordinaire ou un `false` non', [compterEtat(etatPH).get('images-partagees-holo set:Set-A'), compterEtat(etat0).get('images-partagees-holo set:Set-A') ?? 0, compterEtat((() => { const x = copie(etatPH); x.cartes[0].images[0].partageeHoloNonHolo = false; return x; })()).get('images-partagees-holo set:Set-A') ?? 0], [1, 0, 0]);
+verifier('PP-HOLO : un rejeu qui EFFACE le champ (l\'image reste, `images` ne bouge pas) est une BAISSE qui arrête le lot', comparer(compterEtat(etatPH), compterEtat(lotPHefface)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['images-partagees-holo set:Set-A 1→0']);
+verifier('PP-HOLO : le worker prouvé sur le set ne dispense PAS cette baisse (il n\'écrit pas ce champ)', comparer(compterEtat(etatPH), compterEtat(lotPHefface), { setsDuWorker: new Set(['Set-A']) }).nonAutorisees.length, 1);
+verifier('PP-HOLO : la baisse peut s\'annoncer (retrait partiel voulu)', comparer(compterEtat(etatPH), compterEtat(lotPHefface), { annonces: { 'images-partagees-holo set:Set-A': 1 } }).nonAutorisees.length, 0);
+verifier('PP-HOLO : la POSE du champ est une hausse visible, pas une baisse', (c => [c.nonAutorisees.length, c.hausses])(comparer(compterEtat(etat0), compterEtat(etatPH))), [0, { 'images-partagees-holo': 1 }]);
+verifier('PP-HOLO : les autres groupes ne bougent pas (mêmes clés avant/après hors du nouveau compteur)', [...compterEtat(etatPH)].filter(([k]) => !k.startsWith('images-partagees-holo')).map(([k, n]) => `${k}=${n}`).join('|') === [...compterEtat(etat0)].map(([k, n]) => `${k}=${n}`).join('|'), true);
+{ const { validerAnnonces } = require('./collecte-cartes/garde-lot'); let leve = false; try { validerAnnonces({ 'images-partagees-holo set:Set-A': 1 }); } catch { leve = true; }
+  verifier('PP-HOLO : l\'annonce « images-partagees-holo » est un compteur connu', leve, false); }
+
 // ── 2. LE CAS DU §59 : +1 fiche annoncée, un illustrateur effacé à côté. Le total monte, le groupe baisse.
 const lot = copie(etat0);
 lot.cartesProduits.push({ _id: 'p4', idProduct: 300, idExpansion: 13, carteId: 1 });
