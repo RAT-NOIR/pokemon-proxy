@@ -6312,7 +6312,14 @@ async function gererIdentifier(req, res) {
                 strategie: strategieReverse
             },
             // Codes langue Cardmarket, pour que l'extension construise l'URL du live
-            codeLangue: { EN: 1, FR: 2, DE: 3, ES: 4, IT: 5, ZH: 6, JP: 7, PT: 8, RU: 9, KR: 10 }[cardInfo.language] || 1
+            codeLangue: { EN: 1, FR: 2, DE: 3, ES: 4, IT: 5, ZH: 6, JP: 7, PT: 8, RU: 9, KR: 10 }[cardInfo.language] || 1,
+            // GARDE-CONTRADICTION (2026-10-17) : ce que la photo a LUE et le vivier jugé, pour la garde de l'adaptateur v2 (v2/identifier/garde-contradiction.js). UNIQUEMENT quand la requête vient de v2
+            // (`scanIdImpose` posé par la route v2) : la réponse de la route héritée directe ne change pas d'un octet, et aucune décision de cette chaîne ne lit ce bloc.
+            ...(req.scanIdImpose ? { lectureGarde: {
+                numero: cardInfo.number ?? null, total: cardInfo.total ?? null, setCode: cardInfo.setCode ?? null, symboleSet: cardInfo.symboleSet ?? null,
+                attaque: cardInfo.attaque ?? null, attaqueConfiance: cardInfo.attaqueConfiance ?? null, carteTcgdexId: trouvaille.id ?? null,
+                totalHorsTailleDeSet, vivierIds: produits.map(p => p.idProduct)
+            } } : {})
         });
 
     } catch (e) {
