@@ -189,6 +189,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('R2 AVANT la ligne : 2 dépôts WebP à la clé du set', [depots.length, depots[0]?.[1], depots[0]?.[3]], [2, 'pokemontcg.io/Celebrations/005-1-en.webp', 'image/webp']);
     verifier('la carte reçoit SON visuel et garde celui de l\'autre set', B.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `pokemontcg.io:${SLUG}:005`]);
     verifier('   l\'entrée porte mention, lot, langue, attribution, source', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source])(B.col('cartes').get(2).images[0]), ['© Pokémon / The Pokémon Company', 'ptcgio-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokemontcg.io']);
+    verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.urlOriginal, im.collecteLe instanceof Date, B.col('cartes').get(1).images[1].retirable, B.col('cartes').get(1).images[1].urlOriginal, B.col('cartes').get(1).images[1].collecteLe instanceof Date], [true, 'https://images.pokemontcg.io/cel25/5_hires.png', true, true, 'https://images.pokemontcg.io/cel25/5_hires.png', true]);
     verifier('un produit DÉJÀ pourvu par une autre source : intact (additif ; la vignette est un champ NEUF que assurerVignettes pose partout, vignette.js)', B.col('cartes').get(3).images.map(({ vignette, ...e }) => e), [{ set: SLUG, source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/h.webp', langue: 'en' }]);
     verifier('la Classic « BS 15 » est demandée à cel25c ; le serveur simulé répond 404 (le numéro n\'existe pas à la source) : le trou reste, aucune entrée', B.col('cartes').get(4).images, []);
     verifier('VIGNETTES : après la jointure, le collecteur appelle vignetterApresJointure avec le bucket des images et le set', appelsVignettes[0], ['bucket-banc', SLUG]);
@@ -226,6 +227,30 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         verifier('PRÉSÉANCE : un TCGdex plus grand (800×1100) garde sa place, notre entrée cède (comme avant) — son document reste « ok »', [R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), R.Bp.col('images').get('tcgdex/Celebrations/2/011').etat, R.b.etat], [['tcgdex:011'], 'ok', 'verifie']);
         R = await apresPremier(tcgEntree({ source: 'bulbapedia', cleR2: 'bulbapedia/x.webp' }), tcgDoc({ source: 'bulbapedia', cleR2: 'bulbapedia/x.webp', _id: 'bulba:x' }));
         verifier('PRÉSÉANCE : une entrée Bulbapedia au même numéro n\'est pas jugée par cette règle — notre entrée cède comme avant (dejaServi), Bulbapedia intacte', R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), ['bulbapedia:011']);
+    }
+
+    // ➕ 2026-10-17 (BASSE-DEF) : une entrée MARQUÉE (basse définition) d'une autre source est REMPLAÇÉE par l'image haute définition de pokemontcg.io (jamais l'inverse)
+    {
+        const MARQ = { set: SLUG, source: 'tcgdex', numero: '001', cleR2: 'tcgdex/Celebrations/001-3-basse.webp', w: 300, langue: 'en', basseDefinition: true };
+        const monde = (images = [MARQ]) => { const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(3).images = structuredClone(images);
+            Bx.col('images').set('mq', { _id: 'mq', source: 'tcgdex', set: SLUG, carteId: 3, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); return Bx; };
+        const des = Bx => Bx.col('cartes').get(3).images.map(e => `${e.source}:${e.basseDefinition === true}`);
+        { const Bx = monde(); const r = await lancer(Bx, reseau(normal));
+          verifier('REMPLACEMENT : une entrée MARQUÉE (autre source, même set, numéro, langue) face à l\'image HD de pokemontcg.io → elle sort, la nôtre entre sans marque ; garde verte', [r.b.etat, des(Bx), r.b.garde?.ok, r.depots.length], ['verifie', ['pokemontcg.io:false'], true, 3]);
+          verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), adresse d\'origine et clé R2 lisibles', [Bx.col('images').get('mq').etat, Bx.col('images').get('mq').remplacePar, !!Bx.col('images').get('mq').remplaceLe, Bx.col('images').get('mq').urlOriginal, Bx.col('images').get('mq').cleR2], ['remplace', { source: 'pokemontcg.io', cleR2: 'pokemontcg.io/Celebrations/001-3-en.webp' }, true, 'https://hote.example/ancienne.png', MARQ.cleR2]); }
+        { const Bx = monde([{ ...MARQ, langue: 'ja' }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : le numéro reste servi, 001 jamais demandé', [des(Bx), trX.appels.some(u => /\/1_hires/.test(u))], [['tcgdex:true'], false]); }
+        { const Bx = monde([{ ...MARQ, source: 'pokemontcg.io' }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('une entrée marquée de pokemontcg.io lui-même n\'est pas retéléchargée', [trX.appels.some(u => /\/1_hires/.test(u))], [false]); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600, imageEmprunteeTirage: true }]); const r = await lancer(Bx, reseau(normal));
+          verifier('EMPRUNTÉE (correction 4) : une image simple ne remplace pas une entrée `imageEmprunteeTirage` (aucun marqueur positif de tampon) ; garde verte', [des(Bx), Bx.col('images').get('mq').etat, r.b.garde?.ok], [['tcgdex:false'], 'ok', true]); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600 }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('JAMAIS une image correcte au-dessus du seuil par une équivalente : 600 px sain face à 734 px (1,22 ×) → rien n\'est même demandé', [des(Bx), trX.appels.some(u => /\/1_hires/.test(u))], [['tcgdex:false'], false]); }
+        { // course : l'entrée marquée est posée PENDANT le téléchargement ; la jointure arbitre
+          const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(3).images = [];
+          const trX = reseau(url => { if (/\/1_hires/.test(url)) { Bx.col('cartes').get(3).images.push(structuredClone(MARQ)); Bx.col('images').set('mq', { _id: 'mq', source: 'tcgdex', set: SLUG, carteId: 3, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return normal(url); });
+          const r = await lancer(Bx, trX);
+          verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (même arbitrage), garde verte', [des(Bx), Bx.col('images').get('mq')?.etat, r.b.garde?.ok], [['pokemontcg.io:false'], 'remplace', true]); }
     }
 
     // défi en cours de route : arrêt, ce qui est prouvé avant est joint, l'alerte est écrite

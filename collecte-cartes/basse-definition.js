@@ -18,9 +18,9 @@
 //     `remplacePar` (source, cleR2 de la remplaçante) et `remplaceLe`.
 //
 // Qui l'appelle : collecteur-images.js (artofpkm), collecteur-images-bulba.js, collecteur-images-tcgdex.js — les jointures qui posent une entrée
-// NON marquée. Les collecteurs TPC, PikaQian et pokemontcg.io ne comblent que les visuels MANQUANTS (`dejaServi`) : une entrée marquée compte
-// comme « servie », ils ne l'atteignent pas (TPC et PikaQian posent la marque ; ptcgio n'écrit que des originaux ≥ 350).
-const { estBasseDefinition, largeurOriginaleDe } = require('./seuils-images');
+// NON marquée — ET, depuis le 2026-10-17 (BASSE-DEF, voir plus bas), les collecteurs TPC, PikaQian, pokemontcg.io, Pokumon et pokemon.com : ils comblaient
+// les visuels MANQUANTS (`dejaServi`) et comptaient une entrée marquée comme « servie » ; elle est désormais remplaçable par leur image non marquée.
+const { estBasseDefinition, largeurOriginaleDe, LARGEUR_MIN } = require('./seuils-images');
 const { cleNumero } = require('./jointure');
 
 /** La marque d'un document `images` (ou d'une entrée) d'après la largeur de l'original : `{ basseDefinition: true }` ou `{}`. */
@@ -31,32 +31,153 @@ function marqueDe(doc) {
     return estBasseDefinition(largeurOriginaleDe(doc)) ? { basseDefinition: true } : {};
 }
 
-/** Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. */
-function entreesARemplacer(images, candidat) {
+// ➕ 2026-10-17, DOCTRINE DE COLLECTE du testeur (article 4) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée, ou si la nouvelle est la même impression
+// et nettement plus grande. Une image correcte au-dessus du seuil n'est jamais remplacée par une image équivalente. Cela s'applique à toutes les sources. »
+// « Nettement » = au moins RATIO_NETTEMENT_PLUS_GRANDE fois la largeur de l'ORIGINAL de l'image actuelle (400 → 600 admis, 400 → 599 refusé). Une largeur inconnue ne prouve rien : rien ne sort.
+const RATIO_NETTEMENT_PLUS_GRANDE = 1.5;
+// « fausse » : une entrée de la table fermée de corrections (`corrections-images.js`, clés `source|cleR2`) — jamais déduite.
+const { IMAGES_DECLAREES_FAUSSES } = require('./corrections-images');
+const FAUSSES = new Set(IMAGES_DECLAREES_FAUSSES);
+
+// ➕ Correction 3 — « MÊME IMPRESSION » ne se réduit pas à (set, numéro, langue) : une variante tamponnée / non séparée / à note de variante est une AUTRE impression, et « une réimpression tamponnée ne reçoit
+// JAMAIS l'image d'une autre impression ». Le remplacement « nettement plus grande » n'est donc permis que si les DEUX côtés portent EXACTEMENT les mêmes marqueurs (absents des deux côtés compris) ;
+// un marqueur de faux type (null, false, chaîne vide, liste vide) vaut absent. Liste FERMÉE des marqueurs que les collecteurs écrivent sur une entrée : une variante qu'on ne sait pas nommer ne s'y
+// trouve pas — un collecteur qui ajoute un marqueur de variante à ses entrées doit l'ajouter ICI.
+// ➕ Correction 5 — LE TAMPON VIT AUSSI SUR LE DOCUMENT. Le collecteur Pokumon pose le tampon d'un scan (`marque`, texte libre) sur le DOCUMENT `images`, pas sur l'entrée `cartes.images` ; `noteVariante`, `partageeHoloNonHolo`,
+// `produitsPartages`, `partageeTamponNonSepare`, `tamponNonRepresente` sont posés sur l'entrée ET sur le document (marquer-partage-tampon.js). L'identité d'une entrée est donc lue sur l'entrée ET sur son document :
+// `marque` et `tampon` rejoignent la liste. Si le document de l'entrée est INTROUVABLE ou illisible, ou s'il CONTREDIT l'entrée sur un marqueur, on ne sait pas de quelle impression il s'agit : pas de remplacement.
+const MARQUEURS_DE_VARIANTE = Object.freeze(['noteVariante', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'marque', 'tampon']);
+const marqueurDe = (x, k) => { const v = x?.[k]; return v === undefined || v === null || v === false || v === '' || (Array.isArray(v) && !v.length) ? null : JSON.stringify(v); };
+const memeVarianteHors = (a, b, exclus = []) => MARQUEURS_DE_VARIANTE.every(k => exclus.includes(k) || marqueurDe(a, k) === marqueurDe(b, k));
+const memeVariante = (a, b) => memeVarianteHors(a, b);
+/** Un tampon comparé à un autre : minuscules, espaces compactés, bords retirés ; vide → null. */
+const normaliserTampon = s => { const v = typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().toLowerCase() : ''; return v || null; };
+const cleDocument = e => `${e?.source}|${e?.set}|${e?.cleR2}`;
+/**
+ * Les marqueurs EFFECTIFS d'une entrée : ceux de l'entrée complétés par ceux de son document (`documents` : Map `source|set|cleR2` → document). null = on ne peut pas conclure (document absent ou illisible,
+ * ou contradiction entre l'entrée et son document sur un marqueur). Une garde qui ne peut pas conclure bloque.
+ */
+function marqueursEffectifs(e, documents) {
+    const d = documents instanceof Map ? documents.get(cleDocument(e)) : undefined;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+    const eff = {};
+    for (const k of MARQUEURS_DE_VARIANTE) {
+        const a = marqueurDe(e, k), b = marqueurDe(d, k);
+        if (a !== null && b !== null && a !== b) return null;
+        eff[k] = a !== null ? e[k] : (b !== null ? d[k] : null);
+    }
+    return eff;
+}
+/** Le document `images` de chaque entrée (lecture) : Map `source|set|cleR2` → document (de préférence « ok »). Une entrée sans document n'a pas de clé. `M` : les modèles de la base `cartes`. */
+async function documentsDesEntrees(M, entrees) {
+    const m = new Map();
+    for (const e of (Array.isArray(entrees) ? entrees : []).filter(Boolean)) {
+        if (m.has(cleDocument(e))) continue;
+        const ds = await M.Image.find({ source: e.source, set: e.set, cleR2: e.cleR2 }).lean();
+        const d = (ds || []).find(x => x?.etat === 'ok') ?? (ds || [])[0];
+        if (d) m.set(cleDocument(e), d);
+    }
+    return m;
+}
+/** Les documents `images` d'une liste de documents déjà lus (base native, plan) : Map `source|set|cleR2` → document. */
+const documentsDeLaListe = docs => new Map((Array.isArray(docs) ? docs : []).filter(d => d && d.cleR2).map(d => [cleDocument(d), d]));
+
+// ➕ Correction 4 — LE TAMPON D'UNE ENTRÉE EMPRUNTÉE. Une entrée `imageEmprunteeTirage` montre l'image d'un AUTRE tirage (un scan simple sous une réimpression tamponnée) ; `tamponNonRepresente` dit le tampon
+// qu'elle NE montre PAS (« Staff », « Play! Pokémon »). Elle n'est remplacée que par le VRAI scan tamponné : la candidate doit porter un marqueur POSITIF de tampon, égal à ce libellé. Une image simple
+// non tamponnée ne la remplace JAMAIS (elle serait aussi fausse, et le marquage s'effacerait).
+// Correction 5 : le collecteur Pokumon pose désormais `tampon` (sa `marque` normalisée) sur ses entrées de familles TAMPONNÉES (pas McDonald's) : c'est le seul champ POSITIF de tampon. Il ne remplace une
+// empruntée que s'il est ÉGAL au libellé `tamponNonRepresente` de l'entrée. `noteVariante` (variante non séparée) et `partageeHoloNonHolo` ne sont pas des tampons. Écrit par ce qu'il autorise.
+const CHAMPS_TAMPON_POSITIFS = Object.freeze(['tampon']);
+const tamponPositifEgal = (e, c, champs) => typeof e?.tamponNonRepresente === 'string' && e.tamponNonRepresente !== '' && champs.some(k => c?.[k] === e.tamponNonRepresente);
+
+// Largeur de la candidate. SANS `wOriginal` (une entrée de jointure dont le document n'avait pas la largeur de l'original) : repli sur `w`, la largeur SERVIE (≤ 700), qui SOUS-ESTIME l'original.
+// C'est volontaire et prudent : une largeur sous-estimée ne fait jamais remplacer de trop (le ratio n'est atteint qu'avec plus de pixels). Ce n'est pas « l'original des deux côtés » — on ne le prétend pas.
+const largeurDeCandidate = c => {
+    const w = typeof c?.wOriginal === 'number' && c.wOriginal > 0 ? c.wOriginal : (typeof c?.w === 'number' && c.w > 0 ? c.w : null);
+    return w;
+};
+
+/**
+ * Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. Une entrée de MÊME impression (set, numéro, langue connue et égale) sort si elle est : de basse
+ * définition (`basseDefinition`), empruntée à un autre tirage (`imageEmprunteeTirage`), déclarée fausse (table fermée), ou nettement plus petite que la candidate (RATIO_NETTEMENT_PLUS_GRANDE).
+ * Tout le reste ne bouge pas — en particulier une image correcte au-dessus du seuil face à une équivalente.
+ */
+function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon = CHAMPS_TAMPON_POSITIFS, documents } = {}) {
     if (!Array.isArray(images) || !candidat || typeof candidat !== 'object') return [];
     if (candidat.basseDefinition === true || estBasseDefinition(largeurOriginaleDe(candidat))) return [];      // une image basse ne remplace jamais
     if (typeof candidat.langue !== 'string' || !candidat.langue) return [];                                     // langue inconnue : on ne remplace pas
     const numero = cleNumero(candidat.numero);
-    return images.filter(e => e && e.basseDefinition === true
-        && e.set === candidat.set
-        && cleNumero(e.numero) === numero
-        && typeof e.langue === 'string' && e.langue === candidat.langue
-        && !(e.source === candidat.source && e.cleR2 === candidat.cleR2));
+    const wC = largeurDeCandidate(candidat);
+    return images.filter(e => {
+        if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
+        if (!(typeof e.langue === 'string' && e.langue === candidat.langue)) return false;
+        if (e.source === candidat.source && e.cleR2 === candidat.cleR2) return false;
+        // l'identité de l'entrée se lit sur l'entrée ET sur son document (correction 5) : introuvable, illisible ou contradictoire → on ne remplace pas, quelle que soit la branche
+        const eff = marqueursEffectifs(e, documents);
+        if (!eff) return false;
+        // basse définition ou fausse : seulement à IMPRESSION identique (mêmes marqueurs de variante / de tampon des deux côtés) ET largeur de la candidate connue
+        if (e.basseDefinition === true || fausses.has(`${e.source}|${e.cleR2}`)) return wC != null && memeVariante(eff, candidat);
+        // empruntée : seulement par le VRAI scan tamponné (marqueur positif égal), les autres marqueurs identiques
+        if (e.imageEmprunteeTirage === true || eff.imageEmprunteeTirage) return tamponPositifEgal(eff, candidat, champsTampon) && memeVarianteHors(eff, candidat, ['imageEmprunteeTirage', 'tamponNonRepresente', ...champsTampon]);
+        const wE = largeurOriginaleDe(e);
+        return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE && memeVariante(eff, candidat);
+    });
 }
 
 /**
- * Applique le remplacement pour UNE candidate sur UNE carte : retire de `cartes.images` les entrées marquées qu'elle remplace (le `$pull` porte
- * la marque : il ne peut jamais retirer une entrée non marquée), et marque leurs documents `images` « remplace ». Rend le nombre d'entrées remplacées.
+ * Applique le remplacement pour UNE candidate sur UNE carte : retire de `cartes.images` les entrées que `entreesARemplacer` désigne (le `$pull` porte
+ * (set, source, cleR2) : UNE entrée, jamais plus), et marque leurs documents `images` « remplace ». Rend le nombre d'entrées remplacées.
  * À appeler AVANT de poser la candidate. `M` : les modèles de la base `cartes` (Carte, Image).
  */
-async function remplacerBasseDefinition(M, carteId, candidat, { maintenant = new Date() } = {}) {
+async function remplacerBasseDefinition(M, carteId, candidat, { maintenant = new Date(), documents } = {}) {
     const c = await M.Carte.findById(carteId).select('images').lean();
-    const aRemplacer = entreesARemplacer(c?.images, candidat);
+    const aRemplacer = entreesARemplacer(c?.images, candidat, { documents: documents ?? await documentsDesEntrees(M, c?.images) });
     for (const e of aRemplacer) {
-        await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: e.set, source: e.source, cleR2: e.cleR2, basseDefinition: true } } });
+        await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: e.set, source: e.source, cleR2: e.cleR2 } } });   // (set, source, cleR2) désigne UNE entrée
         await M.Image.updateOne({ source: e.source, set: e.set, cleR2: e.cleR2, etat: 'ok' }, { $set: { etat: 'remplace', remplacePar: { source: candidat.source, cleR2: candidat.cleR2 }, remplaceLe: maintenant } });
     }
     return aRemplacer.length;
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition };
+// ============================================================
+// ➕ 2026-10-17 (BASSE-DEF) — LE REMPLACEMENT PAR TOUS LES COLLECTEURS (décision du testeur : « une image basseDefinition est remplacée automatiquement dès qu'une source
+// au-dessus du seuil existe pour ce produit, avec l'ancienne adresse gardée dans l'historique »).
+// ============================================================
+// Les collecteurs « combleurs » (TPC, PikaQian, pokemontcg.io, Pokumon, pokemon.com) s'arrêtaient à `dejaServi` : une entrée marquée comptait comme servie. Ils appellent désormais
+// LES MÊMES fonctions que les trois jointures (artofpkm, Bulbapedia, TCGdex) — aucune copie de la règle (§21 bis) :
+//   · AU PLAN (`sansRemplacables`) : une entrée marquée d'une AUTRE source, de même (set, numéro, langue connue), ne compte pas comme « servie » — la carte est un trou que la source
+//     peut combler, À CONDITION que son image sorte non marquée (sinon, à la jointure, elle cède). Une entrée marquée de la MÊME source n'est jamais remplaçable : le même fichier
+//     reviendrait, au même nombre de pixels. Langue inconnue du candidat : rien n'est remplaçable (une garde s'écrit par ce qu'elle autorise).
+//   · À LA JOINTURE (`arbitrer`) : la décision d'une candidate — quelles entrées sortent (`entreesARemplacer`), la fiche reste-t-elle servie une fois celles-là sorties. Une candidate
+//     marquée ne fait sortir personne et cède : une basse définition ne remplace JAMAIS une image non marquée, ni une autre basse définition.
+//   · LE GESTE (`remplacerBasseDefinition`, ci-dessus) : l'entrée sort de `cartes.images`, le document `images` RESTE (`etat: 'remplace'`, `remplacePar`, `remplaceLe`) avec son
+//     `urlOriginal`, sa `cleR2`, ses largeurs : c'est « l'ancienne adresse gardée dans l'historique ». Le collecteur note l'`empreinteEntree` de chaque entrée sortie pour sa garde
+//     interne (les entrées des autres sources doivent rester les mêmes, moins celles-là) ; la garde de LOT voit un échange 1 pour 1 (images du set inchangées, vignette refaite).
+/** La clé d'une entrée dans la garde interne des collecteurs (`compterEntrees`) : carte|source|set|numéro|cleR2. */
+const empreinteEntree = (carteId, e) => `${carteId}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`;
+
+/**
+ * La carte telle que la voit le PLAN d'une source `source` qui écrira en `langue` au `numero` du `set` : sans les entrées marquées qu'une image non marquée de cette source
+ * remplacerait. Rend une COPIE (la carte d'origine n'est pas modifiée). Pure.
+ */
+function sansRemplacables(carte, { set, numero, langue, source, wOriginal, documents, tampon } = {}) {
+    const images = Array.isArray(carte?.images) ? carte.images : [];
+    // `wOriginal` : la largeur de l'image que la source donnera, quand le plan la connaît (l'index de Pokumon la porte) ; inconnue, la candidate est supposée non marquée
+    // largeur NOMINALE quand le plan ne la connaît pas : le seuil d'une image non marquée (la candidate n'entre que si elle sort non marquée ; la jointure arbitre sur la vraie largeur)
+    const sortent = entreesARemplacer(images, { set, numero, langue, source, cleR2: null, wOriginal: wOriginal ?? LARGEUR_MIN, ...(tampon ? { tampon } : {}) }, { documents })
+        .filter(e => e.source !== source);
+    return { ...(carte || {}), images: images.filter(e => !sortent.includes(e)) };
+}
+
+/**
+ * L'ARBITRAGE d'une candidate à la jointure. `autres` : les entrées de la carte qui ne sont pas les nôtres ; `candidat` : l'entrée qu'on va poser (set, source, cleR2, numero, langue,
+ * marque / largeur) ; `servi(restantes)` : le prédicat « déjà servi » de CE collecteur sur les entrées qui resteraient. @returns {{sortantes: object[], servie: boolean}}
+ * `servie` vrai : la candidate CÈDE (elle n'est pas posée, rien ne sort). Faux : le collecteur appelle `remplacerBasseDefinition` (s'il y a des sortantes) puis pose la candidate.
+ */
+function arbitrer(autres, candidat, servi, { documents } = {}) {
+    const liste = Array.isArray(autres) ? autres : [];
+    const sortantes = entreesARemplacer(liste, candidat, { documents });
+    return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
+}
+
+module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS, normaliserTampon, documentsDesEntrees, documentsDeLaListe };

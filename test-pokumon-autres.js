@@ -128,6 +128,38 @@ const essayer = async f => { try { return await f(); } catch (e) { return e; } }
     const PH2 = P.planifierFamilles({ lignes: [LMEP], produits: [{ ...PLUC, carteId: 7 }], cartes: new Map(), index: [LUC] });
     verifier('plan : une carte absente de la base est un reste nommé', PH2.restes.map(r => r.motif), ['carte-absente']);
 
+    // ── 4 bis. ➕ BASSE-DEF (2026-10-17) : le PLANCHER de 200 px des quatre lignes McDonald's nommées, et le remplacement d'une entrée marquée ────────────────────
+    {
+        const lm = (l, o = {}) => ({ ...l, lu: '2026-10-17', tampon: 'copyright et numéro imprimés lus sur l\'image', temoins: [], ...o });
+        const L14l = lm(L14), LMBl = lm(LMB);
+        const PIKA = w => MCD(107429, 'Pikachu', 5, 12, 41, w);
+        const p14 = { ...P14, carteId: 5 };
+        const unePlan = (ligne, prodt, entree, images = [], docs = undefined) => P.planifierFamilles({ lignes: [ligne], produits: [prodt], cartes: new Map([[prodt.carteId, carte(prodt.carteId, 'Pikachu', images)]]), index: [entree], documents: docs ?? new Map(images.map(e => [`${e.source}|${e.set}|${e.cleR2}`, {}])) });
+        for (const [w, admis] of [[199, false], [200, true], [250, true], [320, true], [322, true], [349, true], [350, true]]) {
+            const pl = unePlan(L14l, p14, PIKA(w));
+            verifier(`McDonald's 2014, ${w} px : ${admis ? 'au PLAN (téléchargeable)' : 'reste « sous-le-seuil » (plancher absolu 200)'}`, [pl.plan.length, pl.restes.map(r => [r.motif, r.w])], admis ? [1, []] : [0, [['sous-le-seuil', w]]]);
+        }
+        const mb = unePlan(LMBl, prod(725425, 'McDonalds-Match-Battle-2023', 'Kilowattrel [Skill Dive | Thunder Blast]', 'Kilowattrel-M23008', [imp("McDonald's Collection 2023", '008', '015')], '008'), MCD(107730, 'Kilowattrel', 8, 15, 238, 322));
+        verifier('McDonald\'s Match Battle 2023 (hors de la liste fermée) à 322 px : « sous-le-seuil », le plancher ne vaut pas pour lui', [mb.plan.length, mb.restes.map(r => [r.motif, r.w])], [0, [['sous-le-seuil', 322]]]);
+        verifier('Trick or Trade / Professor Program / Black Star / Burger King / W Promos à 322 px : toujours refusés (aucune autre famille Pokumon ne change)', ['tot-2022', 'prof', 'bsp-svp', 'bk-2008', 'w-promos'].map(id => require('./collecte-cartes/seuils-images').largeurAdmiseDe('pokumon', id)), [350, 350, 350, 350, 350]);
+        // le REMPLACEMENT au plan : une entrée MARQUÉE (autre source, même set, même numéro, langue en) ne « sert » pas la fiche face à une image qui sortira NON marquée (l'index dit la largeur)
+        const MARQUEE = { set: 'McDonalds-Collection-2014', source: 'tpc-asie', numero: '5', cleR2: 'tpc/m.webp', langue: 'en', w: 300, basseDefinition: true };
+        verifier('plan : fiche servie par une entrée MARQUÉE + image de 496 px (non marquée) → au plan : elle REMPLACERA', unePlan(L14l, p14, PIKA(496), [MARQUEE]).plan.map(p => p.numero), ['5']);
+        verifier('plan : la même fiche + image de 322 px (marquée à son tour) → « deja-servi » : une basse définition ne remplace jamais une basse définition', unePlan(L14l, p14, PIKA(322), [MARQUEE]).restes.map(r => r.motif), ['deja-servi']);
+        verifier('plan : la même fiche + entrée NON marquée → « deja-servi » (additif)', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, basseDefinition: undefined, w: 600 }]).restes.map(r => r.motif), ['deja-servi']);
+        // ➕ doctrine 2026-10-17 : « nettement plus grande » (1,5 ×) et « empruntée »
+        const SAINE = (w, o = {}) => ({ ...MARQUEE, basseDefinition: undefined, w, wOriginal: w, ...o });
+        verifier('plan : image saine de 400 px + image annoncée de 600 px (1,5 ×) → au plan ; 596 px (1,49 ×) → « deja-servi »', [unePlan(L14l, p14, PIKA(600), [SAINE(400)]).plan.length, unePlan(L14l, p14, PIKA(596), [SAINE(400)]).restes.map(r => r.motif)], [1, ['deja-servi']]);
+        verifier('plan : JAMAIS une image correcte au-dessus du seuil par une équivalente (600 px face à 600 px, 500 face à 700)', [unePlan(L14l, p14, PIKA(600), [SAINE(600)]).restes.map(r => r.motif), unePlan(L14l, p14, PIKA(700), [SAINE(500)]).restes.map(r => r.motif)], [['deja-servi'], ['deja-servi']]);
+        // ➕ correction 5 : le tampon d'une entrée vit sur son DOCUMENT ; document introuvable → pas de remplacement
+        verifier('plan : entrée marquée dont le DOCUMENT est introuvable → « deja-servi » (une garde qui ne peut pas conclure bloque)', unePlan(L14l, p14, PIKA(496), [MARQUEE], new Map()).restes.map(r => r.motif), ['deja-servi']);
+        verifier('plan : entrée marquée dont le DOCUMENT porte un tampon (marque) → « deja-servi » ; sans tampon → au plan', [unePlan(L14l, p14, PIKA(496), [MARQUEE], new Map([[`${MARQUEE.source}|${MARQUEE.set}|${MARQUEE.cleR2}`, { marque: 'Prize Pack Series 1' }]])).restes.map(r => r.motif), unePlan(L14l, p14, PIKA(496), [MARQUEE]).plan.length], [['deja-servi'], 1]);
+        verifier('plan : famille McDonald\'s sans tampon (tamponDeLaMarque) ; Prize Pack avec', [P.tamponDeLaMarque('mcd-2014 : carte McDonald\'s'), P.tamponDeLaMarque(P.marqueDeSerie(1))], [null, 'prize pack series 1 : tampon « play! pokémon »']);
+        verifier('plan (correction 4) : entrée EMPRUNTÉE + image de 496 px → « deja-servi » (aucun marqueur positif de tampon : rien ne la remplace)', unePlan(L14l, p14, PIKA(496), [SAINE(600, { imageEmprunteeTirage: true })]).restes.map(r => r.motif), ['deja-servi']);
+        verifier('plan : entrée marquée d\'une autre LANGUE → « deja-servi »', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, langue: 'ja' }]).restes.map(r => r.motif), ['deja-servi']);
+        verifier('plan : entrée marquée de SA PROPRE source (pokumon) → « deja-servi » (le même fichier reviendrait)', unePlan(L14l, p14, PIKA(496), [{ ...MARQUEE, source: 'pokumon' }]).restes.map(r => r.motif), ['deja-servi']);
+    }
+
     // ── 5. BS-HOLO (2026-10-17) : le scan partagé holo / non-holo des promos Black Star SWSH, SVP, MEP ───────────────────────────────────────────────
     // 🔴 MESURÉ le 2026-10-17 sur les 64 groupes (128 produits) « douteux-variantes-non-separables » des trois lignes Black Star : AUCUN n'est un couple holo / non-holo seul.
     //    59 sont « X » contre « Staff X » (tampon Staff, aucune entrée holo) ; 5 sont « X » contre « Holofoil Play Pokemon X » (tampon Play! Pokémon, autre événement). Ces entrées sont RECOPIÉES de
