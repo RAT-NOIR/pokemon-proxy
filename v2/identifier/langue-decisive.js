@@ -6,9 +6,10 @@
 // 🔑 Écrit par ce qu'il AUTORISE : un candidat n'est retiré que par une règle ALLUMÉE, sur une donnée CONNUE des deux côtés ; au moindre doute rien n'est retiré. Si tous les candidats seraient retirés,
 // la question d'origine reste (on n'invente jamais une absence). Chaque règle porte sa constante et son compteur ; chacune a été MESURÉE seule puis combinée sur tout le banc étiqueté
 // (lot-LANGUE-DECISIVE-report.md) : une règle qui crée un seul faux reste ÉTEINTE, et c'est écrit ici.
-const { lectureDe, statuts, contredire, langueCompatible, VETOS, VIVIER_MAX } = require('./garde-contradiction');
+const S = require('../../scoring');
+const { lectureDe, statuts, contredire, langueCompatible, VIVIER_MAX } = require('./garde-contradiction');
 const { comparer } = require('./seconde-lecture');
-const { formesLuesDe, nomCompatible } = require('./nom-compatible');
+const { idsAffirmes } = require('./jumeaux');
 
 // ÉTAT LIVRÉ DES RÈGLES (`ctx.langueDecisive` les surcharge pour les bancs et la mesure). Mesuré le 2026-10-17 sur les 320 cartes du banc étiqueté (rm_essai, lecture) par le VRAI chemin :
 //   R1 ALLUMÉE  : 0 faux, 0 vérité retirée, 4 questions réduites de 3 à 2 (les trois Dark Tyranitar du testeur et une quatrième) ; aucun sûr à elle seule.
@@ -16,14 +17,26 @@ const { formesLuesDe, nomCompatible } = require('./nom-compatible');
 //   R2 ÉTEINTE  : 0 faux avec deux seuils, +1 sûr seule, +3 avec R4 — mais la photo et les vecteurs ne sont pas encore fournis à l'adaptateur par la route (ctx.scoresImage), et la calibration tient sur 153 lignes ;
 //                 allumée sans score elle ne ferait rien. Elle s'allume ici le jour où la route l'alimente (un lot à part).
 //   R2 bis ÉTEINTE : 0 faux mais aucun sûr de plus que R1 + R2 (elle réduit une question de 3 à 2) ; « Crush » contredit aussi la vraie carte du cas fondateur ; la garde dit « l'attaque est une contradiction, pas un veto ».
-const REGLES = Object.freeze({ R1: true, R2: false, R2BIS: false, R4: true });
+//   R5 ALLUMÉE  (tour de correction 1) : un candidat d'un set SANS numérotation est retiré quand le numéro et le total sont lus et qu'un autre candidat hors liste a un total concordant ; liste FIGÉE ci-dessous.
+//   Tour de correction 1 : la résolution d'un candidat SEUL applique TOUTES les conditions du critère A (`critere-a.conditions`) et la garde des jumeaux du candidat ; R4 se juge sur le CATALOGUE ENTIER (code × numéro).
+const REGLES = Object.freeze({ R1: true, R2: false, R2BIS: false, R4: true, R5: true });
+// R5 — LES SETS SANS NUMÉROTATION, liste FIGÉE (jamais calculée à l'exécution), en idExpansion Cardmarket, 9 sets. Preuve : expansions dont 100 % des produits (hors cartes-code) sont sans numéro au catalogue (numero ET numeroUrl
+// nuls) ET dont l'archive Bulbapedia ne porte AUCUN numéro jp (0 page manquante, témoin contrôlé sur ADV1, PCG1, PCG2 : VERIF-R5-SETS-SANS-NUMERO.md). Un set non prouvé SORT de la liste ; un set nouveau n'y entre jamais seul.
+// EXCLUS (décision du coordinateur, 2026-10-18) : DP2 (4317), DP4d (4308), DP4m (4309), HRDK (4303) et EP08 (4306). Les cartes Pokémon des sets DP impriment en bas à droite un « DPBP#nnn » (Remoraid DPBP#280, Magmortar
+// DPBP#150, vus sur les scans) : un numéro imprimé qui n'est pas un numéro de collection, que la lecture peut prendre pour un numéro ; et l'absence de numéro chez Bulbapedia y est moins sûre (HRDK, EP08 non prouvés
+// à l'œil). R5 se déclenche en plus SEULEMENT sur un numéro au format collection : numéro ET total lus (un numéro seul, comme 280, ne déclenche jamais R5).
+const SANS_NUMEROTATION = Object.freeze([
+    { idExpansion: 4169, nom: 'Expansion Pack (EXP)' }, { idExpansion: 4465, nom: 'Rocket Gang (ROG)' }, { idExpansion: 4463, nom: 'Pokémon Jungle (PJU)' },
+    { idExpansion: 4464, nom: 'Mystery of the Fossils (MFO)' }, { idExpansion: 4357, nom: 'Southern Islands JP (SI-JP)' }, { idExpansion: 4506, nom: 'Gold, Silver, to a New World... (N1)' },
+    { idExpansion: 4507, nom: 'Crossing the Ruins... (N2)' }, { idExpansion: 4508, nom: 'Awakening Legends (N3)' }, { idExpansion: 4509, nom: 'Darkness, and to Light... (N4)' }
+].map(x => Object.freeze(x)));const SANS_NUMEROTATION_IDS = new Set(SANS_NUMEROTATION.map(x => x.idExpansion));
 // S de la R2, en inliers ORB/RANSAC (departage-image.js, la fonction de la route), fixé sur le banc (mesure : lot-LANGUE-DECISIVE-report.md). UN SEUL SEUIL NE TIENT PAS : la photo entière contre une vignette de
 // 270 px donne 0 inlier à la vraie carte sur ~12 % des lignes et jusqu'à 39 à une AUTRE carte (aucun S entre 8 et 35 ne laisse la vérité en place). La règle a donc DEUX seuils :
 //   un candidat est retiré s'il est RECONNU PAR PERSONNE (score <= BAS) ET qu'un autre candidat de la question est RECONNU NETTEMENT (score >= HAUT) ;
 //   BAS = 4, HAUT = 20 : sur les 153 lignes-question du banc dont la vérité est parmi les choix, le plus haut score d'un autre candidat à côté d'une vérité <= 4 est 6 ; HAUT est 14 au-dessus (marge nommée : 14 inliers).
 const SEUIL_IMAGE = Object.freeze({ bas: 4, haut: 20 });
 
-const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0 };
+const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0, R5: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0 };
 const compteurs = () => ({ ...compte, retraits: { ...compte.retraits } });
 
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -59,12 +72,55 @@ function langueDeTirage(tirage) {
     return t === 'jp' ? 'ja' : t === 'zh-hans' || t === 'zh-hant' || t === 'ko' ? t : null;
 }
 
-// ── R4 : le code lu ne désigne AUCUN produit du vivier (« s8a-P » pris pour le logo des 25 ans). Écrit par ce qui est AUTORISÉ : le code est lu, le vivier est connu et ENTIÈREMENT chargé.
-function codeSansDesignation({ corps, produits } = {}) {
+/**
+ * L'INDEX code × numéro du CATALOGUE ENTIER (M2). Entrée : des lignes { codeSet, numero, numeroUrl } (numeros_cartes). Clé : les chiffres du numéro (scoring.chiffresDuNumero) ; valeur : les codes de set normalisés.
+ * `existe(setCode, numero)` : un produit du catalogue porte-t-il ce code (concordance de `seconde-lecture.comparer`, la définition de la production) ET ce numéro (mêmes chiffres : plus large que « exact »,
+ * donc plus BLOQUANT) ? Taille : une chaîne courte par couple (chiffres, code) distinct (~ quelques dizaines de milliers de couples, quelques Mo).
+ */
+function creerIndexCodeNumero(lignes) {
+    const parChiffres = new Map();
+    let taille = 0;
+    for (const l of (lignes || [])) {
+        const code = l && texte(l.codeSet) ? S.normaliserCodeSet(l.codeSet) : null;
+        const num = l ? (texte(l.numero == null ? null : String(l.numero)) || texte(l.numeroUrl == null ? null : String(l.numeroUrl))) : null;
+        const k = num ? S.chiffresDuNumero(num) : null;
+        if (!code || !k) continue;
+        if (!parChiffres.has(k)) parChiffres.set(k, new Set());
+        const codes = parChiffres.get(k);
+        if (!codes.has(code)) { codes.add(code); taille++; }
+    }
+    return {
+        taille,
+        existe(setCode, numero) {
+            const num = numero == null ? null : texte(String(numero));
+            const k = num ? S.chiffresDuNumero(num) : null;
+            if (!texte(setCode) || !k) return false;
+            const codes = parChiffres.get(k);
+            if (!codes) return false;
+            for (const ec of codes) if (comparer({ numero: num, setCode }, { numero: num, set: { code: ec } }).concorde.includes('code')) return true;
+            return false;
+        }
+    };
+}
+
+// ── R4 : le code lu ne désigne AUCUN produit — ni du vivier (« s8a-P » pris pour le logo des 25 ans), ni du CATALOGUE ENTIER avec ce numéro (M2 : un code bien lu qui désigne la vraie carte hors du vivier BLOQUE).
+// Écrit par ce qui est AUTORISÉ : le code ET le numéro sont lus, le vivier est connu et ENTIÈREMENT chargé, et l'index du catalogue (`catalogueExiste`) est fourni et répond FAUX franc. Index absent ou qui lève : fermée.
+function codeSansDesignation({ corps, produits, catalogueExiste } = {}) {
     const lu = lectureDe(corps);
-    if (!lu || !texte(lu.setCode) || !(produits instanceof Map) || !lu.vivierIds.length || lu.vivierIds.length > VIVIER_MAX) return false;
+    if (!lu || !texte(lu.setCode) || !texte(lu.numero) || typeof catalogueExiste !== 'function' || !(produits instanceof Map) || !lu.vivierIds.length || lu.vivierIds.length > VIVIER_MAX) return false;
     if (lu.vivierIds.some(id => !produits.has(id))) return false;
-    return !lu.vivierIds.some(id => comparer({ numero: lu.numero, setCode: lu.setCode }, produits.get(id)).concorde.includes('code'));
+    if (lu.vivierIds.some(id => comparer({ numero: lu.numero, setCode: lu.setCode }, produits.get(id)).concorde.includes('code'))) return false;
+    try { return catalogueExiste(lu.setCode, lu.numero) === false; } catch { return false; }
+}
+
+/** Les candidats qu'une réduction pourrait LAISSER SEULS (la route charge leurs jumeaux avant l'adaptation) : ceux que la garde contradiction désigne à côté du produit affirmé. [] si rien ne contredit. */
+function candidatsDeReduction({ corps, produits } = {}) {
+    try {
+        const w = idsAffirmes(corps)[0];
+        if (!Number.isInteger(w) || !(produits instanceof Map)) return [];
+        const g = contredire({ corps, gagnant: w, produits });
+        return g ? g.designe.map(d => d.idProduct).filter(Number.isInteger) : [];
+    } catch { return []; }
 }
 
 /**
@@ -96,6 +152,12 @@ function reduire({ ids, corps, produits, regles = REGLES, scoresImage = null } =
         const st = new Map(restants.filter(id => produits.has(id)).map(id => [id, statuts(lu, produits.get(id)).attaque]));
         if ([...st.values()].some(x => x === 'ok')) for (const [id, x] of st) if (x === 'ko') retirer(id, 'R2BIS');   // repli : jamais si l'attaque lue contredit tout le monde
     }
+    // R5 : un candidat d'un set SANS NUMÉROTATION (liste figée) ne peut pas être la carte d'une photo qui montre un numéro ET un total : retiré quand un AUTRE candidat, hors liste, a un total qui concorde
+    if (regles.R5 && lu.numero && lu.total && !lu.totalHorsTailleDeSet && restants.length >= 2) {
+        const sans = id => { const L = produits.get(id); return Boolean(L) && SANS_NUMEROTATION_IDS.has(L.idExpansion); };
+        const concorde = id => { const L = produits.get(id); return Boolean(L) && !sans(id) && statuts(lu, L).total === 'ok'; };
+        if (restants.some(concorde)) for (const id of [...restants]) if (sans(id)) retirer(id, 'R5');
+    }
     if (!retires.length) return rien;
     if (!restants.length) { compte.tousRetires++; return rien; }
     for (const r of retires) compte.retraits[r.regle]++;
@@ -103,30 +165,24 @@ function reduire({ ids, corps, produits, regles = REGLES, scoresImage = null } =
 }
 
 /**
- * Le candidat SEUL qui reste est-il un SÛR ? Les conditions du critère A, appliquées à lui : aucun champ VETO (numéro, total, set TCGdex, langue) ne le contredit ; la garde contradiction ne répond pas ;
- * le numéro lu concorde exactement ; le code lu concorde, OU (R4) il ne désigne personne dans le vivier ; le nom lu ne le contredit pas. L'attaque et le symbole ne sont pas des vetos (l'attaque lue est bruyante).
+ * Le candidat SEUL qui reste est-il un SÛR ? TOUTES les conditions du critère A (`critere-a.conditions`, la même fonction : jamais recopiée), appliquées à lui ET au groupe de ses jumeaux (`groupe` : les AUTRES
+ * produits que la garde des jumeaux lui donne, lus dans la colonne des jumeaux — pas dans le vivier). `groupe` null (la garde n'a pas pu conclure : colonne absente, périmée, lignes manquantes) : refus.
+ * Aucun champ lu en « ko » (attaque et symbole compris) sauf le code sous R4 ; le numéro lu ne concorde avec aucun jumeau.
  */
-function affirmableSeul({ corps, id, produits, regles = REGLES } = {}) {
+function affirmableSeul({ corps, id, produits, regles = REGLES, groupe = null, catalogueExiste } = {}) {
     const non = raison => { compte.nonAffirmables++; return { affirme: false, raison }; };
     try {
+        if (!Array.isArray(groupe)) return non('la garde des jumeaux ne conclut pas pour ce candidat');
+        const CA = require('./critere-a');                                              // à l'appel : critere-a.js importe ce module (cycle)
+        const autres = [...new Set(groupe)].filter(i => i !== id);
+        const c = CA.conditions({ corps, gagnant: id, autres, produits, r4: regles.R4 === true, catalogueExiste, toleres: regles.attaqueTolereeRestant === true ? ['attaque'] : [] });
+        if (!c.ok) return non(c.raison);
         const lu = lectureDe(corps);
-        if (!lu || !(corps.lectureGarde && typeof corps.lectureGarde === 'object') || !(produits instanceof Map) || !produits.has(id)) return non('lecture ou ligne absente');
-        const L = produits.get(id);
-        if (contredire({ corps, gagnant: id, produits })) return non('la garde contradiction répond');
-        const st = statuts(lu, L);
-        const veto = VETOS.filter(k => st[k] === 'ko');
-        if (veto.length) return non(`un champ veto contredit (${veto.join(', ')})`);
-        const cmp = comparer({ numero: lu.numero, setCode: lu.setCode }, L);
-        if (!cmp.concorde.includes('numero')) return non('le numéro lu ne concorde pas exactement');
-        const sansDesignation = regles.R4 === true && codeSansDesignation({ corps, produits });
-        if (!cmp.concorde.includes('code') && !sansDesignation) return non('le code lu ne concorde pas');
-        const formes = formesLuesDe(corps);
-        if (formes.length && !nomCompatible(formes, L)) return non('le nom lu contredit le produit');
         compte.affirmees++;
-        return { affirme: true, raison: `numéro ${lu.numero} concordant${cmp.concorde.includes('code') ? `, code ${lu.setCode} concordant` : `, code lu ${lu.setCode} sans désignation (R4)`}` };
+        return { affirme: true, raison: `numéro ${lu.numero} concordant${c.codeParR4 ? `, code lu ${lu.setCode} sans désignation dans le catalogue (R4)` : `, code ${lu.setCode} concordant`}${autres.length ? `, seul parmi ${autres.length + 1} produits du groupe` : ''}` };
     } catch (e) {
         return non(`décision impossible (${(e && e.name) || 'erreur'})`);
     }
 }
 
-module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, reduire, affirmableSeul, compteurs, REGLES, SEUIL_IMAGE };
+module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, creerIndexCodeNumero, candidatsDeReduction, reduire, affirmableSeul, compteurs, REGLES, SEUIL_IMAGE, SANS_NUMEROTATION };
