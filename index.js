@@ -28,6 +28,7 @@ const {
 // ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
 // fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
 const SCORING = require('./scoring');
+const { blocLectureGarde } = require('./v2/identifier/garde-contradiction');   // GARDE-CONTRADICTION : le bloc `lectureGarde` de la réponse d'une requête v2 (une seule écriture, testée sans serveur)
 const { classerPanneIA, panneDansLeCorps, lectureDuTitre, causeApresErreur, causeApresReponse, motifDuRefusIA } = require('./lecture-de-secours');
 const {
     choisirMeilleur,
@@ -6315,11 +6316,7 @@ async function gererIdentifier(req, res) {
             codeLangue: { EN: 1, FR: 2, DE: 3, ES: 4, IT: 5, ZH: 6, JP: 7, PT: 8, RU: 9, KR: 10 }[cardInfo.language] || 1,
             // GARDE-CONTRADICTION (2026-10-17) : ce que la photo a LUE et le vivier jugé, pour la garde de l'adaptateur v2 (v2/identifier/garde-contradiction.js). UNIQUEMENT quand la requête vient de v2
             // (`scanIdImpose` posé par la route v2) : la réponse de la route héritée directe ne change pas d'un octet, et aucune décision de cette chaîne ne lit ce bloc.
-            ...(req.scanIdImpose ? { lectureGarde: {
-                numero: cardInfo.number ?? null, total: cardInfo.total ?? null, setCode: cardInfo.setCode ?? null, symboleSet: cardInfo.symboleSet ?? null,
-                attaque: cardInfo.attaque ?? null, attaqueConfiance: cardInfo.attaqueConfiance ?? null, carteTcgdexId: trouvaille.id ?? null,
-                totalHorsTailleDeSet, vivierIds: produits.map(p => p.idProduct)
-            } } : {})
+            ...(req.scanIdImpose ? { lectureGarde: blocLectureGarde({ cardInfo, tcgdexId: trouvaille.id, totalHorsTailleDeSet, produits }) } : {})
         });
 
     } catch (e) {
