@@ -54,7 +54,20 @@ const CORRECTIONS = [
     {
         cleR2: 'artofpkm/105/4.webp', carteId: 51875, nomEn: 'Milotic ex', lu: 'ミロカロスex, HP130, 「まとわりつく 30」「エネリフレクト 70」, 004/015, Illus. Ryo Ueda', le: '2026-10-13',
         cause: 'Quick Construction Pack Water : la page artofpkm 105/4 se nomme « Milotic » (sans « ex ») ; le numéro 004/015 imprimé est celui de Milotic ex chez nous'
-    }
+    },
+    // (2026-10-17, audit VIGN-AUDIT) HUIT FICHIERS « LV.X » REGARDÉS : la page artofpkm les nomme SANS « LV.X » (« Uxie »), donc la jointure par le nom les posait aussi sur la carte de BASE
+    // (qui portait alors l'image du LV.X, et perdait la sienne au `$pull` des entrées sans numéro). Deux éléments par fichier : l'image lue (« LV.X », HP, texte de niveau) et l'illustrateur du
+    // document `images` (Shizurow / Ryo Ueda) = celui de l'impression de la carte LV.X, différent de celui de la carte de base (Sugimori, Ito, Nishida, Saitou, Ueda).
+    ...[
+        ['artofpkm/171/43.webp', 50326, 'Mesprit LV.X', 'エムリット LV.X HP100, Illus. Shizurow'],
+        ['artofpkm/171/42.webp', 50859, 'Uxie LV.X', 'ユクシー LV.X HP90, Illus. Shizurow'],
+        ['artofpkm/150/23.webp', 26230, 'Magmortar LV.X', 'ブーバーン LV.X HP130, Illus. Shizurow'],
+        ['artofpkm/166/38.webp', 28217, 'Gardevoir LV.X', 'サーナイト LV.X HP130, Illus. Ryo Ueda'],
+        ['artofpkm/166/19.webp', 41644, 'Glaceon LV.X', 'グレイシア LV.X HP100, Illus. Ryo Ueda'],
+        ['artofpkm/166/5.webp', 41758, 'Leafeon LV.X', 'リーフィア LV.X HP110, Illus. Ryo Ueda'],
+        ['artofpkm/172/34.webp', 50209, 'Azelf LV.X', 'アグノム LV.X HP90, Illus. Shizurow'],
+        ['artofpkm/164/39.webp', 36172, 'Cresselia LV.X', 'クレセリア LV.X HP100, Illus. Shizurow']
+    ].map(([cleR2, carteId, nomEn, lu]) => ({ cleR2, carteId, nomEn, lu, le: '2026-10-17', cause: 'fichier LV.X joint aussi à la carte de base du même nom par le nom seul (audit VIGN-AUDIT)' }))
 ];
 const PAR_CLE = new Map(CORRECTIONS.map(c => [c.cleR2, c]));
 
