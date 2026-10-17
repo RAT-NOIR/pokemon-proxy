@@ -47,7 +47,7 @@ const refuse = (fn) => { try { fn(); return null; } catch (e) { return e.name ==
     H.vrai('   un octet retourné dans le hachage : refusé', refuse(() => { const b = Buffer.from(brutF); b[b.length - 1] ^= 1; F.deserialiser(b); }) !== null);
     for (const n of [0, 3, 8, 100, brutF.length - 33, brutF.length - 1]) H.vrai(`   tronqué à ${n} octets : refusé`, refuse(() => F.deserialiser(brutF.subarray(0, n))) !== null);
     H.vrai('   magie fausse (rescellé) : refusé', refuse(() => F.deserialiser(retouche(b => { b[0] = 0x58; }))) !== null);
-    H.vrai('   numéro de format inconnu (en-tête réécrit, rescellé) : refusé', /format/i.test(refuse(() => { const e = F.lireEntete(brutF); e.format = 2; F.deserialiser(F.reecrireEntete(brutF, e)); }) || ''));
+    H.vrai('   numéro de format inconnu (en-tête réécrit, rescellé) : refusé', /format/i.test(refuse(() => { const e = F.lireEntete(brutF); e.format = 99; F.deserialiser(F.reecrireEntete(brutF, e)); }) || ''));
     const echange = nomSection => { const s = S.find(x => x.nom === nomSection); return { s, ok: s !== undefined }; };
     const ids = echange('id');
     H.vrai('   identifiants plus triés (deux échangés, RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b => { const o = ids.s.debut; const a = b.readInt32LE(o), c = b.readInt32LE(o + 4); b.writeInt32LE(c, o); b.writeInt32LE(a, o + 4); }))) !== null);

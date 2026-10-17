@@ -114,6 +114,10 @@ function creerChargeur(opts = {}) {
             // JUMEAU-V2 : une version sans la colonne des jumeaux ne remplace jamais une version qui l'a (la route n'affirmerait plus rien) ; sans version en place, elle s'installe (visuels servis, aucune affirmation)
             if (prev && prev.colonneJumeaux && !v.colonneJumeaux) throw new Echec(`la version chargée n'a pas la colonne des jumeaux alors que celle en place l'a — ${dit}`);
             if (!v.colonneJumeaux) journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des jumeaux : la route n\'affirmera aucun produit tant qu\'une archive récente ne l\'aura pas apportée');
+            // REPLI-REIMPRESSIONS : la même règle pour la colonne des marquages (format 2) — une version qui ne sait pas quels produits sont partagés ne remplace jamais une version qui le sait ; sans version en place,
+            // elle s'installe (le comportement d'avant : rien n'est conclu sur les partages) et le journal le dit
+            if (prev && prev.colonneMarquages && !v.colonneMarquages) throw new Echec(`la version chargée n'a pas la colonne des marquages alors que celle en place l'a — ${dit}`);
+            if (!v.colonneMarquages) journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des marquages (archive d\'avant le format 2) : l\'image pourra départager des produits que le catalogue déclare partagés tant qu\'une archive récente ne l\'aura pas apportée');
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
                 if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);
