@@ -2846,6 +2846,8 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
         // passent pas et sont donc déjà sur le comportement cible.
         numero: (options.numeroBrutPourScoring !== undefined ? options.numeroBrutPourScoring : cardInfo.number) || null,
         setCode: cardInfo.setCode || null, // le code/stamp lu par l'IA (ex: PAL, CEL)
+        // le code lu est-il rattaché à un code Cardmarket CONNU ? (même fonction que `setCodeResolution` du journal) : le rapprochement des codes lus ne joue que sur 'inconnu' (scoring.js)
+        setCodeResolution: SCORING.resolutionDuCodeLu(cardInfo.setCode, [...(await lireTousLesCodesSet())]).resolution,
         idExpansionsAttendues,             // déduites du set TCGdex via le pré-remplissage
         rarete: cardInfo.rarete || null,   // brut : neutralise le critère prix sur les promos
         rareteElevee: cardInfo.rareteElevee,
@@ -4534,34 +4536,14 @@ async function gererIdentifier(req, res) {
         //      un prix faux.
         let setCodeResolution = null, parenteJournal = null;
         if (cardInfo.setCode) {
-            const MOTS_CATEGORIE = new Set(['promo', 'holo', 'reverse', 'rare', 'commune', 'common', 'uncommon',
-                'normale', 'normal', 'ir', 'sr', 'sir', 'ar', 'ur', 'secret', 'fullart', 'full art']);
-            const brutLu = normaliserCodeSet(cardInfo.setCode);
-            const codeLu = ALIAS_CODES_LUS.get(brutLu) || brutLu;
-            if (MOTS_CATEGORIE.has(String(cardInfo.setCode).trim().toLowerCase())) {
-                setCodeResolution = 'mot-non-code';
-                console.log(`📊 [setcode-diagnostic] « ${cardInfo.setCode} » n'est pas un code de set mais une catégorie/rareté — compté, sans effet.`);
-            } else if (codesReels.includes(codeLu)) {
-                setCodeResolution = 'exact';
-            } else {
-                // DEUX MÉCANISMES DISTINCTS, DEUX VALEURS DISTINCTES. La convention du X est
-                // un décodage exact ; la parenté est une ressemblance de préfixe. Les
-                // confondre dans le journal reviendrait à ne pas pouvoir dire, dans six
-                // mois, lequel des deux a produit un rapprochement douteux.
-                const parConvention = codesReels.filter(c => memeCodeParConventionX(codeLu, c));
-                const cousins = codesReels.filter(c => codesApparentes(codeLu, c));
-                if (parConvention.length) {
-                    setCodeResolution = 'convention-x';
-                    parenteJournal = `${codeLu}=${parConvention.slice(0, 5).join('/')}`;
-                    console.log(`📊 [setcode-diagnostic] convention X (décodage exact) : ${parenteJournal}`);
-                } else if (cousins.length) {
-                    setCodeResolution = 'parente';
-                    parenteJournal = `${codeLu}~${cousins.slice(0, 5).join('/')}`;
-                    console.log(`📊 [setcode-diagnostic] parenté retenue (préfixe, approximatif) : ${parenteJournal}`);
-                } else {
-                    setCodeResolution = 'inconnu';
-                }
-            }
+            // UNE SEULE écriture de la résolution (scoring.js::resolutionDuCodeLu) : le rapprochement des codes lus la lit aussi (scorerCandidatsLocal). DEUX MÉCANISMES DISTINCTS, DEUX VALEURS DISTINCTES :
+            // la convention du X est un décodage exact, la parenté une ressemblance de préfixe. Liste de codes illisible (vide) : 'inconnu' pour le journal, comme avant (le rapprochement, lui, ne joue pas).
+            const rl = SCORING.resolutionDuCodeLu(cardInfo.setCode, codesReels);
+            setCodeResolution = rl.resolution ?? 'inconnu';
+            parenteJournal = rl.parente;
+            if (setCodeResolution === 'mot-non-code') console.log(`📊 [setcode-diagnostic] « ${cardInfo.setCode} » n'est pas un code de set mais une catégorie/rareté — compté, sans effet.`);
+            else if (setCodeResolution === 'convention-x') console.log(`📊 [setcode-diagnostic] convention X (décodage exact) : ${parenteJournal}`);
+            else if (setCodeResolution === 'parente') console.log(`📊 [setcode-diagnostic] parenté retenue (préfixe, approximatif) : ${parenteJournal}`);
         }
         // ════════════════════════════════════════════════════════════════════
         // LA CLÉ V — AVANT le périmètre, sur le vivier ENTIER, jamais sur un vivier imposé
@@ -6315,7 +6297,7 @@ async function gererIdentifier(req, res) {
             // Codes langue Cardmarket, pour que l'extension construise l'URL du live
             codeLangue: { EN: 1, FR: 2, DE: 3, ES: 4, IT: 5, ZH: 6, JP: 7, PT: 8, RU: 9, KR: 10 }[cardInfo.language] || 1,
             // GARDE-CONTRADICTION (2026-10-17) : ce que la photo a LUE et le vivier jugé, pour la garde de l'adaptateur v2 (v2/identifier/garde-contradiction.js). UNIQUEMENT quand la requête vient de v2
-            // (`scanIdImpose` posé par la route v2) : la réponse de la route héritée directe ne change pas d'un octet, et aucune décision de cette chaîne ne lit ce bloc.
+            // (`scanIdImpose` posé par la route v2) : le BLOC n'existe pas dans la réponse de la route héritée directe, et aucune décision de cette chaîne ne le lit. (Ne pas en conclure que la route héritée est inchangée : le rapprochement des codes lus de scoring.js la touche, 2 écarts sur 307 au banc.)
             ...(req.scanIdImpose ? { lectureGarde: blocLectureGarde({ cardInfo, tcgdexId: trouvaille.id, totalHorsTailleDeSet, produits }) } : {})
         });
 
