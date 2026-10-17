@@ -71,13 +71,13 @@ const mongoose = require('mongoose');
             ['du-set', null, { cle: 'vignettes/c1.webp', w: 200, h: 279 }, { cle: 'cartes/c1.webp', w: 600, h: 838 }]);
         H.v('1001 : numero = numeroFiche, rarete/total lus, métacarte du catalogue, nom du set', [e(1001).numero, e(1001).rarete, e(1001).total, e(1001).idMetacard, e(1001).setNom],
             ['001', 'Rare', '100', 5001, 'Set A']);
-        H.v('1001 : lien construit par la règle du site (numéro ET rareté connus)', e(1001).lien, 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-A/P1001-SA001');
+        H.v('1001 : lien construit par la règle du site (numéro connu)', e(1001).lien, 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-A/P1001-SA001');
         H.v('1002 substitut AVEC mention : la mention du produit, vignette du substitut', [e(1002).visuel, e(1002).mention, e(1002).vignette.cle], ['substitut', MENTION, 'vignettes/orig.webp']);
         H.v('1003 substitut SANS mention : écrit tel quel (mention null), pas inventée', [e(1003).visuel, e(1003).mention], ['substitut', null]);
         H.v('1004 autre tirage : annoncé comme tel, avec le set d\'origine', [e(1004).visuel, /Set B/.test(e(1004).mention || ''), e(1004).vignette.cle], ['autre-tirage', true, 'vignettes/c4b.webp']);
-        H.v('1006 rareté non lue : null, donc pas de lien (jamais devinée)', [e(1006).rarete, e(1006).lien, e(1006).numero, e(1006).idMetacard], [null, null, '006', null]);
+        H.v('1006 rareté non lue : null (jamais devinée), mais le numéro est connu : un lien vers la page exacte', [e(1006).rarete, e(1006).lien, e(1006).numero, e(1006).idMetacard], [null, 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-A/P1006-SA006', '006', null]);
         H.v('1007 deux impressions au même numéro, d\'accord : rareté lue', [e(1007).rarete, e(1007).total], ['Rare', '100']);
-        H.v('1008 deux impressions au même numéro, en DÉSACCORD : null (jamais l\'une des deux)', [e(1008).rarete, e(1008).lien, d.rareteContredite], [null, null, 1]);
+        H.v('1008 deux impressions au même numéro, en DÉSACCORD : null (jamais l\'une des deux)', [e(1008).rarete, e(1008).lien, d.rareteContredite], [null, 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-A/P1008-SA008', 1]);
         H.v('1009 visuel sans vignette : champ vignette absent (l\'importeur le refusera)', 'vignette' in e(1009), false);
         H.v('tous les champs PRÉSENTS exigés par l\'importeur sont là (null admis) sur chaque entrée', entrees.every(x => ['idMetacard', 'numero', 'rarete', 'total'].every(c => x[c] !== undefined)), true);
 

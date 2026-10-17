@@ -2,6 +2,7 @@
 // B1a.1 — le Produit du contrat 2 (CONTRAT-2 §3.2), construit depuis une LIGNE de catalogue déjà lue. Module PUR.
 // Écrit par ce qu'il AUTORISE : une valeur hors liste, un hôte hors liste blanche, un prix non daté => null (on n'affirme rien).
 const { lireConfig } = require('../config');
+const { lienServi } = require('./lien-cardmarket');
 
 const VARIANTES = Object.freeze(['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo']);
 let CFG_DEFAUT = null;
@@ -40,11 +41,8 @@ function prixGuideDe(g) {
     if (!date || (tendance === null && de === null && moyenne30 === null)) return null;
     return Object.freeze({ tendance, de, moyenne30, date });
 }
-function lienCardmarket(u, numero, rarete) {
-    if (numero === null || rarete === null || typeof u !== 'string') return null;     // jamais de lien anonyme
-    let p; try { p = new URL(u); } catch { return null; }
-    return p.protocol === 'https:' && (p.hostname === 'www.cardmarket.com' || p.hostname === 'cardmarket.com') ? u : null;
-}
+// LIEN-CARDMARKET : un lien dès que le NUMÉRO est connu (la rareté n'est plus exigée), vers la page EXACTE du produit — la garde vit dans lien-cardmarket.js (un seul exemplaire).
+const lienCardmarket = (u, numero) => lienServi(u, numero);
 const varianteDe = x => (VARIANTES.includes(x) ? x : null);                            // jamais 'normale' deviné (CLAUDE.md §7)
 function mention(m, langue) {
     if (m && typeof m === 'object') return texte(langue === 'fr' ? m.fr : m.en);
@@ -56,7 +54,7 @@ function impression(i, ctx) {
     return Object.freeze({
         idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
-        lien: lienCardmarket(i.lien, numero, rarete), prixGuide: prixGuideDe(i.prixGuide)
+        lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide)
     });
 }
 
@@ -85,7 +83,7 @@ function construireProduit(source, ctx = {}) {
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
         prixGuide: prixGuideDe(source.prixGuide),
         // `source.lienCardmarket` = le lien de la FICHE PRODUIT (ligne de catalogue) ; `lien` d'une impression (i.lien, plus haut) = le lien de CETTE impression.
-        liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero, rarete),
+        liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero),
                                fiche: ctx.ficheServie ? `https://rat-market.fr/fr/p/${source.idProduct}` : null }),
         impressions: Object.freeze(Array.isArray(source.impressions) ? source.impressions.filter(i => i && Number.isInteger(i.idProduct)).map(i => impression(i, ctx)) : [])
     });

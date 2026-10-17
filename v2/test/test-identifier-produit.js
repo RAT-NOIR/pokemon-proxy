@@ -56,8 +56,9 @@ v('total absent -> null', P({ total: null }).total, null);
 v('numero numérique -> chaîne', P({ numero: 4 }).numero, '4');
 
 // 5. liens
-v('lien Cardmarket si numéro ET rareté', P({}).liens.cardmarket, base().lienCardmarket);
-v('pas de rareté -> pas de lien (jamais anonyme)', P({ rarete: null }).liens.cardmarket, null);
+v('lien Cardmarket si le numéro est connu', P({}).liens.cardmarket, base().lienCardmarket);
+v('pas de rareté, numéro connu -> lien vers la page exacte (la rareté n\'est plus exigée)', P({ rarete: null }).liens.cardmarket, base().lienCardmarket);
+v('lien de recherche refusé (jamais une recherche)', P({ lienCardmarket: 'https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=Lapras' }).liens.cardmarket, null);
 v('pas de numéro -> pas de lien', P({ numero: null }).liens.cardmarket, null);
 v('lien non https refusé', P({ lienCardmarket: 'http://www.cardmarket.com/x' }).liens.cardmarket, null);
 v('lien hors Cardmarket refusé', P({ lienCardmarket: 'https://evil.example/x' }).liens.cardmarket, null);
@@ -104,12 +105,14 @@ vrai('entrée invalide : idProduct absent -> lève', leve(() => construireProdui
 vrai('entrée invalide : set absent -> lève', leve(() => construireProduit({ idProduct: 1, nomCardmarket: 'X' }, { langueInterface: 'fr' })));
 
 // 9. impressions
+const LIEN_IMP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Set/Charizard-BS4';
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
-    lien: 'https://www.cardmarket.com/fr/Pokemon/Products?idProduct=900002', prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
+    lien: LIEN_IMP, prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
 v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
-    lien: 'https://www.cardmarket.com/fr/Pokemon/Products?idProduct=900002', prixGuide: { tendance: 1180, de: 950, moyenne30: 1000, date: '2026-10-05' } });
-v('impression sans rareté -> lien null (jamais anonyme)', avecImp.impressions[1].lien, null);
+    lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, moyenne30: 1000, date: '2026-10-05' } });
+v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
+v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);
 v('impression variante hors liste -> null', avecImp.impressions[1].variante, null);
 v('impression : clés', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'set', 'lien', 'prixGuide']);
 vrai('impressions gelées', Object.isFrozen(avecImp.impressions) && Object.isFrozen(avecImp.impressions[0]));

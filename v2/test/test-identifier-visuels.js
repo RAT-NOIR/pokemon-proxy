@@ -91,7 +91,7 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.v('   ordre : numéro croissant, sans numéro en dernier', imps.map(i => i.idProduct), [3005, 3004, 3001, 3002, 3003]);
     H.v('   numéro ET rareté connus + lien donné : lien Cardmarket', par[3001].lien, `${CM}/Base-Set/Pikachu-V1-BS58`);
     H.v('   numéro, total, rareté, set repris du chargement', [par[3001].numero, par[3001].total, par[3001].rarete, par[3001].set], ['58', '102', 'Rare Holo', { nom: 'Base Set' }]);
-    H.v('   rareté NON lue : null et lien null (le lien donné est tu)', [par[3002].rarete, par[3002].lien], [null, null]);
+    H.v('   rareté NON lue : null (jamais devinée), le numéro est connu : le lien donné est servi', [par[3002].rarete, par[3002].lien], [null, `${CM}/Base-Set/Pikachu-V2-BS58`]);
     H.v('   numéro inconnu : lien null (jamais anonyme)', [par[3003].numero, par[3003].lien], [null, null]);
     H.v('   lien non donné : null même avec numéro et rareté', [par[3005].rarete, par[3005].lien], ['Commune', null]);
     H.v('   variante de la liste conservée, hors liste (V1) : null', [par[3001].variante, par[3004].variante], ['premiere-edition', null]);
@@ -101,8 +101,8 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     // le sortie de impressions() traverse construireProduit (produit.js lit `lien`) : le contrat 2 sort intact
     const prod = construireProduit({ idProduct: 3001, nomCardmarket: 'Pikachu', set: { slug: 'base-set', nom: 'Base Set' }, impressions: imps }, { cfg });
     const pp = Object.fromEntries(prod.impressions.map(i => [i.idProduct, i]));
-    H.v('   via construireProduit : lien conservé, prixGuide au contrat, lien null reste null',
-        [pp[3001].lien, pp[3004].prixGuide, pp[3002].lien], [`${CM}/Base-Set/Pikachu-V1-BS58`, { tendance: 4.5, de: 2, moyenne30: 3.1, date: '2026-10-01' }, null]);
+    H.v('   via construireProduit : lien conservé, prixGuide au contrat, lien sans numéro reste null',
+        [pp[3001].lien, pp[3004].prixGuide, pp[3003].lien], [`${CM}/Base-Set/Pikachu-V1-BS58`, { tendance: 4.5, de: 2, moyenne30: 3.1, date: '2026-10-01' }, null]);
     // la base de l'API ne contient aucune collection de l'autre grappe, ni `visuels`
     const noms = (await require('mongoose').connection.db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name.replace(db.prefixeCourant(), ''));
     H.v('aucune collection cartes / cartes_produits / catalogue_produits / numeros_cartes / visuels dans la base de l\'API (dénominateur ' + noms.length + ')',

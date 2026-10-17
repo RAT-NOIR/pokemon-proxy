@@ -3056,7 +3056,7 @@
           "prixGuide"
         ],
         "additionalProperties": false,
-        "description": "Une impression Cardmarket de la carte. `lien` n'est servi que si numéro ET rareté sont connus (jamais de lien anonyme)."
+        "description": "Une impression Cardmarket de la carte. `lien` est servi dès que le numéro est connu, vers la page exacte du produit (jamais une recherche) ; la rareté n'est pas exigée. Étiquette à afficher : set + numéro."
       },
       "Produit": {
         "type": "object",
@@ -3148,7 +3148,7 @@
                   "string",
                   "null"
                 ],
-                "description": "null tant que numéro ET rareté ne sont pas connus."
+                "description": "null tant que le numéro n'est pas connu ; sinon la page exacte du produit chez Cardmarket (jamais une recherche), sans exiger la rareté. Étiquette à afficher : set + numéro."
               },
               "fiche": {
                 "type": [

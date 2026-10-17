@@ -8,6 +8,7 @@
 const L = () => require('../../exporter-donnees-logos-site');      // paresseux : ce module charge dotenv à l'import
 const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
 
+const { lienServi } = require('../identifier/lien-cardmarket');       // LIEN-CARDMARKET : la garde unique, partagée avec la relecture (visuels.js) et le Produit
 const entier = x => Number.isInteger(x) && x > 0;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const fichierDe = (cle, w, h) => (typeof cle === 'string' && cle ? { cle, w, h } : null);
@@ -131,7 +132,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const idMetacard = entier(metacarte.get(l.idProduct)) ? metacarte.get(l.idProduct) : null;
         if (idMetacard === null) d.idMetacardAbsent++;
         const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: null, setNom: texte(s.nomAffichage),
-            lien: numero && rarete ? regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }) : null,
+            // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
+            lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
