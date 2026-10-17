@@ -356,7 +356,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
-    verifier('langue : la preuve écrite en base porte le VRAI compte (104 témoins, 112 images ouvertes — les 22 de cel25c le 2026-10-13 en plus) et plus « 42 »', [/104 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /112 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 104]);
+    verifier('langue : la preuve écrite en base porte le VRAI compte (146 témoins, 155 images ouvertes — les 22 de cel25c le 2026-10-13 et les 43 de T2-COLLECTE le 2026-10-17 en plus) et plus « 42 »', [/146 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /155 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /\b42\b/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 146]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
     // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
@@ -384,9 +384,9 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('jetons : SM→2 chiffres, SWSH hors table, TG→2 chiffres, HGSS→2 chiffres, McDonald\'s→entier nu', [SMP, BRS, LOR, HSP, M21].map(l => l.jeton ? `${l.jeton.prefixe}${l.jeton.largeur}` : null), ['SM2', 'TG2', 'TG2', 'HGSS2', null]);
     verifier('jetons : toute ligne de la table n\'emploie qu\'un préfixe énuméré', P.TABLE_PTCGIO.filter(l => l.jeton && !P.JETONS_URL.includes(l.jeton.prefixe)).map(l => l.id), []);
     verifier('verdict : les cinq sets prouvés', ['SM-Black-Star-Promos', 'Brilliant-Stars', 'Lost-Origin', 'HGSS-Black-Star-Promos', 'McDonalds-Collection-25th-Anniversary'].map(s => P.verdictDuSet(s).verdict), ['prouve', 'prouve', 'prouve', 'prouve', 'prouve']);
-    verifier('verdict : les sets sondés et NON prouvés restent des trous (SWSH promos 2 témoins sur 3, Best of Game variantes, SV promos, kits : 404, McDonald\'s 2014/2017/2024)',
-        ['SWSH-Black-Star-Promos', 'Best-of-Game-Cards-Promos', 'SV-Black-Star-Promos', 'XY-Trainer-Kit', 'SM-Trainer-Kit-Lycanroc-Alolan-Raichu', 'HS-Trainer-Kit', 'BW-Trainer-Kit', 'DP-Trainer-Kit', 'McDonalds-Collection-2014', 'McDonalds-Collection-2017', 'McDonalds-Collection-2024', 'XY-Black-Star-Promos', 'HeartGold-SoulSilver'].map(s => P.verdictDuSet(s).verdict),
-        Array(13).fill('non-apparie'));
+    verifier('verdict : les sets sondés et NON prouvés restent des trous (Best of Game variantes, SV promos, kits : 404, McDonald\'s 2014/2017/2024) — SWSH promos et HGSS sont prouvés depuis le 2026-10-17 (T2-COLLECTE)',
+        ['Best-of-Game-Cards-Promos', 'SV-Black-Star-Promos', 'XY-Trainer-Kit', 'SM-Trainer-Kit-Lycanroc-Alolan-Raichu', 'HS-Trainer-Kit', 'BW-Trainer-Kit', 'DP-Trainer-Kit', 'McDonalds-Collection-2014', 'McDonalds-Collection-2017', 'McDonalds-Collection-2024', 'XY-Black-Star-Promos'].map(s => P.verdictDuSet(s).verdict),
+        Array(11).fill('non-apparie'));
     const planT = (slug, trous) => P.planifierPtcgio({ slug, trous });
     const pTG = planT('Brilliant-Stars', [t(carte(31, 'Houndoom'), 'TG10', 501), t(carte(32, 'Zekrom'), 'TG05', 502, '5'), t(carte(33, 'Pikachu'), '10', 503, '10'), t(carte(34, 'Eevee'), 'TG31', 504)]);
     verifier('plan Trainer Gallery : TG10 → …/swsh9tg/TG10_hires.png ; le numéro du set principal (10) est « hors set » ; TG31 « non couvert » ; fiche et adresse doivent concorder',
@@ -445,6 +445,45 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const pA = P.planifierPtcgio({ slug: 'Aquapolis', tousNumerosCm: ['H25', 'H25', 'H7'], trous: [t(carte(75, 'Suicune'), 'H25', 905, 'H25'), t(carte(76, 'Electrode'), 'H7', 906, 'H7')] });
     verifier('T7b Aquapolis : H25 porte deux produits (V1, V3) → noteVariante ; H7 seul → aucune note', pA.plan.map(p => [p.carteId, p.url, p.noteVariante ?? null]),
         [[75, 'https://images.pokemontcg.io/ecard2/H25_hires.png', NOTE], [76, 'https://images.pokemontcg.io/ecard2/H7_hires.png', null]]);
+
+    // ── 12. T2-COLLECTE (2026-10-17) : les 7 « Na » (le scan du n° de BASE rendu au trou), swshp, et 5 produits isolés — 12 sets prouvés À L'ŒIL ──────────────────
+    // images ouvertes le 2026-10-17 : 19 demandées (images.pokemontcg.io, 3 s) + 25 de la mesure ; numéro imprimé, nom et symbole lus contre NOS fiches. Les « a » (alternatives jaunes) n'existent PAS chez la source :
+    // pour chacun des 7 trous, le fichier du n° de base imprime « 143/236 » (sans « a »), jamais l'illustration alternative que TCGdex servait au même numéro.
+    const T2 = [['Cosmic-Eclipse', 'sm12'], ['Roaring-Skies', 'xy6'], ['Phantom-Forces', 'xy4'], ['Generations', 'g1'], ['Fates-Collide', 'xy10'], ['BREAKthrough', 'xy8'], ['SWSH-Black-Star-Promos', 'swshp'],
+        ['EX-Emerald', 'ex9'], ['HeartGold-SoulSilver', 'hgss1'], ['Chilling-Reign', 'swsh6'], ['Fusion-Strike', 'swsh8'], ['Rising-Rivals', 'pl2']];
+    verifier('T2-COLLECTE verdict : les 12 sets (sm12, xy6, xy4, g1, xy10, xy8, swshp, ex9, hgss1, swsh6, swsh8, pl2) sont prouvés, chacun par sa ligne', T2.map(([s, id]) => [P.verdictDuSet(s).verdict, P.lignesDe(s).filter(l => l.lu === '2026-10-17').map(l => l.id).join()]), T2.map(([, id]) => ['prouve', id]));
+    verifier('T2-COLLECTE : chaque ligne porte ses témoins (3 au moins), son numéro imprimé « n/dénominateur » ou « SWSHnnn », sa marque et sa date de lecture',
+        T2.map(([s]) => P.lignesDe(s).filter(l => l.lu === '2026-10-17').every(l => l.temoins.length >= 3 && l.temoins.every(w => /^(SWSH\d{3}|\d+\/\d+)$/.test(w.imprime) && w.nom) && /symbole|SWSH/.test(l.marque))), Array(12).fill(true));
+    // les 7 « Na » : un seul produit (V1) au numéro, adresse = le numéro de base
+    const NA = [['Cosmic-Eclipse', 'Togepi & Cleffa & Igglybuff-GX', '143', 'sm12'], ['Roaring-Skies', 'Trainers\' Mail', '92', 'xy6'], ['Phantom-Forces', 'Aegislash-EX', '65', 'xy4'], ['Generations', 'Team Flare Grunt', '73', 'g1'],
+        ['Generations', 'Jolteon-EX', '28', 'g1'], ['Fates-Collide', 'Regirock-EX', '43', 'xy10'], ['BREAKthrough', 'Professor\'s Letter', '146', 'xy8']];
+    verifier('T2-COLLECTE les 7 « Na » : …/<set>/<n°>_hires.png, jamais une note de variante (un seul produit au numéro), preuve = numéro identique + set prouvé à l\'œil',
+        NA.map(([s, nom, n]) => { const r = P.planifierPtcgio({ slug: s, tousNumerosCm: [n], trous: [t(carte(1000 + Number(n), nom), n, 9000 + Number(n))] }); return [r.plan.map(p => p.url), r.restes.length, r.plan.every(p => !p.noteVariante && /prouvé à l'œil le 2026-10-17/.test(p.preuve))]; }),
+        NA.map(([, , n, id]) => [[`https://images.pokemontcg.io/${id}/${n}_hires.png`], 0, true]));
+    verifier('T2-COLLECTE : l\'alternative « 143a » (autre forme de numéro) et le numéro voisin non couvert ne passent pas — le trou reste un trou, nommé',
+        [P.planifierPtcgio({ slug: 'Cosmic-Eclipse', trous: [t(carte(1, 'Togepi & Cleffa & Igglybuff-GX'), '143a', 1, '143a')] }), P.planifierPtcgio({ slug: 'Cosmic-Eclipse', trous: [t(carte(2, 'Autre'), '144', 2)] }), P.planifierPtcgio({ slug: 'Phantom-Forces', trous: [t(carte(3, 'Autre'), '66', 3)] })]
+            .map(r => [r.plan.length, r.restes.map(x => x.motif)]), [[0, ['numero-hors-set']], [0, ['non-couvert-par-un-temoin']], [0, ['non-couvert-par-un-temoin']]]);
+    verifier('T2-COLLECTE : une fiche dont le numéro contredit l\'adresse refuse (« 143 » en Cardmarket, « 144 » en fiche)', P.planifierPtcgio({ slug: 'Cosmic-Eclipse', trous: [t(carte(4, 'Togepi & Cleffa & Igglybuff-GX'), '143', 4, '144')] }).restes.map(r => r.motif), ['numero-contradictoire']);
+    // swshp : « SWSH075 » (3 chiffres), segments 75, 251, 282-283, 287-290, 292 — 300 (404 chez la source), 301 (deux produits), 139, 284 : trous
+    const SWP = L('SWSH-Black-Star-Promos', 'swshp');
+    verifier('swshp : jeton SWSH sur 3 chiffres ; segments exacts, un témoin dans chacun et au plus grand numéro', [SWP.jeton, SWP.segments, [75, 251, 282, 283, 287, 288, 289, 290, 292].every(n => SWP.temoins.some(w => w.n === n && w.imprime === `SWSH${String(n).padStart(3, '0')}`))], [{ prefixe: 'SWSH', largeur: 3 }, [[75, 75], [251, 251], [282, 283], [287, 290], [292, 292]], true]);
+    verifier('swshp : « 075 », « 251 », « 282 », « 283 », « 288 », « 289 », « 290 », « 292 » → URL SWSHnnn ; 284, 286, 291, 300, 301, 139 → rien',
+        ['075', '251', '282', '283', '288', '289', '290', '292', '284', '286', '291', '300', '301', '139'].map(n => P.adresseDe(SWP, n)), [75, 251, 282, 283, 288, 289, 290, 292, null, null, null, null, null, null]);
+    const pSW = planT('SWSH-Black-Star-Promos', [t(carte(81, 'Special Delivery Charizard'), '075', 1, 'SWSH075'), t(carte(82, 'Morpeko V-UNION'), '288', 2, 'SWSH288 (Top Right)'), t(carte(83, 'Zacian V'), '292', 3, 'SWSH292'), t(carte(84, 'Unown V'), '300', 4, 'SWSH300'),
+        t(carte(85, 'Morpeko V-UNION'), null, 5, 'SWSH287'), t(carte(86, 'Lugia V'), '301', 6, 'SWSH301')]);
+    verifier('swshp plan : Charizard 075 → SWSH075, Morpeko 288 (fiche « SWSH288 (Top Right) ») → SWSH288, Zacian V 292 → SWSH292 ; Unown V 300 et Lugia V 301 non couverts (404 / deux produits), 287 sans numéro Cardmarket : trou',
+        [pSW.plan.map(p => p.url.replace('https://images.pokemontcg.io/', '')), pSW.restes.map(r => [r.carteId, r.motif])], [['swshp/SWSH075_hires.png', 'swshp/SWSH288_hires.png', 'swshp/SWSH292_hires.png'], [[84, 'non-couvert-par-un-temoin'], [85, 'sans-numero'], [86, 'non-couvert-par-un-temoin']]]);
+    // les isolés : énergies sans numéro de fiche (le numéro Cardmarket fait l'adresse), « 2010 » (autre impression) n'est pas « 121 »
+    const pIs = [planT('EX-Emerald', [t(carte(91, 'Basic Water Energy'), '103', 1, null)]), planT('HeartGold-SoulSilver', [t(carte(92, 'Basic Darkness Energy'), '121', 2, null), t(carte(93, 'Basic Metal Energy'), '122', 3, null), t(carte(94, 'Basic Darkness Energy'), '2010', 4, null)]),
+        planT('Chilling-Reign', [t(carte(95, 'Basic Water Energy'), '231', 5, null), t(carte(96, 'Basic Psychic Energy'), '232', 6, null)]), planT('Fusion-Strike', [t(carte(97, 'Basic Grass Energy'), '283', 7, null), t(carte(98, 'Basic Fire Energy'), '284', 8, null)]), planT('Rising-Rivals', [t(carte(99, 'Trapinch'), '84', 9)])];
+    verifier('isolés : ex9/103, hgss1/121-122, swsh6/231-232, swsh8/283-284, pl2/84 ; le numéro « 2010 » (autre impression de l\'énergie) reste un trou',
+        [pIs.flatMap(r => r.plan.map(p => p.url.replace('https://images.pokemontcg.io/', ''))), pIs.flatMap(r => r.restes.map(x => [x.carteId, x.motif]))],
+        [['ex9/103_hires.png', 'hgss1/121_hires.png', 'hgss1/122_hires.png', 'swsh6/231_hires.png', 'swsh6/232_hires.png', 'swsh8/283_hires.png', 'swsh8/284_hires.png', 'pl2/84_hires.png'], [[94, 'numero-hors-set']]]);
+    verifier('T2-COLLECTE : un hôte et un chemin énumérés — « sm12/143 », « swshp/SWSH075 », « hgss1/121 » sont acceptés par le client', await (async () => {
+        const trr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: png }), cc = client(trr);
+        for (const u of [P.urlHires('sm12', 143), P.urlHires('swshp', 75, SWP.jeton), P.urlHires('hgss1', 121)]) await cc.image(u);
+        return trr.appels.map(u => u.replace('https://images.pokemontcg.io', ''));
+    })(), ['/robots.txt', '/sm12/143_hires.png', '/swshp/SWSH075_hires.png', '/hgss1/121_hires.png']);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
