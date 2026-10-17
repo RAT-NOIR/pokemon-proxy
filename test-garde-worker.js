@@ -86,7 +86,25 @@ ajouter('9. balise parfaite, mais l\'ARBRE DE TRAVAIL diffère du commit du work
 ajouter('8. une balise fraîche, unique, sur HEAD — qui contient les trois règles',
     fausseCx([{ _id: `${PREFIXE}pod-a/52`, balise: { pid: 52, hote: 'pod-a', commit: HEAD, etat: 'repos', depuis: ilYA(0.2) } }]), false);
 
+// ── LES DEUX ÉTATS D'UN PROCESSUS LOCAL (2026-10-17, le worker Render est suspendu) ──────────────────────────────────────────────
+// La balise est ÉCRITE par le vrai `battre` (résolveur de commit injecté : faux git), puis lue par la vraie garde.
+const { commitVerifiable } = require('./collecte-cartes/commit-local');
+const balise = require('./collecte-cartes/balise-worker');
+const gitFaux = sale => args => (args[0] === 'status' ? sale : HEAD + '\n');
+async function baliseLocale(sale) {
+    const docs = new Map();
+    const db = { collection: () => ({ updateOne: async (f, u) => { docs.set(f._id, { _id: f._id, ...u.$set }); } }) };
+    await balise.battre(db, 'repos', { commit: () => commitVerifiable({ env: {}, git: gitFaux(sale) }) });
+    return [...docs.values()];
+}
+const locales = {};   // rempli avant la boucle (asynchrone)
+ajouter('10. balise LOCALE, arbre suivi propre, commit = HEAD — le seul autre chemin qui passe', { differe: 'propre' }, false);
+ajouter('11. balise LOCALE, arbre suivi SALE — aucun commit dans la balise, la garde bloque', { differe: 'sale' }, true);
+
 (async () => {
+    locales.propre = fausseCx(await baliseLocale(''));
+    locales.sale = fausseCx(await baliseLocale(' M collecteur-images.js\n'));
+    for (const c of cas) if (c.cx && c.cx.differe) c.cx = locales[c.cx.differe];
     console.log(`\n════ LA GARDE SAIT-ELLE REFUSER ? ${cas.length} états fabriqués · HEAD = ${HEAD.slice(0, 12)} ════\n`);
     let ok = 0, ko = 0;
     for (const c of cas) {

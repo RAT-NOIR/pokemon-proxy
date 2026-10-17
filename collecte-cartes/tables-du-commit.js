@@ -93,4 +93,4 @@ function dependancesLocales(entrees, { racine = path.join(__dirname, '..') } = {
     return [...vus].map(f => path.relative(racine, f).split(path.sep).join('/')).sort();
 }
 
-module.exports = { tablesDuCommit, fabriquerJuge, reglesDifferentes, dependancesLocales, FICHIERS };
+module.exports = { tablesDuCommit, fabriquerJuge, reglesDifferentes, dependancesLocales, FICHIERS, gitExe };

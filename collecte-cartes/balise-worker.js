@@ -35,9 +35,14 @@ function idBalise() { return `${PREFIXE}${identite.hote}/${identite.pid}`; }
  * @param {*} db  la base `cartes` (driver natif)
  * @param {'travail'|'repos'} etat  ce que le worker est en train de faire
  */
-async function battre(db, etat = 'travail') {
+// 🔑 (2026-10-17, collecte locale) Le commit se RÉSOUT À CHAQUE BATTEMENT (commit-local.js) : un arbre devenu sale après le démarrage retire
+// le champ à la minute suivante. Sans commit vérifiable, le champ est ABSENT (jamais « local », jamais null) : la garde bloque.
+// `resoudre` est injectable pour les bancs ; par défaut, la définition unique de commit-local.js.
+async function battre(db, etat = 'travail', { commit: resoudre = () => require('./commit-local').commitVerifiable() } = {}) {
+    const { commit } = resoudre();
+    const { commit: _ignore, ...sansCommit } = identite;
     await db.collection(COLLECTION).updateOne({ _id: idBalise() },
-        { $set: { balise: { ...identite, etat, depuis: new Date() } } }, { upsert: true });
+        { $set: { balise: { ...sansCommit, ...(commit ? { commit } : {}), etat, depuis: new Date() } } }, { upsert: true });
 }
 
 /** Retire la balise de CE processus. Un arrêt propre ne laisse pas de fantôme. */
