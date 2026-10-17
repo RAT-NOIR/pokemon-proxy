@@ -105,6 +105,19 @@ function banc({ E = collection(), env = ENV, lance = [], code = 0, extrait = 'ok
         for (const v of ['MOTDEPASSE', 'SECRET-KEY', 'SECRET-SEC', 'acct-long', 'cluster0']) assert.ok(!s.includes(v), `fuite : ${v}`);
         assert.match(s, /mongodb:\/\/\*\*\*/);
     });
+    await t('coupure à 1500 DANS « mongodb+srv:// » : le mot de passe ne sort jamais', async () => {
+        const uri = 'mongodb+srv://user:SECRETPASS@cluster0.x.mongodb.net/db';
+        const extrait = 'x'.repeat(1495) + uri + 'y'.repeat(3000 - 1495 - uri.length);
+        assert.equal(extrait.length, 3000);
+        const sortie = [], journal = { log: m => sortie.push(String(m)), error: m => sortie.push(String(m)), warn: m => sortie.push(String(m)) };
+        const code = await CI.passeCI({ argv: ['--import=guide'], env: ENV, ouvrirE: async () => ({ E: collection(), fermer: async () => { } }), lancerScript: async () => ({ code: 1, dureeS: 1, extrait }), maintenant: () => a('2026-10-18T05:10:00Z'), journal });
+        const s = sortie.join('\n');
+        assert.equal(code, 1); assert.ok(s.includes('--- fin de la sortie'), 'l\'extrait est bien imprimé');
+        assert.ok(!s.includes('SECRETPASS'), 'fuite du mot de passe'); assert.ok(!s.includes('cluster0'), 'fuite de l\'hôte');
+    });
+    await t('défense : un reste « …:mot@hôte » sans son préfixe est masqué', () => {
+        assert.ok(!CI.masquerSecrets('db+srv://user:SECRETPASS@cluster0.x.net/db', {}).includes('SECRETPASS'));
+    });
     await t('masquer : une valeur courte (< 4 car.) n\'est pas masquée partout ; vide ignorée', () => {
         assert.equal(CI.masquerSecrets('abc b', { R2_BUCKET_BRUT: 'b', MONGODB_URI: '' }), 'abc b');
     });

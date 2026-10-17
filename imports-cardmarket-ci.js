@@ -24,8 +24,11 @@ function masquerSecrets(texte, env = process.env) {
     let s = String(texte).replace(/mongodb(?:\+srv)?:\/\/\S+/g, 'mongodb://***');
     const valeurs = VARIABLES_SECRETES.map(n => String(env[n] ?? '').trim()).filter(v => v.length >= 4).sort((x, y) => y.length - x.length);
     for (const v of valeurs) s = s.split(v).join('***');
-    return s;
+    // défense : un reste d'URI dont le préfixe a été coupé (« …:mot@hôte ») — identifiants avant un @
+    return s.replace(/[^\s@/]*:[^\s@/]*@[^\s/]+/g, '***');
 }
+/** Masque le texte ENTIER, puis tronque (jamais l'inverse : une coupure dans « mongodb+srv:// » cacherait l'URI à la regex), puis masque encore. */
+const extraitSur = (texte, env, n = 1500) => masquerSecrets(masquerSecrets(texte, env).slice(-n), env);
 
 function lireArguments(argv) {
     let choix = 'auto';
@@ -77,7 +80,7 @@ async function passeCI({ argv = process.argv.slice(2), env = process.env, ouvrir
             if (!e || e.enCours !== false || e.dernierResultat === 'echec') {
                 journal.error(`🔴 import « ${nom} » : ${e?.dernierResultat ?? 'sans résultat'} (code ${e?.dernierCode ?? '?'})`);
                 // la cause, dans le journal de la CI : fin de la sortie de l'enfant (déjà bornée par le module), valeurs secrètes masquées
-                if (e?.dernierExtrait) journal.error(`--- fin de la sortie de « ${nom} » ---\n${masquerSecrets(String(e.dernierExtrait).slice(-1500), env)}\n--- fin ---`);
+                if (e?.dernierExtrait) journal.error(`--- fin de la sortie de « ${nom} » ---\n${extraitSur(String(e.dernierExtrait), env)}\n--- fin ---`);
                 code = 1;
             }
             else journal.log(`${e.dernierResultat === 'importe' ? '✅' : 'ℹ️'} import « ${nom} » : ${e.dernierResultat}`);
