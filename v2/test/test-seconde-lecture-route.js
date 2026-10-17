@@ -217,7 +217,8 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         H.v('5b. un produit SANS jumeau : affirmé comme avant, aucun appel', [aucun.c0.statut, modele.appels.length, await livre(aucun)], ['identifiee', 0, PAYE]);
         JUM[ID_P] = [ID_J, ID_J2, ID_J3];
         const trop = await scan(svOn);
-        H.v('5c. trois jumeaux (impression indéterminée, remboursée) : aucun appel', [trop.c0.raison, modele.appels.length], ['impression-indeterminee', 0]);
+        // JUMEAUX-QUESTION (2026-10-17) : trois jumeaux = une QUESTION à 3 (réservée), plus l'introuvable d'avant ; la seconde lecture ne se déclenche toujours pas (trop de jumeaux pour la confirmer)
+        H.v('5c. trois jumeaux (4 produits) : une question à 3, réservée, aucun appel au modèle', [trop.c0.statut, trop.c0.candidats.length, await livre(trop), modele.appels.length], ['a-trancher', 3, RESERVE, 0]);
         JUM[ID_P] = [ID_J];
         mode = 'affirmee';
         const svPanne = await monter({ secondeLecture: fournisseur, jumeaux: () => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }) }, cfgOn);

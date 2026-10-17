@@ -197,9 +197,10 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
         await svJ1.fermer();
         const svJ3 = await monter({ jumeaux: id => ({ conclu: true, ids: id === ID_A ? [ID_B, ID_C, ID_D] : [] }) });
         const b = await scan('ambigue-seul', 3, svJ3);
-        H.v('9b. trois jumeaux (4 produits) : introuvable impression-indeterminee, REMBOURSÉ sans plafond (constaté, aucun compteur), aucune question en attente',
-            [b.j.analyse.statut, b.c0.raison, b.j.facturation.rembourse, (await livre(b)).essais, await compteurDe(b, 'jumeaux'), await raw('questions_v2').countDocuments({ 'porteur.id': b.i._id, etat: 'en-attente' })], ['introuvable', 'impression-indeterminee', true, 3, 0, 0]);
-        H.v('   le motif interne jumeaux-trop-nombreux est écrit dans analyses, jamais servi', [(await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(b.scanId) })).motifJumeaux, JSON.stringify(b.j).includes('jumeaux-')], ['jumeaux-trop-nombreux', false]);
+        // JUMEAUX-QUESTION (2026-10-17) : plus de 3 produits = une QUESTION à 3, réservée comme toute question (banc : test-jumeaux-question.js), plus l'introuvable remboursé sans plafond d'avant
+        H.v('9b. trois jumeaux (4 produits) : une QUESTION à 3 (A d\'abord, puis B, C par idProduct), RÉSERVÉE, une question en attente, aucun compteur de jumeaux',
+            [b.j.analyse.statut, b.c0.statut, b.c0.candidats.map(x => x.idProduct).sort((x, y) => x - y), b.j.facturation.reserve, b.j.facturation.rembourse, (await livre(b)).essais, await compteurDe(b, 'jumeaux'), await raw('questions_v2').countDocuments({ 'porteur.id': b.i._id, etat: 'en-attente' })], ['a-trancher', 'a-trancher', [ID_A, ID_B, ID_C], 1, false, 2, 0, 1]);
+        H.v('   aucun motif de refus de la garde n\'est écrit dans analyses (ce n\'est plus un refus) ni servi', [(await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(b.scanId) })).motifJumeaux ?? null, JSON.stringify(b.j).includes('jumeaux-')], [null, false]);
         await svJ3.fermer();
         const svP = await monter({ jumeaux: () => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }) });
         const c = await scan('ambigue-seul', 3, svP);

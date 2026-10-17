@@ -232,7 +232,16 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         const analyseDe = async j => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         const avec = async (jumeaux, f) => { const s = await monter(cfg, { identifierLot, jumeaux }); try { await f(s); } finally { await s.fermer(); } };
         const J1 = id => ({ conclu: true, ids: id === P5 ? [POOL[0]] : [] });                         // P5 a UN jumeau
-        const J3 = id => ({ conclu: true, ids: id === P5 ? [POOL[0], POOL[1], POOL[2]] : [] });       // P5 a TROIS jumeaux : 4 produits, trop pour une question
+        // JUMEAUX-QUESTION (2026-10-17) : plus de 3 produits = une QUESTION à 3 quand les lignes de catalogue des jumeaux sont là ; sinon le repli d'avant (introuvable impression-indeterminee).
+        // J3 : P5 a TROIS jumeaux dont UN sans ligne au catalogue (910999) => le repli, la « garde qui refuse » des cas de remboursement ci-dessous. J3OK : trois jumeaux AVEC lignes => une question à 3.
+        const J3 = id => ({ conclu: true, ids: id === P5 ? [POOL[0], POOL[1], 910999] : [] });
+        const J3OK = id => ({ conclu: true, ids: id === P5 ? [POOL[0], POOL[1], POOL[2]] : [] });
+        await avec(J3OK, async s => {
+            const x = await inst(); lot([aff(P5), aff(P20A)]);
+            const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j);
+            H.v('JUMEAUX-QUESTION lot : la carte à plus de 3 produits (elle et ses 3 jumeaux, lignes présentes) devient une QUESTION à 3 réservée (lot: true), l\'autre reste identifiée',
+                [r.statut, [0, 1].map(i => c[i] && c[i].statut), c[0] && c[0].candidats.length, c[0] && c[0].candidats.some(p => p.idProduct === P5), await raw('questions_v2').countDocuments({ scanId: new mongoose.Types.ObjectId(j.scanId), lot: true, etat: 'en-attente' })], [200, ['a-trancher', 'identifiee'], 3, true, 1]);
+        });
 
         await avec(J1, async s => {
             const x = await inst(); lot([aff(P5), aff(P20A), aff(P1)]);
@@ -246,7 +255,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         await avec(J3, async s => {
             const x = await inst(); lot([aff(P5), aff(P20A)]);
             const r = await poster(s.url, x.jeton), j = r.json || {}, c = parIndex(j), an = await analyseDe(j);
-            H.v('JUMEAU-V2 lot : la carte à plus de 3 produits (elle et ses 3 jumeaux) est INTROUVABLE « impression-indeterminee » (jamais 3 parmi N), l\'autre reste identifiée, le lot n\'est pas remboursé',
+            H.v('JUMEAU-V2 lot : la carte à plus de 3 produits dont un jumeau SANS ligne au catalogue (repli) est INTROUVABLE « impression-indeterminee » (jamais un choix tronqué), l\'autre reste identifiée, le lot n\'est pas remboursé',
                 [[0, 1].map(i => c[i] && c[i].statut), c[0] && c[0].raison, c[0] && c[0].candidats, await essais(x), j.facturation && j.facturation.rembourse], [['introuvable', 'identifiee'], 'impression-indeterminee', [], 2, false]);
             H.v('   I4 : le motif de la garde est tracé PAR CARTE dans analyses (champ interne, jamais servi) : la carte 0 le porte, la carte 1 non',
                 [an && an.cartes[0].motifJumeaux, an && an.cartes[1].motifJumeaux, JSON.stringify(j).includes('jumeaux-')], ['jumeaux-trop-nombreux', undefined, false]);

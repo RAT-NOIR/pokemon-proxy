@@ -44,7 +44,8 @@ const carte0 = r => r.analyse && r.analyse.cartes[0];
     const r3 = A(amb([700]), ctx({ jumeaux: id => ({ conclu: true, ids: id === 700 ? [701, 703] : [] }) })), c3 = carte0(r3);
     v('1 candidat + 2 jumeaux : question à 3', [r3.issue, c3.candidats.map(x => x.idProduct)], ['question', [700, 701, 703]]);
     const r4 = AS(amb([700]), ctx({ jumeaux: id => ({ conclu: true, ids: id === 700 ? [701, 702, 703] : [] }) }));
-    v('1 candidat + 3 jumeaux (4 produits) : introuvable impression-indeterminee, motif jumeaux-trop-nombreux', [r4.issue, carte0(r4).raison, r4.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
+    // JUMEAUX-QUESTION (2026-10-17) : plus de 3 produits n'est plus un introuvable : une question à 3 (P d'abord, puis l'ordre nommé de jumeaux-nombreux.js)
+    v('1 candidat + 3 jumeaux (4 produits) : une QUESTION à 3 (700 d\'abord, puis 701, 702 par idProduct), plus l\'introuvable d\'avant', [r4.issue, carte0(r4).statut, carte0(r4).candidats.map(x => x.idProduct)], ['question', 'a-trancher', [700, 701, 702]]);
 }
 // (3) la garde en panne : une PANNE, jamais une question ni une affirmation
 {
