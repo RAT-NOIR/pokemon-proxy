@@ -184,6 +184,12 @@ function lireConfig(env = process.env) {
         // RESOUDRE-CARDMARKET : POST /api/banc/resoudre-cardmarket (adresse Cardmarket collée → idProduct, administrateur seulement). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) SANS rendre la configuration invalide : un drapeau mal écrit ne doit jamais coûter un 503 au service.
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
+        // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7> (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
+        // éteint la route (elle n'existe pas) et laisse /api/identifier tel qu'il est aujourd'hui, SANS rendre la configuration invalide. Phase 1 : administrateur seulement.
+        photosMultiples: env.V2_PHOTOS_MULTIPLES === '1',
+        // PHOTOS-MULTIPLES, second état (la PHASE 2 : tous les porteurs). LU et RIEN D'AUTRE : aucune ligne du code ne le consulte, la route reste réservée à l'administrateur même allumé. Il ne vaut que si le premier l'est.
+        // Le jour où la phase 2 s'ouvre, c'est ici que se pose la lecture, et un lot dédié (limites, mémoire globale) la câble.
+        photosMultiplesTous: env.V2_PHOTOS_MULTIPLES === '1' && env.V2_PHOTOS_MULTIPLES_TOUS === '1',
         turnstile,
         cookieSecure
     });
