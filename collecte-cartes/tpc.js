@@ -264,14 +264,23 @@ function voieNomJaPvOuverte(nomJaPv, site, multi, carte) {
 }
 /** Ce que la voie lit dans la base, pur : la part de produits sans numéro, les numéros pris, les fiches déjà posées. */
 function contexteNomJaPv({ lignes, cartes, slug }) {
-    const numerosPris = new Set(), fichesPrises = new Set();
-    for (const l of lignes) if (l.numeroFiche) { const k = cleNumero(l.numeroFiche); if (k) numerosPris.add(k); }
+    const numerosPris = new Set(), fichesPrises = new Set(), nomsParNumero = new Map();
+    const parId = new Map(cartes.map(c => [c._id, c]));
+    // qui a pris ce numéro : les noms de SA carte (« ja:<nomJa> », « en:<nomEn> »), ou '' quand sa carte n'a aucun nom — inconnu, donc douteux
+    const prendre = (k, carte) => {
+        if (!k) return;
+        numerosPris.add(k);
+        const s = nomsParNumero.get(k) || nomsParNumero.set(k, new Set()).get(k);
+        const cles = [carte?.nomJa ? `ja:${nomCompare(carte.nomJa)}` : null, carte?.nomEn ? `en:${cleNomEn(carte.nomEn)}` : null].filter(Boolean);
+        if (cles.length) cles.forEach(x => s.add(x)); else s.add('');
+    };
+    for (const l of lignes) if (l.numeroFiche) prendre(cleNumero(l.numeroFiche), parId.get(l.carteId));
     for (const c of cartes) for (const e of c.images || []) {
         if (e.set !== slug) continue;
-        if (e.numero != null) { const k = cleNumero(e.numero); if (k) numerosPris.add(k); }
+        if (e.numero != null) prendre(cleNumero(e.numero), c);
         const m = /\/card\/(\d+)\//.exec(e.urlFiche || ''); if (m) fichesPrises.add(m[1]);
     }
-    return { slug, partSansNumero: lignes.length ? lignes.filter(l => !l.numeroFiche).length / lignes.length : 0, numerosPris, fichesPrises };
+    return { slug, partSansNumero: lignes.length ? lignes.filter(l => !l.numeroFiche).length / lignes.length : 0, numerosPris, fichesPrises, nomsParNumero };
 }
 function jugerNomJaPv({ essais, fiches, code, nomJaPv, temoinNomJa }) {
     const plan = [], restes = [], acceptes = [];
@@ -291,7 +300,12 @@ function jugerNomJaPv({ essais, fiches, code, nomJaPv, temoinNomJa }) {
         if (!f.marque || f.marque.toUpperCase() !== String(code).toUpperCase()) { refus('set', `marque « ${f.marque ?? '—'} » pour le code ${code}`); continue; }
         if (!f.image) { refus('fiche-sans-image', `la fiche ${f.idFiche} ne porte aucune image`); continue; }
         const kf = f.numero ? cleNumero(f.numero) : null;
-        if ((kf && nomJaPv.numerosPris.has(kf)) || nomJaPv.fichesPrises.has(String(f.idFiche))) { refus('fiche-prise', `la fiche ${f.idFiche}${kf ? ` (n° ${f.numero})` : ''} est déjà celle d'un produit numéroté ou d'une image du set`); continue; }
+        // un numéro porté par PLUSIEURS fiches de la liste (les decks d'un set renumérotent chacun de 1) ne désigne pas celle-ci : il ne la prend que
+        // si un produit numéroté de la MÊME carte (même nomJa) le porte — l'autre impression du même nom, la seule qui puisse se confondre avec elle
+        const numeroUnique = kf ? fiches.filter(g => g.numero && cleNumero(g.numero) === kf).length === 1 : false;
+        const nomsPreneurs = kf ? nomJaPv.nomsParNumero?.get(kf) : null;
+        const numeroPris = kf && nomJaPv.numerosPris.has(kf) && (numeroUnique || !nomsPreneurs || nomsPreneurs.has('') || nomsPreneurs.has(`ja:${nomCompare(c.nomJa)}`) || (c.nomEn && nomsPreneurs.has(`en:${cleNomEn(c.nomEn)}`)));
+        if (numeroPris || nomJaPv.fichesPrises.has(String(f.idFiche))) { refus('fiche-prise', `la fiche ${f.idFiche}${kf ? ` (n° ${f.numero})` : ''} est déjà celle d'un produit numéroté ou d'une image du set`); continue; }
         if (temoinNomJa && c.nomEn) { const t = temoinNomJa(c.nomEn); if (t?.divergent) { refus('nom-non-comparable', `les nomJa de « ${c.nomEn} » divergent entre nos cartes (${t.noms.join(' | ')}) : le dictionnaire ne témoigne pas`); continue; } }
         acceptes.push({ e, f });
     }

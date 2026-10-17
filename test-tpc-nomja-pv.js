@@ -64,6 +64,20 @@ const plan = (trous, fiches, o = {}) => T.planifierTpc({ trous, fiches, code: 'D
     verifier('une fiche sans image → trou « fiche-sans-image » (rien à télécharger)', r.restes[0].motif, 'fiche-sans-image');
     r = plan([trou(infernape, 9)], FICHES_DP1, { nomJaPv: OPT({ numerosPris: new Set(['DPBP#453']) }) });
     verifier('le numéro de la fiche est PRIS par un produit numéroté ou une image du set → « fiche-prise »', [r.plan.length, r.restes[0].motif], [0, 'fiche-prise']);
+    // un numéro RÉPÉTÉ dans la liste (les decks d'un set renumérotent chacun de 1 — la forme de sA ; les numéros ci-dessous sont posés sur des fiches réelles
+    // pour reproduire cette forme) ne désigne pas une fiche : il ne la prend que si un produit numéroté de la MÊME carte (même nomJa) le porte
+    const rep = FICHES_DP1.map(f => (f.idFiche === 1110 || f.idFiche === 1114) ? { ...f, numero: '013', denominateur: '030' } : f);
+    const preneur = (...cles) => new Map([['13', new Set(cles)]]);
+    r = plan([trou(potion, 40)], rep, { nomJaPv: OPT({ numerosPris: new Set(['13']), nomsParNumero: preneur(`ja:${T.nomCompare('ポケモンいれかえ')}`, 'en:switch') }) });
+    verifier('numéro répété (013 sur deux fiches), pris par un produit d\'une AUTRE carte → la fiche n\'est pas prise, la carte est prouvée', [r.plan.length, r.plan[0]?.fiche.idFiche], [1, 1110]);
+    r = plan([trou(potion, 41)], rep, { nomJaPv: OPT({ numerosPris: new Set(['13']), nomsParNumero: preneur(`ja:${T.nomCompare('きずぐすり')}`) }) });
+    verifier('   pris par un produit numéroté de la MÊME carte (même nomJa) → « fiche-prise »', [r.plan.length, r.restes[0].motif], [0, 'fiche-prise']);
+    r = plan([trou(potion, 43)], rep, { nomJaPv: OPT({ numerosPris: new Set(['13']), nomsParNumero: preneur('en:potion') }) });
+    verifier('   pris par une carte qui n\'a que le nomEn de la nôtre → « fiche-prise »', [r.plan.length, r.restes[0].motif], [0, 'fiche-prise']);
+    r = plan([trou(potion, 44)], rep, { nomJaPv: OPT({ numerosPris: new Set(['13']), nomsParNumero: preneur('') }) });
+    verifier('   pris par une carte SANS aucun nom → inconnu, donc « fiche-prise »', [r.plan.length, r.restes[0].motif], [0, 'fiche-prise']);
+    r = plan([trou(potion, 42)], rep, { nomJaPv: OPT({ numerosPris: new Set(['13']) }) });
+    verifier('   sans le détail de qui l\'a pris, la garde reste fermée (« je ne sais pas » n\'est pas « tout va bien »)', [r.plan.length, r.restes[0].motif], [0, 'fiche-prise']);
     r = plan([trou(potion, 10)], FICHES_DP1, { nomJaPv: OPT({ fichesPrises: new Set(['1110']) }) });
     verifier('la fiche est déjà celle d\'une image posée dans le set → « fiche-prise »', r.restes[0].motif, 'fiche-prise');
     const doublon = { ...potion, _id: 99999, nomEn: 'Potion (autre carte)' };
@@ -95,9 +109,10 @@ const plan = (trous, fiches, o = {}) => T.planifierTpc({ trous, fiches, code: 'D
 
     // ── 6. LE CONTEXTE, calculé depuis la base ────────────────────────────────────────────────────────────────────────────
     const lignes = [{ carteId: 1, idProduct: 1, numeroFiche: null }, { carteId: 2, idProduct: 2, numeroFiche: 'DPBP#453' }, { carteId: 3, idProduct: 3, numeroFiche: '012' }, { carteId: 4, idProduct: 4, numeroFiche: null }];
-    const cartes = [{ _id: 5, images: [{ set: 'S', numero: '077', source: 'artofpkm' }, { set: 'S', numero: null, source: 'pokemon-card-com', urlFiche: 'https://www.pokemon-card.com/card-search/details.php/card/1110/regu/all' }, { set: 'Autre', numero: '099' }] }];
+    const cartes = [{ _id: 5, nomJa: 'きずぐすり', nomEn: 'Potion', images: [{ set: 'S', numero: '077', source: 'artofpkm' }, { set: 'S', numero: null, source: 'pokemon-card-com', urlFiche: 'https://www.pokemon-card.com/card-search/details.php/card/1110/regu/all' }, { set: 'Autre', numero: '099' }] }];
     const ctx = T.contexteNomJaPv({ lignes, cartes, slug: 'S' });
     verifier('contexte : part sans numéro, numéros pris (produits ET images du set), fiches déjà posées', [ctx.partSansNumero, [...ctx.numerosPris].sort(), [...ctx.fichesPrises], ctx.slug], [0.5, ['12', '77', 'DPBP#453'], ['1110'], 'S']);
+    verifier('   qui a pris quel numéro : les noms de la carte de l\'image (« 77 »), « » quand la carte du produit est inconnue (« 12 »)', [[...ctx.nomsParNumero.get('77')], [...ctx.nomsParNumero.get('12')]], [[`ja:${T.nomCompare('きずぐすり')}`, 'en:potion'], ['']]);
     verifier('   un set sans produit : part 0, la voie ne s\'ouvrira pas', T.contexteNomJaPv({ lignes: [], cartes: [], slug: 'S' }).partSansNumero, 0);
 
     // ── 7. LE CÂBLAGE : collecteur-images-tpc.js `planifier` lit la base (fausse, en mémoire) et ouvre la voie seulement chez pokemon-card.com ──
