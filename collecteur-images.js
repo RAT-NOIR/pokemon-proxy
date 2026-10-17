@@ -69,6 +69,7 @@ const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-uni
 const { estPassive, motifPassif, cloreUnitePassive } = require('./collecte-cartes/source-passive');                 // PikaQian passive depuis le 2026-10-13
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
+const { superviser, garantirVerrou } = require('./collecte-cartes/resilience-base');   // base injoignable en --boucle : alerte, attente, reprise (testeur, 2026-10-17)
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
@@ -677,8 +678,14 @@ if (require.main !== module) return;
     if (inconnus.length) { console.error(`❌ rejeu : argument inconnu ${inconnus.join(' ')} — autorisés : --rejouer-jointure=<CODE|tous> [--simuler] [--rapport=<dossier>] [--source=<source>] ; rien n'est lancé`); process.exit(2); }
 }
 
-(async () => {
+// 🔑 LE WORKER SURVIT À UNE COUPURE DE LA BASE (testeur, 2026-10-17 ; collecte-cartes/resilience-base.js, banc test-resilience-base.js).
+// `principal` s'exécute tel quel pour tous les modes ; en `--boucle` SEULEMENT, une erreur de la liste FERMÉE (serveur injoignable, réseau)
+// n'arrête plus le processus : alerte lisible, nettoyage (battement, minuterie, connexions), attente 30 s ×2 (plafond 5 min), puis le
+// démarrage entier est rejoué — connexion ET reprise du verrou global avant toute collecte. Toute autre erreur : journal + exit 1, comme avant.
+let fermerCourant = null, minuterieBalise = null;
+const principal = async () => {
     const { cartes: cx, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_IMAGES'], production: false });
+    fermerCourant = fermer;
     const M = modeles(cx);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
     const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
@@ -803,7 +810,7 @@ if (require.main !== module) return;
         // codé. 🔑 Une durée de vie se tient par une MINUTERIE, jamais par les points de passage d'une boucle dont on ne
         // borne pas la durée des tours. Les battements explicites restent : ils portent l'ÉTAT (travail/repos) à l'instant.
         let etatBalise = 'travail';
-        const minuterieBalise = setInterval(() => {
+        minuterieBalise = setInterval(() => {
             balise.battre(M.EtatImages.db, etatBalise).catch(e => console.warn(`⚠️ balise : battement manqué (${e.message}) — la garde bloquera, et c'est le bon sens`));
         }, 60 * 1000);
         while (!arretDemande) {
@@ -811,10 +818,14 @@ if (require.main !== module) return;
             await balise.battre(M.EtatImages.db, 'travail');
             // Réveil après un sommeil : le verrou a été RENDU pour dormir, on le reprend (en attendant son
             // détenteur s'il le faut) avant de toucher à la file.
-            if (!verrouGlobal.tenu && !verrouGlobal.perdu) { if (!await attendreVerrouGlobal(M, { patienter: true })) break; }
             // ⚠️ LA POSSESSION SE REVÉRIFIE AVANT CHAQUE SET, pas seulement au démarrage : un verrou pris à
             // minuit ne dit rien de 08:20. Non tenu = arrêt, Render relance, le neuf attend son tour.
-            if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
+            // 🔑 MAIS une revérification qui échoue PARCE QUE la base est injoignable n'est pas un autre détenteur : `garantirVerrou` relance
+            // alors l'erreur passagère (le superviseur rejoue le démarrage et reprend le verrou comme au réveil), et ne rend 'perdu' que
+            // pour une vraie perte. Le verrou est lu par getter : `attendreVerrouGlobal` le recrée.
+            const etatVerrou = await garantirVerrou({ verrou: () => verrouGlobal, reprendre: () => attendreVerrouGlobal(M, { patienter: true }) });
+            if (etatVerrou === 'arret') break;
+            if (etatVerrou === 'perdu') { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
             await reprendreEnCoursFiges(File, M);
             // 🔑 L'ALIMENTATEUR (2026-09-25) : sous 3 unités, le worker remplit SA file lui-même — plus gros manques d'abord,
             // toutes sources légales, reprise seulement sur cause neuve (collecte-cartes/alimentateur.js, banc
@@ -1045,4 +1056,18 @@ if (require.main !== module) return;
     console.log('\nbilan :', bilan.map(b => `${b.code} ${b.etat}`).join(' · '));
     if (process.argv.includes('--attendre-a-la-fin')) { console.log('--attendre-a-la-fin : le processus reste vivant (worker), rien ne tourne plus.'); await rendreVerrouGlobal(); setInterval(() => { }, 60000); return; }
     await rendreVerrouGlobal(); await fermer();
-})().catch(async e => { console.error('❌ ERREUR', e); process.exit(1); });
+};
+
+// --boucle seulement (et pas les modes d'outil qui partagent la ligne de commande) : sinon le lancement reste celui d'avant.
+const AUTRES_MODES = ['--verrou', '--liberer-verrou', '--arreter-et-effacer'];
+const SUPERVISE = process.argv.includes('--boucle') && !arg('rejouer-jointure') && !arg('enfiler') && !AUTRES_MODES.some(m => process.argv.includes(m));
+const nettoyerApresCoupure = async () => {
+    // best effort, borné : la base est injoignable, un `rendre()` ou un `fermer()` peut attendre la sélection de serveur (30 s)
+    const borne = (p) => Promise.race([Promise.resolve(p).catch(() => { }), new Promise(r => setTimeout(r, 5000))]);
+    clearInterval(minuterieBalise); minuterieBalise = null;
+    if (verrouGlobal) await borne(verrouGlobal.rendre());      // arrête aussi son battement
+    if (fermerCourant) await borne(fermerCourant());
+    fermerCourant = null;
+};
+(SUPERVISE ? superviser({ executer: principal, nettoyer: nettoyerApresCoupure, arret: () => arretDemande }) : principal())
+    .catch(async e => { console.error('❌ ERREUR', e); process.exit(1); });
