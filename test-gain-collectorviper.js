@@ -43,8 +43,13 @@ verifier('Palkia LV.X deck DP3p : decks / DP/DPt', deck('Palkia-LVX-Constructed-
 verifier('Deck Kit XYe : decks / XY', deck('Emboar-EX-vs-Togekiss-EX-Deck-Kit', 'XYe'), ['decks', 'XY', true]);
 verifier('Deck smG : decks / SM', deck('Ultra-Sun-Ultra-Moon-Deck-Build-Boxes', 'smG'), ['decks', 'SM', true]);
 verifier('Deck moderne (svK) : decks / moderne, NON annoncé', deck('Stellar-Miracle-Deck-Build-Box', 'svK'), ['decks', 'moderne (S, SV, M)', false]);
-verifier('Deck sans code, nom moderne (Sword-Shield-Starter-Decks) : NON annoncé', deck('Sword-Shield-Starter-Decks', undefined), ['decks', 'moderne (S, SV, M)', false]);
-verifier('Deck sans code ni indice d\'ère : decks / ère inconnue, couvert null', deck('Bastiodon-the-Defender-Deck', undefined), ['decks', 'ère inconnue', null]);
+// 🔑 une ère n'est JAMAIS attribuée par le seul nom du slug (brief : « l'ère se lit sur nos données ; un set dont l'ère ne se prouve pas reste ère inconnue »)
+for (const slug of ['Sword-Shield-Starter-Decks', 'VMAX-Starter-Decks', 'Premium-Trainer-Box-VSTAR', 'MEGA-Starter-Set-Eevee-ex', 'Gift-Box-Latios-ex', 'Bastiodon-the-Defender-Deck', 'Intro-Pack-Squirtle'])
+    verifier(`deck sans code (${slug}) : ère inconnue, couvert null — le nom ne prouve rien`, deck(slug, undefined), ['ère inconnue', null, null]);
+// un mot de deck se lit en MOT ENTIER, casse comprise (« Kit » dans « Skitty » n'est pas un kit)
+verifier('« Kit » à l\'intérieur d\'un mot n\'est pas un deck : Skittykit-Boxing avec un code XYc reste sans ère', ere('Skittykit-Boxing', 'XYc'), ['ère inconnue', null]);
+verifier('« deck » en minuscules n\'est pas le mot Deck', ere('Redeck-Starters', 'XYc'), ['ère inconnue', null]);
+verifier('le mot entier Deck-Kit (avec son code XYe) reste un deck XY', deck('Emboar-EX-vs-Togekiss-EX-Deck-Kit', 'XYe'), ['decks', 'XY', true]);
 
 // ── le calcul du gain, sur des lignes fabriquées
 const L = (slug, nomSet, cause, o = {}) => ({ idProduct: Math.floor(Math.random() * 1e9), slug, langue: 'jp', nomSet, servi: false, cause, sousCause: 'x', ...o });
@@ -60,6 +65,13 @@ const lignes = [
 ];
 const codes = new Map([['Space-Time-Creation', 'DP1'], ['Scarlet-Violet-Promos', 'SV-P'], ['Unnumbered-Promos', 'UNP'], ['Tidal-Storm', 'XY5t']]);
 const R = G.calculer(lignes, codes);
+// colonne « autre source en cours » : lue dans TABLE_TPC (jamais recopiée), le gain déjà visé est compté à part
+const RA = G.calculer(lignes, codes, new Map([['Space-Time-Creation', ['pokemon-card-com (DP1)']]]));
+verifier('autre source : le set visé la porte, les autres non', [RA.sets.find(s => s.slug === 'Space-Time-Creation').autresSources, RA.sets.find(s => s.slug === 'Tidal-Storm').autresSources], [['pokemon-card-com (DP1)'], []]);
+verifier('autre source : le gain déjà visé (4) est compté à part, sans toucher au gain total (9)', [RA.totaux.gainAutreSource, RA.totaux.gain, R.totaux.gainAutreSource], [4, 9, 0]);
+const T = G.autresSourcesDe(require('./collecte-cartes/tpc-sets').TABLE_TPC);
+verifier('autresSourcesDe lit TABLE_TPC : Space-Time-Creation et Sword-Shield-Starter-Decks sont visés par pokemon-card.com', [T.get('Space-Time-Creation'), T.get('Sword-Shield-Starter-Decks')], [['pokemon-card-com (DP1)'], ['pokemon-card-com (sA)']]);
+verifier('autresSourcesDe : un slug absent de la table n\'a pas d\'entrée', T.has('Unnumbered-Promos'), false);
 verifier('le dénominateur : jp seulement, non servis seulement', [R.denominateur.jpTotal, R.denominateur.jpNonServis], [14, 13]);
 verifier('causes du gain : 9, 4, 7, 8 — et rien d\'autre', G.CAUSES_GAIN, [9, 4, 7, 8]);
 verifier('totaux : gain 9, sans fiche (cause 2) 3 à part, hors gain (cause 3) 1', [R.totaux.gain, R.totaux.sansFiche, R.totaux.horsGain, R.totaux.sansCause], [9, 3, 1, 0]);
@@ -69,7 +81,7 @@ verifier('un set porte son nom, son code, son ère, son couvert, son sans-fiche'
 verifier('répartition du gain par statut d\'ère : annoncé 7, non annoncé 2, inconnu 0', [R.totaux.gainCouvert, R.totaux.gainHorsAnnonce, R.totaux.gainEreInconnue], [7, 2, 0]);
 verifier('répartition par ère, triée par gain', R.eres.map(e => [e.ere, e.gain]), [['DP/DPt', 4], ['XY', 3], ['promos modernes', 2], ['ère inconnue', 0]]);
 verifier('le gain d\'une ère inconnue est compté à part du « non annoncé »', G.calculer([L('Foo-Bar', 'Foo Bar', 9)], new Map([['Autre', 'DP1']])).totaux.gainEreInconnue, 1);
-const mixte = G.calculer([L('Sword-Shield-Starter-Decks', 'x', 9), L('Feraligatr-Constructed-Starter-Deck', 'y', 9)], new Map([['Feraligatr-Constructed-Starter-Deck', 'pcgJ'], ['Z', 'DP1']]));
+const mixte = G.calculer([L('Stellar-Miracle-Deck-Build-Box', 'x', 9), L('Feraligatr-Constructed-Starter-Deck', 'y', 9)], new Map([['Feraligatr-Constructed-Starter-Deck', 'pcgJ'], ['Stellar-Miracle-Deck-Build-Box', 'svK']]));
 verifier('des decks de sous-ères différentes ne se confondent pas : « annoncée » se décide par sous-ère', mixte.eres.map(e => [e.ere, e.couvert, e.gain]).sort(), [['decks / PCG', true, 1], ['decks / moderne (S, SV, M)', false, 1]]);
 const sansCode = G.calculer([L('Sun-Moon-Foo', 'Sun Moon Foo', 9)], new Map([['Autre', 'DP1']]));
 verifier('calculer : un set dont le seul indice est son NOM reste « ère inconnue »', [sansCode.sets[0].ere, sansCode.sets[0].couvert], ['ère inconnue', null]);
