@@ -8,7 +8,7 @@ const { repondreErreur } = require('../erreurs');
 const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const L = require('../transport/limites');
 const { idempotente } = require('../transport/idempotence');
-const { validerEntree, rattacherPhotos, traiterIdentifier, traiterReponse } = require('./routes');
+const { validerEntree, traiterIdentifier, traiterReponse } = require('./routes');
 const { traiterRetourLive } = require('./retour-live');
 
 // Sans `Authorization: Bearer`, la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
@@ -84,10 +84,8 @@ module.exports = {
         const parPorteur = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/identifier',
             aiguilleur(req => Boolean(req.body && typeof req.body === 'object' && req.body.contrat === 2)),
-            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg),
-            // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan sortent du magasin ICI (une fois chacune), avant le débit ; drapeau éteint : la pile de la route est celle d'aujourd'hui, pas un maillon de plus
-            ...(cfg.photosMultiples === true ? [rattacherPhotos(deps)] : []),
-            traiterIdentifier(cfg, deps));
+            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
+        // (PHOTOS-MULTIPLES, 7d : les photos reçues avant le scan sortent du magasin DANS traiterIdentifier, une fois la requête acceptée — routes.js::rattacherPhotos ; la pile de cette route est celle d'avant le lot)
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
