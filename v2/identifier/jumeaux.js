@@ -29,6 +29,15 @@ const NE_CONCLUT_PAS = (motif = null) => () => ({ conclu: false, ids: [], ...(mo
  * ancien : un produit PLUS RÉCENT qu'elle, de la MÊME métacarte que le produit affirmé, est peut-être son jumeau qu'elle ne connaît pas → pour CE produit seulement, `jumeaux-perimes`.
  * `undefined` = pas de contrôle (le fournisseur est celui d'un banc ou d'un rejeu) ; une Map : tout produit qui n'y figure pas ne conclut pas (jamais un défaut passant).
  */
+// REPLI-REIMPRESSIONS : les produits que l'IMAGE ne sépare pas du produit `id` (partageeHoloNonHolo, partageeTamponNonSepare — une paire séparée par l'étiquette compte comme non séparée tant que la lecture du tampon
+// n'existe pas — lus dans la colonne des marquages de l'archive). Ce sont des variantes du MÊME créneau (expansion, numéro) : la colonne des jumeaux ne les compte pas, elles sont donc ajoutées ICI, pour que la garde
+// ci-dessous (question de départage, critère A, seconde lecture, lot) les traite comme tout produit qu'on ne sait pas séparer. Une archive SANS la colonne (d'avant) ne conclut rien : [] (comportement d'avant).
+function partagesDeLaVersion(version, id) {
+    if (!version || version.colonneMarquages !== true || typeof version.partagesDe !== 'function') return [];
+    const p = version.partagesDe(id);
+    return Array.isArray(p) ? p : [];
+}
+
 function fournisseurDe(version, verdicts) {
     if (!version || version.colonneJumeaux !== true || typeof version.jumeauxDe !== 'function') return NE_CONCLUT_PAS('jumeaux-indisponibles');
     if (verdicts !== undefined && !(verdicts instanceof Map)) return NE_CONCLUT_PAS('jumeaux-indisponibles');
@@ -39,7 +48,9 @@ function fournisseurDe(version, verdicts) {
             if (v !== 'ok') return { conclu: false, ids: [], motif: 'jumeaux-indisponibles' };
         }
         const j = version.jumeauxDe(id);
-        return j === null || j === undefined ? { conclu: false, ids: [], motif: 'jumeaux-indisponibles' } : { conclu: true, ids: j };
+        if (j === null || j === undefined) return { conclu: false, ids: [], motif: 'jumeaux-indisponibles' };
+        const partages = partagesDeLaVersion(version, id);
+        return { conclu: true, ids: partages.length ? [...new Set([...j, ...partages])].sort((a, b) => a - b) : j };
     };
 }
 
@@ -127,4 +138,4 @@ function garde(ctx, idProduct) {
     return { action: 'question', ids: [idProduct, ...jumeaux] };
 }
 
-module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
+module.exports = { garde, fournisseurDe, partagesDeLaVersion, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
