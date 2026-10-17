@@ -491,5 +491,5 @@ module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
     preuveDeCorrespondance, planifierTpc, contexteNomJaPv, SEUIL_PART_SANS_NUMERO, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
-    autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait
+    autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch
 };
