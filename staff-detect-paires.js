@@ -8,8 +8,10 @@ const D = require('./collecte-cartes/staff-detect');
 const IO = require('./collecte-cartes/staff-detect-io');
 
 const PAIRES = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\CM-PASSIF\\ADRESSES-64-PAIRES.json';
-const [TMP, SORTIE] = process.argv.slice(2);
-if (!TMP || !SORTIE) { console.error('usage : node staff-detect-paires.js <tmp> <sortie>'); process.exit(1); }
+const { autoriser } = require('./collecte-cartes/garde-ecriture');
+const [TMP_ARG, SORTIE_ARG] = process.argv.slice(2);
+if (!TMP_ARG || !SORTIE_ARG) { console.error('usage : node staff-detect-paires.js <tmp> <sortie>'); process.exit(1); }
+const TMP = autoriser(TMP_ARG), SORTIE = autoriser(SORTIE_ARG); // LÈVE avant toute écriture si hors des racines autorisées
 fs.mkdirSync(TMP, { recursive: true }); fs.mkdirSync(path.join(SORTIE, 'planches'), { recursive: true });
 
 function svg(texte, w, h, taille = 14, fond = '#fff') {

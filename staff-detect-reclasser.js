@@ -2,7 +2,7 @@
 'use strict';
 const fs = require('fs');
 const D = require('./collecte-cartes/staff-detect');
-const f = process.argv[2];
+const f = require('./collecte-cartes/garde-ecriture').autoriser(process.argv[2]); // LÈVE avant toute écriture si hors des racines autorisées
 const inv = JSON.parse(fs.readFileSync(f, 'utf8'));
 const compte = {}, autres = {}, parClasse = {};
 for (const c of inv.produits) {

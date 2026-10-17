@@ -15,7 +15,6 @@ const ROUGE = { r: 170, g: 90, b: 90 };  // rouge franc : r élevé, g et b bas
 const BLEUE = { rMax: 40, gMax: 75, bMin: 85, bMax: 150 };  // bleu marine des étiquettes récentes (0,33,105)
 const BAS_MIN = 0.91;                   // le bas de la pastille touche presque le bord : exclut les zones de texte des Dresseurs
 const SEUIL_ECART_PIXEL = 60;            // somme |dR|+|dG|+|dB| au-delà de laquelle un pixel « diffère »
-const PART_BAS_MIN = 0.90;               // part de l'écart qui doit tomber dans la bande du bas
 
 function px(img, i) { const o = i * img.channels; return [img.data[o], img.data[o + 1], img.data[o + 2]]; }
 
@@ -92,7 +91,7 @@ function classerTexte(lignes) {
     const txt = (lignes || []).map(s => String(s).trim()).filter(Boolean).join(' ');
     if (!txt) return null;
     const n = txt.toLowerCase();
-    if (/oversiz|attention/.test(n)) return 'jumbo';
+    if (/versiz/.test(n)) return 'jumbo';
     if (/wcd\s*\d/.test(n)) return 'wcd';
     // « Staff Version », y compris fragmenté par l'OCR (« Stat ff ersion ») ; jamais « Stamped », « Holo », « Center ».
     if (/sta\s?[f]{1,2}|\bs?t?a?i?t?\s?ff\b|\baff\b/.test(n) && /ersion|vers/.test(n) && !/stamped|holo|cent[er]/.test(n)) return 'staff';
@@ -119,4 +118,4 @@ function rectanglePastille(bbox, W, H, wo, ho, marge = 0.1) {
     return { left, top, width: right - left, height: bas - top };
 }
 
-module.exports = { rectanglePastille, detecterEtiquette, comparerPaire, classerTexte, verdictPaire, BANDE_BAS, PASTILLE, BLANC, ROUGE, SEUIL_ECART_PIXEL, PART_BAS_MIN };
+module.exports = { rectanglePastille, detecterEtiquette, comparerPaire, classerTexte, verdictPaire, BANDE_BAS, PASTILLE, BLANC, ROUGE, SEUIL_ECART_PIXEL };

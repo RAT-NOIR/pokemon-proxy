@@ -5,7 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const D = require('./collecte-cartes/staff-detect');
 const IO = require('./collecte-cartes/staff-detect-io');
-const [TMP, F] = process.argv.slice(2);
+const { autoriser } = require('./collecte-cartes/garde-ecriture');
+const [TMP_ARG, F_ARG] = process.argv.slice(2);
+const TMP = autoriser(TMP_ARG), F = autoriser(F_ARG); // LÈVE avant toute écriture si hors des racines autorisées
 fs.mkdirSync(TMP, { recursive: true });
 (async () => {
     const inv = JSON.parse(fs.readFileSync(F, 'utf8'));
