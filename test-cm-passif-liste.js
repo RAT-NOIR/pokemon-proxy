@@ -43,7 +43,7 @@ verifier('produit absent de la base → erreur nommée', /21/.test(leve(() => L.
 verifier('slug de la base ≠ slug du plan → erreur', /slug/.test(leve(() => L.construireListe(EXCLUS, new Map([...NUMEROS, [11, { slug: 'Autre-SVP006', slugSet: 'SV-Black-Star-Promos' }]]))) || ''), true);
 verifier('V2 pas plus récente que V1 → erreur', /date/.test(leve(() => L.construireListe([paire('A', '001', 'x', [11, 12], ['Pawmot-SVP006', 'Pawmot-V2-SVP006'], ['a', 'Staff a'], ['2026-08-14T07:22:08.000Z', '2026-06-18T17:16:41.000Z'])], NUMEROS)) || ''), true);
 verifier('adresses uniques (aucun doublon dans la liste)', new Set(R.flatMap(p => p.versions.map(v => v.url))).size, 8);
-verifier('index : adresse → paire, version, tampon', L.indexer(R)['SV-Black-Star-Promos/Pawmot-V2-SVP006'], { n: 2, v: 'V2', tampon: 'Staff', set: 'SV-Black-Star-Promos', numero: '006', nom: 'Pawmot [X]' });
+verifier('index : adresse → paire, version, tampon', L.indexer(R)['SV-Black-Star-Promos/Pawmot-V2-SVP006'], { n: 2, v: 'V2', idProduct: 12, tampon: 'Staff', set: 'SV-Black-Star-Promos', numero: '006', nom: 'Pawmot [X]' });
 
 // la liste LIVRÉE (si générée) : 64 paires, 128 adresses distinctes, V1/V2
 const livree = path.join(__dirname, 'collecte-cartes', 'cm-passif-liste.json');

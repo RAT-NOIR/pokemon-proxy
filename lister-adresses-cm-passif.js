@@ -21,7 +21,7 @@ const cleJs = s => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`
 /** Remplace le bloc `var LISTE = {…};` du userscript (entre LISTE:DEBUT et LISTE:FIN) par la liste : une ligne par adresse « set/slug » → { n, v, t, s, o }. */
 function injecterListe(src, liste) {
     const lignes = [];
-    for (const p of liste) for (const v of p.versions) lignes.push(`        ${cleJs(`${v.slugSet}/${v.slug}`)}: { n: ${p.n}, v: ${cleJs(v.v)}, t: ${cleJs(p.tampon)}, s: ${cleJs(p.set)}, o: ${cleJs(p.numero)} }`);
+    for (const p of liste) for (const v of p.versions) lignes.push(`        ${cleJs(`${v.slugSet}/${v.slug}`)}: { n: ${p.n}, v: ${cleJs(v.v)}, i: ${v.idProduct}, t: ${cleJs(p.tampon)}, s: ${cleJs(p.set)}, o: ${cleJs(p.numero)} }`);
     const bloc = `    var LISTE = {\n${lignes.join(',\n')}\n    };`;
     const re = /(\/\/ LISTE:DEBUT[^\n]*\n)    var LISTE = \{[\s\S]*?\n    \};(\n    \/\/ LISTE:FIN)/;
     if (!re.test(src)) throw new Error('marqueurs LISTE:DEBUT / LISTE:FIN absents du userscript');

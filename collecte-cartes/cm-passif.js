@@ -49,7 +49,7 @@ function construireListe(exclus, numeros) {
 /** clé « set/slug » → { n, v, tampon, set, numero, nom } */
 function indexer(paires) {
     const idx = {};
-    for (const p of paires) for (const v of p.versions) idx[`${v.slugSet}/${v.slug}`] = { n: p.n, v: v.v, tampon: p.tampon, set: p.set, numero: p.numero, nom: p.nom };
+    for (const p of paires) for (const v of p.versions) idx[`${v.slugSet}/${v.slug}`] = { n: p.n, v: v.v, idProduct: v.idProduct, tampon: p.tampon, set: p.set, numero: p.numero, nom: p.nom };
     return idx;
 }
 

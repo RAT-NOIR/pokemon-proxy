@@ -36,7 +36,9 @@ const CORPS_MAX_OCTETS = 4 * 1024 * 1024;
 const IMAGE_OCTETS_MAX = 2.5 * 1024 * 1024;     // 2,5 Mo en base64 ≈ 3,34 Mo : l'enveloppe tient sous les 4 Mo
 const MAX_RELEVES_DEFAUT = 2000;
 
-const CLES = 'h,idProduct,imageSrc,mime,nom,paquet,pixels,pixelsMotif,schema,titre,url,verdictTesteur,w';
+const PIXELS_MAX = 12000000;                    // limite de pixels du décodage (sharp) : une image plus grande n'est jamais décodée
+const IMAGE_INTROUVABLE = 'image-du-produit-introuvable';
+const CLES = 'h,idProduct,imageMotif,imageSrc,mime,nom,paquet,pixels,pixelsMotif,schema,titre,url,verdictTesteur,w';
 const VERDICTS = ['tampon-visible', 'pas-de-tampon', 'ne-sais-pas'];
 const MOTIFS = ['canvas-protege', 'image-non-chargee', 'aucune-image', 'trop-volumineuse'];
 const SIGNATURES = { 'image/png': Buffer.from('89504e470d0a1a0a', 'hex'), 'image/jpeg': Buffer.from('ffd8ff', 'hex') };
@@ -72,6 +74,8 @@ function validerMessage(o) {
     if (!(o.imageSrc === '' || (estChaine(o.imageSrc, 2000) && /^https:\/\/\S+$/.test(o.imageSrc)))) return nonOk(400, 'imageSrc : vide ou en https');   // GARDE:src
     if (![o.w, o.h].every(x => Number.isInteger(x) && x >= 0 && x <= 100000)) return nonOk(400, 'w et h : des entiers de 0 à 100000');   // GARDE:dimensions
     if (!VERDICTS.includes(o.verdictTesteur)) return nonOk(400, `verdictTesteur : seuls ${VERDICTS.join(', ')} sont admis`);   // GARDE:verdict
+    if (!(o.imageMotif === null || o.imageMotif === IMAGE_INTROUVABLE)) return nonOk(400, `imageMotif : null ou « ${IMAGE_INTROUVABLE} »`);   // GARDE:imagemotif
+    if (o.imageMotif !== null && (o.pixels !== null || o.imageSrc !== '' || o.pixelsMotif !== 'aucune-image')) return nonOk(400, `imageMotif « ${IMAGE_INTROUVABLE} » : sans pixels, sans adresse d'image, pixelsMotif « aucune-image »`);
     if (o.pixels === null) {
         if (o.mime !== null) return nonOk(400, 'mime doit valoir null quand pixels vaut null');
         if (!MOTIFS.includes(o.pixelsMotif)) return nonOk(400, `pixelsMotif : sans pixels, l'un de ${MOTIFS.join(', ')} est exigé`);   // GARDE:motif
@@ -100,7 +104,25 @@ function jugerMessage(brut) {
     return { statut: 200, message: o, octets: v.octets };
 }
 
-const jsonsDe = dossier => fs.readdirSync(dossier).filter(f => f.endsWith('.json'));
+/** DÉCODAGE BORNÉ : les octets s'ouvrent vraiment (sharp, limite de pixels), au format déclaré, aux dimensions déclarées. Rend null si tout va bien, sinon { statut, motif }. */
+async function verifierImage(o, octets) {
+    const sharp = require('sharp');
+    const formatAttendu = o.mime === 'image/png' ? 'png' : 'jpeg';
+    let meta;
+    try { meta = await sharp(octets, { limitInputPixels: false, failOn: 'error' }).metadata(); } catch (e) { return { statut: 415, motif: `image non décodable : ${String(e.message).slice(0, 100)}` }; }   // GARDE:decodage
+    if (meta.format !== formatAttendu) return { statut: 415, motif: `image non décodable : format lu « ${meta.format} », ${formatAttendu} déclaré` };
+    if (!meta.width || !meta.height || meta.width * meta.height > PIXELS_MAX) return { statut: 413, motif: `image de ${meta.width} × ${meta.height} : au-delà de la limite de ${PIXELS_MAX} pixels` };   // GARDE:pixels
+    if (meta.width !== o.w || meta.height !== o.h) return { statut: 422, motif: `dimensions : l'image fait ${meta.width} × ${meta.height}, le relevé en déclare ${o.w} × ${o.h}` };   // GARDE:dimensions-image
+    try { await sharp(octets, { limitInputPixels: PIXELS_MAX, failOn: 'error' }).raw().toBuffer(); } catch (e) { return { statut: 415, motif: `image non décodable : ${String(e.message).slice(0, 100)}` }; }
+    return null;
+}
+
+/** L'idProduct lu dans l'adresse d'une image Cardmarket (…/<id>/<id>.jpg), ou null. */
+const idDeImage = src => { const m = /\/(\d+)\/\1\.[A-Za-z]+$/.exec(String(src)); return m ? Number(m[1]) : null; };
+/** Adresse de la liste : l'image doit porter l'idProduct de CETTE adresse (V1 ou V2). Hors liste, sans image ou « image introuvable » : rien à recouper → false. */
+const imageDiscordante = (paire, o) => !!paire && o.imageSrc !== '' && idDeImage(o.imageSrc) !== paire.idProduct;
+
+const jsonsDe =dossier => fs.readdirSync(dossier).filter(f => f.endsWith('.json'));
 /** Combien des adresses de la liste ont au moins un relevé sur disque (adresses DISTINCTES ; un fichier illisible est ignoré). */
 function compterRelevees(dossier) {
     const vues = new Set();
@@ -119,13 +141,13 @@ function ecrireReleve(dossier, o, octets, le = new Date(), maxReleves = MAX_RELE
     const paire = reconnaitre(o.url);
     const cle = CM.cleDeAdresse(o.url);
     const { pixels, ...reste } = o;
-    const fiche = { ...reste, le: le.toISOString(), cle: paire ? cle : null, paire: paire ? { n: paire.n, set: paire.set, numero: paire.numero, version: paire.v, tamponAttendu: paire.tampon } : null, horsDesSoixanteQuatre: !paire };
+    const fiche = { ...reste, le: le.toISOString(), cle: paire ? cle : null, paire: paire ? { n: paire.n, set: paire.set, numero: paire.numero, version: paire.v, tamponAttendu: paire.tampon } : null, horsDesSoixanteQuatre: !paire, imageDiscordante: imageDiscordante(paire, o), sansImageRattachee: o.imageMotif === IMAGE_INTROUVABLE };
     if (octets) { fiche.fichierImage = path.basename(fImage); fiche.sha256 = crypto.createHash('sha256').update(octets).digest('hex'); fiche.octets = octets.length; }
     try {
         if (octets) fs.writeFileSync(fImage, octets, { flag: 'wx' });
         fs.writeFileSync(fJson, JSON.stringify(fiche), { flag: 'wx' });
     } catch (e) { if (e.code === 'EEXIST') return { statut: 409, motif: 'ce relevé existe déjà (jamais écrasé)' }; throw e; }
-    return { statut: 200, base, paire, relevees: compterRelevees(dossier) };
+    return { statut: 200, base, paire, relevees: compterRelevees(dossier), imageDiscordante: fiche.imageDiscordante, sansImageRattachee: fiche.sansImageRattachee };
 }
 
 async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, maxOctets = CORPS_MAX_OCTETS, maxReleves = MAX_RELEVES_DEFAUT, journal = m => console.log(m) } = {}) {
@@ -158,16 +180,17 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
             morceaux.push(c);
         });
         req.on('error', () => { /* coupure : rien à écrire */ });
-        req.on('end', () => {
+        req.on('end', async () => {
             if (trop) return;
             try {
                 const j = jugerMessage(Buffer.concat(morceaux).toString('utf8'));
                 if (j.statut !== 200) return refuser(j.statut, j.corps.motif);
+                if (j.octets) { const d = await verifierImage(j.message, j.octets); if (d) return refuser(d.statut, d.motif); }
                 const w = ecrireReleve(dossier, j.message, j.octets, new Date(), maxReleves);
                 if (w.statut !== 200) return refuser(w.statut, w.motif);
                 const p = w.paire;
-                journal(`✅ ${slugDe(j.message.url)} : ${p ? `paire n°${p.n} ${p.set} ${p.numero}, ${p.v}, tampon attendu ${p.tampon}` : 'HORS DES 64'} — verdict ${j.message.verdictTesteur} — ${j.octets ? 'image écrite' : `sans image (${j.message.pixelsMotif})`} — ${w.relevees}/${SUR} adresses relevées`);
-                repondre(200, { ok: true, paire: p ? { n: p.n, set: p.set, numero: p.numero, version: p.v, tamponAttendu: p.tampon } : null, horsDesSoixanteQuatre: !p, relevees: w.relevees, sur: SUR, fichier: w.base });
+                journal(`✅ ${slugDe(j.message.url)} : ${p ? `paire n°${p.n} ${p.set} ${p.numero}, ${p.v}, tampon attendu ${p.tampon}` : 'HORS DES 64'}${w.imageDiscordante ? ' — ⚠️ IMAGE DISCORDANTE (autre produit)' : ''}${w.sansImageRattachee ? ' — SANS IMAGE RATTACHÉE' : ''} — verdict ${j.message.verdictTesteur} — ${j.octets ? 'image écrite' : `sans image (${j.message.pixelsMotif})`} — ${w.relevees}/${SUR} adresses relevées`);
+                repondre(200, { ok: true, paire: p ? { n: p.n, set: p.set, numero: p.numero, version: p.v, tamponAttendu: p.tampon } : null, horsDesSoixanteQuatre: !p, imageDiscordante: w.imageDiscordante, sansImageRattachee: w.sansImageRattachee, relevees: w.relevees, sur: SUR, fichier: w.base });
             } catch (e) { journal(`🔴 erreur interne : ${e.message}`); repondre(500, { ok: false, motif: 'erreur interne du récepteur' }); }
         });
     });
@@ -177,7 +200,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
     return { port: a.port, adresse: a.address, fermer: () => new Promise(ok => { serveur.close(() => ok()); serveur.closeAllConnections?.(); }) };
 }
 
-module.exports = { demarrer, jugerMessage, reconnaitre, ecrireReleve, compterRelevees, slugDe, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, RACINE_AUTORISEE, CORPS_MAX_OCTETS, IMAGE_OCTETS_MAX, MAX_RELEVES_DEFAUT, SUR };
+module.exports = { PIXELS_MAX, verifierImage, imageDiscordante, idDeImage, demarrer, jugerMessage, reconnaitre, ecrireReleve, compterRelevees, slugDe, HOTE, PORT_DEFAUT, ORIGINE_ATTENDUE, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT, RACINE_AUTORISEE, CORPS_MAX_OCTETS, IMAGE_OCTETS_MAX, MAX_RELEVES_DEFAUT, SUR };
 
 if (require.main === module) {
     const args = process.argv.slice(2);

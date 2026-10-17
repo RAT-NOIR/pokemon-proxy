@@ -19,12 +19,18 @@ const V1 = LISTE[0].versions[0], V2 = LISTE[0].versions[1];
 const URL_V1 = V1.url, URL_V2 = V2.url;
 const URL_HORS = 'https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Set/Pikachu-V1-BS58';
 const SIG_PNG = Buffer.from('89504e470d0a1a0a', 'hex'), SIG_JPG = Buffer.from('ffd8ffe0', 'hex');
-const png = (g = 1, n = 40) => Buffer.concat([SIG_PNG, Buffer.alloc(n, g)]);
-const jpg = (g = 1, n = 40) => Buffer.concat([SIG_JPG, Buffer.alloc(n, g)]);
+const sharp = require('sharp');
+// de VRAIES images (8 × 10 px) : le récepteur les décode ; les fausses (en-tête + remplissage) servent aux seuls bancs de signature
+const IMG_W = 8, IMG_H = 10;
+const vraie = async (fmt, g) => sharp({ create: { width: IMG_W, height: IMG_H, channels: 3, background: { r: g * 40, g: 10, b: 200 } } })[fmt]().toBuffer();
+const REELLES = {};
+const png = (g = 1, n = 40) => REELLES['png' + g] || Buffer.concat([SIG_PNG, Buffer.alloc(n, g)]);
+const jpg = (g = 1, n = 40) => REELLES['jpeg' + g] || Buffer.concat([SIG_JPG, Buffer.alloc(n, g)]);
+const fauxPng = (n = 40) => Buffer.concat([SIG_PNG, Buffer.alloc(n, 7)]);
 let compteur = 0;
 const paquet = () => `20261017T1200${String(compteur++).padStart(2, '0')}Z-a1b2c3d4`;
 const msg = (extra = {}, octets = png(1)) => ({
-    schema: 1, paquet: paquet(), url: URL_V1, titre: 'Meganium (MEP001)', nom: 'Meganium', idProduct: 894262, imageSrc: 'https://images-exemple.test/51/MEP/894262/894262.jpg', w: 400, h: 560,
+    schema: 1, paquet: paquet(), url: URL_V1, titre: 'Meganium (MEP001)', nom: 'Meganium', idProduct: V1.idProduct, imageMotif: null, imageSrc: `https://images-exemple.test/51/MEP/${V1.idProduct}/${V1.idProduct}.jpg`, w: IMG_W, h: IMG_H,
     mime: 'image/png', pixels: octets.toString('base64'), pixelsMotif: null, verdictTesteur: 'tampon-visible', ...extra
 });
 const sansPixels = (extra = {}) => msg({ mime: null, pixels: null, pixelsMotif: 'canvas-protege', ...extra });
@@ -51,6 +57,7 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
 const statut = o => R.jugerMessage(JSON.stringify(o)).statut;
 
 (async () => {
+    for (const g of [1, 2, 3]) { REELLES['png' + g] = await vraie('png', g); REELLES['jpeg' + g] = await vraie('jpeg', g); }
     // ── schéma, pur
     verifier('message valide (PNG) : 200', statut(msg()), 200);
     verifier('message valide (JPEG) : 200', statut(msg({ mime: 'image/jpeg' }, jpg())), 200);
@@ -78,6 +85,10 @@ const statut = o => R.jugerMessage(JSON.stringify(o)).statut;
     verifier('pixels fournis mais motif aussi : 400', statut(msg({ pixelsMotif: 'canvas-protege' })), 400);
     verifier('pas de pixels et pas de motif : 400', statut(msg({ mime: null, pixels: null, pixelsMotif: null })), 400);
     verifier('pas de pixels mais mime déclaré : 400', statut(msg({ pixels: null, pixelsMotif: 'canvas-protege' })), 400);
+    verifier('imageMotif inconnu : 400', statut(sansPixels({ imageMotif: 'autre', imageSrc: '', idProduct: null })), 400);
+    verifier('imageMotif « image-du-produit-introuvable » : accepté sans image ni adresse d\'image', statut(sansPixels({ imageMotif: 'image-du-produit-introuvable', pixelsMotif: 'aucune-image', imageSrc: '', idProduct: null })), 200);
+    verifier('imageMotif avec des pixels : 400', statut(msg({ imageMotif: 'image-du-produit-introuvable', imageSrc: '' })), 400);
+    verifier('imageMotif avec une adresse d\'image : 400', statut(sansPixels({ imageMotif: 'image-du-produit-introuvable', pixelsMotif: 'aucune-image' })), 400);
     verifier('motif inconnu : 400', statut(sansPixels({ pixelsMotif: 'autre' })), 400);
     for (const mo of ['canvas-protege', 'image-non-chargee', 'aucune-image', 'trop-volumineuse']) verifier(`motif « ${mo} » accepté`, statut(sansPixels({ pixelsMotif: mo })), 200);
     verifier('idProduct non entier : 400', statut(msg({ idProduct: '894262' })), 400);
@@ -136,6 +147,49 @@ const statut = o => R.jugerMessage(JSON.stringify(o)).statut;
         r = await envoyer(port, { entetes: BON, corps: { ...rejeu, verdictTesteur: 'pas-de-tampon' } });
         const apres = fs.readdirSync(dossierTmp).map(f => [f, fs.readFileSync(path.join(dossierTmp, f)).toString('hex')]);
         verifier('même paquet rejoué : 409 et AUCUN fichier modifié ni ajouté', [r.status, JSON.stringify(apres) === JSON.stringify(avant)], [409, true]);
+
+        // image rattachée : l'idProduct lu dans l'adresse de l'image doit être celui de l'adresse de la paire
+        r = await envoyer(port, { entetes: BON, corps: msg() });
+        verifier('image du bon produit : imageDiscordante false', [r.status, r.json?.imageDiscordante, r.json?.sansImageRattachee], [200, false, false]);
+        r = await envoyer(port, { entetes: BON, corps: msg({ idProduct: V2.idProduct, imageSrc: `https://images-exemple.test/51/MEP/${V2.idProduct}/${V2.idProduct}.jpg` }) });
+        const disc = fichiers().filter(f => f.endsWith('.json')).map(f => JSON.parse(fs.readFileSync(path.join(dossierTmp, f), 'utf8'))).find(j => j.fichierImage && r.json?.fichier && `${j.fichierImage}`.startsWith(r.json.fichier));
+        verifier('image d\'un AUTRE produit (celui de la V2 sur l\'adresse V1) : relevé GARDÉ mais imageDiscordante true, réponse et json', [r.status, r.json?.imageDiscordante, disc?.imageDiscordante], [200, true, true]);
+        r = await envoyer(port, { entetes: BON, corps: msg({ imageSrc: 'https://images-exemple.test/photo-sans-id.jpg' }) });
+        verifier('adresse d\'image sans idProduct lisible, sur une paire de la liste : discordante', [r.status, r.json?.imageDiscordante], [200, true]);
+        r = await envoyer(port, { entetes: BON, corps: msg({ url: URL_HORS, idProduct: 5, imageSrc: 'https://images-exemple.test/51/BS/5/5.jpg' }) });
+        verifier('hors des 64 : jamais « discordante » (rien à recouper), marqué hors des 64', [r.status, r.json?.imageDiscordante, r.json?.horsDesSoixanteQuatre], [200, false, true]);
+        r = await envoyer(port, { entetes: BON, corps: sansPixels({ imageMotif: 'image-du-produit-introuvable', pixelsMotif: 'aucune-image', imageSrc: '', idProduct: null, verdictTesteur: 'pas-de-tampon' }) });
+        verifier('image du produit introuvable : relevé gardé, marqué « sans image rattachée »', [r.status, r.json?.sansImageRattachee, r.json?.imageDiscordante], [200, true, false]);
+
+        // décodage borné
+        r = await envoyer(port, { entetes: BON, corps: msg({}, fauxPng()) });
+        verifier('PNG à l\'en-tête valide mais non décodable : 415 avec motif', [r.status, /décod/.test(r.json?.motif || '')], [415, true]);
+        r = await envoyer(port, { entetes: BON, corps: msg({ w: IMG_W + 1 }) });
+        verifier('largeur déclarée ≠ largeur décodée : 422', [r.status, /dimensions/.test(r.json?.motif || '')], [422, true]);
+        r = await envoyer(port, { entetes: BON, corps: msg({ h: IMG_H + 1 }) });
+        verifier('hauteur déclarée ≠ hauteur décodée : 422', r.status, 422);
+        const vaste = await sharp({ create: { width: 4000, height: 4000, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+        r = await envoyer(port, { entetes: BON, corps: msg({ w: 4000, h: 4000 }, vaste) });
+        verifier('image au-delà de la limite de pixels (4000 × 4000) : 413, jamais décodée', [r.status, /pixels/.test(r.json?.motif || '')], [413, true]);
+        verifier('la limite de pixels est exportée et vaut 12 millions', R.PIXELS_MAX, 12000000);
+        r = await envoyer(port, { entetes: BON, corps: msg({ mime: 'image/jpeg' }, jpg(2)) });
+        verifier('JPEG réel, mime jpeg : décodé, 200', r.status, 200);
+
+        // corps > 4 Mo SANS Content-Length honnête : transfert par morceaux (chunked) — la garde « flux » doit couper
+        const chunked = await new Promise(resolve => {
+            const s = net.connect(port, '127.0.0.1', () => {
+                s.write(`POST /releve HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nX-Rat-Market: ${R.VALEUR_MARQUE}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n`);
+                const bloc = Buffer.alloc(1024 * 1024, 97);
+                for (let i = 0; i < 6; i++) { s.write(`${bloc.length.toString(16)}\r\n`); s.write(bloc); s.write('\r\n'); }
+                s.write('0\r\n\r\n');
+            });
+            let t = '';
+            s.on('data', c => { t += c; });
+            s.on('close', () => resolve(Number((/^HTTP\/1\.1 (\d{3})/.exec(t) || [])[1] || 0)));
+            s.on('error', () => { });
+            setTimeout(() => { s.destroy(); resolve(-1); }, 8000);
+        });
+        verifier('corps de 6 Mo en chunked (aucun Content-Length) : 413 par la garde de flux', chunked, 413);
 
         // refus
         const n0 = fichiers().length;

@@ -40,7 +40,7 @@ verifier('ni new Image, ni crossOrigin, ni fetch, ni XMLHttpRequest, ni innerHTM
 verifier('trois écouteurs de clic (les trois verdicts), aucun autre', (sansCommentaires.match(/addEventListener\s*\(/g) || []).length, 3);
 const listeEmbarquee = (() => { const r = /var LISTE = (\{[\s\S]*?\n    \});/.exec(code); return r ? Function(`return (${r[1]})`)() : null; })();
 verifier('liste embarquée : 128 adresses', listeEmbarquee ? Object.keys(listeEmbarquee).length : -1, 128);
-verifier('liste embarquée == collecte-cartes/cm-passif-liste.json (une seule vérité)', (() => { const idx = CM.indexer(LISTE); const ids = Object.keys(idx); return listeEmbarquee && ids.length === Object.keys(listeEmbarquee).length && ids.every(k => { const e = listeEmbarquee[k]; const i = idx[k]; return e && e.n === i.n && e.v === i.v && e.t === i.tampon && e.s === i.set && e.o === i.numero; }); })(), true);
+verifier('liste embarquée == collecte-cartes/cm-passif-liste.json (une seule vérité)', (() => { const idx = CM.indexer(LISTE); const ids = Object.keys(idx); return listeEmbarquee && ids.length === Object.keys(listeEmbarquee).length && ids.every(k => { const e = listeEmbarquee[k]; const i = idx[k]; return e && e.n === i.n && e.v === i.v && e.i === i.idProduct && e.t === i.tampon && e.s === i.set && e.o === i.numero; }); })(), true);
 
 const apresPort = charge => SRC.replace('var PORT = 8768;', 'var PORT = 8768;\n' + charge);
 const dansEntete = ligne => SRC.replace('// @noframes', '// @noframes\n' + ligne);
@@ -139,7 +139,7 @@ const texte = w => w.elements.map(e => e.textContent).join(' | ');
 const boutons = w => w.elements.filter(e => e.tag === 'button' && e.ecouteurs.click);
 const cliquer = async (w, i) => { boutons(w)[i].ecouteurs.click({}); await attendre(80); };
 const corps = w => w.appels.map(a => JSON.parse(a.data));
-const CLES = 'h,idProduct,imageSrc,mime,nom,paquet,pixels,pixelsMotif,schema,titre,url,verdictTesteur,w';
+const CLES = 'h,idProduct,imageMotif,imageSrc,mime,nom,paquet,pixels,pixelsMotif,schema,titre,url,verdictTesteur,w';
 const clesDe = o => Object.keys(o).sort().join(',');
 
 (async () => {
@@ -193,6 +193,20 @@ const clesDe = o => Object.keys(o).sort().join(',');
     // choix de l'image principale : la grande image de produit, pas un pictogramme
     w = fabriquerMonde({ images: [image(1, { w: 40, h: 40, src: 'https://static-exemple.test/icon.png' }), image(2, { w: 400, h: 560 })] }); lancer(w); await cliquer(w, 0);
     verifier('l\'image principale est la grande image de produit (le pictogramme n\'est pas dessiné)', w.acces.dessinees, [2]);
+
+    // image rattachée à l'adresse : seule l'image dont le chemin porte /<idProduct attendu>/ est retenue, jamais la plus grande d'un autre produit
+    const autre = image(5, { w: 900, h: 1200, src: 'https://images-exemple.test/51/MEP/111111/111111.jpg' });
+    w = fabriquerMonde({ images: [autre, image(2, { w: 400, h: 560 })] }); lancer(w); await cliquer(w, 0);
+    b = corps(w);
+    verifier('image d\'un AUTRE produit plus grande : ignorée, seule l\'image …/894262/… est dessinée et envoyée', [w.acces.dessinees, b[0].imageSrc, b[0].imageMotif, b[0].pixels === b64(2)], [[2], 'https://images-exemple.test/51/MEP/894262/894262.jpg', null, true]);
+    w = fabriquerMonde({ images: [autre] }); lancer(w); await cliquer(w, 1);
+    b = corps(w);
+    verifier('aucune image du produit attendu : pas d\'image, imageMotif « image-du-produit-introuvable », rien dessiné, verdict gardé', [b[0].imageMotif, b[0].imageSrc, b[0].pixels, b[0].pixelsMotif, w.acces.canvasCrees, b[0].verdictTesteur], ['image-du-produit-introuvable', '', null, 'aucune-image', 0, 'pas-de-tampon']);
+    verifier('… et le panneau dit « sans image rattachée »', /sans image rattachée/.test(texte(w)), true);
+    verifier('… le message passe la validation du récepteur', R.jugerMessage(w.appels[0].data).statut, 200);
+    const V2PATH = '/en/Pokemon/Products/Singles/MEP-Black-Star-Promos/Slowbro-V2-MEP083';
+    w = fabriquerMonde({ pathname: V2PATH, images: [image(1), image(2, { src: 'https://images-exemple.test/51/MEP/903006/903006.jpg' })] }); lancer(w); await cliquer(w, 0);
+    verifier('adresse V2 : c\'est l\'image …/903006/… (idProduct de la V2) qui est retenue', w.acces.dessinees, [2]);
 
     // adresse hors des 64 : acceptée, marquée
     w = fabriquerMonde({ pathname: '/en/Pokemon/Products/Singles/Base-Set/Pikachu-V1-BS58' }); lancer(w);
