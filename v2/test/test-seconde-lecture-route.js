@@ -60,7 +60,7 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Roaring Moon ex', idExpansion: EXP, idMetacard: META });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero, numeroUrl: `${code}${numero}`, codeSet: code, nomFr: 'Roaring Moon ex', slug: `Roaring-Moon-ex-${code}${numero}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
         await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
-        VIS.push(VB.doc(id, { variante: 'normale', idMetacard: META }));
+        VIS.push(VB.doc(id, { variante: 'normale', idMetacard: META, total: '131' }));
     }
     VB.installer(VIS);
 
@@ -75,7 +75,7 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
             return res.json({ success: true, scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, etat: ETAT, candidats: [cand(ID_P)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2,
                 carte: { idProduct: ID_P, nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', numero: '162', setCode: 'PRE', total: '131', rarete: null, langue: 'FR', ambigu: true } });
         }
-        const lu = mode === 'sans-lecture' ? { numero: null, setCode: null } : mode === 'lu-jumeau' ? { numero: '251', setCode: 'PAR' } : { numero: '162', setCode: 'PRE' };
+        const lu = mode === 'sans-lecture' ? { numero: null, setCode: null } : mode === 'lu-jumeau' ? { numero: null, setCode: 'PAR' } : mode === 'lu-jumeau-numero' ? { numero: '251', setCode: 'PAR' } :{ numero: '162', setCode: 'PRE' };
         return res.json({ success: true, scanId: String(req.scanIdImpose), question: null, etat: ETAT, candidats: [cand(ID_P)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2,
             carte: { idProduct: ID_P, nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', ...lu, total: '131', rarete: null, langue: 'FR', ambigu: false } });
     };
@@ -204,6 +204,15 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         const tj = (await analyseDe(j.scanId)).secondeLecture;
         H.v('9. la chaîne a lu le JUMEAU (PAR/251) et affirmé P ; le modèle relit P (PRE/162) : les deux lectures se contredisent => la question d\'avant, journal « non-confirmee », raison « conflit de lecture »',
             [j.c0.statut, j.c0.candidats.map(c => c.idProduct), await livre(j), tj.issue, /conflit de lecture/.test(tj.raison), modele.appels.length - avant], ['a-trancher', [ID_P, ID_J], RESERVE, 'non-confirmee', true, 1]);
+    }
+
+    // ── GARDE-CONTRADICTION : une lecture qui contredit le NUMÉRO du gagnant (le jumeau lu en entier, 251/PAR) ôte le sûr, et la seconde lecture est sautée
+    {
+        modele.reponse = { setCode: 'PRE', numero: '162' }; const avant = modele.appels.length;
+        const j = await scan(svOn, 'lu-jumeau-numero');
+        const tj = (await analyseDe(j.scanId)).secondeLecture;
+        H.v('9b. la chaîne a lu le numéro du JUMEAU (251) et affirmé P : la garde contredit le numéro, pose la question, aucune seconde lecture',
+            [j.c0.statut, await livre(j), tj == null, modele.appels.length - avant], ['a-trancher', RESERVE, true, 0]);
     }
 
     // ── 5. LE COÛT NE SE DÉCLENCHE QUE SUR LE CAS VISÉ
