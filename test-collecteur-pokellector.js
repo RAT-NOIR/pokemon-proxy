@@ -229,6 +229,16 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
     verifier('plan : un visuel déjà servi au même numéro => « deja-servi », pas de plan', (await C.planifierDepuisBase(B.db, { dossierPages: pages, couverts: new Set(), refusSite: null })).restes.filter(x => x.motif === 'deja-servi').map(x => x.idProduct), [803]);
     // sans la liste des sets, le plan refuse (jamais de table devinée)
     { let e = null; try { await C.planifierDepuisBase(B.db, { dossierPages: tmp(), couverts: new Set(), refusSite: null }); } catch (x) { e = x; } verifier('plan : sans la liste des sets en cache => erreur nommée (« --releve d\'abord »), pas de plan vide', /liste des sets/.test(e?.message || ''), true); }
+    // CORRECTION 1 : pokedata réserve les sets de sa liste tant que son plan n'existe pas
+    B = fausseBase(); semerPlan(B);
+    { const plR = await C.planifierDepuisBase(B.db, { dossierPages: pages, couverts: new Set(), refusSite: null, pokedataSets: [{ nom: 'Twilight Masquerade', langue: 'ENGLISH' }] });
+      verifier('plan avec la liste pokedata : tout Twilight Masquerade est réservé, la collection Trick or Trade (hors liste ici) passe',
+          [plR.plan.map(p => p.slugSet), plR.restes.filter(x => x.motif === 'reserve-a-une-source-plus-grande-en-attente').map(x => x.idProduct).sort(), plR.reserves, plR.sets.length],
+          [['Trick-or-Trade-2024'], [801, 802, 803, 804, 805], ['Twilight-Masquerade'], 2]); }
+    { const dd = tmp(); const sans = C.lireCouvertsPokedata(dd), absent = C.lireCouvertsPokedata(path.join(dd, 'x'));
+      verifier('plan pokedata absent (dossier vide ou introuvable) : NE LÈVE PLUS, rend zéro fichier (la liste prend le relais)', [sans.fichiers, absent.fichiers, sans.produits.size], [0, 0, 0]);
+      fs.writeFileSync(path.join(dd, 'plan-p.json'), JSON.stringify({ plan: [{ produits: [7] }] })); const avec = C.lireCouvertsPokedata(dd);
+      verifier('plan pokedata présent : ses produits sont lus', [avec.fichiers, [...avec.produits]], [1, [7]]); }
     // les plans des autres sources
     { const dd = tmp(); fs.writeFileSync(path.join(dd, 'plan-a.json'), JSON.stringify({ plan: [{ produits: [1, 2] }], remplacements: [{ produits: [3] }] })); fs.writeFileSync(path.join(dd, 'plan-b.json'), JSON.stringify({ plan: [{ produits: [4] }] })); fs.writeFileSync(path.join(dd, 'autre.json'), '{}');
       const cv = C.lireCouverts([dd]); verifier('couverts : les produits des plans pkmncards / pokedata (plan-*.json, plan et remplacements), dénominateur imprimé', [[...cv.produits].sort(), cv.fichiers], [[1, 2, 3, 4], 2]); }

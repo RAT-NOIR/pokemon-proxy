@@ -172,6 +172,21 @@ function tableDesSets(liste, slugs) {
     return t;
 }
 
+/**
+ * RÈGLE DU TESTEUR : « pour une même carte manquante, on prend l'image la plus grande » — pokedata (728 px) passe avant cette source (570 px ; 728/570 < 1,5 : une image écrite d'abord
+ * ne serait jamais remplacée). Tant que le plan pokedata n'existe pas, les sets que LISTE pokedata (anglais seulement) sont réservés : égalité du nom, plus « McDonalds-Collection-<année> »
+ * = « McDonald's Promos <année> » (forme vue sur la liste réelle). @param liste [{ nom, langue }] @returns {Set<string>} les slugs réservés
+ */
+function slugsReserves(slugs, liste) {
+    const cles = new Set(liste.filter(s => String(s.langue).toUpperCase() === 'ENGLISH').map(s => cleNomSet(s.nom)));
+    const out = new Set();
+    for (const slug of slugs) {
+        const m = /^McDonalds-Collection-(\d{4})$/.exec(slug);
+        if (cles.has(cleNomSet(String(slug).replace(/-/g, ' '))) || (m && cles.has(cleNomSet(`McDonald's Promos ${m[1]}`)))) out.add(slug);
+    }
+    return out;
+}
+
 // ── l'appariement ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 function nomDuSlug(slug) {
     if (typeof slug !== 'string' || !slug) return null;
@@ -206,7 +221,7 @@ function nomOk(c, t) {
  *   tableSets : Map(href -> { slugSet, collection }) ; couverts : les idProduct déjà pris par une source plus grande (plans pkmncards / pokedata).
  * @returns {{plan: object[], restes: object[], remplacements: object[], aReleve: object[]}}
  */
-function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new Set(), refus = REFUS_PAR_DEFAUT }) {
+function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new Set(), reserves = new Set(), refus = REFUS_PAR_DEFAUT }) {
     const restes = [], aReleve = [];
     const resolus = [];
     const reste = (t, motif, detail) => restes.push({ idProduct: t.idProduct, carteId: t.carte._id, slugSet: t.slugSet, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, motif, ...(detail ? { detail } : {}) });
@@ -216,6 +231,7 @@ function apparier({ trous, cartes, tableSets, noms = new Map(), couverts = new S
         const auNumero = (t.carte.images || []).filter(e => e && e.set === t.slugSet && (e.numero == null || cleNumero(e.numero) === cleNumero(t.numeroFiche ?? null)));
         const jugees = auNumero.map(e => ({ e, motif: refus(e, t.slugSet) }));
         if (!t.empruntee && jugees.some(x => x.motif === null)) { reste(t, 'deja-servi'); continue; }
+        if (reserves.has(t.slugSet)) { reste(t, 'reserve-a-une-source-plus-grande-en-attente'); continue; }
         const refusees = jugees.filter(x => x.motif !== null).map(x => ({ cleR2: x.e.cleR2 ?? null, source: x.e.source ?? null, numero: x.e.numero ?? null, langue: x.e.langue ?? null, motif: x.motif }));
         const duSet = cartes.filter(c => slugDe(c)?.slugSet === t.slugSet);
         const collection = duSet.some(c => slugDe(c).collection) || (!duSet.length && [...tableSets.values()].some(v => v.slugSet === t.slugSet && v.collection));
@@ -352,5 +368,5 @@ function planRetrait(cartes) {
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, HOTES, UA, CADENCE_MS, LARGEUR_PLEINE_TAILLE, DOSSIER_CACHE, DOSSIER_PAGES, DOSSIER_IMAGES, DOSSIER_LOT, REFUS_PAR_DEFAUT,
-    analyserNomImage, urlImageValide, urlPageValide, adressesDeLaPage, lireListeSets, lirePageSet, lirePageCarte, lireOverlay, tableDesSets, nomNorm, nomDuSlug, numeroDuSlug, origineDuSlug, apparier,
+    analyserNomImage, urlImageValide, urlPageValide, adressesDeLaPage, lireListeSets, lirePageSet, lirePageCarte, lireOverlay, tableDesSets, slugsReserves, nomNorm, nomDuSlug, numeroDuSlug, origineDuSlug, apparier,
     fichierSet, fichierCarte, fichierOverlay, construireReleve, jugerReponse, MARQUEUR_DE_DEFI, estUneImage, estPleineTaille, estUnDos, cleNum, cleR2, idImage, langueDe, tracer, planRetrait, sha };

@@ -150,6 +150,18 @@ const ID = (n, c, num, id, f = '.png') => `${IMG}/${n}.${c}.${num}.${id}${f}`;
     verifier('un produit servi avec l\'image EMPRUNTÉE au tirage normal reste un trou : la source montre le tirage tamponné => au plan, marqué', r.plan.map(p => [p.empruntee, p.aRegarder]), [[true, true]]);
     verifier('origine du slug : BOO24TWM-096 => TWM 096 ; sans la forme => null', [P.origineDuSlug('Fezandipiti-BOO24TWM-096'), P.origineDuSlug('Gengar-BOO24PAF-057'), P.origineDuSlug('Fezandipiti-TWM096'), P.origineDuSlug(null)], [{ code: 'TWM', numero: '96' }, { code: 'PAF', numero: '57' }, null, null]);
 
+    // CORRECTION 1 : les sets que pokedata LISTE sont réservés à la plus grande image (728 px > 570 px)
+    const lp = JSON.parse(lire('pokedata-liste-sets.json')).sets;
+    verifier('liste pokedata (fixture réelle) : 694 sets ; seuls les ANGLAIS comptent', [lp.length, lp.filter(s => s.langue === 'ENGLISH').length], [694, 183]);
+    const listeFab = [{ nom: 'Trick or Trade 2024', langue: 'ENGLISH' }, { nom: "McDonald's Promos 2018", langue: 'ENGLISH' }, { nom: 'Twilight Masquerade', langue: 'ENGLISH' }, { nom: 'Expansion Pack', langue: 'JAPANESE' }];
+    const slugsT = ['Trick-or-Trade-2024', 'McDonalds-Collection-2018', 'Twilight-Masquerade', 'Expansion-Pack', 'Set-Inconnu'];
+    verifier('réservés : égalité du nom (ponctuation ignorée) + « McDonalds-Collection-<année> » = « McDonald\'s Promos <année> » ; un set JAPONAIS de la liste ne réserve pas ; un set absent passe', [...P.slugsReserves(slugsT, listeFab)].sort(), ['McDonalds-Collection-2018', 'Trick-or-Trade-2024', 'Twilight-Masquerade']);
+    verifier('liste réelle : Trick or Trade 2023/2024, McDonald\'s 2018 et Twilight Masquerade sont réservés', [...P.slugsReserves(['Trick-or-Trade-2024', 'Trick-or-Trade-2023', 'McDonalds-Collection-2018', 'Twilight-Masquerade'], lp)].sort(), ['McDonalds-Collection-2018', 'Trick-or-Trade-2023', 'Trick-or-Trade-2024', 'Twilight-Masquerade']);
+    r = P.apparier({ trous: [trou(1, 11, 'Fezandipiti', SET, '096'), trou(2, 12, 'Munkidori', 'Autre', '095')], cartes: [rel('Fezandipiti', '96')], tableSets, noms: nomsDe([SET, 'Fezandipiti', 11]), reserves: new Set([SET]) });
+    verifier('un set réservé => « reserve-a-une-source-plus-grande-en-attente », rien au plan ; un set non réservé passe son chemin', [r.plan.length, motifs(r)], [0, [[1, 'reserve-a-une-source-plus-grande-en-attente'], [2, 'set-non-releve']]]);
+    r = P.apparier({ trous: [trou(1, 11, 'Fezandipiti', SET, '096', null, [{ set: SET, numero: '096', source: 'tcgdex', cleR2: 'x', langue: 'en' }])], cartes: [], tableSets, reserves: new Set([SET]) });
+    verifier('un produit déjà servi n\'est pas compté « réservé »', motifs(r), [[1, 'deja-servi']]);
+
     // ── 10. cache de pages : adresses relevées ───────────────────────────────────────────────────────────────────────────
     const H = lire('carte-fezandipiti-96.html');
     const rel2 = P.adressesDeLaPage(H);

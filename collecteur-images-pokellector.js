@@ -28,7 +28,10 @@ const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
-const DOSSIERS_COUVERTS = ['C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMNCARDS', 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\POKEDATA-LOT'];
+const DOSSIERS_COUVERTS = ['C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMNCARDS'];
+// pokedata (728 px) passe avant cette source (570 px) : son plan, s'il existe, couvre ses produits ; sinon la LISTE de ses sets (fixture de la sonde du lot POKEDATA) les réserve.
+const DOSSIER_POKEDATA_LOT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\POKEDATA-LOT';
+const LISTE_POKEDATA = path.join(__dirname, 'fixtures', 'pokellector', 'pokedata-liste-sets.json');
 
 // ── les fichiers du cache ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const fichierArret = dossier => path.join(dossier, 'ARRET-DEFINITIF.json');
@@ -182,12 +185,29 @@ function lireCouverts(dossiers = DOSSIERS_COUVERTS) {
     }
     return { produits, fichiers };
 }
+/** Le plan pokedata, s'il existe : NE LÈVE PAS sur son absence (la source est bloquée ; la liste de ses sets prend le relais). */
+function lireCouvertsPokedata(dossier = DOSSIER_POKEDATA_LOT) {
+    if (!fs.existsSync(dossier)) return { produits: new Set(), fichiers: 0 };
+    const produits = new Set(); let fichiers = 0;
+    for (const f of fs.readdirSync(dossier).filter(x => /^plan.*\.json$/.test(x)).sort()) {
+        const j = JSON.parse(fs.readFileSync(path.join(dossier, f), 'utf8'));
+        fichiers++;
+        for (const u of [...(j.plan || []), ...(j.remplacements || [])]) for (const id of u.produits || []) produits.add(id);
+    }
+    return { produits, fichiers };
+}
+/** Tout ce qu'une source plus grande prend : produits des plans (pkmncards, pokedata) et, sans plan pokedata, les sets de sa liste (liste fixture, 694 sets dont 183 anglais). */
+function sourcesPlusGrandes(dossiers = DOSSIERS_COUVERTS, dossierPokedata = DOSSIER_POKEDATA_LOT, listePokedata = LISTE_POKEDATA) {
+    const cv = lireCouverts(dossiers), pd = lireCouvertsPokedata(dossierPokedata);
+    const liste = pd.fichiers ? null : JSON.parse(fs.readFileSync(listePokedata, 'utf8')).sets;
+    return { produits: new Set([...cv.produits, ...pd.produits]), fichiers: cv.fichiers + pd.fichiers, pokedataSets: liste, planPokedata: pd.fichiers > 0 };
+}
 const par = (l, n) => { const o = []; for (let i = 0; i < l.length; i += n) o.push(l.slice(i, i + n)); return o; };
 /**
  * Les trous des sets intl, et leur appariement au relevé du CACHE de pages. `db` : la base `cartes`, LECTURE SEULE.
  * @returns {Promise<{plan, restes, remplacements, aReleve, sets: object[], examines: number, cartesReleve: number, ignorees: number}>}
  */
-async function planifierDepuisBase(db, { dossierPages = P.DOSSIER_PAGES, couverts = new Set(), refusSite = null, slugsSeulement = null } = {}) {
+async function planifierDepuisBase(db, { dossierPages = P.DOSSIER_PAGES, couverts = new Set(), refusSite = null, slugsSeulement = null, pokedataSets = null } = {}) {
     let liste;
     try { liste = fs.readFileSync(path.join(dossierPages, 'liste-sets.html'), 'utf8'); } catch { throw new Error(`la liste des sets n'est pas en cache (${path.join(dossierPages, 'liste-sets.html')}) : lance --releve d'abord — la table des sets ne se devine pas`); }
     const sets = await db.collection('sets').find({}, { projection: { tirage: 1, region: 1 } }).toArray();
@@ -204,10 +224,11 @@ async function planifierDepuisBase(db, { dossierPages = P.DOSSIER_PAGES, couvert
     const refus = refusSite ? (e, slug) => (e.cleR2 ? refusSite(e, sref.get(slug) ?? 'intl') : null) : undefined;
     const trous = lignes.filter(l => parId.has(l.carteId)).map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, empruntee: l.imageEmprunteeTirage === true, carte: parId.get(l.carteId) }));
     const rel = P.construireReleve(dossierPages);
-    const r = P.apparier({ trous, cartes: rel.cartes, tableSets, couverts, ...(refus ? { refus } : {}) });
+    const reserves = pokedataSets ? P.slugsReserves(intl, pokedataSets) : new Set();
+    const r = P.apparier({ trous, cartes: rel.cartes, tableSets, couverts, reserves, ...(refus ? { refus } : {}) });
     const vusA = new Set();
     const aReleve = r.aReleve.filter(a => !vusA.has(a.cardId) && vusA.add(a.cardId));
-    return { ...r, aReleve, sets: [...table].map(([slugSet, v]) => ({ slugSet, ...v })).filter(s => lignes.some(l => l.slugSet === s.slugSet)), examines: trous.length, cartesReleve: rel.cartes.length, ignorees: rel.ignorees };
+    return { ...r, aReleve, reserves: [...reserves], sets: [...table].map(([slugSet, v]) => ({ slugSet, ...v })).filter(s => lignes.some(l => l.slugSet === s.slugSet)), examines: trous.length, cartesReleve: rel.cartes.length, ignorees: rel.ignorees };
 }
 
 // ── LA PLANCHE ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -378,7 +399,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere };
 }
 
-module.exports = { creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
+module.exports = { creerFlux, releverPages, telecharger, urlsAutorisees, lireCouverts, lireCouvertsPokedata, sourcesPlusGrandes, planifierDepuisBase, faireLaPlanche, ecrire, annonceRemplacement, transportFetch, fichierArret, fichierIndex, lireIndex, dossierPagesDe, dossierImagesDe, DOSSIERS_COUVERTS, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
@@ -402,10 +423,10 @@ const dossiersCouverts = val('couverts', null)?.split(',') ?? DOSSIERS_COUVERTS;
 const slugsSeuls = val('sets', null)?.split(',') ?? null;
 
 async function planComplet(db) {
-    const cv = lireCouverts(dossiersCouverts);
+    const cv = sourcesPlusGrandes(dossiersCouverts);
     const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
     const R = await reglesDuSite();
-    const p = await planifierDepuisBase(db, { dossierPages: dossierPagesDe(dossierCache), couverts: cv.produits, refusSite: R.refusDuVisuel, slugsSeulement: slugsSeuls });
+    const p = await planifierDepuisBase(db, { dossierPages: dossierPagesDe(dossierCache), couverts: cv.produits, refusSite: R.refusDuVisuel, slugsSeulement: slugsSeuls, pokedataSets: cv.pokedataSets });
     return { ...p, couvertsFichiers: cv.fichiers, couvertsProduits: cv.produits.size };
 }
 if (!erreurArgs) (async () => {
@@ -437,13 +458,13 @@ if (!erreurArgs) (async () => {
             const lireP = f => { try { return fs.readFileSync(path.join(dp, f), 'utf8'); } catch { return ''; } };
             const SETS = `https://${P.HOTE_PAGES}/sets`, abs = h => `https://${P.HOTE_PAGES}${h}`;
             const sets = (await cx.db.collection('sets').find({}, { projection: { tirage: 1, region: 1 } }).toArray()).filter(s => (s.tirage ?? s.region) === 'intl').map(s => s._id).filter(s => !slugsSeuls || slugsSeuls.includes(s));
-            const cv = lireCouverts(dossiersCouverts);
+            const cv = sourcesPlusGrandes(dossiersCouverts);
             const etapes = [
                 async () => ({ cibles: [{ url: SETS, fichier: 'liste-sets.html' }], autorisees: new Set([SETS]) }),
                 async () => {
                     const table = P.tableDesSets(P.lireListeSets(lireP('liste-sets.html')), sets);
-                    const utiles = (await planifierDepuisBase(cx.db, { dossierPages: dp, couverts: cv.produits, refusSite: null, slugsSeulement: slugsSeuls })).restes;   // (sert à nommer les sets qui ont de vrais trous)
-                    const slugsTrous = new Set(utiles.filter(x => !['deja-servi', 'couvert-par-une-source-plus-grande'].includes(x.motif)).map(x => x.slugSet));
+                    const utiles = (await planifierDepuisBase(cx.db, { dossierPages: dp, couverts: cv.produits, refusSite: null, slugsSeulement: slugsSeuls, pokedataSets: cv.pokedataSets })).restes;   // (sert à nommer les sets qui ont de vrais trous)
+                    const slugsTrous = new Set(utiles.filter(x => !['deja-servi', 'couvert-par-une-source-plus-grande', 'reserve-a-une-source-plus-grande-en-attente'].includes(x.motif)).map(x => x.slugSet));
                     const cibles = [...table].filter(([slug]) => slugsTrous.has(slug)).map(([, v]) => ({ url: abs(v.href), fichier: P.fichierSet(v.href) }));
                     return { cibles, autorisees: P.adressesDeLaPage(lireP('liste-sets.html')) };
                 },
