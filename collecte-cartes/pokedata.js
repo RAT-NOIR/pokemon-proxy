@@ -95,20 +95,6 @@ function lireListeDesSets(html) {
     if (!Array.isArray(arr) || !arr.length) throw new Error('liste des sets : setInfoArr absent ou vide — une clé fausse, pas une absence');
     return arr.map(s => ({ id: s.id, name: s.name, code: s.code ?? null, language: s.language, releaseDate: s.release_date ?? null, series: s.series ?? null }));
 }
-/** Les cartes qu'une PAGE de set porte dans son HTML. Sur la page réelle de la sonde (coquille rendue côté client) : aucune, motif « rendu-cote-client ». */
-function lireCartesDeLaPage(html) {
-    const h = String(html ?? '');
-    const cartes = [];
-    for (const m of h.matchAll(/<img\b[^>]*>/g)) {
-        const src = /src="([^"]*)"/.exec(m[0])?.[1];
-        if (!src || !urlImageValide(src)) continue;
-        const u = new URL(src), [seg, f] = u.pathname.slice(PREFIXE_CHEMIN.length).split('/');
-        cartes.push({ set: nomDeSegment(seg), numero: f.replace(/\.webp$/, ''), nom: /alt="([^"]*)"/.exec(m[0])?.[1] ?? null, img: src });
-    }
-    if (cartes.length) return { cartes, motif: null };
-    const nd = lireNextData(h);
-    return { cartes: [], motif: nd && !Object.keys(nd?.props?.pageProps ?? {}).length ? 'rendu-cote-client' : 'aucune-carte-reconnue' };
-}
 /** Les relevés déposés (schéma 1) : releve--*.json = { schema: 1, set: <nom du set>, complet: bool, cartes: [{ numero, nom, img }] }. Jamais d'écriture. */
 function lireReleves(dossier = path.join(DOSSIER_CACHE, 'releves')) {
     const cartes = [], ignores = [];
@@ -243,5 +229,5 @@ function planRetrait(cartes) {
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, CADENCE_MIN_MS, LARGEUR_ATTENDUE, PLUS_GRANDE, DOSSIER_CACHE, DOSSIER_LOT, SETS_UTILES, REFUS_PAR_DEFAUT,
     PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet,
-    nomsDuSlug, nomNorm, nomDeSegment, urlImageValide, urlPageValide, urlPageDuSet, lireNextData, lireListeDesSets, lireCartesDeLaPage, lireReleves, numeroDuSlug, baseNumero, raisonDeRemplacement,
+    nomsDuSlug, nomNorm, nomDeSegment, urlImageValide, urlPageValide, urlPageDuSet, lireNextData, lireListeDesSets, lireReleves, numeroDuSlug, baseNumero, raisonDeRemplacement,
     apparier, cleNum, cleR2, idImage, tracer, langueDe, duLot, planRetrait, estDosDeCarte };

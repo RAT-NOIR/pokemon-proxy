@@ -133,26 +133,25 @@ const SLUG = 'Trick-or-Trade-2024';
     const ix = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
     verifier('dos de carte (empreinte) et image carrée : REFUSÉS (statuts nommés, rien en cache) ; une petite image de forme juste est gardée (le seuil se juge à l\'écriture) ; pas d\'arrêt', [r.etat, plan.map(p => ix[p.url]?.statut), fs.existsSync(C.fichierArret(d))], ['termine', ['dos-de-carte', 'forme-inattendue', 'ok', 'ok'], false]);
 
-    // les PAGES : même discipline, hôte des pages, et l'image n'est pas une page
-    const pageHtml = fs.readFileSync(path.join(__dirname, 'fixtures', 'pokedata-page-set-tot2024.html'), 'utf8');
-    const pagesOk = u => estRobots(u) ? { status: 200, type: 'text/plain', texte: 'User-agent: *\nDisallow:\n' } : { status: 200, type: 'text/html; charset=utf-8', texte: pageHtml };
-    const urlPage = P.urlPageDuSet('Trick or Trade 2024');
-    d = tmp(); tr = reseau(pagesOk); h = horloge();
-    r = await C.telecharger({ urls: [urlPage], dossierCache: d, genre: 'page', transport: tr, pause: h.pause, now: h.now });
-    verifier('pages : robots.txt de www.pokedata.io d\'abord, puis la page du set ; 2 requêtes, mise en cache', [tr.appels, r.etat, fs.existsSync(path.join(d, 'index-pages.json'))], [['https://www.pokedata.io/robots.txt', urlPage], 'termine', true]);
-    d = tmp(); tr = reseau(pagesOk);
-    r = await C.telecharger({ urls: ['https://www.pokedata.io/api/set/Trick+or+Trade+2024', 'https://www.pokedata.io/set/Pitch+Black', 'https://www.pokedata.io/_next/static/chunks/pages/set/%5Bset_name%5D-cbb234bcbbd2895e.js', IMG('Trick+or+Trade+2024', '037a.webp')], dossierCache: d, genre: 'page', transport: tr });
-    verifier('pages : une API, un set hors table, un fragment de code, une adresse d\'image => refusés AVANT toute requête', [r.etat, tr.appels.length, r.refusees.length], ['rien-a-faire', 0, 4]);
-    d = tmp(); tr = reseau(u => estRobots(u) ? pagesOk(u) : { status: 403, type: 'text/html', texte: 'non' });
-    r = await C.telecharger({ urls: [urlPage], dossierCache: d, genre: 'page', transport: tr });
-    verifier('pages : 403 => ARRÊT DÉFINITIF DE LA SOURCE (le fichier d\'arrêt est commun : les images refusent de partir aussi)', [r.etat, (await lancer(urls, reseau(normal), d)).etat], ['arret-definitif', 'refuse-arret']);
-    d = tmp(); tr = reseau(u => estRobots(u) ? pagesOk(u) : { status: 200, type: 'application/json', texte: '{"cards":[]}' });
-    r = await C.telecharger({ urls: [urlPage], dossierCache: d, genre: 'page', transport: tr });
-    verifier('pages : une réponse qui n\'est pas une page HTML (JSON) => arrêt définitif (rien d\'autre qu\'une page n\'est attendu)', r.etat, 'arret-definitif');
-    // le relevé depuis les pages en cache : la page réelle ne porte AUCUNE carte => un compte nommé, jamais un relevé vide présenté comme complet
-    d = tmp(); await C.telecharger({ urls: [urlPage], dossierCache: d, genre: 'page', transport: reseau(pagesOk), pause: async () => { }, now: horloge().now });
-    const rv = C.releverDepuisPages({ dossierCache: d, urls: [urlPage] });
-    verifier('relevé depuis la page réelle : 0 carte, motif « rendu-cote-client », aucun fichier de relevé écrit', [rv.ecrits.length, rv.sansCartes.map(x => x.motif), fs.existsSync(path.join(d, 'releves'))], [0, ['rendu-cote-client'], false]);
+    // 🔴 CORRECTION 3 : AUCUNE page de set ne s'ouvre — le relevé est PASSIF, au clic ; plus de genre « page », plus de --releve
+    verifier('le client ne connaît que le genre « image » ; telecharger refuse tout autre genre ; plus de lecteur de pages', [Object.keys(C.GENRES), 'releverDepuisPages' in C, await C.telecharger({ urls: [P.urlPageDuSet('Trick or Trade 2024')], dossierCache: tmp(), genre: 'page', transport: reseau(normal) }).then(() => 'a-demande', e => /genre inconnu/.test(e.message) ? 'refuse' : e.message)], [['image'], false, 'refuse']);
+    { vusFetch.length = 0; let e1 = null; try { await C.transportFetch.get(P.urlPageDuSet('Trick or Trade 2024'), { genre: 'page' }); } catch (e) { e1 = e; }
+      verifier('transport réel : une adresse de page de set est refusée AVANT fetch (zéro requête)', [!!e1, vusFetch.length], [true, 0]);
+      const srcC = fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8').replace(/(^|\s)\/\/.*$/gm, '$1');
+      verifier('le collecteur ne cite plus ni l\'hôte des pages, ni urlPageValide, ni urlPageDuSet, ni un genre « page »', [/HOTE_PAGES|urlPageValide|urlPageDuSet|genre === 'page'|genre: 'page'|--releve(?!s)/.test(srcC)], [false]); }
+    // les gardes de chemin du collecteur (mêmes que le récepteur) : --cache, --releves, --sortie
+    { const ok2 = (() => { try { C.verifierChemins({ cache: path.join(os.tmpdir(), 'c1'), releves: path.join(os.tmpdir(), 'r1'), sortie: path.join(os.tmpdir(), 'p', 'plan.json') }, { racine: os.tmpdir() }); return 'accepte'; } catch (e) { return e.message; } })();
+      verifier('chemins : sous la racine, hors dépôt, hors apports => acceptés', ok2, 'accepte');
+      const motif = (chemins, racine) => { try { C.verifierChemins(chemins, { racine }); return ''; } catch (e) { return e.message; } };
+      verifier('chemins : --sortie est un FICHIER — c\'est son dossier qui est jugé (un fichier nommé comme un dossier d\'apports, dans un dossier permis, passe)', motif({ sortie: path.join(os.tmpdir(), 'ok', 'apport-manuel') }, os.tmpdir()), '');
+      verifier('chemins : --cache dans le dépôt => refusé', /dépôt/.test(motif({ cache: path.join(__dirname, 'x') }, __dirname)), true);
+      verifier('chemins : --releves hors de la racine => refusé', /racine autorisée/.test(motif({ releves: path.join(os.tmpdir(), 'ailleurs') }, path.join(os.tmpdir(), 'racine-autre'))), true);
+      verifier('chemins : --sortie (fichier) hors de la racine => refusé', /racine autorisée/.test(motif({ sortie: path.join(os.tmpdir(), 'ailleurs', 'plan.json') }, path.join(os.tmpdir(), 'racine-autre'))), true);
+      verifier('chemins : un dossier d\'apports manuels => refusé', /apports manuels/.test(motif({ cache: path.join(os.tmpdir(), 'apport-manuel', 'c') }, os.tmpdir())), true);
+      verifier('chemins : une traversée (..) qui sort de la racine => refusée', /racine autorisée/.test(motif({ cache: path.join(os.tmpdir(), 'a', '..', '..', 'evade') }, path.join(os.tmpdir(), 'a'))), true);
+      const { spawnSync } = require('child_process');
+      for (const opt of ['cache', 'releves', 'sortie']) { const x = spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), '--plan', `--${opt}=${path.join(os.tmpdir(), 'hors-racine', 'x')}`], { encoding: 'utf8', timeout: 60000, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+        verifier(`CLI --${opt}=<hors racine> : refus (code 2) avant toute connexion, message « racine autorisée »`, [x.status, /racine autorisée/.test(x.stderr || '')], [2, true]); } }
 
     // le CLI : sortie propre, arguments inconnus refusés avant toute connexion
     verifier('le CLI ne contient AUCUN process.exit( (process.exitCode seulement)', /process\.exit\(/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8')), false);
@@ -161,7 +160,7 @@ const SLUG = 'Trick-or-Trade-2024';
       for (const a of [['--inconnu'], ['--plan', '--ecrire'], ['--ecrire'], ['--attendu=3'], ['--telecharger', '--sets=../x']]) { const m = cli(a); verifier(`CLI ${a.join(' ')} : code 2 propre, refus avant toute connexion`, [m.status, /argument inconnu|un seul mode|exige/.test(m.stderr || ''), /Assertion failed/.test(m.stderr || '')], [2, true, false]); }
       fs.mkdirSync(path.join(dos2, 'cache')); fs.writeFileSync(path.join(dos2, 'plan.json'), JSON.stringify({ plan: [], remplacements: [], setsAReleve: [] })); fs.writeFileSync(path.join(dos2, 'cache', 'ARRET-DEFINITIF.json'), '{}');
       const m = cli(['--telecharger', `--cache=${path.join(dos2, 'cache')}`, `--sortie=${path.join(dos2, 'plan.json')}`, `--releves=${path.join(dos2, 'rel')}`]);
-      verifier('CLI --telecharger avec un fichier d\'arrêt : code 1 propre, stderr sans assertion', [m.status, /Assertion failed/.test(m.stderr || '')], [1, false]); }
+      verifier('CLI --telecharger avec un --cache hors racine : code 2 propre (la garde de chemin passe avant le fichier d\'arrêt)', [m.status, /Assertion failed/.test(m.stderr || ''), /racine autorisée/.test(m.stderr || '')], [2, false, true]); }
 
     // le transport RÉEL : agent honnête seul, redirection jamais suivie, garde de l'hôte avant fetch
     vusFetch.length = 0; let err = null;
@@ -179,7 +178,7 @@ const SLUG = 'Trick-or-Trade-2024';
       verifier('le collecteur n\'exporte ni ne contient aucun chemin de construction ni d\'échantillon d\'adresses construites', ['sonderEchantillon', 'tauxDeReponse', 'choisirEchantillon', 'construire'].filter(k => k in C || src.includes(k)), []);
       const { spawnSync } = require('child_process'); const dosC = tmp();
       const cliC = a => spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), ...a], { encoding: 'utf8', cwd: dosC, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
-      for (const a of [['--construire'], ['--sonde-echantillon=20'], ['--plan', '--construit'], ['--telecharger', '--construit'], ['--produits=x'], ['--plan-construit=x']]) { const x = cliC(a); verifier(`CLI ${a.join(' ')} : refusé (code 2), aucune connexion`, [x.status, /argument inconnu/.test(x.stderr || '')], [2, true]); } }
+      for (const a of [['--releve'], ['--releve', '--plan'], ['--construire'], ['--sonde-echantillon=20'], ['--plan', '--construit'], ['--telecharger', '--construit'], ['--produits=x'], ['--plan-construit=x']]) { const x = cliC(a); verifier(`CLI ${a.join(' ')} : refusé (code 2), aucune connexion`, [x.status, /argument inconnu/.test(x.stderr || '')], [2, true]); } }
     // la décision : UNE fonction, ses quatre issues
     verifier('jugerReponse : 200 => recevoir ; 404 => absent ; 5xx => interrompu ; 401/403/410/429/3xx/cf/Imperva/marqueur => arret', [[200, 'x'], [404, ''], [503, ''], [401, ''], [403, ''], [410, ''], [429, ''], [302, ''], [200, 'Just a moment']].map(([st, t]) => C.jugerReponse({ status: st, texte: t }).action).concat(C.jugerReponse({ status: 200, cfMitigated: 'challenge' }).action, C.jugerReponse({ status: 200, imperva: true }).action), ['recevoir', 'absent', 'interrompu', 'arret', 'arret', 'arret', 'arret', 'arret', 'arret', 'arret', 'arret']);
     verifier('le corps de telecharger ne décide plus lui-même : il appelle jugerReponse (une seule définition de « arrêt / absent / interrompu »)', [/jugerReponse\(r, url\)/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8')), (fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8').match(/statut: 'absent', status/g) || []).length], [true, 1]);

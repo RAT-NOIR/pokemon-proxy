@@ -82,6 +82,16 @@ const bon = () => ({ schema: 1, set: 'Trick or Trade 2024', url: 'https://www.po
       const ff = JSON.parse(fs.readFileSync(path.join(d3, 'releve--Trick-or-Trade-2024.json'), 'utf8')).cartes.find(c => c.img.endsWith('037b.webp'));
       verifier('numéro qui contredit le nom de fichier de l\'image : la carte est gardée MARQUÉE « numeroDoute » (numéro = celui du fichier) et le plan l\'ignore', [ff?.numero, ff?.numeroDoute, P.lireReleves(d3).cartes.some(c => c.img.endsWith('037b.webp')), P.lireReleves(d3).douteuses], ['037b', true, false, 1]);
       s3.close(); }
+    // 🔴 CORRECTION 3 (B2) : un fichier de relevé corrompu (JSON valide mais de forme inattendue) ne fait pas planter le récepteur
+    { const d4 = fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-rec4-')); const s4 = R.creerServeur({ dossier: d4, racine: os.tmpdir() }); await new Promise(r => s4.listen(0, '127.0.0.1', r)); const p4 = s4.address().port;
+      const po = corps => new Promise(res => { const data = JSON.stringify(corps); const rq = http.request({ host: '127.0.0.1', port: p4, path: '/releve', method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rat-Market': R.VALEUR_MARQUE, 'Content-Length': Buffer.byteLength(data) } }, rs => { let t = ''; rs.on('data', c => t += c); rs.on('end', () => res(rs.statusCode)); }); rq.on('error', e => res(e.code)); rq.end(data); });
+      fs.writeFileSync(path.join(d4, 'releve--Trick-or-Trade-2024.json'), JSON.stringify({ schema: 1, set: 'Trick or Trade 2024', complet: true, cartes: 5 }));
+      const lu = console.error, journal = []; console.error = (...a) => journal.push(a.join(' '));
+      let r1; try { r1 = await po(bon()); } finally { console.error = lu; }
+      verifier('relevé existant corrompu (cartes: 5) : réponse 500 propre, le processus ne plante pas, l\'erreur est journalisée', [r1, journal.some(l => /relevé|corrompu|erreur/i.test(l))], [500, true]);
+      fs.unlinkSync(path.join(d4, 'releve--Trick-or-Trade-2024.json'));
+      verifier('   et le récepteur répond encore ensuite (200 sur un relevé conforme)', await po(bon()), 200);
+      s4.close(); }
     // un flux SANS Content-Length déclaré : la borne se compte sur le flux
     verifier('corps de 1,2 Mo sans Content-Length (flux) : 413, la borne se compte aussi sur le flux', await new Promise(res => {
         const rq = http.request({ host: '127.0.0.1', port, path: '/releve', method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rat-Market': R.VALEUR_MARQUE, 'Transfer-Encoding': 'chunked' } }, rs => { rs.resume(); rs.on('end', () => res(rs.statusCode)); });

@@ -2,7 +2,6 @@
 // COLLECTEUR D'IMAGES — pleine taille 728×1000, pour ce qui NOUS MANQUE (lot POKEDATA, 2026-10-17) -> cache local -> R2 (WebP) + base `cartes`
 // ============================================================
 //   node collecteur-images-pokedata.js --plan [--releves=<dossier>] [--sortie=<plan.json>]   (défaut) SIMULATION : zéro requête réseau, lecture seule de la base, écrit plan.json
-//   node collecteur-images-pokedata.js --releve                 LES SEULES REQUÊTES DE PAGES : les pages de set de plan.json (`setsAReleve`), robots.txt d'abord, ≥ 5 s, arrêt définitif
 //   node collecteur-images-pokedata.js --telecharger            LES SEULES REQUÊTES D'IMAGES : les adresses du plan présentes dans un relevé, robots.txt d'abord, ≥ 5 s, arrêt définitif
 //   node collecteur-images-pokedata.js --planche [--echantillon=50]    une planche-contact de l'échantillon du cache, à REGARDER avant l'écriture (zéro requête)
 //   node lot-additif.js --quoi="N visuels (lot pokedata-2026-10)" --collections=cartes,images,sets --compte=images:source=pokedata -- node collecteur-images-pokedata.js --ecrire --attendu=<N>
@@ -22,6 +21,7 @@ const { cleNumero } = require('./collecte-cartes/jointure');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { marqueDe } = require('./collecte-cartes/basse-definition');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE } = require('./recepteur-pikaqian');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
@@ -31,8 +31,7 @@ const WEBP_OK = b => Buffer.isBuffer(b) && b.length > 12 && b.subarray(0, 4).toS
 const RATIO_MIN = 1.30, RATIO_MAX = 1.45;           // 1000/728 = 1,374 ; une carte n'est jamais carrée
 
 const GENRES = Object.freeze({
-    image: { hote: P.HOTE_IMAGES, valide: P.urlImageValide, index: 'index.json', sous: 'img' },
-    page: { hote: P.HOTE_PAGES, valide: P.urlPageValide, index: 'index-pages.json', sous: 'pages' }
+    image: { hote: P.HOTE_IMAGES, valide: P.urlImageValide, index: 'index.json', sous: 'img' }      // (le seul genre : AUCUNE page de set ne s'ouvre — le relevé est PASSIF, au clic du testeur)
 });
 const robotsDe = genre => `https://${GENRES[genre].hote}/robots.txt`;
 
@@ -49,6 +48,18 @@ function urlsAutorisees(plan, cartes) {
     return { ok, refusees };
 }
 
+// ── les gardes de chemin (mêmes que le récepteur : liste blanche, chemin RÉEL jugé) ───────────────────────────────────────────────────────────────
+/** Refuse (lève) un chemin du dépôt, hors de la racine autorisée, ou d'apports manuels. `chemins` : { cache, releves } (dossiers) et { sortie } (fichier : son dossier est jugé). */
+function verifierChemins(chemins, { racine = RACINE_AUTORISEE } = {}) {
+    for (const [nom, p] of Object.entries(chemins)) {
+        if (p == null) continue;
+        const dossier = nom === 'sortie' ? path.dirname(p) : p;
+        if (dansLeDepot(dossier)) throw new Error(`--${nom} : le dossier « ${dossier} » est dans le dépôt : rien ne s'y écrit`);
+        if (!dansRacineAutorisee(dossier, racine)) throw new Error(`--${nom} : le dossier « ${dossier} » n'est pas sous la racine autorisée « ${racine} »`);
+        if (dansApportsManuels(dossier)) throw new Error(`--${nom} : le dossier « ${dossier} » est un dossier d'apports manuels (ou est dedans) : jamais lu ni écrit par un outil`);
+    }
+}
+
 // ── le cache local ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 const fichierArret = dossier => path.join(dossier, 'ARRET-DEFINITIF.json');
 const fichierIndex = (dossier, genre = 'image') => path.join(dossier, GENRES[genre].index);
@@ -60,7 +71,7 @@ const nomFichier = (url, genre) => (genre === 'image' ? new URL(url).pathname.sl
 const transportFetch = {
     async get(url, { genre = 'image', binaire = false } = {}) {
         if (!GENRES[genre]) throw new Error(`pokedata : genre inconnu « ${genre} » — aucune requête`);
-        if (url !== robotsDe(genre) && !GENRES[genre].valide(url)) throw new Error(`pokedata : adresse hors de ce que le collecteur autorise (${GENRES[genre].hote}, robots.txt, ${genre === 'image' ? 'les images pleine taille de la table' : 'la liste des sets et les pages de set de la table'}) — aucune requête`);
+        if (url !== robotsDe(genre) && !GENRES[genre].valide(url)) throw new Error(`pokedata : adresse hors de ce que le collecteur autorise (${GENRES[genre].hote}, robots.txt, les images pleine taille de la table) — aucune requête`);
         let r;
         try { r = await fetch(url, { headers: { 'User-Agent': P.UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
         catch (e) { throw Object.assign(new Error(`${e.name === 'TimeoutError' ? 'ETIMEDOUT' : e.cause?.code || 'ERR_NETWORK'} ${url}`), { reseau: true }); }
@@ -100,9 +111,9 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
     // 🔑 l'arrêt se lit à DEUX endroits : le dossier de travail ET l'emplacement FIXE de la source — `--cache=<autre dossier>` ne contourne pas un arrêt définitif
     const arretPose = [dossierCache, ARRET_FIXE].map(fichierArret).find(x => fs.existsSync(x));
     if (arretPose) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${arretPose} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
-    const refusees = [...new Set(urls)].filter(u => !G.valide(u) || (genre === 'page' && /robots\.txt$/.test(u))).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
+    const refusees = [...new Set(urls)].filter(u => !G.valide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache, genre);
-    const afaire = [...new Set(urls)].filter(u => G.valide(u) && !(genre === 'page' && /robots\.txt$/.test(u)) && !['ok', 'absent', 'dos-de-carte', 'forme-inattendue'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => G.valide(u) && !['ok', 'absent', 'dos-de-carte', 'forme-inattendue'].includes(index.images[u]?.statut));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MIN_MS);
@@ -134,12 +145,6 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
         if (j.action === 'absent') { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
         if (j.action === 'interrompu') return { etat: 'interrompu', requetes, plafond, refusees, motif: j.motif };
         const fichier = path.join(G.sous, nomFichier(url, genre));
-        if (genre === 'page') {
-            if (!/html/i.test(r.type || '') || typeof r.texte !== 'string' || !/<html/i.test(r.texte)) return arret(url, r, 'la réponse n\'est pas une page HTML (rien d\'autre qu\'une page n\'est attendu)');
-            fs.writeFileSync(path.join(dossierCache, fichier), r.texte);
-            index.images[url] = { statut: 'ok', fichier, sha256: sha('sha256', Buffer.from(r.texte)), octets: Buffer.byteLength(r.texte), le: new Date().toISOString() };
-            ecrireIndex(dossierCache, index, genre); continue;
-        }
         if (P.estDosDeCarte(r.octets)) { index.images[url] = { statut: 'dos-de-carte', le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
         if (!WEBP_OK(r.octets)) return arret(url, r, 'les octets reçus ne sont pas un WebP (page de défi probable)');
         const meta = await sharp(r.octets).metadata();
@@ -150,24 +155,6 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
         ecrireIndex(dossierCache, index, genre);
     }
     return { etat: 'termine', requetes, plafond, refusees };
-}
-
-/** Lit les pages de set EN CACHE et écrit un relevé (schéma 1) pour celles qui portent des cartes ; les autres sont nommées (jamais un relevé vide présenté comme complet). */
-function releverDepuisPages({ dossierCache, urls }) {
-    const index = lireIndex(dossierCache, 'page');
-    const ecrits = [], sansCartes = [];
-    for (const url of urls) {
-        const e = index.images[url];
-        if (e?.statut !== 'ok') { sansCartes.push({ url, motif: e?.statut ?? 'non-telechargee' }); continue; }
-        const nom = P.nomDeSegment(new URL(url).pathname.replace(/^\/set\//, ''));
-        const lu = P.lireCartesDeLaPage(fs.readFileSync(path.join(dossierCache, e.fichier), 'utf8'));
-        if (!nom || !lu.cartes.length) { sansCartes.push({ url, motif: lu.motif ?? 'set-hors-table' }); continue; }
-        const dossier = path.join(dossierCache, 'releves'); fs.mkdirSync(dossier, { recursive: true });
-        const fichier = `releve--${nom.replace(/[^A-Za-z0-9]+/g, '-')}.json`;
-        fs.writeFileSync(path.join(dossier, fichier), JSON.stringify({ schema: 1, set: nom, complet: false, le: new Date().toISOString(), cartes: lu.cartes.map(c => ({ numero: c.numero, nom: c.nom, img: c.img })) }, null, 1));
-        ecrits.push(fichier);
-    }
-    return { ecrits, sansCartes };
 }
 
 // ── le plan (lecture seule de la base) ────────────────────────────────────────────────────────────────────────────────────
@@ -187,10 +174,7 @@ async function planifierDepuisBase(db, { cartes, refusSite = null }) {
     const sets = new Map((await db.collection('sets').find({ _id: { $in: slugs } }, { projection: { tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s.tirage ?? s.region]));
     const refus = refusSite ? (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) : undefined;
     const r = P.apparier({ trous, cartes, noms, ...(refus ? { refus } : {}) });
-    // les pages à relever : les sets de la table où un produit n'a aucun visuel OU porte une entrée à remplacer (basse définition, empruntée)
-    const besoin = new Set(trous.filter(t => { const es = (t.carte.images || []).filter(e => e.set === t.slugSet); return !es.length || es.some(e => e.basseDefinition === true || e.imageEmprunteeTirage === true); }).map(t => t.slugSet));
-    const setsAReleve = Object.keys(P.SETS_UTILES).filter(n => P.SETS_UTILES[n].some(s => besoin.has(s)));
-    return { produits: trous.length, ...r, setsAReleve };
+    return { produits: trous.length, ...r };
 }
 
 // ── L'ÉCRITURE, depuis le cache seulement ─────────────────────────────────────────────────────────────────────────────────
@@ -370,38 +354,28 @@ async function fabriquerPlancheEtiquetee({ dossierCache, echantillon, sortie }) 
     return { images, total: echantillon.length, sortie, etiquettes };
 }
 
-module.exports = { jugerReponse, fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees, telecharger, releverDepuisPages, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
+module.exports = { jugerReponse, fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees, telecharger, verifierChemins, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
+const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
-const modes = ['--plan', '--releve', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
+const modes = ['--plan', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
 if (inconnus.length || modes.length > 1 || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu='))) || (args.some(a => a.startsWith('--echantillon=')) && !args.includes('--planche'))) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --releve, --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche (la planche du lot, étiquetée : set, numéro, nom de NOTRE fiche). Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche (la planche du lot, étiquetée : set, numéro, nom de NOTRE fiche). Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
     process.exitCode = 2;
 }
-const argsValides = process.exitCode !== 2;
 const val = (nom, defaut) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3) ?? defaut;
 const dossierCache = val('cache', P.DOSSIER_CACHE), dossierReleves = val('releves', path.join(dossierCache, 'releves')), fichierPlan = val('sortie', path.join(P.DOSSIER_LOT, 'plan.json'));
+if (process.exitCode !== 2) { try { verifierChemins({ cache: dossierCache, releves: dossierReleves, sortie: fichierPlan }); } catch (e) { console.error(`❌ ${e.message}`); process.exitCode = 2; } }
+const argsValides = process.exitCode !== 2;
 
 if (argsValides) (async () => {
     const mode = modes[0] || '--plan';
     const lirePlan = () => JSON.parse(fs.readFileSync(fichierPlan, 'utf8'));
-    if (mode === '--releve') {
-        const j = lirePlan();
-        const urls = (j.setsAReleve || []).map(P.urlPageDuSet).filter(Boolean);
-        console.log(`${urls.length} page(s) de set à relever (plan.json : setsAReleve) : ${(j.setsAReleve || []).join(' | ')}`);
-        const r = await telecharger({ urls, dossierCache, genre: 'page' });
-        console.log(`RELEVÉ DES PAGES : ${r.etat} · ${r.requetes} requête(s) (plafond ${r.plafond}) ${r.motif ? `· ${r.motif}` : ''}`);
-        const v = releverDepuisPages({ dossierCache, urls });
-        console.log(`relevés écrits ${v.ecrits.length} · pages sans cartes ${v.sansCartes.length} ${JSON.stringify(v.sansCartes.map(x => x.motif).reduce((m, k) => ({ ...m, [k]: (m[k] || 0) + 1 }), {}))}`);
-        process.exitCode = r.etat === 'termine' || r.etat === 'rien-a-faire' ? 0 : 1;
-        return;
-    }
     if (mode === '--telecharger') {
         const j = lirePlan();
         const lu = P.lireReleves(dossierReleves);          // (SEULES les adresses du relevé passif sont demandées : aucune adresse ne se construit)
@@ -427,13 +401,13 @@ if (argsValides) (async () => {
         const p = await planifierDepuisBase(cx.db, { cartes: lu.cartes, refusSite: R.refusDuVisuel });
         const motifs = {}; for (const r of p.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         console.log(`relevés : ${lu.fichiers} lu(s), ${lu.ignores.length} ignoré(s), ${lu.cartes.length} cartes · ${p.produits} produits des sets de la table`);
-        console.log(`PLAN : ${p.plan.length} ajout(s) pour ${p.plan.reduce((n, u) => n + u.produits.length, 0)} produit(s) · remplacements préparés (INACTIFS sans --remplacer) ${p.remplacements.length} · restes ${JSON.stringify(motifs)} · pages à relever ${p.setsAReleve.length}`);
+        console.log(`PLAN : ${p.plan.length} ajout(s) pour ${p.plan.reduce((n, u) => n + u.produits.length, 0)} produit(s) · remplacements préparés (INACTIFS sans --remplacer) ${p.remplacements.length} · restes ${JSON.stringify(motifs)}`);
         const voulus = (val('remplacer', '') || '').split(',').filter(Boolean).map(Number);
         if (mode === '--plan') {
             const urls = [...new Set([...p.plan, ...p.remplacements].map(u => u.url))];
             fs.mkdirSync(path.dirname(fichierPlan), { recursive: true });
-            fs.writeFileSync(fichierPlan, JSON.stringify({ le: new Date().toISOString(), releves: { fichiers: lu.fichiers, ignores: lu.ignores }, plan: p.plan, remplacements: p.remplacements, restes: p.restes, setsAReleve: p.setsAReleve, urls }, null, 1));
-            console.log(`plan écrit : ${fichierPlan} · requêtes à faire : ${p.setsAReleve.length} page(s) de set + ${urls.length} image(s) + 2 robots.txt, ≥ ${P.CADENCE_MIN_MS / 1000} s entre deux (≈ ${Math.ceil((p.setsAReleve.length + urls.length + 2) * P.CADENCE_MS / 60000)} min)`);
+            fs.writeFileSync(fichierPlan, JSON.stringify({ le: new Date().toISOString(), releves: { fichiers: lu.fichiers, ignores: lu.ignores }, plan: p.plan, remplacements: p.remplacements, restes: p.restes, urls }, null, 1));
+            console.log(`plan écrit : ${fichierPlan} · requêtes à faire : ${urls.length} image(s) + 1 robots.txt, ≥ ${P.CADENCE_MIN_MS / 1000} s entre deux (≈ ${Math.ceil((urls.length + 1) * P.CADENCE_MS / 60000)} min)`);
             if (voulus.length) {
                 const choisies = p.remplacements.filter(u => u.produits.some(id => voulus.includes(id)));
                 const annonce = annonceRemplacement(await cx.db.collection('cartes').find({ _id: { $in: choisies.map(u => u.carteId) } }, { projection: { sets: 1, nomEn: 1, images: 1 } }).toArray(), choisies);

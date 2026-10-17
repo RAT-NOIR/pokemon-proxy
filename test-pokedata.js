@@ -23,7 +23,7 @@ const anglais = new Set(liste.filter(s => s.language === 'ENGLISH').map(s => s.n
 verifier('table des sets utiles : chaque nom est un set ANGLAIS de la liste réelle (aucun nom deviné)', Object.keys(P.SETS_UTILES).filter(n => !anglais.has(n)), []);
 verifier('table des sets utiles : aucune clé ne désigne un set de la liste en japonais ou en chinois', Object.keys(P.SETS_UTILES).filter(n => liste.some(s => s.name === n && s.language !== 'ENGLISH') && !anglais.has(n)), []);
 verifier('la liste réelle ne porte ni Prize Pack, ni Kit, ni WCD, ni Battle Academy, ni My First Battle (relevé 17/10)', liste.filter(s => s.language === 'ENGLISH' && /prize pack|trainer kit|world championship|battle academy|first battle/i.test(s.name)).length, 0);
-verifier('page de set réelle : coquille rendue côté client, AUCUNE carte (motif nommé, pas un vide muet)', (r => [r.cartes.length, r.motif])(P.lireCartesDeLaPage(fixture('pokedata-page-set-tot2024.html'))), [0, 'rendu-cote-client']);
+verifier('plus de lecteur de page de set (aucune page ne s\'ouvre ni ne se lit) : lireCartesDeLaPage n\'existe plus', 'lireCartesDeLaPage' in P, false);
 
 // ── 2. les adresses ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const ok1 = IMG('Trick+or+Trade+2024', '037a.webp');

@@ -88,6 +88,7 @@ function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE } = 
         req.on('data', c => { taille += c.length; if (taille > CORPS_MAX_OCTETS) trop = true; else morceaux.push(c); });
         req.on('end', () => {
             if (trop) return fin(413, 'corps trop gros');
+            try {
             let o; try { o = JSON.parse(Buffer.concat(morceaux).toString('utf8')); } catch { return fin(400, 'JSON illisible'); }
             const v = validerReleve(o);
             if (!v.ok) return fin(v.statut, v.motif);
@@ -98,6 +99,7 @@ function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE } = 
             fs.writeFileSync(path.join(dossier, `releve--${nom}.json`), JSON.stringify({ schema: 1, set: o.set, complet: f.complet, le: new Date().toISOString(), cartes: f.cartes }, null, 1));
             fs.writeFileSync(path.join(dossier, `diag--${nom}--${horodatage()}.json`), JSON.stringify({ set: o.set, url: o.url, cartes: o.cartes.length, diag: o.diag }, null, 1));
             fin(200, `${o.cartes.length} carte(s) enregistrée(s) pour ${o.set}`);
+            } catch (e) { console.error(`récepteur : erreur interne (relevé existant corrompu ?) — ${e.message}`); if (!res.headersSent) fin(500, 'erreur interne : relevé existant illisible'); }
         });
     });
 }
