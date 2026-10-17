@@ -115,25 +115,18 @@ const grappeA = p => faux({ test: { data: p * 5.12 * 0.9, index: p * 5.12 * 0.1 
     verifier('mongo-connexion.js (connecterMongo, ecrit) : porte la garde', /verifierEcriture/.test(mc), true);
 
     // ── CORRECTION 1
-    // I2 dégagement : seulement avec une annonce de baisse, mesure lue et < 98 %
-    const ann = { 'fiches set:X': 3 };
-    verifier('dégagement sans annonce : refusé', M.validerDegagement({ degagement: true, annonces: {} }) !== null, true);
-    verifier('dégagement avec annonce nulle (0) : refusé', M.validerDegagement({ degagement: true, annonces: { 'fiches set:X': 0 } }) !== null, true);
-    verifier('dégagement avec annonce de baisse : accepté', M.validerDegagement({ degagement: true, annonces: ann }), null);
-    verifier('pas de dégagement demandé : rien à valider', M.validerDegagement({ degagement: false, annonces: {} }), null);
-    const refus93 = await M.verifierEcriture({ client: grappeA(93) });
-    verifier('sans --degagement, 93 % : refusé', refus93.autorise, false);
-    let dg = M.autoriserDegagement(refus93);
-    verifier('dégagement à 93 % : PASSE', [dg.autorise, dg.niveau], [true, 'degagement']);
-    dg = M.autoriserDegagement(await M.verifierEcriture({ client: grappeA(98) }));
-    verifier('dégagement à 98 % : refusé (pas de marge pour restaurer)', dg.autorise, false);
-    dg = M.autoriserDegagement(await M.verifierEcriture({ client: faux({}, { refuseListe: true }) }));
-    verifier('dégagement avec mesure impossible : refusé', dg.autorise, false);
-    verifier('dégagement : un verdict « inconnu » (estimation illisible) n\'est jamais levé', M.autoriserDegagement({ autorise: false, niveau: 'inconnu', mesure: { mo: 100, pourcent: 50 }, raison: 'x' }).autorise, false);
-    verifier('dégagement qui BAISSE (476 -> 470 Mo) : tenu', M.degagementTenu({ avantMo: 476, apresMo: 470 }), true);
-    verifier('dégagement qui fait MONTER la taille : pas tenu (arrêt + restauration)', M.degagementTenu({ avantMo: 476, apresMo: 480 }), false);
-    verifier('dégagement : apres illisible = pas tenu', M.degagementTenu({ avantMo: 476, apresMo: null }), false);
-    verifier('lot-additif.js : --degagement exige l\'annonce, restaure sur hausse', [/--degagement/.test(src), /validerDegagement/.test(src), /degagementTenu/.test(src), /compteur: 'atlas'/.test(src)], [true, true, true, true]);
+    // CORRECTION 2 : le chemin de dégagement est RETIRÉ. Au-dessus de 90 %, libérer de la place est une décision du testeur.
+    const { spawnSync } = require('child_process');
+    const r = spawnSync(process.execPath, ['lot-additif.js', '--quoi=x', '--collections=a', '--degagement', '--', 'node', '-v'], { cwd: __dirname, encoding: 'utf8', env: { ...process.env, MONGODB_URI: '', MONGODB_CARTES_URI: '' } });
+    verifier('--degagement REFUSÉ par lot-additif (code 2, message du testeur), avant toute connexion', [r.status, /au-dessus de 90 %, libérer de la place est une décision du testeur ; outil dédié à venir/.test(r.stderr || '')], [2, true]);
+    verifier('plus aucun code de dégagement (module, lot-additif)', [typeof M.validerDegagement, typeof M.autoriserDegagement, typeof M.degagementTenu, /autoriserDegagement|degagementTenu|MO_AVANT|compteur: 'atlas'/.test(src)], ['undefined', 'undefined', 'undefined', false]);
+    verifier('le journal « Atlas après » est gardé', /ligneAtlasApres\(mesureApres/.test(src), true);
+    // M-e : seuls les bancs test-*.js sont exclus du scan ; le champ fichier: est scanné
+    const tmp2 = fs.mkdtempSync(path.join(require('os').tmpdir(), 'scan2-atlas-'));
+    for (const [f, t] of [['testeur-x.js', "f({ essentiel: 'import-cardmarket' })"], ['test-banc.js', "f({ essentiel: 'import-cardmarket' })"], ['testing.js', 'f({ essentiel: ESSENTIEL })']]) fs.writeFileSync(path.join(tmp2, f), t);
+    verifier('M-e : un fichier de production nommé test… est scanné ; test-*.js est exclu', M.porteursDuDrapeau(tmp2).sort(), ['testeur-x.js', 'testing.js']);
+    fs.rmSync(tmp2, { recursive: true, force: true });
+    verifier('M-e : fichier: désignant un fichier de la liste fermée est détecté', [M.contientDrapeauEssentiel("f({ fichier: path.join(__dirname, 'import-price-guide.js') })"), M.contientDrapeauEssentiel("f({ fichier : './imports-quotidiens-local.js' })"), M.contientDrapeauEssentiel('f({ fichier: __filename })')], [true, true, false]);
 
     // M1 : le scan attrape TOUTE forme de la valeur hors des fichiers admis
     const formes = { 'guillemets simples': "const x = { essentiel: 'import-cardmarket' };", 'guillemets doubles': 'const x = { essentiel: "import-cardmarket" };', 'gabarit': 'const x = { essentiel: `import-cardmarket` };',
