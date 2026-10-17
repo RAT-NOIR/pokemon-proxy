@@ -212,20 +212,64 @@ const fin8 = (async () => {
 {
     const S = require('../../scoring');
     const cand = [{ idProduct: 1, idExpansion: 1550, numeroCardmarket: '22', codeSet: 'LM' }, { idProduct: 2, idExpansion: 1537, numeroCardmarket: '22', codeSet: 'AQ' }, { idProduct: 3, idExpansion: 1537, numeroCardmarket: 'H16', codeSet: 'AQ' }, { idProduct: 4, idExpansion: 7, numeroCardmarket: '28', codeSet: 'LC' }];
-    v('(14) AQU lu : le seul code du vivier à le satisfaire est AQ', S.codeRapprocheDuVivier('AQU', cand), 'AQ');
-    const lu = { numero: '22', setCode: 'AQU', idExpansionsAttendues: [], rarete: null, regionAttendue: null, motif: { vises: [], autresVariantes: [] } };
+    const IN = 'inconnu';
+    v('(14) AQU lu (code INCONNU de la chaîne) : le seul code du vivier à le satisfaire est AQ', S.codeRapprocheDuVivier('AQU', cand, IN), 'AQ');
+    v('(14)     I-A : le code lu est RATTACHÉ à un code connu (exact, convention-x, parente, mot-non-code) ou sa résolution est absente : jamais de rapprochement', ['exact', 'convention-x', 'parente', 'mot-non-code', null, undefined].map(x => S.codeRapprocheDuVivier('AQU', cand, x)), [null, null, null, null, null, null]);
+    v('(14)     RAPPROCHEMENT_CODES allumée ; éteinte (paramètre), plus aucun rapprochement', [S.RAPPROCHEMENT_CODES, S.codeRapprocheDuVivier('AQU', cand, IN, false)], [true, null]);
+    const connus = ['LM', 'AQ', 'SVP', 'xPRE', 'PRE', 'WC'];
+    v('(14)     resolutionDuCodeLu : exact / convention-x / parente / inconnu / mot-non-code / rien / liste illisible', [S.resolutionDuCodeLu('SVP', connus).resolution, S.resolutionDuCodeLu('PRE', ['XPRE']).resolution, S.resolutionDuCodeLu('PRE', ['PRE1X']).resolution, S.resolutionDuCodeLu('AQU', ['LM', 'SVP']).resolution, S.resolutionDuCodeLu('Promo', connus).resolution, S.resolutionDuCodeLu(null, connus).resolution, S.resolutionDuCodeLu('AQU', []).resolution], ['exact', 'convention-x', 'parente', 'inconnu', 'mot-non-code', null, null]);
+    v('(14)     … l\'alias e-Reader (e1 lu : EC1 connu) est exact ; la parenté nomme ses cousins', [S.resolutionDuCodeLu('e1', ['EC1']).resolution, S.resolutionDuCodeLu('PRE', ['PRE1X']).parente], ['exact', 'PRE~PRE1X']);
+    const lu = { numero: '22', setCode: 'AQU', setCodeResolution: IN, idExpansionsAttendues: [], rarete: null, regionAttendue: null, motif: { vises: [], autresVariantes: [] } };
     const r = S.choisirMeilleur(cand, lu), sc = id => r.scores.find(s => s.candidat.idProduct === id);
     vrai('(14) S41 : AQ (numéro 22) prend le bonus partiel au lieu du malus', /^\+15 .*rapproché/.test(sc(2).detail.set) && /^-40/.test(sc(1).detail.set));
     vrai('(14)     AQ H16 (un AUTRE numéro) : pas de bonus, le code court ne s\'apparente jamais seul', /^-40/.test(sc(3).detail.set));
-    v('(14)     deux codes du vivier satisfont le code lu : aucun rapprochement', S.codeRapprocheDuVivier('DP', [{ codeSet: 'DPPR' }, { codeSet: 'DP4m' }]), null);
-    v('(14)     un code égal existe déjà : aucun rapprochement', S.codeRapprocheDuVivier('LM', cand), null);
-    v('(14)     un code apparenté (3 caractères) existe déjà : les règles d\'avant passent', S.codeRapprocheDuVivier('PRE', [{ codeSet: 'xPRE' }, { codeSet: 'PR' }]), null);
-    v('(14)     « XY » lu pour « XYPR » seul au vivier : rapproché ; un seul caractère (« M » / « MCRP ») : jamais', [S.codeRapprocheDuVivier('XY', [{ codeSet: 'XYPR' }, { codeSet: 'SM' }]), S.codeRapprocheDuVivier('M', [{ codeSet: 'MCRP' }])], ['XYPR', null]);
-    v('(14)     une sous-suite n\'est pas un préfixe (ADV1 / ADVex1) : aucun rapprochement', S.codeRapprocheDuVivier('ADV1', [{ codeSet: 'ADVex1' }]), null);
-    v('(14)     sans code lu ou sans vivier : null', [S.codeRapprocheDuVivier(null, cand), S.codeRapprocheDuVivier('AQU', []), S.codeRapprocheDuVivier('AQU', null)], [null, null, null]);
+    v('(14)     deux codes du vivier satisfont le code lu : aucun rapprochement', S.codeRapprocheDuVivier('DP', [{ codeSet: 'DPPR' }, { codeSet: 'DP4m' }], IN), null);
+    v('(14)     un code égal existe déjà : aucun rapprochement', S.codeRapprocheDuVivier('LM', cand, IN), null);
+    v('(14)     un code apparenté (3 caractères) existe déjà : les règles d\'avant passent', S.codeRapprocheDuVivier('PRE', [{ codeSet: 'xPRE' }, { codeSet: 'PR' }], IN), null);
+    v('(14)     « XY » lu pour « XYPR » seul au vivier : rapproché ; un seul caractère (« M » / « MCRP ») : jamais', [S.codeRapprocheDuVivier('XY', [{ codeSet: 'XYPR' }, { codeSet: 'SM' }], IN), S.codeRapprocheDuVivier('M', [{ codeSet: 'MCRP' }], IN)], ['XYPR', null]);
+    v('(14)     une sous-suite n\'est pas un préfixe (ADV1 / ADVex1) : aucun rapprochement', S.codeRapprocheDuVivier('ADV1', [{ codeSet: 'ADVex1' }], IN), null);
+    v('(14)     sans code lu ou sans vivier : null', [S.codeRapprocheDuVivier(null, cand, IN), S.codeRapprocheDuVivier('AQU', [], IN), S.codeRapprocheDuVivier('AQU', null, IN)], [null, null, null]);
     // SV est un préfixe de SVP sans en être le set : le candidat doit porter le numéro lu
     const c2 = [{ idProduct: 1, idExpansion: 1, numeroCardmarket: '50', codeSet: 'SV' }, { idProduct: 2, idExpansion: 2, numeroCardmarket: '7', codeSet: 'ZZZ' }];
-    const r2 = S.choisirMeilleur(c2, { numero: '7', setCode: 'SVP', idExpansionsAttendues: [], rarete: null, regionAttendue: null, motif: { vises: [], autresVariantes: [] } });
+    const r2 = S.choisirMeilleur(c2, { numero: '7', setCode: 'SVP', setCodeResolution: IN, idExpansionsAttendues: [], rarete: null, regionAttendue: null, motif: { vises: [], autresVariantes: [] } });
     vrai('(14)     SVP lu, SV au vivier avec un AUTRE numéro : pas de bonus', /^-40/.test(r2.scores.find(s => s.candidat.idProduct === 1).detail.set));
+    // I-A, le stress fabriqué de la relecture : le code lu « WC » est un VRAI code connu (autre set) ; « WCD11 » au vivier porte le numéro lu ; la vraie carte (code sans rapport) a 25 points d'avance (prix bas, carte normale).
+    const stress = [{ idProduct: 1, idExpansion: 1, numeroCardmarket: '5', codeSet: 'ZZ1', prix: 1 }, { idProduct: 2, idExpansion: 2, numeroCardmarket: '5', codeSet: 'WCD11', prix: 10 }];
+    const luS = (resolution) => ({ numero: '5', setCode: 'WC', setCodeResolution: resolution, idExpansionsAttendues: [], rarete: 'normale', rareteElevee: false, regionAttendue: null, motif: { vises: [], autresVariantes: [] } });
+    v('(14) I-A stress : « WC » est un code connu (résolution exact) : la vraie carte reste en tête, aucun bonus à WCD11', [S.choisirMeilleur(stress, luS('exact')).scores[0].candidat.idProduct, S.choisirMeilleur(stress, luS('exact')).scores.map(s => s.score)], [1, [35, 10]]);
+    v('(14)     … sans résolution du tout (appelant qui ne la sait pas) : de même, jamais de rapprochement', S.choisirMeilleur(stress, luS(undefined)).scores[0].candidat.idProduct, 1);
+    v('(14)     … résolution « inconnu » (aucun code connu ne s\'y rattache) : le rapprochement joue, la limite écrite', S.choisirMeilleur(stress, luS('inconnu')).scores[0].candidat.idProduct, 2);
+}
+// ── (15) I-B : le VETO DE LANGUE est tenu — le cas 7a (Dark Tyranitar 908322 zh-hans affirmé, vérité 907909 jp m6a 144/103, langue lue JP) ; un candidat dont le tirage contredit la langue lue n'est jamais désigné, même s'il porte le code lu
+{
+    const DT = 'Dark Tyranitar [Grind | Spinning Tail | Bite Off]';
+    const CN = ligne(908322, DT, '30thC', '144', '103', null, { tirageSource: 'zh-hans' });
+    const JP = ligne(907909, DT, 'm6a', '144', '103', null, { tirageSource: 'jp' });
+    const CN2 = ligne(777001, DT, 'S8a-P', '144', '103', null, { tirageSource: 'zh-hans' });        // porte le CODE lu, mais son tirage contredit la langue lue
+    const corps = corpsDe({ gagnant: 908322, vivierIds: [908322, 907909, 777001], nom: 'Dark Tyranitar', lecture: { numero: '144', total: '103', setCode: 'S8a-P', symboleSet: null, attaque: null, attaqueConfiance: null, carteTcgdexId: null, langue: 'JP' } });
+    const g = GC().contredire({ corps, gagnant: 908322, produits: mapDe([CN, JP, CN2]) });
+    v('(15) 7a : le candidat zh-hans qui porte le code lu n\'est PAS désigné (veto de langue) ; la vérité jp l\'est', g && g.designe.map(d => d.idProduct), [907909]);
+    vrai('(15)     VETO_LANGUE allumée et dans VETOS', GC().VETO_LANGUE === true && GC().VETOS.includes('langue'));
+    const r = jouer(corps, [CN, JP, CN2]);
+    v('(15)     le sûr 908322 devient une question [gagnant, vérité]', [r.issue, montres(r)], ['question', [907909, 908322]]);
+}
+// ── (16) I-C : l'attaque trie et écarte AVEC REPLI parmi les désignés
+{
+    const W = ligne(6001, 'Carte [Un | Deux]', 'AAA', '12', '100', null, { tirageSource: 'intl' });
+    const Y = (id, nom) => ligne(id, nom, 'BBB', '12', '150', null, { tirageSource: 'intl' });
+    const lecture = { numero: '12', total: '150', setCode: null, symboleSet: null, attaque: 'Trois', attaqueConfiance: 'haute', carteTcgdexId: null, langue: null };
+    const dec = (ys) => { const g = GC().contredire({ corps: corpsDe({ gagnant: 6001, lecture, vivierIds: [6001, ...ys.map(y => y.idProduct)], nom: 'Carte' }), gagnant: 6001, produits: mapDe([W, ...ys]) }); return g && g.designe.map(d => d.idProduct); };
+    v('(16) un désigné que l\'attaque CONTREDIT est retiré s\'il en reste un autre (6002 : Quatre/Cinq contredit ; 6003 : Trois concorde)', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6003, 'Carte [Trois | Six]')]), [6003]);
+    v('(16)     tous contredits par l\'attaque (la lecture est fausse, cas Dark Tyranitar) : on les garde tous', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6004, 'Carte [Sept | Huit]')]), [6002, 6004]);
+    v('(16)     attaque concorde avant attaque inconnue (6005 sans crochets), à soutiens égaux', dec([Y(6005, 'Carte'), Y(6003, 'Carte [Trois | Six]')]), [6003, 6005]);
+    v('(16)     un inconnu et un contredit : le contredit est retiré', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6005, 'Carte')]), [6005]);
+}
+// ── (17) M-A : les désignés ne passent pas par la garde des jumeaux — ce que la question rend quand un désigné a des variantes du MÊME créneau (même numéro, même total) qui ne tiennent pas dans les 3 places
+{
+    const W = ligne(7001, 'Carte [Un | Deux]', 'AAA', '12', '100', null, { tirageSource: 'intl' });
+    const Vs = [7002, 7003, 7004].map(id => ligne(id, 'Carte [Un | Deux]', 'BBB', '12', '150', null, { tirageSource: 'intl' }));       // trois variantes d'un même produit désigné (même créneau)
+    const corps = corpsDe({ gagnant: 7001, lecture: { numero: '12', total: '150', setCode: null, symboleSet: null, attaque: null, attaqueConfiance: null, carteTcgdexId: null, langue: null }, vivierIds: [7001, 7002, 7003, 7004], nom: 'Carte' });
+    const r = jouer(corps, [W, ...Vs]);
+    v('(17) 3 variantes désignées + le gagnant : la question rend 3 choix (le gagnant puis les 2 premiers par soutiens puis idProduct), la 3e variante n\'est pas montrée ; jamais une affirmation', [r.issue, montres(r)], ['question', [7001, 7002, 7003]]);
 }
 fin8.then(() => bilan());
