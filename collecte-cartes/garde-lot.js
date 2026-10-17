@@ -196,7 +196,7 @@ const signature = v => JSON.stringify(trier(v ?? null));
 const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null, categorie: c.categorie ?? null,
     impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
     images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null, m.vignette?.cleR2 ?? null]) });
-const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null];
+const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null, l.visuelSubstitut?.cleR2 ?? null];   // VIGN-SUITE : le substitut sert une image au site ; projection de CHANGEMENT seulement, aucun groupe compté
 // 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
 // la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
 // SITE lit : `PROJECTION_SET` de lib/cartes.ts (rat-market-site), recopiée ici — plus `dateSortieMois`, demandé au site le même
