@@ -167,8 +167,10 @@ function indexer(entrees) {
 const nomNorm = normaliserNom;
 // 🔑 (correction 2) le témoin du nom est la règle de PRODUCTION (`normaliserNom`, jointure.js) appliquée au nom de NOTRE carte, et à lui seul : le nom lu dans le slug Cardmarket n'est plus un témoin (il laissait
 // passer un nom qui contredit la carte mais suit le slug). Seule tolérance, écrite : la source écrit « Fighting Energy » là où notre carte s'appelle « Basic Fighting Energy » (préfixe « Basic » retiré des DEUX côtés).
-const sansBasic = n => nomNorm(n).replace(/^basic/, '');
-const nomsDeLaFiche = t => new Set([t.carte?.nomEn].filter(Boolean).flatMap(n => [nomNorm(n), sansBasic(n)]));
+// et les ACCENTS repliés des deux côtés (la source écrit « poke ball » là où notre carte s'appelle « Poké Ball » ; normaliserNom ne les plie pas) — le pli s'ajoute à la règle de production, il ne la remplace pas.
+const plier = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+const sansBasic = n => nomNorm(plier(n)).replace(/^basic/, '');
+const nomsDeLaFiche = t => new Set([t.carte?.nomEn].filter(Boolean).flatMap(n => [nomNorm(n), nomNorm(plier(n)), sansBasic(n)]));
 const estBasse = e => e?.basseDefinition === true || (typeof e?.w === 'number' && e.w > 0 && e.w < 350 && !(e.wOriginal > 0)) || (typeof e?.wOriginal === 'number' && e.wOriginal > 0 && e.wOriginal < 350);
 const cleR2 = (slugSet, numero, carteId) => `${SOURCE}/${slugSet}/${cleNum(numero)}-${carteId}-en.webp`;
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';
@@ -223,7 +225,7 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, fic
         }
         if (!candidats.length) { reste(t, 'numero-absent-de-la-source', `n°${numero} dans ${choisies.map(([k]) => k).join(', ')}`); continue; }
         const miens = nomsDeLaFiche(t);
-        const nomOk = e => miens.has(nomNorm(e.nom)) || miens.has(sansBasic(e.nom));
+        const nomOk = e => miens.has(nomNorm(e.nom)) || miens.has(nomNorm(plier(e.nom))) || miens.has(sansBasic(e.nom));
         const concordants = candidats.filter(nomOk);
         if (!concordants.length) { reste(t, 'nom-contredit', `source « ${candidats.map(e => e.nom).join(' / ')} », fiche « ${t.carte.nomEn} »`); continue; }
         if (new Set(concordants.map(e => e.url)).size > 1) { reste(t, 'deux-candidats', `${concordants.map(e => `${e.pkcSet} n°${e.numero}`).join(' ; ')}${reconnues.length ? '' : ' (moitié du kit illisible au slug)'}`); continue; }

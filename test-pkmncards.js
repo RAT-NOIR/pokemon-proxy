@@ -16,7 +16,7 @@ const card = s => `${H}/card/${s}/`;
 
 // ── 1. LES SITEMAPS (extrait réel) ─────────────────────────────────────────────────────────────────────────────────────────
 const lus = P.lireSitemapTexte(lireFixture('pkmncards-extrait-sitemap.xml'));
-verifier('sitemap : l\'extrait réel donne 74 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [74, 0]);
+verifier('sitemap : l\'extrait réel donne 75 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [75, 0]);
 verifier('sitemap : une entrée dont l\'adresse n\'est pas sur l\'hôte, ou dont l\'image est hors règle, est ÉCARTÉE et nommée',
     (() => { const x = P.lireSitemapTexte(`<urlset><url><loc>https://autre.example/card/a-b-1/</loc><image:image><image:loc>${UP('a.jpg')}</image:loc></image:image></url><url><loc>${card('a-xy-trainer-kit-latios-tk8o-1')}</loc><image:image><image:loc>https://autre.example/wp-content/uploads/a.jpg</image:loc></image:image></url><url><loc>${card('b-xy-trainer-kit-latios-tk8o-2')}</loc></url></urlset>`); return [x.entrees.length, x.ecartees.map(e => e.motif)]; })(),
     [0, ['loc-hors-hote', 'image-hors-regle', 'sans-image']]);
@@ -50,7 +50,7 @@ verifier('table : la table est GELÉE (une ligne ne se change pas à l\'exécuti
 
 // ── 5. L'APPARIEMENT CARTE PAR CARTE ───────────────────────────────────────────────────────────────────────────────────────
 const idx = P.indexer(lus.entrees);
-verifier('index : 74 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [74, ['unown-unseen-forces-uf/']]);
+verifier('index : 75 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [75, ['unown-unseen-forces-uf/']]);
 const trou = (idProduct, carteId, slugSet, numeroFiche, slugProduit, nomEn, images = []) => ({ idProduct, carteId, slugSet, numeroFiche, slugProduit, carte: { _id: carteId, nomEn, images } });
 const app = (trous, o = {}) => P.apparier({ trous, entrees: idx.lues, lot: o.lot, ...(o.refus ? { refus: o.refus } : {}) });
 const motifs = r => r.restes.map(x => `${x.idProduct}:${x.motif}`);
@@ -158,6 +158,9 @@ r = app([trou(95, 91, 'XY-Trainer-Kit-Latias-Latios', '24', 'Delcatty-TK824O', '
 verifier('nom de la carte « Skitty » contre la source « Delcatty » : SAUTÉ même si le slug Cardmarket dit « Delcatty » (le slug n\'est pas un témoin)', [r.plan.length, motifs(r)], [0, ['95:nom-contredit']]);
 r = app([trou(96, 92, 'XY-Trainer-Kit-Latias-Latios', '2', 'Fighting-Energy-TK82O', 'Basic Fighting Energy')], { lot: 'kits' });
 verifier('« Basic Fighting Energy » (notre carte) = « fighting energy » (la source) : la seule tolérance écrite (préfixe Basic) passe', [r.plan.length, r.plan[0]?.pkcSet], [1, 'xy-trainer-kit-latios']);
+
+r = app([trou(97, 93, 'XY-Trainer-Kit', '26', 'Poke-Ball-TK626S', 'Poké Ball')], { lot: 'kits' });
+verifier('les accents : notre « Poké Ball » = la source « poke ball » (la source n\'écrit pas d\'accents ; ils sont repliés des DEUX côtés, en plus de normaliserNom)', [r.plan.length, r.plan[0]?.pkcSet], [1, 'xy-trainer-kit-sylveon']);
 
 // ── 6. IDENTIFIANTS PUBLICS : le nom de la source n'y est jamais ────────────────────────────────────────────────────────────
 verifier('identifiants : source « pkc », lot « pkc-2026-10 », clé R2 pkc/<set>/<n°>-<carte>-en.webp, _id du document images', [P.SOURCE, P.LOT, P.cleR2('XY-Trainer-Kit', '24', 10), P.idImage('XY-Trainer-Kit', 10, '24'), P.cleNum(null)], ['pkc', 'pkc-2026-10', 'pkc/XY-Trainer-Kit/24-10-en.webp', 'pkc/XY-Trainer-Kit/10/24/en', 'sans-numero']);
