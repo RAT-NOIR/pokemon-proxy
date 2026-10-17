@@ -25,7 +25,8 @@ function corps({ gagnant = 7003, lecture = {}, nomBrut = 'わるいバンギラ�
         carte: { idProduct: gagnant, ambigu: false, niveauReserve: null, raisonReserve: null, concurrent: null, nbExAequo: null, nom, nomBrut, nomConfiance: 'haute', numero: l.numero, total: l.total, setCode: l.setCode, tcgdexId: null, langue: l.langue },
         etat: etatH, candidats: [{ idProduct: gagnant }], classement: [{ idProduct: gagnant, score: 100 }], reverse: { attendue: false, strategie: null }, codeLangue: 7, lectureGarde: l };
 }
-const jouer = (c, extra = {}, lignes = TOUT) => muet(() => adapter({ statutHttp: 200, corps: c }, { produits: new Map(lignes.map(l => [l.idProduct, l])), langueInterface: 'fr', cfg, jumeaux: () => ({ conclu: true, ids: [] }), critereA: false, ...extra }));
+// codeNumeroExiste : l'index code × numéro du CATALOGUE ENTIER (M2) ; par défaut « aucun produit du catalogue ne porte ce code et ce numéro »
+const jouer = (c, extra = {}, lignes = TOUT) => muet(() => adapter({ statutHttp: 200, corps: c }, { produits: new Map(lignes.map(l => [l.idProduct, l])), langueInterface: 'fr', cfg, jumeaux: () => ({ conclu: true, ids: [] }), critereA: false, codeNumeroExiste: () => false, ...extra }));
 const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map(c => c.idProduct) : []);
 const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idProduct : null);
 
@@ -118,14 +119,28 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
 // ── (6) R4 : un code lu qui ne désigne personne dans le vivier ne bloque pas ; un code qui désigne un autre candidat bloque toujours
 {
     const P = new Map(TOUT.map(l => [l.idProduct, l]));
-    const vide = LD.codeSansDesignation({ corps: corps(), produits: P });
-    vrai('(6) le code « XXXP » ne désigne aucun produit du vivier', vide === true);
-    const desi = LD.codeSansDesignation({ corps: corps({ lecture: { setCode: 'DDDE' } }), produits: P });
+    const aucun = () => false;
+    const vide = LD.codeSansDesignation({ corps: corps(), produits: P, catalogueExiste: aucun });
+    vrai('(6) le code « XXXP » ne désigne aucun produit du vivier NI du catalogue', vide === true);
+    const desi = LD.codeSansDesignation({ corps: corps({ lecture: { setCode: 'DDDE' } }), produits: P, catalogueExiste: aucun });
     vrai('(6) le code « DDDE » désigne un produit du vivier (7004)', desi === false);
-    const incomplet = LD.codeSansDesignation({ corps: corps({ vivier: [7001, 7002, 7003, 7004, 7999] }), produits: P });
+    const incomplet = LD.codeSansDesignation({ corps: corps({ vivier: [7001, 7002, 7003, 7004, 7999] }), produits: P, catalogueExiste: aucun });
     vrai('(6) une ligne du vivier manque : on ne peut pas conclure (false)', incomplet === false);
-    const sansCode = LD.codeSansDesignation({ corps: corps({ lecture: { setCode: null } }), produits: P });
+    const sansCode = LD.codeSansDesignation({ corps: corps({ lecture: { setCode: null } }), produits: P, catalogueExiste: aucun });
     vrai('(6) code non lu : false (rien à ne pas désigner)', sansCode === false);
+    // M2 : le catalogue ENTIER
+    vrai('(6) M2 : sans index du catalogue (absent) : R4 FERMÉE (false)', LD.codeSansDesignation({ corps: corps(), produits: P }) === false);
+    let appel = null;
+    const porte = (c, n) => { appel = [c, n]; return true; };
+    vrai('(6) M2 : un produit du catalogue porte ce code ET ce numéro (hors vivier) : false', LD.codeSansDesignation({ corps: corps(), produits: P, catalogueExiste: porte }) === false && appel[0] === 'XXXP' && appel[1] === '144');
+    vrai('(6) M2 : l\'index qui lève : false (fermé)', LD.codeSansDesignation({ corps: corps(), produits: P, catalogueExiste: () => { throw new Error('x'); } }) === false);
+    // l'index code × numéro lui-même
+    const idx = LD.creerIndexCodeNumero([{ codeSet: 'SV4a', numero: '213' }, { codeSet: 'TG', numeroUrl: 'TG18' }, { codeSet: 'M6a', numero: '144' }, { codeSet: null, numero: '5' }, { codeSet: 'ZZ', numero: null }]);
+    vrai('(6) index : (sv4a, 213) existe, casse et zéros ignorés', idx.existe('sv4a', '213') && idx.existe('SV4A', '0213'));
+    vrai('(6) index : (sv4a, 214) et (s8a-P, 144) n\'existent pas ; (m6a, 144) existe', !idx.existe('sv4a', '214') && !idx.existe('s8a-P', '144') && idx.existe('m6a', '144'));
+    vrai('(6) index : numéro à préfixe (TG18) trouvé par son numeroUrl', idx.existe('TG', 'TG18'));
+    vrai('(6) index : entrées sans code ou sans numéro ignorées, taille comptée', idx.taille === 3);
+    vrai('(6) index : code ou numéro illisible : false', idx.existe(null, '5') === false && idx.existe('ZZ', null) === false);
 }
 
 // ── (7) le CAS RÉEL de bout en bout dans l'adaptateur
@@ -135,11 +150,15 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
     const r1 = jouer(corps(), { langueDecisive: { R1: true, R2: false, R2BIS: false, R4: true } });
     v('(7) R1 + R4 seuls : le chinois part, la question ne porte plus que sur le japonais et l\'ancienne carte', [r1.issue, montres(r1).sort()], ['question', [7001, 7002]]);
     const sc = new Map([[7001, 3], [7002, 80], [7003, 4]]);
-    const tout = jouer(corps(), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true }, scoresImage: sc });
-    v('(7) R1 + R2 + R4 : le japonais 7002 est SÛR', [tout.issue, idAffirme(tout)], ['affirmee', 7002]);
+    const tout = jouer(corps({ lecture: { attaque: null, attaqueConfiance: null } }), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true }, scoresImage: sc });
+    v('(7) R1 + R2 + R4 (attaque non lue) : le japonais 7002 est SÛR', [tout.issue, idAffirme(tout)], ['affirmee', 7002]);
+    const crush = jouer(corps(), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true }, scoresImage: sc });
+    v('(7) M1 : « Crush » (haute) contredit 7002 (Grind…) : toutes les conditions du critère A, PAS de sûr ; la question garde la réduction de la langue seule (le chinois part)', [crush.issue, montres(crush).sort()], ['question', [7001, 7002]]);
+    const toleree = jouer(corps(), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true, attaqueTolereeRestant: true }, scoresImage: sc });
+    v('(7) variante MESURÉE seulement (attaqueTolereeRestant, éteinte par défaut) : l\'attaque ne bloque pas le restant', [toleree.issue, idAffirme(toleree)], ['affirmee', 7002]);
     vrai('(7)     le résultat dit par quelles règles (côté serveur)', typeof tout.critere === 'string' && /R1/.test(tout.critere) && /R2/.test(tout.critere));
     const sansR4 = jouer(corps(), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: false }, scoresImage: sc });
-    v('(7) sans R4 : le code lu « XXXP » contredit 7002, pas de sûr : la question d\'un candidat n\'est pas posée, la question d\'avant reste', [sansR4.issue, montres(sansR4).sort()], ['question', [7001, 7002, 7003]]);
+    v('(7) sans R4 : le code lu « XXXP » contredit 7002, pas de sûr : la question garde la réduction de la langue seule (le chinois part)', [sansR4.issue, montres(sansR4).sort()], ['question', [7001, 7002]]);
     const faux = jouer(corps({ lecture: { numero: '145' } }), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true }, scoresImage: sc });
     vrai('(7) le numéro lu (145) ne concorde pas avec 7002 : jamais un sûr', faux.issue !== 'affirmee');
     const autre = jouer(corps({ lecture: { setCode: 'DDDE' } }), { langueDecisive: { R1: true, R2: true, R2BIS: false, R4: true }, scoresImage: sc });
@@ -175,9 +194,89 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
     const avec = jouer(c('QQQP'), ctx(true), lig);
     v('(9) avec R4 : le numéro désigne 7201 seul et le code ne désigne personne : SÛR', [avec.issue, idAffirme(avec)], ['affirmee', 7201]);
     const autre = jouer(c('BBZ'), ctx(true), lig);
-    vrai('(9) avec R4 : le code lu désigne l\'AUTRE jumeau (BBZ) : jamais un sûr sur 7201', autre.issue !== 'affirmee' || idAffirme(autre) !== 7201);
+    v('(9) avec R4 : le code lu désigne l\'AUTRE jumeau (BBZ) : aucun sûr, la question de départage', [autre.issue, montres(autre).sort()], ['question', [7201, 7202]]);
+    const cat = jouer(c('QQQP'), { ...ctx(true), codeNumeroExiste: () => true }, lig);
+    v('(9) M2 : un produit du catalogue porte ce code ET ce numéro (hors vivier) : R4 ne joue pas, la question d\'avant', [cat.issue, montres(cat).sort()], ['question', [7201, 7202]]);
+    const sansIndex = jouer(c('QQQP'), { ...ctx(true), codeNumeroExiste: undefined }, lig);
+    v('(9) M2 : index du catalogue indisponible : R4 fermée, la question d\'avant', [sansIndex.issue, montres(sansIndex).sort()], ['question', [7201, 7202]]);
     const incomplet = jouer(corps({ gagnant: 7201, lecture: { ...base, setCode: 'QQQP' }, nomBrut: 'ピカ', nom: 'Carte', vivier: [7201, 7202, 7999] }), ctx(true), lig);
     vrai('(9) avec R4 : une ligne du vivier manque (7999) : on ne peut pas conclure, pas de sûr', incomplet.issue !== 'affirmee');
+}
+
+// ── (10) B1 : le candidat restant passe par la GARDE DES JUMEAUX (groupe lu dans la colonne des jumeaux, pas dans le vivier)
+{
+    const Z = ligne(8001, 'Sombre [Grind | Spinning Tail | Bite Off]', 'AAAC', '144', '103', 'zh-hans');
+    const J = ligne(8002, 'Sombre [Grind | Spinning Tail | Bite Off]', 'BBBJ', '144', '103', 'jp');
+    const JJ = ligne(8003, 'Sombre [Grind | Spinning Tail | Bite Off]', 'BBBJ', '144', '103', 'jp');     // le jumeau de 8002 : même numéro, même total, même code, HORS du vivier
+    const JD = ligne(8004, 'Sombre [Grind | Spinning Tail | Bite Off]', 'DDDJ', '99', '103', 'jp');      // un jumeau à un autre numéro
+    const lec = { setCode: 'BBBJ', attaque: null, attaqueConfiance: null };
+    const R = { langueDecisive: { R1: true, R2: false, R2BIS: false, R4: false, R5: false } };
+    const groupe = (jum) => id => ({ conclu: true, ids: id === 8002 ? [jum] : id === 8001 ? [] : [8002] });
+    const refus = jouer(corps({ gagnant: 8001, lecture: lec, vivier: [8001, 8002] }), { ...R, jumeaux: groupe(8003) }, [Z, J, JJ]);
+    v('(10) B1 : 8002 a un jumeau (8003) de même numéro, total et code HORS du vivier : jamais un sûr, la question d\'avant', [refus.issue, montres(refus).sort()], ['question', [8001, 8002]]);
+    const ok = jouer(corps({ gagnant: 8001, lecture: lec, vivier: [8001, 8002] }), { ...R, jumeaux: groupe(8004) }, [Z, J, JD]);
+    v('(10) B1 témoin : le jumeau est à un AUTRE numéro (99) que le numéro lu : 8002 est SÛR', [ok.issue, idAffirme(ok)], ['affirmee', 8002]);
+    const sansColonne = jouer(corps({ gagnant: 8001, lecture: lec, vivier: [8001, 8002] }), { ...R, jumeaux: () => ({ conclu: false, ids: [] }) }, [Z, J]);
+    vrai('(10) B1 : la colonne des jumeaux ne conclut pas : jamais un sûr', sansColonne.issue !== 'affirmee');
+    const sansJumeau = jouer(corps({ gagnant: 8001, lecture: lec, vivier: [8001, 8002] }), { ...R, jumeaux: () => ({ conclu: true, ids: [] }) }, [Z, J]);
+    v('(10) B1 témoin : 8002 n\'a aucun jumeau : SÛR', [sansJumeau.issue, idAffirme(sansJumeau)], ['affirmee', 8002]);
+}
+
+// ── (11) R5 : un candidat d'un set SANS NUMÉROTATION (liste figée en idExpansion) est retiré quand le numéro et le total sont lus et qu'un autre candidat, hors liste, a un total qui concorde
+{
+    const SANS = LD.SANS_NUMEROTATION[0].idExpansion;
+    const vieux = ligne(8101, 'Sombre [Mountain Smasher | Fling Away]', 'CCCN', null, null, 'jp', { idExpansion: SANS });
+    const vieux2 = ligne(8104, 'Sombre [Mountain Smasher | Fling Away]', 'CCCM', null, null, 'jp', { idExpansion: SANS });
+    const jp = ligne(8102, 'Sombre [Grind | Spinning Tail | Bite Off]', 'BBBJ', '144', '103', 'jp', { idExpansion: 123456 });
+    const horsListe = ligne(8105, 'Sombre [Mountain Smasher | Fling Away]', 'CCCH', null, null, 'jp', { idExpansion: 654321 });
+    const zh = ligne(8103, 'Sombre [Grind | Spinning Tail | Bite Off]', 'AAAC', '144', null, 'zh-hans', { idExpansion: 123457 });
+    const P = new Map([vieux, vieux2, jp, horsListe, zh].map(l => [l.idProduct, l]));
+    const R5 = { R1: false, R2: false, R2BIS: false, R4: false, R5: true };
+    const lec = (o = {}) => corps({ gagnant: 8103, lecture: { setCode: 'BBBJ', attaque: null, attaqueConfiance: null, ...o }, vivier: [8101, 8102, 8103, 8104, 8105] });
+    const a = LD.reduire({ ids: [8101, 8102], corps: lec(), produits: P, regles: R5 });
+    v('(11) R5 : le set sans numérotation est retiré (numéro et total lus, un autre candidat au total concordant)', [a.ids, a.retires], [[8102], [{ id: 8101, regle: 'R5' }]]);
+    const b = LD.reduire({ ids: [8101, 8104], corps: lec(), produits: P, regles: R5 });
+    v('(11) R5 : jamais tous retirés (deux candidats de la liste : aucun autre au total concordant)', [b.ids, b.retires], [[8101, 8104], []]);
+    const c = LD.reduire({ ids: [8105, 8102], corps: lec(), produits: P, regles: R5 });
+    v('(11) R5 : un set HORS liste n\'est jamais retiré', c.retires, []);
+    const d = LD.reduire({ ids: [8101, 8102], corps: lec({ total: '999' }), produits: P, regles: R5 });
+    v('(11) R5 : total lu discordant avec l\'autre candidat : rien', d.retires, []);
+    const e = LD.reduire({ ids: [8101, 8102], corps: lec({ numero: null }), produits: P, regles: R5 });
+    v('(11) R5 : numéro non lu : rien', e.retires, []);
+    const f = LD.reduire({ ids: [8101, 8102], corps: lec({ total: null }), produits: P, regles: R5 });
+    v('(11) R5 : total non lu : rien', f.retires, []);
+    const g = LD.reduire({ ids: [8101, 8102], corps: lec({ totalHorsTailleDeSet: true }), produits: P, regles: R5 });
+    v('(11) R5 : total hors taille de set (mauvaise lecture) : rien', g.retires, []);
+    const h = LD.reduire({ ids: [8101, 8102], corps: lec(), produits: P, regles: { ...R5, R5: false } });
+    v('(11) R5 éteinte : rien', h.retires, []);
+    const i = LD.reduire({ ids: [8101, 8103], corps: lec(), produits: P, regles: R5 });
+    v('(11) R5 : l\'autre candidat n\'a pas de total : rien', i.retires, []);
+    // de bout en bout : le chinois part (R1), le set sans numérotation part (R5), reste le japonais numéroté : SÛR
+    const bout = jouer(lec(), { langueDecisive: { R1: true, R2: false, R2BIS: false, R4: false, R5: true } }, [vieux, jp, zh]);
+    v('(11) de bout en bout : R1 + R5 => 8102 SÛR (code lu concordant)', [bout.issue, idAffirme(bout)], ['affirmee', 8102]);
+    vrai('(11)     le résultat dit les règles (R5)', typeof bout.critere === 'string' && /R5/.test(bout.critere));
+    // le CAS RÉEL avec l'attaque « Crush » (haute) qui contredit aussi la vraie carte : R1 + R5 laissent 8102 seul, M1 refuse le sûr ; la question garde la réduction de la langue (le chinois part, le set sans numérotation reste)
+    const reel = jouer(lec({ attaque: 'Crush', attaqueConfiance: 'haute' }), { langueDecisive: { R1: true, R2: false, R2BIS: false, R4: false, R5: true } }, [vieux, jp, zh]);
+    v('(11) cas réel (Crush haute) : pas de sûr, la question à deux (R1 seule)', [reel.issue, montres(reel).sort()], ['question', [8101, 8102]]);
+    const reelTolere = jouer(lec({ attaque: 'Crush', attaqueConfiance: 'haute' }), { langueDecisive: { R1: true, R2: false, R2BIS: false, R4: false, R5: true, attaqueTolereeRestant: true } }, [vieux, jp, zh]);
+    v('(11) variante MESURÉE (attaque tolérée, éteinte en production) : 8102 SÛR', [reelTolere.issue, idAffirme(reelTolere)], ['affirmee', 8102]);
+    // la liste figée
+    vrai('(11) la liste est figée : gelée, 9 expansions, entiers, noms en clair, sans doublon', Object.isFrozen(LD.SANS_NUMEROTATION) && LD.SANS_NUMEROTATION.length === 9 && LD.SANS_NUMEROTATION.every(x => Number.isInteger(x.idExpansion) && typeof x.nom === 'string' && x.nom) && new Set(LD.SANS_NUMEROTATION.map(x => x.idExpansion)).size === 9);
+    vrai('(11)     les sets DP exclus (DP2 4317, DP4d 4308, DP4m 4309, EP08 4306, HRDK 4303) n\'y sont PAS', [4317, 4308, 4309, 4306, 4303].every(id => !LD.SANS_NUMEROTATION.some(x => x.idExpansion === id)));
+    // le déclencheur est un numéro au FORMAT COLLECTION : « DPBP#280 » lu seul (numéro 280, aucun total) ne retire jamais le vrai candidat
+    const dp = LD.reduire({ ids: [8101, 8102], corps: lec({ numero: '280', total: null }), produits: P, regles: R5 });
+    v('(11) un numéro lu SANS total (280, DPBP#) ne déclenche jamais R5', dp.retires, []);
+    vrai('(11)     elle contient Darkness-and-to-Light (4509) et Expansion-Pack (4169)', [4509, 4169].every(id => LD.SANS_NUMEROTATION.some(x => x.idExpansion === id)));
+}
+
+// ── (12) l'ÉTAT LIVRÉ : R1, R4, R5 allumées ; R2 et R2 bis ÉTEINTES en production (sans ctx.langueDecisive, même avec des scores d'image)
+{
+    vrai('(12) REGLES gelé, R1 R4 R5 allumées, R2 et R2 bis éteintes', Object.isFrozen(LD.REGLES) && LD.REGLES.R1 === true && LD.REGLES.R4 === true && LD.REGLES.R5 === true && LD.REGLES.R2 === false && LD.REGLES.R2BIS === false);
+    const sc = new Map([[7001, 3], [7002, 80], [7003, 4]]);
+    const prod = jouer(corps({ lecture: { attaque: null, attaqueConfiance: null } }), { scoresImage: sc });
+    v('(12) production (aucun ctx.langueDecisive) avec des scores d\'image qui feraient un sûr : R2 éteinte, R1 seule joue, la question à deux', [prod.issue, montres(prod).sort()], ['question', [7001, 7002]]);
+    const bis = LD.reduire({ ids: [7001, 7002], corps: corps({ lecture: { attaque: 'Grind' } }), produits: new Map(TOUT.map(l => [l.idProduct, l])), scoresImage: new Map([[7001, 0], [7002, 90]]) });   // les règles LIVRÉES (aucun argument `regles`)
+    v('(12) production : ni R2 bis (attaque concordante) ni R2 (scores) ne retirent 7001 quand on ne passe pas de règles', bis.retires, []);
 }
 
 bilan();
