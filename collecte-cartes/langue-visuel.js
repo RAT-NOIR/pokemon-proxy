@@ -53,7 +53,7 @@ function langueDuVisuel(im) {
         if (!hote) return { langue: null, preuve: 'pokemontcg.io : adresse d\'origine hors des deux hôtes d\'images, sans règle de langue' };
         if (hote !== 'images.pokemontcg.io') return { langue: 'en', preuve: 'pokemontcg.io, second serveur d\'images du même jeu de données : scan de l\'impression anglaise (30 images de la Classic Collection de 30th Celebration ouvertes à l\'œil le 2026-10-17, toutes en anglais)' };
     }
-    if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (146 témoins écrits dans la table, 155 images ouvertes à l\'œil les 2026-10-08, 2026-10-10, 2026-10-12, 2026-10-13 et 2026-10-17, toutes en anglais)' };
+    if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (157 témoins écrits dans la table, 166 images ouvertes à l\'œil les 2026-10-08, 2026-10-10, 2026-10-12, 2026-10-13 et 2026-10-17, toutes en anglais)' };
     // ➕ 2026-10-11 — pikaqian.com : des copies des scans officiels CHINOIS (texte en sinogrammes simplifiés lisible sur les 3 images ouvertes à l'œil
     // le 2026-10-10, MESURE-PIKAQIAN.md §5) ; la collecte n'écrit que sous un set au tirage `zh-hans`. Par ce qu'elle autorise : une autre langue source n'a pas de règle.
     if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'
