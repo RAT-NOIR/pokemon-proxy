@@ -4,12 +4,14 @@
 // lecture qui se trompe (IMG_3237 : « PAR 251 » lu sur une carte qui imprime « PRE 162 » ; même nom, même métacarte ; prix rendu faux de 106 €). Un champ inconnu compte comme « même ».
 // 🔑 La garde est écrite par ce qu'elle AUTORISE : UN seul chemin mène à « affirmer » — un fournisseur de jumeaux qui a CONCLU, sur une colonne à jour, et qui n'en rend AUCUN. Tout le reste :
 //   · P et ses jumeaux tiennent en 3 produits ou moins, tous au catalogue de l'API → une QUESTION de départage (le mécanisme existant) ;
-//   · plus de 3 produits → INTROUVABLE `impression-indeterminee` (jamais un choix de 3 parmi N : la question pourrait exclure la vérité), motif interne `jumeaux-trop-nombreux` ;
+//   · plus de 3 produits → action `nombreux` : l'adaptateur pose une QUESTION à 3 (P d'abord, puis l'ordre de jumeaux-nombreux.js) — jamais une affirmation. Si les lignes de catalogue des jumeaux manquent
+//     (ou dépassent la borne de chargement), le repli est l'INTROUVABLE `impression-indeterminee` d'avant, motif interne `jumeaux-trop-nombreux` (JUMEAUX-QUESTION, 2026-10-17) ;
 //   · la colonne manque, est périmée, ne couvre pas le produit, le fournisseur lève ou rend une forme inconnue, un jumeau n'a pas de ligne au catalogue de l'API → PANNE INDISPONIBLE (c'est
 //     NOTRE infrastructure, pas la photo : « une panne n'est jamais un introuvable »), motif interne `jumeaux-indisponibles` / `jumeaux-perimes` / `jumeaux-incomplets`.
 // Un refus de la garde est NOTRE refus : il se rembourse SANS plafond (constaté par le serveur, PLAFOND-DECLARE : plus de compteur dédié), une unité par carte (routes.js, lot.js, argent/ledger.js). Chaque refus est COMPTÉ (compteurs()) et journalisé (CLAUDE.md §21).
 const MAX_PRODUITS = 3;                         // la limite d'une question : celle de l'adaptateur
-const MOTIFS = Object.freeze(['jumeaux-trop-nombreux', 'jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets', 'question-de-jumeaux']);
+const MAX_CHARGE = 60;                          // au plus 60 jumeaux chargés pour choisir les 3 d'une question (au-delà : le repli introuvable d'avant, jamais un chargement sans fin)
+const MOTIFS = Object.freeze(['jumeaux-trop-nombreux', 'jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets', 'question-de-jumeaux', 'question-de-jumeaux-nombreux']);
 const MOTIFS_PANNE = Object.freeze(['jumeaux-indisponibles', 'jumeaux-perimes', 'jumeaux-incomplets']);
 const compte = Object.fromEntries(MOTIFS.map(m => [m, 0]));
 const compteurs = () => ({ ...compte });
@@ -89,7 +91,7 @@ async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
     return fournisseurDe(version, verdicts);
 }
 
-/** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux, seulement s'ils tiennent dans une question (au plus 2). */
+/** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux (au plus MAX_CHARGE) — au plus 2 tiennent dans la question, au-delà le choix des 3 a besoin de leurs lignes. */
 function idsACharger(corps, fournisseur) {
     const p = idsAffirmes(corps)[0];                                    // le produit affirmé, ou le candidat UNIQUE (UN-CANDIDAT)
     if (p === undefined || typeof fournisseur !== 'function') return [];
@@ -97,13 +99,13 @@ function idsACharger(corps, fournisseur) {
         const r = fournisseur(p);
         if (!r || r.conclu !== true || !entiers(r.ids)) return [];
         const ids = [...new Set(r.ids)].filter(i => i !== p);
-        return ids.length >= 1 && ids.length <= MAX_PRODUITS - 1 ? ids : [];
+        return ids.length >= 1 && ids.length <= MAX_CHARGE ? ids : [];
     } catch { return []; }
 }
 
 /**
  * La décision pour UNE affirmation de la chaîne.
- * @returns {{ action: 'affirmer' } | { action: 'question', ids: number[] } | { action: 'introuvable', motif: string } | { action: 'panne', motif: string }}
+ * @returns {{ action: 'affirmer' } | { action: 'question', ids: number[] } | { action: 'nombreux', ids: number[] } | { action: 'panne', motif: string }}   (`nombreux` : P d'abord puis tous ses jumeaux, plus de 3 produits)
  * ctx : { jumeaux: (idProduct) => { conclu, ids, motif? }, produits: Map<idProduct, ligne> }
  */
 function garde(ctx, idProduct) {
@@ -118,11 +120,11 @@ function garde(ctx, idProduct) {
     if (r.conclu !== true || !entiers(r.ids)) return panne('jumeaux-indisponibles', '(forme inconnue)');
     const jumeaux = [...new Set(r.ids)].filter(i => i !== idProduct);
     if (!jumeaux.length) return { action: 'affirmer' };
-    if (1 + jumeaux.length > MAX_PRODUITS) return introuvable('jumeaux-trop-nombreux', `(${1 + jumeaux.length} produits)`);
+    if (1 + jumeaux.length > MAX_PRODUITS) return { action: 'nombreux', ids: [idProduct, ...jumeaux] };     // l'adaptateur choisit les 3 (ou retombe sur l'introuvable, et COMPTE alors jumeaux-trop-nombreux)
     const produits = ctx.produits instanceof Map ? ctx.produits : new Map();
     if (!produits.has(idProduct) || jumeaux.some(i => !produits.has(i))) return panne('jumeaux-incomplets', '(un produit sans ligne au catalogue de l\'API)');
     noter('question-de-jumeaux', idProduct, `(${1 + jumeaux.length} produits)`);
     return { action: 'question', ids: [idProduct, ...jumeaux] };
 }
 
-module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS };
+module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
