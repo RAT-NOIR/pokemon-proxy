@@ -55,7 +55,7 @@ const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
-const { retirerChezLesAutres } = require('./collecte-cartes/retirer-chez-les-autres');
+const { retirerChezLesAutres, preuveDeCorrection, preuveEstUneCorrection } = require('./collecte-cartes/retirer-chez-les-autres');
 const { entreesDeMesure, entreesDeLaLigne, plageDeRangs, dansLaPlage } = require('./collecte-cartes/echantillon-mesure');   // V8 : les mesures de largeur d'une ligne à sous-section se prennent dans CETTE sous-section
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
@@ -453,7 +453,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // Une correction LUE À L'ŒIL passe avant le numéro (collecte-cartes/corrections-images.js : les deux témoins par
         // le nom ont été mesurés et refusés). Elle ne joint que si la carte nommée est dans CE set.
         const corr = correctionDe(im.cleR2);
-        if (corr) { cands = cartes.filter(c => c._id === corr.carteId); preuve = `correction lue à l'œil le ${corr.le} (« ${corr.lu} »)`; }
+        if (corr) { cands = cartes.filter(c => c._id === corr.carteId); preuve = preuveDeCorrection(corr); }
         else if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
         // 🔴 T3d (2026-10-12) : les FICHES SIMPLES d'un set sans page portent l'expansion `lisible(slug)`, que `impsDe` (égalité avec le nom
         // PONCTUÉ de la ligne) ne voit pas. Seulement quand la clé ordinaire n'a rien désigné (additif), et par le numéro ET le nom
@@ -610,7 +610,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             // 🔴 (VIGN-SUITE, 2026-10-17) une correction lue à l'œil attribue le fichier à CETTE carte : l'entrée qu'une autre carte du set portait
             // déjà (la carte de base, jointe par le nom seul) est fausse par construction, et rien d'autre ne la retirait (§59).
-            if (preuve && String(preuve).startsWith('correction lue')) { const n = await retirerChezLesAutres(M.Carte, { carteId: c._id, set: slug, cleR2: im.cleR2 }); if (n) dire(`   correction ${im.cleR2} : entrée retirée chez ${n} autre(s) carte(s) du set`); }
+            if (preuveEstUneCorrection(preuve)) { const n = await retirerChezLesAutres(M.Carte, { carteId: c._id, set: slug, cleR2: im.cleR2 }); if (n) dire(`   correction ${im.cleR2} : entrée retirée chez ${n} autre(s) carte(s) du set`); }
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
         }
     }

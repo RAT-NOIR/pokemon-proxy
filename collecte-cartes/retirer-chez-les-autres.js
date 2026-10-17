@@ -16,4 +16,9 @@ async function retirerChezLesAutres(Carte, { carteId, set, cleR2 }) {
     return r.modifiedCount ?? 0;
 }
 
-module.exports = { retirerChezLesAutres };
+// La preuve que la jointure écrit pour une correction : UNE définition, utilisée par la jointure (qui l'écrit) et par le déclencheur (qui la lit).
+const PREFIXE_PREUVE = 'correction lue';
+const preuveDeCorrection = corr => `${PREFIXE_PREUVE} à l'œil le ${corr.le} (« ${corr.lu} »)`;
+const preuveEstUneCorrection = preuve => typeof preuve === 'string' && preuve.startsWith(PREFIXE_PREUVE);
+
+module.exports = { retirerChezLesAutres, preuveDeCorrection, preuveEstUneCorrection };
