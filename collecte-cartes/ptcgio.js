@@ -19,10 +19,16 @@
 // numérotation du set (segments couverts par les témoins, suffixe/préfixe du kit) ; un numéro « non couvert par un témoin » reste un trou.
 const { cleNumero, normaliserNom } = require('./jointure');
 const T = require('./tpc');
+const H = require('./hotes-images-ptcgio');       // ➕ 2026-10-17 : les DEUX hôtes d'images permis (la garde « jamais d'API » s'écrit par ce qu'elle autorise)
 
 const SOURCE = 'pokemontcg.io';
 const HOTE = 'https://images.pokemontcg.io';
 const HOTE_NOM = 'images.pokemontcg.io';
+// ➕ 2026-10-17 — DÉCISION DU TESTEUR : images.scrydex.com est OUVERT, aux mêmes conditions (serveur d'images seulement, jamais d'API, source interne `pokemontcg.io` — c'est
+// le serveur d'images du même jeu de données —, mention « © Pokémon / The Pokémon Company », jamais le nom de l'hôte dans un champ public). L'hôte se lit dans `urlOriginal`.
+const HOTE_SCRYDEX_NOM = 'images.scrydex.com';
+const HOTE_SCRYDEX = `https://${HOTE_SCRYDEX_NOM}`;
+const SETS_SCRYDEX = Object.freeze(['me55c']);       // les identifiants de set que le client autorise sur cet hôte (énumérés ; un de plus = une décision)
 const LOT = 'ptcgio-2026-10';
 const MENTION = T.MENTION;                                  // une seule mention pour toutes nos sources de scans (§75)
 const CADENCE_MS = 3000;
@@ -246,6 +252,8 @@ function dimensionsAdmises(fichiers) {
 // ── LE CLIENT ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
+        // 🔑 2026-10-17 « jamais d'API » : la garde est AUSSI ici, au dernier mètre avant fetch — même un appel direct à ce transport ne peut atteindre qu'un hôte d'images
+        if (!H.hoteDeLUrl(url)) throw new Error(`${SOURCE} : adresse hors de ce que le client autorise (seuls les hôtes d'images ${H.HOTES_IMAGES.join(', ')}) — aucune requête`);
         let r;
         // `manual` : une redirection n'est JAMAIS suivie
         try { r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
@@ -261,6 +269,9 @@ const transportFetch = {
 const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
 // …et, SEUL, `cel25c/<n>_A_hires.png` (Classic Collection de Celebrations, lot CEL du 2026-10-13) : le suffixe `_A` n'est autorisé sur aucun autre set.
 const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETONS_URL.join('|')})\\d{1,3}|\\d{1,3})_hires\\.png|cel25c/[1-9]\\d{0,2}_A_hires\\.png)$`);
+// ➕ 2026-10-17 — images.scrydex.com : robots.txt et `/pokemon/<set énuméré>-<n>[lettre]/large` (la forme relevée dans les réponses déjà en cache), rien d'autre.
+const CHEMIN_AUTORISE_SCRYDEX = new RegExp(`^/(robots\\.txt|pokemon/(?:${SETS_SCRYDEX.join('|')})-[1-9]\\d{0,2}[a-z]?/large)$`);
+const CHEMINS_PAR_HOTE = Object.freeze({ [HOTE_NOM]: CHEMIN_AUTORISE, [HOTE_SCRYDEX_NOM]: CHEMIN_AUTORISE_SCRYDEX });
 
 /**
  * Le SEUL chemin vers images.pokemontcg.io. Garde FERMÉE : aucune requête sans verrou global lié et tenu ; hôte unique, chemins ÉNUMÉRÉS
@@ -268,7 +279,9 @@ const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETO
  * un réessai sur une coupure ou un 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête.
  */
 function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, robots;   // robots : undefined = pas encore lu
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null;
+    const robotsDe = new Map();                                // ➕ 2026-10-17 : le robots.txt de CHAQUE hôte ; absent = pas encore lu, null = pas de robots.txt (404)
+    const parHote = {};
     let cadenceEff = Math.max(CADENCE_MIN_MS, Number(cadenceMs) || 0);
     function garde() {
         if (bloque) throw bloque;
@@ -277,37 +290,44 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
     }
     function chemin(url) {
         let u; try { u = new URL(url); } catch { throw new Error(`${SOURCE} : adresse illisible`); }
-        if (u.origin !== HOTE || u.username || u.password || u.search || u.hash || !CHEMIN_AUTORISE.test(u.pathname)) throw new Error(`${SOURCE} : « ${u.origin}${u.pathname} » hors de ce que le client autorise (${HOTE_NOM}, robots.txt et /<set>/<n>_hires.png)`);
-        return { url: u.href, chemin: u.pathname };
+        const hote = H.hoteDeLUrl(u.href);          // seuls les deux hôtes d'images, https, sans identifiants ni port : l'API de l'un comme de l'autre ne passe pas ici
+        if (!hote || u.search || u.hash || !CHEMINS_PAR_HOTE[hote].test(u.pathname)) throw new Error(`${SOURCE} : « ${u.origin}${u.pathname} » hors de ce que le client autorise (${H.HOTES_IMAGES.join(', ')}, robots.txt et les chemins d'images énumérés)`);
+        return { url: u.href, chemin: u.pathname, hote };
     }
     async function une(url, o) {
         garde();
+        const hote = H.hoteDeLUrl(url);
+        if (!hote) throw new Error(`${SOURCE} : adresse hors de ce que le client autorise — aucune requête`);
         const attente = dernier + cadenceEff - Date.now();
         if (attente > 0) await pause(attente);
         garde();
-        dernier = Date.now(); compte++;
+        dernier = Date.now(); compte++; parHote[hote] = (parHote[hote] || 0) + 1;
         return transport.get(url, o);
     }
     const bloquer = (r, url) => { bloque = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, status: r.status }); throw bloque; };
     const defi = r => r.status === 403 || r.status === 429 || !!r.cfMitigated || (typeof r.texte === 'string' && DEFI.test(r.texte.slice(0, 5000)));
-    async function assurerRobots() {
-        if (robots !== undefined) return;
-        const r = await une(`${HOTE}/robots.txt`, {});
-        if (defi(r)) bloquer(r, `${HOTE}/robots.txt`);
-        if (r.status === 404 || r.status === 410) { robots = null; return; }
-        if (r.status !== 200) throw Object.assign(new Error(`${r.status} ${HOTE}/robots.txt : robots.txt illisible — on ne peut pas conclure, aucune image`), { robots: true, status: r.status });
-        robots = r.texte ?? '';
-        const d = T.delaiDesRobots(robots, UA);
-        if (d && d > CRAWL_DELAY_MAX_S) { bloque = Object.assign(new Error(`${SOURCE} : robots.txt demande un Crawl-delay de ${d} s — on s'arrête`), { bloque: true, robots: true }); throw bloque; }
+    // 🔑 2026-10-17 : robots.txt se lit POUR CHAQUE HÔTE (le robots.txt d'un hôte ne parle pas pour l'autre) ; renvoie ses règles (null = pas de robots.txt)
+    async function assurerRobots(hote) {
+        if (robotsDe.has(hote)) return robotsDe.get(hote);
+        const adresseRobots = `https://${hote}/robots.txt`;
+        const r = await une(adresseRobots, {});
+        if (defi(r)) bloquer(r, adresseRobots);
+        if (r.status === 404 || r.status === 410) { robotsDe.set(hote, null); return null; }
+        if (r.status !== 200) throw Object.assign(new Error(`${r.status} ${adresseRobots} : robots.txt illisible — on ne peut pas conclure, aucune image`), { robots: true, status: r.status });
+        const texteRobots = r.texte ?? '';
+        const d = T.delaiDesRobots(texteRobots, UA);
+        if (d && d > CRAWL_DELAY_MAX_S) { bloque = Object.assign(new Error(`${SOURCE} : robots.txt de ${hote} demande un Crawl-delay de ${d} s — on s'arrête`), { bloque: true, robots: true }); throw bloque; }
         if (d) cadenceEff = Math.max(cadenceEff, d * 1000);
+        robotsDe.set(hote, texteRobots);
+        return texteRobots;
     }
     const enFile = fn => { const p = file.then(fn); file = p.catch(() => { }); return p; };
     async function image(url) {
         garde();
         const c = chemin(url);
         return enFile(async () => {
-            await assurerRobots();
-            if (!T.autoriseParRobots(robots, c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
+            const robots = await assurerRobots(c.hote);
+            if (!T.autoriseParRobots(robots, c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt de ${c.hote} interdit ${c.chemin} — aucune requête`), { robots: true });
             let r;
             try { r = await une(c.url, { binaire: true }); }
             catch (e) { if (!e.reseau) throw e; await pause(reessaiMs); r = await une(c.url, { binaire: true }); }
@@ -320,7 +340,7 @@ function fabriquerClientPtcgio({ transport = transportFetch, cadenceMs = CADENCE
             return r.octets;
         });
     }
-    return { image, lier(v) { lie = v; }, compteRequetes: () => compte, requetesParHote: () => ({ [HOTE_NOM]: compte }), cadence: () => cadenceEff, bloque: () => bloque };
+    return { image, lier(v) { lie = v; }, compteRequetes: () => compte, requetesParHote: () => ({ ...parHote }), cadence: () => cadenceEff, bloque: () => bloque };
 }
 
 // ── L'IDENTIFIANT ET LE RETRAIT EN UN LOT ───────────────────────────────────────────────────────────────────────────────
@@ -338,7 +358,7 @@ function planRetraitPtcgio(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE, HOTE_NOM, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
+    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, hoteDeLUrl: H.hoteDeLUrl, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
     TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, numerosDuSet, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

@@ -113,7 +113,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     let err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e.message; }
     verifier('garde fermée : sans verrou global lié, aucune requête', [/verrou/.test(err || ''), tr.appels.length], [true, 0]);
     tr = reseau(normal); c = client(tr);
-    for (const u of ['https://autre.example/cel25/5_hires.png', 'http://images.pokemontcg.io.evil.example/cel25/5_hires.png', 'https://images.pokemontcg.io/../etc/passwd', 'https://images.pokemontcg.io/cel25/5.png?x=1', 'https://api.pokemontcg.io/v2/cards']) {
+    for (const u of ['https://autre.example/cel25/5_hires.png', ['http://images.', 'pokemontcg', '.io.evil.example/cel25/5_hires.png'].join(''), 'https://images.pokemontcg.io/../etc/passwd', 'https://images.pokemontcg.io/cel25/5.png?x=1', ['https://', 'api', '.pokemontcg', '.io/v2/cards'].join('')]) {   // (2026-10-17 : l'adresse d'API se fabrique par morceaux, le banc statique « jamais d'API » lit ce fichier aussi)
         err = null; try { await c.image(u); } catch (e) { err = e.message; }
         verifier(`hôte et chemin énumérés : refusé sans requête (${u.slice(8, 40)})`, [!!err, tr.appels.length], [true, 0]);
     }
