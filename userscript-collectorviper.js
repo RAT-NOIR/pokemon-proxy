@@ -42,20 +42,21 @@
     var PREFIXE_PNG = 'data:image/png;base64,';
 
     // ===== UI =====
-    var panneau = document.createElement('div');
-    panneau.style.cssText =
-        'position:fixed;bottom:16px;right:16px;z-index:2147483647;background:#0d0d10;color:#eee;' +
-        'font:13px system-ui,sans-serif;padding:12px 14px;border:1px solid #D4AF37;border-radius:10px;' +
-        'box-shadow:0 4px 16px rgba(0,0,0,.4);width:320px';
-    panneau.innerHTML =
-        '<div style="font-weight:600;margin-bottom:2px">🐀 Relever cette page</div>' +
-        '<div style="color:#888;font-size:11px;margin-bottom:8px">Collectorviper · relevé local, pixels affichés, aucune requête vers le site</div>' +
-        '<button id="rm-go" style="width:100%;padding:7px;background:#0c0c0e;color:#D4AF37;' +
-        'border:1px solid #D4AF37;border-radius:6px;cursor:pointer;font-weight:600">Relever</button>' +
-        '<div id="rm-msg" style="margin-top:8px;min-height:16px;color:#bbb;line-height:1.4;white-space:pre-wrap"></div>';
+    // Le panneau se construit par l'API DOM (createElement + textContent), jamais par une chaîne HTML : aucun attribut src/href ne peut s'y glisser.
+    function noeud(balise, css, texte) {
+        var n = balise === 'button' ? document.createElement('button') : document.createElement('div');   // littéraux seulement : la garde statique les lit
+        n.style.cssText = css;
+        if (texte) n.textContent = texte;
+        return n;
+    }
+    var panneau = noeud('div', 'position:fixed;bottom:16px;right:16px;z-index:2147483647;background:#0d0d10;color:#eee;font:13px system-ui,sans-serif;padding:12px 14px;border:1px solid #D4AF37;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.4);width:320px');
+    panneau.appendChild(noeud('div', 'font-weight:600;margin-bottom:2px', '🐀 Relever cette page'));
+    panneau.appendChild(noeud('div', 'color:#888;font-size:11px;margin-bottom:8px', 'Collectorviper · relevé local, pixels affichés, aucune requête vers le site'));
+    var bouton = noeud('button', 'width:100%;padding:7px;background:#0c0c0e;color:#D4AF37;border:1px solid #D4AF37;border-radius:6px;cursor:pointer;font-weight:600', 'Relever');
+    var msg = noeud('div', 'margin-top:8px;min-height:16px;color:#bbb;line-height:1.4;white-space:pre-wrap');
+    panneau.appendChild(bouton);
+    panneau.appendChild(msg);
     document.body.appendChild(panneau);
-    var bouton = panneau.querySelector('#rm-go');
-    var msg = panneau.querySelector('#rm-msg');
     function dire(texte, couleur) { msg.style.color = couleur || '#bbb'; msg.textContent = texte; }
     dire('Rien n\'est lu ni envoyé avant ton clic. Affiche la page voulue, laisse les images se charger, puis clique une fois.');
 

