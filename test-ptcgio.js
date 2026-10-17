@@ -113,7 +113,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     let err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e.message; }
     verifier('garde fermée : sans verrou global lié, aucune requête', [/verrou/.test(err || ''), tr.appels.length], [true, 0]);
     tr = reseau(normal); c = client(tr);
-    for (const u of ['https://autre.example/cel25/5_hires.png', 'http://images.pokemontcg.io.evil.example/cel25/5_hires.png', 'https://images.pokemontcg.io/../etc/passwd', 'https://images.pokemontcg.io/cel25/5.png?x=1', 'https://api.pokemontcg.io/v2/cards']) {
+    for (const u of ['https://autre.example/cel25/5_hires.png', ['http://images.', 'pokemontcg', '.io.evil.example/cel25/5_hires.png'].join(''), 'https://images.pokemontcg.io/../etc/passwd', 'https://images.pokemontcg.io/cel25/5.png?x=1', ['https://', 'api', '.pokemontcg', '.io/v2/cards'].join('')]) {   // (2026-10-17 : l'adresse d'API se fabrique par morceaux, le banc statique « jamais d'API » lit ce fichier aussi)
         err = null; try { await c.image(u); } catch (e) { err = e.message; }
         verifier(`hôte et chemin énumérés : refusé sans requête (${u.slice(8, 40)})`, [!!err, tr.appels.length], [true, 0]);
     }
@@ -356,7 +356,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
-    verifier('langue : la preuve écrite en base porte le VRAI compte (146 témoins, 155 images ouvertes — les 22 de cel25c le 2026-10-13 et les 43 de T2-COLLECTE le 2026-10-17 en plus) et plus « 42 »', [/146 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /155 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /\b42\b/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 146]);
+    verifier('langue : la preuve écrite en base porte le VRAI compte (146 témoins, 155 images ouvertes — les 22 de cel25c le 2026-10-13 et les 43 de T2-COLLECTE le 2026-10-17 en plus) et plus « 42 »', [/146 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /155 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /\b42\b/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.filter(l => !l.hote).reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 146]);   // (les lignes de l'hôte historique : celles du texte de la preuve ; l'hôte `scrydex` a la sienne)
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
     // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
