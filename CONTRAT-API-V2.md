@@ -1296,7 +1296,7 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | A7 | description « non conservée » / « 3 mois » | expurgée côté serveur, **non conservée par défaut** (depuis le 2026-10-14 ; **90 jours** puis effacée seulement avec `V2_DESCRIPTION_CONSERVEE=1`) (§8) | C5, C6 |
 | A8 | « secours `onrender.com` » listé parmi les origines CORS | adresse de secours du **serveur**, pas une origine | C18, Q6 |
 | A9 | `variante` toujours une valeur de la liste | **`null`** quand l'édition n'est pas connue (jamais `normale` deviné) | Q31 |
-| A10 | `liens.cardmarket` toujours une adresse | **`null`** tant que numéro ET rareté ne sont pas connus (jamais de lien anonyme) ; même règle pour `impressions[].lien` | Q31 |
+| A10 | `liens.cardmarket` toujours une adresse | **`null`** tant que le **numéro** n'est pas connu ; dès qu'il l'est, l'adresse de la **page exacte du produit** (`/<langue>/Pokemon/Products/Singles/<set>/<produit>`, idProduct connu, slug et slugSet présents), **jamais** une recherche ni une liste ; la rareté n'est plus exigée (décision du testeur, 2026-10-17). **Étiquette à afficher : « set + numéro », sans rareté** (le client la compose depuis `set` et `numero`, déjà servis). Même règle pour `impressions[].lien` | Q31 |
 | A11 | « réponse commune » (banc RatMarket) | pas d'issue de ce nom : une carte `a-trancher` avec la question `visuel` | Q34 |
 | A12 | `IMAGE` et `IA` en erreur HTTP | `IMAGE` et `IA` gardent le statut **200** (`success: false`) ; `VERSION` 426, `MARCHE` 422 | Q12 |
 | A13 | 24 marchés (extension) / 16 domaines (CORS hérité) | la liste est celle du serveur (`V2_MARCHES`, 27 domaines Vinted par défaut depuis le 2026-10-14 : `vinted.uk`, qui n'existe pas, est remplacé par `vinted.co.uk`, et `ie hu ro si hr gr lv ee dk fi com.au` s'ajoutent) ; hors liste : `422 MARCHE` | C13, Q26 |
@@ -1331,7 +1331,7 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | E6 | fausse introuvable : `etat` rempli de `null` | `etat: null` pour un introuvable |
 | E7 | fausse quota : `facturation` avec `motif: null` | `facturation: null` (aucune analyse) ; un `motif` n'est jamais `null` |
 | E8 | fausses : images `https://pub-fictif.r2.dev/…` | l'hôte exact du bucket public (`pub-7d992e666c3d4a2b870b680a920045b6.r2.dev`) ou `rat-market.fr` |
-| E9 | fausses : `variante: "normale"` partout, `liens.cardmarket` rempli sans numéro ni rareté | `variante: null` et `liens.cardmarket: null` dans ces cas (A9, A10) |
+| E9 | fausses : `variante: "normale"` partout, `liens.cardmarket` rempli sans numéro, ou menant à une recherche | `variante: null` et `liens.cardmarket: null` dans ces cas (A9, A10) |
 | E10 | `CODES_ERREUR` de l'extension : 10 codes du serveur + `RESEAU` + `EXTENSION` | 20 codes serveur ; `RESEAU` et `EXTENSION` restent côté client |
 | E11 | `reels.js` : `set.slug: null` | `set.slug` est une chaîne (jamais `null`) |
 

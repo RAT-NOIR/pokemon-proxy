@@ -9,7 +9,7 @@
     "route": "POST /api/identifier",
     "statut": 200,
     "schema": "ReponseAnalyse",
-    "description": "Identifiée avec quatre impressions (un lien seulement quand numéro ET rareté sont connus)."
+    "description": "Identifiée avec quatre impressions (un lien dès que le numéro est connu, vers la page exacte du produit)."
   },
   "identifiee-hors-euro.json": {
     "route": "POST /api/identifier",

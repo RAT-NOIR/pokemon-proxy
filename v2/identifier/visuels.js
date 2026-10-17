@@ -8,6 +8,7 @@ const { lireConfig } = require('../config');
 const db = require('../db');
 const etat = require('../chargeur/etat');
 const { VARIANTES } = require('./produit');
+const { lienServi } = require('./lien-cardmarket');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
 const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
@@ -104,7 +105,7 @@ function creerVisuels(opts = {}) {
     }
 
     // Les impressions d'une métacarte : les entrées EN MÉMOIRE de même idMetacard, rien d'autre. Le lien n'est servi
-    // que si numéro ET rareté sont connus (la rareté vient du chargement, lue sur cartes.impressions[].rarete, jamais devinée).
+    // que si le numéro est connu ET que l'URL est la page exacte du produit (la rareté, lue sur cartes.impressions[].rarete, n'est plus exigée).
     async function impressions(idMetacard) {
         const v = version();
         if (!v || !Number.isInteger(idMetacard)) return [];
@@ -113,7 +114,7 @@ function creerVisuels(opts = {}) {
         const guides = new Map((await colLue('guide_prix').find({ idProduct: { $in: docs.map(d => d.idProduct) } }).toArray()).map(g => [g.idProduct, g]));
         const sortie = docs.map(d => {
             const numero = chaineOuNull(d.numero), rarete = texte(d.rarete);
-            const lien = numero && rarete && lienCardmarket(d.lien) ? d.lien : null;                     // jamais de lien anonyme
+            const lien = lienServi(d.lien, numero);                          // LIEN-CARDMARKET : numéro connu + page produit exacte (rareté non exigée)
             return Object.freeze({
                 idProduct: d.idProduct, numero, total: chaineOuNull(d.total), rarete,
                 variante: VARIANTES.includes(d.variante) ? d.variante : null,                          // V1/V2 n'a pas de sémantique (CLAUDE.md §7)
