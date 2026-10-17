@@ -18,8 +18,9 @@ const { formesLuesDe, nomCompatible } = require('./nom-compatible');
 // 🔑 UNE CONSTANTE (comme VARIANTE_STRICTE) : le critère n'est allumé que si la mesure sur tout le banc étiqueté rend 0 faux. Mesuré le 2026-10-17 sur les 307 cartes par le vrai chemin (adaptateur + groupes de jumeaux de
 // l'archive) : 58 affirmations nouvelles, 58 justes, 0 variante fausse, 0 faux, 0 sûr perdu ni changé => ALLUMÉ. Au premier faux, `false` l'éteint sans rien retirer. Un banc (test-critere-a) tient l'état livré.
 const CRITERE_A = true;
-const compte = { jugees: 0, affirmees: 0 };
-const compteurs = () => ({ ...compte });
+// `parCode` : les affirmations du critère PAR CODE DE SET LU — le risque résiduel (une lecture fausse mais cohérente avec un jumeau, relecture r1 I1) se suit en production par ce compteur et par la ligne de journal.
+const compte = { jugees: 0, affirmees: 0, parCode: {} };
+const compteurs = () => ({ ...compte, parCode: { ...compte.parCode } });
 
 /**
  * @param corps     la réponse de la chaîne héritée (success true) avec son bloc `lectureGarde`
@@ -57,6 +58,9 @@ function critereA({ corps, gagnant, jumeaux, produits, actif = CRITERE_A } = {})
         const formes = formesLuesDe(corps);
         if (formes.length && !nomCompatible(formes, P)) return non('le nom lu contredit P');
         compte.affirmees++;
+        const codeLu = String(lu.setCode).trim().toUpperCase();
+        compte.parCode[codeLu] = (compte.parCode[codeLu] || 0) + 1;
+        console.warn(`ℹ️ [critere-a-v2] affirmation produit=${gagnant} code=${codeLu} groupe=${autres.length + 1}`);
         return { affirme: true, raison: `critère A : le numéro (${lu.numero}) et le code (${lu.setCode}) lus concordent avec ${gagnant} seul parmi ${autres.length + 1} produits` };
     } catch (e) {
         return non(`décision impossible (${(e && e.name) || 'erreur'})`);                 // une exception n'est jamais une affirmation
