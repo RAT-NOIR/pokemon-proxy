@@ -2132,6 +2132,122 @@
         }
       }
     },
+    "/api/banc/resoudre-cardmarket": {
+      "post": {
+        "operationId": "resoudreCardmarketBanc",
+        "tags": [
+          "banc"
+        ],
+        "x-conditionnel": "V2_RESOLUTION_CARDMARKET",
+        "summary": "Administrateur seulement : transforme l'adresse d'une page produit Cardmarket en idProduct, sans charger la page",
+        "description": "Route réservée à un compte ADMINISTRATEUR (rôle relu en base à chaque requête) ET derrière le drapeau `V2_RESOLUTION_CARDMARKET=1` : drapeau éteint, ou porteur qui n'est pas administrateur, la route n'existe pas (le 404 natif d'une route inexistante, corps non JSON, jamais de 429). Seule la page exacte d'un produit Pokémon est lue : `https://[www.]cardmarket.com/<en|fr|de|es|it>/Pokemon/Products/Singles/<slugSet>/<slug>` ; la requête (`?language=…`) et l'ancre sont ignorées ; tout le reste (recherche, liste, autre jeu, autre domaine, `http`, `..`, `%`) rend 422 `adresse-non-produit`. La résolution lit le couple (`slugSet`, `slug`) dans le catalogue de l'API (`numeros_cartes`) : aucune requête vers Cardmarket, aucune écriture, aucun argent. La casse compte. `lien` est l'adresse canonique (`/fr/`), servie par la même garde que `liens.cardmarket`. Plafond : 600 requêtes par heure et par porteur (429 DEBIT).",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteResoudreCardmarketBanc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Le produit qui porte ce couple.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseResoudreCardmarketBanc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : corps qui n'est pas un objet, champ autre que `url`, `url` qui n'est pas une chaîne ou dépasse 2 048 caractères. `detail` précise (corps, champ-inconnu, url).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "CODE_INVALIDE (`detail` produit-inconnu) : aucun produit ne porte ce couple, ou le catalogue ne sait pas nommer le produit. Pour un porteur qui n'est pas administrateur, ou drapeau éteint : le 404 natif d'une route inexistante, corps NON JSON (hors ce schéma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT (`detail` ambigu) : plusieurs produits portent ce couple ; le message en dit le nombre, aucun idProduct n'est rendu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE (`detail` adresse-non-produit) : l'adresse n'est pas la page exacte d'un produit Pokémon chez Cardmarket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plus de 600 requêtes dans l'heure pour ce porteur (avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : base ou catalogue injoignable (réessayer).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/banc/contributions": {
       "delete": {
         "operationId": "effacerContributionsBanc",
@@ -5144,6 +5260,71 @@
           "etat",
           "rev",
           "banc"
+        ],
+        "additionalProperties": false
+      },
+      "RequeteResoudreCardmarketBanc": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "L'adresse collée. Seule la page exacte d'un produit Pokémon est lue ; la requête et l'ancre sont ignorées."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseResoudreCardmarketBanc": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "idProduct": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nom": {
+            "type": "string",
+            "description": "Le nom Cardmarket du produit."
+          },
+          "set": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "nom": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "nom"
+            ],
+            "additionalProperties": false
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lien": {
+            "type": "string",
+            "description": "L'adresse canonique (/fr/) du produit, servie par la garde de `liens.cardmarket`."
+          }
+        },
+        "required": [
+          "success",
+          "idProduct",
+          "nom",
+          "set",
+          "numero",
+          "lien"
         ],
         "additionalProperties": false
       },
