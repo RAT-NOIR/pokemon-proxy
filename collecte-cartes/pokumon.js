@@ -158,29 +158,60 @@ function denominateurDuCode(items) {
 //   · l'entrée choisie passe ensuite tous les vetos et témoins habituels (placeholder, langue, préfixe, séries, événements, une origine, dénominateur).
 // RÈGLE DE CHOIX, écrite et déterministe : la NON-holo. Le scan holo porte le brillant CUIT dans l'image (visible sur Drizzile) : servi au produit non-holo il affirmerait un brillant qui n'y est
 // pas ; le scan plat servi au produit holo omet seulement le brillant, ce que la décision accepte. (Contrepartie nommée au rapport : la non-holo est souvent plus étroite, 576 px en médiane.)
-const MOTIF_HOLO = Object.freeze({ carte: 'holo-carte-non-prouvee', forme: 'holo-forme-non-prouvee', reverse: 'holo-reverse', series: 'holo-series-differentes' });
+const MOTIF_HOLO = Object.freeze({ carte: 'holo-carte-non-prouvee', forme: 'holo-forme-non-prouvee', reverse: 'holo-reverse', series: 'holo-series-differentes', evenements: 'holo-evenements-differents', mot: 'holo-mot-autre' });
 const sansSeries = s => String(s ?? '').replace(/Play Pokemon Prize Pack Series \d/g, '').replace(/[,\s]+/g, ' ').trim();
 /**
- * Un groupe (série, nom, numéro d'origine) qui a autant de produits que d'entrées : est-ce UN couple holo / non-holo ? `g` : les enregistrements de l'apparieur ({ p, nm }) ; `c` : ses entrées.
- * @returns {{ entree: object, holo: object, produits: number[] } | { motif: string }}
+ * Le CŒUR de la règle, commun aux Prize Packs et aux promos Black Star (BS-HOLO, 2026-10-17) : UN couple holo / non-holo, et rien d'autre. `regle` dit ce qui change d'une famille à l'autre :
+ *   · `setDe(p)` : le set Cardmarket du produit ; `lireSlug(p)` : { base, v } — le slug sans son jeton V1 / V2 — ou null ; `portee(a, h, e)` : la preuve que les deux entrées sont de la MÊME impression
+ *     (les séries du Prize Pack ; les événements des promos) ; `motsAutres` : les mots de tampon / d'événement qui font d'un groupe autre chose qu'un brillant (aucun pour les Prize Packs : inchangés).
+ * Écrit par ce qu'il AUTORISE : tout ce qui n'est pas exactement un couple pur sort avec son motif nommé.
  */
-function groupeHoloNonHolo(g, c) {
+function coupleHoloNonHolo(g, c, regle) {
     if (g.length !== 2 || c.length !== 2) return { motif: 'douteux-variantes-non-separables' };
     const [a, b] = g.map(r => r.p);
-    if (a.carteId == null || a.carteId !== b.carteId || a.slugSet == null || a.slugSet !== b.slugSet) return { motif: MOTIF_HOLO.carte };
-    const lire = p => /^(.*)-(V\d+)-([^-]+-[^-]+)$/.exec(String(p.slugProduit ?? ''));
-    const [ma, mb] = [lire(a), lire(b)];
-    if (!ma || !mb || `${ma[1]}-${ma[3]}` !== `${mb[1]}-${mb[3]}` || a.nomCm !== b.nomCm || [ma[2], mb[2]].sort().join() !== 'V1,V2') return { motif: MOTIF_HOLO.forme };
-    if (c.some(e => /reverse/i.test(e.titre))) return { motif: MOTIF_HOLO.reverse };
+    if (a.carteId == null || a.carteId !== b.carteId || regle.setDe(a) == null || regle.setDe(a) !== regle.setDe(b)) return { motif: MOTIF_HOLO.carte };
+    const reverse = c.some(e => /reverse/i.test(e.titre));
+    // les promos : le MOT de tampon se cherche d'abord (le motif nomme la vraie différence, même quand le slug est aussi de forme inattendue) ; les Prize Packs gardent leur ordre
+    if (regle.motsAutres) {
+        if (reverse) return { motif: MOTIF_HOLO.reverse };
+        if (c.some(e => regle.motsAutres.test(`${e.titre} ${e.set}`)) || g.some(r => regle.motsAutres.test(`${nomNu(r.p.nomCm)} ${String(r.p.slugProduit ?? '').replace(/-/g, ' ')}`))) return { motif: MOTIF_HOLO.mot };
+    }
+    const [ma, mb] = [regle.lireSlug(a), regle.lireSlug(b)];
+    if (!ma || !mb || ma.base !== mb.base || a.nomCm !== b.nomCm || [ma.v, mb.v].sort().join() !== 'V1,V2') return { motif: MOTIF_HOLO.forme };
+    if (reverse) return { motif: MOTIF_HOLO.reverse };
     const hs = c.filter(e => e.holo), ps = c.filter(e => !e.holo);
     if (hs.length !== 1 || ps.length !== 1) return { motif: MOTIF_HOLO.forme };
     const [h, e] = [hs[0], ps[0]];
     if (h.nom !== e.nom || h.numero !== e.numero || h.total !== e.total || sansSeries(h.set) !== sansSeries(e.set)) return { motif: MOTIF_HOLO.forme };
-    // 🔑 décision du coordinateur (tour 1) : le tampon est identique d'une série à l'autre (PK-PP, paires 1-2, 2-3, 3-4) ; deux ensembles de séries différents ne font donc pas une autre impression.
-    // La condition : les DEUX entrées contiennent la série du produit ET leurs événements portent cette série.
-    if (![h, e].every(x => x.series.includes(a.serie) && x.evenements.includes(EVENEMENTS[a.serie]))) return { motif: MOTIF_HOLO.series };
+    const p = regle.portee(a, h, e);
+    if (p) return { motif: p };
     return { entree: e, holo: h, produits: [a.idProduct, b.idProduct].sort((x, y) => x - y) };
 }
+// PRIZE PACKS : 🔑 décision du coordinateur (tour 1) : le tampon est identique d'une série à l'autre (PK-PP, paires 1-2, 2-3, 3-4) ; deux ensembles de séries différents ne font donc pas une autre impression.
+// La condition : les DEUX entrées contiennent la série du produit ET leurs événements portent cette série.
+const REGLE_PRIZE_PACK = Object.freeze({
+    setDe: p => p.slugSet,
+    lireSlug: p => { const m = /^(.*)-(V\d+)-([^-]+-[^-]+)$/.exec(String(p.slugProduit ?? '')); return m ? { base: `${m[1]}-${m[3]}`, v: m[2] } : null; },
+    portee: (a, h, e) => ([h, e].every(x => x.series.includes(a.serie) && x.evenements.includes(EVENEMENTS[a.serie])) ? null : MOTIF_HOLO.series),
+    motsAutres: null
+});
+/**
+ * Un groupe (série, nom, numéro d'origine) qui a autant de produits que d'entrées : est-ce UN couple holo / non-holo ? `g` : les enregistrements de l'apparieur ({ p, nm }) ; `c` : ses entrées.
+ * @returns {{ entree: object, holo: object, produits: number[] } | { motif: string }}
+ */
+const groupeHoloNonHolo = (g, c) => coupleHoloNonHolo(g, c, REGLE_PRIZE_PACK);
+
+// BS-HOLO (2026-10-17) : MÊME décision du testeur, étendue aux lignes Black Star SWSH, SVP, MEP — et à elles seules. 🔴 Les promos ont d'autres variantes que le brillant : le tampon Staff, le tampon Play! Pokémon,
+// Cosmos, Prerelease, un événement… Un couple n'est donc admis que si TOUT le reste est identique : les mêmes mots (aucun mot de tampon d'aucun côté, `motsAutres`), le même texte de set, et EXACTEMENT les mêmes
+// événements. Le jeton V1 / V2 du slug peut se trouver n'importe où (« Mimikyu-ex-V1-SVPen004 », « Galarian-Rapidash-V-V1 ») ; un seul jeton par slug, sinon rien n'est prouvé.
+const MOTS_AUTRES_BSP = /\b(staff|cosmos|stamp(?:ed)?|pre-?release|winner|champions?|championships?|worlds?|play!? ?pok[eé]mon|pok[eé]mon center|league|regionals?|nationals?|event|exclusive|jumbo|oversize|cracked ice|gamestop|build ?& ?battle|reverse)\b/i;
+const REGLE_BLACK_STAR = Object.freeze({
+    setDe: p => p.unite,
+    lireSlug: p => { const s = String(p.slugProduit ?? ''), m = [...s.matchAll(/-(V\d+)(?=-|$)/g)]; return m.length === 1 ? { base: s.replace(m[0][0], ''), v: m[0][1] } : null; },
+    portee: (a, h, e) => { const k = x => [...x.evenements].sort((p, q) => p - q).join(); return h.evenements.length && k(h) === k(e) ? null : MOTIF_HOLO.evenements; },
+    motsAutres: MOTS_AUTRES_BSP
+});
+const groupeHoloNonHoloBlackStar = (g, c) => coupleHoloNonHolo(g, c, REGLE_BLACK_STAR);
 
 /**
  * L'APPARIEMENT, pur. `produits` : { idProduct, serie (1-4), nomCm (catalogue_produits.name), slugProduit (numeros_cartes.slug), carteId, slugSet (seulement pour la décision PP-HOLO) } ; `index` : des entrées lues (lireEntree).
@@ -328,11 +359,18 @@ function apparierFamille({ lignes, produits, index }) {
     let placeholders = 0;
     for (const g of groupes.values()) {
         const c = g[0].cands;
-        const statut = !c.length ? 'non-couvert' : g.length === 1 && c.length === 1 ? 'couvert' : g.length === c.length ? 'douteux-variantes-non-separables' : 'douteux-multiplicite';
+        let statut = !c.length ? 'non-couvert' : g.length === 1 && c.length === 1 ? 'couvert' : g.length === c.length ? 'douteux-variantes-non-separables' : 'douteux-multiplicite';
+        let choisi = c[0], holo = null;
+        // BS-HOLO : les SEULES lignes Black Star (famille « bsp ») résolvent un couple holo / non-holo, par le même cœur que les Prize Packs ; les autres familles gardent leur doute
+        if (statut === 'douteux-variantes-non-separables' && g.every(r => r.l?.famille === 'bsp') && c.every(x => x.l?.famille === 'bsp')) {
+            holo = groupeHoloNonHoloBlackStar(g, c.map(x => x.e));
+            if (holo.entree) { statut = 'couvert'; choisi = c.find(x => x.e === holo.entree); for (const r of g) { r.groupe = g; r.partagee = holo.produits; r.holoIgnoree = holo.holo; } }
+            else statut = holo.motif;
+        }
         for (const r of g) {
             if (statut !== 'couvert') { r.motif = statut; continue; }
-            const e = c[0].e;
-            r.l = c[0].l;
+            const e = choisi.e;
+            r.l = choisi.l;
             r.entree = e;
             if (estPlaceholder(e)) { r.motif = 'placeholder'; placeholders++; }
             else if (!e.anglais) r.motif = 'langue';
@@ -351,7 +389,8 @@ function apparierFamille({ lignes, produits, index }) {
     const placeholdersIndex = index.filter(estPlaceholder).length;
     const resultats = recs.map(r => (r.motif || !r.entree
         ? { idProduct: r.p.idProduct, verdict: 'reste', motif: r.motif ?? 'non-couvert' }
-        : { idProduct: r.p.idProduct, verdict: 'prouve', entree: r.entree, ligne: r.l.id, famille: r.l.famille, numeroOrigine: r.nm, temoin: r.temoin, numeroFiche: r.numeroFiche }));
+        : { idProduct: r.p.idProduct, verdict: 'prouve', entree: r.entree, ligne: r.l.id, famille: r.l.famille, numeroOrigine: r.nm, temoin: r.temoin, numeroFiche: r.numeroFiche,
+            ...(r.partagee ? { partageeHoloNonHolo: true, produitsPartages: r.partagee, entreeHoloIgnoree: r.holoIgnoree } : {}) }));
     const parMotif = {};
     for (const r of resultats) if (r.verdict === 'reste') parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
     return { resultats, comptes: { produits: produits.length, prouves: resultats.filter(r => r.verdict === 'prouve').length, placeholders, placeholdersIndex, parMotif } };
@@ -410,8 +449,13 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         if (!urlImageValide(e.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
         if (!(e.w >= seuil)) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
         if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.unite && nImage(x.numero) === nImage(numero))) continue;
-        plan.push({ ...base, nomEn: carte.nomEn ?? null, famille: r.famille, ligne: l.id, marque: `${l.id} : ${l.tampon}`, numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: `pokumon+nom+numero+${r.famille}`,
-            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro ${e.numero} (produit ${p.slugProduit ?? ''}, n° ${p.numero ?? ''}) ; ${r.temoin} ; une seule entrée candidate pour ce produit ; ligne ${l.id} prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; marque : ${l.tampon}` });
+        // BS-HOLO : l'image est celle de TOUT le couple ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
+        const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
+        const choix = r.partageeHoloNonHolo
+            ? `partagée holo/non-holo : produits ${r.produitsPartages.join(' + ')} (slugs V1 / V2 d'une même carte), entrée ${e.id} (non-holo) choisie, entrée ${r.entreeHoloIgnoree.id} (Holofoil) laissée de côté — même nom, même numéro, mêmes événements, aucun mot de tampon, seul le brillant diffère ; `
+            : 'une seule entrée candidate pour ce produit ; ';
+        plan.push({ ...base, nomEn: carte.nomEn ?? null, famille: r.famille, ligne: l.id, marque: `${l.id} : ${l.tampon}`, numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: `pokumon+nom+numero+${r.famille}`, ...partage,
+            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro ${e.numero} (produit ${p.slugProduit ?? ''}, n° ${p.numero ?? ''}) ; ${r.temoin} ; ${choix}ligne ${l.id} prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; marque : ${l.tampon}` });
     }
     return { plan, restes, comptes: { ...comptes, trous: restes.length, plan: plan.length, sousSeuil: restes.filter(x => x.motif === 'sous-le-seuil').length } };
 }
@@ -631,13 +675,20 @@ function visuelServi(site, { set, images, numeroFiche, region, produits, baseUrl
 
 // ── L'IDENTIFIANT ET LE RETRAIT EN UN LOT ────────────────────────────────────────────────────────────────────────────────────────────────────
 const idImagePokumon = (slug, carteId, numero) => `${SOURCE}/${slug}/${carteId}/${String(numero ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero'}/en`;
+/** BS-HOLO : les slugs des sets de lignes de la table des autres familles (`--lignes=`) ; une ligne inconnue LÈVE (jamais un retrait sur un périmètre deviné). */
+function setsDesLignes(ids) {
+    const inconnues = (ids || []).filter(i => !LIGNES_AUTRES.some(l => l.id === i));
+    if (inconnues.length) throw new Error(`ligne(s) inconnue(s) : ${inconnues.join(', ')} — la table dit : ${LIGNES_AUTRES.map(l => l.id).join(', ')}`);
+    return new Set(LIGNES_AUTRES.filter(l => ids.includes(l.id)).flatMap(l => l.slugs));
+}
 /** Ce qu'un retrait en un lot retire : les entrées `cartes.images` de CETTE source ET de CE lot — rien d'autre — et leurs clés R2 (vignette comprise). Les substituts ne bougent pas. */
-function planRetraitPokumon(cartes, { seulementPartagees = false } = {}) {
+function planRetraitPokumon(cartes, { seulementPartagees = false, sets = null } = {}) {
     const touchees = [], cles = [];
     let entrees = 0;
     for (const c of cartes) {
         // PP-HOLO : `seulementPartagees` ne retire que les images portant le champ explicite « partagée holo/non-holo » — rien d'autre du lot (un champ absent n'est pas `true`)
-        const es = (c.images || []).filter(e => e && e.source === SOURCE && e.lot === LOT && (!seulementPartagees || e.partageeHoloNonHolo === true));
+        // BS-HOLO : `sets` (les slugs des lignes demandées) restreint encore le retrait à ces sets — les promos Black Star seules, sans les Prize Packs
+        const es = (c.images || []).filter(e => e && e.source === SOURCE && e.lot === LOT && (!seulementPartagees || e.partageeHoloNonHolo === true) && (!sets || sets.has(e.set)));
         if (!es.length) continue;
         touchees.push(c._id); entrees += es.length; cles.push(...es.flatMap(e => [e.cleR2, e.vignette?.cleR2].filter(Boolean)));
     }
@@ -647,5 +698,5 @@ function planRetraitPokumon(cartes, { seulementPartagees = false } = {}) {
 module.exports = {
     SOURCE, HOTE_API, HOTE_IMG, HOTES, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, REESSAI_MS, PLAFOND_REQUETES, PLAFOND_MAX, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, EVENEMENTS,
     TABLE_POKUMON, ligneDe, seriesAdmises, lireEntree, estPlaceholder, construireIndex, cleMesure, nomPokumon, numeroOrigine, codeOrigine, temoinsDeLEntree, denominateurDuCode,
-    LIGNES_AUTRES, nImage, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon
+    LIGNES_AUTRES, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
 };

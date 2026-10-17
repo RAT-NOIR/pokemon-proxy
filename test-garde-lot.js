@@ -217,5 +217,23 @@ verifier('le seul texte de dateSortieMois changé (le site ne lit que .iso) : ri
 const lComposeLe = copie(d0c2); lComposeLe.sets[0].logoCompose = { ...lComposeLe.sets[0].logoCompose, le: new Date('2026-10-07'), preuve: 'y' };
 verifier('le même logoCompose réécrit (date, preuve) : rien', setsTouches({ avant: d0c2, apres: lComposeLe }).sets, []);
 
+// ── BS-STAFF (2026-10-17) : « tampon non séparable » — l'image servie aux paires Black Star V1/V2 porte `partageeTamponNonSepare: true`, `produitsPartages` et `tamponNonRepresente`.
+// Un retrait (ou un rejeu qui efface les champs) laisse `images` et les vignettes intacts : seul ce compteur le voit. Le compteur « holo » ne se confond pas avec lui.
+const etatT = copie(etat0); Object.assign(etatT.cartes[0].images[0], { partageeTamponNonSepare: true, produitsPartages: [100, 101], tamponNonRepresente: 'Staff' });
+const lotTRetire = copie(etatT); for (const k of ['partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente']) delete lotTRetire.cartes[0].images[0][k];
+verifier('BS-STAFF compteur : une image marquée « tampon non séparable » se compte par set ; une ordinaire ou un `false` non', [compterEtat(etatT).get('images-partagees-tampon set:Set-A'), compterEtat(etat0).get('images-partagees-tampon set:Set-A') ?? 0, compterEtat((() => { const x = copie(etatT); x.cartes[0].images[0].partageeTamponNonSepare = false; return x; })()).get('images-partagees-tampon set:Set-A') ?? 0], [1, 0, 0]);
+verifier('BS-STAFF : le retrait des champs (l\'image reste) est une BAISSE qui arrête le lot', comparer(compterEtat(etatT), compterEtat(lotTRetire)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['images-partagees-tampon set:Set-A 1→0']);
+verifier('BS-STAFF : la baisse peut s\'annoncer (retrait voulu)', comparer(compterEtat(etatT), compterEtat(lotTRetire), { annonces: { 'images-partagees-tampon set:Set-A': 1 } }).nonAutorisees.length, 0);
+verifier('BS-STAFF : la POSE est une hausse visible, aucune baisse, aucun autre groupe ne bouge', (c => [c.nonAutorisees.length, c.hausses])(comparer(compterEtat(etat0), compterEtat(etatT))), [0, { 'images-partagees-tampon': 1 }]);
+verifier('BS-STAFF : le compteur « holo » ne compte pas une image « tampon » (et inversement)', [compterEtat(etatT).get('images-partagees-holo set:Set-A') ?? 0, compterEtat((() => { const x = copie(etat0); x.cartes[0].images[0].partageeHoloNonHolo = true; return x; })()).get('images-partagees-tampon set:Set-A') ?? 0], [0, 0]);
+{ const { validerAnnonces } = require('./collecte-cartes/garde-lot'); let leve = false; try { validerAnnonces({ 'images-partagees-tampon set:Set-A': 1 }); } catch { leve = true; }
+  verifier('BS-STAFF : l\'annonce « images-partagees-tampon » est un compteur connu', leve, false); }
+verifier('BS-STAFF (setsTouches) : le marquage change ce que le site lit (mention) : le set de l\'image est touché, pas le catalogue', (r => [r.sets, r.catalogue, r.especes])(setsTouches({ avant: docs0, apres: etatT })), [['Set-A'], false, false]);
+verifier('BS-STAFF (setsTouches) : le retrait du marquage touche aussi le set', setsTouches({ avant: etatT, apres: lotTRetire }).sets, ['Set-A']);
+// lot-additif.js lit les cartes par une projection : un champ absent de la projection est un compteur qui ne voit rien (§41)
+{ const src = require('fs').readFileSync(require('path').join(__dirname, 'lot-additif.js'), 'utf8');
+  const proj = /db\.collection\('cartes'\)\.find\(\{\}\)\.project\(\{([^}]*)\}\)/.exec(src)?.[1] ?? '';
+  verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj.includes(`'${c}': 1`)), [true, true, true]); }
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
