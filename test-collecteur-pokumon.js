@@ -1,0 +1,235 @@
+// node test-collecteur-pokumon.js — le collecteur de pokumon.com (collecteur-images-pokumon.js + retirer-visuels-pokumon.js) de BOUT EN BOUT sur une base EN MÉMOIRE, un réseau SIMULÉ et un faux
+// client R2 : aucune requête, aucune base réelle, rien sur R2. Ce que le banc garde :
+//   · l'index vient du client (quatre listes), la clé prouve, un doute reste un trou et le DIT ; une entrée commune à deux séries ne se télécharge qu'UNE fois ;
+//   · un original sous le seuil est écarté, COMPTÉ, écrit « trop-petit » ; R2 AVANT la ligne `images` ; la mention, le lot, la source, la langue sur la ligne ET sur l'entrée ;
+//   · additif : une fiche déjà pourvue n'est jamais touchée ; reprise sans requête ni doublon ; un visuel retiré ne revient pas ;
+//   · 🔑 `cartes_produits.visuelSubstitut` n'est JAMAIS touché, et la règle du site IMPORTÉE sert l'image propre là où elle est posée, le substitut ailleurs ;
+//   · défi : arrêt, alerte écrite, plus rien ; alerte posée : aucune requête ; tirage non occidental : refusé ;
+//   · le retrait en un lot retire EXACTEMENT le lot et rend les fiches à leur substitut.
+// TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE du dépôt (collecte-cartes/ + les deux scripts).
+const path = require('path');
+const { spawnSync } = require('child_process');
+const sharp = require('sharp');
+const DIR = process.env.TOOL_DIR || __dirname;
+const P = require(path.join(DIR, 'collecte-cartes', 'pokumon.js'));
+const { lancerEcriture } = require(path.join(DIR, 'collecteur-images-pokumon.js'));
+const { retirerLot } = require(path.join(DIR, 'retirer-visuels-pokumon.js'));
+const { vignetterApresJointure } = require(path.join(DIR, 'collecte-cartes', 'vignettes-apres-jointure'));
+const { RAW, CDN } = require('./test-pokumon-donnees');
+
+let ok = 0, ko = 0;
+const verifier = (nom, obtenu, attendu) => {
+    const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
+    if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
+};
+const silencieux = () => { const l = console.log, w = console.warn, e = console.error; console.log = console.warn = console.error = () => { }; return () => { console.log = l; console.warn = w; console.error = e; }; };
+
+// ── une base en mémoire : les seules formes de requête que le collecteur emploie (même forme que test-ptcgio.js) ──
+function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
+    const cols = new Map();
+    const col = n => cols.get(n) || cols.set(n, new Map()).get(n);
+    const lire = (o, k) => k.split('.').reduce((x, p) => Array.isArray(x) && !/^\d+$/.test(p) ? x.flatMap(e => e?.[p]) : x?.[p], o);
+    const ecrireChamp = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
+    const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+        ? ('$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
+        : (x => Array.isArray(x) ? x.includes(v) : x === v)(lire(d, k)));
+    const appliquer = (d, u) => {
+        for (const [k, v] of Object.entries(u.$set || {})) ecrireChamp(d, k, v);
+        for (const k of Object.keys(u.$unset || {})) delete d[k];
+        for (const [k, v] of Object.entries(u.$pull || {})) d[k] = (d[k] || []).filter(e => !accepte(e, v));
+        for (const [k, v] of Object.entries(u.$push || {})) (d[k] ??= []).push(...(v.$each || [v]));
+    };
+    const tous = (n, f) => [...col(n).values()].filter(d => accepte(d, f));
+    const collection = n => ({
+        async findOne(f) { return structuredClone(tous(n, f)[0] ?? null); },
+        find(f) { return { toArray: async () => structuredClone(tous(n, f)) }; },
+        async countDocuments(f) { return tous(n, f).length; },
+        async updateOne(f, u, o = {}) {
+            let d = tous(n, f)[0];
+            if (!d) { if (!o.upsert) return { matchedCount: 0, modifiedCount: 0 }; d = { _id: f._id, ...(u.$setOnInsert || {}) }; col(n).set(d._id, d); }
+            appliquer(d, u); return { matchedCount: 1, modifiedCount: 1 };
+        }
+    });
+    const db = { collection, async command(c) { if (c.dbStats) return { dataSize, indexSize }; throw new Error(`commande inattendue ${JSON.stringify(c)}`); } };
+    const modele = n => ({
+        db: { db },
+        findById: id => ({ select: () => ({ lean: async () => structuredClone(col(n).get(id) ?? null) }) }),
+        find: f => ({ lean: async () => structuredClone(tous(n, f)) }),
+        updateOne: (f, u, o) => collection(n).updateOne(f, u, o)
+    });
+    return { cols, col, db, M: { Carte: modele('cartes'), Image: modele('images'), Set: modele('sets'), EtatImages: modele('collecte_images_etat') } };
+}
+
+// ── le monde : les produits RÉELS de la mesure (idProduct, nom Cardmarket, slug) sur quatre sets Prize Pack ────────────────────────────────────────────
+const SLUG = { 1: 'Play-Pokemon-Prize-Pack-Series-One', 2: 'Play-Pokemon-Prize-Pack-Series-Two', 3: 'Play-Pokemon-Prize-Pack-Series-Three', 4: 'Play-Pokemon-Prize-Pack-Series-Four' };
+const PRODUITS = [
+    { idProduct: 697064, carteId: 100, serie: 1, nomCm: 'Kricketune V [Exciting Stage | X-Scissor]', slugProduit: 'Kricketune-V-PPS1BST-006' },
+    { idProduct: 705125, carteId: 101, serie: 2, nomCm: 'Kricketune V [Exciting Stage | X-Scissor]', slugProduit: 'Kricketune-V-PPS2BST-006' },
+    { idProduct: 697065, carteId: 102, serie: 1, nomCm: 'Cherrim [Spring Bloom | Seed Bomb]', slugProduit: 'Cherrim-PPS1BST-008' },
+    { idProduct: 697089, carteId: 103, serie: 1, nomCm: 'Drizzile [Shady Dealings | Water Drip]', slugProduit: 'Drizzile-V1-PPS1SSH-056' },
+    { idProduct: 835825, carteId: 103, serie: 1, nomCm: 'Drizzile [Shady Dealings | Water Drip]', slugProduit: 'Drizzile-V2-PPS1SSH-056' },
+    { idProduct: 728167, carteId: 104, serie: 3, nomCm: 'Cheren\'s Care', slugProduit: 'Cherens-Care-PPS3BRS-134' },
+    { idProduct: 728159, carteId: 105, serie: 3, nomCm: 'Grotle [Sun-Drenched Shell | Razor Leaf]', slugProduit: 'Grotle-PPS3BRS-007' },
+    { idProduct: 730140, carteId: 106, serie: 3, nomCm: 'Regieleki VMAX [Transistor | Max Thunder and Lightning]', slugProduit: 'Regieleki-VMAX-PPS3SIT-058' },
+    { idProduct: 756372, carteId: 107, serie: 4, nomCm: 'Regieleki VMAX [Transistor | Max Thunder and Lightning]', slugProduit: 'Regieleki-VMAX-PPS4SIT-058' }
+];
+const TCGDEX_GROTLE = { set: SLUG[3], source: 'tcgdex', numero: '007', cleR2: 'tcgdex/autre.webp', langue: 'en' };
+const substitut = id => ({ cleR2: `tcgdex/Origine/${id}.webp`, source: 'tcgdex', set: 'Origine', numero: '006', w: 600, h: 825, mention: 'Visuel de la carte d\'origine, sans le tampon Prize Pack', preuve: 'x', le: '2026-09-26T10:22:34.641Z' });
+function semer(B, { tirage1 = 'intl' } = {}) {
+    for (const s of [1, 2, 3, 4]) B.col('sets').set(SLUG[s], { _id: SLUG[s], tirage: s === 1 ? tirage1 : 'intl', region: 'intl' });
+    for (const p of PRODUITS) {
+        if (!B.col('cartes').has(p.carteId)) B.col('cartes').set(p.carteId, { _id: p.carteId, nomEn: p.nomCm.replace(/\s*\[.*$/, ''), images: p.carteId === 105 ? [structuredClone(TCGDEX_GROTLE)] : [] });
+        B.col('cartes_produits').set(`${p.carteId}|${p.idProduct}`, { _id: `${p.carteId}|${p.idProduct}`, carteId: p.carteId, idProduct: p.idProduct, slugSet: SLUG[p.serie], visuelSubstitut: substitut(p.idProduct) });
+    }
+}
+const lireProduits = async () => PRODUITS.map(p => ({ idProduct: p.idProduct, slugSet: SLUG[p.serie], slugProduit: p.slugProduit, nomCm: p.nomCm }));
+
+const png = (w, h) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 200, g: 60, b: 60 } } }).png().toBuffer();
+const LISTES = { 1: [RAW.kricketune, RAW.cherrim, RAW.drizzileHolo, RAW.drizzile], 2: [RAW.kricketune, RAW.cherrim, RAW.cheren, RAW.grotle], 3: [RAW.cheren, RAW.grotle, RAW.regieleki], 4: [RAW.regieleki] };
+const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
+
+(async () => {
+    const fichiers = { [RAW.kricketune._embedded['wp:featuredmedia'][0].source_url]: await png(947, 1325), [RAW.cherrim._embedded['wp:featuredmedia'][0].source_url]: await png(200, 280), [RAW.cheren._embedded['wp:featuredmedia'][0].source_url]: await png(500, 698), [RAW.regieleki._embedded['wp:featuredmedia'][0].source_url]: await png(738, 1033) };
+    let totalAnnonce = null;                                       // le total que la source annonce par série (x-wp-total), pour fausser la liste
+    const reseau = (surImage = null) => {
+        const appels = [];
+        return { appels, async get(url) {
+            appels.push(url);
+            if (/robots\.txt$/.test(url)) return { status: 200, texte: 'User-agent: *\nDisallow: /wp-admin/\n' };
+            if (/wp-json/.test(url)) { const s = EVT[/release_event=(\d+)/.exec(url)[1]]; return { status: 200, type: 'application/json', texte: JSON.stringify(LISTES[s]), pages: 1, total: totalAnnonce?.[s] ?? LISTES[s].length }; }
+            if (surImage) { const r = surImage(url); if (r) return r; }
+            return fichiers[url] ? { status: 200, type: 'image/png', octets: fichiers[url] } : { status: 404, type: 'text/html' };
+        } };
+    };
+    const verrou = { tenu: true, perdu: false };
+    let maintenant = 1e12;
+    const pause = async ms => { maintenant += ms; };
+    const stock = new Map();
+    const cache = { lire: k => stock.get(k) ?? null, ecrire: (k, v) => stock.set(k, v) };
+    const client = (tr, ch = cache) => P.fabriquerClientPokumon({ transport: tr, verrou, pause, horloge: () => maintenant, cache: ch });
+    const depots = [], supprimes = [];
+    const R2 = { verifierBucket: async b => { if (!b) throw new Error('bucket'); }, deposerBinaire: async (b, c, d, t) => depots.push([b, c, d.length, t]) };
+    process.env.R2_BUCKET_IMAGES = 'bucket-banc';
+    // les VIGNETTES : le banc injecte ce que fait assurerVignettes sur la base en mémoire (pas de R2)
+    const assurerBanc = async (db, { slug }) => {
+        let n = 0;
+        for (const c of await db.collection('cartes').find({}).toArray()) {
+            let touche = false;
+            const images = (c.images || []).map(e => { if (e.set !== slug || !e.cleR2 || e.vignette) return e; touche = true; n++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2.replace(/\.[^./]+$/, '')}.webp`, w: 200, h: 279 } }; });
+            if (touche) await db.collection('cartes').updateOne({ _id: c._id }, { $set: { images } });
+        }
+        return { entrees: n, cles: n, traitees: n, fabriquees: n, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: n ? [slug] : [] };
+    };
+    const vignetter = (db, slug, o) => vignetterApresJointure(db, slug, { ...o, assurer: assurerBanc, journal: { error() { } } });
+    const verrouSet = () => ({ prendre: async () => null, rendre: async () => { } });
+    const depotsDe = B => [...B.col('cartes').values()].flatMap(c => c.images).filter(e => e.source === 'pokumon').length;
+    const lancer = async (B, tr, o = {}) => { const r = silencieux(); try { const c = client(tr, o.cache); return { c, ...(await lancerEcriture(o.series || [1, 2, 3, 4], B.M, { verrou, client: c, lireProduits, R2, vignetter, fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets })) }; } finally { r(); } };
+
+    // ── 1. la collecte, de bout en bout ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+    const B = fausseBase(); semer(B);
+    const substitutsAvant = JSON.stringify([...B.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut]));
+    let tr = reseau();
+    let R = await lancer(B, tr);
+    const R1 = R;
+    verifier('la collecte des quatre séries est « verifiee » partout', R.resultats.map(r => r.etat), ['verifie', 'verifie', 'verifie', 'verifie']);
+    verifier('les requêtes : robots.txt de pokumon.com, les 4 listes, robots.txt de l\'hôte d\'images, puis UNE image par fichier distinct (Kricketune S1 et S2 partagent la même : un seul téléchargement)',
+        tr.appels.map(u => u.replace('https://pokumon.com', '').replace('https://cdn6966.templcdn.com', 'CDN').slice(0, 40)),
+        ['/robots.txt', '/wp-json/wp/v2/card?release_event=7720&p', '/wp-json/wp/v2/card?release_event=7721&p', '/wp-json/wp/v2/card?release_event=7838&p', '/wp-json/wp/v2/card?release_event=8187&p', 'CDN/robots.txt',
+            'CDN/wp-content/uploads/2024/11/EN_S1080H', 'CDN/wp-content/uploads/2024/11/EN_S1081P', 'CDN/wp-content/uploads/2024/11/EN_S1275P', 'CDN/wp-content/uploads/2024/11/EN_S1394H']);
+    verifier('le plan : 6 prouvés (Kricketune S1 et S2, Cherrim, Cheren, Regieleki S3 et S4) ; Drizzile V1/V2 (holo et non-holo non séparables) et Grotle (déjà servi par TCGdex) restent des trous NOMMÉS',
+        [R.plan.plan.map(p => [p.carteId, p.serie]), R.plan.restes.map(r => [r.idProduct, r.motif]).sort()],
+        [[[100, 1], [101, 2], [102, 1], [104, 3], [106, 3], [107, 4]], [[697089, 'douteux-variantes-non-separables'], [728159, 'deja-servi'], [835825, 'douteux-variantes-non-separables']].sort()]);
+    verifier('R2 AVANT la ligne : un dépôt WebP par fiche posée (5 : Kricketune S1 et S2, Cheren, Regieleki S3 et S4 ; Cherrim est sous le seuil), à la clé du set', depots.map(d => [d[1], d[3]]).sort(),
+        [[`pokumon/${SLUG[1]}/006-100-en.webp`, 'image/webp'], [`pokumon/${SLUG[2]}/006-101-en.webp`, 'image/webp'], [`pokumon/${SLUG[3]}/134-104-en.webp`, 'image/webp'], [`pokumon/${SLUG[3]}/058-106-en.webp`, 'image/webp'], [`pokumon/${SLUG[4]}/058-107-en.webp`, 'image/webp']].sort());
+    const im = B.col('images').get(`pokumon/${SLUG[1]}/100/006/en`);
+    verifier('le document `images` : source, langue, mention, lot, état, adresse d\'origine, entrée Pokumon, preuve', [im?.source, im?.langue, im?.mention, im?.lot, im?.etat, im?.urlOriginal, im?.pokumonId, /006/.test(im?.preuve || '') && /Kricketune V/.test(im?.preuve || '') && /Play! Pokémon/.test(im?.preuve || '')],
+        ['pokumon', 'en', '© Pokémon / The Pokémon Company', 'pokumon-2026-10', 'ok', RAW.kricketune._embedded['wp:featuredmedia'][0].source_url, 75661, true]);
+    verifier('l\'entrée de la carte : mention, lot, langue, attribution, source, numéro, vignette', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source, e.numero, /^vignettes\/pokumon\//.test(e.vignette?.cleR2 || '')])(B.col('cartes').get(100).images[0]),
+        ['© Pokémon / The Pokémon Company', 'pokumon-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokumon', '006', true]);
+    verifier('SEUIL : un original de 200 px est écarté, COMPTÉ, écrit « trop-petit » avec la largeur et le seuil ; la carte ne reçoit rien',
+        [B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.etat, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.wOriginal, B.col('images').get(`pokumon/${SLUG[1]}/102/008/en`)?.seuilApplique, B.col('cartes').get(102).images.length, R.resultats[0].tropPetits],
+        ['trop-petit', 200, 350, 0, 1]);
+    verifier('ADDITIF : la fiche déjà pourvue (Grotle, TCGdex) n\'est pas touchée', B.col('cartes').get(105).images.map(({ vignette, ...e }) => e), [TCGDEX_GROTLE]);
+    verifier('🔑 les SUBSTITUTS ne bougent pas d\'un octet (aucun détachement) et la garde de chaque série les a comptés avant et après', [JSON.stringify([...B.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut])) === substitutsAvant, R.resultats.map(r => r.garde.substitutsAvant === r.garde.substitutsApres)], [true, [true, true, true, true]]);
+    verifier('le bilan du set : prouvés, joints, garde verte, requêtes', [B.col('sets').get(SLUG[1]).visuelsPokumon?.prouves, B.col('sets').get(SLUG[1]).visuelsPokumon?.joints, B.col('sets').get(SLUG[1]).visuelsPokumon?.garde?.ok], [2, 1, true]);
+
+    // ── 2. LA RÈGLE DU SITE, IMPORTÉE, sur le résultat : le propre là où il est posé, le substitut ailleurs ────────────────────────────────────────────
+    const SITE = await P.chargerRegleDuSite(process.env.RACINE_SITE || 'C:/Users/Yung/Desktop/pokemon-proxy');
+    const servi = (carteId, serie) => P.visuelServi(SITE, { set: SLUG[serie], images: B.col('cartes').get(carteId).images, numeroFiche: null, region: 'intl', produits: [...B.col('cartes_produits').values()].filter(l => l.carteId === carteId), baseUrlImages: 'https://img.example' }).genre;
+    verifier('règle du site : Kricketune (S1, S2) et Cheren (S3) sont servis par l\'image PROPRE ; Cherrim (trop petit) reste sur son SUBSTITUT ; Drizzile (deux produits) aussi', [servi(100, 1), servi(101, 2), servi(104, 3), servi(102, 1), servi(103, 1)], ['propre', 'propre', 'propre', 'substitut', 'substitut']);
+
+    // ── 3. la REPRISE : aucune requête, aucun doublon, aucun dépôt ─────────────────────────────────────────────────────────────────────────────────
+    const nDepots = depots.length;
+    tr = reseau();
+    R = await lancer(B, tr);
+    verifier('reprise : AUCUNE requête (la liste vient du cache, les fichiers déjà posés et le « trop-petit » ne se redemandent pas), aucun nouveau dépôt', [tr.appels.length, depots.length - nDepots], [0, 0]);
+    verifier('reprise : une entrée par fiche (pas de doublon), les mêmes entrées', [B.col('cartes').get(100).images.length, B.col('cartes').get(101).images.length, B.col('cartes').get(104).images.length, R.resultats.map(r => r.etat)], [1, 1, 1, ['verifie', 'verifie', 'verifie', 'verifie']]);
+
+    // ── 4. un visuel retiré ne revient pas ────────────────────────────────────────────────────────────────────────────────────────────────────────
+    B.col('images').get(`pokumon/${SLUG[2]}/101/006/en`).etat = 'retire';
+    B.col('cartes').get(101).images = [];
+    tr = reseau();
+    R = await lancer(B, tr);
+    verifier('un visuel « retire » ne revient ni au rejeu ni à la collecte (aucune requête, aucune entrée)', [tr.appels.length, B.col('cartes').get(101).images.length, R.resultats[1].retires], [0, 0, 1]);
+
+    // ── 5. le RETRAIT EN UN LOT ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    // la carte d'origine garde son propre scan (autre set, autre source) : le retrait ne la touche pas
+    B.col('cartes').get(100).images.push({ set: 'Battle-Styles', source: 'tcgdex', numero: '006', cleR2: 'tcgdex/Battle-Styles/006.webp', langue: 'en' });
+    const simul = await retirerLot(B.db);
+    verifier('retrait (simulation) : les cartes et les entrées du lot, rien d\'autre (Grotle et son TCGdex n\'y sont pas ; Kricketune S2 est déjà retiré)', [simul.cartes.sort(), simul.entrees, simul.parSet], [[100, 104, 106, 107], 4, { [SLUG[1]]: 1, [SLUG[3]]: 2, [SLUG[4]]: 1 }]);
+    const r2cles = [];
+    const rr = await retirerLot(B.db, { ecrire: true, effacerR2: true, supprimer: async (b, c) => r2cles.push(...c), verifierBucket: async () => { }, bucket: 'bucket-banc' });
+    verifier('retrait : les entrées du lot sortent, TCGdex reste, les documents passent « retire », les vignettes sont effacées avec les images, l\'alerte est posée, le bilan du set nettoyé',
+        [B.col('cartes').get(100).images.map(e => `${e.source}:${e.set}`).join(), B.col('cartes').get(104).images.length, B.col('cartes').get(105).images.map(e => e.source), B.col('images').get(`pokumon/${SLUG[1]}/100/006/en`).etat, r2cles.filter(c => /^vignettes\//.test(c)).length, B.col('collecte_images_etat').get(P.ID_ALERTE)?.active, B.col('sets').get(SLUG[1]).visuelsPokumon === undefined, rr.reste],
+        ['tcgdex:Battle-Styles', 0, ['tcgdex'], 'retire', 4, true, true, 0]);
+    verifier('🔑 le retrait rend les fiches à leur SUBSTITUT (jamais détaché) : règle du site rejouée', [servi(100, 1), servi(104, 3), JSON.stringify([...B.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut])) === substitutsAvant], ['substitut', 'substitut', true]);
+    tr = reseau();
+    let err = null; try { await lancer(B, tr); } catch (e) { err = e.message; }
+    verifier('après le retrait, la source est fermée : aucune requête ne part', [/a bloqué/.test(err || ''), tr.appels.length], [true, 0]);
+
+    // ── 6. un DÉFI : arrêt, alerte écrite, plus rien ──────────────────────────────────────────────────────────────────────────────────────────────
+    const B2 = fausseBase(); semer(B2);
+    tr = reseau(url => /EN_S1080/.test(url) ? { status: 403, type: 'text/html', texte: 'non' } : null);
+    R = await lancer(B2, tr);
+    verifier('403 sur la première image : « incomplet », l\'alerte est ÉCRITE, aucune entrée posée, aucune autre image demandée, les séries suivantes ne partent pas', [R.resultats.map(r => r.etat), B2.col('collecte_images_etat').get(P.ID_ALERTE)?.active, [...B2.col('cartes').values()].flatMap(c => c.images).filter(e => e.source === 'pokumon').length, tr.appels.filter(u => /EN_S/.test(u)).length], [['incomplet'], true, 0, 1]);
+
+    // ── 6 bis. ADDITIF À LA JOINTURE : une autre source qui sert la fiche ENTRE le plan et la jointure garde sa place, la nôtre lui cède ──────────────
+    const B5 = fausseBase(); semer(B5);
+    const course = { set: SLUG[3], source: 'tcgdex', numero: '134', cleR2: 'tcgdex/course.webp', langue: 'en' };
+    tr = reseau(url => { if (/EN_S1275/.test(url)) B5.col('cartes').get(104).images.push(structuredClone(course)); return null; });
+    R = await lancer(B5, tr);
+    verifier('une autre source pose la fiche pendant la collecte : son entrée est intacte, la nôtre cède (comptée), aucun doublon', [B5.col('cartes').get(104).images.map(({ vignette, ...e }) => e), R.resultats[2].dejaParAutre, R.resultats[2].etat], [[course], 1, 'verifie']);
+
+    // ── 6 ter. une liste INCOMPLÈTE (le total annoncé dépasse les entrées lues) arrête tout, avant la moindre écriture ──────────────────────────────
+    const B6 = fausseBase(); semer(B6);
+    totalAnnonce = { 1: 5, 2: 4, 3: 3, 4: 1 };
+    tr = reseau();
+    err = null; try { await lancer(B6, tr, { cache: { lire: () => null, ecrire() { } } }); } catch (e) { err = e.message; }
+    totalAnnonce = null;
+    verifier('liste incomplète : 4 entrées lues pour 5 annoncées → arrêt, rien d\'écrit, aucune image demandée', [/incomplète/.test(err || ''), tr.appels.filter(u => /EN_S/.test(u)).length, depotsDe(B6), [...B6.col('images').values()].length], [true, 0, 0, 0]);
+
+    // ── 7. un tirage non occidental est refusé, la base trop pleine aussi ──────────────────────────────────────────────────────────────────────────
+    const B3 = fausseBase(); semer(B3, { tirage1: 'jp' });
+    tr = reseau();
+    R = await lancer(B3, tr, { series: [1] });
+    verifier('un set au tirage « jp » est refusé : la source ne sert que des cartes anglaises', [R.resultats[0].etat, [...B3.col('cartes').values()].flatMap(c => c.images).filter(e => e.source === 'pokumon').length], ['refuse-set', 0]);
+    const B4 = fausseBase({ dataSize: 450 * 1048576 }); semer(B4);
+    tr = reseau();
+    R = await lancer(B4, tr, { series: [1] });
+    verifier('base « cartes » au-dessus de 400 Mo : STOP, alerte de taille, aucune image demandée', [R.resultats[0].etat, B4.col('collecte_images_etat').get('alerte/taille-base')?.active, tr.appels.filter(u => /EN_S/.test(u)).length], ['refuse-taille-base', true, 0]);
+
+    // ── 8. le plafond suit le plan ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    const c = client(reseau());
+    let e2 = null; try { c.fixerPlafond(P.PLAFOND_MAX + 1); } catch (e) { e2 = e.message; }
+    verifier('le plafond d\'une collecte ne dépasse jamais PLAFOND_MAX', [/refusé/.test(e2 || ''), P.PLAFOND_MAX], [true, 400]);
+    verifier('le plafond fixé par la collecte suit le plan : 5 requêtes déjà parties (robots + 4 listes) + 1 robots d\'images + 4 fichiers distincts + 10 % (1) + 3 de marge', [R1.c.plafond(), R1.c.compteRequetes()], [14, 10]);
+
+    // ── 9. la ligne de commande s'écrit par ce qu'elle AUTORISE ───────────────────────────────────────────────────────────────────────────────────
+    for (const args of [['--ecrire', '--tout'], ['--plan', '--ecrire'], [], ['--series=5', '--plan'], ['--ecrire', '--series=1,2;x']]) {
+        const r = spawnSync(process.execPath, [path.join(DIR, 'collecteur-images-pokumon.js'), ...args], { encoding: 'utf8', timeout: 30000 });
+        verifier(`ligne de commande « ${args.join(' ') || '(rien)'} » : refusée avant toute connexion (code 2)`, r.status, 2);
+    }
+
+    console.log(`\n${ko ? '❌' : '✅'} ${ok} passés, ${ko} en échec`);
+    process.exit(ko ? 1 : 0);
+})().catch(e => { console.error('❌ le banc a levé :', e.stack); process.exit(1); });
