@@ -24,6 +24,7 @@ const PRODUITS_MATIERE_SPECIALE = Object.freeze({
         date: '2026-10-17',
         frereCompare: 576772,
         frereNature: 'normal',
+        matiere: 'metal',
         idExpansion: 4347,
     }),
     // PREUVE : planche 01 de S7\METAL (rang 1), vignette 580161 comparée à son frère 605985 (même idExpansion 4347, même idMetacard) : bordure dorée sombre (V 0,37) contre jaune vif, scan doré métallique
@@ -34,9 +35,29 @@ const PRODUITS_MATIERE_SPECIALE = Object.freeze({
         decision: 'coordinateur, 2026-10-18 : ajout sur la planche 01 ; décision du testeur : un trou, ou le vrai scan',
         date: '2026-10-18',
         frereCompare: 605985,
+        matiere: 'metal',
         frereNature: 'jumbo',   // 605985 est le JUMBO (étiquette « Oversized Card ») de 580161, pas la carte normale : ne jamais le prendre pour un substitut valide
         idExpansion: 4347,
     }),
+    // ── ruling du coordinateur 2026-10-18, après lecture de planches-texte (S7\METAL\planches-texte\) : chaque entrée = la vignette Cardmarket, l'étiquette lue, le frère comparé ──
+    // MÉTAL : TCGdex (variante `metal`, thirdParty.cardmarket) ET l'étiquette Cardmarket « Attention: Metal Card » lue sur la vignette (planche-texte-01 rang 6 ; planche-texte-02 rang 2).
+    720951: entree({
+        nom: 'Mew ex [Restart | Genome Hacking]', matiere: 'metal',
+        motif: 'carte en métal doré du coffret 151 Ultra-Premium Collection : vignette dorée, étiquette Cardmarket « Metal Card — 151 Ultra-Premium Collection » (planche-texte-01) ; le scan normal serait faux',
+        decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan (décision du testeur)', date: '2026-10-18', frereCompare: 733746, frereNature: 'normal', idExpansion: 5402,
+    }),
+    804205: entree({
+        nom: 'Greninja ex [Shinobi Blade | Mirage Barrage]', matiere: 'metal',
+        motif: 'carte en métal de Twilight Masquerade : étiquette Cardmarket « Attention: Metal Card » (planche-texte-02) ; le scan normal serait faux',
+        decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan (décision du testeur)', date: '2026-10-18', frereCompare: 769280, frereNature: 'normal', idExpansion: 5691,
+    }),
+    // LENTICULAIRE 3D : TCGdex (variante `lenticular`) ; vignette Cardmarket à la marque « 3D! » et à l'étiquette « Oversized Card » (planche-texte-01 rangs 1 à 5) ; autre matière, le scan normal est faux.
+    // (821617 Charizard ex, « Oversized » sans marque 3D visible : cas DOUTEUX, hors table.)
+    851066: entree({ nom: 'Mega Latias ex [Strafe | Illusory Impulse]', matiere: 'lenticulaire', motif: 'jumbo lenticulaire 3D (« 3D! », Oversized Card), MEP Black Star Promos', decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan', date: '2026-10-18', frereCompare: 851063, frereNature: 'normal', idExpansion: 6232 }),
+    859012: entree({ nom: 'Mega Venusaur ex [Solar Transfer | Jungle Dump]', matiere: 'lenticulaire', motif: 'jumbo lenticulaire 3D (« 3D! », Oversized Card), MEP Black Star Promos', decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan', date: '2026-10-18', frereCompare: 859011, frereNature: 'normal', idExpansion: 6232 }),
+    873718: entree({ nom: 'Mega Meganium ex [Giant Bouquet]', matiere: 'lenticulaire', motif: 'jumbo lenticulaire 3D (« 3D! », Oversized Card), MEP Black Star Promos', decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan', date: '2026-10-18', frereCompare: 873717, frereNature: 'normal', idExpansion: 6232 }),
+    873720: entree({ nom: 'Mega Emboar ex [Crimson Blast]', matiere: 'lenticulaire', motif: 'jumbo lenticulaire 3D (« 3D! », Oversized Card), MEP Black Star Promos', decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan', date: '2026-10-18', frereCompare: 873719, frereNature: 'normal', idExpansion: 6232 }),
+    873722: entree({ nom: 'Mega Feraligatr ex [Mortal Crunch]', matiere: 'lenticulaire', motif: 'jumbo lenticulaire 3D (« 3D! », Oversized Card), MEP Black Star Promos', decision: 'coordinateur, 2026-10-18 : un trou, ou le vrai scan', date: '2026-10-18', frereCompare: 873721, frereNature: 'normal', idExpansion: 6232 }),
 });
 
 /** Le produit est-il en matière spéciale ? Accepte un nombre ou une chaîne de chiffres ; tout le reste est faux. */

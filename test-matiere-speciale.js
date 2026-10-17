@@ -20,6 +20,12 @@ verifier('undefined / null : jamais', [M.estMatiereSpeciale(undefined), M.estMat
 verifier('la table est gelée', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE), true);
 verifier('chaque entrée porte motif, décision, date, frère comparé et sa nature (normal | jumbo)', Object.values(M.PRODUITS_MATIERE_SPECIALE).every(e => e.motif && e.decision && /^\d{4}-\d\d-\d\d$/.test(e.date) && Number.isInteger(e.frereCompare) && ['normal', 'jumbo'].includes(e.frereNature) && !('frereNormal' in e)), true);
 verifier('580162 est comparé à la NORMALE 576772, 580161 au JUMBO 605985', [M.PRODUITS_MATIERE_SPECIALE[580162], M.PRODUITS_MATIERE_SPECIALE[580161]].map(e => [e.frereCompare, e.frereNature]), [[576772, 'normal'], [605985, 'jumbo']]);
+// ruling du coordinateur 2026-10-18 (planches-texte) : 2 métaux + 5 lenticulaires ; chaque entrée dit sa matière
+const NOUVEAUX = { 720951: ['metal', 733746], 804205: ['metal', 769280], 851066: ['lenticulaire', 851063], 859012: ['lenticulaire', 859011], 873718: ['lenticulaire', 873717], 873720: ['lenticulaire', 873719], 873722: ['lenticulaire', 873721] };
+verifier('les 7 nouveaux sont en table avec leur matière et leur frère comparé', Object.entries(NOUVEAUX).map(([id]) => { const e = M.PRODUITS_MATIERE_SPECIALE[id]; return e ? [e.matiere, e.frereCompare] : null; }), Object.values(NOUVEAUX));
+verifier('chaque entrée de la table porte matiere metal | lenticulaire', Object.values(M.PRODUITS_MATIERE_SPECIALE).every(e => ['metal', 'lenticulaire'].includes(e.matiere)), true);
+verifier('821617 (Charizard ex, « Oversized » sans marque 3D) n\'est PAS en table', M.estMatiereSpeciale(821617), false);
+verifier('la table compte 9 produits', Object.keys(M.PRODUITS_MATIERE_SPECIALE).length, 9);
 verifier('l\'entrée est gelée aussi', Object.isFrozen(M.PRODUITS_MATIERE_SPECIALE[580162]), true);
 
 // 1 bis. 580161 « Pikachu [Gnaw | Thunder Jolt] » (métal doré, Celebrations Ultra-Premium) : ruling du coordinateur 2026-10-18
