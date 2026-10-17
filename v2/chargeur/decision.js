@@ -18,6 +18,55 @@ const cibleDuSet = s => ({ tirage: s.tirage ?? s.region, expansions: [].concat(s
 /** La clé stable d'une fiche, comme lib/collectionContrat.ts::cleFiche (« - » pour une fiche sans numéro). */
 const cleFiche = (idInterne, numero) => `${idInterne}|${numero ?? '-'}`;
 
+// ── REPLI-REIMPRESSIONS (étape 6 du testeur) : « une réimpression 30th, comme une tamponnée, ne reçoit JAMAIS l'image d'une autre impression ».
+// Une liste FERMÉE de familles, écrite par ce qu'elle AUTORISE (des slugSet énumérés, jamais un motif qui attraperait ce qu'on n'a pas lu). Pour un produit de ces familles, un visuel d'un AUTRE tirage
+// (`autre-tirage`, ou un `substitut` dont le set n'est pas celui du produit) n'est PAS servi : AUCUNE ENTRÉE. Pas d'entrée « sans visuel » : le format et la validation d'entrée exigent une vignette,
+// et tous les lecteurs (resoudre, impressions) la supposent ; l'honnêteté tient dans l'absence (un visuel absent est honnête, celui d'un autre tirage ne l'est pas — CLAUDE.md).
+// Le filtre vient APRÈS choisirVisuel (la fonction PARTAGÉE avec l'export du site, non touchée).
+// PREUVES (catalogue, relevées le 2026-10-17 : sets.json de `cartes`, slugSet = _id du set ; chiffres dans le rapport du lot) :
+//   30th Celebration : les 8 sets dont le slugSet commence par « 30th- » (codes 30C, m6a, 30thC, MA6, mF, 30thDC, 30th-P, x30C) — « toutes les langues » ;
+//   Prize Packs : « Play-Pokemon-Prize-Pack-Series-One » à « -Nine » (codes PPS1 à PPS9) ;
+//   WCD : les 20 sets « WCD-aaaa » du catalogue (2004 à 2019, 2022 à 2025 ; WCD20 et WCD21 n'existent pas) ;
+//   tamponnées nommées : les sets que la décision du testeur (2026-10-17, avis du catalogue) nomme « tamponnées sans source » dont l'image n'est que celle du tirage normal : Battle Academy 2020/2022/2024
+//   et Trick or Trade 2024 (les autres Trick or Trade ne sont PAS nommés, ils ne sont pas dans la liste).
+const FAMILLES_SANS_REPLI = Object.freeze({
+    '30th-celebration': Object.freeze(['30th-Celebration', '30th-Celebration-JP', '30th-Celebration-Simplified-Chinese', '30th-Celebration-IDTH', '30th-Celebration-Premium-Deck-Set',
+        '30th-Celebration-Simplified-Chinese-Premium-Deck-Set', '30th-Anniversary-Celebration-Simplified-Chinese', '30th-Celebration-Additionals']),
+    'prize-packs': Object.freeze(['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'].map(n => `Play-Pokemon-Prize-Pack-Series-${n}`)),
+    wcd: Object.freeze([2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2022, 2023, 2024, 2025].map(a => `WCD-${a}`)),
+    'tamponnees-nommees': Object.freeze(['Battle-Academy-2020', 'Battle-Academy-2022', 'Battle-Academy-2024', 'Trick-or-Trade-2024'])
+});
+// Une tamponnée reconnue à son NOM Cardmarket (le slug en porte le jeton) : « Staff », « Prerelease ». Les slugs relevés : 4 « League-Staff », 0 « Prerelease » (la preuve est dans le rapport).
+const JETON_TAMPON_NOM = /(^|-)(Staff|Prerelease|Pre-Release)(-|$)/i;
+// Les familles qui RESSEMBLENT à une liste sans y figurer (un 31e set 30th, un WCD-2026, une Prize Pack Series Ten) : elles ne sont pas refusées (la liste est fermée), elles sont SIGNALÉES (d.familleHorsListe).
+const RESSEMBLANCES = Object.freeze([/^30th-/, /^WCD-\d{4}$/, /^Play-Pokemon-Prize-Pack-Series-/]);
+const NOMS_REFUS = Object.freeze([...Object.keys(FAMILLES_SANS_REPLI), 'staff-prerelease', 'image-empruntee']);
+const VARIANTES_ARCHIVE = Object.freeze(['staff', 'jumbo', 'normale']);
+// basseDefinition (original sous 350 px) : le coordinateur MESURE puis tranche. false = les entrées sont GARDÉES (et portent le champ) ; true = une entrée basseDefinition n'est pas servie à l'identification
+// (compteur d.basseDefinitionExclue). Le site, lui, continue d'afficher ces images ; le choix ne concerne que l'archive.
+const EXCLURE_BASSE_DEFINITION = false;
+const familleDuSet = id => { for (const [nom, liste] of Object.entries(FAMILLES_SANS_REPLI)) if (liste.includes(id)) return nom; return null; };
+/**
+ * Le visuel choisi doit-il être REFUSÉ ? @returns le nom du compteur (famille, 'staff-prerelease' ou 'image-empruntee'), ou null.
+ *  · une image marquée imageEmprunteeTirage (l'image du tirage normal, pour l'AFFICHAGE seulement) n'est JAMAIS servie, famille ou non, du set ou non ;
+ *  · un visuel d'un AUTRE tirage (autre-tirage, ou substitut dont le set n'est pas celui du produit) n'est pas servi aux familles ci-dessus ni aux produits dont le nom Cardmarket nomme un tampon.
+ */
+function refusDeRepli({ ligne, set, im, visuel }) {
+    if (im && im.imageEmprunteeTirage === true) return 'image-empruntee';
+    const autre = visuel === 'autre-tirage' || (visuel === 'substitut' && (!im || im.set !== set._id));
+    if (!autre) return null;
+    const f = familleDuSet(set._id);
+    if (f) return f;
+    return JETON_TAMPON_NOM.test(String(ligne.slug ?? '')) ? 'staff-prerelease' : null;
+}
+/** Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés (la basse définition suit l'image). */
+function marquagesDe(im, idProduct) {
+    const concerne = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+    const bool = x => (typeof x === 'boolean' ? x : null);
+    return { partageeHoloNonHolo: concerne ? bool(im.partageeHoloNonHolo) : null, partageeTamponNonSepare: concerne ? bool(im.partageeTamponNonSepare) : null,
+        produitsPartages: concerne ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
+}
+
 function verifierRegle(regle) {
     for (const k of REGLE_REQUISE) if (!regle || typeof regle[k] !== 'function') throw new Error(`règle du site absente : ${k} — la décision s'arrête (jamais un repli)`);
 }
@@ -30,7 +79,7 @@ function verifierRegle(regle) {
  * @param regle     la règle du site (sept fonctions, dont impressionDuSet) ; @param journal fonction(texte)
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
-async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null }) {
+async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null, exclureBasseDefinition = EXCLURE_BASSE_DEFINITION }) {
     // `sink` { entree(e), lien(setId, cle, idProducts) } : les résultats sortent UN À UN (le chargeur les range en colonnes sans jamais tenir le tableau des entrées ni la Map des liens) ;
     // sans sink, ils sont rendus en tableau et en Map (les bancs, l'exporteur de comparaison).
     verifierRegle(regle);
@@ -89,7 +138,14 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
 
     const d = { catalogue: metacarte.size, avecLigne: lignes.length, sansLigne: 0, duSet: 0, substitut: 0, autreTirage: 0, aucun: 0,
         aucunDetail: { 'carte absente': 0, 'aucun set candidat': 0, 'aucun visuel': 0 }, ecrites: 0, sansFicheDuSite: 0, rareteContredite: 0, idMetacardAbsent: 0, plusieursSets: 0,
-        setsAvecLiens: compte.sets, fichesLiees: compte.fiches, produitsLies: compte.produits };
+        setsAvecLiens: compte.sets, fichesLiees: compte.fiches, produitsLies: compte.produits,
+        // REPLI-REIMPRESSIONS : les produits dont le visuel d'un autre tirage (ou emprunté) n'est PAS servi, par famille — somme à part : avecLigne = ecrites + aucun + sansFicheDuSite + repliRefuse.total (+ doublons de lignes)
+        basseDefinitionExclue: 0,
+        repliRefuse: { total: 0, parFamille: Object.fromEntries(NOMS_REFUS.map(n => [n, 0])) },
+        // les sets qui RESSEMBLENT à une famille sans figurer dans sa liste fermée : servis comme avant, mais nommés (une liste fermée qui vieillit ne doit pas vieillir en silence)
+        familleHorsListe: sets.map(s => s._id).filter(id => RESSEMBLANCES.some(re => re.test(id)) && familleDuSet(id) === null).sort(),
+        // les marquages portés par les entrées écrites
+        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 } };
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
@@ -118,6 +174,10 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (choix.sansFiche) { d.sansFicheDuSite++; continue; }
         const { im, visuel, mention } = choix;
         if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
+        // REPLI-REIMPRESSIONS : APRÈS le choix (la fonction partagée n'est pas touchée), AVANT toute entrée : jamais l'image d'un autre tirage à une réimpression
+        const refus = refusDeRepli({ ligne: l, set: s, im, visuel });
+        if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
+        if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
 
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
@@ -131,13 +191,18 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const numero = l.numeroFiche == null ? null : String(l.numeroFiche);
         const idMetacard = entier(metacarte.get(l.idProduct)) ? metacarte.get(l.idProduct) : null;
         if (idMetacard === null) d.idMetacardAbsent++;
-        const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: null, setNom: texte(s.nomAffichage),
+        const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: VARIANTES_ARCHIVE.includes(l.variante) ? l.variante : null, setNom: texte(s.nomAffichage),
             // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
             lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
+        Object.assign(e, marquagesDe(im, l.idProduct));
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
+        if (e.produitsPartages) d.marquees.partages++;
+        if (e.partageeHoloNonHolo === true) d.marquees.holo++;
+        if (e.partageeTamponNonSepare !== null) d.marquees.tampon++;
+        if (e.basseDefinition === true) d.marquees.basse++;
         if (sink) sink.entree(e); else entrees.push(e);
         d.ecrites++;
     }
@@ -146,4 +211,4 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE };
+module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION };
