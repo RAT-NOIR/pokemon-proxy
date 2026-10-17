@@ -87,7 +87,7 @@
     "route": "POST /api/identifier",
     "statut": 200,
     "schema": "ReponseAnalyse",
-    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent et la photo ne dit pas laquelle ; remboursé sans plafond (refus de la garde des jumeaux, constaté par le serveur)."
+    "description": "Introuvable (impression-indeterminee) : la carte est reconnue mais plus de trois impressions existent, la photo ne dit pas laquelle et la ligne de catalogue d'un jumeau manque, donc la question à 3 n'est pas possible (repli, JUMEAUX-QUESTION) ; remboursé sans plafond (refus de la garde des jumeaux, constaté par le serveur)."
   },
   "introuvable-panne-lecture.json": {
     "route": "POST /api/identifier",

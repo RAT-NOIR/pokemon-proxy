@@ -79,11 +79,13 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     H.v('P + 2 jumeaux = 3 produits : une question à 3', [TROIS.issue, ids(TROIS)], ['question', [700, 701, 702]]);
 
     const QUATRE = A(700, table(new Map([[700, [701, 702, 703]]])));
-    H.v('P + 3 jumeaux = 4 produits : introuvable, jamais un choix de 3 parmi N ; la raison SERVIE dit la vérité (impression-indeterminee, pas photo-illisible)', [QUATRE.issue, QUATRE.analyse.cartes[0].statut, QUATRE.analyse.cartes[0].raison], ['introuvable', 'introuvable', 'impression-indeterminee']);
-    H.vrai('   « impression-indeterminee » est dans la liste fermée de l\'adaptateur (RAISONS), additive', require('../identifier/adaptateur').RAISONS.includes('impression-indeterminee') && require('../identifier/adaptateur').RAISONS.includes('photo-illisible'));
-    H.v('   le motif distinct est dit (jumeaux-trop-nombreux)', QUATRE.motif, 'jumeaux-trop-nombreux');
+    // JUMEAUX-QUESTION (2026-10-17) : plus de 3 produits n'est plus un introuvable mais une QUESTION à 3 (P d'abord), jamais une affirmation ; le banc complet est test-jumeaux-question.js
+    H.v('P + 3 jumeaux = 4 produits : une QUESTION à 3 parmi eux (P compris), jamais une carte identifiée', [QUATRE.issue, QUATRE.analyse.cartes[0].statut, QUATRE.analyse.cartes[0].carte, ids(QUATRE).length, ids(QUATRE).includes(700)], ['question', 'a-trancher', null, 3, true]);
+    H.vrai('   « impression-indeterminee » reste dans la liste fermée de l\'adaptateur (RAISONS) : c\'est le repli quand une ligne de catalogue manque', require('../identifier/adaptateur').RAISONS.includes('impression-indeterminee') && require('../identifier/adaptateur').RAISONS.includes('photo-illisible'));
     const GROS = A(700, table(new Map([[700, [701, 702, 703, 704]]])));
-    H.v('   5 produits : de même', [GROS.issue, GROS.motif], ['introuvable', 'jumeaux-trop-nombreux']);
+    H.v('   5 produits : de même, 3 candidats', [GROS.issue, ids(GROS).length], ['question', 3]);
+    const SANSLIGNE = adapter({ statutHttp: 200, corps: succes(700) }, ctx(table(new Map([[700, [701, 702, 999999]]]))));
+    H.v('   plus de 3 produits dont un SANS ligne au catalogue : le repli d\'avant, introuvable impression-indeterminee / jumeaux-trop-nombreux', [SANSLIGNE.issue, SANSLIGNE.analyse.cartes[0].raison, SANSLIGNE.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
 
     const SANSFOURNISSEUR = adapter({ statutHttp: 200, corps: succes(700) }, { produits, langueInterface: 'fr', cfg });
     // I1 de la relecture 1 : une colonne qui manque est une panne de NOTRE côté (INDISPONIBLE, remboursée dans le compteur des jumeaux, puis au plafond de pannes quand il est plein), jamais un « introuvable » (la photo n'y est pour rien)
@@ -114,8 +116,9 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     const avant = C.compteurs();
     A(700, table(new Map([[700, [701, 702, 703]]])));
     A(700, table(new Map([[700, [701]]])));
+    adapter({ statutHttp: 200, corps: succes(700) }, ctx(table(new Map([[700, [701, 702, 999999]]]))));
     const apres = C.compteurs();
-    H.v('compteurs : +1 jumeaux-trop-nombreux, +1 question-de-jumeaux', [apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux'], apres['question-de-jumeaux'] - avant['question-de-jumeaux']], [1, 1]);
+    H.v('compteurs : la question à 3 ne compte rien (M2), +1 jumeaux-trop-nombreux (le repli), +1 question-de-jumeaux', [apres['jumeaux-trop-nombreux'] - avant['jumeaux-trop-nombreux'], apres['question-de-jumeaux'] - avant['question-de-jumeaux']], [1, 1]);
 
     // ── 4. le fournisseur de la route : lit la version EN PLACE, une version à la fois
     const four = C.fournisseurDe(v);
@@ -149,10 +152,10 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     const n0 = appels.length;
     H.v('   sans colonne : ne conclut pas, et le catalogue n\'est même pas interrogé', [(await pd(cat([]), [1], sansColonne))(1).motif, appels.length - n0], ['jumeaux-indisponibles', 0]);
     H.v('idsAffirmes : seulement le produit d\'une affirmation de la chaîne (success, ambigu false)', [C.idsAffirmes({ success: true, carte: { idProduct: 7, ambigu: false } }), C.idsAffirmes({ success: true, carte: { idProduct: 7, ambigu: true } }), C.idsAffirmes({ success: false }), C.idsAffirmes(null)], [[7], [], [], []]);
-    H.v('idsACharger : les jumeaux de l\'affirmation, seulement s\'ils tiennent dans une question (au plus 2)', [
+    H.v('idsACharger : les jumeaux de l\'affirmation (jusqu\'à la borne de chargement : le choix des 3 d\'un groupe trop grand a besoin de leurs lignes) ; aucun jumeau : rien', [
         C.idsACharger({ success: true, carte: { idProduct: 740794, ambigu: false }, candidats: [{ idProduct: 740794 }] }, C.fournisseurDe(relue)),
         C.idsACharger({ success: true, carte: { idProduct: 1, ambigu: false }, candidats: [] }, four),
-        C.idsACharger({ success: true, carte: { idProduct: 2, ambigu: true }, candidats: [{ idProduct: 2 }] }, four)], [[], [], []]);
+        C.idsACharger({ success: true, carte: { idProduct: 2, ambigu: true }, candidats: [{ idProduct: 2 }] }, four)], [[805556, 900003, 900004], [], []]);
     const v2 = (() => { const b = creerConstructeur(); b.entree(brut(10, 9)); b.jumeau(J(10, 9, 1, '1', 'intl')); b.jumeau(J(11, 9, 2, '1', 'intl')); b.jumeau(J(12, 9, 3, '1', 'intl')); return b.finir(); })();
     H.v('idsACharger : 2 jumeaux → chargés ; la route peut alors poser la question', C.idsACharger({ success: true, carte: { idProduct: 10, ambigu: false }, candidats: [{ idProduct: 10 }] }, C.fournisseurDe(v2)), [11, 12]);
 

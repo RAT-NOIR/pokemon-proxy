@@ -19,7 +19,8 @@
 const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
-const { garde, candidatUniqueDe } = require('./jumeaux');
+const { garde, candidatUniqueDe, noter } = require('./jumeaux');
+const { choisirTrois } = require('./jumeaux-nombreux');
 const { garderCompatibles } = require('./nom-compatible');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
@@ -79,17 +80,27 @@ function question(ids, etat, ctx) {
 }
 
 // JUMEAU-V2 + UN-CANDIDAT : ce que dit la garde des jumeaux pour un produit P. `affirmer` rend null (l'appelant décide : affirmer P, ou lui poser la question de confirmation) ;
-// tout le reste est une SORTIE : question de départage (P et ses jumeaux), introuvable `impression-indeterminee` (plus de 3 produits), ou PANNE INDISPONIBLE (jamais ni question ni affirmation).
-function apresGarde(g, etat, ctx) {
+// tout le reste est une SORTIE : question de départage (P et ses jumeaux ; plus de 3 produits : 3 d'entre eux, jumeaux-nombreux.js), introuvable `impression-indeterminee` (repli : une ligne de catalogue d'un jumeau manque), ou PANNE INDISPONIBLE (jamais ni question ni affirmation).
+function apresGarde(g, etat, ctx, corps) {
     if (g.action === 'affirmer') return null;
     if (g.action === 'question') return question(g.ids, etat, ctx);
+    if (g.action === 'nombreux') {
+        // JUMEAUX-QUESTION : plus de 3 produits => une QUESTION à 3 (P d'abord, puis l'ordre nommé de jumeaux-nombreux.js), jamais une affirmation. Une ligne de catalogue manquante : le repli d'avant.
+        const trois = choisirTrois({ p: g.ids[0], jumeaux: g.ids.slice(1), corps, produits: ctx.produits });
+        // TOUR 1 : le filtre de nom vaut pour P aussi. Aucun candidat ne reste => introuvable photo-illisible (la règle du lot CONFIRMATION-SURE : tous contredits, on ne sait pas) ;
+        // UN seul reste, ou une ligne manque => le repli d'avant (jamais une confirmation à 1 candidat dans cette voie) ; 2 ou plus => la question. Seul le repli écrit au journal.
+        if (trois && trois.length === 0) return introuvable('photo-illisible');
+        if (trois && trois.length >= 2) return question(trois, etat, ctx);
+        noter('jumeaux-trop-nombreux', g.ids[0], trois ? '(un seul candidat compatible)' : '(lignes de catalogue incomplètes)');
+        return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
+    }
     if (g.action === 'introuvable') return { ...introuvable('impression-indeterminee'), motif: g.motif };     // la carte est reconnue, son impression ne se tranche pas (plus de 3 produits) : on ne ment pas par « photo-illisible »
     return panne('INDISPONIBLE', `jumeaux : ${g.motif || 'indisponibles'}`, g.motif || 'jumeaux-indisponibles');     // notre infrastructure (colonne absente, périmée, incomplète), jamais un introuvable
 }
 // UN candidat non affirmé P : la source de P est lue d'abord (absent du catalogue de l'API : panne SERVEUR, on n'invente pas), puis la garde ; sans jumeau, une question à UN choix.
-function candidatUnique(idProduct, etat, ctx) {
+function candidatUnique(idProduct, etat, ctx, corps) {
     source(ctx, idProduct);
-    return apresGarde(garde(ctx, idProduct), etat, ctx) || question([idProduct], etat, ctx);
+    return apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx);
 }
 
 function traduire(statutHttp, corps, ctx) {
@@ -106,7 +117,7 @@ function traduire(statutHttp, corps, ctx) {
             // JUMEAU-V2 : P n'est affirmé que s'il n'a AUCUN jumeau (jumeaux.js : un seul chemin mène à « affirmer »). Sinon une question de départage entre P et ses jumeaux,
             // ou un introuvable au motif distinct. La source de P est lue d'abord : un P absent du catalogue de l'API reste la panne SERVEUR d'avant.
             const sourceP = source(ctx, c.idProduct);
-            const refusGarde = apresGarde(garde(ctx, c.idProduct), etat, ctx);
+            const refusGarde = apresGarde(garde(ctx, c.idProduct), etat, ctx, corps);
             if (refusGarde) return refusGarde;
             const produit = construireProduit(sourceP, pctx(ctx));
             return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
@@ -116,7 +127,7 @@ function traduire(statutHttp, corps, ctx) {
         // UN-CANDIDAT (D1, 2026-10-13) : un seul candidat n'est plus un introuvable (ancien §5 Q32) — « ce qui n'est pas affirmé devient une question ». Il passe par la garde des
         // jumeaux (comme une affirmation) : sans jumeau, la question « est-ce cette carte ? » ; avec jumeaux, la question de départage ; trop de jumeaux, impression-indeterminee.
         const unique = candidatUniqueDe({ ...corps, candidats: ids.map(idProduct => ({ idProduct })) });
-        if (unique !== null) return candidatUnique(unique, etat, ctx);
+        if (unique !== null) return candidatUnique(unique, etat, ctx, corps);
         if (ids.length < 2) return introuvable('photo-illisible');       // aucun candidat : on ne sait rien
         return question(ids, etat, ctx);
     }
@@ -134,7 +145,7 @@ function traduire(statutHttp, corps, ctx) {
             const brute = [...new Set([...entiers(corps.candidats), ...entiers(ctx.candidatsDeRefus)])];
             const union = garderCompatibles(brute, corps, ctx.produits);           // CONFIRMATION-SURE : les candidats que le nom lu contredit sont retirés d'abord
             if (brute.length > 0 && union.length === 0) return introuvable('photo-illisible');     // tous contredits : on ne sait pas, jamais une absence affirmée (« hors-catalogue »)
-            if (union.length === 1) return candidatUnique(union[0], etatDe(corps.etat), ctx);     // UN-CANDIDAT (D1) : la même règle que l'ambiguë à un candidat (sans-repli est sorti plus haut : le nom CONTREDIT)
+            if (union.length === 1) return candidatUnique(union[0], etatDe(corps.etat), ctx, corps);     // UN-CANDIDAT (D1) : la même règle que l'ambiguë à un candidat (sans-repli est sorti plus haut : le nom CONTREDIT)
             if (union.length >= 2 && union.length <= 3) return question(union, etatDe(corps.etat), ctx);
             if (union.length > 3 || motif !== 'egalite-parfaite') return introuvable('photo-illisible');   // on ne sait pas : pas d'absence affirmée
             return introuvable('hors-catalogue');

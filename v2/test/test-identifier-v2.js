@@ -355,7 +355,8 @@ async function semer(mode) {                                  // 'double' | 'sim
                     ['introuvable', 0, true, null, 3, 5, 20]);
                 await s.fermer();
             }
-            await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits', 'jumeaux-trop-nombreux');
+            // JUMEAUX-QUESTION (2026-10-17) : plus de 3 produits = une question à 3 quand les lignes des jumeaux sont au catalogue (test-jumeaux-question.js) ; ici 901 et 902 n'y sont PAS : le repli d'avant
+            await refusJ(id => ({ conclu: true, ids: id === ID_A ? [ID_B, 901, 902] : [] }), 'plus de 3 produits dont deux sans ligne au catalogue (repli)', 'jumeaux-trop-nombreux');
             // I1 : la colonne absente / périmée est une PANNE INDISPONIBLE (503), remboursée elle aussi dans le compteur des jumeaux (puis au plafond de pannes quand il est plein), pas un introuvable
             const panneJ = async (jumeaux, nom) => {
                 const s = await serveurJ(jumeaux); const x = await inst(3); await plafondPlein(x); const r = await poster(s.url, x.jeton, corps(), { nom }), j = r.json || {};
