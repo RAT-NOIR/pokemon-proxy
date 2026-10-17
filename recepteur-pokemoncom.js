@@ -36,8 +36,17 @@ const HTML_MAX = 400000;             // caractères de la zone des résultats ga
 const CARTES_MAX = 1000;
 const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE } = PK;
 
-const CLES_RELEVE = 'cartes,compteur,filtre,html,htmlTronque,pagination,schema,titre,url,zoneRepli';
-const CLES_CARTE = 'alt,img,nom,numero,set';
+const SCHEMA = 2;                    // 2 = userscript 1.1 (pagination lue, numeroDoute par carte, extensions et selects du formulaire)
+// 12 cartes par page : la taille OBSERVÉE sur la vraie page (premier relevé réel du testeur, 2026-10-17, Guardians Rising : « 1 of 15 », 12 cartes). Une valeur observée, pas promise par le site.
+const CARTES_PAR_PAGE_OBSERVEE = 12;
+const PAGES_MAX_SAINE = 5000;        // borne saine de « N of M » : au-delà, la lecture est jugée illisible (null), pas crue
+const EXTENSIONS_MAX = 500;
+const SELECTS_MAX = 30;
+const OPTIONS_MAX = 100;
+const CLES_RELEVE = 'cartes,compteur,extensions,filtre,html,htmlTronque,pagination,schema,selects,titre,url,zoneRepli';
+const CLES_CARTE = 'alt,img,nom,numero,numeroDoute,set';
+const CLES_EXTENSION = 'case,cochee,libelle';
+const CLES_SELECT = 'nom,options';
 const estChaine = (v, max) => typeof v === 'string' && v.length <= max;
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
@@ -45,9 +54,10 @@ const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').repl
 function validerReleve(o) {
     const non = (statut, motif) => ({ ok: false, statut, motif });
     if (!o || typeof o !== 'object' || Array.isArray(o)) return non(400, 'le corps doit être un objet JSON');   // GARDE:objet
+    if (o.schema === 1) return non(400, 'schema 1 refusé : le userscript installé est la version 1.0, trop ancienne ; réinstalle le userscript 1.1 (schema 2)');   // GARDE:schema
+    if (o.schema !== SCHEMA) return non(400, `schema inconnu : seul le schema ${SCHEMA} (userscript 1.1) est accepté ; réinstalle le userscript`);   // GARDE:schema
     const cles = Object.keys(o).sort().join(',');
     if (cles !== CLES_RELEVE) return non(400, `clés reçues « ${cles.slice(0, 200)} » : seules ${CLES_RELEVE} sont acceptées`);   // GARDE:cles
-    if (o.schema !== 1) return non(400, 'schema doit valoir 1');   // GARDE:schema
     let adresseOk = false;
     if (estChaine(o.url, 2000)) {
         try {
@@ -65,7 +75,21 @@ function validerReleve(o) {
         const c = o.cartes[i];
         if (!c || typeof c !== 'object' || Array.isArray(c) || Object.keys(c).sort().join(',') !== CLES_CARTE) return non(400, `carte ${i} : clés exactes ${CLES_CARTE} exigées`);   // GARDE:carte
         if (![c.nom, c.numero, c.set, c.alt].every(x => estChaine(x, 300)) || !estChaine(c.img, 1000)) return non(400, `carte ${i} : champs en chaînes bornées`);
+        if (typeof c.numeroDoute !== 'boolean') return non(400, `carte ${i} : numeroDoute doit être un booléen`);   // GARDE:doute
+        if (c.numeroDoute && (c.numero !== '' || c.set !== '')) return non(400, `carte ${i} : un numéro douteux doit avoir numero et set vides (jamais une devinette)`);   // GARDE:doute
         if (c.img !== '' && !/^https:\/\/[^\s]+$/.test(c.img)) return non(400, `carte ${i} : l'adresse d'image doit être vide ou en https`);   // GARDE:image
+    }
+    if (!Array.isArray(o.extensions) || o.extensions.length > EXTENSIONS_MAX) return non(400, `extensions : un tableau de ${EXTENSIONS_MAX} entrées au plus`);   // GARDE:extensions
+    for (let i = 0; i < o.extensions.length; i++) {
+        const e = o.extensions[i];
+        if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).sort().join(',') !== CLES_EXTENSION) return non(400, `extension ${i} : clés exactes ${CLES_EXTENSION} exigées`);   // GARDE:extensions
+        if (!estChaine(e.case, 200) || !estChaine(e.libelle, 200) || typeof e.cochee !== 'boolean') return non(400, `extension ${i} : case et libelle en chaînes de 200 caractères au plus, cochee booléen`);
+    }
+    if (!Array.isArray(o.selects) || o.selects.length > SELECTS_MAX) return non(400, `selects : un tableau de ${SELECTS_MAX} select au plus`);   // GARDE:selects
+    for (let i = 0; i < o.selects.length; i++) {
+        const s = o.selects[i];
+        if (!s || typeof s !== 'object' || Array.isArray(s) || Object.keys(s).sort().join(',') !== CLES_SELECT) return non(400, `select ${i} : clés exactes ${CLES_SELECT} exigées`);   // GARDE:selects
+        if (!estChaine(s.nom, 100) || !Array.isArray(s.options) || s.options.length > OPTIONS_MAX || !s.options.every(x => estChaine(x, 200))) return non(400, `select ${i} : nom (100 caractères) et au plus ${OPTIONS_MAX} options de 200 caractères`);
     }
     if (!estChaine(o.html, HTML_MAX)) return non(400, `html : une chaîne de ${HTML_MAX} caractères au plus`);   // GARDE:html
     if (typeof o.htmlTronque !== 'boolean') return non(400, 'htmlTronque doit être un booléen');   // GARDE:tronque
@@ -73,19 +97,38 @@ function validerReleve(o) {
     return { ok: true };
 }
 
-/** Le diagnostic d'un relevé : cartes vues, total annoncé lu dans le compteur affiché (ou null), complétude (null = on ne sait pas). */
+/** « N of M » dans le texte de pagination affiché. Rend { pageCourante, pagesTotal } ou { null, null } si le motif manque ou si les bornes sont insensées (1 ≤ N ≤ M ≤ PAGES_MAX_SAINE). */
+function lirePagination(texte) {
+    const m = /(?<!\d)(\d{1,4})\s+of\s+(\d{1,4})(?!\d)/i.exec(String(texte));
+    if (!m) return { pageCourante: null, pagesTotal: null };
+    const n = Number(m[1]), t = Number(m[2]);
+    if (!(n >= 1 && t >= 1 && n <= t && t <= PAGES_MAX_SAINE)) return { pageCourante: null, pagesTotal: null };
+    return { pageCourante: n, pagesTotal: t };
+}
+
+/** Le diagnostic d'un relevé. Pagination lisible (« N of M ») : page N sur M, complète si 12 cartes (N < M) ou 1 à 12 cartes (dernière page). Sinon : total annoncé lu dans le compteur (ou null), complétude (null = on ne sait pas). */
 function diagnostiquer(o) {
     const m = /(\d[\d.,]*)\s*(?:cards?|results?|cartes|résultats)\b/i.exec(o.compteur);
     const annonce = m ? Number(m[1].replace(/[.,]/g, '')) : null;
     const cartes = o.cartes.length;
     const lu = Number.isFinite(annonce) && annonce !== null;
     const pagine = o.pagination !== '';
-    // le compteur affiché est le TOTAL des résultats : sur une page paginée, moins de cartes que le total est NORMAL (« pagine », jamais « incomplet »)
-    const etat = !lu ? 'compteur-non-lu' : cartes === annonce ? 'complet' : pagine ? 'pagine' : cartes < annonce ? 'incomplet' : 'incoherent';
+    const { pageCourante, pagesTotal } = lirePagination(o.pagination);
+    const paginationLisible = pageCourante !== null;
+    let etat;
+    if (paginationLisible) {
+        const derniere = pageCourante === pagesTotal;
+        const complete = derniere ? cartes >= 1 && cartes <= CARTES_PAR_PAGE_OBSERVEE : cartes === CARTES_PAR_PAGE_OBSERVEE;
+        etat = complete ? 'complet' : 'incomplet';
+    } else {
+        // pas de pagination lisible : le compteur affiché est le TOTAL des résultats ; sur une page paginée, moins de cartes que le total est NORMAL (« pagine », jamais « incomplet »)
+        etat = !lu ? 'compteur-non-lu' : cartes === annonce ? 'complet' : pagine ? 'pagine' : cartes < annonce ? 'incomplet' : 'incoherent';
+    }
     return {
-        cartes, annonce: lu ? annonce : null, compteur: o.compteur, pagination: o.pagination, pagine, etat,
+        cartes, annonce: lu ? annonce : null, compteur: o.compteur, pagination: o.pagination, pagine, pageCourante, pagesTotal, paginationLisible, etat,
         complet: etat === 'complet' ? true : etat === 'incomplet' ? false : null, zoneRepli: o.zoneRepli,
-        sansNumero: o.cartes.filter(c => c.numero === '').length, sansImage: o.cartes.filter(c => c.img === '').length,
+        sansNumero: o.cartes.filter(c => c.numero === '').length, numerosDoutes: o.cartes.filter(c => c.numeroDoute).length, sansImage: o.cartes.filter(c => c.img === '').length,
+        extensions: o.extensions.length, selects: o.selects.length,
         htmlTronque: o.htmlTronque, octetsHtml: Buffer.byteLength(o.html), sha256Html: crypto.createHash('sha256').update(o.html).digest('hex')
     };
 }
@@ -104,7 +147,7 @@ function ecrireReleve(dossier, o, diag, le = new Date()) {
         const page = path.join(dossier, `page--${suffixe}`), dg = path.join(dossier, `diag--${suffixe}`);
         if (fs.existsSync(page) || fs.existsSync(dg)) continue;
         fs.writeFileSync(page, JSON.stringify({ ...o, le: le.toISOString(), diagnostic: diag }), { flag: 'wx' });
-        fs.writeFileSync(dg, JSON.stringify({ schema: 1, url: o.url, le: le.toISOString(), ...diag }), { flag: 'wx' });
+        fs.writeFileSync(dg, JSON.stringify({ schema: SCHEMA, url: o.url, le: le.toISOString(), ...diag }), { flag: 'wx' });
         return { page: path.basename(page), diag: path.basename(dg) };
     }
     throw new Error('plus de 100 relevés pour la même seconde');
@@ -155,7 +198,8 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
                 if (j.statut !== 200) return refuser(j.statut, j.corps.motif);
                 const noms = ecrireReleve(dossier, j.releve, j.diagnostic);
                 const d = j.diagnostic;
-                journal(`✅ ${slugDe(j.releve.url)} : ${d.cartes} carte(s) relevée(s), compteur « ${d.compteur.slice(0, 60)} », ${{ complet: 'complet', incomplet: `INCOMPLET (${d.annonce} annoncées, aucune pagination)`, pagine: `paginé (compteur = total ${d.annonce})`, incoherent: `INCOHÉRENT (${d.annonce} annoncées)`, 'compteur-non-lu': 'compteur non lu' }[d.etat]}${d.zoneRepli ? ', zone de repli' : ''}, ${d.sansNumero} sans numéro, ${d.sansImage} sans image → ${noms.page}`);
+                const pageTxt = d.paginationLisible ? `page ${d.pageCourante} sur ${d.pagesTotal}` : `pagination non lisible (« ${d.pagination.slice(0, 40)} »)`;
+                journal(`✅ ${slugDe(j.releve.url)} : ${d.cartes} carte(s) relevée(s), ${pageTxt}, compteur « ${d.compteur.slice(0, 60)} », ${d.numerosDoutes} numéro(s) douteux, ${d.extensions} extension(s), ${d.paginationLisible ? { complet: 'complète', incomplet: 'INCOMPLÈTE' }[d.etat] : ''}${d.paginationLisible ? '' : { complet: 'complet', incomplet: `INCOMPLET (${d.annonce} annoncées, aucune pagination)`, pagine: `paginé (compteur = total ${d.annonce})`, incoherent: `INCOHÉRENT (${d.annonce} annoncées)`, 'compteur-non-lu': 'compteur non lu' }[d.etat]}${d.zoneRepli ? ', zone de repli' : ''}, ${d.sansNumero} sans numéro, ${d.sansImage} sans image → ${noms.page}`);
                 repondre(200, { ok: true, fichier: noms.page, diagnostic: d });
             } catch (e) { journal(`🔴 erreur interne : ${e.message}`); repondre(500, { ok: false, motif: 'erreur interne du récepteur' }); }
         });

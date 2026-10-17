@@ -14,8 +14,11 @@ const verifier = (nom, obtenu, attendu) => {
 };
 
 const URL_BONNE = 'https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?cardName=&cardText=&evolvesFrom=&simpleSubmit=&format=unlimited&hitPointsMin=0&hitPointsMax=340&retreatCostMin=0&retreatCostMax=5&totalAttackCostMin=0&totalAttackCostMax=5&particularArtist=&advancedSubmit=&expansion=guardians-rising';
-const carte = (n, extra = {}) => ({ nom: `Carte ${n}`, numero: `${n}/145`, set: 'Guardians Rising', img: `https://assets.pokemon.com/assets/cms2/img/cards/web/SM2/SM2_EN_${n}.png`, alt: `Carte ${n}`, ...extra });
-const releve = (extra = {}) => ({ schema: 1, url: URL_BONNE, titre: 'Pokémon Cards | Pokemon.com', filtre: ['Guardians Rising'], compteur: '3 cards', pagination: 'Page 1 of 1', cartes: [carte(1), carte(2), carte(3)], html: '<div class="results"><img alt="Carte 1"></div>', htmlTronque: false, zoneRepli: false, ...extra });
+const carte = (n, extra = {}) => ({ nom: `Carte ${n}`, numero: String(n), numeroDoute: false, set: 'sm2', img: `https://assets.pokemon.com/assets/cms2/img/cards/web/SM2/SM2_EN_${n}.png`, alt: `Carte ${n}`, ...extra });
+const EXTENSIONS = [{ case: 'sm2', libelle: 'Guardians Rising', cochee: true }, { case: 'sm1', libelle: 'Sun & Moon', cochee: false }];
+const SELECTS = [{ nom: 'sort', options: ['Card Number', 'Card Name'] }];
+const releve = (extra = {}) => ({ schema: 2, url: URL_BONNE, titre: 'Pokémon Cards | Pokemon.com', filtre: ['Guardians Rising'], compteur: '3 cards', pagination: 'Page 1 of 1', cartes: [carte(1), carte(2), carte(3)], extensions: EXTENSIONS, selects: SELECTS, html: '<div class="results"><img alt="Carte 1"></div>', htmlTronque: false, zoneRepli: false, ...extra });
+const cartesN = n => Array.from({ length: n }, (_, i) => carte(i + 1));
 
 const dossierTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'recepteur-pm-'));
 
@@ -64,14 +67,44 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         // ── page incomplète : le compteur annonce plus de cartes que la page n'en montre → écrite quand même (relevé brut), mais dite incomplète
         const inc = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards', pagination: '' }) });
         verifier('compteur 197, 3 cartes vues, AUCUNE pagination : 200 mais complet=false, etat « incomplet »', [inc.status, inc.json?.diagnostic?.complet, inc.json?.diagnostic?.annonce, inc.json?.diagnostic?.etat], [200, false, 197, 'incomplet']);
-        const pagine = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards', pagination: 'Page 1 of 17' }) });
-        verifier('compteur 197, 3 cartes vues, pagination VISIBLE : le compteur est le total, ce n\'est PAS « incomplet » (complet null, etat « pagine »)', [pagine.status, pagine.json?.diagnostic?.complet, pagine.json?.diagnostic?.etat, pagine.json?.diagnostic?.pagine], [200, null, 'pagine', true]);
+        const pagine = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards', pagination: 'Previous Results Next Results' }) });
+        verifier('compteur 197, 3 cartes vues, pagination VISIBLE mais sans « N of M » : le compteur est le total, ce n\'est PAS « incomplet » (complet null, etat « pagine », paginationLisible false)', [pagine.status, pagine.json?.diagnostic?.complet, pagine.json?.diagnostic?.etat, pagine.json?.diagnostic?.pagine, pagine.json?.diagnostic?.paginationLisible], [200, null, 'pagine', true, false]);
         const egal = await envoyer(port, { entetes: BON, corps: releve({ compteur: '3 cards', pagination: 'Page 1 of 1' }) });
         verifier('compteur = cartes vues, même paginé : complet true, etat « complet »', [egal.json?.diagnostic?.complet, egal.json?.diagnostic?.etat], [true, 'complet']);
-        const illisible = await envoyer(port, { entetes: BON, corps: releve({ compteur: 'rien' }) });
+        const illisible = await envoyer(port, { entetes: BON, corps: releve({ compteur: 'rien', pagination: '' }) });
         verifier('compteur illisible : annonce null, complet null, etat « compteur-non-lu »', [illisible.json?.diagnostic?.annonce, illisible.json?.diagnostic?.complet, illisible.json?.diagnostic?.etat], [null, null, 'compteur-non-lu']);
         const repli = await envoyer(port, { entetes: BON, corps: releve({ zoneRepli: true }) });
         verifier('zone de repli (document.body) : marquée dans le diagnostic ET dans la page écrite', [repli.json?.diagnostic?.zoneRepli, JSON.parse(fs.readFileSync(path.join(dossierTmp, repli.json.fichier), 'utf8')).zoneRepli], [true, true]);
+
+        // ── LA PAGINATION RÉELLE (« N of M » dans #cards-load-more) : le texte tel qu'affiché, lu par le récepteur
+        const diagP = (pagination, n, extra = {}) => R.diagnostiquer(releve({ pagination, compteur: '', cartes: cartesN(n), ...extra }));
+        const pReel = diagP('Previous Results 1 of 15 Next Results', 12);
+        verifier('« 1 of 15 » + 12 cartes (le vrai relevé) : page 1 sur 15, complète', [pReel.pageCourante, pReel.pagesTotal, pReel.etat, pReel.complet, pReel.paginationLisible], [1, 15, 'complet', true, true]);
+        const pDer = diagP('Previous Results 15 of 15 Next Results', 1);
+        verifier('« 15 of 15 » + 1 carte : dernière page, complète', [pDer.pageCourante, pDer.pagesTotal, pDer.etat, pDer.complet], [15, 15, 'complet', true]);
+        const pInc = diagP('Previous Results 3 of 15 Next Results', 7);
+        verifier('« 3 of 15 » + 7 cartes : incomplète', [pInc.pageCourante, pInc.etat, pInc.complet], [3, 'incomplet', false]);
+        verifier('dernière page avec 13 cartes (plus que la taille observée) : incomplète ; avec 0 carte : incomplète', [diagP('15 of 15', 13).complet, diagP('15 of 15', 0).complet], [false, false]);
+        verifier('AVANT-DERNIÈRE page : « 14 of 15 » + 5 cartes -> incomplète ; « 1 of 2 » + 11 cartes -> incomplète ; « 14 of 15 » + 12 -> complète', [diagP('14 of 15', 5).complet, diagP('1 of 2', 11).complet, diagP('14 of 15', 12).complet, diagP('1 of 2', 12).complet], [false, false, true, true]);
+        verifier('« 10003 of 15 » (chiffre collé devant) : illisible, jamais lu « 0003 of 15 » = page 3', [diagP('10003 of 15', 12).pageCourante, diagP('10003 of 15', 12).paginationLisible], [null, false]);
+        verifier('page 2 sur 15 avec 12 cartes : complète ; avec 11 : incomplète', [diagP('2 of 15', 12).complet, diagP('2 of 15', 11).complet], [true, false]);
+        for (const [nom, texte] of [['aucun motif', 'Previous Results Next Results'], ['N > M', '16 of 15'], ['N = 0', '0 of 15'], ['M absurde (5 chiffres)', '1 of 99999'], ['M au-delà de la borne saine (6000)', '1 of 6000'], ['vide', ''], ['sans le mot of', '1 / 15']]) {
+            const x = R.diagnostiquer(releve({ pagination: texte, compteur: '', cartes: cartesN(12) }));
+            verifier(`pagination illisible (${nom}) : pageCourante et pagesTotal null, paginationLisible false`, [x.pageCourante, x.pagesTotal, x.paginationLisible], [null, null, false]);
+        }
+        const sansPage = R.diagnostiquer(releve({ pagination: '', compteur: '12 cards', cartes: cartesN(12) }));
+        verifier('pas de pagination lisible : comme avant (compteur = cartes -> complet)', [sansPage.etat, sansPage.complet, sansPage.pageCourante], ['complet', true, null]);
+        const rP = await envoyer(port, { entetes: BON, corps: releve({ pagination: 'Previous Results 1 of 15 Next Results', compteur: '', cartes: cartesN(12) }) });
+        verifier('par HTTP : « 1 of 15 » + 12 cartes -> page 1/15, complète, 2 extensions, 1 select', [rP.status, rP.json?.diagnostic?.pageCourante, rP.json?.diagnostic?.pagesTotal, rP.json?.diagnostic?.complet, rP.json?.diagnostic?.extensions, rP.json?.diagnostic?.selects], [200, 1, 15, true, 2, 1]);
+
+        const bornes = await envoyer(port, { entetes: BON, corps: releve({ extensions: Array.from({ length: 500 }, (_, i) => ({ case: `c${i}`, libelle: 'x'.repeat(200), cochee: i % 2 === 0 })), selects: Array.from({ length: 30 }, () => ({ nom: 's'.repeat(100), options: Array.from({ length: 100 }, () => 'o'.repeat(200)) })) }) });
+        verifier('exactement aux bornes (500 extensions de 200 car., 30 select de 100 options de 200 car.) : accepté', bornes.status, 200);
+
+        // ── NUMÉRO DE CARTE : « 124a » et « SV001 » passent tels quels ; un doute exige numero et set vides
+        const lettres = await envoyer(port, { entetes: BON, corps: releve({ cartes: [carte(1, { numero: '124a', set: 'sm2' }), carte(2, { numero: 'SV001', set: 'sv1' }), carte(3, { numero: 'TG01', set: 'swsh9' })] }) });
+        verifier('numéros « 124a », « SV001 », « TG01 » acceptés tels quels', [lettres.status, lettres.json?.diagnostic?.numerosDoutes, lettres.json?.diagnostic?.sansNumero], [200, 0, 0]);
+        const doute = await envoyer(port, { entetes: BON, corps: releve({ cartes: [carte(1, { numero: '', set: '', numeroDoute: true }), carte(2)] }) });
+        verifier('une carte numeroDoute (numero et set vides) : acceptée, comptée', [doute.status, doute.json?.diagnostic?.numerosDoutes, doute.json?.diagnostic?.sansNumero], [200, 1, 1]);
 
         // ── LE NOM DE FICHIER : le slug vient de l'adresse reçue ; chaque cas hostile donne un nom sûr, strictement dans le dossier d'écriture
         const BASE = 'https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?expansion=';
@@ -116,7 +149,23 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         await refus('corps tableau', { entetes: BON, brut: '[1]' }, 400, /objet/);
         await refus('clé en trop (cookie)', { entetes: BON, corps: { ...releve(), cookie: 'a=b' } }, 400, /clés/);
         await refus('clé manquante (html)', { entetes: BON, corps: (() => { const o = releve(); delete o.html; return o; })() }, 400, /clés/);
-        await refus('schema ≠ 1', { entetes: BON, corps: releve({ schema: 2 }) }, 400, /schema/);
+        await refus('schema 1 (userscript 1.0) : motif clair qui dit de réinstaller', { entetes: BON, corps: (() => { const o = releve({ schema: 1 }); delete o.extensions; delete o.selects; o.cartes = o.cartes.map(c => { const d = { ...c }; delete d.numeroDoute; return d; }); return o; })() }, 400, /schema 1 refusé.*réinstalle/);
+        await refus('schema 1 même avec les clés du schema 2', { entetes: BON, corps: releve({ schema: 1 }) }, 400, /schema 1 refusé/);
+        await refus('schema 3 (inconnu)', { entetes: BON, corps: releve({ schema: 3 }) }, 400, /schema inconnu/);
+        await refus('schema absent', { entetes: BON, corps: (() => { const o = releve(); delete o.schema; return o; })() }, 400, /schema/);
+        await refus('carte sans numeroDoute', { entetes: BON, corps: releve({ cartes: [(() => { const c = carte(1); delete c.numeroDoute; return c; })()] }) }, 400, /carte/);
+        await refus('numeroDoute pas un booléen', { entetes: BON, corps: releve({ cartes: [carte(1, { numeroDoute: 'oui' })] }) }, 400, /numeroDoute/);
+        await refus('numeroDoute vrai MAIS un numéro posé (une devinette)', { entetes: BON, corps: releve({ cartes: [carte(1, { numeroDoute: true })] }) }, 400, /douteux/);
+        await refus('extensions absentes', { entetes: BON, corps: (() => { const o = releve(); delete o.extensions; return o; })() }, 400, /clés/);
+        await refus('extensions pas un tableau', { entetes: BON, corps: releve({ extensions: 'x' }) }, 400, /extensions/);
+        await refus('plus de 500 extensions', { entetes: BON, corps: releve({ extensions: Array.from({ length: 501 }, (_, i) => ({ case: `c${i}`, libelle: 'x', cochee: false })) }) }, 400, /extensions/);
+        await refus('extension avec une clé en plus', { entetes: BON, corps: releve({ extensions: [{ case: 'a', libelle: 'b', cochee: true, value: 'x' }] }) }, 400, /extension 0/);
+        await refus('libellé d\'extension de 201 caractères', { entetes: BON, corps: releve({ extensions: [{ case: 'a', libelle: 'b'.repeat(201), cochee: true }] }) }, 400, /extension 0/);
+        await refus('cochee pas un booléen', { entetes: BON, corps: releve({ extensions: [{ case: 'a', libelle: 'b', cochee: 'oui' }] }) }, 400, /extension 0/);
+        await refus('plus de 30 select', { entetes: BON, corps: releve({ selects: Array.from({ length: 31 }, () => ({ nom: 's', options: [] })) }) }, 400, /selects/);
+        await refus('plus de 100 options dans un select', { entetes: BON, corps: releve({ selects: [{ nom: 's', options: Array.from({ length: 101 }, () => 'o') }] }) }, 400, /select 0/);
+        await refus('option de 201 caractères', { entetes: BON, corps: releve({ selects: [{ nom: 's', options: ['o'.repeat(201)] }] }) }, 400, /select 0/);
+        await refus('select avec une clé en plus', { entetes: BON, corps: releve({ selects: [{ nom: 's', options: [], valeur: 'x' }] }) }, 400, /select 0/);
         await refus('url d\'un autre site', { entetes: BON, corps: releve({ url: 'https://exemple.test/us/pokemon-tcg/pokemon-cards' }) }, 422, /adresse/);
         await refus('url pokemon.com hors de la base de cartes', { entetes: BON, corps: releve({ url: 'https://www.pokemon.com/us/pokemon-tcg/' }) }, 422, /adresse/);
         await refus('url en http', { entetes: BON, corps: releve({ url: 'http://www.pokemon.com/us/pokemon-tcg/pokemon-cards/' }) }, 422, /adresse/);
