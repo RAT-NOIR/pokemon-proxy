@@ -13,7 +13,7 @@ const pro = () => compte({ abonnement: { actif: true, quotaMensuel: 100, moisCle
 const sansCompte = () => inst({ essais: 0, achete: 0 });
 const rep = (n, x) => Array(n).fill(x);
 // n remboursements constatés successifs, chacun sur son scan débité ; rend ['rendu'|raison]
-async function constater(p, n, { compteur = 'panne', prefixe = 'k', maintenant = t, unites } = {}) {
+async function constater(p, n, { compteur = 'introuvable', prefixe = 'k', maintenant = t, unites } = {}) {
     const issues = [];
     for (let i = 0; i < n; i++) {
         const scanId = `${prefixe}${i}-${p.id}`; const credit = await prendre(p, scanId, maintenant);
@@ -62,15 +62,15 @@ async function constater(p, n, { compteur = 'panne', prefixe = 'k', maintenant =
         H.v('F3. PRO (100) : cent rendues, la 101e plafond-jour', ip, [...rep(100, 'rendu'), 'plafond-jour']);
         H.v('    les compteurs « constate » ne dérivent pas au refus : 20, 50, 100', [await cnt(s, 'constate'), await cnt(g, 'constate'), await cnt(p, 'constate')], [20, 50, 100]);
         H.v('    le claim du refus est libéré (aucun rb| du 21e scan)', await db.col('mouvements').countDocuments({ cleIdempotence: `rb|k20-${s.id}` }), 0);
-        const r = await Lg.rembourser(s, await prendre(s, 'plus-un'), 'constate', { scanId: 'plus-un', compteur: 'panne', maintenant: t }, cfg);
+        const r = await Lg.rembourser(s, await prendre(s, 'plus-un'), 'constate', { scanId: 'plus-un', compteur: 'introuvable', maintenant: t }, cfg);
         H.v('    le refus dit pourquoi, sans champ `declaration` (ce n\'est pas une déclaration)', [r.rendu, r.raisonNonRembourse, 'declaration' in r], [false, 'plafond-jour', false]);
     }
 
     // ════════ UN SEUL compteur pour panne, introuvable, jumeaux et question constatée ════════
     {
         const s = await sansCompte();
-        const iss = await constater(s, 21, { compteur: ['panne', 'jumeaux', 'constate-question'], prefixe: 'mx' });
-        H.v('M1. panne, jumeaux, constate-question alternés : le 21e (toutes natures confondues) est refusé', iss, [...rep(20, 'rendu'), 'plafond-jour']);
+        const iss = await constater(s, 21, { compteur: ['introuvable', 'jumeaux', 'constate-question'], prefixe: 'mx' });
+        H.v('M1. introuvable, jumeaux, constate-question alternés : le 21e (toutes natures confondues) est refusé', iss, [...rep(20, 'rendu'), 'plafond-jour']);
         H.v('    un seul compteur « constate » ; aucun « panne », « jumeaux » ni « constate-question »', [await cnt(s, 'constate'), await cnt(s, 'panne'), await cnt(s, 'jumeaux'), await cnt(s, 'constate-question')], [20, 0, 0, 0]);
     }
 
@@ -98,12 +98,24 @@ async function constater(p, n, { compteur = 'panne', prefixe = 'k', maintenant =
         H.v('N3. constatés épuisés : une panne INDISPONIBLE est encore rendue', apres, ['rendu']);
     }
 
+    // ════════ TOUTE panne de NOTRE côté (SERVEUR 500, IA, INDISPONIBLE) est hors plafond : le plafond ne porte que sur les constats sur la photo ════════
+    {
+        const s = await sansCompte();
+        const iss = await constater(s, 25, { compteur: 'panne', prefixe: 'pS' });
+        H.v('T1. 25 pannes (SERVEUR / IA : nature `panne`) d\'un sans-compte, plafond des constatés 20 : les 25 rendues', iss, rep(25, 'rendu'));
+        H.v('    aucun compteur « constate » écrit par une panne', await cnt(s, 'constate'), 0);
+        const intro = await constater(s, 21, { compteur: 'introuvable', prefixe: 'pI' });
+        H.v('T2. les introuvables, eux, restent plafonnés (20 rendus, le 21e refusé) même après 25 pannes', intro, [...rep(20, 'rendu'), 'plafond-jour']);
+        const apres = await constater(s, 1, { compteur: 'panne', prefixe: 'pJ' });
+        H.v('T3. constatés épuisés : une panne SERVEUR / IA est encore rendue', apres, ['rendu']);
+    }
+
     // ════════ administrateur : aucun crédit pris, jamais plafonné ════════
     {
         const a = await compte({ role: 'administrateur' }); const ok = [];
         for (let i = 0; i < 25; i++) { const r = await Lg.debiter(a, { scanId: `ad${i}`, cleIdempotence: `d|ad${i}`, maintenant: t }, cfg); ok.push(r.ok && r.administrateur === true); }
         H.v('A1. administrateur : 25 débits, tous « administrateur » (aucun crédit, donc rien à plafonner)', ok.filter(Boolean).length, 25);
-        const r = await Lg.rembourser(a, null, 'constate', { scanId: 'ad0', compteur: 'panne', maintenant: t }, cfg);
+        const r = await Lg.rembourser(a, null, 'constate', { scanId: 'ad0', compteur: 'introuvable', maintenant: t }, cfg);
         H.v('    et il n\'écrit aucun compteur', [r.raisonNonRembourse, await cnt(a, 'constate')], ['aucun-debit', 0]);
     }
 
@@ -113,13 +125,13 @@ async function constater(p, n, { compteur = 'panne', prefixe = 'k', maintenant =
         for (let i = 0; i < 21; i++) credits.push(await prendre(orphelin, `or${i}`));
         await db.col('installations').updateOne({ _id: orphelin.id }, { $set: { compteId: new (require('mongoose').Types.ObjectId)() } });   // liée APRÈS les débits à un compte qui n'existe pas
         const iss = [];
-        for (let i = 0; i < 21; i++) { const r = await Lg.rembourser(orphelin, credits[i], 'constate', { scanId: `or${i}`, compteur: 'panne', maintenant: t }, cfg); iss.push(r.rendu ? 'rendu' : r.raisonNonRembourse); }
+        for (let i = 0; i < 21; i++) { const r = await Lg.rembourser(orphelin, credits[i], 'constate', { scanId: `or${i}`, compteur: 'introuvable', maintenant: t }, cfg); iss.push(r.rendu ? 'rendu' : r.raisonNonRembourse); }
         H.v('G1. installation liée à un compte introuvable : plafond SANS COMPTE (20), jamais plus large', iss, [...rep(20, 'rendu'), 'plafond-jour']);
         const lie = await compte(); const il = await inst({ essais: 0, achete: 0 }); const cr2 = [];
         for (let i = 0; i < 21; i++) cr2.push(await prendre(il, `li${i}`));
         await db.col('installations').updateOne({ _id: il.id }, { $set: { compteId: lie.id } });             // liée APRÈS les débits à un compte gratuit
         let rendues = 0;
-        for (let i = 0; i < 21; i++) { const r = await Lg.rembourser(il, cr2[i], 'constate', { scanId: `li${i}`, compteur: 'panne', maintenant: t }, cfg); if (r.rendu) rendues++; }
+        for (let i = 0; i < 21; i++) { const r = await Lg.rembourser(il, cr2[i], 'constate', { scanId: `li${i}`, compteur: 'introuvable', maintenant: t }, cfg); if (r.rendu) rendues++; }
         H.v('G2. installation liée à un compte gratuit : l\'offre du compte (50) s\'applique ; 21 rendues', rendues, 21);
     }
 
@@ -142,8 +154,8 @@ async function constater(p, n, { compteur = 'panne', prefixe = 'k', maintenant =
     // ════════ le plafond ne s'applique pas à une REPRISE d'un remboursement commencé (inchangé) et un rejeu ne compte qu'une fois ════════
     {
         const s = await sansCompte(); const credit = await prendre(s, 'rj');
-        const r1 = await Lg.rembourser(s, credit, 'constate', { scanId: 'rj', compteur: 'panne', maintenant: t }, cfg);
-        const r2 = await Lg.rembourser(s, credit, 'constate', { scanId: 'rj', compteur: 'panne', maintenant: t }, cfg);
+        const r1 = await Lg.rembourser(s, credit, 'constate', { scanId: 'rj', compteur: 'introuvable', maintenant: t }, cfg);
+        const r2 = await Lg.rembourser(s, credit, 'constate', { scanId: 'rj', compteur: 'introuvable', maintenant: t }, cfg);
         H.v('R1. un rejeu du même scan : une prise, « deja-rembourse »', [r1.rendu, r2.raisonNonRembourse, await cnt(s, 'constate')], [true, 'deja-rembourse', 1]);
     }
 

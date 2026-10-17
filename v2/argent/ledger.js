@@ -187,13 +187,15 @@ async function incPlafond(porteurCle, jour, type, now, pas = 1) {   // même sch
 //                  plafonné par l'OFFRE du porteur au moment du remboursement (sans compte 1, gratuit 3, Pro 30 : cfg.plafonds.declares) ; `question` et `sans-prix` en sont les deux noms historiques ;
 //   · `constate` — décidé par le SERVEUR seul (panne, introuvable, garde des jumeaux, remboursement à l'émission d'une question) : FREIN-CONSTATES (2026-10-17) — UN SEUL compteur « constate » par porteur et par
 //                  jour de Paris, plafonné par l'OFFRE du porteur au moment du remboursement (sans compte 20, gratuit 50, Pro 100 : cfg.plafonds.constates) ; au-delà, `plafond-jour` ;
-//   · `infra`    — une panne de NOTRE infrastructure (`indisponible` : INDISPONIBLE, 503) : rendue SANS plafond ni compteur, elle ne se facture jamais au client ;
+//                  Le plafond ne porte que sur les constats sur la PHOTO : `introuvable`, `jumeaux`, `constate-question` ;
+//   · `infra`    — toute panne de NOTRE côté (`panne` : SERVEUR 500, IA ; `indisponible` : INDISPONIBLE 503) : rendue SANS plafond ni compteur, elle ne se facture jamais au client ;
 //   · `lot`      — `lot-trop-grand` (10 par jour, cfg.plafonds.lotTropGrand), INCHANGÉ, indépendant de l'offre.
 // `livre` : le contrôle « une panne ne rembourse pas une question déjà répondue par un candidat » (M2) s'applique ; il ne s'applique pas aux remboursements qui SUIVENT une question (leur raison d'être est cette réponse).
 // Une garde s'écrit par ce qu'elle AUTORISE : un nom absent de cette table est REFUSÉ (jamais rabattu sur une nature plus large).
 const NATURES = Object.freeze({
-    panne: { classe: 'constate', livre: true },
+    panne: { classe: 'infra', livre: true },            // TOUTE panne de NOTRE côté (SERVEUR, IA, INDISPONIBLE) : hors plafond (décision du coordinateur, 2026-10-17)
     indisponible: { classe: 'infra', livre: true },
+    introuvable: { classe: 'constate', livre: true },   // un constat sur la photo : plafonné
     jumeaux: { classe: 'constate', livre: true },
     'constate-question': { classe: 'constate', livre: false },
     question: { classe: 'declare', livre: false },

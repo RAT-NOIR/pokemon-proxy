@@ -51,7 +51,7 @@ async function executerLot(p) {
     // Rend TOUTES les unités du scan (initiale + supplément). { rendu, cause } — cause en liste publique fermée.
     const rendre = async (motif, o = {}) => {
         if (admin || !credit) return { rendu: false, cause: null };
-        try { const r = await argent.rembourser(porteur, credit, motif, { scanId, compteur: 'panne', ...o }); return { rendu: Boolean(r && r.rendu), cause: r && r.rendu ? null : raisonPublique(r && r.raisonNonRembourse) }; }
+        try { const r = await argent.rembourser(porteur, credit, motif, { scanId, compteur: /^panne/.test(motif) ? 'panne' : 'introuvable', ...o }); return { rendu: Boolean(r && r.rendu), cause: r && r.rendu ? null : raisonPublique(r && r.raisonNonRembourse) }; }
         catch (e) { journal('remboursement', e); return { rendu: false, cause: 'erreur' }; }
     };
     // Un refus `lot-trop-grand` (taille ou quota) : jusqu'à `cfg.plafonds.lotTropGrand` par jour et par porteur (V2_LOT_TROP_GRAND_JOUR, 10) le crédit initial est rendu ; AU-DELÀ la lecture

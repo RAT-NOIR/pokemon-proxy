@@ -36,7 +36,7 @@ async function requete(p, scanId, { le = t } = {}) {
     const p3 = await compte({ solde: { accueil: 0, achete: 20 } }); const res = [];
     for (let i = 0; i < 6; i++) { const q = await requete(p3, `pont-p${i}`); res.push(await dansUnScan(async () => ({ rendu: await acces.rembourserScan(q, 'ia-echec'), cause: raisonNonRemboursement() }))); }
     // PLAFOND-DECLARE : une panne est CONSTATÉE par le serveur, rendue sans plafond (l'ancien plafond de 5 est levé)
-    H.v('6 pannes : les 6 rendues (constaté par le serveur, sous le plafond des constatés — FREIN-CONSTATES), un seul compteur « constate »', [res.map(r => r.rendu ? 'rendu' : r.cause), await db.col('plafonds').countDocuments({ porteur: `compte:${p3.id}` })], [Array(6).fill('rendu'), 1]);
+    H.v('6 pannes : les 6 rendues (panne de NOTRE côté `ia-echec` : hors plafond des constatés — FREIN-CONSTATES), aucun compteur', [res.map(r => r.rendu ? 'rendu' : r.cause), await db.col('plafonds').countDocuments({ porteur: `compte:${p3.id}` })], [Array(6).fill('rendu'), 0]);
     // une cause que v2 connaît seule se dit avec la liste fermée de sources.js (jamais une valeur refusée)
     // OFFRE-QUOTA : plus de poche qui « change de période » (l'abonnement mensuel, l'hebdo) — un remboursement tardif rend l'unité au compteur du JOUR OÙ ELLE A ÉTÉ PRISE, jamais à celui du jour courant
     const p4 = await compte();

@@ -324,7 +324,7 @@ function traiterIdentifier(cfg, deps = {}) {
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // `infra` (FREIN-CONSTATES) : une panne de NOTRE infrastructure (INDISPONIBLE) ne se facture jamais : nature `indisponible`, hors plafond.
-        const rembourserMoi = (motif, parLaGarde = false, infra = false) => reqH.credit.v2.rembourser(reqH, motif, infra ? { compteur: 'indisponible' } : parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: 'panne' });
+        const rembourserMoi = (motif, parLaGarde = false, infra = false) => reqH.credit.v2.rembourser(reqH, motif, infra ? { compteur: 'indisponible' } : parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: /^panne/.test(motif) ? 'panne' : 'introuvable' });   // toute panne (`panne-*`) est hors plafond ; un introuvable est un constat sur la photo : plafonné
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
