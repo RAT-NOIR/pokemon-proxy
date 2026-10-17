@@ -86,7 +86,25 @@ ajouter('9. balise parfaite, mais l\'ARBRE DE TRAVAIL diffère du commit du work
 ajouter('8. une balise fraîche, unique, sur HEAD — qui contient les trois règles',
     fausseCx([{ _id: `${PREFIXE}pod-a/52`, balise: { pid: 52, hote: 'pod-a', commit: HEAD, etat: 'repos', depuis: ilYA(0.2) } }]), false);
 
+// ── LES DEUX ÉTATS D'UN PROCESSUS LOCAL (2026-10-17, le worker Render est suspendu) ──────────────────────────────────────────────
+// La balise est ÉCRITE par le vrai `battre` (résolveur de commit injecté : faux git), puis lue par la vraie garde.
+const { commitVerifiable } = require('./collecte-cartes/commit-local');
+const balise = require('./collecte-cartes/balise-worker');
+const gitFaux = sale => args => (args[0] === 'status' ? sale : HEAD + '\n');
+async function baliseLocale(sale) {
+    const docs = new Map();
+    const db = { collection: () => ({ updateOne: async (f, u) => { docs.set(f._id, { _id: f._id, ...u.$set }); } }) };
+    await balise.battre(db, 'repos', { commit: () => commitVerifiable({ env: {}, git: gitFaux(sale) }) });
+    return [...docs.values()];
+}
+const locales = {};   // rempli avant la boucle (asynchrone)
+ajouter('10. balise LOCALE, arbre suivi propre, commit = HEAD — le seul autre chemin qui passe', { differe: 'propre' }, false);
+ajouter('11. balise LOCALE, arbre suivi SALE — aucun commit dans la balise, la garde bloque', { differe: 'sale' }, true);
+
 (async () => {
+    locales.propre = fausseCx(await baliseLocale(''));
+    locales.sale = fausseCx(await baliseLocale(' M collecteur-images.js\n'));
+    for (const c of cas) if (c.cx && c.cx.differe) c.cx = locales[c.cx.differe];
     console.log(`\n════ LA GARDE SAIT-ELLE REFUSER ? ${cas.length} états fabriqués · HEAD = ${HEAD.slice(0, 12)} ════\n`);
     let ok = 0, ko = 0;
     for (const c of cas) {
@@ -99,6 +117,11 @@ ajouter('8. une balise fraîche, unique, sur HEAD — qui contient les trois rè
         console.log(`        attendu ${c.attenduBloque ? 'BLOQUE' : 'passe'} · obtenu ${r.bloque === null ? 'EXCEPTION' : r.bloque ? 'BLOQUE' : 'passe'}`);
         console.log(`        ${String(r.phrase).split('\n')[0].trim()}`);
     }
+    // le message d'une balise locale sans commit n'accuse pas un « code antérieur au 2026-09-21 » (relecture 1, mineur 6)
+    const rSale = await etatDuWorker(locales.sale, { comparerArbre: arbreIdentique });
+    const msgOk = /processus local, arbre modifié ou HEAD changé/.test(rSale.phrase) && !/antérieur au 2026-09-21/.test(rSale.phrase);
+    console.log(`   ${msgOk ? '✅' : '❌'} 12. le message de la balise locale sale dit « processus local, arbre modifié ou HEAD changé »`);
+    if (!msgOk) ko++; else ok++;
     console.log(`\n════ ${ok} passés · ${ko} en échec ════`);
     if (ko) {
         console.error(`\n🔴 UNE GARDE QUI NE SAIT PAS REFUSER N'EST PAS UNE GARDE. Elle a échoué vers le passant`);
