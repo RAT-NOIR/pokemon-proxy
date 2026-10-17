@@ -74,7 +74,7 @@ function baseDemandee() {
  * Ne renvoie JAMAIS sur une base non demandée : en cas d'écart, le processus s'arrête
  * avec un code de sortie 1, connexion fermée, avant toute opération.
  */
-async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false } = {}) {
+async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false, essentiel, fichier, estimationMo } = {}) {
     if (!process.env.MONGODB_URI) {
         console.error("❌ MONGODB_URI absent du .env — impossible de continuer.");
         process.exit(1);
@@ -137,6 +137,20 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     // naître en s'y connectant — la signature exacte d'une grappe fausse.
     // ⚠️ SOUS BANC_ISOLE=1 ce contrôle est REMPLACÉ : une base de banc NEUVE est vide, et c'est normal. Le contrôle qui peut échouer dans le
     // cas redouté ici (un banc qui se retrouve sur une vraie grappe) porte sur ce qu'une vraie grappe n'a PAS : l'hôte du banc.
+    // GARDE-ATLAS (2026-10-18) : un script qui ÉCRIT s'arrête à 90 % de 512 Mo sur SA grappe ; les imports Cardmarket passent par
+    // le drapeau `essentiel` nommé + `fichier` (liste fermée, collecte-cartes/garde-taille-atlas.js). « Je ne sais pas mesurer » bloque.
+    if (ecrit) {
+        const T = require('./collecte-cartes/garde-taille-atlas');
+        const v = await T.verifierEcriture({ client: mongoose.connection.getClient?.(), estimationMo: estimationMo ?? 0, essentiel, fichier });
+        if (!v.autorise) {
+            console.error(`\n❌ ARRÊT : GARDE-ATLAS (grappe de "${reelle}") — ${v.raison}.`);
+            console.error(`   Aucune opération n'a été effectuée.`);
+            await mongoose.disconnect();
+            process.exit(1);
+        }
+        if (v.niveau === 'alerte') console.log(`⚠️  GARDE-ATLAS : ${v.raison}`);
+    }
+
     const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env });
     if (!apres.ok) {
         console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} — ${apres.raison}`);

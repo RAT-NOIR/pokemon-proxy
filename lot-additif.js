@@ -49,12 +49,17 @@ const sep = process.argv.indexOf('--');
 const options = sep < 0 ? process.argv.slice(2) : process.argv.slice(2, sep);
 const commande = sep < 0 ? [] : process.argv.slice(sep + 1);
 const AUTORISES = [/^--quoi=.+/, /^--collections=[\w,]+$/, /^--compte=\w+(:\w+=[^\s]+)?$/, /^--annonce=.+\.json$/,
-    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/];
+    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/, /^--estimation-mo=\d+(\.\d+)?$/];
 const inconnus = options.filter(a => !AUTORISES.some(r => r.test(a)));
 const val = nom => options.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const quoi = val('quoi'), collections = val('collections'), BASE = val('base') || 'cartes';
 const JOURNAL = val('journal') ? path.resolve(val('journal')) : path.join(__dirname, 'JOURNAL-LOTS.md');
 const CONFIRMATION_S = Number(val('confirmation') ?? 20);
+// GARDE-ATLAS (2026-10-18) : le lot mesure la grappe CIBLE de son écriture AVANT la sauvegarde et refuse à 90 % de 512 Mo ou plus ;
+// `--estimation-mo=<N>` (les Mo que le lot ajoute) : refus si mesure + estimation ≥ 90 %. « Je ne sais pas mesurer » refuse. Après le lot : « Atlas après : X % ».
+const T = require('./collecte-cartes/garde-taille-atlas');
+const ESTIMATION_MO = val('estimation-mo') !== undefined ? Number(val('estimation-mo')) : 0;
+const GRAPPE = BASE === 'cartes' ? 'cartes' : 'production';
 // 🔴 « idExpansion=6395 » a compté 0 → 0 au premier lot (2026-09-24) : la valeur partait en CHAÎNE, le champ est un
 // NOMBRE. Un filtre qui ne mord sur rien rend un zéro plausible (§41). Une valeur numérique cherche donc les deux types,
 // et chaque compte s'imprime sur le total de sa collection : « 0 sur 64 000 » se voit, « 0 » non.
@@ -81,13 +86,15 @@ const aSauver = [...new Set([...collections.split(','), ...GARDEES])];
 async function ouvrir() {
     if (BASE === 'cartes') {
         const { ouvrirConnexions } = require('./collecte-cartes/garde');
-        const { cartes, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
-        return { db: cartes.db, fermer };
+        // GARDE-ATLAS : le lot fait SA mesure (avant la sauvegarde, avec son estimation). Les réouvertures d'après-lot ne doivent pas
+        // s'arrêter (process.exit) à 90 % : elles servent à comparer et à RESTAURER — d'où lectureSeule, qui saute la garde de connexion
+        const { cartes, fermer } = await ouvrirConnexions({ production: false, buckets: [], lectureSeule: true });
+        return { db: cartes.db, client: cartes.getClient(), fermer };
     }
     const mongoose = require('mongoose');
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
     if (cx.db.databaseName !== 'test_scratch') { await cx.close(); throw new Error(`base connectée « ${cx.db.databaseName} » au lieu de test_scratch`); }
-    return { db: cx.db, fermer: () => cx.close() };
+    return { db: cx.db, client: cx.getClient(), fermer: () => cx.close() };
 }
 
 async function compter(db) {
@@ -140,6 +147,15 @@ function journaliser(t, dossier, combien, sortie) {
     const t = new Date().toISOString();
     const depuis = new Date(Date.now() - 60000);
     const dossier = `backup-${t.slice(0, 10)}-lot-${t.slice(11, 19).replace(/:/g, '')}`;
+    // 0. GARDE-ATLAS, AVANT la sauvegarde : la grappe cible est-elle sous 90 % de 512 Mo, estimation du lot comprise ?
+    {
+        let o = null, v;
+        try { o = await ouvrir(); v = await T.verifierEcriture({ client: o.client, estimationMo: ESTIMATION_MO }); }
+        catch (e) { v = { autorise: false, niveau: 'inconnu', raison: `je ne sais pas mesurer la grappe (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 150)})` }; }
+        finally { try { await o?.fermer(); } catch { /* fermeture sans importance */ } }
+        if (!v.autorise) { console.error(`❌ GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}. Rien n'a été sauvegardé ni écrit.`); process.exit(5); }
+        console.log(`   0. GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}${ESTIMATION_MO ? '' : ' — sans --estimation-mo, l\'ajout du lot n\'est pas compté'}`);
+    }
     console.log(`\n══ LOT : ${quoi}\n   1. sauvegarde ${aSauver.join(',')} → ${dossier} (base ${BASE})`);
     const s = spawnSync(process.execPath, ['backup-collections.js', `--base=${BASE}`, `--collections=${aSauver.join(',')}`, `--dossier=${dossier}`], { stdio: 'inherit', cwd: __dirname });
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
@@ -155,7 +171,11 @@ function journaliser(t, dossier, combien, sortie) {
     // LOT_ADDITIF_PID : la commande sait qu'elle tourne SOUS ce lot (retirer-scan-faux-metal.js --ecrire refuse sans lui)
     const c = spawnSync(exe === 'node' ? process.execPath : exe, args, { stdio: 'inherit', cwd: __dirname, env: { ...process.env, LOT_ADDITIF_PID: String(process.pid) } });
 
-    ({ db, fermer } = await ouvrir());
+    let client;
+    ({ db, fermer, client } = await ouvrir());
+    // GARDE-ATLAS : où en est la grappe APRÈS l'écriture ? (imprimé et mis au journal ; une mesure impossible se dit, elle ne fait pas échouer le lot)
+    const atlasApres = T.ligneAtlasApres(await T.mesurerGrappe(client).catch(() => null), GRAPPE);
+    console.log(`   ${atlasApres}`);
     let apres = await etatDeLaBase(db), sw = await setsDuWorker(db, depuis);
     let cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     if (cmp.nonAutorisees.length && CONFIRMATION_S) {
@@ -192,7 +212,7 @@ function journaliser(t, dossier, combien, sortie) {
                 console.error(`   ${revalidation}`);
             }
         }
-        const combien = [legacy, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`, revalidation].filter(Boolean).join(' ; ');
+        const combien = [legacy, atlasApres, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`, revalidation].filter(Boolean).join(' ; ');
         console.log(`   ✅ aucune baisse non annoncée · code de sortie ${c.status}`);
         await fermer();
         journaliser(t, dossier, combien, c.status);
@@ -246,7 +266,7 @@ function journaliser(t, dossier, combien, sortie) {
     await fermer();
     const ok = !relu.nonAutorisees.length;
     console.log(`   7. relu après restauration : ${ok ? '✅ aucune baisse non annoncée' : `🔴 RESTAURATION INCOMPLÈTE : ${liste(relu.nonAutorisees.map(decrire))}`}`);
-    const combien = [legacy, `🔴 ARRÊT : baisses non annoncées ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(relu.nonAutorisees.map(decrire))}`}`].filter(Boolean).join(' ; ');
+    const combien = [legacy, atlasApres, `🔴 ARRÊT : baisses non annoncées ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(relu.nonAutorisees.map(decrire))}`}`].filter(Boolean).join(' ; ');
     journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);
     process.exit(ok ? 3 : 4);
 })().catch(e => { console.error('❌', e.message); process.exit(1); });
