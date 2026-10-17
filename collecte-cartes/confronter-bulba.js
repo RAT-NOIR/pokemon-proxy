@@ -24,7 +24,8 @@ const typeN = s => { const n = norm(s); return TYPE[n] || n; };
 const tokens = s => String(s ?? '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
 
 const egalNum = (a, b) => Number(a) === Number(b);
-const egalIll = (a, s) => { const A = norm(a), S = norm(s); return !!A && !!S && (A === S || S.includes(A) || A.includes(S)); };
+// ÉGALITÉ normalisée (relecture 1, 2026-10-18) : l'inclusion de sous-chaîne faisait confirmer « Ito » par « Kumiko Itou »
+const egalIll = (a, s) => { const A = norm(a), S = norm(s); return !!A && !!S && A === S; };
 const egalAtt = (a, s) => {
     const A = new Set(a.map(norm)), S = new Set(s.map(norm));
     const incl = (x, y) => [...x].every(v => y.has(v));

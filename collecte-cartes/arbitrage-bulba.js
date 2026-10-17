@@ -35,7 +35,7 @@ function parMajorite(ko, raisonUnSeul = 'un seul témoin contredit Bulbapedia : 
     const groupes = new Map();
     for (const [src, x] of ko) { const k = cleValeur(x.valeur); if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push([src, x.valeur]); }
     const accord = [...groupes.values()].filter(g => g.length >= 2).sort((a, b) => b.length - a.length)[0];
-    if (accord) return fausse(`${accord.length} sources indépendantes s'accordent contre Bulbapedia`, accord[0][1], accord.map(([source, valeur]) => ({ source, valeur })));
+    if (accord) return fausse(`${accord.length} sources indépendantes s'accordent contre Bulbapedia`, accord[0][1], accord.map(([source, valeur]) => ({ source, valeur })), 'forte');
     return indecidable(ko.length >= 2 ? 'les sources divergent entre elles' : raisonUnSeul, ko.map(([source, x]) => ({ source, valeur: x.valeur })));
 }
 
@@ -144,7 +144,9 @@ function arbitrerTout(lignes, ctx) {
         if (l.statut !== 'desaccord') continue;
         const a = arbitrer(l, ctx);
         if (a.verdict === 'sans-objet') continue;
-        entrees.push({ champ: l.champ, cle: l.cle, contexte: l.contexte, bulba: l.bulba, sources: Object.fromEntries(Object.entries(l.parSource).filter(([, x]) => x.valeur != null).map(([s, x]) => [s, x.valeur])), ...a });
+        entrees.push({ champ: l.champ, cle: l.cle, contexte: l.contexte, bulba: l.bulba, sources: Object.fromEntries(Object.entries(l.parSource).filter(([, x]) => x.valeur != null).map(([s, x]) => [s, x.valeur])), ...a,
+            // le lot 5 (corrections) ne consomme QUE la solidité forte : un témoin unique compté deux fois (même lignée TCGdex) n'est pas une preuve (relecture 1)
+            ...(a.verdict === 'fausse' ? { consommableLot5: a.solidite === 'forte' } : {}) });
         const r = (resume[l.champ] ||= { total: 0, juste: 0, fausse: 0, indecidable: 0 });
         r.total++; r[a.verdict]++;
     }

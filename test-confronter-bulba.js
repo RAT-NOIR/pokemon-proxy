@@ -38,6 +38,12 @@ verifier('pv 70 contre 60 / 60 : désaccord, valeurs des sources conservées', [
 r = confronter(donnees({ sources: { pkc: [pkcCarte({ hp: 99 })], tdx: { sets: [tdxSet], cartes: [tdxCarte()] }, jp: [] } }));
 verifier('une source concorde : « accord »', ligne(r, 'carte.pv').statut, 'accord');
 
+// 3 bis. l'illustrateur se compare par ÉGALITÉ normalisée, pas par inclusion de sous-chaîne (un auteur court « Ito » serait contenu dans « Mitsuhiro Arita »)
+r = confronter(donnees({ cartes: [carte({ illustrateur: 'Ito' })], sources: { pkc: [pkcCarte({ author: ['Kumiko Itou'] })], tdx: { sets: [], cartes: [] }, jp: [] } }));
+verifier('illustrateur : « Ito » n’est pas « Kumiko Itou » (plus d’inclusion)', ligne(r, 'carte.illustrateur').parSource.pkc.statut, 'ko');
+r = confronter(donnees({ cartes: [carte({ illustrateur: 'ken SUGIMORI.' })] }));
+verifier('illustrateur : égalité après normalisation (casse, ponctuation)', ligne(r, 'carte.illustrateur').parSource.pkc.statut, 'ok');
+
 // 4. le NOM est un témoin : numéro et set égaux mais nom différent → pas confirmé, aucune ligne de champ comparée
 r = confronter(donnees({ sources: { pkc: [pkcCarte({ name: 'Gamma' })], tdx: { sets: [], cartes: [] }, jp: [] } }));
 verifier('nom divergent : impression non confirmée (nomDiff), le champ reste sans remplaçant', [r.appar.intl.nomDiff, r.appar.intl.confirmees, ligne(r, 'carte.pv').statut], [1, 0, 'sans']);

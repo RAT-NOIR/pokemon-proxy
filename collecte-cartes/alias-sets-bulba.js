@@ -13,7 +13,12 @@
 // Ce module est pur. La table (alias-sets-bulba.json) est produite par mesurer-alias-sets.js ; `verifierTable` la refuse si une entrée n'a pas sa preuve au niveau des seuils.
 const { norm, cn } = require('./confronter-bulba');
 
-const SEUILS = { minPaires: 5, couvBulbaMin: 0.8, couvExterneMin: 0.5, couvExterneContenue: 0.8, rivalMin: 0.5 };
+// Relecture 1 (2026-10-18) : la règle « source CONTENUE ≥ 0,8 » seule est une inclusion à sens unique (§31 : une petite source est facilement contenue dans une grande liste, ex.
+// Extra Regulation Box → bw : 12 paires, couverture Bulbapedia 0,255). Elle n'est admise qu'à ≥ 0,8 DANS LES DEUX SENS (alors la première règle suffit), ou à ≥ `minPairesContenue`
+// paires dont le nom concorde ; en dessous, refus motivé « inclusion-a-sens-unique ».
+const SEUILS = { minPaires: 5, couvBulbaMin: 0.8, couvExterneMin: 0.5, couvExterneContenue: 0.8, minPairesContenue: 20, rivalMin: 0.5 };
+const preuveSuffisante = (e, s) => e.paires >= s.minPaires && ((e.couvBulba >= s.couvBulbaMin && e.couvExterne >= s.couvExterneMin)
+    || (e.couvExterne >= s.couvExterneContenue && (e.couvBulba >= s.couvBulbaMin || e.paires >= s.minPairesContenue)));
 
 const cleNum = n => cn(n);
 const clePaire = (num, nom) => cleNum(num) + '\u0000' + norm(nom);
@@ -54,14 +59,15 @@ function prouverAlias(bulba, index, seuils = SEUILS) {
         const taille = index.tailles.get(cle) || nums.size;
         return { cle, nums, paires: nums.size, couvBulba: r3(nums.size / numsB.size), couvExterne: r3(nums.size / taille) };
     }).sort((a, b) => b.paires - a.paires || b.couvExterne - a.couvExterne || (a.cle < b.cle ? -1 : 1));
-    const eligible = e => e.paires >= seuils.minPaires && ((e.couvBulba >= seuils.couvBulbaMin && e.couvExterne >= seuils.couvExterneMin) || e.couvExterne >= seuils.couvExterneContenue);
-    const el = evalues.filter(eligible);
+    const el = evalues.filter(e => preuveSuffisante(e, seuils));
     const sortie = (retenus, refus) => ({ retenus: retenus.map(({ cle, paires, couvBulba, couvExterne }) => ({ cle, paires, couvBulba, couvExterne })), refus, evalues: evalues.slice(0, 3).map(({ cle, paires, couvBulba, couvExterne }) => ({ cle, paires, couvBulba, couvExterne })) });
-    if (!el.length) return sortie([], 'aucun-candidat');
+    if (!el.length) return sortie([], evalues.some(e => e.paires >= seuils.minPaires && e.couvExterne >= seuils.couvExterneContenue) ? 'inclusion-a-sens-unique' : 'aucun-candidat');
     const retenus = [el[0]]; const pris = new Set(el[0].nums);
-    for (const e of el.slice(1)) {
+    // un RIVAL est jugé sur la règle large (ancienne) : une inclusion trop mince pour être RETENUE reste un concurrent qui rend le choix ambigu
+    const rivaux = evalues.filter(e => e !== el[0] && e.paires >= seuils.minPaires && ((e.couvBulba >= seuils.couvBulbaMin && e.couvExterne >= seuils.couvExterneMin) || e.couvExterne >= seuils.couvExterneContenue));
+    for (const e of rivaux) {
         const chevauche = [...e.nums].some(n => pris.has(n));
-        if (!chevauche) { retenus.push(e); e.nums.forEach(n => pris.add(n)); continue; }
+        if (!chevauche) { if (el.includes(e)) { retenus.push(e); e.nums.forEach(n => pris.add(n)); } continue; }
         if (e.paires >= seuils.rivalMin * el[0].paires) return sortie([], 'ambigu');   // un rival de taille comparable : on ne choisit pas
     }
     return sortie(retenus, null);
@@ -71,7 +77,7 @@ function prouverAlias(bulba, index, seuils = SEUILS) {
 function verifierTable(table, seuils = SEUILS) {
     const erreurs = [];
     const preuveOk = p => p && Number.isFinite(p.paires) && Number.isFinite(p.couvBulba) && Number.isFinite(p.couvExterne) && typeof p.cle === 'string' && p.cle.length > 0
-        && p.paires >= seuils.minPaires && ((p.couvBulba >= seuils.couvBulbaMin && p.couvExterne >= seuils.couvExterneMin) || p.couvExterne >= seuils.couvExterneContenue);
+        && preuveSuffisante(p, seuils);
     const verifier = (quoi, cle, liste) => {
         if (!Array.isArray(liste) || !liste.length) { erreurs.push(`${quoi} ${cle} : aucune preuve`); return; }
         for (const p of liste) if (!preuveOk(p)) erreurs.push(`${quoi} ${cle} : preuve absente ou sous les seuils (${JSON.stringify(p)})`);

@@ -33,9 +33,18 @@ function suite(M) {
     verifier('deux candidats identiques : ambigu, aucun choisi', [ids(r), r.refus], [[], 'ambigu']);
 
     // 5. UNION : le set de Bulbapedia est la réunion de deux sets externes DISJOINTS (ex. Hidden Fates + Shiny Vault)
+    //    (relecture 1 : une partie ne passe par la seule règle « source contenue » qu'avec ≥ 20 paires dont le nom concorde ; en dessous, c'est une inclusion à sens unique)
+    idx = indexerExternes([{ cle: 'PRINC', cartes: set(25) }, { cle: 'VAULT', cartes: set(20, 26) }]);
+    r = prouverAlias(set(45), idx);
+    verifier('réunion de deux sets disjoints de 25 et 20 paires : les deux retenus', [ids(r), r.refus], [['PRINC', 'VAULT'], null]);
     idx = indexerExternes([{ cle: 'PRINC', cartes: set(10) }, { cle: 'VAULT', cartes: set(5, 11) }]);
     r = prouverAlias(set(15), idx);
-    verifier('réunion de deux sets disjoints : les deux retenus', [ids(r), r.refus], [['PRINC', 'VAULT'], null]);
+    verifier('mêmes parties à 10 et 5 paires : inclusions à sens unique, refusées et motivées', [ids(r), r.refus], [[], 'inclusion-a-sens-unique']);
+    // 5 bis. UNE PETITE SOURCE « contenue » dans une grande liste (Extra Regulation Box → bw : 12 paires, couverture Bulbapedia 0,255) ne prouve rien (§31)
+    idx = indexerExternes([{ cle: 'bw', cartes: set(12) }]);
+    r = prouverAlias(set(47), idx);
+    verifier('12 paires contenues dans 47 cartes : inclusion à sens unique, refusée', [ids(r), r.refus], [[], 'inclusion-a-sens-unique']);
+    verifier('la même inclusion à 20 paires (nom concordant) est admise', ids(prouverAlias(set(80), indexerExternes([{ cle: 'bw', cartes: set(20) }]))), ['bw']);
 
     // 6. trop peu de cartes pour prouver
     idx = indexerExternes([{ cle: 'PETIT', cartes: set(3) }]);
@@ -61,6 +70,8 @@ function suite(M) {
     verifier('table valide', verifierTable({ intl: { alpha: entree() }, jp: {} }), []);
     verifier('entrée sans preuve : rejetée', verifierTable({ intl: { alpha: { expansion: 'Alpha', pkc: [{ cle: 'AAA' }] } }, jp: {} }).length, 1);
     verifier('preuve sous le seuil : rejetée', verifierTable({ intl: { alpha: entree({ pkc: [{ cle: 'AAA', paires: 2, couvBulba: 1, couvExterne: 1 }] }) }, jp: {} }).length, 1);
+    verifier('table : inclusion à sens unique sous 20 paires (12 paires, couvertures 0,255 / 1) : rejetée', verifierTable({ intl: { alpha: entree({ pkc: [{ cle: 'bw', paires: 12, couvBulba: 0.255, couvExterne: 1 }] }) }, jp: {} }).length, 1);
+    verifier('table : inclusion à sens unique à 25 paires : admise', verifierTable({ intl: { alpha: entree({ pkc: [{ cle: 'bw', paires: 25, couvBulba: 0.5, couvExterne: 1 }] }) }, jp: {} }), []);
     verifier('couverture faible dans les deux sens : rejetée', verifierTable({ intl: { alpha: entree({ pkc: [{ cle: 'AAA', paires: 10, couvBulba: 0.3, couvExterne: 0.3 }] }) }, jp: {} }).length, 1);
     verifier('jp : même exigence', verifierTable({ intl: {}, jp: { beta: { expansion: 'Beta', dossiers: [{ cle: 'sv1', paires: 9, couvBulba: 0.9, couvExterne: 0.9 }] } } }), []);
     verifier('conversion pour la confrontation', versTableConfronter({ intl: { alpha: entree({ tdx: [{ cle: 'S/Alpha', paires: 10, couvBulba: 1, couvExterne: 1 }] }) }, jp: { beta: { expansion: 'Beta', dossiers: [{ cle: 'sv1', paires: 9, couvBulba: 0.9, couvExterne: 0.9 }] } } }),

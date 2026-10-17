@@ -23,28 +23,6 @@
     }
    ]
   },
-  "extrainerkit2": {
-   "expansion": "EX Trainer Kit 2",
-   "pkc": [
-    {
-     "cle": "EX/TK2M",
-     "paires": 6,
-     "couvBulba": 0.545,
-     "couvExterne": 1
-    }
-   ]
-  },
-  "sunandmoontrainerkitlycanrocandalolanraichu": {
-   "expansion": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu",
-   "tdx": [
-    {
-     "cle": "Trainer kits/SM trainer Kit (Lycanroc)",
-     "paires": 17,
-     "couvBulba": 0.567,
-     "couvExterne": 0.944
-    }
-   ]
-  },
   "swshblackstarpromos": {
    "expansion": "SWSH Black Star Promos",
    "pkc": [
@@ -86,17 +64,6 @@
      "paires": 222,
      "couvBulba": 0.996,
      "couvExterne": 0.991
-    }
-   ]
-  },
-  "yellowaalternatecards": {
-   "expansion": "Yellow A Alternate cards",
-   "tdx": [
-    {
-     "cle": "XY/Yellow A Alternate",
-     "paires": 6,
-     "couvBulba": 0.087,
-     "couvExterne": 1
     }
    ]
   },
@@ -502,17 +469,6 @@
      "cle": "bw6-bc",
      "paires": 59,
      "couvBulba": 0.908,
-     "couvExterne": 1
-    }
-   ]
-  },
-  "extraregulationbox": {
-   "expansion": "Extra Regulation Box",
-   "dossiers": [
-    {
-     "cle": "bw",
-     "paires": 12,
-     "couvBulba": 0.255,
      "couvExterne": 1
     }
    ]

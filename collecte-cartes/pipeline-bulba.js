@@ -38,4 +38,15 @@ async function preparer(db, { dossierSources, fichierVariants, sansAlias = false
     for (const e of A.entrees) e.baseline = dansBase.has(e.champ + '\u0000' + e.cle);
     return { cartes, sets, sources, base, cible, conventions, arbitrage: A, desaccordsBaseline: dansBase.size, avecVariantes };
 }
-module.exports = { preparer, fabriquerDexDuNom, VARIANTS_PAR_DEFAUT };
+/** Le sha256 de chaque fichier d'entrée du plan (index des sources, variantes TCGdex, table d'alias) : un fichier modifié entre l'essai à blanc et l'écriture change le plan. */
+function entreesDuPlan({ dossierSources, fichierVariants } = {}) {
+    const crypto = require('crypto');
+    const { DOSSIER_SOURCES } = require('./charger-bulba');
+    const d = dossierSources || DOSSIER_SOURCES;
+    const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+    return {
+        'ptcg-index-en.json': sha(path.join(d, 'ptcg-index-en.json')), 'ptcg-index-jp.json': sha(path.join(d, 'ptcg-index-jp.json')), 'tcgdex-index.json': sha(path.join(d, 'tcgdex-index.json')),
+        'tcgdex-variants.json': sha(fichierVariants || VARIANTS_PAR_DEFAUT), 'alias-sets-bulba.json': sha(TABLE_ALIAS),
+    };
+}
+module.exports = { preparer, fabriquerDexDuNom, entreesDuPlan, VARIANTS_PAR_DEFAUT };

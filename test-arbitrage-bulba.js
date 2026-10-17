@@ -85,6 +85,13 @@ function suite(M) {
     const lignes = [ligne('carte.pv', 70, { pkc: 60, tdx: 60 }), { ...ligne('carte.pv', 70, { pkc: 60 }), cle: 2 }, { ...ligne('carte.pv', 60, {}), statut: 'accord', cle: 3 }];
     const t = arbitrerTout(lignes, ctx);
     verifier('arbitrerTout : seules les lignes en désaccord, résumé par champ', [t.entrees.length, t.resume['carte.pv']], [2, { total: 2, juste: 0, fausse: 1, indecidable: 1 }]);
+    // ── LE LOT 5 NE CONSOMME QUE LA SOLIDITÉ « FORTE » (relecture 1) : un témoin unique compté deux fois (même lignée TCGdex) ne corrige rien
+    const ent = (l) => arbitrerTout([l], ctx).entrees[0];
+    verifier('fausse par deux sources indépendantes : solidité forte, consommable par le lot 5', [ent(ligne('carte.pv', 70, { pkc: 60, tdx: 60 })).solidite, ent(ligne('carte.pv', 70, { pkc: 60, tdx: 60 })).consommableLot5], ['forte', true]);
+    verifier('ndex fausse par TCGdex + table (même lignée) : solidité moyenne, NON consommable', [ent(ligne('carte.ndex', 116, { tdx: 117 })).solidite, ent(ligne('carte.ndex', 116, { tdx: 117 })).consommableLot5], ['moyenne', false]);
+    verifier('ndex fausse avec une source japonaise indépendante : consommable', ent(ligne('carte.ndex', 116, { tdx: 117, jp: 117 })).consommableLot5, true);
+    verifier('rareté fausse par les variantes TCGdex seules (même source) : NON consommable', ent(ligne('impression.rarete', 'Rare Holo', { tdx: ['Rare', V(['normal'])] })).consommableLot5, false);
+    verifier('les verdicts non « fausse » ne portent pas le champ', ['consommableLot5' in ent(ligne('carte.pv', 70, { pkc: 60 })), 'consommableLot5' in ent(ligne('impression.rarete', 'Rare Ace', { pkc: 'ACE SPEC Rare' }))], [false, false]);
     return { ok, ko };
 }
 module.exports = { suite };
