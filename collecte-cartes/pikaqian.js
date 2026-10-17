@@ -172,6 +172,8 @@ function codeDeAncre(corps) {
     const p = /<p[^>]*>([\s\S]{0,400}?)<\/p>/.exec(corps)?.[1];
     return p == null ? null : texteAncre(p);
 }
+/** LA définition de « référence complète » d'une ancre (PQ-SANSNUM2 tour 1, §21 bis) : `lireAncres` y a lu un « code · numéro » dont le code ET le numéro sont non vides. Le compteur `sansRef` du diagnostic et la garde `ancresSansNumero` la partagent. */
+const refComplete = a => !!(a.ref && a.ref[1] && a.ref[2]);
 function decrireAncresSansTuile(html) {
     const r = { n: 0, sansImg: 0, sansH2: 0, sansRef: 0, imgSansSrc: 0, srcHorsHote: 0, exemples: [] };
     for (const a of lireAncres(html)) {
@@ -180,7 +182,7 @@ function decrireAncresSansTuile(html) {
         const aUneImg = /<img[\s/>]/i.test(a.corps);
         if (!aUneImg) r.sansImg++;
         if (a.titre == null || !T.entites(a.titre).trim()) r.sansH2++;
-        if (!a.ref || !a.ref[1] || !a.ref[2]) r.sansRef++;
+        if (!refComplete(a)) r.sansRef++;
         const src = a.img == null ? null : T.entites(a.img);
         if (aUneImg && src == null) r.imgSansSrc++;
         if (src != null && !src.startsWith(`https://${HOTE_IMAGES}/`)) r.srcHorsHote++;
@@ -198,7 +200,7 @@ function decrireAncresSansTuile(html) {
 // Mesuré (récepteur, 18:20 UTC, promo-sv-p) : 758 ancres, 701 tuiles, 57 ancres qui ont une image du dossier de la page, un nom, le code des tuiles, et AUCUN numéro (« 758 of 758 cards »).
 /**
  * Les ancres SANS NUMÉRO d'une page, par ce que la définition AUTORISE (rien de plus large) : une ancre `/cards/<uuid>` du découpage UNIQUE (`lireAncres`) qui n'est pas une tuile, qui a un
- * `<h2>` non vide (le nom), et dont le `<p>` — lu par `codeDeAncre`, la MÊME lecture que le diagnostic — est EXACTEMENT le code que portent les tuiles de la page (le code de la page, ou
+ * `<h2>` non vide (le nom), sans référence « code · numéro » complète (`refComplete`, la définition du compteur `sansRef` du diagnostic), et dont le `<p>` — lu par `codeDeAncre`, la MÊME lecture que le diagnostic — est EXACTEMENT le code que portent les tuiles de la page (le code de la page, ou
  * `codeDesTuilesPromo(code)`, la fonction unique, pour une page promo), SANS « · numéro ». (PQ-SANSNUM2, ruling du coordinateur : le nombre de h2/img/p et l'adresse exacte de l'image ne
  * font plus partie de la définition — le testeur définit la carte sans numéro par son code et l'absence de numéro ; la page reste protégée par le total annoncé, obligatoire, et ces
  * cartes ne sont jamais importées.) Toute autre ancre qui n'est pas une tuile n'en est PAS une : elle compte comme une ancre AVEC numéro manquante, et la page est refusée.
@@ -209,6 +211,7 @@ function ancresSansNumero(html, code) {
     const codeTuiles = codeDesTuilesPromo(code) ?? code, sortie = [];
     for (const a of lireAncres(html)) {
         if (a.tuile !== null) continue;   // une tuile n'est jamais « sans numéro »
+        if (refComplete(a)) continue;   // GARDE:pk-sn-ref — une référence « code · numéro » complète (même dans un second <p>) est un numéro : carte numérotée dont il manque l'image, pas une carte sans numéro
         const nom = a.titre == null || !T.entites(a.titre).trim() ? null : texteAncre(a.titre);
         if (nom === null) continue;   // GARDE:pk-sn-nom
         if (codeDeAncre(a.corps) !== codeTuiles) continue;   // GARDE:pk-sn-code

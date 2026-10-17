@@ -82,6 +82,17 @@ for (const [nom, forme] of Object.entries(CORPS)) {
     verifier(`propriété — ${nom} : la garde compte l'ancre ⇔ la sonde la décrit (h2 non vide, p = sv-p, sans référence) [sonde : ${sondeDit}]`, (appel('ancresSansNumero', html, 'promo-sv-p') ?? ['?']).length === 1, sondeDit);
 }
 
+// ── 2 bis. TOUR 1 : une ancre dont un SECOND <p> porte une référence « code · numéro » COMPLÈTE a un numéro : elle n'est jamais « sans numéro » ───────────────────────────
+{
+    const ref2 = (img) => (id, nom) => `${img ? `<img src="${DOSSIER}/${id}.webp"/>` : ''}<h2>${nom}</h2><p>sv-p</p><p>sv-p<!-- --> · 3</p>`;
+    const sansImg = page(701, [...ancresSN(FORMES['forme de base (un h2, une img, un p)'], 56), ancre(UUID(300001), 'N', ref2(false))], undefined);
+    verifier('TOUR 1 — second <p> « sv-p · 3 » SANS image : non comptée (la sonde la range hors « sans code · numéro »), la page est refusée à 56 sans numéro', [(appel('ancresSansNumero', sansImg, 'promo-sv-p') ?? ['?']).length, appel('decrireAncresSansTuile', sansImg)?.sansRef, juger(sansImg).statut, juger(sansImg).corps.sansNumero], [56, 56, 422, 56]);
+    const avecImg = page(701, [...ancresSN(FORMES['forme de base (un h2, une img, un p)'], 56), ancre(UUID(300001), 'N', ref2(true))], undefined);
+    verifier('TOUR 1 — la même ancre AVEC image : c\'est une tuile (lue), jamais comptée sans numéro', [(appel('ancresSansNumero', avecImg, 'promo-sv-p') ?? ['?']).length, juger(avecImg).corps.tuilesLues], [56, 702]);
+    const point = page(701, [...ancresSN(FORMES['forme de base (un h2, une img, un p)'], 56), ancre(UUID(300001), 'N', (id, nom) => `<h2>${nom}</h2><p>sv-p</p><p> · </p>`)], undefined);
+    verifier('TOUR 1 — second <p> « · » SANS numéro complet : la référence n\'est pas complète, l\'ancre reste comptée sans numéro (57, page acceptée)', [(appel('ancresSansNumero', point, 'promo-sv-p') ?? ['?']).length, appel('decrireAncresSansTuile', point)?.sansRef, juger(point).statut], [57, 57, 200]);
+}
+
 // ── 3. CE QUI DOIT TOUJOURS TOMBER ────────────────────────────────────────────────────────────────────────────────────────────────────────
 const base = ancresSN(FORMES['forme de base (un h2, une img, un p)'], 56);
 const mauvaise = nom => CORPS[nom];
