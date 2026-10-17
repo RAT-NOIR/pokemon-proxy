@@ -96,6 +96,19 @@ for (const q of parCas('numero-substitue')) {
     v('(f) Korrina\'s Focus ~ Korrina\'s Motivation (traduction de la même carte)', nomCompatible(L('Korrina\'s Focus'), P('Korrina\'s Motivation')), true);
     v('(f) Palkia LV.X ~ Palkia Lv.67 (même Pokémon)', nomCompatible(L('Palkia LV.X'), P('Palkia Lv.67 [Spacial Rend | Transback]')), true);
     v('(f) Fire Energy ≠ Water Energy (un mot générique ne rapproche pas)', nomCompatible(L('Fire Energy'), P('Water Energy')), false);
+    // I1 (relecture r1) : un propriétaire en préfixe partagé ne suffit pas ; on compare les restes par l'espèce (table de Pokédex de la production)
+    const paires = [
+        ["Imakuni?'s Doduo", "Imakuni?'s Nasty Plot"], ["Whitney's Clefable", "Whitney's Miltank"], ["Sabrina's Alakazam", "Sabrina's Jynx"],
+        ["Team Magma's Aron", "Team Magma's Baltoy"], ["Team Aqua's Zubat", "Team Aqua's Mightyena"], ["Professor Oak", "Professor Elm"],
+        ["Misty's Starmie", "Misty's Tears"], ["Lt. Surge's Raichu", "Lt. Surge's Strategy"]];
+    for (const [lu, cand] of paires) v(`(f) I1 « ${lu} » lu / « ${cand} » : contredit, retiré`, nomCompatible(L(lu), P(cand)), false);
+    v('(f) I1 toléré écrit : deux Dresseurs du même propriétaire (Zinnia\'s Resolve / Zinnia\'s Nasty Plot) restent montrés', nomCompatible(L("Zinnia's Resolve"), P("Zinnia's Nasty Plot")), true);
+    v('(f) I1 même propriétaire, même espèce : gardé (Whitney\'s Clefable / Whitney\'s Clefable ex)', nomCompatible(L("Whitney's Clefable"), P("Whitney's Clefable ex")), true);
+    // M3 : les jetons courts
+    v('(f) M3 Ho-Oh / Ho-Oh : compatible (égalité, aucun mot de 3 lettres)', nomCompatible(L('Ho-Oh'), P('Ho-Oh')), true);
+    v('(f) M3 Ho-Oh / Lugia : contredit (deux espèces)', nomCompatible(L('Ho-Oh'), P('Lugia')), false);
+    v('(f) M3 Mew / Ho-Oh : contredit', nomCompatible(L('Mew'), P('Ho-Oh')), false);
+    v('(f) M2 hérité de nomConcorde (préfixe) : Mew / Mewtwo reste compatible, non élargi', nomCompatible(L('Mew'), P('Mewtwo')), true);
     v('(f) nom lu vide : compatible (rien à contredire)', nomCompatible([], P('Dark Porygon2')), true);
     v('(f) candidat sans nom exploitable : compatible (on ne sait pas)', nomCompatible(L('Pikachu'), P(null)), true);
 }
