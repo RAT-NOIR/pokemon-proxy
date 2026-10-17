@@ -9,6 +9,7 @@ const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const { creerBanc, traiterCorrection } = require('./routes');
 const { creerPurge, FORME_JETON } = require('./purge');
 const { traiterEtiquette, exigerAdministrateur } = require('./etiquette');
+const { traiterResolution } = require('./resoudre-cardmarket');
 const { traiterPhoto, exigerAdministrateurPhoto } = require('./photo');
 const L = require('../transport/limites');
 const { idempotente } = require('../transport/idempotence');
@@ -80,6 +81,12 @@ module.exports = {
         // (le corps est binaire, la clé en hacherait un objet vide) : la même photo pour le même scan rend `deja`.
         const parPorteurPhoto = L.limiteur({ nom: 'banc-photo', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/banc/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhoto(cfg, { ...deps, banc }));
+        // RESOUDRE-CARDMARKET : adresse Cardmarket collée → idProduct, derrière V2_RESOLUTION_CARDMARKET=1. Drapeau éteint : la route N'EXISTE PAS (404 natif pour tous, administrateur compris). Même garde de rôle que
+        // l'étiquette, AVANT le limiteur (le même, 600 par heure et par porteur) ; lecture seule, aucune idempotence à tenir.
+        if (cfg.resolutionCardmarket === true) {
+            const parPorteurResolution = L.limiteur({ nom: 'banc-resoudre-cardmarket', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+            router.post('/api/banc/resoudre-cardmarket', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteurResolution, traiterResolution(cfg, deps));
+        }
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge, undefined, undefined, { banc });
     },
