@@ -64,6 +64,8 @@ function langueDuVisuel(im) {
     if (im.source === 'pokumon') return im.langueSource === 'en'
         ? { langue: 'en', preuve: 'pokumon.com : entrée de la taxonomie « language » English (id 1260), carte anglaise tamponnée (17 images ouvertes à l\'œil le 2026-10-17, toutes en anglais)' }
         : { langue: null, preuve: `pokumon, langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-17 (PKMCOM-IMPORT) — pokemon.com (relevés passifs du testeur) : la langue est DÉCLARÉE par le nom du fichier servi (« …_EN_… ») ; l'adresse doit être valable (require paresseux : pas de cycle)
+    if (im.source === 'pokemon.com') return require('./pokemoncom').langueDe(im.urlOriginal);
     if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };

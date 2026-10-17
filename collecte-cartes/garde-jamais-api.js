@@ -16,7 +16,10 @@ const { execFileSync } = require('child_process');
 const { HOTES_IMAGES } = require('./hotes-images-ptcgio');
 
 const JETON = /[a-z0-9._-]*(?:pokemontcg\.io|scrydex\.com)(?:\.[a-z0-9-]+)*/gi;
-const NOMS_NUS = new Set(['pokemontcg.io', 'scrydex.com']);
+const JETON_PKM = /[a-z0-9._-]*pokemon\.com(?:\.[a-z0-9-]+)*/gi;
+const HOTE_IMAGES_PKM = 'assets.pokemon.com';                       // = collecte-cartes/pokemoncom.js HOTE_IMAGES (le banc vérifie l'égalité)
+const ETIQUETTES_API_PKM = Object.freeze(['api', 'apis', 'graphql', 'gateway', 'services', 'auth']);
+const NOMS_NUS =new Set(['pokemontcg.io', 'scrydex.com']);
 const ROUTES_API = /^\/(?:v\d+|api|cards|sets|rarities|types|subtypes|supertypes|pokemon\/v\d+)(?![a-z0-9])/i;
 const TAILLE_MAX = 20 * 1024 * 1024;
 
@@ -34,6 +37,16 @@ function analyserTexte(fichier, texte) {
                 if (avant !== '://' && !(suite[0] === '/' && ROUTES_API.test(suite))) continue;
             }
             violations.push({ fichier, ligne: i + 1, jeton: m[0] });
+        }
+        // ➕ 2026-10-17 (PKMCOM-IMPORT) : pokemon.com. Le dépôt cite légitimement le site (www, press, image.….cn, des hôtes déguisés cités par des bancs de REFUS) : la moitié
+        // statique ne juge donc que les hôtes d'API (liste fermée des étiquettes) et un chemin d'API sur l'hôte d'images ; la moitié exécution est fermée par ce qu'elle
+        // AUTORISE (collecte-cartes/pokemoncom.js urlImageValide : l'hôte d'images seul, https, le chemin des cartes).
+        for (const m of contenu.matchAll(JETON_PKM)) {
+            const jeton = m[0].toLowerCase().replace(/\.+$/, '');
+            const suite = contenu.slice(m.index + m[0].length);
+            const etiquette = jeton.split('.')[0];
+            if ((jeton.endsWith('pokemon.com') && jeton !== 'pokemon.com' && ETIQUETTES_API_PKM.includes(etiquette))
+                || (jeton === HOTE_IMAGES_PKM && /^\/(?:v\d+|api|graphql)(?![a-z0-9])/i.test(suite))) violations.push({ fichier, ligne: i + 1, jeton: m[0] });
         }
     });
     return violations;
