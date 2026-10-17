@@ -53,7 +53,7 @@ function creerCatalogue(opts = {}) {
             table.set(id, {
                 idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr),
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
-                numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
+                numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
                 prixGuide: g ? { trend: g.trend, low: g.low, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import)
