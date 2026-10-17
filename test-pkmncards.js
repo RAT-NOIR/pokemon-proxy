@@ -16,7 +16,7 @@ const card = s => `${H}/card/${s}/`;
 
 // ── 1. LES SITEMAPS (extrait réel) ─────────────────────────────────────────────────────────────────────────────────────────
 const lus = P.lireSitemapTexte(lireFixture('pkmncards-extrait-sitemap.xml'));
-verifier('sitemap : l\'extrait réel donne 75 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [75, 0]);
+verifier('sitemap : l\'extrait réel donne 79 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [79, 0]);
 verifier('sitemap : une entrée dont l\'adresse n\'est pas sur l\'hôte, ou dont l\'image est hors règle, est ÉCARTÉE et nommée',
     (() => { const x = P.lireSitemapTexte(`<urlset><url><loc>https://autre.example/card/a-b-1/</loc><image:image><image:loc>${UP('a.jpg')}</image:loc></image:image></url><url><loc>${card('a-xy-trainer-kit-latios-tk8o-1')}</loc><image:image><image:loc>https://autre.example/wp-content/uploads/a.jpg</image:loc></image:image></url><url><loc>${card('b-xy-trainer-kit-latios-tk8o-2')}</loc></url></urlset>`); return [x.entrees.length, x.ecartees.map(e => e.motif)]; })(),
     [0, ['loc-hors-hote', 'image-hors-regle', 'sans-image']]);
@@ -45,12 +45,12 @@ const setsReels = [...lireFixture('pkmncards-extrait-sets.xml').matchAll(/<loc>[
 verifier('table : le fichier des sets (196 sets réels) est lu', setsReels.length, 196);
 verifier('table : CHAQUE set de la table existe dans les sitemaps des sets (aucun nom deviné)', Object.keys(P.TABLE).filter(s => !setsReels.includes(s)), []);
 verifier('table : lots connus, chaque ligne a un lot, au moins un slugSet et un code (ou null)', Object.entries(P.TABLE).filter(([, e]) => !P.LOTS.includes(e.lot) || !Array.isArray(e.slugSets) || !e.slugSets.length || !('code' in e)).map(([k]) => k), []);
-verifier('table : les quatre lots ont au moins un set', P.LOTS.map(l => Object.values(P.TABLE).some(e => e.lot === l)), [true, true, true, true]);
+verifier('table : les cinq lots ont au moins un set', P.LOTS.map(l => Object.values(P.TABLE).some(e => e.lot === l)), [true, true, true, true, true]);
 verifier('table : la table est GELÉE (une ligne ne se change pas à l\'exécution)', [Object.isFrozen(P.TABLE), Object.isFrozen(P.TABLE['xy-trainer-kit-latios'])], [true, true]);
 
 // ── 5. L'APPARIEMENT CARTE PAR CARTE ───────────────────────────────────────────────────────────────────────────────────────
 const idx = P.indexer(lus.entrees);
-verifier('index : 75 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [75, ['unown-unseen-forces-uf/']]);
+verifier('index : 79 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [79, ['unown-unseen-forces-uf/']]);
 const trou = (idProduct, carteId, slugSet, numeroFiche, slugProduit, nomEn, images = []) => ({ idProduct, carteId, slugSet, numeroFiche, slugProduit, carte: { _id: carteId, nomEn, images } });
 const app = (trous, o = {}) => P.apparier({ trous, entrees: idx.lues, lot: o.lot, ...(o.refus ? { refus: o.refus } : {}) });
 const motifs = r => r.restes.map(x => `${x.idProduct}:${x.motif}`);
@@ -161,6 +161,19 @@ verifier('« Basic Fighting Energy » (notre carte) = « fighting energy » (la 
 
 r = app([trou(97, 93, 'XY-Trainer-Kit', '26', 'Poke-Ball-TK626S', 'Poké Ball')], { lot: 'kits' });
 verifier('les accents : notre « Poké Ball » = la source « poke ball » (la source n\'écrit pas d\'accents ; ils sont repliés des DEUX côtés, en plus de normaliserNom)', [r.plan.length, r.plan[0]?.pkcSet], [1, 'xy-trainer-kit-sylveon']);
+
+// 5r. (correction 3) le lot « autres » : les 12 trous anglais de la mesure du dépôt PTCG-database couverts EN PLUS des quatre lots
+r = app([trou(582672, 100, 'Cosmic-Eclipse', '143a', 'Togepi-Cleffa-Igglybuff-GX-V2', 'Togepi & Cleffa & Igglybuff-GX', [{ set: 'Cosmic-Eclipse', source: 'pokemontcg.io', numero: '143', cleR2: 'x/143.webp', langue: 'en', w: 700 }])], { lot: 'autres' });
+verifier('autres : Togepi & Cleffa & Igglybuff-GX n°143a (le n°143 est servi, le 143a est le trou) -> AJOUT de l\'entrée 143a de la source, set + numéro + nom', [r.plan.length, r.plan[0]?.action, r.plan[0]?.url.slice(r.plan[0].url.lastIndexOf('/') + 1), r.restes.length], [1, 'ajout', 'en_US-SM12-143a-togepi_cleffa_igglybuff_gx-ya.jpg', 0]);
+const MEW = (id, n, slug) => trou(id, 101, '30th-Celebration', n, slug, 'Mew', [{ set: '30th-Celebration', source: 'tcgdex', numero: '065', cleR2: 't/065.webp', langue: 'en', w: 600 }]);
+r = app([MEW(909509, 'R', 'Mew-V1-30CRRGB'), MEW(909510, 'G', 'Mew-V2-30CGRGB'), MEW(909511, 'B', 'Mew-V3-30CBRGB')], { lot: 'autres' });
+verifier('autres : les trois Mew du 30th Celebration (R, G, B) -> trois fiches, trois images distinctes, à REGARDER (la marque « 30 »)', [r.plan.map(u => [u.produits[0], u.url.slice(u.url.lastIndexOf('/') + 1), u.aRegarder]), r.restes.length], [[[909509, 'me5-5m_en_001_std.png', true], [909510, 'me5-5m_en_002_std.png', true], [909511, 'me5-5m_en_003_std.png', true]], 0]);
+r = app([trou(297255, 30360, 'SM-Trainer-Kit-Lycanroc-Alolan-Raichu', '21', 'Great-Ball-V3-TK10A21', 'Great Ball'), trou(297288, 30360, 'SM-Trainer-Kit-Lycanroc-Alolan-Raichu', '21', 'Great-Ball-V1-TK10L21', 'Great Ball')], { lot: 'autres' });
+verifier('autres : les huit produits Hau / Great Ball du kit Sun & Moon, où la mesure du dépôt choisit une image sans distinguer les moitiés, restent SAUTÉS (deux images pour une fiche)', [r.plan.length, motifs(r).sort()], [0, ['297255:deux-images-une-fiche', '297288:deux-images-une-fiche']]);
+r = app([MEW(909509, 'R', 'Mew-V1-30CRRGB')], { lot: 'pkmcom' });
+verifier('la ligne 30th Celebration reste lue par le lot pkmcom (lots supplémentaires, pas un déplacement)', r.plan.length, 1);
+r = app([trou(582672, 100, 'Cosmic-Eclipse', '143a', 'Togepi-Cleffa-Igglybuff-GX-V2', 'Togepi & Cleffa & Igglybuff-GX')], { lot: 'kits' });
+verifier('un set du lot « autres » n\'est pas offert aux autres lots', motifs(r), ['582672:set-hors-table']);
 
 // ── 6. IDENTIFIANTS PUBLICS : le nom de la source n'y est jamais ────────────────────────────────────────────────────────────
 verifier('identifiants : source « pkc », lot « pkc-2026-10 », clé R2 pkc/<set>/<n°>-<carte>-en.webp, _id du document images', [P.SOURCE, P.LOT, P.cleR2('XY-Trainer-Kit', '24', 10), P.idImage('XY-Trainer-Kit', 10, '24'), P.cleNum(null)], ['pkc', 'pkc-2026-10', 'pkc/XY-Trainer-Kit/24-10-en.webp', 'pkc/XY-Trainer-Kit/10/24/en', 'sans-numero']);

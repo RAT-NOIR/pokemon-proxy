@@ -33,7 +33,7 @@ const DOSSIER_SITEMAPS = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pkmnca
 const DOSSIER_CACHE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pkmncards-cache\\images';
 const DOSSIER_LOT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMNCARDS';
 const ROBOTS = `https://${HOTE}/robots.txt`;
-const LOTS = Object.freeze(['kits', 'mcdo', 'promos', 'pkmcom']);
+const LOTS = Object.freeze(['kits', 'mcdo', 'promos', 'pkmcom', 'autres']);
 // Largeur et rapport d'une carte servie par cette source (733×1024 lu sur une page : 0,716).
 const RAPPORT_MIN = 0.69, RAPPORT_MAX = 0.74;
 const LARGEUR_ATTENDUE = 733;
@@ -44,7 +44,9 @@ const EMPREINTES_DOS_SOURCE = Object.freeze([]);
 // `code` : le code que la source met entre le set et le numéro (lu sur les sitemaps réels) ; `demi` : l'expression que le SLUG Cardmarket d'un produit doit porter pour être de cette moitié de kit ;
 // `prefixe` : la lettre que Cardmarket met devant le numéro de cette moitié (DP : L, M) ; `numeroDuSlug` : où lire le numéro d'une fiche sans numéro.
 // Les équivalences se PROUVENT carte par carte (numéro ET nom) à chaque plan : la table dit seulement où chercher.
-const ligne = o => Object.freeze({ ...o, slugSets: Object.freeze([...o.slugSets]) });
+// `lots` : les lots SUPPLÉMENTAIRES qui lisent aussi cette ligne (le lot « autres » reprend des sets déjà à la table : 30th Celebration, les kits Sun & Moon)
+const ligne = o => Object.freeze({ ...o, slugSets: Object.freeze([...o.slugSets]), ...(o.lots ? { lots: Object.freeze([...o.lots]) } : {}) });
+const duLot = (l, lot) => l.lot === lot || !!l.lots?.includes(lot);
 const TABLE = Object.freeze({
     // a. Kits Dresseur
     'xy-trainer-kit-sylveon': ligne({ lot: 'kits', slugSets: ['XY-Trainer-Kit'], code: 'tk6s', demi: /TK6\d+S$/ }),
@@ -55,8 +57,8 @@ const TABLE = Object.freeze({
     'xy-trainer-kit-latios': ligne({ lot: 'kits', slugSets: ['XY-Trainer-Kit-Latias-Latios'], code: 'tk8o', demi: /TK8\d+O$/ }),
     'xy-trainer-kit-pikachu-libre': ligne({ lot: 'kits', slugSets: ['XY-Trainer-Kit-Pikachu-Libre-Suicune'], code: 'tk9p', demi: /TK9P/ }),
     'xy-trainer-kit-suicune': ligne({ lot: 'kits', slugSets: ['XY-Trainer-Kit-Pikachu-Libre-Suicune'], code: 'tk9s', demi: /TK9S/ }),
-    'sun-moon-trainer-kit-lycanroc': ligne({ lot: 'kits', slugSets: ['SM-Trainer-Kit-Lycanroc-Alolan-Raichu'], code: 'tk10l', demi: /TK10L\d+$/ }),
-    'sun-moon-trainer-kit-alolan-raichu': ligne({ lot: 'kits', slugSets: ['SM-Trainer-Kit-Lycanroc-Alolan-Raichu'], code: 'tk10a', demi: /TK10A\d+$/ }),
+    'sun-moon-trainer-kit-lycanroc': ligne({ lot: 'kits', slugSets: ['SM-Trainer-Kit-Lycanroc-Alolan-Raichu'], code: 'tk10l', demi: /TK10L\d+$/, lots: ['autres'] }),
+    'sun-moon-trainer-kit-alolan-raichu': ligne({ lot: 'kits', slugSets: ['SM-Trainer-Kit-Lycanroc-Alolan-Raichu'], code: 'tk10a', demi: /TK10A\d+$/, lots: ['autres'] }),
     'black-white-trainer-kit-excadrill': ligne({ lot: 'kits', slugSets: ['BW-Trainer-Kit'], code: 'tk5e', demi: /TK5\d+E$/ }),
     'black-white-trainer-kit-zoroark': ligne({ lot: 'kits', slugSets: ['BW-Trainer-Kit'], code: 'tk5z', demi: /TK5\d+Z$/ }),
     'hs-trainer-kit-gyarados': ligne({ lot: 'kits', slugSets: ['HS-Trainer-Kit'], code: 'tk4g' }),
@@ -83,8 +85,10 @@ const TABLE = Object.freeze({
     'heartgold-soulsilver': ligne({ lot: 'pkmcom', slugSets: ['HeartGold-SoulSilver'], code: 'hs' }),
     'sword-shield-promos': ligne({ lot: 'pkmcom', slugSets: ['SWSH-Black-Star-Promos'], code: null }),
     'scarlet-violet-promos': ligne({ lot: 'pkmcom', slugSets: ['SV-Black-Star-Promos'], code: 'svp' }),
-    '30th-celebration': ligne({ lot: 'pkmcom', slugSets: ['30th-Celebration'], code: '30c' }),
+    '30th-celebration': ligne({ lot: 'pkmcom', slugSets: ['30th-Celebration'], code: '30c', lots: ['autres'] }),
     // (correction 1) les sets des 5 remplacements du plan pokemon.com (entrée japonaise refusée au numéro d'un produit anglais)
+    // lot « autres » (décision du testeur, 17/10 soir : « type-null : on prend quand même les petits gains ») : les trous anglais que la mesure du dépôt PTCG-database a trouvés EN PLUS des quatre lots
+    'cosmic-eclipse': ligne({ lot: 'autres', slugSets: ['Cosmic-Eclipse'], code: 'cec' }),
     'shining-legends': ligne({ lot: 'pkmcom', slugSets: ['Shining-Legends'], code: 'slg' }),
     'forbidden-light': ligne({ lot: 'pkmcom', slugSets: ['Forbidden-Light'], code: 'fli' }),
     'lost-origin': ligne({ lot: 'pkmcom', slugSets: ['Lost-Origin'], code: 'lor' })
@@ -188,7 +192,7 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, fic
     for (const e of entrees) (parSet.get(e.pkcSet) || parSet.set(e.pkcSet, []).get(e.pkcSet)).push(e);
     const resolus = [];
     for (const t of trous) {
-        const lignes = Object.entries(TABLE).filter(([, l]) => (lot == null || l.lot === lot) && l.slugSets.includes(t.slugSet));
+        const lignes = Object.entries(TABLE).filter(([, l]) => (lot == null || duLot(l, lot)) && l.slugSets.includes(t.slugSet));
         if (!lignes.length) { reste(t, 'set-hors-table'); continue; }
         // la moitié du kit se lit au slug ; si aucune moitié ne se reconnaît, toutes restent candidates (et le départage échoue honnêtement)
         const slug = String(t.slugProduit ?? '');
@@ -306,5 +310,5 @@ function planRetrait(cartes) {
     return { cartes: touchees, entrees, cles };
 }
 
-module.exports = { SOURCE, LOT, HOTE, ROBOTS, PREFIXE_CHEMIN, UA, CADENCE_MS, MENTION, DOSSIER_SITEMAPS, DOSSIER_CACHE, DOSSIER_LOT, LOTS, TABLE, SETS_A_REGARDER, SETS_SANS_NUMERO_DE_SLUG, LARGEUR_ATTENDUE,
+module.exports = { duLot, SOURCE, LOT, HOTE, ROBOTS, PREFIXE_CHEMIN, UA, CADENCE_MS, MENTION, DOSSIER_SITEMAPS, DOSSIER_CACHE, DOSSIER_LOT, LOTS, TABLE, SETS_A_REGARDER, SETS_SANS_NUMERO_DE_SLUG, LARGEUR_ATTENDUE,
     urlImageValide, urlRobotsValide, adressePermise, lireSitemapTexte, lireSitemaps, decomposer, indexer, nomNorm, estBasse, cleR2, cleNum, idImage, apparier, controlerImage, imagesIdentiques, planRetrait };

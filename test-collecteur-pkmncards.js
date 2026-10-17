@@ -139,6 +139,31 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     d = tmp(); await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' }), d);
     const r6 = await lancer(urls, reseau(normal), d); const r7 = await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' }), tmp());
     verifier('5xx puis une réussite : le compteur repart (pas d\'arrêt)', [r6.etat, r7.etat, fs.existsSync(C.fichierArret(d))], ['termine', 'interrompu', false]);
+    // (correction 3) le compteur de 5xx ne vaut que pour des 5xx RAPPROCHÉS (6 h) ; une réponse valide (image reçue, 404) le remet à zéro
+    { const h5 = horloge(), rep503 = url => /robots\.txt$/.test(url) ? robotsLibre : { status: 503, type: 'text/html', texte: 'x' };
+      d = tmp(); const a1 = await lancer(urls, reseau(rep503), d, h5); h5.avance(7 * 3600 * 1000); const a2 = await lancer(urls, reseau(rep503), d, h5);
+      verifier('5xx espacés de 7 h : le second INTERROMPT (nouvel incident), pas d\'arrêt définitif', [a1.etat, a2.etat, fs.existsSync(C.fichierArret(d))], ['interrompu', 'interrompu', false]);
+      d = tmp(); await lancer(urls, reseau(rep503), d, h5); h5.avance(60 * 1000); const a3 = await lancer(urls, reseau(rep503), d, h5);
+      verifier('5xx à une minute d\'intervalle : le second est un ARRÊT définitif', [a3.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
+      d = tmp(); await lancer(urls, reseau(rep503), d, h5);
+      await lancer(urls, reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 404, type: 'text/html', texte: '404' }), d, h5);
+      verifier('un 404 (réponse valide) remet le compteur à zéro dans l\'index', JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).cinqCents ?? null, null); }
+    // (correction 3) le plafond d'octets agit AVANT et PENDANT la lecture du corps (le transport réel)
+    { const fo = global.fetch; let lu = false;      // (`lu` : inutilisable seul — un ReadableStream tire une première fois à sa création ; on mesure ce qui RESTE du corps)
+      const flux = (n, entetes) => new Response(new ReadableStream({ pull(c) { lu = true; c.enqueue(new Uint8Array(Math.min(64, n.reste))); n.reste -= 64; if (n.reste <= 0) c.close(); } }), { status: 200, headers: { 'content-type': 'image/png', ...entetes } });
+      try {
+          const c1 = { reste: 10 * 1024 * 1024 }; global.fetch = async () => flux(c1, { 'content-length': String(10 * 1024 * 1024) });
+          const t1 = await C.transportFetch.get(UP('a.png'), { binaire: true, octetsMax: 1000 });
+          verifier('transport réel : un content-length au-delà du plafond refuse AVANT de lire le corps (presque rien n\'en est tiré)', [t1.tropVolumineux === true, Buffer.isBuffer(t1.octets), c1.reste > 10 * 1024 * 1024 - 1024], [true, false, true]);
+          const compte = { reste: 5000 }; global.fetch = async () => flux(compte, {});
+          const t2 = await C.transportFetch.get(UP('a.png'), { binaire: true, octetsMax: 1000 });
+          verifier('transport réel : sans content-length, la lecture est COUPÉE au plafond (bien moins que le corps entier)', [t2.tropVolumineux === true, Buffer.isBuffer(t2.octets), compte.reste > 3000], [true, false, true]);
+          global.fetch = async () => flux({ reste: 640 }, { 'content-length': '640' });
+          const t3 = await C.transportFetch.get(UP('a.png'), { binaire: true, octetsMax: 1000 });
+          verifier('transport réel : une image sous le plafond est lue en entier', [t3.tropVolumineux, t3.octets?.length], [undefined, 640]);
+      } finally { global.fetch = fo; }
+      d = tmp(); const rv = await lancer(urls.slice(0, 1), reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', tropVolumineux: true }), d);
+      verifier('télécharger : une réponse « trop volumineuse » du transport est notée « refuse / trop-volumineuse », sans arrêt', [rv.etat, JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images[urls[0]]?.motif, fs.existsSync(C.fichierArret(d))], ['termine', 'trop-volumineuse', false]); }
     // plafond d'octets : une image trop volumineuse est refusée et notée, la collecte continue
     d = tmp(); tr = reseau(normal);
     r = await lancer(urls, tr, d, horloge(), { octetsMax: 100 });

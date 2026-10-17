@@ -30,8 +30,13 @@ const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
+const CINQ_CENTS_FENETRE_MS = 6 * 3600 * 1000;
 const OCTETS_MAX_PAR_IMAGE = 8 * 1024 * 1024;           // un scan de carte pèse < 2 Mo : au-delà, ce n'est pas l'image attendue (refusée, notée « trop-volumineuse »)
 const CIBLES_PKMCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-IMPORT\\plan.json';
+// Les 12 trous anglais que la mesure du dépôt PTCG-database (S7\PTCGDB, PTCGDB-MESURE-report.md : « en plus de PKMNCARDS ») a trouvés au-delà des quatre lots ; décision du testeur du 17/10 soir. Les adresses d'image
+// ne viennent JAMAIS de ce dépôt : seul le sitemap en cache fait foi, et chaque produit est apparié set + numéro + nom comme les autres (les douteux sont sautés).
+const CIBLES_AUTRES = Object.freeze([297254, 297255, 297257, 297258, 297282, 297283, 297288, 297289, 582672, 909509, 909510, 909511]);
+const lireCiblesAutres = () => ({ ids: [...CIBLES_AUTRES], parProduit: new Map() });
 const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemoncom-cache';
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident/i;
@@ -72,7 +77,7 @@ function ecrireRejets(dossier, map) { fs.mkdirSync(dossier, { recursive: true })
 
 // ── le transport RÉEL : l'agent du dépôt seul, aucune redirection suivie, robots.txt et les images SEULEMENT ────────────────
 const transportFetch = {
-    async get(url, { binaire = false } = {}) {
+    async get(url, { binaire = false, octetsMax = OCTETS_MAX_PAR_IMAGE } = {}) {
         if (!P.adressePermise(url)) throw new Error(`adresse hors de ce que le collecteur autorise (robots.txt et les images à plat de ${P.HOTE}) — aucune requête`);
         let r;
         try { r = await fetch(url, { headers: { 'User-Agent': P.UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
@@ -83,7 +88,21 @@ const transportFetch = {
         if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location'), cfMitigated, imperva };
         // un 404/410 rend aussi son corps (borné) : un défi caché derrière un 404 doit se voir
         if (r.status === 404 || r.status === 410) return { status: r.status, type, texte: (await r.text()).slice(0, 3000), cfMitigated, imperva };
-        if (binaire && r.ok && /^image\//.test(type)) return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()), cfMitigated, imperva };
+        if (binaire && r.ok && /^image\//.test(type)) {
+            // le plafond d'octets agit AVANT (content-length) et PENDANT la lecture : le corps n'est jamais chargé en entier au-delà du plafond
+            const annonce = Number(r.headers.get('content-length'));
+            if (Number.isFinite(annonce) && annonce > octetsMax) { try { await r.body?.cancel(); } catch { /* corps déjà fermé */ } return { status: r.status, type, tropVolumineux: true, octetsAnnonces: annonce, cfMitigated, imperva }; }
+            const morceaux = []; let total = 0;
+            const lecteur = r.body.getReader();
+            for (;;) {
+                const { done, value } = await lecteur.read();
+                if (done) break;
+                total += value.length;
+                if (total > octetsMax) { try { await lecteur.cancel(); } catch { /* flux déjà fermé */ } return { status: r.status, type, tropVolumineux: true, octetsAnnonces: total, cfMitigated, imperva }; }
+                morceaux.push(value);
+            }
+            return { status: r.status, type, octets: Buffer.concat(morceaux), cfMitigated, imperva };
+        }
         return { status: r.status, type, texte: await r.text(), cfMitigated, imperva };
     }
 };
@@ -104,7 +123,12 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     // un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : un 404 sans marqueur est « absent ». Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps.
     const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
     // un 5xx INTERROMPT (compté dans l'index) ; le DEUXIÈME de suite, sans une seule réussite entre, est un arrêt définitif
-    const erreur5xx = (url, r) => { index.cinqCents = (index.cinqCents || 0) + 1; ecrireIndex(dossierCache, index); return index.cinqCents >= 2 ? arret(url, r, `HTTP ${r.status} deux fois de suite sans réussite entre : arrêt définitif`) : { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` }; };
+    // (correction 3) « de suite » = rapprochés (6 h) : un 5xx d'il y a une semaine n'est pas le premier d'une série ; une réponse valide (image, 404) remet le compteur à zéro
+    const erreur5xx = (url, r) => {
+        const t = now(), avant = index.cinqCents && typeof index.cinqCents === 'object' && t - index.cinqCents.au < CINQ_CENTS_FENETRE_MS ? index.cinqCents.n : 0;
+        index.cinqCents = { n: avant + 1, au: t }; ecrireIndex(dossierCache, index);
+        return index.cinqCents.n >= 2 ? arret(url, r, `HTTP ${r.status} deux fois de suite (moins de 6 h) sans réponse valide entre : arrêt définitif`) : { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` };
+    };
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
@@ -130,14 +154,15 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     fs.mkdirSync(path.join(dossierCache, 'img'), { recursive: true });
     for (const url of permises) {
         let r;
-        try { r = await demander(url, { binaire: true }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
+        try { r = await demander(url, { binaire: true, octetsMax }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
         if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}${/html/i.test(r.type || '') ? ', HTML au lieu d\'une image' : ''}`);
-        if (r.status === 404) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }       // le SEUL « absent » : un 404 sans marqueur de défi
+        if (r.status === 404) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; delete index.cinqCents; ecrireIndex(dossierCache, index); continue; }       // le SEUL « absent » : un 404 sans marqueur de défi
         if (r.status >= 500) return erreur5xx(url, r);
         if (r.status !== 200) return arret(url, r, `HTTP ${r.status} : ni l'image (200) ni l'absence (404) — 401, 410 et tout autre statut sont un arrêt définitif`);
+        if (r.tropVolumineux) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octetsAnnonces ?? null, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, plafond ${octetsMax} octets) : ${url}`); continue; }
         if (!octetsConformes(url, r.octets)) return arret(url, r, 'les octets reçus ne sont pas l\'image que l\'adresse annonce (page de défi probable)');
         if (r.octets.length > octetsMax) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octets.length, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, ${r.octets.length} octets) : ${url}`); continue; }
-        index.cinqCents = 0;
+        delete index.cinqCents;
         const meta = await sharp(r.octets).metadata();
         const fichier = path.join('img', nomFichier(url));
         fs.writeFileSync(path.join(dossierCache, fichier), r.octets);
@@ -263,7 +288,7 @@ async function fichesDuSiteDesSets(db, slugSets, regles) {
 }
 async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles = null, regles = null }) {
     if (!P.LOTS.includes(lot)) throw new Error(`lot inconnu : ${lot}`);
-    const slugSets = [...new Set(Object.values(P.TABLE).filter(l => l.lot === lot).flatMap(l => l.slugSets))];
+    const slugSets = [...new Set(Object.values(P.TABLE).filter(l => P.duLot(l, lot)).flatMap(l => l.slugSets))];
     const filtre = { slugSet: { $in: slugSets }, ...(cibles ? { idProduct: { $in: cibles.ids } } : {}) };
     const lignes = await db.collection('cartes_produits').find(filtre, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1, slugSet: 1, slug: 1 } }).toArray();
     if (!lignes.length) throw new Error(`cartes_produits : 0 ligne pour ${slugSets.length} sets du lot « ${lot} » — une clé fausse (§41)`);
@@ -455,20 +480,20 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere, rejetes: rejetes.length };
 }
 
-module.exports = { OCTETS_MAX_PAR_IMAGE, lireRejets, fichierRejets, urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, GRAINE_ECHANTILLON, fichesDuSiteDesSets, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
+module.exports = { CIBLES_AUTRES, OCTETS_MAX_PAR_IMAGE, lireRejets, fichierRejets, urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, GRAINE_ECHANTILLON, fichesDuSiteDesSets, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--lot=(kits|mcdo|promos|pkmcom)$/, /^--attendu=\d{1,4}$/, /^--cache=.+$/, /^--sitemaps=.+$/, /^--dossier=.+$/, /^--rejets=.+$/, /^--anciennes=.+$/, /^--cibles=.+$/, /^--par-page=\d{1,2}$/, /^--echantillon=\d{1,3}$/];
+const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--lot=(kits|mcdo|promos|pkmcom|autres)$/, /^--attendu=\d{1,4}$/, /^--cache=.+$/, /^--sitemaps=.+$/, /^--dossier=.+$/, /^--rejets=.+$/, /^--anciennes=.+$/, /^--cibles=.+$/, /^--par-page=\d{1,2}$/, /^--echantillon=\d{1,3}$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const modes = ['--plan', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
 const val = (nom, defaut) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3) ?? defaut;
 const LOT = val('lot', null);
 if (inconnus.length || modes.length > 1 || !LOT || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu=')))) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${LOT ? '' : '--lot=kits|mcdo|promos|pkmcom est exigé — '}un seul mode parmi --plan (défaut), --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte). Options : --cache=, --sitemaps=, --dossier=, --rejets=<fichier>, --anciennes=<dossier>, --cibles=<fichier> (pkmcom), --par-page=<N>.`);
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${LOT ? '' : '--lot=kits|mcdo|promos|pkmcom|autres est exigé — '}un seul mode parmi --plan (défaut), --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte). Options : --cache=, --sitemaps=, --dossier=, --rejets=<fichier>, --anciennes=<dossier>, --cibles=<fichier> (pkmcom), --par-page=<N>.`);
     process.exitCode = 2;
 }
 const argsValides = process.exitCode !== 2;
@@ -481,7 +506,7 @@ async function planComplet(db) {
     // la règle du site (refusDuVisuel) est IMPORTÉE du site : si elle ne se charge pas, le plan LÈVE (jamais un repli silencieux)
     const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
     const R = await reglesDuSite();
-    const cibles = LOT === 'pkmcom' ? lireCiblesPkmcom(val('cibles', CIBLES_PKMCOM)) : null;
+    const cibles = LOT === 'pkmcom' ? lireCiblesPkmcom(val('cibles', CIBLES_PKMCOM)) : LOT === 'autres' ? lireCiblesAutres() : null;
     const p = await planifierDepuisBase(db, { lot: LOT, entrees: idx.lues, refusSite: R.refusDuVisuel, cibles, regles: R });
     return { lu, idx, R, cibles, ...p };
 }

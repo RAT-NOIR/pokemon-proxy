@@ -442,6 +442,27 @@
 		</image:image>
 	</url>
 	<url>
+		<loc>@@HOTE@@/card/mew-30th-celebration-30c-r/</loc>
+		<lastmod>2026-09-18T06:59:44+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/me5-5m_en_001_std.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/mew-30th-celebration-30c-g/</loc>
+		<lastmod>2026-09-18T07:01:29+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/me5-5m_en_002_std.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/mew-30th-celebration-30c-b/</loc>
+		<lastmod>2026-09-18T07:03:01+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/me5-5m_en_003_std.png</image:loc>
+		</image:image>
+	</url>
+	<url>
 		<loc>@@HOTE@@/card/parasect-lost-origin-lor-tg01/</loc>
 		<lastmod>2024-03-22T06:23:42+00:00</lastmod>
 		<image:image>
@@ -474,6 +495,13 @@
 		<lastmod>2024-03-22T20:19:10+00:00</lastmod>
 		<image:image>
 			<image:loc>@@HOTE@@/wp-content/uploads/en_US-Promo_SWSH-SWSH293-zamazenta_v.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/togepi-cleffa-igglybuff-gx-cosmic-eclipse-cec-143a/</loc>
+		<lastmod>2024-03-22T21:03:45+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-SM12-143a-togepi_cleffa_igglybuff_gx-ya.jpg</image:loc>
 		</image:image>
 	</url>
 	<url>
