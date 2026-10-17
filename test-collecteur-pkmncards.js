@@ -130,7 +130,7 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
         r = await lancer(urls, tr, d, horloge(), { suivi: RH.suiviHote({ seuil: 1 }), dossierPauses: dp() });
         verifier('REPONSE-HOTE : au-delà du seuil de fausses absences d\'affilée → PAUSE de l\'hôte (« pause-hote »), AUCUN fichier d\'arrêt définitif, robots + 2 images seulement (le seuil du banc est 1 : le plan n\'a que 3 fichiers ; le 21 est prouvé au module)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.hote, r.reponsesHotes[0].fausses], ['pause-hote', false, 3, 'pkmncards.com', 2]);
         tr = reseau(normal); const rSuite = await lancer(urls, tr, d, horloge(), { dossierPauses: dp() });
-        verifier('REPONSE-HOTE : …et la passe SUIVANTE repart (une pause n\'est pas un arrêt définitif)', [rSuite.etat, tr.appels.length], ['termine', 2]);
+        verifier('REPONSE-HOTE : …et la passe SUIVANTE repart (une pause n\'est pas un arrêt définitif)', [rSuite.etat, tr.appels.length], ['termine', 3]);   // robots + les 2 images restantes : la 1re absence est au cache
         d = tmp(); const dPause = dp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<nav>Gym Heroes · Gym Challenge</nav>' });
         r = await lancer(urls, tr, d, horloge(), { dossierPauses: dPause });
         verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier daté qui nomme l\'empreinte), pas d\'arrêt définitif', [r.etat, r.pauseHote?.persistante, fs.existsSync(C.fichierArret(d)), tr.appels.length, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(dPause, 'pkmncards.com')?.empreinte || '')], ['pause-hote', true, false, 2, true]);
