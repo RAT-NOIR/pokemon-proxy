@@ -117,6 +117,11 @@ ajouter('11. balise LOCALE, arbre suivi SALE — aucun commit dans la balise, la
         console.log(`        attendu ${c.attenduBloque ? 'BLOQUE' : 'passe'} · obtenu ${r.bloque === null ? 'EXCEPTION' : r.bloque ? 'BLOQUE' : 'passe'}`);
         console.log(`        ${String(r.phrase).split('\n')[0].trim()}`);
     }
+    // le message d'une balise locale sans commit n'accuse pas un « code antérieur au 2026-09-21 » (relecture 1, mineur 6)
+    const rSale = await etatDuWorker(locales.sale, { comparerArbre: arbreIdentique });
+    const msgOk = /processus local, arbre modifié ou HEAD changé/.test(rSale.phrase) && !/antérieur au 2026-09-21/.test(rSale.phrase);
+    console.log(`   ${msgOk ? '✅' : '❌'} 12. le message de la balise locale sale dit « processus local, arbre modifié ou HEAD changé »`);
+    if (!msgOk) ko++; else ok++;
     console.log(`\n════ ${ok} passés · ${ko} en échec ════`);
     if (ko) {
         console.error(`\n🔴 UNE GARDE QUI NE SAIT PAS REFUSER N'EST PAS UNE GARDE. Elle a échoué vers le passant`);

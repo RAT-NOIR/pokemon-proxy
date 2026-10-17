@@ -68,6 +68,61 @@ const fauxGit = ({ sale = '', panne = null } = {}) => args => {
         assert.notEqual(b.commit, 'local');
     });
 
+    // ── CORRECTION 1 : le commit est FIGÉ au démarrage (HEAD propre ne prouve pas le code chargé en mémoire, §23) ───────────────────
+    const SHA2 = 'b'.repeat(40);
+    const gitMobile = etat => args => (args[0] === 'status' ? etat.sale : (etat.head + '\n'));
+    await t('figé : HEAD propre au départ, inchangé et propre ensuite → le commit reste publié', () => {
+        const etat = { head: SHA, sale: '' };
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        assert.equal(r().commit, SHA.slice(0, 12));
+        assert.equal(r().commit, SHA.slice(0, 12));
+    });
+    await t('figé : HEAD change pendant la vie du processus (git pull, arbre propre) → plus de commit, la raison le dit', () => {
+        const etat = { head: SHA, sale: '' };
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        assert.ok(r().commit);
+        etat.head = SHA2;
+        const x = r();
+        assert.equal(x.commit, null);
+        assert.match(x.raison, /HEAD a chang/);
+    });
+    await t('figé : la perte est DÉFINITIVE (revenir sur le commit de départ ne la défait pas : un require tardif a pu charger l\'autre code)', () => {
+        const etat = { head: SHA, sale: '' };
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        etat.head = SHA2; assert.equal(r().commit, null);
+        etat.head = SHA; assert.equal(r().commit, null);
+    });
+    await t('figé : arbre sale au départ → aucun commit pour toute la vie du processus, même nettoyé ensuite', () => {
+        const etat = { head: SHA, sale: ' M a.js\n' };
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        assert.equal(r().commit, null);
+        etat.sale = '';
+        assert.equal(r().commit, null);
+    });
+    await t('figé : arbre propre au départ, sali ensuite → commit retiré (définitivement)', () => {
+        const etat = { head: SHA, sale: '' };
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        etat.sale = ' M b.js\n';
+        assert.equal(r().commit, null);
+        etat.sale = '';
+        assert.equal(r().commit, null);
+    });
+    await t('battre avec le résolveur figé : après un changement de HEAD la balise est posée sans commit ET porte la raison', async () => {
+        const etat = { head: SHA, sale: '' }, db = fauxDb();
+        const r = CL.fabriquerResolveur({ env: {}, git: gitMobile(etat) });
+        await balise.battre(db, 'repos', { commit: r });
+        assert.equal([...db.docs.values()][0].balise.commit, SHA.slice(0, 12));
+        etat.head = SHA2;
+        await balise.battre(db, 'repos', { commit: r });
+        const b = [...db.docs.values()][0].balise;
+        assert.ok(!('commit' in b));
+        assert.match(b.raisonSansCommit, /HEAD a chang/);
+    });
+    await t('Render : le résolveur figé rend RENDER_GIT_COMMIT sans appeler git', () => {
+        const r = CL.fabriquerResolveur({ env: { RENDER_GIT_COMMIT: SHA }, git: () => { throw new Error('git appelé'); } });
+        assert.equal(r().commit, SHA.slice(0, 12));
+    });
+
     console.log(`\n${ok} passés · ${ko} en échec`);
     if (ko) process.exit(1);
 })();

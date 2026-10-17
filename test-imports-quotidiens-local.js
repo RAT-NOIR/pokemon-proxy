@@ -40,6 +40,23 @@ const journal = () => { const l = []; return { l, log: m => l.push(m), warn: m =
         assert.equal(r.ok, false);
         assert.equal(r.detenteur.pid, 1111);
     });
+    await t('verrou : le refus d\'un PID vivant dit comment sortir d\'un PID réutilisé (message dédié)', () => {
+        const r = VP.prendre(fichier('a.pid'), { pid: 2223, maintenant: a('2026-10-17T20:10:00Z'), vivant: pid => pid === 1111 });
+        assert.match(r.raison, /réutilis/);
+        assert.match(r.raison, /supprimer/);
+    });
+    await t('verrou : reprise d\'un verrou périmé — si le fichier a changé entre la lecture et le retrait, on ne le supprime PAS', () => {
+        fs.writeFileSync(fichier('e.pid'), JSON.stringify({ pid: 9, hote: 'x', depuis: '2026-10-17T10:00:00.000Z' }));
+        let lectures = 0;
+        const lire = f => { const c = fs.readFileSync(f, 'utf8'); if (++lectures === 1) fs.writeFileSync(f, JSON.stringify({ pid: 4242, hote: 'autre', depuis: '2026-10-17T20:00:00.000Z' })); return c; };
+        const r = VP.prendre(fichier('e.pid'), { pid: 5, maintenant: a('2026-10-17T20:00:30Z'), vivant: () => false, lire });
+        assert.equal(JSON.parse(fs.readFileSync(fichier('e.pid'), 'utf8')).pid, 4242, 'le verrou du concurrent est intact');
+        assert.equal(r.ok, false);
+    });
+    await t('gitExe : la version la plus récente se compare en NOMBRES (app-3.10 > app-3.9)', () => {
+        const T = require('./collecte-cartes/tables-du-commit');
+        assert.equal(T.versionLaPlusRecente(['app-3.9.1', 'app-3.10.0', 'app-3.2.5']), 'app-3.10.0');
+    });
     await t('verrou : détenteur MORT → repris (un processus tué ne libère rien)', () => {
         const r = VP.prendre(fichier('a.pid'), { pid: 3333, maintenant: a('2026-10-17T20:20:00Z'), vivant: () => false });
         assert.equal(r.ok, true);
