@@ -172,7 +172,9 @@ function lireCouverts(dossiers = DOSSIERS_COUVERTS) {
     const produits = new Set(); let fichiers = 0;
     for (const dossier of dossiers) {
         if (!fs.existsSync(dossier)) throw new Error(`couverts : le dossier ${dossier} n'existe pas — le plan de cette source n'est pas encore là, on ne suppose pas qu'elle ne couvre rien`);
-        for (const f of fs.readdirSync(dossier).filter(x => /^plan.*\.json$/.test(x)).sort()) {
+        const plans = fs.readdirSync(dossier).filter(x => /^plan.*\.json$/.test(x)).sort();
+        if (!plans.length) throw new Error(`couverts : aucun plan-*.json dans ${dossier} — le plan de cette source n'est pas encore là ; zéro fichier n'est pas « rien de couvert »`);
+        for (const f of plans) {
             let j; try { j = JSON.parse(fs.readFileSync(path.join(dossier, f), 'utf8')); } catch { throw new Error(`couverts : ${f} illisible`); }
             fichiers++;
             for (const u of [...(j.plan || []), ...(j.remplacements || [])]) for (const id of u.produits || []) produits.add(id);

@@ -233,6 +233,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pkl-banc-'));
     { const dd = tmp(); fs.writeFileSync(path.join(dd, 'plan-a.json'), JSON.stringify({ plan: [{ produits: [1, 2] }], remplacements: [{ produits: [3] }] })); fs.writeFileSync(path.join(dd, 'plan-b.json'), JSON.stringify({ plan: [{ produits: [4] }] })); fs.writeFileSync(path.join(dd, 'autre.json'), '{}');
       const cv = C.lireCouverts([dd]); verifier('couverts : les produits des plans pkmncards / pokedata (plan-*.json, plan et remplacements), dénominateur imprimé', [[...cv.produits].sort(), cv.fichiers], [[1, 2, 3, 4], 2]); }
     { let e = null; try { C.lireCouverts([path.join(tmp(), 'absent')]); } catch (x) { e = x; } verifier('couverts : un dossier introuvable LÈVE (jamais « rien n\'est couvert » par défaut)', !!e, true); }
+    { let e = null; try { C.lireCouverts([tmp()]); } catch (x) { e = x; } verifier('couverts : un dossier SANS aucun plan-*.json LÈVE aussi (le plan de cette source n\'est pas encore là : zéro n\'est pas « rien de couvert »)', /aucun plan/.test(e?.message || ''), true); }
 
     // ── 4. ÉCRIRE : depuis le cache seulement ───────────────────────────────────────────────────────────────────────────────
     process.env.R2_BUCKET_IMAGES = 'bucket-banc';
