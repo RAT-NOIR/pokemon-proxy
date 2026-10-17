@@ -85,7 +85,40 @@ const TABLE_PTCGIO = Object.freeze([
       // H16/H17 (Magcargo) et H18/H19 (Magneton) : jumeaux de même nom, séparés par les attaques, les PV, le type et l'illustrateur lus sur l'image (Kusajima / Arita ; Kusajima 80 PV / Saitou 70 PV), pas par le nom
       temoins: [t(1, 'Alakazam', 'H1/H32'), t(9, 'Gengar', 'H9/H32'), t(16, 'Magcargo', 'H16/H32'), t(17, 'Magcargo', 'H17/H32'), t(18, 'Magneton', 'H18/H32'), t(19, 'Magneton', 'H19/H32'), t(20, 'Moltres', 'H20/H32'), t(32, 'Xatu', 'H32/H32')], lu: '2026-10-12' },
     { slug: 'Aquapolis', id: 'ecard2', prefixe: 'H', jeton: { prefixe: 'H', largeur: 1 }, segments: [[7, 32]], marque: 'symbole Aquapolis (vague) et logo « e » e-Card, ©2002, numéro imprimé « Hn/H32 » avec étoile holo (segment à partir de H7, le premier témoin ; H1 à H6 sont déjà servis)',
-      temoins: [t(7, 'Electrode', 'H7/H32'), t(14, 'Kingdra', 'H14/H32'), t(24, 'Sudowoodo', 'H24/H32'), t(32, 'Zapdos', 'H32/H32')], lu: '2026-10-12' }
+      temoins: [t(7, 'Electrode', 'H7/H32'), t(14, 'Kingdra', 'H14/H32'), t(24, 'Sudowoodo', 'H24/H32'), t(32, 'Zapdos', 'H32/H32')], lu: '2026-10-12' },
+    // ── T2-COLLECTE (2026-10-17) : les 7 « Na », swshp et cinq produits isolés. 43 images ouvertes à l'œil (19 demandées à images.pokemontcg.io le 17/10, 25 de la mesure MESURE-OCC), numéro imprimé, nom et symbole lus contre
+    // NOS fiches. Les segments ne couvrent QUE les numéros prouvés (les trous visés), jamais la plage entière du set : les autres cartes sont déjà servies par TCGdex.
+    // 🔴 LES « Na » : TCGdex servait au n° de base (143, 92, 65, 73, 28, 43, 146) l'illustration ALTERNATIVE « 143a/236 » (cadre jaune, « A » en pied) — ces sept visuels ont été retirés le 17/10 (A-prouves-faux.json). Chez cette
+    // source l'alternative n'existe pas : le fichier du n° de base imprime « 143/236 » sans « a » (vu, à côté de la 143a retirée) ; un numéro de la forme « 143a » n'a de toute façon pas d'adresse (`lireNumero`).
+    // Un seul produit (V1) par numéro : aucune variante à signaler. Pas de reverse ni de tampon chez cette source (un fichier par numéro, scan non-reverse).
+    { slug: 'Cosmic-Eclipse', id: 'sm12', segments: [[143, 143]], marque: 'symbole Cosmic Eclipse, ©2019, dénominateur /236 ; le n° 143 imprime « 143/236 » (la 143a alternative, cadre fond coloré, n\'existe pas chez cette source)',
+      temoins: [t(1, 'Venusaur & Snivy-GX', '1/236'), t(100, 'Cosmog', '100/236'), t(143, 'Togepi & Cleffa & Igglybuff-GX', '143/236')], lu: '2026-10-17' },
+    { slug: 'Roaring-Skies', id: 'xy6', segments: [[92, 92]], marque: 'symbole Roaring Skies, ©2015, dénominateur /108 ; le n° 92 imprime « 92/108 » (pas de « 92a » chez cette source)',
+      temoins: [t(77, 'Shaymin-EX', '77/108'), t(92, 'Trainers\' Mail', '92/108'), t(108, 'Winona', '108/108')], lu: '2026-10-17' },
+    { slug: 'Phantom-Forces', id: 'xy4', segments: [[65, 65]], marque: 'symbole Phantom Forces, ©2014, dénominateur /119 ; le n° 65 imprime « 65/119 » (pas de « 65a » chez cette source)',
+      temoins: [t(24, 'M Manectric-EX', '24/119'), t(65, 'Aegislash-EX', '65/119'), t(119, 'Xerosic', '119/119')], lu: '2026-10-17' },
+    { slug: 'Generations', id: 'g1', segments: [[28, 28], [73, 73]], marque: 'symbole Generations, ©2016, dénominateur /83 ; les n° 28 et 73 impriment « 28/83 » et « 73/83 » (pas de « a » chez cette source)',
+      temoins: [t(28, 'Jolteon-EX', '28/83'), t(40, 'Machop', '40/83'), t(73, 'Team Flare Grunt', '73/83')], lu: '2026-10-17' },
+    { slug: 'Fates-Collide', id: 'xy10', segments: [[43, 43]], marque: 'symbole Fates Collide, ©2016, dénominateur /124 ; le n° 43 imprime « 43/124 » (pas de « 43a » chez cette source ; 54, 105 et 111 vus aussi)',
+      temoins: [t(43, 'Regirock-EX', '43/124'), t(54, 'Zygarde-EX', '54/124'), t(105, 'N', '105/124')], lu: '2026-10-17' },
+    { slug: 'BREAKthrough', id: 'xy8', segments: [[146, 146]], marque: 'symbole BREAKthrough, ©2015, dénominateur /162 ; le n° 146 imprime « 146/162 » (pas de « 146a » chez cette source)',
+      temoins: [t(1, 'Paras', '1/162'), t(100, 'Ralts', '100/162'), t(146, 'Professor\'s Letter', '146/162')], lu: '2026-10-17' },
+    // swshp : « SWSHnnn » imprimé près du copyright, étoile noire « Black Star ». Segments = les numéros OUVERTS : 75, 251, 282-283, 287-290 (les quatre morceaux du V-UNION Morpeko, 288 à 290 vus un à un), 292.
+    // SWSH300 répond 404 et SWSH301 (deux produits Cardmarket, V1/V2) n'est pas prouvé : trous nommés.
+    { slug: 'SWSH-Black-Star-Promos', id: 'swshp', jeton: { prefixe: 'SWSH', largeur: 3 }, segments: [[75, 75], [251, 251], [282, 283], [287, 290], [292, 292]], marque: 'étoile noire « Black Star » des promos Sword & Shield, numéro imprimé « SWSHnnn » à côté du copyright (©2020 à ©2023)',
+      temoins: [t(75, 'Special Delivery Charizard', 'SWSH075'), t(251, 'Boss\'s Orders', 'SWSH251'), t(282, 'Galarian Articuno', 'SWSH282'), t(283, 'Galarian Zapdos', 'SWSH283'), t(287, 'Morpeko V-UNION', 'SWSH287'), t(288, 'Morpeko V-UNION', 'SWSH288'),
+          t(289, 'Morpeko V-UNION', 'SWSH289'), t(290, 'Morpeko V-UNION', 'SWSH290'), t(292, 'Zacian V', 'SWSH292')], lu: '2026-10-17' },
+    // isolés : énergies de base sans numéro de fiche (le numéro Cardmarket fait l'adresse). hgss1 : l'énergie Cardmarket « 2010 » est une autre impression, hors de la forme (4 chiffres) : elle reste un trou.
+    { slug: 'EX-Emerald', id: 'ex9', segments: [[103, 103]], marque: 'symbole EX Emerald, ©2005, dénominateur /106 ; le n° 103 est l\'énergie Eau holo « 103/106 »',
+      temoins: [t(1, 'Blaziken', '1/106'), t(50, 'Feebas', '50/106'), t(103, 'Water Energy', '103/106')], lu: '2026-10-17' },
+    { slug: 'HeartGold-SoulSilver', id: 'hgss1', segments: [[121, 122]], marque: 'symbole HeartGold & SoulSilver, ©2010, dénominateur /123 ; les n° 121 et 122 sont les énergies Obscurité et Métal',
+      temoins: [t(1, 'Arcanine', '1/123'), t(121, 'Darkness Energy', '121/123'), t(122, 'Metal Energy', '122/123')], lu: '2026-10-17' },
+    { slug: 'Chilling-Reign', id: 'swsh6', segments: [[231, 232]], marque: 'symbole Chilling Reign, ©2021, dénominateur /198 ; les n° 231 et 232 sont les énergies dorées Eau et Psy (secrètes)',
+      temoins: [t(1, 'Weedle', '001/198'), t(231, 'Water Energy', '231/198'), t(232, 'Psychic Energy', '232/198')], lu: '2026-10-17' },
+    { slug: 'Fusion-Strike', id: 'swsh8', segments: [[283, 284]], marque: 'symbole Fusion Strike, ©2021, dénominateur /264 ; les n° 283 et 284 sont les énergies dorées Plante et Feu (secrètes)',
+      temoins: [t(1, 'Caterpie', '001/264'), t(283, 'Grass Energy', '283/264'), t(284, 'Fire Energy', '284/264')], lu: '2026-10-17' },
+    { slug: 'Rising-Rivals', id: 'pl2', segments: [[84, 84]], marque: 'symbole Rising Rivals, ©2009, dénominateur /111 ; le n° 84 imprime « 84/111 »',
+      temoins: [t(1, 'Arcanine Lv.53', '1/111'), t(50, 'Starmie Lv.44', '50/111'), t(84, 'Trapinch Lv.14', '84/111')], lu: '2026-10-17' }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l })));
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
