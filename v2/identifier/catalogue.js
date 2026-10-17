@@ -10,6 +10,7 @@ const db = require('../db');
 const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
+const { creerIndexCodeNumero } = require('./langue-decisive');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -32,6 +33,18 @@ function creerCatalogue(opts = {}) {
         return trouves.length > 0;
     }
 
+    // LANGUE-DECISIVE M2 : l'index code × numéro du CATALOGUE ENTIER (numeros_cartes : 73 756 lignes, projection de trois champs), construit UNE fois puis gardé 6 h (le catalogue change à chaque import quotidien) ;
+    // coût mémoire : une chaîne courte par couple (chiffres du numéro, code) distinct, mesuré dans le rapport du lot. Une lecture qui ÉCHOUE lève : l'appelant ferme R4 (jamais une R4 sans index).
+    let indexEnCours = null, indexLe = 0;
+    const INDEX_DUREE_MS = 6 * 3600 * 1000;
+    async function indexCodeNumero() {
+        if (indexEnCours && Date.now() - indexLe < INDEX_DUREE_MS) return indexEnCours;
+        const p = (async () => creerIndexCodeNumero(await colLue('numeros_cartes').find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray()))();
+        indexEnCours = p; indexLe = Date.now();
+        p.catch(() => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
+        return p;
+    }
+
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
     async function lire(idProducts) {
         const ids = [...new Set((Array.isArray(idProducts) ? idProducts : []).filter(Number.isInteger))];
@@ -51,7 +64,7 @@ function creerCatalogue(opts = {}) {
             const visuel = await vis.resoudre(id);
             const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
             table.set(id, {
-                idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr),
+                idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr), idExpansion: Number.isInteger(n.idExpansion) ? n.idExpansion : (Number.isInteger(c.idExpansion) ? c.idExpansion : null),   // R5 (non servi : construireProduit ne le lit pas)
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
@@ -62,6 +75,6 @@ function creerCatalogue(opts = {}) {
         }
         return table;
     }
-    return { lire, plusRecentDansMetacarte };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };
