@@ -103,9 +103,9 @@ function lotDouteux(o = {}) {
     const lignes = [], ncs = new Map(), cat = new Map(), cartes = new Map(), docs = new Map();
     idsLot.forEach((id, i) => {
         const num = 246 + i, T = types[i];
-        const slugNum = id === 605830 ? 251 : id === 605831 ? 252 : num;        // le décalage de Cardmarket
+        const slugNum = o.slugEtrange && id === 605830 ? 999 : id === 605830 ? 251 : id === 605831 ? 252 : num;        // le décalage de Cardmarket
         lignes.push({ _id: `${carteDe(i)}|${id}`, carteId: carteDe(i), idProduct: id, slugSet: SET, idExpansion: 3214, slug: null });
-        ncs.set(id, nc(id, o.sansNumero && id === 605830 ? null : String(num), `${T}-Energy-S-P${slugNum}`));
+        ncs.set(id, nc(id, (o.sansNumero && id === 605830) || (o.peuDeFreres && i < 4) ? null : String(num), `${T}-Energy-S-P${slugNum}`));
         cat.set(id, { idProduct: id, dateAdded: (o.dateAutre && id === 605826 ? '2022-01-08T09:00:00.000Z' : '2022-01-07T09:37:05.000Z') });
         cartes.set(carteDe(i), { _id: carteDe(i), nomEn: `Basic ${T} Energy`, sets: [SET], impressions: [], images: [{ set: SET, cleR2: `artofpkm/397/${220 + i}.webp`, numero: String(num) }] });
         docs.set(`artofpkm/397/${220 + i}.webp`, { _id: `artofpkm/397/${220 + i}.webp`, carteId: carteDe(i), numero: String(num) });
@@ -132,6 +132,16 @@ t('605830 : le lot n\'est pas du même jour : le rang ne prouve rien, pas de num
 t('605830 : les frères prouvés manquent (lot absent des lignes) : pas de numeroFiche', () => {
     const p = planD({ sansLot: true });
     assert(!p.numerosFiche.some(x => x.idProduct === 605830));
+});
+t('605830 : le slug contredit n\'est le numéro d\'aucun frère : contradiction non expliquée, pas de numeroFiche', () => {
+    const p = planD({ slugEtrange: true });
+    assert(!p.numerosFiche.some(x => x.idProduct === 605830));
+    assert(p.douteuxRefuses.some(r => r.idProduct === 605830 && /non expliquée/.test(r.raison)));
+});
+t('605830 : deux frères prouvés seulement (3 exigés) : pas de numeroFiche, même si le rang concorde', () => {
+    const p = planD({ peuDeFreres: true });
+    assert(!p.numerosFiche.some(x => x.idProduct === 605830 || x.idProduct === 605831));
+    assert(p.douteuxRefuses.some(r => r.idProduct === 605830 && /3 exigés/.test(r.raison)));
 });
 t('--sans-douteux : 605830 et 605831 ne reçoivent rien, nommés', () => {
     const p = planD({}, false);
@@ -198,8 +208,13 @@ t('--retirer : un numeroFiche modifié depuis (valeur ≠ manifeste) n\'est pas 
     const retire = E.retirer({ ...b, ...etat }, m);
     assert.strictEqual(retire.lignes.find(l => l.idProduct === 1).numeroFiche, '123');
 });
-t('opérations de retrait : $pull borné par la marque, $unset par valeur, numero remis à nul par arrayFilters', () => {
+t('opérations de retrait : $pull borné par la marque, $unset gardé par la VALEUR posée, numero remis à nul par arrayFilters', () => {
     const b = baseImg(); const m = E.manifeste(E.planifier(b)); const ops = E.operationsDeRetrait(m);
+    const pull = ops.find(o => o.update.$pull);
+    assert(pull && pull.update.$pull.impressions.source === E.SOURCE && pull.update.$pull.impressions.preuveNumero.$regex === `^${E.MARQUE}`);
+    const un = ops.filter(o => o.update.$unset);
+    assert(un.length === m.numerosFiche.length && un.length > 0);
+    for (const o of un) { const x = m.numerosFiche.find(y => y._id === o.filter._id); assert(x && o.filter.numeroFiche === x.numero && o.update.$unset.numeroFiche === ''); }
     assert(ops.some(o => o.coll === 'images' && o.filter.numero === IMG.numero && o.update.$set.numero === null));
     assert(ops.some(o => o.coll === 'cartes' && o.update.$set && Object.keys(o.update.$set).some(k => k.startsWith('images.$['))));
 });
@@ -209,6 +224,15 @@ t('annonce du retrait : les impressions retirées sont une baisse annoncée, et 
     assert.deepStrictEqual(a, { 'impressions imp:jp|S-P Promotional cards': m.impressions.length });
     require('./collecte-cartes/garde-lot').validerAnnonces(a);
     assert.deepStrictEqual(E.annonceDeRetrait({ impressions: [], numerosFiche: [], images: [] }), {});
+});
+t('manifeste : une simulation relancée après l\'écriture (plan vide) n\'écrase jamais un manifeste qui porte des écritures', () => {
+    const plein = E.manifeste(E.planifier(base())), vide = E.manifeste({ impressions: [], numerosFiche: [], images: [] });
+    assert.strictEqual(E.decisionManifeste(plein, vide).ecrire, false);
+    assert(/écras/.test(E.decisionManifeste(plein, vide).raison));
+    assert.strictEqual(E.decisionManifeste(null, vide).ecrire, true);
+    assert.strictEqual(E.decisionManifeste(null, plein).ecrire, true);
+    assert.strictEqual(E.decisionManifeste(plein, plein).ecrire, true);
+    assert.strictEqual(E.decisionManifeste(vide, vide).ecrire, true);
 });
 t('diff.md : résume gagnés / perdus / visuels changés et nomme les douteux', () => {
     const sortie = { resume: { produitsRejoues: 10, differences: 2, natures: { 'visuel changé': 1 }, perdus: 0, horsDesHuitCartes: 0, gagnes: 0, visuelsChanges: 1, fichesChangeesVisuelIdentique: 1, produitsDesHuitCartes: 1 },

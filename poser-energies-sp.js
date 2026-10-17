@@ -80,7 +80,8 @@ async function rejouerLeSite({ etat, apres, siteLib }) {
 
         // ── le retrait exact
         if (RETIRER) {
-            const m = JSON.parse(fs.readFileSync(fichier('manifeste.json'), 'utf8'));
+            const figes = fs.readdirSync(SORTIE).filter(f => /^manifeste-ecrit-.+\.json$/.test(f)).sort();   // le manifeste figé à l'écriture prime
+            const m = JSON.parse(fs.readFileSync(fichier(figes.length ? figes[figes.length - 1] : 'manifeste.json'), 'utf8'));
             const ops = E.operationsDeRetrait(m);
             const annonce = E.annonceDeRetrait(m);   // statique : avant l'écriture du lot, la base ne porte encore rien à retirer
             require('./collecte-cartes/garde-lot').validerAnnonces(annonce);
@@ -138,11 +139,16 @@ async function rejouerLeSite({ etat, apres, siteLib }) {
             const simule = fs.existsSync(fichier('manifeste.json')) ? fs.readFileSync(fichier('manifeste.json'), 'utf8') : null;
             if (simule === null || JSON.stringify(JSON.parse(simule)) !== JSON.stringify(manifeste)) { console.error('❌ ARRÊT : le lot d\'aujourd\'hui n\'est pas celui de la simulation (manifeste.json) : relancer la simulation et relire son diff — rien n\'est écrit'); process.exitCode = 1; return; }
         } else {
+            const existant = fs.existsSync(fichier('manifeste.json')) ? JSON.parse(fs.readFileSync(fichier('manifeste.json'), 'utf8')) : null;
+            const d = E.decisionManifeste(existant, manifeste);
+            if (!d.ecrire) console.log(`⚠️ manifeste.json, diff.json et diff.md NON réécrits : ${d.raison}`);
+            else {
             fs.writeFileSync(fichier('diff.json'), JSON.stringify(sortie, null, 1));
             fs.writeFileSync(fichier('manifeste.json'), JSON.stringify(manifeste, null, 1));
             if (Object.keys(annonce).length) fs.writeFileSync(fichier('annonce.json'), JSON.stringify(annonce, null, 1));
             else if (fs.existsSync(fichier('annonce.json'))) fs.rmSync(fichier('annonce.json'));
             fs.writeFileSync(fichier('diff.md'), E.diffEnMarkdown(sortie, { annonce, garde: { baisses: cmp.baisses.length, nonAutorisees: cmp.nonAutorisees.length, hausses: cmp.hausses }, douteux: DOUTEUX }));
+            }
         }
 
         if (S.perdus.length || S.horsCartes.length) { console.error('🔴 ARRÊT : la correction perd un produit ou change un produit hors des 8 cartes.'); process.exitCode = 1; return; }
@@ -150,6 +156,8 @@ async function rejouerLeSite({ etat, apres, siteLib }) {
 
         // ── l'écriture : exactement le lot simulé
         if (plan.refus.length || ops.length !== ATTENDU) { console.error(`❌ ARRÊT : ${ops.length} écritures, ${plan.refus.length} refus, attendu ${ATTENDU} — rien n'est écrit`); process.exitCode = 1; return; }
+        // le manifeste d'écriture est FIGÉ avant la première écriture : copie horodatée, que `--retirer` préfère
+        fs.copyFileSync(fichier('manifeste.json'), fichier(`manifeste-ecrit-${new Date().toISOString().replace(/[:.]/g, '-')}.json`));
         let touches = 0;
         for (const o of ops) touches += (await cx.dbCartes.collection(o.coll).updateOne(o.filter, o.update, o.options || {})).modifiedCount;
         const relu = E.planifier(await lireEtat(cx.dbCartes, cx.dbProd), { douteux: DOUTEUX });

@@ -161,6 +161,13 @@ const manifeste = plan => ({
     images: plan.images.map(o => ({ carteId: o.carteId, cleR2: o.cleR2, numero: o.numero })),
 });
 
+const totalManifeste = m => (m ? m.impressions.length + m.numerosFiche.length + m.images.length : 0);
+/** Une simulation relancée après l'écriture rend un plan VIDE : elle ne doit jamais écraser le manifeste dont le retrait dépend. */
+function decisionManifeste(existant, nouveau) {
+    if (totalManifeste(existant) > 0 && totalManifeste(nouveau) === 0) return { ecrire: false, raison: `le manifeste existant porte ${totalManifeste(existant)} élément(s) : le plan vide (lot déjà écrit ?) ne l'écrase pas` };
+    return { ecrire: true, raison: null };
+}
+
 /** Le retrait en mémoire : seulement ce que le manifeste a posé, à la valeur posée. */
 function retirer(etat, m) {
     const cartes = new Map([...etat.cartes].map(([id, c]) => [id, copie(c)]));
@@ -222,5 +229,5 @@ function diffEnMarkdown({ resume, plan, produits }, { annonce = {}, garde = {}, 
     return `${L.join('\n')}\n`;
 }
 
-module.exports = { SET, EXPANSION, TIRAGE_ATTENDU: TIRAGE, SOURCE, MARQUE, CARTES, diffEnMarkdown, annonceDeRetrait, IMAGES_SANS_NUMERO, DOUTEUX, SOURCES_POSEES_APRES_OK: true, numeroDuSlug, pad3, k,
+module.exports = { SET, EXPANSION, TIRAGE_ATTENDU: TIRAGE, SOURCE, MARQUE, CARTES, diffEnMarkdown, annonceDeRetrait, decisionManifeste, totalManifeste, IMAGES_SANS_NUMERO, DOUTEUX, SOURCES_POSEES_APRES_OK: true, numeroDuSlug, pad3, k,
     planifier, appliquer, manifeste, retirer, operationsVersMongo, operationsDeRetrait };
