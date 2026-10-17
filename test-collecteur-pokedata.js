@@ -172,6 +172,40 @@ const SLUG = 'Trick-or-Trade-2024';
     vusFetch.length = 0; err = null; try { await C.transportFetch.get(IMG('Trick+or+Trade+2024', '037a.webp'), { genre: 'page' }); } catch (e) { err = e; }
     verifier('transport réel : une adresse d\'image demandée comme PAGE est refusée avant fetch', [!!err, vusFetch.length], [true, 0]);
 
+    // ── 2 bis. CORRECTION 1 : l'échantillon de la construction directe ─────────────────────────────────────────────────────────
+    { const set20 = ['Trick+or+Trade+2024', 'Pitch+Black', 'Chaos+Rising', 'Stellar+Crown'];
+      const plan20 = Array.from({ length: 40 }, (_, i) => ({ carteId: 500 + i, nomEn: `Carte ${i}`, slugSet: `S${i % 4}`, ligne: set20[i % 4].replace(/\+/g, ' '), numeroReleve: String(i + 1).padStart(3, '0'), url: IMG(set20[i % 4], `${String(i + 1).padStart(3, '0')}.webp`) }));
+      // robots.txt déjà lu (404, 2026-10-17 19:22 UTC) : l'échantillon ne le redemande pas — 20 adresses = 20 requêtes
+      d = tmp(); tr = reseau(u => (/(037|001)/.test(u) ? { status: 404, type: 'text/html', texte: '<Error>NoSuchKey</Error>' } : { status: 200, type: 'image/webp', octets: grand })); h = horloge();
+      const s = await C.sonderEchantillon({ plan: plan20, n: 20, graine: 20261017, dossierCache: d, transport: tr, pause: h.pause, now: h.now });
+      verifier('échantillon : 20 requêtes d\'IMAGES, AUCUN robots.txt (déjà lu), tous sur l\'hôte d\'images, ≥ 5 s entre deux', [tr.appels.length, tr.appels.some(estRobots), tr.appels.every(u => u.startsWith('https://pokemoncardimages.pokedata.io/images/')), h.attentes.length, h.attentes.every(ms => ms >= 5000), s.resultat.etat], [20, false, true, 19, true, 'termine']);
+      verifier('échantillon : taux = répondent / total (200 + WebP valide), les 404 sont « absents » et comptés ; graine imprimée', [s.taux.total, s.taux.repondent + s.taux.absents + s.taux.autres, s.taux.repondent >= 1, s.graine], [20, 20, true, 20261017]);
+      verifier('échantillon : les 404 n\'arrêtent rien et ne produisent pas de fichier d\'arrêt', [s.taux.absents >= 1, fs.existsSync(C.fichierArret(d))], [true, false]);
+      d = tmp(); tr = reseau(u => (tr.appels.length === 3 ? { status: 403, type: 'text/html', texte: 'non' } : { status: 200, type: 'image/webp', octets: grand }));
+      const s2 = await C.sonderEchantillon({ plan: plan20, n: 20, graine: 1, dossierCache: d, transport: tr, pause: horloge().pause, now: horloge().now });
+      verifier('échantillon : un 403 à la 3e adresse => ARRÊT DÉFINITIF (3 requêtes, fichier d\'arrêt), taux sur ce qui a été demandé', [s2.resultat.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 3, true]);
+      // la planche étiquetée : la vignette + le set / numéro / nom de NOTRE fiche
+      d = tmp(); tr = reseau(() => ({ status: 200, type: 'image/webp', octets: grand }));
+      const s3 = await C.sonderEchantillon({ plan: plan20, n: 20, graine: 3, dossierCache: d, transport: tr, pause: horloge().pause, now: horloge().now });
+      const pl = await C.fabriquerPlancheEtiquetee({ dossierCache: d, echantillon: s3.echantillon, sortie: path.join(d, 'planche.png') });
+      const mp = await sharp(path.join(d, 'planche.png')).metadata();
+      verifier('planche étiquetée : 20 vignettes, 5 par rang, une bande d\'étiquette sous chacune', [pl.images, mp.width, mp.height > 4 * 330], [20, 1200, true]);
+      verifier('planche étiquetée : les étiquettes portent set, numéro de la source et nom de NOTRE fiche', pl.etiquettes.every(e => /Carte \d+/.test(e.ligne2) && /^[A-Za-z0-9 ']+ \d{3}$/.test(e.ligne1)), true); }
+    { const d2 = tmp(), t2 = reseau(normal); const r2 = await C.telecharger({ urls: urls.slice(0, 2), dossierCache: d2, transport: t2, pause: async () => { }, now: horloge().now, robotsDejaLu: { status: 404 } });
+      verifier('robotsDejaLu : une lecture 404 déjà faite n\'est pas redemandée (2 images = 2 requêtes, plafond 2)', [t2.appels.length, r2.plafond, r2.etat], [2, 2, 'termine']);
+      const t3 = reseau(normal); const r3 = await C.telecharger({ urls: urls.slice(0, 2), dossierCache: tmp(), transport: t3, pause: async () => { }, now: horloge().now, robotsDejaLu: { status: 200 } });
+      verifier('robotsDejaLu : seule une lecture 404 dispense ; autre chose => robots.txt relu (3 requêtes)', t3.appels.length, 3); }
+    { const { spawnSync } = require('child_process'); const dos3 = tmp();
+      fs.writeFileSync(path.join(dos3, 'reserves.json'), JSON.stringify({ sets: { 'Trick-or-Trade-2024': { pokedata: 'Trick or Trade 2024', produits: [{ idProduct: 1, carteId: 11, numeroFiche: null, slug: 'Mimikyu-BOO24PAF-037', nomEn: 'Mimikyu' }, { idProduct: 2, carteId: 12, numeroFiche: null, slug: 'X-TG', nomEn: 'X' }] } } }));
+      const cli = a => spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), ...a], { encoding: 'utf8', cwd: dos3, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+      const m = cli(['--construire', `--produits=${path.join(dos3, 'reserves.json')}`, `--plan-construit=${path.join(dos3, 'pc.json')}`]);
+      const pc = JSON.parse(fs.readFileSync(path.join(dos3, 'pc.json'), 'utf8'));
+      verifier('CLI --construire : 0 requête, plan-construit.json écrit (1 adresse, 1 reste motivé), code 0', [m.status, pc.plan.length, pc.restes.map(x => x.motif), pc.plan[0].url], [0, 1, ['numero-non-deductible'], IMG('Trick+or+Trade+2024', '037a.webp')]);
+      for (const a of [['--sonde-echantillon=abc'], ['--sonde-echantillon=20', '--plan'], ['--construire', '--ecrire', '--attendu=1'], ['--construit']]) { const x = cli(a); verifier(`CLI ${a.join(' ')} : code 2, refus avant toute connexion`, [x.status, /Assertion failed/.test(x.stderr || '')], [2, false]); }
+      fs.mkdirSync(path.join(dos3, 'cache')); fs.writeFileSync(path.join(dos3, 'cache', 'ARRET-DEFINITIF.json'), '{}');
+      const x = cli(['--sonde-echantillon=20', `--cache=${path.join(dos3, 'cache')}`, `--plan-construit=${path.join(dos3, 'pc.json')}`]);
+      verifier('CLI --sonde-echantillon avec un fichier d\'arrêt : code 1, zéro requête', [x.status, /Assertion failed/.test(x.stderr || '')], [1, false]); }
+
     // ── 3. ÉCRIRE : depuis le cache seulement ───────────────────────────────────────────────────────────────────────────────
     process.env.R2_BUCKET_IMAGES = 'bucket-banc';
     const dc = tmp();

@@ -38,19 +38,29 @@ const SETS_UTILES = Object.freeze({
     "Mcdonald's Dragon Discovery": ['McDonalds-Collection-2024'], "McDonald's Promos 2023": ['McDonalds-Match-Battle-2023'], "Mcdonald's Promos 2022": ['McDonalds-Collection-2022'],
     "Mcdonald's 25th Anniversary": ['McDonalds-Collection-25th-Anniversary'], "McDonald's Promos 2019": ['McDonalds-Collection-2019', 'McDonalds-Collection-2019-2'],
     "McDonald's Promos 2018": ['McDonalds-Collection-2018', 'McDonald-s-Collection-2018-2'], "McDonald's Promos 2017": ['McDonalds-Collection-2017'], "McDonald's Promos 2016": ['McDonalds-Collection-2016'],
-    "McDonald's Promos 2015": ['McDonalds-Collection-2015'], "McDonald's Promos 2014": ['McDonalds-Collection-2014'], "McDonald's Promos 2012": ['McDonalds-Collection-2012'], "McDonald's Promos 2011": ['McDonalds-Collection-2011']
+    "McDonald's Promos 2015": ['McDonalds-Collection-2015'], "McDonald's Promos 2014": ['McDonalds-Collection-2014'], "McDonald's Promos 2012": ['McDonalds-Collection-2012'], "McDonald's Promos 2011": ['McDonalds-Collection-2011'],
+    'Unseen Forces': ['EX-Unseen-Forces'], 'HeartGold SoulSilver': ['HeartGold-SoulSilver'], '30th Celebration': ['30th-Celebration'], 'Celebrations': ['Celebrations']      // (réservés par Pokéllector, nom vu sur la liste)
 });
+// Les pages à ouvrir à la main pour le relevé passif au clic : 10 au plus, les plus gros trous d'abord (produits sans visuel au 2026-10-17 : 2019 : 80, 2018 : 51, ToT 2024 : 34, Unseen Forces : 26, Dragon Discovery : 15, 2014 : 12, 2015 : 10, ToT 2023 : 10, 2023 : 8, 2017 : 4).
+const PAGES_A_OUVRIR = Object.freeze(["McDonald's Promos 2019", "McDonald's Promos 2018", 'Trick or Trade 2024', 'Unseen Forces', "Mcdonald's Dragon Discovery", "McDonald's Promos 2014", "McDonald's Promos 2015", 'Trick or Trade 2023', "McDonald's Promos 2023", "McDonald's Promos 2017"]
+    .map(n => `https://www.pokedata.io/set/${encodeURIComponent(n).replace(/%20/g, '+').replace(/'/g, '%27')}`));
+// ➕ CORRECTION 1 (décision du testeur, 2026-10-17 soir) : la CONSTRUCTION directe des adresses. La liste FERMÉE des sets anglais de la source (183, lus dans la liste réelle) :
+// une adresse d'image n'est valable que sous l'un d'eux. Le fichier est généré depuis la fixture de la sonde ; le banc compare les deux.
+const SETS_ANGLAIS = Object.freeze([...require('./pokedata-sets-anglais.json').noms]);
 const nomsDuSlug = slug => Object.keys(SETS_UTILES).filter(n => SETS_UTILES[n].includes(slug));
 const nomNorm = normaliserNom;
 
 // ── les adresses ────────────────────────────────────────────────────────────────────────────────────────────────────────
 const enc = nom => nom.replace(/ /g, '+');
 /** Le nom de set lu dans un segment de chemin (« + » = espace ; seuls %27 et %26 sont décodés), ou null. */
-function nomDeSegment(seg) {
-    if (typeof seg !== 'string' || !/^[A-Za-z0-9+'&.-]*(?:%2[67][A-Za-z0-9+'&.-]*)*$/.test(seg) || !seg) return null;
-    const nom = seg.replace(/\+/g, ' ').replace(/%27/g, "'").replace(/%26/g, '&');
-    return Object.hasOwn(SETS_UTILES, nom) ? nom : null;
+function nomDeSegment(seg, table = SETS_ANGLAIS) {
+    if (typeof seg !== 'string' || !seg || !/^(?:[A-Za-z0-9+'.!*()~-]|%[0-9A-Fa-f]{2})+$/.test(seg)) return null;
+    let nom; try { nom = decodeURIComponent(seg.replace(/\+/g, ' ')); } catch { return null; }
+    return table.includes(nom) ? nom : null;
 }
+/** Le segment d'un nom de set dans une adresse : espaces -> « + », le reste encodé (l'apostrophe reste brute). */
+const segmentDeSet = nom => encodeURIComponent(nom).replace(/%20/g, '+');
+const NOMS_UTILES = Object.keys(SETS_UTILES);
 /** Une adresse d'IMAGE valable : https, l'hôte d'images seul, sans port/identifiants/paramètres/ancre, /images/<set de la table>/<numéro>.webp, jamais _240w. */
 function urlImageValide(url) {
     if (typeof url !== 'string' || !url || /\.\.|\\|_240w/i.test(url)) return false;
@@ -67,7 +77,7 @@ function urlPageValide(url) {
     if (u.protocol !== 'https:' || u.hostname !== HOTE_PAGES || u.port || u.username || u.password || u.search || u.hash) return false;
     if (u.pathname === '/sets/' || u.pathname === '/robots.txt') return true;
     const m = /^\/set\/([^/]+)$/.exec(u.pathname);
-    return !!m && nomDeSegment(m[1]) !== null;
+    return !!m && nomDeSegment(m[1], NOMS_UTILES) !== null;
 }
 const urlPageDuSet = nom => (Object.hasOwn(SETS_UTILES, nom) ? `https://${HOTE_PAGES}/set/${enc(nom).replace(/'/g, '%27')}` : null);
 
@@ -198,6 +208,49 @@ function apparier({ trous, cartes, noms = new Map(), refus = REFUS_PAR_DEFAUT, l
     return { plan, remplacements, restes };
 }
 
+// ── LA CONSTRUCTION DIRECTE (correction 1) : l'adresse candidate d'un produit, depuis NOS données, sans relevé ─────────────────────
+// La règle des numéros, DÉDUITE de la seule fixture disponible (l'exemple du testeur : Mimikyu, slug …-BOO24PAF-037, Trick or Trade 2024 => 037a.webp) : le numéro d'origine en TROIS chiffres,
+// zéros à gauche ; le suffixe « a » n'est posé que pour le set où il a été VU. Ailleurs la règle est une GÉNÉRALISATION (trois chiffres, sans suffixe) : c'est l'échantillon qui la juge.
+// Un numéro à préfixe de lettres (TG05) ou à barre n'est pas déductible => AUCUNE adresse pour ce produit, motif écrit. Jamais deux essais pour un produit.
+const SUFFIXE_PAR_SET = Object.freeze({ 'Trick or Trade 2024': 'a' });
+function construireAdresse(nomSet, p) {
+    if (!SETS_ANGLAIS.includes(nomSet)) return { motif: 'set-hors-liste' };
+    const fiche = p.numeroFiche != null && String(p.numeroFiche).trim() !== '' ? String(p.numeroFiche).trim() : null;
+    const brut = fiche != null ? (/^\d{1,4}$/.test(fiche) ? fiche : null) : numeroDuSlug(p.slugProduit);
+    if (brut == null || !/^\d{1,4}$/.test(brut)) return { motif: 'numero-non-deductible' };
+    const numeroSource = `${brut.padStart(3, '0')}${SUFFIXE_PAR_SET[nomSet] ?? ''}`;
+    const url = `https://${HOTE_IMAGES}${PREFIXE_CHEMIN}${segmentDeSet(nomSet)}/${numeroSource}.webp`;
+    if (!urlImageValide(url)) return { motif: 'adresse-hors-regle' };
+    return { url, numeroSource, numeroFiche: String(parseInt(brut, 10)) };
+}
+/** Le plan construit : { plan (unités prêtes pour l'écriture, à REGARDER), restes } depuis { sets: { <slugSet>: { pokedata, produits: [{ idProduct, carteId, numeroFiche, slug, nomEn }] } } }. */
+function construire(reserves) {
+    const plan = [], restes = [];
+    for (const [slugSet, s] of Object.entries(reserves.sets)) {
+        for (const p of s.produits) {
+            const a = construireAdresse(s.pokedata, { numeroFiche: p.numeroFiche, slugProduit: p.slug });
+            if (a.motif) { restes.push({ idProduct: p.idProduct, carteId: p.carteId, nomEn: p.nomEn ?? null, slugSet, motif: a.motif }); continue; }
+            plan.push({ carteId: p.carteId, nomEn: p.nomEn ?? null, slugSet, numero: p.numeroFiche ?? null, produits: [p.idProduct], ligne: s.pokedata, numeroReleve: a.numeroSource, url: a.url, voie: 'adresse-construite',
+                preuve: `adresse construite depuis nos données (set « ${s.pokedata} », numéro ${a.numeroSource}) : l'identité se juge à l'œil sur la planche`, genre: 'ajout', releve: null, aRegarder: true,
+                ...(p.numeroFiche == null ? { correspondance: { relevee: a.numeroSource, fiche: a.numeroFiche, preuve: 'numéro d\'origine du slug, trois chiffres' } } : {}) });
+        }
+    }
+    return { plan, restes };
+}
+/** n adresses tirées à graine fixe (mulberry32), réparties : un tour de chaque set avant le second tour. */
+function choisirEchantillon(plan, n, graine) {
+    let a = graine >>> 0;
+    const alea = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const groupes = new Map();
+    for (const u of plan) (groupes.get(u.slugSet) || groupes.set(u.slugSet, []).get(u.slugSet)).push(u);
+    for (const g of groupes.values()) for (let i = g.length - 1; i > 0; i--) { const j = Math.floor(alea() * (i + 1)); [g[i], g[j]] = [g[j], g[i]]; }
+    const choix = [], vus = new Set();
+    for (let tour = 0; choix.length < n && [...groupes.values()].some(g => tour < g.length); tour++) {
+        for (const g of groupes.values()) if (tour < g.length && choix.length < n && !vus.has(g[tour].url)) { choix.push(g[tour]); vus.add(g[tour].url); }
+    }
+    return choix;
+}
+
 // ── clé R2, traçabilité, langue, retrait ───────────────────────────────────────────────────────────────────────────────
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';
 /** La clé R2 NEUVE : neutre, sans le nom de la source. */
@@ -229,5 +282,6 @@ function planRetrait(cartes) {
 }
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, CADENCE_MIN_MS, LARGEUR_ATTENDUE, PLUS_GRANDE, DOSSIER_CACHE, DOSSIER_LOT, SETS_UTILES, REFUS_PAR_DEFAUT,
+    PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet, construireAdresse, construire, choisirEchantillon, SUFFIXE_PAR_SET,
     nomsDuSlug, nomNorm, nomDeSegment, urlImageValide, urlPageValide, urlPageDuSet, lireNextData, lireListeDesSets, lireCartesDeLaPage, lireReleves, numeroDuSlug, baseNumero, raisonDeRemplacement,
     apparier, cleNum, cleR2, idImage, tracer, langueDe, duLot, planRetrait, estDosDeCarte };

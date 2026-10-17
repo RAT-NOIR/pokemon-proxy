@@ -32,7 +32,7 @@ verifier('adresse d\'image : les McDonald\'s (apostrophe encodée) d\'un set de 
 const refusees = {
     '_240w': IMG('Trick+or+Trade+2024', '037a_240w.webp'), 'http': ok1.replace('https', 'http'), 'autre hôte': ok1.replace('pokemoncardimages.pokedata.io', 'images.example.com'),
     'hôte des pages': ok1.replace('pokemoncardimages.pokedata.io', 'www.pokedata.io'), 'paramètre': ok1 + '?w=240', 'ancre': ok1 + '#a', 'remontée': IMG('Trick+or+Trade+2024', '../../x.webp'),
-    'png': IMG('Trick+or+Trade+2024', '037a.png'), 'set hors table': IMG('Pitch+Black', '001.webp'), 'port': ok1.replace('.io/', '.io:8443/'), 'identifiants': ok1.replace('https://', 'https://u:p@'),
+    'png': IMG('Trick+or+Trade+2024', '037a.png'), 'set hors liste': IMG('Nope+Set', '001.webp'), 'port': ok1.replace('.io/', '.io:8443/'), 'identifiants': ok1.replace('https://', 'https://u:p@'),
     'chemin d\'API': 'https://pokemoncardimages.pokedata.io/api/cards/037a.webp', 'prix': 'https://pokemoncardimages.pokedata.io/images/prices/037a.webp', 'double barre': IMG('Trick+or+Trade+2024', '/037a.webp'),
     'encodage inattendu': IMG('Trick+or+Trade+2024', '%2e%2e.webp'), 'vide': '', 'non-chaîne': null
 };
@@ -100,6 +100,27 @@ verifier('langue : « en » pour une adresse valable déclarée en anglais ; sin
 const lot = { source: 'pokedata', lot: P.LOT };
 const cs = [{ _id: 1, images: [{ ...lot, cleR2: 'pdt/a/1-1-en.webp', vignette: { cleR2: 'v/pdt/a/1.webp' } }, { source: 'pokumon', lot: 'x', cleR2: 'k' }] }, { _id: 2, images: [{ source: 'pokedata', lot: 'autre-lot', cleR2: 'z' }] }, { _id: 3, images: [] }];
 verifier('retrait : exactement le lot (source ET lot), vignettes comprises', P.planRetrait(cs), { cartes: [1], entrees: 1, cles: ['pdt/a/1-1-en.webp', 'v/pdt/a/1.webp'] });
+
+// ── 4 bis. CORRECTION 1 : la construction directe des adresses, depuis NOS données (0 requête) ─────────────────────────────
+verifier('sets anglais : la liste fermée = exactement les sets ENGLISH de la liste réelle (183) ; aucun set japonais ou chinois', [P.SETS_ANGLAIS.length, [...P.SETS_ANGLAIS].sort().join('|') === [...anglais].sort().join('|'), P.SETS_ANGLAIS.includes('Storm Emeralda')], [183, true, false]);
+verifier('sets anglais : la table des sets utiles en est un sous-ensemble', Object.keys(P.SETS_UTILES).filter(n => !P.SETS_ANGLAIS.includes(n)), []);
+verifier('adresse d\'image : un set anglais de la liste (Pitch Black) passe désormais ; un nom inventé non', [P.urlImageValide(IMG('Pitch+Black', '001.webp')), P.urlImageValide(IMG('Nope+Set', '001.webp'))], [true, false]);
+verifier('segment de set : espaces -> « + » comme l\'exemple relevé', P.segmentDeSet('Trick or Trade 2024'), 'Trick+or+Trade+2024');
+const prod = (numeroFiche, slugProduit) => ({ idProduct: 1, carteId: 1, numeroFiche, slugProduit });
+verifier('construire : l\'exemple RÉEL du testeur est retrouvé — Mimikyu BOO24PAF-037 de Trick or Trade 2024 => …/Trick+or+Trade+2024/037a.webp', P.construireAdresse('Trick or Trade 2024', prod(null, 'Mimikyu-BOO24PAF-037')), { url: ok1, numeroSource: '037a', numeroFiche: '37' });
+verifier('construire : trois chiffres, zéros à gauche (McDonald\'s, numéro de fiche « 5 »), pas de suffixe hors de la table', P.construireAdresse("McDonald's Promos 2014", prod('5', 'Pikachu-MCD145')).url, IMG("McDonald's+Promos+2014", '005.webp'));
+verifier('construire : un numéro à préfixe (TG05) n\'est PAS déductible => aucune adresse, motif écrit', P.construireAdresse('Lost Origin', prod('TG05', null)), { motif: 'numero-non-deductible' });
+verifier('construire : slug MCD145 sans numéro de fiche => aucune adresse', P.construireAdresse("McDonald's Promos 2014", prod(null, 'Pikachu-MCD145')), { motif: 'numero-non-deductible' });
+verifier('construire : un set absent de la liste anglaise => aucune adresse', P.construireAdresse('Nope Set', prod('5', null)), { motif: 'set-hors-liste' });
+const reserves = { sets: { A: { pokedata: 'Trick or Trade 2024', produits: [{ idProduct: 1, carteId: 11, numeroFiche: null, slug: 'Mimikyu-BOO24PAF-037', nomEn: 'Mimikyu' }, { idProduct: 2, carteId: 12, numeroFiche: null, slug: 'X-TG', nomEn: 'X' }] }, B: { pokedata: "McDonald's Promos 2014", produits: [{ idProduct: 3, carteId: 13, numeroFiche: '5', slug: null, nomEn: 'Pikachu' }] } } };
+const cons = P.construire(reserves);
+verifier('construire : UNE adresse par produit (jamais deux essais), les autres en restes avec motif ; plan prêt pour l\'écriture', [cons.plan.length, cons.restes.map(r => [r.idProduct, r.motif]), cons.plan.map(u => [u.produits[0], u.slugSet, u.numero, u.numeroReleve, u.correspondance?.fiche ?? null, u.genre, u.aRegarder])], [2, [[2, 'numero-non-deductible']], [[1, 'A', null, '037a', '37', 'ajout', true], [3, 'B', '5', '005', null, 'ajout', true]]]);
+verifier('construire : aucune adresse du plan ne contient _240w et toutes sont valables', cons.plan.every(u => P.urlImageValide(u.url) && !/_240w/.test(u.url)), true);
+const grosPlan = Array.from({ length: 60 }, (_, i) => ({ url: IMG(['Trick+or+Trade+2024', 'Pitch+Black', 'Chaos+Rising', 'Stellar+Crown'][i % 4], `${String(i + 1).padStart(3, '0')}.webp`), slugSet: `S${i % 4}` }));
+const e1 = P.choisirEchantillon(grosPlan, 20, 20261017), e2 = P.choisirEchantillon(grosPlan, 20, 20261017), e3 = P.choisirEchantillon(grosPlan, 20, 7);
+verifier('échantillon : 20 adresses distinctes, graine fixe => mêmes 20 ; autre graine => autres', [e1.length, new Set(e1.map(u => u.url)).size, JSON.stringify(e1) === JSON.stringify(e2), JSON.stringify(e1) === JSON.stringify(e3)], [20, 20, true, false]);
+verifier('échantillon : réparti — chacun des 4 sets y figure 5 fois', [0, 1, 2, 3].map(k => e1.filter(u => u.slugSet === `S${k}`).length), [5, 5, 5, 5]);
+verifier('échantillon : plus petit que demandé => tout, sans doublon', P.choisirEchantillon(grosPlan.slice(0, 3), 20, 1).length, 3);
 
 // ── 5. constantes de politesse ─────────────────────────────────────────────────────────────────────────────────────────
 verifier('cadence ≥ 5 s ; hôtes : deux, nommés ; pas de source 0 requête dans le module (aucun require réseau)', [P.CADENCE_MS >= 5000, P.HOTE_PAGES, P.HOTE_IMAGES, /require\('(axios|http|https|node-fetch)'\)/.test(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'pokedata.js'), 'utf8'))], [true, 'www.pokedata.io', 'pokemoncardimages.pokedata.io', false]);
