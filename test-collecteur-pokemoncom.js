@@ -143,6 +143,45 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     r = await lancer(plan.map(p => p.url), tr, d);
     verifier('coupure réseau : « interrompu », pas d\'arrêt définitif', [r.etat, fs.existsSync(C.fichierArret(d))], ['interrompu', false]);
 
+    // 🔴 TOUR 2 — un 404/410 n'est PAS un défi. Le robots.txt réel de l'hôte d'images répond 404 avec la page HTML d'AmazonS3 (corps relevé le 17/10, robots-assets-pokemon.json)
+    const corpsS3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixture-robots-assets-s3.json'), 'utf8')).corps;
+    const robotsS3 = { status: 404, type: 'text/html', texte: corpsS3 };
+    verifier('(le corps de la fixture est bien celui d\'AmazonS3 : HTML, « 404 - Not Found », aucun marqueur de défi)', [/<html/i.test(corpsS3), /404 - Not Found/.test(corpsS3), /just a moment|captcha|challenge/i.test(corpsS3)], [true, true, false]);
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : normal(url));
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('robots.txt 404 au corps HTML d\'AmazonS3 : AUCUNE règle, le téléchargement se POURSUIT (5 requêtes), pas d\'arrêt', [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['termine', 5, false]);
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? { status: 404, type: 'text/html', texte: '<html><title>Just a moment...</title></html>' } : normal(url));
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('robots.txt 404 AVEC marqueur de défi (« just a moment ») : ARRÊT DÉFINITIF, une seule requête', [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 1, true]);
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? { status: 410, type: 'text/html', texte: 'captcha' } : normal(url));
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('robots.txt 410 avec « captcha » : arrêt définitif', r.etat, 'arret-definitif');
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : /Unown_B/.test(url) ? { status: 404, type: 'text/html', texte: corpsS3 } : { status: 200, type: 'image/png', octets: grand });
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('image 404 au corps HTML : « absent », les autres continuent, pas d\'arrêt', [r.etat, JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, fs.existsSync(C.fichierArret(d))], ['termine', 'absent', false]);
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : { status: 404, type: 'text/html', texte: '<div id="challenge-platform">' });
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('image 404 AVEC marqueur de défi (challenge) : arrêt définitif', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
+    d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : { status: 200, type: 'text/html', texte: '<html><body>page</body></html>' });
+    r = await lancer(plan.map(p => p.url), tr, d);
+    verifier('image 200 qui n\'est pas une image (HTML sans marqueur) : arrêt définitif (une IMAGE était attendue)', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
+    // le transport RÉEL rend aussi le corps des 404/410 (sinon un marqueur de défi y serait invisible)
+    { const fo = global.fetch; global.fetch = async () => new Response('<html>Just a moment</html>', { status: 404, headers: { 'content-type': 'text/html' } });
+      try { const t = await C.transportFetch.get('https://assets.pokemon.com/robots.txt', {}); verifier('transport réel : un 404 rend son corps (le défi caché derrière un 404 se voit)', [t.status, /just a moment/i.test(t.texte || '')], [404, true]); } finally { global.fetch = fo; } }
+
+    // 🔴 TOUR 2 — sortie propre : aucun process.exit() dans le CLI (les poignées de fetch se ferment seules) ; code de sortie prouvé sur de vrais processus, sans réseau
+    verifier('le CLI ne contient AUCUN process.exit( (process.exitCode seulement)', /process\.exit\(/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pokemoncom.js'), 'utf8')), false);
+    { const { spawnSync } = require('child_process'); const dos = tmp();
+      fs.writeFileSync(path.join(dos, 'plan.json'), JSON.stringify({ plan: [], remplacements: [] })); fs.mkdirSync(path.join(dos, 'releves')); fs.mkdirSync(path.join(dos, 'cache'));
+      const lancerCli = a => spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokemoncom.js'), ...a], { encoding: 'utf8', cwd: dos, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+      const ok0 = lancerCli(['--telecharger', `--sortie=${path.join(dos, 'plan.json')}`, `--releves=${path.join(dos, 'releves')}`, `--cache=${path.join(dos, 'cache')}`]);
+      verifier('CLI --telecharger sans adresse à demander : code 0, aucune assertion libuv, stderr vide', [ok0.status, /Assertion failed/.test(ok0.stderr || ''), (ok0.stderr || '').trim()], [0, false, '']);
+      const mauvais = lancerCli(['--inconnu']);
+      verifier('CLI avec un argument inconnu : code 2 propre (pas de plantage)', [mauvais.status, /Assertion failed/.test(mauvais.stderr || ''), /argument inconnu/.test(mauvais.stderr || '')], [2, false, true]);
+      fs.writeFileSync(path.join(dos, 'cache', 'ARRET-DEFINITIF.json'), '{}');
+      const refuse = lancerCli(['--telecharger', `--sortie=${path.join(dos, 'plan.json')}`, `--releves=${path.join(dos, 'releves')}`, `--cache=${path.join(dos, 'cache')}`]);
+      verifier('CLI --telecharger avec un fichier d\'arrêt : code 1 propre', [refuse.status, /Assertion failed/.test(refuse.stderr || '')], [1, false]); }
+
     // le transport RÉEL : agent honnête seul, redirection jamais suivie, garde de l'hôte avant fetch
     vusFetch.length = 0;
     let err = null; try { await C.transportFetch.get(URL('EX10', 'EX10_EN_Unown_A.png'), { binaire: true }); } catch (e) { err = e; }
