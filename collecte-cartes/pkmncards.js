@@ -83,7 +83,11 @@ const TABLE = Object.freeze({
     'heartgold-soulsilver': ligne({ lot: 'pkmcom', slugSets: ['HeartGold-SoulSilver'], code: 'hs' }),
     'sword-shield-promos': ligne({ lot: 'pkmcom', slugSets: ['SWSH-Black-Star-Promos'], code: null }),
     'scarlet-violet-promos': ligne({ lot: 'pkmcom', slugSets: ['SV-Black-Star-Promos'], code: 'svp' }),
-    '30th-celebration': ligne({ lot: 'pkmcom', slugSets: ['30th-Celebration'], code: '30c' })
+    '30th-celebration': ligne({ lot: 'pkmcom', slugSets: ['30th-Celebration'], code: '30c' }),
+    // (correction 1) les sets des 5 remplacements du plan pokemon.com (entrée japonaise refusée au numéro d'un produit anglais)
+    'shining-legends': ligne({ lot: 'pkmcom', slugSets: ['Shining-Legends'], code: 'slg' }),
+    'forbidden-light': ligne({ lot: 'pkmcom', slugSets: ['Forbidden-Light'], code: 'fli' }),
+    'lost-origin': ligne({ lot: 'pkmcom', slugSets: ['Lost-Origin'], code: 'lor' })
 });
 const SETS_PAR_LONGUEUR = Object.keys(TABLE).sort((a, b) => b.length - a.length);
 // Les sets dont chaque image se REGARDE avant l'écriture (la Classic Collection de 30th Celebration : une marque « 30 » dans le coin) — et dont le numéro d'origine du slug n'est pas celui de la source.
@@ -172,7 +176,7 @@ const idImage = (slugSet, carteId, numero) => `${SOURCE}/${slugSet}/${carteId}/$
  *   trous : { idProduct, carteId, slugSet, numeroFiche, slugProduit, carte:{_id, nomEn, images} } ; entrees : indexer().lues ; refus(entrée, slugSet) -> motif|null : la règle du site.
  * @returns {{plan: object[], restes: object[]}} plan : une unité par FICHE (carte, numéro) avec son action `ajout` | `remplacement`.
  */
-function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT }) {
+function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, ficheDuSite = null }) {
     const restes = [];
     const reste = (t, motif, detail) => restes.push({ idProduct: t.idProduct, carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, slugSet: t.slugSet, motif, ...(detail ? { detail } : {}) });
     const parSet = new Map();
@@ -198,7 +202,15 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT }) {
         const admises = jugees.filter(x => x.motif === null).map(x => x.e);
         const refusees = jugees.filter(x => x.motif !== null);
         if (admises.some(e => !estBasse(e))) { reste(t, 'deja-servi'); continue; }
-        if (!admises.length && refusees.length) { reste(t, 'entree-refusee-au-numero', `entrée(s) refusée(s) par la règle du site au même numéro (${refusees.map(x => `${x.e.cleR2} [${x.e.source}, ${x.motif}]`).join(' ; ')}) : la remplacer est une modification, feu vert du testeur requis`); continue; }
+        // 🔑 DOCTRINE DU TESTEUR (17/10, soir) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée ». Un scan d'une AUTRE LANGUE refusé par la règle du site
+        // (motif « langue:… ») au numéro exact d'un produit anglais est une image FAUSSE pour ce produit : il est remplacé (l'ancienne est gardée, état « remplace »). Tout autre refus, ou une entrée refusée
+        // sans numéro (elle couvrirait tout le set), reste sauté et noté.
+        let aRetirerFausses = [];
+        if (!admises.length && refusees.length) {
+            const fausses = refusees.every(x => String(x.motif).startsWith('langue') && x.e.numero != null && clef != null && cleNumero(x.e.numero) === clef);
+            if (!fausses) { reste(t, 'entree-refusee-au-numero', `entrée(s) refusée(s) par la règle du site au même numéro (${refusees.map(x => `${x.e.cleR2} [${x.e.source}, ${x.motif}]`).join(' ; ')}) : ni une autre langue au numéro exact, ni une entrée numérotée — modification qui attend le testeur`); continue; }
+            aRetirerFausses = refusees.map(x => ({ ...x.e, motifRemplacement: `fausse : ${x.motif}` }));
+        }
         if (numero == null) { reste(t, 'sans-numero', 'fiche sans numéro et sans second élément écrit (numéro d\'origine du slug) : jamais appariée par le nom seul'); continue; }
         // ── les candidats : set, numéro, nom ───────────────────────────────────────────────────────────────────────────────────────
         const candidats = [];
@@ -215,30 +227,43 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT }) {
         const choisie = concordants[0];
         if (!urlImageValide(choisie.url)) { reste(t, 'adresse-hors-regle', 'adresse du sitemap hors des règles'); continue; }
         // ── ajout ou remplacement ───────────────────────────────────────────────────────────────────────────────────────────────────
-        let remplace = [];
+        let remplace = [...aRetirerFausses];
         if (admises.length) {
             const candidat = { set: t.slugSet, numero: t.numeroFiche ?? numero, langue: 'en', source: SOURCE, cleR2: cleR2(t.slugSet, t.numeroFiche ?? null, t.carte._id), wOriginal: LARGEUR_ATTENDUE };
             const vue = (t.carte.images || []).filter(Boolean).map(e => estBasse(e) ? { ...e, basseDefinition: true } : e);     // la marque lue sur la largeur quand elle n'est pas encore posée
-            remplace = entreesARemplacer(vue, candidat);
+            remplace = entreesARemplacer(vue, candidat).map(e => ({ ...e, motifRemplacement: 'basse définition' }));
             const ids = new Set(remplace.map(e => `${e.source}|${e.cleR2}`));
             if (admises.some(e => !ids.has(`${e.source}|${e.cleR2}`))) { reste(t, 'basse-definition-non-remplacable', `entrée(s) basse(s) non remplaçable(s) par la règle (langue ou numéro différents) : ${admises.map(e => `${e.source} ${e.cleR2} n°${e.numero ?? '∅'} langue ${e.langue ?? '?'}`).join(' ; ')}`); continue; }
         }
         resolus.push({ t, e: choisie, voie: depuisSlug ? 'set+numero-du-slug+nom' : 'set+numero+nom', numero,
             preuve: `set ${choisie.pkcSet} n°${choisie.numero} = ${depuisSlug ? `le numéro d'origine du slug (${numero})` : 'le numéro de la fiche'} ; nom « ${choisie.nom} » = « ${t.carte.nomEn} »`,
-            remplace: remplace.map(e => ({ source: e.source, cleR2: e.cleR2, numero: e.numero ?? null, w: e.w ?? null, langue: e.langue ?? null })), demiInconnu: !reconnues.length && lignes.length > 1 });
+            remplace: remplace.map(e => ({ source: e.source, cleR2: e.cleR2, numero: e.numero ?? null, w: e.w ?? null, langue: e.langue ?? null, motif: e.motifRemplacement })), demiInconnu: !reconnues.length && lignes.length > 1 });
     }
     // ── les groupes : une FICHE = (carte, numéro) ; une seule image par fiche ; une image pour une seule fiche ──────────────────────
-    const cleGroupe = t => `${t.carte._id}|${t.numeroFiche == null ? '∅' : cleNumero(t.numeroFiche)}`;
+    // (correction 1) la clé porte AUSSI le set Cardmarket : une même carte (Potion, Énergie de base) est vendue dans dix kits, chacun a sa fiche — sans le set, 46 produits se prenaient pour une seule fiche
+    const cleGroupe = t => `${t.slugSet}|${t.carte._id}|${t.numeroFiche == null ? '∅' : cleNumero(t.numeroFiche)}`;
     const groupes = new Map();
     for (const r of resolus) { const k = cleGroupe(r.t); (groupes.get(k) || groupes.set(k, []).get(k)).push(r); }
-    for (const [k, g] of [...groupes]) if (new Set(g.map(r => r.e.url)).size > 1) { for (const r of g) reste(r.t, 'deux-images-une-fiche', g.map(x => `${x.e.pkcSet} n°${x.e.numero}`).join(' ; ')); groupes.delete(k); }
+    for (const [k, g] of [...groupes]) if (new Set(g.map(r => r.e.url)).size > 1) {
+        // 🔑 la règle du site IMPORTÉE rejuge : si elle donne à chaque produit SON numéro de fiche (distincts), chaque produit reçoit l'image de SA demi-deck, écrite sous ce numéro ;
+        // si elle donne la même fiche aux deux (ou ne dit rien), ils restent sautés
+        const fiches = ficheDuSite ? g.map(r => ficheDuSite(r.t.idProduct)) : [];
+        const numeros = fiches.map(f => (f && f.numero != null ? cleNumero(f.numero) : null));
+        if (ficheDuSite && numeros.every(n => n != null) && new Set(numeros).size === g.length) {
+            groupes.delete(k);
+            g.forEach((r, i) => { r.numeroSite = fiches[i].numero; groupes.set(`${k}#${r.t.idProduct}`, [r]); });
+            continue;
+        }
+        for (const r of g) reste(r.t, 'deux-images-une-fiche', `${g.map(x => `${x.e.pkcSet} n°${x.e.numero}`).join(' ; ')}${ficheDuSite ? ' ; la règle du site donne la même fiche aux deux produits' : ''}`);
+        groupes.delete(k);
+    }
     const parImg = new Map();
     for (const [k, g] of groupes) { const u = g[0].e.url; (parImg.get(u) || parImg.set(u, new Set()).get(u)).add(k); }
     for (const [, ks] of parImg) if (ks.size > 1) for (const k of ks) { for (const r of groupes.get(k) || []) reste(r.t, 'carte-pour-deux-fiches'); groupes.delete(k); }
     const plan = [];
     for (const g of groupes.values()) {
         const { t, e, voie, preuve, remplace, demiInconnu } = g[0];
-        plan.push({ carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, slugSet: t.slugSet, numero: t.numeroFiche ?? null, produits: g.map(r => r.t.idProduct), pkcSet: e.pkcSet, numeroPkc: e.numero, nomPkc: e.nom,
+        plan.push({ carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, slugSet: t.slugSet, numero: g[0].numeroSite ?? t.numeroFiche ?? null, produits: g.map(r => r.t.idProduct), pkcSet: e.pkcSet, numeroPkc: e.numero, nomPkc: e.nom,
             url: e.url, loc: e.loc, voie, preuve, action: remplace.length ? 'remplacement' : 'ajout', remplace, aRegarder: SETS_A_REGARDER.includes(t.slugSet), ...(demiInconnu ? { demiInconnu: true } : {}) });
     }
     return { plan, restes };

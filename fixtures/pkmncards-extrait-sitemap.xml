@@ -85,6 +85,20 @@
 		</image:image>
 	</url>
 	<url>
+		<loc>@@HOTE@@/card/potion-xy-trainer-kit-wigglytuff-tk7b-20/</loc>
+		<lastmod>2024-03-25T10:10:59+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-TK7B-020-potion.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/potion-xy-trainer-kit-sylveon-tk6s-20/</loc>
+		<lastmod>2024-03-25T10:52:14+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-TK6B-020-potion.png</image:loc>
+		</image:image>
+	</url>
+	<url>
 		<loc>@@HOTE@@/card/raichu-hs-trainer-kit-raichu-tk4r-19/</loc>
 		<lastmod>2024-03-25T22:25:19+00:00</lastmod>
 		<image:image>
@@ -421,6 +435,13 @@
 		</image:image>
 	</url>
 	<url>
+		<loc>@@HOTE@@/card/parasect-lost-origin-lor-tg01/</loc>
+		<lastmod>2024-03-22T06:23:42+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-SWSH11-TG001-parasect.png</image:loc>
+		</image:image>
+	</url>
+	<url>
 		<loc>@@HOTE@@/card/rowlet-mcdonalds-collection-2022-mcd22-2/</loc>
 		<lastmod>2024-03-22T07:15:56+00:00</lastmod>
 		<image:image>
@@ -432,6 +453,34 @@
 		<lastmod>2024-03-22T07:16:03+00:00</lastmod>
 		<image:image>
 			<image:loc>@@HOTE@@/wp-content/uploads/en_US-MCD22-001-ledyba.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/galarian-moltres-sword-shield-promos-swsh284/</loc>
+		<lastmod>2024-03-22T20:17:29+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-Promo_SWSH-SWSH284-galarian_moltres.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/zamazenta-v-sword-shield-promos-swsh293/</loc>
+		<lastmod>2024-03-22T20:19:10+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-Promo_SWSH-SWSH293-zamazenta_v.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/xerneas-gx-forbidden-light-fli-126/</loc>
+		<lastmod>2024-03-23T00:50:20+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-SM6-126-xerneas_gx.png</image:loc>
+		</image:image>
+	</url>
+	<url>
+		<loc>@@HOTE@@/card/mewtwo-gx-shining-legends-slg-78/</loc>
+		<lastmod>2024-03-23T01:53:48+00:00</lastmod>
+		<image:image>
+			<image:loc>@@HOTE@@/wp-content/uploads/en_US-SL-078-mewtwo_gx.jpg</image:loc>
 		</image:image>
 	</url>
 	<url>

@@ -198,9 +198,12 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
     { const dvv = tmp(); const blanc = await cadre({ r: 255, g: 255, b: 255 });
       await lancer([urls[0]], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: blanc }), dvv);
       verifier('contrôle du cache : le motif visuel est rendu avec les autres (fond-ou-cadre-trop-large)', (await C.controlerCache([plan[0]], dvv)).get(urls[0]), 'fond-ou-cadre-trop-large'); }
+    // le rapport d'une carte : bornes exactes (0,69 – 0,74)
+    verifier('contrôle qualité : rapport 0,684 (trop étroit) et 0,742 (trop large) refusés ; 0,716 et 0,732 passent', [[700, 1024], [760, 1024], [733, 1024], [750, 1024]].map(([w, h]) => P.controlerImage({ octets: Buffer.from('x'), w, h })), ['rapport-hors-carte', 'rapport-hors-carte', null, null]);
     // l'échantillon à graine fixe
     { const gros = Array.from({ length: 300 }, (_, i) => ({ ...plan[0], carteId: i, produits: [i] }));
       const a = C.tirerEchantillon(gros, 50), b2 = C.tirerEchantillon(gros, 50), c2 = C.tirerEchantillon(gros, 50, 7);
+      verifier('échantillon : la graine est FIXE et exportée (imprimée par --planche), le tirage ne touche pas à Math.random', [C.GRAINE_ECHANTILLON, /Math\.random/.test(C.tirerEchantillon.toString())], [20261017, false]);
       verifier('échantillon : 50 sur 300, MÊME graine = MÊME tirage, autre graine = autre tirage, ordre du plan conservé, sans doublon', [a.length, JSON.stringify(a) === JSON.stringify(b2), JSON.stringify(a) === JSON.stringify(c2), new Set(a.map(x => x.carteId)).size, a.every((x, i) => i === 0 || a[i - 1].carteId < x.carteId)], [50, true, false, 50, true]); }
     verifier('contrôle du cache : trois adresses, UNE même empreinte (un espace réservé) -> les trois refusées', [[...ctl2.values()]], [['meme-image-plusieurs-adresses', 'meme-image-plusieurs-adresses', 'meme-image-plusieurs-adresses']]);
     // la planche
@@ -295,10 +298,27 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
 
     // ── 5. RETIRER : exactement le lot ────────────────────────────────────────────────────────────────────────────────────────────
     const { retirerLot } = require('./retirer-visuels-pkmncards');
+    // un remplacement d'une image FAUSSE (scan japonais refusé) : l'unité du plan la nomme, elle sort, l'ancienne est gardée (état « remplace »)
+    { const Bj = fausseBase(); semer(Bj);
+      Bj.col('cartes').get(1).images.push({ set: 'McDonalds-Match-Battle-2023', source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/ja-1.webp', langue: 'ja', w: 868 });
+      Bj.col('images').set('bj1', { _id: 'bj1', source: 'bulbapedia', set: 'McDonalds-Match-Battle-2023', carteId: 1, cleR2: 'bulbapedia/ja-1.webp', etat: 'ok', langue: 'ja' });
+      const pj = [{ ...plan[0], action: 'remplacement', remplace: [{ source: 'bulbapedia', cleR2: 'bulbapedia/ja-1.webp', numero: '001', w: 868, langue: 'ja', motif: 'fausse : langue:ja' }] }];
+      const { b: bj } = await ecrire(Bj, { plan: pj, attendu: 1 });
+      verifier('écrire : l\'entrée japonaise NOMMÉE par le plan sort, la nôtre entre ; l\'ancien document reste, « remplace »', [bj.code, Bj.col('cartes').get(1).images.map(e => e.source).sort(), Bj.col('images').get('bj1').etat], [0, ['pkc', 'tcgdex'], 'remplace']);
+      const Bk = fausseBase(); semer(Bk);
+      Bk.col('cartes').get(1).images.push({ set: 'McDonalds-Match-Battle-2023', source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/ja-1.webp', langue: 'ja', w: 868 });
+      await ecrire(Bk, { plan: [plan[0]], attendu: 1 });
+      verifier('écrire : une entrée que le plan ne nomme PAS n\'est jamais retirée', [Bk.col('cartes').get(1).images.some(e => e.cleR2 === 'bulbapedia/ja-1.webp')], [true]); }
     B = fausseBase(); semer(B);
     await ecrire(B, { attendu: 2 });
     B.col('cartes').get(1).images.push({ set: 'McDonalds-Match-Battle-2023', source: 'pkc', lot: 'autre-lot', numero: '009', cleR2: 'pkc/autre.webp' });
+    const photo = () => JSON.stringify([...B.cols].map(([k, m]) => [k, [...m.entries()]]));
+    const avantBlanc = photo();
     const sup = []; const sansEcrire = await retirerLot(B.db, { ecrire: false });
+    verifier('retrait À BLANC : AUCUNE écriture — la base entière est identique, avant et après', photo() === avantBlanc, true);
+    verifier('retrait À BLANC : annonce les documents à retirer (toute la source) et les clés R2', [sansEcrire.docs, sansEcrire.cles.length > 0], [3, true]);       // 2 images écrites + le document « trop-petit » : TOUS les documents de la source
+    { const { spawnSync } = require('child_process'); const cli = a => spawnSync(process.execPath, [path.join(__dirname, 'retirer-visuels-pkmncards.js'), ...a], { encoding: 'utf8', env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+      verifier('retrait CLI : un argument inconnu -> code 2 ; --effacer-r2 sans --ecrire -> code 2 (aucune connexion)', [cli(['--tout']).status, cli(['--effacer-r2']).status], [2, 2]); }
     verifier('retrait À BLANC : comptes sur TOUTE la source (les deux lots), une entrée à rétablir, rien n\'est modifié', [sansEcrire.entrees, sansEcrire.cartes.length, sansEcrire.retablies, B.col('cartes').get(1).images.some(e => e.source === 'pkc' && e.lot === 'pkc-2026-10'), B.col('images').get('pokumon-old-2').etat], [3, 2, 1, true, 'remplace']);
     const rr = await retirerLot(B.db, { ecrire: true, effacerR2: true, supprimer: async (bk, cles) => sup.push(...cles), verifierBucket: async () => { }, bucket: 'bucket-banc' });
     verifier('retrait : TOUTE la source sort (même un autre lot) en une commande ; l\'autre source reste ; les documents passent à « retire »', [B.col('cartes').get(1).images.some(e => e.source === 'pkc'), B.col('cartes').get(1).images.some(e => e.source === 'tcgdex'), B.col('images').get('pkc/McDonalds-Match-Battle-2023/1/001/en').etat, rr.reste, rr.nRet], [false, true, 'retire', 0, 1]);

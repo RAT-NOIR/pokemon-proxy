@@ -16,7 +16,7 @@ const card = s => `${H}/card/${s}/`;
 
 // ── 1. LES SITEMAPS (extrait réel) ─────────────────────────────────────────────────────────────────────────────────────────
 const lus = P.lireSitemapTexte(lireFixture('pkmncards-extrait-sitemap.xml'));
-verifier('sitemap : l\'extrait réel donne 67 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [67, 0]);
+verifier('sitemap : l\'extrait réel donne 74 entrées (loc + image:loc), aucune écartée', [lus.entrees.length, lus.ecartees.length], [74, 0]);
 verifier('sitemap : une entrée dont l\'adresse n\'est pas sur l\'hôte, ou dont l\'image est hors règle, est ÉCARTÉE et nommée',
     (() => { const x = P.lireSitemapTexte(`<urlset><url><loc>https://autre.example/card/a-b-1/</loc><image:image><image:loc>${UP('a.jpg')}</image:loc></image:image></url><url><loc>${card('a-xy-trainer-kit-latios-tk8o-1')}</loc><image:image><image:loc>https://autre.example/wp-content/uploads/a.jpg</image:loc></image:image></url><url><loc>${card('b-xy-trainer-kit-latios-tk8o-2')}</loc></url></urlset>`); return [x.entrees.length, x.ecartees.map(e => e.motif)]; })(),
     [0, ['loc-hors-hote', 'image-hors-regle', 'sans-image']]);
@@ -50,7 +50,7 @@ verifier('table : la table est GELÉE (une ligne ne se change pas à l\'exécuti
 
 // ── 5. L'APPARIEMENT CARTE PAR CARTE ───────────────────────────────────────────────────────────────────────────────────────
 const idx = P.indexer(lus.entrees);
-verifier('index : 67 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [67, ['unown-unseen-forces-uf/']]);
+verifier('index : 74 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [74, ['unown-unseen-forces-uf/']]);
 const trou = (idProduct, carteId, slugSet, numeroFiche, slugProduit, nomEn, images = []) => ({ idProduct, carteId, slugSet, numeroFiche, slugProduit, carte: { _id: carteId, nomEn, images } });
 const app = (trous, o = {}) => P.apparier({ trous, entrees: idx.lues, lot: o.lot, ...(o.refus ? { refus: o.refus } : {}) });
 const motifs = r => r.restes.map(x => `${x.idProduct}:${x.motif}`);
@@ -111,7 +111,11 @@ verifier('une entrée haute définition ET une basse : le visuel est servi -> de
 r = mc([IM({ basseDefinition: true, langue: null })]);
 verifier('basse définition de langue inconnue : elle ne se remplace pas (la règle exige les deux langues connues) -> sautée, notée', motifs(r), ['30:basse-definition-non-remplacable']);
 r = mc([IM({ langue: 'ja', w: 868, cleR2: 'bulbapedia/ja.webp', source: 'bulbapedia' })]);
-verifier('entrée refusée par la règle du site (scan japonais) : modification qui attend le testeur -> entree-refusee-au-numero, rien ne part', [r.plan.length, motifs(r)], [0, ['30:entree-refusee-au-numero']]);
+verifier('DOCTRINE : un scan JAPONAIS refusé par la règle du site au numéro exact est une image FAUSSE -> REMPLACEMENT (ancienne nommée, motif « fausse »), plus de feu vert', [r.plan[0]?.action, r.plan[0]?.remplace.map(e => [e.cleR2, e.motif]), r.restes.length], ['remplacement', [['bulbapedia/ja.webp', 'fausse : langue:ja']], 0]);
+r = mc([IM({ langue: 'ja', w: 868, cleR2: 'bulbapedia/ja.webp', source: 'bulbapedia', numero: null })]);
+verifier('un scan japonais refusé SANS numéro (il couvrirait tout le set) reste sauté, noté', motifs(r), ['30:entree-refusee-au-numero']);
+r = app([trou(50, 60, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ w: 868, source: 'tcgdex', cleR2: 'x.webp' })])], { lot: 'mcdo', refus: () => 'format:inconnu' });
+verifier('un refus qui n\'est PAS une autre langue reste sauté (la doctrine ne couvre que l\'image fausse par la langue)', motifs(r), ['50:entree-refusee-au-numero']);
 r = mc([IM({ numero: '13', basseDefinition: true })]);
 verifier('une entrée basse d\'un AUTRE numéro ne compte pas : AJOUT', r.plan[0]?.action, 'ajout');
 r = mc([IM({ numero: null, basseDefinition: true })]);
@@ -128,6 +132,26 @@ verifier('pkmcom : Unown B (numéro-lettre), Énergie sans numéro (slug), SWSH3
     [r.plan.map(u => [u.produits[0], u.url.slice(u.url.lastIndexOf('/') + 1)]), motifs(r)],
     [[[33, 'unown-unseen-forces-uf-b.jpg'], [34, 'en_US-HGSS1-121-darkness_energy.jpg'], [35, 'en_US-Promo_SWSH-SWSH301-lugia_v.png'], [36, 'svbsp_en_221_std.png']], ['37:sans-numero']]);
 verifier('pkmcom : la 30th Celebration est à REGARDER (la marque « 30 »), les autres non', [P.SETS_A_REGARDER.includes('30th-Celebration'), r.plan.every(u => u.aRegarder === false)], [true, true]);
+
+// 5n. (correction 1) les 5 produits du plan pokemon.com dont l'entrée est un scan japonais refusé : REMPLACEMENT, appariés set + numéro + nom
+const JA = (set, numero, cleR2) => ({ set, source: 'bulbapedia', numero, cleR2, langue: 'ja', w: 868 });
+r = app([trou(302215, 70, 'Shining-Legends', '78', 'Mewtwo-GX-SLG78', 'Mewtwo-GX', [JA('Shining-Legends', '78', 'b/78.webp')]), trou(355637, 71, 'Forbidden-Light', '126', 'Xerneas-GX-FLI126', 'Xerneas-GX', [JA('Forbidden-Light', '126', 'b/126.webp')]),
+    trou(670826, 72, 'Lost-Origin', 'TG01', 'Parasect-LOR-TG01', 'Parasect', [JA('Lost-Origin', 'TG01', 'b/tg01.webp')]), trou(682983, 73, 'SWSH-Black-Star-Promos', 'SWSH293', 'Zamazenta-V-SWSH293', 'Zamazenta V', [JA('SWSH-Black-Star-Promos', 'SWSH293', 'b/293.webp')]),
+    trou(692427, 74, 'SWSH-Black-Star-Promos', 'SWSH284', 'Galarian-Moltres-SWSH284', 'Galarian Moltres', [JA('SWSH-Black-Star-Promos', 'SWSH284', 'b/284.webp')])], { lot: 'pkmcom' });
+verifier('pkmcom : Mewtwo-GX 78, Xerneas-GX 126, Parasect TG01, Zamazenta V SWSH293, Galarian Moltres SWSH284 -> 5 REMPLACEMENTS de l\'entrée japonaise (set + numéro + nom)',
+    [r.plan.map(u => [u.produits[0], u.action, u.remplace[0]?.cleR2, u.url.slice(u.url.lastIndexOf('/') + 1)]), r.restes.length],
+    [[[302215, 'remplacement', 'b/78.webp', 'en_US-SL-078-mewtwo_gx.jpg'], [355637, 'remplacement', 'b/126.webp', 'en_US-SM6-126-xerneas_gx.png'], [670826, 'remplacement', 'b/tg01.webp', 'en_US-SWSH11-TG001-parasect.png'], [682983, 'remplacement', 'b/293.webp', 'en_US-Promo_SWSH-SWSH293-zamazenta_v.png'], [692427, 'remplacement', 'b/284.webp', 'en_US-Promo_SWSH-SWSH284-galarian_moltres.png']], 0]);
+// 5o. (correction 1) une même carte vendue dans deux kits = deux fiches, deux images (la clé de fiche porte le set Cardmarket)
+r = app([trou(80, 12098, 'XY-Trainer-Kit', '20', 'Potion-TK620S', 'Potion'), trou(81, 12098, 'XY-Trainer-Kit-Bisharp-Wigglytuff', '20', 'Potion-TK720W', 'Potion')], { lot: 'kits' });
+verifier('Potion n°20 vendue dans deux kits : DEUX unités (une par kit), chacune avec l\'image de SON kit — pas « deux images pour une fiche »', [r.plan.map(u => [u.produits[0], u.pkcSet]), r.restes.length], [[[80, 'xy-trainer-kit-sylveon'], [81, 'xy-trainer-kit-wigglytuff']], 0]);
+// 5p. (correction 1) rejugement par la règle du site IMPORTÉE : deux produits d'une même fiche chez nous, mais deux fiches distinctes chez elle -> chacun reçoit l'image de SA demi-deck, sous SON numéro
+const deuxAcro = [trou(6, 13, 'XY-Trainer-Kit-Latias-Latios', '20', 'Acro-Bike-TK820A', 'Acro Bike'), trou(7, 13, 'XY-Trainer-Kit-Latias-Latios', '20', 'Acro-Bike-TK820O', 'Acro Bike')];
+r = P.apparier({ trous: deuxAcro, entrees: idx.lues, lot: 'kits', ficheDuSite: id => ({ numero: id === 6 ? '20A' : '20O', rang: id }) });
+verifier('règle du site : numéros de fiche DISTINCTS par demi-deck -> chaque produit reçoit l\'image de SON demi-deck, écrite sous le numéro du site', [r.plan.map(u => [u.produits[0], u.pkcSet, u.numero]), r.restes.length], [[[6, 'xy-trainer-kit-latias', '20A'], [7, 'xy-trainer-kit-latios', '20O']], 0]);
+r = P.apparier({ trous: deuxAcro, entrees: idx.lues, lot: 'kits', ficheDuSite: () => ({ numero: '20', rang: 3 }) });
+verifier('règle du site : la MÊME fiche pour les deux produits -> restent sautés, le motif le dit', [r.plan.length, motifs(r).sort(), /même fiche/.test(r.restes[0]?.detail || '')], [0, ['6:deux-images-une-fiche', '7:deux-images-une-fiche'], true]);
+r = P.apparier({ trous: deuxAcro, entrees: idx.lues, lot: 'kits', ficheDuSite: id => (id === 6 ? { numero: '20A', rang: 1 } : null) });
+verifier('règle du site : un produit que la règle ne sert nulle part -> les deux restent sautés (jamais deviné)', [r.plan.length], [0]);
 
 // ── 6. IDENTIFIANTS PUBLICS : le nom de la source n'y est jamais ────────────────────────────────────────────────────────────
 verifier('identifiants : source « pkc », lot « pkc-2026-10 », clé R2 pkc/<set>/<n°>-<carte>-en.webp, _id du document images', [P.SOURCE, P.LOT, P.cleR2('XY-Trainer-Kit', '24', 10), P.idImage('XY-Trainer-Kit', 10, '24'), P.cleNum(null)], ['pkc', 'pkc-2026-10', 'pkc/XY-Trainer-Kit/24-10-en.webp', 'pkc/XY-Trainer-Kit/10/24/en', 'sans-numero']);

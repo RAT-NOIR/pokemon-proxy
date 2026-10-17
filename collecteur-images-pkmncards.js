@@ -234,7 +234,21 @@ function lireCiblesPkmcom(fichier = CIBLES_PKMCOM, cacheDir = CACHE_POKEMONCOM) 
     return { ids: [...parProduit.keys()], parProduit };
 }
 /** Les trous du lot et leur appariement. `db` : la base `cartes`, LECTURE SEULE. */
-async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles = null }) {
+/** La fiche que la règle du site IMPORTÉE (exporter-donnees-logos-site.js fichesDesProduits) donne à chaque produit des sets nommés : idProduct -> { numero, rang }. Lecture seule. */
+async function fichesDuSiteDesSets(db, slugSets, regles) {
+    const exporteur = require('./exporter-donnees-logos-site');
+    const parProduit = new Map();
+    for (const slugSet of slugSets) {
+        const set = await db.collection('sets').findOne({ _id: slugSet });
+        if (!set) continue;
+        const lignes = await db.collection('cartes_produits').find({ idExpansion: { $in: [].concat(set.idExpansion) } }).toArray();
+        const docs = (await db.collection('cartes').find({ sets: slugSet }).toArray()).filter(d => d.nomEn);
+        const { fiche } = exporteur.fichesDesProduits(regles.regle, set, docs, lignes);
+        for (const [id, f] of fiche) parProduit.set(id, { numero: f.numero, rang: f.rang });
+    }
+    return id => parProduit.get(id) ?? null;
+}
+async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles = null, regles = null }) {
     if (!P.LOTS.includes(lot)) throw new Error(`lot inconnu : ${lot}`);
     const slugSets = [...new Set(Object.values(P.TABLE).filter(l => l.lot === lot).flatMap(l => l.slugSets))];
     const filtre = { slugSet: { $in: slugSets }, ...(cibles ? { idProduct: { $in: cibles.ids } } : {}) };
@@ -245,7 +259,8 @@ async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles 
     const occidentales = lignes.filter(l => (sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId));
     const horsTirage = lignes.filter(l => !((sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId))).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, motif: parId.has(l.carteId) ? 'tirage-non-occidental' : 'carte-absente' }));
     const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
-    const r = P.apparier({ trous, entrees, lot, ...(refusSite ? { refus: (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) } : {}) });
+    const ficheDuSite = regles ? await fichesDuSiteDesSets(db, slugSets, regles) : null;
+    const r = P.apparier({ trous, entrees, lot, ...(ficheDuSite ? { ficheDuSite } : {}), ...(refusSite ? { refus: (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) } : {}) });
     if (cibles) for (const u of r.plan) u.pokemoncom = u.produits.map(id => cibles.parProduit.get(id)).find(Boolean) ?? null;
     return { lignes: lignes.length, slugSets, ...r, restes: [...r.restes, ...horsTirage] };
 }
@@ -385,10 +400,10 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     if (!c) { cartesAbsentes++; continue; }
                     const nous = e => e?.source === P.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
-                    // la marque se lit sur la largeur quand elle n'est pas encore posée (les 320 px d'une autre source) ; la règle de remplacement est celle de basse-definition.js
-                    const vue = autres.map(e => P.estBasse(e) ? { ...e, basseDefinition: true } : e);
-                    const aRemplacer = entreesARemplacer(vue, { set: slug, numero: im.numero ?? null, langue: im.langue, source: P.SOURCE, cleR2: im.cleR2, wOriginal: im.wOriginal });
-                    const sortantes = new Set(aRemplacer.map(e => `${e.source}|${e.cleR2}`));
+                    // ce qui sort est ce que le PLAN nomme (basse définition de même impression, ou image fausse : un scan d'une autre langue refusé par la règle du site au numéro exact), et seulement si l'entrée est encore là
+                    // au même set : le plan est recalculé à l'écriture contre l'état de la base (planifierDepuisBase)
+                    const nommees = new Set((uniteDe.get(im._id)?.remplace || []).map(r => `${r.source}|${r.cleR2}`));
+                    const sortantes = new Set(autres.filter(e => nommees.has(`${e.source}|${e.cleR2}`)).map(e => `${e.source}|${e.cleR2}`));
                     const admises = autres.filter(e => !sortantes.has(`${e.source}|${e.cleR2}`));
                     const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, retirable: true, collecteLe: im.collecteLe, jointeLe: new Date() };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero ?? null } } });
@@ -423,7 +438,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     return { code, resultats, attendu: attendu ?? reel, reel, horsCache, altere, rejetes: rejetes.length };
 }
 
-module.exports = { urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
+module.exports = { urlsAutorisees, telecharger, controlerCache, controleVisuel, tirerEchantillon, GRAINE_ECHANTILLON, fichesDuSiteDesSets, planche, lireCiblesPkmcom, planifierDepuisBase, annonceRemplacement, servisAvantApres, ecrire, transportFetch, fichierArret, fichierIndex, lireIndex, octetsConformes, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
@@ -450,7 +465,7 @@ async function planComplet(db) {
     const { reglesDuSite } = require('./collecte-cartes/simuler-servis');
     const R = await reglesDuSite();
     const cibles = LOT === 'pkmcom' ? lireCiblesPkmcom(val('cibles', CIBLES_PKMCOM)) : null;
-    const p = await planifierDepuisBase(db, { lot: LOT, entrees: idx.lues, refusSite: R.refusDuVisuel, cibles });
+    const p = await planifierDepuisBase(db, { lot: LOT, entrees: idx.lues, refusSite: R.refusDuVisuel, cibles, regles: R });
     return { lu, idx, R, cibles, ...p };
 }
 if (argsValides) (async () => {
