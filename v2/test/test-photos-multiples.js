@@ -100,6 +100,7 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     for (const [id, nom] of [[4242, 'Pikachu']]) { await db.col('catalogue_produits').insertOne({ idProduct: id, name: nom, idMetacard: id }); await db.col('numeros_cartes').insertOne({ idProduct: id, slugSet: 'Base-Set', numero: String(id % 100) }); }
     const monter = async (cfg, reglage = { placesMax: 2, delaiLectureMs: 1200 }, photos = stockPhotos) => {
         const app = express(); app.set('trust proxy', true);
+        for (const l of require('../index').LOTS) l.enTete(app, cfg);       // les en-têtes de sécurité et le CORS de v2, comme en production (le 404 natif d'une route absente se compare AVEC eux)
         app.use((q, s, n) => { const wh = s.writeHead; s.writeHead = function (...a) { lus.set(q.headers['x-essai'], q.socket.bytesRead); return wh.apply(this, a); }; n(); });
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
@@ -127,9 +128,11 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     // ═══ 1. le drapeau ÉTEINT : la route n'existe pour personne ; /api/identifier est celui d'aujourd'hui, octet pour octet ═══
     await essayer('1', async () => {
         const brut = async (srv, jeton, chemin) => { const x = await fetch(srv.url + chemin, { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${jeton}` }, body: jpg }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte: texte.split(chemin.split('?')[0]).join('<CHEMIN>'), h }; };
-        const vraie = await brut(svOff, ADM.jeton, '/api/photo/inexistante');
+        // M-1 : la référence est un chemin SANS RAPPORT avec tout préfixe v2 (jamais un voisin de /api/photo, qui partagerait son préfixe : l'égalité serait vraie par construction)
+        const vraie = await brut(svOff, ADM.jeton, '/zz-route-inexistante');
         H.vrai('1. instrument : une route inexistante rend un 404 non JSON qui cite le chemin', vraie.statut === 404 && vraie.texte.includes('<CHEMIN>'));
-        H.v('1. drapeau éteint : MÊME un administrateur reçoit EXACTEMENT la réponse d\'une route inexistante', await brut(svOff, ADM.jeton, '/api/photo?index=0'), vraie);
+        H.vrai('1. instrument : les en-têtes de sécurité v2 sont montés dans ce banc (un chemin v2 les porte, la référence non)', (await brut(svOff, ADM.jeton, '/api/banc/route-inexistante')).h['cache-control'] === 'no-store' && vraie.h['cache-control'] === undefined);
+        H.v('1. drapeau éteint : MÊME un administrateur reçoit EXACTEMENT la réponse d\'une route inexistante (statut, corps, en-têtes)', await brut(svOff, ADM.jeton, '/api/photo?index=0'), vraie);
         H.v('1. drapeau éteint, sans jeton : 404 aussi (la route n\'existe pas), pas 401', (await envoyer(svOff.url, { query: 'index=0', corps: jpg }).fini).statut, 404);
         // /api/identifier : un champ inconnu aujourd'hui, avec ou sans le drapeau éteint — la même réponse, octet pour octet (à l'identifiant du scan près)
         const norm = r => r.texte.replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"X"');
@@ -388,7 +391,7 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         H.v('12. drapeau allumé : 204, POST, Authorization et Content-Type autorisés pour l\'origine exacte de l\'extension', [on.statut, /POST/.test(on.methodes), /Authorization/.test(on.entetes), /Content-Type/.test(on.entetes), on.origine], [204, true, true, true, cfgOn.origines.extension]);
         H.v('12. drapeau éteint : aucun en-tête CORS propre à v2 pour ce chemin (la route n\'existe pas)', [off.statut, off.origine], [404, null]);
         const { cheminV2 } = require('../transport/entetes');
-        H.vrai('12. /api/photo reçoit les en-têtes de sécurité v2 (comme tout chemin v2), pour que le 404 natif d\'un non-administrateur ne se distingue pas', cheminV2('/api/photo'));
+        H.v('12. /api/photo est un chemin v2 (en-têtes de sécurité) SEULEMENT drapeau allumé, pour que le 404 natif d\'un non-administrateur ne se distingue pas ; éteint, un chemin comme un autre', [cheminV2('/api/photo', cfgOn), cheminV2('/api/photo', cfgOff), cheminV2('/api/photo')], [true, false, false]);
     });
 
     // ═══ 13. les chemins qui téléchargent : chacun est coupé quand une photo est reçue (preuve par le code) ═══
@@ -405,6 +408,61 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');
         const u = imagesDeLaChaine({ imageUrls: ['https://images1.vinted.net/a.jpeg'], photosRecues: [{ index: 0, octets: Buffer.from('xy') }] })[0];
         H.v('13. une image `data:` n\'a pas d\'hôte : le départage par l\'image (qui télécharge photos[0]) s\'abstient avant tout appel', [new URL(u).hostname, HOTES_PHOTO_AUTORISES.some(re => re.test(new URL(u).hostname))], ['', false]);
+    });
+
+    // ═══ 14. TOUR 1 : ce qui part au modèle est à 800 px au plus ; le base64 une fois ; une photo n'est consommée qu'une fois la requête ACCEPTÉE ; le second décodage est sous le sémaphore ═══
+    await essayer('14', async () => {
+        const dims = async u => { const m = await sharp(dataVersOctets(u)).metadata(); return [m.width, m.height]; };
+        const grande = await sharp({ create: { width: 1500, height: 2100, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+        const petite = await sharp({ create: { width: 300, height: 420, channels: 3, background: { r: 20, g: 120, b: 240 } } }).jpeg().toBuffer();
+        const D = await acteur({ role: 'administrateur' });
+        const g = await poster(D, 0, grande), pt = await poster(D, 1, petite);
+        const R = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: g.json.photoId }, { index: 1, photoId: pt.json.photoId }] }, 2));
+        const vue = vusParLaChaine[vusParLaChaine.length - 1];
+        H.v('14. 1500 × 2100 envoyée : le modèle reçoit 571 × 800 (grand côté 800, proportions gardées) ; 300 × 420 : jamais agrandie', [R.statut, await dims(vue[0]), await dims(vue[1])], [200, [571, 800], [300, 420]]);
+        const an = await jusque(async () => (await lireAn(R.json.scanId)).photoBanc, 4000) && await lireAn(R.json.scanId);
+        const mb = an && await sharp(await mem.lire(an.photoBanc.cle)).metadata();
+        H.v('14. la photo du BANC garde le traitement existant : WebP sans EXIF, 1 600 px de grand côté (pas 800)', [mb && mb.format, mb && Math.max(mb.width, mb.height), mb && mb.exif === undefined], ['webp', 1600, true]);
+        // base64 UNE fois par scan : la 2e demande ne ré-encode pas (la chaîne, le lot, la règle G et la détection appellent tous imagesDeLaChaine)
+        {
+            const { imagesDeLaChaine } = require('../identifier/photos-recues');
+            let n = 0; const modele = Buffer.from('mod'); const vraiToString = modele.toString.bind(modele); modele.toString = (...a) => { n++; return vraiToString(...a); };
+            const e = { imageUrls: ['https://a'], photosRecues: [{ index: 0, octets: Buffer.from('gros'), modele }] };
+            const a = imagesDeLaChaine(e), b = imagesDeLaChaine(e), c = imagesDeLaChaine(e);
+            H.v('14. imagesDeLaChaine : UN seul encodage base64 pour trois appels, même résultat, et c\'est la version réduite qui est encodée', [n, a[0] === b[0] && b[0] === c[0], a[0]], [1, true, 'data:image/jpeg;base64,bW9k']);
+        }
+        // une photo n'est consommée qu'APRÈS l'acceptation : un refus la laisse à son rejeu (dans les 120 s)
+        const E = await acteur({ role: 'administrateur' });
+        const pe = await poster(E, 0);
+        const photoIds = [{ index: 0, photoId: pe.json.photoId }];
+        const refusee = async (nom, r, statut, det) => H.v(`14. ${nom} : refusé (${statut}${det ? ' ' + det : ''}), la photo est TOUJOURS au magasin`, [r.statut, det === undefined ? undefined : detail(r), stockPhotos.taille(E.porteur).photos], [statut, det, 1]);
+        const mauvais = await identifier(sv, E, { ...corpsId({ photoIds }), imageUrls: ['http://pas-https.example/x.jpg'] });
+        await refusee('imageUrls invalide', mauvais, 400, 'image-url');
+        const debut = Math.floor(Date.now() / 3600e3) * 3600e3, cleLimite = `identifier:compte:${E.c._id}|${debut}`;
+        await db.col('limites').updateOne({ cle: cleLimite }, { $set: { n: 100000, expireLe: new Date(debut + 7200e3) } }, { upsert: true });      // le compteur existe déjà (la photo a passé par le limiteur du porteur) : on le pose à son plafond
+        const plafonnee = await identifier(sv, E, corpsId({ photoIds }));
+        await refusee('plafond horaire de /api/identifier fabriqué', plafonnee, 429, undefined);
+        await db.col('limites').deleteOne({ cle: cleLimite });
+        tel = 0; const s2 = sorties.length;
+        const rejeu = await identifier(sv, E, corpsId({ photoIds }));
+        await attendre(500);
+        H.v('14. le rejeu valide utilise la photo (data:), AUCUN téléchargement (téléchargeur et appels sortants), et le magasin est vidé', [rejeu.statut, /^data:/.test(vusParLaChaine[vusParLaChaine.length - 1][0]), tel, sorties.slice(s2), stockPhotos.taille(E.porteur).photos], [200, true, 0, [], 0]);
+        // le second décodage : sous le sémaphore des décodages (2 au plus), plein => `occupe` tout de suite
+        const PEx = require('../identifier/photo-extension'), { epurer } = require('../identifier/photo-avant-scan');
+        let lib1, lib2;
+        const p1 = PEx.sousSemaphore(() => new Promise(r => { lib1 = r; })), p2 = PEx.sousSemaphore(() => new Promise(r => { lib2 = r; }));
+        let leve = null; try { await epurer(grande, 2 * MIO); } catch (e) { leve = e.code; }
+        H.v('14. deux places prises : le réencodage (epurer) est refusé tout de suite (`occupe`) au lieu de décoder hors sémaphore', [PEx.decodagesEnCours(), leve], [2, 'occupe']);
+        lib1(); lib2(); await p1; await p2;
+        const ok = await epurer(petite, 2 * MIO);
+        H.v('14. places rendues : le réencodage passe, la place est rendue ensuite', [Boolean(ok && ok.octets && ok.modele), PEx.decodagesEnCours()], [true, 0]);
+        // trois dépôts simultanés de 12 Mpx : jamais plus de 2 décodages vivants (validation + réencodage)
+        const svD = await monter(cfgOn, { placesMax: 4, delaiLectureMs: 5000 });
+        const douze = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#445566' } }).png().toBuffer();
+        const trio = [await acteur({ role: 'administrateur' }), await acteur({ role: 'administrateur' }), await acteur({ role: 'administrateur' })];
+        const rs = await Promise.all(trio.map(a => envoyer(svD.url, { query: 'index=0', jeton: a.jeton, type: 'image/png', corps: douze }).fini));
+        H.v('14. trois photos de 12 Mpx en même temps : au plus 2 décodages vivants à la fois, les autres reçoivent 429 DEBIT', [PEx.picDecodages() <= PEx.DECODAGES_MAX, rs.every(r => r.statut === 200 || (r.statut === 429 && code(r) === 'DEBIT')), rs.filter(r => r.statut === 200).length >= 1], [true, true, true]);
+        await svD.fermer();
     });
 
     await sv.fermer(); await svOff.fermer(); await svPlafond.fermer(); monterBanc.arreterPurge();
