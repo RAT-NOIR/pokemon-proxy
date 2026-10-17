@@ -25,7 +25,8 @@ const P = require('./collecte-cartes/pkmncards');
 const T = require('./collecte-cartes/tpc');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe, entreesARemplacer } = require('./collecte-cartes/basse-definition');      // L'API déjà exportée : la marque d'après la largeur de l'ORIGINAL, la règle de remplacement
+const { marqueDe, entreesARemplacer, arbitrer, remplacerBasseDefinition, documentsDesEntrees, documentsDeLaListe, empreinteEntree } = require('./collecte-cartes/basse-definition');
+const { champsTracabilite, champsDeLEntree } = require('./collecte-cartes/tracabilite');       // la traçabilité commune : retirable, adresse d'origine, date (une seule définition)      // L'API déjà exportée : la marque d'après la largeur de l'ORIGINAL, la règle de remplacement
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -297,8 +298,11 @@ async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles 
     const occidentales = lignes.filter(l => (sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId));
     const horsTirage = lignes.filter(l => !((sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId))).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, motif: parId.has(l.carteId) ? 'tirage-non-occidental' : 'carte-absente' }));
     const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
+    // (BASSE-DEF) la règle commune lit le DOCUMENT `images` de chaque entrée actuelle : ceux des cartes du lot, dans les sets du lot (de préférence « ok »)
+    const docsImages = await db.collection('images').find({ carteId: { $in: [...parId.keys()] }, set: { $in: slugSets } }).toArray();
+    const documents = documentsDeLaListe([...docsImages.filter(d => d.etat !== 'ok'), ...docsImages.filter(d => d.etat === 'ok')]);
     const ficheDuSite = regles ? await fichesDuSiteDesSets(db, slugSets, regles) : null;
-    const r = P.apparier({ trous, entrees, lot, ...(ficheDuSite ? { ficheDuSite } : {}), ...(refusSite ? { refus: (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) } : {}) });
+    const r = P.apparier({ trous, entrees, lot, documents, ...(ficheDuSite ? { ficheDuSite } : {}), ...(refusSite ? { refus: (e, slug) => (e.cleR2 ? refusSite(e, sets.get(slug) ?? 'intl') : null) } : {}) });
     if (cibles) for (const u of r.plan) u.pokemoncom = u.produits.map(id => cibles.parProduit.get(id)).find(Boolean) ?? null;
     return { lignes: lignes.length, slugSets, ...r, restes: [...r.restes, ...horsTirage] };
 }
@@ -427,7 +431,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                     ...marqueDe({ wOriginal: meta.width }),
-                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), retirable: true, collecteLe: new Date(p.e.le), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
+                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), ...champsTracabilite({ urlOriginal: u.url, collecteLe: p.e.le }), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
                 telecharges++; ecrits.push(_id);
             }
             // ---- JOINTURE, sous sa garde : ajout, ou remplacement d'une basse définition de même impression ---------------------------------------------------
@@ -442,16 +446,21 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     if (!c) { cartesAbsentes++; continue; }
                     const nous = e => e?.source === P.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
-                    // ce qui sort est ce que le PLAN nomme (basse définition de même impression, ou image fausse : un scan d'une autre langue refusé par la règle du site au numéro exact), et seulement si l'entrée est encore là
-                    // au même set : le plan est recalculé à l'écriture contre l'état de la base (planifierDepuisBase)
-                    const nommees = new Set((uniteDe.get(im._id)?.remplace || []).map(r => `${r.source}|${r.cleR2}`));
-                    const sortantes = new Set(autres.filter(e => nommees.has(`${e.source}|${e.cleR2}`)).map(e => `${e.source}|${e.cleR2}`));
-                    const admises = autres.filter(e => !sortantes.has(`${e.source}|${e.cleR2}`));
-                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, retirable: true, collecteLe: im.collecteLe, urlOriginal: im.urlOriginal, jointeLe: new Date() };
+                    const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero ?? null } } });
+                    // 🔑 LA RÈGLE COMMUNE (basse-definition.js) : elle lit le DOCUMENT `images` de chaque entrée actuelle (identité d'impression : marqueurs de l'entrée ET du document ; document absent -> rien ne sort) et la largeur
+                    // de la candidate, qui est ICI celle de l'image en cache. Même fonction que pokemon.com / TPC / Pokumon… : `arbitrer` décide, `remplacerBasseDefinition` fait le geste.
+                    const documents = await documentsDesEntrees(M, autres);
+                    const arb = arbitrer(autres, entree, () => false, { documents });
+                    // l'image FAUSSE (un scan d'une autre langue que la règle du site refuse au numéro exact) sort par SA branche, nommée par le plan ; l'identité d'impression se juge par la même règle (entrée + document concordants)
+                    const nommeesFausses = new Set((uniteDe.get(im._id)?.remplace || []).filter(r => String(r.motif).startsWith('fausse')).map(r => `${r.source}|${r.cleR2}`));
+                    const fausses = entreesARemplacer(autres.filter(x => nommeesFausses.has(`${x.source}|${x.cleR2}`)).map(x => ({ ...x, langue: im.langue, basseDefinition: true })), entree, { documents }).map(x => autres.find(a => a.source === x.source && a.cleR2 === x.cleR2));
+                    const sortantes = [...arb.sortantes, ...fausses.filter(x => x && !arb.sortantes.includes(x))];
+                    const admises = autres.filter(x => !sortantes.includes(x));
                     if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source sert ce numéro : intacte, la nôtre cède
                     const sorties = [];
-                    for (const e of autres.filter(x => sortantes.has(`${x.source}|${x.cleR2}`))) {
+                    if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree, { documents }); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); remplacees++; sorties.push(e); } }
+                    for (const e of sortantes.filter(x => !arb.sortantes.includes(x))) {
                         await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: e.source, cleR2: e.cleR2 } } });
                         await M.Image.updateOne({ source: e.source, set: slug, carteId: im.carteId, cleR2: e.cleR2 }, { $set: { etat: 'remplace', remplacePar: { source: P.SOURCE, cleR2: im.cleR2 }, remplaceLe: new Date() } });
                         retirees.push(cleEntree(im.carteId, e)); remplacees++; sorties.push(e);

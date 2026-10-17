@@ -52,7 +52,10 @@ verifier('table : la table est GELÉE (une ligne ne se change pas à l\'exécuti
 const idx = P.indexer(lus.entrees);
 verifier('index : 79 entrées lues, celles dont l\'adresse ne se lit pas sont comptées à part (jamais perdues en silence)', [idx.lues.length + idx.illisibles.length, idx.illisibles.map(x => x.loc.replace(H + '/card/', ''))], [79, ['unown-unseen-forces-uf/']]);
 const trou = (idProduct, carteId, slugSet, numeroFiche, slugProduit, nomEn, images = []) => ({ idProduct, carteId, slugSet, numeroFiche, slugProduit, carte: { _id: carteId, nomEn, images } });
-const app = (trous, o = {}) => P.apparier({ trous, entrees: idx.lues, lot: o.lot, ...(o.refus ? { refus: o.refus } : {}) });
+// (BASSE-DEF) la règle commune exige le DOCUMENT `images` de chaque entrée actuelle : le banc le fabrique pour chaque entrée (ok, sans marqueur), sauf si le cas fournit le sien
+const { documentsDeLaListe } = require('./collecte-cartes/basse-definition');
+const docsDe = images => documentsDeLaListe(images.filter(e => e && e.cleR2).map(e => ({ source: e.source, set: e.set, cleR2: e.cleR2, etat: 'ok' })));
+const app = (trous, o = {}) => P.apparier({ trous, entrees: idx.lues, lot: o.lot, documents: o.documents ?? docsDe(trous.flatMap(t => t.carte.images || [])), ...(o.refus ? { refus: o.refus } : {}) });
 const motifs = r => r.restes.map(x => `${x.idProduct}:${x.motif}`);
 
 // 5a. un kit : set, numéro et nom concordent -> AJOUT ; la demi-deck vient du slug
@@ -108,10 +111,18 @@ r = mc([IM({ w: 600 })]);
 verifier('McDonald\'s : une entrée de 600 px sert déjà -> deja-servi, rien n\'est touché', [r.plan.length, motifs(r)], [0, ['30:deja-servi']]);
 r = mc([IM({ basseDefinition: true }), IM({ w: 600, cleR2: 'autre/x.webp', source: 'tcgdex' })]);
 verifier('une entrée haute définition ET une basse : le visuel est servi -> deja-servi (la basse n\'est pas remplacée à l\'insu)', motifs(r), ['30:deja-servi']);
+r = app([trou(30, 40, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ basseDefinition: true })])], { lot: 'mcdo', documents: new Map() });
+verifier('BASSE-DEF : SANS le document `images` de l\'entrée marquée, rien ne sort (la règle commune exige le document) -> sautée, notée', motifs(r), ['30:basse-definition-non-remplacable']);
+r = app([trou(30, 40, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ basseDefinition: true })])], { lot: 'mcdo', documents: docsDe([IM()]).size ? new Map([[`pokumon|McDonalds-Match-Battle-2023|pokumon/old.webp`, { source: 'pokumon', set: 'McDonalds-Match-Battle-2023', cleR2: 'pokumon/old.webp', etat: 'ok', tampon: 'Staff' }]]) : new Map() });
+verifier('BASSE-DEF : le DOCUMENT porte un tampon que notre image n\'a pas -> une AUTRE impression : rien ne sort', motifs(r), ['30:basse-definition-non-remplacable']);
+r = app([trou(30, 40, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ w: 400 })])], { lot: 'mcdo' });
+verifier('BASSE-DEF : une entrée de 400 px (733 >= 1,5 x 400) est NETTEMENT plus petite -> REMPLACEMENT ; de 500 px (733 < 750) -> déjà servie', [r.plan[0]?.action, motifs(app([trou(30, 40, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ w: 500 })])], { lot: 'mcdo' }))], ['remplacement', ['30:deja-servi']]);
 r = mc([IM({ basseDefinition: true, langue: null })]);
 verifier('basse définition de langue inconnue : elle ne se remplace pas (la règle exige les deux langues connues) -> sautée, notée', motifs(r), ['30:basse-definition-non-remplacable']);
 r = mc([IM({ langue: 'ja', w: 868, cleR2: 'bulbapedia/ja.webp', source: 'bulbapedia' })]);
 verifier('DOCTRINE : un scan JAPONAIS refusé par la règle du site au numéro exact est une image FAUSSE -> REMPLACEMENT (ancienne nommée, motif « fausse »), plus de feu vert', [r.plan[0]?.action, r.plan[0]?.remplace.map(e => [e.cleR2, e.motif]), r.restes.length], ['remplacement', [['bulbapedia/ja.webp', 'fausse : langue:ja']], 0]);
+r = app([trou(30, 40, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ langue: 'ja', w: 868, cleR2: 'bulbapedia/ja.webp', source: 'bulbapedia' })])], { lot: 'mcdo', documents: new Map() });
+verifier('DOCTRINE + BASSE-DEF : le scan japonais refusé sans son document `images` ne sort pas (l\'identité d\'impression se juge par la règle commune)', motifs(r), ['30:entree-refusee-au-numero']);
 r = mc([IM({ langue: 'ja', w: 868, cleR2: 'bulbapedia/ja.webp', source: 'bulbapedia', numero: null })]);
 verifier('un scan japonais refusé SANS numéro (il couvrirait tout le set) reste sauté, noté', motifs(r), ['30:entree-refusee-au-numero']);
 r = app([trou(50, 60, 'McDonalds-Match-Battle-2023', '012', 'Blissey-M23012', 'Blissey', [IM({ w: 868, source: 'tcgdex', cleR2: 'x.webp' })])], { lot: 'mcdo', refus: () => 'format:inconnu' });

@@ -18,8 +18,8 @@ const { cleNumero, normaliserNom } = require('./jointure');
 const PK = require('./pokemoncom');
 const T = require('./tpc');
 const { estDosDeCarte } = require('./hotes-images-ptcgio');
-const { largeurMinDe } = require('./seuils-images');
-const { entreesARemplacer } = require('./basse-definition');
+const { largeurMinDe, largeurOriginaleDe } = require('./seuils-images');
+const { entreesARemplacer, RATIO_NETTEMENT_PLUS_GRANDE } = require('./basse-definition');
 
 const SOURCE = 'pkc';
 const LOT = 'pkc-2026-10';
@@ -175,6 +175,8 @@ const nomNorm = normaliserNom;
 const plier = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
 const sansBasic = n => nomNorm(plier(n)).replace(/^basic/, '');
 const nomsDeLaFiche = t => new Set([t.carte?.nomEn].filter(Boolean).flatMap(n => [nomNorm(n), nomNorm(plier(n)), sansBasic(n)]));
+// (BASSE-DEF) « nettement plus grande » : au moins RATIO_NETTEMENT_PLUS_GRANDE fois la largeur de l'ORIGINAL de l'entrée actuelle ; notre image nominale fait LARGEUR_ATTENDUE (733) de large
+const sortiraitPeutEtre = e => estBasse(e) || (largeurOriginaleDe(e) != null && LARGEUR_ATTENDUE >= RATIO_NETTEMENT_PLUS_GRANDE * largeurOriginaleDe(e));
 const estBasse = e => e?.basseDefinition === true || (typeof e?.w === 'number' && e.w > 0 && e.w < 350 && !(e.wOriginal > 0)) || (typeof e?.wOriginal === 'number' && e.wOriginal > 0 && e.wOriginal < 350);
 const cleR2 = (slugSet, numero, carteId) => `${SOURCE}/${slugSet}/${cleNum(numero)}-${carteId}-en.webp`;
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';
@@ -185,7 +187,7 @@ const idImage = (slugSet, carteId, numero) => `${SOURCE}/${slugSet}/${carteId}/$
  *   trous : { idProduct, carteId, slugSet, numeroFiche, slugProduit, carte:{_id, nomEn, images} } ; entrees : indexer().lues ; refus(entrée, slugSet) -> motif|null : la règle du site.
  * @returns {{plan: object[], restes: object[]}} plan : une unité par FICHE (carte, numéro) avec son action `ajout` | `remplacement`.
  */
-function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, ficheDuSite = null }) {
+function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, ficheDuSite = null, documents = new Map() }) {
     const restes = [];
     const reste = (t, motif, detail) => restes.push({ idProduct: t.idProduct, carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, slugSet: t.slugSet, motif, ...(detail ? { detail } : {}) });
     const parSet = new Map();
@@ -210,7 +212,8 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, fic
         const jugees = auNumero.map(e => ({ e, motif: refus(e, t.slugSet) }));
         const admises = jugees.filter(x => x.motif === null).map(x => x.e);
         const refusees = jugees.filter(x => x.motif !== null);
-        if (admises.some(e => !estBasse(e))) { reste(t, 'deja-servi'); continue; }
+        // une entrée admise qui ne peut JAMAIS sortir (ni basse définition, ni nettement plus petite que notre image nominale) sert la fiche ; celles qui pourraient sortir sont jugées par la règle commune plus bas
+        if (admises.some(e => !sortiraitPeutEtre(e))) { reste(t, 'deja-servi'); continue; }
         // 🔑 DOCTRINE DU TESTEUR (17/10, soir) : « un remplacement est permis si l'image actuelle est fausse, en basse définition ou empruntée ». Un scan d'une AUTRE LANGUE refusé par la règle du site
         // (motif « langue:… ») au numéro exact d'un produit anglais est une image FAUSSE pour ce produit : il est remplacé (l'ancienne est gardée, état « remplace »). Tout autre refus, ou une entrée refusée
         // sans numéro (elle couvrirait tout le set), reste sauté et noté.
@@ -236,13 +239,19 @@ function apparier({ trous, entrees, lot = null, refus = PK.REFUS_PAR_DEFAUT, fic
         const choisie = concordants[0];
         if (!urlImageValide(choisie.url)) { reste(t, 'adresse-hors-regle', 'adresse du sitemap hors des règles'); continue; }
         // ── ajout ou remplacement ───────────────────────────────────────────────────────────────────────────────────────────────────
+        // LA RÈGLE COMMUNE (basse-definition.js, fusionnée) : elle exige le DOCUMENT `images` de chaque entrée actuelle (identité d'impression = marqueurs de l'entrée ET du document ; document absent -> rien ne sort) et
+        // une largeur de candidate connue — au plan, notre largeur nominale (733 px, lue sur une page de la source) ; à l'écriture, celle de l'image en cache
         let remplace = [...aRetirerFausses];
+        const candidat = { set: t.slugSet, numero: t.numeroFiche ?? null, langue: 'en', source: SOURCE, cleR2: cleR2(t.slugSet, t.numeroFiche ?? null, t.carte._id), wOriginal: LARGEUR_ATTENDUE };
+        if (aRetirerFausses.length) {
+            // l'image FAUSSE (autre langue refusée) sort par SA branche, mais l'IDENTITÉ d'impression se juge par la règle commune : entrée + document concordants, sinon rien ne sort
+            const identite = entreesARemplacer(aRetirerFausses.map(e => ({ ...e, langue: 'en', basseDefinition: true })), candidat, { documents });
+            if (identite.length !== aRetirerFausses.length) { reste(t, 'entree-refusee-au-numero', `entrée(s) refusée(s) dont le document \`images\` manque ou ne concorde pas (la règle commune exige le document) : ${aRetirerFausses.map(e => e.cleR2).join(' ; ')}`); continue; }
+        }
         if (admises.length) {
-            const candidat = { set: t.slugSet, numero: t.numeroFiche ?? numero, langue: 'en', source: SOURCE, cleR2: cleR2(t.slugSet, t.numeroFiche ?? null, t.carte._id), wOriginal: LARGEUR_ATTENDUE };
-            const vue = (t.carte.images || []).filter(Boolean).map(e => estBasse(e) ? { ...e, basseDefinition: true } : e);     // la marque lue sur la largeur quand elle n'est pas encore posée
-            remplace = entreesARemplacer(vue, candidat).map(e => ({ ...e, motifRemplacement: 'basse définition' }));
+            remplace = [...aRetirerFausses, ...entreesARemplacer((t.carte.images || []).filter(e => e && admises.includes(e)), candidat, { documents }).map(e => ({ ...e, motifRemplacement: 'basse définition ou nettement plus petite' }))];
             const ids = new Set(remplace.map(e => `${e.source}|${e.cleR2}`));
-            if (admises.some(e => !ids.has(`${e.source}|${e.cleR2}`))) { reste(t, 'basse-definition-non-remplacable', `entrée(s) basse(s) non remplaçable(s) par la règle (langue ou numéro différents) : ${admises.map(e => `${e.source} ${e.cleR2} n°${e.numero ?? '∅'} langue ${e.langue ?? '?'}`).join(' ; ')}`); continue; }
+            if (admises.some(e => !ids.has(`${e.source}|${e.cleR2}`))) { reste(t, 'basse-definition-non-remplacable', `entrée(s) non remplaçable(s) par la règle commune (langue, numéro ou marqueur différents, ou document absent) : ${admises.map(e => `${e.source} ${e.cleR2} n°${e.numero ?? '∅'} langue ${e.langue ?? '?'}`).join(' ; ')}`); continue; }
         }
         resolus.push({ t, e: choisie, voie: depuisSlug ? 'set+numero-du-slug+nom' : 'set+numero+nom', numero,
             preuve: `set ${choisie.pkcSet} n°${choisie.numero} = ${depuisSlug ? `le numéro d'origine du slug (${numero})` : 'le numéro de la fiche'} ; nom « ${choisie.nom} » = « ${t.carte.nomEn} »`,
