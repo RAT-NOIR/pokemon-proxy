@@ -19,7 +19,8 @@ function chargerSources(dossier = DOSSIER_SOURCES) {
 }
 
 const PROJ_CARTES = { nomEn: 1, nomJa: 1, attaques: 1, pv: 1, retraite: 1, faiblesse: 1, resistance: 1, illustrateur: 1, ndex: 1, categorie: 1, impressions: 1, provenance: 1 };
-const PROJ_SETS = { code: 1, region: 1, tirage: 1, nomEn: 1, 'bulba.expansion': 1, dateSortieEn: 1, totalImprime: 1, type: 1, idExpansion: 1, provenance: 1 };
+// ⚠️ chaque champ que le planificateur de provenance LIT doit figurer ici (test-provenance-bulba.js le vérifie) : un champ non projeté se lit « absent » et fabrique un défaut silencieux
+const PROJ_SETS = { code: 1, region: 1, tirage: 1, nomEn: 1, 'bulba.expansion': 1, dateSortieEn: 1, dateSortieEnSource: 1, dateSortieJa: 1, dateSortieJaSource: 1, totalImprime: 1, type: 1, typeSource: 1, idExpansion: 1, provenance: 1 };
 
 /** @param {import('mongodb').Db} db  la base `cartes`, en lecture seule */
 async function chargerBase(db) {
@@ -28,4 +29,4 @@ async function chargerBase(db) {
     if (!sets.length || !cartes.length) throw new Error(`base vide : ${sets.length} sets, ${cartes.length} cartes Bulbapedia`);
     return { sets, cartes };
 }
-module.exports = { chargerSources, chargerBase, DOSSIER_SOURCES };
+module.exports = { chargerSources, chargerBase, DOSSIER_SOURCES, PROJ_CARTES, PROJ_SETS };

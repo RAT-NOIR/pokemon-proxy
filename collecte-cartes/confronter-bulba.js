@@ -86,6 +86,7 @@ function confronter({ cartes, sets, sources, alias = null }) {
     // `cle` = clé (set, numéro) trouvée, comme la mesure du 2026-10-17 (en intl elle compte aussi les noms divergents) ; `confirmees` = clé ET nom concordant (seules celles-là comparent des champs)
     const appar = { intl: { impr: 0, cle: 0, confirmees: 0, non: 0, doublon: 0, nomDiff: 0 }, jp: { impr: 0, cle: 0, confirmees: 0, non: 0, doublon: 0, nomDiff: 0 }, 'zh-hant': { impr: 0, cle: 0, non: 0 }, 'zh-hans': { impr: 0, cle: 0, non: 0 } };
     const nonResolues = { intl: {}, jp: {} };
+    const appariements = [];   // chaque clé (set, numéro) trouvée chez une source : { carteId, idx de l'impression, tirage, src, nomOk } — la preuve du nom ET du numéro, par impression
     const confirmees = { pkc: new Set(), tdx: new Set(), jp: new Set() };
 
     for (const k of cartes) {
@@ -112,6 +113,7 @@ function confronter({ cartes, sets, sources, alias = null }) {
                     if (!cs.length) continue;
                     if (cs.length > 1) { appar.intl.doublon++; continue; }
                     const c = cs[0]; got = true;
+                    appariements.push({ carteId: k._id, idx, tirage: 'intl', src, nomOk: norm(c.name) === norm(k.nomEn) });
                     if (norm(c.name) !== norm(k.nomEn)) { appar.intl.nomDiff++; continue; }
                     accord[src].push({ c, im }); confirmee = true;
                     const totS = src === 'pkc' ? entier(c.set_total) : (tdxSetParCle.get(c.serie + '/' + c.dossierSet) || {}).total;
@@ -130,6 +132,7 @@ function confronter({ cartes, sets, sources, alias = null }) {
                 if (!cs.length) { appar.jp.non++; nonResolues.jp[im.expansion] = (nonResolues.jp[im.expansion] || 0) + 1; return; }
                 if (cs.length > 1) { appar.jp.doublon++; return; }
                 const c = cs[0];
+                appariements.push({ carteId: k._id, idx, tirage: 'jp', src: 'jp', nomOk: !!(k.nomJa && norm(c.name) === norm(k.nomJa)) });
                 if (!(k.nomJa && norm(c.name) === norm(k.nomJa))) { appar.jp.nomDiff++; return; }
                 appar.jp.cle++; appar.jp.confirmees++;
                 accord.jp.push({ c, im });
@@ -199,7 +202,7 @@ function confronter({ cartes, sets, sources, alias = null }) {
         o.statut = st.includes('ok') ? 'accord' : st.includes('approx') ? 'approx' : st.includes('ko') ? 'desaccord' : 'sans';
         lignes.push(o);
     }
-    return { lignes, appar, nonResolues, confirmees: { pkc: confirmees.pkc.size, tdx: confirmees.tdx.size, jp: confirmees.jp.size } };
+    return { lignes, appar, nonResolues, appariements, confirmees: { pkc: confirmees.pkc.size, tdx: confirmees.tdx.size, jp: confirmees.jp.size } };
 }
 
 /** Synthèse par champ (même découpage que la mesure : accord / approx seul / désaccord seul / sans remplaçant), dénominateur imprimé. */

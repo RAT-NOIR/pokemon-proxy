@@ -1,11 +1,13 @@
 // node test-confronter-bulba.js — la confrontation des champs d'origine Bulbapedia à d'autres sources (fonction pure, FAUX objets, aucune base).
 // Port de la mesure du 2026-10-17 (BULBA-REMPLACEMENT/mesure2.js) en module testable : le « nom » reste un TÉMOIN de la clé (set + numéro), jamais un accord compté.
-const { confronter } = require('./collecte-cartes/confronter-bulba');
+// `suite(module)` est rejouée contre des mutants par test-mutants-bulba.js.
+function suite(M) {
+const { confronter } = M;
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
-    if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
+    if (a === b) { ok++; if (require.main === module) console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
 };
 
 // ── sources fabriquées
@@ -39,6 +41,12 @@ verifier('une source concorde : « accord »', ligne(r, 'carte.pv').statut, 'acc
 // 4. le NOM est un témoin : numéro et set égaux mais nom différent → pas confirmé, aucune ligne de champ comparée
 r = confronter(donnees({ sources: { pkc: [pkcCarte({ name: 'Gamma' })], tdx: { sets: [], cartes: [] }, jp: [] } }));
 verifier('nom divergent : impression non confirmée (nomDiff), le champ reste sans remplaçant', [r.appar.intl.nomDiff, r.appar.intl.confirmees, ligne(r, 'carte.pv').statut], [1, 0, 'sans']);
+
+// 4 bis. chaque clé trouvée est rendue avec le verdict du nom, par impression (la provenance du numéro et du nom en dépend)
+r = confronter(donnees());
+verifier('appariements : (carte, impression, tirage, source, nom concordant)', r.appariements.map(a => [a.carteId, a.idx, a.tirage, a.src, a.nomOk]), [[1, 0, 'intl', 'pkc', true], [1, 0, 'intl', 'tdx', true]]);
+r = confronter(donnees({ sources: { pkc: [pkcCarte({ name: 'Gamma' })], tdx: { sets: [], cartes: [] }, jp: [] } }));
+verifier('appariements : un nom divergent est rendu nomOk false', r.appariements.map(a => [a.src, a.nomOk]), [['pkc', false]]);
 
 // 5. alias : l'expansion de Bulbapedia n'est pas le nom de la source → sans alias non résolue ; avec alias PROUVÉ résolue
 const sansNom = { cartes: [carte({ impressions: [{ tirage: 'intl', expansion: 'Alpha Set (Bulbapedia)', numero: '1', total: '2', rarete: 'Rare' }] })] };
@@ -93,5 +101,12 @@ verifier('total du set : 3 numéros (secrète comprise) pour « /2 » imprimé �
 r = confronter(donnees({ sources: { pkc: [], tdx: { sets: [], cartes: [] }, jp: [] } }));
 verifier('aucune source : « sans », dénominateur compté', [ligne(r, 'carte.pv').statut, r.lignes.filter(l => l.champ === 'carte.pv').length], ['sans', 1]);
 
-console.log(`\n${ok} passés, ${ko} en échec`);
-if (ko) process.exit(1);
+return { ok, ko };
+}
+module.exports = { suite };
+
+if (require.main === module) {
+    const { ok, ko } = suite(require('./collecte-cartes/confronter-bulba'));
+    console.log(`\n${ok} passés, ${ko} en échec`);
+    if (ko) process.exit(1);
+}
