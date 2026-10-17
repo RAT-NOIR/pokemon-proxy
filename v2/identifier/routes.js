@@ -103,6 +103,7 @@ const { facturation: fabriquerFacturation, raisonPublique } = require('../argent
 const { offreSur, avecOffre, offreRefusee } = require('../argent/offre-sur');
 const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('../../sources');
 const { col } = require('../db');
+const { choixPour } = require('../choix');
 const SL = require('./seconde-lecture');
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
@@ -402,6 +403,16 @@ function traiterIdentifier(cfg, deps = {}) {
                             if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
                         }
                     }
+                }
+                // CRITERE-A (relecture r1, C1) : une AFFIRMATION qui remplace une question que la CHAÎNE a déjà réservée (voie « candidat unique » : poserQuestion avant l'adaptateur) règle cette réservation
+                // comme une RÉPONSE par ce candidat — le chemin existant du grand livre (`argent.repondreQuestion` : en-attente -> repondue, réserve -> débité) — sinon la réponse dit « débité », le livre
+                // « réservé » et le balayage à 24 h rend le crédit. Réglage impossible : exception, le filet ci-dessous rend le crédit (jamais un scan gratuit ni une question qui traîne).
+                if (resultat.issue === 'affirmee' && reqH.questionId && !admin && credit) {
+                    const idP = resultat.analyse.cartes[0].carte.idProduct;
+                    const choixP = choixPour([idP]).map(x => ({ id: x.id, idProduct: x.idProduct }));
+                    await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { choix: choixP } });
+                    const rep = await argent.repondreQuestion(porteur, { scanId, carte: 0, choix: choixP[0].id });
+                    if (!rep || rep.statut !== 200 || rep.etat !== 'repondue') throw new Error(`question réservée non réglée par l'affirmation (${(rep && (rep.statut || rep.code)) || 'aucune réponse'})`);
                 }
                 // une question née d'un REFUS (remboursement différé) : la chaîne ne l'a pas posée, on la RÉSERVE ici, avec les choix du contrat
                 // (B1b.7 : même chemin pour une affirmation de la chaîne que la règle G transforme en question — son crédit est encore pris, on le réserve)
