@@ -65,6 +65,11 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
         9002: { idProduct: 9002, numero: '6', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: `${CM}/Base-Set/Ok-6`, vignette: img('v/2.webp') } })[id] || null };
     const imE = await V.creerVisuels({ cfg, version: () => versionEtrange }).impressions(1);
     H.v('   un lien d\'un autre hôte que Cardmarket n\'est JAMAIS servi (null), le lien Cardmarket l\'est', imE.map(i => [i.idProduct, i.lien]), [[9001, null], [9002, `${CM}/Base-Set/Ok-6`]]);
+    // LANGUE-DECISIVE (contrat 7a) : la langue d'une impression vient de la langue de TIRAGE de la colonne des jumeaux ; intl, id, th, idth, inconnu : null
+    const tirages = { 9101: 'jp', 9102: 'zh-hans', 9103: 'intl', 9104: 'idth', 9105: null, 9106: 'ko' };
+    const versionLangues = { produitsDeMetacarte: () => Object.keys(tirages).map(Number), tirageJumeaux: id => tirages[id] ?? null, entree: id => (id in tirages ? { idProduct: id, numero: String(id - 9100), rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: null, vignette: img('v/' + id + '.webp') } : null) };
+    const imL = await V.creerVisuels({ cfg, version: () => versionLangues }).impressions(1);
+    H.v('   langue d\'une impression : jp -> ja, zh-hans, ko ; intl, idth, null -> null', imL.map(i => [i.idProduct, i.langue]), [[9101, 'ja'], [9102, 'zh-hans'], [9103, null], [9104, null], [9105, null], [9106, 'ko']]);
     // M6 : un jeu de lecteurs LIÉ à la version en place à cet instant : la bascule d'une autre version ne s'y mêle pas
     E.installer(VB.construire([brut(4001, { setNom: 'Version A' })]));
     const fige = V.creerVisuels({ cfg }).instantane();
@@ -96,7 +101,8 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.v('   lien non donné : null même avec numéro et rareté', [par[3005].rarete, par[3005].lien], ['Commune', null]);
     H.v('   variante de la liste conservée, hors liste (V1) : null', [par[3001].variante, par[3004].variante], ['premiere-edition', null]);
     H.v('   prix guide daté, forme de LIGNE de catalogue (jamais sans date)', [par[3004].prixGuide, par[3001].prixGuide], [{ trend: 4.5, low: 2, avg30: 3.1, guideDu: '2026-10-01' }, null]);
-    H.v('   clés d\'une impression : `lien` seul (contrat 2)', Object.keys(par[3001]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'set', 'lien', 'prixGuide']);
+    H.v('   clés d\'une impression : `lien` seul (contrat 2)', Object.keys(par[3001]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'langue', 'set', 'lien', 'prixGuide']);
+    H.v('   langue d\'une impression : null sans colonne de tirage (jamais devinée)', par[3001].langue, null);
     H.v('   métacarte inconnue ou non entière : []', [await S.impressions(424242), await S.impressions('77'), await S.impressions(null)], [[], [], []]);
     // le sortie de impressions() traverse construireProduit (produit.js lit `lien`) : le contrat 2 sort intact
     const prod = construireProduit({ idProduct: 3001, nomCardmarket: 'Pikachu', set: { slug: 'base-set', nom: 'Base Set' }, impressions: imps }, { cfg });
