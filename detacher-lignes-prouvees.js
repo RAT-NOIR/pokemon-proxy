@@ -78,7 +78,22 @@ const DECISIONS = {
     '2026-10-08d': [
         { id: '154845|676475', preuve: 'attaques+nom', autre: 71777, type: 'fiche-contredite-par-les-attaques',
             pourquoi: 'Garchomp LV.X (Garchomp SP Half Deck) joint par set+numero à Garchomp (Dragons Exalted 91) : les attaques écrites par Cardmarket désignent 71777 (Garchomp C LV.X) et le nom n\'est pas « Garchomp »' }
-    ]
+    ],
+    // VIGN-AUDIT2 (2026-10-17), famille G : 15 produits servis dont le NOM contredit la carte jointe ET dont le visuel servi, regardé, montre la carte
+    // jointe et non le produit. Garchomp SP Half Deck : les 7 produits restants (PtG009-015, dresseurs de l'ère Platine) sont joints aux cartes du
+    // deck BW (Ultra Ball, Rare Candy, Giant Cape, Juniper, Cheren…) — même cause que 2026-10-08c ; les dresseurs n'ont pas d'attaque, preuve « nom ».
+    // Les autres : Victini ex SV-P051/052 (visuel Arctibax, Bellibolt), Lance's Charizard V S-P123 (visuel Pikachu VMAX), Tornadus GX SM-P (visuel
+    // Zoroark), BREAK Starter Pack Water/Grass/Fire Energy (visuels Krabby, Shellder, Cloyster), Magikarp M-P040 (visuel : l'Énergie Combat 040/M-P).
+    '2026-10-17': [
+        ['158475|676477', 'Energy Switch', 'Minccino'], ['148517|676478', 'Energy Search', 'Ultra Ball'], ['25165|676479', 'Switch', 'Rare Candy'],
+        ['158409|676480', 'Pokédex HANDY910is', 'Giant Cape'], ['120958|676481', 'Poké Ball', 'Professor Juniper'], ['126640|676482', 'Buffer Piece', 'Cheren'],
+        ['158418|676483', 'Cynthia\'s Guidance', 'Blend Energy WaterLightningFightingMetal'],
+        ['282245|796963', 'Victini ex V1 SV-P051', 'Arctibax'], ['282977|796964', 'Victini ex V2 SV-P052', 'Bellibolt'],
+        ['255447|786632', 'Lance\'s Charizard V S-P123', 'Pikachu VMAX'], ['226932|826648', 'Tornadus GX SM-P', 'Zoroark'],
+        ['188047|563109', 'Grass Energy (BREAK Starter Pack)', 'Shellder'], ['188048|563110', 'Fire Energy (BREAK Starter Pack)', 'Cloyster'],
+        ['196231|563111', 'Water Energy (BREAK Starter Pack)', 'Krabby'], ['13686|885573', 'Magikarp M-P040', 'Basic Fighting Energy']
+    ].map(([id, produit, carte]) => ({ id, preuve: 'nom', type: 'fiche-contredite-par-le-nom',
+        pourquoi: `VIGN-AUDIT2 : le produit « ${produit} » est joint à « ${carte} », d'un autre nom, et le visuel servi (regardé) est celui de « ${carte} »` }))
 };
 
 // Produits dont aucune ligne ne se détache par cet outil, quelle que soit la décision : la preuve n'est pas apportée.
