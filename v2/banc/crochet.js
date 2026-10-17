@@ -7,6 +7,7 @@
 // `deps.detection({ scanId, imageUrls })` → Promise<{ imageRedressee: Buffer, detectionSure: boolean, versionModele?: string } | null>.
 // Il n'est appelé qu'APRÈS un consentement valide : sans consentement, la photo n'est même pas regardée.
 const registre = require('../registre');
+const { imagesDeLaChaine } = require('../identifier/photos-recues');
 const { consentementAutorise } = require('./commun');   // la garde du jeton de consentement (valide ET distinct de toute empreinte d'accès du porteur) vit dans commun.js
 
 const journal = (ou, e) => console.error(`❌ [v2 banc-crochet] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
@@ -18,7 +19,7 @@ const journal = (ou, e) => console.error(`❌ [v2 banc-crochet] ${ou} (${(e && (
 const SURFACES_QUI_CONSERVENT = Object.freeze(['extension']);
 const surfaceAutorisee = req => { const p = req && req.v2 && req.v2.porteur; return Boolean(p) && typeof p.surface === 'string' && SURFACES_QUI_CONSERVENT.includes(p.surface); };
 
-/** Après /api/identifier.`analyse` est celle de la réponse ; `req.entree.imageUrls` les images de l'annonce. Rend undefined, tout de suite. */
+/** Après /api/identifier.`analyse` est celle de la réponse ; `req.entree` porte les images de l'annonce (ou, si des photos ont été reçues avant le scan, leurs octets). Rend undefined, tout de suite. */
 function apresIdentifier({ cfg, deps, req, scanId, analyse }) {
     try {
         if (!deps || typeof deps.detection !== 'function') return;                         // la production d'aujourd'hui : rien n'est conservé
@@ -31,7 +32,8 @@ function apresIdentifier({ cfg, deps, req, scanId, analyse }) {
         else return;                                                                        // introuvable, panne : rien
         let banc; try { banc = registre.obtenir('banc'); } catch { return; }                // aucun banc fourni : rien, sans bruit
         const id = String(scanId);
-        const imageUrls = Array.isArray(req.entree && req.entree.imageUrls) ? [...req.entree.imageUrls] : [];
+        // PHOTOS-MULTIPLES (7d) : si des photos ont été REÇUES pour ce scan, la détection reçoit leurs octets (`data:`), jamais une URL à télécharger
+        const imageUrls = req.entree && Array.isArray(imagesDeLaChaine(req.entree)) ? [...imagesDeLaChaine(req.entree)] : [];
         // sans consentement valide (et distinct de TOUTE empreinte d'accès du porteur) : ni détecteur, ni ligne, ni objet. La garde lit Mongo : chemin rare, jamais attendue.
         consentementAutorise(req, cfg).then(ok => (ok ? deps.detection({ scanId: id, imageUrls }) : null)).then(d => {
             if (!d || d.detectionSure !== true || !Buffer.isBuffer(d.imageRedressee)) return;
