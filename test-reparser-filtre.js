@@ -20,7 +20,7 @@ function monde() {
         { _id: 'h', carteId: 2, idProduct: 21, idExpansion: 5, preuve: 'set+numero' }
     ];
     const cartes = new Map([[1, { _id: 1, liens: { idProduct: [11, 12, 13, 14, 15, 16, 17], idMetacards: [77] } }], [2, { _id: 2, liens: { idProduct: [21], idMetacards: [88] } }]]);
-    const dedans = (f, d) => Object.entries(f).every(([k, v]) => v.$in.includes(d[k]));
+    const dedans = (f, d) => Object.entries(f).every(([k, v]) => '$in' in v ? v.$in.includes(d[k]) : ('$exists' in v ? (d[k] !== undefined) === v.$exists : false));
     return { lignes, cartes, M: {
         CarteProduit: {
             deleteMany: async f => { for (let i = lignes.length - 1; i >= 0; i--) if (dedans(f, lignes[i])) lignes.splice(i, 1); },
@@ -89,6 +89,21 @@ function monde() {
         verifier('le rejeu AJOUTE en fin ce qu\'il refait : sans correction, [100,200,501] devient [501,100,200] (le repère [0] bouge)', cartes.get(7).liens.idProduct, [501, 100, 200]);
         verifier('   restaurerOrdreLiens remet l\'ordre d\'AVANT (les ids présents gardent leur place, un id neuf s\'ajoute en fin)', await (async () => { cartes.get(7).liens.idProduct.push(777); await P.restaurerOrdreLiens(M3, regen.ordreAvant); return cartes.get(7).liens.idProduct; })(), [100, 200, 501, 777]);
         verifier('   un id d\'avant que le rejeu ne refait PAS disparaît (pas de lien sans ligne)', await (async () => { cartes.get(7).liens.idProduct = [501, 100]; await P.restaurerOrdreLiens(M3, regen.ordreAvant); return cartes.get(7).liens.idProduct; })(), [100, 501]);
+    }
+    // ── STAFF-ECRITURE (tour 1) : une ligne qui porte `variante` / `variantePreuve` (posée à la main par poser-variante-staff.js, joindre() ne la refabrique pas) n'est JAMAIS effacée ──
+    // Forme retenue : GARDER la ligne (pas de report). La ligne refaite par joindre() est un `$set` par champs (ecrire-jointure.js) : il laisse `variante` en place ; un report
+    // devrait relire la ligne effacée et la recopier, avec une fenêtre où elle n'existe pas. Garder ne peut rien perdre : au pire la ligne reste, nommée, pour une relecture.
+    {
+        const w = monde();
+        w.lignes.push({ _id: 'v1', carteId: 1, idProduct: 31, idExpansion: 5, preuve: 'set+numero', variante: 'staff', variantePreuve: 'étiquette lue' },
+            { _id: 'v2', carteId: 1, idProduct: 32, idExpansion: 5, preuve: 'set+numero', variantePreuve: 'seule' },
+            { _id: 'v3', carteId: 1, idProduct: 33, idExpansion: 5, preuve: 'set+numero', variante: 'normale' });
+        w.cartes.get(1).liens.idProduct.push(31, 32, 33);
+        const r = await effacerRefabricables(w.M, [1, 2], [5]);
+        verifier('STAFF : une ligne refabricable (set+numero) qui porte variante et/ou variantePreuve est GARDÉE ; les autres lignes refabricables sont effacées comme avant', w.lignes.map(l => l._id).sort(), ['c', 'd', 'e', 'f', 'g', 'v1', 'v2', 'v3']);
+        verifier('   elles comptent comme gardées et leurs liens.idProduct restent', [r.gardees, [31, 32, 33].every(i => w.cartes.get(1).liens.idProduct.includes(i)), w.cartes.get(1).liens.idMetacards], [7, true, [77]]);
+        const f = P.filtreDeRegeneration([1], [5]);
+        verifier('   le filtre exclut explicitement variante et variantePreuve', [f.variante, f.variantePreuve], [{ $exists: false }, { $exists: false }]);
     }
     // le câblage : collecteur-texte.js restaure l'ordre APRÈS la jointure
     verifier('collecteur-texte.js appelle restaurerOrdreLiens après la jointure', /if \(ordreAvant\) \{ const R = await restaurerOrdreLiens\(M, ordreAvant\)/.test(fs.readFileSync(path.join(DIR, 'collecteur-texte.js'), 'utf8')), true);
