@@ -44,6 +44,7 @@ const CRAWL_DELAY_MAX_S = 60;
 // `segments` : les plages de numérotation que les TÉMOINS couvrent (principal, secrètes) — chacune a un témoin en son sein ET un témoin à son plus grand
 // numéro (test-ptcgio.js le vérifie) ; au-delà, le numéro est « non couvert par un témoin » : il reste un trou, nommé.
 const t = (n, nom, imprime) => ({ n, nom, imprime });
+const pp = (idProduct, nom, numero, imprime, id) => ({ idProduct, nom, numero, imprime, id });   // une ligne `parProduit` (SCRYDEX-OCC) : tout ce qui a été LU à l'œil sur l'image du serveur
 const TABLE_PTCGIO = Object.freeze([
     { slug: 'EX-Trainer-Kit', id: 'tk1a', suffixe: 'A', segments: [[1, 10]], marque: 'symbole du EX Trainer Kit (Latias), dénominateur /10', temoins: [t(1, 'Bagon', '1/10'), t(4, 'Latias', '4/10'), t(10, 'Fire Energy', '10/10')] },
     { slug: 'EX-Trainer-Kit', id: 'tk1b', suffixe: 'O', segments: [[1, 10]], marque: 'symbole du EX Trainer Kit (Latios), dénominateur /10', temoins: [t(1, 'Electrike', '1/10'), t(2, 'Latios', '2/10'), t(10, 'Lightning Energy', '10/10')] },
@@ -124,8 +125,33 @@ const TABLE_PTCGIO = Object.freeze([
     { slug: 'Fusion-Strike', id: 'swsh8', segments: [[283, 284]], marque: 'symbole Fusion Strike, ©2021, dénominateur /264 ; les n° 283 et 284 sont les énergies dorées Plante et Feu (secrètes)',
       temoins: [t(1, 'Caterpie', '001/264'), t(283, 'Grass Energy', '283/264'), t(284, 'Fire Energy', '284/264')], lu: '2026-10-17' },
     { slug: 'Rising-Rivals', id: 'pl2', segments: [[84, 84]], marque: 'symbole Rising Rivals, ©2009, dénominateur /111 ; le n° 84 imprime « 84/111 »',
-      temoins: [t(1, 'Arcanine Lv.53', '1/111'), t(50, 'Starmie Lv.44', '50/111'), t(84, 'Trapinch Lv.14', '84/111')], lu: '2026-10-17' }
-].map(l => Object.freeze({ lu: '2026-10-10', ...l })));
+      temoins: [t(1, 'Arcanine Lv.53', '1/111'), t(50, 'Starmie Lv.44', '50/111'), t(84, 'Trapinch Lv.14', '84/111')], lu: '2026-10-17' },
+    // ── SCRYDEX-OCC (2026-10-17) : la CLASSIC COLLECTION de 30th Celebration, servie par images.scrydex.com sous `pokemon/me55c-<n>[lettre]/large` (images.pokemontcg.io répond 404 pour me55c).
+    // 30 images ouvertes à l'œil le 2026-10-17 (654×914, bordure dorée, logo « 30 » = Pikachu jaune, « 3 » et « 0 » rouges) : 29 portent le numéro imprimé ET le nom de NOTRE produit.
+    // Les produits n'ont ni numéro de fiche ni numéro Cardmarket (« Charizard-30CBS-4 » : le numéro d'ORIGINE est dans le slug) ; trois cartes s'impriment « 106 » (Shining Celebi, Palkia LV.X,
+    // M Gardevoir-EX) et deux « 11 » : l'adresse se prouve donc PAR PRODUIT (`parProduit` : idProduct, nom, numéro d'origine, numéro imprimé lu sur l'image, identifiant du serveur) ET par le NOM
+    // de la carte au moment du plan. Un produit absent de cette liste reste un trou ; `refuses` nomme celui que l'image contredit.
+    { slug: '30th-Celebration', id: 'me55c', hote: HOTE_SCRYDEX_NOM, idServeur: 'me55c', numeroDe: 'produit', segments: [], lu: '2026-10-17',
+      marque: 'Classic Collection de 30th Celebration (réimpression, pas la carte d\'origine) : bordure dorée et logo « 30 » (Pikachu jaune, « 3 » et « 0 » rouges) imprimés sur chaque carte ; numéro imprimé = numéro de la carte d\'origine',
+      parProduit: [
+          pp(907939, 'Pikachu', '58', '58/102', 'me55c-58'), pp(907940, 'Charizard', '4', '4/102', 'me55c-4'), pp(907941, 'Misty', '18', '18/132', 'me55c-18'),
+          pp(907942, 'Erika\'s Jigglypuff', '69', '69/132', 'me55c-69'), pp(907943, 'Sneasel', '25', '25/111', 'me55c-25'), pp(907944, 'Shining Celebi', '106', '106/105', 'me55c-106'),
+          pp(907945, 'Lugia', '149', '149/147', 'me55c-149'), pp(907946, 'Delcatty', '5', '5/109', 'me55c-5'), pp(907947, 'Dark Tyranitar', '19', '19/109', 'me55c-19'),
+          pp(907948, 'Scizor ex', '108', '108/115', 'me55c-108'), pp(907949, 'Metagross', '11', '11/113', 'me55c-11'), pp(907950, 'Palkia LV.X', '106', '106/106', 'me55c-106p'),
+          pp(907951, 'Uxie', '43', '43/146', 'me55c-43'), pp(907952, 'Crobat G', '47', '47/127', 'me55c-47'), pp(907953, 'Gengar', '94', '94/102', 'me55c-94'),
+          pp(907956, 'N', '101', '101/101', 'me55c-101'),
+          pp(907957, 'Rayquaza-EX', '85', '85/124', 'me55c-85'), pp(907959, 'M Gardevoir-EX', '106', '106/160', 'me55c-106m'), pp(907960, 'Greninja BREAK', '41', '41/122', 'me55c-41'),
+          pp(907961, 'Solgaleo-GX', '89', '89/149', 'me55c-89'), pp(907962, 'Buzzwole-GX', '57', '57/111', 'me55c-57'), pp(907963, 'Pikachu & Zekrom-GX', '33', '33/181', 'me55c-33'),
+          pp(907964, 'Zacian V', '138', '138/202', 'me55c-138'), pp(907965, 'Raikou', '50', '50/185', 'me55c-50'), pp(907966, 'Mew VMAX', '114', '114/264', 'me55c-114'),
+          pp(907967, 'Arceus VSTAR', '123', '123/172', 'me55c-123'), pp(907968, 'Magikarp', '203', '203/193', 'me55c-203')],
+      // « Genesect-EX-30CPLB-97 » : le serveur sert sous me55c-11g une Genesect-EX qui imprime 11/101 (vue le 2026-10-17), jamais 97 — le produit n'est pas prouvé, il reste un trou
+      // les deux moitiés de Darkrai & Cresselia LEGEND (me55c-99 et me55c-100, 99/102 et 100/102 imprimés, justes à l'œil) sont UNE carte (un document `cartes`) et DEUX produits ; la fiche du site n'a
+      // pas de numéro et sert la première image du set aux deux produits (simulation, règle du site importée : 907954 reçoit me55c-100). Aucune des deux n'est écrite : un trou est honnête, la moitié d'une autre carte non.
+      refuses: [{ idProduct: 907958, nom: 'Genesect-EX', motif: 'numero-contredit-par-l-image', vu: 'me55c-11g imprime 11/101, le produit porte 97' },
+          { idProduct: 907954, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-99 : 99/102 juste ; une fiche sans numéro pour les deux moitiés' },
+          { idProduct: 907955, nom: 'Darkrai & Cresselia LEGEND', motif: 'deux-produits-une-fiche', vu: 'me55c-100 : 100/102 juste ; une fiche sans numéro pour les deux moitiés' }],
+      ouvertes: 30 }
+].map(l => Object.freeze({ lu: '2026-10-10', ...l, ...(l.parProduit ? { temoins: l.parProduit.map(e => t(Number(e.numero), e.nom, e.imprime)) } : {}) })));   // une ligne par produit : chaque produit prouvé EST un témoin
 
 const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
 const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
@@ -133,6 +159,7 @@ const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
 /** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
 function lireNumero(ligne, numeroFiche) {
     if (!ligne || numeroFiche == null) return null;
+    if (ligne.parProduit) return null;           // une ligne PAR PRODUIT (SCRYDEX-OCC) n'adresse jamais par un numéro : seul l'idProduct prouvé fait l'adresse (planifierPtcgio)
     const s = String(numeroFiche).trim();
     if (ligne.numeroDe === 'fiche') return /^[1-9]\d{0,2}$/.test(s) ? Number(s) : null;   // numéro d'ORIGINE : sans zéros de tête (« 002 » est le tirage principal, ligne cel25)
     const m = ligne.suffixe ? new RegExp(`^(\\d{1,3})${ligne.suffixe}$`).exec(s) : ligne.prefixe ? new RegExp(`^${ligne.prefixe}(\\d{1,3})$`).exec(s) : /^0*(\d{1,3})$/.exec(s);
@@ -162,6 +189,12 @@ function urlHires(id, n, jeton = null, suffixe = '') {
     if (!jeton) return `${HOTE}/${id}/${n}${suffixe}_hires.png`;
     if (!JETONS_URL.includes(jeton.prefixe) || !Number.isInteger(jeton.largeur) || jeton.largeur < 1 || jeton.largeur > 3) throw new Error(`${SOURCE} : jeton d'URL « ${jeton.prefixe} » hors de ce que le client autorise (${JETONS_URL.join(', ')})`);
     return `${HOTE}/${id}/${jeton.prefixe}${String(n).padStart(jeton.largeur, '0')}${suffixe}_hires.png`;
+}
+
+/** L'adresse d'une image du serveur d'images scrydex : `/pokemon/<set énuméré>-<n>[lettre]/large`. Un identifiant hors des sets énumérés LÈVE (jamais une adresse bâtie sur autre chose). */
+function urlScrydex(id) {
+    if (!new RegExp(`^(?:${SETS_SCRYDEX.join('|')})-[1-9]\\d{0,2}[a-z]?$`).test(String(id))) throw new Error(`${SOURCE} : identifiant « ${id} » hors de ce que le client autorise (${HOTE_SCRYDEX_NOM} : ${SETS_SCRYDEX.join(', ')}-<n>)`);
+    return `${HOTE_SCRYDEX}/pokemon/${id}/large`;
 }
 
 // Les réimpressions MARQUÉES (tampon) : sans set dédié qui montre la marque, ce serait un substitut. ÉNUMÉRÉ, par le nom Cardmarket du set.
@@ -205,6 +238,24 @@ function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
         const numero = x.numeroFiche ?? x.numeroCm ?? null;       // celui que l'entrée `cartes.images` portera (comme les autres sources)
         const base = { carteId: x.carte._id, nomEn: x.carte.nomEn ?? null, numero, idProduct: x.idProduct };
         if (V.verdict !== 'prouve') { restes.push({ ...base, motif: V.verdict }); continue; }
+        // 🔑 SCRYDEX-OCC (2026-10-17) : un set dont les lignes sont PAR PRODUIT (30th Celebration, Classic Collection) s'adresse par l'idProduct prouvé À L'ŒIL, jamais par un numéro — les produits n'ont ni numéro
+        // de fiche ni numéro Cardmarket, et trois cartes s'impriment « 106 ». Deux éléments : l'idProduct de la table ET le NOM de la carte ; un numéro de fiche ou Cardmarket qui contredit refuse.
+        if (lignes.length && lignes.every(l => l.parProduit)) {
+            const refuse = lignes.flatMap(l => l.refuses || []).find(r => r.idProduct === x.idProduct);
+            if (refuse) { restes.push({ ...base, motif: refuse.motif }); continue; }
+            const trouve = lignes.map(l => ({ l, e: l.parProduit.find(z => z.idProduct === x.idProduct) })).find(h => h.e);
+            if (!trouve) { restes.push({ ...base, motif: 'produit-hors-table' }); continue; }
+            const { l, e } = trouve, b2 = { ...base, numero: e.numero };
+            if (normaliserNom(e.nom) !== normaliserNom(x.carte.nomEn)) { restes.push({ ...b2, motif: 'numero-nom-contredit' }); continue; }
+            if ([x.numeroFiche, x.numeroCm].some(v => v != null && (!/\d+/.test(String(v)) || Number(/\d+/.exec(String(v))[0]) !== Number(e.numero)))) { restes.push({ ...b2, motif: 'numero-contradictoire' }); continue; }
+            if (T.dejaServi(x.carte, slug, e.numero)) continue;
+            const cleP = `${x.carte._id}|${l.id}|${x.idProduct}`;
+            if (vus.has(cleP)) continue;
+            vus.add(cleP);
+            plan.push({ ...b2, ligneId: l.id, n: Number(e.numero), url: urlScrydex(e.id), voie: 'set-prouve+produit',
+                preuve: `${l.hote} ${e.id} (Classic Collection) ; produit ${x.idProduct} « ${x.carte.nomEn} » = carte n°${e.numero} du set d'origine, numéro imprimé « ${e.imprime} » et nom lus à l'œil sur l'image ; set prouvé le ${l.lu} sur ${l.ouvertes ?? l.parProduit.length} images ouvertes ; marque : ${l.marque}` });
+            continue;
+        }
         if (T.dejaServi(x.carte, slug, numero)) continue;
         // 🔑 Le numéro qui fait l'adresse est celui du PRODUIT Cardmarket (`numeroCm`) — SAUF sur une ligne `numeroDe: 'fiche'` (Classic Collection de CEL : Cardmarket ne numérote pas ces
         // réimpressions, ou écrit « BS 15 »), où c'est le numéro de FICHE sans zéros ET le nom de la carte qui font l'adresse.
@@ -358,7 +409,7 @@ function planRetraitPtcgio(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, hoteDeLUrl: H.hoteDeLUrl, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
+    SOURCE, HOTE, HOTE_NOM, HOTE_SCRYDEX, HOTE_SCRYDEX_NOM, SETS_SCRYDEX, hoteDeLUrl: H.hoteDeLUrl, urlScrydex, transportFetch, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
     TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, numerosDuSet, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

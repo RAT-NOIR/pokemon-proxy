@@ -7,7 +7,7 @@
 //   · un des deux hôtes d'images (collecte-cartes/hotes-images-ptcgio.js — la liste n'est pas recopiée ici) ;
 //   · le NOM nu « pokemontcg.io » / « scrydex.com » dans une phrase ou une valeur (SOURCE = 'pokemontcg.io'), qui n'est pas une adresse :
 //     ni précédé de « :// », ni suivi d'un « / ».
-// Tout le reste — api.pokemontcg.io, api.scrydex.com, www.scrydex.com, un sous-domaine, un hôte d'images suivi d'un suffixe (« …io.evil.example »),
+// Tout le reste — l'hôte d'API de pokemontcg.io, celui de Scrydex, leur site public, un sous-domaine quelconque, un hôte d'images suivi d'un suffixe (« …io.evil.example »),
 // une adresse nue avec chemin — est une violation, nommée avec son fichier et sa ligne.
 // Portée honnête : le banc lit des TEXTES. Une adresse bâtie à l'exécution par morceaux ne s'y lit pas ; c'est la moitié exécution qui la refuse.
 const fs = require('fs');

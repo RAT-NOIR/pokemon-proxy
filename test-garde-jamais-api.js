@@ -48,7 +48,7 @@ const urlScry = (n = 11) => `${IMG_SCRY}/pokemon/me55c-${n}/large`;
     // 1.c tout le reste lève AVANT toute requête
     const interdites = [
         [API_PTCG + '/v2/cards', 'API pokemontcg.io'], [API_PTCG + '/v2/sets', 'API pokemontcg.io (sets)'], [API_SCRY + '/pokemon/v1/en/cards', 'API scrydex'],
-        [adresse('https', '://www.scry', 'dex.com/'), 'www.scrydex.com'], [adresse('https', '://scry', 'dex.com/'), 'scrydex.com nu'], [adresse('https', '://cdn.scry', 'dex.com/x.png'), 'autre sous-domaine'],
+        [adresse('https', '://www.scry', 'dex.com/'), 'site public de Scrydex'], [adresse('https', '://scry', 'dex.com/'), 'domaine nu de Scrydex'], [adresse('https', '://cdn.scry', 'dex.com/x.png'), 'autre sous-domaine'],
         [adresse('https', '://api.images.scry', 'dex.com/pokemon/me55c-1/large'), 'sous-domaine de images.'],
         [adresse('https', '://images.scry', 'dex.com.evil.example/pokemon/me55c-1/large'), 'hôte déguisé'], [adresse('http', '://images.scry', 'dex.com/pokemon/me55c-1/large'), 'http clair'],
         [adresse('https', '://images.scry', 'dex.com/v1/pokemon/cards'), 'chemin d\'API sur l\'hôte d\'images'], [adresse('https', '://images.scry', 'dex.com/pokemon/inconnu-1/large'), 'set non énuméré'],
@@ -87,7 +87,7 @@ const urlScry = (n = 11) => `${IMG_SCRY}/pokemon/me55c-${n}/large`;
         const trouve = (nom, texte) => G.analyserTexte(nom, texte).map(v => [v.fichier, v.ligne]);
         verifier('NON : une adresse d\'API pokemontcg.io, ligne 3, est nommée avec son fichier', trouve('faux/appel.js', `const a = 1;\n// rien\nfetch('${API_PTCG}/v2/cards');\n`), [['faux/appel.js', 3]]);
         verifier('NON : l\'API Scrydex, un sous-domaine quelconque et l\'apex sont refusés', trouve('faux/s.js', [API_SCRY + '/v1', adresse('https', '://www.scry', 'dex.com/'), adresse('https', '://scry', 'dex.com'), adresse('https', '://cdn.scry', 'dex.com/a')].join('\n')), [['faux/s.js', 1], ['faux/s.js', 2], ['faux/s.js', 3], ['faux/s.js', 4]]);
-        verifier('NON : l\'hôte écrit sans schéma (api.pokemontcg.io, api.scrydex.com) est refusé aussi', trouve('faux/h.js', adresse("const H = '", 'api', '.pokemontcg', ".io';\nconst K = 'api.scry", "dex.com';")), [['faux/h.js', 1], ['faux/h.js', 2]]);
+        verifier('NON : l\'hôte d\'API écrit sans schéma (les deux fournisseurs) est refusé aussi', trouve('faux/h.js', adresse("const H = '", 'api', '.pokemontcg', ".io';\nconst K = 'api.scry", "dex.com';")), [['faux/h.js', 1], ['faux/h.js', 2]]);
         verifier('NON : un hôte d\'images déguisé (suffixe ajouté) est refusé', trouve('faux/d.js', `${IMG_SCRY}.evil.example/x\n`), [['faux/d.js', 1]]);
         verifier('NON : pokemontcg.io nu suivi du chemin /v2 (API) est refusé', trouve('faux/v.md', adresse('GET pokemontcg', '.io/v2/cards')), [['faux/v.md', 1]]);
         verifier('OUI : les deux hôtes d\'images, le nom de source et la prose ne sont pas des adresses d\'API', trouve('faux/ok.js', [`${IMG_PTCG}/cel25/5_hires.png`, `${IMG_SCRY}/pokemon/me55c-11/large`, "const SOURCE = 'pokemontcg.io';", "// jamais l'API Scrydex, jamais d'API : serveur d'images seulement", 'la source interne est pokemontcg.io (lot ptcgio-2026-10)'].join('\n')), []);

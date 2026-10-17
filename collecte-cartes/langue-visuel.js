@@ -18,6 +18,7 @@
 //     formats : 9 japonais sur 36. Écrire `en` sur un format serait affirmer sans preuve : ce qui ne se tranche pas
 //     vaut `null`, et `null` n'est pas « anglais » — le site l'affiche comme avant, faute de mieux.
 // ⚠️ La PREUVE s'écrit à côté du verdict, verdict ou pas : `null` sans raison serait indistinguable d'un oubli.
+const { hoteDeLUrl } = require('./hotes-images-ptcgio');
 const FORMATS_JAPONAIS = new Map([
     ['868×1212', 'scans artofpkm 9 386 · Bulbapedia lus japonais à l\'œil'],
     ['748×1044', 'scans artofpkm 6 631 · Bulbapedia lus japonais à l\'œil'],
@@ -44,6 +45,14 @@ function langueDuVisuel(im) {
     }
     // ➕ 2026-10-10 — images.pokemontcg.io : un serveur de cartes ANGLAISES (le set est celui d'un tirage occidental, prouvé à l'œil par
     // set, collecte-cartes/ptcgio.js `temoins`) ; la collecte n'écrit que sous un set dont le tirage est `intl`.
+    // ➕ 2026-10-17 (SCRYDEX-OCC) : la même source interne s'écrit aussi depuis le second serveur d'images (urlOriginal). Par ce qu'elle AUTORISE : une adresse d'origine qui n'est pas l'un des
+    // DEUX hôtes d'images (collecte-cartes/hotes-images-ptcgio.js) n'a pas de règle (null) ; sans adresse (appel historique du collecteur), la règle d'avant. La preuve de langue est PUBLIQUE
+    // (le site la lit) : elle ne nomme jamais l'hôte, qui se lit dans `urlOriginal` et dans `preuve` (internes).
+    if (im.source === 'pokemontcg.io' && im.urlOriginal != null) {
+        const hote = hoteDeLUrl(im.urlOriginal);
+        if (!hote) return { langue: null, preuve: 'pokemontcg.io : adresse d\'origine hors des deux hôtes d\'images, sans règle de langue' };
+        if (hote !== 'images.pokemontcg.io') return { langue: 'en', preuve: 'pokemontcg.io, second serveur d\'images du même jeu de données : scan de l\'impression anglaise (30 images de la Classic Collection de 30th Celebration ouvertes à l\'œil le 2026-10-17, toutes en anglais)' };
+    }
     if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (146 témoins écrits dans la table, 155 images ouvertes à l\'œil les 2026-10-08, 2026-10-10, 2026-10-12, 2026-10-13 et 2026-10-17, toutes en anglais)' };
     // ➕ 2026-10-11 — pikaqian.com : des copies des scans officiels CHINOIS (texte en sinogrammes simplifiés lisible sur les 3 images ouvertes à l'œil
     // le 2026-10-10, MESURE-PIKAQIAN.md §5) ; la collecte n'écrit que sous un set au tirage `zh-hans`. Par ce qu'elle autorise : une autre langue source n'a pas de règle.

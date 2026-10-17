@@ -213,7 +213,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                     ...(remplacerJumeau && p.jumeau ? { jumeauRemplace: p.jumeau } : {}),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
-                    langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
+                    langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en', urlOriginal: p.url })),
                     attribution: P.MENTION, mention: P.MENTION, lot: LOT, telechargeLe: new Date(), etat: 'ok'
                 }, $unset: { erreur: 1 }
             }, { upsert: true });
@@ -372,8 +372,8 @@ if (inconnus.length || modes.length !== 1 || (args.includes('--ecrire') && !args
             if (args.includes('--fichiers')) for (const p of Pl.plan) console.log(`      ${p.url}  ← ${p.nomEn} ${p.numero} (jumeau ${p.jumeau?.cleR2})`);
             for (const r of Pl.restes) console.log(`      reste : ${r.nomEn ?? r.carteId} ${r.numero} — ${r.motif}`);
         }
-        const requetes = prouves + 1;
-        console.log(`\nSIMULATION (zéro requête) : ${prouves} fichiers pour ${jumeaux} carte×numéro à scan jumeau (${produits} produits au set) · ${produitsRemplaces} produits dont le visuel serait remplacé · ${requetes} requêtes vers ${P.HOTE_NOM} (1 robots.txt + ${prouves} images, 0 réessai) · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil(requetes * P.CADENCE_MS / 60000)} min · autres hôtes : 0`);
+        const hotes = [...new Set(slugs.flatMap(sl => P.lignesDe(sl)).map(l => l.hote || P.HOTE_NOM))]; const requetes = prouves + hotes.length;   // un robots.txt PAR HÔTE (2026-10-17)
+        console.log(`\nSIMULATION (zéro requête) : ${prouves} fichiers pour ${jumeaux} carte×numéro à scan jumeau (${produits} produits au set) · ${produitsRemplaces} produits dont le visuel serait remplacé · ${requetes} requêtes vers ${hotes.join(' + ')} (${hotes.length} robots.txt + ${prouves} images, 0 réessai) · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil(requetes * P.CADENCE_MS / 60000)} min · autres hôtes : 0`);
         await fermer(); return;
     }
     if (args.includes('--plan')) {
@@ -386,8 +386,8 @@ if (inconnus.length || modes.length !== 1 || (args.includes('--ecrire') && !args
             const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
             console.log(`${slug.padEnd(42)} ${P.lignesDe(slug).map(l => l.id).join('+').padEnd(10)} produits ${String(Pl.produits).padStart(4)} · trous ${String(Pl.trous).padStart(4)} · PROUVÉS (fichiers) ${String(Pl.plan.length).padStart(4)} · dont avec note de variante ${String(Pl.plan.filter(p => p.noteVariante).length).padStart(3)} · restes ${JSON.stringify(motifs)}`);
         }
-        const requetes = prouves + 1;
-        console.log(`\nSIMULATION (zéro requête) : ${prouves} fichiers sur ${trous} trous (${produits} produits) · ${requetes} requêtes vers ${P.HOTE_NOM} (1 robots.txt + ${prouves} images, 0 réessai) · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil(requetes * P.CADENCE_MS / 60000)} min · autres hôtes : 0`);
+        const hotes = [...new Set(slugs.flatMap(sl => P.lignesDe(sl)).map(l => l.hote || P.HOTE_NOM))]; const requetes = prouves + hotes.length;   // un robots.txt PAR HÔTE (2026-10-17)
+        console.log(`\nSIMULATION (zéro requête) : ${prouves} fichiers sur ${trous} trous (${produits} produits) · ${requetes} requêtes vers ${hotes.join(' + ')} (${hotes.length} robots.txt + ${prouves} images, 0 réessai) · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil(requetes * P.CADENCE_MS / 60000)} min · autres hôtes : 0`);
         await fermer(); return;
     }
     // --ecrire : sous lot-additif.js, par le coordinateur. Verrou global pris et LIÉ au client ; arrêt au premier défi.
