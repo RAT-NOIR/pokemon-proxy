@@ -13,7 +13,8 @@ const BALAYAGE_MS = 30 * 1000;
 function creerPhotosRecues({ horloge = Date.now } = {}) {
     const parPorteur = new Map();                       // cle de porteur -> [{ photoId, index, octets, expireA, n }] (ordre de dépôt : la plus ancienne en tête)
     let ordre = 0, minuteur = null;
-    const total = l => l.reduce((s, p) => s + p.octets.length, 0);
+    const taillePhoto = p => p.octets.length + (p.modele ? p.modele.length : 0);          // la photo ET sa version réduite pour le modèle : les deux sont en mémoire, les deux comptent dans les bornes
+    const total = l => l.reduce((s, p) => s + taillePhoto(p), 0);
     const oublier = (cle, l) => { if (!l.length) parPorteur.delete(cle); };
     function purgerExpirees() {
         const maintenant = horloge();
@@ -25,20 +26,20 @@ function creerPhotosRecues({ horloge = Date.now } = {}) {
         minuteur.unref();                               // il ne retient jamais le processus
     }
     /** Retient une photo ; rend son identifiant. Lève { code: 'trop-grosse' } au-delà de 2 Mio (la route l'a déjà refusée avant : ceinture et bretelles). */
-    function deposer(cle, index, octets) {
+    function deposer(cle, index, octets, modele) {                // `modele` (facultatif) : la version réduite (800 px) que reçoit le modèle ; sans elle, `octets` sert aux deux usages
         if (!Buffer.isBuffer(octets) || octets.length === 0) throw Object.assign(new Error('photo'), { code: 'format' });
         if (octets.length > PHOTO_OCTETS_MAX) throw Object.assign(new Error('photo'), { code: 'trop-grosse' });
         purgerExpirees();
         const photoId = crypto.randomBytes(16).toString('hex');
         let l = parPorteur.get(cle); if (!l) { l = []; parPorteur.set(cle, l); }
-        l.push({ photoId, index, octets, expireA: horloge() + TTL_S * 1000, n: ++ordre });
+        l.push({ photoId, index, octets, modele: Buffer.isBuffer(modele) && modele.length ? modele : null, expireA: horloge() + TTL_S * 1000, n: ++ordre });
         while (l.length > PHOTOS_MAX || total(l) > OCTETS_MAX) l.shift();                   // la plus ancienne de CE porteur est oubliée
         let globale = 0; for (const x of parPorteur.values()) globale += total(x);
         while (globale > GLOBAL_OCTETS_MAX) {                                                  // la plus ancienne du SERVICE
             let cibleCle = null, cibleN = Infinity;
             for (const [k, x] of parPorteur) if (x.length && x[0].n < cibleN) { cibleN = x[0].n; cibleCle = k; }
             if (cibleCle === null) break;
-            const x = parPorteur.get(cibleCle); globale -= x[0].octets.length; x.shift(); oublier(cibleCle, x);
+            const x = parPorteur.get(cibleCle); globale -= taillePhoto(x[0]); x.shift(); oublier(cibleCle, x);
         }
         armerBalayage();
         return photoId;
@@ -48,7 +49,7 @@ function creerPhotosRecues({ horloge = Date.now } = {}) {
         const l = parPorteur.get(cle); if (!l) return null;
         const i = l.findIndex(p => p.photoId === photoId); if (i < 0) return null;
         const [p] = l.splice(i, 1); oublier(cle, l);
-        return p.expireA > horloge() ? { index: p.index, octets: p.octets } : null;
+        return p.expireA > horloge() ? { index: p.index, octets: p.octets, modele: p.modele } : null;
     }
     function taille(cle) { purgerExpirees(); const l = parPorteur.get(cle) || []; return { photos: l.length, octets: total(l) }; }
     function arreter() { if (minuteur) { clearInterval(minuteur); minuteur = null; } parPorteur.clear(); }
@@ -65,7 +66,8 @@ const magasin = (deps) => (deps && deps.photosRecues && typeof deps.photosRecues
 function imagesDeLaChaine(entree) {
     const recues = entree && Array.isArray(entree.photosRecues) ? entree.photosRecues : [];
     if (!recues.length) return entree ? entree.imageUrls : [];
-    return [...recues].sort((a, b) => a.index - b.index).map(p => `data:image/jpeg;base64,${p.octets.toString('base64')}`);
+    // Ce que reçoit le MODÈLE : la version réduite à 800 px au plus de grand côté (la définition f800 que Vinted sert aujourd'hui), jamais la photo du banc (1 600 px). Encodée en base64 UNE fois par scan (mémorisée sur la photo).
+    return [...recues].sort((a, b) => a.index - b.index).map(p => p.dataUrl || (p.dataUrl = `data:image/jpeg;base64,${(p.modele || p.octets).toString('base64')}`));
 }
 
 module.exports = { creerPhotosRecues, magasin, imagesDeLaChaine };
