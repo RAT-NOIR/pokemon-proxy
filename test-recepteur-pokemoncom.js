@@ -85,6 +85,8 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         const pInc = diagP('Previous Results 3 of 15 Next Results', 7);
         verifier('« 3 of 15 » + 7 cartes : incomplète', [pInc.pageCourante, pInc.etat, pInc.complet], [3, 'incomplet', false]);
         verifier('dernière page avec 13 cartes (plus que la taille observée) : incomplète ; avec 0 carte : incomplète', [diagP('15 of 15', 13).complet, diagP('15 of 15', 0).complet], [false, false]);
+        verifier('AVANT-DERNIÈRE page : « 14 of 15 » + 5 cartes -> incomplète ; « 1 of 2 » + 11 cartes -> incomplète ; « 14 of 15 » + 12 -> complète', [diagP('14 of 15', 5).complet, diagP('1 of 2', 11).complet, diagP('14 of 15', 12).complet, diagP('1 of 2', 12).complet], [false, false, true, true]);
+        verifier('« 10003 of 15 » (chiffre collé devant) : illisible, jamais lu « 0003 of 15 » = page 3', [diagP('10003 of 15', 12).pageCourante, diagP('10003 of 15', 12).paginationLisible], [null, false]);
         verifier('page 2 sur 15 avec 12 cartes : complète ; avec 11 : incomplète', [diagP('2 of 15', 12).complet, diagP('2 of 15', 11).complet], [true, false]);
         for (const [nom, texte] of [['aucun motif', 'Previous Results Next Results'], ['N > M', '16 of 15'], ['N = 0', '0 of 15'], ['M absurde (5 chiffres)', '1 of 99999'], ['M au-delà de la borne saine (6000)', '1 of 6000'], ['vide', ''], ['sans le mot of', '1 / 15']]) {
             const x = R.diagnostiquer(releve({ pagination: texte, compteur: '', cartes: cartesN(12) }));

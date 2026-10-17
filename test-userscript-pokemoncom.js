@@ -60,7 +60,9 @@ const el = (o = {}) => ({
     ...o
 });
 const SEL = { nom: 'h1, h2, h3, h4, h5, h6, [class*="name"]' };
-const SEL_PAGINATION = '#cards-load-more, [class*="pagination"], nav[aria-label*="agination"]';
+// la pagination réelle (#cards-load-more) est cherchée D'ABORD ; les anciens motifs ne servent qu'en repli (un élément antérieur du document ne doit pas la masquer)
+const SEL_PAGINATION_VRAI = '#cards-load-more';
+const SEL_PAGINATION_REPLI = '[class*="pagination"], nav[aria-label*="agination"]';
 const SEL_CASES = 'input[type="checkbox"][name]';
 const CHEMIN_SERIE = '/us/pokemon-tcg/pokemon-cards/series';
 // une carte du DOM fabriqué : le conteneur (le lien <a>) porte son href, l'image son nom de fichier ; `lien: null` = pas de lien
@@ -69,7 +71,7 @@ const cartePage = (n, { nom = `Carte ${n}`, code = 'sm2', numero = String(n), li
     return el({ alt, src, currentSrc: src, _conteneur: conteneur });
 };
 const caseForm = (name, libelle, { id = '', checked = false, dansLabel = false } = {}) => el({ name, id, checked, _libelle: libelle, closest(s) { return dansLabel && s === 'label' ? el({ textContent: ` ${libelle}\n` }) : null; } });
-function fabriquerMonde({ sansZone = false, bodyHtml = '<body>CORPS-ENTIER</body>', cartes = [cartePage(1), cartePage(2), cartePage(3)], reponse = { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'page--x.json', diagnostic: { cartes: 3, annonce: 3, complet: true, sansNumero: 0, sansImage: 0 } }) }, erreur = null, zoneHtml = '<div class="results">3 cartes</div>', compteur = '3 cards', pathname = '/us/pokemon-tcg/pokemon-cards/', paginationTexte = ' Page 1 of 1 \n Next ', cases = [], libelles = {}, selectsPage = null, dansZone = [] } = {}) {
+function fabriquerMonde({ sansZone = false, bodyHtml = '<body>CORPS-ENTIER</body>', cartes = [cartePage(1), cartePage(2), cartePage(3)], reponse = { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'page--x.json', diagnostic: { cartes: 3, annonce: 3, complet: true, sansNumero: 0, sansImage: 0 } }) }, erreur = null, zoneHtml = '<div class="results">3 cartes</div>', compteur = '3 cards', pathname = '/us/pokemon-tcg/pokemon-cards/', paginationTexte = ' Page 1 of 1 \n Next ', cases = [], libelles = {}, selectsPage = null, dansZone = [], leurre = null, repliTexte = null } = {}) {
     const appels = [], acces = { cookie: 0 };
     const zone = el({ outerHTML: zoneHtml, selAll: { img: cartes }, contains(e) { return dansZone.includes(e); } });
     const docRacine = el({ title: 'Pokémon Cards | Pokemon.com', body: el({ textContent: `Search ${compteur} found`, outerHTML: bodyHtml }) });
@@ -79,7 +81,8 @@ function fabriquerMonde({ sansZone = false, bodyHtml = '<body>CORPS-ENTIER</body
     const zoneSel = ['[class*="card-results"]', '[class*="results"]', 'main'];
     docRacine.querySelector = s => {
         if (!sansZone && s === zoneSel[0]) return zone;
-        if (s === SEL_PAGINATION) return paginationTexte === null ? null : el({ textContent: paginationTexte });
+        if (s === SEL_PAGINATION_VRAI) return paginationTexte === null ? null : el({ textContent: paginationTexte });
+        if (s === SEL_PAGINATION_REPLI) return leurre === null ? (repliTexte === null ? null : el({ textContent: repliTexte })) : el({ textContent: leurre });
         const lab = /^label\[for="([A-Za-z0-9_-]+)"\]$/.exec(s);
         if (lab && libelles[lab[1]] !== undefined) return el({ textContent: libelles[lab[1]] });
         return null;
@@ -138,9 +141,9 @@ const cliquer = w => bouton(w).ecouteurs.click({});
     w = fabriquerMonde({ compteur: '197 cards', reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: 197, complet: null, etat: 'pagine', pagine: true, sansNumero: 0, sansImage: 0 } }) } });
     lancer(w); cliquer(w); await attendre(40);
     verifier('page PAGINÉE (etat pagine) : jamais « incomplète » ; « compteur = total (197) ; cette page montre 3 cartes — normal si paginé : relève chaque page »', [/incomplète/i.test(texte(w)), /compteur = total \(197\) ; cette page montre 3 cartes — normal si paginé : relève chaque page/.test(texte(w))], [false, true]);
-    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: null, complet: null, etat: 'compteur-non-lu', pagine: true, sansNumero: 0, sansImage: 0 } }) } });
+    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: null, complet: null, etat: 'compteur-non-lu', pagine: true, paginationLisible: false, pageCourante: null, pagesTotal: null, sansNumero: 0, sansImage: 0 } }) } });
     lancer(w); cliquer(w); await attendre(40);
-    verifier('compteur illisible : le panneau dit « compteur non lu » (pas « complet »)', [/compteur non lu/i.test(texte(w)), /✅ page complète/i.test(texte(w))], [true, false]);
+    verifier('« N of M » illisible : le panneau dit « pagination illisible », jamais « compteur non lu » ni « complet »', [/pagination illisible/i.test(texte(w)), /compteur non lu/i.test(texte(w)), /✅ page complète/i.test(texte(w))], [true, false, false]);
 
     // html borné
     w = fabriquerMonde({ zoneHtml: '<div>' + 'x'.repeat(R.HTML_MAX + 5000) + '</div>' });
@@ -231,10 +234,16 @@ const cliquer = w => bouton(w).ecouteurs.click({});
     verifier('bornes : 500 extensions, libellés à 200 ; 30 select, 100 options à 200', [gr.extensions.length, gr.extensions[0].libelle.length, gr.selects.length, gr.selects[0].options.length, gr.selects[0].options[0].length], [500, 200, 30, 100, 200]);
     verifier('… et le corps borné passe la validation du récepteur', R.validerReleve(gr).ok, true);
 
-    // pagination : l'ancien sélecteur reste en repli (le mock ne répond qu'à la liste complète des sélecteurs) ; absente -> chaîne vide
+    // pagination : #cards-load-more d'abord ; l'ancien sélecteur reste en repli ; absente -> chaîne vide
     w = fabriquerMonde({ paginationTexte: null });
     lancer(w); cliquer(w); await attendre(40);
     verifier('aucune pagination dans la page : chaîne vide envoyée', JSON.parse(w.appels[0].data).pagination, '');
+    w = fabriquerMonde({ paginationTexte: 'Previous Results 1 of 15 Next Results', leurre: 'Leurre de pagination placé avant 9 of 9' });
+    lancer(w); cliquer(w); await attendre(40);
+    verifier('un élément [class*=pagination] placé AVANT ne masque pas #cards-load-more', JSON.parse(w.appels[0].data).pagination, 'Previous Results 1 of 15 Next Results');
+    w = fabriquerMonde({ paginationTexte: null, repliTexte: 'Page 2 of 4' });
+    lancer(w); cliquer(w); await attendre(40);
+    verifier('sans #cards-load-more : l\'ancien sélecteur sert de repli', JSON.parse(w.appels[0].data).pagination, 'Page 2 of 4');
     // panneau, page incomplète et dernière page
     const rep = diagnostic => ({ status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic }) });
     w = fabriquerMonde({ reponse: rep({ cartes: 7, annonce: null, complet: false, etat: 'incomplet', pageCourante: 3, pagesTotal: 15, sansNumero: 0, sansImage: 0 }) });

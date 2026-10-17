@@ -33,7 +33,9 @@
     var ZONES = ['[class*="card-results"]', '[class*="results"]', 'main'];
     var SEL_NOM = 'h1, h2, h3, h4, h5, h6, [class*="name"]';
     var SEL_COMPTEUR = '[class*="count"], [class*="total"], [class*="result"]';
-    var SEL_PAGINATION = '#cards-load-more, [class*="pagination"], nav[aria-label*="agination"]';
+    // la vraie pagination d'abord ; les anciens motifs en repli seulement (un élément antérieur du document ne doit pas masquer #cards-load-more)
+    var SEL_PAGINATION_VRAI = '#cards-load-more';
+    var SEL_PAGINATION_REPLI = '[class*="pagination"], nav[aria-label*="agination"]';
     var SEL_CHOISIS = '[aria-pressed="true"], [aria-selected="true"], [class*="selected"]';
     var SEL_CASES = 'input[type="checkbox"][name]';
     var RE_COMPTEUR = /\d[\d.,]*\s*(?:cards?|results?|cartes|résultats)\b/i;
@@ -176,7 +178,7 @@
         return h.length > HTML_MAX ? { html: h.slice(0, HTML_MAX), htmlTronque: true } : { html: h, htmlTronque: false };
     }
     function releve() {
-        var trouvee = zoneDesResultats(), zone = trouvee.zone, h = lireHtml(zone), pag = document.querySelector(SEL_PAGINATION);
+        var trouvee = zoneDesResultats(), zone = trouvee.zone, h = lireHtml(zone), pag = document.querySelector(SEL_PAGINATION_VRAI) || document.querySelector(SEL_PAGINATION_REPLI);
         return {
             schema: 2,
             url: location.origin + location.pathname + location.search,
@@ -207,6 +209,7 @@
         }
         if (d.etat === 'pagine') return { texte: ligne + '\nℹ️ compteur = total (' + d.annonce + ') ; cette page montre ' + d.cartes + ' cartes — normal si paginé : relève chaque page.' + repli, couleur: '#e6a23c' };
         if (d.etat === 'incomplet') return { texte: ligne + '\n⚠️ page incomplète : le compteur annonce ' + d.annonce + ', ' + d.cartes + ' cartes vues, sans pagination visible. Affiche le reste toi-même (défile, « charger plus »), puis reclique : chaque clic écrit son propre fichier.' + repli, couleur: '#e6a23c' };
+        if (d.paginationLisible === false && d.etat === 'compteur-non-lu') return { texte: ligne + '\n⚠️ pagination illisible (« N of M » introuvable dans la page) : impossible de dire si la page est complète.' + repli, couleur: '#e6a23c' };
         if (d.complet === null || d.complet === undefined) return { texte: ligne + '\n⚠️ compteur non lu : impossible de dire si la page est complète.', couleur: '#e6a23c' };
         return { texte: ligne + '\n✅ page complète' + (d.sansNumero ? ' · ' + d.sansNumero + ' sans numéro' : '') + (d.sansImage ? ' · ' + d.sansImage + ' sans image' : ''), couleur: '#67c23a' };
     }
