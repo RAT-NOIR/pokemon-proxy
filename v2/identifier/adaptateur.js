@@ -25,7 +25,7 @@ const { garderCompatibles } = require('./nom-compatible');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
-const MOTIFS_ILLISIBLE = Object.freeze(['numero-illisible']);
+const MOTIFS_ILLISIBLE = Object.freeze(['numero-illisible', 'ia-sans-lecture']);       // `ia-sans-lecture` (FREIN-CONSTATES tour 3) : la lecture n'a rien rendu d'exploitable (photo sans carte…) — un introuvable « photo-illisible », jamais une panne IA
 const MOTIFS_ABSENCE = Object.freeze(['carte-introuvable', 'aucun-candidat', 'aucun-prix']);
 const MOTIFS_EGALITE = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
 const CODE_CHINOIS = 6;
@@ -155,6 +155,7 @@ function traduire(statutHttp, corps, ctx) {
     if (nature === 'echec-technique') {
         if (motif === 'ia-echec') panne('IA', motif);
         if (motif === 'tcgdex-injoignable' || MOTIFS_ABSENCE.slice(0, 2).includes(motif)) panne('INDISPONIBLE', `${motif} (absence requalifiée ou source tombée)`);
+        if (motif === 'depense-modele-plafond') panne('INDISPONIBLE', motif);          // le plafond de dépense du modèle atteint PENDANT le scan : notre limite, la même panne que la coupure en amont
         if (motif === 'erreur-serveur') panne('SERVEUR', motif);
         panne('SERVEUR', `motif technique inconnu : ${motif}`);
     }

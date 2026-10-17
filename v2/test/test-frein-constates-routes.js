@@ -30,12 +30,18 @@ const poster = (url, jeton) => H.appel(url, '/api/identifier', { methode: 'POST'
     db.brancher(mongoose.connection.db); await M.creerIndex();
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels', 'depense_modele', 'alertes']) await raw(c).deleteMany({});
     const express = require('express'); const pret = require('../pret'); const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const D = require('../argent/depense-modele');
+    let corpsChaine = null, tomberSource = false;    // corpsChaine : le corps que la chaîne rend après son remboursement (défaut : un refus délibéré « numero-illisible ») ; tomberSource : une source tombe pendant le scan
     let appelsChaine = 0, motifChaine = null;       // motifChaine : le motif dont la chaîne HÉRITÉE rembourse (elle appelle req.credit.v2.rembourser sans nommer de compteur)
     const depense = D.creer({ cfg });
     const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(require('../modeles').verifierIndex);
     app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { depenseModele: depense, jumeaux: () => ({ conclu: true, ids: [] }),
-        gererIdentifier: async (req, res) => { appelsChaine++; if (motifChaine) await req.credit.v2.rembourser(req, motifChaine, {}); res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible', scanId: String(req.scanIdImpose) }); }, gererRetourLive: async (q, s) => s.json({ success: true }) }));
+        gererIdentifier: async (req, res) => {
+            appelsChaine++;
+            if (tomberSource) await require('../../sources').interrogerSource('catalogue/nom', async () => { throw new Error('source tombée'); });
+            if (motifChaine) await req.credit.v2.rembourser(req, motifChaine, {});
+            res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible', ...(corpsChaine || {}), scanId: String(req.scanIdImpose) });
+        }, gererRetourLive: async (q, s) => s.json({ success: true }) }));
     const sv = await H.serveur(app);
     const jour = Q.jourCourant();
     const pose = (porteur, n) => raw('plafonds').updateOne({ porteur, jour, type: 'constate' }, { $set: { count: n }, $setOnInsert: { expireLe: new Date(Date.now() + 3 * 86400e3) } }, { upsert: true });
@@ -81,6 +87,34 @@ const poster = (url, jeton) => H.appel(url, '/api/identifier', { methode: 'POST'
         const sortie = async m => { motifChaine = m; const x = await compteLie(); await pose(`compte:${x.c._id}`, 50); const r = await poster(sv.url, x.jeton); motifChaine = null; if (process.env.DEBUG_FC) console.log('DBG', m, JSON.stringify(r.json.facturation), JSON.stringify(await raw('plafonds').find({ porteur: `compte:${x.c._id}` }).toArray()), JSON.stringify((await raw('mouvements').find({ compteId: x.c._id }).toArray()).map(d => [d.type, d.motif, d.etat, d.cleIdempotence]))); return [r.json.facturation.rembourse, r.json.facturation.raisonNonRembourse]; };
         for (const m of PANNE) H.v(`N1. route v2, motif de la chaîne « ${m} », constatés épuisés : rendu (panne de notre côté)`, await sortie(m), [true, null]);
         for (const m of CONSTAT) H.v(`N2. route v2, motif de la chaîne « ${m} », constatés épuisés : NON rendu (plafond-jour)`, await sortie(m), [false, 'plafond-jour']);
+    }
+    // (5) TOUR 3 (relecture 2), par la ROUTE v2 : ce que la chaîne dit (motif de remboursement ET corps de refus) et ce que la v2 rend, plafond des constatés épuisé (compte gratuit à 50)
+    {
+        const cas = async (motif, corps, { source = false } = {}) => {
+            motifChaine = motif; corpsChaine = corps; tomberSource = source;
+            const x = await compteLie(); await pose(`compte:${x.c._id}`, 50); const r = await poster(sv.url, x.jeton);
+            motifChaine = null; corpsChaine = null; tomberSource = false;
+            return r;
+        };
+        const f = r => [r.statut, r.json.facturation.rembourse, r.json.facturation.raisonNonRembourse];
+        // (a) photo sans carte : motif neuf, refus délibéré, PLAFONNÉ ; la v2 rend un introuvable « photo-illisible », jamais une panne IA
+        const a = await cas('ia-sans-lecture', { natureRefus: 'refus-delibere', motifRefus: 'ia-sans-lecture' });
+        H.v('T3a. route v2, photo sans carte (ia-sans-lecture) : 200, introuvable / photo-illisible, NON rendu (plafond-jour) au 51e constat',
+            [...f(a), a.json.analyse && a.json.analyse.cartes[0].statut, a.json.analyse && a.json.analyse.cartes[0].raison], [200, false, 'plafond-jour', 'introuvable', 'photo-illisible']);
+        // (b) la vraie panne du fournisseur : toujours hors plafond (panne IA remboursée)
+        const b = await cas('ia-echec', { natureRefus: 'echec-technique', motifRefus: 'ia-echec' });
+        H.v('T3b. route v2, panne du fournisseur (ia-echec) : rendue hors plafond', [b.json.facturation.rembourse, b.json.erreur && b.json.erreur.code], [true, 'IA']);
+        // (c) la coupure de dépense en cours de scan : 503 INDISPONIBLE, rendue hors plafond
+        const c = await cas('depense-modele-plafond', { natureRefus: 'echec-technique', motifRefus: 'depense-modele-plafond' });
+        H.v('T3c. route v2, coupure de dépense en cours de scan (depense-modele-plafond) : 503 INDISPONIBLE rendue hors plafond', [c.statut, c.json.erreur && c.json.erreur.code, c.json.facturation.rembourse], [503, 'INDISPONIBLE', true]);
+        // (d) carte-introuvable avec une source tombée : requalifié en panne (503 INDISPONIBLE) ET rendu hors plafond (même prédicat)
+        const d = await cas('carte-introuvable', { natureRefus: 'echec-technique', motifRefus: 'carte-introuvable' }, { source: true });
+        H.v('T3d. route v2, carte-introuvable avec une source tombée : 503 INDISPONIBLE rendue hors plafond', [d.statut, d.json.erreur && d.json.erreur.code, d.json.facturation.rembourse], [503, 'INDISPONIBLE', true]);
+        const d2 = await cas('carte-introuvable', { natureRefus: 'refus-delibere', motifRefus: 'carte-introuvable' });
+        H.v('    sans source tombée, carte-introuvable reste un constat plafonné (NON rendu)', f(d2), [200, false, 'plafond-jour']);
+        // (e) un panne-XXX inconnu : plafonné
+        const e = await cas('panne-XXX', { natureRefus: 'echec-technique', motifRefus: 'erreur-serveur' });
+        H.v('T3e. route v2, panne-XXX inconnu : plafonné (NON rendu)', [e.json.facturation.rembourse, e.json.facturation.raisonNonRembourse], [false, 'plafond-jour']);
     }
     await sv.fermer(); await mongoose.disconnect(); await H.arreterBanc(); H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

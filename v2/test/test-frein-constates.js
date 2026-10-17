@@ -89,12 +89,14 @@ async function constater(p, n, { compteur = 'introuvable', prefixe = 'k', mainte
     // ════════ PANNE DE NOTRE INFRASTRUCTURE : jamais plafonnée ════════
     {
         const s = await sansCompte();
-        const iss = await constater(s, 25, { compteur: 'indisponible', prefixe: 'ni' });
+        const iss = await constater(s, 25, { compteur: 'panne', prefixe: 'ni' });       // la nature `indisponible` n'existe plus : toute panne de notre côté, INDISPONIBLE comprise, est la nature `panne`
         H.v('N1. 25 pannes INDISPONIBLE d\'un sans-compte (plafond 20) : 25 rendues', iss, rep(25, 'rendu'));
-        H.v('    aucun compteur écrit (ni constate, ni indisponible)', [await cnt(s, 'constate'), await cnt(s, 'indisponible')], [0, 0]);
+        H.v('    aucun compteur écrit (ni constate, ni panne)', [await cnt(s, 'constate'), await cnt(s, 'panne')], [0, 0]);
+        const retiree = await Lg.rembourser(s, await prendre(s, 'nat-indisp'), 'x', { scanId: 'nat-indisp', compteur: 'indisponible', maintenant: t }, cfg);
+        H.v('    la nature morte `indisponible` est retirée : un compteur de ce nom est refusé (erreur)', retiree.raisonNonRembourse, 'erreur');
         const tout = await constater(s, 21, { prefixe: 'nj' });
         H.v('N2. elle ne consomme pas le plafond des constatés : 20 constatés puis le 21e refusé', tout, [...rep(20, 'rendu'), 'plafond-jour']);
-        const apres = await constater(s, 1, { compteur: 'indisponible', prefixe: 'nk' });
+        const apres = await constater(s, 1, { compteur: 'panne', prefixe: 'nk' });
         H.v('N3. constatés épuisés : une panne INDISPONIBLE est encore rendue', apres, ['rendu']);
     }
 

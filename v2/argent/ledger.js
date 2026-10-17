@@ -189,13 +189,13 @@ async function incPlafond(porteurCle, jour, type, now, pas = 1) {   // même sch
 //   · `constate` — décidé par le SERVEUR seul (panne, introuvable, garde des jumeaux, remboursement à l'émission d'une question) : FREIN-CONSTATES (2026-10-17) — UN SEUL compteur « constate » par porteur et par
 //                  jour de Paris, plafonné par l'OFFRE du porteur au moment du remboursement (sans compte 20, gratuit 50, Pro 100 : cfg.plafonds.constates) ; au-delà, `plafond-jour` ;
 //                  Le plafond ne porte que sur les constats sur la PHOTO : `introuvable`, `jumeaux`, `constate-question` ;
-//   · `infra`    — toute panne de NOTRE côté (`panne` : SERVEUR 500, IA ; `indisponible` : INDISPONIBLE 503) : rendue SANS plafond ni compteur, elle ne se facture jamais au client ;
+//   · `infra`    — toute panne de NOTRE côté (`panne` : SERVEUR 500, IA, INDISPONIBLE 503, coupure de dépense…) : rendue SANS plafond ni compteur, elle ne se facture jamais au client ;
+//   Un remboursement qui ne nomme pas sa nature la reçoit de `natureDuMotif` (nature-du-motif.js), la SEULE fonction qui décide du côté panne ou constat d'un motif.
 //   · `lot`      — `lot-trop-grand` (10 par jour, cfg.plafonds.lotTropGrand), INCHANGÉ, indépendant de l'offre.
 // `livre` : le contrôle « une panne ne rembourse pas une question déjà répondue par un candidat » (M2) s'applique ; il ne s'applique pas aux remboursements qui SUIVENT une question (leur raison d'être est cette réponse).
 // Une garde s'écrit par ce qu'elle AUTORISE : un nom absent de cette table est REFUSÉ (jamais rabattu sur une nature plus large).
 const NATURES = Object.freeze({
     panne: { classe: 'infra', livre: true },            // TOUTE panne de NOTRE côté (SERVEUR, IA, INDISPONIBLE) : hors plafond (décision du coordinateur, 2026-10-17)
-    indisponible: { classe: 'infra', livre: true },
     introuvable: { classe: 'constate', livre: true },   // un constat sur la photo : plafonné
     jumeaux: { classe: 'constate', livre: true },
     'constate-question': { classe: 'constate', livre: false },
@@ -225,7 +225,7 @@ async function rendreLeScan(porteur, motif, { scanId, compteur, jourDe, sansPlaf
     if (!Number.isInteger(unites) || unites < 1) { console.error('❌ [v2 rembourser] unites invalides : refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let cle = `rb|${scanId}`;
     const jour = Of.jourDeParis(jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant);   // le jour de PARIS, par la même fonction que le quota (relecture 3, I2) : jamais une copie en UTC
-    // La NATURE du remboursement (voir NATURES) : `panne` est le défaut quand aucun compteur n'est nommé. `unites` : combien d'unités du compteur ce remboursement consomme (une par carte refusée par la garde
+    // La NATURE du remboursement (voir NATURES) : quand aucun compteur n'est nommé, la nature vient du MOTIF (`natureDuMotif`) : il n'y a plus de défaut. `unites` : combien d'unités du compteur ce remboursement consomme (une par carte refusée par la garde
     // des jumeaux, qui n'a plus de compteur : la forme reste validée) — un seul compteur plafonné en consomme TOUJOURS une (un scan = un remboursement).
     // Une garde s'écrit par ce qu'elle AUTORISE : un compteur qui n'est pas dans la table est REFUSÉ (jamais rabattu sur `panne`, qui imputerait en silence une faute de frappe)
     // FREIN-CONSTATES tour 2 : un compteur ABSENT n'est plus rabattu sur `panne` (hors plafond) : la nature vient du MOTIF, par l'unique fonction (v2/argent/nature-du-motif.js) ; un motif inconnu est plafonné

@@ -10,8 +10,8 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
     const scanDe = req => (ctx.scanId && (typeof ctx.scanId === 'function' ? ctx.scanId(req) : ctx.scanId)) || (req && req.scanId) || null;
     return {
         // → true si un crédit a été RENDU ; sinon false, et la cause remonte par noterNonRemboursement (liste fermée de sources.js)
-        // `compteur: 'jumeaux'` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — rendu sans plafond, `unites` (une par carte refusée) validé par le ledger.
-        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre nom retombe sur `panne` (aussi constatée, sans plafond) ; seul le grand livre refuse un nom inconnu.
+        // `compteur: 'jumeaux'` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — constaté par le serveur, sous le plafond des constatés (FREIN-CONSTATES) ; `unites` (une par carte refusée) validé par le ledger.
+        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre appel reçoit sa nature de `natureDuMotif(motif)` (panne de notre côté hors plafond, sinon constat plafonné) ; seul le grand livre refuse un nom inconnu.
         async rembourser(req, motif, { compteur, jourDe, unites } = {}) {
             if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }      // un seul par requête
             req.scanRembourse = true;
