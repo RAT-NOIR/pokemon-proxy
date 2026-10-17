@@ -41,7 +41,10 @@ const COMPTEURS = Object.freeze({
     'nom-affiche': 'le set porte un nomAffichage',
     // ➕ 2026-10-17 (PP-HOLO) : le champ explicite `partageeHoloNonHolo: true` (le scan tamponné sert le produit holo ET le non-holo ; l'API ne tranche jamais le brillant par l'image).
     // Un rejeu qui l'efface laisse `images` et les vignettes intacts : seul ce compteur le voit. Jamais dispensé par le worker (il n'écrit pas ce champ) ; s'annonce (retrait partiel voulu).
-    'images-partagees-holo': 'entrées de cartes.images marquées partageeHoloNonHolo: true, par set'
+    'images-partagees-holo': 'entrées de cartes.images marquées partageeHoloNonHolo: true, par set',
+    // ➕ 2026-10-17 (BS-STAFF) : le champ explicite `partageeTamponNonSepare: true` (l'image servie aux deux produits V1/V2 d'une promo Black Star ne montre pas le tampon Staff / Play! Pokémon ; le site
+    // affiche « tampon non représenté »). Même raison que le compteur holo, et il ne se confond pas avec lui. Jamais dispensé par le worker ; s'annonce (retrait voulu : marquer-partage-tampon.js --retirer).
+    'images-partagees-tampon': 'entrées de cartes.images marquées partageeTamponNonSepare: true, par set'
 });
 
 /** @returns {Map<string, number>} « <compteur> <groupe> » → n */
@@ -71,6 +74,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
         for (const im of c.images || []) if (im) {
             inc(`images set:${im.set}`);
             if (im.partageeHoloNonHolo === true) inc(`images-partagees-holo set:${im.set}`);
+            if (im.partageeTamponNonSepare === true) inc(`images-partagees-tampon set:${im.set}`);
             // une clé PAR ENTRÉE (set|carte|numero|cleR2) : un nombre par set laissait passer « une perdue, une gagnée » (relecture 2026-10-08)
             const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
             inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition
@@ -199,7 +203,8 @@ const signature = v => JSON.stringify(trier(v ?? null));
 // (2026-10-07, nuit) `categorie` : le site la lit (page de la carte, listes d'espèces) — elle se compare comme le nom
 const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null, categorie: c.categorie ?? null,
     impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
-    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null, m.vignette?.cleR2 ?? null]) });
+    // (2026-10-17, BS-STAFF) le site affiche la mention « tampon non représenté » depuis ces deux champs : les poser ou les retirer change la page du set
+    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null, m.vignette?.cleR2 ?? null, m.partageeTamponNonSepare === true ? (m.tamponNonRepresente ?? true) : null]) });
 const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null, l.visuelSubstitut?.cleR2 ?? null];   // VIGN-SUITE : le substitut sert une image au site ; projection de CHANGEMENT seulement, aucun groupe compté
 // 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
 // la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
