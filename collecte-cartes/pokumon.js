@@ -149,8 +149,40 @@ function denominateurDuCode(items) {
     });
 }
 
+// ── PP-HOLO (2026-10-17) : le scan tamponné sert les DEUX produits holo et non-holo d'une carte Prize Pack ─────────────────────────────────────────────────────────────────────────────
+// 🔑 DÉCISION DU TESTEUR : « le scan tamponné de Pokumon sert les DEUX produits (holo et non-holo). Ce n'est pas l'image d'une autre impression : même carte, même tampon, seul le brillant
+// diffère et aucun scan ne le montre. Marque ces images « partagée holo/non-holo » (champ explicite), pour que l'API ne tente jamais de trancher le brillant par l'image. »
+// 🔴 La décision couvre UNE différence — holo / non-holo — et rien d'autre : un groupe n'est résolu que si TOUT ceci est vrai (écrit par ce qu'il AUTORISE ; le reste est un trou NOMMÉ) :
+//   · EXACTEMENT deux produits (une carte, un set : `carteId` et `slugSet` fournis et identiques), même nom Cardmarket, slugs identiques à V1 / V2 près ;
+//   · EXACTEMENT deux entrées Pokumon : l'une « Holofoil », l'autre non, même nom, même numéro, même total, même texte de set, MÊMES séries et MÊMES événements ; aucun « Reverse » ;
+//   · l'entrée choisie passe ensuite tous les vetos et témoins habituels (placeholder, langue, préfixe, séries, événements, une origine, dénominateur).
+// RÈGLE DE CHOIX, écrite et déterministe : la NON-holo. Le scan holo porte le brillant CUIT dans l'image (visible sur Drizzile) : servi au produit non-holo il affirmerait un brillant qui n'y est
+// pas ; le scan plat servi au produit holo omet seulement le brillant, ce que la décision accepte. (Contrepartie nommée au rapport : la non-holo est souvent plus étroite, 576 px en médiane.)
+const MOTIF_HOLO = Object.freeze({ carte: 'holo-carte-non-prouvee', forme: 'holo-forme-non-prouvee', reverse: 'holo-reverse', series: 'holo-series-differentes' });
+const sansSeries = s => String(s ?? '').replace(/Play Pokemon Prize Pack Series \d/g, '').replace(/[,\s]+/g, ' ').trim();
+const memeListe = (a, b) => JSON.stringify([...a].sort((x, y) => x - y)) === JSON.stringify([...b].sort((x, y) => x - y));
 /**
- * L'APPARIEMENT, pur. `produits` : { idProduct, serie (1-4), nomCm (catalogue_produits.name), slugProduit (numeros_cartes.slug) } ; `index` : des entrées lues (lireEntree).
+ * Un groupe (série, nom, numéro d'origine) qui a autant de produits que d'entrées : est-ce UN couple holo / non-holo ? `g` : les enregistrements de l'apparieur ({ p, nm }) ; `c` : ses entrées.
+ * @returns {{ entree: object, holo: object, produits: number[] } | { motif: string }}
+ */
+function groupeHoloNonHolo(g, c) {
+    if (g.length !== 2 || c.length !== 2) return { motif: 'douteux-variantes-non-separables' };
+    const [a, b] = g.map(r => r.p);
+    if (a.carteId == null || a.carteId !== b.carteId || a.slugSet == null || a.slugSet !== b.slugSet) return { motif: MOTIF_HOLO.carte };
+    const lire = p => /^(.*)-(V\d+)-([^-]+-[^-]+)$/.exec(String(p.slugProduit ?? ''));
+    const [ma, mb] = [lire(a), lire(b)];
+    if (!ma || !mb || `${ma[1]}-${ma[3]}` !== `${mb[1]}-${mb[3]}` || a.nomCm !== b.nomCm || [ma[2], mb[2]].sort().join() !== 'V1,V2') return { motif: MOTIF_HOLO.forme };
+    if (c.some(e => /reverse/i.test(e.titre))) return { motif: MOTIF_HOLO.reverse };
+    const hs = c.filter(e => e.holo), ps = c.filter(e => !e.holo);
+    if (hs.length !== 1 || ps.length !== 1) return { motif: MOTIF_HOLO.forme };
+    const [h, e] = [hs[0], ps[0]];
+    if (h.nom !== e.nom || h.numero !== e.numero || h.total !== e.total || sansSeries(h.set) !== sansSeries(e.set)) return { motif: MOTIF_HOLO.forme };
+    if (!memeListe(h.series, e.series) || !memeListe(h.evenements, e.evenements)) return { motif: MOTIF_HOLO.series };
+    return { entree: e, holo: h, produits: [a.idProduct, b.idProduct].sort((x, y) => x - y) };
+}
+
+/**
+ * L'APPARIEMENT, pur. `produits` : { idProduct, serie (1-4), nomCm (catalogue_produits.name), slugProduit (numeros_cartes.slug), carteId, slugSet (seulement pour la décision PP-HOLO) } ; `index` : des entrées lues (lireEntree).
  * Rend un verdict par produit (« prouve » + l'entrée, ou « reste » + son MOTIF) et des comptes. Un produit n'est prouvé que si TOUT ceci est vrai : un seul produit et une seule entrée de
  * son groupe (nom, numéro d'origine, série) ; l'image n'est pas un placeholder ; l'entrée est anglaise ; son numéro a le même préfixe ; ses séries sont admises par la table ET portées par ses
  * événements ; aucune autre origine ne la réclame ; le dénominateur du set d'origine concorde (au moins deux appariés).
@@ -168,10 +200,17 @@ function apparier({ produits, index }) {
     let placeholders = 0;
     for (const g of groupes.values()) {
         const c = g[0].cands;
-        const statut = !c.length ? 'non-couvert' : g.length === 1 && c.length === 1 ? 'couvert' : g.length === c.length ? 'douteux-variantes-non-separables' : 'douteux-multiplicite';
+        let statut = !c.length ? 'non-couvert' : g.length === 1 && c.length === 1 ? 'couvert' : g.length === c.length ? 'douteux-variantes-non-separables' : 'douteux-multiplicite';
+        let entree = c[0], holo = null;
+        // PP-HOLO : deux produits V1/V2 et deux entrées Holofoil / non-Holofoil d'une MÊME carte — la seule différence que la décision du testeur couvre
+        if (statut === 'douteux-variantes-non-separables') {
+            holo = groupeHoloNonHolo(g, c);
+            if (holo.entree) { statut = 'couvert'; entree = holo.entree; for (const r of g) { r.groupe = g; r.partagee = holo.produits; r.holoIgnoree = holo.holo; } }
+            else statut = holo.motif;
+        }
         for (const r of g) {
             if (statut !== 'couvert') { r.motif = statut; continue; }
-            const e = c[0];
+            const e = entree;
             r.entree = e;
             if (estPlaceholder(e)) { r.motif = 'placeholder'; placeholders++; }
             else if (!e.anglais) r.motif = 'langue';
@@ -184,11 +223,19 @@ function apparier({ produits, index }) {
     let vivants = recs.filter(r => r.entree && !r.motif).map(r => ({ idProduct: r.p.idProduct, entree: r.entree, code: codeOrigine(r.nm.code), r }));
     for (const w of temoinsDeLEntree(vivants)) if (w.motif) { const x = recs.find(r => r.p.idProduct === w.idProduct); x.motif = w.motif; }
     vivants = vivants.filter(x => !x.r.motif);
-    for (const w of denominateurDuCode(vivants)) { const x = recs.find(r => r.p.idProduct === w.idProduct); if (w.motif) x.motif = w.motif; else x.temoin = w.temoin; }
+    // 🔑 un groupe holo / non-holo COMPTE UNE FOIS pour le dénominateur du code : ses deux produits sont une seule entrée, et deux appariements fabriqués par le groupe lui-même seraient un témoin qui se
+    // confirme lui-même. Le verdict (motif ou témoin) s'applique ensuite aux DEUX produits.
+    const deja = new Set();
+    const pourDenominateur = vivants.filter(x => { if (!x.r.groupe) return true; if (deja.has(x.r.groupe)) return false; deja.add(x.r.groupe); return true; });
+    for (const w of denominateurDuCode(pourDenominateur)) {
+        const x = recs.find(r => r.p.idProduct === w.idProduct);
+        for (const m of x.groupe || [x]) { if (w.motif) m.motif = w.motif; else m.temoin = w.temoin; }
+    }
     const placeholdersIndex = index.filter(estPlaceholder).length;
     const resultats = recs.map(r => (r.motif || !r.entree
         ? { idProduct: r.p.idProduct, verdict: 'reste', motif: r.motif ?? 'non-couvert' }
-        : { idProduct: r.p.idProduct, verdict: 'prouve', entree: r.entree, serie: r.p.serie, numeroOrigine: r.nm, temoin: r.temoin }));
+        : { idProduct: r.p.idProduct, verdict: 'prouve', entree: r.entree, serie: r.p.serie, numeroOrigine: r.nm, temoin: r.temoin,
+            ...(r.partagee ? { partageeHoloNonHolo: true, produitsPartages: r.partagee, entreeHoloIgnoree: r.holoIgnoree } : {}) }));
     const parMotif = {};
     for (const r of resultats) if (r.verdict === 'reste') parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
     return { resultats, comptes: { produits: produits.length, prouves: resultats.filter(r => r.verdict === 'prouve').length, placeholders, placeholdersIndex, parMotif } };
@@ -429,8 +476,13 @@ function planifierPokumon({ produits, cartes, index }) {
         if (!urlImageValide(r.entree.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
         if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.slugSet)) continue;
         const l = ligneDe(p.serie), e = r.entree;
-        plan.push({ ...base, nomEn: carte.nomEn ?? null, serie: p.serie, numero: e.numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: 'pokumon+nom+numero+serie',
-            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro d'origine ${r.numeroOrigine.n} (slug Cardmarket ${p.slugProduit ?? ''}) = n° imprimé ${e.numero} ; Prize Pack Series ${p.serie} (entrée ${e.series.map(s => `Series ${s}`).join(' + ')}) ; ${r.temoin} ; une seule entrée candidate pour ce produit ; série prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; tampon : ${l.tampon}` });
+        // PP-HOLO : l'image est celle de TOUT le groupe ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
+        const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
+        const choix = r.partageeHoloNonHolo
+            ? `partagée holo/non-holo : produits ${r.produitsPartages.join(' + ')} (slugs V1 / V2 d'une même carte), entrée ${e.id} (non-holo) choisie, entrée ${r.entreeHoloIgnoree.id} (Holofoil) laissée de côté — même nom, même numéro, mêmes séries, seul le brillant diffère ; `
+            : 'une seule entrée candidate pour ce produit ; ';
+        plan.push({ ...base, nomEn: carte.nomEn ?? null, serie: p.serie, numero: e.numero, entreeId: e.id, lien: e.link, titre: e.titre, url: e.img, w: e.w, h: e.h, holo: e.holo, voie: 'pokumon+nom+numero+serie', ...partage,
+            preuve: `pokumon.com entrée ${e.id} « ${e.titre} » ; nom « ${nomNu(p.nomCm)} » = celui de l'entrée ; numéro d'origine ${r.numeroOrigine.n} (slug Cardmarket ${p.slugProduit ?? ''}) = n° imprimé ${e.numero} ; Prize Pack Series ${p.serie} (entrée ${e.series.map(s => `Series ${s}`).join(' + ')}) ; ${r.temoin} ; ${choix}série prouvée à l'œil le ${l.lu} sur ${l.temoins.map(w => `${w.nom} ${w.imprime}`).join(', ')} ; tampon : ${l.tampon}` });
     }
     return { plan, restes, comptes: { ...comptes, trous: restes.length, plan: plan.length } };
 }
@@ -579,11 +631,12 @@ function visuelServi(site, { set, images, numeroFiche, region, produits, baseUrl
 // ── L'IDENTIFIANT ET LE RETRAIT EN UN LOT ────────────────────────────────────────────────────────────────────────────────────────────────────
 const idImagePokumon = (slug, carteId, numero) => `${SOURCE}/${slug}/${carteId}/${String(numero ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero'}/en`;
 /** Ce qu'un retrait en un lot retire : les entrées `cartes.images` de CETTE source ET de CE lot — rien d'autre — et leurs clés R2 (vignette comprise). Les substituts ne bougent pas. */
-function planRetraitPokumon(cartes) {
+function planRetraitPokumon(cartes, { seulementPartagees = false } = {}) {
     const touchees = [], cles = [];
     let entrees = 0;
     for (const c of cartes) {
-        const es = (c.images || []).filter(e => e && e.source === SOURCE && e.lot === LOT);
+        // PP-HOLO : `seulementPartagees` ne retire que les images portant le champ explicite « partagée holo/non-holo » — rien d'autre du lot (un champ absent n'est pas `true`)
+        const es = (c.images || []).filter(e => e && e.source === SOURCE && e.lot === LOT && (!seulementPartagees || e.partageeHoloNonHolo === true));
         if (!es.length) continue;
         touchees.push(c._id); entrees += es.length; cles.push(...es.flatMap(e => [e.cleR2, e.vignette?.cleR2].filter(Boolean)));
     }

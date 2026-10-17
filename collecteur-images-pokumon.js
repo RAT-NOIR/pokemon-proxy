@@ -206,9 +206,13 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         for (const p of planSerie) {
             if (arretDemande || !verrou.tenu) break;
             const _id = P.idImagePokumon(slug, p.carteId, p.numero);
-            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal').lean();
+            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal partageeHoloNonHolo').lean();
             if (deja?.etat === 'retire') { retires++; continue; }                       // un visuel retiré ne revient jamais sans une décision
-            if (deja?.sha256 && deja.urlOriginal === p.url && deja.etat === 'ok') { sautes++; continue; }
+            if (deja?.sha256 && deja.urlOriginal === p.url && deja.etat === 'ok') {
+                // PP-HOLO : un document déjà posé reçoit quand même le champ explicite (la jointure le lit sur le document)
+                if (p.partageeHoloNonHolo && !(deja.partageeHoloNonHolo === true)) await M.Image.updateOne({ _id }, { $set: { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } });
+                sautes++; continue;
+            }
             if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url) { tropPetits++; continue; }
             try {
                 // une entrée Pokumon commune à deux séries est UN fichier : il se télécharge UNE fois (courtoisie envers la source) et sert les deux fiches
@@ -254,6 +258,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 $set: {
                     source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct, preuve: p.preuve, voie: p.voie, urlOriginal: p.url, pokumonId: p.entreeId, pokumonLien: p.lien,
                     marque: unite.marque(p),
+                    ...(p.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } : {}),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
@@ -273,7 +278,9 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(),
+                    // PP-HOLO : le champ explicite suit l'image (une image Prize Packs ordinaire n'a NI l'un NI l'autre)
+                    ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}) };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 // (« cette fiche » = ce numéro : l'image d'un AUTRE numéro de la même carte — MEP012 pour MEP033 — ne sert pas la fiche, la règle du site la compare au numéro de la fiche)
                 const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2 && (P.nImage(e.numero) === null || P.nImage(e.numero) === P.nImage(im.numero)));
