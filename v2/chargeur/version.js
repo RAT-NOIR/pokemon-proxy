@@ -96,6 +96,8 @@ function assembler(d) {
         empreinteJumeaux() { return jum && jum.id.length ? { n: jum.id.length, max: jum.id[jum.ordre[jum.id.length - 1]] } : null; },
         /** La métacarte d'un produit selon la colonne, ou null (colonne absente, produit hors colonne, métacarte inconnue). */
         metacarteJumeaux(id) { if (!jum || !Number.isInteger(id)) return null; const r = plusPetitOrdre(jum, id); return r < 0 || jum.meta[r] < 0 ? null : jum.meta[r]; },
+        /** GARDE-CONTRADICTION : la langue de TIRAGE d'un produit selon la colonne (« intl », « jp », « zh-hans »…), ou null (colonne absente, produit hors colonne, tirage inconnu). */
+        tirageJumeaux(id) { if (!jum || !Number.isInteger(id)) return null; const r = plusPetitOrdre(jum, id); return r < 0 ? null : lire(texte, jum.tir[r]); },
         /** Les jumeaux d'un produit (idProduct triés), ou null quand on ne peut PAS conclure : colonne absente, produit hors colonne, métacarte inconnue. [] = conclu, aucun jumeau. */
         jumeauxDe(id) {
             if (!jum || !Number.isInteger(id)) return null;

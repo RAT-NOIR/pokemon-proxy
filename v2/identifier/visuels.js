@@ -125,7 +125,9 @@ function creerVisuels(opts = {}) {
     }
     /** Un jeu de lecteurs LIÉ à la version en place À CET INSTANT : une requête qui lit le visuel, l'entrée et les impressions d'un produit ne mêle jamais deux versions (revue M6). */
     function instantane() { const fixe = version(); return creerVisuels({ ...opts, cfg, version: () => fixe }); }
-    return { resoudre, impressions, entree, instantane };
+    /** GARDE-CONTRADICTION : la langue de tirage d'un produit (colonne des jumeaux de la version en place), ou null. Synchrone. */
+    function tirage(idProduct) { const v = version(); return v && typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(idProduct) : null; }
+    return { resoudre, impressions, entree, instantane, tirage };
 }
 
 module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION, prix, dateGuide };

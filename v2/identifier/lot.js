@@ -14,6 +14,7 @@
 const { dansUnScan } = require('../../sources');
 const { adapter, codeLangueDe } = require('./adaptateur');
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
+const { idsDeLaGarde } = require('./garde-contradiction');
 const etatChargeur = require('../chargeur/etat');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -98,7 +99,7 @@ async function executerLot(p) {
     let produits;
     // JUMEAU-V2 : la même garde que la route d'une carte (une version de la colonne pour tout le lot) ; les jumeaux d'une affirmation qui tient dans une question sont chargés avec elle
     const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), resultats.flatMap(r => idsAffirmes(corpsDe(r))));
-    try { produits = await catalogue.lire(resultats.flatMap(r => { const c = corpsDe(r); return [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)]; })); }
+    try { produits = await catalogue.lire(resultats.flatMap(r => { const c = corpsDe(r); return [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux), ...idsDeLaGarde(c)]; })); }
     catch (e) { journal('catalogue', e); return panne('INDISPONIBLE'); }
     // 3. une carte par résultat, dans l'ordre d'ENTRÉE ; une carte illisible devient « introuvable / panne-lecture » (comptée vue : la lecture a eu lieu)
     const adapterFn = deps.adapter || adapter;
