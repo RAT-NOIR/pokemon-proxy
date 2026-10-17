@@ -208,11 +208,11 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
     const p20 = await compteN(100); const c20 = [];
     for (let i = 0; i < 25; i++) c20.push(await prendre(p20, `jm${i}`));
     const r20 = []; for (let i = 0; i < 25; i++) r20.push((await Lg.rembourser(p20, c20[i], 'introuvable', { scanId: `jm${i}`, compteur: 'jumeaux', maintenant: t }, cfg)).rendu);
-    H.v('   25 refus de la garde (ancien plafond 20) : 25 rendus, aucun compteur écrit', [r20.every(Boolean), await db.col('plafonds').countDocuments({ porteur: `compte:${p20.id}` })], [true, 0]);
+    H.v('   25 refus de la garde (ancien plafond 20 ; FREIN-CONSTATES : gratuit 50) : 25 rendus, UN seul compteur « constate » écrit', [r20.every(Boolean), await db.col('plafonds').countDocuments({ porteur: `compte:${p20.id}`, type: 'constate' }), await db.col('plafonds').countDocuments({ porteur: `compte:${p20.id}` })], [true, 1, 1]);
     // une unité PAR CARTE reste une forme valide : un lot de 3 cartes refusées est rendu en entier
     const p20b = await compteN(20); const l20 = await lotDe(p20b, 'lotJ', 3);
     const rl20 = await Lg.rembourser(p20b, l20[0], 'introuvable', { scanId: 'lotJ', compteur: 'jumeaux', unites: 3, maintenant: t }, cfg);
-    H.v('   un lot de 3 cartes refusées : rendu en entier (3 unités du lot), aucun compteur', [rl20.rendu, await restant(p20b), await db.col('plafonds').countDocuments({ porteur: `compte:${p20b.id}` })], [true, 20, 0]);
+    H.v('   un lot de 3 cartes refusées : rendu en entier (3 unités du lot), une prise du compteur « constate » (FREIN-CONSTATES)', [rl20.rendu, await restant(p20b), await db.col('plafonds').countDocuments({ porteur: `compte:${p20b.id}` })], [true, 20, 1]);
     // des unités mal formées sont refusées (la forme reste validée)
     const p20c = await compteN(9); const c20c = await prendre(p20c, 'u0');
     const mal = []; for (const u of [0, -1, 1.5, '2', NaN]) mal.push((await Lg.rembourser(p20c, c20c, 'introuvable', { scanId: 'u0', compteur: 'jumeaux', unites: u, maintenant: t }, cfg)).raisonNonRembourse);

@@ -4,7 +4,8 @@
 // SANS plafond ; `lot-trop-grand` (10 par jour) ne bouge pas. Base EN MÉMOIRE, aucun réseau.
 const H = require('./_harnais'); const db = require('../db'); const M = require('../modeles'); const { lireConfig } = require('../config'); const Lg = require('../argent/ledger'); const Q = require('../argent/questions');
 const { compte, inst } = require('./_aide-argent'); const QJ = require('./_aide-quota');
-const cfg = QJ.cfgGrand({ V2_HEBDO: '0' });
+// FREIN-CONSTATES (2026-10-17) plafonne les constatés ; ce banc est celui des DÉCLARATIONS et garde ses grands volumes de constatés : plafonds relevés (le plafond des constatés a son banc, test-frein-constates.js)
+const cfg = QJ.cfgGrand({ V2_HEBDO: '0', V2_CONSTATES_SANS_COMPTE: '100000', V2_CONSTATES_GRATUIT: '100000', V2_CONSTATES_PRO: '100000' });
 const t = new Date('2026-10-08T10:00:00Z'), JOUR = '2026-10-08';
 const prendre = async (p, scanId, maintenant = t) => { const r = await Lg.debiter(p, { scanId, cleIdempotence: `d|${scanId}`, maintenant }, cfg); if (!r.ok) throw new Error(`débit refusé ${scanId} : ${r.code}`); return r.credit; };
 const plaf = async (p, type, jour = JOUR) => (await db.col('plafonds').findOne({ porteur: `${p.type}:${p.id}`, jour, type }));

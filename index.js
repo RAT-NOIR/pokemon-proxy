@@ -28,7 +28,7 @@ const {
 // ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
 // fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
 const SCORING = require('./scoring');
-const { classerPanneIA, panneDansLeCorps, lectureDuTitre } = require('./lecture-de-secours');
+const { classerPanneIA, panneDansLeCorps, lectureDuTitre, causeApresErreur, causeApresReponse, motifDuRefusIA } = require('./lecture-de-secours');
 const {
     choisirMeilleur,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
@@ -70,7 +70,7 @@ const { enregistrerScan, enregistrerEchec, JournalScan, VERSION } = require('./j
 // « Rien trouvé » et « pas pu chercher » sont deux états, jamais un seul. Voir sources.js :
 // six requêtes catalogue rendaient `[]` dans les deux cas, et l'aval lisait ce vide comme
 // un fait sur le catalogue.
-const { interrogerSource, dansUnScan, sourcesTombees,
+const { interrogerSource, dansUnScan, sourcesTombees, REFUS_D_ABSENCE, absenceNonConstatee,
     noterNonRemboursement, raisonNonRemboursement } = require('./sources');
 
 // La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
@@ -304,6 +304,8 @@ const SEUIL_PRIX_CORRECT  = 1.10; // jusqu'à 10% plus cher -> prix correct
 // résultats qui se dégradent d'un coup, repasse sur "google/gemini-3.5-flash"
 // (stable, plus chère). L'ancien "google/gemini-2.5-flash" est arrêté oct. 2026.
 const MODELE_IA = "google/gemini-3-flash-preview";
+// FREIN-CONSTATES : l'appel au modèle passe SOUS le plafond global de dépense quotidienne (v2/argent/depense-modele.js) quand l'API v2 est allumée ; éteinte, rien ne change
+const appelerModele = (url, corps, config) => (V2 ? V2.depenseModele.appeler(axios.post.bind(axios), url, corps, config) : axios.post(url, corps, config));
 
 // ============================================================
 // MONGODB — connexion + schéma de cache
@@ -667,7 +669,11 @@ async function ecrireCache(name, number, language, price, url) {
 // que la ROUTE passe quand elle sait transformer une lecture incertaine en question (/api/identifier). Sur une PANNE DU SERVICE
 // (lecture-de-secours.js : crédit, quota, clé, serveur, réseau), la lecture vient alors du TITRE de l'annonce — même forme, même
 // normalisation ci-dessous — et `secours.panne` dit pourquoi. Sans cet objet (/api/analyser), rien ne change : une panne rend null.
-async function getCardIdFromAI(imageUrls, title, secours = null) {
+// `diagnostic` (FREIN-CONSTATES tour 3) : un objet que l'appelant passe pour savoir POURQUOI la lecture rend null, avec ou sans `secours` : `diagnostic.cause` vaut 'fournisseur' (panne du service PROUVÉE),
+// 'depense' (plafond de dépense du modèle atteint pendant le scan) ou 'sans-lecture' (tout le reste : photo sans carte, JSON invalide ou sans nom, erreur non classée) — voir lecture-de-secours.js.
+// Il ne change RIEN au comportement : la lecture de secours ne s'ouvre toujours que si `secours` est passé.
+async function getCardIdFromAI(imageUrls, title, secours = null, diagnostic = null) {
+    const dire = cause => { if (diagnostic && typeof diagnostic === 'object') diagnostic.cause = cause; };
     // Accepte une URL unique ou un tableau d'URLs (recto, verso, gros plans).
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
@@ -816,7 +822,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
     try {
         let response;
         try {
-            response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+            response = await appelerModele("https://openrouter.ai/api/v1/chat/completions", {
                 model: MODELE_IA,
                 // Température 0 : lire un numéro sur une carte n'est pas une tâche
                 // créative. Sans ça, le modèle "improvise" et donne des résultats
@@ -842,21 +848,24 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
                 timeout: 30000
             });
         } catch (e) {
+            // FREIN-CONSTATES : le plafond de dépense du modèle n'est PAS une panne du service : la lecture de secours (titre) ne le contourne pas, l'erreur remonte
+            if (e && e.code === 'DEPENSE_MODELE_PLAFOND') throw e;
             // LA PANNE DU SERVICE, et elle seule, ouvre la lecture de secours ; tout le reste repart au catch d'avant (null)
             const panne = secours ? classerPanneIA(e) : null;
             if (!panne) throw e;
             response = secourir(panne, e.response?.status ?? e.code ?? e.message);
-            if (!response) return null;
+            if (!response) { dire('fournisseur'); return null; }
         }
         // relecture du 2026-10-05 : un 200 dont le CORPS porte l'erreur (fournisseur amont tombé, crédit) est la même panne
         if (secours && !secours.panne) {
             const panne = panneDansLeCorps(response.data);
-            if (panne) { response = secourir(panne, `200, corps d'erreur ${response.data?.error?.code}`); if (!response) return null; }
+            if (panne) { response = secourir(panne, `200, corps d'erreur ${response.data?.error?.code}`); if (!response) { dire('fournisseur'); return null; } }
         }
 
         const content = response.data?.choices?.[0]?.message?.content;
         if (typeof content !== "string") {
             console.error("Réponse IA inattendue (pas de string content):", JSON.stringify(response.data));
+            dire(causeApresReponse(response.data));      // un 200 au corps d'erreur est la panne du service ; tout autre contenu non textuel est « sans lecture »
             return null;
         }
 
@@ -874,6 +883,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         // pour rembourser avec le bon motif et pour que le journal les compte séparément.
         if (!parsed.name) {
             console.error("JSON IA sans nom — inexploitable :", parsed);
+            dire('sans-lecture');
             return null;
         }
         // Numéro absent : on renvoie quand même la lecture, avec un drapeau explicite.
@@ -1053,6 +1063,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
     } catch (e) {
         // Log complet : c'est ici que tu verras la vraie cause (clé invalide, quota, timeout...)
         console.error("❌ Erreur getCardIdFromAI:", e.response?.data || e.message);
+        dire(causeApresErreur(e));        // le plafond de dépense, une panne du service classée, ou « sans lecture » (JSON invalide, erreur non classée)
         return null;
     }
 }
@@ -3126,11 +3137,13 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         console.log(`📷 ${photos.length} photo(s) envoyée(s) à l'IA.`);
-        cardInfo = await getCardIdFromAI(photos, title);
+        const diagnosticIA = {};      // POURQUOI la lecture rend null (FREIN-CONSTATES tour 3, C1) : panne du fournisseur PROUVÉE, coupure de dépense, ou « sans lecture » (photo sans carte…)
+        cardInfo = await getCardIdFromAI(photos, title, null, diagnosticIA);
         if (!cardInfo) {
-            // Échec DUR : aucune carte identifiée, rien n'a été livré -> on rend le scan.
-            const rendu = await rembourserScan(req, 'ia-echec');
-            enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
+            // Échec DUR : aucune carte identifiée, rien n'a été livré -> on rend le scan. Le motif dit la cause : `ia-echec` SEULEMENT pour une panne du fournisseur prouvée.
+            const motifIA = motifDuRefusIA(diagnosticIA);
+            const rendu = await rembourserScan(req, motifIA);
+            enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: motifIA, rembourse: rendu });
             return res.json({ success: false, error: "Analyse IA échouée (voir logs Render pour la cause exacte)" });
         }
 
@@ -3501,6 +3514,8 @@ const PHRASE_REFUS = {
     'numero-illisible': 'Je n\'ai pas pu lire cette carte.',
     'carte-introuvable': 'Je n\'ai pas pu lire cette carte.',
     'ia-echec': 'Je n\'ai pas pu lire cette carte.',
+    'ia-sans-lecture': 'Je n\'ai pas pu lire cette carte.',        // la lecture n'a rien rendu d'exploitable (photo sans carte…) : plafonné, jamais une panne du fournisseur
+    'depense-modele-plafond': 'Une source n\'a pas répondu. Réessaie dans un instant.',
     'tcgdex-injoignable': 'Une source n\'a pas répondu. Réessaie dans un instant.',
     'erreur-serveur': 'Une source n\'a pas répondu. Réessaie dans un instant.'
 };
@@ -3516,9 +3531,11 @@ const NATURE_REFUS = {
     'nom-contredit-sans-repli': 'refus-delibere',// idem, et le vivier de preuve est vide
     'egalite-parfaite': 'refus-delibere',        // plusieurs cartes correspondent aussi bien, l'écart de prix décide du verdict
     'aucun-prix': 'refus-delibere',              // ⚠️ /api/analyser UNIQUEMENT — jamais émis par /api/identifier
+    'ia-sans-lecture': 'refus-delibere',         // le modèle a répondu mais rien d'exploitable (JSON invalide, sans nom, contenu non textuel) : souvent une photo SANS carte — un constat sur la photo, PLAFONNÉ
 
     // ── ÉCHECS TECHNIQUES : quelque chose n'a pas marché. Rouge, même remboursé.
-    'ia-echec': 'echec-technique',               // le modèle n'a rien rendu d'exploitable — REMBOURSÉ, et pourtant une panne
+    'ia-echec': 'echec-technique',               // le fournisseur du modèle est en PANNE (prouvée : erreur classée ou corps d'erreur) — REMBOURSÉ hors plafond, et pourtant une panne
+    'depense-modele-plafond': 'echec-technique', // le plafond de dépense du modèle est atteint PENDANT le scan — notre limite : REMBOURSÉ hors plafond
     'erreur-serveur': 'echec-technique',         // exception dans la route — NON remboursé
     // ⚠️ CELUI-CI EXISTE PARCE QUE SON ABSENCE A MENTI. Le 2026-08-15 à 11:47, deux cartes
     // japonaises que TCGdex connaît sont sorties en `carte-introuvable`, donc en
@@ -3538,7 +3555,7 @@ const NATURE_REFUS = {
 // Les autres motifs ne sont pas concernés : `egalite-parfaite` affirme qu'on a trouvé
 // PLUSIEURS candidats, `numero-illisible` parle de la photo. Une panne ne les rend pas
 // faux, elle ne les touche pas.
-const REFUS_D_ABSENCE = new Set(['carte-introuvable', 'aucun-candidat']);
+// (la définition vit dans sources.js : `REFUS_D_ABSENCE` et `absenceNonConstatee`, lus aussi par v2/argent/nature-du-motif.js — une seule règle)
 
 // UN SEUL ENDROIT CONSTRUIT LES TROIS CHAMPS, pour qu'aucune sortie ne puisse en
 // oublier un ni les faire diverger. Les cinq sorties de /api/identifier l'appellent.
@@ -3583,8 +3600,8 @@ function champsDeRefus(motifRefus, rembourse) {
     // est sorti, et les statistiques par motif restent comparables) ; c'est la NATURE qui
     // change, donc la couleur affichée et le sens rendu à l'utilisateur.
     const tombees = sourcesTombees();
-    const absenceNonConstatee = tombees.length > 0 && REFUS_D_ABSENCE.has(motifRefus);
-    if (absenceNonConstatee) {
+    const absenceNonConstateeIci = absenceNonConstatee(motifRefus);       // le prédicat UNIQUE (sources.js), le même que celui qui range le remboursement côté panne
+    if (absenceNonConstateeIci) {
         console.warn(`⚠️ [absence-non-constatee] « ${motifRefus} » requalifié en echec-technique :` +
             ` ${tombees.join(', ')} n'a pas répondu. On n'affirme pas une absence qu'on n'a pas constatée.`);
     }
@@ -3650,10 +3667,10 @@ function champsDeRefus(motifRefus, rembourse) {
         // `rembourse` », c'est « montrer `raisonNonRembourse === 'plafond-jour'` ».
         raisonNonRembourse: rembourse ? null : raisonNonRemboursement(),
         motifRefus,
-        natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique'),
+        natureRefus: absenceNonConstateeIci ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique'),
         // La phrase du GESTE — voir PHRASE_REFUS. Une absence requalifiée en panne prend la
         // phrase de la panne : rescanner sert alors, alors qu'il ne servait pas avant.
-        phraseRefus: absenceNonConstatee
+        phraseRefus: absenceNonConstateeIci
             ? PHRASE_REFUS['tcgdex-injoignable']
             : (PHRASE_REFUS[motifRefus] ?? PHRASE_REFUS['erreur-serveur'])
     };
@@ -3758,7 +3775,8 @@ async function gererIdentifier(req, res) {
         const debutIA = Date.now();
         // la route sait transformer une lecture incertaine en question : elle accepte la lecture de SECOURS (titre) si le service tombe
         const secoursIA = {};
-        cardInfo = await getCardIdFromAI(photos, title, secoursIA);
+        const diagnosticIA = {};      // POURQUOI la lecture rend null (FREIN-CONSTATES tour 3, C1)
+        cardInfo = await getCardIdFromAI(photos, title, secoursIA, diagnosticIA);
         // la panne voyage dans `annonce`, donc jusqu'aux DEUX voies du journal (succès et refus)
         annonce.panneIA = secoursIA.panne ?? null;
         // ⚓ JALON DU VERROU (« ia-lue ») — voir verrou/jalons.js.
@@ -3774,7 +3792,8 @@ async function gererIdentifier(req, res) {
         // `nbPhotos`. Un objet figé ici rendrait `msCatalogue` toujours nulle.
         const champsCout = () => ({ msIA, msCatalogue, nbPhotos: photos.length });
         if (!cardInfo) {
-            const rendu = await rembourserScan(req, 'ia-echec');
+            const motifIA = motifDuRefusIA(diagnosticIA);        // `ia-echec` SEULEMENT pour une panne du fournisseur prouvée ; sinon `depense-modele-plafond` ou `ia-sans-lecture` (plafonné)
+            const rendu = await rembourserScan(req, motifIA);
             // ⚠️ `cardInfo` EST NUL ICI, ET LE BLOC RESTE UTILE : `etatVinted` et `etatMin`
             // ne viennent pas de l'IA mais de l'annonce. Une panne de lecture n'efface pas
             // ce que le vendeur a déclaré. Les trois champs d'origine IA seront nuls, et ce
@@ -3782,11 +3801,11 @@ async function gererIdentifier(req, res) {
             enregistrerEchec({
                 _id: req.scanIdImpose,
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null,
-                motifEchec: 'ia-echec', rembourse: rendu, ...champsEtat(), ...champsCout()
+                motifEchec: motifIA, rembourse: rendu, ...champsEtat(), ...champsCout()
             });
             // ⚠️ REMBOURSÉ, ET POURTANT UNE PANNE. C'est précisément le cas qui rendait
             // `rembourse` inutilisable seul : voir la table NATURE_REFUS au-dessus.
-            return res.json({ success: false, ...champsDeRefus('ia-echec', rendu), error: "Analyse IA échouée" });
+            return res.json({ success: false, ...champsDeRefus(motifIA, rendu), error: "Analyse IA échouée" });
         }
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce

@@ -143,7 +143,7 @@
           "identification"
         ],
         "summary": "Identifie les cartes d'une annonce (contrat 2)",
-        "description": "Sans `contrat: 2` dans le corps : la réponse héritée, inchangée. Les refus IMAGE et IA gardent le statut HTTP 200 (success:false).",
+        "description": "Sans `contrat: 2` dans le corps : la réponse héritée, inchangée. Les refus IMAGE et IA gardent le statut HTTP 200 (success:false). FREIN-CONSTATES : une analyse rendue parce que le SERVEUR l'a constatée (introuvable, garde des jumeaux, carte identifiée sans prix au guide) est remboursée dans la limite de 20 par jour de Paris sans compte, 50 gratuit, 100 Pro ; au-delà `facturation { debite: 1, rembourse: false, motif: \"plafond-jour\", raisonNonRembourse: \"plafond-jour\" }`. Toute panne de NOTRE côté (`503 INDISPONIBLE`, `500 SERVEUR`, `IA` : le fournisseur du modèle en panne prouvée) est toujours remboursée, hors plafond. Une photo SANS carte (le modèle ne rend rien d'exploitable) n'est pas une panne : `introuvable` / `photo-illisible`, plafonnée comme tout introuvable. Quand la dépense quotidienne globale du modèle (`V2_DEPENSE_MODELE_JOUR_USD`) est atteinte, aucun appel au modèle n'a lieu : tout scan rend `503 INDISPONIBLE` remboursé, jusqu'à minuit de Paris.",
         "security": [
           {
             "installation": []

@@ -10,6 +10,13 @@ const entier = (nom, v, defaut, min = 0, max = Infinity) => {
     if (!Number.isInteger(n) || n < min || n > max) throw new Error(`configuration invalide : ${nom}="${v}"`);
     return n;
 };
+// Nombre DÉCIMAL strictement positif et fini (dollars) : écrit par ce qu'il AUTORISE (chiffres, un point décimal éventuel), donc ni hexadécimal, ni exposant, ni infini, ni NaN, ni unité.
+const positif = (nom, v, defaut) => {
+    if (v === undefined || v === '') return defaut;
+    const n = /^\d+(\.\d+)?$/.test(String(v)) ? Number(v) : NaN;
+    if (!Number.isFinite(n) || n <= 0 || n > 100000) throw new Error(`configuration invalide : ${nom}="${v}"`);
+    return n;
+};
 const gele = o => { Object.values(o).forEach(x => { if (x && typeof x === 'object') gele(x); }); return Object.freeze(o); };
 // Variable booléenne : seulement '0' ou '1' (absente ou vide = défaut). Toute autre valeur rend la configuration invalide.
 const booleen = (nom, v, defaut) => {
@@ -88,9 +95,15 @@ function lireConfig(env = process.env) {
         //   · `declares` : les analyses RENDUES sur DÉCLARATION du client (réponse « aucune » ou « ne-sait-pas », question abandonnée, prix illisible définitif déclaré) — UN SEUL compteur pour les trois,
         //     plafonné par OFFRE (lue au moment du remboursement) : sans compte 1, gratuit 3, Pro 30 (dans la garde anti-abus de 200) ;
         //   · `lotTropGrand` : refus `lot-trop-grand`, taille ou quota (10), INCHANGÉ, indépendant de l'offre.
-        // Ce que le SERVEUR constate (panne, introuvable, garde des jumeaux, carte identifiée sans prix au guide) est rendu SANS plafond. Au-delà d'un plafond : pas de remboursement.
+        // FREIN-CONSTATES (décision du testeur, 2026-10-17) : ce que le SERVEUR constate (panne, introuvable, garde des jumeaux, remboursement à l'émission d'une question) est plafonné lui aussi, par jour de Paris
+        // et par PORTEUR, selon l'OFFRE lue au moment du remboursement : `constates` sans compte 20, gratuit 50, Pro 100. Seule exception : une panne de NOTRE infrastructure (INDISPONIBLE, 503), qui ne se facture jamais.
+        // Au-delà d'un plafond : pas de remboursement (motif `plafond-jour`).
         plafonds: { declares: { sansCompte: entier('V2_DECLARES_SANS_COMPTE', env.V2_DECLARES_SANS_COMPTE, 1), gratuit: entier('V2_DECLARES_GRATUIT', env.V2_DECLARES_GRATUIT, 3), pro: entier('V2_DECLARES_PRO', env.V2_DECLARES_PRO, 30) },
+                    constates: { sansCompte: entier('V2_CONSTATES_SANS_COMPTE', env.V2_CONSTATES_SANS_COMPTE, 20), gratuit: entier('V2_CONSTATES_GRATUIT', env.V2_CONSTATES_GRATUIT, 50), pro: entier('V2_CONSTATES_PRO', env.V2_CONSTATES_PRO, 100) },
                     lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
+        // FREIN-CONSTATES : le plafond GLOBAL de dépense quotidienne du modèle (tous porteurs confondus, jour de Paris), en dollars. Atteint, l'appel au modèle n'a plus lieu (v2/argent/depense-modele.js).
+        // `appelEstimeUsd` : le coût PRUDENT d'un appel quand la réponse du fournisseur n'en donne pas (le coût mesuré d'une identification est de 0,0032 à 0,0037 $).
+        depenseModele: { jourUsd: positif('V2_DEPENSE_MODELE_JOUR_USD', env.V2_DEPENSE_MODELE_JOUR_USD, 5), appelEstimeUsd: positif('V2_COUT_APPEL_ESTIME_USD', env.V2_COUT_APPEL_ESTIME_USD, 0.004) },
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
         // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).

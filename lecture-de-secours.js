@@ -5,7 +5,7 @@
 // avec l'image, le symbole et ce qui est déjà lu, et transforme en question ce qu'elle ne peut plus affirmer. »
 // Ce qui est « déjà lu » sans l'IA, c'est le TITRE DE L'ANNONCE, que l'extension envoie à chaque scan. Ce module :
 //   · classerPanneIA(e) : la panne est-elle du SERVICE (crédit, quota, clé, serveur, réseau) ? Une réponse illisible du modèle, une
-//     requête mal formée (400) ne sont PAS des pannes : elles gardent leur sort d'avant (refus « ia-echec »).
+//     requête mal formée (400) ne sont PAS des pannes : elles rendent une lecture nulle SANS panne, motif « ia-sans-lecture » (plafonné ; FREIN-CONSTATES tour 3 — « ia-echec » ne dit plus que la panne prouvée du fournisseur).
 //   · lectureDuTitre(titre) : le numéro (X/Y, ou une promo SWSH186, TG05/TG30…), la langue si le titre la dit, et le reste du titre
 //     comme nom, en confiance BASSE (un nom de titre est souvent français, ou approximatif : il ne fait pas foi). Sans numéro : null —
 //     un nom seul ne désigne pas une impression, et la route refuse comme avant.
@@ -35,6 +35,23 @@ function panneDansLeCorps(data) {
     if (!data?.error || data?.choices?.length) return null;
     return Number.isFinite(c) ? classerPanneIA({ response: { status: c } }) : null;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI LA LECTURE A RENDU NULL (FREIN-CONSTATES tour 3, relecture 2 C1). `getCardIdFromAI` rend `null` pour des causes qui ne se valent pas, et le motif de remboursement en dépend :
+//   · 'fournisseur'   — une panne du service PROUVÉE : une erreur que `classerPanneIA` classe, ou un 200 dont `panneDansLeCorps` trouve le corps d'erreur → `ia-echec` (panne de NOTRE côté) ;
+//   · 'depense'       — la dépense quotidienne du modèle atteinte PENDANT le scan (DEPENSE_MODELE_PLAFOND) → `depense-modele-plafond` (panne de notre côté) ;
+//   · 'sans-lecture'  — tout le reste : contenu non textuel, JSON invalide, JSON sans `name`, toute erreur non classée. Souvent une photo SANS CARTE : un constat sur la photo → `ia-sans-lecture`, PLAFONNÉ.
+// Écrit par ce qu'on AUTORISE : seules les deux causes prouvées ouvrent le côté panne ; une cause absente ou inconnue est « sans-lecture » (plafonnée).
+// ════════════════════════════════════════════════════════════════════════════
+const CODE_DEPENSE = 'DEPENSE_MODELE_PLAFOND';
+function causeApresErreur(e) {
+    if (e && e.code === CODE_DEPENSE) return 'depense';
+    return classerPanneIA(e) ? 'fournisseur' : 'sans-lecture';
+}
+const causeApresReponse = data => (panneDansLeCorps(data) ? 'fournisseur' : 'sans-lecture');
+const MOTIF_PAR_CAUSE = Object.freeze({ fournisseur: 'ia-echec', depense: 'depense-modele-plafond', 'sans-lecture': 'ia-sans-lecture' });
+/** Le motif de remboursement d'une lecture nulle, d'après le diagnostic que `getCardIdFromAI` a rempli. Cause absente ou inconnue : `ia-sans-lecture` (plafonné). */
+const motifDuRefusIA = diagnostic => MOTIF_PAR_CAUSE[diagnostic && diagnostic.cause] ?? 'ia-sans-lecture';
 
 const PREFIXES_PROMO = ['SWSH', 'SVP', 'HGSS', 'SM', 'XY', 'BW', 'DP', 'SV', 'TG', 'GG', 'RC'];
 // le numéro « X/Y » : X = préfixe facultatif (TG, GG, SV, RC…) + 1 à 3 chiffres + une lettre facultative ; Y = un total (chiffres, ou
@@ -76,4 +93,4 @@ function lectureDuTitre(titre) {
     };
 }
 
-module.exports = { classerPanneIA, panneDansLeCorps, lectureDuTitre };
+module.exports = { classerPanneIA, panneDansLeCorps, lectureDuTitre, causeApresErreur, causeApresReponse, motifDuRefusIA, MOTIF_PAR_CAUSE };

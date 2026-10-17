@@ -2,7 +2,7 @@
 // L'ADAPTATEUR vers acces.js (A0.6) : acces.js appelle `req.credit.v2.rembourser(req, motif, opts)` et `req.credit.v2.poserQuestion(req, q)` quand il existe.
 // Il garde sa forme d'aujourd'hui (booléen, cause par le contexte de scan de sources.js) ; ici on n'écrit AUCUNE collection héritée.
 const db = require('../db'); const { noterNonRemboursement } = require('../../sources');
-const { rembourser } = require('./ledger'); const { reserverQuestion } = require('./questions'); const { raisonPublique } = require('./facturation');
+const { rembourser } = require('./ledger'); const { natureDuMotif } = require('./nature-du-motif'); const { reserverQuestion } = require('./questions'); const { raisonPublique } = require('./facturation');
 const col = nom => db.col(nom);
 const quand = ctx => { const m = ctx && ctx.maintenant; return (typeof m === 'function' ? m() : m) || new Date(); };
 
@@ -10,8 +10,8 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
     const scanDe = req => (ctx.scanId && (typeof ctx.scanId === 'function' ? ctx.scanId(req) : ctx.scanId)) || (req && req.scanId) || null;
     return {
         // → true si un crédit a été RENDU ; sinon false, et la cause remonte par noterNonRemboursement (liste fermée de sources.js)
-        // `compteur: 'jumeaux'` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — rendu sans plafond, `unites` (une par carte refusée) validé par le ledger.
-        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre nom retombe sur `panne` (aussi constatée, sans plafond) ; seul le grand livre refuse un nom inconnu.
+        // `compteur: 'jumeaux'` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — constaté par le serveur, sous le plafond des constatés (FREIN-CONSTATES) ; `unites` (une par carte refusée) validé par le ledger.
+        // L'unicité par scan reste (claim rb|scanId). Seuls `question` et `jumeaux` sont honorés : tout autre appel reçoit sa nature de `natureDuMotif(motif)` (panne de notre côté hors plafond, sinon constat plafonné) ; seul le grand livre refuse un nom inconnu.
         async rembourser(req, motif, { compteur, jourDe, unites } = {}) {
             if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }      // un seul par requête
             req.scanRembourse = true;
@@ -23,7 +23,8 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
             }
             // PLAFOND-DECLARE : tout ce qui passe par ce pont est décidé par le SERVEUR (la chaîne héritée juge un résultat incertain, une panne, un introuvable) : `constate-question` pour une question (rendu sans
             // plafond), `jumeaux` ou `panne` sinon. Les DÉCLARATIONS du client (réponse, abandon, prix illisible) ne passent jamais ici : questions.js et retour-live.js appellent le grand livre directement.
-            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : 'panne', jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
+            // la nature vient du MOTIF, par l'unique fonction `natureDuMotif` (nature-du-motif.js) : une panne de NOTRE côté est hors plafond, tout le reste (motif inconnu compris) est un constat plafonné
+            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'constate-question' : compteur === 'jumeaux' ? 'jumeaux' : natureDuMotif(motif), jourDe, ...(compteur === 'jumeaux' && Number.isInteger(unites) ? { unites } : {}), maintenant: now }, cfg);
             if (r.rendu) { req.scanRendu = true; return true; }
             noterNonRemboursement(raisonPublique(r.raisonNonRembourse));
             return false;

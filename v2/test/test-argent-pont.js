@@ -36,7 +36,7 @@ async function requete(p, scanId, { le = t } = {}) {
     const p3 = await compte({ solde: { accueil: 0, achete: 20 } }); const res = [];
     for (let i = 0; i < 6; i++) { const q = await requete(p3, `pont-p${i}`); res.push(await dansUnScan(async () => ({ rendu: await acces.rembourserScan(q, 'ia-echec'), cause: raisonNonRemboursement() }))); }
     // PLAFOND-DECLARE : une panne est CONSTATÉE par le serveur, rendue sans plafond (l'ancien plafond de 5 est levé)
-    H.v('6 pannes : les 6 rendues (constaté par le serveur, sans plafond), aucun compteur de plafond écrit', [res.map(r => r.rendu ? 'rendu' : r.cause), await db.col('plafonds').countDocuments({ porteur: `compte:${p3.id}` })], [Array(6).fill('rendu'), 0]);
+    H.v('6 pannes : les 6 rendues (panne de NOTRE côté `ia-echec` : hors plafond des constatés — FREIN-CONSTATES), aucun compteur', [res.map(r => r.rendu ? 'rendu' : r.cause), await db.col('plafonds').countDocuments({ porteur: `compte:${p3.id}` })], [Array(6).fill('rendu'), 0]);
     // une cause que v2 connaît seule se dit avec la liste fermée de sources.js (jamais une valeur refusée)
     // OFFRE-QUOTA : plus de poche qui « change de période » (l'abonnement mensuel, l'hebdo) — un remboursement tardif rend l'unité au compteur du JOUR OÙ ELLE A ÉTÉ PRISE, jamais à celui du jour courant
     const p4 = await compte();
@@ -47,7 +47,7 @@ async function requete(p, scanId, { le = t } = {}) {
     // 3. signalerIncertain => décidé par le serveur : rendu sans plafond, aucun compteur
     const p5 = await compte({ solde: { accueil: 0, achete: 3 } }); const q5 = await requete(p5, 'pont-s5');
     const r5 = await dansUnScan(async () => await acces.signalerIncertain(q5, 'egalite'));
-    H.v('signalerIncertain : rendu, CONSTATÉ par le serveur (aucun compteur écrit : ni déclarations, ni pannes)', [r5, await db.col('plafonds').countDocuments({ porteur: `compte:${p5.id}` })], [true, 0]);
+    H.v('signalerIncertain : rendu, CONSTATÉ par le serveur (un compteur « constate », jamais celui des déclarations)', [r5, await db.col('plafonds').countDocuments({ porteur: `compte:${p5.id}`, type: 'constate' }), await db.col('plafonds').countDocuments({ porteur: `compte:${p5.id}`, type: 'declare' })], [true, 1, 0]);
     // 4. poserQuestion d'acces.js => ligne dans questions v2, req.questionId posé
     const p6 = await compte({ solde: { accueil: 0, achete: 3 } }); const q6 = await requete(p6, 'pont-s6');
     const pq = await acces.poserQuestion(q6, { scanId: 'pont-s6', raison: 'egalite', candidats: [111, 222] });

@@ -104,6 +104,12 @@ const raisonNonRemboursement = () => contexteDuScan.getStore()?.raisonNonRembour
  */
 const sourcesTombees = () => [...(contexteDuScan.getStore()?.pannes ?? [])];
 
+// LES REFUS QUI AFFIRMENT UNE ABSENCE, ET LE PRÉDICAT UNIQUE « ABSENCE NON CONSTATÉE » (FREIN-CONSTATES tour 3, I1). Une seule définition, lue par `champsDeRefus` (index.js, qui requalifie le refus en
+// échec technique) ET par `natureDuMotif` (v2/argent/nature-du-motif.js, qui range le remboursement côté panne, hors plafond) : un refus d'absence prononcé alors qu'une source est tombée n'est pas
+// un constat sur la photo, c'est une panne de NOTRE côté. Hors contexte de scan, `sourcesTombees()` rend [] : le prédicat est faux.
+const REFUS_D_ABSENCE = new Set(['carte-introuvable', 'aucun-candidat']);
+const absenceNonConstatee = motif => typeof motif === 'string' && REFUS_D_ABSENCE.has(motif) && sourcesTombees().length > 0;
+
 // ⚠️ COMPTEUR DES PANNES TOMBÉES HORS DE TOUT SCAN — voir `interrogerSource`.
 // Volontairement un compteur de PROCESSUS et non de scan : par définition, ces
 // pannes-là n'appartiennent à aucun scan. Il n'existe que pour être lu par un contrôle
@@ -170,6 +176,6 @@ async function interrogerSource(quoi, requete) {
 }
 
 module.exports = {
-    interrogerSource, dansUnScan, sourcesTombees, pannesHorsContexte,
+    interrogerSource, dansUnScan, sourcesTombees, pannesHorsContexte, REFUS_D_ABSENCE, absenceNonConstatee,
     RAISONS_NON_REMBOURSE, noterNonRemboursement, raisonNonRemboursement
 };

@@ -250,7 +250,9 @@ function rattacherVerites(lignes, verites) {
 // ajoute un cas qui n'a PAS de `motifEchec` : OpenRouter tombé, la route cherche la carte par le TITRE de l'annonce et rend une
 // QUESTION — une ligne « aboutie » où l'IA n'a jamais lu la photo. `panneIA` la marque ; sans lui, le banc la jugerait comme une
 // identification, et porterait au tableau la disponibilité d'un fournisseur.
-const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
+// FREIN-CONSTATES tour 3 : `ia-echec` ne couvre plus que la panne PROUVÉE du fournisseur ; la lecture sans résultat exploitable (`ia-sans-lecture`) et la coupure de dépense (`depense-modele-plafond`) étaient
+// comptées sous `ia-echec` : elles restent des incidents où l'IA n'a pas lu la photo, pour que le banc ne les juge pas comme des identifications.
+const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'ia-sans-lecture', 'depense-modele-plafond', 'erreur-serveur']);
 function estIncidentTechnique(d) { return MOTIFS_TECHNIQUES.has(d?.motifEchec) || Boolean(d?.panneIA); }
 
 module.exports = {

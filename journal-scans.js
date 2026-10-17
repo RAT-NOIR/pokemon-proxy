@@ -134,7 +134,9 @@ const journalScanSchema = new mongoose.Schema({
     // Le motif EXACT, jamais un « échec » générique : c'est la répartition entre ces
     // motifs qui dira où porter l'effort. Les valeurs viennent des `return` réels des
     // deux routes, pas d'une nomenclature inventée :
-    //   'ia-echec'          -> l'IA n'a rien rendu du tout (getCardIdFromAI null)
+    //   'ia-echec'          -> le fournisseur du modèle est en PANNE prouvée (getCardIdFromAI null, cause 'fournisseur')
+    //   'ia-sans-lecture'   -> le modèle a répondu sans rien d'exploitable (JSON invalide, sans nom : photo sans carte…) (null, cause 'sans-lecture')
+    //   'depense-modele-plafond' -> le plafond de dépense du modèle atteint pendant le scan (null, cause 'depense')
     //   'numero-illisible'  -> l'IA le déclare elle-même ; aucun chemin ne peut aboutir
     //   'carte-introuvable' -> ni TCGdex ni le catalogue local ne connaissent la carte
     //   'aucun-candidat'    -> carte identifiée, mais zéro produit Cardmarket à tester
