@@ -7,23 +7,31 @@
 //     d'un petit ensemble fermé, accès indexé réduit à un identifiant ou un nombre, méthodes appelées et `new` d'un ensemble fermé, createElement de div, button, canvas.
 const esprima = require('esprima');
 
-const MATCH = 'https://collectorviper.livejournal.com/*';
-const HOTES_ADMIS = Object.freeze(['collectorviper.livejournal.com', 'recepteur-collectorviper.js']);   // chaînes à points admises dans le code (garde de lieu, commande affichée)
+// UN PROFIL par userscript (lot CM-PASSIF) : ce que chacun a le droit de dire d'EUX-MÊMES (nom, @match, hôtes et fichiers cités dans le code). Tout le reste de la liste fermée est COMMUN,
+// et un profil n'ouvre pas l'autre : le script Cardmarket est refusé par le profil Collectorviper (défaut) et inversement.
+const PROFILS = Object.freeze({
+    collectorviper: Object.freeze({ nom: 'Rat-Market — Relevé passif Collectorviper', match: 'https://collectorviper.livejournal.com/*', hotes: Object.freeze(['collectorviper.livejournal.com', 'recepteur-collectorviper.js']) }),   // chaînes à points admises dans le code (garde de lieu, commande affichée)
+    'cardmarket-fiche': Object.freeze({ nom: 'Rat-Market — Relevé passif fiches Cardmarket', match: 'https://www.cardmarket.com/*/Pokemon/Products/Singles/*', hotes: Object.freeze(['www.cardmarket.com', 'recepteur-cardmarket-fiche.js']) })
+});
+const PROFIL_DEFAUT = 'collectorviper';
+const profilDe = p => { if (!Object.prototype.hasOwnProperty.call(PROFILS, p)) throw new Error(`profil « ${String(p)} » inconnu : ${Object.keys(PROFILS).join(', ')}`); return PROFILS[p]; };
+const MATCH = PROFILS[PROFIL_DEFAUT].match;
 const PREFIXE_LOCAL = 'http://127.0.0.1:';
 const PREFIXE_PNG = 'data:image/png;base64,';
 const sansHote = v => !/\/\/|:\/\//.test(v) && !(v.match(/[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g) || []).some(h => /[A-Za-z]/.test(h.split('.').pop()));
 
-const ENTETE_ADMIS = Object.freeze({
-    name: v => v === 'Rat-Market — Relevé passif Collectorviper',
+const enteteAdmis = profil => Object.freeze({
+    name: v => v === profil.nom,
     namespace: v => v === 'rat-market',
     version: v => v === '1.0',
     description: v => v !== '' && sansHote(v),
-    match: v => v === MATCH,
+    match: v => v === profil.match,
     grant: v => v === 'GM_xmlhttpRequest',
     connect: v => v === '127.0.0.1',
     'run-at': v => v === 'document-idle',
     noframes: v => v === ''
 });
+const ENTETE_ADMIS = enteteAdmis(PROFILS[PROFIL_DEFAUT]);
 const CSS_OK = Object.freeze(['position', 'bottom', 'right', 'z-index', 'background', 'color', 'font', 'padding', 'border', 'border-radius', 'box-shadow', 'width', 'margin-bottom', 'margin-top', 'min-height', 'line-height', 'white-space', 'cursor', 'font-weight', 'font-size']);
 const ECRITURES_OK = Object.freeze(['textContent', 'cssText', 'disabled', 'opacity', 'width', 'height', 'color', 'etat', 'raison']);   // etat et raison : champs d'un objet local du script
 const METHODES_OK = Object.freeze(['createElement', 'appendChild', 'addEventListener', 'getContext', 'drawImage', 'toDataURL', 'querySelector', 'querySelectorAll', 'closest', 'slice', 'call', 'forEach', 'push', 'join', 'then', 'charAt', 'indexOf', 'test', 'replace', 'trim', 'toISOString', 'floor', 'random', 'max', 'stringify', 'parse', 'resolve']);
@@ -33,7 +41,8 @@ const ELEMENTS_OK = Object.freeze(['div', 'button', 'canvas']);
 const IDENTIFIANTS_REFUSES = new Set(['window', 'self', 'top', 'parent', 'frames', 'globalThis', 'unsafeWindow', 'GM', 'GM_info', 'eval', 'Function', 'fetch', 'XMLHttpRequest', 'xmlHttpRequest', 'sendBeacon', 'Audio', 'Worker', 'SharedWorker', 'EventSource', 'WebSocket', 'Request', 'Image', 'Option', 'importScripts', 'localStorage', 'sessionStorage', 'indexedDB', 'navigator', 'Reflect', 'Proxy', 'constructor', '__proto__', 'innerHTML', 'outerHTML', 'insertAdjacentHTML', 'setAttribute', 'setAttributeNS', 'crossOrigin', 'referrerPolicy', 'srcset', 'cookie', 'open', 'write', 'assign', 'replaceState', 'pushState', 'postMessage', 'submit', 'click', 'dispatchEvent', 'focus', 'scrollTo', 'scrollBy', 'scrollIntoView', 'setTimeout', 'setInterval', 'requestAnimationFrame', 'toBlob', 'createObjectURL', 'FileReader', 'createImageBitmap', 'decode', 'href']);
 const CHAINES_REFUSEES = /^(fetch|src|srcset|href|sendBeacon|XMLHttpRequest|Worker|Audio|crossOrigin|innerHTML)$/;
 
-function violationsEntete(entete) {
+function violationsEntete(entete, nomProfil = PROFIL_DEFAUT) {
+    const ENTETE_ADMIS = enteteAdmis(profilDe(nomProfil));
     const v = [], vues = [];
     for (const ligne of entete.split(/\r?\n/)) {
         const d = /^\/\/\s*@(\S+)(?:\s+(.*?))?\s*$/.exec(ligne);
@@ -44,11 +53,12 @@ function violationsEntete(entete) {
         vues.push(cle);
         if (!ENTETE_ADMIS[cle](valeur)) v.push(`en-tête : valeur « ${valeur.slice(0, 80)} » non admise pour @${cle}`);
     }
-    for (const cle of ['name', 'version', 'match', 'grant', 'connect']) if (!vues.includes(cle)) v.push(`en-tête : @${cle} absente`);
+    for (const cle of ['name', 'version', 'match', 'grant', 'connect', 'noframes']) if (!vues.includes(cle)) v.push(`en-tête : @${cle} absente`);
     return v;
 }
 
-function violationsChaine(brut) {
+function violationsChaine(brut, nomProfil = PROFIL_DEFAUT) {
+    const HOTES_ADMIS = profilDe(nomProfil).hotes;
     const v = [];
     if (brut === PREFIXE_PNG) return v;
     const s = brut.split(PREFIXE_LOCAL).join('');
@@ -64,17 +74,18 @@ function violationsChaine(brut) {
     return v;
 }
 
-function violations(src) {
+function violations(src, nomProfil = PROFIL_DEFAUT) {
+    profilDe(nomProfil);
     const m = /^\/\/ ==UserScript==\r?\n([\s\S]*?)\r?\n\/\/ ==\/UserScript==/.exec(src);
     if (!m) return ['en-tête ==UserScript== absent'];
-    const v = violationsEntete(m[1]);
+    const v = violationsEntete(m[1], nomProfil);
     let T;
     try { T = esprima.tokenize(src.slice(m[0].length)); } catch (e) { return [...v, `corps illisible par le lecteur de jetons : ${e.message}`]; }
     let nbGM = 0;
     for (let i = 0; i < T.length; i++) {
         const t = T[i], p = T[i - 1], n = T[i + 1], val = x => (x ? x.value : undefined);
         if (t.type === 'Template') v.push('gabarit de chaîne (backticks) : non admis');
-        else if (t.type === 'String') v.push(...violationsChaine(t.value.slice(1, -1)));
+        else if (t.type === 'String') v.push(...violationsChaine(t.value.slice(1, -1), nomProfil));
         else if (t.type === 'Identifier') {
             if (IDENTIFIANTS_REFUSES.has(t.value)) v.push(`identifiant « ${t.value} » refusé`);
             if (t.value === 'prototype' && !(T[i - 2] && T[i - 2].type === 'Identifier' && T[i - 2].value === 'Array')) v.push('prototype : seulement Array.prototype');
@@ -99,4 +110,4 @@ function violations(src) {
     return v;
 }
 
-module.exports = { violations, violationsEntete, violationsChaine, MATCH, ENTETE_ADMIS, METHODES_OK, ECRITURES_OK, CSS_OK, ELEMENTS_OK };
+module.exports = { violations, violationsEntete, violationsChaine, MATCH, PROFILS, ENTETE_ADMIS, METHODES_OK, ECRITURES_OK, CSS_OK, ELEMENTS_OK };
