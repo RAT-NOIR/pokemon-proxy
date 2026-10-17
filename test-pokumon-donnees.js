@@ -14,6 +14,10 @@ const RAW = {
     grotle: wp(75820, 'Play Pokemon Grotle (007/172 Play Pokemon Prize Pack Series 2,Play Pokemon Prize Pack Series 3 Special Print)', `${CDN}/2024/11/EN_S1239Play-PokemonSpecial-Print.jpg`, 500, 698, [7721, 7838]),
     ludicolo: wp(75792, 'Play Pokemon Ludicolo (034/203 Play Pokemon Prize Pack Series 2 Special Print)', `${CDN}/2024/11/EN_S1211Play-PokemonSpecial-Print.jpg`, 500, 698, [7721]),
     regieleki: wp(75976, 'Holofoil Play Pokemon Regieleki VMAX (058/195 Play Pokemon Prize Pack Series 3,Play Pokemon Prize Pack Series 4 Special Print)', `${CDN}/2024/11/EN_S1394Holofoil-Play-PokemonSpecial-Print.png`, 738, 1033, [7838, 8187]),
+    // lot PP-HOLO (2026-10-17) : une carte ordinaire du même set d'origine que Drizzile (SSH, /202) — le second témoin du dénominateur — et un couple holo/non-holo aux SÉRIES différentes (Houndoom S2)
+    greatBall: wp(75605, `Play Pokemon Great Ball (164/202 ${S12})`, `${CDN}/2024/11/EN_S1024Play-PokemonSpecial-Print.jpg`, 576, 804, [7720, 7721]),
+    houndoomN: wp(75673, `Play Pokemon Houndoom (096/163 ${S12})`, `${CDN}/2024/11/EN_S1092Play-PokemonSpecial-Print.jpg`, 576, 804, [7720, 7721]),
+    houndoomHolo: wp(75674, 'Holofoil Play Pokemon Houndoom (096/163 Play Pokemon Prize Pack Series 2 Special Print)', `${CDN}/2024/11/EN_S1093Holofoil-Play-PokemonSpecial-Print.png`, 767, 1074, [7721]),
     gengar22: wp(76001, 'Trick or Trade Gengar (057/198 Line Holo Pikachu jack-o’-lantern stamp Trick or Trade BOOster Bundle exclusive Special Print)', `${CDN}/2026/07/EN_S1695Trick-or-TradeSpecial-Print.png`, 740, 1036, [8001]),
     placeholder: wp(107729, 'Kilowattrel (8/15 McDonald\'s McDonalds Collection)', `${CDN}/2021/03/PlaceholderCard.jpg`, 474, 659, [777])
 };

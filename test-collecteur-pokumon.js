@@ -137,9 +137,9 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
         tr.appels.map(u => u.replace('https://pokumon.com', '').replace('https://cdn6966.templcdn.com', 'CDN').slice(0, 40)),
         ['/robots.txt', '/wp-json/wp/v2/card?release_event=7720&p', '/wp-json/wp/v2/card?release_event=7721&p', '/wp-json/wp/v2/card?release_event=7838&p', '/wp-json/wp/v2/card?release_event=8187&p', 'CDN/robots.txt',
             'CDN/wp-content/uploads/2024/11/EN_S1080H', 'CDN/wp-content/uploads/2024/11/EN_S1081P', 'CDN/wp-content/uploads/2024/11/EN_S1275P', 'CDN/wp-content/uploads/2024/11/EN_S1394H']);
-    verifier('le plan : 6 prouvés (Kricketune S1 et S2, Cherrim, Cheren, Regieleki S3 et S4) ; Drizzile V1/V2 (holo et non-holo non séparables) et Grotle (déjà servi par TCGdex) restent des trous NOMMÉS',
+    verifier('le plan : 6 prouvés (Kricketune S1 et S2, Cherrim, Cheren, Regieleki S3 et S4) ; Drizzile V1/V2 (holo et non-holo : seul de son code d\'origine SSH, le groupe ne peut pas être son propre témoin du dénominateur — la section 11 le prouve avec un second témoin) et Grotle (déjà servi par TCGdex) restent des trous NOMMÉS',
         [R.plan.plan.map(p => [p.carteId, p.serie]), R.plan.restes.map(r => [r.idProduct, r.motif]).sort()],
-        [[[100, 1], [101, 2], [102, 1], [104, 3], [106, 3], [107, 4]], [[697089, 'douteux-variantes-non-separables'], [728159, 'deja-servi'], [835825, 'douteux-variantes-non-separables']].sort()]);
+        [[[100, 1], [101, 2], [102, 1], [104, 3], [106, 3], [107, 4]], [[697089, 'code-sans-second-temoin'], [728159, 'deja-servi'], [835825, 'code-sans-second-temoin']].sort()]);
     verifier('R2 AVANT la ligne : un dépôt WebP par fiche posée (5 : Kricketune S1 et S2, Cheren, Regieleki S3 et S4 ; Cherrim est sous le seuil), à la clé du set', depots.map(d => [d[1], d[3]]).sort(),
         [[`pokumon/${SLUG[1]}/006-100-en.webp`, 'image/webp'], [`pokumon/${SLUG[2]}/006-101-en.webp`, 'image/webp'], [`pokumon/${SLUG[3]}/134-104-en.webp`, 'image/webp'], [`pokumon/${SLUG[3]}/058-106-en.webp`, 'image/webp'], [`pokumon/${SLUG[4]}/058-107-en.webp`, 'image/webp']].sort());
     const im = B.col('images').get(`pokumon/${SLUG[1]}/100/006/en`);
@@ -271,6 +271,73 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
     verifier('index des autres familles : total concordant → les entrées sont lues', [ok3.entrees.length, ok3.requetes], [3, 1]);
     let e5 = null; try { await C.lancerEcritureFamilles(['nexistepas'], null, { lireProduits: async () => [], bucket: 'b' }); } catch (e) { e5 = e.message; }
     verifier('une ligne inconnue refuse avant toute requête, et nomme les lignes de la table', [/ligne\(s\) inconnue\(s\) : nexistepas/.test(e5 || ''), /mcd-2015/.test(e5 || '')], [true, true]);
+
+    // ── 11. PP-HOLO de BOUT EN BOUT : le scan non-holo sert les DEUX produits, marqué « partagée holo/non-holo » ; le retrait ne vise que ces images ─────────────────────────────
+    {
+        const SL = SLUG[1];
+        const monde = [
+            { idProduct: 697089, carteId: 244998, nomCm: 'Drizzile [Shady Dealings | Water Drip]', slugProduit: 'Drizzile-V1-PPS1SSH-056' },
+            { idProduct: 835825, carteId: 244998, nomCm: 'Drizzile [Shady Dealings | Water Drip]', slugProduit: 'Drizzile-V2-PPS1SSH-056' },
+            { idProduct: 697187, carteId: 30360, nomCm: 'Great Ball', slugProduit: 'Great-Ball-PPS1SSH-164' }
+        ];
+        const BH = fausseBase();
+        BH.col('sets').set(SL, { _id: SL, tirage: 'intl', region: 'intl' });
+        for (const p of monde) {
+            if (!BH.col('cartes').has(p.carteId)) BH.col('cartes').set(p.carteId, { _id: p.carteId, nomEn: p.nomCm.replace(/\s*\[.*$/, ''), images: [] });
+            BH.col('cartes_produits').set(`${p.carteId}|${p.idProduct}`, { _id: `${p.carteId}|${p.idProduct}`, carteId: p.carteId, idProduct: p.idProduct, slugSet: SL, visuelSubstitut: substitut(p.idProduct) });
+        }
+        const prodH = async () => monde.map(p => ({ idProduct: p.idProduct, slugSet: SL, slugProduit: p.slugProduit, nomCm: p.nomCm }));
+        const indexH = [RAW.drizzileHolo, RAW.drizzile, RAW.greatBall].map(r => P.lireEntree(r));
+        const urlDe = r => r._embedded['wp:featuredmedia'][0].source_url;
+        const fich = { [urlDe(RAW.drizzile)]: await png(785, 1099), [urlDe(RAW.greatBall)]: await png(576, 804), [urlDe(RAW.drizzileHolo)]: await png(770, 1078) };
+        const trH = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : fich[url] ? { status: 200, type: 'image/png', octets: fich[url] } : { status: 404, type: 'text/html' }; } };
+        const sH = JSON.stringify([...BH.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut]));
+        const lancerH = async tr => { const re = silencieux(); try { return await C.lancerEcriture([1], BH.M, { verrou, client: client(tr), lireProduits: prodH, index: indexH, R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { re(); } };
+        const RH = await lancerH(trH);
+        verifier('PP-HOLO bout en bout : la série est « verifie » ; seuls les fichiers NON-holo sont demandés (Drizzile 1007, Great Ball 1024) — le scan holo (1006) n\'est JAMAIS téléchargé',
+            [RH.resultats.map(r => r.etat), trH.appels.filter(u => /EN_S/.test(u)).map(u => /EN_S(\d+)/.exec(u)[1]).sort()], [['verifie'], ['1007', '1024']]);
+        const dD = BH.col('images').get(`pokumon/${SL}/244998/056/en`), dG = BH.col('images').get(`pokumon/${SL}/30360/164/en`);
+        verifier('PP-HOLO : le document `images` du groupe porte le champ explicite et la liste exacte des deux produits ; celui de Great Ball n\'a ni l\'un ni l\'autre',
+            [dD?.partageeHoloNonHolo, dD?.produitsPartages, dD?.pokumonId, 'partageeHoloNonHolo' in dG, 'produitsPartages' in dG], [true, [697089, 835825], 75588, false, false]);
+        const eD = BH.col('cartes').get(244998).images, eG = BH.col('cartes').get(30360).images;
+        verifier('PP-HOLO : l\'entrée `cartes.images` du groupe porte les deux champs (UNE entrée pour la fiche) ; l\'entrée de Great Ball n\'en a aucun',
+            [eD.length, eD[0].partageeHoloNonHolo, eD[0].produitsPartages, eG.length, 'partageeHoloNonHolo' in eG[0], 'produitsPartages' in eG[0]], [1, true, [697089, 835825], 1, false, false]);
+        const serviH = id => P.visuelServi(SITE, { set: SL, images: BH.col('cartes').get(id).images, numeroFiche: null, region: 'intl', produits: [...BH.col('cartes_produits').values()].filter(l => l.carteId === id), baseUrlImages: 'https://img.example' }).genre;
+        verifier('PP-HOLO : la règle du site IMPORTÉE sert l\'image propre pour les deux produits de la fiche ; les substituts n\'ont pas bougé d\'un octet', [serviH(244998), serviH(30360), JSON.stringify([...BH.col('cartes_produits').values()].map(l => [l._id, l.visuelSubstitut])) === sH], ['propre', 'propre', true]);
+        const trH2 = { appels: [], get: trH.get };
+        const RH2 = await lancerH(trH2);
+        verifier('PP-HOLO : la reprise ne demande aucun fichier et garde le champ (une entrée par fiche)', [trH2.appels.filter(u => /EN_S/.test(u)).length, BH.col('cartes').get(244998).images.length, BH.col('cartes').get(244998).images[0].partageeHoloNonHolo, RH2.resultats.map(r => r.etat)], [0, 1, true, ['verifie']]);
+        // une image posée AVANT cette règle (sans le champ) le reçoit au rejeu — sur le document ET sur l'entrée — sans nouveau téléchargement
+        const docAnc = BH.col('images').get(`pokumon/${SL}/244998/056/en`);
+        delete docAnc.partageeHoloNonHolo; delete docAnc.produitsPartages;
+        BH.col('cartes').get(244998).images = [];                 // l'entrée de la fiche manque : le plan la reprend, le document est « sauté » (déjà téléchargé) mais doit recevoir le champ
+        const trH4 = { appels: [], get: trH.get };
+        await lancerH(trH4);
+        verifier('PP-HOLO : un document déjà téléchargé mais sans le champ (entrée de la fiche manquante) le reçoit au rejeu — document ET entrée rebâtie — sans nouveau téléchargement',
+            [trH4.appels.filter(u => /EN_S/.test(u)).length, BH.col('images').get(`pokumon/${SL}/244998/056/en`).partageeHoloNonHolo, BH.col('images').get(`pokumon/${SL}/244998/056/en`).produitsPartages, BH.col('cartes').get(244998).images.length, BH.col('cartes').get(244998).images[0].partageeHoloNonHolo, BH.col('cartes').get(244998).images[0].produitsPartages], [0, true, [697089, 835825], 1, true, [697089, 835825]]);
+        // la MÊME carte porte aussi une image ORDINAIRE du lot dans un autre set (une carte réimprimée en S2) : le retrait partiel n'y touche pas
+        const ordinaire = { set: SLUG[2], source: 'pokumon', cleR2: `pokumon/${SLUG[2]}/056-244998-en.webp`, numero: '056', lot: P.LOT, langue: 'en', vignette: { cleR2: `vignettes/pokumon/${SLUG[2]}/056-244998-en.webp`, w: 200, h: 279 } };
+        BH.col('cartes').get(244998).images.push(structuredClone(ordinaire));
+        BH.col('images').set(`pokumon/${SLUG[2]}/244998/056/en`, { _id: `pokumon/${SLUG[2]}/244998/056/en`, source: 'pokumon', set: SLUG[2], carteId: 244998, numero: '056', lot: P.LOT, etat: 'ok', cleR2: ordinaire.cleR2 });
+        // le retrait des seules images partagées
+        const simH = await retirerLot(BH.db, { seulementPartagees: true });
+        verifier('PP-HOLO retrait (simulation) : les seules images « partagée holo/non-holo » — la carte du groupe, une entrée, ses clés R2 (image et vignette) ; Great Ball n\'y est pas', [simH.cartes, simH.entrees, simH.docs, simH.cles.length, simH.cles.every(c => /Series-One/.test(c))], [[244998], 1, 1, 2, true]);
+        const clesH = [];
+        const rrH = await retirerLot(BH.db, { ecrire: true, effacerR2: true, seulementPartagees: true, supprimer: async (b, c) => clesH.push(...c), verifierBucket: async () => { }, bucket: 'bucket-banc' });
+        verifier('PP-HOLO retrait : la fiche Drizzile perd son entrée, Great Ball garde la sienne ; le document du groupe passe « retire », celui de Great Ball reste « ok » ; seules les clés du groupe sont effacées',
+            [BH.col('cartes').get(244998).images.map(e => e.set), BH.col('cartes').get(30360).images.length, BH.col('images').get(`pokumon/${SL}/244998/056/en`).etat, BH.col('images').get(`pokumon/${SL}/30360/164/en`).etat, BH.col('images').get(`pokumon/${SLUG[2]}/244998/056/en`).etat, clesH.length, clesH.every(c => /Series-One/.test(c)), rrH.reste], [[SLUG[2]], 1, 'retire', 'ok', 'ok', 2, true, 0]);
+        verifier('PP-HOLO retrait partiel : la source N\'est PAS fermée (pas d\'alerte), le bilan du set reste, la fiche retrouve son substitut', [BH.col('collecte_images_etat').get(P.ID_ALERTE)?.active ?? null, BH.col('sets').get(SL).visuelsPokumon !== undefined, serviH(244998), serviH(30360)], [null, true, 'substitut', 'propre']);
+        const trH3 = { appels: [], get: trH.get };
+        const RH3 = await lancerH(trH3);
+        verifier('PP-HOLO : un visuel retiré ne revient pas au rejeu (aucun fichier demandé, aucune entrée)', [trH3.appels.filter(u => /EN_S/.test(u)).length, BH.col('cartes').get(244998).images.filter(e => e.set === SL).length, RH3.resultats[0].retires], [0, 0, 1]);
+        for (const [args, motifAttendu] of [[['--partagees-holo', '--effacer-r2'], /--effacer-r2 sans --ecrire/], [['--partagees'], /argument inconnu/]]) {
+            const r = spawnSync(process.execPath, [path.join(DIR, 'retirer-visuels-pokumon.js'), ...args], { encoding: 'utf8', timeout: 30000 });
+            verifier(`ligne de commande du retrait « ${args.join(' ')} » : refusée avant toute connexion (code 2), pour la bonne raison`, [r.status, motifAttendu.test(r.stderr || '')], [2, true]);
+        }
+        // le retrait COMPLET du lot retire aussi les images partagées (même lot) : rien n'est oublié
+        const rrAll = await retirerLot(BH.db, { ecrire: true });
+        verifier('PP-HOLO retrait complet : retire le reste du lot (Great Ball, et l\'image ordinaire de la même carte en S2) et ferme la source', [BH.col('cartes').get(30360).images.length, BH.col('cartes').get(244998).images.length, BH.col('collecte_images_etat').get(P.ID_ALERTE)?.active, rrAll.reste], [0, 0, true, 0]);
+    }
 
     console.log(`\n${ko ? '❌' : '✅'} ${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

@@ -38,7 +38,10 @@ const COMPTEURS = Object.freeze({
     // de cleR2 et perd sa vignette) saute la clé disparue et laisse `images` égal : seul ce nombre le voit. S'annonce aussi : un retrait de
     // masse voulu s'annonce PAR SET (« vignettes-set set:S » : K), qui couvre les K clés perdues et le nombre.
     'vignettes-set': 'nombre d\'entrées de cartes.images qui portent une vignette, par set',
-    'nom-affiche': 'le set porte un nomAffichage'
+    'nom-affiche': 'le set porte un nomAffichage',
+    // ➕ 2026-10-17 (PP-HOLO) : le champ explicite `partageeHoloNonHolo: true` (le scan tamponné sert le produit holo ET le non-holo ; l'API ne tranche jamais le brillant par l'image).
+    // Un rejeu qui l'efface laisse `images` et les vignettes intacts : seul ce compteur le voit. Jamais dispensé par le worker (il n'écrit pas ce champ) ; s'annonce (retrait partiel voulu).
+    'images-partagees-holo': 'entrées de cartes.images marquées partageeHoloNonHolo: true, par set'
 });
 
 /** @returns {Map<string, number>} « <compteur> <groupe> » → n */
@@ -67,6 +70,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
         }
         for (const im of c.images || []) if (im) {
             inc(`images set:${im.set}`);
+            if (im.partageeHoloNonHolo === true) inc(`images-partagees-holo set:${im.set}`);
             // une clé PAR ENTRÉE (set|carte|numero|cleR2) : un nombre par set laissait passer « une perdue, une gagnée » (relecture 2026-10-08)
             const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
             inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition

@@ -48,7 +48,7 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     verifier('un seul produit, une seule entrée : PROUVÉ (Kricketune V S1 et S2 → la même entrée commune S1/S2)', A.resultats.map(r => [r.idProduct, r.verdict, r.entree?.id]), [[697064, 'prouve', 75661], [705125, 'prouve', 75661]]);
     verifier('le témoin porte le dénominateur du set d\'origine', A.resultats[0].temoin, 'dénominateur /163 : 2 appariements du code BST, tous à /163');
     A = P.apparier({ produits: [prod(697089, 1, 'Drizzile [Shady Dealings | Water Drip]', 'Drizzile-V1-PPS1SSH-056'), prod(835825, 1, 'Drizzile [Shady Dealings | Water Drip]', 'Drizzile-V2-PPS1SSH-056')], index: indexComplet });
-    verifier('holo et non-holo non séparables (V1/V2 contre deux entrées) : TROU, nommé', A.resultats.map(r => [r.verdict, r.motif]), [['reste', 'douteux-variantes-non-separables'], ['reste', 'douteux-variantes-non-separables']]);
+    verifier('holo et non-holo (V1/V2 contre deux entrées) sans carte commune PROUVÉE (aucun carteId fourni) : TROU, nommé — la décision PP-HOLO ne vaut que pour une même carte', A.resultats.map(r => [r.verdict, r.motif]), [['reste', 'holo-carte-non-prouvee'], ['reste', 'holo-carte-non-prouvee']]);
     A = P.apparier({ produits: [prod(705184, 2, 'Escape Rope', 'Escape-Rope-PPS2BST-125')], index: indexComplet });
     verifier('un produit, deux entrées (holo et non-holo) : TROU « multiplicité »', A.resultats.map(r => [r.verdict, r.motif]), [['reste', 'douteux-multiplicite']]);
     const GROTLE3 = prod(728159, 3, 'Grotle [Sun-Drenched Shell | Razor Leaf]', 'Grotle-PPS3BRS-007');
@@ -85,6 +85,86 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     const dn = P.denominateurDuCode([{ idProduct: 1, code: 'BST', entree: { total: '163' } }, { idProduct: 2, code: 'BST', entree: { total: '163' } }, { idProduct: 3, code: 'BST', entree: { total: '198' } }, { idProduct: 4, code: 'CRE', entree: { total: '198' } }]);
     verifier('dénominateur du code : le produit qui contredit la majorité est écarté, le code à un seul témoin aussi (non vérifiable)', dn.map(t => [t.idProduct, t.motif ?? 'ok']), [[1, 'ok'], [2, 'ok'], [3, 'denominateur-contredit'], [4, 'code-sans-second-temoin']]);
 
+    // ── 3 ter. PP-HOLO (2026-10-17) : le scan tamponné sert les DEUX produits holo et non-holo, marqué « partagée holo/non-holo » ─────────────────────────────
+    // DÉCISION DU TESTEUR : même carte, même tampon, seul le brillant diffère. Un groupe n'est résolu que si TOUT le prouve : deux produits d'une MÊME carte dont le slug ne diffère que par V1/V2 ;
+    // deux entrées de MÊME titre dont l'une seulement est « Holofoil », mêmes séries, mêmes événements ; l'entrée choisie est la NON-holo (aucun brillant cuit dans le scan) ; tous les vetos et témoins s'appliquent.
+    const SLUGS = { 1: 'Play-Pokemon-Prize-Pack-Series-One', 2: 'Play-Pokemon-Prize-Pack-Series-Two' };
+    const pc = (idProduct, carteId, serie, nomCm, slugProduit) => ({ idProduct, carteId, slugSet: SLUGS[serie], serie, nomCm, slugProduit });
+    const DRZ1 = pc(697089, 244998, 1, 'Drizzile [Shady Dealings | Water Drip]', 'Drizzile-V1-PPS1SSH-056'), DRZ2 = pc(835825, 244998, 1, 'Drizzile [Shady Dealings | Water Drip]', 'Drizzile-V2-PPS1SSH-056');
+    const GB1 = pc(697187, 30360, 1, 'Great Ball', 'Great-Ball-PPS1SSH-164');
+    const idxH = [E.drizzileHolo, E.drizzile, E.greatBall];
+    const parId = (A, id) => A.resultats.find(r => r.idProduct === id);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: idxH });
+    verifier('PP-HOLO : deux produits V1/V2 d\'une même carte, deux entrées Holofoil / non-Holofoil de même titre → les DEUX prouvés, sur la même entrée : la NON-holo (75588), pas la holo (75587)',
+        [parId(A, 697089).verdict, parId(A, 835825).verdict, parId(A, 697089).entree.id, parId(A, 835825).entree.id, parId(A, 697089).entree.holo], ['prouve', 'prouve', 75588, 75588, false]);
+    verifier('PP-HOLO : le champ explicite sur les deux résultats — partagée, et la liste EXACTE des produits du groupe (ids triés)',
+        [parId(A, 697089).partageeHoloNonHolo, parId(A, 835825).partageeHoloNonHolo, parId(A, 697089).produitsPartages, parId(A, 835825).produitsPartages], [true, true, [697089, 835825], [697089, 835825]]);
+    verifier('PP-HOLO : une carte ordinaire (Great Ball) du même lot n\'a NI le champ NI la liste', ['partageeHoloNonHolo' in parId(A, 697187), 'produitsPartages' in parId(A, 697187), parId(A, 697187).verdict], [false, false, 'prouve']);
+    verifier('PP-HOLO : le témoin du dénominateur s\'applique au groupe (SSH /202 : le groupe compte UNE fois, avec Great Ball)', [parId(A, 697089).temoin, parId(A, 835825).temoin], ['dénominateur /202 : 2 appariements du code SSH, tous à /202', 'dénominateur /202 : 2 appariements du code SSH, tous à /202']);
+    // la règle est déterministe : l'ordre des produits et des entrées n'y change rien
+    const A2 = P.apparier({ produits: [GB1, DRZ2, DRZ1], index: [...idxH].reverse() });
+    verifier('PP-HOLO : déterminisme — produits et entrées dans l\'ordre inverse : même entrée, même liste', [parId(A2, 697089).entree.id, parId(A2, 835825).entree.id, parId(A2, 835825).produitsPartages], [75588, 75588, [697089, 835825]]);
+    // un témoin qui se confirme lui-même ne prouve rien : le groupe ne peut pas faire à lui seul les « deux appariements » du code
+    A = P.apparier({ produits: [DRZ1, DRZ2], index: idxH });
+    verifier('PP-HOLO : le groupe SEUL ne se sert pas de témoin (ses deux produits ne font pas deux appariements du code) : trou « code-sans-second-temoin »', A.resultats.map(r => [r.verdict, r.motif]), [['reste', 'code-sans-second-temoin'], ['reste', 'code-sans-second-temoin']]);
+    // les causes de refus, chacune nommée
+    const REVERSE = P.lireEntree(wp(75588, 'Reverse Holo Play Pokemon Drizzile (056/202 Play Pokemon Prize Pack Series 1 Special Print)', `${CDN}/2024/11/EN_S1007Play-PokemonSpecial-Print.png`, 785, 1099, [7720]));
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, REVERSE, E.greatBall] });
+    verifier('PP-HOLO : « Reverse » n\'est pas « non-holo » — une autre question, NON tranchée : trou « holo-reverse », ni l\'un ni l\'autre prouvé', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-reverse', 'holo-reverse']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, { ...E.drizzileHolo, id: 99999 }, E.greatBall] });
+    verifier('PP-HOLO : deux entrées toutes deux « Holofoil » — ce n\'est pas holo / non-holo : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzile, { ...E.drizzile, id: 99998 }, E.greatBall] });
+    verifier('PP-HOLO : deux entrées toutes deux sans « Holofoil » : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, { ...DRZ2, carteId: 244999 }, GB1], index: idxH });
+    verifier('PP-HOLO : deux produits de deux CARTES différentes : trou « holo-carte-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-carte-non-prouvee', 'holo-carte-non-prouvee']);
+    A = P.apparier({ produits: [{ ...DRZ1, carteId: undefined }, { ...DRZ2, carteId: undefined }, GB1], index: idxH });
+    verifier('PP-HOLO : sans carteId connu (même set), la carte commune n\'est pas prouvée : trou « holo-carte-non-prouvee » (jamais « undefined = undefined »)', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-carte-non-prouvee', 'holo-carte-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, { ...DRZ2, nomCm: 'Drizzile [Shady Dealings | Water Drip]' , slugProduit: 'Drizzile-V3-PPS1SSH-056' }, GB1], index: idxH });
+    verifier('PP-HOLO : deux produits dont les slugs ne sont pas exactement V1 et V2 (ici V1 et V3) : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, { ...E.drizzile, nom: 'Play Pokemon Drizzile Autre' , titre: E.drizzile.titre.replace('Drizzile', 'Drizzile Autre') }, E.greatBall] });
+    verifier('PP-HOLO : deux entrées de titres différents ne sont pas deux impressions d\'une même carte (le nom lu ne s\'apparie plus) : le groupe reste un trou, pas un gain', [parId(A, 697089).verdict, parId(A, 835825).verdict], ['reste', 'reste']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, P.lireEntree(wp(75588, 'Play Pokemon Drizzile (056/203 Play Pokemon Prize Pack Series 1 Special Print)', E.drizzile.img, 785, 1099, [7720]))] });
+    verifier('PP-HOLO : deux entrées au dénominateur imprimé différent (056/202 contre 056/203) : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, P.lireEntree(wp(75588, 'Play Pokemon Drizzile (056/202 Play Pokemon Prize Pack Series 1 Special Print Autre)', E.drizzile.img, 785, 1099, [7720]))] });
+    verifier('PP-HOLO : deux entrées au texte de set différent hors séries (« … Autre ») : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    A = P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [E.drizzileHolo, { ...E.drizzile, evenements: [] }, E.greatBall] });
+    verifier('PP-HOLO : mêmes séries lues mais événements différents (la holo porte l\'événement S1, la non-holo aucun) : trou « holo-series-differentes »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-series-differentes', 'holo-series-differentes']);
+    A = P.apparier({ produits: [DRZ1, { ...DRZ2, nomCm: 'Drizzile [Shady Dealings | Autre]' }, GB1], index: idxH });
+    verifier('PP-HOLO : deux produits au nom Cardmarket différent (les attaques diffèrent) ne sont pas un couple holo / non-holo : trou « holo-forme-non-prouvee »', [parId(A, 697089).motif, parId(A, 835825).motif], ['holo-forme-non-prouvee', 'holo-forme-non-prouvee']);
+    // séries : la décision vaut pour des entrées aux MÊMES séries ; un couple aux séries différentes (Houndoom : S1+S2 / S2 seule) reste un trou
+    const HD = (id, v) => pc(id, 259245, 2, 'Houndoom [Single Strike Roar | Darkness Fang]', `Houndoom-${v}-PPS2BST-096`);
+    const KRIC1 = pc(697064, 100, 1, 'Kricketune V [Exciting Stage | X-Scissor]', 'Kricketune-V-PPS1BST-006');
+    A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, E.houndoomHolo, E.kricketune] });
+    verifier('PP-HOLO : holo S2 seule et non-holo S1+S2 (Houndoom 096/163) — les deux entrées contiennent la série S2 du produit : PROUVÉS, sur la non-holo (75673), le tampon étant identique d\'une série à l\'autre', [parId(A, 705155).verdict, parId(A, 835797).verdict, parId(A, 705155).entree.id, parId(A, 835797).produitsPartages], ['prouve', 'prouve', 75673, [705155, 835797]]);
+    A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, { ...E.houndoomHolo, series: [3], evenements: [7838] }, E.kricketune] });
+    verifier('PP-HOLO : une entrée qui ne contient PAS la série du produit (holo S3 pour des produits S2) n\'est pas candidate : un seul candidat pour deux produits, trou « multiplicité »', [parId(A, 705155).motif, parId(A, 835797).motif], ['douteux-multiplicite', 'douteux-multiplicite']);
+    A = P.apparier({ produits: [HD(705155, 'V1'), HD(835797, 'V2'), KRIC1], index: [E.houndoomN, { ...E.houndoomHolo, series: [1, 2], evenements: [7720] }, E.kricketune] });
+    verifier('PP-HOLO : une entrée dont les événements ne portent pas la série du produit (S2 dite, seul l\'événement S1 posé) : trou « holo-series-differentes »', [parId(A, 705155).motif, parId(A, 835797).motif], ['holo-series-differentes', 'holo-series-differentes']);
+    // la décision ne contourne AUCUN veto : l'entrée choisie les passe tous
+    const sous = (modN, modH = {}) => P.apparier({ produits: [DRZ1, DRZ2, GB1], index: [{ ...E.drizzileHolo, ...modH }, { ...E.drizzile, ...modN }, E.greatBall] });
+    verifier('PP-HOLO vetos : placeholder · langue · événement contredit · série non prouvée — chacun garde le groupe en trou, avec son motif habituel',
+        [sous({ img: `${CDN}/2021/03/PlaceholderCard.jpg` }), sous({ anglais: false }), sous({ series: [1, 2], evenements: [7720] }, { series: [1, 2], evenements: [7720] }), sous({ series: [1, 3], evenements: [7720, 7838] }, { series: [1, 3], evenements: [7720, 7838] })].map(r => [parId(r, 697089).motif, parId(r, 835825).motif]),
+        [['placeholder', 'placeholder'], ['langue', 'langue'], ['evenement-contredit', 'evenement-contredit'], ['serie-non-prouvee', 'serie-non-prouvee']]);
+    A = P.apparier({ produits: [{ ...DRZ1, slugProduit: 'Drizzile-V1-PPS1SSH-TG056' }, { ...DRZ2, slugProduit: 'Drizzile-V2-PPS1SSH-TG056' }, GB1], index: idxH });
+    verifier('PP-HOLO vetos : un numéro d\'origine à préfixe (TG056) ne reçoit pas l\'entrée « 056 » (le groupe lui-même reste un trou)', [parId(A, 697089).verdict, parId(A, 835825).verdict], ['reste', 'reste']);
+    // deux cartes ordinaires du même code d'origine (SSH) dont le dénominateur imprimé est /198 (forme dérivée de Great Ball : seul le total change) : la majorité du code est /198, le groupe est à /202
+    const QB = (id, n, nom) => ({ produit: pc(id, 5000 + id, 1, nom, `${nom.replace(/ /g, '-')}-PPS1SSH-${n}`), entree: { ...E.greatBall, id: 80000 + id, nom: `Play Pokemon ${nom}`, numero: n, total: '198' } });
+    const [QB1, QB2] = [QB(1, '179', 'Quick Ball'), QB(2, '180', 'Ultra Ball')];
+    A = P.apparier({ produits: [DRZ1, DRZ2, QB1.produit, QB2.produit], index: [E.drizzileHolo, E.drizzile, QB1.entree, QB2.entree] });
+    verifier('PP-HOLO témoins : un dénominateur (/202) qui contredit la majorité du code (/198) écarte le groupe ENTIER — les deux produits, jamais un seul', [parId(A, 697089).motif, parId(A, 835825).motif], ['denominateur-contredit', 'denominateur-contredit']);
+    verifier('PP-HOLO témoins : les deux cartes ordinaires /198 du même code restent prouvées (la décision ne les touche pas)', [parId(A, 1).verdict, parId(A, 2).verdict], ['prouve', 'prouve']);
+    // les autres produits du lot ne changent pas : Kricketune V (une seule entrée) reste prouvé exactement comme avant, et un produit seul avec deux entrées reste « multiplicité »
+    A = P.apparier({ produits: [prod(705184, 2, 'Escape Rope', 'Escape-Rope-PPS2BST-125')], index: [E.escapeHolo, E.escape] });
+    verifier('PP-HOLO : UN produit pour deux entrées (holo et non-holo) reste un trou « multiplicité » — la décision ne vaut que pour deux produits', A.resultats.map(r => [r.verdict, r.motif]), [['reste', 'douteux-multiplicite']]);
+    // ── les AUTRES FAMILLES ne changent PAS (128 Black Star, McDonald's, Trick or Trade, Professor Program) : même cas holo / non-holo, même verdict qu'avant ──
+    const PRO1 = { idProduct: 450688, unite: 'Professor-Program', nomCm: 'Judge', slugProduit: 'Judge-V1-PPPFLI-108', carteId: 7, impressions: [{ tirage: 'intl', expansion: 'Flashfire', numero: '108', total: '131' }] };
+    const PRO2 = { ...PRO1, idProduct: 450689, slugProduit: 'Judge-V2-PPPFLI-108' };
+    const JUDGE_N = P.lireEntree(wp(51219, 'Professor Program Judge (108/131 Professor Program Special Print)', `${CDN}/2022/01/EN_S830Professor-ProgramSpecial-Print.jpg`, 732, 1019, [5077]));
+    const JUDGE_H = P.lireEntree(wp(51218, 'Holofoil Professor Program Judge (108/131 Professor Program Special Print)', `${CDN}/2022/01/EN_S829Holofoil-Professor-ProgramSpecial-Print.png`, 732, 1019, [5077]));
+    A = P.apparierFamille({ lignes: [{ id: 'prof', famille: 'prof', slugs: ['Professor-Program'] }], produits: [PRO1, PRO2], index: [JUDGE_H, JUDGE_N] });
+    verifier('AUTRES FAMILLES inchangées : deux produits V1/V2 d\'une même carte pour une entrée holo et une non-holo restent « douteux-variantes-non-separables » (la décision PP-HOLO ne vaut que pour les Prize Packs S1-S4)',
+        A.resultats.map(r => [r.verdict, r.motif, 'partageeHoloNonHolo' in r]), [['reste', 'douteux-variantes-non-separables', false], ['reste', 'douteux-variantes-non-separables', false]]);
+
     // ── 4. le PLAN : la fiche reçoit UN visuel, jamais deux, jamais un autre produit que le sien ─────────────────────────
     const carte = (id, nomEn, images = []) => ({ _id: id, nomEn, images });
     const ligne = (idProduct, carteId, slugSet) => ({ idProduct, carteId, slugSet });
@@ -101,6 +181,19 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     verifier('plan : deux produits sur UNE fiche (carte, set), dont un non prouvé : la fiche affiche un seul visuel — TROU « fiche-partagee », rien n\'est posé sur cette fiche', [plan.plan.map(p => p.carteId), plan.restes.map(r => [r.carteId, r.motif]).sort()], [[101], [[100, 'fiche-partagee'], [100, 'non-couvert']]]);
     plan = P.planifierPokumon({ produits: dd, cartes: new Map([[101, carte(101, 'Kricketune V')]]), index: indexComplet });
     verifier('plan : une carte absente de la base est un reste nommé', [plan.plan.length, plan.restes.map(r => r.motif)], [1, ['carte-absente']]);
+    // PP-HOLO au plan : UNE image par fiche (carte, set), le champ explicite, la preuve qui le dit
+    const cartesH = () => new Map([[244998, carte(244998, 'Drizzile')], [30360, carte(30360, 'Great Ball')]]);
+    plan = P.planifierPokumon({ produits: [DRZ1, DRZ2, GB1], cartes: cartesH(), index: idxH });
+    const pH = plan.plan.find(p => p.carteId === 244998), pG = plan.plan.find(p => p.carteId === 30360);
+    verifier('plan PP-HOLO : UNE image pour la fiche Drizzile (les deux produits y sont), l\'adresse est celle de la non-holo, le numéro imprimé 056', [plan.plan.length, pH.url, pH.entreeId, pH.numero], [2, E.drizzile.img, 75588, '056']);
+    verifier('plan PP-HOLO : le champ explicite « partagée holo/non-holo » et la liste EXACTE des produits ; Great Ball (ordinaire) n\'a ni l\'un ni l\'autre', [pH.partageeHoloNonHolo, pH.produitsPartages, 'partageeHoloNonHolo' in pG, 'produitsPartages' in pG], [true, [697089, 835825], false, false]);
+    verifier('plan PP-HOLO : la preuve dit « partagée holo/non-holo », nomme les deux produits, l\'entrée choisie (75588) et la holo laissée de côté (75587)', [/partagée holo\/non-holo/.test(pH.preuve), /697089/.test(pH.preuve) && /835825/.test(pH.preuve), /75588/.test(pH.preuve), /75587/.test(pH.preuve)], [true, true, true, true]);
+    plan = P.planifierPokumon({ produits: [DRZ1, DRZ2, GB1], cartes: new Map([[244998, carte(244998, 'Drizzile', [{ set: SLUGS[1], source: 'tcgdex', numero: '056', cleR2: 'x.webp' }])], [30360, carte(30360, 'Great Ball')]]), index: idxH });
+    verifier('plan PP-HOLO ADDITIF : une fiche qui a déjà un visuel dans CE set n\'est jamais touchée — les deux produits restent « deja-servi »', [plan.plan.map(p => p.carteId), plan.restes.map(r => [r.idProduct, r.motif]).sort()], [[30360], [[697089, 'deja-servi'], [835825, 'deja-servi']]]);
+    plan = P.planifierPokumon({ produits: [DRZ1, DRZ2, GB1, pc(999001, 244998, 1, 'Drizzile Autre', 'Drizzile-Autre-PPS1SSH-057')], cartes: cartesH(), index: idxH });
+    verifier('plan PP-HOLO : la garde « fiche-partagee » s\'applique telle quelle — un troisième produit non prouvé sur la même fiche garde les DEUX en trou', [plan.plan.map(p => p.carteId), plan.restes.map(r => [r.idProduct, r.motif]).sort()], [[30360], [[697089, 'fiche-partagee'], [835825, 'fiche-partagee'], [999001, 'non-couvert']]]);
+    plan = P.planifierPokumon({ produits: [{ ...DRZ1, carteId: 244998 }, { ...DRZ2, slugSet: SLUGS[2] }, GB1], cartes: cartesH(), index: idxH });
+    verifier('plan PP-HOLO : deux produits sur deux FICHES (deux sets) ne sont pas un groupe de la décision : rien n\'est posé pour eux', [plan.plan.filter(p => p.carteId === 244998).length, plan.restes.filter(r => r.carteId === 244998).map(r => r.motif)], [0, ['holo-carte-non-prouvee', 'holo-carte-non-prouvee']]);
 
     // ── 5. le CLIENT : garde fermée, hôtes et chemins énumérés, cadence, réessai, plafond, arrêt au premier blocage ───────────────
     const reseau = repondre => { const appels = []; return { appels, async get(url, o) { appels.push(url); return repondre(url, o); } }; };
