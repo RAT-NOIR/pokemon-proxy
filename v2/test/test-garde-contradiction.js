@@ -119,7 +119,8 @@ const mapDe = lignes => new Map(lignes.map(l => [l.idProduct, l]));
 {
     const W = ligne(3001, 'Carte [Un | Deux]', 'AAA', '12', '100', 'set1');
     const J = ligne(3002, 'Carte [Un | Deux]', 'BBB', '99', '100', 'set1');
-    const corps = corpsDe({ gagnant: 3001, lecture: { numero: '12', total: '100', setCode: 'AAA', attaque: null, attaqueConfiance: null, carteTcgdexId: null, symboleSet: null, langue: null }, vivierIds: [3001, 3002], nom: 'Carte' });
+    // CRITERE-A : avec le code ET le numéro lus, ce jumeau serait départagé par le critère A (test-critere-a.js) ; le code NON lu laisse la garde des jumeaux seule
+    const corps = corpsDe({ gagnant: 3001, lecture: { numero: '12', total: '100', setCode: null, attaque: null, attaqueConfiance: null, carteTcgdexId: null, symboleSet: null, langue: null }, vivierIds: [3001, 3002], nom: 'Carte' });
     const r = jouer(corps, [W, J], id => ({ conclu: true, ids: id === 3001 ? [3002] : [3001] }));
     v('(7) sans contradiction, un jumeau fait toujours sa question (garde des jumeaux inchangée)', [r.issue, r.contradiction === undefined], ['question', true]);
 }
@@ -262,7 +263,9 @@ const fin8 = (async () => {
     v('(16) un désigné que l\'attaque CONTREDIT est retiré s\'il en reste un autre (6002 : Quatre/Cinq contredit ; 6003 : Trois concorde)', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6003, 'Carte [Trois | Six]')]), [6003]);
     v('(16)     tous contredits par l\'attaque (la lecture est fausse, cas Dark Tyranitar) : on les garde tous', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6004, 'Carte [Sept | Huit]')]), [6002, 6004]);
     v('(16)     attaque concorde avant attaque inconnue (6005 sans crochets), à soutiens égaux', dec([Y(6005, 'Carte'), Y(6003, 'Carte [Trois | Six]')]), [6003, 6005]);
-    v('(16)     un inconnu et un contredit : le contredit est retiré', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6005, 'Carte')]), [6005]);
+    // CRITERE-A (réserve I-C de la relecture r3) : un désigné contredit par l'attaque n'est retiré que si un AUTRE désigné a une attaque qui CONCORDE ; un inconnu ne suffit pas (l'attaque est contredite sur 32 % des lignes de vérité)
+    v('(16)     un inconnu et un contredit : AUCUN ne concorde, le contredit est GARDÉ (la vérité peut être mal lue)', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6005, 'Carte')]), [6005, 6002]);
+    v('(16)     un contredit, un inconnu et un qui concorde : le contredit est retiré', dec([Y(6002, 'Carte [Quatre | Cinq]'), Y(6005, 'Carte'), Y(6003, 'Carte [Trois | Six]')]), [6003, 6005]);
 }
 // ── (17) M-A : les désignés ne passent pas par la garde des jumeaux — ce que la question rend quand un désigné a des variantes du MÊME créneau (même numéro, même total) qui ne tiennent pas dans les 3 places
 {
