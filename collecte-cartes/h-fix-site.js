@@ -14,7 +14,7 @@ async function chargerRegle({ racine, siteLib }) {
     const lire = f => import(pathToFileURL(path.join(lib, f)).href);
     const [N, Lg] = await Promise.all([lire('imageDeLImpression.ts'), lire('langueDuVisuel.ts')]);
     if (typeof N.imageDeLImpression !== 'function' || typeof Lg.refusDuVisuel !== 'function') throw new Error('imageDeLImpression / refusDuVisuel absents du site');
-    const regle = await exporteur.regleDuSite(racine);
+    const regle = await exporteur.regleDuSite(racine, siteLib || null);   // la MÊME lib du site pour la fiche et pour l'image (siteLib était ignoré ici)
     return { exporteur, regle, imageDeLImpression: N.imageDeLImpression, refusDuVisuel: Lg.refusDuVisuel };
 }
 
