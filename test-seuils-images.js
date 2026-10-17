@@ -14,7 +14,7 @@ const verifier = (nom, obtenu, attendu) => {
 verifier('largeurMinDe est exportée', typeof S.largeurMinDe, 'function');
 if (typeof S.largeurMinDe === 'function') {
     const f = S.largeurMinDe;
-    for (const s of ['tpc-asie', 'pokemon-card-com', 'pokemon-com']) verifier(`officielle ${s} → 257 (décision du testeur, 2026-10-12)`, f(s), 257);
+    for (const s of ['tpc-asie', 'pokemon-card-com', 'pokemon.com']) verifier(`officielle ${s} → 257 (décision du testeur, 2026-10-12)`, f(s), 257);
     for (const s of ['bulbapedia', 'artofpkm', 'tcgdex']) verifier(`${s} → 350`, f(s), 350);
     verifier('source inconnue → 350', f('quelque-part'), 350);
     verifier('undefined → 350', f(undefined), 350);
@@ -28,7 +28,7 @@ if (typeof S.largeurMinDe === 'function') {
 const TPC = require('./collecte-cartes/tpc');
 verifier('chaque site de SITES (tpc.js) est à 257 : une source TPC ajoutée ne peut pas rester à 350',
     TPC.SOURCES_TPC.map(s => S.largeurMinDe(s)), TPC.SOURCES_TPC.map(() => 257));
-verifier('la liste officielle = SOURCES_TPC + pokemon-com, rien d\'autre', [...(S.SOURCES_OFFICIELLES || [])].sort(), [...TPC.SOURCES_TPC, 'pokemon-com'].sort());
+verifier('la liste officielle = SOURCES_TPC + pokemon.com (le nom ÉCRIT dans images.source), rien d\'autre', [...(S.SOURCES_OFFICIELLES || [])].sort(), [...TPC.SOURCES_TPC, 'pokemon.com'].sort());
 
 // ── une décision de seuil se relit (§23) : aRejuger(document trop-petit, source) ───────────────────────────────────────
 verifier('aRejuger est exportée', typeof S.aRejuger, 'function');

@@ -16,6 +16,11 @@ const { execFileSync } = require('child_process');
 const { HOTES_IMAGES } = require('./hotes-images-ptcgio');
 
 const JETON = /[a-z0-9._-]*(?:pokemontcg\.io|scrydex\.com)(?:\.[a-z0-9-]+)*/gi;
+const JETON_PKM = /[a-z0-9._-]*pokemon\.com(?:\.[a-z0-9-]+)*/gi;
+const HOTE_IMAGES_PKM = 'assets.pokemon.com';                       // = collecte-cartes/pokemoncom.js HOTE_IMAGES (le banc vérifie l'égalité)
+const PREFIXE_PKM = '/static-assets/content-assets/cms2/img/cards/';
+const HOTES_PKM_PERMIS = Object.freeze(['pokemon.com', 'www.pokemon.com', 'press.pokemon.com', 'image.pokemon.com.cn', HOTE_IMAGES_PKM]);
+const FICHIERS_DE_BANC_PKM = Object.freeze(['test-userscript-pokemoncom.js', 'test-recepteur-pokemoncom.js']);
 const NOMS_NUS = new Set(['pokemontcg.io', 'scrydex.com']);
 const ROUTES_API = /^\/(?:v\d+|api|cards|sets|rarities|types|subtypes|supertypes|pokemon\/v\d+)(?![a-z0-9])/i;
 const TAILLE_MAX = 20 * 1024 * 1024;
@@ -34,6 +39,16 @@ function analyserTexte(fichier, texte) {
                 if (avant !== '://' && !(suite[0] === '/' && ROUTES_API.test(suite))) continue;
             }
             violations.push({ fichier, ligne: i + 1, jeton: m[0] });
+        }
+        // ➕ 2026-10-17 (PKMCOM-IMPORT) : pokemon.com, ÉCRITE PAR CE QU'ELLE AUTORISE. Une mention n'est permise que si son hôte est dans la liste FERMÉE HOTES_PKM_PERMIS
+        // (le nom nu, www et press — pages vues par un humain —, image….cn et l'hôte d'images) ET, pour l'hôte d'images, si le chemin est celui des cartes ou robots.txt.
+        // Tout le reste — api, graphql, gateway, un hôte inventé, un suffixe, un chemin d'API — est refusé SANS être nommé. Les fichiers de banc du userscript (liste fermée
+        // de deux NOMS) reproduisent des formes hostiles pour leurs propres refus.
+        if (!FICHIERS_DE_BANC_PKM.includes(fichier)) for (const m of contenu.matchAll(JETON_PKM)) {
+            const jeton = m[0].toLowerCase().replace(/\.+$/, '');
+            const suite = contenu.slice(m.index + m[0].length);
+            const permis = HOTES_PKM_PERMIS.includes(jeton) && (jeton !== HOTE_IMAGES_PKM || suite[0] !== '/' || suite.startsWith('/robots.txt') || suite.startsWith(PREFIXE_PKM));
+            if (!permis) violations.push({ fichier, ligne: i + 1, jeton: m[0] });
         }
     });
     return violations;
