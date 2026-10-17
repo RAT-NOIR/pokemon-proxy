@@ -40,6 +40,12 @@ const maintenant = () => a('2026-10-18T12:00:00Z');
         await PG.etatGuide({ lire: bad, maintenant, cache: c2 }); await PG.etatGuide({ lire: bad, maintenant, cache: c2 });
         assert.equal(m, 1, 'l\'échec est mémorisé brièvement : pas de martèlement de la base par le keep-alive');
     });
+    await t('lectures simultanées : une seule lecture en vol', async () => {
+        const cache = {}; let n = 0;
+        const lire = () => new Promise(r => { n++; setTimeout(() => r(a('2026-10-18T02:00:00Z')), 30); });
+        await Promise.all([1, 2, 3].map(() => PG.etatGuide({ lire, maintenant, cache })));
+        assert.equal(n, 1);
+    });
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

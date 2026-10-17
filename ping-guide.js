@@ -18,7 +18,16 @@ function calculer(valeur, maintenant) {
 }
 
 /** @param lire async () => Date|null ; @param cache objet muable partagé (ou null : pas de cache). Ne lève jamais. */
-async function etatGuide({ lire, maintenant = () => new Date(), delaiMs = DELAI_MS, cache = null }) {
+async function etatGuide(o) {
+    // une seule lecture en vol : les /ping simultanés partagent la même promesse (la base lente n'est interrogée qu'une fois)
+    const cache = o.cache;
+    if (!cache) return lireEtCalculer(o);
+    if (cache.enVol && !(cache.valeur && o.maintenant && o.maintenant().getTime() < cache.jusqua)) return cache.enVol;
+    const p = lireEtCalculer(o).finally(() => { if (cache.enVol === p) cache.enVol = null; });
+    cache.enVol = p;
+    return p;
+}
+async function lireEtCalculer({ lire, maintenant = () => new Date(), delaiMs = DELAI_MS, cache = null }) {
     try {
         const now = maintenant().getTime();
         if (cache?.valeur && now < cache.jusqua) return cache.valeur;

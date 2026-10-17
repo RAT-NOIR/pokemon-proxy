@@ -18,6 +18,15 @@ const CHOIX = ['guide', 'catalogue', 'auto'];
 const COLLECTION_JOURNAL = 'imports_ci_etat';
 const masquer = m => String(m).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 200);
 
+const VARIABLES_SECRETES = ['MONGODB_URI', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'R2_ACCOUNT_ID', 'R2_BUCKET_BRUT'];
+/** Remplace tout motif `mongodb(+srv)://…` par « mongodb://*** » et toute valeur des variables secrètes (4 caractères au moins) par « *** ». */
+function masquerSecrets(texte, env = process.env) {
+    let s = String(texte).replace(/mongodb(?:\+srv)?:\/\/\S+/g, 'mongodb://***');
+    const valeurs = VARIABLES_SECRETES.map(n => String(env[n] ?? '').trim()).filter(v => v.length >= 4).sort((x, y) => y.length - x.length);
+    for (const v of valeurs) s = s.split(v).join('***');
+    return s;
+}
+
 function lireArguments(argv) {
     let choix = 'auto';
     for (const x of argv) {
@@ -50,18 +59,27 @@ async function passeCI({ argv = process.argv.slice(2), env = process.env, ouvrir
     try {
         // ce que l'heure et le journal rendent dû, AVANT : pour dire "rien de dû" et pour reconnaître un import lancé
         const dus = [];
+        let dejaEnEchec = false;
         for (const nom of noms) {
             const h = IQ.IMPORTS.find(i => i.nom === nom);
-            const d = IQ.aLancer(await E.findOne({ _id: `import-quotidien/${nom}` }), maintenant(), { heure: h.heure, minute: h.minute });
+            const etat = await E.findOne({ _id: `import-quotidien/${nom}` });
+            const d = IQ.aLancer(etat, maintenant(), { heure: h.heure, minute: h.minute });
             journal.log(`${d.lancer ? '📥' : '⏭️'} ${nom} : ${d.lancer ? 'dû, lancement' : d.raison}`);
             if (d.lancer) dus.push(nom);
+            // un échec du jour que la règle n'autorise pas encore à rejouer (moins d'1 h, ou 3 échecs) : la passe reste ROUGE
+            else if (etat?.jour === IQ.jourUTC(maintenant()) && etat.dernierResultat === 'echec') { journal.error(`🔴 ${nom} : en échec aujourd'hui (code ${etat.dernierCode ?? '?'}), pas rejouable pour l'instant`); dejaEnEchec = true; }
         }
-        if (!dus.length) { journal.log('rien de dû : sortie 0'); return 0; }
+        if (!dus.length) { journal.log(`rien de dû : sortie ${dejaEnEchec ? 1 : 0}`); return dejaEnEchec ? 1 : 0; }
         await IQ.importsQuotidiens({ E, ...(lancerScript ? { lancerScript } : {}), maintenant, journal, seulement: dus });
-        let code = 0;
+        let code = dejaEnEchec ? 1 : 0;
         for (const nom of dus) {
             const e = await E.findOne({ _id: `import-quotidien/${nom}` });
-            if (!e || e.enCours !== false || e.dernierResultat === 'echec') { journal.error(`🔴 import « ${nom} » : ${e?.dernierResultat ?? 'sans résultat'} (code ${e?.dernierCode ?? '?'})`); code = 1; }
+            if (!e || e.enCours !== false || e.dernierResultat === 'echec') {
+                journal.error(`🔴 import « ${nom} » : ${e?.dernierResultat ?? 'sans résultat'} (code ${e?.dernierCode ?? '?'})`);
+                // la cause, dans le journal de la CI : fin de la sortie de l'enfant (déjà bornée par le module), valeurs secrètes masquées
+                if (e?.dernierExtrait) journal.error(`--- fin de la sortie de « ${nom} » ---\n${masquerSecrets(String(e.dernierExtrait).slice(-1500), env)}\n--- fin ---`);
+                code = 1;
+            }
             else journal.log(`${e.dernierResultat === 'importe' ? '✅' : 'ℹ️'} import « ${nom} » : ${e.dernierResultat}`);
         }
         return code;
@@ -73,4 +91,4 @@ if (require.main === module) {
     passeCI().then(c => process.exit(c), e => { console.error(`🔴 ${masquer(e.message)}`); process.exit(1); });
 }
 
-module.exports = { passeCI, lireArguments, CHOIX, COLLECTION_JOURNAL };
+module.exports = { passeCI, masquerSecrets, lireArguments, CHOIX, COLLECTION_JOURNAL };

@@ -94,6 +94,27 @@ function banc({ E = collection(), env = ENV, lance = [], code = 0, extrait = 'ok
         await banc({ env }).passe(['--import=auto'], '2026-10-18T05:10:00Z');
         assert.ok(!/SECRET-/.test(b.sortie.join('\n')));
     });
+    await t('échec : nom, code et extrait sont imprimés, MASQUÉS (valeurs des variables secrètes et URI mongodb)', async () => {
+        const extrait = 'connexion mongodb+srv://admin:MOTDEPASSE@cluster0.x.mongodb.net/test refusée ; clé SECRET-KEY ; sec SECRET-SEC ; compte acct-long';
+        const env = { ...ENV, R2_ACCOUNT_ID: 'acct-long' };
+        const sortie = [], journal = { log: m => sortie.push(String(m)), error: m => sortie.push(String(m)), warn: m => sortie.push(String(m)) };
+        const E = collection();
+        const code = await CI.passeCI({ argv: ['--import=guide'], env, ouvrirE: async () => ({ E, fermer: async () => { } }), lancerScript: async () => ({ code: 7, dureeS: 1, extrait }), maintenant: () => a('2026-10-18T05:10:00Z'), journal });
+        const s = sortie.join('\n');
+        assert.equal(code, 1); assert.match(s, /guide/); assert.match(s, /code 7/); assert.match(s, /refusée/);
+        for (const v of ['MOTDEPASSE', 'SECRET-KEY', 'SECRET-SEC', 'acct-long', 'cluster0']) assert.ok(!s.includes(v), `fuite : ${v}`);
+        assert.match(s, /mongodb:\/\/\*\*\*/);
+    });
+    await t('masquer : une valeur courte (< 4 car.) n\'est pas masquée partout ; vide ignorée', () => {
+        assert.equal(CI.masquerSecrets('abc b', { R2_BUCKET_BRUT: 'b', MONGODB_URI: '' }), 'abc b');
+    });
+    await t('échec déjà constaté aujourd\'hui mais non rejouable (moins d\'1 h) : la passe reste ROUGE, pas "rien de dû"', async () => {
+        const b = banc({ code: 1, extrait: 'boum' });
+        assert.equal(await b.passe(['--import=guide'], '2026-10-18T05:10:00Z'), 1);
+        assert.equal(await b.passe(['--import=guide'], '2026-10-18T05:30:00Z'), 1);
+        assert.equal(b.lance.length, 1);
+        assert.equal(await b.passe(['--import=guide'], '2026-10-19T04:00:00Z'), 0, 'le lendemain avant l\'heure : rien de dû, vert');
+    });
     await t('le journal des imports du dépôt (importsQuotidiens) accepte `seulement` et reste inchangé sans lui', async () => {
         const IQ = require('./collecte-cartes/imports-quotidiens');
         const E = collection(), lances = [];
