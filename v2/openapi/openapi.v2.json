@@ -3132,6 +3132,31 @@
               null
             ]
           },
+          "langue": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "fr",
+              "en",
+              "de",
+              "es",
+              "it",
+              "pt",
+              "nl",
+              "pl",
+              "ru",
+              "cs",
+              "hu",
+              "ja",
+              "ko",
+              "zh-hans",
+              "zh-hant",
+              null
+            ],
+            "description": "AJOUT FACULTATIF (lot LANGUE-DECISIVE, contrat 7a) : la langue de CETTE impression, en code fermé minuscule (les quinze langues de Cardmarket), ou null quand elle n'est pas connue — jamais devinée (un tirage international regroupe plusieurs langues : null). `Produit.langue` ne change pas."
+          },
           "set": {
             "type": "object",
             "properties": {
