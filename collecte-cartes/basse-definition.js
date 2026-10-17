@@ -18,8 +18,8 @@
 //     `remplacePar` (source, cleR2 de la remplaçante) et `remplaceLe`.
 //
 // Qui l'appelle : collecteur-images.js (artofpkm), collecteur-images-bulba.js, collecteur-images-tcgdex.js — les jointures qui posent une entrée
-// NON marquée. Les collecteurs TPC, PikaQian et pokemontcg.io ne comblent que les visuels MANQUANTS (`dejaServi`) : une entrée marquée compte
-// comme « servie », ils ne l'atteignent pas (TPC et PikaQian posent la marque ; ptcgio n'écrit que des originaux ≥ 350).
+// NON marquée — ET, depuis le 2026-10-17 (BASSE-DEF, voir plus bas), les collecteurs TPC, PikaQian, pokemontcg.io, Pokumon et pokemon.com : ils comblaient
+// les visuels MANQUANTS (`dejaServi`) et comptaient une entrée marquée comme « servie » ; elle est désormais remplaçable par leur image non marquée.
 const { estBasseDefinition, largeurOriginaleDe } = require('./seuils-images');
 const { cleNumero } = require('./jointure');
 
@@ -59,4 +59,44 @@ async function remplacerBasseDefinition(M, carteId, candidat, { maintenant = new
     return aRemplacer.length;
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition };
+// ============================================================
+// ➕ 2026-10-17 (BASSE-DEF) — LE REMPLACEMENT PAR TOUS LES COLLECTEURS (décision du testeur : « une image basseDefinition est remplacée automatiquement dès qu'une source
+// au-dessus du seuil existe pour ce produit, avec l'ancienne adresse gardée dans l'historique »).
+// ============================================================
+// Les collecteurs « combleurs » (TPC, PikaQian, pokemontcg.io, Pokumon, pokemon.com) s'arrêtaient à `dejaServi` : une entrée marquée comptait comme servie. Ils appellent désormais
+// LES MÊMES fonctions que les trois jointures (artofpkm, Bulbapedia, TCGdex) — aucune copie de la règle (§21 bis) :
+//   · AU PLAN (`sansRemplacables`) : une entrée marquée d'une AUTRE source, de même (set, numéro, langue connue), ne compte pas comme « servie » — la carte est un trou que la source
+//     peut combler, À CONDITION que son image sorte non marquée (sinon, à la jointure, elle cède). Une entrée marquée de la MÊME source n'est jamais remplaçable : le même fichier
+//     reviendrait, au même nombre de pixels. Langue inconnue du candidat : rien n'est remplaçable (une garde s'écrit par ce qu'elle autorise).
+//   · À LA JOINTURE (`arbitrer`) : la décision d'une candidate — quelles entrées sortent (`entreesARemplacer`), la fiche reste-t-elle servie une fois celles-là sorties. Une candidate
+//     marquée ne fait sortir personne et cède : une basse définition ne remplace JAMAIS une image non marquée, ni une autre basse définition.
+//   · LE GESTE (`remplacerBasseDefinition`, ci-dessus) : l'entrée sort de `cartes.images`, le document `images` RESTE (`etat: 'remplace'`, `remplacePar`, `remplaceLe`) avec son
+//     `urlOriginal`, sa `cleR2`, ses largeurs : c'est « l'ancienne adresse gardée dans l'historique ». Le collecteur note l'`empreinteEntree` de chaque entrée sortie pour sa garde
+//     interne (les entrées des autres sources doivent rester les mêmes, moins celles-là) ; la garde de LOT voit un échange 1 pour 1 (images du set inchangées, vignette refaite).
+/** La clé d'une entrée dans la garde interne des collecteurs (`compterEntrees`) : carte|source|set|numéro|cleR2. */
+const empreinteEntree = (carteId, e) => `${carteId}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`;
+
+/**
+ * La carte telle que la voit le PLAN d'une source `source` qui écrira en `langue` au `numero` du `set` : sans les entrées marquées qu'une image non marquée de cette source
+ * remplacerait. Rend une COPIE (la carte d'origine n'est pas modifiée). Pure.
+ */
+function sansRemplacables(carte, { set, numero, langue, source, wOriginal } = {}) {
+    const images = Array.isArray(carte?.images) ? carte.images : [];
+    // `wOriginal` : la largeur de l'image que la source donnera, quand le plan la connaît (l'index de Pokumon la porte) ; inconnue, la candidate est supposée non marquée
+    const sortent = entreesARemplacer(images, { set, numero, langue, source, cleR2: null, wOriginal })
+        .filter(e => e.source !== source);
+    return { ...(carte || {}), images: images.filter(e => !sortent.includes(e)) };
+}
+
+/**
+ * L'ARBITRAGE d'une candidate à la jointure. `autres` : les entrées de la carte qui ne sont pas les nôtres ; `candidat` : l'entrée qu'on va poser (set, source, cleR2, numero, langue,
+ * marque / largeur) ; `servi(restantes)` : le prédicat « déjà servi » de CE collecteur sur les entrées qui resteraient. @returns {{sortantes: object[], servie: boolean}}
+ * `servie` vrai : la candidate CÈDE (elle n'est pas posée, rien ne sort). Faux : le collecteur appelle `remplacerBasseDefinition` (s'il y a des sortantes) puis pose la candidate.
+ */
+function arbitrer(autres, candidat, servi) {
+    const liste = Array.isArray(autres) ? autres : [];
+    const sortantes = entreesARemplacer(liste, candidat);
+    return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
+}
+
+module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer };

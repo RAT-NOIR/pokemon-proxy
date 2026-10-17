@@ -21,9 +21,9 @@ const sharp = require('sharp');
 const PK = require('./collecte-cartes/pokemoncom');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici)
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -191,7 +191,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     if (typeof deposer !== 'function' || typeof vignetter !== 'function') throw new Error('ecrire : deposer et vignetter sont exigés');
     const db = M.Carte.db.db;
     const index = lireIndex(dossierCache);
-    const seuil = largeurMinDe(PK.SOURCE);
+    const seuil = largeurAdmiseDe(PK.SOURCE);        // 200 px (plancher de basse définition, BASSE-DEF) : de 200 à 349 px l'image est admise et MARQUÉE (marqueDe)
     // ---- REMPLACER : liste FERMÉE — chaque idProduct doit figurer dans le motif « entree-refusee-au-numero » du plan, sinon rien n'est écrit ; sans --remplacer, rien ne bouge ----
     const idsRemplaçables = new Set((remplacements || []).flatMap(u => u.produits));
     const inconnus = (remplacer || []).filter(id => !idsRemplaçables.has(id));
@@ -264,7 +264,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
             const avant = await compterEntrees(db, carteIds, slug);
             const images = (await M.Image.find({ source: PK.SOURCE, set: slug, etat: 'ok', lot: PK.LOT }).lean()).filter(im => ecrits.includes(im._id));
-            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, remplacees = 0;
+            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, remplacees = 0, basseDefRemplacees = 0;
             const retirees = [];                              // les entrées refusées sorties par --remplacer (clé de compterEntrees) : la garde les attend absentes
             try {
                 for (const im of images) {
@@ -277,7 +277,11 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     const admises = autres.filter(e => !refCles.has(e.cleR2));        // (sans --remplacer, refCles est vide : toute entrée au numéro sert la fiche)
                     const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: PK.SOURCE, numero: im.numero ?? null } } });
-                    if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
+                    // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source, même (set, numéro, langue connue), n'est pas « servie » face à une image NON marquée : elle sort
+                    // (la même fonction que artofpkm / Bulbapedia / TCGdex). Une image marquée (245 px…) ne remplace jamais rien et cède.
+                    const arb = arbitrer(admises, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero ?? null));
+                    if (arb.servie) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
+                    if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                     for (const e of autres.filter(x => refCles.has(x.cleR2))) {
                         await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, cleR2: e.cleR2 } } });
                         await M.Image.updateOne({ source: e.source, set: slug, carteId: im.carteId, cleR2: e.cleR2 }, { $set: { etat: 'remplace', remplaceMotif: `entrée refusée par la règle du site au numéro ${im.numero ?? '∅'}, remplacée sur décision du testeur (--remplacer, lot ${PK.LOT})`, remplaceePar: im._id, remplaceeLe: new Date() } });
@@ -294,7 +298,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)`}`);
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, basseDefRemplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0 && telecharges + sautes + tropPetits === unites.length, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokemoncom: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });

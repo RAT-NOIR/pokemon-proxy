@@ -22,7 +22,8 @@ const path = require('path');
 const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
@@ -158,7 +159,7 @@ async function compterEntrees(db, carteIds, slug) {
     const autres = [];
     let siennes = 0;
     for (const c of cs) for (const e of c.images || []) { if (!(e?.source === P.SOURCE && e.lot === P.LOT)) autres.push(`${c._id}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`); else if (e.set === slug) siennes++; }
-    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes };
+    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes, liste: autres };
 }
 const compterSubstituts = (db, slug) => db.collection('cartes_produits').countDocuments({ slugSet: slug, 'visuelSubstitut.cleR2': { $exists: true } });
 
@@ -213,7 +214,8 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 if (p.partageeHoloNonHolo && !(deja.partageeHoloNonHolo === true)) await M.Image.updateOne({ _id }, { $set: { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } });
                 sautes++; continue;
             }
-            if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url) { tropPetits++; continue; }
+            // ➕ BASSE-DEF : le seuil est celui de la LIGNE du plan (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 px ailleurs) ; un « trop-petit » jugé sous un seuil plus haut se REJUGE (§23)
+            if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url && !aRejuger(deja, P.SOURCE, p.ligne)) { tropPetits++; continue; }
             try {
                 // une entrée Pokumon commune à deux séries est UN fichier : il se télécharge UNE fois (courtoisie envers la source) et sert les deux fiches
                 let o = memo.get(p.url);
@@ -223,7 +225,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                     else {
                         const meta = await sharp(buffer).metadata();
                         if (!FORMATS.includes(meta.format)) o = { genre: 'format', meta };
-                        else if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) o = { genre: 'trop-petit', meta };
+                        else if (!meta.width || meta.width < largeurAdmiseDe(P.SOURCE, p.ligne)) o = { genre: 'trop-petit', meta };
                         else o = { genre: 'ok', meta, webp: await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true }), sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length };
                     }
                     memo.set(p.url, o);
@@ -232,7 +234,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 if (o.genre === 'format') { mauvaisFormat++; echecs++; console.warn(`   ✗ ${_id} : format « ${o.meta.format} »`); continue; }
                 if (o.genre === 'trop-petit') {
                     tropPetits++;
-                    await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: o.meta.width, hOriginal: o.meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(P.SOURCE), lot: P.LOT } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: o.meta.width, hOriginal: o.meta.height, etat: 'trop-petit', seuilApplique: largeurAdmiseDe(P.SOURCE, p.ligne), lot: P.LOT } }, { upsert: true });
                     continue;
                 }
                 obtenus.push({ p, _id, meta: o.meta, webp: o.webp, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal });
@@ -261,9 +263,11 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                     ...(p.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } : {}),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
+                    // ➕ BASSE-DEF : la marque d'après la largeur de l'ORIGINAL (200 à 349 px : basseDefinition: true) ; une marque qui ne décrit plus l'image (refournie plus large) s'efface du document
+                    ...marqueDe({ wOriginal: o.meta.width }),
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
                     attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok'
-                }, $unset: { erreur: 1 }
+                }, $unset: { erreur: 1, ...(marqueDe({ wOriginal: o.meta.width }).basseDefinition ? {} : { basseDefinition: 1 }) }
             }, { upsert: true });
             telecharges++;
         }
@@ -272,28 +276,34 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, slug);
         const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: P.LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
+        const retirees = [];                              // BASSE-DEF : les entrées marquées sorties par le remplacement (empreintes de compterEntrees) : la garde les attend absentes
         try {
             for (const im of images) {
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(),
+                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...marqueDe(im),
                     // PP-HOLO : le champ explicite suit l'image (une image Prize Packs ordinaire n'a NI l'un NI l'autre)
                     ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}) };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 // (« cette fiche » = ce numéro : l'image d'un AUTRE numéro de la même carte — MEP012 pour MEP033 — ne sert pas la fiche, la règle du site la compare au numéro de la fiche)
                 const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2 && (P.nImage(e.numero) === null || P.nImage(e.numero) === P.nImage(im.numero)));
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
-                if (autres.length) { dejaParAutre++; continue; }
+                // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source ne « sert » pas la fiche face à une image NON marquée : elle sort (la même fonction que artofpkm / Bulbapedia / TCGdex)
+                // et la nôtre entre ; une image marquée (200 à 349 px) ne remplace jamais rien et cède
+                const arb = arbitrer(autres, entree, restantes => restantes.length > 0);
+                if (arb.servie) { dejaParAutre++; continue; }
+                if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
             }
         } catch (e) { erreurJointure = e.message; console.error(`🔴 ${slug} : jointure interrompue — ${e.message}`); }
         const apres = await compterEntrees(db, carteIds, slug);
         const substitutsApres = await compterSubstituts(db, slug);
-        const garde = avant.autres === apres.autres && apres.siennes === joints && substitutsAvant === substitutsApres;
-        if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes, substituts ${substitutsAvant} → ${substitutsApres}`);
+        const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // les autres sources, MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
+        const garde = attenduesAutres === apres.autres && apres.siennes === joints && substitutsAvant === substitutsApres;
+        if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres} (attendu ${avant.nAutres - retirees.length})${attenduesAutres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes, substituts ${substitutsAvant} → ${substitutsApres}`);
         // ---- 6. LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que les autres collecteurs ----
         const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
         console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.depuisDocument} recopiée(s) · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)${W.vg.interrompu ? ' · interrompu' : ''}`}`);
@@ -301,7 +311,8 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         const complet = {
             vignettes: W.vg, source: P.SOURCE, mention: P.MENTION, lot: P.LOT, serie, produits, prouves: planSerie.length, restes: motifs, comptesPlan,
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, mauvaisFormat, joints, dejaParAutre, cartesAbsentes,
-            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
+            basseDefRemplacees,
+            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
             concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()

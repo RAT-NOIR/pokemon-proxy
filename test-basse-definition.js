@@ -43,6 +43,34 @@ verifier('plusieurs entrées marquées au même (set, numéro, langue) : toutes 
 verifier('images absentes / non tableau → rien, sans exception', [rem(undefined, bonne()), rem(null, bonne()), rem('x', bonne())], [[], [], []]);
 verifier('candidate absente → rien, sans exception', [rem([basse()], null), rem([basse()], undefined)], [[], []]);
 
+// ── ➕ 2026-10-17 (BASSE-DEF) : le PLAN d'un collecteur « combleur » et l'ARBITRAGE de sa jointure — la même règle (entreesARemplacer), jamais une copie ─────────────
+const carteAvec = images => ({ _id: 7, nomEn: 'X', images });
+const sr = (carte, o = {}) => (B.sansRemplacables(carte, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex', ...o }) ?? {}).images?.map(e => e.cleR2);
+verifier('sansRemplacables : une entrée marquée d\'une AUTRE source, même set/numéro/langue, ne compte pas comme « servie »', sr(carteAvec([basse()])), []);
+verifier('   les autres entrées restent (non marquée, autre numéro, autre set, autre langue)', sr(carteAvec([basse(), bonne({ cleR2: 'n.webp', source: 'artofpkm' }), basse({ numero: '2', cleR2: 'b2' }), basse({ set: 'A', cleR2: 'b3' }), basse({ langue: 'th', cleR2: 'b4' })])), ['n.webp', 'b2', 'b3', 'b4']);
+verifier('   sa PROPRE entrée marquée reste : la même source redonnerait le même fichier (aucun téléchargement pour rien)', sr(carteAvec([basse({ source: 'tcgdex', cleR2: 'mienne' })])), ['mienne']);
+verifier('   langue du candidat inconnue (null / absente) : rien n\'est remplaçable, la carte est inchangée', [sr(carteAvec([basse()]), { langue: null }), sr(carteAvec([basse()]), { langue: undefined })], [['tpc-asie/S/001-1-id.webp'], ['tpc-asie/S/001-1-id.webp']]);
+verifier('   la carte d\'origine n\'est pas modifiée (copie)', (() => { const c = carteAvec([basse()]); B.sansRemplacables(c, { set: 'S', numero: '1', langue: 'id', source: 'tcgdex' }); return c.images.length; })(), 1);
+verifier('   carte absente / sans images → rendue sans exception', [B.sansRemplacables(null, { set: 'S', numero: '1', langue: 'id', source: 'x' }), B.sansRemplacables({ _id: 1 }, { set: 'S', numero: '1', langue: 'id', source: 'x' })], [{ images: [] }, { _id: 1, images: [] }]);
+const arb = (autres, cand, servi = r => r.length > 0) => { const r = B.arbitrer(autres, cand, servi); return { sortantes: r.sortantes.map(e => e.cleR2), servie: r.servie }; };
+verifier('arbitrer : candidate non marquée + une entrée marquée → elle sort, la fiche n\'est plus servie : la candidate prend la place', arb([basse()], bonne()), { sortantes: ['tpc-asie/S/001-1-id.webp'], servie: false });
+verifier('arbitrer : candidate MARQUÉE → rien ne sort, la fiche reste servie (elle cède) — jamais l\'inverse', arb([basse()], basse({ source: 'pikaqian', cleR2: 'p.webp' })), { sortantes: [], servie: true });
+verifier('arbitrer : une AUTRE entrée non marquée sert déjà → la marquée sort quand même de la liste, mais la fiche reste servie : la candidate cède', arb([basse(), bonne({ source: 'artofpkm', cleR2: 'a.webp' })], bonne()), { sortantes: ['tpc-asie/S/001-1-id.webp'], servie: true });
+verifier('arbitrer : langue inconnue de la candidate → aucune sortie, servie', arb([basse()], bonne({ langue: null })), { sortantes: [], servie: true });
+verifier('arbitrer : aucune entrée → rien à sortir, non servie', arb([], bonne()), { sortantes: [], servie: false });
+verifier('empreinteEntree : la clé de compterEntrees des collecteurs (carte|source|set|numéro|cleR2)', [B.empreinteEntree(7, basse()), B.empreinteEntree(7, { source: 's', set: 'x' })], ['7|tpc-asie|S|001|tpc-asie/S/001-1-id.webp', '7|s|x||']);
+
+// ── ce que la GARDE DE LOT voit d'un remplacement (les fonctions de la garde, garde-lot.js) ───────────────────────────────────────────
+{ const G = require('./collecte-cartes/garde-lot');
+  const entreeV = (o, v = true) => ({ ...o, ...(v ? { vignette: { cleR2: `vignettes/${o.cleR2}`, w: 200, h: 279 } } : {}) });
+  const avant = { cartes: [{ _id: 7, images: [entreeV(basse())] }] };
+  const apresOk = { cartes: [{ _id: 7, images: [entreeV(bonne())] }] };
+  const apresSansVignette = { cartes: [{ _id: 7, images: [entreeV(bonne(), false)] }] };
+  const cmp = (a, b) => G.comparer(G.compterEtat(a), G.compterEtat(b));
+  verifier('garde de lot : un remplacement À NOMBRE CONSTANT (vignette refaite) n\'est PAS une baisse — aucune annonce nécessaire', cmp(avant, apresOk).nonAutorisees.length, 0);
+  verifier('   le compteur « images » du set ne baisse pas (1 → 1)', cmp(avant, apresOk).baisses.filter(b => b.compteur === 'images').length, 0);
+  verifier('   si la vignette de la remplaçante manque encore, la garde CRIE (vignettes-set) : le collecteur vignette AVANT de rendre la main', cmp(avant, apresSansVignette).nonAutorisees.map(b => b.compteur), ['vignettes-set']); }
+
 // ── l'effet sur les modèles : l'entrée sort de `cartes.images`, le document `images` reste, marqué remplacé ──────────
 function fauxModeles(carte, docs) {
     const journal = [];
@@ -85,10 +113,14 @@ function fauxModeles(carte, docs) {
     for (const f of ['collecteur-images-tpc.js', 'collecteur-images-pikaqian.js']) {
         verifier(`${f} pose la marque par marqueDe (jamais un nombre recopié)`, /marqueDe\(/.test(sansCommentaires(lire(f))), true);
     }
-    // ptcgio, TPC et PikaQian ne comblent que les visuels MANQUANTS (dejaServi) : une entrée marquée compte comme « servie », ils n'atteignent jamais le remplacement
-    for (const f of ['collecteur-images-ptcgio.js', 'collecteur-images-tpc.js', 'collecteur-images-pikaqian.js']) {
-        verifier(`${f} reste additif (dejaServi) : il ne remplace rien`, /dejaServi\(/.test(sansCommentaires(lire(f))) && !/remplacerBasseDefinition\(/.test(sansCommentaires(lire(f))), true);
+    // ➕ 2026-10-17 (BASSE-DEF) : TOUS les collecteurs traitent une entrée marquée comme remplaçable — la décision par `arbitrer`, le geste par `remplacerBasseDefinition` (la même fonction, §21 bis)
+    for (const f of ['collecteur-images-ptcgio.js', 'collecteur-images-tpc.js', 'collecteur-images-pikaqian.js', 'collecteur-images-pokumon.js', 'collecteur-images-pokemoncom.js']) {
+        const t = sansCommentaires(lire(f));
+        verifier(`${f} arbitre par le module (arbitrer) ET remplace par remplacerBasseDefinition`, [/\barbitrer\(/.test(t), /remplacerBasseDefinition\(/.test(t)], [true, true]);
     }
+    for (const f of ['collecteur-images-pokumon.js', 'collecteur-images-pokemoncom.js']) verifier(`${f} pose la marque par marqueDe (document ET entrée)`, (sansCommentaires(lire(f)).match(/marqueDe\(/g) || []).length >= 2, true);
+    for (const f of ['collecteur-images-ptcgio.js', 'collecteur-images-tpc.js']) verifier(`${f} ne planifie pas comme « servi » une carte dont l'entrée marquée est remplaçable : sansRemplacables`, /sansRemplacables\(/.test(sansCommentaires(lire(f))), true);
+    verifier('collecte-cartes/pokumon.js (le plan) : sansRemplacables, la largeur de l\'index étant connue', /sansRemplacables\(/.test(sansCommentaires(lire('collecte-cartes/pokumon.js'))), true);
     const regles = lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '';
     verifier('REGLES surveille collecte-cartes/basse-definition.js (les collecteurs l\'appellent : la remise en file en dépend)', regles.includes("'collecte-cartes/basse-definition.js'"), true);
 

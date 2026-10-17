@@ -64,7 +64,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
 
 (async () => {
     const png = w => sharp({ create: { width: w, height: Math.round(w * 1.4), channels: 3, background: { r: 30, g: 120, b: 200 } } }).png().toBuffer();
-    const grand = await png(734), petit = await png(200), moyen = await png(300);
+    const grand = await png(734), petit = await png(199), moyen = await png(300);   // (BASSE-DEF : 199 px est SOUS le plancher absolu de 200 px ; 200 à 349 px est admis, marqué)
     // ── le réseau est INTERDIT à tout ce qui n'est pas le transport simulé ───────────────────────────────────────────────
     const fetchOrigine = global.fetch, vusFetch = [];
     global.fetch = async (u, init) => { vusFetch.push([String(u), init]); throw new Error('réseau interdit dans le banc'); };
@@ -76,6 +76,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const { largeurMinDe } = require('./collecte-cartes/seuils-images');
     const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
     verifier('seuil : la source ÉCRITE (« pokemon.com ») est une source OFFICIELLE → 257 px ; l\'ancien nom « pokemon-com » n\'existe plus et retombe à 350', [largeurMinDe(PK.SOURCE), largeurMinDe('pokemon-com')], [257, 350]);
+    verifier('plancher (BASSE-DEF) : la largeur ADMISE de la source écrite est 200 px, la norme (largeurMinDe) reste 257', [require('./collecte-cartes/seuils-images').largeurAdmiseDe(PK.SOURCE), largeurMinDe(PK.SOURCE)], [200, 257]);
     verifier('langue : « en » déclarée par le nom du fichier (_EN_), sans nommer l\'hôte ; sans adresse valable, null', [langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_EN_1.png') }).langue, /assets\./.test(langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_EN_1.png') }).preuve), langueDuVisuel({ source: PK.SOURCE, urlOriginal: 'https://autre.example/x_EN_1.png' }).langue, langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_JA_1.png') }).langue], ['en', false, null, null]);
 
     // ── 1. les adresses autorisées ───────────────────────────────────────────────────────────────────────────────────────
@@ -208,13 +209,22 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const vignetterBanc = () => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, journal: { error() { } }, assurer: async (db2, { slug: s }) => { let k = 0; for (const c of await db2.collection('cartes').find({}).toArray()) { let t = false; const images = (c.images || []).map(e => { if (e.set !== s || !e.cleR2 || e.vignette) return e; t = true; k++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2}`, w: 200, h: 279 } }; }); if (t) await db2.collection('cartes').updateOne({ _id: c._id }, { $set: { images } }); } return { entrees: k, cles: k, traitees: k, fabriquees: k, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: k ? [s] : [] }; } });
     const ecrire = async (B, o = {}) => { const dp = depotsDe(); const q = silencieux(); try { const b = await C.ecrire(o.plan || plan, B.M, { dossierCache: o.dossierCache || dc, attendu: o.attendu, remplacements: o.remplacements, remplacer: o.remplacer, deposer: dp.f, vignetter: vignetterBanc(), fabriquerVerrouSet: verrouSet }); return { b, dp }; } finally { q(); } };
     let B = fausseBase(); semer(B);
-    verifier('--attendu qui diffère du compte réel (3 à écrire : l\'une est sous le seuil) : REFUSÉ avant toute écriture', await (async () => { const { b, dp } = await ecrire(B, { attendu: 4 }); return [b.code, b.etat, dp.l.length, B.col('images').size]; })(), [2, 'refuse-attendu', 0, 0]);
+    verifier('--attendu qui diffère du compte réel (3 à écrire : l\'une est sous le plancher) : REFUSÉ avant toute écriture', await (async () => { const { b, dp } = await ecrire(B, { attendu: 4 }); return [b.code, b.etat, dp.l.length, B.col('images').size]; })(), [2, 'refuse-attendu', 0, 0]);
     let { b, dp } = await ecrire(B, { attendu: 3 });
-    verifier('écrire : 3 images écrites (A, B, énergie), la 4e (C, 200 px) est sous le seuil de 257 px ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
+    verifier('écrire : 3 images écrites (A, B, énergie), la 4e (C, 199 px) est sous le plancher de 200 px ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
     const doc = B.col('images').get('pokemon.com/EX-Unseen-Forces/100/A/en');
     verifier('le document `images` : source, lot, mention, langue, état, adresse d\'origine, produits, largeur', [doc.source, doc.lot, doc.mention, doc.langue, doc.etat, doc.urlOriginal, doc.produits, doc.wOriginal], ['pokemon.com', 'pokemoncom-2026-10', '© Pokémon / The Pokémon Company', 'en', 'ok', URL('EX10', 'EX10_EN_Unown_A.png'), [900], 734]);
     verifier('   R2 AVANT la ligne : clé du set, WebP', [dp.l[0][1], dp.l[0][3]], ['pokemon.com/EX-Unseen-Forces/A-100-en.webp', 'image/webp']);
-    verifier('le document de l\'image sous le seuil : « trop-petit », seuil 257, rien de joint', [B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.etat, B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.seuilApplique, B.col('cartes').get(102).images.length], ['trop-petit', 257, 1]);
+    verifier('le document de l\'image sous le plancher : « trop-petit », seuil appliqué 200, rien de joint', [B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.etat, B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.seuilApplique, B.col('cartes').get(102).images.length], ['trop-petit', 200, 1]);
+    // ➕ BASSE-DEF — le plancher 200 : 199 refusé / 200, 245, 256, 257, 349 admis MARQUÉS (document ET entrée) / 350 admis sans marque
+    const pngs = {}; for (const w of [199, 200, 245, 256, 257, 349, 350]) pngs[w] = await png(w);
+    for (const [w, admis, marque] of [[199, false, null], [200, true, true], [245, true, true], [256, true, true], [257, true, true], [349, true, true], [350, true, false]]) {
+        const dcw = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: pngs[w] }), dcw);
+        const Bw = fausseBase(); semer(Bw); const { b: bw } = await ecrire(Bw, { plan: [plan[0]], dossierCache: dcw, attendu: admis ? 1 : 0 });
+        const docw = Bw.col('images').get('pokemon.com/EX-Unseen-Forces/100/A/en'), entw = Bw.col('cartes').get(100).images.find(e => e.source === 'pokemon.com');
+        verifier(`plancher : ${w} px → ${admis ? `admise ${marque ? 'MARQUÉE basseDefinition' : 'sans marque'} (document ET entrée)` : 'REFUSÉE (trop-petit, seuil 200), rien de joint'}`,
+            [bw.code, docw?.etat, docw?.basseDefinition === true, entw ? entw.basseDefinition === true : null, docw?.etat === 'trop-petit' ? docw.seuilApplique : null], [admis ? 0 : 0, admis ? 'ok' : 'trop-petit', !!marque, admis ? !!marque : null, admis ? null : 200]);
+    }
     // 300 px : au-dessus du seuil officiel (257), sous 350 : écrite AVEC la marque basseDefinition (document ET entrée)
     { const dcb = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: moyen }), dcb);
       const Bb = fausseBase(); semer(Bb); const { b: bb } = await ecrire(Bb, { plan: [plan[0]], dossierCache: dcb, attendu: 1 });
@@ -265,6 +275,24 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     verifier('   si une entrée ADMISE sert ce numéro à l\'écriture, la nôtre cède et rien n\'est retiré', [B.col('cartes').get(100).images.some(e => e.source === 'pokemon.com'), B.col('cartes').get(100).images.some(e => e.cleR2 === JAE.cleR2)], [false, true]);
     const ann = C.annonceRemplacement([{ _id: 100, sets: ['EX-Unseen-Forces'], images: [{ ...JAE, vignette: { cleR2: 'v/ja' } }] }], remp);
     verifier('annonce pour lot-additif : la garde verrait la baisse des vignettes (l\'entrée refusée portait la sienne) ; sans remplacement, aucune annonce', [Object.keys(ann).length > 0, Object.keys(C.annonceRemplacement([{ _id: 100, sets: ['EX-Unseen-Forces'], images: [{ ...JAE }] }], [])).length], [true, 0]);
+
+    // ── 3 ter. ➕ BASSE-DEF : le REMPLACEMENT d'une entrée MARQUÉE par une image non marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ────────────
+    const MARQ = { set: 'EX-Unseen-Forces', source: 'tcgdex', numero: 'A', cleR2: 'tcgdex/EX/A-basse.webp', langue: 'en', w: 300, basseDefinition: true };
+    const semerMarquee = (Bx, o = {}) => { semer(Bx); Bx.col('cartes').get(100).images.push({ ...MARQ, ...o }); Bx.col('images').set('mq', { _id: 'mq', source: MARQ.source, set: MARQ.set, carteId: 100, cleR2: (o.cleR2 ?? MARQ.cleR2), etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); };
+    const ecrireAvec = async (octets, mod) => { const dcr = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets }), dcr); const Br = fausseBase(); semerMarquee(Br, mod); const { b: br } = await ecrire(Br, { plan: [plan[0]], dossierCache: dcr, attendu: 1 }); return { Br, br }; };
+    pngs[400] = await png(400);
+    { const { Br, br } = await ecrireAvec(pngs[400]);
+      verifier('REMPLACEMENT : 400 px (non marquée) + une entrée MARQUÉE d\'une autre source au même (set, numéro, langue) → l\'entrée marquée sort, la nôtre entre (sans marque)', [br.code, Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => `${e.source}:${e.numero}:${e.basseDefinition === true}`)], [0, ['pokemon.com:A:false']]);
+      verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), avec son adresse d\'origine et sa clé R2', [Br.col('images').get('mq')?.etat, Br.col('images').get('mq')?.remplacePar, !!Br.col('images').get('mq')?.remplaceLe, Br.col('images').get('mq')?.urlOriginal, Br.col('images').get('mq')?.cleR2], ['remplace', { source: 'pokemon.com', cleR2: 'pokemon.com/EX-Unseen-Forces/A-100-en.webp' }, true, 'https://hote.example/ancienne.png', 'tcgdex/EX/A-basse.webp']);
+      verifier('   la garde du set est VERTE : l\'entrée sortie est attendue absente (un échange 1 pour 1), les autres sources intactes', [Br.col('sets').get('EX-Unseen-Forces').visuelsPokemoncom?.garde?.ok, Br.col('cartes').get(100).images.some(e => e.set === 'Autre' && e.source === 'tcgdex')], [true, true]); }
+    { const { Br, br } = await ecrireAvec(pngs[245]);
+      verifier('JAMAIS L\'INVERSE : 245 px (marquée) face à une entrée marquée → la nôtre CÈDE, l\'entrée marquée reste, son document n\'est pas touché', [br.code, Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [0, ['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(grand, { basseDefinition: undefined, w: 600, cleR2: 'tcgdex/EX/A-haute.webp' });
+      verifier('une entrée NON marquée n\'est jamais remplacée : la nôtre cède', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(pngs[400], { langue: 'ja' });
+      verifier('une entrée marquée d\'une AUTRE langue (ja) n\'est pas remplacée : le numéro reste servi, la nôtre cède', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(pngs[400], { langue: null });
+      verifier('une entrée marquée de langue INCONNUE n\'est pas remplacée', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source)], [['tcgdex']]); }
 
     // ── 4. RETIRER : exactement le lot ────────────────────────────────────────────────────────────────────────────────────
     const { retirerLot } = require('./retirer-visuels-pokemoncom');

@@ -124,6 +124,32 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     ({ b, depots } = await lancer(B1, tr));
     verifier('déjà servie avant : 0 dépôt, aucune entrée TPC, l\'entrée existante intacte', [depots.length, B1.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}`), b.trous], [0, ['tcgdex:5', 'tcgdex:001'], 0]);
 
+    // ── 3 ter. ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source (même set, numéro, langue) est REMPLACÉE par une image TPC non marquée ───────────────────────────────
+    {
+        const MARQ = { set: SLUG, source: 'pikaqian', numero: '001', cleR2: 'pikaqian/basse.webp', langue: 'id', w: 300, basseDefinition: true };
+        const monde = (images = [MARQ]) => { const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(1).images.push(...structuredClone(images));
+            Bx.col('images').set('mq', { _id: 'mq', source: 'pikaqian', set: SLUG, carteId: 1, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); return Bx; };
+        const avecImage = octets => url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets } : normal(url);
+        const etroite = await sharp({ create: { width: 300, height: 418, channels: 3, background: { r: 10, g: 10, b: 10 } } }).png().toBuffer();
+        const des = Bx => Bx.col('cartes').get(1).images.filter(e => e.set === SLUG).map(e => `${e.source}:${e.basseDefinition === true}`);
+        { const Bx = monde(); const trX = reseau(avecImage(png)); const r = await lancer(Bx, trX);
+          verifier('REMPLACEMENT : 734 px (non marquée) + une entrée MARQUÉE d\'une autre source au même (set, numéro, langue) → TPC remplace, sans marque ; garde verte', [r.b.etat, des(Bx), r.b.garde?.ok, trX.appels.filter(u => /\.png$/.test(u)).length], ['verifie', ['tpc-asie:false'], true, 1]);
+          verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), avec son adresse d\'origine et sa clé R2', [Bx.col('images').get('mq').etat, Bx.col('images').get('mq').remplacePar, !!Bx.col('images').get('mq').remplaceLe, Bx.col('images').get('mq').urlOriginal, Bx.col('images').get('mq').cleR2], ['remplace', { source: 'tpc-asie', cleR2: 'tpc-asie/Scarlet-Violet-Indonesian-Promos/001-1-id.webp' }, true, 'https://hote.example/ancienne.png', 'pikaqian/basse.webp']); }
+        { const Bx = monde(); const r = await lancer(Bx, reseau(avecImage(etroite)));
+          verifier('JAMAIS L\'INVERSE : 300 px (marquée) face à une entrée marquée → TPC CÈDE : l\'entrée marquée reste, son document n\'est pas touché', [r.b.etat, des(Bx), Bx.col('images').get('mq').etat], ['verifie', ['pikaqian:true'], 'ok']); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600 }]); const trX = reseau(avecImage(png)); const r = await lancer(Bx, trX);
+          verifier('une entrée NON marquée n\'est jamais remplacée : rien n\'est téléchargé (la fiche est servie), l\'entrée reste', [des(Bx), Bx.col('images').get('mq').etat, trX.appels.filter(u => /\.png$/.test(u)).length], [['pikaqian:false'], 'ok', 0]); }
+        { const Bx = monde([{ ...MARQ, langue: 'th' }]); const trX = reseau(avecImage(png)); await lancer(Bx, trX);
+          verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : rien n\'est téléchargé', [des(Bx), trX.appels.filter(u => /\.png$/.test(u)).length], [['pikaqian:true'], 0]); }
+        { const Bx = monde([{ ...MARQ, source: 'tpc-asie' }]); const trX = reseau(avecImage(png)); await lancer(Bx, trX);
+          verifier('une entrée marquée de TPC lui-même n\'est pas retéléchargée (le même fichier reviendrait)', [trX.appels.filter(u => /\.png$/.test(u)).length], [0]); }
+        { // course : l'entrée marquée est posée PENDANT la collecte (après le plan) ; la jointure arbitre
+          const Bx = fausseBase(); semer(Bx);
+          const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(MARQ)); Bx.col('images').set('mq', { _id: 'mq', source: 'pikaqian', set: SLUG, carteId: 1, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return normal(url); });
+          const r = await lancer(Bx, trX);
+          verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (même arbitrage), garde verte', [des(Bx), Bx.col('images').get('mq')?.etat, r.b.garde?.ok], [['tpc-asie:false'], 'remplace', true]); }
+    }
+
     // ── 4. un visuel RETIRÉ n'est jamais repris ───────────────────────────────────────────────────────────────────────
     const B2 = fausseBase(); semer(B2);
     await lancer(B2, reseau(normal));

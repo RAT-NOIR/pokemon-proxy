@@ -259,6 +259,65 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
         verifier('autres familles : une image sous le seuil (322 px) ne part JAMAIS en requête (comptée au plan), rien n\'est posé', [jamais.appels.filter(u => /\.jpg$/.test(u)).length, BF.col('cartes').get(7).images.filter(e => e.source === 'pokumon').length], [0, 0]);
     }
 
+    // ── 9 ter. ➕ BASSE-DEF : le PLANCHER de 200 px des lignes McDonald's nommées, la marque, et le REMPLACEMENT d'une entrée marquée (de bout en bout) ────────────────────
+    {
+        const { wp } = require('./test-pokumon-donnees');
+        const SLM = 'McDonalds-Collection-2014';
+        const URLM = `${CDN}/2025/07/EN_S041McDonalds-Collection.png`;
+        const entreeM = w => P.lireEntree(wp(107429, 'Pikachu (5/12 McDonald\'s McDonalds Collection)', URLM, w, Math.round(w * 1.4), [9231]));
+        const prodM = async () => [{ idProduct: 281657, slugSet: SLM, slugProduit: 'Pikachu-MCD145', numero: '5', nomCm: 'Pikachu [Nuzzle | Quick Attack]' }];
+        const MARQ = { set: SLM, source: 'tpc-asie', numero: '5', cleR2: 'tpc-asie/McD/005-9-en.webp', langue: 'en', w: 300, basseDefinition: true };
+        const monde = (images = [], tirageM = 'intl') => {
+            const Bm = fausseBase();
+            Bm.col('sets').set(SLM, { _id: SLM, tirage: tirageM, region: 'intl' });
+            Bm.col('cartes').set(9, { _id: 9, nomEn: 'Pikachu', images: structuredClone(images), impressions: [{ tirage: 'intl', expansion: "McDonald's Collection 2014", numero: '5', total: '12' }] });
+            Bm.col('cartes_produits').set('9|281657', { _id: '9|281657', carteId: 9, idProduct: 281657, slugSet: SLM, visuelSubstitut: substitut(281657) });
+            if (images.length) Bm.col('images').set('mq', { _id: 'mq', source: MARQ.source, set: SLM, carteId: 9, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 });
+            return Bm;
+        };
+        const lancerM = async (Bm, wIndex, wFichier = wIndex) => {
+            const fich = { [URLM]: await png(wFichier, Math.round(wFichier * 1.4)) };
+            const trM = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : fich[url] ? { status: 200, type: 'image/png', octets: fich[url] } : { status: 404, type: 'text/html' }; } };
+            const rest = silencieux(); let RM; const cM = client(trM);
+            try { RM = await C.lancerEcritureFamilles(['mcd-2014'], Bm.M, { verrou, client: cM, lireProduits: prodM, index: [entreeM(wIndex)], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest(); }
+            return { RM, trM };
+        };
+        const posees = Bm => Bm.col('cartes').get(9).images.filter(e => e.source === 'pokumon');
+        for (const [w, admis, marque] of [[199, false, null], [200, true, true], [320, true, true], [349, true, true], [350, true, false], [496, true, false]]) {
+            const Bm = monde(); const { RM, trM } = await lancerM(Bm, w);
+            const doc = Bm.col('images').get(`pokumon/${SLM}/9/5/en`), ent = posees(Bm)[0];
+            verifier(`McDonald's 2014, ${w} px : ${admis ? `posée ${marque ? 'MARQUÉE basseDefinition (document ET entrée)' : 'sans marque'}, unité vérifiée` : 'jamais téléchargée (plan : sous le plancher de 200 px), rien posé'}`,
+                [RM.resultats.map(r => r.etat), trM.appels.filter(u => /\.png$/.test(u)).length, doc?.basseDefinition === true, ent ? ent.basseDefinition === true : null], [['verifie'], admis ? 1 : 0, !!marque, admis ? !!marque : null]);
+        }
+        { const Bm = monde(); const { RM } = await lancerM(Bm, 322, 150);
+          verifier('l\'index dit 322 px, le fichier en fait 150 : « trop-petit », seuil appliqué 200 (plancher), rien de joint', [Bm.col('images').get(`pokumon/${SLM}/9/5/en`)?.etat, Bm.col('images').get(`pokumon/${SLM}/9/5/en`)?.seuilApplique, posees(Bm).length, RM.resultats[0].tropPetits], ['trop-petit', 200, 0, 1]); }
+        { const Bm = monde(); Bm.col('images').set(`pokumon/${SLM}/9/5/en`, { _id: `pokumon/${SLM}/9/5/en`, source: 'pokumon', set: SLM, carteId: 9, numero: '5', urlOriginal: URLM, wOriginal: 322, hOriginal: 450, etat: 'trop-petit', seuilApplique: 350, lot: P.LOT });
+          const { RM, trM } = await lancerM(Bm, 322);
+          verifier('un « trop-petit » jugé à 350 (avant le plancher), 322 px, est REJUGÉ au plancher de 200 : retéléchargé et posé marqué', [trM.appels.filter(u => /\.png$/.test(u)).length, Bm.col('images').get(`pokumon/${SLM}/9/5/en`)?.etat, posees(Bm)[0]?.basseDefinition === true, RM.resultats[0].tropPetits], [1, 'ok', true, 0]); }
+        { const Bm = monde(); Bm.col('images').set(`pokumon/${SLM}/9/5/en`, { _id: `pokumon/${SLM}/9/5/en`, source: 'pokumon', set: SLM, carteId: 9, numero: '5', urlOriginal: URLM, wOriginal: 150, hOriginal: 210, etat: 'trop-petit', seuilApplique: 200, lot: P.LOT });
+          const { RM, trM } = await lancerM(Bm, 322, 150);
+          verifier('un « trop-petit » à 150 px jugé à 200 n\'est PAS redemandé (reste refusé sous le plancher)', [trM.appels.filter(u => /\.png$/.test(u)).length, RM.resultats[0].tropPetits], [0, 1]); }
+        { const Bm = monde(); const tr3 = { appels: [], async get(url) { this.appels.push(url); return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : { status: 404, type: 'text/html' }; } };
+          const rest = silencieux(); try { await C.lancerEcritureFamilles(['mcd-2014'], Bm.M, { verrou, client: client(tr3), lireProduits: prodM, index: [entreeM(322)], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest(); }
+          verifier('(témoin du banc) l\'image demandée à la source est bien celle de l\'index', tr3.appels.filter(u => /\.png$/.test(u)), [URLM]); }
+        // les lignes qui ne sont PAS McDonald's (ici Black Star MEP) à 322 px : toujours refusées — le plancher ne les touche pas (déjà prouvé en 9 bis) ; et un set McDonald's HORS de la liste fermée
+        verifier('Pokumon non-McDonald\'s à 320 px toujours refusé : la largeur admise d\'une ligne Black Star, Trick or Trade, Professor Program est 350', ['bsp-mep', 'tot-2022', 'prof'].map(id => require('./collecte-cartes/seuils-images').largeurAdmiseDe('pokumon', id)), [350, 350, 350]);
+        // ── le REMPLACEMENT ──
+        { const Bm = monde([MARQ]); const { RM } = await lancerM(Bm, 496);
+          verifier('REMPLACEMENT : 496 px (non marquée) face à une entrée MARQUÉE d\'une autre source (même set, numéro, langue) → l\'entrée marquée sort, Pokumon entre sans marque', [RM.resultats.map(r => r.etat), Bm.col('cartes').get(9).images.map(e => `${e.source}:${e.basseDefinition === true}`)], [['verifie'], ['pokumon:false']]);
+          verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe) avec son adresse d\'origine et sa clé R2', [Bm.col('images').get('mq')?.etat, Bm.col('images').get('mq')?.remplacePar, !!Bm.col('images').get('mq')?.remplaceLe, Bm.col('images').get('mq')?.urlOriginal, Bm.col('images').get('mq')?.cleR2], ['remplace', { source: 'pokumon', cleR2: `pokumon/${SLM}/5-9-en.webp` }, true, 'https://hote.example/ancienne.png', MARQ.cleR2]);
+          verifier('   la garde du set est verte (l\'entrée sortie est attendue absente), les substituts intacts', [RM.resultats[0].garde.ok, RM.resultats[0].garde.substitutsAvant === RM.resultats[0].garde.substitutsApres], [true, true]); }
+        { const Bm = monde([MARQ]); const { RM, trM } = await lancerM(Bm, 322);
+          verifier('JAMAIS L\'INVERSE : 322 px (marquée) face à une entrée marquée → rien n\'est téléchargé (plan : deja-servi), l\'entrée marquée reste', [trM.appels.filter(u => /\.png$/.test(u)).length, Bm.col('cartes').get(9).images.map(e => e.source), Bm.col('images').get('mq')?.etat], [0, ['tpc-asie'], 'ok']); }
+        { const Bm = monde([{ ...MARQ, basseDefinition: undefined, w: 600 }]); await lancerM(Bm, 496);
+          verifier('une entrée NON marquée n\'est jamais remplacée (additif)', [Bm.col('cartes').get(9).images.map(e => e.source), Bm.col('images').get('mq')?.etat], [['tpc-asie'], 'ok']); }
+        { // course : l'entrée marquée est posée PENDANT le téléchargement ; la jointure arbitre alors (le plan ne la voyait pas)
+          const Bm = monde(); const fich = { [URLM]: await png(496, 694) };
+          const trM = { appels: [], async get(url) { this.appels.push(url); if (/\.png$/.test(url)) { Bm.col('cartes').get(9).images.push(structuredClone(MARQ)); Bm.col('images').set('mq', { _id: 'mq', source: MARQ.source, set: SLM, carteId: 9, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return /robots\.txt$/.test(url) ? { status: 200, texte: '' } : fich[url] ? { status: 200, type: 'image/png', octets: fich[url] } : { status: 404, type: 'text/html' }; } };
+          const rest = silencieux(); let RM; try { RM = await C.lancerEcritureFamilles(['mcd-2014'], Bm.M, { verrou, client: client(trM), lireProduits: prodM, index: [entreeM(496)], R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { rest(); }
+          verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (le même arbitrage), garde verte', [Bm.col('cartes').get(9).images.map(e => e.source), Bm.col('images').get('mq')?.etat, RM.resultats[0].garde.ok], [['pokumon'], 'remplace', true]); }
+    }
+
     // ── 10. les AUTRES familles : l'index par jeu de promos compare le total annoncé, et la table ne cite que des jeux énumérés ─────────────────────────
     const jeuxTable = [...new Set(P.LIGNES_AUTRES.map(l => l.jeu))];
     verifier('chaque ligne cite un jeu de promos énuméré (adresses admises par la liste fermée du client)', jeuxTable.every(j => P.urlIndexAutorisee(P.urlIndexPromoSet(j, 1))), true);

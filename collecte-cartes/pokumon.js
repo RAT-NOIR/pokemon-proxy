@@ -453,8 +453,9 @@ const LIGNES_AUTRES = Object.freeze([
       echantillon: [ech(34847, 'Wartortle (Base Set 2 63/130, 1296 px)', '2021/07/EN_S047Special-Print.jpg', 1296), ech(34844, 'Kabuto (Fossil 50/62)', '2021/07/EN_S044Special-Print.jpg', 400), ech(34853, 'Brock\'s Vulpix (Gym Challenge 37/132, 1296 px)', '2021/07/EN_S053Special-Print.jpg', 1296)] }
 ].map(l => Object.freeze(l)));
 const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
-const { largeurMinDe } = require('./seuils-images');
-const nImage = n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
+const { largeurAdmiseDe } = require('./seuils-images');
+const { sansRemplacables } = require('./basse-definition');
+const nImage =n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
 
 /**
  * LE PLAN des autres familles (pur). `produits` : TOUS les produits des sets des lignes (servis ou non : un groupe se compte sur tous) ; `cartes` : Map(carteId → { nomEn, images }).
@@ -468,7 +469,6 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
     const parFiche = new Map();
     for (const r of resultats) { const k = cleFiche(parId.get(r.idProduct)); (parFiche.get(k) || parFiche.set(k, []).get(k)).push(r); }
     const plan = [], restes = [];
-    const seuil = largeurMinDe(SOURCE);
     for (const r of resultats) {
         const p = parId.get(r.idProduct);
         const base = { idProduct: p.idProduct, carteId: p.carteId, slugSet: p.unite, nomCm: p.nomCm };
@@ -479,11 +479,14 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         // PK-PROMOS : une ligne dont les images n'ont pas été REGARDÉES (`lu` absent) ne pose rien — écrit par ce qu'il autorise : seule une date de lecture ouvre la ligne
         if (!l.lu) { restes.push({ ...base, motif: 'ligne-non-regardee' }); continue; }
         const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
-        if ((carte.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : le SEUIL est celui de la LIGNE (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 ailleurs) ; une entrée MARQUÉE (basse définition) d'une autre source ne « sert »
+        // pas la fiche face à une image qui sortira NON marquée — la largeur est connue ICI (l'index la porte), donc une image sous 350 px (qui sera marquée) ne remplace rien : « deja-servi » reste
+        const visible = sansRemplacables(carte, { set: p.unite, numero, langue: 'en', source: SOURCE, wOriginal: e.w });
+        if ((visible.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(cleFiche(p));
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === e.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(e.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
-        if (!(e.w >= seuil)) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
+        if (!(e.w >= largeurAdmiseDe(SOURCE, l.id))) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
         if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.unite && nImage(x.numero) === nImage(numero))) continue;
         // BS-HOLO : l'image est celle de TOUT le couple ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
         const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
@@ -551,7 +554,8 @@ function planifierPokumon({ produits, cartes, index }) {
         if (r.verdict !== 'prouve') { restes.push({ ...base, motif: r.motif }); continue; }
         const carte = cartes.get(p.carteId);
         if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
-        if ((carte.images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : une entrée marquée (basse définition) d'une autre source, même set / numéro / langue, ne « sert » pas la fiche face à une image qui sortira non marquée (largeur de l'index)
+        if ((sansRemplacables(carte, { set: p.slugSet, numero: r.entree.numero, langue: 'en', source: SOURCE, wOriginal: r.entree.w }).images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(`${p.carteId}|${p.slugSet}`);
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === r.entree.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(r.entree.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
