@@ -65,15 +65,15 @@ const cartePage = (n, { nom = `Carte ${n}`, numero = `${n}/145`, set = 'Guardian
     const img = el({ alt, src, currentSrc: src, _conteneur: conteneur });
     return img;
 };
-function fabriquerMonde({ cartes = [cartePage(1), cartePage(2), cartePage(3)], reponse = { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'page--x.json', diagnostic: { cartes: 3, annonce: 3, complet: true, sansNumero: 0, sansImage: 0 } }) }, erreur = null, zoneHtml = '<div class="results">3 cartes</div>', compteur = '3 cards', pathname = '/us/pokemon-tcg/pokemon-cards/' } = {}) {
+function fabriquerMonde({ sansZone = false, bodyHtml = '<body>CORPS-ENTIER</body>', cartes = [cartePage(1), cartePage(2), cartePage(3)], reponse = { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'page--x.json', diagnostic: { cartes: 3, annonce: 3, complet: true, sansNumero: 0, sansImage: 0 } }) }, erreur = null, zoneHtml = '<div class="results">3 cartes</div>', compteur = '3 cards', pathname = '/us/pokemon-tcg/pokemon-cards/' } = {}) {
     const appels = [], acces = { cookie: 0 };
     const zone = el({ outerHTML: zoneHtml, selAll: { img: cartes } });
-    const docRacine = el({ title: 'Pokémon Cards | Pokemon.com', body: el({ textContent: `Search ${compteur} found` }) });
+    const docRacine = el({ title: 'Pokémon Cards | Pokemon.com', body: el({ textContent: `Search ${compteur} found`, outerHTML: bodyHtml }) });
     docRacine.documentElement = { outerHTML: '<html>NE-DOIT-JAMAIS-PARTIR</html>' };
     Object.defineProperty(docRacine, 'cookie', { get() { acces.cookie++; return 'secret=1'; } });
     const selecteurs = {};
     const zoneSel = ['[class*="card-results"]', '[class*="results"]', 'main'];
-    docRacine.querySelector = s => (zoneSel.includes(s) && s === zoneSel[0] ? zone : s === '[class*="pagination"], nav[aria-label*="agination"]' ? el({ textContent: ' Page 1 of 1 \n Next ' }) : null);
+    docRacine.querySelector = s => (!sansZone && s === zoneSel[0] ? zone : s === '[class*="pagination"], nav[aria-label*="agination"]' ? el({ textContent: ' Page 1 of 1 \n Next ' }) : null);
     docRacine.querySelectorAll = s => {
         if (s === 'select') return [{ options: [{ textContent: 'All' }, { textContent: ' Guardians Rising ' }], selectedIndex: 1 }];
         if (s === '[class*="count"], [class*="total"], [class*="result"]') return [el({ textContent: compteur })];
@@ -107,7 +107,8 @@ const cliquer = w => bouton(w).ecouteurs.click({});
     verifier('au clic : UNE requête, POST vers http://127.0.0.1:<port>/releve', [w.appels.length, w.appels[0]?.method, /^http:\/\/127\.0\.0\.1:\d{4,5}\/releve$/.test(w.appels[0]?.url || '')], [1, 'POST', true]);
     const a = w.appels[0] || {};
     const corps = JSON.parse(a.data || '{}');
-    verifier('corps : exactement les clés du schéma du récepteur', Object.keys(corps).sort(), ['cartes', 'compteur', 'filtre', 'html', 'htmlTronque', 'pagination', 'schema', 'titre', 'url']);
+    verifier('corps : exactement les clés du schéma du récepteur', Object.keys(corps).sort(), ['cartes', 'compteur', 'filtre', 'html', 'htmlTronque', 'pagination', 'schema', 'titre', 'url', 'zoneRepli']);
+    verifier('zone trouvée : zoneRepli = false', corps.zoneRepli, false);
     verifier('url : adresse de la page (origine + chemin + requête, sans ancre) ; titre ; compteur ; pagination normalisée', [corps.url, corps.titre, corps.compteur, corps.pagination], ['https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?expansion=guardians-rising', 'Pokémon Cards | Pokemon.com', '3 cards', 'Page 1 of 1 Next']);
     verifier('filtre : l\'extension affichée dans le sélecteur', corps.filtre.includes('Guardians Rising'), true);
     verifier('cartes : nom (espaces normalisés), numéro, set, adresse de l\'image, alt', corps.cartes, [1, 2, 3].map(n => ({ nom: `Carte ${n}`, numero: `${n}/145`, set: 'Guardians Rising', img: `https://assets.pokemon.com/cards/${n}.png`, alt: `Carte ${n}` })));
@@ -119,10 +120,13 @@ const cliquer = w => bouton(w).ecouteurs.click({});
     verifier('le panneau dit ce qui a été relevé : 3 cartes, compteur « 3 cards », pas d\'avertissement', [/3 cartes/.test(texte(w)), /3 cards/.test(texte(w)), /incomplète/i.test(texte(w))], [true, true, false]);
 
     // page incomplète : le récepteur le dit → avertissement
-    w = fabriquerMonde({ compteur: '197 cards', reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: 197, complet: false, sansNumero: 0, sansImage: 0 } }) } });
+    w = fabriquerMonde({ compteur: '197 cards', reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: 197, complet: false, etat: 'incomplet', pagine: false, sansNumero: 0, sansImage: 0 } }) } });
     lancer(w); cliquer(w); await attendre(40);
-    verifier('compteur ≠ cartes vues : l\'avertissement « page incomplète » est affiché avec les deux nombres', [/page incomplète/i.test(texte(w)), /197/.test(texte(w)), /3 cartes/.test(texte(w))], [true, true, true]);
-    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: null, complet: null, sansNumero: 0, sansImage: 0 } }) } });
+    verifier('compteur > cartes vues SANS pagination (etat incomplet) : « page incomplète » est affiché avec les deux nombres', [/page incomplète/i.test(texte(w)), /197/.test(texte(w)), /3 cartes/.test(texte(w))], [true, true, true]);
+    w = fabriquerMonde({ compteur: '197 cards', reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: 197, complet: null, etat: 'pagine', pagine: true, sansNumero: 0, sansImage: 0 } }) } });
+    lancer(w); cliquer(w); await attendre(40);
+    verifier('page PAGINÉE (etat pagine) : jamais « incomplète » ; « compteur = total (197) ; cette page montre 3 cartes — normal si paginé : relève chaque page »', [/incomplète/i.test(texte(w)), /compteur = total \(197\) ; cette page montre 3 cartes — normal si paginé : relève chaque page/.test(texte(w))], [false, true]);
+    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, fichier: 'x', diagnostic: { cartes: 3, annonce: null, complet: null, etat: 'compteur-non-lu', pagine: true, sansNumero: 0, sansImage: 0 } }) } });
     lancer(w); cliquer(w); await attendre(40);
     verifier('compteur illisible : le panneau dit « compteur non lu » (pas « complet »)', [/compteur non lu/i.test(texte(w)), /✅ page complète/i.test(texte(w))], [true, false]);
 
@@ -134,6 +138,27 @@ const cliquer = w => bouton(w).ecouteurs.click({});
     w = fabriquerMonde({ zoneHtml: '<div>a<script>var secret="t";</script>b</div>' });
     lancer(w); cliquer(w); await attendre(40);
     verifier('les <script> de la zone sont retirés avant l\'envoi', JSON.parse(w.appels[0].data).html, '<div>ab</div>');
+    for (const [nom, entree, sortie] of [
+        ['</script > avec espace', '<div>a<script>x</script >b</div>', '<div>ab</div>'],
+        ['majuscules', '<div>a<SCRIPT type="x">x</SCRIPT>b</div>', '<div>ab</div>'],
+        ['casse mêlée et espace avant >', '<div>a<ScRiPt>x</sCrIpT\n>b</div>', '<div>ab</div>'],
+        ['balise jamais refermée (tout le reste est retiré)', '<div>a<script>var s=1;</div>', '<div>a'],
+        ['deux scripts', '<p>1</p><script>a</script><p>2</p><script src="x"></script ><p>3</p>', '<p>1</p><p>2</p><p>3</p>']
+    ]) {
+        w = fabriquerMonde({ zoneHtml: entree });
+        lancer(w); cliquer(w); await attendre(40);
+        verifier(`<script> retiré : ${nom}`, JSON.parse(w.appels[0].data).html, sortie);
+    }
+
+    // zone absente : repli sur document.body, MARQUÉ, et borné comme la zone
+    w = fabriquerMonde({ sansZone: true });
+    lancer(w); cliquer(w); await attendre(40);
+    const repli = JSON.parse(w.appels[0].data);
+    verifier('aucune zone trouvée : repli sur document.body, zoneRepli = true', [repli.html, repli.zoneRepli], ['<body>CORPS-ENTIER</body>', true]);
+    w = fabriquerMonde({ sansZone: true, bodyHtml: '<body>' + 'y'.repeat(R.HTML_MAX + 5000) + '<script>s</script ></body>' });
+    lancer(w); cliquer(w); await attendre(40);
+    const repliGros = JSON.parse(w.appels[0].data);
+    verifier('le repli body est borné à HTML_MAX, signalé tronqué, marqué repli', [repliGros.html.length <= R.HTML_MAX, repliGros.htmlTronque, repliGros.zoneRepli], [true, true, true]);
 
     // carte sans numéro / image : relevée telle quelle (vides), jamais inventée
     w = fabriquerMonde({ cartes: [cartePage(1, { numero: '' , set: '' }), cartePage(2, { src: '' })] });

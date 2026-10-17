@@ -15,7 +15,7 @@ const verifier = (nom, obtenu, attendu) => {
 
 const URL_BONNE = 'https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?cardName=&cardText=&evolvesFrom=&simpleSubmit=&format=unlimited&hitPointsMin=0&hitPointsMax=340&retreatCostMin=0&retreatCostMax=5&totalAttackCostMin=0&totalAttackCostMax=5&particularArtist=&advancedSubmit=&expansion=guardians-rising';
 const carte = (n, extra = {}) => ({ nom: `Carte ${n}`, numero: `${n}/145`, set: 'Guardians Rising', img: `https://assets.pokemon.com/assets/cms2/img/cards/web/SM2/SM2_EN_${n}.png`, alt: `Carte ${n}`, ...extra });
-const releve = (extra = {}) => ({ schema: 1, url: URL_BONNE, titre: 'Pokémon Cards | Pokemon.com', filtre: ['Guardians Rising'], compteur: '3 cards', pagination: 'Page 1 of 1', cartes: [carte(1), carte(2), carte(3)], html: '<div class="results"><img alt="Carte 1"></div>', htmlTronque: false, ...extra });
+const releve = (extra = {}) => ({ schema: 1, url: URL_BONNE, titre: 'Pokémon Cards | Pokemon.com', filtre: ['Guardians Rising'], compteur: '3 cards', pagination: 'Page 1 of 1', cartes: [carte(1), carte(2), carte(3)], html: '<div class="results"><img alt="Carte 1"></div>', htmlTronque: false, zoneRepli: false, ...extra });
 
 const dossierTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'recepteur-pm-'));
 
@@ -62,10 +62,30 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         }
 
         // ── page incomplète : le compteur annonce plus de cartes que la page n'en montre → écrite quand même (relevé brut), mais dite incomplète
-        const inc = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards' }) });
-        verifier('compteur 197, 3 cartes vues : 200 mais complet=false, annonce 197', [inc.status, inc.json?.diagnostic?.complet, inc.json?.diagnostic?.annonce], [200, false, 197]);
+        const inc = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards', pagination: '' }) });
+        verifier('compteur 197, 3 cartes vues, AUCUNE pagination : 200 mais complet=false, etat « incomplet »', [inc.status, inc.json?.diagnostic?.complet, inc.json?.diagnostic?.annonce, inc.json?.diagnostic?.etat], [200, false, 197, 'incomplet']);
+        const pagine = await envoyer(port, { entetes: BON, corps: releve({ compteur: '197 cards', pagination: 'Page 1 of 17' }) });
+        verifier('compteur 197, 3 cartes vues, pagination VISIBLE : le compteur est le total, ce n\'est PAS « incomplet » (complet null, etat « pagine »)', [pagine.status, pagine.json?.diagnostic?.complet, pagine.json?.diagnostic?.etat, pagine.json?.diagnostic?.pagine], [200, null, 'pagine', true]);
+        const egal = await envoyer(port, { entetes: BON, corps: releve({ compteur: '3 cards', pagination: 'Page 1 of 1' }) });
+        verifier('compteur = cartes vues, même paginé : complet true, etat « complet »', [egal.json?.diagnostic?.complet, egal.json?.diagnostic?.etat], [true, 'complet']);
         const illisible = await envoyer(port, { entetes: BON, corps: releve({ compteur: 'rien' }) });
-        verifier('compteur illisible : annonce null, complet null (« ne sait pas » n\'est pas « complet »)', [illisible.json?.diagnostic?.annonce, illisible.json?.diagnostic?.complet], [null, null]);
+        verifier('compteur illisible : annonce null, complet null, etat « compteur-non-lu »', [illisible.json?.diagnostic?.annonce, illisible.json?.diagnostic?.complet, illisible.json?.diagnostic?.etat], [null, null, 'compteur-non-lu']);
+        const repli = await envoyer(port, { entetes: BON, corps: releve({ zoneRepli: true }) });
+        verifier('zone de repli (document.body) : marquée dans le diagnostic ET dans la page écrite', [repli.json?.diagnostic?.zoneRepli, JSON.parse(fs.readFileSync(path.join(dossierTmp, repli.json.fichier), 'utf8')).zoneRepli], [true, true]);
+
+        // ── LE NOM DE FICHIER : le slug vient de l'adresse reçue ; chaque cas hostile donne un nom sûr, strictement dans le dossier d'écriture
+        const BASE = 'https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?expansion=';
+        const hostiles = [['..\\..\\x', '..%5C..%5Cx'], ['../x', '..%2Fx'], ['chemin absolu', '%2Fetc%2Fpasswd'], ['lecteur absolu', 'C%3A%5CWindows%5Cx'], ['octet NUL', 'a%00b'], ['seulement des points', '..'], ['vide', ''], ['très long', 'a'.repeat(500)], ['majuscules et espaces', 'Guardians%20Rising%21']];
+        const dejaH = new Set(fichiers());
+        for (const [nom, valeur] of hostiles) {
+            const slug = R.slugDe(BASE + valeur);
+            verifier(`slug (${nom}) : [a-z0-9-] seulement, 1 à 40 caractères, ni point ni séparateur`, /^[a-z0-9-]{1,40}$/.test(slug), true);
+            const x = await envoyer(port, { entetes: BON, corps: releve({ url: BASE + valeur }) });
+            verifier(`écriture (${nom}) : 200`, x.status, 200);
+        }
+        const nouveauxH = fichiers().filter(n => !dejaH.has(n));
+        verifier('… deux fichiers par cas hostile, tous nommés page--/diag--<slug sûr>--<date>.json, tous DIRECTEMENT dans le dossier', [nouveauxH.length, nouveauxH.every(n => /^(page|diag)--[a-z0-9-]{1,40}--\d{8}T\d{6}Z(-\d+)?\.json$/.test(n)), nouveauxH.every(n => path.dirname(path.resolve(dossierTmp, n)) === path.resolve(dossierTmp))], [hostiles.length * 2, true, true]);
+        verifier('… et rien n\'a été écrit au-dessus du dossier (aucun fichier voisin créé)', fs.readdirSync(path.dirname(dossierTmp)).filter(n => /^(page|diag)--/.test(n)).length, 0);
         const sn = await envoyer(port, { entetes: BON, corps: releve({ cartes: [carte(1, { numero: '' }), carte(2, { img: '' })], compteur: '2 results' }) });
         verifier('cartes sans numéro / sans image comptées', [sn.json?.diagnostic?.sansNumero, sn.json?.diagnostic?.sansImage], [1, 1]);
 
@@ -110,6 +130,7 @@ const fichiers = () => fs.readdirSync(dossierTmp).sort();
         await refus('plus de 1000 cartes', { entetes: BON, corps: releve({ cartes: Array.from({ length: 1001 }, (_, i) => carte(i)) }) }, 400, /cartes/);
         await refus('html trop long (> HTML_MAX)', { entetes: BON, corps: releve({ html: 'x'.repeat(R.HTML_MAX + 1) }) }, 400, /html/);
         await refus('htmlTronque pas un booléen', { entetes: BON, corps: releve({ htmlTronque: 'oui' }) }, 400, /htmlTronque/);
+        await refus('zoneRepli pas un booléen', { entetes: BON, corps: releve({ zoneRepli: 'oui' }) }, 400, /zoneRepli/);
 
         // ── un corps trop gros
         const nAvantGros = fichiers().length;

@@ -36,7 +36,7 @@ const HTML_MAX = 400000;             // caractères de la zone des résultats ga
 const CARTES_MAX = 1000;
 const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE } = PK;
 
-const CLES_RELEVE = 'cartes,compteur,filtre,html,htmlTronque,pagination,schema,titre,url';
+const CLES_RELEVE = 'cartes,compteur,filtre,html,htmlTronque,pagination,schema,titre,url,zoneRepli';
 const CLES_CARTE = 'alt,img,nom,numero,set';
 const estChaine = (v, max) => typeof v === 'string' && v.length <= max;
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
@@ -69,6 +69,7 @@ function validerReleve(o) {
     }
     if (!estChaine(o.html, HTML_MAX)) return non(400, `html : une chaîne de ${HTML_MAX} caractères au plus`);   // GARDE:html
     if (typeof o.htmlTronque !== 'boolean') return non(400, 'htmlTronque doit être un booléen');   // GARDE:tronque
+    if (typeof o.zoneRepli !== 'boolean') return non(400, 'zoneRepli doit être un booléen');   // GARDE:repli
     return { ok: true };
 }
 
@@ -77,9 +78,13 @@ function diagnostiquer(o) {
     const m = /(\d[\d.,]*)\s*(?:cards?|results?|cartes|résultats)\b/i.exec(o.compteur);
     const annonce = m ? Number(m[1].replace(/[.,]/g, '')) : null;
     const cartes = o.cartes.length;
+    const lu = Number.isFinite(annonce) && annonce !== null;
+    const pagine = o.pagination !== '';
+    // le compteur affiché est le TOTAL des résultats : sur une page paginée, moins de cartes que le total est NORMAL (« pagine », jamais « incomplet »)
+    const etat = !lu ? 'compteur-non-lu' : cartes === annonce ? 'complet' : pagine ? 'pagine' : cartes < annonce ? 'incomplet' : 'incoherent';
     return {
-        cartes, annonce: Number.isFinite(annonce) ? annonce : null, compteur: o.compteur, pagination: o.pagination,
-        complet: Number.isFinite(annonce) && annonce !== null ? cartes === annonce : null,
+        cartes, annonce: lu ? annonce : null, compteur: o.compteur, pagination: o.pagination, pagine, etat,
+        complet: etat === 'complet' ? true : etat === 'incomplet' ? false : null, zoneRepli: o.zoneRepli,
         sansNumero: o.cartes.filter(c => c.numero === '').length, sansImage: o.cartes.filter(c => c.img === '').length,
         htmlTronque: o.htmlTronque, octetsHtml: Buffer.byteLength(o.html), sha256Html: crypto.createHash('sha256').update(o.html).digest('hex')
     };
@@ -150,7 +155,7 @@ async function demarrer({ port = PORT_DEFAUT, dossier = DOSSIER_DEFAUT, racine =
                 if (j.statut !== 200) return refuser(j.statut, j.corps.motif);
                 const noms = ecrireReleve(dossier, j.releve, j.diagnostic);
                 const d = j.diagnostic;
-                journal(`✅ ${slugDe(j.releve.url)} : ${d.cartes} carte(s) relevée(s), compteur « ${d.compteur.slice(0, 60)} », ${d.complet === true ? 'complet' : d.complet === false ? `INCOMPLET (${d.annonce} annoncées)` : 'compteur non lu'}, ${d.sansNumero} sans numéro, ${d.sansImage} sans image → ${noms.page}`);
+                journal(`✅ ${slugDe(j.releve.url)} : ${d.cartes} carte(s) relevée(s), compteur « ${d.compteur.slice(0, 60)} », ${{ complet: 'complet', incomplet: `INCOMPLET (${d.annonce} annoncées, aucune pagination)`, pagine: `paginé (compteur = total ${d.annonce})`, incoherent: `INCOHÉRENT (${d.annonce} annoncées)`, 'compteur-non-lu': 'compteur non lu' }[d.etat]}${d.zoneRepli ? ', zone de repli' : ''}, ${d.sansNumero} sans numéro, ${d.sansImage} sans image → ${noms.page}`);
                 repondre(200, { ok: true, fichier: noms.page, diagnostic: d });
             } catch (e) { journal(`🔴 erreur interne : ${e.message}`); repondre(500, { ok: false, motif: 'erreur interne du récepteur' }); }
         });

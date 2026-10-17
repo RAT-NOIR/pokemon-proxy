@@ -81,8 +81,8 @@
     function bornee(t, max) { return normaliser(t).slice(0, max); }
 
     function zoneDesResultats() {
-        for (var i = 0; i < ZONES.length; i++) { var z = document.querySelector(ZONES[i]); if (z) return z; }
-        return document.body;
+        for (var i = 0; i < ZONES.length; i++) { var z = document.querySelector(ZONES[i]); if (z) return { zone: z, repli: false }; }
+        return { zone: document.body, repli: true };   // repli : MARQUÉ dans le relevé (zoneRepli), borné par lireHtml comme toute zone
     }
     function lireCartes(zone) {
         var sortie = [], imgs = zone.querySelectorAll('img');
@@ -116,11 +116,12 @@
         return sortie.slice(0, 20);
     }
     function lireHtml(zone) {
-        var h = String(zone.outerHTML || '').replace(/<script[\s\S]*?<\/script>/gi, '');
+        // balises fermées (</script >, casse quelconque), puis toute balise jamais refermée jusqu'à la fin
+        var h = String(zone.outerHTML || '').replace(/<script\b[\s\S]*?<\/script\s*>/gi, '').replace(/<script\b[\s\S]*$/i, '');
         return h.length > HTML_MAX ? { html: h.slice(0, HTML_MAX), htmlTronque: true } : { html: h, htmlTronque: false };
     }
     function releve() {
-        var zone = zoneDesResultats(), h = lireHtml(zone), pag = document.querySelector(SEL_PAGINATION);
+        var trouvee = zoneDesResultats(), zone = trouvee.zone, h = lireHtml(zone), pag = document.querySelector(SEL_PAGINATION);
         return {
             schema: 1,
             url: location.origin + location.pathname + location.search,
@@ -130,14 +131,17 @@
             pagination: pag ? bornee(pag.textContent, 500) : '',
             cartes: lireCartes(zone),
             html: h.html,
-            htmlTronque: h.htmlTronque
+            htmlTronque: h.htmlTronque,
+            zoneRepli: trouvee.repli
         };
     }
 
     function resume(j, corps) {
         var d = j.diagnostic || {};
         var ligne = '✅ ' + corps.cartes.length + ' cartes relevées · compteur « ' + (corps.compteur || '—') + ' »' + (corps.pagination ? ' · ' + corps.pagination : '');
-        if (d.complet === false) return { texte: ligne + '\n⚠️ page incomplète : le compteur annonce ' + d.annonce + ', ' + d.cartes + ' cartes vues. Affiche le reste toi-même (défile, « charger plus », page suivante), puis reclique : chaque clic écrit son propre fichier.', couleur: '#e6a23c' };
+        var repli = corps.zoneRepli ? '\nℹ️ zone des résultats non reconnue : relevé de toute la page (repli).' : '';
+        if (d.etat === 'pagine') return { texte: ligne + '\nℹ️ compteur = total (' + d.annonce + ') ; cette page montre ' + d.cartes + ' cartes — normal si paginé : relève chaque page.' + repli, couleur: '#e6a23c' };
+        if (d.etat === 'incomplet') return { texte: ligne + '\n⚠️ page incomplète : le compteur annonce ' + d.annonce + ', ' + d.cartes + ' cartes vues, sans pagination visible. Affiche le reste toi-même (défile, « charger plus »), puis reclique : chaque clic écrit son propre fichier.' + repli, couleur: '#e6a23c' };
         if (d.complet === null || d.complet === undefined) return { texte: ligne + '\n⚠️ compteur non lu : impossible de dire si la page est complète.', couleur: '#e6a23c' };
         return { texte: ligne + '\n✅ page complète' + (d.sansNumero ? ' · ' + d.sansNumero + ' sans numéro' : '') + (d.sansImage ? ' · ' + d.sansImage + ' sans image' : ''), couleur: '#67c23a' };
     }
