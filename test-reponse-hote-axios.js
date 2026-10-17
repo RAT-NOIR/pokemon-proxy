@@ -33,6 +33,8 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     let nuls = 0; for (let i = 0; i < 20; i++) if ((await sansLever(() => AP.telecharger(U(i)))).e?.absente) nuls++;
     x = await sansLever(() => AP.telecharger(U(21)));
     verifier('ARTOFPKM : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un arrêt définitif)', [nuls, !!x.e?.pauseHote, !!x.e?.bloque], [20, true, false]);
+    const av0 = appels.length; const xs = await sansLever(() => AP.telecharger(U(21.5)));
+    verifier('ARTOFPKM : …et la pause TIENT pour le reste de la passe : aucune requête de plus', [!!xs.e?.pauseHote, appels.length === av0], [true, true]);
     const av = appels.length; AP.nouvellePasse({ dossierPauses: dp() });
     x = await sansLever(() => AP.telecharger(U(22)));
     verifier('ARTOFPKM : une nouvelle passe repart (compteur à zéro) ; …', [appels.length - av, x.e?.absente], [1, true]);
@@ -128,6 +130,7 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         t = mk(() => rep(200, 'text/html', Buffer.from('<nav>Gym Challenge</nav>'))); BU.nouvellePasse();
         const dB = dp();
         x = await sansLever(() => BU.telecharger(`${H}/a.png`, opt(t, { dossierPauses: dB })));
+        BU.nouvellePasse();       // une AUTRE passe : seul le fichier de pause persistante retient l'hôte
         const x2 = await sansLever(() => BU.telecharger(`${H}/b.png`, opt(t, { dossierPauses: dB })));
         verifier('BULBAPEDIA : « Gym Challenge » seul = ambiguë → pause PERSISTANTE, puis aucune requête tant que le fichier tient', [!!x.e?.pausePersistante, !!x2.e?.pauseHote, t.a.length], [true, true, 1]);
     }

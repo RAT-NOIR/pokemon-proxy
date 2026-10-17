@@ -38,7 +38,7 @@ verifier('l\'empreinte porte sur le corps BORNÉ à 64 Ko', cl({ statut: 200, ty
 verifier('le type est lu sans tenir compte de la casse ni du charset', issue({ statut: 200, typeContenu: 'TEXT/HTML; Charset=UTF-8', debutCorps: PAGE }), 'fausse-absente');
 
 // ── le défi : les marqueurs TECHNIQUES, à tout statut ─────────────────────────────────────────────────────────────────────
-const MARQUEURS = ['Just a moment...', 'cf-chl-bypass', '__cf_chl_tk=abc', 'cf_chl_opt = {}', '/cdn-cgi/challenge-platform/h/b/orchestrate', 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+const MARQUEURS = ['Just a moment...', 'cf-chl-bypass', '__cf_chl_tk=abc', 'cf_chl_opt = {}', '/cdn-cgi/challenge-platform/h/b/orchestrate', 'https://challenges.cloudflare.com/x/api.js',
     '<form action="/cdn-cgi/challenge">', '<div class="cf-challenge-running">', '<div class="g-recaptcha"></div>', '<div class="h-captcha"></div>', 'Please solve the CAPTCHA', 'cf-turnstile-response',
     '<script src="/_Incapsula_Resource?SWJIYLWA=1"></script>', 'Request unsuccessful. Incapsula incident ID: 1', 'Attention Required! | Cloudflare'];
 for (const m of MARQUEURS) verifier(`marqueur « ${m.slice(0, 40)} » dans une page 200 → defi`, issue({ statut: 200, typeContenu: 'text/html', debutCorps: html(m) }), 'defi');
