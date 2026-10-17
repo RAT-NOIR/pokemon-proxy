@@ -206,7 +206,8 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         // ---- 4. originaux -> WebP -> R2 -> images ------------------------------------------------
         const bucket = process.env.R2_BUCKET_IMAGES;
         const aFaire = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w >= largeurMin);
-        let telecharges = 0, sautes = 0, echecs = 0;
+        let telecharges = 0, sautes = 0, echecs = 0, arretHote = null;
+        bulba.nouvellePasse();          // REPONSE-HOTE : une nouvelle passe, le compteur de fausses absences repart de zéro
         for (const p of aFaire) {
             if (arretDemande) break;
             const _id = `${SOURCE}/${slug}/${p.carteId}/${numeroEntier(p.numero)}`;
@@ -235,6 +236,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
                 telecharges++;
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: bulba.compteRequetes() } });
             } catch (err) {
+                if (err.bloque || err.pauseHote) { arretHote = err; break; }     // REPONSE-HOTE : défi = arrêt définitif de l'hôte ; pause = la passe s'arrête (pas un verdict sur le fichier)
                 echecs++;
                 console.warn(`   ✗ ${_id} (${p.fichier}) : ${err.message}`);
                 await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carteId, numero: p.numero, fichier: p.fichier, etat: 'echec', erreur: err.message } }, { upsert: true });
@@ -242,6 +244,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         }
         console.log(`4. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, sur ${aFaire.length} à faire`);
         if (arretDemande) return { code, etat: 'interrompu', telecharges };
+        if (arretHote) { console.error(`⛔ ${code} : ${arretHote.message}`); return { code, etat: arretHote.bloque ? 'refuse-source-bloquee' : 'incomplet', erreur: arretHote.message, telecharges, echecs, reponsesHotes: bulba.rapportReponses() }; }
 
         // ---- 5. jointure -------------------------------------------------------------------------
         const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();

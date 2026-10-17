@@ -25,7 +25,11 @@ const API = 'https://api.tcgdex.net/v2';
 
 const transportAxios = {
     async get(url, { binaire = false } = {}) {
-        try { return (await axios.get(url, { timeout: 30000, responseType: binaire ? 'arraybuffer' : 'json', headers: { 'User-Agent': 'rat-market-catalogue/1.0' } })).data; }
+        try {
+            // une IMAGE rend la réponse entière (statut, type, octets) : la règle commune la classe (reponse-hote.js) ; le reste rend ses données comme avant
+            if (binaire) { const r = await axios.get(url, { timeout: 30000, responseType: 'arraybuffer', headers: { 'User-Agent': 'rat-market-catalogue/1.0' }, validateStatus: s => s < 500 }); return { status: r.status, type: r.headers?.['content-type'] || '', octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }; }
+            return (await axios.get(url, { timeout: 30000, responseType: 'json', headers: { 'User-Agent': 'rat-market-catalogue/1.0' } })).data;
+        }
         catch (e) { throw Object.assign(new Error(`${e.response?.status ?? e.code} ${url}`), { status: e.response?.status }); }
     },
     async post(url, corps) {
@@ -54,11 +58,17 @@ const LANGUES = new Set(['id', 'th', 'ja']);
 const verifierLangue = langue => { if (!LANGUES.has(langue)) throw new Error(`TCGdex : langue « ${langue} » non autorisée (autorisées : en, ${[...LANGUES].join(', ')})`); };
 const verifierIdSet = id => { if (!/^[\w.-]+$/.test(String(id))) throw new Error(`identifiant de set TCGdex inattendu : « ${id} »`); };
 
-function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null } = {}) {
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
+
+function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null, suivi = RH.suiviHote(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+    let pauseHote = null, arretHote = null;
     let lie = verrou, file = Promise.resolve(), dernierDepart = 0, compte = 0;
     const pause = ms => new Promise(r => setTimeout(r, ms));
 
     function garde() {
+        if (arretHote) throw arretHote;                    // un défi : arrêt définitif, plus aucune requête
+        if (pauseHote) throw pauseHote;                    // la pause de la passe : plus aucune requête (pas un arrêt définitif)
         if (!lie) throw new Error(`TCGdex : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`TCGdex : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -71,6 +81,7 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
             dernierDepart = Date.now(); compte++;
             try { return await appel(); }
             catch (e) {
+                if (e.bloque || e.pauseHote) throw e;      // jamais de réessai vers un hôte qui a bloqué ou qu'on a mis en pause
                 if (e.status === 404) return null;
                 await pause(reessaiMs);
                 garde();
@@ -82,7 +93,15 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
         return p;
     }
     const getJSON = url => enFile(() => transport.get(url));
-    const telecharger = url => enFile(() => transport.get(url, { binaire: true })).then(b => b == null ? null : Buffer.from(b));
+    // UNE IMAGE se CLASSE (image · absente → null · défi · ambiguë · transitoire · inattendue) ; un Buffer nu (transport de banc) est jugé comme un 200 image/png
+    const telecharger = url => enFile(async () => {
+        RH.garderHote(new URL(url).hostname, dossierPauses);
+        const r = await transport.get(url, { binaire: true });
+        if (r == null) return null;
+        const rep = Buffer.isBuffer(r) || r instanceof Uint8Array ? { status: 200, type: 'image/png', octets: Buffer.from(r) } : r;
+        try { const j = RH.lireImage(rep, { suivi, hote: new URL(url).hostname, url, dossierPauses, connues }); return j.absente ? null : j.octets; }
+        catch (e) { if (e.bloque) arretHote = e; else if (e.pauseHote) pauseHote = e; throw e; }
+    });
     const graphql = query => enFile(() => transport.post(`${API}/graphql`, { query }), Math.max(cadenceMs, cadenceGraphqlMs));
 
     /** Toutes les cartes d'un set anglais, ILLUSTRATEUR COMPRIS : la liste d'un set ne le porte pas, `cards(filters)` si. */
@@ -112,7 +131,8 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
         // de GraphQL : l'illustrateur n'est pas demandé, il est déjà écrit par tirage)
         setsLangue: async langue => { verifierLangue(langue); return getJSON(`${API}/${langue}/sets`); },
         setLangue: async (langue, id) => { verifierLangue(langue); verifierIdSet(id); return getJSON(`${API}/${langue}/sets/${id}`); },
-        compteRequetes: () => compte
+        compteRequetes: () => compte,
+        bloque: () => arretHote, pause: () => pauseHote, suivi: () => suivi
     };
 }
 

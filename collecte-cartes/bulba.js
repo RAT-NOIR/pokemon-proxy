@@ -33,10 +33,16 @@ const dodo = ms => new Promise(r => setTimeout(r, ms));
 // https, et l'hôte de départ OU la liste fermée Bulbagarden ci-dessous, 3 sauts au plus. Tout autre cas est un REFUS NOMMÉ (`refusRedirection`), ni un succès ni un défi.
 const HOTES_BULBAGARDEN = Object.freeze(['archives.bulbagarden.net', 'bulbapedia.bulbagarden.net']);
 const SAUTS_MAX = 3;
-const transportAxios = url => axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000, maxRedirects: 0, validateStatus: s => s < 400 });
+const transportAxios = url => axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000, maxRedirects: 0, validateStatus: s => s < 500 });
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
+let suivi = RH.suiviHote(), pauseHote = null;      // pauseHote : la pause de la passe (collante) — plus aucune requête vers l'hôte jusqu'à la prochaine passe
+/** Une nouvelle passe (une unité) : le compteur de fausses absences repart de zéro. `o` ne sert qu'aux bancs. */
+function nouvellePasse(o = {}) { suivi = o.suivi || RH.suiviHote(); pauseHote = null; }
+const rapportReponses = () => suivi.hotes().map(h => suivi.rapport(h));
 const refusRedirection = m => Object.assign(new Error(m), { refusRedirection: true });
 
-function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, attendre = dodo } = {}) {
+function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, attendre = dodo, dossierPauses, connues = null } = {}) {
     const tache = _file.then(async () => {
         const attendreFile = async () => { const a = _derniere + delaiMs - Date.now(); if (a > 0) await attendre(a); };
         await attendreFile();
@@ -46,6 +52,8 @@ function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, atte
                 const hoteDepart = new URL(url).hostname;
                 for (let saut = 0; ; saut++) {
                     if (saut > 0) await attendreFile();
+                    if (pauseHote) throw pauseHote;
+                    RH.garderHote(new URL(courant).hostname, dossierPauses);        // une pause persistante tient : aucune requête
                     _derniere = Date.now();
                     _compte++;
                     const r = await transport(courant);
@@ -58,10 +66,16 @@ function telecharger(url, { transport = transportAxios, delaiMs = DELAI_MS, atte
                         courant = cible.href;
                         continue;
                     }
-                    return { buffer: Buffer.from(r.data), type: r.headers?.['content-type'] || null };
+                    // LA RÈGLE COMMUNE : image · absente (404, fausse page introuvable) · défi (arrêt définitif) · ambiguë/inattendue (pause) — un 4xx n'est plus une exception de transport
+                    const hote = new URL(courant).hostname;
+                    let j;
+                    try { j = RH.lireImage({ status: r.status, type: r.headers?.['content-type'], octets: Buffer.from(r.data), cfMitigated: r.headers?.['cf-mitigated'] }, { suivi, hote, url: courant, dossierPauses, connues }); }
+                    catch (e) { if (e.pauseHote) pauseHote = e; throw e; }
+                    if (j.absente) throw Object.assign(new Error(`Bulbagarden absent (${j.issue}) sur ${url}`), { absente: true });
+                    return { buffer: j.octets, type: r.headers?.['content-type'] || null };
                 }
             } catch (e) {
-                if (e.refusRedirection) throw e;
+                if (e.refusRedirection || e.bloque || e.pauseHote || e.absente) throw e;
                 const statut = e.response?.status;
                 if (essai === 0 && (!statut || statut >= 500)) { console.warn(`   ↻ Bulbagarden ${statut ?? e.code} sur ${url} — un seul réessai dans 60 s`); await attendre(60000); continue; }
                 throw new Error(`Bulbagarden ${statut ?? e.code ?? ''} sur ${url} (après ${essai + 1} essai(s))`);
@@ -167,4 +181,4 @@ async function imageinfoDe(fichiers) {
     return infos;
 }
 
-module.exports = { api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS, HOTES_BULBAGARDEN, SAUTS_MAX };
+module.exports = { nouvellePasse, rapportReponses, api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS, HOTES_BULBAGARDEN, SAUTS_MAX };

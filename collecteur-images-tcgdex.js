@@ -204,7 +204,7 @@ async function collecterSet(unite, M, { verrou }) {
         if (!P) throw new Error(`${L.code} : cartes TCGdex « ${langue}/${set.id} » ni en cache ni lisibles`);
         console.log(`\n══ ${L.code} « ${L.nom} » → TCGdex ${langue}/${set.id} « ${set.name} » — ${P.impressions} impressions, ${P.plan.length} scans (${langue}) · restes ${JSON.stringify(P.motifs)} ══`);
         const bucket = process.env.R2_BUCKET_IMAGES;
-        let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0;
+        let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0, arretHote = null;
         for (const p of P.plan) {
             if (arretDemande || !verrou.tenu) break;
             // la MÊME forme que le manque réel de l'alimentateur ; ➕ 2026-10-03 (relecture) : pour une langue contrôlée par l'image, la
@@ -245,6 +245,7 @@ async function collecterSet(unite, M, { verrou }) {
                 telecharges++;
                 if (telecharges % 25 === 0) await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: client.compteRequetes() } });
             } catch (err) {
+                if (err.bloque || err.pauseHote) { arretHote = err; break; }     // REPONSE-HOTE : défi = arrêt définitif de l'hôte ; pause = la passe s'arrête (pas un verdict sur le fichier)
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${url}) : ${err.message}`);
@@ -253,6 +254,7 @@ async function collecterSet(unite, M, { verrou }) {
             }
         }
         if (arretDemande || !verrou.tenu) return { code: L.code, etat: 'interrompu', telecharges };
+        if (arretHote) { console.error(`⛔ ${L.code} : ${arretHote.message}`); return { code: L.code, etat: arretHote.bloque ? 'refuse-source-bloquee' : 'incomplet', erreur: arretHote.message, telecharges, echecs, reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), ...(arretHote.pauseHote ? { pauseHote: { hote: arretHote.hote, issue: arretHote.issue, empreinte: arretHote.empreinte, persistante: arretHote.pausePersistante } } : {}) }; }
 
         // ---- 5. JOINTURE = REMPLACEMENT -------------------------------------------------------------
         // les images de CETTE langue seulement (un set idth peut porter l'indonésien et le thaï : une unité ne joint que les siennes) ;

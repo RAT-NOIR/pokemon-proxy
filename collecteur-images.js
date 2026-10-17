@@ -304,6 +304,8 @@ async function collecterSet(code, M, dossierRapport) {
     // largeur : `joindreImages` ne lit que `etat: 'ok'`, donc elle ne joint rien, et le jour où la vue
     // pleine carte existera on saura lesquelles reprendre sans redemander un octet au tiers.
     let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
+    let arretHote = null;          // REPONSE-HOTE : un défi (arrêt définitif de l'hôte) ou une pause de l'hôte arrête la passe de ce set
+    src.nouvellePasse();           // une nouvelle passe : le compteur de fausses absences repart de zéro
     // 🔴 CHAQUE ENTRÉE SOUS SON SET SOURCE (relecture du 2026-10-06) : une sous-section de kit est un set à part chez artofpkm
     // (/sets/643/card/1 sous la liste 206). L'id de la LISTE ne désigne pas la carte — sa page, sa clé et son document se prennent sous
     // `e.sourceSetId`. Sur les 27 969 entrées déjà en base, les deux sont égaux : rien ne change pour elles.
@@ -347,11 +349,18 @@ async function collecterSet(code, M, dossierRapport) {
                 telecharges++;
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: src.compteRequetes() } });
             } catch (err) {
+                if (err.bloque || err.pauseHote) { arretHote = err; break; }     // REPONSE-HOTE : défi = arrêt définitif de l'hôte ; pause = la passe s'arrête (aucune écriture d'échec : ce n'est pas un verdict sur la carte)
                 echecs++;
                 console.warn(`   ✗ ${_id} : ${err.message}`);
                 await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, etat: 'echec', erreur: err.message } }, { upsert: true });
             }
         }
+        if (arretHote) break;
+    }
+    if (arretHote) {
+        console.error(`⛔ ${code} : ${arretHote.message}`);
+        await liberer();
+        return { code, etat: arretHote.bloque ? 'refuse-source-bloquee' : 'incomplet', erreur: arretHote.message, telecharges, sautes, echecs, reponsesHotes: src.rapportReponses(), ...(arretHote.pauseHote ? { pauseHote: { hote: arretHote.hote, issue: arretHote.issue, empreinte: arretHote.empreinte, persistante: arretHote.pausePersistante } } : {}) };
     }
     console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${largeurMin} px`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }

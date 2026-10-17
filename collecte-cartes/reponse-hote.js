@@ -252,8 +252,24 @@ function traiterImage(r, { suivi, hote, url = null, dossierPauses = DOSSIER_PAUS
     return reaction;
 }
 
+/**
+ * Pour les clients qui LÈVENT sur un résultat (artofpkm, Bulbapedia, TCGdex : leurs collecteurs attrapent l'erreur d'un fichier et passent au suivant) : la même décision, rendue en
+ * { octets } (une image), { absente: true, issue } (404 ou fausse page introuvable : le fichier est absent), ou une exception TYPÉE —
+ *   `bloque` + `arretDefinitif` (défi), `pauseHote` (+ `pausePersistante`), ou `status` (transitoire, à la réaction actuelle du client).
+ * `r` : { status, type, octets | texte, cfMitigated, imperva } ; un 206 (lecture d'un début de fichier) se juge comme un 200.
+ */
+function lireImage(r, { suivi, hote, url = null, dossierPauses = DOSSIER_PAUSES, connues = null }) {
+    const lu = r && r.status === 206 ? { ...r, status: 200 } : r;
+    const x = traiterImage(lu, { suivi, hote, url, dossierPauses, connues });
+    if (x.action === 'arret-definitif') throw Object.assign(new Error(`${hote} BLOQUÉ (${x.motif}) sur ${url} — arrêt définitif de l'hôte`), { bloque: true, arretDefinitif: true, status: r?.status ?? null, hote, issue: x.issue, motif: x.motif });
+    if (x.action === 'pause' || x.action === 'pause-persistante') throw erreurPause(x, hote, url, x.fichier ? { fichier: x.fichier } : {});
+    if (x.action === 'transitoire') throw Object.assign(new Error(`${r.status} ${url}`), { status: r.status, transitoire: true });
+    if (x.action === 'absente') return { absente: true, issue: x.issue, empreinte: x.empreinte ?? null };
+    return { octets: lu.octets };
+}
+
 module.exports = {
-    ISSUES, LAISSENT_CONTINUER, BORNE_CORPS, SEUIL_FAUSSES, STATUTS_DEFI, MARQUEURS, FICHIER_CONNUES, DOSSIER_PAUSES,
+    lireImage, ISSUES, LAISSENT_CONTINUER, BORNE_CORPS, SEUIL_FAUSSES, STATUTS_DEFI, MARQUEURS, FICHIER_CONNUES, DOSSIER_PAUSES,
     classerReponseImage, detecterDefi, entreeDepuisClient, octetsDImage, empreintesConnues, suiviHote, reagir,
     fichierPause, extraitBorne, ecrirePausePersistante, lirePausePersistante, erreurPause, garderHote, traiterImage
 };
