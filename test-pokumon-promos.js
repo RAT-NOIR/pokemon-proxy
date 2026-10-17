@@ -21,7 +21,8 @@ const BK08 = 'Burger-King-DP-Promos-2008', BK09 = 'Burger-King-Platinum-Promos-2
 const NEUVES = ['bk-2008', 'bk-2009', 'prof-reverse', 'w-promos'].map(ligne);
 verifier('table : les quatre lignes neuves existent (bk-2008, bk-2009, prof-reverse, w-promos)', NEUVES.map(l => l?.id), ['bk-2008', 'bk-2009', 'prof-reverse', 'w-promos']);
 verifier('table : familles bk, bk, prof, w ; chacune porte un set, le jeu « speciale » et une marque lue', NEUVES.map(l => [l.famille, l.slugs.length, l.jeu, l.tampon.length > 20]), [['bk', 1, 'speciale', true], ['bk', 1, 'speciale', true], ['prof', 1, 'speciale', true], ['w', 1, 'speciale', true]]);
-verifier('table : une ligne NEUVE n\'est pas encore regardée (lu = null) et prépare 3 images à regarder, adresses admises par la liste fermée du client', NEUVES.map(l => [l.lu, (l.echantillon || []).length >= 3 && l.echantillon.every(x => P.urlImageValide(x.url) && x.id && x.nom)]), [[null, true], [null, true], [null, true], [null, true]]);
+verifier('table : les quatre lignes sont REGARDÉES (lu = 2026-10-17), portent 3 témoins vus distincts, leur échantillon (adresses admises) et la marque lue', NEUVES.map(l => [l.lu, new Set(l.temoins.map(t => `${t.nom}|${t.imprime}`)).size >= 3, l.echantillon.length >= 3 && l.echantillon.every(x => P.urlImageValide(x.url) && x.id && x.nom)]), [['2026-10-17', true, true], ['2026-10-17', true, true], ['2026-10-17', true, true], ['2026-10-17', true, true]]);
+verifier('table : la marque lue est nommée (DIAMOND & PEARL, PLATINUM, PROFESSOR PROGRAM, W)', NEUVES.map((l, i) => [/DIAMOND & PEARL/, /PLATINUM/, /PROFESSOR PROGRAM/, /« W »/][i].test(l.tampon)), [true, true, true, true]);
 
 // ── 2. BURGER KING : la clé (nom sans niveau + numéro du slug) et ses vetos ──────────────────────────────────────────────────────────────────
 const PRIN = e(35491, 'Burger King Prinplup (58/130 Burger King Special Print)', IMG('2021/07', 'EN_S156Burger-KingSpecial-Print.jpg'), 400, 555, [5237]);
@@ -91,15 +92,17 @@ const carte = (id, nomEn, images = []) => ({ _id: id, nomEn, images });
 const cartes = new Map([[1, carte(1, 'Prinplup')], [2, carte(2, 'Turtwig')], [3, carte(3, 'Kabuto')], [4, carte(4, 'Pikachu')]]);
 const P_TURT = prod(275630, BK08, 'Turtwig Lv.10 [Tackle | Razor Leaf]', 'Turtwig-Lv10-BKPR103', [imp('Diamond & Pearl', '103', '130')]);
 const base = [{ ...P_PRIN, carteId: 1 }, { ...P_TURT, carteId: 2 }];
-let plan = P.planifierFamilles({ lignes: LB, produits: base, cartes, index: [PRIN, TURT] });
+let plan = P.planifierFamilles({ lignes: LB.map(l => ({ ...l, lu: null })), produits: base, cartes, index: [PRIN, TURT] });
 verifier('GARDE : une ligne dont l\'image n\'a pas été REGARDÉE (lu = null) ne pose RIEN, ses produits sont des restes « ligne-non-regardee »', [plan.plan.length, plan.restes.map(r => r.motif).sort()], [0, ['ligne-non-regardee', 'ligne-non-regardee']]);
 const REGARDEES = LB.map(l => ({ ...l, lu: '2026-10-17' }));
 plan = P.planifierFamilles({ lignes: REGARDEES, produits: base, cartes, index: [PRIN, TURT] });
 verifier('une fois la ligne regardée, Prinplup (400 px) est posé ; Turtwig (321 px, sous le seuil de 350) est écarté et COMPTÉ, jamais téléchargé', [plan.plan.map(p => [p.idProduct, p.ligne, p.numero, p.voie]), plan.restes.map(r => [r.motif, r.w]), plan.comptes.sousSeuil], [[[275625, 'bk-2008', '58', 'pokumon+nom+numero+bk']], [['sous-le-seuil', 321]], 1]);
 verifier('la preuve du plan nomme l\'entrée, le produit, la ligne et sa marque', [/35491/.test(plan.plan[0].preuve), /Prinplup/.test(plan.plan[0].preuve), /bk-2008/.test(plan.plan[0].preuve), plan.plan[0].marque.startsWith('bk-2008')], [true, true, true, true]);
-plan = P.planifierFamilles({ lignes: [ligne('w-promos'), ligne('prof'), ligne('prof-reverse'), ligne('tot-2022')], produits: [{ ...P_KAB, carteId: 3 }], cartes, index: [KAB] });
-verifier('GARDE : la ligne « w-promos » non regardée ne pose rien non plus ; les lignes DÉJÀ regardées (prof, tot-2022) restent valides', [plan.plan.length, plan.restes.map(r => r.motif)], [0, ['ligne-non-regardee']]);
-verifier('les lignes déjà posées restent regardées (lu = date) : mcd, tot, prof, bsp', P.LIGNES_AUTRES.filter(l => ['mcd', 'tot', 'prof', 'bsp'].includes(l.famille) && l.id !== 'prof-reverse').every(l => l.lu === '2026-10-17'), true);
+plan = P.planifierFamilles({ lignes: [{ ...ligne('w-promos'), lu: null }], produits: [{ ...P_KAB, carteId: 3 }], cartes, index: [KAB] });
+verifier('GARDE : une ligne « w-promos » non regardée ne pose rien', [plan.plan.length, plan.restes.map(r => r.motif)], [0, ['ligne-non-regardee']]);
+plan = P.planifierFamilles({ lignes: [ligne('w-promos')], produits: [{ ...P_KAB, carteId: 3 }], cartes, index: [KAB] });
+verifier('la ligne « w-promos » regardée pose Kabuto (400 px), la preuve nomme ses témoins vus', [plan.plan.length, /Wartortle/.test(plan.plan[0]?.preuve || '')], [1, true]);
+verifier('toutes les lignes de la table sont regardées (lu = date)', P.LIGNES_AUTRES.every(l => l.lu === '2026-10-17'), true);
 
 console.log(`\n${ok} réussis, ${ko} échecs`);
 process.exit(ko ? 1 : 0);
