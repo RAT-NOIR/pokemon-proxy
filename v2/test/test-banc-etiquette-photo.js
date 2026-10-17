@@ -313,7 +313,7 @@ const lire = async id => db.col('analyses').findOne({ _id: new mongoose.Types.Ob
     {
         const pret = require('../pret'), { dansUnScan } = require('../../sources'), { assembler } = require('../index');
         const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
-        const chaine = async (req, res) => res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) });
+        const chaine = async (req, res) => res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '42', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) });
         const nTel = { n: 0 };
         const app2 = express(); app2.set('trust proxy', true); app2.use(express.json()); app2.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
