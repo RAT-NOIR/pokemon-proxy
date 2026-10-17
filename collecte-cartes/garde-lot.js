@@ -55,8 +55,9 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
     const vus = new Set();
     // 🔴 LOT METAL (correction 1, I1) : les lignes et les liens.idProduct qui portent un produit de la table fermée (matiere-speciale.js, lue, jamais recopiée) sont comptés à part ;
     // `comparer` arrête tout lot qui en FAIT AUGMENTER le compte (une ligne déjà là avant n'est pas le fait du lot).
-    for (const l of cartesProduits) if (estMatiereSpeciale(l.idProduct)) inc(`matiere-speciale prod:${Number(l.idProduct)} ligne`);
-    for (const c of cartes) for (const id of new Set(c.liens?.idProduct || [])) if (estMatiereSpeciale(id)) inc(`matiere-speciale prod:${Number(id)} lien`);
+    // (correction 2, M-1) le compte est PAR LIGNE (_id) et par couple (carte, produit) pour les liens : remplacer la ligne X par la ligne Y sur le même produit (1 → 1) est une hausse de Y
+    for (const l of cartesProduits) if (estMatiereSpeciale(l.idProduct)) inc(`matiere-speciale prod:${Number(l.idProduct)} ligne:${l._id ?? `${l.carteId}|${l.idProduct}`}`);
+    for (const c of cartes) for (const id of new Set(c.liens?.idProduct || [])) if (estMatiereSpeciale(id)) inc(`matiere-speciale prod:${Number(id)} lien:${c._id}`);
     for (const l of cartesProduits) {
         const k = `${l.idExpansion}|${l.idProduct}`;
         if (vus.has(k)) continue;
@@ -290,4 +291,11 @@ function setsTouches({ avant, apres }) {
     return { sets: [...touches].sort(), catalogue, especes, setsInfo };
 }
 
-module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+// (correction 2, I-1) LA projection de l'état « après » que lot-additif lit dans la base — UNE constante, lue par lot-additif ET par le banc : ce que compterEtat/setsTouches lisent y figure,
+// `liens.idProduct` compris (sans lui, la garde des liens de la table fermée valait toujours 0 en production).
+const PROJECTION_ETAT = Object.freeze({
+    cartes: Object.freeze({ sets: 1, nomEn: 1, categorie: 1, 'liens.idProduct': 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.vignette': 1, 'images.partageeHoloNonHolo': 1, 'images.produitsPartages': 1, 'images.partageeTamponNonSepare': 1, 'images.tamponNonRepresente': 1 }),
+    cartesProduits: Object.freeze({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1, 'visuelSubstitut.cleR2': 1 }),
+});
+
+module.exports = { PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };

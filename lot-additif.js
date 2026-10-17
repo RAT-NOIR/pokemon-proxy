@@ -35,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
@@ -106,8 +106,8 @@ const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(
 // La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
 async function etatDeLaBase(db) {
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, categorie: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.vignette': 1, 'images.partageeHoloNonHolo': 1, 'images.produitsPartages': 1, 'images.partageeTamponNonSepare': 1, 'images.tamponNonRepresente': 1 }).toArray(),
-        db.collection('cartes_produits').find({}).project({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1, 'visuelSubstitut.cleR2': 1 }).toArray(),
+        db.collection('cartes').find({}).project({ ...PROJECTION_ETAT.cartes }).toArray(),
+        db.collection('cartes_produits').find({}).project({ ...PROJECTION_ETAT.cartesProduits }).toArray(),
         db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])
         if (!l.length) throw new Error(`« ${n} » est VIDE : un compteur sur elle ne mesure rien (§41)`);
