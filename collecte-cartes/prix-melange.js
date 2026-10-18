@@ -171,24 +171,16 @@ const triees = o => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.lo
  * @param {{temoins: object[], produits: Array<{idProduct, name, idExpansion, idMetacard}>, lignes: object[], exclus?: Set<number>, ecartes?: object[]}} o
  *   `produits` : l'export Cardmarket ; `lignes` : les lignes cartes_produits (lireLignes) ; `exclus` : les idProduct des 64 paires ; `ecartes` : les entrées déjà écartées par les lecteurs (reprises dans les sautés).
  */
-function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes = [], numerosCm = null }) {
-    // Le numéro que Cardmarket porte dans le slug (test.numeros_cartes, lu une fois) : il ne SERT que (1) à lire un numéro à suffixe (« 121a ») que `numeroFiche` ne porte pas, et (2) à connaître le numéro d'un frère sans
-    // numeroFiche. Un numéro à suffixe est celui d'un produit à part : il REMPLACE les autres numéros de ce produit, et seul un témoin au même numéro à suffixe le désigne.
-    const cmNum = id => { const v = numerosCm && typeof numerosCm.get === 'function' ? numerosCm.get(id) : null; return v == null || String(v).trim() === '' ? null : String(v).trim(); };
-    const cmSuffixe = id => { const v = cmNum(id); return v && /\d[A-Za-z]$/.test(v) ? v : null; };
-    const totauxDuSet = new Map();
-    for (const l of lignes) if (l.slugSet && l.impTotal != null) (totauxDuSet.get(l.slugSet) || totauxDuSet.set(l.slugSet, new Set()).get(l.slugSet)).add(String(l.impTotal));
+function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes = [] }) {
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const rangs = new Map();
     for (const l of lignes) (rangs.get(l.idProduct) || rangs.set(l.idProduct, []).get(l.idProduct)).push(l);
     const parMeta = new Map();
     for (const p of produits) { if (!p.idMetacard) continue; const k = `${p.idExpansion}|${p.idMetacard}`; (parMeta.get(k) || parMeta.set(k, []).get(k)).push(p); }
-    const numerosDe = id => {
-        const suf = cmSuffixe(id); if (suf) return new Set([cleNumero(suf)]);
-        const s = new Set((rangs.get(id) || []).map(l => l.numeroFiche ?? l.impNumero).filter(n => n != null && String(n).trim() !== '').map(n => cleNumero(n)));
-        if (!s.size && cmNum(id)) s.add(cleNumero(cmNum(id)));
-        return s;
-    };
+    const numerosDe = id => new Set((rangs.get(id) || []).map(l => l.numeroFiche ?? l.impNumero).filter(n => n != null && String(n).trim() !== '').map(n => cleNumero(n)));
+    // « 121 » et « 121A » : même carte, même expansion, une lettre en plus = une VERSION qui a SON produit chez Cardmarket (l'impression spéciale), à côté de la fiche du numéro normal. Ce n'est pas une réimpression au numéro
+    // d'à côté : la fiche « A » est propre (elle ne mélange pas la version normale, qui a la sienne) — et la fiche normale ne mélange pas non plus. Le frère reste un frère : on saute.
+    const sansLettre = n => String(n).replace(/(\d)[A-Z]+$/, '$1');
     // le nom comparé : celui de Cardmarket sans ses crochets, sans la mention « Delta Species » que seule Cardmarket écrit à la suite du δ
     const comparable = s => normaliserNom(String(s ?? '').replace(/\s+delta species$/i, ''));
     const nomCm = p => comparable(decomposerNomCardmarket(p.name).nom);
@@ -232,12 +224,6 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
                 if (!parId.has(l.idProduct)) return false;
                 if (t.expansions?.length && !t.expansions.includes(l.idExpansion)) return false;
                 if (t.slugSets?.length && !t.slugSets.includes(l.slugSet)) return false;
-                const suf = cmSuffixe(l.idProduct);
-                if (suf) {   // produit à numéro à suffixe : seul un témoin au même numéro à suffixe le désigne ; le total vient de la ligne, à défaut du set s'il n'en imprime qu'un
-                    if (digits || kT == null || cleNumero(suf) !== kT) return false;
-                    if (t.total != null) { const ts = totauxDuSet.get(l.slugSet); const tot = l.impTotal != null ? String(l.impTotal) : (ts && ts.size === 1 ? [...ts][0] : null); if (tot !== String(t.total)) return false; }
-                    return true;
-                }
                 if (t.total != null && String(l.impTotal ?? '') !== String(t.total)) return false;
                 const n = l.numeroFiche ?? l.impNumero;
                 return n != null && kT != null && (digits ? chiffres(n) : cleNumero(n)) === kT;
@@ -255,7 +241,9 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
         const numsP = numerosDe(id);
         const freres = (p.idMetacard ? parMeta.get(`${p.idExpansion}|${p.idMetacard}`) || [] : []).filter(q => q.idProduct !== id).filter(q => {
             const nq = numerosDe(q.idProduct);
-            return !(numsP.size && nq.size && ![...numsP].some(n => nq.has(n)));   // deux numéros connus et disjoints : une réimpression, pas une version de la même carte
+            if (!(numsP.size && nq.size)) return true;
+            if ([...numsP].some(n => nq.has(n))) return true;
+            return [...numsP].some(n => [...nq].some(m => sansLettre(m) === sansLettre(n)));   // deux numéros connus et disjoints : une réimpression, pas une version de la même carte — SAUF s'ils ne diffèrent que par une lettre (version à produit dédié : frère)
         });
         if (!p.idMetacard) { sauter(t, 'metacarte-inconnue', { idProduct: id }); continue; }
         if (freres.length) { sauter(t, 'plusieurs-produits-pour-la-carte', { produits: [id, ...freres.map(q => q.idProduct)] }); continue; }

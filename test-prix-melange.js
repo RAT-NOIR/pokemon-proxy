@@ -355,34 +355,24 @@ const motifs = p => p.sautes.map(s => s.motif);
         const q = M.construirePlan({ temoins: [{ ...t, setNom: 'Autre Promos' }], produits: prods, lignes: lg });
         verifier('nom de set sans slugSet égal : toujours sans ancrage', motifs(q), ['temoin-sans-ancrage']);
     });
-    // numéro à suffixe lu sur le slug Cardmarket (« 121a »)
-    const PS = [P(6001, 'Choice Band', 400, 950), P(6002, 'Choice Band', 400, 950), P(6003, 'Choice Band', 400, 950)];
-    const LS = [L(6001, 71, 'Guardians-Rising', 400, '121', { nomCarte: 'Choice Band', impNumero: '121', impTotal: '145' }), L(6002, 71, 'Guardians-Rising', 400, null, { nomCarte: 'Choice Band' }), L(6003, 71, 'Guardians-Rising', 400, null, { nomCarte: 'Choice Band' })];
-    const NCM = new Map([[6001, '121a'], [6002, '121'], [6003, '121']]);
-    const TS = o => ({ source: 'pokumon', enregistrement: 'pokumon:9', nom: 'Choice Band', numero: '121a', total: '145', tampons: ['staff'], idProduct: null, ...o });
-    await essayer('suffixe : sans le numéro Cardmarket, aucune fiche', () => verifier('sans numerosCm', motifs(M.construirePlan({ temoins: [TS()], produits: PS, lignes: LS })), ['aucune-fiche']));
-    await essayer('suffixe : le numéro du slug désigne le produit, les frères au numéro nu sont des réimpressions', () => {
-        const p = M.construirePlan({ temoins: [TS()], produits: PS, lignes: LS, numerosCm: NCM });
-        verifier('marqué', [ids(p), p.fiches[0]?.preuves[0]?.mode, motifs(p)], [[6001], 'set+numero+nom', []]);
-    });
-    await essayer('suffixe : garde du total (le set doit imprimer ce total)', () => {
-        const p = M.construirePlan({ temoins: [TS({ total: '999' })], produits: PS, lignes: LS, numerosCm: NCM });
-        verifier('total différent : sauté', [ids(p), motifs(p)], [[], ['aucune-fiche']]);
-    });
-    await essayer('suffixe : deux produits au même numéro à suffixe', () => {
-        const p = M.construirePlan({ temoins: [TS()], produits: PS, lignes: LS, numerosCm: new Map([[6001, '121a'], [6002, '121a'], [6003, '121']]) });
-        verifier('ambigu : sauté', [ids(p), motifs(p)], [[], ['plusieurs-produits-pour-la-carte']]);
-    });
-    await essayer('suffixe : un frère sans aucun numéro connu bloque', () => {
-        const p = M.construirePlan({ temoins: [TS()], produits: PS, lignes: LS, numerosCm: new Map([[6001, '121a']]) });
-        verifier('frère inconnu : on ne devine pas', [ids(p), motifs(p)], [[], ['plusieurs-produits-pour-la-carte']]);
-    });
-    await essayer('suffixe : le total vient aussi du set quand la ligne n\'imprime rien', () => {
-        const lg = LS.map(l => l.idProduct === 6001 ? { ...l, numeroFiche: null, impNumero: null, impTotal: null } : (l.idProduct === 6002 ? { ...l, impTotal: '145' } : l));
-        const p = M.construirePlan({ temoins: [TS()], produits: PS, lignes: lg, numerosCm: NCM });
-        verifier('total du set unique et concordant : marqué', ids(p), [6001]);
-        const q = M.construirePlan({ temoins: [TS({ total: '146' })], produits: PS, lignes: lg, numerosCm: NCM });
-        verifier('autre total : sauté', ids(q), []);
+    // « 121 » et « 121a » : une VERSION à produit dédié, pas une réimpression — les 6 paires RÉELLES relevées par la relecture (idProduct du « a », idProduct du numéro normal, nom, set, expansion, numéro, total)
+    const REELLES = [[449138, 297573, 'Choice Band', 'Guardians-Rising', 1800, '121', '145'], [371641, 297580, 'Max Potion', 'Guardians-Rising', 1800, '128', '145'], [450308, 297582, 'Rescue Stretcher', 'Guardians-Rising', 1800, '130', '145'],
+        [448148, 299516, 'Kiawe', 'Burning-Shadows', 1824, '116', '147'], [448158, 355625, 'Metal Frying Pan', 'Forbidden-Light', 1860, '112', '131'], [450048, 365821, 'Net Ball', 'Lost-Thunder', 1900, '187', '214']];
+    for (const [idA, idB, nom, set, exp, n, total] of REELLES) {
+        await essayer(`suffixe réel : ${nom} ${n}a`, () => {
+            const meta = 7000 + idB % 1000, prods = [P(idA, nom, exp, meta), P(idB, nom, exp, meta)];
+            const lg = [L(idA, 81, set, exp, `${n}a`, { nomCarte: nom, impTotal: total }), L(idB, 82, set, exp, n, { nomCarte: nom, impTotal: total })];
+            const t = { source: 'pokumon', enregistrement: `pokumon:${idA}`, nom, numero: `${n}a`, total, tampons: ['staff'], idProduct: null };
+            const p = M.construirePlan({ temoins: [t], produits: prods, lignes: lg });
+            verifier('le produit « a » a son frère au numéro normal : sauté, jamais marqué', [ids(p), motifs(p)], [[], ['plusieurs-produits-pour-la-carte']]);
+            const q = M.construirePlan({ temoins: [{ ...t, numero: n }], produits: prods, lignes: lg });
+            verifier('le numéro normal : le « a » est un frère, sauté aussi', ids(q), []);
+        });
+    }
+    await essayer('suffixe : deux numéros disjoints qui ne diffèrent pas par une lettre restent une réimpression', () => {
+        const prods = [P(8001, 'Super Rod', 100, 700), P(8002, 'Super Rod', 100, 700)];
+        const lg = [L(8001, 91, 'Diamond-Pearl', 100, '188'), L(8002, 91, 'Diamond-Pearl', 100, '276')];
+        verifier('188 contre 276 : marquée', ids(M.construirePlan({ temoins: [T({ nom: 'Super Rod', numero: '188', idProduct: 8001 })], produits: prods, lignes: lg })), [8001]);
     });
 
     console.log(`\n${ok} passés, ${ko} en échec`);
