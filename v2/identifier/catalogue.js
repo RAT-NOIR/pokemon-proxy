@@ -111,7 +111,7 @@ function creerCatalogue(opts = {}) {
                 autres = new Map((await Promise.race([lecture, delai])).map(d => [d.idProduct, d]));
             } catch (e) {
                 autres = new Map();
-                console.warn(`⚠️ [catalogue] lecture des versions des impressions en panne (${(e && (e.code || e.name || e.message)) || 'erreur'}) : ${ids.size} impression(s) non lue(s), prix non fiables`);
+                console.warn(`⚠️ [catalogue] lecture des versions des impressions en panne (${(e && (e.code || e.name)) || 'erreur'}) : ${ids.size} impression(s) non lue(s), prix non fiables`);
             } finally { clearTimeout(minuterie); }
         }
         for (const ligne of table.values())
