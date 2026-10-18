@@ -693,7 +693,7 @@ async function ecrireCache(name, number, language, price, url) {
 // `diagnostic` (FREIN-CONSTATES tour 3) : un objet que l'appelant passe pour savoir POURQUOI la lecture rend null, avec ou sans `secours` : `diagnostic.cause` vaut 'fournisseur' (panne du service PROUVÉE),
 // 'depense' (plafond de dépense du modèle atteint pendant le scan) ou 'sans-lecture' (tout le reste : photo sans carte, JSON invalide ou sans nom, erreur non classée) — voir lecture-de-secours.js.
 // Il ne change RIEN au comportement : la lecture de secours ne s'ouvre toujours que si `secours` est passé.
-async function getCardIdFromAI(imageUrls, title, secours = null, diagnostic = null) {
+async function getCardIdFromAI(imageUrls, title, secours = null, diagnostic = null, signalArret = null) {      // signalArret (PHOTOS-MULTIPLES, borne du scan tenue par le serveur) : annule l'appel au modèle en cours
     const dire = cause => { if (diagnostic && typeof diagnostic === 'object') diagnostic.cause = cause; };
     // Accepte une URL unique ou un tableau d'URLs (recto, verso, gros plans).
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
@@ -866,7 +866,8 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
                     "HTTP-Referer": "https://render.com",
                     "Content-Type": "application/json"
                 },
-                timeout: 30000
+                timeout: 30000,
+                ...(signalArret ? { signal: signalArret } : {})
             });
         } catch (e) {
             // FREIN-CONSTATES : le plafond de dépense du modèle n'est PAS une panne du service : la lecture de secours (titre) ne le contourne pas, l'erreur remonte
@@ -3806,7 +3807,7 @@ async function gererIdentifier(req, res) {
         // la route sait transformer une lecture incertaine en question : elle accepte la lecture de SECOURS (titre) si le service tombe
         const secoursIA = {};
         const diagnosticIA = {};      // POURQUOI la lecture rend null (FREIN-CONSTATES tour 3, C1)
-        cardInfo = await getCardIdFromAI(photos, title, secoursIA, diagnosticIA);
+        cardInfo = await getCardIdFromAI(photos, title, secoursIA, diagnosticIA, req.signalArret);
         // la panne voyage dans `annonce`, donc jusqu'aux DEUX voies du journal (succès et refus)
         annonce.panneIA = secoursIA.panne ?? null;
         // ⚓ JALON DU VERROU (« ia-lue ») — voir verrou/jalons.js.
