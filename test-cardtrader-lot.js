@@ -13,6 +13,9 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ctr2-'));
 const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardtrader-pages.json'), 'utf8'));
 
 (async () => {
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 7)]);
+    const mk = (transport, o = {}) => C.fabriquerClient({ dossierCache: tmp(), plafond: 5, transport, cadenceMs: 0, pause: async () => {}, dossierPauses: tmp(), robots: null, suivi: require('./collecte-cartes/reponse-hote').suiviHote(), ...o });
+    const URL_IMG = 'https://www.cardtrader.com/uploads/blueprints/image/77/x.jpg';
     await test('12 pages réelles : l\'adresse est l\'og:image pleine taille du blueprint, jamais une variante réduite ni le dos', () => {
         assert.strictEqual(pages.length, 12);
         for (const p of pages) {
@@ -118,9 +121,52 @@ const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardt
         const ba = { set: 'Battle-Academy-2022', numero: null, langue: 'en', source: 'emprunt', cleR2: 'e', w: 600, imageEmprunteeTirage: true };
         assert.strictEqual(C.decisionEcriture([ba], cand({ set: 'Battle-Academy-2022', numero: null, tampon: undefined })).action, 'cede');
     });
+    await test('écriture : le scan japonais du jumeau ne sert pas le set : on ajoute quand même', () => {
+        const ja = { set: 'Play-Pokemon-Prize-Pack-Series-Five', numero: '072', langue: 'ja', source: 'artofpkm', cleR2: 'j', w: 868 };
+        assert.strictEqual(C.decisionEcriture([ja], cand()).action, 'ajouter');
+    });
     await test('écriture : l\'entrée de même source et même clé est déjà là (reprise) -> rien', () => {
         const e = { set: 'Play-Pokemon-Prize-Pack-Series-Five', numero: '072', langue: 'en', source: 'ctr', cleR2: 'ctr/x', w: 500 };
         assert.strictEqual(C.decisionEcriture([e], cand()).action, 'deja-posee');
+    });
+
+    await test('page réduite avant le cache : l\'adresse d\'image reste la même, la page de 900 Ko tient en quelques Ko', async () => {
+        const url = 'https://www.cardtrader.com/en-US/cards/77-x-battle-academy-2022';
+        const bruit = Array.from({ length: 4000 }, (_, i) => `<a href="/uploads/blueprints/image/${1000 + i}/show_autre-${i}.jpg">autre ${i}</a>`).join('\n');
+        const pleine = `<html><head><meta property="og:image" content="https://www.cardtrader.com/uploads/blueprints/image/77/x.jpg" /><script>${'x'.repeat(50000)}</script></head><body>${bruit}<img src="/uploads/blueprints/image/77/show_x.jpg"><img src="/uploads/blueprints/back_image/77/show_x.jpg"></body></html>`;
+        const r = C.reduirePage(pleine, url);
+        assert.ok(r.length < 3000 && pleine.length > 200000, `${r.length}`);
+        assert.deepStrictEqual(C.imageDePage(r, url), C.imageDePage(pleine, url));
+        assert.ok(!/autre-/.test(r));
+        const dossier = tmp();
+        const cli = mk({ async get() { return { status: 200, type: 'text/html', texte: pleine }; } }, { dossierCache: dossier });
+        const page = await cli.lire(url, { reduire: h => C.reduirePage(h, url) });
+        assert.ok(page.texte.length < 3000);
+        assert.ok(fs.readdirSync(dossier).every(f => fs.statSync(path.join(dossier, f)).size < 5000));
+    });
+    await test('lecture du cache sans réseau : octets et fiche, null si absent', async () => {
+        const dossier = tmp();
+        const cli = mk({ async get() { return { status: 200, type: 'image/jpeg', octets: jpeg }; } }, { dossierCache: dossier });
+        assert.strictEqual(C.lireDuCache(dossier, URL_IMG), null);
+        await cli.lireImage(URL_IMG);
+        const c = C.lireDuCache(dossier, URL_IMG);
+        assert.ok(Buffer.compare(c.octets, jpeg) === 0); assert.strictEqual(c.meta.statut, 'ok');
+    });
+    // ───────── l'échantillon de planche ─────────
+    await test('planche : n unités, au moins 15 « clé seule », toutes les familles, déterministe', () => {
+        const unites = [];
+        for (let i = 0; i < 300; i++) unites.push({ carteId: i, slugSet: 's', numero: null, famille: ['wcd', 'pp', 'ba'][i % 3], temoins: [i % 5 === 0 ? 'non-applicable' : i % 7 === 0 ? 'absent' : 'confirme'], cles: ['nom+numero'] });
+        const a = C.choisirEchantillon(unites, 50), b = C.choisirEchantillon(unites, 50);
+        assert.strictEqual(a.length, 50); assert.deepStrictEqual(a.map(u => u.carteId), b.map(u => u.carteId));
+        assert.ok(a.filter(C.estCleSeule).length >= 15, `${a.filter(C.estCleSeule).length}`);
+        assert.deepStrictEqual([...new Set(a.map(u => u.famille))].sort(), ['ba', 'pp', 'wcd']);
+        assert.strictEqual(new Set(a.map(u => u.carteId)).size, 50);
+        assert.ok(a.filter(u => C.estCleSeule(u) && u.famille === 'wcd').length >= 1 && a.filter(u => C.estCleSeule(u) && u.famille === 'ba').length >= 1);
+    });
+    await test('planche : peu de clé seule disponibles -> toutes prises, jamais une unité deux fois ; n plus grand que la population -> tout', () => {
+        const u = [{ carteId: 1, famille: 'wcd', temoins: ['absent'], cles: [] }, { carteId: 2, famille: 'pp', temoins: ['confirme'], cles: [] }, { carteId: 3, famille: 'ba', temoins: ['confirme'], cles: ['nom-seul'] }];
+        assert.strictEqual(C.choisirEchantillon(u, 50).length, 3);
+        assert.strictEqual(C.choisirEchantillon(u, 2).filter(C.estCleSeule).length, 2);
     });
 
     // ───────── les entrées écrites ─────────
@@ -146,9 +192,6 @@ const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardt
     });
 
     // ───────── le client : images ─────────
-    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 7)]);
-    const mk = (transport, o = {}) => C.fabriquerClient({ dossierCache: tmp(), plafond: 5, transport, cadenceMs: 0, pause: async () => {}, dossierPauses: tmp(), robots: null, suivi: require('./collecte-cartes/reponse-hote').suiviHote(), ...o });
-    const URL_IMG = 'https://www.cardtrader.com/uploads/blueprints/image/77/x.jpg';
     await test('client image : octets rendus, cache disque, jamais redemandée', async () => {
         let n = 0;
         const cli = mk({ async get() { n++; return { status: 200, type: 'image/jpeg', octets: jpeg }; } });

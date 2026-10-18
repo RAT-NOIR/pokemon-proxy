@@ -97,7 +97,7 @@ function fabriquerClient({ dossierCache, plafond, transport = transportFetch, ca
     fs.mkdirSync(dossierCache, { recursive: true });
     const fichier = url => path.join(dossierCache, nomCache(url));
 
-    async function lire(url, { robotsTxt = false } = {}) {
+    async function lire(url, { robotsTxt = false, reduire = null } = {}) {
         if (!hoteOk(url)) throw new Error(`cardtrader : adresse hors de l'hôte autorisé — aucune requête (${url})`);
         const f = fichier(url);
         if (fs.existsSync(f)) return { ...JSON.parse(fs.readFileSync(f, 'utf8')), cache: true };
@@ -114,7 +114,7 @@ function fabriquerClient({ dossierCache, plafond, transport = transportFetch, ca
             throw Object.assign(new Error(`${SOURCE_RACINE} BLOQUÉ (${defi}) sur ${url} — ARRÊT définitif de l'hôte${f2 ? ` (${f2})` : ''}`), { bloque: true, arretDefinitif: true, status: r.status });
         }
         if (r.status !== 200 && r.status !== 404) throw Object.assign(new Error(`HTTP ${r.status} sur ${url} — réponse non prévue, on s'arrête`), { status: r.status });
-        const sortie = { url, status: r.status, type: r.type || '', texte: r.status === 200 ? r.texte : '', le: new Date(now()).toISOString() };
+        const sortie = { url, status: r.status, type: r.type || '', texte: r.status === 200 ? (reduire ? reduire(r.texte) : r.texte) : '', le: new Date(now()).toISOString() };
         fs.writeFileSync(f, JSON.stringify(sortie));
         return { ...sortie, cache: false };
     }
@@ -157,6 +157,24 @@ function fabriquerClient({ dossierCache, plafond, transport = transportFetch, ca
         return { octets: x.octets, cache: false, meta: m };
     }
     return { lire, lireImage, requetes: () => n, initialiserRobots, texteRobots: () => texteRobots };
+}
+/** La fiche et les octets d'une image DÉJÀ au cache, sans réseau : { octets, meta } | null. */
+function lireDuCache(dossier, url) {
+    const f = path.join(dossier, nomCache(url)), fb = f.replace(/\.json$/, '.bin');
+    if (!fs.existsSync(f) || !fs.existsSync(fb)) return null;
+    const meta = JSON.parse(fs.readFileSync(f, 'utf8'));
+    return meta.statut === 'ok' ? { octets: fs.readFileSync(fb), meta } : null;
+}
+/**
+ * Une page de blueprint (~900 Ko) réduite à ce dont on a besoin : les méta og:image et les lignes qui citent un fichier de CE blueprint. 1 500 pages entières pèseraient 1,3 Go au cache.
+ * `imageDePage(reduirePage(h, u), u)` = `imageDePage(h, u)`.
+ */
+function reduirePage(html, urlPage) {
+    const id = /\/cards\/(\d+)-/.exec(String(urlPage ?? ''))?.[1];
+    const t = String(html ?? '');
+    const og = [...t.matchAll(/<meta[^>]+og:image[^>]*>/gi)].map(m => m[0]);
+    const cites = id ? [...new Set([...t.matchAll(new RegExp(`[^"'\\s<>]*/uploads/blueprints/(?:back_)?image/${id}/[^"'\\s)\\\\<>]+`, 'g'))].map(m => m[0]))].slice(0, 12) : [];
+    return `<!doctype html><html><head>${og.join('')}</head><body>${cites.map(c => `<img src="${c}">`).join('')}</body></html>`;
 }
 const CHEMIN_IMAGE = /^\/uploads\/blueprints\/image\/\d+\/[^/]+\.(?:jpe?g|png|webp)$/i;
 
@@ -236,12 +254,40 @@ function construireLot(produits) {
     for (const g of groupes.values()) {
         if (new Set(g.map(x => x.p.blueprint)).size > 1) { for (const x of g) exclus.push({ idProduct: x.p.idProduct, groupe: x.p.groupe, raison: 'conflit' }); continue; }
         const p = g[0].p;
-        unites.push({ carteId: p.carteId, slugSet: p.slugSet, numero: g[0].numero, blueprint: p.blueprint, blueprintSlug: p.blueprintSlug, page: `https://${HOTE}/en-US/cards/${p.blueprint}-${p.blueprintSlug}`, groupe: p.groupe, famille: familleDe(p),
+        unites.push({ carteId: p.carteId, slugSet: p.slugSet, numero: g[0].numero, blueprint: p.blueprint, blueprintSlug: p.blueprintSlug, page: `https://${HOTE}/en-US/cards/${p.blueprint}-${p.blueprintSlug}`, groupe: p.groupe, famille: familleDe(p), slugCM: p.slug ?? null, carteNom: p.carteNom ?? null, preuve: p.preuve ?? null,
             produits: g.map(x => x.p.idProduct).sort((a, b) => a - b), cles: [...new Set(g.map(x => x.p.cle))], temoins: [...new Set(g.map(x => x.p.temoin))] });
     }
     const parFamille = { wcd: 0, pp: 0, ba: 0 };
     for (const u of unites) if (u.famille) parFamille[u.famille]++;
     return { unites, exclus, parFamille };
+}
+
+/** « Clé seule » : aucun témoin hors de la clé n'a CONFIRMÉ l'appariement (témoin absent, non applicable, ou nom seul). */
+const estCleSeule = u => !(u.temoins || []).includes('confirme') || (u.cles || []).includes('nom-seul');
+function prng(graine) { let a = graine >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+/**
+ * L'échantillon de la planche (à regarder à l'œil avant toute écriture) : `n` unités, déterministe (graine fixe), au moins `cleSeuleMin` appariements « clé seule » (s'il y en a), toutes les
+ * familles présentes, chaque unité une seule fois. Tirage en tourniquet sur les familles pour ne pas laisser les WCD, plus nombreux, tout prendre.
+ */
+function choisirEchantillon(unites, n, { cleSeuleMin = 15, graine = 20261018 } = {}) {
+    const alea = prng(graine), toutes = [...(unites || [])];
+    const pris = [], dejaPris = new Set();
+    const tirer = (pool, k) => {
+        const parFam = new Map();
+        for (const u of pool) (parFam.get(u.famille) || parFam.set(u.famille, []).get(u.famille)).push(u);
+        const fams = [...parFam.keys()].sort();
+        let i = 0, mis = 0;
+        while (mis < k && fams.some(f => parFam.get(f).length)) {
+            const f = fams[i++ % fams.length], l = parFam.get(f);
+            if (!l.length) continue;
+            const u = l.splice(Math.floor(alea() * l.length), 1)[0];
+            if (dejaPris.has(u)) continue;
+            dejaPris.add(u); pris.push(u); mis++;
+        }
+    };
+    tirer(toutes.filter(estCleSeule), Math.min(cleSeuleMin, n));
+    tirer(toutes.filter(u => !dejaPris.has(u)), n - pris.length);
+    return pris;
 }
 
 const memeNumero = (e, numero) => e.numero == null || String(e.numero).trim() === '' || numero == null || cleNumero(e.numero) === cleNumero(numero);
@@ -255,7 +301,8 @@ function decisionEcriture(images, cand, { documents } = {}) {
     if (liste.some(e => e.source === cand.source && e.set === cand.set && e.cleR2 === cand.cleR2)) return { action: 'deja-posee', remplace: [] };
     const sortantes = entreesARemplacer(liste, cand, { documents: documents ?? new Map() });
     const restantes = liste.filter(e => !sortantes.includes(e));
-    if (restantes.some(e => e.set === cand.set && memeNumero(e, cand.numero))) return { action: 'cede', remplace: [], raison: 'le set est déjà servi par une entrée que la règle commune ne remplace pas' };
+    // (le scan japonais du jumeau, `langue: ja`, ne sert pas un set occidental : mesure-catalogue.js ne le compte pas non plus)
+    if (restantes.some(e => e.set === cand.set && e.langue !== 'ja' && memeNumero(e, cand.numero))) return { action: 'cede', remplace: [], raison: 'le set est déjà servi par une entrée que la règle commune ne remplace pas' };
     return { action: 'ajouter', remplace: sortantes };
 }
 
@@ -484,4 +531,4 @@ function produitsServis({ liens, imagesParCarte, regionDe, slugParProduit = null
     return servis;
 }
 
-module.exports = { imageDePage, controleLargeur, cleR2, idImage, tamponDeLaFamille, construireLot, decisionEcriture, entreeDeCarte, documentImage, SOURCE, LOT, MENTION, LANGUE_PREUVE, CHEMIN_IMAGE, familleDe, blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };
+module.exports = { reduirePage, lireDuCache, nomCache, choisirEchantillon, estCleSeule, prng, imageDePage, controleLargeur, cleR2, idImage, tamponDeLaFamille, construireLot, decisionEcriture, entreeDeCarte, documentImage, SOURCE, LOT, MENTION, LANGUE_PREUVE, CHEMIN_IMAGE, familleDe, blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };

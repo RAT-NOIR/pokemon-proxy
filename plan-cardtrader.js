@@ -101,7 +101,7 @@ async function plan({ enumeration }) {
         const noms = new Map((await prod.db.collection('catalogue_produits').find({ idProduct: { $in: ids } }, { projection: { idProduct: 1, name: 1 } }).toArray()).map(p => [p.idProduct, p.name]));
         const nonCode = ciblees.filter(p => !estCarteCode(noms.get(p.idProduct) || p.slug || ''));
         const cartesCode = ciblees.length - nonCode.length;
-        const liens = await cx.db.collection('cartes_produits').find({ idProduct: { $in: nonCode.map(p => p.idProduct) } }, { projection: { idProduct: 1, carteId: 1, slugSet: 1, preuve: 1 } }).toArray();
+        const liens = await cx.db.collection('cartes_produits').find({ idProduct: { $in: nonCode.map(p => p.idProduct) } }, { projection: { idProduct: 1, carteId: 1, slugSet: 1, preuve: 1, numeroFiche: 1 } }).toArray();
         const carteIds = [...new Set(liens.map(l => l.carteId))];
         const docs = await cx.db.collection('cartes').find({ _id: { $in: carteIds } }, { projection: { nomEn: 1, impressions: 1, images: 1 } }).toArray();
         const carte = new Map(docs.map(c => [c._id, c]));
@@ -120,7 +120,7 @@ async function plan({ enumeration }) {
             const ls = liensDe.get(p.idProduct) || [];
             const c = ls.length === 1 ? carte.get(ls[0].carteId) : null;      // plusieurs cartes pour un produit : aucune ne témoigne
             return { idProduct: p.idProduct, famille: f.famille, annee: f.annee, serie: f.serie, groupe: f.groupe, slugSet: p.slugSet, slug: p.slug, numeroCM: p.numero ?? null, variante: p.variante ?? null,
-                carteId: ls.length === 1 ? ls[0].carteId : null, carteNom: c?.nomEn ?? null, impressions: c ? (c.impressions || []).map(i => ({ numero: i.numero, total: i.total })) : null, liens: ls.length };
+                carteId: ls.length === 1 ? ls[0].carteId : null, numeroFiche: ls.length === 1 ? (ls[0].numeroFiche ?? null) : null, carteNom: c?.nomEn ?? null, impressions: c ? (c.impressions || []).map(i => ({ numero: i.numero, total: i.total })) : null, liens: ls.length };
         };
         const produits = nonServis.map(fabriquer);
         const tousProduits = nonCode.map(fabriquer);        // le contexte des origines : servis ou non
@@ -192,7 +192,7 @@ async function plan({ enumeration }) {
             parFamille, tableau, lectures,
             collecte: { ...requetesCollecte, secondes: requetesCollecte.total * CADENCE_S, heures: +(requetesCollecte.total * CADENCE_S / 3600).toFixed(2), blueprintsPartagesParPlusieursProduits: nPartages, blueprintsCandidatsDesAmbigus: candidatsAmbigus.size,
                 note: 'L\'adresse de l\'image N\'EST PAS dans le sitemap (aucune balise image:loc) et le nom du fichier diffère du slug de la page (311538 : image « …2019-world-championships-promo-henry-brand… », page « …wcd-2019-henry-brand-071-236… ») : il faut lire la page HTML de chaque blueprint (1 requête) puis l\'image (1 requête).' },
-            produits: produits.map((p, i) => ({ idProduct: p.idProduct, groupe: p.groupe, slug: p.slug, numeroCM: p.numeroCM, variante: p.variante, liens: p.liens, ...res[i], blueprint: res[i].blueprint ? res[i].blueprint.id : undefined, blueprintSlug: res[i].blueprint ? res[i].blueprint.slug : undefined, blueprintFinition: res[i].blueprint ? res[i].blueprint.finition : undefined }))
+            produits: produits.map((p, i) => ({ idProduct: p.idProduct, groupe: p.groupe, slugSet: p.slugSet, carteId: p.carteId, numeroFiche: p.numeroFiche, carteNom: p.carteNom, slug: p.slug, numeroCM: p.numeroCM, variante: p.variante, liens: p.liens, ...res[i], blueprint: res[i].blueprint ? res[i].blueprint.id : undefined, blueprintSlug: res[i].blueprint ? res[i].blueprint.slug : undefined, blueprintFinition: res[i].blueprint ? res[i].blueprint.finition : undefined }))
         };
         void parSerieCroisee;
         // l'échantillon : 12 appariements, 4 par famille, graine fixe
