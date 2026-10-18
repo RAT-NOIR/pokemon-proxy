@@ -31,10 +31,9 @@ const compteurs = () => ({ ...compte, parCode: { ...compte.parCode } });
  *   · le numéro lu concorde exactement avec P et avec AUCUN produit de `autres`, dont chacun a un numéro CONNU que le numéro lu CONTREDIT ; toutes les lignes du groupe sont au catalogue ;
  *   · le code lu concorde avec P, ou (R4) il ne désigne AUCUN produit du vivier NI du catalogue entier (code × numéro, `catalogueExiste`) ;
  *   · le nom lu (confiance haute) ne contredit pas P.
- * `toleres` : champs dont un « ko » ne bloque pas (MESURE seulement : la variante « attaque tolérée » du restant, éteinte en production).
  * @returns { ok: boolean, raison: string, codeParR4: boolean }
  */
-function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catalogueExiste, toleres = [] } = {}) {
+function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catalogueExiste } = {}) {
     const non = raison => ({ ok: false, raison, codeParR4: false });
     if (!Number.isInteger(gagnant) || !(produits instanceof Map) || !produits.has(gagnant)) return non('produit absent du catalogue');
     if (!Array.isArray(autres) || !autres.every(Number.isInteger)) return non('groupe illisible');
@@ -46,8 +45,8 @@ function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catal
     if (contredire({ corps, gagnant, produits })) return non('la garde contradiction répond');
     const sp = statuts(lu, P);
     // LANGUE-DECISIVE R4 : un code lu qui ne désigne AUCUN produit (vivier ET catalogue entier, code × numéro) — « s8a-P » lu pour un logo — ne bloque pas ; un code qui désigne un AUTRE produit bloque toujours.
-    const sansDesignation = r4 === true && codeSansDesignation({ corps, produits, catalogueExiste });
-    const ko = Object.keys(sp).filter(k => sp[k] === 'ko' && !(sansDesignation && k === 'code') && !toleres.includes(k));
+    const sansDesignation = r4 === true && codeSansDesignation({ corps, produits, catalogueExiste, pour: gagnant });
+    const ko = Object.keys(sp).filter(k => sp[k] === 'ko' && !(sansDesignation && k === 'code'));
     if (ko.length) return non(`un champ lu contredit P (${ko.join(', ')})`);
     const luNC = { numero: lu.numero, setCode: lu.setCode };
     const cp = comparer(luNC, P);
