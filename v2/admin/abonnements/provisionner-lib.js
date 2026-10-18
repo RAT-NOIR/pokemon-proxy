@@ -9,7 +9,8 @@
 //   · le fichier local de sortie ne porte que des identifiants non secrets ; il est contrôlé avant l'écriture (aucune forme de clé ni de secret).
 const O = require('../../abonnements/offres');
 const EVENEMENTS = Object.freeze(['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
-const CLE_PORTAIL = 'rat-market-v2';
+const CLE_PORTAIL = 'rat-market-v2';                       // la marque de la configuration UNIQUE du premier jet (retrouvée seulement pour être désactivée) et de l'endpoint
+const clePortail = offre => `rat-market-v2-portail-${offre}`;
 const NOM_VARIABLE_SECRET = 'V2_STRIPE_WEBHOOK_SECRET';
 const FORME_SECRET = /\b(whsec|sk_test|sk_live|rk_test|rk_live)_[A-Za-z0-9]/;
 const VARIABLES_PRIX = Object.freeze({ 'rm_v2_pro_mois': 'V2_STRIPE_PRIX_PRO_MOIS', 'rm_v2_pro_an': 'V2_STRIPE_PRIX_PRO_AN', 'rm_v2_fondateurs_mois': 'V2_STRIPE_PRIX_FONDATEURS_MOIS', 'rm_v2_fondateurs_an': 'V2_STRIPE_PRIX_FONDATEURS_AN' });
@@ -26,7 +27,7 @@ async function toutLister(fn, params) {                                   // pag
 }
 /** @returns le plan et, si `ecrire`, l'exécution. `trace(msg)` reçoit des lignes SANS valeur secrète. */
 async function provisionner({ stripe, site, urlWebhook, versionApi, ecrire = false, avecWebhook = true, poserSurRender, trace = () => { } }) {
-    const rapport = { crees: [], retrouves: [], miseAJour: [], secretPose: false, ids: { produits: {}, prix: {}, webhook: null, portail: null } };
+    const rapport = { crees: [], retrouves: [], miseAJour: [], secretPose: false, ids: { produits: {}, prix: {}, webhook: null, portail: { pro: null, fondateurs: null } } };
     const marque = (genre, nom) => { (genre === 'cree' ? rapport.crees : genre === 'maj' ? rapport.miseAJour : rapport.retrouves).push(nom); trace(`${genre === 'cree' ? 'créé' : genre === 'maj' ? 'mis à jour' : 'retrouvé'} : ${nom}`); };
     if (!/^https:\/\/[^\s/]+$/.test(site)) throw new Error('provisionnement : site attendu sous la forme https://hôte (sans chemin)');
     if (!/^https:\/\/\S+\/api\/webhook-stripe-v2$/.test(urlWebhook)) throw new Error('provisionnement : l\'URL du webhook doit se terminer par /api/webhook-stripe-v2');
@@ -87,36 +88,45 @@ async function provisionner({ stripe, site, urlWebhook, versionApi, ecrire = fal
         } finally { secret = null; }
     }
     };
-    // ── portail client ──
-    const configs = (await toutLister(p => stripe.billingPortal.configurations.list(p), {})).filter(c => c.metadata && c.metadata.rm_cle === CLE_PORTAIL);
-    if (configs.length > 1) throw new Error('provisionnement : plusieurs configurations de portail portent notre marque (rien n\'est touché)');
+    // ── portails clients : UNE configuration PAR OFFRE (C1). Une configuration qui exposerait les deux produits laisserait un abonné Pro passer au prix Fondateurs sans code ni place :
+    //    chacune ne propose donc QUE les deux prix (mensuel ↔ annuel) de SON produit. La configuration unique du premier jet (deux produits) est NEUTRALISÉE si elle existe
+    //    (changement de plan coupé : Stripe interdit de désactiver la configuration PAR DÉFAUT du compte, que celle-ci est devenue).
+    const toutes = await toutLister(p => stripe.billingPortal.configurations.list(p), {});
+    for (const ancienne of toutes.filter(c => c.metadata && c.metadata.rm_cle === CLE_PORTAIL && c.active !== false && !(c.features && c.features.subscription_update && c.features.subscription_update.enabled === false))) {
+        if (ecrire) { await stripe.billingPortal.configurations.update(ancienne.id, { features: { subscription_update: { enabled: false } } }); marque('maj', 'ancienne configuration unique du portail (deux produits) : changement de plan COUPÉ'); }
+        else trace('à neutraliser : l\'ancienne configuration unique du portail (deux produits)');
+    }
+    rapport.ids.portail = { pro: null, fondateurs: null };
     const prix = lk => rapport.ids.prix[lk];
-    const corps = {
-        business_profile: { headline: 'Rat-Market — gérer mon abonnement', terms_of_service_url: `${site}/cgv`, privacy_policy_url: `${site}/politique-confidentialite` },
-        default_return_url: `${site}/fr/compte`,
-        features: {
-            subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'none', cancellation_reason: { enabled: true, options: ['too_expensive', 'missing_features', 'switched_service', 'unused', 'other'] } },
-            // mensuel ↔ annuel DANS la même offre seulement : passer de Pro à Fondateurs contournerait le code
-            subscription_update: { enabled: true, default_allowed_updates: ['price'], proration_behavior: 'create_prorations',
-                products: O.OFFRES.map(o => ({ product: rapport.ids.produits[o], prices: O.PERIODES.map(p => prix(O.lookupKey(o, p))) })) },
-            payment_method_update: { enabled: true }, invoice_history: { enabled: true },
-            customer_update: { enabled: true, allowed_updates: ['email', 'name', 'address'] }
-        }
-    };
-    if (configs.length === 1) {
-        rapport.ids.portail = configs[0].id; marque('trouve', 'configuration du portail');
-        if (ecrire) { await stripe.billingPortal.configurations.update(configs[0].id, { ...corps, active: true }); marque('maj', 'configuration du portail (réalignée)'); }
-    } else if (!ecrire) { rapport.ids.portail = '(à créer)'; trace('à créer : configuration du portail client'); }
-    else { const c = await stripe.billingPortal.configurations.create({ ...corps, metadata: { rm_cle: CLE_PORTAIL, rm_lot: 'stripe-v2' } }); rapport.ids.portail = c.id; marque('cree', 'configuration du portail'); }
+    for (const offre of O.OFFRES) {
+        const cle = clePortail(offre), trouvees = toutes.filter(c => c.metadata && c.metadata.rm_cle === cle);
+        if (trouvees.length > 1) throw new Error(`provisionnement : plusieurs configurations de portail ${offre} portent notre marque (rien n'est touché)`);
+        const corps = {
+            business_profile: { headline: 'Rat-Market — gérer mon abonnement', terms_of_service_url: `${site}/cgv`, privacy_policy_url: `${site}/politique-confidentialite` },
+            default_return_url: `${site}/fr/compte`,
+            features: {
+                subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'none', cancellation_reason: { enabled: true, options: ['too_expensive', 'missing_features', 'switched_service', 'unused', 'other'] } },
+                subscription_update: { enabled: true, default_allowed_updates: ['price'], proration_behavior: 'create_prorations',
+                    products: [{ product: rapport.ids.produits[offre], prices: O.PERIODES.map(p => prix(O.lookupKey(offre, p))) }] },     // UN produit : le sien
+                payment_method_update: { enabled: true }, invoice_history: { enabled: true },
+                customer_update: { enabled: true, allowed_updates: ['email', 'name', 'address'] }
+            }
+        };
+        if (trouvees.length === 1) {
+            rapport.ids.portail[offre] = trouvees[0].id; marque('trouve', `configuration du portail ${offre}`);
+            if (ecrire) { await stripe.billingPortal.configurations.update(trouvees[0].id, { ...corps, active: true }); marque('maj', `configuration du portail ${offre} (réalignée)`); }
+        } else if (!ecrire) { rapport.ids.portail[offre] = '(à créer)'; trace(`à créer : configuration du portail client ${offre}`); }
+        else { const c = await stripe.billingPortal.configurations.create({ ...corps, metadata: { rm_cle: cle, rm_lot: 'stripe-v2' } }); rapport.ids.portail[offre] = c.id; marque('cree', `configuration du portail ${offre}`); }
+    }
     if (avecWebhook) await faireWebhook(); else trace('endpoint de webhook : NON TRAITÉ (--sans-webhook)');
     return rapport;
 }
 /** Le contenu du fichier local : des identifiants, jamais un secret. Contrôlé avant d'être rendu. */
 function fichierDeSortie({ rapport, urlWebhook, mode, le }) {
-    const variables = { V2_STRIPE_PORTAIL_CONFIG: rapport.ids.portail };
+    const variables = { V2_STRIPE_PORTAIL_CONFIG_PRO: rapport.ids.portail.pro, V2_STRIPE_PORTAIL_CONFIG_FONDATEURS: rapport.ids.portail.fondateurs };
     for (const [lk, nom] of Object.entries(VARIABLES_PRIX)) variables[nom] = rapport.ids.prix[lk];
     const o = { mode, creeLe: le, produits: rapport.ids.produits, prix: rapport.ids.prix, webhook: { id: rapport.ids.webhook, url: urlWebhook, evenements: [...EVENEMENTS], variableDuSecret: NOM_VARIABLE_SECRET, secretPoseSurRender: rapport.secretPose },
-        portail: { id: rapport.ids.portail }, variablesAPoser: variables, avertissement: 'Aucun secret dans ce fichier : le secret du webhook n\'existe que sur le service Render.' };
+        portail: { pro: rapport.ids.portail.pro, fondateurs: rapport.ids.portail.fondateurs }, variablesAPoser: variables, avertissement: 'Aucun secret dans ce fichier : le secret du webhook n\'existe que sur le service Render.' };
     const texte = JSON.stringify(o, null, 2);
     if (FORME_SECRET.test(texte)) throw new Error('provisionnement : le fichier de sortie porterait une forme de clé ou de secret — écriture refusée');
     return texte;

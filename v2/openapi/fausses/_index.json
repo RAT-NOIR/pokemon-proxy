@@ -395,12 +395,6 @@
     "schema": "ReponseErreur",
     "description": "Entrée refusée : `offre-inconnue`, `periode-inconnue`, `champ-inconnu`, `retour-invalide`, `corps`."
   },
-  "checkout-deja-abonne.json": {
-    "route": "POST /api/abonnement/checkout",
-    "statut": 409,
-    "schema": "ReponseErreur",
-    "description": "Le compte a déjà un abonnement vivant : le site propose le portail, jamais un second abonnement."
-  },
   "checkout-places-epuisees.json": {
     "route": "POST /api/abonnement/checkout",
     "statut": 409,
@@ -436,5 +430,11 @@
     "statut": 409,
     "schema": "ReponseErreur",
     "description": "Le compte n'a jamais eu de client Stripe : pas de portail."
+  },
+  "checkout-abonnement-actif.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Le compte a déjà un abonnement vivant (essai, actif, impayé, suspendu) : un seul abonnement par compte ; le site renvoie vers le portail."
   }
 }

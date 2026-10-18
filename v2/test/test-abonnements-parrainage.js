@@ -105,6 +105,17 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     await vider();
     H.v('   Stripe revenu, le renvoi réussit : prime posée ; le coupon (deux tentatives de création, la seconde « existe déjà » tolérée) n\'existe qu\'UNE fois et n\'est posé qu\'UNE fois', [rejeu.statut, (await prime(H1.id)).etat, faux.E.appels.filter(x => x.nom === 'coupons.create' && x.params.id === `rm-parrainage-${H1.id}`).length, [...faux.E.coupons.keys()].filter(k => k === `rm-parrainage-${H1.id}`).length, remisesDe(sidR)], [200, 'applique', 2, 1, [`rm-parrainage-${H1.id}`]]);
     H.v('   la clé d\'idempotence de la pose est celle du filleul (Stripe ne la ferait pas deux fois)', faux.E.appels.filter(x => x.nom === 'subscriptions.update' && x.opts && x.opts.idempotencyKey === `prime-${H1.id}`).length >= 1, true);
+    // M1 : un checkout.session.completed rejoué après une panne en milieu de traitement reprend la prime en attente du parrain
+    const Q2 = await A.compteConnecte(), G9 = await A.compteConnecte();
+    await abonner(G9, { jours: 30, parrain: Q2 }); await avancer(31);
+    H.v('M1 : parrain sans abonnement, la prime attend', (await prime(G9.id)).etat, 'en-attente-parrain');
+    const cuQ = await faux.customers.create({ email: 'q@exemple.fr', test_clock: horloge.id });
+    const sQ = await faux.subscriptions.create({ customer: cuQ.id, items: [{ price: A.PRIX.proMois }], default_payment_method: 'pm_card_visa', metadata: { compteId: String(Q2.id), offre: 'pro', periode: 'mois' } });
+    file.length = 0;                                                      // les livraisons du parrain se sont perdues : l'état est appliqué SANS la suite (reprise des primes)
+    await require('../abonnements/etat').appliquer(faux.vue(sQ.id), { cfgAbo: A.cfgAbo().abonnements, version: Math.floor(Date.now() / 1000), evtDate: new Date() });
+    H.v('   l\'état du parrain est appliqué mais la prime n\'est pas encore reprise (le crash est réel)', (await prime(G9.id)).etat, 'en-attente-parrain');
+    await A.livrer(srv.url, A.evenement('checkout.session.completed', { id: 'cs_test_rejeu', object: 'checkout.session', mode: 'subscription', client_reference_id: String(Q2.id), customer: cuQ.id, subscription: sQ.id }, Math.floor(Date.now() / 1000)));
+    H.v('   le checkout.session.completed rejoué (abonnement déjà connu) reprend la prime : posée sur l\'abonnement du parrain', [(await prime(G9.id)).etat, remisesDe(sQ.id)], ['applique', [`rm-parrainage-${G9.id}`]]);
     H.v('aucun secret dans les journaux', logs.some(l => /sk_test_BANC|whsec_banc/i.test(l)), false);
     await srv.fermer(); Cl.debrancher(); console.error = errOrig;
     await H.fermerBac(); H.bilan();

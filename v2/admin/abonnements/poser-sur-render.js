@@ -25,6 +25,10 @@ function fabriquer(garde, trace = () => { }) {
         trace(`essai à blanc (noms) : ajoutés [${d.ajoutes.join(', ')}] · retirés [${d.retires.join(', ')}] · modifiés [${d.modifies.join(', ')}]`);
         const autres = [...d.ajoutes, ...d.retires, ...d.modifies].filter(k => k !== nom);
         if (autres.length || d.retires.length) throw new Error('poserSurRender : le diff touche autre chose que la variable visée — arrêt avant toute écriture');
+        // M5 : juste avant le remplacement, une seconde lecture doit compter le MÊME nombre de variables (le PUT remplace l'ensemble : une variable que Render génère, masque ou qui vient d'être
+        // ajoutée à la main serait perdue). Les variables à valeur générée par Render et les fichiers secrets ne passent pas par cette API : le coordinateur contrôle l'essai à la main.
+        const verif = await garde.lireVariables(SERVICE);
+        if (!Array.isArray(verif) || verif.length !== avant.length) throw new Error(`poserSurRender : le nombre de variables a changé entre deux lectures (${avant.length}, puis ${Array.isArray(verif) ? verif.length : '?'}) — arrêt avant toute écriture`);
         await garde.remplacerVariables(SERVICE, apres, { sauvegarde, essaiABlanc: true });
         const relu = await garde.lireVariables(SERVICE);
         const m = new Map(relu.map(x => [x.key, x.value])), attendu = new Map(apres.map(x => [x.key, x.value]));

@@ -31,7 +31,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const r1 = await A.livrer(srv.url, e0);
     const c1 = await A.lireCompte(u.id);
     H.v('essai (trialing) : 200', r1.statut, 200);
-    H.v('   Pro jusqu\'à la fin de la période, offre pro/mois, client lié, essai utilisé', [c1.abonnement.actif, c1.abonnement.jusquAu.getTime() / 1000, c1.abonnement.stripe.offre, c1.abonnement.stripe.periode, c1.abonnement.stripe.statut, c1.stripeClient, c1.abonnement.stripe.essaiUtilise], [true, fin, 'pro', 'mois', 'trialing', 'cus_u', true]);
+    H.v('   Pro jusqu\'à la fin de la période, offre pro/mois, client lié, essai utilisé', [c1.abonnement.actif, c1.abonnement.jusquAu.getTime() / 1000, c1.abonnement.stripe.offre, c1.abonnement.stripe.periode, c1.abonnement.stripe.statut, c1.stripeClient, c1.abonnement.stripe.essaiUtilise], [true, fin + A.MARGE_S, 'pro', 'mois', 'trialing', 'cus_u', true]);
     const l1 = await reg().findOne({ _id: e0.id });
     H.v('   le registre : une ligne par identifiant d\'événement, traitée, sans le contenu de l\'événement', [l1.etat, l1.type, l1.tentatives, Object.keys(l1).sort()], ['traite', 'customer.subscription.created', 1, ['_id', 'compteId', 'creeLe', 'etat', 'raison', 'recuLe', 'signaux', 'tentatives', 'traiteLe', 'type']]);
 
@@ -42,13 +42,13 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const rafale = await Promise.all(Array.from({ length: 5 }, () => A.livrer(srv.url, e0b)));
     H.v('cinq livraisons simultanées du même événement : aucune erreur 5xx, une seule ligne de registre', [rafale.every(r => r.statut === 200 || r.statut === 409), await reg().countDocuments({ _id: e0b.id })], [true, 1]);
     const apresRafale = await Promise.all([A.livrer(srv.url, e0b)]);
-    H.v('   puis l\'événement est acquitté et l\'état est l\'abonnement actif', [apresRafale[0].statut, (await A.lireCompte(u.id)).abonnement.stripe.statut, (await A.lireCompte(u.id)).abonnement.jusquAu.getTime() / 1000], [200, 'active', fin + 10 * JOUR]);
+    H.v('   puis l\'événement est acquitté et l\'état est l\'abonnement actif', [apresRafale[0].statut, (await A.lireCompte(u.id)).abonnement.stripe.statut, (await A.lireCompte(u.id)).abonnement.jusquAu.getTime() / 1000], [200, 'active', fin + 10 * JOUR + A.MARGE_S]);
 
     // ── 4. DÉSORDRE : un événement plus ancien ne fait JAMAIS régresser l'état ──
     const ancien = A.evenement('customer.subscription.updated', A.sub({ id: 'sub_u', client: 'cus_u', statut: 'trialing', fin, trialEnd: fin, metadata: metaU }), T + 1);
     const rA = await A.livrer(srv.url, ancien);
     const c4 = await A.lireCompte(u.id);
-    H.v('un « updated » plus ancien (essai) arrive après l\'actif : acquitté, IGNORÉ, l\'état reste actif jusqu\'à la fin plus tardive', [rA.statut, (await reg().findOne({ _id: ancien.id })).raison, c4.abonnement.stripe.statut, c4.abonnement.jusquAu.getTime() / 1000], [200, 'desordre', 'active', fin + 10 * JOUR]);
+    H.v('un « updated » plus ancien (essai) arrive après l\'actif : acquitté, IGNORÉ, l\'état reste actif jusqu\'à la fin plus tardive', [rA.statut, (await reg().findOne({ _id: ancien.id })).raison, c4.abonnement.stripe.statut, c4.abonnement.jusquAu.getTime() / 1000], [200, 'desordre', 'active', fin + 10 * JOUR + A.MARGE_S]);
     const dernier = A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_u', client: 'cus_u', statut: 'canceled', fin: fin + 10 * JOUR, endedAt: T + 10, metadata: metaU }), T + 10);
     await A.livrer(srv.url, dernier);
     H.v('« deleted » : fin de l\'abonnement, plus de Pro', [(await A.lireCompte(u.id)).abonnement.actif, (await A.lireCompte(u.id)).abonnement.stripe.statut], [false, 'canceled']);
@@ -73,7 +73,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const grace = (cp1.abonnement.jusquAu.getTime() / 1000);
     H.v('   la grâce finie (4 jours après), le compte est « gratuit » par la fonction des quotas', (await Of.etatDe({ type: 'compte', id: p.id }, cfg, new Date((grace + 60) * 1000))).nom, 'gratuit');
     await A.livrer(srv.url, A.evenement('customer.subscription.updated', A.sub({ id: 'sub_p', client: 'cus_p', statut: 'active', fin: finP + 30 * JOUR, metadata: metaP }), T + 4 * JOUR));
-    H.v('   le paiement repris (active) : Pro jusqu\'à la fin de la nouvelle période', [(await A.lireCompte(p.id)).abonnement.actif, (await A.lireCompte(p.id)).abonnement.jusquAu.getTime() / 1000], [true, finP + 30 * JOUR]);
+    H.v('   le paiement repris (active) : Pro jusqu\'à la fin de la nouvelle période', [(await A.lireCompte(p.id)).abonnement.actif, (await A.lireCompte(p.id)).abonnement.jusquAu.getTime() / 1000], [true, finP + 30 * JOUR + A.MARGE_S]);
 
     // ── 6. RÉSILIATION EN FIN DE PÉRIODE : Pro jusqu'au bout, puis gratuit ──
     const r = await A.compteConnecte(); const metaR = { compteId: String(r.id), offre: 'pro', periode: 'an' };
@@ -105,7 +105,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     H.v('le même client Stripe désigné par un second compte : refusé (raison nommée), le second compte n\'est pas Pro', [(await reg().findOne({ _id: croise.id })).raison, (await A.lireCompte(b.id)).abonnement.actif, (await A.lireCompte(b.id)).stripeClient], ['client-et-compte-divergent', false, null]);
     const sansMeta = A.evenement('customer.subscription.updated', A.sub({ id: 'sub_a', client: 'cus_ab', statut: 'active', fin: fin + JOUR, metadata: {} }), T + 20);
     await A.livrer(srv.url, sansMeta);
-    H.v('un événement sans métadonnée retrouve le compte par son client Stripe lié', (await A.lireCompte(a.id)).abonnement.jusquAu.getTime() / 1000, fin + JOUR);
+    H.v('un événement sans métadonnée retrouve le compte par son client Stripe lié', (await A.lireCompte(a.id)).abonnement.jusquAu.getTime() / 1000, fin + JOUR + A.MARGE_S);
 
     // ── 9. PRIX INCONNU et MODE : jamais de Pro deviné ──
     const g = await A.compteConnecte();
@@ -116,6 +116,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const live = A.evenement('customer.subscription.created', A.sub({ id: 'sub_g2', client: 'cus_g', statut: 'active', fin, metadata: { compteId: String(g.id), offre: 'pro' } }), T, { livemode: true });
     await A.livrer(srv.url, live);
     H.v('un événement « live » reçu par un service en mode test : mis de côté, aucun effet', [(await reg().findOne({ _id: live.id })).raison, (await A.lireCompte(g.id)).abonnement.actif], ['mode-different', false]);
+    await A.placePrise(g.id);
     const lookupSeul = A.evenement('customer.subscription.created', A.sub({ id: 'sub_g3', client: 'cus_g', statut: 'active', prixId: 'price_FERMEE', lookup: 'rm_v2_fondateurs_an', fin, metadata: { compteId: String(g.id) } }), T + 1);
     await A.livrer(srv.url, lookupSeul);
     H.v('un prix hors configuration mais portant la clé de recherche Rat-Market (offre fermée depuis) reste servi à son abonné', [(await A.lireCompte(g.id)).abonnement.actif, (await A.lireCompte(g.id)).abonnement.stripe.offre, (await A.lireCompte(g.id)).abonnement.stripe.periode], [true, 'fondateurs', 'an']);
@@ -162,6 +163,55 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     H.v('   après minuit de Paris le compteur repart : l\'analyse passe', (await Lg.debiter(q.porteur, { scanId: 'q-demain', cleIdempotence: 'q-demain', maintenant: demain }, cfgBanc)).ok, true);
     await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_q', client: 'cus_q', statut: 'canceled', fin, endedAt: T + 50, metadata: metaQ }), T + 50));
     H.v('abonnement résilié : retour au gratuit (2 par jour en banc), restant recalculé', [(await Of.offre(q.porteur, cfgBanc)).nom], ['gratuit']);
+
+    // ── 12 bis. I2 : UNE MARGE AU RENOUVELLEMENT (48 h) — jamais pour une résiliation, ni pour un impayé ──
+    const mg = await A.compteConnecte(); const metaM = { compteId: String(mg.id), offre: 'pro', periode: 'mois' }, finM = T + 3 * JOUR;
+    await A.livrer(srv.url, A.evenement('customer.subscription.updated', A.sub({ id: 'sub_m', client: 'cus_m', statut: 'active', fin: finM, metadata: metaM }), T));
+    H.v('actif non résilié : jusquAu = fin de période + 48 h (une constante nommée)', (await A.lireCompte(mg.id)).abonnement.jusquAu.getTime() / 1000, finM + 48 * 3600);
+    H.v('   une heure APRÈS la fin de période, avant le webhook de renouvellement : toujours Pro ; 49 h après : gratuit', [(await Of.etatDe({ type: 'compte', id: mg.id }, cfg, new Date((finM + 3600) * 1000))).nom, (await Of.etatDe({ type: 'compte', id: mg.id }, cfg, new Date((finM + 49 * 3600) * 1000))).nom], ['pro', 'gratuit']);
+    const mg2 = await A.compteConnecte(); const metaM2 = { compteId: String(mg2.id), offre: 'pro', periode: 'mois' };
+    await A.livrer(srv.url, A.evenement('customer.subscription.updated', A.sub({ id: 'sub_m2', client: 'cus_m2', statut: 'active', fin: finM, cancelAtPeriodEnd: true, metadata: metaM2 }), T));
+    H.v('   résiliation programmée : AUCUNE marge (fin exacte de la période)', [(await A.lireCompte(mg2.id)).abonnement.jusquAu.getTime() / 1000, (await Of.etatDe({ type: 'compte', id: mg2.id }, cfg, new Date((finM + 3600) * 1000))).nom], [finM, 'gratuit']);
+    await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_m', client: 'cus_m', statut: 'canceled', fin: finM, endedAt: T + 60, metadata: metaM }), T + 60));
+    H.v('   abonnement supprimé : aucune marge (plus de Pro dès la suppression)', [(await A.lireCompte(mg.id)).abonnement.actif, (await A.lireCompte(mg.id)).abonnement.jusquAu.getTime() / 1000 <= T + 60], [false, true]);
+    const mg3 = await A.compteConnecte(); const metaM3 = { compteId: String(mg3.id), offre: 'pro', periode: 'mois' };
+    await A.livrer(srv.url, A.evenement('customer.subscription.updated', A.sub({ id: 'sub_m3', client: 'cus_m3', statut: 'past_due', fin: finM, metadata: metaM3 }), T));
+    H.v('   impayé : la grâce reste de 3 jours, sans la marge', (await A.lireCompte(mg3.id)).abonnement.jusquAu.getTime() / 1000, Math.min(finM, T + 3 * JOUR));
+
+    // ── 12 ter. I1 : DEUX ABONNEMENTS VIVANTS — le Pro tient tant qu'AU MOINS UN est vivant ──
+    logs.length = 0;
+    const d = await A.compteConnecte(); const metaD = { compteId: String(d.id), offre: 'pro', periode: 'mois' };
+    const finD1 = T + 10 * JOUR, finD2 = T + 20 * JOUR;
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_d1', client: 'cus_d', statut: 'active', fin: finD1, created: T - 100, metadata: metaD }), T));
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_d2', client: 'cus_d', statut: 'active', fin: finD2, created: T - 50, metadata: metaD }), T + 1));
+    H.v('deux abonnements vivants pour un compte : Pro jusqu\'au plus tardif, DOUBLON signalé', [(await A.lireCompte(d.id)).abonnement.actif, (await A.lireCompte(d.id)).abonnement.jusquAu.getTime() / 1000, logs.some(l => l.includes('double-abonnement'))], [true, finD2 + A.MARGE_S, true]);
+    await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_d2', client: 'cus_d', statut: 'canceled', fin: finD2, endedAt: T + 5, created: T - 50, metadata: metaD }), T + 5));
+    const cd = await A.lireCompte(d.id);
+    H.v('   résilier le plus récent NE coupe PAS le Pro que l\'autre paie (jusquAu = celui du premier)', [cd.abonnement.actif, cd.abonnement.jusquAu.getTime() / 1000, cd.abonnement.stripe.sid], [true, finD1 + A.MARGE_S, 'sub_d1']);
+    await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_d1', client: 'cus_d', statut: 'canceled', fin: finD1, endedAt: T + 9, created: T - 100, metadata: metaD }), T + 9));
+    H.v('   les deux résiliés : plus de Pro', (await A.lireCompte(d.id)).abonnement.actif, false);
+    // l'ordre d'arrivée ne change rien : le plus récent d'abord, le plus ancien ensuite
+    const d3 = await A.compteConnecte(); const metaD3 = { compteId: String(d3.id), offre: 'pro', periode: 'mois' };
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_e2', client: 'cus_e', statut: 'active', fin: finD2, created: T - 50, metadata: metaD3 }), T));
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_e1', client: 'cus_e', statut: 'active', fin: finD1, created: T - 100, metadata: metaD3 }), T + 1));
+    await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_e2', client: 'cus_e', statut: 'canceled', fin: finD2, endedAt: T + 5, created: T - 50, metadata: metaD3 }), T + 5));
+    H.v('   dans l\'autre ordre d\'arrivée : même résultat (Pro porté par le survivant)', [(await A.lireCompte(d3.id)).abonnement.actif, (await A.lireCompte(d3.id)).abonnement.jusquAu.getTime() / 1000], [true, finD1 + A.MARGE_S]);
+
+    // ── 12 quater. C1 (défense en profondeur) : un abonnement qui passe au prix Fondateurs SANS place prise n'accorde rien de plus ──
+    logs.length = 0;
+    const c = await A.compteConnecte(); const metaC = { compteId: String(c.id), offre: 'pro', periode: 'mois' };
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c', client: 'cus_c', statut: 'active', fin, metadata: metaC }), T));
+    const passage = A.evenement('customer.subscription.updated', A.sub({ id: 'sub_c', client: 'cus_c', statut: 'active', prixId: A.PRIX.fondMois, fin, metadata: metaC }), T + 10);
+    await A.livrer(srv.url, passage);
+    const cc = await A.lireCompte(c.id);
+    H.v('Pro qui passe au prix Fondateurs sans place : il reste sur ce que sa place permet (offre pro), AUCUNE place prise, signalé', [cc.abonnement.stripe.offre, cc.abonnement.actif, await db.col('abo_places').countDocuments({ compteId: c.id }), logs.some(l => l.includes('fondateurs-sans-place'))], ['pro', true, 0, true]);
+    const c2 = await A.compteConnecte(); const metaC2 = { compteId: String(c2.id), offre: 'fondateurs', periode: 'mois' };
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c2', client: 'cus_c2', statut: 'active', prixId: A.PRIX.fondMois, fin, metadata: metaC2 }), T));
+    H.v('   un NOUVEL abonnement au prix Fondateurs sans place : aucun droit, aucune place', [(await A.lireCompte(c2.id)).abonnement.actif, await db.col('abo_places').countDocuments({ compteId: c2.id })], [false, 0]);
+    const c3 = await A.compteConnecte(); const metaC3 = { compteId: String(c3.id), offre: 'fondateurs', periode: 'mois' };
+    await A.placePrise(c3.id);
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c3', client: 'cus_c3', statut: 'active', prixId: A.PRIX.fondMois, fin, metadata: metaC3 }), T));
+    H.v('   avec une place prise par ce compte : l\'abonnement Fondateurs est reconnu', [(await A.lireCompte(c3.id)).abonnement.actif, (await A.lireCompte(c3.id)).abonnement.stripe.offre], [true, 'fondateurs']);
 
     // ── 13. LA ROUTE EST ÉTEINTE sans le drapeau, et le webhook refuse quand la configuration est incomplète ──
     const cfgEteint = A.cfgAbo({ V2_ABONNEMENTS: '' });

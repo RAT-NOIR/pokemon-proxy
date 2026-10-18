@@ -33,6 +33,6 @@ const AUTORISES = /^--(mode=test|ecrire|sans-webhook|site=https:\/\/[A-Za-z0-9.-
         const texte = fichierDeSortie({ rapport, urlWebhook: `${essai}/api/webhook-stripe-v2`, mode: 'test', le: new Date().toISOString() });
         fs.writeFileSync(SORTIE, texte + '\n');
         console.log(`Fichier écrit : ${SORTIE} (identifiants seulement)`);
-        console.log(`Variables à poser sur le service d'essai (valeurs dans le fichier, sauf la clé et le secret) : V2_ABONNEMENTS, V2_STRIPE_MODE=test, V2_STRIPE_CLE, V2_STRIPE_WEBHOOK_SECRET (${rapport.secretPose ? 'posée par ce passage' : "PAS ENCORE posée : passage avec l'endpoint à faire"}), V2_STRIPE_PRIX_*, V2_STRIPE_PORTAIL_CONFIG, V2_FONDATEURS_CODE, V2_FONDATEURS_PLACES`);
+        console.log(`Variables à poser sur le service d'essai (valeurs dans le fichier, sauf la clé et le secret) : V2_ABONNEMENTS, V2_STRIPE_MODE=test, V2_STRIPE_CLE, V2_STRIPE_WEBHOOK_SECRET (${rapport.secretPose ? 'posée par ce passage' : "PAS ENCORE posée : passage avec l'endpoint à faire"}), V2_STRIPE_PRIX_*, V2_STRIPE_PORTAIL_CONFIG_PRO, V2_STRIPE_PORTAIL_CONFIG_FONDATEURS, V2_FONDATEURS_CODE, V2_FONDATEURS_PLACES`);
     }
 })().catch(e => { console.error(`ERREUR : ${String(e && e.message || e).slice(0, 300)}`); process.exit(1); });

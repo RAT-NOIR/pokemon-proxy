@@ -11,7 +11,7 @@ const SECRET = 'whsec_bancfauxbancfaux';
 const PRIX = Object.freeze({ proMois: 'price_BANCproMois', proAn: 'price_BANCproAn', fondMois: 'price_BANCfondMois', fondAn: 'price_BANCfondAn' });
 const CODE_FONDATEURS = 'FONDATEURS-BANC-2026';
 const ENV = Object.freeze({
-    MONGODB_BASE: 'test_scratch', V2_ABONNEMENTS: '1', V2_STRIPE_MODE: 'test', V2_STRIPE_CLE: 'sk_test_BANCfauxBANCfaux', V2_STRIPE_WEBHOOK_SECRET: SECRET, V2_STRIPE_PORTAIL_CONFIG: 'bpc_BANC',
+    MONGODB_BASE: 'test_scratch', V2_ABONNEMENTS: '1', V2_STRIPE_MODE: 'test', V2_STRIPE_CLE: 'sk_test_BANCfauxBANCfaux', V2_STRIPE_WEBHOOK_SECRET: SECRET, V2_STRIPE_PORTAIL_CONFIG_PRO: 'bpc_BANCpro', V2_STRIPE_PORTAIL_CONFIG_FONDATEURS: 'bpc_BANCfond',
     V2_STRIPE_PRIX_PRO_MOIS: PRIX.proMois, V2_STRIPE_PRIX_PRO_AN: PRIX.proAn, V2_STRIPE_PRIX_FONDATEURS_MOIS: PRIX.fondMois, V2_STRIPE_PRIX_FONDATEURS_AN: PRIX.fondAn,
     V2_FONDATEURS_CODE: CODE_FONDATEURS, V2_FONDATEURS_PLACES: '3', V2_HEBDO: '0'
 });
@@ -65,4 +65,7 @@ async function compteConnecte(o = {}) {
 }
 const lireCompte = id => db.col('comptes').findOne({ _id: id });
 const SITE = { origin: 'https://rat-market.fr', 'x-rat-market': '1' };
-module.exports = { SECRET, PRIX, CODE_FONDATEURS, ENV, cfgAbo, serveur, signer, livrer, evenement, sub, semerPrix, maintenantS, compteConnecte, lireCompte, SITE };
+/** Une place Fondateurs PRISE par ce compte (ce qu'un abonnement Fondateurs légitime a déjà fait par le Checkout). */
+async function placePrise(compteId) { await db.col('abo_places').insertOne({ _id: `place:banc${Math.random().toString(36).slice(2, 9)}`, compteId, etat: 'prise', priseLe: new Date() }); }
+const MARGE_S = 48 * 3600;
+module.exports = { placePrise, MARGE_S, SECRET, PRIX, CODE_FONDATEURS, ENV, cfgAbo, serveur, signer, livrer, evenement, sub, semerPrix, maintenantS, compteConnecte, lireCompte, SITE };

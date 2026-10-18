@@ -29,7 +29,8 @@ async function marquerFacture(compteId, champ, evtDate) {
     await col('comptes').updateOne({ _id: compteId, $or: [{ [`abonnement.stripe.${champ}`]: null }, { [`abonnement.stripe.${champ}`]: { $lt: evtDate } }] }, { $set: { [`abonnement.stripe.${champ}`]: evtDate } });
 }
 async function apresApplication(res, ctx) {
-    if (res.etat === 'applique' && res.compte) await Pr.reprendre({ stripe: ctx.stripe, parrainId: res.compte._id, maintenant: ctx.evtDate });
+    // M1 : un abonnement DÉJÀ connu (événement rejoué après une panne en milieu de traitement) reprend aussi les primes en attente
+    if ((res.etat === 'applique' || (res.etat === 'ignore' && res.raison === 'deja-connu')) && res.compte) await Pr.reprendre({ stripe: ctx.stripe, parrainId: res.compte._id, maintenant: ctx.evtDate });
 }
 
 const GESTIONNAIRES = {

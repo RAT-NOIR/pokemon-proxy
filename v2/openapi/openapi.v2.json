@@ -3012,7 +3012,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT : `deja-abonne`, `places-epuisees`.",
+            "description": "CONFLIT : `abonnement-actif` (le compte a déjà un abonnement vivant : le site renvoie vers le portail), `places-epuisees`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4512,11 +4512,11 @@
                 "properties": {
                   "mois": {
                     "type": "integer",
-                    "const": 499
+                    "minimum": 1
                   },
                   "an": {
                     "type": "integer",
-                    "const": 3900
+                    "minimum": 1
                   }
                 },
                 "required": [
@@ -4524,6 +4524,14 @@
                   "an"
                 ],
                 "additionalProperties": false
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "stripe",
+                  "constantes"
+                ],
+                "description": "D'où viennent les montants : lus chez Stripe (cache de 10 minutes) ou, si la lecture échoue, les constantes de repli."
               },
               "devise": {
                 "const": "EUR"
@@ -4535,11 +4543,12 @@
             },
             "required": [
               "pro",
+              "source",
               "devise",
               "essaiJours"
             ],
             "additionalProperties": false,
-            "description": "Montants en centimes. L'offre Fondateurs (sur code) n'est jamais annoncée."
+            "description": "Montants en centimes, relus des PRIX Stripe. L'offre Fondateurs (sur code) n'est jamais annoncée."
           }
         },
         "required": [

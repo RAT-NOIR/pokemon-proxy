@@ -15,7 +15,8 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     const faux = creerFauxStripe(); Cl.brancher(faux);
     const cfg = A.cfgAbo();
     const srv = await A.serveur(cfg);
-    const post = (chemin, u, corps, entetes = {}) => H.appel(srv.url, chemin, { methode: 'POST', corps, entetes: { ...A.SITE, ...(u ? { cookie: u.cookie } : {}), ...entetes } });
+    let nIp = 0; const ipN = () => { nIp++; return { 'x-forwarded-for': `10.1.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
+    const post = (chemin, u, corps, entetes = {}) => H.appel(srv.url, chemin, { methode: 'POST', corps, entetes: { ...A.SITE, ...ipN(), ...(u ? { cookie: u.cookie } : {}), ...entetes } });
     const checkout = (u, corps, entetes) => post('/api/abonnement/checkout', u, corps, entetes);
     const dernier = () => faux.E.appels.filter(x => x.nom === 'checkout.sessions.create').at(-1);
     const FORME_ERREUR = r => r.json && r.json.success === false && typeof r.json.erreur.code === 'string' && r.json.facturation === null;
@@ -91,10 +92,10 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     const abonne = await A.compteConnecte({ 'abonnement': { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 86400e3), stripe: { sid: 'sub_vivant', statut: 'active', version: 1, offre: 'pro', periode: 'mois' } } });
     const avantS = faux.E.sessions.size;
     const rAb = await checkout(abonne, { offre: 'pro', periode: 'an' });
-    H.v('un compte déjà abonné : 409 CONFLIT « deja-abonne », aucune session', [rAb.statut, rAb.json.erreur.code, rAb.json.erreur.detail, faux.E.sessions.size - avantS], [409, 'CONFLIT', 'deja-abonne', 0]);
+    H.v('un compte déjà abonné : 409 CONFLIT « abonnement-actif », aucune session', [rAb.statut, rAb.json.erreur.code, rAb.json.erreur.detail, faux.E.sessions.size - avantS], [409, 'CONFLIT', 'abonnement-actif', 0]);
     const chezStripe = await A.compteConnecte(); const clS = await faux.customers.create({}); await db.col('comptes').updateOne({ _id: chezStripe.id }, { $set: { stripeClient: clS.id } });
     await faux.subscriptions.create({ customer: clS.id, items: [{ price: A.PRIX.proMois }], metadata: {}, default_payment_method: 'pm_card_visa' });
-    H.v('   abonnement vivant connu de Stripe seulement (webhook pas encore reçu) : refusé aussi', (await checkout(chezStripe, { offre: 'pro', periode: 'mois' })).json.erreur.detail, 'deja-abonne');
+    H.v('   abonnement vivant connu de Stripe seulement (webhook pas encore reçu) : refusé aussi', (await checkout(chezStripe, { offre: 'pro', periode: 'mois' })).json.erreur.detail, 'abonnement-actif');
 
     // ── 6. FONDATEURS : le code, les places atomiques ──
     const f1 = await A.compteConnecte();
@@ -165,7 +166,18 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('portail sans client Stripe : 409 « aucun-abonnement »', [rP0.statut, rP0.json.erreur.detail], [409, 'aucun-abonnement']);
     const rP = await post('/api/abonnement/portail', u, {});
     const pp = faux.E.appels.filter(x => x.nom === 'billingPortal.sessions.create').at(-1).params;
-    H.v('portail d\'un client : une adresse, la configuration du portail de la configuration, retour au compte', [rP.statut, Object.keys(rP.json).sort(), pp.configuration, pp.return_url, pp.customer === (await A.lireCompte(u.id)).stripeClient], [200, ['success', 'url'], 'bpc_BANC', 'https://rat-market.fr/fr/compte', true]);
+    H.v('portail d\'un client : une adresse, la configuration du portail de la configuration, retour au compte', [rP.statut, Object.keys(rP.json).sort(), pp.configuration, pp.return_url, pp.customer === (await A.lireCompte(u.id)).stripeClient], [200, ['success', 'url'], 'bpc_BANCpro', 'https://rat-market.fr/fr/compte', true]);
+    // C1 : UNE configuration de portail PAR OFFRE, celle de l'abonnement en cours
+    const ofr = async (offre, cfgSrv = srv) => { const x = await A.compteConnecte({ stripeClient: (await faux.customers.create({})).id, abonnement: { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 864e5), stripe: { sid: 'sub_p', statut: 'active', offre, periode: 'mois', version: 1 } } }); const r = await H.appel(cfgSrv.url, '/api/abonnement/portail', { methode: 'POST', corps: {}, entetes: { ...A.SITE, cookie: x.cookie } }); return [r.statut, faux.E.appels.filter(a => a.nom === 'billingPortal.sessions.create').at(-1).params.configuration]; };
+    H.v('portail : un abonné Pro reçoit la configuration PRO, un Fondateur la configuration FONDATEURS (jamais l\'autre : sinon Pro → Fondateurs sans code)', [await ofr('pro'), await ofr('fondateurs')], [[200, 'bpc_BANCpro'], [200, 'bpc_BANCfond']]);
+    const sansAbo = await A.compteConnecte({ stripeClient: (await faux.customers.create({})).id });
+    await post('/api/abonnement/portail', sansAbo, {});
+    H.v('   un client sans abonnement (carte, factures) reçoit la configuration PRO', faux.E.appels.filter(a => a.nom === 'billingPortal.sessions.create').at(-1).params.configuration, 'bpc_BANCpro');
+    const srvSansF = await A.serveur(A.cfgAbo({ V2_STRIPE_PORTAIL_CONFIG_FONDATEURS: '' }));
+    const avantP = faux.E.appels.filter(a => a.nom === 'billingPortal.sessions.create').length;
+    const sf = await (async () => { const x = await A.compteConnecte({ stripeClient: (await faux.customers.create({})).id, abonnement: { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 864e5), stripe: { sid: 'sub_q', statut: 'active', offre: 'fondateurs', periode: 'mois', version: 1 } } }); return H.appel(srvSansF.url, '/api/abonnement/portail', { methode: 'POST', corps: {}, entetes: { ...A.SITE, cookie: x.cookie } }); })();
+    H.v('   un Fondateur sans configuration Fondateurs : 503, JAMAIS la configuration Pro en repli', [sf.statut, faux.E.appels.filter(a => a.nom === 'billingPortal.sessions.create').length - avantP], [503, 0]);
+    await srvSansF.fermer();
     H.v('   sans l\'origine du site : 403', (await H.appel(srv.url, '/api/abonnement/portail', { methode: 'POST', corps: {}, entetes: { cookie: u.cookie } })).statut, 403);
 
     // ── 9. LE STATUT : des états, jamais d'identifiant Stripe ──
@@ -173,7 +185,7 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('statut d\'un compte sans abonnement', [s0.statut, s0.json.abonnement, s0.json.quota.nom, s0.entetes['cache-control']], [200, { actif: false, plan: null, periode: null, statut: 'aucun', finPeriode: null, resiliationPrevue: false, essai: { enCours: false, finLe: null, disponible: true }, paiementEchoue: false }, 'gratuit', 'no-store']);
     const fin = Math.floor(Date.now() / 1000) + 10 * 86400;
     const suivre = async (statut, extra = {}) => {
-        const x = await A.compteConnecte(); const meta = { compteId: String(x.id), offre: 'fondateurs', periode: 'an' };
+        const x = await A.compteConnecte(); await A.placePrise(x.id); const meta = { compteId: String(x.id), offre: 'fondateurs', periode: 'an' };
         const e = A.evenement('customer.subscription.updated', A.sub({ id: `sub_${x.id}`, client: `cus_${x.id}`, statut, prixId: A.PRIX.fondAn, fin, trialEnd: statut === 'trialing' ? fin : null, metadata: meta, ...extra }), Math.floor(Date.now() / 1000));
         const r = await A.livrer(srv.url, e); if (r.statut !== 200) throw new Error(`livraison ${r.statut}`);
         return { x, s: (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: x.cookie } })).json };
@@ -196,6 +208,50 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     vs('statut sans abonnement', s0.json, 'ReponseAbonnement'); vs('statut en essai', tr.s, 'ReponseAbonnement'); vs('statut actif résiliation', ac.s, 'ReponseAbonnement'); vs('statut impayé', im.s, 'ReponseAbonnement'); vs('statut terminé', te.s, 'ReponseAbonnement');
     vs('checkout 200', r1.json, 'ReponseUrlPaiement'); vs('portail 200', rP.json, 'ReponseUrlPaiement'); vs('refus 409 déjà abonné', rAb.json, 'ReponseErreur'); vs('refus 422 mauvais code', mauvais.json, 'ReponseErreur');    H.vrai('le schéma refuse un identifiant Stripe brut ajouté au statut', !valider({ ...s0.json, abonnement: { ...s0.json.abonnement, subscriptionId: 'sub_x' } }, ref('ReponseAbonnement'), doc).ok);
     H.vrai('   et un statut hors liste', !valider({ ...s0.json, abonnement: { ...s0.json.abonnement, statut: 'peut-etre' } }, ref('ReponseAbonnement'), doc).ok);
+
+    // ── 9 bis bis. I1 : UN SEUL ABONNEMENT PAR COMPTE — les autres sessions ouvertes du client sont expirées à la création d'une session ──
+    const dbl = await A.compteConnecte();
+    await checkout(dbl, { offre: 'pro', periode: 'mois' });
+    const ouvertesDe = async x => { const c = await A.lireCompte(x.id); return (await faux.checkout.sessions.list({ customer: c.stripeClient, status: 'open' })).data.length; };
+    H.v('une session ouverte : une seule ouverte pour le client', await ouvertesDe(dbl), 1);
+    await checkout(dbl, { offre: 'pro', periode: 'an' });
+    H.v('   une SECONDE session (autre période) : la première est expirée, UNE seule reste ouverte (deux Checkout ouverts ne peuvent plus donner deux paiements)', [await ouvertesDe(dbl), [...faux.E.sessions.values()].filter(s => s.client_reference_id === String(dbl.id) && s.status === 'expired').length], [1, 1]);
+    await checkout(dbl, { offre: 'pro', periode: 'an' });
+    H.v('   le même clic rejoué (même session, idempotente) n\'expire PAS la session en cours', await ouvertesDe(dbl), 1);
+    const dblAbo = await A.compteConnecte({ abonnement: { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 864e5), stripe: { sid: 'sub_z', statut: 'trialing', offre: 'pro', periode: 'mois', version: 1 } } });
+    const rz = await checkout(dblAbo, { offre: 'pro', periode: 'an' });
+    H.v('   un abonné en essai (trialing) : 409 « abonnement-actif », aucune session', [rz.statut, rz.json.erreur.detail], [409, 'abonnement-actif']);
+
+    // ── 9 bis ter. M2 : deux codes de parrainage dans la même tranche ne se heurtent plus ; M3 : un client Stripe existant est retrouvé ──
+    const pa1 = await A.compteConnecte(), pa2 = await A.compteConnecte(), fil = await A.compteConnecte();
+    const k1 = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: pa1.cookie } })).json.parrainage.code, k2 = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: pa2.cookie } })).json.parrainage.code;
+    const s1 = await checkout(fil, { offre: 'pro', periode: 'mois', code: k1 }), s2 = await checkout(fil, { offre: 'pro', periode: 'mois', code: k2 });
+    H.v('deux codes de parrainage différents dans la même tranche de 10 minutes : deux sessions (la clé d\'idempotence porte le code HACHÉ), pas un 503', [s1.statut, s2.statut, faux.E.appels.filter(a => a.nom === 'checkout.sessions.create').at(-1).opts.idempotencyKey.includes(k2)], [200, 200, false]);
+    const orphelin = await A.compteConnecte();
+    const clo = await faux.customers.create({ email: 'o@exemple.fr', metadata: { compteId: String(orphelin.id) } });
+    const nCrees = faux.E.appels.filter(a => a.nom === 'customers.create').length;
+    await checkout(orphelin, { offre: 'pro', periode: 'mois' });
+    H.v('un client Stripe qui porte déjà le compte en métadonnée (pose en base perdue) est RETROUVÉ par recherche : aucun second client', [faux.E.appels.filter(a => a.nom === 'customers.create').length - nCrees, (await A.lireCompte(orphelin.id)).stripeClient === clo.id], [0, true]);
+    faux.panneSur = 'customers.search';
+    const sansRecherche = await A.compteConnecte(); const rsr = await checkout(sansRecherche, { offre: 'pro', periode: 'mois' });
+    faux.panneSur = null;
+    H.v('   la recherche en panne : repli sur la création (idempotente), le paiement reste possible', [rsr.statut, Boolean((await A.lireCompte(sansRecherche.id)).stripeClient)], [200, true]);
+
+    // ── 9 bis quater. M4 : les montants publics sont ceux des PRIX Stripe (cache nommé), les constantes seulement en repli, et on le dit ──
+    const O2 = require('../abonnements/offres'), Pub = require('../abonnements/prix-publics');
+    A.semerPrix(faux); Pub.vider();
+    const pubUn = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: u.cookie } })).json.offres;
+    H.v('montants lus chez Stripe', [pubUn.pro, pubUn.source], [{ mois: 499, an: 3900 }, 'stripe']);
+    faux.E.prix.find(p => p.id === A.PRIX.proMois).unit_amount = 599;
+    const pubCache = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: u.cookie } })).json.offres;
+    H.v('   en cache (délai nommé) : pas de nouvelle lecture à chaque requête', [pubCache.pro.mois, O2.PRIX_PUBLICS_CACHE_MS > 0], [499, true]);
+    Pub.vider();
+    H.v('   le cache vidé : le nouveau prix de Stripe est servi', (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: u.cookie } })).json.offres.pro, { mois: 599, an: 3900 });
+    Pub.vider(); faux.panneSur = 'prices.retrieve';
+    const pubRepli = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: u.cookie } })).json.offres;
+    faux.panneSur = null; Pub.vider();
+    H.v('   la lecture en panne : les constantes servent de repli, et la réponse DIT « constantes »', [pubRepli.pro, pubRepli.source], [{ mois: O2.CATALOGUE.pro.prix.mois, an: O2.CATALOGUE.pro.prix.an }, 'constantes']);
+    faux.E.prix.find(p => p.id === A.PRIX.proMois).unit_amount = 499;
 
     // ── 9 ter. SUPPRIMER UN COMPTE NE LAISSE PAS UN ABONNEMENT FACTURER DANS LE VIDE ──
     const P = require('../comptes/mots-de-passe');

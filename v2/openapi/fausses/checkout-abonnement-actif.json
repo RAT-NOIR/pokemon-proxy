@@ -3,7 +3,7 @@
   "erreur": {
     "code": "CONFLIT",
     "message": "Opération impossible dans l'état actuel du compte",
-    "detail": "deja-abonne"
+    "detail": "abonnement-actif"
   },
   "facturation": null
 }

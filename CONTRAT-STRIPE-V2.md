@@ -29,7 +29,8 @@ Corps : `{ offre: "pro" | "fondateurs", periode: "mois" | "an", code?: string, r
 - `retour` : un chemin du site (`/fr` suivi de 0 à 3 segments `[a-z0-9_-]`), jamais une adresse. Succès → `<site><retour ou /fr/compte>?abonnement=succes` ; abandon → `<site><retour ou /fr/tarifs>?abonnement=annule`.
 - Réponse `200` : `{ "success": true, "url": "https://checkout.stripe.com/…" }` — le site envoie le navigateur à cette adresse.
 - La session Stripe : `mode: subscription`, **CGV TOUJOURS exigées** (`consent_collection[terms_of_service]=required`, aucun réglage pour l'éteindre), `client_reference_id` = le compte,
-  **un seul client Stripe par compte** (créé à la première session, avec une clé d'idempotence), carte exigée, aucun code promotionnel libre, durée de vie 1 heure.
+  **un seul client Stripe par compte** (retrouvé par ses métadonnées avant toute création, sinon créé avec une clé d'idempotence), carte exigée, aucun code promotionnel libre, durée de vie 1 heure.
+- Les autres sessions Checkout OUVERTES du même client sont **expirées** à la création d'une session (deux pages ouvertes ne donnent jamais deux paiements).
 - Une place Fondateurs est **réservée** (atomiquement) à l'ouverture de la session, pour sa durée + 5 minutes ; elle devient définitive quand l'abonnement existe.
 
 | statut | `erreur.code` | `detail` | quand |
@@ -37,7 +38,7 @@ Corps : `{ offre: "pro" | "fondateurs", periode: "mois" | "an", code?: string, r
 | 400 | `ENTREE` | `corps`, `offre-inconnue`, `periode-inconnue`, `champ-inconnu`, `retour-invalide` | entrée refusée |
 | 401 | `SESSION` | — | pas de session, ou compte non vérifié |
 | 403 | `ORIGINE` | — | origine ou `X-Rat-Market` absents |
-| 409 | `CONFLIT` | `deja-abonne` | le compte a un abonnement vivant (essai, actif, impayé, suspendu) : proposer le portail |
+| 409 | `CONFLIT` | `abonnement-actif` | **un seul abonnement par compte** : le compte a un abonnement vivant (essai, actif, impayé, suspendu) : renvoyer vers le portail |
 | 409 | `CONFLIT` | `places-epuisees` | code Fondateurs valide, plus de place |
 | 422 | `ENTREE` | `code-invalide` | code faux ; **offre Fondateurs fermée** (indiscernable d'un mauvais code) |
 | 422 | `ENTREE` | `parrainage-non-eligible` | soi-même, ou compte qui n'est pas un client neuf |
@@ -45,8 +46,10 @@ Corps : `{ offre: "pro" | "fondateurs", periode: "mois" | "an", code?: string, r
 | 503 | `INDISPONIBLE` | `abonnements-indisponibles`, `prix-non-configure`, `paiement-indisponible` | configuration incomplète ou Stripe injoignable |
 
 ### `POST /api/abonnement/portail`
-Sans corps. Réponse `200` : `{ "success": true, "url": "https://billing.stripe.com/…" }` (retour : `<site>/fr/compte`). Le portail permet : résiliation **à la fin de la période**, passage mensuel ↔ annuel **dans la même offre**
-(jamais Pro ↔ Fondateurs), carte, factures, adresse. `409 CONFLIT` (`aucun-abonnement`) si le compte n'a jamais eu de client Stripe.
+Sans corps. Réponse `200` : `{ "success": true, "url": "https://billing.stripe.com/…" }` (retour : `<site>/fr/compte`). **Une configuration de portail PAR OFFRE** : le portail Pro n'expose que les deux prix Pro, le portail
+Fondateurs que les deux prix Fondateurs ; la route ouvre celle de l'offre de l'abonnement EN COURS du compte (Pro à défaut, jamais l'autre en repli : `503` `portail-indisponible` si elle manque). Il permet : résiliation **à la fin de la période**,
+passage mensuel ↔ annuel **dans la même offre** (jamais Pro ↔ Fondateurs), carte, factures, adresse. Mentions légales du portail : CGV `https://rat-market.fr/cgv` et confidentialité `https://rat-market.fr/politique-confidentialite` (page confirmée).
+Défense en profondeur : un abonnement qui passerait au prix Fondateurs sans place prise par le compte n'accorde rien de plus (voir §3). `409 CONFLIT` (`aucun-abonnement`) si le compte n'a jamais eu de client Stripe.
 
 ### `GET /api/abonnement`
 ```json
@@ -55,11 +58,12 @@ Sans corps. Réponse `200` : `{ "success": true, "url": "https://billing.stripe.
                   "essai": { "enCours": true, "finLe": "2026-11-01T10:00:00.000Z", "disponible": false }, "paiementEchoue": false },
   "quota": { "nom": "pro", "restant": null, "remiseAZero": "2026-10-19T00:00:00+02:00" },
   "parrainage": { "code": "K7M2QX9P", "essaiFilleulJours": 30 },
-  "offres": { "pro": { "mois": 499, "an": 3900 }, "devise": "EUR", "essaiJours": 14 } }
+  "offres": { "pro": { "mois": 499, "an": 3900 }, "source": "stripe", "devise": "EUR", "essaiJours": 14 } }
 ```
 - `statut` : `aucun` · `en-attente` · `essai` · `actif` · `impaye` · `suspendu` · `termine`. `actif` est vrai si le compte est Pro **maintenant** (l'impayé garde Pro pendant sa grâce).
 - `quota` est `offre` de `CONTRAT-API-V2.md` (le quota réel : `pro` illimité côté client, plafond technique invisible de 200 par jour, remise à zéro au minuit de Paris).
 - Le code de parrainage est créé à la première lecture. L'offre Fondateurs n'est jamais annoncée ici.
+- `offres.pro` : les montants sont relus des PRIX Stripe (cache de 10 minutes) ; `source: "constantes"` dit que la lecture a échoué et que les montants de repli sont servis.
 
 ### `DELETE /api/compte` (changement, tant que `V2_ABONNEMENTS` est allumé)
 Supprimer le compte ne résilie pas l'abonnement chez Stripe : le client continuerait d'être débité sans compte. Un compte dont l'abonnement est vivant (essai, actif, impayé, suspendu) et dont la résiliation n'est
@@ -77,10 +81,12 @@ Route propre à la v2 (celle de la v1 reste en place), secret propre (`V2_STRIPE
 ### Les règles de l'état du compte (`abonnement.actif`, `abonnement.jusquAu`)
 | statut Stripe | effet |
 |---|---|
-| `trialing`, `active` | Pro jusqu'à la fin de la période (ou de la coupure programmée si elle est plus tôt) |
+| `trialing`, `active` | Pro jusqu'à la fin de la période **plus 48 heures** (marge de renouvellement : un client qui paie ne perd pas le Pro parce qu'un webhook arrive tard) ; **aucune marge** pour une résiliation programmée (fin exacte, ou de la coupure programmée si elle est plus tôt) ni pour un abonnement supprimé |
 | `past_due` | **Pro maintenu 3 jours après le PREMIER événement past_due**, jamais au-delà de la fin de période, **jamais prolongé** par un nouvel échec ou un nouvel événement (décision : la plus prudente pour le client — un incident de carte ne le coupe pas à la minute — sans offrir un mois gratuit pendant les relances de Stripe) |
 | `canceled` / `deleted`, `unpaid`, `paused`, `incomplete`, `incomplete_expired` | plus de Pro |
 | prix qui n'est pas l'un des quatre prix Rat-Market (variables, ou `lookup_key` `rm_v2_…`) | **aucun** Pro, signalé |
+- **Plusieurs abonnements** : l'état de chacun est gardé ; le Pro tient tant qu'**au moins un** est vivant (résilier l'un ne coupe jamais le Pro que l'autre paie) ; le doublon est signalé (`double-abonnement`) ; rien n'est annulé ni remboursé automatiquement.
+- **Prix Fondateurs sans place** : un abonnement vivant à un prix Fondateurs que le compte n'a pas de place (prise ou réservée) pour détenir n'accorde rien de plus : un abonné Pro reste Pro, un nouvel abonnement n'ouvre aucun droit, signalé (`fondateurs-sans-place`), aucune place n'est prise.
 - **Désordre** : chaque écriture porte la date de l'événement Stripe ; un événement plus ancien que celui déjà appliqué pour le même abonnement est ignoré (égalité : le statut le plus avancé gagne). Jamais de régression.
 - Une résiliation en fin de période laisse Pro jusqu'à `finPeriode`, puis le compte est gratuit (10 par jour) : la fonction des quotas (`offre.js`, inchangée) relit `jusquAu` à chaque requête.
 - `invoice.payment_failed` date l'échec (`paiementEchoue`) ; le droit, lui, vient de l'abonnement.
@@ -97,7 +103,7 @@ Voir l'entrée du 2026-10-18 dans `DEMANDE-SERVEUR-SITE.md` (routes, retours, er
 | `V2_STRIPE_CLE` | clé secrète ou restreinte (Checkout, clients, portail, abonnements, coupons) |
 | `V2_STRIPE_WEBHOOK_SECRET` | secret de l'endpoint de webhook v2 |
 | `V2_STRIPE_PRIX_PRO_MOIS` · `V2_STRIPE_PRIX_PRO_AN` · `V2_STRIPE_PRIX_FONDATEURS_MOIS` · `V2_STRIPE_PRIX_FONDATEURS_AN` | les quatre `price_…` |
-| `V2_STRIPE_PORTAIL_CONFIG` | la configuration du portail (`bpc_…`) |
+| `V2_STRIPE_PORTAIL_CONFIG_PRO` · `V2_STRIPE_PORTAIL_CONFIG_FONDATEURS` | les deux configurations du portail (`bpc_…`), une par offre, distinctes ; celle des Fondateurs est facultative (sans elle l'offre Fondateurs reste fermée) |
 | `V2_FONDATEURS_PLACES` | nombre de places (défaut 100, de 1 à 1000) |
 | `V2_FONDATEURS_CODE` **ou** `V2_FONDATEURS_CODE_EMPREINTE` | le code (6 caractères au moins) ou son empreinte sha256 en hexadécimal — jamais les deux |
 

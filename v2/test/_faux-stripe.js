@@ -64,6 +64,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
     f.customers = {
         async create(p, o) { panne('customers.create'); note('customers.create', p, o); return avecCle(o, () => { const id = nid('cus'); const c = { id, object: 'customer', email: p.email, metadata: p.metadata || {}, test_clock: p.test_clock || null, pm: null }; E.customers.set(id, c); return { ...c }; }, p); },
         async retrieve(id) { const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); return { ...c }; },
+        async search(p) { panne('customers.search'); note('customers.search', p); const m = /metadata\['compteId'\]:'([0-9a-f]+)'/.exec(p.query || ''); return { data: [...E.customers.values()].filter(c => m && c.metadata && c.metadata.compteId === m[1]).map(c => ({ ...c })) }; },
         async update(id, p) { note('customers.update', p); const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); if (p.invoice_settings && p.invoice_settings.default_payment_method) c.pm = p.invoice_settings.default_payment_method; return { ...c }; },
         async del(id) { E.customers.delete(id); return { id, deleted: true }; }
     };
@@ -78,7 +79,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
             }, p);
         },
         async retrieve(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); return { ...s }; },
-        async list(p = {}) { return { data: [...E.sessions.values()].filter(s => !p.customer || s.customer === p.customer).map(s => ({ ...s })) }; },
+        async list(p = {}) { return { data: [...E.sessions.values()].filter(s => (!p.customer || s.customer === p.customer) && (!p.status || s.status === p.status)).map(s => ({ ...s })) }; },
         async expire(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); s.status = 'expired'; return { ...s }; },
         async listLineItems(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); return { data: (s.line_items || []).map(l => ({ price: { id: l.price }, quantity: l.quantity })) }; }
     } };
@@ -153,6 +154,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
     };
     f.prices = {
         async list(p = {}) { return liste(E.prix, p); },
+        async retrieve(id) { panne('prices.retrieve'); note('prices.retrieve', { id }); const x = E.prix.find(y => y.id === id); if (!x) throw erreur('resource_missing'); return JSON.parse(JSON.stringify(x)); },
         async create(p, o) { note('prices.create', p, o); if (p.lookup_key && E.prix.some(x => x.lookup_key === p.lookup_key && x.active)) throw erreur('lookup_key_already_used'); const x = { id: nid('price'), object: 'price', active: true, ...JSON.parse(JSON.stringify(p)) }; E.prix.push(x); return JSON.parse(JSON.stringify(x)); },
         async update(id, p) { note('prices.update', p); const x = E.prix.find(y => y.id === id); if (!x) throw erreur('resource_missing'); Object.assign(x, JSON.parse(JSON.stringify(p))); return JSON.parse(JSON.stringify(x)); }
     };

@@ -7,6 +7,7 @@ const { col } = require('../db');
 const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('../comptes/sessions');
 const { resoudrePorteur, exigerSession } = require('../porteur');
+const crypto = require('crypto'); const Pub = require('./prix-publics');
 const Cl = require('./client'); const Fo = require('./fondateurs'); const Pa = require('./parrainage'); const Cfg = require('./config');
 const O = require('./offres');
 
@@ -38,8 +39,11 @@ function statutPublic(compte, maintenant) {
 }
 async function assurerClient(stripe, compte) {
     if (compte.stripeClient) return compte.stripeClient;
+    // M3 : un client déjà créé pour ce compte (la pose en base a pu échouer après la création, et l'idempotence de Stripe ne dure que 24 h) est RETROUVÉ par ses métadonnées avant d'en créer un autre
+    let c = null;
+    try { const r = await stripe.customers.search({ query: `metadata['compteId']:'${String(compte._id)}'`, limit: 1 }); c = r && Array.isArray(r.data) && r.data[0] && !r.data[0].deleted ? r.data[0] : null; } catch (e) { console.error(`🔴 [v2 abonnement] recherche du client impossible (${nomErreur(e)}) — création`); }
     // un client Stripe par compte : l'identifiant d'idempotence rend le client DÉTERMINISTE (deux requêtes simultanées reçoivent le même), la pose en base est conditionnelle
-    const c = await stripe.customers.create({ email: compte.email, metadata: { compteId: String(compte._id) } }, { idempotencyKey: `cust-${String(compte._id)}` });
+    if (!c) c = await stripe.customers.create({ email: compte.email, metadata: { compteId: String(compte._id) } }, { idempotencyKey: `cust-${String(compte._id)}` });
     const r = await col('comptes').updateOne({ _id: compte._id, stripeClient: null }, { $set: { stripeClient: c.id } });
     if (r.matchedCount === 1) return c.id;
     const relu = await col('comptes').findOne({ _id: compte._id }, { projection: { stripeClient: 1 } });
@@ -84,7 +88,7 @@ function routesAbonnements(router, cfg) {
             if (b.offre === 'fondateurs' && !abo().fondateurs.ouvert) return entree(res, 'code-invalide', 422);   // l'offre est fermée : indiscernable d'un mauvais code (on ne révèle pas qu'elle existe)
             if (!prix) return indispo(res, 'prix-non-configure');
             const stripe = Cl.obtenir(abo());
-            if (await dejaAbonne(stripe, compte)) return conflit(res, 'deja-abonne');
+            if (await dejaAbonne(stripe, compte)) return conflit(res, 'abonnement-actif');
             // le code (Fondateurs ou parrainage) : au plus 10 essais par heure et par compte, comptés AVANT de le lire
             let parrain = null;
             if (b.code !== undefined) {
@@ -115,8 +119,11 @@ function routesAbonnements(router, cfg) {
                 // rejouée avec des paramètres différents) ; la session vit entre 60 et 70 minutes, la réservation d'une place Fondateurs la couvre (MARGE_RESERVATION_MINUTES)
                 expires_at: (tranche + 1) * 600 + O.SESSION_MINUTES * 60, metadata,
                 subscription_data: { metadata, ...(jours > 0 ? { trial_period_days: jours, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } } : {}) }
-            }, { idempotencyKey: `ckt-${String(compte._id)}-${b.offre}-${b.periode}-${parrain ? 'p' : '_'}-${tranche}` });
+            }, { idempotencyKey: `ckt-${String(compte._id)}-${b.offre}-${b.periode}-${parrain ? 'p' + crypto.createHash('sha256').update(Pa.normaliserCodeParrainage(b.code)).digest('hex').slice(0, 12) : '_'}-${tranche}` });
             if (!session || typeof session.url !== 'string') throw new Error('checkout : pas d\'adresse de paiement');
+            // I1 : UN seul abonnement par compte — les autres sessions Checkout OUVERTES de ce client sont expirées (deux pages ouvertes ne peuvent plus donner deux paiements)
+            try { const ouvertes = await stripe.checkout.sessions.list({ customer: client, status: 'open', limit: 20 }); for (const o of (ouvertes && ouvertes.data) || []) if (o.id !== session.id) await stripe.checkout.sessions.expire(o.id).catch(() => { /* déjà expirée ou complétée */ }); }
+            catch (e) { console.error(`🔴 [v2 abonnement checkout] sessions ouvertes non expirées (${nomErreur(e)})`); }
             reserveePour = null;
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, url: session.url });
@@ -133,7 +140,10 @@ function routesAbonnements(router, cfg) {
             const compte = req.v2.porteur.compte;
             if (!compte.stripeClient) return conflit(res, 'aucun-abonnement');
             const stripe = Cl.obtenir(abo());
-            const p = await stripe.billingPortal.sessions.create({ customer: compte.stripeClient, configuration: abo().portail, return_url: `${site}/fr/compte` });
+            // C1 : UNE configuration de portail PAR OFFRE — celle de l'abonnement EN COURS (Pro à défaut) ; jamais l'autre en repli (elle laisserait passer d'une offre à l'autre sans code ni place)
+            const st = compte.abonnement && compte.abonnement.stripe, offre = st && st.sid && st.offre === 'fondateurs' ? 'fondateurs' : 'pro', configuration = abo().portail[offre];
+            if (!configuration) return indispo(res, 'portail-indisponible');
+            const p = await stripe.billingPortal.sessions.create({ customer: compte.stripeClient, configuration, return_url: `${site}/fr/compte` });
             if (!p || typeof p.url !== 'string') throw new Error('portail : pas d\'adresse');
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, url: p.url });
@@ -148,9 +158,10 @@ function routesAbonnements(router, cfg) {
             if (!compte) return repondreErreur(res, 'SESSION', 'Connexion requise');
             const quota = await registre.obtenir('argent').offre(porteur, maintenant);
             const code = await Pa.codeDe(compte._id);
+            const prixPublics = pret() ? await Pub.lire(Cl.obtenir(abo()), abo()) : Pub.constantes();
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, abonnement: statutPublic(compte, maintenant), quota, parrainage: { code, essaiFilleulJours: O.ESSAI_PARRAINAGE_JOURS },
-                offres: { pro: { mois: O.CATALOGUE.pro.prix.mois, an: O.CATALOGUE.pro.prix.an }, devise: 'EUR', essaiJours: O.ESSAI_JOURS } });   // en centimes ; l'offre Fondateurs (sur code) n'est jamais annoncée ici
+                offres: { pro: prixPublics.pro, source: prixPublics.source, devise: 'EUR', essaiJours: O.ESSAI_JOURS } });   // en centimes ; l'offre Fondateurs (sur code) n'est jamais annoncée ici
         } catch (e) { console.error(`❌ [v2 abonnement statut] ${nomErreur(e)}`); return indispo(res); }
     });
 }

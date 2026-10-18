@@ -18,6 +18,8 @@ const cleProduit = offre => `rm_v2_${offre}`;
 const ESSAI_JOURS = 14;                 // Pro : 14 jours, UNE fois par compte
 const ESSAI_PARRAINAGE_JOURS = 30;      // le filleul : 30 jours au lieu de 14
 const GRACE_IMPAYE_JOURS = 3;           // past_due : Pro maintenu 3 jours après le premier échec (voir etat.js), jamais prolongé par un nouvel échec
-const SESSION_MINUTES = 60;             // la durée MINIMALE d'une session Checkout (elle vit de 60 à 70 minutes : voir routes.js, tranche de 10 minutes)
+const MARGE_RENOUVELLEMENT_HEURES = 48; // I2 : jusquAu = fin de période + 48 h pour un abonnement actif/en essai qui doit se RENOUVELER (jamais pour une résiliation, un abonnement supprimé, un impayé)
+const PRIX_PUBLICS_CACHE_MS = 10 * 60e3; // M4 : durée de vie des montants publics lus chez Stripe
+const SESSION_MINUTES = 60;            // la durée MINIMALE d'une session Checkout (elle vit de 60 à 70 minutes : voir routes.js, tranche de 10 minutes)
 const MARGE_RESERVATION_MINUTES = 15;   // la réservation d'une place Fondateurs dure SESSION_MINUTES + cette marge : elle couvre toute la vie de la session (70 minutes) avec 5 minutes de plus
-module.exports = { OFFRES, PERIODES, CATALOGUE, DEVISE, INTERVALLE, lookupKey, DEPUIS_LOOKUP, cleProduit, ESSAI_JOURS, ESSAI_PARRAINAGE_JOURS, GRACE_IMPAYE_JOURS, SESSION_MINUTES, MARGE_RESERVATION_MINUTES };
+module.exports = { OFFRES, PERIODES, CATALOGUE, DEVISE, INTERVALLE, lookupKey, DEPUIS_LOOKUP, cleProduit, ESSAI_JOURS, ESSAI_PARRAINAGE_JOURS, GRACE_IMPAYE_JOURS, MARGE_RENOUVELLEMENT_HEURES, PRIX_PUBLICS_CACHE_MS, SESSION_MINUTES, MARGE_RESERVATION_MINUTES };
