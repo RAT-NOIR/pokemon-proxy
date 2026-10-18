@@ -20,6 +20,7 @@ const { exigerOrigineSite } = require('../comptes/sessions');
 const { traiterIdentifier, traiterReponse } = require('../identifier/routes');
 const { offreSur, avecOffre, offreRefusee } = require('../argent/offre-sur');
 const { facturation: fabriquerFacturation } = require('../argent/facturation');
+const PS = require('../argent/poche-servie');      // ACHETE-AVANT-JOUR : facturation.poche
 const { facturationDeLecture } = require('../identifier/retour-live');
 const { col } = require('../db');
 
@@ -205,7 +206,9 @@ function routesScanner(router, cfg, deps = {}) {
         let solde; try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { await col('analyses').updateOne({ _id: scanId }, { $set: { facturation } }); } catch (e) { journalErreur('analyses', e); }
         const offre = await offreSur(porteur, argent);      // l'offre est relue APRÈS le remboursement : l'unité rendue se voit
-        return { ...corps, facturation, ...(r.declaration ? { declaration: r.declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
+        // ACHETE-AVANT-JOUR : la facturation reconstruite garde `poche` (d'où l'analyse avait été prise), lue sur les lignes de débit du scan (elles restent après le remboursement) ; sur la RÉPONSE seulement
+        let poche = null; try { poche = await PS.pocheDesDebits(porteur, scanId); } catch (e) { journalErreur('poche', e); }
+        return { ...corps, facturation: PS.avecPoche(facturation, poche), ...(r.declaration ? { declaration: r.declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
     }
     // Habille res.json : `transformer` (null au scanner), puis le remboursement sans-prix si `aRembourser(corps)`. Un remboursement qui échoue sert la réponse d'origine (jamais une panne).
     function habiller(transformer, aRembourser, idScan) {
