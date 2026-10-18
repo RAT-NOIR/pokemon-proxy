@@ -76,7 +76,7 @@ visuelMention, prixGuide, liens: { cardmarket, fiche } }` — la forme de la dem
   GUIDE, `guideDu`, jamais celle de l'import) ; `null` si le produit n'y est pas. Sur la carte comme sur chaque candidat. **Le scanner
   les affiche libellés** (« tendance », « prix le plus bas », « moyenne 30 jours ») **et datés** ; jamais un prix par état.
   **Lot F4-PRIX (2026-10-18, ajouts FACULTATIFS, voir CONTRAT-API-V2.md §2 bis)** : `prixGuide` porte aussi `moyenne7`, `deBase` (`tous-etats` : le « De » est l'offre la
-  plus basse tous états, jamais le prix de l'état retenu), `fiable` et `reserves` (codes fermés : `ecart-tendance`, `prix-indicatif-tampons-melanges`,
+  plus basse tous états, jamais le prix de l'état retenu), `fiable` et `reserves` (codes fermés : `ecart-tendance`, `ecart-non-mesurable`, `prix-indicatif-tampons-melanges`,
   `peut-etre-gonfle-par-tampons`) ; `Produit` et `Impression` portent `version` (`V1`, `V2`…) ; `set` porte `badge` et `badgeSource` ;
   `regleVerdict` porte `ecartTendanceMax` (0,3).
 - **`impressions` (ajout du 2026-10-06, demande de l'extension §12.1)** : `[{ idProduct, numero, total, rarete, variante, set, lien,

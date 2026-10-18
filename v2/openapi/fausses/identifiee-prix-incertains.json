@@ -117,6 +117,30 @@
                   "peut-etre-gonfle-par-tampons"
                 ]
               }
+            },
+            {
+              "idProduct": 9000204,
+              "numero": "20",
+              "total": "82",
+              "rarete": null,
+              "variante": null,
+              "version": null,
+              "set": {
+                "nom": "Fusée Fictive"
+              },
+              "lien": null,
+              "prixGuide": {
+                "tendance": 2,
+                "de": 1,
+                "moyenne30": null,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": null,
+                "fiable": false,
+                "reserves": [
+                  "ecart-non-mesurable"
+                ]
+              }
             }
           ]
         },
