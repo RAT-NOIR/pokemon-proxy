@@ -1,5 +1,5 @@
 // ============================================================
-// LES IMPORTS QUOTIDIENS, LANCÉS PAR LE WORKER — catalogue Cardmarket (après 12 h 15 UTC) et guide des prix (après 5 h UTC), une fois par jour
+// LES IMPORTS QUOTIDIENS, LANCÉS PAR LE WORKER — catalogue Cardmarket (après 12 h 15 UTC) et guide des prix (après 4 h 45 UTC), une fois par jour
 // ============================================================
 // 🔑 LA DEMANDE (testeur, 2026-10-06) : « sans cron Render payant : le WORKER lance lui-même, une fois par jour vers 5 h UTC, l'import du
 // catalogue (import-catalogue-quotidien.js --base=test --confirmer-production) et celui du guide des prix, sous la garde de lot, avec une
@@ -23,10 +23,11 @@ const { spawn } = require('child_process');
 
 // (testeur, 2026-10-08) L'HEURE EST PAR IMPORT. L'export du catalogue paraît vers 11 h 31 UTC (createdAt de l'export du 2026-10-06 :
 // 13:31 +02:00) : à 5 h, 7 h, 9 h, 11 h, le worker retéléchargeait celui de la veille — ~5 requêtes Cardmarket par jour contre une.
-// Le catalogue part donc à 12 h 15 UTC (marge après 11 h 31) ; le guide, qui paraît vers 0 h 49 UTC, garde 5 h.
+// Le catalogue part donc à 12 h 15 UTC (marge après 11 h 31) ; le guide, qui paraît vers 0 h 49 UTC, part à 4 h 45 UTC (2026-10-18 :
+// GitHub fait glisser les crons à l'heure pile ; le workflow vise 4 h 47 et 12 h 17, avec un passage de secours 2 h après chacun).
 const IMPORTS = [
     { nom: 'catalogue', script: 'import-catalogue-quotidien.js', heure: 12, minute: 15 },
-    { nom: 'guide', script: 'import-guide-quotidien.js', heure: 5, minute: 0 }
+    { nom: 'guide', script: 'import-guide-quotidien.js', heure: 4, minute: 45 }
 ];
 const ARGS = ['--base=test', '--confirmer-production'];
 const ESSAIS_PAR_JOUR = 3, ENTRE_ESSAIS_MS = 60 * 60 * 1000;

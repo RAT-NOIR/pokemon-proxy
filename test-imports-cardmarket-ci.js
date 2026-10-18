@@ -145,11 +145,54 @@ function banc({ E = collection(), env = ENV, lance = [], code = 0, extrait = 'ok
         assert.deepEqual(lances, ['import-catalogue-quotidien.js']);
     });
 
+    // le passage de secours (2 h après chaque principal) : même passe `auto`, idempotence par le journal
+    const IQ = require('./collecte-cartes/imports-quotidiens');
+    const faitAujourdhui = () => {
+        const E = collection();
+        for (const nom of ['guide', 'catalogue']) E.docs.set(`import-quotidien/${nom}`, { _id: `import-quotidien/${nom}`, jour: '2026-10-18', essais: 1, echecs: 0, succesLe: '2026-10-18', dernierResultat: 'importe', dernierEssai: '2026-10-18T05:00:00Z' });
+        return E;
+    };
+    await t('secours : import du jour déjà en base => rien lancé à 06:47 puis 14:17, sortie 0', async () => {
+        const b = banc({ E: faitAujourdhui() });
+        assert.equal(await b.passe(['--import=auto'], '2026-10-18T06:47:00Z'), 0);
+        assert.equal(await b.passe(['--import=auto'], '2026-10-18T14:17:00Z'), 0);
+        assert.deepEqual(b.lance, []);
+    });
+    await t('secours : journal vide à 06:47 => le guide seul ; à 14:17 journal vide => guide ET catalogue', async () => {
+        const b = banc();
+        assert.equal(await b.passe(['--import=auto'], '2026-10-18T06:47:00Z'), 0);
+        assert.deepEqual(b.lance, ['import-guide-quotidien.js']);
+        const c = banc();
+        assert.equal(await c.passe(['--import=auto'], '2026-10-18T14:17:00Z'), 0);
+        assert.deepEqual(c.lance.slice().sort(), ['import-catalogue-quotidien.js', 'import-guide-quotidien.js']);
+    });
+    await t('principal du guide : 04:47 lance le guide, 04:44 ne lance rien', async () => {
+        const b = banc();
+        assert.equal(await b.passe(['--import=auto'], '2026-10-18T04:44:00Z'), 0);
+        assert.deepEqual(b.lance, []);
+        assert.equal(await b.passe(['--import=auto'], '2026-10-18T04:47:00Z'), 0);
+        assert.deepEqual(b.lance, ['import-guide-quotidien.js']);
+    });
+    await t('cohérence : chaque cron principal est à une minute >= l\'horaire IMPORTS de son import', () => {
+        const y = fs.readFileSync(path.join(__dirname, '.github', 'workflows', 'imports-cardmarket.yml'), 'utf8');
+        const crons = [...y.matchAll(/cron: '(\d+) (\d+) \* \* \*'/g)].map(m => [Number(m[2]) * 60 + Number(m[1]), Number(m[2])]);
+        for (const { nom, heure, minute } of IQ.IMPORTS) {
+            const debut = heure * 60 + minute;
+            const principal = crons.find(([min, h]) => h === heure);
+            assert.ok(principal, `un cron principal à ${heure} h pour ${nom}`);
+            assert.ok(principal[0] >= debut, `${nom} : cron ${principal[0]} < horaire ${debut}`);
+            assert.ok(crons.some(([min]) => min === principal[0] + 120), `${nom} : secours à +2 h`);
+        }
+    });
+
     // le workflow
     const wf = path.join(__dirname, '.github', 'workflows', 'imports-cardmarket.yml');
     await t('workflow : horaires, permissions, concurrency, versions précises, secrets, timeout', () => {
         const y = fs.readFileSync(wf, 'utf8');
-        assert.match(y, /cron: '0 5 \* \* \*'/); assert.match(y, /cron: '15 12 \* \* \*'/);
+        const crons = [...y.matchAll(/^\s*-?\s*cron: '([^']+)'/gm)].map(m => m[1]);
+        assert.deepEqual(crons.slice().sort(), ['17 12 * * *', '17 14 * * *', '47 4 * * *', '47 6 * * *'].sort(), 'exactement les quatre crons voulus');
+        assert.equal((y.match(/cron:/g) || []).length, 4, 'aucun autre cron');
+        for (const c of crons) assert.notEqual(c.split(' ')[0], '0', `cron à la minute 0 (glisse) : ${c}`);
         assert.match(y, /workflow_dispatch:/); assert.match(y, /guide[\s\S]*catalogue[\s\S]*auto|options:/);
         assert.match(y, /permissions:\s*\n\s+contents: read/);
         assert.match(y, /group: imports-cardmarket/); assert.match(y, /cancel-in-progress: false/);

@@ -31,9 +31,9 @@ const muet = { log() { }, warn() { }, error() { } };
     // ── 1. la décision, pure ──────────────────────────────────────────────────────────────────────────────────────────
     // (testeur, 2026-10-08) l'heure est PAR IMPORT : le catalogue à 12 h 15 UTC (l'export du jour paraît vers 11 h 31 — à 5 h le worker
     // retéléchargeait celui de la veille, ~5 requêtes par jour), le guide à 5 h (il paraît vers 0 h 49)
-    const GUI = { heure: 5, minute: 0 }, CAT = { heure: 12, minute: 15 };
-    await t('les horaires : catalogue 12 h 15 UTC, guide 5 h UTC', () => assert.deepEqual(IQ.IMPORTS.map(i => [i.nom, i.heure, i.minute]), [['catalogue', 12, 15], ['guide', 5, 0]]));
-    await t('guide : avant 5 h UTC rien, à 5 h on lance', () => { assert.equal(IQ.aLancer(null, a('2026-10-07T04:59:00Z'), GUI).lancer, false); assert.equal(IQ.aLancer(null, a('2026-10-07T05:00:00Z'), GUI).lancer, true); });
+    const GUI = { heure: 4, minute: 45 }, CAT = { heure: 12, minute: 15 };
+    await t('les horaires : catalogue 12 h 15 UTC, guide 4 h 45 UTC', () => assert.deepEqual(IQ.IMPORTS.map(i => [i.nom, i.heure, i.minute]), [['catalogue', 12, 15], ['guide', 4, 45]]));
+    await t('guide : à 4 h 44 UTC rien, à 4 h 45 on lance', () => { assert.equal(IQ.aLancer(null, a('2026-10-07T04:44:00Z'), GUI).lancer, false); assert.equal(IQ.aLancer(null, a('2026-10-07T04:45:00Z'), GUI).lancer, true); });
     await t('catalogue : à 12 h 14 UTC rien, à 12 h 15 on lance', () => { assert.equal(IQ.aLancer(null, a('2026-10-07T12:14:00Z'), CAT).lancer, false); assert.equal(IQ.aLancer(null, a('2026-10-07T12:15:00Z'), CAT).lancer, true); });
     await t('sans horaire : refus de conclure, jamais un lancement', () => assert.throws(() => IQ.aLancer(null, a('2026-10-07T13:00:00Z'))));
     await t('déjà réussi aujourd\'hui : rien', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, succesLe: '2026-10-07', dernierEssai: a('2026-10-07T05:01:00Z') }, a('2026-10-07T12:00:00Z'), GUI).lancer, false));
