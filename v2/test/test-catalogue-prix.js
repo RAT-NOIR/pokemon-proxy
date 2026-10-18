@@ -65,6 +65,59 @@ const prix = g => g && Object.fromEntries(GARDER.map(k => [k, g[k]]));
     const aucun = await cat.lire([ID_V1, 999999]);
     H.v('un idProduct inconnu est absent (rien d\'inventé)', [aucun.has(ID_V1), aucun.has(999999)], [true, false]);
     H.v('liste vide : table vide', (await cat.lire([])).size, 0);
+    // ── tour 1 (I1) : une impression ABSENTE de numeros_cartes est « non lue » : jamais fiable, ecart-non-mesurable (on ne prend jamais prixMelangeTampon: false par défaut pour une preuve)
+    const ID_ORPH = 999001;
+    await db.col('guide_prix').insertOne({ idProduct: ID_ORPH, trend: 5, low: 4, avg7: 5, avg30: 5, guideDu: g });
+    E.installer(VB.construire([e(ID_V1), e(ID_V2), e(ID_ORPH, { numero: '16', lien: null })]));
+    const tO = await creerCatalogue({ cfg }).lire([ID_V2]);
+    const impO = Object.fromEntries(tO.get(ID_V2).impressions.map(i => [i.idProduct, i]));
+    H.v('I1 : l\'impression absente de numeros_cartes est marquée non lue, les autres non', [impO[ID_ORPH].nonLu, impO[ID_V1].nonLu, impO[ID_V2].nonLu], [true, false, false]);
+    const pO = construireProduit(tO.get(ID_V2), { langueInterface: 'fr', cfg });
+    H.v('I1 : …donc son prix n\'est pas sûr, même avec un écart nul (5 / 5 / 5)', pO.impressions.filter(i => i.idProduct === ID_ORPH).map(i => [i.prixGuide.fiable, i.prixGuide.reserves]), [[false, ['ecart-non-mesurable']]]);
+    H.v('I1 : …et les impressions lues gardent leur fiabilité (V1 mesurée dans la borne)', pO.impressions.filter(i => i.idProduct === ID_V1).map(i => [i.prixGuide.fiable, i.prixGuide.reserves]), [[true, []]]);
+
+    // ── tour 1 (I2) : la requête ajoutée est BORNÉE et ISOLÉE. Sa panne ne casse pas l'identification : les impressions concernées sont « non lues ».
+    const original = db.col;
+    const appels = [];
+    let mode = 'leve';
+    db.col = nom => {
+        const c = original(nom);
+        if (nom !== 'numeros_cartes') return c;
+        return new Proxy(c, { get(cible, p) {
+            if (p !== 'find') return typeof cible[p] === 'function' ? cible[p].bind(cible) : cible[p];
+            return (filtre, options) => {
+                if (!options || !options.projection || !options.projection.variante) return cible.find(filtre, options);      // la première requête de lire() : intacte
+                appels.push({ filtre, options });
+                if (mode === 'leve') throw new Error('panne simulée de la requête des impressions');
+                if (mode === 'rejette') return { toArray: async () => { throw new Error('panne simulée à la lecture'); } };
+                if (mode === 'pend') return { toArray: () => new Promise(() => { }) };
+                return cible.find(filtre, options);
+            };
+        } });
+    };
+    try {
+        const log = console.warn; console.warn = () => { };
+        const attendu = i => [i.idProduct, i.nonLu, i.prixMelangeTampon, i.version];
+        for (const m of ['leve', 'rejette']) {
+            mode = m;
+            const tp = await creerCatalogue({ cfg }).lire([ID_V2]);
+            H.v(`I2 : la requête des impressions ${m === 'leve' ? 'lève' : 'échoue à la lecture'} : lire() ne lève pas, le produit est servi`, [tp.has(ID_V2), tp.get(ID_V2).prixGuide.avg7], [true, 14.59]);
+            H.v('I2 : …les impressions hors du produit sont non lues (version null, prix non mélangé NON pris pour une preuve)', tp.get(ID_V2).impressions.filter(i => i.idProduct !== ID_V2).map(attendu), [[ID_V1, true, false, null], [ID_ORPH, true, false, null]].sort((a, b) => a[0] - b[0]));
+            const pp2 = construireProduit(tp.get(ID_V2), { langueInterface: 'fr', cfg });
+            H.v('I2 : …donc aucune n\'est fiable (ecart-non-mesurable)', pp2.impressions.filter(i => i.idProduct !== ID_V2).map(i => [i.prixGuide.fiable, i.prixGuide.reserves]), [[false, ['ecart-non-mesurable']], [false, ['ecart-non-mesurable']]]);
+            H.v('I2 : …le produit lui-même, lu par la première requête, garde son prix et sa version', [pp2.version, pp2.prixGuide.reserves], ['V2', ['ecart-tendance']]);
+        }
+        mode = 'pend';
+        const t0 = Date.now();
+        const tPend = await creerCatalogue({ cfg, delaiImpressionsMs: 80 }).lire([ID_V2]);
+        H.v('I2 : une requête qui ne répond pas dans le délai nommé est abandonnée (identification continuée, impressions non lues)', [tPend.has(ID_V2), tPend.get(ID_V2).impressions.every(i => i.idProduct === ID_V2 || i.nonLu === true), Date.now() - t0 < 3000], [true, true, true]);
+        mode = 'ok'; appels.length = 0;
+        await creerCatalogue({ cfg }).lire([ID_V2]);
+        const a = appels[0] && appels[0].options;
+        H.v('I2 : la requête est BORNÉE : maxTimeMS nommé (IMPRESSIONS_MAX_TIME_MS) et limit égal au nombre d\'ids demandés', [appels.length, a && a.maxTimeMS, a && a.limit, appels[0] && appels[0].filtre.idProduct.$in.length], [1, require('../identifier/catalogue').IMPRESSIONS_MAX_TIME_MS, 2, 2]);
+        console.warn = log;
+    } finally { db.col = original; }
+
     E.vider();
     const sansVersion = await creerCatalogue({ cfg }).lire([ID_V2]);
     H.v('AUCUNE version de visuels chargée : plus d\'impressions, mais la version du produit et le prix restent (la ligne vient de numeros_cartes)', [sansVersion.get(ID_V2).impressions, sansVersion.get(ID_V2).version, sansVersion.get(ID_V2).prixGuide.avg7], [[], 'V2', 14.59]);
