@@ -10,7 +10,7 @@ const db = require('../db');
 const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
-const { construireIndexVerifie } = require('./langue-decisive');
+const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -35,14 +35,25 @@ function creerCatalogue(opts = {}) {
 
     // LANGUE-DECISIVE M2 : l'index code × numéro du CATALOGUE ENTIER (numeros_cartes : 73 756 lignes, projection de trois champs), construit UNE fois puis gardé 6 h (le catalogue change à chaque import quotidien) ;
     // coût mémoire : une chaîne courte par couple (chiffres du numéro, code) distinct, mesuré dans le rapport du lot. Une lecture qui ÉCHOUE lève : l'appelant ferme R4 (jamais une R4 sans index).
-    let indexEnCours = null, indexLe = 0;
+    // La lecture est précédée d'un COMPTE de la même collection avec le même filtre : moins de documents lus que comptés = lecture tronquée, refusée (R4 fermée) ; plancher de 10 000 couples en plus (M-B).
+    let indexEnCours = null, indexLe = 0, indexPret = null;
     const INDEX_DUREE_MS = 6 * 3600 * 1000;
     async function indexCodeNumero() {
         if (indexEnCours && Date.now() - indexLe < INDEX_DUREE_MS) return indexEnCours;
-        const p = (async () => construireIndexVerifie(await colLue('numeros_cartes').find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray()))();     // M-B : sous le plancher, LÈVE (R4 fermée)
+        const p = (async () => {
+            const col = colLue('numeros_cartes');
+            const attendu = await col.countDocuments({});
+            const docs = await col.find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray();
+            return construireIndexVerifie(docs, INDEX_CODE_NUMERO_MIN, attendu);               // sous le plancher ou tronqué : LÈVE (R4 fermée)
+        })();
         indexEnCours = p; indexLe = Date.now();
-        p.catch(() => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
+        p.then(idx => { if (indexEnCours === p) indexPret = idx; }, () => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
         return p;
+    }
+    // Sans attente : l'index PRÊT (même un peu périmé pendant sa reconstruction), ou null — et la construction part en ARRIÈRE-PLAN. Tant qu'il n'est pas prêt R4 est FERMÉE, le scan ne l'attend jamais (le suivant en profite).
+    function indexSansAttente() {
+        if (!indexEnCours || Date.now() - indexLe >= INDEX_DUREE_MS) indexCodeNumero().catch(() => { });
+        return indexPret;
     }
 
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
@@ -75,6 +86,6 @@ function creerCatalogue(opts = {}) {
         }
         return table;
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };
