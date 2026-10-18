@@ -27,6 +27,8 @@ let nCle = 0; const cle = () => `banc-tampon-${Date.now().toString(36)}-${++nCle
 const raw = n => mongoose.connection.db.collection(n);
 const E = require('../chargeur/etat'); const { creerConstructeur } = require('../chargeur/version'); const VB = require('./_visuels-banc');
 const PA = 895831, PB = 895832, PC = 895833, JA = 895841, JB = 895842, PX = 895851, EXP = 990031, EXPJ = 990032, EXPX = 990033, META = 990131, METAJ = 990132, METAX = 990133;
+// LOT TAMPONS : une paire league / normale (LA normale, LB league) et une paire staff+prerelease / normale (SA normale, SB staff+prerelease)
+const LA = 895861, LB = 895862, SA = 895871, SB = 895872, EXPL = 990034, EXPS = 990035, METAL = 990134, METAS = 990135;
 let ecartsContrat = 0, reponsesValidees = 0;
 let CARTE = null;                                           // la carte redressée valide : base64 d'un JPEG 420 × 587
 
@@ -64,8 +66,9 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'depense_modele']) await raw(c).deleteMany({});
-    for (const [e, code] of [[EXP, 'PRE'], [EXPJ, 'PRJ'], [EXPX, 'PRX']]) await raw('codes_set').insertOne({ idExpansion: e, codeSet: code, apprisLe: new Date() });
-    const SEMIS = [[PA, EXP, META, 'PRE', '162', {}], [PB, EXP, META, 'PRE', '162', {}], [PC, EXP, META + 1, 'PRE', '170', {}], [JA, EXPJ, METAJ, 'PRJ', '5', {}], [JB, EXPJ, METAJ, 'PRJ', '5', {}], [PX, EXPX, METAX, 'PRX', '9', { prixMelangeTampon: true }]];
+    for (const [e, code] of [[EXP, 'PRE'], [EXPJ, 'PRJ'], [EXPX, 'PRX'], [EXPL, 'PRL'], [EXPS, 'PRS']]) await raw('codes_set').insertOne({ idExpansion: e, codeSet: code, apprisLe: new Date() });
+    const SEMIS = [[PA, EXP, META, 'PRE', '162', {}], [PB, EXP, META, 'PRE', '162', {}], [PC, EXP, META + 1, 'PRE', '170', {}], [JA, EXPJ, METAJ, 'PRJ', '5', {}], [JB, EXPJ, METAJ, 'PRJ', '5', {}], [PX, EXPX, METAX, 'PRX', '9', { prixMelangeTampon: true }],
+        [LA, EXPL, METAL, 'PRL', '7', {}], [LB, EXPL, METAL, 'PRL', '7', {}], [SA, EXPS, METAS, 'PRS', '8', {}], [SB, EXPS, METAS, 'PRS', '8', {}]];
     for (const [id, exp, meta, code, numero, plus] of SEMIS) {
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Roaring Moon ex', idExpansion: exp, idMetacard: meta });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: exp, numero, numeroUrl: `${code}${numero}`, codeSet: code, nomFr: 'Roaring Moon ex', slug: `Roaring-Moon-ex-${code}${numero}-${id}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...plus });
@@ -79,7 +82,12 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         mar(PC, { idMetacard: META + 1 }),
         mar(JA, { idMetacard: METAJ, variante: 'normale', numero: '5', partageeTamponNonSepare: false, produitsPartages: [JA, JB] }),
         mar(JB, { idMetacard: METAJ, variante: 'jumbo', numero: '5', partageeTamponNonSepare: false, produitsPartages: [JA, JB] }),
-        mar(PX, { idMetacard: METAX, numero: '9' })];
+        mar(PX, { idMetacard: METAX, numero: '9', variante: 'staff' }),                  // le produit marqué : sa variante STAFF est PROUVÉE (I3 : la règle 2 exige la même preuve qu'un sûr)
+        mar(895852, { idMetacard: METAX, numero: '9', variante: 'league' }),             // un frère de la fiche (même métacarte), variante LEAGUE prouvée : une impression sans ligne de catalogue
+        mar(LA, { idMetacard: METAL, numero: '7', variante: 'normale', partageeTamponNonSepare: false, produitsPartages: [LA, LB], tamponNonRepresente: 'League' }),
+        mar(LB, { idMetacard: METAL, numero: '7', variante: 'league', partageeTamponNonSepare: false, produitsPartages: [LA, LB], tamponNonRepresente: 'League' }),
+        mar(SA, { idMetacard: METAS, numero: '8', variante: 'normale', partageeTamponNonSepare: false, produitsPartages: [SA, SB], tamponNonRepresente: 'Staff' }),
+        mar(SB, { idMetacard: METAS, numero: '8', variante: 'staff+prerelease', partageeTamponNonSepare: false, produitsPartages: [SA, SB], tamponNonRepresente: 'Staff' })];
     const bm = creerConstructeur({ marquages: true }); for (const d of entrees) bm.entree(d);
     const VERSION_MAR = bm.finir(); E.installer(VERSION_MAR);
     const bs = creerConstructeur(); for (const d of entrees.map(x => ({ ...x, partageeTamponNonSepare: undefined, produitsPartages: undefined, tamponNonRepresente: undefined }))) bs.entree(d);   // une archive d'AVANT : sans la colonne des marquages
@@ -93,26 +101,31 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
     const enTete = { etat: ETAT, classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 };
     const chaine = async (req, res) => {
         const sid = String(req.scanIdImpose);
-        const qui = { paire: [PA, PB], 'paire-trois': [PA, PB, PC], 'hors-paire': [PA, PC], 'paire-jumbo': [JA, JB], 'lu-autre': [PA, PB] }[mode];
+        const qui = { paire: [PA, PB], 'paire-trois': [PA, PB, PC], 'hors-paire': [PA, PC], 'paire-jumbo': [JA, JB], 'lu-autre': [PA, PB], 'paire-league': [LA, LB], 'paire-staff-prerelease': [SA, SB] }[mode];
         if (qui) {                                                   // la chaîne POSE la question (réserve le crédit) : elle n'affirme rien
             await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: qui });
-            const numero = mode === 'paire-jumbo' ? '5' : mode === 'lu-autre' ? '999' : '162';
+            const numero = mode === 'paire-jumbo' ? '5' : mode === 'lu-autre' ? '999' : mode === 'paire-league' ? '7' : mode === 'paire-staff-prerelease' ? '8' : '162';
+            const setCode = mode === 'paire-jumbo' ? 'PRJ' : mode === 'paire-league' ? 'PRL' : mode === 'paire-staff-prerelease' ? 'PRS' : 'PRE';
             return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: qui.map(i => cand(i, numero)),
-                carte: { idProduct: qui[0], nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', numero, setCode: mode === 'paire-jumbo' ? 'PRJ' : 'PRE', total: '131', rarete: null, langue: 'FR', ambigu: true } });
+                carte: { idProduct: qui[0], nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', numero, setCode, total: '131', rarete: null, langue: 'FR', ambigu: true } });
         }
         const id = mode === 'jumeaux' ? PA : PX;                      // la chaîne AFFIRME : PA (la garde des jumeaux en fait une question avec PB) ou PX (le produit marqué seul)
         const code = id === PX ? 'PRX' : 'PRE', numero = id === PX ? '9' : '162';
         return res.json({ success: true, scanId: sid, question: null, ...enTete, candidats: [cand(id, numero)], carte: { idProduct: id, nomProduit: 'Roaring Moon ex', nom: 'Roaring Moon ex', numero, setCode: code, total: '131', rarete: null, langue: 'FR', ambigu: false } });
     };
-    // le « modèle » factice du FOURNISSEUR (deps.lectureTampon)
+    // le « modèle » factice du FOURNISSEUR (deps.lectureTampon). LOT TAMPONS : les essais sont des ENSEMBLES de marques ; les notations courtes de F1 se lisent ainsi : 'oui' = [staff], 'non' = aucune marque.
+    // `modele.essais` peut aussi porter des essais déjà normalisés ({ marques } | { autre } | 'incertain') ; `modele.lecture` la lecture que le fournisseur ANNONCE (la route la refait sur les essais).
     const modele = { appels: [], lecture: 'oui', essais: ['oui', 'oui'], cout: 2, panne: false, lenteurMs: 0, sansImage: false };
+    const EN_ESSAI = x => (x === 'oui' ? { marques: ['staff'] } : x === 'non' ? { marques: [] } : x);
+    const EN_LECTURE = x => (x === 'oui' ? 'marques' : x === 'non' ? 'aucune' : x);
     const fournisseur = async ({ image, signal, corps: c, scanId, compteur }) => {
         modele.appels.push({ scanId: String(scanId), image: Buffer.isBuffer(image), jpeg: Buffer.isBuffer(image) && image[0] === 0xff && image[1] === 0xd8, signal: Boolean(signal), corps: Boolean(c) });
-        if (modele.sansImage) return { lecture: 'incertain', essais: [], echec: false, sansImage: true, raison: 'aucune image' };
+        if (modele.sansImage) return { lecture: 'incertain', marques: [], essais: [], echec: false, sansImage: true, raison: 'aucune image' };
         if (compteur) compteur.appels = (compteur.appels || 0) + modele.cout;
         if (modele.lenteurMs) await new Promise(r => setTimeout(r, modele.lenteurMs));
-        if (modele.panne) return { lecture: 'incertain', essais: [], echec: true, raison: 'panne factice' };
-        return { lecture: modele.lecture, essais: modele.essais, echec: false, raison: 'factice' };
+        if (modele.panne) return { lecture: 'incertain', marques: [], essais: [], echec: true, raison: 'panne factice' };
+        const essais = modele.essais.map(EN_ESSAI);
+        return { lecture: EN_LECTURE(modele.lecture), marques: modele.lecture === 'oui' ? ['staff'] : (modele.lecture === 'marques' ? (essais[0] && essais[0].marques) || [] : []), essais, echec: false, raison: 'factice' };
     };
     const JUM = { [PA]: [PB] };
     const voisinsMuet = async () => ({ ok: false, code: 'muette' });      // la règle G par l'empreinte se TAIT : seule la lecture du tampon est mesurée
@@ -127,7 +140,8 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
     const svSans = await monter({}, cfgOff), svOffAvec = await monter({ lectureTampon: fournisseur }, cfgOff), svOn = await monter({ lectureTampon: fournisseur }, cfgOn);
     const avertissements = async (deps, cfgApp) => { const vus = []; const ancien = console.warn; console.warn = (...a) => { vus.push(a.join(' ')); }; try { const s = await monter(deps, cfgApp); return { s, vus: vus.filter(l => /lecture du tampon demandée/i.test(l)) }; } finally { console.warn = ancien; } };
     const aOn = await avertissements({}, cfgOn), aOff = await avertissements({}, cfgOff), aOk = await avertissements({ lectureTampon: fournisseur }, cfgOn);
-    const postFactice = { appels: 0, corps: [], cout: 0.002, contenu: '{"staff":"yes"}' };
+    const STAFF_LU = '{"stamps":["staff"],"other":false,"unclear":false}';
+    const postFactice = { appels: 0, corps: [], cout: 0.002, contenu: STAFF_LU };
     const post = async (url, c) => { postFactice.appels++; postFactice.corps.push(c); return { data: { choices: [{ message: { content: postFactice.contenu } }], usage: { cost: postFactice.cout } } }; };
     const aCle = await avertissements({ cleModele: 'cle-factice-du-banc', postModele: post }, cfgOn);
     H.v('0b. au montage : demandée sans fournisseur ni clé = UN avertissement ; éteinte, avec fournisseur, ou avec la clé du modèle (le fournisseur est BRANCHÉ) = aucun', [aOn.vus.length, aOff.vus.length, aOk.vus.length, aCle.vus.length], [1, 0, 0, 0]);
@@ -255,6 +269,13 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         Object.assign(modele, { lecture: 'non', essais: ['non', 'non'] });
         const n = await scan(svOn, 'prix-seul');
         H.v('8c. « non » deux fois : la règle 3 reste', [n.c0.carte.idProduct, prix(n), await livre(n)], [PX, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'], PAYE]);
+        // LOT TAMPONS : n'importe quelle marque de la liste lue deux fois (League, une enseigne…) donne la règle 2 ; une marque hors liste, des ensembles qui diffèrent ou rien : la règle 3
+        const mentionPour = async (essais, lecture) => { Object.assign(modele, { lecture, essais }); return prix(await scan(svOn, 'prix-seul')); };
+        const R2 = ['prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime'], R3 = ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'];
+        H.v('8d. I3 : [league] lu deux fois (variante PROUVÉE d\'un produit de la fiche) : la règle 2 ; [kfc] ou [cosmo] (aucun produit de la fiche ne les porte : le faux positif Rayquaza, le logo imprimé), un sur-ensemble : la règle 3 ; `autre`, [league] puis [kfc], aucune marque, incertain : la règle 3', [await mentionPour([{ marques: ['league'] }, { marques: ['league'] }], 'marques'), await mentionPour([{ marques: ['kfc'] }, { marques: ['kfc'] }], 'marques'),
+            await mentionPour([{ autre: true }, { autre: true }], 'autre'), await mentionPour([{ marques: ['league'] }, { marques: ['kfc'] }], 'desaccord'), await mentionPour([{ marques: [] }, { marques: [] }], 'aucune'), await mentionPour(['incertain', 'incertain'], 'incertain'),
+            await mentionPour([{ marques: ['league'] }, { autre: true }], 'marques'), await mentionPour([{ marques: ['cosmo'] }, { marques: ['cosmo'] }], 'marques'), await mentionPour([{ marques: ['league', 'staff'] }, { marques: ['league', 'staff'] }], 'marques')], [R2, R3, R3, R3, R3, R3, R3, R3, R3]);              // le dernier : le fournisseur dit « marques » (à tort), ses essais ne le disent pas
+        Object.assign(modele, { lecture: 'oui', essais: ['oui', 'oui'] });
     }
 
     // ── 9. I1 : le fournisseur de PRODUCTION (branché au montage par le client du modèle) compte CHAQUE appel dans le plafond GLOBAL de dépense, et ne part plus au plafond
@@ -262,7 +283,7 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         const un = (x, o = {}) => ({ ...x, ...o });
         const svP = await monter({ cleModele: 'cle-factice-du-banc', postModele: post, voisinsEmpreinte: voisinsMuet }, cfgPlafond);
         const jourId = `jour:${require('../argent/offre').jourDeParis(new Date())}`;
-        await raw('depense_modele').deleteMany({}); Object.assign(postFactice, { appels: 0, corps: [], cout: 0.002, contenu: '{"staff":"yes"}' });
+        await raw('depense_modele').deleteMany({}); Object.assign(postFactice, { appels: 0, corps: [], cout: 0.002, contenu: STAFF_LU });
         const a = await scan(svP);
         H.v('9a. fournisseur de production (client du modèle fabriqué) : STAFF lu deux fois => PB affirmé ; 2 appels du client ; la consigne ne pose que la question STAFF ; le coût réel est demandé', [a.c0.carte && a.c0.carte.idProduct, postFactice.appels, /STAFF/.test(postFactice.corps[0].messages[0].content[0].text), postFactice.corps[0].usage], [PB, 2, true, { include: true }]);
         const d = await raw('depense_modele').findOne({ _id: jourId });
@@ -303,7 +324,7 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         H.v('10c. garde 3 — l\'archive SANS colonne des marquages (ou sans version) : rien (null), aucun appel, même si l\'entrée de la paire existe', [r3, VERSION_SANS.colonneMarquages, appels() - a3], [[null, null, null], false, 0]);
         // (4) prixMelangeTampon === true : « true » (texte), 1, null ne marquent rien
         const a4 = appels();
-        const ligneX = v => new Map([[PX, { ...ligne(PX), prixMelangeTampon: v }]]);
+        const ligneX = v => new Map([[PX, { ...ligne(PX), prixMelangeTampon: v, marques: ['staff'] }]]);       // I3 : la variante staff du produit est prouvée
         const affX = { issue: 'affirmee', analyse: { cartes: [{ carte: { idProduct: PX } }] } };
         const r4 = [];
         for (const [i, v] of ['true', 1, null, undefined, 'oui'].entries()) r4.push(await consulterLectureTampon({ ...base, scanId: `scan-prix-${i}`, resultat: affX, produits: ligneX(v) }));
@@ -314,6 +335,47 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         const a5 = appels();
         const r5 = [await consulterLectureTampon({ ...base, scanId: 'scan-d-1', cfg: { lectureTampon: true, empreinteExtension: false } }), await consulterLectureTampon({ ...base, scanId: 'scan-d-2', cfg: { lectureTampon: false, empreinteExtension: true } }), await consulterLectureTampon({ ...base, scanId: 'scan-d-3', deps: {} })];
         H.v('10e. un seul drapeau, ou aucun fournisseur : rien (null), aucun appel', [r5, appels() - a5], [[null, null, null], 0]);
+    }
+
+    // ── 12. LOT TAMPONS : l'ENSEMBLE de marques lu doit être EXACTEMENT celui du produit tamponné de la paire (variante prouvée). Rien d'autre n'affirme.
+    {
+        const M = (...m) => ({ marques: m }), AUT = { autre: true };
+        const lire12 = async (mode12, essais, lecture = 'marques', ancre = null) => {
+            Object.assign(modele, { lecture, essais, panne: false, sansImage: false, lenteurMs: 0 }); modele.appels.length = 0;
+            const s = await scan(svOn, mode12); const an = await analyseDe(s.scanId);
+            return { s, an, lt: an.lectureTampon || null, id: s.c0.carte && s.c0.carte.idProduct, statut: s.c0.statut, appels: modele.appels.length, ancre };
+        };
+        const juste = await lire12('paire-league', [M('league'), M('league')]);
+        H.v('12a. paire league/normale, [league] lu deux fois : le produit LEAGUE (LB) est affirmé, jamais la normale ; la trace dit le type, les marques lues et l\'accord', [juste.statut, juste.id, juste.lt && juste.lt.type, juste.lt && juste.lt.marques, juste.lt && juste.lt.accord, juste.lt && juste.lt.issue, await livre(juste.s)], ['identifiee', LB, 'league', ['league'], true, 'confirmee', PAYE]);
+        const sp = await lire12('paire-staff-prerelease', [M('staff', 'prerelease'), M('prerelease', 'staff')]);
+        H.v('12b. paire staff+prerelease/normale, les deux marques lues deux fois (dans un ordre ou l\'autre) : le produit staff+prerelease (SB) est affirmé', [sp.statut, sp.id, sp.lt && sp.lt.type, sp.lt && sp.lt.marques], ['identifiee', SB, 'staff+prerelease', ['staff', 'prerelease']]);
+        // tout le reste : la question d'avant, crédit réservé, 2 lectures faites (le coût), jamais la normale
+        const nonConf = async (nom, mode12, essais, lecture, issueAttendue, raisonRe) => {
+            const x = await lire12(mode12, essais, lecture);
+            H.v(`12c. ${nom} : la question d'avant, crédit réservé, journal « ${issueAttendue} », jamais la normale`, [x.statut, x.id === LA || x.id === SA, x.lt && x.lt.issue, raisonRe ? raisonRe.test(x.lt.raison) : true, JSON.stringify(await livre(x.s))], ['a-trancher', false, issueAttendue, true, JSON.stringify(RESERVE)]);
+            return x;
+        };
+        const avantSansProduit = LT.compteurs().marquesSansProduit;
+        const sousEns = await nonConf('paire staff+prerelease, mais seulement [staff] lu deux fois (un SOUS-ensemble : le produit staff n\'existe pas dans la paire)', 'paire-staff-prerelease', [M('staff'), M('staff')], 'marques', 'non-confirmee', /ne sont pas celles du produit/);
+        H.v('   … la trace garde ce qui a été lu', [sousEns.lt.marques, sousEns.lt.accord, sousEns.lt.type], [['staff'], true, 'staff+prerelease']);
+        await nonConf('paire league, mais [staff] lu deux fois (une AUTRE marque)', 'paire-league', [M('staff'), M('staff')], 'marques', 'non-confirmee', /ne sont pas celles du produit/);
+        await nonConf('paire league, mais [league, place-2] lu deux fois (un SUR-ensemble)', 'paire-league', [M('league', 'place-2'), M('league', 'place-2')], 'marques', 'non-confirmee', /ne sont pas celles du produit/);
+        H.v('   … les trois lectures « aucun produit de la paire ne porte ces marques » sont COMPTÉES (marquesSansProduit +3) ; les autres refus (rien lu, autre, désaccord) ne le sont pas', LT.compteurs().marquesSansProduit - avantSansProduit, 3);
+        await nonConf('paire league, [league] puis [league, place-2] (désaccord)', 'paire-league', [M('league'), M('league', 'place-2')], 'desaccord', 'non-confirmee', null);
+        await nonConf('paire league, AUCUNE marque lue deux fois (un tampon manqué n\'est pas un tampon absent)', 'paire-league', [M(), M()], 'aucune', 'non-confirmee', null);
+        await nonConf('paire league, une marque HORS liste (`autre`) lue', 'paire-league', [AUT, AUT], 'autre', 'non-confirmee', null);
+        await nonConf('paire league, `autre` d\'un côté et [league] de l\'autre', 'paire-league', [AUT, M('league')], 'desaccord', 'non-confirmee', null);
+        await nonConf('paire league, incertain deux fois', 'paire-league', ['incertain', 'incertain'], 'incertain', 'non-confirmee', null);
+        const faux = await nonConf('paire league : le FOURNISSEUR annonce « marques » mais ses essais ne le disent pas (le module décide, jamais le fournisseur)', 'paire-league', [M('league'), AUT], 'marques', 'non-confirmee', null);
+        H.v('   … le fournisseur n\'est consulté qu\'UNE fois par scan (le coût de ses deux essais est compté par le plafond de dépense, pas ici)', faux.appels, 1);
+        // le fournisseur annonce [staff] (modele.lecture 'oui') mais ses essais sont [league] : la route ne se fie qu'aux essais
+        Object.assign(modele, { lecture: 'oui', essais: [M('league'), M('league')], panne: false, sansImage: false }); modele.appels.length = 0;
+        const trompe = await scan(svOn, 'paire-league');
+        H.v('12d. le fournisseur annonce des marques ([staff]) que ses essais ([league]) ne portent pas : c\'est l\'ensemble DES ESSAIS qui compte (LB, league), pas celui que le fournisseur annonce', [trompe.c0.statut, trompe.c0.carte && trompe.c0.carte.idProduct], ['identifiee', LB]);
+        // la paire STAFF d'avant n'a pas changé : [staff] lu deux fois affirme PB ; [staff, prerelease] sur la paire staff : la question
+        const staffPlus = await lire12('paire', [M('staff', 'prerelease'), M('staff', 'prerelease')]);
+        H.v('12e. la paire staff/normale d\'avant : [staff, prerelease] lu deux fois n\'affirme PAS le produit staff (un autre ensemble) ; [staff] l\'affirme toujours', [staffPlus.statut, staffPlus.id === PB, staffPlus.lt && staffPlus.lt.issue, (await lire12('paire', [M('staff'), M('staff')])).id], ['a-trancher', false, 'non-confirmee', PB]);
+        Object.assign(modele, { lecture: 'oui', essais: ['oui', 'oui'], panne: false, sansImage: false });
     }
 
     // ── 11. le contrat : rien de neuf pour le client que l'issue (une affirmation de plus) et la mention fermée de la règle 2

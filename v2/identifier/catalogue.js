@@ -13,6 +13,7 @@ const { VARIANTES } = require('./produit');
 const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
 const { versionDe } = require('./fiabilite-prix');
 const { creerIndexFamilles } = require('./designation');
+const MT = require('./marques-tampon');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -107,11 +108,14 @@ function creerCatalogue(opts = {}) {
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
+                marques: MT.marquesProuvees(v.variante),                         // LOT TAMPONS (ajout additif du contrat) : les marques PROUVÉES du produit (variante de l'archive), [] pour la normale, null sinon
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
                 prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
                 // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
                 // version tamponnée : `prixMelangeTampon`, posé par le catalogue). Lus sur la ligne du produit, par le chemin qui sert déjà l'identification ; === true seulement.
-                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true,
+                // LOT TAMPONS (B, tour 1) : la colonne PROPRE de l'ARCHIVE (cartes_produits.prixMelangeTampon, lue par idProduct : le produit a une entrée d'archive ou non) OU l'ancien champ de numeros_cartes :
+                // une SOURCE qui dit « vrai » suffit, aucune ne dit « faux » pour l'autre
+                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true || (typeof vis.prixMelange === 'function' && vis.prixMelange(id) === true),
                 lienCardmarket: texte(v.lien), impressions
             });
         }
@@ -141,7 +145,8 @@ function creerCatalogue(opts = {}) {
         for (const ligne of table.values())
             ligne.impressions = ligne.impressions.map(i => {
                 const d = deja.get(i.idProduct) || autres.get(i.idProduct);
-                return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: false, nonLu: true });
+                // LOT TAMPONS (B) : `i.prixMelangeTampon` vient de l'archive (visuels.js) ; une impression non lue garde SA marque d'archive (une preuve), jamais un « faux » inventé
+                return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true || i.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: i.prixMelangeTampon === true, nonLu: true });
             });
     }
     return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente };

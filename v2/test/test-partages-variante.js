@@ -125,17 +125,17 @@ const muet = f => { const w = console.warn; console.warn = () => { }; try { retu
     const memeFiche = (a, c) => v.memeFiche(a, c);
     const pb = (ids, entree = id => v.entree(id), mf = memeFiche) => { const x = LT.paireSeparee({ ids, entree, memeFiche: mf }); return x.ok ? [x.type, x.special, x.normale] : x.motif; };
     H.v('4a. (b) la paire Staff sans liste, même visuel, même fiche : staff = 5002, normale = 5001, quel que soit l\'ordre', [pb([5001, 5002]), pb([5002, 5001])], [['staff', 5002, 5001], ['staff', 5002, 5001]]);
-    H.v('4b. (b) la paire Jumbo : rien (un jumbo reste une question)', pb([5011, 5012]), 'les variantes ne sont pas une paire staff/normale');
+    H.v('4b. (b) la paire Jumbo : rien (un jumbo reste une question)', pb([5011, 5012]), 'les variantes ne sont pas une paire marque/normale');
     H.v('4c. (b) même visuel mais fiches différentes : rien', pb([5021, 5022]), 'les deux produits ne sont pas de la même fiche');
     H.v('4d. (b) même fiche mais visuels différents : rien', pb([5031, 5032]), 'les deux produits ne partagent pas le même visuel');
-    H.v('4e. (b) deux staff : rien', pb([5041, 5042]), 'les variantes ne sont pas une paire staff/normale');
+    H.v('4e. (b) deux staff : rien', pb([5041, 5042]), 'les variantes ne sont pas une paire marque/normale');
     H.v('4f. (b) sans fournisseur de fiche (memeFiche absent, ou qui lève) : rien — jamais devinée', [pb([5001, 5002], id => v.entree(id), null), pb([5001, 5002], id => v.entree(id), () => { throw new Error('boum'); })], ['la fiche commune n\'est pas connue', 'les deux produits ne sont pas de la même fiche']);
     const gardes = { entree: id => v.entree(id), ids: [5001, 5002], memeFiche };
     const entreesAvec = (f) => id => { const x = v.entree(id); return x && f(id, x); };
     const forme = (f, ids = [5001, 5002]) => { const x = LT.paireSeparee({ ids, entree: entreesAvec(f), memeFiche }); return x.ok ? 'OK' : x.motif; };
     H.v('4g. (b) une liste d\'un seul côté (forme mêlée) : rien', forme((id, x) => (id === 5001 ? { ...x, produitsPartages: [5001, 5002] } : x)), 'la liste de partage ne nomme pas exactement la paire');
     H.v('4h. (b) un côté `true`, ou `null` : rien', [forme((id, x) => (id === 5001 ? { ...x, partageeTamponNonSepare: true } : x)), forme((id, x) => (id === 5002 ? { ...x, partageeTamponNonSepare: null } : x))], ['la paire n\'est pas marquée séparée', 'la paire n\'est pas marquée séparée']);
-    H.v('4i. (b) un partage holo/non-holo en plus, ou aucun « Staff » dans tamponNonRepresente : rien', [forme((id, x) => ({ ...x, partageeHoloNonHolo: true })), forme((id, x) => ({ ...x, tamponNonRepresente: null }))], ['un partage holo / non-holo se mêle à la paire', 'l\'archive ne dit pas que le tampon Staff n\'est pas représenté']);
+    H.v('4i. (b) un partage holo/non-holo en plus, ou aucun « Staff » dans tamponNonRepresente : rien', [forme((id, x) => ({ ...x, partageeHoloNonHolo: true })), forme((id, x) => ({ ...x, tamponNonRepresente: null }))], ['un partage holo / non-holo se mêle à la paire', 'l\'archive ne dit pas quel tampon n\'est pas représenté']);
     H.v('4j. (b) la question n\'est pas exactement la paire (3 candidats, 1, doublon) : rien', [pb([5001, 5002, 5100]), pb([5001]), pb([5001, 5001])], ['la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire']);
     H.v('4k. (a) la forme d\'AVANT (listes = la paire) se déclenche toujours, sans fournisseur de fiche', LT.paireSeparee({ ids: [11, 12], entree: id => ({ 11: { partageeHoloNonHolo: null, partageeTamponNonSepare: false, produitsPartages: [11, 12], tamponNonRepresente: 'Staff', variante: 'normale' },
         12: { partageeHoloNonHolo: null, partageeTamponNonSepare: false, produitsPartages: [11, 12], tamponNonRepresente: 'Staff', variante: 'staff' } })[id] || null }).ok, true);
@@ -145,7 +145,7 @@ const muet = f => { const w = console.warn; console.warn = () => { }; try { retu
     const tous = () => true;
     const pp = (ea, eb) => { const r = PV.pairePar(ea, eb, tous); return r.ok ? [r.special, r.normale, r.variante] : r.motif; };
     const f1 = (ea, eb) => { const x = LT.paireSeparee({ ids: [1, 2], entree: id => (id === 1 ? ea : eb), memeFiche: tous }); return x.ok ? [x.special, x.normale] : x.motif; };
-    const MV = 'les variantes ne sont pas une paire staff|jumbo/normale', MF1 = 'les variantes ne sont pas une paire staff/normale';
+    const MV = 'les variantes ne sont pas une paire staff|jumbo/normale', MF1 = 'les variantes ne sont pas une paire marque/normale';
     H.v('4n. pairePar : staff/normale et jumbo/normale sont des paires (le special est nomme)', [pp(ent(1, 'staff'), ent(2, 'normale')), pp(ent(1, 'normale'), ent(2, 'jumbo'))], [[1, 2, 'staff'], [2, 1, 'jumbo']]);
     H.v('4o. pairePar : staff + jumbo, jumbo + staff, deux jumbo, deux staff, deux normales : jamais une paire', [pp(ent(1, 'staff'), ent(2, 'jumbo')), pp(ent(1, 'jumbo'), ent(2, 'staff')), pp(ent(1, 'jumbo'), ent(2, 'jumbo')), pp(ent(1, 'staff'), ent(2, 'staff')), pp(ent(1, 'normale'), ent(2, 'normale'))], [MV, MV, MV, MV, MV]);
     H.v('4p. F1 (paireSeparee) : staff + jumbo, jumbo + staff et deux jumbo ne declenchent rien', [f1(ent(1, 'staff'), ent(2, 'jumbo')), f1(ent(1, 'jumbo'), ent(2, 'staff')), f1(ent(1, 'jumbo'), ent(2, 'jumbo'))], [MF1, MF1, MF1]);
@@ -161,7 +161,7 @@ const muet = f => { const w = console.warn; console.warn = () => { }; try { retu
     const lignesProd = new Map([5001, 5002, 5011, 5012, 5021, 5022].map(id => [id, { idProduct: id }]));
     const consulter = async (ids, version) => {
         LT.reinitialiser(); let appels = 0;
-        const res = await consulterLectureTampon({ deps: { lectureTampon: async () => { appels++; return { lecture: 'oui', essais: ['oui', 'oui'], echec: false, sansImage: false }; } }, cfg, entree: { empreintes: { entrees: [{ carte: CARTE }] } }, scanId: `s${ids.join('')}`,
+        const res = await consulterLectureTampon({ deps: { lectureTampon: async () => { appels++; return { lecture: 'marques', marques: ['staff'], essais: [{ marques: ['staff'] }, { marques: ['staff'] }], echec: false, sansImage: false }; } }, cfg, entree: { empreintes: { entrees: [{ carte: CARTE }] } }, scanId: `s${ids.join('')}`,
             resultat: { issue: 'question', analyse: { cartes: [{ candidats: ids.map(idProduct => ({ idProduct })) }] } }, corpsChaine: {}, produits: lignesProd, version, affirmer: id => ({ issue: 'affirmee', id }), avecBorne: fn => fn(), journal: () => { } });
         return [res && res.resultat ? res.resultat.id : (res ? res.trace : null), appels];
     };

@@ -3681,6 +3681,34 @@
             ],
             "description": "AJOUT FACULTATIF (lot LANGUE-DECISIVE, contrat 7a) : la langue de CETTE impression, en code fermé minuscule (les quinze langues de Cardmarket), ou null quand elle n'est pas connue — jamais devinée (un tirage international regroupe plusieurs langues : null). `Produit.langue` ne change pas."
           },
+          "marques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "prerelease",
+                "league",
+                "championship",
+                "toys-r-us",
+                "gamestop",
+                "kfc",
+                "indomilk",
+                "professor",
+                "cosmo",
+                "snowflake",
+                "play-pokemon",
+                "place-1",
+                "place-2",
+                "place-3",
+                "place-4"
+              ]
+            },
+            "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques de CETTE impression, d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`) ; `[]` = prouvée sans tampon de la liste ; null = on ne sait pas. `variante` ne change pas."
+          },
           "set": {
             "type": "object",
             "properties": {
@@ -3772,6 +3800,34 @@
               null
             ],
             "description": "null = on ne sait pas (jamais « normale » deviné)."
+          },
+          "marques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "prerelease",
+                "league",
+                "championship",
+                "toys-r-us",
+                "gamestop",
+                "kfc",
+                "indomilk",
+                "professor",
+                "cosmo",
+                "snowflake",
+                "play-pokemon",
+                "place-1",
+                "place-2",
+                "place-3",
+                "place-4"
+              ]
+            },
+            "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques du produit (tampons, logos d'événement ou d'enseigne), d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`, `[\"league\",\"place-2\"]`) ; `[]` = prouvé sans tampon de la liste (variante `normale` prouvée) ; null = on ne sait pas. `variante` ne change PAS (son énumération est lue par l'extension et le site) : lire `marques` pour les tampons."
           },
           "version": {
             "type": [
