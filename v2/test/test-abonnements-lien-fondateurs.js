@@ -31,6 +31,8 @@ try {
     refuse('code trop long', { code: 'X'.repeat(65), site: 'https://rat-market.fr', dossier });
     refuse('site qui n\'est pas https://hôte', { code, site: 'http://rat-market.fr', dossier });
     refuse('site avec un chemin', { code, site: 'https://rat-market.fr/fr', dossier });
+    refuse('code de 11 caractères (le minimum est 12)', { code: 'ONZE-CAR-11', site: 'https://rat-market.fr', dossier });
+    H.v('   un code de 12 caractères est accepté', ecrireLien({ code: 'DOUZE-CAR-12', site: 'https://rat-market.fr', dossier }).octets > 0, true);
     refuse('dossier inexistant (jamais créé)', { code, site: 'https://rat-market.fr', dossier: path.join(dossier, 'absent') });
     refuse('dossier qui est un fichier', { code, site: 'https://rat-market.fr', dossier: r.chemin });
     H.v('   et le dossier inexistant n\'a pas été créé', fs.existsSync(path.join(dossier, 'absent')), false);

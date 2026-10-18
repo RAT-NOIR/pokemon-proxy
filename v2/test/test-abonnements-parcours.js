@@ -16,8 +16,8 @@ const Carte = require('../abonnements/carte');
         let e = null; try { analyserArguments(mauvais); } catch (x) { e = x.message; }
         H.v(`   argument refusé : ${mauvais.join(' ')}`, Boolean(e), true);
     }
-    H.v('onze rôles de comptes, huit scénarios (dont essaiSansCarte et essaiCarteAjoutee, avec leurs rôles sanscarte et carteajoutee)', [ROLES.length, SCENARIOS.length, ROLES.includes('sanscarte'), ROLES.includes('carteajoutee'), SCENARIOS.includes('essaiSansCarte'), SCENARIOS.includes('essaiCarteAjoutee')], [11, 8, true, true, true, true]);
-    H.v('les rôles exigés suivent les scénarios joués (table fermée) : un seul scénario n\'exige que ses comptes', [rolesRequis(['essaiSansCarte']), rolesRequis(['parrainage']).sort(), rolesRequis(null).length], [['sanscarte'], ['filleul', 'parrain'], 11]);
+    H.v('treize rôles de comptes, neuf scénarios (dont essaiSansCarte, essaiCarteAjoutee et essaiClosInstallation, avec leurs rôles sanscarte, carteajoutee, servi et clos)', [ROLES.length, SCENARIOS.length, ROLES.includes('sanscarte'), ROLES.includes('carteajoutee'), ROLES.includes('servi'), ROLES.includes('clos'), SCENARIOS.includes('essaiClosInstallation')], [13, 9, true, true, true, true, true]);
+    H.v('les rôles exigés suivent les scénarios joués (table fermée) : un seul scénario n\'exige que ses comptes', [rolesRequis(['essaiSansCarte']), rolesRequis(['parrainage']).sort(), rolesRequis(null).length], [['sanscarte'], ['filleul', 'parrain'], 13]);
 
     await H.ouvrirBac('test-abonnements-parcours.js'); await M.creerIndex();
     // `attendre` du banc : la lecture de la carte pendant l'essai est mise en cache 30 s par le serveur (carte.js) ; le banc n'attend pas pour de vrai, il VIDE donc ce cache à chaque attente
@@ -25,12 +25,13 @@ const Carte = require('../abonnements/carte');
         faux = faux || creerFauxStripe({ clientsParHorloge: 3 }); Cl.brancher(faux); A.semerPrix(faux); Carte.vider();       // la limite de Stripe : 3 clients par horloge
         // un faux Stripe neuf repart de cus_000001 et evt_000001 : les clients des passages précédents ne doivent pas entrer en collision (index unique), ni leurs événements passer pour des doublons du registre (le registre de production, lui, n'est jamais purgé)
         await require('../db').col('comptes').updateMany({}, { $set: { stripeClient: null } }); for (const c of ['abo_evenements', 'abo_places', 'abo_essais', 'abo_primes']) await require('../db').col(c).deleteMany({});
-        const srv = await A.serveur(A.cfgAbo({ V2_FONDATEURS_PLACES: '2', ...cfgSurcharge }));
+        const srv = await A.serveur(A.cfgAbo({ V2_FONDATEURS_PLACES: '2', ...cfgSurcharge }), [require('../transport/monter'), require('../installations/monter'), require('../comptes/monter'), require('../argent/monter')]);       // + installations et comptes : le scénario de clôture crée et lie une installation
         const file = []; faux.surEvenement = e => file.push(e);
         const livre = async () => { while (file.length) { const e = file.shift(); if (rendreCassee && rendreCassee(e)) continue; await A.livrer(srv.url, e); } };
         const comptes = {}, cookies = {};
         for (const r of roles) { const c = await A.compteConnecte(); comptes[r] = { id: String(c.id) }; cookies[r] = c.cookie; }
-        const api = async (role, methode, chemin, corps) => { const x = await H.appel(srv.url, chemin, { methode, corps, entetes: { cookie: cookies[role], ...(methode === 'POST' ? A.SITE : {}) } }); return { statut: x.statut, json: x.json }; };
+        let nIp = 0;      // une adresse par appel (le banc rejoue plusieurs parcours : la création d'installation est limitée par adresse et par jour)
+        const api = async (role, methode, chemin, corps, entetes = {}) => { nIp++; const x = await H.appel(srv.url, chemin, { methode, corps, entetes: { ...(role ? { cookie: cookies[role] } : {}), 'x-forwarded-for': `10.${(Date.now() >> 8) & 255}.${Math.floor(nIp / 250) % 250}.${nIp % 250 + 1}`, ...(methode === 'POST' ? A.SITE : {}), ...entetes } }); return { statut: x.statut, json: x.json }; };
         const trace = []; const traces = m => trace.push(m);
         const p = fabrique({ stripe: faux, api, comptes, prix: A.PRIX, attendre: async () => { Carte.vider(); await livre(); }, trace: traces, delaiS: 6, pasS: 3, places, codeFondateurs: A.CODE_FONDATEURS });
         if (avant) await avant(comptes);

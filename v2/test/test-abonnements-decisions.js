@@ -222,15 +222,16 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
         return compteMail(`manuel${n()}@exemple.fr`, { stripeClient: cu.id, abonnement: { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu, stripe: { sid: `sub_${n()}`, statut: 'active', offre: 'pro', periode: 'mois', version: 1, jusquAu, resiliation: false } } });
     };
     const insererPrimes = async (parrain, k, etat = 'a-appliquer') => { const ids = []; for (let i = 0; i < k; i++) { const id = new ObjectId(); ids.push(id); await db.col('abo_primes').insertOne({ _id: id, parrainId: parrain.id, etat, creeLe: new Date() }); } return ids; };
-    const R = await creerParrainManuel(), T0 = new Date('2027-03-10T12:00:00Z');
+    // T0 RELATIF (400 jours avant l'horloge réelle, arrondi à la seconde) et l'heure de décision INJECTÉE : le banc ne dépend plus du calendrier (une date fixe cassait le banc un an plus tard)
+    const R = await creerParrainManuel(), T0 = new Date(Math.floor((Date.now() - 400 * JOUR * 1000) / 1000) * 1000);
     const idsR = await insererPrimes(R, 13);
-    const resR = await Promise.all(idsR.map(id => Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id, maintenant: T0 })));
+    const resR = await Promise.all(idsR.map(id => Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id, maintenant: T0, heure: T0 })));
     const apresR = await db.col('abo_primes').find({ parrainId: R.id }).toArray();
     H.v('13 primes appliquées EN MÊME TEMPS : exactement 12 appliquées, 1 refusée (plafond-annuel), 12 avoirs', [apresR.filter(p => p.etat === 'applique').length, apresR.filter(p => p.etat === 'refusee' && p.raison === 'plafond-annuel').length, (faux.E.customers.get(R.compte.stripeClient).transactions || []).length], [12, 1, 12]);
     // la fenêtre glissante, à la seconde : 12 primes appliquées à T0 (insérées telles quelles), puis des filleuls plus tard
     const Q = await creerParrainManuel();
     for (let i = 0; i < 12; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q.id, etat: 'applique', creeLe: T0, appliqueLe: T0, montant: 499 });
-    const tard = async (jours, s = 0) => { const [id] = await insererPrimes(Q, 1); const r = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id, maintenant: new Date(T0.getTime() + jours * JOUR * 1000 + s * 1000) }); return [r.etat, (await db.col('abo_primes').findOne({ _id: id })).etat]; };
+    const tard = async (jours, s = 0) => { const [id] = await insererPrimes(Q, 1); const t = new Date(T0.getTime() + jours * JOUR * 1000 + s * 1000); const r = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id, maintenant: t, heure: t }); return [r.etat, (await db.col('abo_primes').findOne({ _id: id })).etat]; };
     H.v('à T0 + 364 jours : toujours 12 mois dans la fenêtre → refusée', await tard(364), ['ignore', 'refusee']);
     H.v('   à T0 + 365 jours − 1 s : encore refusée', await tard(365, -1), ['ignore', 'refusee']);
     H.v('   à T0 + 365 jours : les 12 premiers sortent de la fenêtre, la place se LIBÈRE → appliquée', await tard(365), ['applique', 'applique']);
@@ -363,6 +364,32 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     H.v('R5 : l\'avoir de la 13e prime existe DÉJÀ chez Stripe (reprise après panne) : la base dit « applique », jamais « refusee », et il n\'y a toujours qu\'UN avoir', [r13.etat, (await db.col('abo_primes').findOne({ _id: id13 })).etat, (faux.E.customers.get(Q5.compte.stripeClient).transactions || []).length], ['applique', 'applique', 1]);
     const [id14] = await insererPrimes(Q5, 1);
     H.v('   et cet avoir compte dans le plafond : la 14e est refusée', [(await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id14, maintenant: new Date() })).etat, (await db.col('abo_primes').findOne({ _id: id14 })).etat], ['ignore', 'refusee']);
+    // I1 (relecture 2) : une prime voisine dont l'avoir est DÉJÀ chez Stripe (base : a-appliquer) compte dans le plafond avant qu'une autre soit décidée
+    const Q7 = await creerParrainManuel();
+    for (let i = 0; i < 11; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q7.id, etat: 'applique', creeLe: new Date(), appliqueLe: new Date(), montant: 499 });
+    const [idA7, idB7] = await insererPrimes(Q7, 2);
+    await faux.customers.createBalanceTransaction(Q7.compte.stripeClient, { amount: -499, currency: 'eur', description: 'x', metadata: { rm_prime: String(idA7), rm_parrain: String(Q7.id) } });
+    const rB7 = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: idB7, maintenant: new Date() });
+    await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: idA7, maintenant: new Date() });
+    H.v('S1 : 11 appliquées, A (avoir déjà chez Stripe, base a-appliquer) et B décidée AVANT la reprise de A : A est comptée, B refusée, jamais 13', [rB7.etat, (await db.col('abo_primes').findOne({ _id: idB7 })).etat, (await db.col('abo_primes').findOne({ _id: idA7 })).etat, await db.col('abo_primes').countDocuments({ parrainId: Q7.id, etat: 'applique' }), (faux.E.customers.get(Q7.compte.stripeClient).transactions || []).length], ['ignore', 'refusee', 'applique', 12, 1]);
+    // la lecture Stripe en panne : les primes voisines comptent COMME consommées (jamais un « je ne sais pas » ne franchit 12), la prime reste en attente et la reprise rejoue
+    const Q8 = await creerParrainManuel();
+    for (let i = 0; i < 11; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q8.id, etat: 'applique', creeLe: new Date(), appliqueLe: new Date(), montant: 499 });
+    const [, idB8] = await insererPrimes(Q8, 2);
+    faux.panneSur = 'customers.listBalanceTransactions';
+    const rPanne8 = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: idB8, maintenant: new Date() });
+    faux.panneSur = null;
+    H.v('lecture Stripe EN PANNE, 11 appliquées + 1 voisine en attente : la nouvelle n\'est PAS créditée (jamais 13), elle reste en attente pour la reprise, aucun avoir de plus', [rPanne8.etat, rPanne8.raison, (await db.col('abo_primes').findOne({ _id: idB8 })).etat, await db.col('abo_primes').countDocuments({ parrainId: Q8.id, etat: 'applique' }), (faux.E.customers.get(Q8.compte.stripeClient).transactions || []).length], ['ignore', 'lecture-stripe-impossible', 'a-appliquer', 11, 0]);
+    await Pr.reprendre({ stripe: faux, cfgAbo, parrainId: Q8.id, maintenant: new Date() });
+    H.v('   la reprise (Stripe revenu) : exactement 12 appliquées en tout, une seule des deux refusée', [await db.col('abo_primes').countDocuments({ parrainId: Q8.id, etat: 'applique' }), await db.col('abo_primes').countDocuments({ parrainId: Q8.id, etat: 'refusee' })], [12, 1]);
+    // M2 (a) : sans configuration armée, la confirmation de l'essai LÈVE (jamais une confirmation sans les contrôles de la boîte et des installations)
+    Essai.armer(null);
+    let leveNonArmee = null; try { await Essai.confirmer({ _id: new ObjectId(), emailCle: 'x@exemple.fr' }, new Date()); } catch (e) { leveNonArmee = e.code; }
+    Essai.armer(cfg);
+    H.v('M2a : sans configuration armée, confirmer LÈVE avec un motif nommé (pas de repli silencieux)', leveNonArmee, 'CONFIG_ESSAI_NON_ARMEE');
+    // M5 : le code Fondateurs exige 12 caractères (le code de banc en a plus)
+    const cOnze = A.cfgAbo({ V2_FONDATEURS_CODE: 'ONZE-CAR-11' }), cDouze = A.cfgAbo({ V2_FONDATEURS_CODE: 'DOUZE-CAR-12' });
+    H.v('M5 : un code de 11 caractères est refusé (variable fausse, offre fermée), un de 12 est accepté', [cOnze.abonnements.invalides.includes('V2_FONDATEURS_CODE'), cOnze.abonnements.fondateurs.ouvert, cDouze.abonnements.invalides.includes('V2_FONDATEURS_CODE'), cDouze.abonnements.fondateurs.ouvert], [true, false, false, true]);
     // les mutants de la relecture : carteDe sur une clé absente, le verrou d'un autre, un compte sans emailCle
     H.v('carteDe : la clé default_payment_method ABSENTE de l\'abonnement = on ne sait pas (null), jamais « sans carte »', Carte.carteDe({ customer: { invoice_settings: { default_payment_method: null } } }), null);
     {

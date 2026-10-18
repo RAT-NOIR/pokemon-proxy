@@ -39,19 +39,20 @@ async function ouvrir({ stripe, cfgAbo, filleul, parrainId, factureId, maintenan
     return appliquer({ stripe, cfgAbo, filleulId: filleul._id, maintenant });
 }
 async function attente(filleulId, etat) { await col('abo_primes').updateOne({ _id: filleulId, etat: { $in: ATTENTES } }, { $set: { etat, majLe: new Date() } }); return { etat: 'en-attente', raison: etat }; }
-/** L'avoir de ce filleul est-il DÉJÀ au solde du client chez Stripe ? (lecture des transactions, par la métadonnée). */
-async function avoirDejaPose(stripe, clientId, filleulId) {
+/** Les avoirs de primes DÉJÀ au solde du client chez Stripe : Map (filleul → montant en centimes), lue par la métadonnée `rm_prime`. LÈVE si Stripe ne répond pas (jamais un « je ne sais pas » pris pour « aucun »). */
+async function avoirsPoses(stripe, clientId) {
+    const poses = new Map();
     for (let page = 0, apres = null; page < 20; page++) {
         const r = await stripe.customers.listBalanceTransactions(clientId, { limit: 100, ...(apres ? { starting_after: apres } : {}) });
         const liste = (r && r.data) || [];
-        if (liste.some(t => t && t.metadata && t.metadata.rm_prime === String(filleulId))) return true;
-        if (!r || !r.has_more || !liste.length) return false;
+        for (const t of liste) if (t && t.metadata && typeof t.metadata.rm_prime === 'string') poses.set(t.metadata.rm_prime, Math.abs(Number(t.amount) || 0));
+        if (!r || !r.has_more || !liste.length) return poses;
         apres = liste[liste.length - 1].id;
     }
-    return false;
+    return poses;
 }
-/** Pose l'avoir de la prime d'un filleul au solde du client du parrain, si c'est possible MAINTENANT. */
-async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date() }) {
+/** Pose l'avoir de la prime d'un filleul au solde du client du parrain, si c'est possible MAINTENANT. `heure` : l'heure de la décision (injectable pour les bancs ; l'horloge par défaut). */
+async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), heure = new Date() }) {
     const prime = await col('abo_primes').findOne({ _id: filleulId });
     if (!prime || !ATTENTES.includes(prime.etat)) return { etat: 'ignore', raison: prime ? prime.etat : 'absente' };
     const parrain = await col('comptes').findOne({ _id: prime.parrainId });
@@ -77,9 +78,19 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date() })
         if (!fraiche || !ATTENTES.includes(fraiche.etat)) return { etat: 'ignore', raison: fraiche ? fraiche.etat : 'absente' };
         // L'HEURE DE LA DÉCISION, pas la date de l'événement : un événement en retard (reprise de Stripe après un 500) porte une date ancienne, mais il est décidé MAINTENANT ; les avoirs déjà appliqués
         // (même datés de « plus tard » que lui) comptent tous. (`maintenant` plus tardif que l'horloge : les bancs, qui fixent la date de décision.)
-        const decision = new Date(Math.max(maintenant.getTime(), Date.now()));
+        const decision = new Date(Math.max(maintenant.getTime(), heure.getTime()));
         // L'ÉTAT RÉEL chez Stripe d'abord : un avoir DÉJÀ posé (panne entre l'avoir et l'écriture « applique », reprise) reste « applique » et compte dans le plafond — la base ne dit jamais « refusee » pour un avoir qui existe.
-        const dejaPose = await avoirDejaPose(stripe, parrain.stripeClient, filleulId);
+        // Et pas seulement pour CETTE prime : une prime VOISINE du même parrain (encore « a-appliquer » en base, avoir déjà chez Stripe) est passée en « applique » AVANT de compter, sinon une prime décidée avant sa
+        // reprise franchirait 12. Si Stripe ne répond pas, ces voisines comptent COMME consommées : une décision ne s'appuie jamais sur un « je ne sais pas » pour franchir 12 (la prime reste en attente, la reprise rejouera).
+        const voisines = await col('abo_primes').find({ parrainId: parrain._id, _id: { $ne: filleulId }, etat: { $in: ATTENTES } }).toArray();
+        let poses = null;
+        try { poses = await avoirsPoses(stripe, parrain.stripeClient); } catch (e) { signaler(`primes : lecture des avoirs chez Stripe impossible (${(e && (e.code || e.type || e.name)) || 'erreur'}) — parrain ${String(parrain._id)}`); }
+        if (!poses) {
+            if ((await moisDansLaFenetre(parrain._id, filleulId, decision)) + voisines.length + 1 > O.PLAFOND_PARRAINAGE_MOIS) return { etat: 'ignore', raison: 'lecture-stripe-impossible' };
+            throw Object.assign(new Error('primes : lecture des avoirs impossible'), { code: 'LECTURE_AVOIRS' });         // sous le plafond mais impossible de savoir si l'avoir existe : l'événement échoue, Stripe le rejoue
+        }
+        for (const v of voisines) if (poses.has(String(v._id))) await col('abo_primes').updateOne({ _id: v._id, etat: { $in: ATTENTES } }, { $set: { etat: 'applique', appliqueLe: decision, montant: poses.get(String(v._id)), sid: st.sid, majLe: maintenant } });
+        const dejaPose = poses.has(String(filleulId));
         if (!dejaPose && (await moisDansLaFenetre(parrain._id, filleulId, decision)) >= O.PLAFOND_PARRAINAGE_MOIS) {
             await col('abo_primes').updateOne({ _id: filleulId, etat: { $in: ATTENTES } }, { $set: { etat: 'refusee', raison: 'plafond-annuel', majLe: maintenant } });
             signaler(`prime refusee : plafond-annuel (le parrain ${String(parrain._id)} a déjà ${O.PLAFOND_PARRAINAGE_MOIS} mois offerts sur ${O.FENETRE_PARRAINAGE_JOURS} jours ; filleul ${String(filleulId)})`);

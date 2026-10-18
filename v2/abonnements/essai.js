@@ -90,13 +90,12 @@ async function confirmerLigne(c, compteId, jours, evtDate, deuxieme = false) {
  * L'essai existe vraiment (webhook). LA RÈGLE, écrite par ce qu'elle autorise : l'essai n'est GARDÉ que si la boîte ET chaque installation du compte (liée ou l'ayant été, y compris celles liées
  * APRÈS le Checkout) sont libres ou à ce compte — alors elles deviennent définitives (rétention). Si l'une a déjà été CONFIRMÉE par un autre compte, l'essai doit être CLOS : { clore: true, detail }.
  * (Le webhook peut arriver longtemps après la réservation, qui a pu expirer et être reprise ; une installation peut avoir été liée entre le Checkout et le webhook.)
- * Sans configuration armée (bancs anciens), l'ancienne confirmation par compteId seule.
+ * Sans configuration armée : elle LÈVE (CONFIG_ESSAI_NON_ARMEE).
  */
 async function confirmer(compte, evtDate) {
-    if (!cfgApp || !cfgApp.empreinte || !cfgApp.empreinte.secret) {
-        await col(COL).updateMany({ compteId: compte._id, etat: 'reserve' }, [{ $set: { etat: 'pris', prisLe: evtDate, expireLe: { $add: [evtDate, { $multiply: [{ $ifNull: ['$dureeJours', 365] }, 86400000] }] } } }]);
-        return { clore: false };
-    }
+    // écrit par ce qu'elle AUTORISE : sans configuration armée, AUCUNE confirmation (jamais un repli sur l'ancienne confirmation par compteId, qui n'a ni les contrôles de la boîte ni ceux des installations).
+    // L'événement échoue (500), Stripe le rejoue ; un montage futur qui oublie `armer` est vu tout de suite.
+    if (!cfgApp || !cfgApp.empreinte || !cfgApp.empreinte.secret) throw Object.assign(new Error('essai : configuration non armée (secret d\'empreinte absent) — confirmation refusée'), { code: 'CONFIG_ESSAI_NON_ARMEE' });
     const jours = cfgApp.empreinte.jours;
     for (const c of await clesDe(compte, cfgApp)) {
         if (!(await confirmerLigne(c, compte._id, jours, evtDate))) {

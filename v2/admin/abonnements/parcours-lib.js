@@ -16,7 +16,7 @@ const AttentePerdue = class extends Error { };
 const ROLES_DES_SCENARIOS = Object.freeze({
     essaiPuisPaiement: Object.freeze(['essai']), paiementEchoue: Object.freeze(['echec']), resiliation: Object.freeze(['resiliation']), parrainage: Object.freeze(['parrain', 'filleul']),
     fondateurs: Object.freeze(['fond1', 'fond2', 'fond3']), routeCheckoutEtPortail: Object.freeze(['route']),
-    essaiSansCarte: Object.freeze(['sanscarte']), essaiCarteAjoutee: Object.freeze(['carteajoutee'])
+    essaiSansCarte: Object.freeze(['sanscarte']), essaiCarteAjoutee: Object.freeze(['carteajoutee']), essaiClosInstallation: Object.freeze(['servi', 'clos'])
 });
 
 function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Math.floor(Date.now() / 1000), trace = () => { }, delaiS = 90, pasS = 3, places = null, codeFondateurs = null, parcoursCgv = true }) {
@@ -58,6 +58,12 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
     async function sessionDe(role) {                                                       // la session Checkout créée par la route pour ce compte
         const l = await stripe.checkout.sessions.list({ limit: 30 });
         return l.data.filter(s => s.client_reference_id === comptes[role].id).at(-1) || null;
+    }
+    // ce que le Checkout crée pour un essai SANS carte (aucun moyen de paiement, `missing_payment_method: cancel`), sur le client de la session (sans horloge : la clôture est immédiate)
+    async function completerSansCarte(session, essaiJours) {
+        const items = await stripe.checkout.sessions.listLineItems(session.id);
+        const s = await stripe.subscriptions.create({ customer: session.customer, items: [{ price: items.data[0].price.id }], trial_period_days: essaiJours, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } }, metadata: session.metadata });
+        return s.id;
     }
     async function completerCommeLeCheckout(role, session, { essaiJours, carte = 'pm_card_visa' }) {
         const pm = await stripe.paymentMethods.attach(carte, { customer: session.customer });
@@ -184,6 +190,38 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
             const f = await stripe.invoices.list({ subscription: sid, limit: 5 });
             note('carte ajoutée, J+14 : une facture de 4,99 € payée', f.data.some(i => i.amount_paid === 499), `${f.data.length} facture(s)`);
         },
+        // LA CLÔTURE D'UN ESSAI QUI N'AURAIT PAS DÛ DÉMARRER (relecture 2, M3) : l'installation a déjà servi l'essai d'un autre compte ; le webhook clôt l'essai du second (`trial_end: now`). Le faux Stripe rend
+        // cette hypothèse vraie par construction : CE scénario la prouve chez Stripe Test — abonnement `canceled`, 0 facture payée, statut `termine`. Il ne se joue qu'avec le vrai Stripe Test (par le coordinateur).
+        async essaiClosInstallation() {
+            const bearer = j => ({ authorization: `Bearer ${j}` });
+            const inst = await api(null, 'POST', '/api/installation', {});
+            const jeton0 = inst.json && inst.json.jetonInstallation;
+            if (!note('clôture : une installation anonyme est créée', inst.statut === 201 && Boolean(jeton0), `HTTP ${inst.statut}`)) return;
+            const code1 = await api('servi', 'POST', '/api/compte/code', {});
+            const lien1 = await api(null, 'POST', '/api/compte/lier', { code: code1.json && code1.json.code }, bearer(jeton0));
+            if (!note('clôture : l\'installation est liée au compte « servi »', lien1.statut === 200 && Boolean(lien1.json.jetonInstallation), `HTTP ${lien1.statut}`)) return;
+            const jeton1 = lien1.json.jetonInstallation;
+            const ck1 = await api('servi', 'POST', '/api/abonnement/checkout', { offre: 'pro', periode: 'mois' });
+            const s1 = await sessionDe('servi');
+            if (!note('clôture : le compte « servi » ouvre son Checkout avec essai', ck1.statut === 200 && Boolean(s1), `HTTP ${ck1.statut}`)) return;
+            await completerSansCarte(s1, 14);
+            await jusqua('servi', s => s.abonnement.statut === 'essai', 'essai du compte « servi »');
+            note('clôture : le premier essai (installation liée) est gardé', true);
+            const del = await api(null, 'POST', '/api/compte/delier', {}, bearer(jeton1));
+            if (!note('clôture : l\'installation est déliée', del.statut === 200, `HTTP ${del.statut}`)) return;
+            const ck2 = await api('clos', 'POST', '/api/abonnement/checkout', { offre: 'pro', periode: 'mois' });
+            const s2 = await sessionDe('clos');
+            const code2 = await api('clos', 'POST', '/api/compte/code', {});
+            const lien2 = await api(null, 'POST', '/api/compte/lier', { code: code2.json && code2.json.code }, bearer(jeton1));
+            if (!note('clôture : le second compte ouvre son Checkout, PUIS lie la même installation', ck2.statut === 200 && Boolean(s2) && lien2.statut === 200, `HTTP ${ck2.statut}/${lien2.statut}`)) return;
+            const sub2 = await completerSansCarte(s2, 14);
+            const fin = await jusqua('clos', s => s.abonnement.statut === 'termine', 'essai du second compte clos par le webhook');
+            const chez = await stripe.subscriptions.retrieve(sub2);
+            const f = await stripe.invoices.list({ subscription: sub2, limit: 5 });
+            note('clôture : chez Stripe l\'abonnement est « canceled », aucune facture payée ; côté API statut « termine », quota gratuit', chez.status === 'canceled' && f.data.every(i => !(i.amount_paid > 0)) && !fin.abonnement.actif && fin.quota.nom === 'gratuit', `Stripe ${chez.status}, ${f.data.length} facture(s)`);
+            const s1b = await statut('servi');
+            note('clôture : le premier compte garde son essai', s1b.abonnement.statut === 'essai');
+        },
         async routeCheckoutEtPortail() {
             const r = await api('route', 'POST', '/api/abonnement/checkout', { offre: 'pro', periode: 'an' });
             note('checkout Pro annuel : 200 et une adresse de paiement', r.statut === 200 && /^https:\/\//.test(r.json.url || ''), `HTTP ${r.statut}`);
@@ -201,7 +239,7 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
     };
     async function jouer({ seulement = null } = {}) {
         const noms = { essaiPuisPaiement: 'essai puis premier paiement', paiementEchoue: 'paiement échoué', resiliation: 'résiliation', parrainage: 'parrainage', fondateurs: 'fondateurs', routeCheckoutEtPortail: 'checkout et portail',
-            essaiSansCarte: 'essai sans carte', essaiCarteAjoutee: 'carte ajoutée pendant l\'essai' };
+            essaiSansCarte: 'essai sans carte', essaiCarteAjoutee: 'carte ajoutée pendant l\'essai', essaiClosInstallation: 'essai clos (installation déjà servie)' };
         const choisis = Object.keys(scenarios).filter(k => !seulement || seulement.includes(k));
         const refuses = choisis.filter(k => !Object.prototype.hasOwnProperty.call(ROLES_DES_SCENARIOS, k));
         for (const k of refuses) note(`scénario « ${k} » REFUSÉ : absent de la table des rôles (on ne devine pas les comptes qu'il consommerait)`, false);

@@ -61,8 +61,9 @@ if (require.main === module) (async () => {
     const comptes = Object.fromEntries(liste.filter(c => requis.includes(c.role)).map(c => [c.role, { id: c.id }]));
     const cookies = {};
     for (const c of liste.filter(c => requis.includes(c.role))) cookies[c.role] = await connecter(a.essai, c);
-    const api = async (role, methode, chemin, corps) => {
-        const r = await fetch(a.essai + chemin, { method: methode, headers: { cookie: cookies[role], ...(corps !== undefined ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}) }, body: corps !== undefined ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(90000) });
+    // `role` null : aucun cookie (les routes de l'extension, par jeton d'installation passé en `entetes`)
+    const api = async (role, methode, chemin, corps, entetes = {}) => {
+        const r = await fetch(a.essai + chemin, { method: methode, headers: { ...(role ? { cookie: cookies[role] } : {}), ...entetes, ...(corps !== undefined ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}) }, body: corps !== undefined ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(90000) });
         let json = null; try { json = await r.json(); } catch { /* corps non JSON */ }
         return { statut: r.status, json };
     };
