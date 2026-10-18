@@ -3,7 +3,7 @@
 // ne reçoit aucun en-tête CORS (le cors() hérité décide alors, comme aujourd'hui). Jamais '*'.
 // Monté AVANT toute route, limiteur ou gestionnaire d'erreur : les en-têtes figurent donc aussi sur les 4xx/5xx/429.
 const EXPOSE = 'Retry-After, Idempotency-Replayed';
-// INDEX-EMPREINTES : le fichier du modèle (GET /api/modele-empreinte/<sha256>, SEULEMENT si V2_EMPREINTE_EXTENSION=1) a son propre profil : l'extension y lit Content-Length / Content-Range / ETag et envoie Range, rien d'autre.
+// INDEX-EMPREINTES : le fichier du modèle (GET /api/modele-empreinte/<sha256>, SEULEMENT si V2_EMPREINTE_EXTENSION=1) a son propre profil (la route répond 302 vers R2 : seul Retry-After des refus est lisible ; Range est autorisé en entrée).
 // Les profils existants ne changent pas d'un octet.
 
 
@@ -11,7 +11,7 @@ function profils(cfg) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
     return [
-        ...(cfg.empreinteExtension === true ? [{ nom: 'extension-modele', origines: new Set(ext), credentials: false, chemins: [/^\/api\/modele-empreinte\/[0-9a-f]{64}$/], methodes: 'GET, HEAD', entetes: 'Range, If-None-Match', expose: 'Content-Length, Content-Range, ETag, Accept-Ranges, Retry-After' }] : []),
+        ...(cfg.empreinteExtension === true ? [{ nom: 'extension-modele', origines: new Set(ext), credentials: false, chemins: [/^\/api\/modele-empreinte\/[0-9a-f]{64}$/], methodes: 'GET, HEAD', entetes: 'Range, If-None-Match', expose: 'Retry-After' }] : []),
         { nom: 'extension', origines: new Set(ext), credentials: false,
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/],
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },

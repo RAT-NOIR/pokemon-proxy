@@ -40,7 +40,7 @@ async function deposer({ client, bucket, plan, journal = console.log }) {
     }
     for (const k of ['index', 'modele']) {
         const p = plan[k];
-        await client.send(new PutObjectCommand({ Bucket: bucket, Key: plan.objets[k], Body: fs.createReadStream(p.fichier), ContentLength: p.octets, ContentType: 'application/octet-stream', IfNoneMatch: '*', Metadata: { sha256: p.sha256 } }));
+        await client.send(new PutObjectCommand({ Bucket: bucket, Key: plan.objets[k], Body: fs.createReadStream(p.fichier), ContentLength: p.octets, ContentType: 'application/octet-stream', ...(k === 'modele' ? { CacheControl: 'public, max-age=31536000, immutable' } : {}), IfNoneMatch: '*', Metadata: { sha256: p.sha256 } }));
         journal(`déposé ${plan.objets[k]} (${(p.octets / 1048576).toFixed(1)} Mo)`);
     }
     const bilan = {};

@@ -92,9 +92,9 @@ function lireConfig(env = process.env) {
         if (objetModele !== undefined && objetModele !== '' && !/^[A-Za-z0-9._/-]{1,200}$/.test(objetModele)) { variableFautive = 'V2_MODELE_EMPREINTE_OBJET'; throw new Error('forme'); };
         variableFautive = 'V2_MODELE_EMPREINTE_URL ou V2_MODELE_EMPREINTE_OCTETS';
         modeleEmpreinte = { id: id || null, sha256: sha || null, url: url('V2_MODELE_EMPREINTE_URL', env.V2_MODELE_EMPREINTE_URL, null), octets: entier('V2_MODELE_EMPREINTE_OCTETS', octets, null, 1), objet: objet || null, objetModele: objetModele || null,
-                            fichierBanc: banc ? (env.V2_EMPREINTES_BANC_FICHIER || null) : null, fichierModeleBanc: banc ? (env.V2_MODELE_EMPREINTE_FICHIER_BANC || null) : null };
+                            fichierBanc: banc ? (env.V2_EMPREINTES_BANC_FICHIER || null) : null };
     } catch (e) {
-        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, objetModele: null, fichierBanc: null, fichierModeleBanc: null };
+        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, objetModele: null, fichierBanc: null };
         const raison = variableFautive || 'configuration du modèle';
         if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
         else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
