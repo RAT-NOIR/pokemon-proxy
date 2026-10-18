@@ -63,8 +63,18 @@ function rattacherPhotos(req, deps = {}, res = null) {
         const p = req.v2 && req.v2.porteur;
         if (!demandees.length || !p || entree.photosRecues) return;
         const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
-        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) recues.push({ index: d.index, octets: x.octets, modele: x.modele }); }
-        if (recues.length) { recues.sort((a, b) => a.index - b.index); entree.photosRecues = recues; entree.imageOctets = recues[0].octets; if (res && typeof res.once === 'function') res.once('close', () => require('./photos-recues').libererPhotos(entree)); }
+        let depotMin = Infinity;
+        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) { recues.push({ index: d.index, octets: x.octets, modele: x.modele }); if (Number.isFinite(x.depotA) && x.depotA < depotMin) depotMin = x.depotA; } }
+        if (recues.length) {
+            const PR = require('./photos-recues');
+            recues.sort((a, b) => a.index - b.index); entree.photosRecues = recues; entree.imageOctets = recues[0].octets;
+            entree.photosRecuesPourCeScan = true;          // N-1 : des photos ont été reçues pour CE scan ; plus aucune étape ne retombe sur les URLs de l'annonce (imagesDeLaChaine, photo-admin), même une fois les octets libérés
+            // I-2 : LE SERVEUR tient la borne de 90 s (au plus tôt de : dépôt de la plus ancienne + 120 s, début de l'analyse + 90 s). À l'arrêt : le signal part vers les appels en cours, l'analyse finit par le chemin d'échec existant
+            // (le crédit pris est rendu) et les octets sont libérés. La fin de la réponse retire le minuteur et libère les octets.
+            const borne = PR.poserBorne(entree, m, Number.isFinite(depotMin) ? depotMin : (typeof m.maintenant === 'function' ? m.maintenant() : Date.now()));
+            entree.arret = borne;
+            if (res && typeof res.once === 'function') res.once('close', () => { borne.annuler(); PR.libererPhotos(entree); });
+        }
     } catch (e) { console.error(`❌ [v2 photos-recues] rattachement (${(e && (e.code || e.name)) || 'erreur'})`); }
 }
 
@@ -250,6 +260,7 @@ async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, co
     let appels = 0;
     const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { SL.noter('appels', v - appels); appels = v; } } };
     const abandon = new AbortController();
+    if (entree && entree.arret && entree.arret.signal) { if (entree.arret.signal.aborted) abandon.abort(); else entree.arret.signal.addEventListener('abort', () => abandon.abort(), { once: true }); }      // I-2 : la borne du scan annule aussi la seconde lecture
     let lu = null, issue = null, raison = null;
     try {
         const ms = Number.isFinite(deps.delaiSecondeMs) && deps.delaiSecondeMs > 0 ? deps.delaiSecondeMs : DELAI_SECONDE_MS;
@@ -490,7 +501,8 @@ function traiterIdentifier(cfg, deps = {}) {
             sortie = await dansUnScan(async () => {
                 const fr = fauxRes();
                 let exception = null;
-                try { await (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                if (entree.arret) reqH.signalArret = entree.arret.signal;           // I-2 : la chaîne reçoit le signal d'arrêt de la borne du scan (annule l'appel au modèle en cours)
+                try { await require('./photos-recues').avecArret(entree.arret && entree.arret.signal, (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr)); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
                 let resultat, produits = null;
                 if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 else {
@@ -588,6 +600,8 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
+                if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}) };
             });
             }
