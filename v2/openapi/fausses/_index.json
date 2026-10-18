@@ -5,6 +5,12 @@
     "schema": "ReponseAnalyse",
     "description": "Une carte identifiée, débitée (affirmee)."
   },
+  "identifiee-empreinte.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Identifiée avec le vecteur de l'extension (lot MODELE-VISUEL-API) : `empreinte: {utilisee: true, code: null}` et `regleVerdict.modeleEmpreinte` (version attendue du modèle, adresse de téléchargement `null` tant que la publication n'est pas faite)."
+  },
   "identifiee-impressions.json": {
     "route": "POST /api/identifier",
     "statut": 200,

@@ -193,6 +193,20 @@
               }
             }
           },
+          "413": {
+            "description": "Corps trop volumineux. Au-delà de 100 Ko, et de 2 400 Ko quand le serveur a V2_EMPREINTE_EXTENSION=1, une requête portant `Authorization: Bearer` ET `Content-Length` et dans le plafond par IP ; sans jeton ou sans Content-Length la limite reste 100 Ko (rendu sans lecture du corps quand le Content-Length annoncé la dépasse). Corps JSON `{ success: false, error: \"Requête illisible\" }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "enum": [ false ] },
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
           "400": {
             "description": "Entrée invalide (ENTREE).",
             "content": {
@@ -3911,6 +3925,9 @@
               "null"
             ],
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "modeleEmpreinte": {
+            "$ref": "#/components/schemas/ModeleEmpreinteServi"
           }
         },
         "required": [
@@ -3920,7 +3937,124 @@
           "tauxDate"
         ],
         "additionalProperties": false,
-        "description": "Extension seulement. `versEUR: null` ⇒ aucun verdict affiché."
+        "description": "Extension seulement. `versEUR: null` ⇒ aucun verdict affiché. `modeleEmpreinte` : AJOUT FACULTATIF (lot MODELE-VISUEL-API), présent SEULEMENT quand le serveur accepte les empreintes de l'extension (`V2_EMPREINTE_EXTENSION=1`) ET qu'il connaît une version du modèle."
+      },
+      "ModeleEmpreinteServi": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]{1,60}$",
+            "description": "L'identifiant de LA version du modèle que le serveur attend (une seule). À renvoyer tel quel dans `modeleEmpreinte.id` de la requête."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Le sha256 du fichier du modèle (poids 8 bits, ONNX) : l'extension le vérifie après le téléchargement et le renvoie dans `modeleEmpreinte.sha256`."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Où télécharger le modèle (https). `null` tant que la publication du modèle n'est pas faite : l'extension n'envoie alors AUCUN vecteur."
+          },
+          "octets": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "La taille du fichier du modèle, en octets (118 202 501 pour la première version) ; `null` si non configurée."
+          }
+        },
+        "required": [
+          "id",
+          "sha256",
+          "url",
+          "octets"
+        ],
+        "additionalProperties": false,
+        "description": "La version du modèle d'empreinte que le serveur accepte, et où la prendre. Voir CONTRAT-EMPREINTE-EXTENSION.md."
+      },
+      "ModeleEmpreinte": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]{1,60}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "sha256"
+        ],
+        "additionalProperties": false,
+        "description": "La version du modèle qui a calculé les vecteurs de la requête : l'identifiant et le sha256 reçus dans `regleVerdict.modeleEmpreinte`. Une autre version que celle du serveur ⇒ les vecteurs sont ignorés (`empreinte.code: modele-inconnu`)."
+      },
+      "EmpreinteEntree": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7,
+            "description": "L'index de la photo dans `imageUrls` (0 = la première), de 0 à 7, et inférieur au nombre d'images. Au plus UNE entrée par photo, 8 entrées au plus. Une clé inconnue dans l'entrée rejette CETTE ENTRÉE seulement (la règle visuelle se tait si c'est la photo jugée), pas l'enveloppe."
+          },
+          "vecteur": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]{683}=$",
+            "description": "256 nombres en float16 petit-boutiste (512 octets), base64 standard avec bourrage (684 caractères). Norme L2 entre 0,999 et 1,001, chaque valeur de valeur absolue <= 0,5."
+          },
+          "redressee": {
+            "type": "boolean",
+            "description": "Vrai si le vecteur est celui de la PREMIÈRE CARTE REDRESSÉE de la photo, faux (défaut) s'il est celui de la photo entière. UN seul essai par photo."
+          },
+          "carte": {
+            "type": "string",
+            "maxLength": 273068,
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+            "description": "La CARTE REDRESSÉE dont le vecteur a été tiré : un JPEG (qualité 0,92, sans métadonnées recommandé ; un EXIF éventuel est accepté, jamais conservé), EXACTEMENT 420 × 587, au plus 200 Ko = 204 800 octets de JPEG comptés après décodage du base64 (273 068 caractères base64), base64 standard. Ce sont les pixels de la garde des zones. Absente, trop lourde, d'une autre taille, ou qui n'est pas un JPEG décodable : la règle visuelle se tait pour cette photo (`empreinte.code: muette`), la requête n'est pas refusée. Seule la carte de la photo de plus petit index est lue."
+          }
+        },
+        "required": [
+          "photo",
+          "vecteur"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseEmpreinte": {
+        "type": "object",
+        "properties": {
+          "utilisee": {
+            "type": "boolean",
+            "description": "Vrai si le vecteur a été accepté et que la règle visuelle a rendu une décision (affirmation ou question) ; cela ne dit PAS qu'elle a changé la réponse."
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "modele-inconnu",
+              "invalide",
+              "indisponible",
+              "muette",
+              null
+            ],
+            "description": "Pourquoi le vecteur n'a pas servi : `modele-inconnu` (une autre version du modèle que celle du serveur, ou aucune annoncée), `invalide` (enveloppe ou vecteur refusé par la vérification), `indisponible` (index absent, délai ou panne), `muette` (vecteur valide mais la règle ne peut pas conclure). `null` si `utilisee`."
+          }
+        },
+        "required": [
+          "utilisee",
+          "code"
+        ],
+        "additionalProperties": false,
+        "description": "AJOUT FACULTATIF (lot MODELE-VISUEL-API) : présent SEULEMENT quand la requête portait `empreintes` et que le serveur les accepte (`V2_EMPREINTE_EXTENSION=1`). La réponse d'identification reste valable dans tous les cas."
       },
       "Facturation": {
         "type": "object",
@@ -4249,6 +4383,9 @@
           },
           "offre": {
             "$ref": "#/components/schemas/Offre"
+          },
+          "empreinte": {
+            "$ref": "#/components/schemas/ReponseEmpreinte"
           }
         },
         "required": [
@@ -5032,6 +5169,17 @@
           "versionExtension": {
             "type": "string",
             "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "empreintes": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/EmpreinteEntree"
+            },
+            "description": "AJOUT FACULTATIF (lot MODELE-VISUEL-API), lu SEULEMENT si le serveur l'accepte (`V2_EMPREINTE_EXTENSION=1`) : au plus UNE entrée par photo envoyée, 8 au plus. Une enveloppe ou un vecteur fautif ne refuse JAMAIS la requête : le vecteur est ignoré et la réponse le dit (`empreinte.code`)."
+          },
+          "modeleEmpreinte": {
+            "$ref": "#/components/schemas/ModeleEmpreinte"
           }
         },
         "required": [

@@ -918,6 +918,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',
         'POST /api/compte/deconnexion 401': 'aucun chemin ne rend 401 : v2/comptes/routes.js l.63-69 — la déconnexion rend 200 même sans cookie ; seul le garde de site peut refuser (403)',
         'POST /api/identifier 403': 'O3 : le 403 VERIFICATION n\'est plus atteignable — un compte non confirmé n\'est plus un porteur (v2/porteur.js : session refusée, installation liée = installation seule) ; la garde de la chaîne reste en profondeur. Le contrat OpenAPI le documente encore (aucun contrat changé par O3 hors comptes)',
+        'POST /api/identifier 413': 'MODELE-VISUEL-API tour 2 : le 413 est rendu par l\'analyseur de corps de index.js, en amont de l\'API v2 que ce banc monte seule ; il est joué sur le vrai index.js par test-corps-identifier-empreinte.js (serveurs enfants, 17 assertions)',
         'POST /api/compte/mot-de-passe-oublie 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.71-77 — un corps illisible vaut une adresse absente (202 neutre, l\'énumération d\'adresses est refusée par construction)'
     };
     const joues = new Set(reels.map(e => `${e.route} ${e.statut}`)), joues503 = new Set(gardes.map(e => `${e.route} ${e.statut}`));
