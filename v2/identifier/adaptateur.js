@@ -114,7 +114,7 @@ function parLangueDecisive(ids, idProduct, etat, ctx, corps) {
     if (r.ids.length === 1) {
         // B1 : le candidat seul passe par la MÊME garde des jumeaux que toute affirmation (groupe lu dans la colonne des jumeaux et le catalogue, jamais dans le vivier) ; sans jumeau : groupe vide ;
         // la garde ne conclut pas (colonne absente ou périmée, ligne manquante…) : groupe null, refus.
-        const gj = garde(ctx, r.ids[0]);
+        const gj = garde(ctx, r.ids[0], true);                          // une SONDE : ni compteur ni journal de la garde des jumeaux (m-2)
         const groupe = gj.action === 'affirmer' ? [] : (gj.action === 'question' || gj.action === 'nombreux') ? gj.ids.filter(i => i !== r.ids[0]) : null;
         const a = LD.affirmableSeul({ corps, id: r.ids[0], produits: ctx.produits, regles, groupe, catalogueExiste: ctx.codeNumeroExiste });
         if (!a.affirme) {
