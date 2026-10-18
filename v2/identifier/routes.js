@@ -31,7 +31,7 @@ const urlAmbigue = (u) => {
 };
 
 // PHOTOS-MULTIPLES (7d) : `photoIds: [{ index, photoId }]` (au plus 8, un par index, l'index existe dans imageUrls et va de 0 à 7) ou l'ancien `photoId` seul (= l'index 0). Pure ; ne lit PAS le magasin.
-// Un `photoId` qui n'a pas la forme de 32 hexadécimaux est `photo-id` ; toute autre forme absurde est `photo-ids`. Bien formé mais inconnu, expiré, d'un autre porteur ou servi : jugé PLUS TARD (rattacherPhotos), ignoré.
+// (C2, C3) Le `photoId` SEUL, mal formé, est `photo-id` ; DANS `photoIds` (de 1 à 8 couples), un `photoId` mal formé comme toute autre forme absurde est `photo-ids`. Bien formé mais inconnu, expiré, d'un autre porteur ou servi : jugé PLUS TARD (rattacherPhotos), ignoré.
 const FORME_PHOTO_ID = /^[0-9a-f]{32}$/;
 const PHOTO_INDEX_MAX = 7;
 function lirePhotoIds(corps, nUrls) {
@@ -40,12 +40,12 @@ function lirePhotoIds(corps, nUrls) {
     if (a('photoId')) return typeof corps.photoId === 'string' && FORME_PHOTO_ID.test(corps.photoId) ? { photoIds: [{ index: 0, photoId: corps.photoId }] } : { erreur: 'photo-id' };
     if (!a('photoIds')) return { photoIds: [] };
     const l = corps.photoIds;
-    if (!Array.isArray(l) || l.length > PHOTO_INDEX_MAX + 1) return { erreur: 'photo-ids' };
+    if (!Array.isArray(l) || l.length < 1 || l.length > PHOTO_INDEX_MAX + 1) return { erreur: 'photo-ids' };
     const vus = new Set(), sortie = [];
     for (const e of l) {
         if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some(k => k !== 'index' && k !== 'photoId')) return { erreur: 'photo-ids' };
         if (!Number.isInteger(e.index) || e.index < 0 || e.index > PHOTO_INDEX_MAX || e.index >= nUrls) return { erreur: 'photo-ids' };
-        if (typeof e.photoId !== 'string' || !FORME_PHOTO_ID.test(e.photoId)) return { erreur: 'photo-id' };
+        if (typeof e.photoId !== 'string' || !FORME_PHOTO_ID.test(e.photoId)) return { erreur: 'photo-ids' };
         if (vus.has(e.index)) return { erreur: 'photo-ids' };
         vus.add(e.index); sortie.push({ index: e.index, photoId: e.photoId });
     }
@@ -631,7 +631,10 @@ function traiterIdentifier(cfg, deps = {}) {
         // contrat, et que /ping reste un sondage de santé sans configuration. Éteint, ou version non configurée : le champ n'existe pas (la réponse est celle d'avant, octet pour octet).
         const me = cfg.empreinteExtension === true && regle && cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? cfg.modeleEmpreinte : null;
         if (me) regle = { ...regle, modeleEmpreinte: { id: me.id, sha256: me.sha256, url: me.url ?? null, octets: me.octets ?? null } };
-        const analyse = { ...resultat.analyse, regleVerdict: regle };
+        // PHOTOS-MULTIPLES (7d, C4) : quand `photoIds` (ou l'ancien `photoId`) est envoyé, l'analyse dit quelles photos ont été REÇUES : `photosRecues`, les index reçus en ordre croissant (tableau vide si aucune), et `photoRecue`, vrai
+        // SI ET SEULEMENT SI l'index 0 est reçu. Rien n'est ajouté sans `photoIds` (ni drapeau éteint : `entree.photoIds` n'existe alors pas) : la réponse est celle d'avant, octet pour octet.
+        const photosDites = Array.isArray(entree.photoIds) && entree.photoIds.length ? (() => { const idx = (entree.photosRecues || []).map(p => p.index).sort((a, b) => a - b); return { photosRecues: idx, photoRecue: idx.includes(0) }; })() : null;
+        const analyse = { ...resultat.analyse, regleVerdict: regle, ...(photosDites || {}) };
         // 9. les écritures annexes : sans effet sur la réponse
         try {
             const maintenant = new Date();
