@@ -118,7 +118,7 @@ module.exports = {
         if (cfg.photosMultiples === true) {
             const { exigerAdministrateurPhoto } = require('../banc/photo');
             const { traiterPhotoAvantScan } = require('./photo-avant-scan');
-            const parPorteurPhoto = parPorteurDe('photo-avant-scan', cfg.limites.etiquetteParPorteurHeure);
+            const parPorteurPhoto = parPorteurDe('photo-avant-scan', Math.max(600, cfg.limites.etiquetteParPorteurHeure));      // (B) au moins 600 par porteur (75 scans de 8 photos), même si le réglage des routes du banc est plus bas
             router.post('/api/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhotoAvantScan(cfg, deps));
         }
         demarrerBalayage();
