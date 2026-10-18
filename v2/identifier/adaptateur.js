@@ -25,6 +25,7 @@ const { garderCompatibles } = require('./nom-compatible');
 const { contredire } = require('./garde-contradiction');
 const { critereA, CRITERE_A } = require('./critere-a');
 const LD = require('./langue-decisive');
+const DES = require('./designation');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -256,10 +257,23 @@ function traduire(statutHttp, corps, ctx) {
     return panne('SERVEUR', `natureRefus inconnue : ${nature}`);
 }
 
+// DESIGNATION (2026-10-18) : APRÈS le critère A et LANGUE-DECISIVE (déjà passés dans traduire), une QUESTION que rien n'a tranchée est relue : si les champs déjà lus ne satisfont que l'un de ses candidats (designation.js : seule la
+// règle `numero` est allumée), il est affirmé à la place. Une désignation qui échoue ne change rien : la question d'avant, jamais une panne.
+function parDesignation(r, corps, ctx) {
+    if (!r || r.issue !== 'question') return r;
+    const regles = DES.reglesDe({ ...DES.REGLES_DESIGNATION, ...(ctx.designation && typeof ctx.designation === 'object' ? ctx.designation : {}) });
+    if (!DES.actives(regles).length) return r;
+    try {
+        const c = r.analyse.cartes[0];
+        const d = DES.designer({ ids: c.candidats.map(x => x.idProduct), corps, produits: ctx.produits, jumeaux: ctx.jumeaux, regles, catalogueExiste: ctx.codeNumeroExiste });
+        return d ? affirmer(d.id, c.etat, ctx, corps, d.critere) : r;
+    } catch { return r; }
+}
+
 /** @returns { issue: 'affirmee'|'question'|'introuvable'|'panne', analyse, erreur?, question?, diagnostic? } */
 function adapter({ statutHttp, corps } = {}, ctx = {}) {
     try {
-        return traduire(statutHttp, corps, ctx);
+        return parDesignation(traduire(statutHttp, corps, ctx), corps, ctx);
     } catch (e) {
         const code = e instanceof Panne ? e.code : 'SERVEUR';           // un cas non prévu tombe sur le défaut qui n'affirme rien
         const diagnostic = e instanceof Panne ? e.message : `exception : ${(e && (e.code || e.name)) || 'erreur'}`;   // jamais le message d'une exception interne (seule une Panne, phrase fabriquée ici, est dite en entier)
