@@ -334,9 +334,10 @@ const PG = require('./promotion-g');
 
 function traiterIdentifier(cfg, deps = {}) {
     const catalogue = deps.catalogue || creerCatalogue({ cfg });
-    // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place + crochet de pixels, non branché par ce lot : G se tait quand elle a besoin des zones)
+    // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place ; les PIXELS sont la carte redressée jointe par l'extension, les scans
+    // viennent de NOTRE bucket public de visuels ou de deps.scanEmpreinte en banc). Le serveur ne télécharge jamais la photo.
     const fournisseurEmpreinte = cfg.empreinteExtension === true
-        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, pixels: deps.pixelsEmpreinte || null, zones: deps.zonesEmpreinte || null }))
+        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, scan: typeof deps.scanEmpreinte === 'function' ? deps.scanEmpreinte : require('./voisins-empreinte').scanArchivePublic({ hote: cfg.images.hotesPublics[0] }), zones: deps.zonesEmpreinte || null }))
         : null;
     const interne = async function traiterIdentifierV2(req, res, etat) {
         const porteur = req.v2 && req.v2.porteur, entree = req.entree;
