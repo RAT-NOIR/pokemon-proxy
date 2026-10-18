@@ -16,8 +16,10 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { UA } = require('./collecte-cartes/ptcgio');
+const { FICHIER_ORPHELINS } = require('./retirer-symboles-ptcgio');
 
-const SOURCE = 'pokemontcg.io';
+const SOURCE ='pokemontcg.io';
 const LOT = 'symboles-2026-10';
 const LOT_IDENTITE = 'ptcgio-2026-10';
 const HOTE = 'images.pokemontcg.io';
@@ -118,8 +120,10 @@ function planifier(sets) {
         // 2. TCGdex : l'identité du collecteur de remplacement (quelle que soit sa langue), la série lue dans une adresse déjà en base
         if (tcg) {
             if (!/^[a-z0-9.-]{2,24}$/.test(tcg)) { sautes.push({ slug, raison: raisonP ?? 'identifiant-illisible' }); continue; }
+            // un set japonais ou asiatique dont tcgdexSet désigne le jumeau occidental recevrait le symbole du jumeau : TCGdex seulement pour un tirage occidental (intl)
+            if (tirage !== 'intl') { sautes.push({ slug, raison: raisonP ?? 'tirage-non-occidental' }); continue; }
             const r = serieTcgdex(s, tcg);
-            if (r.serie) { poser({ slug, nom, tirage, id: tcg, url: urlSymboleTcgdex(r.serie, tcg), source: SOURCE_TCGDEX, tcgdexSet: tcg, serie: r.serie, serieOu: r.ou }); continue; }
+            if (r.serie) { poser({ slug, nom, tirage, id: tcg, url: urlSymboleTcgdex(r.serie, tcg), source: SOURCE_TCGDEX, tcgdexSet: tcg, serie: r.serie, serieOu: r.ou, ...(raisonP ? { refusPtcgio: raisonP } : {}) }); continue; }
             sautes.push({ slug, raison: raisonP ?? r.raison });
             continue;
         }
@@ -160,7 +164,7 @@ function lireMeta(cache, slug) {
 }
 
 // ── le transport réel : les deux hôtes d'images de ce lot, rien d'autre ──────────────────────────────────────────────────────────────────────────
-const UA = 'pokemon-proxy-catalogue/1.0 (mesure, cadence lente)';
+// UN SEUL User-Agent : celui des requêtes est aussi celui avec lequel robots.txt est évalué
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
         const robots = (() => { try { const u = new URL(url); return u.protocol === 'https:' && (u.hostname === HOTE || u.hostname === HOTE_TCGDEX) && u.pathname === '/robots.txt' && !u.search; } catch { return false; } })();
@@ -193,7 +197,7 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
     if (!Number.isInteger(plafond) || plafond < 1) throw new Error('telecharger : plafond obligatoire (entier ≥ 1)');
     for (const l of lignes) if (!cheminPermis(l.url)) throw new Error(`telecharger : « ${l.url} » hors de ce que ce lot demande (https://${HOTE}/<id>/symbol.png ou https://${HOTE_TCGDEX}/univ/<série>/<id>/symbol.png) — aucune requête`);
     fs.mkdirSync(cache, { recursive: true });
-    const bilan = { demandes: 0, telecharges: 0, absents: 0, repris: 0, transitoires: 0, arret: null, arrets: [] };
+    const bilan = { demandes: 0, telecharges: 0, absents: 0, repris: 0, transitoires: 0, arret: null, arrets: [], pasImage: [] };
     const aDemander = [];
     for (const l of lignes) { const m = lireMeta(cache, l.slug); if (m && m.url === l.url && m.statut != null) bilan.repris++; else aDemander.push(l); }
     if (aDemander.length > plafond) throw new Error(`telecharger : ${aDemander.length} adresses à demander pour un plafond de ${plafond} — rien n'est demandé (relancer avec un plafond assumé)`);
@@ -203,11 +207,12 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
     const hotes = new Map();
     const eh = h => hotes.get(h) || hotes.set(h, { dernier: null, cadence: CADENCE_MS, robots: undefined, arrete: false, transitoiresDeSuite: 0 }).get(h);
     // ≥ 5 s (ou le Crawl-delay de robots.txt) entre deux requêtes sur LE MÊME hôte : la première part sans attente, les suivantes attendent le reste de la cadence
+    // la cadence se mesure depuis la FIN de la réponse précédente sur le même hôte (une réponse longue ne laisse pas partir la suivante tout de suite)
+    const appel = async (hote, url, o) => { try { return await tr.get(url, o); } finally { eh(hote).dernier = now(); } };
     const requete = async (hote, url, o) => {
         const e = eh(hote);
         if (e.dernier !== null) { const a = e.dernier + e.cadence - now(); if (a > 0) await pause(a); }
-        e.dernier = now();
-        return tr.get(url, o);
+        return appel(hote, url, o);
     };
     const noterArret = (hote, motif) => { eh(hote).arrete = true; bilan.arrets.push({ hote, motif }); bilan.arret = bilan.arret ?? { hote, motif }; journal(`   🛑 ${hote} : ${motif}`); };
     // robots.txt : relu une fois PAR HÔTE, avant sa première image ; un défi sur robots.txt arrête l'hôte (règle commune)
@@ -223,7 +228,7 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
         else if (rr.status === 200) robots = rr.texte ?? '';
         else throw new Error(`robots.txt de ${hote} illisible (HTTP ${rr.status}) — on ne peut pas conclure, aucune image`);
         if (robots !== null) {
-            const d = T.delaiDesRobots(robots, P.UA);
+            const d = T.delaiDesRobots(robots, UA);
             if (d && d > CRAWL_DELAY_MAX_S) throw new Error(`robots.txt de ${hote} demande un Crawl-delay de ${d} s — on s'arrête`);
             if (d) e.cadence = Math.max(e.cadence, d * 1000);
         }
@@ -239,11 +244,11 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
         const robots = await lireRobots(HOTE_L);
         if (e.arrete) continue;
         const chemin = new URL(l.url).pathname;
-        if (robots !== null && !T.autoriseParRobots(robots, chemin, P.UA)) throw Object.assign(new Error(`robots.txt de ${HOTE_L} interdit ${chemin} — aucune requête`), { robots: true });
+        if (robots !== null && !T.autoriseParRobots(robots, chemin, UA)) throw Object.assign(new Error(`robots.txt de ${HOTE_L} interdit ${chemin} — aucune requête`), { robots: true });
         let r;
         try { r = await requete(HOTE_L, l.url, { binaire: true }); }
-        catch (x) { if (!x.reseau) throw x; await pause(REESSAI_MS); e.dernier = now(); r = await tr.get(l.url, { binaire: true }); }
-        if (r.status >= 500) { await pause(REESSAI_MS); e.dernier = now(); r = await tr.get(l.url, { binaire: true }); }
+        catch (x) { if (!x.reseau) throw x; await pause(REESSAI_MS); r = await appel(HOTE_L, l.url, { binaire: true }); }
+        if (r.status >= 500) { await pause(REESSAI_MS); r = await appel(HOTE_L, l.url, { binaire: true }); }
         bilan.demandes++;
         let lu;
         try { lu = RH.lireImage(r, { suivi: sv, hote: HOTE_L, url: l.url, dossierPauses: dp }); }
@@ -259,6 +264,11 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
         }
         e.transitoiresDeSuite = 0;
         const base = { slug: l.slug, nom: l.nom, id: l.id, url: l.url, source: l.source ?? SOURCE, tirage: l.tirage ?? null, le: new Date().toISOString() };
+        if (lu.absente && lu.issue === 'fausse-absente') {
+            // un 200 qui n'est pas une image (HTML) N'EST PAS un 404 : refus « pas une image », rien de définitif au cache (relu au prochain lancement)
+            bilan.pasImage.push(l.slug); journal(`   ⚠️ ${l.slug} (${l.id}) : pas une image (HTTP 200 HTML) — non consigné, à redemander`);
+            continue;
+        }
         if (lu.absente) {
             fs.writeFileSync(fichierMeta(cache, l.slug), JSON.stringify({ ...base, statut: 404, issue: lu.issue }));
             bilan.absents++; journal(`   · ${l.slug} (${l.id}) : absent (${lu.issue})`);
@@ -312,7 +322,7 @@ async function fabriquerPlanche(items, { colonnes = 4 } = {}) {
  * @param {{lignes: Array, cache: string, attendu: number, db: object, r2: {verifierBucket: Function, deposerBinaire: Function}, bucket: string, maintenant?: Function}} o
  * @returns {{ecrits: string[], refuses: Array, nonEcrits: Array<{slug, raison}>}}
  */
-async function ecrire({ lignes, cache, attendu, db, r2, bucket, maintenant = () => new Date() }) {
+async function ecrire({ lignes, cache, attendu, db, r2, bucket, maintenant = () => new Date(), journal = console.log }) {
     const { cleVignette, fabriquerVignetteSymbole } = require('./collecte-cartes/vignette');
     if (!Number.isInteger(attendu) || attendu < 0) throw new Error('ecrire : --attendu obligatoire (entier)');
     const entrees = lireCache(cache, lignes);
@@ -327,29 +337,57 @@ async function ecrire({ lignes, cache, attendu, db, r2, bucket, maintenant = () 
     }
     await r2.verifierBucket(bucket);
     const S = db.collection('sets');
-    const ecrits = [], nonEcrits = [];
-    for (const { g, buf } of aEcrire) {
-        const doc = await S.findOne({ _id: g.slug }, { projection: { 'symbole.cleR2': 1 } });
-        if (!doc) { nonEcrits.push({ slug: g.slug, raison: 'set-absent' }); continue; }
-        if (doc.symbole?.cleR2) { nonEcrits.push({ slug: g.slug, raison: 'symbole-apparu' }); continue; }
-        const cleR2 = cleSymbole(g.slug, g.meta.sha1);
-        await r2.deposerBinaire(bucket, cleR2, buf, 'image/png');
-        const vg = await fabriquerVignetteSymbole(buf);
-        const cv = cleVignette(cleR2);
-        await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
-        const tcgdex = g.source === SOURCE_TCGDEX;
-        const preuve = tcgdex ? `identité remplacementTcgdex.tcgdexSet « ${g.tcgdexSet} » ; série lue dans ${g.serieOu} (« ${g.serie} ») ; le set n'avait pas de symbole`
-            : `identité visuelsPtcgio.lignes (lot ${LOT_IDENTITE}) ; le set n'avait pas de symbole`;
-        const valeur = { cleR2, w: g.meta.w, h: g.meta.h, octets: g.meta.octets, sha1: g.meta.sha1, fichier: 'symbol.png', source: tcgdex ? SOURCE_TCGDEX : SOURCE, urlOriginal: g.url, mention: '© Pokémon / The Pokémon Company', lot: LOT, retirable: true,
-            preuve, le: maintenant(), vignette: { cleR2: cv, w: vg.w, h: vg.h } };
-        // la condition du plan, relue dans la requête : un symbole apparu depuis n'est jamais écrasé
-        const u = await S.updateOne({ _id: g.slug, 'symbole.cleR2': { $exists: false } }, { $set: { symbole: valeur } });
-        if (u.matchedCount === 1 && u.modifiedCount === 1) ecrits.push(g.slug); else nonEcrits.push({ slug: g.slug, raison: 'symbole-apparu' });
+    const ecrits = [], nonEcrits = [], erreurs = [], orphelins = [];
+    // les objets R2 que CE passage vient de déposer pour un set qui n'a rien reçu en base : supprimés ; si la suppression échoue, la clé est consignée (fichier du cache, lu par le retrait)
+    const nettoyer = async (cles, slug, raison) => {
+        if (!cles.length) return;
+        try { if (typeof r2.supprimer !== 'function') throw new Error('r2.supprimer indisponible'); await r2.supprimer(bucket, cles); }
+        catch (e) {
+            for (const cle of cles) orphelins.push({ slug, cle, raison, le: new Date().toISOString(), erreur: e.message });
+            const f = path.join(cache, FICHIER_ORPHELINS);
+            let avant = []; try { avant = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { /* pas encore de fichier */ }
+            fs.writeFileSync(f, JSON.stringify([...avant, ...cles.map(cle => ({ slug, cle, raison, le: new Date().toISOString(), erreur: e.message }))], null, 1));
+        }
+    };
+    try {
+        for (const { g, buf } of aEcrire) {
+            const depose = [];                                          // les clés déposées par CE passage pour ce set
+            try {
+                const doc = await S.findOne({ _id: g.slug }, { projection: { 'symbole.cleR2': 1 } });
+                if (!doc) { nonEcrits.push({ slug: g.slug, raison: 'set-absent' }); continue; }
+                if (doc.symbole?.cleR2) { nonEcrits.push({ slug: g.slug, raison: 'symbole-apparu' }); continue; }
+                const cleR2 = cleSymbole(g.slug, g.meta.sha1);
+                const vg = await fabriquerVignetteSymbole(buf);        // la vignette AVANT tout dépôt : si elle lève, rien n'a été déposé
+                const cv = cleVignette(cleR2);
+                const w1 = await r2.deposerBinaire(bucket, cleR2, buf, 'image/png'); if (w1?.ecrit) depose.push(cleR2);
+                const w2 = await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp'); if (w2?.ecrit) depose.push(cv);
+                const tcgdex = g.source === SOURCE_TCGDEX;
+                const preuve = tcgdex ? `identité remplacementTcgdex.tcgdexSet « ${g.tcgdexSet} » ; série lue dans ${g.serieOu} (« ${g.serie} ») ; ${g.refusPtcgio ? `pokemontcg.io non pris (${g.refusPtcgio}) ; ` : ''}le set n'avait pas de symbole`
+                    : `identité visuelsPtcgio.lignes (lot ${LOT_IDENTITE}) ; le set n'avait pas de symbole`;
+                const valeur = { cleR2, w: g.meta.w, h: g.meta.h, octets: g.meta.octets, sha1: g.meta.sha1, fichier: 'symbol.png', source: tcgdex ? SOURCE_TCGDEX : SOURCE, urlOriginal: g.url, mention: '© Pokémon / The Pokémon Company', lot: LOT, retirable: true,
+                    preuve, le: maintenant(), vignette: { cleR2: cv, w: vg.w, h: vg.h } };
+                // la condition du plan, relue dans la requête : un symbole apparu depuis n'est jamais écrasé
+                const u = await S.updateOne({ _id: g.slug, 'symbole.cleR2': { $exists: false } }, { $set: { symbole: valeur } });
+                if (u.matchedCount === 1 && u.modifiedCount === 1) ecrits.push(g.slug);
+                else { nonEcrits.push({ slug: g.slug, raison: 'symbole-apparu' }); await nettoyer(depose, g.slug, 'symbole-apparu'); }
+            } catch (e) {
+                // une exception sur un set ne coupe pas le lot : le set est « en erreur », ses objets déposés par ce passage sont supprimés
+                erreurs.push({ slug: g.slug, erreur: e.message });
+                await nettoyer(depose, g.slug, 'erreur');
+            }
+        }
+    } finally {
+        // le bilan s'imprime TOUJOURS
+        journal(`BILAN : écrits ${ecrits.length} · refusés ${refuses.length} · non écrits ${nonEcrits.length} · en erreur ${erreurs.length} · orphelins R2 ${orphelins.length}`);
+        for (const n of nonEcrits) journal(`   ⚠️ ${n.slug} : non écrit (${n.raison})`);
+        for (const x of erreurs) journal(`   🔴 ${x.slug} : en erreur (${x.erreur})`);
+        for (const o of orphelins) journal(`   🕳️ orphelin R2 ${o.cle} (${o.slug}) — consigné dans ${FICHIER_ORPHELINS}`);
+        journal(`SETS : ${ecrits.join(',')}`);
     }
-    return { ecrits, refuses, nonEcrits };
+    return { ecrits, refuses, nonEcrits, erreurs, orphelins };
 }
 
-module.exports = { SOURCE, LOT, LOT_IDENTITE, HOTE, parserArguments, planifier, urlSymbole, cheminPermis, decider, cleSymbole, telecharger, lireCache, fabriquerPlanche, ecrire };
+module.exports = { SOURCE, LOT, LOT_IDENTITE, HOTE, UA, parserArguments, planifier, urlSymbole, cheminPermis, decider, cleSymbole, telecharger, lireCache, fabriquerPlanche, ecrire };
 
 // ── la ligne de commande : exécutée SEULEMENT en ligne de commande ───────────────────────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -391,14 +429,10 @@ if (require.main === module) {
             }
             const r2 = require('./collecte-cartes/r2');
             const R = await ecrire({ lignes: P.lignes, cache: a.cache, attendu: a.attendu, db: cx.db, r2, bucket: process.env.R2_BUCKET_IMAGES });
-            const entrees = lireCache(a.cache, P.lignes);
-            const D = decider(entrees);
-            const parRefus = {}; for (const r of D.refuses) parRefus[r.raison] = (parRefus[r.raison] || 0) + 1;
-            console.log(`\n${R.ecrits.length === a.attendu && !R.nonEcrits.length ? '✅' : '🔴'} écrits ${R.ecrits.length} / attendu ${a.attendu} · refusés ${D.refuses.length} ${JSON.stringify(parRefus)} · non écrits ${R.nonEcrits.length}`);
-            for (const n of R.nonEcrits) console.log(`   ⚠️ ${n.slug} : non écrit (${n.raison})`);
-            for (const r of D.refuses) console.log(`   ✖ ${r.slug} : refusé (${r.raison})`);
-            console.log(`SETS : ${R.ecrits.join(',')}`);
-            if (R.nonEcrits.length) process.exitCode = 1;
+            const parRefus = {}; for (const r of R.refuses) parRefus[r.raison] = (parRefus[r.raison] || 0) + 1;
+            console.log(`\n${R.ecrits.length === a.attendu && !R.nonEcrits.length && !R.erreurs.length ? '✅' : '🔴'} écrits ${R.ecrits.length} / attendu ${a.attendu} · refusés ${R.refuses.length} ${JSON.stringify(parRefus)} · non écrits ${R.nonEcrits.length} · en erreur ${R.erreurs.length}`);
+            for (const r of R.refuses) console.log(`   ✖ ${r.slug} : refusé (${r.raison})`);
+            if (R.nonEcrits.length || R.erreurs.length) process.exitCode = 1;
         } finally { await fermer(); }
     })().catch(e => { console.error(e); process.exit(1); });
 }
