@@ -167,6 +167,8 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     H.v('5g. question de la chaîne sans produit partagé : inchangée', [c4.issue, montres(c4)], ['question', [400, 401]]);
     const ancienne5 = muet(() => adapter({ statutHttp: 200, corps: amb([300, 400]) }, { produits: prod5, langueInterface: 'fr', cfg, jumeaux: () => ({ conclu: true, ids: [] }) }));
     H.v('5h. un fournisseur sans partages (banc, archive d\'avant) : la question d\'avant, inchangée', [ancienne5.issue, montres(ancienne5)], ['question', [300, 400]]);
+    const c5 = adapter5(amb([400, 401, 2, 3]));
+    H.v('5j. question de la chaîne à 4 candidats SANS partenaire ajouté : coupée aux 3 premiers comme avant (régression vue sur test-identifier-adaptateur)', [c5.issue, montres(c5).length], ['question', 3]);
     const { idsACharger } = require('../identifier/jumeaux');
     H.v('5i. idsACharger : les partenaires des candidats d\'une question de la chaîne sont chargés', idsACharger(amb([300, 400]), fournisseurDe(v5)), [301]);
     // ── 6. m8 : une question sur des produits PARTAGÉS n'invite pas à comparer l'illustration (elle est la même) : même code (liste fermée), aide propre

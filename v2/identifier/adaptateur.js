@@ -79,7 +79,7 @@ function introuvable(raison) {
 function questionAvecPartenaires(ids, etat, ctx, motifTexte) {
     const tous = [...ids];
     for (const id of ids) for (const q of partagesDuFournisseur(ctx.jumeaux, id)) if (!tous.includes(q)) tous.push(q);
-    if (tous.length > 3) {
+    if (tous.length > ids.length && tous.length > 3) {                    // seulement quand des partenaires ont été AJOUTÉS : une question de la chaîne à 4 candidats reste coupée aux 3 premiers comme avant
         noter('jumeaux-trop-nombreux', ids[0], `(${motifTexte} : ${tous.length} produits avec les partenaires de partage)`);
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
     }
