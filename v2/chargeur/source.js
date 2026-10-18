@@ -9,8 +9,10 @@ const PROJECTIONS = Object.freeze({
     sets: Object.freeze({ idExpansion: 1, nomAffichage: 1, tirage: 1, region: 1, code: 1, 'bulba.expansion': 1, deck: 1 }),
     cartes: Object.freeze({ nomEn: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.deck': 1, 'impressions.numero': 1, 'impressions.total': 1, 'impressions.rarete': 1,
         'images.set': 1, 'images.cleR2': 1, 'images.w': 1, 'images.h': 1, 'images.numero': 1, 'images.langue': 1, 'images.languePreuve': 1, 'images.source': 1,
-        'images.vignette.cleR2': 1, 'images.vignette.w': 1, 'images.vignette.h': 1 }),
-    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1 })
+        'images.vignette.cleR2': 1, 'images.vignette.w': 1, 'images.vignette.h': 1,
+        // REPLI-REIMPRESSIONS : les marquages du catalogue sur l'image servie (avis du 2026-10-17) et les deux drapeaux qui la retirent ou la signalent
+        'images.partageeHoloNonHolo': 1, 'images.partageeTamponNonSepare': 1, 'images.produitsPartages': 1, 'images.tamponNonRepresente': 1, 'images.basseDefinition': 1, 'images.imageEmprunteeTirage': 1 }),
+    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1 })
 });
 const LOT = 500;
 
@@ -25,11 +27,13 @@ function compacterCarte(d, I) {
     return { _id: d._id, nomEn: typeof d.nomEn === 'string' && d.nomEn !== '' ? 'x' : d.nomEn, sets: liste(d.sets, I),
         impressions: liste(d.impressions, i => (i && typeof i === 'object' ? { tirage: I(i.tirage), expansion: I(i.expansion), deck: I(i.deck), numero: I(i.numero), total: I(i.total), rarete: I(i.rarete) } : i)),
         images: liste(d.images, m => (m && typeof m === 'object' ? { set: I(m.set), cleR2: m.cleR2, w: m.w, h: m.h, numero: I(m.numero), langue: I(m.langue), languePreuve: I(m.languePreuve), source: I(m.source),
-            vignette: m.vignette && typeof m.vignette === 'object' ? { cleR2: m.vignette.cleR2, w: m.vignette.w, h: m.vignette.h } : m.vignette } : m)) };
+            vignette: m.vignette && typeof m.vignette === 'object' ? { cleR2: m.vignette.cleR2, w: m.vignette.w, h: m.vignette.h } : m.vignette,
+            partageeHoloNonHolo: m.partageeHoloNonHolo, partageeTamponNonSepare: m.partageeTamponNonSepare, produitsPartages: m.produitsPartages, tamponNonRepresente: I(m.tamponNonRepresente),
+            basseDefinition: m.basseDefinition, imageEmprunteeTirage: m.imageEmprunteeTirage } : m)) };
 }
 function compacterLigne(d, I) {
     const v = d.visuelSubstitut;
-    return { carteId: d.carteId, idProduct: d.idProduct, idExpansion: d.idExpansion, numeroFiche: I(d.numeroFiche), slug: d.slug, slugSet: I(d.slugSet),
+    return { carteId: d.carteId, idProduct: d.idProduct, idExpansion: d.idExpansion, numeroFiche: I(d.numeroFiche), slug: d.slug, slugSet: I(d.slugSet), variante: I(d.variante), variantePreuve: typeof d.variantePreuve === 'string' && d.variantePreuve.trim() ? 'oui' : null,
         visuelSubstitut: v && typeof v === 'object' ? { ...v, set: I(v.set), mention: I(v.mention) } : v };
 }
 async function lireEnFlux(collection, projection, convertir) {

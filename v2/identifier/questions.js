@@ -25,6 +25,8 @@ const PHRASES = Object.freeze({
         langue: { texte: 'En quelle langue la carte est-elle imprimée ?', aide: 'Les cartes proposées existent en plusieurs langues : regardez le texte de la carte.' },
         'premiere-edition': { texte: 'La carte porte-t-elle le tampon « Edition 1 » ?', aide: 'Le tampon se trouve sous l’illustration, à gauche.' },
         visuel: { texte: 'Laquelle de ces cartes est celle de l’annonce ?', aide: 'Plusieurs cartes portent ce nom : comparez l’illustration avec les photos.' },
+        // m8 : le code isuel quand les produits partagent la MÊME illustration (holo / non holo, tampon non séparé) : l'aide ne renvoie pas à l'illustration, qui ne les sépare pas
+        visuelPartage: { texte: 'Laquelle de ces cartes est celle de l’annonce ?', aide: 'Ces cartes ont la même illustration : regardez la brillance (holo ou non) ou le tampon sur les photos de l’annonce.' },
         confirmation: { texte: 'Est-ce bien cette carte ?', aide: 'Comparez l’illustration, le numéro et l’extension avec les photos de l’annonce.' }
     },
     en: {
@@ -34,6 +36,7 @@ const PHRASES = Object.freeze({
         langue: { texte: 'Which language is the card printed in?', aide: 'The proposed cards exist in several languages: look at the text on the card.' },
         'premiere-edition': { texte: 'Does the card carry the "Edition 1" stamp?', aide: 'The stamp sits below the artwork, on the left.' },
         visuel: { texte: 'Which of these cards is the one in the listing?', aide: 'Several cards share this name: compare the artwork with the photos.' },
+        visuelPartage: { texte: 'Which of these cards is the one in the listing?', aide: 'These cards share the same artwork: look at the shine (holo or not) or the stamp in the listing photos.' },
         confirmation: { texte: 'Is this the right card?', aide: 'Compare the artwork, the number and the set with the listing photos.' }
     }
 });
@@ -109,7 +112,7 @@ function construireQuestion(candidats, ctx = {}) {
         libelles = ordonnes.map((c, i) => `${L.carte} ${'ABC'[i]} — ${c.set.nom}`);
     }
     const q = {
-        code, texte: PHRASES[langue][code].texte, aide: PHRASES[langue][code].aide, zone: zoneDe(code, ordonnes),
+        code, texte: PHRASES[langue][code].texte, aide: PHRASES[langue][code === 'visuel' && ctx.partages === true ? 'visuelPartage' : code].aide, zone: zoneDe(code, ordonnes),
         choix: ids.map((x, i) => ({ id: x.id, libelle: libelles[i], idProduct: x.idProduct }))
     };
     verifierBijection(q, candidats);                                                 // la propriété s'applique à la sortie même
