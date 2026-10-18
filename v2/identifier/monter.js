@@ -112,6 +112,10 @@ module.exports = {
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }
             return res.status(200).json({ success: true, solde, offre });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
         });
+        // INDEX-EMPREINTES : le fichier du modèle d'empreinte (≈ 113 Mo) pour l'extension, SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : la route n'existe pas, 404). Publique (le sha256 de l'adresse est la seule clé et il est public),
+        // donc bornée : un limiteur par IP (V2_MODELE_EMPREINTE_IP_HEURE, défaut 10/h) AVANT le gestionnaire, qui borne aussi les envois simultanés.
+        if (cfg.empreinteExtension === true) router.get('/api/modele-empreinte/:sha256', L.limiteur({ nom: 'modele-empreinte', max: cfg.limites.modeleEmpreinteIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) }),
+            require('./modele-empreinte').creerRoute(cfg, deps && deps.modeleEmpreinte && typeof deps.modeleEmpreinte === 'object' ? deps.modeleEmpreinte : {}));
         demarrerBalayage();
         demarrerPurge();
         // O5 : la passe de rattrapage des scans dont la réponse n'est jamais partie — une passe différée au démarrage, puis toutes les 5 min (≤ le seuil de 15 min). `deps.rattrapage` ne règle que
