@@ -8,17 +8,26 @@ const col = nom => db.col(nom);
 const masquer = email => { const i = typeof email === 'string' ? email.indexOf('@') : -1; return i < 1 ? null : `${email[0]}•••${email.slice(i)}`; };
 const premierDuMoisSuivant = d => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 
+// `solde.achete` est un ENTIER >= 0 au contrat (§1.5). Une valeur en base qui ne l'est pas (donnée corrompue : aucune écriture n'en fabrique) est servie Math.floor si c'est un nombre fini >= 0, sinon 0 ;
+// jamais inventée, jamais servie fausse, et COMPTÉE (`compteurs.acheteNonEntier`, un avertissement par valeur sans donnée de compte). Absente (undefined/null) : 0, sans compter (un compte neuf).
+const compteurs = { acheteNonEntier: 0 };
+function acheteServi(v) {
+    if (v === undefined || v === null) return 0;
+    const sain = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+    if (sain !== v) { compteurs.acheteNonEntier++; console.warn(`⚠️ [v2 solde] achete non entier en base (${typeof v === 'number' ? 'nombre hors entier >= 0' : typeof v}) : servi ${sain} (compteur acheteNonEntier ${compteurs.acheteNonEntier})`); }
+    return sain;
+}
 async function solde(porteur, cfg, maintenant = new Date()) {
     const vide = { essai: 0, accueil: 0, hebdo: 0, achete: 0 };
     let p = { ...vide }, hebdoMax = 0, prochainHebdo = null, lie = null, abonnement = null;
     if (porteur.type === 'installation') {
         const i = await col('installations').findOne({ _id: porteur.id });
-        if (i) { p.essai = Math.max(0, i.essais ?? 0); p.achete = Math.max(0, i.achete ?? 0); }
+        if (i) { p.essai = Math.max(0, i.essais ?? 0); p.achete = acheteServi(i.achete); }
     } else if (porteur.type === 'compte') {
         const c = await col('comptes').findOne({ _id: porteur.id });
         if (c) {
             lie = { lie: true, emailMasque: masquer(c.email), verifie: Boolean(c.verifie), administrateur: Of.estAdministrateur(porteur, c) };
-            p.achete = Math.max(0, c.solde?.achete ?? 0);
+            p.achete = acheteServi(c.solde?.achete);
             if (c.verifie) {
                 p.accueil = Math.max(0, c.solde?.accueil ?? 0);
                 if (cfg.quotas.hebdo > 0) {
@@ -45,7 +54,7 @@ async function peutPayer(porteur, cfg, maintenant = new Date()) {
     if (porteur.administrateur === true && porteur.type === 'compte' && Of.estAdministrateur(porteur, await col('comptes').findOne({ _id: porteur.id }, { projection: { role: 1 } }))) return { ok: true };
     // OFFRE-QUOTA : « peut-il payer ? » = lui reste-t-il une analyse aujourd'hui (même source que le débit : l'offre relue en base). Les anciens soldes ne comptent plus : ils ne se débitent plus.
     // Pro (restant: null) passe tant que le plafond technique n'est pas atteint (le débit reste seul juge) ; un compte non vérifié se voit demander de confirmer son adresse.
-    // ACHETE-AVANT-JOUR : une analyse achetée restante suffit (le débit la prend AVANT le quota du jour), même quota épuisé et même compte non vérifié — la même poche, lue par la même définition (poches.acheteDe)
+    // ACHETE-AVANT-JOUR : une analyse achetée restante suffit (le débit la prend AVANT le quota du jour), même quota épuisé ; un compte non vérifié n'a aucune poche (poches.acheteDe) et reçoit VERIFICATION — la même poche, lue par la même définition
     const a = P.acheteDe(porteur);
     if (a && await col(a.collection).findOne({ ...a.filtre, [a.champ]: { $gte: 1 } }, { projection: { _id: 1 } })) return { ok: true };
     const e = await Of.etatDe(porteur, cfg, maintenant);
@@ -140,4 +149,4 @@ async function historique(porteur, { suite = null, limite = 20 } = {}, cfg) {
     // `suite` est nul SEULEMENT si les deux sources sont épuisées sans autre ligne servie ; sinon elle pointe sur la dernière ligne de la page
     return { lignes: page.map(s => s.x.ligne), suite: plus ? ecrireSuite(page[page.length - 1].x) : null, omises: plus ? servies[taille - 1].omisesAvant : nOmis };
 }
-module.exports = { solde, peutPayer, historique, masquer };
+module.exports = { solde, peutPayer, historique, masquer, compteurs };
