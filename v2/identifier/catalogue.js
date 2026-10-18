@@ -12,6 +12,7 @@ const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
 const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
 const { versionDe } = require('./fiabilite-prix');
+const { creerIndexFamilles } = require('./designation');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -58,6 +59,29 @@ function creerCatalogue(opts = {}) {
     function indexSansAttente() {
         if (!indexEnCours || Date.now() - indexLe >= INDEX_DUREE_MS) indexCodeNumero().catch(() => { });
         return indexPret;
+    }
+
+    // DESIGNATION (condition d) : l'index des FAMILLES du catalogue entier (même métacarte ou même nom : numeros_cartes + catalogue_produits, 74 000 lignes), même discipline que l'index code × numéro : construit UNE fois
+    // puis gardé 6 h, comptes de contrôle AVANT la lecture (moins de documents lus que comptés = tronqué, refusé), plancher de taille ; un échec LÈVE et n'est pas gardé. Jamais lu tant qu'aucune règle n'est allumée.
+    let famEnCours = null, famLe = 0, famPret = null;
+    async function indexFamilles() {
+        if (famEnCours && Date.now() - famLe < INDEX_DUREE_MS) return famEnCours;
+        const p = (async () => {
+            const colN = colLue('numeros_cartes'), colC = colLue('catalogue_produits');
+            const [attN, attC] = await Promise.all([colN.countDocuments({}), colC.countDocuments({})]);
+            const [numeros, produits] = await Promise.all([colN.find({}, { projection: { idProduct: 1, codeSet: 1, numero: 1, numeroUrl: 1, setTcgdex: 1 } }).toArray(), colC.find({}, { projection: { idProduct: 1, idMetacard: 1, name: 1 } }).toArray()]);
+            if (numeros.length < attN || produits.length < attC) throw new Error('index des familles : lecture tronquée');
+            const idx = creerIndexFamilles(numeros, produits, () => { const vis = visuels.instantane ? visuels.instantane() : visuels; return id => ({ total: (vis.entree && (vis.entree(id) || {}).total) ?? null, tirage: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null) }); });
+            if (idx.taille < INDEX_CODE_NUMERO_MIN) throw new Error(`index des familles sous le plancher (${INDEX_CODE_NUMERO_MIN})`);
+            return idx;
+        })();
+        famEnCours = p; famLe = Date.now();
+        p.then(idx => { if (famEnCours === p) famPret = idx; }, () => { if (famEnCours === p) { famEnCours = null; famLe = 0; } });
+        return p;
+    }
+    function indexFamillesSansAttente() {
+        if (!famEnCours || Date.now() - famLe >= INDEX_DUREE_MS) indexFamilles().catch(() => { });
+        return famPret;
     }
 
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
@@ -120,6 +144,6 @@ function creerCatalogue(opts = {}) {
                 return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: false, nonLu: true });
             });
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };
