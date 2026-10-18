@@ -140,6 +140,10 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuseRq('un champ en trop dans une entrée', c => { c.empreintes[0].score = 0.9; });
     refuseRq('un index de photo à 20', c => { c.empreintes[0].photo = 20; });
     refuseRq('un modèle sans sha256', c => { delete c.modeleEmpreinte.sha256; });
+    { const ok = clone(rq); ok.empreintes[0].carte = 'QUJD'; H.v('MVA : une carte base64 (forme seulement ; le JPEG est jugé par le serveur) est acceptée par le schéma', valider(ok, ref('RequeteIdentifier'), doc).ok, true); }
+    refuseRq('une carte de plus de 273 068 caractères', c => { c.empreintes[0].carte = 'A'.repeat(273072); });
+    refuseRq('une carte qui n\'est pas du base64', c => { c.empreintes[0].carte = 'pas du base64 !'; });
+    refuseRq('une carte qui n\'est pas une chaîne', c => { c.empreintes[0].carte = 42; });
 }
 const er = lire('quota-compte.json');
 H.v('contrôle : une erreur saine est acceptée', valider(er, ref('ReponseErreur'), doc).ok, true);

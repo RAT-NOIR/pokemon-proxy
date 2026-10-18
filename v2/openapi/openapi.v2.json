@@ -3999,6 +3999,12 @@
           "redressee": {
             "type": "boolean",
             "description": "Vrai si le vecteur est celui de la PREMIÈRE CARTE REDRESSÉE de la photo, faux (défaut) s'il est celui de la photo entière. UN seul essai par photo."
+          },
+          "carte": {
+            "type": "string",
+            "maxLength": 273068,
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+            "description": "La CARTE REDRESSÉE dont le vecteur a été tiré : un JPEG (qualité 0,92, sans métadonnées), EXACTEMENT 420 × 587, au plus 200 Ko décodés (273 068 caractères base64), base64 standard. Ce sont les pixels de la garde des zones. Absente, trop lourde, d'une autre taille, ou qui n'est pas un JPEG décodable : la règle visuelle se tait pour cette photo (`empreinte.code: muette`), la requête n'est pas refusée. Seule la carte de la photo de plus petit index est lue."
           }
         },
         "required": [
