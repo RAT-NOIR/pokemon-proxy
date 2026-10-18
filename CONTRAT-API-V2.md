@@ -1489,6 +1489,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 | X5 | `POST /api/compte/deconnexion` · `401` | documenté, jamais rendu : la déconnexion rend 200 même sans cookie (l.63-69) | idem |
 | X5 | `POST /api/compte/mot-de-passe-oublie` · `400` | documenté, jamais rendu : un corps illisible vaut une adresse absente, 202 neutre (l.71-77) | idem |
 | X7 | `POST /api/identifier` · `403` | **documenté, plus atteignable (O3)** : un compte non confirmé n'est plus un porteur (`v2/porteur.js` : sa session est refusée, une installation qui lui serait liée redevient une installation seule). Le `403` `VERIFICATION` reste documenté (garde en profondeur de la chaîne, du scanner et de la collection) mais aucune requête ne l'atteint plus. | laisser documenté (inoffensif) ou retirer ; les clients traitent `VERIFICATION` comme avant |
+| X8 | `POST /api/identifier` · `413` | documenté, non joué par ce banc : le `413` est rendu par l'analyseur de corps de `index.js`, en amont de l'API v2 que ce banc monte seule ; il est joué sur le vrai `index.js` (serveurs enfants) par `test-corps-identifier-empreinte.js` | rien |
 | X6 | code `EN_RECONCILIATION` | n'est produit que sur une clé de débit rejouée dont la ligne attend la réconciliation (état fabriqué par `test-argent-tour4.js`) ; le banc de contrat le déclare non produit et échoue si un état courant le produit | rien |
 
 ---
