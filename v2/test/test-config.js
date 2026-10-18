@@ -52,7 +52,9 @@ let l3 = null; try { lireConfig({ V2_ORDRE_POCHES: 'jour,jour' }); } catch (e) {
 H.vrai('doublon dans l\'ordre lève', /doublon/.test(l3 || ''));
 // O2 réécrite : au lieu d'exiger les poches payées, la garde exige `jour` (sinon plus aucun porteur ne serait débitable) et refuse toute ancienne poche
 const refusOrdre = o => { try { lireConfig({ V2_ORDRE_POCHES: o }); return null; } catch (e) { return e.message; } };
-H.vrai('O2 : une ancienne poche (essai, accueil, hebdo, abonnement, achete) est refusée et dit qu\'elle n\'est plus débitée', ['essai', 'accueil', 'hebdo', 'abonnement', 'achete', 'jour,achete'].every(o => /n'est plus débitée/.test(refusOrdre(o) || '')));
+H.vrai('O2 : une ancienne poche (essai, accueil, hebdo, abonnement) est refusée et dit qu\'elle n\'est plus débitée', ['essai', 'accueil', 'hebdo', 'abonnement'].every(o => /n'est plus débitée/.test(refusOrdre(o) || '')));
+// ACHETE-AVANT-JOUR : `achete` est débitée AVANT `jour`, dans le code : le refus dit la VRAIE raison (non configurable), jamais « n'est plus débitée »
+H.vrai('ACHETE-AVANT-JOUR : `achete` (seule ou après jour) est refusée parce qu\'elle n\'est pas configurable (débitée avant jour, dans le code), et ne dit pas « n\'est plus débitée »', ['achete', 'jour,achete', 'achete,jour'].every(o => { const m = refusOrdre(o) || ''; return /n'est pas configurable/.test(m) && /AVANT "jour"/.test(m) && !/n'est plus débitée/.test(m); }));
 H.vrai('O2 : un ordre sans `jour` est refusé (configuration invalide)', /configuration invalide/.test(refusOrdre(',') || ''));
 H.v('O2 : `jour` est accepté, c\'est aussi le défaut', [refusOrdre('jour'), lireConfig({ V2_ORDRE_POCHES: 'jour' }).ordrePoches], [null, ['jour']]);
 // l'origine "extension de développement" n'est lue QUE sur test_scratch

@@ -111,6 +111,7 @@ const { executerLot } = require('./lot');
 const MS = require('../argent/marque-scan');
 const DEPENSE = require('../argent/depense-modele');
 const { natureDuMotif } = require('../argent/nature-du-motif');
+const PS = require('../argent/poche-servie');      // ACHETE-AVANT-JOUR : facturation.poche
 // FREIN-CONSTATES : la garde de dépense du modèle de cette configuration (un banc en injecte une par deps.depenseModele ; sinon celle du processus)
 const depenseDe = (cfg, deps) => (deps && deps.depenseModele && typeof deps.depenseModele.autorise === 'function' ? deps.depenseModele : DEPENSE.pourConfig(cfg));
 const { cartesParScanMax } = require('./cartes-par-scan');
@@ -321,6 +322,8 @@ function traiterIdentifier(cfg, deps = {}) {
 
         const admin = debit.administrateur === true, credit = admin ? null : (debit.credit ?? null);
         const userId = `v2:${porteur.type}:${porteur.id}`;
+        // ACHETE-AVANT-JOUR : d'où vient l'analyse (`facturation.poche`), posé sur la RÉPONSE seulement ; un lot qui chevauche les deux poches dit "jour" (voir argent/poche-servie.js)
+        const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null;
@@ -472,19 +475,19 @@ function traiterIdentifier(cfg, deps = {}) {
             catch (e3) { journalErreur('facturation après exception', e3); facturation = { debite: rendu || admin ? 0 : 1, reserve: 0, rembourse: rendu, motif: admin ? 'administrateur' : 'panne', raisonNonRembourse: rendu || admin ? null : 'erreur' }; }
             const s = await soldeSur(), o = await offreP();
             await fermer();                                // le scan est rendu (ou dit non rendu) : le résultat est produit
-            return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
+            return repondreErreur(res, 'SERVEUR', undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
         }
         // 7. le solde, relu APRÈS les mouvements
         const solde = await soldeSur(), offre = await offreP();
         if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
             await fermer();
-            return repondreErreur(res, erreurLot.code, undefined, { facturation: erreurLot.facturation, ...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
+            return repondreErreur(res, erreurLot.code, undefined, { facturation: PS.avecPoche(erreurLot.facturation, credit ? credit.poche : null),...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
                 ...(solde !== undefined ? { solde } : {}), ...avecOffre(erreurLot.code === 'QUOTA' && erreurLot.detail !== 'lot-trop-grand' ? offreRefusee(offre) : offre) });   // lot-trop-grand : les unités sont rendues, l'offre relue dit le VRAI restant (relecture 1, I-2)
         }
         const { resultat, facturation } = sortie;
         if (resultat.issue === 'panne') {
             await fermer();
-            return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
+            return repondreErreur(res, resultat.erreur.code, undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
         }
         // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
         let regle = null;
@@ -518,7 +521,7 @@ function traiterIdentifier(cfg, deps = {}) {
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
-        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
+        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
     };
     return async function traiterIdentifierV2(req, res) {
         const etat = { suivi: null, differe: false };

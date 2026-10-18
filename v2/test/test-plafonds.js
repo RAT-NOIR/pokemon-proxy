@@ -37,7 +37,7 @@ const qst = ids => ({ statutHttp: 200, corps: { success: true, question: { etat:
 const nAff = n => Array.from({ length: n }, (_, i) => aff(POOL[i % POOL.length]));
 
 async function compteLie(solde, role) {
-    const c = Object.assign(M.nouveauCompte({ email: `plaf${++nCle}@x.fr`, emailCle: `plaf${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde }, role ? { role } : {});
+    const c = Object.assign(M.nouveauCompte({ email: `plaf${++nCle}@x.fr`, emailCle: `plaf${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde: { ...solde, achete: 0 } }, role ? { role } : {});      // ACHETE-AVANT-JOUR : l'ancien stock devient du QUOTA ci-dessous ; le document garde achete 0 (la poche achete a son banc : test-achete-avant-jour.js)
     await db.col('comptes').insertOne(c);
     await Q.poserRestant(`compte:${c._id}`, (solde.achete || 0) + (solde.accueil || 0));
     return { c, ...(await installationDe(c)) };

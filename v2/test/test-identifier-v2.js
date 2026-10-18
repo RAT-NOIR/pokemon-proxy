@@ -285,7 +285,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const a = await aff('affirmee');
         const v3 = validerAnalyse(a.j);
         H.v('3. verdict ferme : 200, contrat 2, identifiee, valide contre ReponseAnalyse (0 écart)', [a.r.statut, a.j.contrat, a.j.analyse && a.j.analyse.statut, v3.ok], [200, 2, 'identifiee', true]);
-        H.v('   facturation affirmee { debite:1, reserve:0, rembourse:false }, solde.essai 3 -> 2', [a.j.facturation, a.j.offre.restant], [{ debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null }, 2]);
+        H.v('   facturation affirmee { debite:1, reserve:0, rembourse:false }, solde.essai 3 -> 2', [a.j.facturation, a.j.offre.restant], [{ debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null, poche: 'jour' }, 2]);
         H.v('   le scanId de la réponse est celui de analyses', !!(await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(a.j.scanId) })), true);
         // introuvable remboursé par la chaîne via le pont
         const b = await aff('introuvable');
@@ -319,7 +319,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         };
         const A_rep = await parcours('ambigue', 'a'), R_rep = await parcours('refus-egalite', 'a');
         const A_ab = await parcours('ambigue', 'aucune'), R_ab = await parcours('refus-egalite', 'aucune');
-        H.v('ruling 2 : refus egalite-parfaite -> a-trancher à 2 candidats, facturation de l\'ambiguë { debite:0, reserve:1, motif:question }', [R_rep.statut, R_rep.candidats, R_rep.facturation], ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }]);
+        H.v('ruling 2 : refus egalite-parfaite -> a-trancher à 2 candidats, facturation de l\'ambiguë { debite:0, reserve:1, motif:question }', [R_rep.statut, R_rep.candidats, R_rep.facturation], ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }]);
         H.v('   après le scan : solde et mouvements NETS identiques au chemin ambigu', R_rep.apresScan, A_rep.apresScan);
         H.v('   (valeurs : essais 2, net -1, un débit réservé, question en-attente, choix = choixPour)', R_rep.apresScan, { essais: 2, net: -1, mouvements: 1, debitsOuverts: ['reserve'], question: { etat: 'en-attente', choix: choixPour([ID_A, ID_B]) } });
         H.v('   après une réponse (débité UNE fois) : identique, essais 2, net -1', [R_rep.apresReponse, R_rep.apresReponse.essais, R_rep.apresReponse.net, R_rep.apresReponse.debitsOuverts], [A_rep.apresReponse, 2, -1, ['debite']]);
@@ -337,7 +337,7 @@ async function semer(mode) {                                  // 'double' | 'sim
             mode = 'affirmee'; const xj = await inst(3); const rj = await poster(svJ.url, xj.jeton, corps(), { nom: 'jumeau-question' }), jj = rj.json || {};
             H.v('JUMEAU-V2 : produit affirmé avec UN jumeau : a-trancher à 2 candidats (le produit et son jumeau), { debite:0, reserve:1, motif:question }, essai 3 -> 2',
                 [jj.analyse && jj.analyse.statut, jj.analyse && jj.analyse.cartes[0].candidats.map(c => c.idProduct), jj.facturation, (await solde(xj.i._id)).essais],
-                ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+                ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }, 2]);
             const qj = await raw('questions_v2').findOne({ _id: `${jj.scanId}:0` });
             H.v('   la question est écrite en attente avec les choix du contrat (choixPour)', [qj && qj.etat, qj && qj.choix], ['en-attente', choixPour([ID_A, ID_B])]);
             await svJ.fermer();

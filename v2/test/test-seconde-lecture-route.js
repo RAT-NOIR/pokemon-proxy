@@ -124,7 +124,7 @@ const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"
         modele.reponse = { setCode: 'PRE', numero: '162' };
         const a = await scan(svOn);
         H.v('2a. confirmée : issue affirmée (identifiee), le produit LU (et lui seul), facturation { debite:1, reserve:0, motif:affirmee }', [a.j.analyse.statut, a.c0.statut, a.c0.carte && a.c0.carte.idProduct, a.c0.candidats.length, a.j.facturation],
-            ['identifiee', 'identifiee', ID_P, 0, { debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null }]);
+            ['identifiee', 'identifiee', ID_P, 0, { debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null, poche: 'jour' }]);
         H.v('   grand livre : un débit « debite », aucune question écrite, aucun remboursement', [await livre(a), await ligneQ(a.scanId)], [PAYE, null]);
         const an = await analyseDe(a.scanId);
         H.v('   le coût est journalisé dans `analyses` : déclenchée, 2 appels, confirmée — et jamais servi au client', [an.secondeLecture && an.secondeLecture.declenchee, an.secondeLecture && an.secondeLecture.appels, an.secondeLecture && an.secondeLecture.issue, JSON.stringify(a.j).includes('secondeLecture')], [true, 2, 'confirmee', false]);

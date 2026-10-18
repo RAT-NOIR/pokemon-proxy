@@ -1,7 +1,7 @@
 'use strict';
 // Le coût d'un lot et son supplément. Lot : max(1, ceil(cartesVues / 10)), questions comprises ; cartesVues compte les introuvables.
 const db = require('../db'); const { ObjectId } = require('mongoose').Types;
-const { debiter, rendrePoche, ETATS_CLOS } = require('./ledger');
+const { debiter, ETATS_CLOS, interne } = require('./ledger');
 const col = nom => db.col(nom);
 const coutDuLot = (cartesVues, cfg) => Math.max(1, Math.ceil(cartesVues / cfg.lot.tranche));
 
@@ -46,7 +46,10 @@ async function annulerUnite(porteur, u, cfg, maintenant) {
     // MOYENS-B2a tour 3 (M-4) : même protocole que les autres chemins de crédit — `priseLe` à la prise, identité du débit dans le marqueur de la poche (même écriture que le crédit), `debitId` sur la trace
     const pris = await col('mouvements').findOneAndUpdate({ ...base, type: 'debit', cleIdempotence: u.cle, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours', priseLe: maintenant }, $unset: { expireLe: '' } }, { returnDocument: 'before' });
     if (!pris) { console.error(`🔴 [v2 supplement] unité ${u.cle} : déjà prise par un autre chemin (ou ligne absente) — rien n'est rendu ici`); return; }
-    const credite = await rendrePoche(porteur, u.credit, cfg, maintenant, pris._id);
+    // (ACHETE-AVANT-JOUR) par `rendreUnite` : l'unité revient au porteur ACTUEL de la poche (une installation LIÉE depuis le débit rend au compte), et la trace porte ce porteur et cette poche
+    const credite = await interne.rendreUnite(porteur, u.credit, cfg, maintenant, pris._id);
+    const cible = credite.cible || porteur, pocheRendue = credite.pocheRendue || u.credit.poche;
+    const baseTrace = cible.type === 'compte' ? { compteId: cible.id } : { installationId: cible.id };
     const { raison } = credite, rendu = credite.rendu || raison === 'poche-deja-compensee';           // le crédit de CE débit est déjà sur la poche : l'unité est rendue, il ne manque que sa trace
     if (!rendu) {
         console.error(`🔴 [v2 supplement] unité ${u.cle} NON rendue (poche ${u.credit.poche}) : ligne « rendu-echoue », la réconciliation le dira`);
@@ -54,7 +57,7 @@ async function annulerUnite(porteur, u, cfg, maintenant) {
         return;
     }
     await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rembourse', expireLe: expire }, $unset: { cleIdempotence: '' } });
-    await col('mouvements').insertOne({ ...base, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: u.credit.poche, motif: 'supplement-annule', scanId: null, debitId: pris._id,
+    await col('mouvements').insertOne({ ...baseTrace, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: pocheRendue, motif: 'supplement-annule', scanId: null, debitId: pris._id,
         etat: 'rembourse', cleIdempotence: `annule|${u.cle}|${new ObjectId()}`, expireLe: expire });
 }
 module.exports = { coutDuLot, debiterSupplement };

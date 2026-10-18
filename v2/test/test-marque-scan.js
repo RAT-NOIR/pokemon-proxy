@@ -89,11 +89,11 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
 
     // ═══════════ 3. un scan mort depuis plus de 15 min est rendu, sans plafond, motif arret-serveur
     {
-        const s = await scanMort({ unites: 3, acheteInit: 4 });          // 3 unités du quota du jour prises (le solde acheté ancien, 4, n'y est pour rien)
+        const s = await scanMort({ unites: 3, acheteInit: 0 });          // 3 unités du quota du jour prises (ACHETE-AVANT-JOUR : sans achetée ; la poche achete a son banc, test-achete-avant-jour.js)
         const avant = [await essais(s.p), await achete(s.p)];
         const b = await MS.rattraper(sec);
         const m = await lireMarque(s.scanId);
-        H.v('3. lot de 3 unités mort : toutes rendues (restant 0 puis 3), le solde acheté ancien (4) jamais touché, somme des delta 0, 1 rendu au bilan', [avant, [await essais(s.p), await achete(s.p)], await somme(s.p), b.rendues], [[0, 4], [3, 4], 0, 1]);
+        H.v('3. lot de 3 unités mort : toutes rendues (restant 0 puis 3), la poche achete (0) jamais touchée, somme des delta 0, 1 rendu au bilan', [avant, [await essais(s.p), await achete(s.p)], await somme(s.p), b.rendues], [[0, 0], [3, 0], 0, 1]);
         H.v('   marque rendu, motif de la trace arret-serveur, plafonds de pannes du porteur NON consommés (sansPlafond)', [m.etat, (await mouvements(s.p)).filter(x => x.type === 'remboursement').every(x => x.motif === 'arret-serveur'), (await db.col('plafonds').find({ porteur: `installation:${s.p.id}` }).toArray()).reduce((t, x) => t + x.count, 0)], ['rendu', true, 0]);
         H.vrai('   priseLe et closLe posées, expireLe ≤ 30 jours', m.priseLe instanceof Date && m.closLe instanceof Date && (m.expireLe - m.closLe) <= 30 * 86400e3);
     }
@@ -263,20 +263,20 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
 
     // ═══════════ 11c. un remboursement INTERROMPU par la mort de la passe (ou du scan) : le claim `rb|scanId` est là, les unités sont encore prises — la passe les REPREND (jamais « deja-rembourse » pris pour une preuve)
     {
-        const s = await scanMort({ unites: 3, acheteInit: 4 });                // 3 unités du quota du jour prises
+        const s = await scanMort({ unites: 3, acheteInit: 0 });                // 3 unités du quota du jour prises
         await db.col('mouvements').insertOne({ installationId: s.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: s.scanId, etat: 'rembourse', cleIdempotence: `rb|${s.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
         const b = await MS.rattraper(sec);
         const m = await lireMarque(s.scanId);
-        H.v('11c. claim rb|scanId orphelin (3 unités encore prises) : les 3 unités sont reprises une à une — restant 3, acheté ancien 4, 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [[await essais(s.p), await achete(s.p)], await rembs(s.p), await somme(s.p), m.etat, m.issue, b.reprises], [[3, 4], 3, 0, 'rendu', 'repris', 3]);
+        H.v('11c. claim rb|scanId orphelin (3 unités encore prises) : les 3 unités sont reprises une à une — restant 3, achete 0, 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [[await essais(s.p), await achete(s.p)], await rembs(s.p), await somme(s.p), m.etat, m.issue, b.reprises], [[3, 0], 3, 0, 'rendu', 'repris', 3]);
         const b2 = await MS.rattraper(sec);
         H.v('   jouée de nouveau : rien de plus (chaque unité ne se rend qu\'une fois)', [b2.examinees, await rembs(s.p), await essais(s.p)], [0, 3, 3]);
         // reprise PARTIELLE : une unité déjà rendue par le scan avant sa mort, deux encore prises
-        const t = await scanMort({ unites: 3, acheteInit: 4 });
+        const t = await scanMort({ unites: 3, acheteInit: 0 });
         await db.col('mouvements').insertOne({ installationId: t.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: t.scanId, etat: 'rembourse', cleIdempotence: `rb|${t.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
         const premiere = (await db.col('mouvements').find({ installationId: t.p.id, type: 'debit', scanId: t.scanId }).sort({ _id: 1 }).toArray())[0];
         const une = await argent.rembourserLigne(t.p, premiere.cleIdempotence, 'arret-serveur');
         const b3 = await MS.rattraper(sec);
-        H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [3, 4], 0]);
+        H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [3, 0], 0]);
     }
 
     // 11c bis. m3 — une unité rendue ENTRE la lecture et la reprise (par le scan lui-même) répond `deja-rembourse` à la reprise : c'est une unité rendue, pas un échec
@@ -332,13 +332,13 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.v('11h. unité `rembourse` sans ligne de crédit : marque ECHEC (issue unite-sans-credit), jamais « rendu » ; crédit non recrédité (essais 2) ; journalisé', [m.etat, m.issue, b.echecs, await essais(s.p), journalR4.some(l => /SANS ligne de crédit/.test(l))], ['echec', 'unite-sans-credit', 1, 2, true]);
         H.v('   la réconciliation la LISTE : verdict non propre (alors que somme(delta) = solde)', [rec.marquesEnSuspens.map(x => [x.etat, x.issue]), rec.propre], [[['echec', 'unite-sans-credit']], false]);
         // contrôle (pas de fausse alerte) : une unité de supplément ANNULÉE (sans clé, trace sans scanId) puis le remboursement propre du scan par la route : la passe écrit « rendu/deja-rembourse »
-        const p = await inst({ essais: 1, achete: 1 }); const scanId = new ObjectId(), cleDebit = `scan|installation:${p.id}|annul`;
+        const p = await inst({ essais: 1, achete: 0 }); const scanId = new ObjectId(), cleDebit = `scan|installation:${p.id}|annul`;
         await MS.ouvrir({ scanId, porteur: p, cleDebit, maintenant: new Date(Date.now() - 20 * MIN) });
         await argent.debiter(p, { scanId, cleIdempotence: cleDebit });
         const sup = await argent.debiterSupplement(p, { scanId, unites: 3, cleIdempotence: `${cleDebit}|supplement` });       // plus d'unités que le solde : tout ou rien, la 1re est ANNULÉE
         const r0 = await argent.rembourser(p, { poche: 'essai' }, 'lot-trop-grand', { scanId, compteur: 'panne', sansPlafond: true });
         const b2 = await MS.rattraper(sec); const m2 = await lireMarque(scanId);
-        H.v('   contrôle : supplément annulé + remboursement propre du scan, puis passe : « rendu/deja-rembourse », pas de fausse alerte (restant 3, acheté ancien 1)', [sup.ok, r0.rendu, m2.etat, m2.issue, b2.echecs, await essais(p), await achete(p)], [false, true, 'rendu', 'deja-rembourse', 0, 3, 1]);
+        H.v('   contrôle : supplément annulé + remboursement propre du scan, puis passe : « rendu/deja-rembourse », pas de fausse alerte (restant 3, achete 0)', [sup.ok, r0.rendu, m2.etat, m2.issue, b2.echecs, await essais(p), await achete(p)], [false, true, 'rendu', 'deja-rembourse', 0, 3, 0]);
     }
 
     // ═══════════ 11g. la suppression d'un compte purge ses marques ; celles d'une installation (qui survit) et d'un autre compte restent
@@ -424,7 +424,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.v('   (même scan, marque rouverte à la main : la passe voit « déjà remboursé » et ne rend rien de plus)', [await essais(x.p), await rembs(x.p), (await lireMarque(m._id)).issue], [3, 1, 'deja-rembourse']);
     }
     {
-        const x = await instJ({ essais: 3, achete: 5 });
+        const x = await instJ({ essais: 3, achete: 0 });
         lotImpl = async () => Array.from({ length: 25 }, () => aff(PID));
         const r = await poster(svLot.url, x.jeton);
         await attendre(150);
