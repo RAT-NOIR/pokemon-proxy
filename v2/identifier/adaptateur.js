@@ -19,7 +19,7 @@
 const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
-const { garde, candidatUniqueDe, noter } = require('./jumeaux');
+const { garde, candidatUniqueDe, noter, partagesDuFournisseur } = require('./jumeaux');
 const { choisirTrois } = require('./jumeaux-nombreux');
 const { garderCompatibles } = require('./nom-compatible');
 const { contredire } = require('./garde-contradiction');
@@ -74,6 +74,17 @@ function introuvable(raison) {
     return enveloppe('introuvable', carte('introuvable', { raison }));
 }
 
+// M1 (relecture r1) : une question de la CHAÎNE ne perd jamais le partenaire de partage d'un de ses candidats (l'image ne les sépare pas : la vérité peut être le partenaire). Les partenaires sont ajoutés
+// (les candidats d'abord) ; au-delà de 3 produits, jamais une question tronquée : l'introuvable impression-indeterminee, motif compté. Un fournisseur sans partages (banc, archive d'avant) : la question d'avant.
+function questionAvecPartenaires(ids, etat, ctx, motifTexte) {
+    const tous = [...ids];
+    for (const id of ids) for (const q of partagesDuFournisseur(ctx.jumeaux, id)) if (!tous.includes(q)) tous.push(q);
+    if (tous.length > 3) {
+        noter('jumeaux-trop-nombreux', ids[0], `(${motifTexte} : ${tous.length} produits avec les partenaires de partage)`);
+        return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
+    }
+    return question(tous, etat, ctx);
+}
 function question(ids, etat, ctx) {
     const premiers = ids.slice(0, 3);                                    // l'ordre du classement n'est pas servi : on ne garde que le rang pour couper
     const ordre = choixPour(premiers).map(c => c.idProduct);             // puis ordre idProduct, jamais celui du classement
@@ -89,7 +100,7 @@ function apresGarde(g, etat, ctx, corps) {
     if (g.action === 'question') return question(g.ids, etat, ctx);
     if (g.action === 'nombreux') {
         // JUMEAUX-QUESTION : plus de 3 produits => une QUESTION à 3 (P d'abord, puis l'ordre nommé de jumeaux-nombreux.js), jamais une affirmation. Une ligne de catalogue manquante : le repli d'avant.
-        const trois = choisirTrois({ p: g.ids[0], jumeaux: g.ids.slice(1), corps, produits: ctx.produits });
+        const trois = choisirTrois({ p: g.ids[0], jumeaux: g.ids.slice(1), partages: g.partages, corps, produits: ctx.produits });     // M1 : P et ses partenaires de partage d'abord ; trop de partenaires : null (introuvable plus bas)
         // TOUR 1 : le filtre de nom vaut pour P aussi. Aucun candidat ne reste => introuvable photo-illisible (la règle du lot CONFIRMATION-SURE : tous contredits, on ne sait pas) ;
         // UN seul reste, ou une ligne manque => le repli d'avant (jamais une confirmation à 1 candidat dans cette voie) ; 2 ou plus => la question. Seul le repli écrit au journal.
         if (trois && trois.length === 0) return introuvable('photo-illisible');
@@ -133,13 +144,21 @@ function parContradiction(idProduct, etat, ctx, corps) {
     const g = contredire({ corps, gagnant: idProduct, produits: ctx.produits });
     if (!g) return null;
     console.warn(`⚠️ [garde-contradiction-v2] produit=${idProduct} ${g.resume}`);
-    if (g.designe.length) {
-        const ld = parLangueDecisive([g.gagnant, ...g.designe.map(d => d.idProduct)], idProduct, etat, ctx, corps);
+    // M1 : les partenaires de partage de P et du candidat désigné entrent dans la question (l'image ne les sépare pas) ; au-delà de 3 produits : jamais tronquée, impression-indeterminee
+    const designes = g.designe.length ? [g.gagnant, ...g.designe.map(d => d.idProduct)] : [];
+    const ajoutes = designes.flatMap(i => partagesDuFournisseur(ctx.jumeaux, i)).filter((x, k, a) => !designes.includes(x) && a.indexOf(x) === k);
+    const avecPart = designes.length ? [...designes, ...ajoutes] : [];
+    if (ajoutes.length && avecPart.length > 3) {
+        noter('jumeaux-trop-nombreux', idProduct, `(contradiction : ${avecPart.length} produits avec les partenaires de partage)`);
+        return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux', contradiction: g.resume };
+    }
+    if (designes.length) {
+        const ld = parLangueDecisive(avecPart, idProduct, etat, ctx, corps);
         if (ld) return { ...ld, contradiction: g.resume };
     }
     // Un candidat DÉSIGNÉ : la question entre P et lui. Numéro ou total seul (personne de désigné) : l'issue la plus prudente existante, la question de confirmation « est-ce cette carte ? » à UN candidat — après la garde
     // des jumeaux (si P a des jumeaux, leur question ou leur refus passe d'abord) — jamais une affirmation.
-    const r = g.designe.length ? question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx) : (apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx));
+    const r = designes.length ? question(avecPart, etat, ctx) : (apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx));
     return { ...r, contradiction: g.resume };
 }
 // CRITÈRE A (2026-10-17) : la garde des jumeaux refuse d'affirmer P (question de départage ou plus de 3 produits) ; si le code ET le numéro lus le désignent SEUL (critere-a.js : après la garde
@@ -202,7 +221,7 @@ function traduire(statutHttp, corps, ctx) {
         const unique = candidatUniqueDe({ ...corps, candidats: ids.map(idProduct => ({ idProduct })) });
         if (unique !== null) return candidatUnique(unique, etat, ctx, corps);
         if (ids.length < 2) return introuvable('photo-illisible');       // aucun candidat : on ne sait rien
-        return question(ids, etat, ctx);
+        return questionAvecPartenaires(ids, etat, ctx, 'question de la chaîne');
     }
     if (corps.success !== false) panne('SERVEUR', 'success ni vrai ni faux');
     const { natureRefus: nature, motifRefus: motif } = corps;
@@ -219,7 +238,7 @@ function traduire(statutHttp, corps, ctx) {
             const union = garderCompatibles(brute, corps, ctx.produits);           // CONFIRMATION-SURE : les candidats que le nom lu contredit sont retirés d'abord
             if (brute.length > 0 && union.length === 0) return introuvable('photo-illisible');     // tous contredits : on ne sait pas, jamais une absence affirmée (« hors-catalogue »)
             if (union.length === 1) return candidatUnique(union[0], etatDe(corps.etat), ctx, corps);     // UN-CANDIDAT (D1) : la même règle que l'ambiguë à un candidat (sans-repli est sorti plus haut : le nom CONTREDIT)
-            if (union.length >= 2 && union.length <= 3) return question(union, etatDe(corps.etat), ctx);
+            if (union.length >= 2 && union.length <= 3) return questionAvecPartenaires(union, etatDe(corps.etat), ctx, 'égalité de la chaîne');
             if (union.length > 3 || motif !== 'egalite-parfaite') return introuvable('photo-illisible');   // on ne sait pas : pas d'absence affirmée
             return introuvable('hors-catalogue');
         }

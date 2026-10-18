@@ -72,11 +72,11 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
 
     // ── 1. le fournisseur de jumeaux porte les produits partagés
     const fx = fournisseurDe(v), fa = fournisseurDe(ancienne);
-    H.v('1a. 7001 : ses « jumeaux » sont son partenaire de partage (même créneau, donc pas un jumeau de la colonne)', [v.jumeauxDe(7001), fx(7001)], [[], { conclu: true, ids: [7002] }]);
-    H.v('1b. 7003 : un vrai jumeau (autre créneau), aucun partage : inchangé', fx(7003), { conclu: true, ids: [7004] });
-    H.v('1c. 7030 : le partenaire ET les deux jumeaux, triés', fx(7030), { conclu: true, ids: [7031, 7032, 7033] });
+    H.v('1a. 7001 : ses « jumeaux » sont son partenaire de partage (même créneau, donc pas un jumeau de la colonne)', [v.jumeauxDe(7001), fx(7001).conclu, fx(7001).ids], [[], true, [7002]]);
+    H.v('1b. 7003 : un vrai jumeau (autre créneau), aucun partage : inchangé', [fx(7003).conclu, fx(7003).ids, fx(7003).partages || []], [true, [7004], []]);
+    H.v('1c. 7030 : le partenaire ET les deux jumeaux, triés ; le partenaire est nommé à part', [fx(7030).ids, fx(7030).partages], [[7031, 7032, 7033], [7031]]);
     H.v('1d. une paire SÉPARÉE (false) compte comme non séparée : 7005 ↔ 7006', [fx(7005).ids, fx(7006).ids, fx(7007).ids, fx(7008).ids], [[7006], [7005], [7008], [7007]]);
-    H.v('1e. une archive ANCIENNE (sans colonne de marquages) : aucun partage, comportement d\'avant', [fa(7001), ancienne.colonneMarquages], [{ conclu: true, ids: [] }, false]);
+    H.v('1e. une archive ANCIENNE (sans colonne de marquages) : aucun partage, comportement d\'avant', [fa(7001).conclu, fa(7001).ids, fa(7001).partages || [], ancienne.colonneMarquages], [true, [], [], false]);
     H.v('1f. sans la colonne des jumeaux : le fournisseur ne conclut toujours pas (jamais « aucun partage » comme une conclusion)', fournisseurDe(sansJum)(7001).conclu, false);
 
     // ── 2. la chaîne affirme un produit marqué : une QUESTION entre les produits partagés, jamais une affirmation
@@ -133,5 +133,41 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     } finally { etat.vider(); }
     const sansVersion = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG });
     H.v('4g. aucune version en place : G décide comme avant', [sansVersion.issue, sansVersion.produit], ['affirmee', 7001]);
+
+    // ── 5. M1 (relecture r1) : le PARTENAIRE d'un produit partagé ne disparaît jamais d'une question
+    const b5 = creerConstructeur({ marquages: true });
+    const marq = ids => ({ partageeHoloNonHolo: true, produitsPartages: ids });
+    b5.entree(brut(100, 950, marq([100, 900]))); b5.entree(brut(900, 950, marq([100, 900])));          // la paire
+    for (const id of [2, 3, 4]) b5.entree(brut(id, 950));                                              // trois vrais jumeaux
+    b5.entree(brut(200, 960, marq([200, 201, 202, 203]))); for (const i of [201, 202, 203]) b5.entree(brut(i, 960, marq([200, 201, 202, 203])));   // un groupe de QUATRE
+    b5.entree(brut(300, 970, marq([300, 301]))); b5.entree(brut(301, 970, marq([300, 301]))); b5.entree(brut(400, 971)); b5.entree(brut(401, 972));
+    for (const [id, mc, exp, num] of [[100, 950, 800, '5'], [900, 950, 800, '5'], [2, 950, 801, '6'], [3, 950, 802, '7'], [4, 950, 803, '8'], [200, 960, 810, '5'], [201, 960, 810, '5'], [202, 960, 810, '5'], [203, 960, 810, '5'],
+        [300, 970, 820, '5'], [301, 970, 820, '5'], [400, 971, 830, '5'], [401, 972, 840, '5']]) b5.jumeau(J(id, mc, exp, num));
+    b5.lien('Set-A', '1|001', [100, 900]);
+    const v5 = relue(b5.finir(new Date('2026-10-18T10:00:00.000Z')));
+    const prod5 = new Map([100, 900, 2, 3, 4, 200, 201, 202, 203, 300, 301, 400, 401].map(i => [i, ligne(i, 'AAA', [2, 3, 4].includes(i) ? String(i + 4) : '5')]));
+    const adapter5 = (corps, version = v5) => muet(() => adapter({ statutHttp: 200, corps }, { produits: prod5, langueInterface: 'fr', cfg, jumeaux: fournisseurDe(version) }));
+    const classe = (corps, ids) => ({ ...corps, classement: ids.map((idProduct, k) => ({ idProduct, score: 90 - k })), candidats: ids.map(idProduct => ({ idProduct })) });
+    for (const lecture of [{}, { numero: null, setCode: null }]) {
+        const m1 = adapter5(classe(corpsDe(100, { lecture, vivierIds: [100, 2, 3, 4, 900] }), [100, 2, 3, 4]));
+        H.v(`5a. P=100, partenaire 900, jumeaux 2, 3, 4 classés par la chaîne${lecture.numero === null ? ' (rien de lu)' : ''} : le partenaire est DANS la question (jamais [100, 2, 3])`, [m1.issue, montres(m1).includes(900), montres(m1).includes(100), montres(m1).length], ['question', true, true, 3]);
+    }
+    const m1b = adapter5(classe(corpsDe(900, { lecture: { numero: null, setCode: null } }), [900, 2, 3, 4]));
+    H.v('5b. la chaîne affirme le partenaire 900 : 900 et 100 sont dans la question', [m1b.issue, montres(m1b).includes(900) && montres(m1b).includes(100)], ['question', true]);
+    const m4 = adapter5(corpsDe(200, { lecture: { numero: null, setCode: null }, vivierIds: [200] }));
+    H.v('5c. P + 3 partenaires (4 produits que l\'image ne sépare pas) : jamais une question tronquée → introuvable impression-indeterminee', [m4.issue, m4.analyse.cartes[0].raison], ['introuvable', 'impression-indeterminee']);
+    const amb = ids => ({ ...corpsDe(ids[0]), carte: { ...corpsDe(ids[0]).carte, ambigu: true }, candidats: ids.map(idProduct => ({ idProduct })), classement: ids.map(idProduct => ({ idProduct, score: 80 })) });
+    const c1 = adapter5(amb([300, 400]));
+    H.v('5d. question de la CHAÎNE [300, 400] : le partenaire 301 de 300 y entre (la vérité peut être 301)', [c1.issue, montres(c1)], ['question', [300, 301, 400]]);
+    const c2 = adapter5(amb([300, 400, 401]));
+    H.v('5e. question de la chaîne à 3 + un partenaire = 4 : jamais tronquée → introuvable impression-indeterminee', [c2.issue, c2.analyse.cartes[0].raison], ['introuvable', 'impression-indeterminee']);
+    const c3 = adapter5(amb([300, 301]));
+    H.v('5f. question de la chaîne déjà complète : inchangée', [c3.issue, montres(c3)], ['question', [300, 301]]);
+    const c4 = adapter5(amb([400, 401]));
+    H.v('5g. question de la chaîne sans produit partagé : inchangée', [c4.issue, montres(c4)], ['question', [400, 401]]);
+    const ancienne5 = muet(() => adapter({ statutHttp: 200, corps: amb([300, 400]) }, { produits: prod5, langueInterface: 'fr', cfg, jumeaux: () => ({ conclu: true, ids: [] }) }));
+    H.v('5h. un fournisseur sans partages (banc, archive d\'avant) : la question d\'avant, inchangée', [ancienne5.issue, montres(ancienne5)], ['question', [300, 400]]);
+    const { idsACharger } = require('../identifier/jumeaux');
+    H.v('5i. idsACharger : les partenaires des candidats d\'une question de la chaîne sont chargés', idsACharger(amb([300, 400]), fournisseurDe(v5)), [301]);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
