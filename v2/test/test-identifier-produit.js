@@ -3,7 +3,7 @@
 const { v, vrai, bilan } = require('./_harnais');
 const { construireProduit, VARIANTES } = require('../identifier/produit');
 
-const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
+const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
 const BON = 'https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/v/357044.webp';
 const base = (o = {}) => ({
     idProduct: 357044, nomCardmarket: 'Lapras', nomFr: 'Lokhlass',
@@ -25,10 +25,24 @@ v('nom langue absente -> anglais', P({}, {}).nom, 'Lapras');
 v('nomCardmarket toujours le nom Cardmarket', P({}).nomCardmarket, 'Lapras');
 
 // 2. prixGuide
-v('prixGuide complet, date du GUIDE', P({}).prixGuide, { tendance: 15.2, de: 12.4, moyenne30: 14, date: '2026-10-04' });
+v('prixGuide complet, date du GUIDE (F4 : base du « De », moyenne 7 j, fiabilité)', P({}).prixGuide,
+    { tendance: 15.2, de: 12.4, deBase: 'tous-etats', moyenne7: null, moyenne30: 14, date: '2026-10-04', fiable: true, reserves: [] });
 v('prixGuide : jamais la date d\'import (majAt)', P({ majAt: new Date('2026-10-08T10:00:00Z') }).prixGuide.date, '2026-10-04');
 v('valeur absente -> null (pas 0)', P({ prixGuide: { trend: 15.2, low: null, guideDu: new Date('2026-10-04') } }).prixGuide,
-    { tendance: 15.2, de: null, moyenne30: null, date: '2026-10-04' });
+    { tendance: 15.2, de: null, deBase: 'tous-etats', moyenne7: null, moyenne30: null, date: '2026-10-04', fiable: true, reserves: [] });
+// F4 (e) : l'écart de la tendance aux moyennes. Valeurs du cas réel (Arcanin [G] Lv.60, guide du 2026-10-12 : 10,18 / 14,59 / 13,15)
+v('F4 (e) cas réel : tendance 10,18 contre la moyenne 7 j 14,59 (−30,2 %) : non fiable, ecart-tendance',
+    (({ fiable, reserves }) => ({ fiable, reserves }))(P({ prixGuide: { trend: 10.18, low: 1, avg7: 14.59, avg30: 13.15, guideDu: new Date('2026-10-12') } }).prixGuide), { fiable: false, reserves: ['ecart-tendance'] });
+v('F4 (e) la moyenne 7 j est servie', P({ prixGuide: { trend: 10.18, low: 1, avg7: 14.59, avg30: 13.15, guideDu: new Date('2026-10-12') } }).prixGuide.moyenne7, 14.59);
+v('F4 (e) sans moyenne 7 j, l\'écart au 30 j suffit', P({ prixGuide: { trend: 5, low: 1, avg30: 10, guideDu: new Date('2026-10-12') } }).prixGuide.reserves, ['ecart-tendance']);
+v('F4 (e) moyenne 7 j nulle ou négative -> null (un zéro n\'est pas un prix)', [P({ prixGuide: { trend: 5, low: 1, avg7: 0, avg30: 5, guideDu: new Date('2026-10-12') } }).prixGuide.moyenne7, P({ prixGuide: { trend: 5, low: 1, avg7: -2, avg30: 5, guideDu: new Date('2026-10-12') } }).prixGuide.moyenne7], [null, null]);
+// F4 prix mélangés : la fiche mélange la version normale et une version tamponnée (Dark Arbok, Team Rocket 19, idProduct 274072, tampon league : liste du catalogue)
+const MEL = { idProduct: 274072, nomCardmarket: 'Dark Arbok [Stare | Poison Vapor]', set: { slug: 'Team-Rocket', nom: 'Team Rocket', code: 'TR' }, numero: '19', prixGuide: { trend: 3, low: 1, avg7: 3, avg30: 3, guideDu: new Date('2026-10-12') } };
+v('F4 prixMelangeTampon : le prix n\'est jamais fiable, les deux mentions fermées', (({ fiable, reserves }) => ({ fiable, reserves }))(construireProduit({ ...MEL, prixMelangeTampon: true }, { langueInterface: 'fr' }).prixGuide), { fiable: false, reserves: ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'] });
+v('F4 sans prixMelangeTampon : fiable', construireProduit(MEL, { langueInterface: 'fr' }).prixGuide.fiable, true);
+v('F4 prixMelangeTampon texte « true » : ne marque rien', construireProduit({ ...MEL, prixMelangeTampon: 'true' }, { langueInterface: 'fr' }).prixGuide.fiable, true);
+v('F4 prixMelangeTampon sans prix du guide : pas de prixGuide (rien à marquer, rien d\'inventé)', construireProduit({ ...MEL, prixMelangeTampon: true, prixGuide: null }, { langueInterface: 'fr' }).prixGuide, null);
+v('F4 le champ interne prixMelangeTampon ne fuit pas (seules les mentions sortent)', Object.keys(construireProduit({ ...MEL, prixMelangeTampon: true, tamponsConnus: ['league'] }, { langueInterface: 'fr' })).filter(k => /tampon/i.test(k)), []);
 v('source sans guide -> null', P({ prixGuide: null }).prixGuide, null);
 v('prixGuide undefined -> null', P({ prixGuide: undefined }).prixGuide, null);
 v('trend 0 -> null (un zéro n\'est pas un prix)', P({ prixGuide: { trend: 0, low: 1, avg30: 2, guideDu: new Date('2026-10-04') } }).prixGuide.tendance, null);
@@ -89,7 +103,16 @@ const sym = { url: 'https://rat-market.fr/s/30c.png', w: 40, h: 40 };
 v('symbole sur notre hôte', P({ symbole: sym }).set.symbole, sym);
 v('symbole hôte étranger -> null', P({ symbole: { url: 'https://evil.example/s.png', w: 40, h: 40 } }).set.symbole, null);
 v('symbole absent -> null', P({}).set.symbole, null);
-v('set : clés exactes', Object.keys(P({}).set), ['slug', 'nom', 'code', 'tirage', 'annee', 'symbole']);
+v('set : clés exactes (F4 (d) : badge et badgeSource)', Object.keys(P({}).set), ['slug', 'nom', 'code', 'tirage', 'annee', 'symbole', 'badge', 'badgeSource']);
+v('F4 (d) badge : un code sans ambiguïté reste le code', [P({}).set.badge, P({}).set.badgeSource], ['30C', 'code']);
+v('F4 (d) badge : SV (Supreme Victors) se donne par son nom, pas par un code qui ressemble à Scarlet & Violet', (({ code, badge, badgeSource }) => ({ code, badge, badgeSource }))(P({ set: { slug: 'Supreme-Victors', nom: 'Supreme Victors', code: 'SV' } }).set), { code: 'SV', badge: 'Supreme Victors', badgeSource: 'nom' });
+v('F4 (d) badge : le code d\'origine n\'est jamais retiré de set.code', P({ set: { slug: 'Supreme-Victors', nom: 'Supreme Victors', code: 'SV' } }).set.code, 'SV');
+v('F4 (d) badge : set sans code -> le nom', [P({ set: { slug: 'x', nom: 'Un Set' } }).set.badge, P({ set: { slug: 'x', nom: 'Un Set' } }).set.badgeSource], ['Un Set', 'nom']);
+
+// F4 (c) la version Cardmarket (V1, V2…) : ce qui sépare deux produits au même set et au même numéro
+v('F4 (c) version V2 servie sur le produit (variante reste null : pas de sémantique)', [P({ version: 'V2', variante: 'V2' }).version, P({ version: 'V2', variante: 'V2' }).variante], ['V2', null]);
+v('F4 (c) version absente -> null (rien ne les sépare dans nos données : on ne devine pas)', P({}).version, null);
+v('F4 (c) version hors forme (reverse, v2, V100) -> null', ['reverse', 'v2', 'V100', 12].map(x => P({ version: x }).version), [null, null, null, null]);
 
 // 8. forme : exactement les clés du contrat, rien d'autre, gelé
 const sortie = P({ champInterne: 'fuite', majAt: new Date(), _id: 'x', visuel: vis });
@@ -109,12 +132,23 @@ const LIEN_IMP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Se
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
-v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', langue: null, set: { nom: 'Set de Base' },
-    lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, moyenne30: 1000, date: '2026-10-05' } });
+v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', version: null, langue: null, set: { nom: 'Set de Base' },
+    lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, deBase: 'tous-etats', moyenne7: null, moyenne30: 1000, date: '2026-10-05', fiable: true, reserves: [] } });
+// F4 (b) le « ≈ 1,00 € » d'une impression est le « De » : l'offre la plus basse TOUS ÉTATS ; il le dit (deBase), jamais le prix de l'état retenu
+v('F4 (b) chaque prix d\'impression dit sa base : tous états', avecImp.impressions.map(i => i.prixGuide.deBase), ['tous-etats', 'tous-etats']);
+// F4 (c) les deux impressions du cas réel : Supreme Victors 15/147, V1 (278706) et V2 (371545) — rien d'autre ne les sépare
+{
+    const sv = P({ impressions: [imp({ idProduct: 278706, numero: '15', total: '147', rarete: 'Rare', variante: null, version: 'V1', set: { nom: 'Supreme Victors' }, prixGuide: { trend: 3.35, low: 0.47, avg30: 3.42, guideDu: new Date('2026-10-12') } }),
+                                  imp({ idProduct: 371545, numero: '15', total: '147', rarete: 'Rare', variante: null, version: 'V2', set: { nom: 'Supreme Victors' }, prixGuide: { trend: 10.18, low: 1, avg7: 14.59, avg30: 13.15, guideDu: new Date('2026-10-12') } })] }).impressions;
+    v('F4 (c) deux lignes « Supreme Victors n° 15/147 » : la version les sépare (V1, V2)', sv.map(i => [i.idProduct, i.version]), [[278706, 'V1'], [371545, 'V2']]);
+    v('F4 (e) sur l\'impression V2 : tendance 10,18 contre la moyenne 7 j 14,59 -> non fiable', [sv[0].prixGuide.fiable, sv[1].prixGuide.fiable, sv[1].prixGuide.reserves], [true, false, ['ecart-tendance']]);
+}
+v('F4 impression : prixMelangeTampon -> les deux mentions, le champ interne ne sort pas', (i => [i.prixGuide.fiable, i.prixGuide.reserves, Object.keys(i).filter(k => /tampon/i.test(k))])(P({ impressions: [imp({ prixMelangeTampon: true })] }).impressions[0]), [false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'], []]);
+v('F4 (c) impression : version hors forme -> null', P({ impressions: [imp({ version: 'staff' })] }).impressions[0].version, null);
 v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
 v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);
 v('impression variante hors liste -> null', avecImp.impressions[1].variante, null);
-v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'langue', 'set', 'lien', 'prixGuide']);
+v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a ; F4 : `version`)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'version', 'langue', 'set', 'lien', 'prixGuide']);
 v('impression : langue en code fermé conservée (ja, zh-hans)', P({ impressions: [imp({ langue: 'ja' }), imp({ idProduct: 900003, langue: 'zh-hans' })] }).impressions.map(i => i.langue), ['ja', 'zh-hans']);
 v('impression : langue hors liste (JP, EN, texte libre, nombre) -> null, jamais devinée', P({ impressions: [imp({ langue: 'JP' }), imp({ idProduct: 900003, langue: 'EN' }), imp({ idProduct: 900005, langue: 'japonais' }), imp({ idProduct: 900006, langue: 7 })] }).impressions.map(i => i.langue), [null, null, null, null]);
 vrai('impressions gelées', Object.isFrozen(avecImp.impressions) && Object.isFrozen(avecImp.impressions[0]));
