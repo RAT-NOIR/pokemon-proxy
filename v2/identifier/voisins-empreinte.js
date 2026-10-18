@@ -11,6 +11,7 @@
 // Écrit par ce qu'il AUTORISE : tout ce qui n'est pas explicitement bon rend un code fermé (modele-inconnu, invalide, indisponible, muette) et NE LÈVE JAMAIS.
 const E = require('./empreinte-vecteur');
 const G = require('../../ratmarket/decision-g');
+const CR = require('./carte-redressee');
 
 const CODES = Object.freeze(['modele-inconnu', 'invalide', 'indisponible', 'muette']);
 const ENTREES_MAX = 8, VECTEUR_MAX = 2000, TOURS_MAX = 16;
@@ -33,28 +34,29 @@ function lireEnveloppe(corps, nPhotos) {
     const vus = new Set(), entrees = [];
     for (const x of e) {
         if (!objetSimple(x)) return rejet;
-        for (const k of Object.keys(x)) if (k !== 'photo' && k !== 'vecteur' && k !== 'redressee') return rejet;
+        for (const k of Object.keys(x)) if (k !== 'photo' && k !== 'vecteur' && k !== 'redressee' && k !== 'carte') return rejet;
         if (!Number.isInteger(x.photo) || x.photo < 0 || x.photo >= nPhotos || vus.has(x.photo)) return rejet;
         if (typeof x.vecteur !== 'string' || x.vecteur.length > VECTEUR_MAX) return rejet;
         if (x.redressee !== undefined && typeof x.redressee !== 'boolean') return rejet;
         vus.add(x.photo);
-        entrees.push({ photo: x.photo, vecteur: x.vecteur, redressee: x.redressee === true });
+        entrees.push({ photo: x.photo, vecteur: x.vecteur, redressee: x.redressee === true, carte: typeof x.carte === 'string' && x.carte.length <= CR.BASE64_MAX ? x.carte : null });   // une carte démesurée ou qui n'est pas une chaîne n'est pas retenue : la photo ne conclura pas
     }
     entrees.sort((a, b) => a.photo - b.photo);
+    for (let i = 1; i < entrees.length; i++) entrees[i].carte = null;                         // seule la carte de la photo JUGÉE (la plus petite) reste en mémoire
     return { rejet: null, modele, entrees };
 }
 
 /**
  * @param {{cfg: object, etat?: object, zones?: object, pixels?: {photo: Function, scan: Function}}} o
  *   cfg.modeleEmpreinte : { id, sha256 } — LA version attendue ; etat : le pointeur de l'index (etat-empreintes.js) ; zones : ratmarket/zones.js (injectable) ;
- *   pixels : { photo({entree, indexPhoto, scanId}) → {data: Buffer RGB, width, height}|null, scan(cle) → Buffer|null }
+ *   scan : (cle) → Buffer|null — les scans de l'ARCHIVE (jamais la photo de l'utilisateur) ; la photo redressée est la CARTE que l'extension joint à l'entrée (carte-redressee.js), et elle seule.
  */
-function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), zones = null, pixels = null } = {}) {
+function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), zones = null, scan = null } = {}) {
     const attendu = () => { const m = cfg && cfg.modeleEmpreinte; return m && typeof m.id === 'string' && m.id && typeof m.sha256 === 'string' && m.sha256 ? { id: m.id, sha256: m.sha256 } : null; };
     const Z = () => zones || require('../../ratmarket/zones');
 
     // Les mesures que la règle demande, calculées avec les pixels fournis. { ok:true, mesures } | { ok:false, code }
-    async function mesurer({ ligne, ctx, entree, photo: indexPhoto, scanId }) {
+    async function mesurer({ ligne, ctx, carte }) {
         const cache = { zones: {}, paires: {} };
         const rendu = { comparerPaire: (a, b) => cache.paires[`${a}|${b}`], scoresZones: c => cache.zones[c] };
         let photo = null;
@@ -68,13 +70,9 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
                 try { G.decider(ctx, ligne, 1, mesures, G.SEUILS_G); return { ok: true, mesures: rendu }; }
                 catch (err) {
                     if (err !== MANQUE || !manque) return echec('indisponible');            // une faute de la règle ou du contexte : on ne la prend pas pour une mesure
-                    if (!pixels || typeof pixels.photo !== 'function' || typeof pixels.scan !== 'function') return echec('muette');
-                    if (!photo) {
-                        const p = await pixels.photo({ entree, indexPhoto, scanId });
-                        if (!p || !Buffer.isBuffer(p.data) || !Number.isInteger(p.width) || !Number.isInteger(p.height) || p.data.length !== p.width * p.height * 3) return echec('muette');
-                        photo = await Z().photoGrise(p.data, p.width, p.height);
-                    }
-                    const source = async cle => { const octets = await pixels.scan(cle); if (!Buffer.isBuffer(octets) || octets.length === 0) throw MANQUE; return { cle, octets }; };
+                    if (typeof scan !== 'function') return echec('muette');
+                    if (!photo) photo = await Z().photoGrise(carte.data, carte.width, carte.height);          // la carte validée : 420 × 587, RGB
+                    const source = async cle => { const octets = await scan(cle); if (!Buffer.isBuffer(octets) || octets.length === 0) throw MANQUE; return { cle, octets }; };
                     if (manque[0] === 'paire') {
                         const r = await Z().comparerPaire(photo, await source(manque[1]), await source(manque[2]));
                         if (!Array.isArray(r) || r.length !== 2 || !r.every(Number.isFinite)) return echec('muette');
@@ -106,11 +104,34 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
             if (!v.ok || !trouve) return echec('invalide');
             const ligne = { top: trouve.top, essai: e0.redressee ? 1 : 0 };
             const ctx = courant.index.contexteG;
-            const m = await mesurer({ ligne, ctx, entree, photo: e0.photo, scanId });
+            // 🔑 LA CARTE : sans carte autorisée (JPEG 420 × 587, <= 200 Ko, celle de la MÊME entrée que le vecteur), la garde des zones ne peut pas conclure : G se tait pour cette photo, même si aucune mesure n'était demandée
+            const carte = await CR.valider(e0.carte);
+            if (!carte.ok) return { ...echec('muette'), raison: carte.code };
+            const m = await mesurer({ ligne, ctx, carte });
             if (!m.ok) return echec(m.code);
             return { ok: true, ligne, nEssais: 1, mesures: m.mesures, contexteG: ctx, seuils: G.SEUILS_G, photo: e0.photo, meilleurCosinus: v.meilleurCosinus };
         } catch { return echec('indisponible'); }
     };
 }
 
-module.exports = { lireEnveloppe, creerFournisseurEmpreinte, CODES, ENTREES_MAX, VECTEUR_MAX };
+/**
+ * Les scans de l'ARCHIVE (jamais une photo d'utilisateur) : un GET sur NOTRE bucket public de visuels (hôte de cfg.images.hotesPublics), sans suivre de redirection, 3 s, 2 Mo au plus, type image/* ; les 32 derniers sont gardés.
+ * La clé vient de l'index scellé, jamais de la requête. Rend null au moindre doute (la garde des zones se tait).
+ */
+function scanArchivePublic({ hote, fetchFn = (typeof fetch === 'function' ? fetch : null), delaiMs = 3000, octetsMax = 2 * 1048576 } = {}) {
+    const garde = new Map();
+    return async cle => {
+        try {
+            if (!hote || typeof fetchFn !== 'function' || typeof cle !== 'string' || !cle || cle.length > 300 || /[\\\s?#]|(^|\/)\.\.?(\/|$)/.test(cle)) return null;
+            if (garde.has(cle)) { const v = garde.get(cle); garde.delete(cle); garde.set(cle, v); return v; }
+            const r = await fetchFn(`https://${hote}/${cle.split('/').map(encodeURIComponent).join('/')}`, { redirect: 'error', signal: AbortSignal.timeout(delaiMs) });
+            if (!r || r.status !== 200 || !/^image\//.test(String(r.headers && r.headers.get ? r.headers.get('content-type') : ''))) return null;
+            const b = Buffer.from(await r.arrayBuffer());
+            if (b.length === 0 || b.length > octetsMax) return null;
+            garde.set(cle, b); while (garde.size > 32) garde.delete(garde.keys().next().value);
+            return b;
+        } catch { return null; }
+    };
+}
+
+module.exports = { lireEnveloppe, creerFournisseurEmpreinte, scanArchivePublic, CODES, ENTREES_MAX, VECTEUR_MAX };

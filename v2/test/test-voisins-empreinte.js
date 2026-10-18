@@ -25,9 +25,15 @@ const contexte = { groupe: { 'banc/jeu-5.webp': 0, 'banc/jeu-6.webp': 0 }, carte
 const cfgDe = (over = {}) => ({ empreinteExtension: true, modeleEmpreinte: { id: MODELE.id, sha256: MODELE.sha256, url: null, ...over } });
 const installerIndex = () => { const o = X.ouvrir(X.sceller({ cles, matrice, contexte, modele: MODELE, chargeLe: '2026-10-17T14:14:00.000Z' }, SECRET), SECRET, { modeleAttendu: MODELE }); etat.installer(Object.freeze({ index: o.index, meta: o.meta })); return o.index; };
 const entreeDe = (vecteurs, { modele = { id: MODELE.id, sha256: MODELE.sha256 } } = {}) => ({ empreintes: { rejet: null, modele, entrees: vecteurs }, imageUrls: ['https://images1.vinted.net/a.jpg', 'https://images1.vinted.net/b.jpg'] });
-const ent = (photo, v, redressee = false) => ({ photo, vecteur: E.encoderVecteur(v), redressee });
+const sharp = require('sharp');
+const bruit = (w, h) => { let x = 99; const b = Buffer.alloc(w * h * 3); for (let i = 0; i < b.length; i++) { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; b[i] = (x >>> 24) & 0xff; } return b; };
+const carteDe = async (w, h, q = 40) => (await sharp(bruit(w, h), { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: q }).toBuffer()).toString('base64');
+let CARTE = null;
+const ent = (photo, v, redressee = false, carte = undefined) => ({ photo, vecteur: E.encoderVecteur(v), redressee, ...(carte === false ? {} : { carte: carte === undefined ? CARTE : carte }) });
+const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
 
 (async () => {
+    CARTE = await carteDe(420, 587, 40);
     // ── lireEnveloppe : la forme de la requête, jugée avant tout calcul
     const L = (c, n = 2) => V.lireEnveloppe(c, n);
     const bonne = E.encoderVecteur(ligneDe(1));
@@ -108,45 +114,65 @@ const ent = (photo, v, redressee = false) => ({ photo, vecteur: E.encoderVecteur
     H.v('6b. l\'index en place vient d\'un AUTRE modèle que la configuration : « indisponible » (jamais de voisins d\'un autre espace)', [r.ok, r.code], [false, 'indisponible']);
     installerIndex();
 
-    // la garde des zones : les pixels sont fournis par un crochet
+    // la garde des zones : les PIXELS sont la carte redressée jointe par l'extension (jamais téléchargée) ; seuls les scans de l'archive viennent d'un crochet `scan`
     const scripts = { paires: {}, zones: {}, appels: [] };
     const fauxZones = {
-        photoGrise: async (data, w, h) => { scripts.appels.push(['photo', w, h]); return { delete() { scripts.appels.push(['photo-liberee']); } }; },
+        photoGrise: async (data, w, h) => { scripts.appels.push(['photo', w, h, data.length]); return { delete() { scripts.appels.push(['photo-liberee']); } }; },
         comparerPaire: async (photo, a, b) => { scripts.appels.push(['paire', a.cle, b.cle]); const k = `${a.cle}|${b.cle}`; if (!scripts.paires[k]) throw new Error('paire non scénarisée'); return scripts.paires[k]; },
         scoresZones: async (photo, s) => { scripts.appels.push(['zones', s.cle]); return scripts.zones[s.cle]; }
     };
     scripts.paires['banc/jeu-5.webp|banc/jeu-6.webp'] = [0.30, 0.20];            // jeu-5 bat jeu-6 de 0,30 sur les pixels où ils diffèrent
     scripts.zones['banc/jeu-5.webp'] = { haut: 0.9, bas: 0.9, inliers: 120, illustration: 0.9, bandeau: 0.9, texte: 0.9 };
-    let pixelsAppeles = { photo: 0, scan: [] };
-    const pixels = { photo: async () => { pixelsAppeles.photo++; return { data: Buffer.alloc(420 * 586 * 3), width: 420, height: 586 }; }, scan: async cle => { pixelsAppeles.scan.push(cle); return Buffer.from('octets-' + cle); } };
-    const avecPixels = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, pixels });
+    let scansDemandes = [];
+    const scan = async cle => { scansDemandes.push(cle); return Buffer.from('octets-' + cle); };
+    const avecPixels = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, scan });
     r = await appel(avecPixels, entreeDe([ent(0, ligneDe(5), true)]));
     H.vrai('7a. jeu-5 a un jumeau (jeu-6) : la règle demande la comparaison de la paire PUIS les zones du gagnant ; les mesures reviennent au fournisseur', r.ok === true && scripts.appels.filter(a => a[0] === 'paire').length >= 1 && scripts.appels.some(a => a[0] === 'zones' && a[1] === 'banc/jeu-5.webp'));
-    H.v('7b. la photo redressée a été demandée UNE fois, aux dimensions fournies, puis LIBÉRÉE', [pixelsAppeles.photo, scripts.appels.filter(a => a[0] === 'photo-liberee').length], [1, 1]);
+    H.v('7b. la photo redressée est la CARTE jointe : 420 × 587 × 3 octets, demandée UNE fois, puis LIBÉRÉE', [scripts.appels.filter(a => a[0] === 'photo').map(a => a.slice(1)), scripts.appels.filter(a => a[0] === 'photo-liberee').length], [[[420, 587, 420 * 587 * 3]], 1]);
     const d2 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
     H.v('7c. la décision de la route, rejouée sur les mesures rendues par le fournisseur (sans nouveau calcul de pixels), affirme 705', [d2 && d2.issue, d2 && d2.produit], ['affirmee', 705]);
     scripts.appels.length = 0;
     const d3 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
     H.vrai('7d. … et ce rejeu n\'appelle AUCUNE fonction de zones (les mesures sont en cache)', d3 && scripts.appels.length === 0);
-    // pas de pixels branchés : G se tait quand elle a besoin des zones
+    // sans crochet de scans : G se tait quand elle a besoin des zones
     r = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones }), entreeDe([ent(0, ligneDe(5), true)]));
-    H.v('8a. les zones sont demandées et AUCUN crochet de pixels n\'est branché : « muette » (G ne devine pas)', [r.ok, r.code], [false, 'muette']);
-    pixelsAppeles = { photo: 0, scan: [] };
-    r = await appel(avecPixels, entreeDe([ent(0, ligneDe(5), false)]));
-    H.v('8b. la photo entière (essai 0) et des jumeaux : G dit déjà qu\'elle ne peut pas juger — « muette » ou une question, jamais d\'appel de pixels pour une photo non redressée', [pixelsAppeles.photo, r.ok === false ? r.code : 'ok'].join(','), r.ok === false ? '0,muette' : '0,ok');
-    pixelsAppeles = { photo: 0, scan: [] };
+    H.v('8a. les zones sont demandées et AUCUN crochet de scans n\'est branché : « muette » (G ne devine pas)', [r.ok, r.code], [false, 'muette']);
+    scansDemandes = []; scripts.appels.length = 0;
     r = await appel(avecPixels, entreeDe([ent(0, ligneDe(3), true)]));
-    H.v('8c. aucun besoin de zones (jeu-3 seul) : le crochet de pixels n\'est JAMAIS appelé', [r.ok, pixelsAppeles.photo, pixelsAppeles.scan.length], [true, 0, 0]);
-    const casse = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, pixels: { photo: async () => { throw new Error('réseau'); }, scan: async () => null } });
+    H.v('8c. aucun besoin de zones (jeu-3 seul) : ni scan ni mesure demandés', [r.ok, scansDemandes.length, scripts.appels.filter(a => a[0] !== 'photo' && a[0] !== 'photo-liberee').length], [true, 0, 0]);
+    const casse = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, scan: async () => { throw new Error('réseau'); } });
     r = await appel(casse, entreeDe([ent(0, ligneDe(5), true)]));
-    H.v('8d. le crochet de pixels LÈVE : « muette », jamais une exception', [r.ok, r.code], [false, 'muette']);
-    const sansScan = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, pixels: { photo: pixels.photo, scan: async () => null } });
+    H.v('8d. le crochet de scans LÈVE : « muette », jamais une exception', [r.ok, r.code], [false, 'muette']);
+    const sansScan = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, scan: async () => null });
     r = await appel(sansScan, entreeDe([ent(0, ligneDe(5), true)]));
     H.v('8e. un scan d\'archive introuvable pour le crochet : « muette »', [r.ok, r.code], [false, 'muette']);
-    const photoNulle = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, pixels: { photo: async () => null, scan: pixels.scan } });
-    r = await appel(photoNulle, entreeDe([ent(0, ligneDe(5), true)]));
-    H.v('8f. la photo redressée n\'a pas pu être produite : « muette »', [r.ok, r.code], [false, 'muette']);
 
+    // ── la CARTE : ce que le serveur AUTORISE, et rien d'autre ; sinon G se tait, même quand aucune mesure n'est demandée (jeu-3 : un visuel, un produit)
+    const sains = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones, scan });
+    const sansCarte = async (nom, e, raison) => { scansDemandes = []; const x = await appel(sains, entreeDe([e])); H.v(nom, [x.ok, x.code, x.raison, scansDemandes.length], [false, 'muette', raison, 0]); };
+    await sansCarte('9a. entrée SANS carte : G se tait, même pour un vecteur parfait qui n\'a besoin d\'aucune mesure', ent(0, ligneDe(3), true, false), 'absente');
+    await sansCarte('9b. carte qui n\'est pas une chaîne', { ...ent(0, ligneDe(3), true), carte: 42 }, 'forme');
+    await sansCarte('9c. carte qui n\'est pas un JPEG (du texte)', { ...ent(0, ligneDe(3), true), carte: Buffer.from('pas une image').toString('base64') }, 'format');
+    await sansCarte('9d. carte d\'une autre taille (419 × 587)', ent(0, ligneDe(3), true, await carteDe(419, 587)), 'dimensions');
+    await sansCarte('9e. carte trop lourde (JPEG q100, plus de 200 Ko)', ent(0, ligneDe(3), true, await carteDe(420, 587, 100)), 'taille');
+    await sansCarte('9f. carte tronquée (sans EOI)', ent(0, ligneDe(3), true, Buffer.from(CARTE, 'base64').subarray(0, 5000).toString('base64').replace(/=+$/, '').padEnd(Math.ceil(5000 / 3) * 4, '=')), 'format');
+    // une carte d'une AUTRE entrée : seule l'entrée de la photo jugée compte
+    scansDemandes = [];
+    r = await appel(sains, entreeDe([ent(0, ligneDe(3), true, false), ent(1, ligneDe(3), true)]));
+    H.v('9g. la carte de la photo 1 ne sert pas au vecteur de la photo 0 (la photo 0 n\'en porte pas) : « muette », raison « absente »', [r.ok, r.code, r.raison], [false, 'muette', 'absente']);
+    r = await appel(sains, entreeDe([ent(0, ligneDe(3), true), ent(1, ligneDe(5), true, false)]));
+    H.v('9h. contrôle : la photo 0 avec SA carte est jugée normalement, quelle que soit la carte de la photo 1', [r.ok, r.photo], [true, 0]);
+    // la carte ne change JAMAIS le vecteur ni les voisins : même ligne avec deux cartes différentes
+    const cA = await appel(sains, entreeDe([ent(0, ligneDe(3), true, await carteDe(420, 587, 30))])), cB = await appel(sains, entreeDe([ent(0, ligneDe(3), true, await carteDe(420, 587, 50))]));
+    H.v('9i. les voisins ne dépendent pas de la carte (deux cartes, mêmes voisins)', JSON.stringify(cA.ligne), JSON.stringify(cB.ligne));
+
+    // lireEnveloppe et `carte`
+    const bonneCarte = CARTE;
+    const eC = V.lireEnveloppe({ empreintes: [{ photo: 1, vecteur: bonne, carte: bonneCarte }, { photo: 0, vecteur: bonne, carte: bonneCarte }], modeleEmpreinte: A_MODELE() }, 2);
+    H.v('10a. la carte n\'est retenue QUE pour la photo jugée (la plus petite) — le reste n\'occupe pas la mémoire', eC.entrees.map(e => [e.photo, typeof e.carte]), [[0, 'string'], [1, 'object']]);
+    const eD = V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 'A'.repeat(300000) }], modeleEmpreinte: A_MODELE() }, 1);
+    H.v('10b. une carte démesurée (> 273 068 caractères) : l\'enveloppe reste valide, la carte est écartée (null) — la photo ne conclura pas', [eD.rejet, eD.entrees[0].carte], [null, null]);
+    H.v('10c. une carte qui n\'est pas une chaîne : écartée, enveloppe valide', [V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 5 }] }, 1).rejet, V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 5 }] }, 1).entrees[0].carte], [null, null]);
     // l'index qui lève
     installerIndex().voisins = () => { throw new Error('index cassé'); };
     r = await appel(sans, entreeDe([ent(0, ligneDe(3))]));
