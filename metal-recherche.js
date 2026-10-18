@@ -86,7 +86,7 @@ async function main() {
         const sortie = { idProduct: c.idProduct, name: c.name, verdict: c.verdict, expansion: c.expansion, ciblé: cible, tcgdex: tcg };
         if (cible) {
             const jetons = slug(c.expansion).split('-').filter(w => w.length > 2 && !['the', 'and', 'collection', 'pokemon', 'card'].includes(w));
-            const parSitemap = S.filter(e => { const u = e.page.replace('https://pkmncards.com/card/', ''); return u.startsWith(ns + '-') && (MOT_MATIERE.test(u) || jetons.some(j => u.includes(j))); });
+            const parSitemap = S.filter(e => { const u = e.page.replace(/^https:\/\/[^/]+\/card\//, ''); return u.startsWith(ns + '-') && (MOT_MATIERE.test(u) || jetons.some(j => u.includes(j))); });
             sortie.pkmncards = parSitemap.slice(0, 12);
             sortie.pkmncardsMatiere = parSitemap.filter(e => MOT_MATIERE.test(e.page));
             sortie.ptcgdb = P.lus.filter(x => x.name && slug(x.name) === ns && (MOT_MATIERE.test(`${x.rarity} ${x.set} ${x.url}`) || jetons.some(j => slug(x.set).includes(j)))).slice(0, 12);
@@ -97,7 +97,7 @@ async function main() {
         pkmncardsSitemaps: S.filter(e => MOT_MATIERE.test(e.page)).slice(0, 60),
         ptcgdb: P.lus.filter(x => MOT_MATIERE.test(`${x.rarity} ${x.set} ${x.url} ${x.name}`)).slice(0, 60),
         // toutes les pages pkmncards de l'ensemble Celebrations : une page de carte en métal y figurerait-elle ? (lecture à l'œil de la liste)
-        pkmncardsCelebrations: S.filter(e => /celebrations|25th|anniversary/.test(e.page)).map(e => e.page.replace('https://pkmncards.com/card/', '')),
+        pkmncardsCelebrations: S.filter(e => /celebrations|25th|anniversary/.test(e.page)).map(e => e.page.replace(/^https:\/\/[^/]+\/card\//, '')),
         raretesPtcgdbMatiere: [...new Set(P.lus.map(x => x.rarity))].filter(r => r && MOT_MATIERE.test(r)),
     };
     const out = {

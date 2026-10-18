@@ -28,7 +28,10 @@ const urlScry = (n = 11) => `${IMG_SCRY}/pokemon/me55c-${n}/large`;
         : /\/pokemon\/me55c-\d+[a-z]?\/large$/.test(url) || /_hires\.png$/.test(url) ? { status: 200, type: 'image/png', octets: png } : { status: 404, type: 'image/png' };
     const verrou = { tenu: true, perdu: false };
     const pause = async () => { };
-    const client = (tr, o = {}) => P.fabriquerClientPtcgio({ transport: tr, verrou, pause, ...o });
+    // Chaque client du banc prend son SUIVI neuf et un dossier d'arrêts temporaire : le registre du processus (reponse-hote.js, c585c19d I3) garde la pause d'un hôte d'un client à l'autre,
+    // et la 302 d'une image (1.d) mettait images.scrydex.com en pause avant le scénario suivant : zéro requête au lieu d'une. Le banc n'écrit jamais dans le dossier réel des arrêts.
+    const dossierBanc = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'garde-api-'));
+    const client = (tr, o = {}) => P.fabriquerClientPtcgio({ transport: tr, verrou, pause, suivi: require('./collecte-cartes/reponse-hote').suiviHote(), dossierPauses: dossierBanc, ...o });
     const lever = async (c, u) => { try { await c.image(u); return null; } catch (e) { return e; } };
 
     // ── 1. L'EXÉCUTION ─────────────────────────────────────────────────────────────────────────────────────────────────
