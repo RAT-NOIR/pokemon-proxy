@@ -2,6 +2,7 @@
 // Les extraits du NOUVEAU gabarit sont copiés de pages réelles (set 552, Terastal Festival ex, lues le 2026-10-05) ; l'ANCIEN est celui
 // que décrit l'en-tête du module (relevé du 2026-09-12), avec une clé réelle de la base (artofpkm/102/1). Aucune requête.
 // Le cas qui a fait écrire ce banc : sur le nouveau gabarit, l'ancien lecteur rendait ZÉRO entrée pour tous les sets, sans erreur.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const { lireListe, lirePageCarte, parcourirListe, releveComplet } = require('./collecte-cartes/artofpkm');
 let ok = 0, ko = 0;

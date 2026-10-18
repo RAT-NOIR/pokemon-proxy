@@ -8,6 +8,7 @@
 //   (c) une autre langue, ou un autre numéro → la marque reste, le document reste `ok` ;
 //   (d) REJEU de la jointure sur une image de basse définition, sans candidate meilleure → la marque de l'entrée RESTE (I1 : le $pull + $push d'une entrée
 //       neuve l'effaçait, le site aurait agrandi l'image).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

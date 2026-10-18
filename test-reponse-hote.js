@@ -1,6 +1,7 @@
 // node test-reponse-hote.js — la règle commune de réponse des hôtes d'images (collecte-cartes/reponse-hote.js), au niveau du MODULE.
 // Fonctions pures : aucune requête, aucune base. Un test par cas de la décision du testeur du 2026-10-18 (fausse page introuvable, défi, plus de 20 d'affilée)
 // et des rulings du coordinateur (liste fermée d'issues, « challenge » seul = ambigu, empreinte connue, inattendue, compteur par hôte).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -215,6 +216,62 @@ const ABSENTE = cl({ statut: 404 });
     R.reagir(S2, 'i.example', cl({ statut: 302 }));
     verifier('I3 : une issue « inattendue » met AUSSI l\'hôte en pause pour le processus', [S2.rapport('i.example').pause, (() => { try { R.garderHote('i.example', os.tmpdir(), S2); return null; } catch (e) { return !!e.pauseHote; } })()], [true, true]);
     R.reinitialiserSuiviProcessus();
+}
+
+// ── CORRECTION 2 (I1) : le bilan d'une unité arrêtée par un hôte — UNE définition pour les collecteurs ──────────────────────────────────────────
+{
+    const arret = Object.assign(new Error('x.example ARRÊTÉ'), { bloque: true, arretDefinitif: true, hote: 'x.example', motif: 'HTTP 403', fichier: '/f' });
+    const pause = Object.assign(new Error('x.example EN PAUSE'), { pauseHote: true, hote: 'x.example', issue: 'inattendue', empreinte: null, pausePersistante: false });
+    verifier('bilanDeLArret : un arrêt durable → « arret-hote » + arretHote nommé, sans jointure', (b => [b.code, b.etat, b.arretHote, b.pauseHote, b.sansJointure, b.erreur, b.telecharges])(R.bilanDeLArret('U1', arret, { telecharges: 3 })), ['U1', 'arret-hote', { hote: 'x.example', motif: 'HTTP 403', fichier: '/f' }, undefined, true, 'x.example ARRÊTÉ', 3]);
+    verifier('bilanDeLArret : une pause → « pause-hote » + pauseHote nommé', (b => [b.etat, b.pauseHote, b.arretHote])(R.bilanDeLArret('U1', pause)), ['pause-hote', { hote: 'x.example', issue: 'inattendue', empreinte: null, persistante: false }, undefined]);
+}
+// ── CORRECTION 2 (faibles) : entités décodées avant les marqueurs ; detecterDefi fermé sur un corps indécodable ; mesure des marqueurs sur des pages archivées ──────────────
+{
+    const defi = t => issue({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.from(`<html>${t}</html>`) });
+    verifier('F5 : « Just&nbsp;a moment » (entité insécable) = defi', defi('Just&nbsp;a&nbsp;moment...'), 'defi');
+    verifier('F5 : « Just&#160;a moment » et « Just&#xA0;a moment » = defi', [defi('Just&#160;a moment'), defi('Just&#xA0;a moment')], ['defi', 'defi']);
+    verifier('F5 : « g&#45;recaptcha » (entité décimale) = defi', defi('<div class="g&#45;recaptcha"></div>'), 'defi');
+    verifier('F5 : une entité ordinaire ne fabrique pas de marqueur (« Gym &amp; Fossil »)', defi('Gym &amp; Fossil'), 'fausse-absente');
+    verifier('F5 : « Gym&nbsp;Challenge » reste ambigu (le mot « challenge » seul)', defi('Gym&nbsp;Challenge'), 'ambigue');
+    const nul = Buffer.from([0x3c, 0x68, 0x00, 0x74, 0x00, 0x6d, 0x00, 0x6c, 0x00, 0x3e, 0x00, 0x00]);
+    verifier('F5 : detecterDefi sur un corps INDÉCODABLE (text/html, octets NUL sans BOM) = fermé : un motif « inattendue », jamais null', (m => [typeof m, /inattendue/.test(m || '')])(R.detecterDefi({ statut: 200, typeContenu: 'text/html', debutCorps: nul })), ['string', true]);
+    verifier('F5 : …mais un JSON ou une image n\'est pas visé par cette fermeture', [R.detecterDefi({ statut: 200, typeContenu: 'application/json', debutCorps: nul }), R.detecterDefi({ statut: 200, typeContenu: 'image/png', debutCorps: PNG })], [null, null]);
+    verifier('F5 : un corps vide ou lisible n\'est pas indécodable', [R.detecterDefi({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.alloc(0) }), R.detecterDefi({ statut: 200, typeContenu: 'text/html', debutCorps: Buffer.from('<html>ok</html>') })], [null, null]);
+    // M2 : le mesureur de marqueurs (lecture seule, zéro requête) sur des pages archivées
+    const { mesurer } = require('./mesurer-marqueurs-pages');
+    const dm = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-mesure-'));
+    fs.writeFileSync(path.join(dm, 'a.html'), '<html><body>carte normale</body></html>');
+    fs.writeFileSync(path.join(dm, 'b.html'), '<html><script src="https://www.google.com/recaptcha/api.js"></script></html>');
+    fs.mkdirSync(path.join(dm, 'sous')); fs.writeFileSync(path.join(dm, 'sous', 'c.html'), '<html>' + ' '.repeat(6000) + '<div class="g-recaptcha"></div></html>');
+    fs.writeFileSync(path.join(dm, 'd.txt'), 'Please solve the CAPTCHA');
+    fs.writeFileSync(path.join(dm, 'e.html'), '<html>' + ' '.repeat(300) + '<div class="g-recaptcha"></div></html>');
+    const mes = mesurer(dm);
+    verifier('M2 : le mesureur compte les pages lues et celles qui portent un marqueur dans leurs 5 000 premiers caractères (récursif, un marqueur au-delà de 5 000 ne compte pas)', [mes.pages, mes.avecMarqueur, mes.parMarqueur], [5, 3, { captcha: 3 }]);
+    fs.rmSync(dm, { recursive: true, force: true });
+}
+
+// ── CORRECTION 2 (M1) : les arrêts et pauses durables vivent HORS de l'arbre du code ─────────────────────────────────────────────────────────────
+{
+    const { spawnSync } = require('child_process');
+    const afficher = env => spawnSync(process.execPath, [path.join(__dirname, 'affiche-dossier-arrets.js')], { encoding: 'utf8', env: { ...process.env, ARRETS_HOTES_DOSSIER: '', ...env } }).stdout.trim();
+    const DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
+    verifier('M1 : le dossier par défaut est C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes', afficher({}), DEFAUT);
+    verifier('M1 : ARRETS_HOTES_DOSSIER remplace le dossier par défaut', afficher({ ARRETS_HOTES_DOSSIER: path.join(os.tmpdir(), 'autre-dossier-arrets') }), path.join(os.tmpdir(), 'autre-dossier-arrets'));
+    verifier('M1 : le dossier par défaut n\'est PAS dans l\'arbre du code (ni sous collecte-cartes, ni sous le dépôt)', [path.resolve(DEFAUT).startsWith(path.resolve(__dirname)), path.resolve(DEFAUT).startsWith(path.resolve(__dirname, 'collecte-cartes'))], [false, false]);
+    verifier('M1 : l\'ancienne variable RM_PAUSES_HOTE n\'est plus lue', afficher({ RM_PAUSES_HOTE: path.join(os.tmpdir(), 'ancien') }), DEFAUT);
+    // le dossier est créé s'il est absent ; illisible (un fichier à sa place, ou non créable), la lecture BLOQUE (sens fermé)
+    const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-doss-'));
+    const absent = path.join(racine, 'a', 'b');
+    verifier('M1 : un dossier absent est CRÉÉ à la première lecture (aucun arrêt)', [R.hoteArrete('h.example', absent), fs.existsSync(absent)], [null, true]);
+    const fichier = path.join(racine, 'fichier'); fs.writeFileSync(fichier, 'x');
+    verifier('M1 : un dossier ILLISIBLE (un fichier à sa place) BLOQUE la lecture : garderHote lève un arrêt, hoteArrete rend un arrêt « illisible »', [(() => { try { R.garderHote('h.example', fichier); return 'passe'; } catch (e) { return [!!e.bloque, !!e.arretDefinitif]; } })(), R.hoteArrete('h.example', fichier)?.illisible],
+        [[true, true], true]);
+    verifier('M1 : un dossier NON CRÉABLE (sous un fichier) BLOQUE la lecture', (() => { try { R.garderHote('h.example', path.join(fichier, 'sous')); return 'passe'; } catch (e) { return !!e.bloque; } })(), true);
+    // un arrêt écrit s'imprime EN GROS
+    const traces = []; const err0 = console.error; console.error = (...a) => traces.push(a.join(' '));
+    try { R.arretHote('gros.example', 'HTTP 403 (banc)', { dossier: racine, url: 'https://gros.example/x.png' }); } finally { console.error = err0; }
+    verifier('M1 : un arrêt écrit s\'imprime EN GROS (hôte, motif, fichier, « seul le coordinateur le lève »)', [/ARRÊT DÉFINITIF/.test(traces.join('\n')), /gros\.example/.test(traces.join('\n')), /HTTP 403/.test(traces.join('\n')), /coordinateur/.test(traces.join('\n')), traces.join('\n').includes(R.fichierArret(racine, 'gros.example')), traces.join('\n').split('\n').length >= 5], [true, true, true, true, true, true]);
+    fs.rmSync(racine, { recursive: true, force: true });
 }
 
 // ── M2 : l'écriture d'une pause qui échoue LÈVE une pauseHote ─────────────────────────────────────────────────────────────────

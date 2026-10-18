@@ -1,5 +1,6 @@
 // Banc de collecte-cartes/bulba.js : telecharger ne suit une redirection QUE vers l'hôte de départ ou la liste fermée Bulbagarden (§75), 3 sauts au plus.
 // Faux transport, aucune requête.   node test-bulba-redirections.js
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const bulba = require('./collecte-cartes/bulba');
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };

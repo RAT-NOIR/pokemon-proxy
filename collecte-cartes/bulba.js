@@ -104,6 +104,16 @@ function api(params) {
                     timeout: 60000
                 });
             } catch (e) {
+                // CORRECTION 2 (F4) : un DÉFI sur api.php (la forme du §73 : 403 Cloudflare `cf-mitigated: challenge`, ou un 503 « Just a moment ») écrit l'ARRÊT DURABLE de la source — même racine que les images
+                const rr = e.response;
+                if (rr) {
+                    const motif = RH.detecterDefi({ statut: rr.status, typeContenu: rr.headers?.['content-type'], entetes: { 'cf-mitigated': rr.headers?.['cf-mitigated'] }, debutCorps: Buffer.from(String(typeof rr.data === 'string' ? rr.data : JSON.stringify(rr.data ?? '')).slice(0, 5000)) });
+                    if (motif) {
+                        let fichier = null, ecriture = null;
+                        try { fichier = RH.arretHote(SOURCE_RACINE, `${motif} (HTTP ${rr.status}) sur api.php`, { dossier: dossierDefaut, url: API }); } catch (x) { ecriture = x.message; }
+                        throw Object.assign(new Error(`${SOURCE_RACINE} BLOQUÉ (${motif}) sur api.php — arrêt définitif de la source${fichier ? '' : ` ; ÉCRITURE DE L'ARRÊT IMPOSSIBLE (${ecriture})`}`), { bloque: true, arretDefinitif: true, status: rr.status, hote: SOURCE_RACINE, motif, fichier });
+                    }
+                }
                 // 5xx ou réseau : UN réessai après 60 s, comme artofpkm.js (§21 bis : les deux clients d'une
                 // même règle). Le 2026-09-14 à 18:43 UTC, un 503 Cloudflare a tué la génération de la table à
                 // sa première requête, avec une trace de 300 lignes. Au-delà d'un réessai, on s'arrête :

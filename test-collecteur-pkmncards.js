@@ -4,6 +4,7 @@
 //     403 / 429 / HTML / cf-mitigated / 3xx / octets qui ne sont pas une image => ARRÊT DÉFINITIF (fichier d'arrêt) ; 404 => absent ; 5xx / coupure => interrompu SANS fichier ;
 //   · CONTRÔLER : dos de carte, taille, rapport, même empreinte sous deux adresses ; la PLANCHER que le coordinateur regarde ;
 //   · ÉCRIRE : depuis le cache seulement (0 requête), ajout ou remplacement, seuil, --attendu, rejets, aucun champ public ne nomme la source, vignettes, garde de lot ; RETIRER : exactement le lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -132,6 +133,13 @@ const robotsReel = fs.readFileSync(path.join(__dirname, 'fixtures', 'pkmncards-r
             const a = await lancer(urls, t1, tmp(), horloge(), { dossierPauses: dp() });
             const t2 = reseau(normal); const b = await lancer(urls, t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
             verifier('I3 pkmncards : deux unités de suite — la seconde ne fait AUCUNE requête (pas même robots.txt)', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
+        // CORRECTION 2 (faible) : une pause « octets non conformes » (valide mais pas l'image annoncée) vaut pour le PROCESSUS : la seconde unité ne fait AUCUNE requête
+        {
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: Buffer.from('ffd8ffe000104a464946000101000001', 'hex') }));
+            const a = await lancer(urls, t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(urls, t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('F3 pkmncards : une pause « octets non conformes » vaut pour le processus — la seconde unité ne fait AUCUNE requête', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
         }
         // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
         {

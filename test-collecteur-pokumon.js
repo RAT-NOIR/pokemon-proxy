@@ -7,6 +7,7 @@
 //   · défi : arrêt, alerte écrite, plus rien ; alerte posée : aucune requête ; tirage non occidental : refusé ;
 //   · le retrait en un lot retire EXACTEMENT le lot et rend les fiches à leur substitut.
 // TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE du dépôt (collecte-cartes/ + les deux scripts).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const { spawnSync } = require('child_process');
 const sharp = require('sharp');

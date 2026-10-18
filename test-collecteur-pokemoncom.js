@@ -6,6 +6,7 @@
 //     404 => absent, on continue ; 5xx / coupure => interrompu SANS fichier d'arrêt ; reprise sans requête pour ce qui est en cache ; en-têtes : l'agent honnête seul ;
 //   · ÉCRIRE : depuis le cache seulement (0 requête), additif, seuil de largeur, --attendu, aucun champ public ne nomme l'hôte, vignettes, garde de lot ;
 //   · RETIRER : exactement le lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -148,6 +149,14 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
             const a = await lancer(plan.map(p => p.url), t1, tmp(), horloge(), { dossierPauses: dp() });
             const t2 = reseau(normal); const b = await lancer(plan.map(p => p.url), t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
             verifier('I3 pokemoncom : deux unités de suite — la seconde ne fait AUCUNE requête (pas même robots.txt)', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
+        // CORRECTION 2 (faible) : la pause « image valide mais pas un PNG » vaut pour le PROCESSUS : la seconde unité ne fait AUCUNE requête
+        {
+            const jpg = await require('sharp')({ create: { width: 700, height: 980, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: jpg }));
+            const a = await lancer(plan.map(p => p.url), t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(plan.map(p => p.url), t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('F3 pokemoncom : la pause « pas un PNG » vaut pour le processus — la seconde unité ne fait AUCUNE requête', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
         }
         // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — notée « fausse-absente » (empreinte, date), redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
         {

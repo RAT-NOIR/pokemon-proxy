@@ -4,6 +4,7 @@
 // Ce que le banc garde : la LECTURE des pages (le parseur lit ce que la page porte), la PREUVE de correspondance (numéro + nom + set ;
 // un doute est un trou), le PLAN (jamais l'illustration d'une autre impression), le CLIENT (verrou, cadence, robots.txt, ARRÊT au
 // premier blocage) et le RETRAIT en un seul lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const T = require('./collecte-cartes/tpc');

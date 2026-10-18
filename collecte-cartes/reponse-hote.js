@@ -68,12 +68,18 @@ function octetsDImage(b) {
     if (b.subarray(4, 8).toString('latin1') === 'ftyp' && /^(avif|avis)/.test(b.subarray(8, 12).toString('latin1'))) return true;
     return false;
 }
-/** Le corps en texte : UTF-16 avec BOM (LE ou BE) décodé, UTF-8 sinon ; un corps qui porte des octets NUL sans BOM est INDÉCODABLE (null) — les marqueurs n'y seraient pas vus. */
+/** Les entités HTML qui masquent un marqueur (« Just&nbsp;a moment », « Just&#160;a moment », « g&#45;recaptcha ») : décodées AVANT la recherche. */
+function sansEntites(t) {
+    const cp = n => { try { return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ' '; } catch { return ' '; } };
+    return t.replace(/&nbsp;/gi, ' ').replace(/&#x([0-9a-f]+);?/gi, (_, h) => cp(parseInt(h, 16)).replace(/\u00a0/g, ' ')).replace(/&#(\d+);?/g, (_, d) => cp(Number(d)).replace(/\u00a0/g, ' '))
+        .replace(/&(amp|lt|gt|quot|apos);/gi, (_, n) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'' })[n.toLowerCase()]);
+}
+/** Le corps en texte : UTF-16 avec BOM (LE ou BE) décodé, UTF-8 sinon, entités HTML décodées ; un corps qui porte des octets NUL sans BOM est INDÉCODABLE (null) — les marqueurs n'y seraient pas vus. */
 function decoder(corps) {
-    if (corps.length >= 2 && corps[0] === 0xff && corps[1] === 0xfe) return corps.subarray(2).toString('utf16le');
-    if (corps.length >= 2 && corps[0] === 0xfe && corps[1] === 0xff) { const b = Buffer.from(corps.subarray(2)); for (let i = 0; i + 1 < b.length; i += 2) { const x = b[i]; b[i] = b[i + 1]; b[i + 1] = x; } return b.toString('utf16le'); }
+    if (corps.length >= 2 && corps[0] === 0xff && corps[1] === 0xfe) return sansEntites(corps.subarray(2).toString('utf16le'));
+    if (corps.length >= 2 && corps[0] === 0xfe && corps[1] === 0xff) { const b = Buffer.from(corps.subarray(2)); for (let i = 0; i + 1 < b.length; i += 2) { const x = b[i]; b[i] = b[i + 1]; b[i + 1] = x; } return sansEntites(b.toString('utf16le')); }
     if (corps.includes(0)) return null;
-    return corps.toString('utf8');
+    return sansEntites(corps.toString('utf8'));
 }
 const estHtml = t => /^\s*(text\/html|application\/xhtml)/i.test(t);
 const estJson = t => /json/i.test(t);
@@ -103,7 +109,12 @@ function detecterDefi({ statut, typeContenu, entetes, debutCorps } = {}) {
     const h = enTetes(entetes);
     const corps = bornerCorps(debutCorps);
     const type = String(typeContenu ?? h['content-type'] ?? '');
-    return motifDeDefi({ statut: Number(statut), h, corps, image: octetsDImage(corps), type });
+    const image = octetsDImage(corps);
+    const motif = motifDeDefi({ statut: Number(statut), h, corps, image, type });
+    if (motif) return motif;
+    // FERMÉ (correction 2, F5) : un corps de texte INDÉCODABLE (octets NUL sans BOM) est « inattendue » — les marqueurs n'y seraient pas vus ; on ne le prend pas pour une page sans défi
+    if (!image && corps.length && /^\s*(text\/|application\/(xhtml|xml))/i.test(type) && decoder(corps) === null) return 'inattendue : corps indécodable (octets NUL sans BOM), aucun marqueur ne peut y être cherché';
+    return null;
 }
 
 /** Le fichier des empreintes de « page introuvable connue » : { "<hôte>": ["<sha256>", …] }. Illisible ou mal formé : LÈVE (jamais un repli sur le vide). */
@@ -244,6 +255,8 @@ function ecrirePausePersistante(dossier, hote, { classement, debutCorps, url = n
 }
 /** La pause d'un hôte, ou null. Un fichier illisible vaut PAUSE (« je ne sais pas » n'est jamais « tout va bien »). */
 function lirePausePersistante(dossier, hote) {
+    const pb = problemeDeDossier(dossier);
+    if (pb) return { hote, illisible: true, motif: `${dossier} : ${pb} — on ne sait pas, la pause tient` };
     const f = fichierPause(dossier, hote);
     if (!fs.existsSync(f)) return null;
     try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (j && typeof j === 'object') return j; } catch { /* illisible */ }
@@ -252,7 +265,15 @@ function lirePausePersistante(dossier, hote) {
 
 // ── l'ARRÊT DURABLE d'un hôte (issue `defi`, pour les clients qui n'ont aucune alerte : artofpkm, Bulbapedia, TCGdex) ──────────────────────────────
 // Le même dossier et le même format que la pause persistante, une NATURE distincte (`arret-definitif`) et un fichier distinct. Lu avant toute requête. Seul le coordinateur le lève.
-const DOSSIER_PAUSES = process.env.RM_PAUSES_HOTE || path.join(__dirname, 'pauses-hote');
+// CORRECTION 2 (M1) : HORS de l'arbre du code (un autre worktree, un clone neuf ou un `git clean` verrait sinon un hôte arrêté comme libre). Le dossier est créé s'il est absent ;
+// s'il est illisible, la lecture BLOQUE (sens fermé). Les bancs prennent TOUJOURS un dossier temporaire (ARRETS_HOTES_DOSSIER, ou l'option `dossier` des fonctions).
+const DOSSIER_PAUSES = process.env.ARRETS_HOTES_DOSSIER || 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
+/** Le dossier des arrêts : créé s'il est absent. Rend null s'il est lisible, sinon la RAISON (illisible, pas un dossier, non créable). */
+function problemeDeDossier(dossier) {
+    try { fs.mkdirSync(dossier, { recursive: true }); } catch (e) { return `dossier des arrêts non créable (${e.message})`; }
+    try { if (!fs.statSync(dossier).isDirectory()) return 'ce n\'est pas un dossier'; fs.readdirSync(dossier); } catch (e) { return `dossier des arrêts illisible (${e.message})`; }
+    return null;
+}
 /** La racine d'un hôte (cdn.artofpkm.com → artofpkm.com) : un arrêt vaut pour la SOURCE, pas pour un seul de ses noms d'hôte. */
 function hoteRacine(hote) { const l = String(hote).split('.'); return l.length <= 2 ? String(hote) : l.slice(-2).join('.'); }
 const fichierArret = (dossier, hote) => path.join(path.resolve(dossier), `ARRET-HOTE-${String(hote).replace(/[^A-Za-z0-9.-]/g, '_').replace(/^\.+/, '_')}.json`);
@@ -263,10 +284,14 @@ function arretHote(hote, motif, { dossier = DOSSIER_PAUSES, url = null } = {}) {
     try { const u = new URL(url); adresse = `${u.origin}${u.pathname}`; } catch { /* pas d'adresse */ }
     const f = fichierArret(dossier, hote);
     fs.writeFileSync(f, JSON.stringify({ hote, nature: 'arret-definitif', le: new Date().toISOString(), motif, url: adresse, levee: 'par le coordinateur seulement : supprimer ce fichier' }, null, 1));
+    // un arrêt écrit s'imprime EN GROS : il ne doit pas passer inaperçu dans un journal
+    console.error(['', '█'.repeat(100), `██  ARRÊT DÉFINITIF DE L'HÔTE « ${hote} »`, `██  motif   : ${motif}`, `██  fichier : ${f}`, '██  aucune requête ne partira vers cet hôte ; seul le coordinateur le lève (en supprimant ce fichier).', '█'.repeat(100), ''].join('\n'));
     return f;
 }
 /** L'arrêt durable d'un hôte, ou null. Un fichier illisible vaut ARRÊT (« je ne sais pas » n'est jamais « tout va bien »). */
 function hoteArrete(hote, dossier = DOSSIER_PAUSES) {
+    const pb = problemeDeDossier(dossier);
+    if (pb) return { hote, nature: 'arret-definitif', illisible: true, motif: `${dossier} : ${pb} — on ne sait pas, l'arrêt tient` };
     const f = fichierArret(dossier, hote);
     if (!fs.existsSync(f)) return null;
     try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (j && typeof j === 'object') return j; } catch { /* illisible */ }
@@ -350,8 +375,17 @@ function fausseAbsenceRecente(entree, maintenant = Date.now()) {
     return Number.isFinite(t) && maintenant - t < DELAI_FAUSSE_ABSENCE_MS;
 }
 
+/**
+ * Le bilan d'une unité ARRÊTÉE par un hôte : un arrêt durable (`bloque`) → « arret-hote », une pause (`pauseHote`) → « pause-hote ». issueDeLUnite (issue-unite.js) en fait une unité EN ATTENTE
+ * et arrête le worker pour cet hôte. `comptes` : ce que l'unité avait déjà fait (téléchargés, échecs…).
+ */
+function bilanDeLArret(code, e, comptes = {}) {
+    return { code, etat: e.bloque ? 'arret-hote' : 'pause-hote', erreur: e.message, sansJointure: true, ...comptes,
+        ...(e.bloque ? { arretHote: { hote: e.hote ?? null, motif: e.motif ?? e.message, fichier: e.fichier ?? null } } : { pauseHote: { hote: e.hote ?? null, issue: e.issue ?? null, empreinte: e.empreinte ?? null, persistante: !!e.pausePersistante } }) };
+}
+
 module.exports = {
-    entreeAbsence, fausseAbsenceRecente, DELAI_FAUSSE_ABSENCE_MS, hoteRacine, fichierArret, arretHote, hoteArrete, suiviDuProcessus, reinitialiserSuiviProcessus, lireImage, ISSUES, LAISSENT_CONTINUER, BORNE_CORPS, SEUIL_FAUSSES, STATUTS_DEFI, MARQUEURS, FICHIER_CONNUES, DOSSIER_PAUSES,
+    bilanDeLArret, entreeAbsence, fausseAbsenceRecente, DELAI_FAUSSE_ABSENCE_MS, hoteRacine, fichierArret, arretHote, hoteArrete, suiviDuProcessus, reinitialiserSuiviProcessus, lireImage, ISSUES, LAISSENT_CONTINUER, BORNE_CORPS, SEUIL_FAUSSES, STATUTS_DEFI, MARQUEURS, FICHIER_CONNUES, DOSSIER_PAUSES,
     classerReponseImage, detecterDefi, entreeDepuisClient, octetsDImage, empreintesConnues, suiviHote, reagir,
     fichierPause, extraitBorne, ecrirePausePersistante, lirePausePersistante, erreurPause, garderHote, traiterImage
 };

@@ -159,7 +159,7 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         if (x.action === 'transitoire') return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}`, ...rapportReponses() };
         if (x.action === 'absente') { index.images[url] = RH.entreeAbsence(index.images[url], x, r.status, now()); ecrireIndex(dossierCache, index); continue; }
         // M1 : une image valide mais qui n'est pas un PNG est « inattendue » (REPONSE-HOTE) : PAUSE de l'hôte, rien n'entre au cache
-        if (!r.octets.subarray(0, 8).equals(PNG_MAGIE)) return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus sont une image, mais pas un PNG (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapportReponses() };
+        if (!r.octets.subarray(0, 8).equals(PNG_MAGIE)) { suivi.bloquer(hoteImages, 'image valide mais pas un PNG (réponse inattendue)'); return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus sont une image, mais pas un PNG (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapportReponses() }; }
         const meta = await sharp(r.octets).metadata();
         const fichier = path.join('img', nomFichier(url));
         fs.writeFileSync(path.join(dossierCache, fichier), r.octets);

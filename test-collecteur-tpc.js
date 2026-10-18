@@ -4,6 +4,7 @@
 // la liste est la même page réduite à cette fiche (une liste d'une carte : « resultNumber » 1, une page).
 // Ce que le banc garde : la collecte additive (les entrées des autres sources ne bougent pas), la MENTION et le LOT sur chaque visuel, la
 // REPRISE sans requête, un visuel RETIRÉ jamais repris, l'ARRÊT au premier blocage (et plus rien ensuite), la garde de TAILLE.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');

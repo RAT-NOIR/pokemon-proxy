@@ -1,6 +1,7 @@
 // node test-pikaqian.js — pikaqian.com : le CLIENT (hôtes fermés, robots, redirections, défi, erreur répétée, cadence), la LECTURE de la page de
 // set, la PREUVE par produit, le plan, le seuil de largeur et le plan de retrait. Aucune requête réelle : transport simulé, horloge simulée.
 // PK_MODULE (banc des mutants, rouge-pikaqian.js) : un module à tester à la place du vrai.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const P = require(process.env.PK_MODULE ? path.resolve(process.env.PK_MODULE) : './collecte-cartes/pikaqian');

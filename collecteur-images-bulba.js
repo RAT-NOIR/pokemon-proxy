@@ -42,6 +42,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { numerosServisParRemplacement } = require('./collecte-cartes/jumeau-en');
+const RH0 = require('./collecte-cartes/reponse-hote');   // CORRECTION 2 : le bilan d'une unité arrêtée par un hôte (arret-hote / pause-hote), une seule définition
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
@@ -243,7 +244,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         }
         console.log(`4. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, sur ${aFaire.length} à faire`);
         if (arretDemande) return { code, etat: 'interrompu', telecharges };
-        if (arretHote) { console.error(`⛔ ${code} : ${arretHote.message}`); return { code, etat: arretHote.bloque ? 'refuse-source-bloquee' : 'incomplet', erreur: arretHote.message, telecharges, echecs, reponsesHotes: bulba.rapportReponses() }; }
+        if (arretHote) { console.error(`⛔ ${code} : ${arretHote.message}`); return RH0.bilanDeLArret(code, arretHote, { telecharges, echecs, reponsesHotes: bulba.rapportReponses() }); }
 
         // ---- 5. jointure -------------------------------------------------------------------------
         const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();

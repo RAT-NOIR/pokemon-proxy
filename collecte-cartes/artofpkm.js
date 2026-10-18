@@ -56,6 +56,8 @@ function juger(r, url) {
 function defiDePage(r, url) {
     const motif = RH.detecterDefi({ statut: r.status, typeContenu: r.headers?.['content-type'], entetes: { 'cf-mitigated': r.headers?.['cf-mitigated'] }, debutCorps: Buffer.from(String(typeof r.data === 'string' ? r.data : Buffer.from(r.data || '').toString('utf8')).slice(0, 5000)) });
     if (!motif) return null;
+    // FERMÉ (correction 2, F5) : un corps indécodable est « inattendue » — PAUSE de la source (et du processus), pas un arrêt durable : on ne sait pas si c'est un défi
+    if (/^inattendue/.test(motif)) { suivi.bloquer(racineDe(url), motif); throw RH.erreurPause({ action: 'pause', issue: 'inattendue', motif }, racineDe(url), url); }
     let fichier = null, ecriture = null;
     try { fichier = RH.arretHote(racineDe(url), `${motif} (HTTP ${r.status})`, { dossier: dossierPauses, url }); } catch (e) { ecriture = e.message; }
     throw Object.assign(new Error(`${racineDe(url)} BLOQUÉ (${motif}) sur ${url} — arrêt définitif de l'hôte${fichier ? '' : ` ; ÉCRITURE DE L'ARRÊT IMPOSSIBLE (${ecriture})`}`), { bloque: true, arretDefinitif: true, definitif: true, status: r.status, hote: racineDe(url), motif, fichier });
@@ -85,7 +87,7 @@ function requete(url, { bin = false, range = null } = {}) {
                 if (r.status >= 400) throw Object.assign(new Error(`HTTP ${r.status} sur ${url}`), { status: r.status, definitif: true });
                 return r;
             } catch (e) {
-                if (e.definitif || e.bloque || essai === 1) throw e;
+                if (e.definitif || e.bloque || e.pauseHote || essai === 1) throw e;
                 console.warn(`   ↻ ${e.code || e.message} sur ${url} — un seul réessai dans ${REESSAI_MS / 1000} s`);
                 await dodo(REESSAI_MS);
             }
@@ -93,7 +95,8 @@ function requete(url, { bin = false, range = null } = {}) {
     });
     _file = tache.catch(() => { });
     return tache;
-}const compteRequetes = () => _compte;
+}
+const compteRequetes = () => _compte;
 
 /**
  * Les entrées d'un set, TOUTES PAGES.

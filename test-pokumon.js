@@ -2,6 +2,7 @@
 // propre et le substitut. Aucune requête, aucune base, rien sur R2 : un transport simulé et des cas RÉELS de la mesure du 2026-10-17 (S7/MESURE-OCC).
 // TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE du module (le rouge se voit en cassant le code).
 // RACINE_SITE=<dossier> : le dossier dont le VOISIN `rat-market-site` porte la règle du site (défaut : le dépôt principal).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 const P = require(path.join(DIR, 'collecte-cartes', 'pokumon.js'));

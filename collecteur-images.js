@@ -67,7 +67,7 @@ const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');  
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
-const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { issueDeLUnite, echecTransitoire, bilanDeLException } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const { estPassive, motifPassif, cloreUnitePassive } = require('./collecte-cartes/source-passive');                 // PikaQian passive depuis le 2026-10-13
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
@@ -196,6 +196,14 @@ async function collecterSet(code, M, dossierRapport) {
         console.error(`❌ ${code} : un collecteur d'images tient déjà ${slug} (pid ${tenuPar.pid} sur ${tenuPar.hote}, battement il y a ${tenuPar.ageS} s).`); return { code, etat: 'refuse-verrou' };
     }
     const liberer = () => verrouSet.rendre();
+    // CORRECTION 2 (I1) : un arrêt DURABLE d'hôte (`bloque`) ou une PAUSE (`pauseHote`) levé par la liste, la mesure ou une page n'est ni un plantage ni un verdict :
+    // l'unité sort en « arret-hote » / « pause-hote » (issue-unite.js : elle revient en attente, le worker s'arrête pour cet hôte) — la file n'est pas touchée.
+    const attraper = async f => { try { return { v: await f() }; } catch (e) { if (e.bloque || e.pauseHote) return { arret: e }; throw e; } };
+    const rendreArret = async (e, comptes = {}) => {
+        console.error(`⛔ ${code} : ${e.message}`);
+        await liberer();
+        return require('./collecte-cartes/reponse-hote').bilanDeLArret(code, e, { ...comptes, reponsesHotes: src.rapportReponses() });
+    };
 
     // 🔴 W-RESIL2 : toute sortie après la prise, retour nommé OU exception (lecture Mongo coupée, réseau), arrête le battement et TENTE le
     // rendu. Sans cela, l'exception remontait au superviseur avec le minuteur armé : après SIGTERM le processus ne sortait pas seul. `rendre`
@@ -218,7 +226,9 @@ async function collecterSet(code, M, dossierRapport) {
     // ---- 1. liste + 2. mesure, par set source ------------------------------------------------
     for (const id of S.ids) {
         if (!entrees[id]?.length) {
-            const liste = await src.listerSet(id);
+            const rl = await attraper(() => src.listerSet(id));
+            if (rl.arret) return await rendreArret(rl.arret);
+            const liste = rl.v;
             // une liste TRONQUÉE (cadre non lu, lot suivant vide ou répété) ne se vérifie pas : elle n'est pas écrite comme liste du set,
             // son relevé l'est — relecture du 2026-10-06 ; la règle est celle du relevé (src.releveComplet), la même que
             // remplir-file-images.js lit en base. Une page vide peut être passagère (anti-robot) : l'unité REVIENT en file, en queue, pas
@@ -258,7 +268,11 @@ async function collecterSet(code, M, dossierRapport) {
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-sous-section-absente', fini: new Date() } });
                 await liberer(); return { code, etat: 'refuse-sous-section-absente' };
             }
-            for (const e of echantillon) m.push({ url: e.original, ...(await src.enTeteImage(e.original)) });
+            for (const e of echantillon) {
+                const rm = await attraper(() => src.enTeteImage(e.original));
+                if (rm.arret) return await rendreArret(rm.arret);
+                m.push({ url: e.original, ...rm.v });
+            }
             mesures[id] = m;
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`mesures.${id}`]: m, phase: 'mesure' } });
         }
@@ -356,11 +370,7 @@ async function collecterSet(code, M, dossierRapport) {
         }
         if (arretHote) break;
     }
-    if (arretHote) {
-        console.error(`⛔ ${code} : ${arretHote.message}`);
-        await liberer();
-        return { code, etat: arretHote.bloque ? 'refuse-source-bloquee' : 'incomplet', erreur: arretHote.message, telecharges, sautes, echecs, reponsesHotes: src.rapportReponses(), ...(arretHote.pauseHote ? { pauseHote: { hote: arretHote.hote, issue: arretHote.issue, empreinte: arretHote.empreinte, persistante: arretHote.pausePersistante } } : {}) };
-    }
+    if (arretHote) return await rendreArret(arretHote, { telecharges, sautes, echecs });
     console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${largeurMin} px`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
@@ -936,6 +946,11 @@ const principal = async () => {
                 }
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await bulbaImg.collecterSet(suivant._id, M, { mesurerSeulement: false }); }
+                catch (e) {
+                    if (!(e.bloque || e.pauseHote)) throw e;       // CORRECTION 2 : un arrêt durable / une pause d'hôte ne tue pas le worker ; toute autre exception garde son chemin
+                    b = bilanDeLException(suivant._id, e);
+                    console.error(`🔴 ${suivant._id} : ${e.message}`);
+                }
                 finally { await vb.rendre(); }
             } else if (sourceDuSet === 'tcgdex') {
                 // 🔑 TROISIÈME SOURCE, TROISIÈME VERROU (2026-09-23) : api.tcgdex.net n'est ni Bulbagarden ni artofpkm (§17).
@@ -955,7 +970,7 @@ const principal = async () => {
                     // 🔴 relecture du 2026-09-26 (nuit) : une exception (`cartesDuSet` en 503 après son réessai, un GraphQL en erreur)
                     // TUAIT le worker — et le manque réel enfile des sets « jamais lus ». L'unité sort avec une issue : passagère, elle
                     // revient en file (issue-unite.js, 3 passages au plus) ; sinon refusée, la cause ÉCRITE sur l'unité.
-                    b = { code: suivant.code, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant.code, e);          // CORRECTION 2 : un arrêt durable / une pause d'hôte → « arret-hote » / « pause-hote » (attente + arrêt), jamais « erreur »
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte TCGdex — ${e.message}`);
                 }
                 finally { await vt.rendre(); }
@@ -974,7 +989,7 @@ const principal = async () => {
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await tpcImg.collecterSet(suivant, M, { verrou: vp }); }
                 catch (e) {
-                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant._id, e);
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
                 }
                 finally { await vp.rendre(); }
@@ -1001,11 +1016,18 @@ const principal = async () => {
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await pkImg.collecterSet(suivant, M, { verrou: vk }); }
                 catch (e) {
-                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant._id, e);
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
                 }
                 finally { await vk.rendre(); }
-            } else if (sourceDuSet === SOURCE) b = await collecterSet(suivant._id, M, dossierRapport);
+            } else if (sourceDuSet === SOURCE) {
+                try { b = await collecterSet(suivant._id, M, dossierRapport); }
+                catch (e) {
+                    if (!(e.bloque || e.pauseHote)) throw e;       // CORRECTION 2 : un arrêt durable / une pause d'hôte ne tue pas le worker ; toute autre exception garde son chemin
+                    b = bilanDeLException(suivant._id, e);
+                    console.error(`🔴 ${suivant._id} : ${e.message}`);
+                }
+            }
             else {
                 // 🔴 PLAN-POKECARDEX.md §5 (demande du testeur, 2026-09-27) : le `else` final envoyait TOUTE source inconnue chez artofpkm —
                 // une unité d'une source neuve, lue par un worker antérieur, aurait frappé le mauvais serveur sous le mauvais verrou.

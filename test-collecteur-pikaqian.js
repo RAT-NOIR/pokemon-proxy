@@ -4,6 +4,7 @@
 // la PROVENANCE et la LANGUE sur chaque visuel, le seuil de 300 px, la REPRISE sans requête d'image, un visuel RETIRÉ jamais repris, l'ARRÊT au
 // premier défi (alerte) et à l'erreur répétée (pas de refus définitif), les vignettes avant « verifie », la garde de TAILLE, et le RETRAIT en un lot.
 // PK_COLLECTEUR / PK_RETRAIT (banc des mutants, rouge-pikaqian.js) : des fichiers à tester à la place des vrais.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');

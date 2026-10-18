@@ -6,6 +6,7 @@
 //   · le collecteur : additif (un produit déjà pourvu n'est jamais touché), mention + lot + source + langue, reprise sans requête,
 //     un visuel retiré ne revient pas, dimensions hétérogènes refusées, R2 avant la ligne ;
 //   · le retrait en un lot retire EXACTEMENT le lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const sharp = require('sharp');
 const P = require('./collecte-cartes/ptcgio');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');

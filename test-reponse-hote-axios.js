@@ -1,13 +1,15 @@
 // node test-reponse-hote-axios.js — la règle commune de réponse (collecte-cartes/reponse-hote.js) pour les trois clients à transport axios : artofpkm, Bulbapedia, TCGdex.
 // Aucune requête (transports simulés), aucune base réelle, dossiers de pause TEMPORAIRES. Pour chacun : 200 text/html → absente (on passe à la suivante) ; défi → arrêt
 // définitif (erreur `bloque`, plus aucune requête) ; 21 fausses absences d'affilée → pause (erreur `pauseHote`, pas un arrêt) ; une image remet à zéro ; un 404 ne compte pas.
-// Et, pour le collecteur artofpkm (collecteur-images.js), le câblage : défi → « refuse-source-bloquee », pause → « incomplet », fausse absence → la carte est un échec, la passe continue.
+// Et, pour le collecteur artofpkm (collecteur-images.js), le câblage : défi → « arret-hote », pause → « pause-hote », fausse absence → la carte est un échec, la passe continue.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 process.env.R2_BUCKET_IMAGES = 'bucket-faux';
 const RH = require('./collecte-cartes/reponse-hote');
+const { issueDeLUnite } = require('./collecte-cartes/issue-unite');
 const AP = require('./collecte-cartes/artofpkm');
 const BU = require('./collecte-cartes/bulba');
 const TG = require('./collecte-cartes/tcgdex');
@@ -86,6 +88,10 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
     brancher(() => rep(500, 'application/json', Buffer.from('{"e":1}')));
     x = await sansLever(() => AP.pageCarte(1, 2));
     verifier('I1 ARTOFPKM : 500 JSON (page) → erreur ordinaire après UN réessai', [!!x.e?.bloque, appels.length], [false, 2]);
+    // CORRECTION 2 (F5) : une page (liste, carte) au corps INDÉCODABLE n'est pas « sans défi » : PAUSE de la source (fermé), pas un arrêt durable
+    brancher(() => rep(200, 'text/html', Buffer.from([0x3c, 0x68, 0x00, 0x74, 0x00, 0x6d, 0x00, 0x6c, 0x00, 0x00])));
+    x = await sansLever(() => AP.pageCarte(1, 2));
+    verifier('F5 ARTOFPKM : une page au corps indécodable → PAUSE de la source (pauseHote), aucun arrêt durable, UNE requête', [!!x.e?.pauseHote, !!x.e?.bloque, RH.hoteArrete('artofpkm.com', dirA), appels.length], [true, false, null, 1]);
     // I2 : l'arrêt durable survit à un NOUVEAU processus (registre vierge) tant que le fichier est là
     brancher(() => rep(403, 'text/html', Buffer.from('non')));
     x = await sansLever(() => AP.telecharger(U(1)));
@@ -121,13 +127,13 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         const doss = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-axios-col-'));
         let B = fausseBase(), apps = brancherC(() => { throw Object.assign(new Error('artofpkm.com BLOQUÉ (HTTP 403)'), { bloque: true, arretDefinitif: true, hote: 'cdn.artofpkm.com' }); });
         let r = await silencieux(() => collecterSet('DHD', B.M, doss));
-        verifier('COLLECTEUR artofpkm : un défi → « refuse-source-bloquee », une seule requête de fichier, aucun échec écrit', [r.etat, apps.length, B.echecs.length], ['refuse-source-bloquee', 1, 0]);
+        verifier('COLLECTEUR artofpkm : un défi → « arret-hote » (jamais « refuse »), une seule requête de fichier, aucun échec écrit, attente + arrêt du worker', [r.etat, apps.length, B.echecs.length, issueDeLUnite(r, {})], ['arret-hote', 1, 0, { etat: 'attente', arreter: true }]);
         B = fausseBase(); apps = brancherC(() => { throw Object.assign(new Error('cdn.artofpkm.com EN PAUSE'), { pauseHote: true, hote: 'cdn.artofpkm.com', issue: 'fausse-absente' }); });
         r = await silencieux(() => collecterSet('DHD', B.M, doss));
-        verifier('COLLECTEUR artofpkm : une pause de l\'hôte → « incomplet » avec la pause nommée, PAS un blocage, une seule requête, aucun échec écrit', [r.etat, r.pauseHote?.hote, apps.length, B.echecs.length], ['incomplet', 'cdn.artofpkm.com', 1, 0]);
+        verifier('COLLECTEUR artofpkm : une pause de l\'hôte → « pause-hote » avec la pause nommée, PAS un blocage, une seule requête, aucun échec écrit, attente + arrêt du worker', [r.etat, r.pauseHote?.hote, apps.length, B.echecs.length, issueDeLUnite(r, {})], ['pause-hote', 'cdn.artofpkm.com', 1, 0, { etat: 'attente', arreter: true }]);
         B = fausseBase(); apps = brancherC(() => { throw Object.assign(new Error('absent chez artofpkm (fausse-absente)'), { absente: true, status: 404, definitif: true }); });
         r = await silencieux(() => collecterSet('DHD', B.M, doss)).catch(() => ({ etat: 'jointure-non-simulee' }));        // (la jointure, après les téléchargements, n'est pas simulée par cette base)
-        verifier('COLLECTEUR artofpkm : une fausse page introuvable → la carte est notée en échec, la passe CONTINUE (3 requêtes), aucun blocage', [r.etat === 'refuse-source-bloquee', apps.length, B.echecs.length], [false, 3, 3]);
+        verifier('COLLECTEUR artofpkm : une fausse page introuvable → la carte est notée en échec, la passe CONTINUE (3 requêtes), aucun blocage', [r.etat === 'arret-hote', apps.length, B.echecs.length], [false, 3, 3]);
     }
 
     // ════════════ BULBAPEDIA ════════════
@@ -159,6 +165,26 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
         BU.regler();       // une AUTRE passe : seul le fichier de pause persistante retient l'hôte
         const x2 = await sansLever(() => BU.telecharger(`${H}/b.png`, opt(t, { dossierPauses: dB })));
         verifier('BULBAPEDIA : « Gym Challenge » seul = ambiguë → pause PERSISTANTE, puis aucune requête tant que le fichier tient', [!!x.e?.pausePersistante, !!x2.e?.pauseHote, t.a.length], [true, true, 1]);
+    }
+
+    // ── CORRECTION 2 (F4) : un défi sur l'API Bulbapedia (api.php) écrit l'arrêt durable de la source ──
+    {
+        const axiosO = require('axios').get; const dA2 = dp();
+        const stub = (status, data, h = {}) => async (url, o) => { const r = { status, headers: { 'content-type': typeof data === 'string' ? 'text/html' : 'application/json', ...h }, data }; if (status >= 400) throw Object.assign(new Error('Request failed with status code ' + status), { response: r }); return r; };
+        try {
+            BU.regler({ dossierPauses: dA2 });
+            require('axios').get = stub(403, '<html>Forbidden</html>', { 'cf-mitigated': 'challenge' });
+            const xa = await sansLever(() => BU.api({ action: 'query' }));
+            const arret = RH.hoteArrete('bulbagarden.net', dA2);
+            require('axios').get = stub(200, { query: { pages: [] } });
+            const xb = await sansLever(() => BU.api({ action: 'query' }));
+            verifier('F4 BULBAPEDIA : un 403 « cf-mitigated » sur api.php → erreur `bloque` ET arrêt durable écrit pour bulbagarden.net ; la requête suivante (API comme image) ne part pas', [!!xa.e?.bloque, !!arret, !!xb.e?.bloque], [true, true, true]);
+            BU.regler({ dossierPauses: dp() });
+            require('axios').get = stub(200, { query: { pages: [{ title: 'x' }] } });
+            const xc = await sansLever(() => BU.api({ action: 'query' }));
+            verifier('F4 BULBAPEDIA : une réponse JSON normale passe toujours (aucun arrêt)', [xc.e?.message ?? null, !!xc.ok], [null, true]);
+
+        } finally { require('axios').get = axiosO; BU.regler(); }
     }
 
     // ── Bulbapedia : I1 (503), I2 (arrêt durable), I3 (le registre du processus) ──
