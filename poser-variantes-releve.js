@@ -1,9 +1,9 @@
 // ============================================================
-// TAMPONS-RELEVE B — POSER LES VARIANTES DES 13 V2 TAMPONNÉS DU RELEVÉ DU TESTEUR (2026-10-18)
+// TAMPONS-RELEVE B — POSER LES VARIANTES DES 13 V2 TAMPONNÉS DU RELEVÉ DU TESTEUR + 20 CORRECTIONS « normale » -> prerelease (2 du relevé, 18 vues sur vignette) (2026-10-18)
 // ============================================================
 //   node poser-variantes-releve.js --plan                                        (ESSAI À BLANC, défaut : prouve chaque fiche, imprime les comptes, le diff « servis », l'annonce ; n'écrit rien)
 //   node poser-variantes-releve.js --plan --rapport=<f>.json --annonce-vers=<f>.json
-//   node lot-additif.js --quoi="TAMPONS-RELEVE B : 13 fiches" --collections=cartes_produits,cartes,images --annonce=<f> --compte=cartes_produits -- node poser-variantes-releve.js --ecrire --attendu=13
+//   node lot-additif.js --quoi="TAMPONS-RELEVE B : 13 fiches + 20 corrections" --collections=cartes_produits,cartes,images --annonce=<f> --compte=cartes_produits -- node poser-variantes-releve.js --ecrire --attendu=33
 //   node poser-variantes-releve.js --restaurer=<sauvegarde>.json [--ecrire --attendu=<N>]    (remet chaque champ à sa valeur d'avant, s'il porte encore la valeur écrite par ce lot)
 // La SAUVEGARDE des valeurs d'avant est écrite AVANT la première écriture (`--sauvegarde-vers=`, par défaut dans le dossier du lot). Les règles vivent dans collecte-cartes/variantes-releve.js.
 // JAMAIS de requête réseau. Collections écrites : `cartes_produits`, `cartes`, `images`.
@@ -27,7 +27,7 @@ function lireSources(chemins = CHEMINS) {
     const inv = JSON.parse(fs.readFileSync(chemins.inventaire, 'utf8'));
     if (!Array.isArray(inv.produits) || !inv.produits.length) throw new Error(`${chemins.inventaire} : aucune étiquette — un inventaire vide ne prouve rien`);
     const etiquettes = new Map(inv.produits.map(p => [p.idProduct, String(p.ocr ? p.ocr.join(' ') : p.classe ?? '')]));
-    const corrections = R.listeDesCorrections(lignesCsv);
+    const corrections = [...R.listeDesCorrections(lignesCsv), ...R.listeDesCorrectionsVues()];
     return { fiches, corrections, dates, etiquettes, idsReleve: new Set(lignesCsv.map(l => l.idProduct)), denominateurs: { produitsExport: ex.products.length, datesLues: dates.size, vignettesInventaire: inv.vignettes, etiquettesInventaire: inv.produits.length, lignesReleve: lignesCsv.length } };
 }
 

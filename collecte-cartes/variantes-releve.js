@@ -57,7 +57,7 @@ const FICHES = Object.freeze([
     { id: 359285, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'toys-r-us', mot: 'toys-r-us' }, { jeton: 'cosmo', mot: 'cosmo' }] },
     // Frosmoth : la vignette Cardmarket de 450593 dit « 1ST PLACE » (League Challenge), pas « 2e place » comme le relevé et le titre de l'annonce : la vignette fait foi pour la marque, le conflit est SIGNALÉ dans la preuve.
     // Les frères, lus à l'œil : 450598 « 2ND PLACE », 450603 « 3RD PLACE », 450608 « 4TH PLACE » -> la fiche est entièrement séparée (V1 normale + 4 places).
-    { id: 450593, colonne: 'League', corrobore: ['2ieme-place'], ajouts: [{ jeton: 'place-1', vignette: '1ST PLACE' }], conflit: 'le relevé du testeur dit 2e place pour ce produit : signalé',
+    { id: 450593, colonne: 'League', corrobore: ['2ieme-place'], ajouts: [{ jeton: 'place-1', vignette: '1ST PLACE' }], conflit: 'le relevé du testeur disait 2e place pour ce produit ; décision du testeur du 2026-10-18 : la vignette fait foi (1re place), l\'annonce de l\'utilisateur correspond à 450598 (2e place)',
         freres: [{ id: 450598, variante: 'league+place-2', etiquette: '2ND PLACE' }, { id: 450603, variante: 'league+place-3', etiquette: '3RD PLACE' }, { id: 450608, variante: 'league+place-4', etiquette: '4TH PLACE' }] }
 ]);
 
@@ -122,6 +122,32 @@ function listeDesCorrections(lignesCsv, table = CORRECTIONS) {
         if (!String(l.url).toLowerCase().includes(t.mot)) throw new Error(`correction ${t.id} : le mot « ${t.mot} » ne figure pas dans l'URL de l'annonce — rien n'est écrit`);
         if (!varianteValide(t.vers)) throw new Error(`correction ${t.id} : variante « ${t.vers} » hors vocabulaire`);
         return { idProduct: t.id, de: t.de, vers: t.vers, nom: t.nom, preuve: `relevé du testeur, ${DATE_RELEVE} (annonce ${l.url}, colonne « ${l.stamp} ») et feu vert du testeur du ${DATE_RELEVE} (« le relevé de l'utilisateur fait foi ») : ce produit est le tamponné ${t.vers} ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale` };
+    });
+}
+
+/**
+ * LES CORRECTIONS VUES (B2, décision du testeur du 2026-10-18, mot pour mot : « Les 18 V1 de MEP marqués « normale » : OUI, corrige-les en prerelease, mais carte par carte, SEULEMENT là où le scan ou la vignette
+ * Cardmarket montre bien le logo de prérelease. »). LISTE FERMÉE DE 18 ; la preuve n'est PAS le CSV du testeur (ces ids n'y sont pas) mais la vignette Cardmarket regardée par le coordinateur (zoom ×3).
+ * Même condition que CORRECTIONS : la valeur d'avant doit être exactement « normale » ; en plus, le set et le numéro de fiche de la ligne doivent être ceux de la table.
+ */
+const SET_MEP = 'MEP-Black-Star-Promos';
+const vue = (id, numero, nom, logo, zoomSeul = false) => Object.freeze({ id, de: 'normale', vers: 'prerelease', nom, set: SET_MEP, numero, logo, ...(zoomSeul ? { zoomSeul: true } : {}) });
+const CORRECTIONS_VUES = Object.freeze([
+    vue(851043, '001', 'Meganium', 'MEGA EVOLUTION'), vue(851045, '002', 'Inteleon', 'MEGA EVOLUTION'), vue(851047, '003', 'Alakazam', 'MEGA EVOLUTION'), vue(851049, '004', 'Lunatone', 'MEGA EVOLUTION'),
+    vue(857390, '014', 'Ceruledge', 'PHANTASMAL FLAMES'), vue(857393, '015', 'Zacian', 'PHANTASMAL FLAMES'), vue(857396, '016', 'Flygon', 'PHANTASMAL FLAMES'), vue(857400, '017', 'Toxtricity', 'PHANTASMAL FLAMES'),
+    vue(877543, '064', 'Serperior', 'PERFECT ORDER'), vue(877544, '065', 'Barbaracle', 'PERFECT ORDER'), vue(877545, '066', 'Tyrantrum', 'PERFECT ORDER'),
+    vue(884754, '075', 'Ampharos', 'CHAOS RISING'), vue(884756, '076', 'Crobat', 'CHAOS RISING'), vue(884758, '077', 'Goodra', 'CHAOS RISING'),
+    vue(894261, '082', 'Miraidon', 'PITCH BLACK'), vue(894262, '083', 'Slowbro', 'PITCH BLACK'), vue(894263, '084', 'Dhelmise', 'PITCH BLACK', true), vue(894264, '085', 'Bastiodon', 'PITCH BLACK')
+]);
+function listeDesCorrectionsVues(table = CORRECTIONS_VUES) {
+    const vus = new Set(), communs = new Set(CORRECTIONS.map(c => c.id));
+    return table.map(t => {
+        if (vus.has(t.id)) throw new Error(`correction vue ${t.id} : id en double — rien n'est écrit`);
+        vus.add(t.id);
+        if (communs.has(t.id)) throw new Error(`correction vue ${t.id} : figure aussi dans CORRECTIONS — rien n'est écrit`);
+        if (!varianteValide(t.vers)) throw new Error(`correction vue ${t.id} : variante « ${t.vers} » hors vocabulaire`);
+        return { idProduct: t.id, de: t.de, vers: t.vers, nom: t.nom, set: t.set, numero: t.numero,
+            preuve: `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} (zoom ×3) : logo de prérelease « ${t.logo} » visible${t.zoomSeul ? ' ; visible au zoom seulement' : ''} ; feu vert du testeur du ${DATE_RELEVE} (« corrige-les en prerelease, carte par carte, SEULEMENT là où le scan ou la vignette Cardmarket montre bien le logo de prérelease ») ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale` };
     });
 }
 
@@ -220,6 +246,8 @@ async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, 
             const ls = lc.filter(l => l.idProduct === c.idProduct);
             if (ls.length !== 1) { non(ls.length ? 'lignes-multiples' : 'produit-sans-ligne'); continue; }
             const L = ls[0], deja = L.variante === c.vers && !!L.variantePreuve;
+            if (c.set != null && L.slugSet !== c.set) { non(`set-different : ${L.slugSet}`); continue; }
+            if (c.numero != null && cleNumero(L.numeroFiche) !== cleNumero(c.numero)) { non(`numero-different : ${L.numeroFiche}`); continue; }
             if (!deja && L.variante !== c.de) { non(`valeur-d-avant-inattendue : ${L.variante ?? 'absente'}`); continue; }
             // l'entrée d'image : NON modifiée, seulement listée pour le coordinateur
             const imgs = (cc.find(x => x._id === L.carteId)?.images || []).filter(e => e && e.set === L.slugSet && e.numero != null && cleNumero(e.numero) === nf(L));
@@ -312,4 +340,4 @@ async function restaurer(cartesDb, sauvegarde, { ecrire = false, attendu } = {})
     return r;
 }
 
-module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, NORMALES_VUES, PREUVE_NORMALE, dateReelle, CORRECTIONS, listeDesCorrections, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };
+module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, NORMALES_VUES, PREUVE_NORMALE, dateReelle, CORRECTIONS, listeDesCorrections, CORRECTIONS_VUES, listeDesCorrectionsVues, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };

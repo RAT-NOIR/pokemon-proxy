@@ -68,7 +68,7 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     await essayer('table : 13 fiches, variantes attendues', () => {
         const l = R.listeDesFiches(lignesCsv());
         verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-1']);
-        verifier('Frosmoth : la vignette fait foi, le conflit avec le relevé est signalé ; 3 frères lus', [l[12].vignettes, l[12].conflit, l[12].freres.map(x => x.variante)], [['1ST PLACE'], 'le relevé du testeur dit 2e place pour ce produit : signalé', ['league+place-2', 'league+place-3', 'league+place-4']]);
+        verifier('Frosmoth : la vignette fait foi, le conflit avec le relevé est signalé ; 3 frères lus', [l[12].vignettes, l[12].conflit, l[12].freres.map(x => x.variante)], [['1ST PLACE'], 'le relevé du testeur disait 2e place pour ce produit ; décision du testeur du 2026-10-18 : la vignette fait foi (1re place), l\'annonce de l\'utilisateur correspond à 450598 (2e place)', ['league+place-2', 'league+place-3', 'league+place-4']]);
         verifier('Ogerpon : 1 frère lu, 2 sans jeton', [l[10].freres.map(x => [x.id, x.variante]), Object.keys(l[10].sansJeton)], [[[800148, 'cosmo']], ['771357', '786105']]);
         verifier('toutes valides', l.every(f => R.varianteValide(f.variante)), true);
         verifier('les réserves sont nommées', l.filter(f => f.reserve).map(f => f.idProduct), [882210, 449653]);
@@ -116,6 +116,47 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
             const w = fausseBase(monC({ l1: { variante: v, variantePreuve: v ? 'x' : undefined } })); const p = await planC(w, cor);
             verifier(`avant « ${v} » : refusée`, [p.corrections.length, /^correction : valeur-d-avant-inattendue/.test(p.refus[0]?.motif)], [0, true]);
         }
+    });
+
+    // ── B2 : les 18 corrections « vues » (V1 MEP normale -> prerelease), preuve = vignette regardée ──
+    const IDS_VUES = [851043, 851045, 851047, 851049, 857390, 857393, 857396, 857400, 877543, 877544, 877545, 884754, 884756, 884758, 894261, 894262, 894263, 894264];
+    await essayer('vues : la table fermée de 18', async () => {
+        const t = R.CORRECTIONS_VUES, l = R.listeDesCorrectionsVues();
+        verifier('18 ids exacts (ensemble égal), table gelée', [t.map(x => x.id).sort((a, b) => a - b), Object.isFrozen(t)], [IDS_VUES, true]);
+        verifier('tous normale -> prerelease, set MEP', [t.every(x => x.de === 'normale' && x.vers === 'prerelease' && x.set === 'MEP-Black-Star-Promos'), l.length], [true, 18]);
+        verifier('numéros et noms recopiés', [l.find(x => x.idProduct === 894263).numero, l.find(x => x.idProduct === 894263).nom, l.find(x => x.idProduct === 851043).numero, l.find(x => x.idProduct === 877545).nom], ['084', 'Dhelmise', '001', 'Tyrantrum']);
+        verifier('forme de listeDesCorrections + set + numero', Object.keys(l[0]).sort(), ['de', 'idProduct', 'nom', 'numero', 'preuve', 'set', 'vers']);
+        verifier('preuve : vignette, zoom, feu vert ; Dhelmise = zoom seulement', [/vignette Cardmarket regardée par le coordinateur le 2026-10-18 \(zoom ×3\) : logo de prérelease « MEGA EVOLUTION » visible ; feu vert du testeur du 2026-10-18/.test(l[0].preuve), /visible au zoom seulement/.test(l.find(x => x.idProduct === 894263).preuve), l.filter(x => /au zoom seulement/.test(x.preuve)).length], [true, true, 1]);
+        verifier('doublon refusé', /double|doublon/.test(await leve(() => R.listeDesCorrectionsVues([...t, t[0]])) || ''), true);
+        verifier('variante hors vocabulaire refusée', /hors vocabulaire/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[0], vers: 'autre' }])) || ''), true);
+        verifier('id commun avec CORRECTIONS refusé', /CORRECTIONS/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[0], id: 877546 }])) || ''), true);
+    });
+    const VUE = { id: 851043, de: 'normale', vers: 'prerelease', nom: 'Meganium', set: 'MEP-Black-Star-Promos', numero: '001', logo: 'MEGA EVOLUTION' };
+    const monV = (o = {}) => ({ produits: [LP(851043, 7, 'MEP-Black-Star-Promos', '001', { variante: 'normale', variantePreuve: 'supposition V1', ...(o.l1 || {}) }), LP(851044, 7, 'MEP-Black-Star-Promos', '001', { variante: 'staff', variantePreuve: 'p2' })],
+        cartes: [{ _id: 7, images: [ENTREE('MEP-Black-Star-Promos', '001', 'kv', { tamponNonRepresente: 'Staff', partageeTamponNonSepare: false })] }], images: [{ _id: 'dv', cleR2: 'kv', carteId: 7, set: 'MEP-Black-Star-Promos' }] });
+    await essayer('vues : plan, set et numéro gardés', async () => {
+        const cor = R.listeDesCorrectionsVues([VUE]);
+        const w = fausseBase(monV()), avant = w.instantane(), p = await planC(w, cor);
+        verifier('une ligne à écrire, entrée NON modifiée', [p.corrections.length, p.refus.length, R.operations(p).lignes.map(l => [l.idProduct, l.ecrit.variante]), R.operations(p).entrees.length, R.operations(p).docs.length, p.corrections[0].entreesNonModifiees.length], [1, 0, [[851043, 'prerelease']], 0, 0, 1]);
+        let sv = null;
+        await R.appliquer(w.db, p, { ecrire: true, attendu: 1, sauvegarder: async o => { sv = JSON.parse(JSON.stringify(o)); } });
+        verifier('écrit : variante + preuve, entrée et V2 intacts', [w.col.cartes_produits.get('7|851043').variante, /zoom ×3/.test(w.col.cartes_produits.get('7|851043').variantePreuve), w.col.cartes_produits.get('7|851044').variante, w.journal.filter(j => j.n !== 'cartes_produits').length], ['prerelease', true, 'staff', 0]);
+        const p2 = await planC(w, cor);
+        verifier('deja idempotent', [p2.corrections[0].deja, (await R.appliquer(w.db, p2, { ecrire: true, attendu: 1, sauvegarder: async () => { throw new Error('ne doit pas sauvegarder'); } })).dejaFait], [true, true]);
+        await R.restaurer(w.db, sv, { ecrire: true, attendu: 1 });
+        verifier('restauration exacte', w.instantane() === avant, true);
+        const a = await planC(fausseBase(monV()), [{ ...cor[0], set: 'Autre-Set' }]);
+        verifier('autre set : refus set-different', [a.corrections.length, a.refus[0]?.motif], [0, 'correction : set-different : MEP-Black-Star-Promos']);
+        const b = await planC(fausseBase(monV()), [{ ...cor[0], numero: '002' }]);
+        verifier('autre numéro : refus numero-different', [b.corrections.length, b.refus[0]?.motif], [0, 'correction : numero-different : 001']);
+        const c = await planC(fausseBase(monV({ l1: { variante: 'staff' } })), cor);
+        verifier('avant ≠ normale : refus existant', [c.corrections.length, /^correction : valeur-d-avant-inattendue/.test(c.refus[0]?.motif)], [0, true]);
+        const d = await planC(fausseBase(monV()), [{ ...cor[0], numero: '1' }]);
+        verifier('numéro comparé par cleNumero (001 = 1)', d.corrections.length, 1);
+    });
+    await essayer('Frosmoth : la décision du testeur est dans le conflit', () => {
+        const f = R.FICHES.find(x => x.id === 450593);
+        verifier('texte du conflit', f.conflit, 'le relevé du testeur disait 2e place pour ce produit ; décision du testeur du 2026-10-18 : la vignette fait foi (1re place), l\'annonce de l\'utilisateur correspond à 450598 (2e place)');
     });
 
     // ── le plan ──
