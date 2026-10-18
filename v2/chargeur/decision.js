@@ -67,6 +67,20 @@ function marquagesDe(im, idProduct) {
         produitsPartages: concerne ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
 }
 
+/** m2 : l'image porte un marquage de partage (ou une liste) qui ne tient pas pour CE produit : fail-closed. */
+function partageIncoherent(im, idProduct) {
+    const partage = im.partageeHoloNonHolo === true || typeof im.partageeTamponNonSepare === 'boolean';
+    const liste = Array.isArray(im.produitsPartages);
+    if (!partage && !liste) return false;
+    return !(partage && liste && im.produitsPartages.includes(idProduct));
+}
+/** m3 : la variante (staff / jumbo / normale) n'est portée QUE si la ligne a sa preuve (variantePreuve non vide) ; sinon null, compté. */
+function varianteAvecPreuve(l, d) {
+    if (!VARIANTES_ARCHIVE.includes(l.variante)) return null;
+    if (!texte(l.variantePreuve)) { d.varianteSansPreuve++; return null; }
+    return l.variante;
+}
+
 function verifierRegle(regle) {
     for (const k of REGLE_REQUISE) if (!regle || typeof regle[k] !== 'function') throw new Error(`règle du site absente : ${k} — la décision s'arrête (jamais un repli)`);
 }
@@ -140,7 +154,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         aucunDetail: { 'carte absente': 0, 'aucun set candidat': 0, 'aucun visuel': 0 }, ecrites: 0, sansFicheDuSite: 0, rareteContredite: 0, idMetacardAbsent: 0, plusieursSets: 0,
         setsAvecLiens: compte.sets, fichesLiees: compte.fiches, produitsLies: compte.produits,
         // REPLI-REIMPRESSIONS : les produits dont le visuel d'un autre tirage (ou emprunté) n'est PAS servi, par famille — somme à part : avecLigne = ecrites + aucun + sansFicheDuSite + repliRefuse.total (+ doublons de lignes)
-        basseDefinitionExclue: 0,
+        basseDefinitionExclue: 0, partageIncoherent: 0, varianteSansPreuve: 0,
         repliRefuse: { total: 0, parFamille: Object.fromEntries(NOMS_REFUS.map(n => [n, 0])) },
         // les sets qui RESSEMBLENT à une famille sans figurer dans sa liste fermée : servis comme avant, mais nommés (une liste fermée qui vieillit ne doit pas vieillir en silence)
         familleHorsListe: sets.map(s => s._id).filter(id => RESSEMBLANCES.some(re => re.test(id)) && familleDuSet(id) === null).sort(),
@@ -178,6 +192,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const refus = refusDeRepli({ ligne: l, set: s, im, visuel });
         if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
         if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
+        // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
+        if (partageIncoherent(im, l.idProduct)) { d.partageIncoherent++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
 
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
@@ -191,7 +207,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const numero = l.numeroFiche == null ? null : String(l.numeroFiche);
         const idMetacard = entier(metacarte.get(l.idProduct)) ? metacarte.get(l.idProduct) : null;
         if (idMetacard === null) d.idMetacardAbsent++;
-        const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: VARIANTES_ARCHIVE.includes(l.variante) ? l.variante : null, setNom: texte(s.nomAffichage),
+        const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: varianteAvecPreuve(l, d), setNom: texte(s.nomAffichage),
             // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
             lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
@@ -211,4 +227,4 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION };
+module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION, partageIncoherent };

@@ -9,6 +9,6 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
     const e = b.etat();
     const comptes = { sets: sets.length, cartes: docs.length, produits: lignes.length, catalogue: metacarte.size, visuels: e.admises, refusees: e.refusees, doublons: e.doublons, doublonsContradictoires: e.doublonsContradictoires, motifs: e.motifs, fichesLiees: e.fiches,
         setsAvecLiens: r.denominateurs.setsAvecLiens, produitsLies: r.denominateurs.produitsLies };
-    return { version: e.admises > 0 ? b.finir() : null, comptes: { ...comptes, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue }, denominateurs: r.denominateurs };
+    return { version: e.admises > 0 ? b.finir() : null, comptes: { ...comptes, marquees: r.denominateurs.marquees, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue, partageIncoherent: r.denominateurs.partageIncoherent, varianteSansPreuve: r.denominateurs.varianteSansPreuve }, denominateurs: r.denominateurs };
 }
 module.exports = { calculer };

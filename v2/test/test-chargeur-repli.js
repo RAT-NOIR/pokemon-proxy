@@ -5,7 +5,7 @@
 //   (3) les marquages lus sur l'entrée cartes.images servie, portés par l'entrée de CHAQUE produit concerné ; basseDefinition gardée ; la variante des cartes_produits.
 // Pas de base, pas de réseau : decider reçoit des tableaux fabriqués ; la règle du site est la règle EMBARQUÉE.
 const H = require('./_harnais');
-const { decider, FAMILLES_SANS_REPLI, EXCLURE_BASSE_DEFINITION } = require('../chargeur/decision');
+const { decider, FAMILLES_SANS_REPLI, EXCLURE_BASSE_DEFINITION, partageIncoherent } = require('../chargeur/decision');
 const { regleEmbarquee } = require('../chargeur/regle-site');
 const { lireEntree } = require('../identifier/visuels');
 
@@ -48,15 +48,15 @@ const { lireEntree } = require('../identifier/visuels');
         ligne(1001, 1, 'Set-A', '001'), ligne(1002, 2, 'Set-A', '002'), ligne(1003, 3, 'Set-A', '003', { visuelSubstitut: SUBST() }),
         ligne(2001, 20, '30th-Celebration', '004'), ligne(2002, 21, '30th-Celebration', '005'),
         ligne(2003, 22, 'WCD-2024', '006', { visuelSubstitut: SUBST({ set: 'Pokemon-GO' }) }),
-        ligne(2301, 23, 'Play-Pokemon-Prize-Pack-Series-One', '007', { variante: 'staff' }), ligne(2302, 23, 'Play-Pokemon-Prize-Pack-Series-One', '007', { variante: 'zzz' }),
+        ligne(2301, 23, 'Play-Pokemon-Prize-Pack-Series-One', '007', { variante: 'staff', variantePreuve: 'étiquette Staff Version' }), ligne(2302, 23, 'Play-Pokemon-Prize-Pack-Series-One', '007', { variante: 'zzz' }),
         ligne(2303, 23, 'Play-Pokemon-Prize-Pack-Series-One', '007'),                                    // même carte, même fiche, mais PAS dans produitsPartages
         ligne(2004, 24, 'Play-Pokemon-Prize-Pack-Series-Five', '008', { visuelSubstitut: SUBST() }),
         ligne(2005, 25, 'Set-A', '009'), ligne(2006, 26, 'Set-A', '010', { visuelSubstitut: SUBST({ imageEmprunteeTirage: true }) }),
         ligne(2007, 27, 'Battle-Academy-2024', '011', { visuelSubstitut: SUBST() }), ligne(2008, 28, 'Trick-or-Trade-2024', '012', { visuelSubstitut: SUBST() }),
         ligne(2009, 29, 'Trick-or-Trade-2023', '013', { visuelSubstitut: SUBST() }),
         ligne(3000, 30, 'Set-A', '014', { slug: 'Zapdos-League-Staff-s014' }),
-        ligne(3101, 31, 'Set-A', '015', { variante: 'normale' }), ligne(3102, 31, 'Set-A', '015', { variante: 'staff' }),
-        ligne(3201, 32, 'Set-A', '016', { variante: 'normale' }), ligne(3202, 32, 'Set-A', '016', { variante: 'jumbo' }),
+        ligne(3101, 31, 'Set-A', '015', { variante: 'normale', variantePreuve: 'p' }), ligne(3102, 31, 'Set-A', '015', { variante: 'staff', variantePreuve: 'p' }),
+        ligne(3201, 32, 'Set-A', '016', { variante: 'normale', variantePreuve: 'p' }), ligne(3202, 32, 'Set-A', '016', { variante: 'jumbo' }),
         ligne(4001, 33, 'WCD-2026', '017'), ligne(4002, 34, '30th-Foo', '018'), ligne(4003, 35, 'Play-Pokemon-Prize-Pack-Series-Ten', '019')
     ];
     const metacarte = new Map(lignes.map((l, i) => [l.idProduct, 9000 + i]));
@@ -91,13 +91,13 @@ const { lireEntree } = require('../identifier/visuels');
     // ── (3) les marquages
     H.v('3a. Prize Pack S1 : holo/non-holo + la liste, sur le produit CONCERNÉ', [e(2301).partageeHoloNonHolo, e(2301).produitsPartages, e(2301).basseDefinition], [true, [2301, 2302], true]);
     H.v('3b. l\'autre produit de la paire porte les mêmes marquages', [e(2302).partageeHoloNonHolo, e(2302).produitsPartages], [true, [2301, 2302]]);
-    H.v('3c. un produit servi par la même image mais ABSENT de la liste n\'est pas marqué de partage (la basse définition, elle, suit l\'image)', [e(2303).partageeHoloNonHolo, e(2303).produitsPartages, e(2303).basseDefinition], [null, null, true]);
+    H.v('3c. m2 : un produit servi par la même image mais ABSENT de la liste n\'est PAS servi (fermé par défaut), compté', [e(2303), d.partageIncoherent], [undefined, 1]);
     H.v('3d. tampon non séparé : le tampon que le scan ne montre pas est porté', [e(3101).partageeTamponNonSepare, e(3101).tamponNonRepresente, e(3101).produitsPartages], [true, 'Staff', [3101, 3102]]);
     H.v('3e. paire SÉPARÉE : false est gardé (jamais ramené à null), la liste aussi', [e(3201).partageeTamponNonSepare, e(3201).tamponNonRepresente, e(3202).produitsPartages], [false, 'Play! Pokémon', [3201, 3202]]);
-    H.v('3f. la variante des cartes_produits est portée (staff, normale, jumbo) ; une variante inconnue ("zzz") : null, jamais recopiée', [e(2301).variante, e(2302).variante, e(3101).variante, e(3102).variante, e(3202).variante], ['staff', null, 'normale', 'staff', 'jumbo']);
+    H.v('3f. la variante est portée avec sa preuve (staff, normale) ; sans variantePreuve (3202 jumbo) : null et comptée (m3) ; inconnue ("zzz") : null', [e(2301).variante, e(2302).variante, e(3101).variante, e(3102).variante, e(3202).variante, d.varianteSansPreuve], ['staff', null, 'normale', 'staff', null, 1]);
     H.v('3g. un produit ordinaire : cinq champs nuls', [e(1001).partageeHoloNonHolo, e(1001).partageeTamponNonSepare, e(1001).produitsPartages, e(1001).tamponNonRepresente, e(1001).basseDefinition, e(1001).variante], [null, null, null, null, null, null]);
     H.v('3h. compteurs nommés : 5 produits partagés, dont 2 holo/non-holo (+ 1 hors liste servi sans partage) ; 4 tampons ; 3 basse définition',
-        [d.marquees.partages, d.marquees.holo, d.marquees.tampon, d.marquees.basse], [6, 2, 4, 3]);
+        [d.marquees.partages, d.marquees.holo, d.marquees.tampon, d.marquees.basse], [6, 2, 4, 2]);
     const lues = r.entrees.map(x => lireEntree(JSON.parse(JSON.stringify(x))));
     const motifs = {}; for (const x of lues) if (!x.ok) motifs[x.motif] = (motifs[x.motif] || 0) + 1;
     H.v('3i. toutes les entrées émises passent la validation d\'entrée (aucun refus)', motifs, {});
@@ -115,7 +115,7 @@ const { lireEntree } = require('../identifier/visuels');
     // ── (6) le producteur de bout en bout : le calcul de l'API écrit la colonne des marquages, même quand rien n'est marqué
     const { calculer } = require('../chargeur/calcul');
     const cal = await calculer({ sets, docs, lignes, metacarte, regle });
-    H.v('6a. calculer : la version porte la colonne des marquages et ses comptes', [cal.version.colonneMarquages, cal.version.comptes.marquees, cal.comptes.repliRefuse.total], [true, { holo: 2, tampon: 4, partages: 6, basse: 3 }, 8]);
+    H.v('6a. calculer : la version porte la colonne des marquages et ses comptes', [cal.version.colonneMarquages, cal.version.comptes.marquees, cal.comptes.repliRefuse.total], [true, { holo: 2, tampon: 4, partages: 6, basse: 2 }, 8]);
     const vide = await calculer({ sets: sets.filter(x => ['Set-A', 'Set-B'].includes(x._id)), docs, lignes: lignes.filter(l => l.idProduct === 1001), metacarte: new Map([[1001, 1]]), regle });
     H.v('6b. rien de marqué : la colonne est quand même là (« aucun » est une réponse, l\'absence de colonne n\'en est pas une)', [vide.version.colonneMarquages, vide.version.comptes.marquees, vide.version.partagesDe(1001)], [true, { holo: 0, tampon: 0, partages: 0, basse: 0 }, []]);
     // ── (7) basseDefinition : la constante nommée, les deux valeurs
@@ -124,6 +124,9 @@ const { lireEntree } = require('../identifier/visuels');
     const f = id => ex.entrees.find(x => x.idProduct === id);
     H.v('7b. true : les trois produits dont l\'image est basseDefinition ne sont plus servis, comptés ; les autres inchangés', [f(2301), f(2302), f(2303), ex.denominateurs.basseDefinitionExclue, f(1001) !== undefined, f(3101) !== undefined], [undefined, undefined, undefined, 3, true, true]);
     H.v('7c. true : le reste des entrées est identique à false', JSON.stringify(ex.entrees) === JSON.stringify(r.entrees.filter(x => ![2301, 2302, 2303].includes(x.idProduct))), true);
+    H.v('7d. m2 : cohérent / liste sans marquage / holo false avec liste / marquage sans liste / produit absent de la liste / image ordinaire',
+        [partageIncoherent({ partageeHoloNonHolo: true, produitsPartages: [1, 2] }, 1), partageIncoherent({ produitsPartages: [1, 2] }, 1), partageIncoherent({ partageeHoloNonHolo: false, produitsPartages: [1, 2] }, 1), partageIncoherent({ partageeTamponNonSepare: false }, 1),
+            partageIncoherent({ partageeTamponNonSepare: true, produitsPartages: [2, 3] }, 1), partageIncoherent({ basseDefinition: true }, 1)], [false, true, true, true, true, false]);
     // ── (8) « source » et « retirable » du catalogue : jamais dans l'archive, jamais lus au-delà du choix interne
     H.v('8a. aucune entrée émise ne porte source ni retirable ; la projection ne lit pas retirable', [r.entrees.some(x => 'source' in x || 'retirable' in x), 'images.retirable' in S.PROJECTIONS.cartes, 'retirable' in S.PROJECTIONS.cartes_produits], [false, false, false]);
     H.v('8b. la version relue n\'expose ni source ni retirable', [Object.keys(cal.version.entree(1001)).filter(k => /source|retirable/.test(k))], [[]]);
