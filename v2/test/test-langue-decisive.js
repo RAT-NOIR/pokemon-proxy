@@ -306,9 +306,10 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
     vrai('(11)     elle contient Darkness-and-to-Light (4509) et Expansion-Pack (4169)', [4509, 4169].every(id => LD.SANS_NUMEROTATION.some(x => x.idExpansion === id)));
 }
 
-// ── (12) l'ÉTAT LIVRÉ : R1, R4, R5 allumées ; R2 et R2 bis ÉTEINTES en production (sans ctx.langueDecisive, même avec des scores d'image)
+// ── (12) l'ÉTAT LIVRÉ : R1, R4 allumées ; R2, R2 bis et R5 ÉTEINTES en production (sans ctx.langueDecisive, même avec des scores d'image)
+//      R5 éteinte le 2026-10-18 (décision du testeur : « elle passe seulement à 0 faux, sur les deux bancs ») : le banc de contrôle est vide, elle n'y est pas mesurable.
 {
-    vrai('(12) REGLES gelé, R1 R4 R5 allumées, R2 et R2 bis éteintes', Object.isFrozen(LD.REGLES) && LD.REGLES.R1 === true && LD.REGLES.R4 === true && LD.REGLES.R5 === true && LD.REGLES.R2 === false && LD.REGLES.R2BIS === false);
+    vrai('(12) REGLES gelé, R1 R4 allumées, R2, R2 bis et R5 éteintes', Object.isFrozen(LD.REGLES) && LD.REGLES.R1 === true && LD.REGLES.R4 === true && LD.REGLES.R5 === false && LD.REGLES.R2 === false && LD.REGLES.R2BIS === false);
     const sc = new Map([[7001, 3], [7002, 80], [7003, 4]]);
     const prod = jouer(corps({ lecture: { attaque: null, attaqueConfiance: null } }), { scoresImage: sc });
     v('(12) production (aucun ctx.langueDecisive) avec des scores d\'image qui feraient un sûr : R2 éteinte, R1 seule joue, la question à deux', [prod.issue, montres(prod).sort()], ['question', [7001, 7002]]);
