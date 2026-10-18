@@ -32,6 +32,10 @@ function apresIdentifier({ cfg, deps, req, scanId, analyse }) {
         else return;                                                                        // introuvable, panne : rien
         let banc; try { banc = registre.obtenir('banc'); } catch { return; }                // aucun banc fourni : rien, sans bruit
         const id = String(scanId);
+        // PHOTOS-MULTIPLES (7d, I-2) : la photo reçue d'un utilisateur ORDINAIRE n'est gardée par AUCUNE tâche après la réponse : pour lui, la détection du banc n'a pas lieu quand des photos ont été reçues (un futur fournisseur
+        // devra décider de ses octets). L'ADMINISTRATEUR est l'exception nommée (le banc de mesure).
+        const porteurDe = req.v2 && req.v2.porteur;
+        if (req.entree && Array.isArray(req.entree.photosRecues) && req.entree.photosRecues.length && !(porteurDe && porteurDe.administrateur === true)) return;
         // PHOTOS-MULTIPLES (7d) : si des photos ont été REÇUES pour ce scan, la détection reçoit leurs octets (`data:`), jamais une URL à télécharger
         const imageUrls = req.entree && Array.isArray(imagesDeLaChaine(req.entree)) ? [...imagesDeLaChaine(req.entree)] : [];
         // sans consentement valide (et distinct de TOUTE empreinte d'accès du porteur) : ni détecteur, ni ligne, ni objet. La garde lit Mongo : chemin rare, jamais attendue.
