@@ -26,7 +26,6 @@ const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE }
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
-const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident|sign in to continue|log in to continue/i;
 const WEBP_OK = b => Buffer.isBuffer(b) && b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP';
 const RATIO_MIN = 1.30, RATIO_MAX = 1.45;           // 1000/728 = 1,374 ; une carte n'est jamais carrée
 
@@ -85,18 +84,9 @@ const transportFetch = {
     }
 };
 
-// ── LA DÉCISION « que faire de cette réponse » : UNE fonction, pour qu'une règle commune (collecte-cartes/reponse-hote.js, lot REPONSE-HOTE) la remplace par un simple branchement ──
-// ⚠️ NE PAS implémenter ici « 200 text/html = absente » ni la pause après 20 absences : cette règle viendra du module partagé. Aujourd'hui : un 200 qui n'est pas une image reste un ARRÊT (plus bas, dans le corps).
-// Un défi s'écrit par ce qui le PROUVE (liste fermée) : 401, 403, 410, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404 compris).
-const estDefi = r => [401, 403, 410, 429].includes(r.status) || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
-/** @returns {{action: 'arret'|'absent'|'interrompu'|'recevoir', motif?: string}} */
-function jugerReponse(r, url = '') {
-    if (estDefi(r)) return { action: 'arret', motif: `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}` };
-    if (r.status === 404) return { action: 'absent' };
-    if (r.status >= 500) return { action: 'interrompu', motif: `HTTP ${r.status} sur ${url}` };
-    if (r.status !== 200) return { action: 'interrompu', motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
-    return { action: 'recevoir' };
-}
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (POKEDATA-SUITE, 2026-10-18) : le défi, la fausse page introuvable (200 text/html sans marqueur = ABSENTE, empreinte gardée), la pause (plus de 20 fausses
+// absences d'affilée, réponse inattendue), l'arrêt durable de l'hôte et le compteur par hôte vivent dans collecte-cartes/reponse-hote.js — ce collecteur les APPELLE, il n'en garde aucune copie.
+const RH = require('./collecte-cartes/reponse-hote');
 // L'EMPLACEMENT FIXE du fichier d'arrêt de la source : le dossier de cache par défaut, quel que soit --cache. Seuls les bancs le déplacent (fixerDossierArret).
 let ARRET_FIXE = P.DOSSIER_CACHE;
 const fixerDossierArret = d => { ARRET_FIXE = d; };
@@ -105,7 +95,7 @@ const fixerDossierArret = d => { ARRET_FIXE = d; };
  * LA PHASE RÉSEAU (images ou pages). @param {{urls: string[], dossierCache: string, genre?: 'image'|'page', transport?: object, pause?: Function, now?: Function, cadenceMs?: number, plafond?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, genre = 'image', transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null }) {
+async function telecharger({ urls, dossierCache, genre = 'image', transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
     const G = GENRES[genre];
     if (!G) throw new Error(`telecharger : genre inconnu « ${genre} »`);
     // 🔑 l'arrêt se lit à DEUX endroits : le dossier de travail ET l'emplacement FIXE de la source — `--cache=<autre dossier>` ne contourne pas un arrêt définitif
@@ -113,12 +103,18 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
     if (arretPose) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${arretPose} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !G.valide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache, genre);
-    const afaire = [...new Set(urls)].filter(u => G.valide(u) && !['ok', 'absent', 'dos-de-carte', 'forme-inattendue'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => G.valide(u) && !['ok', 'absent', 'dos-de-carte', 'forme-inattendue'].includes(index.images[u]?.statut) && !RH.fausseAbsenceRecente(index.images[u], now()));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MIN_MS);
-    const arret = (url, r, motif) => { for (const d of new Set([dossierCache, ARRET_FIXE])) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(fichierArret(d), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, genre, requetes }, null, 1)); } return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    const defi = estDefi;
+    const arret = (url, r, motif) => { posterArret(url, motif); for (const d of new Set([dossierCache, ARRET_FIXE])) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(fichierArret(d), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, genre, requetes }, null, 1)); } return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
+    const hoteImages = G.hote;
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 3000 })) !== null;
+    const posterArret = (url, motif) => { try { RH.arretHote(hoteImages, motif, { dossier: dossierPauses, url }); } catch (e) { suivi.bloquer(hoteImages, `écriture de l'arrêt durable impossible (${e.message})`); } };
+    const rapport = () => ({ reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) });
+    // 0. l'ARRÊT DURABLE de l'hôte, une pause du processus ou une pause persistante tiennent : AUCUNE requête (pas même robots.txt)
+    try { RH.garderHote(hoteImages, dossierPauses, suivi); }
+    catch (e) { return { etat: e.arretDefinitif ? 'refuse-arret' : 'pause-hote', requetes, plafond, refusees, motif: e.message, ...(e.arretDefinitif ? {} : { pauseHote: { hote: hoteImages, persistante: !!e.pausePersistante, empreinte: e.empreinte ?? null } }), reponsesHotes: [] }; }
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
@@ -140,13 +136,16 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
     for (const url of permises) {
         let r;
         try { r = await demander(url, { binaire: genre === 'image' }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
-        const j = jugerReponse(r, url);
-        if (j.action === 'arret') return arret(url, r, j.motif);
-        if (j.action === 'absent') { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
-        if (j.action === 'interrompu') return { etat: 'interrompu', requetes, plafond, refusees, motif: j.motif };
+        // LA RÈGLE COMMUNE : une seule décision pour la réponse à une image
+        const x = RH.traiterImage(r, { suivi, hote: hoteImages, url, dossierPauses, connues });
+        if (x.action === 'arret-definitif') return { ...arret(url, r, `${x.motif} (HTTP ${r.status})`), ...rapport() };
+        if (x.action === 'pause' || x.action === 'pause-persistante') return { etat: 'pause-hote', requetes, plafond, refusees, motif: x.motif, pauseHote: { hote: hoteImages, issue: x.issue, empreinte: x.empreinte ?? null, persistante: x.action === 'pause-persistante', fichier: x.fichier ?? null }, ...rapport() };
+        if (x.action === 'transitoire') return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}`, ...rapport() };
+        if (x.action === 'absente') { index.images[url] = RH.entreeAbsence(index.images[url], x, r.status, now()); ecrireIndex(dossierCache, index, genre); continue; }       // les SEULS « absent » : un 404, ou une fausse page introuvable (200 text/html sans marqueur)
         const fichier = path.join(G.sous, nomFichier(url, genre));
         if (P.estDosDeCarte(r.octets)) { index.images[url] = { statut: 'dos-de-carte', le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
-        if (!WEBP_OK(r.octets)) return arret(url, r, 'les octets reçus ne sont pas un WebP (page de défi probable)');
+        // une image valide mais qui n'est pas un WebP est « inattendue » (règle commune) : PAUSE de l'hôte, rien n'entre au cache
+        if (!WEBP_OK(r.octets)) { suivi.bloquer(hoteImages, 'image valide mais pas un WebP (réponse inattendue)'); return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus sont une image, mais pas un WebP (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapport() }; }
         const meta = await sharp(r.octets).metadata();
         const ratio = meta.width ? meta.height / meta.width : 0;
         if (ratio < RATIO_MIN || ratio > RATIO_MAX) { index.images[url] = { statut: 'forme-inattendue', w: meta.width, h: meta.height, le: new Date().toISOString() }; ecrireIndex(dossierCache, index, genre); continue; }
@@ -154,7 +153,7 @@ async function telecharger({ urls, dossierCache, genre = 'image', transport = tr
         index.images[url] = { statut: 'ok', fichier, sha256: sha('sha256', r.octets), octets: r.octets.length, w: meta.width, h: meta.height, le: new Date().toISOString() };
         ecrireIndex(dossierCache, index, genre);
     }
-    return { etat: 'termine', requetes, plafond, refusees };
+    return { etat: 'termine', requetes, plafond, refusees, ...rapport() };
 }
 
 // ── le plan (lecture seule de la base) ────────────────────────────────────────────────────────────────────────────────────
@@ -354,7 +353,7 @@ async function fabriquerPlancheEtiquetee({ dossierCache, echantillon, sortie }) 
     return { images, total: echantillon.length, sortie, etiquettes };
 }
 
-module.exports = { jugerReponse, fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees, telecharger, verifierChemins, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
+module.exports = { fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees, telecharger, verifierChemins, planifierDepuisBase, ecrire, annonceRemplacement, fabriquerPlanche, transportFetch, fichierArret, fichierIndex, lireIndex, STOP_OCTETS, GENRES };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
