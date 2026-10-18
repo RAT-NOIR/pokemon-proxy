@@ -52,7 +52,9 @@ async function avoirsPoses(stripe, clientId) {
     return poses;
 }
 /** Pose l'avoir de la prime d'un filleul au solde du client du parrain, si c'est possible MAINTENANT. `heure` : l'heure de la décision (injectable pour les bancs ; l'horloge par défaut). */
-async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), heure = new Date() }) {
+// `soldes` (facultatif) : les soldes déjà lus chez Stripe PAR CETTE REPRISE (Map client → avoirs posés), pour que plusieurs primes en attente d'un même parrain ne relisent pas les mêmes pages. Il ne vit que le temps
+// d'une reprise (quelques secondes, un seul événement) : un avoir posé entre-temps par un autre processus l'est sous le verrou de SA prime, avec la clé d'idempotence `prime-<filleul>` encore fraîche chez Stripe.
+async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), heure = new Date(), soldes = null }) {
     const prime = await col('abo_primes').findOne({ _id: filleulId });
     if (!prime || !ATTENTES.includes(prime.etat)) return { etat: 'ignore', raison: prime ? prime.etat : 'absente' };
     const parrain = await col('comptes').findOne({ _id: prime.parrainId });
@@ -84,7 +86,7 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), h
         // reprise franchirait 12. Si Stripe ne répond pas, ces voisines comptent COMME consommées : une décision ne s'appuie jamais sur un « je ne sais pas » pour franchir 12 (la prime reste en attente, la reprise rejouera).
         const voisines = await col('abo_primes').find({ parrainId: parrain._id, _id: { $ne: filleulId }, etat: { $in: ATTENTES } }).toArray();
         let poses = null;
-        try { poses = await avoirsPoses(stripe, parrain.stripeClient); } catch (e) { signaler(`primes : lecture des avoirs chez Stripe impossible (${(e && (e.code || e.type || e.name)) || 'erreur'}) — parrain ${String(parrain._id)}`); }
+        try { poses = soldes && soldes.has(parrain.stripeClient) ? soldes.get(parrain.stripeClient) : await avoirsPoses(stripe, parrain.stripeClient); if (soldes) soldes.set(parrain.stripeClient, poses); } catch (e) { signaler(`primes : lecture des avoirs chez Stripe impossible (${(e && (e.code || e.type || e.name)) || 'erreur'}) — parrain ${String(parrain._id)}`); }
         if (!poses) {
             if ((await moisDansLaFenetre(parrain._id, filleulId, decision)) + voisines.length + 1 > O.PLAFOND_PARRAINAGE_MOIS) return { etat: 'ignore', raison: 'lecture-stripe-impossible' };
             throw Object.assign(new Error('primes : lecture des avoirs impossible'), { code: 'LECTURE_AVOIRS' });         // sous le plafond mais impossible de savoir si l'avoir existe : l'événement échoue, Stripe le rejoue
@@ -98,8 +100,7 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), h
         }
         const montant = (await Pub.lire(stripe, cfgAbo)).pro.mois;                              // UN mois : le prix mensuel Pro (lu chez Stripe), quelle que soit la période du parrain
         if (!dejaPose) {
-            await stripe.customers.createBalanceTransaction(parrain.stripeClient, { amount: -montant, currency: O.DEVISE, description: DESCRIPTION, metadata: { rm_prime: String(filleulId), rm_parrain: String(parrain._id) } }, { idempotencyKey: `prime-${String(filleulId)}` });
-        }
+            await stripe.customers.createBalanceTransaction(parrain.stripeClient, { amount: -montant, currency: O.DEVISE, description: DESCRIPTION, metadata: { rm_prime: String(filleulId), rm_parrain: String(parrain._id) } }, { idempotencyKey: `prime-${String(filleulId)}` });        }
         await col('abo_primes').updateOne({ _id: filleulId, etat: { $ne: 'applique' } }, { $set: { etat: 'applique', appliqueLe: decision, montant, sid: st.sid, majLe: maintenant } });
         return { etat: 'applique' };
     });
@@ -132,7 +133,8 @@ async function moisOfferts(parrainId, maintenant = new Date()) {
 async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date() }) {
     const primes = await col('abo_primes').find({ parrainId, etat: { $in: ATTENTES } }).sort({ creeLe: 1 }).toArray();
     let faites = 0;
-    for (const p of primes) { const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant }); if (r.etat === 'applique') faites++; }
+    const soldes = new Map();                                                                  // les soldes du client du parrain, lus une seule fois pour toutes ses primes en attente
+    for (const p of primes) { const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant, soldes }); if (r.etat === 'applique') faites++; }
     return primes.length ? { etat: faites ? 'applique' : 'en-attente', faites } : { etat: 'ignore', raison: 'rien-en-attente' };
 }
 module.exports = { ouvrir, appliquer, reprendre, raisonDeRefus, moisOfferts, moisDansLaFenetre, sousVerrou, VERROUS, VIVANTS, ATTENTES };
