@@ -50,12 +50,14 @@ const INDEX = Object.freeze([
 ]);
 // STRIPE-V2 : les index des abonnements (stripeClient unique, places Fondateurs, codes de parrainage). Ils sont CRÉÉS avec les autres (migrations/creer-index.js) mais EXIGÉS par verifierIndex
 // seulement quand les abonnements sont allumés (verifierIndex(true), armé par v2/index.js) : déployer ce code sans V2_ABONNEMENTS ne ferme donc jamais une route v2 sur un index que personne n'a créé.
-const { INDEX_ABO } = require('./abonnements/index-db');
+const { INDEX_ABO, INDEX_ABO_CONFORT } = require('./abonnements/index-db');
 const TOUS = Object.freeze([...INDEX, ...INDEX_ABO]);
+// STRIPE-DECISIONS : les index de confort de l'essai sans carte sont CRÉÉS (creerIndex) mais jamais EXIGÉS (verifierIndex) : aucun ne garantit une propriété du droit, déployer avant de les créer ne ferme aucune route
+const CREES = Object.freeze([...TOUS, ...INDEX_ABO_CONFORT]);
 
 // `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle (et les index des abonnements). `colFn` est injectable pour les bancs.
 async function creerIndex(collections, colFn = col) {
-    const choisis = Array.isArray(collections) ? TOUS.filter(i => collections.includes(i.c)) : TOUS;
+    const choisis = Array.isArray(collections) ? CREES.filter(i => collections.includes(i.c)) : CREES;
     for (const i of choisis) await colFn(i.c).createIndex(i.cle, i.opts);
     return choisis.length;
 }

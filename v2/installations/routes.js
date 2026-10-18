@@ -98,7 +98,7 @@ function routesLiaison(router, cfg, deps) {
             const inst = req.v2.porteur.installation;
             const cleBrute = req.headers['idempotency-key'];
             const rejeu = typeof cleBrute === 'string' ? { cle: cleBrute, expireLe: new Date(Date.now() + cfg.retention.idempotenceHeures * 3600000) } : null;
-            const r = await liaison.lier({ installation: inst, code: req.body && req.body.code, argent, rejeu });
+            const r = await liaison.lier({ installation: inst, code: req.body && req.body.code, argent, rejeu, cfg });
             if (!r.ok) return repondreErreur(res, r.code, nom[r.code]);
             // La rotation du jeton est ÉCRITE (et la fusion des crédits faite) : à partir d'ici le nouveau jeton n'est JAMAIS perdu. Si une lecture qui suit lève (solde, offre…), la réponse ne peut pas partir :
             // on REMET l'ANCIEN jeton en vigueur (la liaison au compte et la fusion restent : elles ne se défont pas sans risque pour l'argent). Le client garde un jeton qui marche ; un nouvel essai rend 409 DEJA_LIE.

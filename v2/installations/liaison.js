@@ -43,7 +43,7 @@ async function porteurDeRejeu(req) {
 
 /** → { statut, code } en cas de refus ; { ok:true, compte, jeton } sinon. `argent` est vérifié par l'appelant AVANT l'appel.
  *  `rejeu` : { cle, expireLe } quand la requête porte une Idempotency-Key (la fenêtre de rejeu est posée dans la MÊME écriture que la rotation du jeton). */
-async function lier({ installation, code, argent, maintenant = new Date(), rejeu = null }) {
+async function lier({ installation, code, argent, maintenant = new Date(), rejeu = null, cfg = null }) {
     if (installation.compteId) return { statut: 409, code: 'DEJA_LIE' };      // avant de toucher au code : il reste utilisable ailleurs
     const texte = typeof code === 'string' ? code.trim().toUpperCase() : '';
     if (!RE_CODE.test(texte)) return { statut: 404, code: 'CODE_INVALIDE' };
@@ -59,10 +59,13 @@ async function lier({ installation, code, argent, maintenant = new Date(), rejeu
     // O3 tour 2 (I-A) : un code d'une génération révolue (la réinitialisation est passée depuis sa création) ne lie rien, même vivant. Champ absent : jamais égal.
     if (!Number.isInteger(pris.generation) || !Number.isInteger(compte.generation) || pris.generation !== compte.generation) return { statut: 404, code: 'CODE_INVALIDE' };
     const jeton = J.genererJeton();
-    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0, rejeuLiaison: installation.rejeuLiaison ?? null } });
+    const dejaLiee = (installation.comptesLies || []).some(x => String(x) === String(compte._id));
+    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0, rejeuLiaison: installation.rejeuLiaison ?? null },
+        ...(dejaLiee ? {} : { $pull: { comptesLies: compte._id } }) });          // une liaison défaite n'a jamais eu lieu : sa trace s'en va aussi (sauf si l'installation avait DÉJÀ été liée à ce compte)
     const r = await col('installations').updateOne({ _id: installation._id, compteId: null, revoqueeLe: null, jetonEmpreinte: installation.jetonEmpreinte },
         { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton), generation: pris.generation,
-            rejeuLiaison: rejeu ? { ancienneEmpreinte: installation.jetonEmpreinte, cle: J.empreinte(rejeu.cle), expireLe: rejeu.expireLe } : null } });   // l'installation porte la génération du CODE
+            rejeuLiaison: rejeu ? { ancienneEmpreinte: installation.jetonEmpreinte, cle: J.empreinte(rejeu.cle), expireLe: rejeu.expireLe } : null },   // l'installation porte la génération du CODE
+          $addToSet: { comptesLies: compte._id } });   // STRIPE-DECISIONS : la trace durable « cette installation a été liée à ce compte » (la garde de l'essai : une installation, un essai), même après `delier`
     if (r.modifiedCount !== 1) { await rendre(); return { statut: 409, code: 'DEJA_LIE' }; }
     // relecture APRÈS l'écriture : si la réinitialisation est passée entre la lecture du compte et cette écriture, l'installation (déjà inerte : génération révolue) est déliée tout de suite,
     // faute de quoi elle resterait « liée » sans pouvoir ni se relier (DEJA_LIE) ni dépenser sa poche (compteId non nul)
@@ -78,6 +81,8 @@ async function lier({ installation, code, argent, maintenant = new Date(), rejeu
         await rendre();
         return { statut: 503, code: 'INDISPONIBLE' };
     }
+    // STRIPE-DECISIONS : liée APRÈS un essai (ou entre le Checkout et le webhook), l'installation entre au registre de l'essai du compte (une installation qui a servi un essai n'en ouvre jamais un second)
+    if (cfg) { try { await require('../abonnements/essai').noterLiaison(compte, installation._id, cfg, maintenant); } catch (e) { console.error(`❌ [v2 liaison] registre de l'essai non mis à jour (${(e && (e.code || e.name)) || 'erreur'})`); } }
     return { ok: true, compte, jeton, emailMasque: masquer(compte.email) };
 }
 

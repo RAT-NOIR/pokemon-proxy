@@ -2958,7 +2958,7 @@
             "session": []
           }
         ],
-        "description": "mode `subscription`, CGV TOUJOURS exigées, un seul client Stripe par compte, `client_reference_id` = le compte. Essai de 14 jours, UNE fois par compte ; 30 jours avec un code de parrainage valide (Pro) ; `code` est le code Fondateurs pour `offre: fondateurs`, un code de parrainage pour `offre: pro`. Voir CONTRAT-STRIPE-V2.md.",
+        "description": "mode `subscription`, CGV TOUJOURS exigées, un seul client Stripe par compte, `client_reference_id` = le compte. Essai de 14 jours SANS CARTE (`payment_method_collection: if_required` ; sans moyen de paiement à la fin de l'essai l'abonnement est RÉSILIÉ, aucun prélèvement), UNE fois par compte et sous la garde de l'essai (compte neuf, domaine non jetable, une boîte, une installation de l'extension) : un refus de l'essai ne refuse pas l'abonnement, la session part sans essai donc avec la carte (`essai.disponible: false` au statut). 30 jours avec un code de parrainage valide (Pro) ; `code` est le code Fondateurs pour `offre: fondateurs`, un code de parrainage pour `offre: pro`. Voir CONTRAT-STRIPE-V2.md.",
         "parameters": [
           {
             "$ref": "#/components/parameters/XRatMarket"
@@ -3065,6 +3065,135 @@
           },
           "503": {
             "description": "INDISPONIBLE : abonnements non configurés ou Stripe injoignable (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/fondateurs": {
+      "post": {
+        "operationId": "lireOffreFondateurs",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "L'offre Fondateurs, rendue à qui présente un code valide (page réservée, jamais publique)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "La page réservée du site (noindex, hors sitemap) appelle cette route avec le code de son adresse. Un code VALIDE reçoit l'offre (prix mensuel et annuel en centimes, places restantes) ; un mauvais code et une offre fermée reçoivent la MÊME réponse (`422 code-invalide`). Même limite d'essais que le Checkout : 10 par heure et par compte, compteur partagé, compté avant la lecture du code. Le code voyage dans le corps, jamais dans une adresse. Aucune autre route ne donne ce prix.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteFondateurs"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'offre Fondateurs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseOffreFondateurs"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "noindex, nofollow"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : corps ou champ inconnu (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE : `code-invalide` (mauvais code, code absent, ou offre fermée : indiscernables).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (10 essais de code par heure et par compte, partagés avec le Checkout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4502,6 +4631,94 @@
         ],
         "additionalProperties": false
       },
+      "RequeteFondateurs": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Le code Fondateurs de l'adresse réservée. Casse et espaces ignorés."
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseOffreFondateurs": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "offre": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "const": "fondateurs"
+              },
+              "devise": {
+                "const": "EUR"
+              },
+              "prix": {
+                "type": "object",
+                "properties": {
+                  "mois": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "an": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "mois",
+                  "an"
+                ],
+                "additionalProperties": false,
+                "description": "En centimes."
+              },
+              "places": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "restantes": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "total",
+                  "restantes"
+                ],
+                "additionalProperties": false
+              },
+              "essaiJours": {
+                "type": "integer",
+                "const": 14
+              }
+            },
+            "required": [
+              "nom",
+              "devise",
+              "prix",
+              "places",
+              "essaiJours"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
       "ReponseUrlPaiement": {
         "type": "object",
         "properties": {
@@ -4565,10 +4782,60 @@
               "string",
               "null"
             ],
-            "description": "ISO 8601 UTC : la fin de la période payée (ou de l'essai)."
+            "description": "ANCIEN NOM de `finDePeriode`, gardé pendant la transition (retrait : voir CONTRAT-STRIPE-V2.md). ISO 8601 UTC."
+          },
+          "finDePeriode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de la période payée, ou de l'essai. C'est le prochain renouvellement, ou la fin si `resiliationPrevue`."
           },
           "resiliationPrevue": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Une fin est prévue : résiliation demandée (effet à la fin de la période), OU essai en cours dont la carte est connue comme absente (`essai.carteEnregistree: false`) — il prend fin tout seul, sans prélèvement."
+          },
+          "finPrevueLe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : « prend fin le… » — la fin d'une résiliation prévue, ou la fin d'un essai sans carte. `null` sinon (y compris quand on ne sait pas si une carte est enregistrée)."
+          },
+          "prochaineEcheance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : « se renouvelle le… » — seulement quand un prélèvement est sûr (abonnement actif non résilié, ou essai AVEC carte). `null` pour un essai sans carte, un essai dont la carte est inconnue, une résiliation prévue, un impayé."
+          },
+          "essaiFinLe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de l'essai EN COURS (le nom du site) ; `null` hors essai."
+          },
+          "debutEssai": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : le début de l'essai de ce compte, aussi après sa fin (courriels) ; `null` si le compte n'a jamais eu d'essai."
+          },
+          "finEssai": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de l'essai de ce compte, aussi après sa fin (courriels) ; `null` si le compte n'a jamais eu d'essai."
+          },
+          "maintienJusqua": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de la grâce d'un impayé (Pro maintenu jusque-là). `null` hors impayé."
           },
           "essai": {
             "type": "object",
@@ -4576,21 +4843,53 @@
               "enCours": {
                 "type": "boolean"
               },
+              "debutLe": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ISO 8601 UTC ; `null` hors essai en cours."
+              },
               "finLe": {
                 "type": [
                   "string",
                   "null"
-                ]
+                ],
+                "description": "ISO 8601 UTC ; `null` hors essai en cours (ancien nom de `essaiFinLe`, gardé pendant la transition)."
+              },
+              "carteEnregistree": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Pendant l'essai : une carte sera-t-elle prélevée à la fin ? `true`, `false`, ou `null` quand on ne sait pas (Stripe injoignable) — JAMAIS une affirmation fausse. `null` hors essai."
               },
               "disponible": {
                 "type": "boolean",
-                "description": "Faux dès qu'un essai ou un abonnement a existé pour ce compte (UNE fois par compte)."
+                "description": "Vrai si un essai peut être accordé à ce compte (la garde de l'essai : compte neuf, domaine non jetable, une boîte, une installation). Un refus ne refuse pas l'abonnement : le Checkout part sans essai, avec la carte."
+              },
+              "refus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "essai-deja-utilise",
+                  "domaine-jetable",
+                  "boite-deja-utilisee",
+                  "installation-deja-utilisee",
+                  null
+                ],
+                "description": "Pourquoi l'essai n'est pas disponible. `null` quand il l'est (ou si la garde n'a pas pu conclure)."
               }
             },
             "required": [
               "enCours",
+              "debutLe",
               "finLe",
-              "disponible"
+              "carteEnregistree",
+              "disponible",
+              "refus"
             ],
             "additionalProperties": false
           },
@@ -4604,11 +4903,75 @@
           "periode",
           "statut",
           "finPeriode",
+          "finDePeriode",
           "resiliationPrevue",
+          "finPrevueLe",
+          "prochaineEcheance",
+          "essaiFinLe",
+          "debutEssai",
+          "finEssai",
+          "maintienJusqua",
           "essai",
           "paiementEchoue"
         ],
         "additionalProperties": false
+      },
+      "QuotaAbonnement": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ],
+            "description": "ANCIEN NOM de `offre`, gardé pendant la transition."
+          },
+          "offre": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ],
+            "description": "L'offre du porteur (le nom du site)."
+          },
+          "limite": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Analyses autorisées par jour (jour de Paris). `null` pour Pro : usage raisonnable, aucun plafond affiché."
+          },
+          "utilisees": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Analyses prises aujourd'hui (jour de Paris)."
+          },
+          "restant": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "remiseAZero": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T00:00:00[+-]\\d{2}:\\d{2}$"
+          }
+        },
+        "required": [
+          "nom",
+          "offre",
+          "limite",
+          "utilisees",
+          "restant",
+          "remiseAZero"
+        ],
+        "additionalProperties": false,
+        "description": "L'objet `Offre` commun (nom, restant, remiseAZero) PLUS les noms du site : offre, limite, utilisees."
       },
       "ReponseAbonnement": {
         "type": "object",
@@ -4620,7 +4983,7 @@
             "$ref": "#/components/schemas/AbonnementStatut"
           },
           "quota": {
-            "$ref": "#/components/schemas/Offre"
+            "$ref": "#/components/schemas/QuotaAbonnement"
           },
           "parrainage": {
             "type": "object",
@@ -4632,11 +4995,28 @@
               "essaiFilleulJours": {
                 "type": "integer",
                 "const": 30
+              },
+              "moisOfferts": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Les mois offerts à ce parrain sur les `fenetreJours` derniers jours (comptés à la date d'application de chaque prime)."
+              },
+              "plafondMois": {
+                "type": "integer",
+                "const": 12,
+                "description": "Au plus 12 mois offerts par parrain sur 365 jours glissants ; au-delà, la prime est refusée (`plafond-annuel`)."
+              },
+              "fenetreJours": {
+                "type": "integer",
+                "const": 365
               }
             },
             "required": [
               "code",
-              "essaiFilleulJours"
+              "essaiFilleulJours",
+              "moisOfferts",
+              "plafondMois",
+              "fenetreJours"
             ],
             "additionalProperties": false
           },
