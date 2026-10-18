@@ -52,7 +52,7 @@ async function consulterLectureTampon({ deps, cfg, entree, scanId, resultat, cor
         if (!version || version.colonneMarquages !== true || typeof version.entree !== 'function') return null;
         const c = corpsChaine && typeof corpsChaine === 'object' ? corpsChaine : null;
         if (!c || !(produits instanceof Map)) return null;
-        const paire = LT.paireSeparee({ ids: idsDeLaQuestion(resultat), entree: id => version.entree(id) });
+        const paire = LT.paireSeparee({ ids: idsDeLaQuestion(resultat), entree: id => version.entree(id), memeFiche: typeof version.memeFiche === 'function' ? (x, y) => version.memeFiche(x, y) : undefined });
         if (!paire.ok) return null;                                               // aucune autre question ne déclenche la lecture : 0 coût inutile
         if (!produits.has(paire.special) || !produits.has(paire.normale)) return null;
         const carte = await carteValidee(entree);

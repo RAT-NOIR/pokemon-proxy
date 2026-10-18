@@ -8,6 +8,8 @@
 //   comptes, octets              → les dénominateurs ; la taille mesurée des colonnes et des chaînes
 // Le constructeur reçoit les résultats UN À UN (sink de decider) : il ne tient jamais le tableau des entrées.
 const { lireEntree } = require('../identifier/visuels');
+const PV = require('../identifier/partage-variante');                              // PARTAGES-VARIANTE : la paire séparée par la variante, une seule définition
+const { separeeParVariante } = PV;
 
 const COLS = ['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 'rar', 'tot', 'variante', 'set', 'lien'];
 
@@ -112,6 +114,33 @@ function assembler(d) {
         }
         return groupes;
     };
+    // PARTAGES-VARIANTE : les paires SANS liste, séparées par la variante (false, ni holo, variante staff|jumbo|normale) — le partage ne se lit plus dans une liste mais dans le visuel ET la fiche communs.
+    // Construit une fois, à la demande : les rangs candidats (quelques centaines), leurs fiches (une passe sur les fiches), puis les couples jugés par pairePar (la MÊME fonction que F1).
+    let variantes = null;
+    const pairesParVariante = () => {
+        if (variantes) return variantes;
+        variantes = { fiches: new Map(), partenaires: new Map() };
+        if (!mar) return variantes;
+        const candidats = [];
+        for (let r = 0; r < ids.length; r++) {
+            const f = mar.flags[r];
+            if (champDe(f, 2) === 2 && champDe(f, 0) !== 1 && mar.pfin[r] <= mar.pdeb[r] && PV.VARIANTES_PAIRE.includes(lire(texte, cols.variante[r]))) candidats.push(r);
+        }
+        if (!candidats.length) return variantes;
+        const choisis = new Set(candidats.map(r => ids[r]));
+        for (let i = 0; i < fiches.debut.length; i++) for (let k = fiches.debut[i]; k < fiches.fin[i]; k++) {
+            const p = fiches.produits[k];
+            if (choisis.has(p)) { if (!variantes.fiches.has(p)) variantes.fiches.set(p, new Set()); variantes.fiches.get(p).add(`${i}`); }
+        }
+        const seaux = new Map();                                                    // le visuel (vignette + grande) → les produits candidats
+        for (const r of candidats) { const cle = `${lire(texte, cols.vig[r])}|${cols.gra[r] < 0 ? '' : lire(texte, cols.gra[r])}`; if (!seaux.has(cle)) seaux.set(cle, []); seaux.get(cle).push(ids[r]); }
+        const memeFiche = (a, b) => { const x = variantes.fiches.get(a), y = variantes.fiches.get(b); if (!x || !y) return false; for (const f of x) if (y.has(f)) return true; return false; };
+        for (const liste of seaux.values()) for (let i = 0; i < liste.length; i++) for (let j = i + 1; j < liste.length; j++) {
+            if (!PV.pairePar(V.entree(liste[i]), V.entree(liste[j]), memeFiche).ok) continue;
+            for (const [p, q] of [[liste[i], liste[j]], [liste[j], liste[i]]]) { if (!variantes.partenaires.has(p)) variantes.partenaires.set(p, new Set()); variantes.partenaires.get(p).add(q); }
+        }
+        return variantes;
+    };
     const V = {
         chargeLe, comptes, octets,
         /** Les identifiants de produit, triés (une vue de la colonne : à ne pas modifier). */
@@ -135,8 +164,16 @@ function assembler(d) {
          */
         partagesDe(id) {
             if (!mar || !Number.isInteger(id)) return null;
-            const g = groupesDePartage().get(id);
-            return g ? [...g].sort((a, b) => a - b) : [];
+            const g = groupesDePartage().get(id), p = pairesParVariante().partenaires.get(id);
+            return g || p ? [...new Set([...(g || []), ...(p || [])])].sort((a, b) => a - b) : [];
+        },
+        /** PARTAGES-VARIANTE : ces deux produits sont-ils de la même fiche ? Vrai seulement pour deux produits candidats à une paire séparée par la variante (les seuls dont la fiche est lue) ; faux sinon, sans colonne comprise. */
+        memeFiche(a, b) {
+            if (!mar || !Number.isInteger(a) || !Number.isInteger(b)) return false;
+            const x = pairesParVariante().fiches.get(a), y = pairesParVariante().fiches.get(b);
+            if (!x || !y) return false;
+            for (const f of x) if (y.has(f)) return true;
+            return false;
         },
         produitsDeMetacarte(m) {
             if (!Number.isInteger(m)) return [];
@@ -344,7 +381,9 @@ function verifierStructure(d) {
             if (x.tampon[i] < -1 || x.tampon[i] >= nT) refuser('marquages : indice de texte hors de la réserve');
             if (x.pdeb[i] < 0 || x.pdeb[i] > x.pfin[i] || x.pfin[i] > x.produits.length) refuser('marquages : bornes de produits partagés hors de la liste');
             const taille = x.pfin[i] - x.pdeb[i], partage = champDe(f, 0) === 1 || champDe(f, 2) !== 0;
-            if (partage && (taille < 2 || taille > PARTAGES_MAX)) refuser('marquages : un drapeau de partage sans liste de 2 à 6 produits');
+            // PARTAGES-VARIANTE : la seule forme de partage SANS liste — false, ni holo, variante staff|jumbo|normale (partage-variante.js : la définition de la validation d'entrée et de la décision)
+            const parVariante = partage && taille === 0 && separeeParVariante({ partageeHoloNonHolo: boolDeCode(champDe(f, 0)), partageeTamponNonSepare: boolDeCode(champDe(f, 2)), produitsPartages: null }, lire(d.texte, d.cols.variante[i]));
+            if (partage && !parVariante && (taille < 2 || taille > PARTAGES_MAX)) refuser('marquages : un drapeau de partage sans liste de 2 à 6 produits');
             if (!partage && taille > 0) refuser('marquages : une liste de produits sans drapeau de partage');
             if (taille > 0) {
                 const l = Array.from(x.produits.subarray(x.pdeb[i], x.pfin[i]));

@@ -10,6 +10,7 @@ const etat = require('../chargeur/etat');
 const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
 const { langueDeTirage } = require('./langue-decisive');
+const { separeeParVariante } = require('./partage-variante');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
 const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
@@ -74,7 +75,8 @@ function lireMarquages(e) {
         if (!l.includes(e.idProduct)) return { motif: 'champ "produitsPartages" ne contient pas le produit de l\'entrée' };
         liste = [...l].sort((a, b) => a - b);
     }
-    if (partage && liste === null) return { motif: 'marquage de partage sans "produitsPartages"' };
+    // PARTAGES-VARIANTE : UNE seule forme sans liste est admise — la paire séparée par la variante (partage-variante.js, la même définition que la décision, la structure de l'archive et F1) ; tout le reste reste refusé
+    if (partage && liste === null && !separeeParVariante({ partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: null }, texte(e.variante))) return { motif: 'marquage de partage sans "produitsPartages"' };
     if (!partage && liste !== null) return { motif: '"produitsPartages" sans marquage de partage (partageeHoloNonHolo ou partageeTamponNonSepare)' };
     return { marquages: { partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: liste, tamponNonRepresente: tn, basseDefinition: basse } };
 }

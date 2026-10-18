@@ -71,7 +71,7 @@ const I = require('../identifier/seconde-lecture-image');
         const dir = path.join(__dirname, '..', 'identifier');
         const MODULES = ['lecture-tampon.js', 'lecture-tampon-route.js', 'seconde-lecture-image.js', 'fournisseur-tampon.js'];
         const requis = f => [...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
-        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction', './carte-redressee', './seconde-lecture-image']);
+        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction', './carte-redressee', './seconde-lecture-image', './partage-variante']);       // partage-variante : module PUR (PARTAGES-VARIANTE), ni base ni réseau
         H.v('3a. les modules n\'importent que sharp, opencv-js, scoring et leurs voisins de la lecture (ni http, https, net, axios, undici, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], [], [], []]);
         const code = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
         H.v('3b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios`, `import(` dans le code (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], [], [], []]);
