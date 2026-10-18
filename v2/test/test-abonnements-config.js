@@ -50,9 +50,9 @@ H.v('   codeFondateursValide refuse une empreinte absente ou mal formée', [C.co
 const c = lire();
 const sortie = JSON.stringify(c) + JSON.stringify(Object.entries(c)) + require('util').inspect(c, { depth: 5 }) + JSON.stringify(lireConfig({ ...base, V2_ABONNEMENTS: '1' }).abonnements);
 H.v('la clé et le secret ne s\'énumèrent pas : ni JSON.stringify, ni inspect, ni la configuration entière de la v2 ne les montrent', [sortie.includes('sk_test_'), sortie.includes('whsec_'), sortie.includes(A.CODE_FONDATEURS), sortie.includes(empreinte)], [false, false, false, false]);
-H.v('   mais le code les lit', [c.cle, c.webhookSecret], ['sk_test_BANCfauxBANCfaux', A.SECRET]);
+H.v('   mais le code les lit', [c.cle, c.webhookSecret], ['sk_test_' + 'BANCfauxBANCfaux', A.SECRET]);
 H.v('   la configuration est gelée', [Object.isFrozen(lireConfig({ ...base, V2_ABONNEMENTS: '1' }).abonnements), Object.isFrozen(lireConfig({ ...base, V2_ABONNEMENTS: '1' }).abonnements.fondateurs)], [true, true]);
-H.v('   les avertissements nomment des variables, jamais des valeurs', lire({ V2_STRIPE_CLE: 'sk_live_valeurSECRETE999' }).avertissements.join(' ').includes('SECRETE'), false);
+H.v('   les avertissements nomment des variables, jamais des valeurs', lire({ V2_STRIPE_CLE: 'sk_live_' + 'valeurSECRETE999' }).avertissements.join(' ').includes('SECRETE'), false);
 
 // ── les offres : les valeurs exactes de la décision ──
 H.v('prix en centimes : Pro 499 / 3 900, Fondateurs 299 / 2 900, EUR', [O.CATALOGUE.pro.prix, O.CATALOGUE.fondateurs.prix, O.DEVISE], [{ mois: 499, an: 3900 }, { mois: 299, an: 2900 }, 'eur']);

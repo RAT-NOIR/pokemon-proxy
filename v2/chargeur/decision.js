@@ -9,6 +9,7 @@ const L = () => require('../../exporter-donnees-logos-site');      // paresseux 
 const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
 
 const { lienServi } = require('../identifier/lien-cardmarket');       // LIEN-CARDMARKET : la garde unique, partagée avec la relecture (visuels.js) et le Produit
+const { separeeParVariante } = require('../identifier/partage-variante');   // PARTAGES-VARIANTE : la forme « paire séparée par la variante », UNE définition (décision, validation d'entrée, structure, F1)
 const entier = x => Number.isInteger(x) && x > 0;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const fichierDe = (cle, w, h) => (typeof cle === 'string' && cle ? { cle, w, h } : null);
@@ -59,21 +60,32 @@ function refusDeRepli({ ligne, set, im, visuel }) {
     if (f) return f;
     return JETON_TAMPON_NOM.test(String(ligne.slug ?? '')) ? 'staff-prerelease' : null;
 }
-/** Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés (la basse définition suit l'image). */
-function marquagesDe(im, idProduct) {
-    const concerne = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+/**
+ * Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés, OU si l'image est servie à une paire SÉPARÉE PAR LA VARIANTE
+ * (PARTAGES-VARIANTE : false, aucune liste, `variante` prouvée du produit servi — partage-variante.js) ; la basse définition suit l'image.
+ */
+function marquagesDe(im, idProduct, variante = null) {
+    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+    const paire = separeeParVariante(im, variante);
+    const concerne = liste || paire;
     const bool = x => (typeof x === 'boolean' ? x : null);
     return { partageeHoloNonHolo: concerne ? bool(im.partageeHoloNonHolo) : null, partageeTamponNonSepare: concerne ? bool(im.partageeTamponNonSepare) : null,
-        produitsPartages: concerne ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
+        produitsPartages: liste ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
 }
 
-/** m2 : l'image porte un marquage de partage (ou une liste) qui ne tient pas pour CE produit : fail-closed. */
-function partageIncoherent(im, idProduct) {
+/**
+ * m2 : l'image porte un marquage de partage (ou une liste) qui ne tient pas pour CE produit : fail-closed. `variante` : la variante PROUVÉE du produit servi (varianteProuvee), ou null.
+ * La seule exception à « un marquage de partage exige une liste qui contient le produit » : la paire séparée par la variante (false, aucune liste, staff|jumbo|normale prouvée).
+ */
+function partageIncoherent(im, idProduct, variante = null) {
     const partage = im.partageeHoloNonHolo === true || typeof im.partageeTamponNonSepare === 'boolean';
     const liste = Array.isArray(im.produitsPartages);
     if (!partage && !liste) return false;
+    if (separeeParVariante(im, variante)) return false;
     return !(partage && liste && im.produitsPartages.includes(idProduct));
 }
+/** La variante d'une ligne SI elle a sa preuve, sans compter (varianteAvecPreuve compte, et ne passe qu'une fois par produit servi). */
+const varianteProuvee = l => (VARIANTES_ARCHIVE.includes(l.variante) && texte(l.variantePreuve) ? l.variante : null);
 /** m3 : la variante (staff / jumbo / normale) n'est portée QUE si la ligne a sa preuve (variantePreuve non vide) ; sinon null, compté. */
 function varianteAvecPreuve(l, d) {
     if (!VARIANTES_ARCHIVE.includes(l.variante)) return null;
@@ -193,7 +205,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
         if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
         // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
-        if (partageIncoherent(im, l.idProduct)) { d.partageIncoherent++; continue; }
+        if (partageIncoherent(im, l.idProduct, varianteProuvee(l))) { d.partageIncoherent++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
 
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
@@ -211,7 +223,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
             // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
             lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
-        Object.assign(e, marquagesDe(im, l.idProduct));
+        Object.assign(e, marquagesDe(im, l.idProduct, e.variante));
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;

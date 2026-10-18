@@ -6,6 +6,7 @@
 //   · le déclenchement : la question est EXACTEMENT une paire que l'archive prouve séparée (partageeTamponNonSepare false des deux côtés, listes de partage = la paire, variantes staff/normale) ;
 //   · un seul chemin mène à « STAFF lu » : DEUX essais indépendants répondent « oui » à l'identique. Non, incertain, désaccord, panne, délai : la question reste, inchangée ;
 //   · 🔴 ON N'AFFIRME JAMAIS LA VERSION NORMALE sur une absence de lecture : un tampon manqué n'est pas un tampon absent. Ce module ne sait même pas désigner la normale.
+const PV = require('./partage-variante');
 const COMPTEURS = ['declenchees', 'affirmees', 'nonConfirmees', 'echecs', 'appels', 'dejaTentees', 'nonFaisables'];
 const compte = Object.fromEntries(COMPTEURS.map(k => [k, 0]));
 const compteurs = () => ({ ...compte });
@@ -29,13 +30,25 @@ const memeListe = (l, a, b) => Array.isArray(l) && l.length === 2 && l.every(Num
  * @param entree  (idProduct) => l'entrée d'archive (format 2) ou null
  * @returns { ok: true, type: 'staff', special: idProduct, normale: idProduct } | { ok: false, motif }
  */
-function paireSeparee({ ids, entree } = {}) {
+function paireSeparee({ ids, entree, memeFiche } = {}) {
     try {
         if (!Array.isArray(ids) || ids.length !== 2 || !ids.every(Number.isInteger) || ids[0] === ids[1]) return refus('la question n\'est pas exactement la paire');
         if (typeof entree !== 'function') return refus('aucune archive');
         const [a, b] = ids, ea = entree(a), eb = entree(b);
         if (!ea || !eb || typeof ea !== 'object' || typeof eb !== 'object') return refus('un candidat n\'a pas d\'entrée d\'archive');
         if (ea.partageeTamponNonSepare !== false || eb.partageeTamponNonSepare !== false) return refus('la paire n\'est pas marquée séparée');
+        // PARTAGES-VARIANTE : deux formes de paire « prouvée séparée ». (a) les DEUX listes nomment exactement la paire. (b) AUCUNE liste des deux côtés : la paire est séparée par la variante, et
+        // les deux produits partagent le même visuel ET la même fiche (partage-variante.js, la définition commune). Une liste d'un seul côté n'est ni l'une ni l'autre.
+        const sansListe = x => x.produitsPartages === undefined || x.produitsPartages === null;
+        if (sansListe(ea) && sansListe(eb)) {
+            if (ea.partageeHoloNonHolo === true || eb.partageeHoloNonHolo === true) return refus('un partage holo / non-holo se mêle à la paire');
+            const p = PV.pairePar({ ...ea, idProduct: a }, { ...eb, idProduct: b }, memeFiche);
+            if (!p.ok) return refus(/^les variantes/.test(p.motif) ? 'les variantes ne sont pas une paire staff/normale' : p.motif);
+            if (p.variante !== 'staff') return refus('les variantes ne sont pas une paire staff/normale');      // un JUMBO reste une question
+            const dit = [ea, eb].some(x => typeof x.tamponNonRepresente === 'string' && x.tamponNonRepresente.trim().toLowerCase() === 'staff');
+            if (!dit) return refus('l\'archive ne dit pas que le tampon Staff n\'est pas représenté');
+            return { ok: true, type: 'staff', special: p.special, normale: p.normale };
+        }
         if (!memeListe(ea.produitsPartages, a, b) || !memeListe(eb.produitsPartages, a, b)) return refus('la liste de partage ne nomme pas exactement la paire');
         if (ea.partageeHoloNonHolo === true || eb.partageeHoloNonHolo === true) return refus('un partage holo / non-holo se mêle à la paire');
         const v = [ea.variante, eb.variante];

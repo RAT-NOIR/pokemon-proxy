@@ -4063,7 +4063,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Écho du texte d'état déclaré par le vendeur, tel que reçu. Il est reçu et ignoré : il n'entre ni dans l'état retenu, ni dans le prix, ni dans le verdict. À ne pas afficher comme l'état de la carte."
           },
           "retenu": {
             "type": [
@@ -5854,7 +5855,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "L'état déclaré par le vendeur sur l'annonce. Reçu et ignoré : il n'entre ni dans l'état retenu, ni dans le prix, ni dans le verdict. L'état d'une carte ne vient jamais du vendeur."
           },
           "vintedUrl": {
             "type": [
