@@ -1,0 +1,159 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-tampon-staff-0008",
+  "analyse": {
+    "statut": "identifiee",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000312,
+          "nom": "Bouture Fictive",
+          "nomCardmarket": "Bouture Fictive [Staff]",
+          "set": {
+            "slug": "Promos-Fictives",
+            "nom": "Promos Fictives",
+            "code": "PRF",
+            "tirage": null,
+            "annee": null,
+            "symbole": null,
+            "badge": "PRF",
+            "badgeSource": "code"
+          },
+          "numero": "115",
+          "total": null,
+          "langue": null,
+          "variante": "tampon",
+          "version": "V2",
+          "rarete": "Promo",
+          "visuel": null,
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 4,
+            "de": 1,
+            "moyenne30": 4,
+            "date": "2026-10-12",
+            "deBase": "tous-etats",
+            "moyenne7": 4,
+            "fiable": false,
+            "reserves": [
+              "prix-indicatif-tampons-melanges",
+              "version-tamponnee-prix-sous-estime"
+            ]
+          },
+          "liens": {
+            "cardmarket": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Promos-Fictives/Bouture-Fictive-V2-PRF115",
+            "fiche": null
+          },
+          "impressions": [
+            {
+              "idProduct": 9000311,
+              "numero": "115",
+              "total": null,
+              "rarete": "Promo",
+              "variante": "normale",
+              "version": "V1",
+              "set": {
+                "nom": "Promos Fictives"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Promos-Fictives/Bouture-Fictive-V1-PRF115",
+              "prixGuide": {
+                "tendance": 1,
+                "de": 0.2,
+                "moyenne30": 1,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": 1,
+                "fiable": true,
+                "reserves": []
+              }
+            },
+            {
+              "idProduct": 9000312,
+              "numero": "115",
+              "total": null,
+              "rarete": "Promo",
+              "variante": "tampon",
+              "version": "V2",
+              "set": {
+                "nom": "Promos Fictives"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Promos-Fictives/Bouture-Fictive-V2-PRF115",
+              "prixGuide": {
+                "tendance": 4,
+                "de": 1,
+                "moyenne30": 4,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": 4,
+                "fiable": false,
+                "reserves": [
+                  "prix-indicatif-tampons-melanges",
+                  "version-tamponnee-prix-sous-estime"
+                ]
+              }
+            }
+          ]
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "NM",
+          "confiance": "haute",
+          "defauts": [],
+          "declare": null,
+          "retenu": "NM"
+        },
+        "prixLive": {
+          "idProduct": 9000312,
+          "langues": [
+            1
+          ],
+          "reverseHolo": false,
+          "etatVise": "NM"
+        },
+        "zone": null
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "ecartTendanceMax": 0.3,
+      "versEUR": 1,
+      "tauxDate": null
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "affirmee",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  }
+}

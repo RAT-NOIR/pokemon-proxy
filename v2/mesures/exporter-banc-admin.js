@@ -144,7 +144,10 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     const lues = new Map();        // clé -> true (écrite) | false (illisible)
     const lignes = [];
     let sansPhoto = 0;
+    let exclues = 0;
     for (const l of brutes) {
+        // MODELE-VISUEL-API (tour 2, M6) : une ligne qui porte le marqueur du vecteur de l'extension n'est jamais exportée (aucun écrivain actuel n'en pose : la règle est là pour le prochain)
+        if (l.empreinteExtension) { exclues++; continue; }
         let photo = null;
         const cle = l.cleR2;
         if (typeof cle === 'string' && CLE_BANC.test(cle)) {
@@ -171,7 +174,7 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     fs.mkdirSync(path.join(dossier, 'photos'), { recursive: true });
     const photos = [...lues.values()].filter(Boolean).length;
     ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1), juge);
-    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
+    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, exclues, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
     return { lignes: lignes.length, photos, sansPhoto };
 }
 

@@ -65,25 +65,75 @@ async function bandes(carte) {
     }));
 }
 
-/** Le lecteur du modèle. `post(url, corps, config)` est un client axios-compatible ; `modele` et `cle` sont OBLIGATOIRES. Rend { setCode, number, total } ou { illisible: true }. */
-function creerLecteur({ post, modele, cle } = {}) {
-    if (typeof post !== 'function' || typeof modele !== 'string' || !modele || typeof cle !== 'string' || !cle) throw new Error('creerLecteur : post, modele et cle sont obligatoires');
-    return async function lire(bande, { signal } = {}) {
+/**
+ * L'appel au modèle, UN seul exemplaire (seconde lecture ET lecture du tampon, F1-TAMPON) : une consigne, une image JPEG, la réponse brute. `post(url, corps, config)` est un client axios-compatible ;
+ * `surUsage(usage)` (la MESURE seulement) demande le coût réel au fournisseur et le rend ; sans lui, la requête est exactement celle d'avant. @returns la réponse brute (texte) */
+function creerAppel({ post, modele, cle, prompt, surUsage, nom }) {
+    if (typeof post !== 'function' || typeof modele !== 'string' || !modele || typeof cle !== 'string' || !cle) throw new Error(`${nom} : post, modele et cle sont obligatoires`);
+    return async function appeler(bande, { signal } = {}) {
         let r;
         try {
             r = await post('https://openrouter.ai/api/v1/chat/completions', {
-                model: modele, temperature: 0,
-                messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${Buffer.from(bande).toString('base64')}` } }] }]
+                model: modele, temperature: 0, ...(typeof surUsage === 'function' ? { usage: { include: true } } : {}),
+                messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${Buffer.from(bande).toString('base64')}` } }] }]
             }, { headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' }, timeout: 30000, ...(signal ? { signal } : {}) });     // le signal d'abandon (délai de la route) interrompt l'appel en vol
         } catch (e) {
             throw Object.assign(new Error('seconde lecture : appel du modèle en échec'), { code: (e && typeof e.code === 'string' && /^[A-Z_0-9]{2,40}$/.test(e.code)) ? e.code : 'APPEL_MODELE' });     // jamais le message d'origine : il peut contenir l'en-tête
         }
+        if (typeof surUsage === 'function') { try { surUsage(r && r.data && r.data.usage ? r.data.usage : null); } catch { /* une mesure qui échoue ne change pas la lecture */ } }
         const [choix] = (r && r.data && Array.isArray(r.data.choices) && r.data.choices) || [];
         const { message: reponse } = choix || {};                                    // la réponse du MODÈLE (pas une erreur) : déstructurée, la règle « aucun .message » ne la confond pas avec un message d'exception
-        const brut = String((reponse && reponse.content) || '');
-        let p = null; try { p = JSON.parse(brut.replace(/```json|```/g, '').trim()); } catch { /* illisible */ }
-        if (!p || typeof p !== 'object' || Array.isArray(p)) return { illisible: true };
+        return String((reponse && reponse.content) || '');
+    };
+}
+const jsonDe = brut => { let p = null; try { p = JSON.parse(String(brut).replace(/```json|```/g, '').trim()); } catch { /* illisible */ } return p && typeof p === 'object' && !Array.isArray(p) ? p : null; };
+
+/** Le lecteur du modèle. `post(url, corps, config)` est un client axios-compatible ; `modele` et `cle` sont OBLIGATOIRES. Rend { setCode, number, total } ou { illisible: true }. */
+function creerLecteur({ post, modele, cle, surUsage } = {}) {
+    const appeler = creerAppel({ post, modele, cle, prompt: PROMPT, surUsage, nom: 'creerLecteur' });
+    return async function lire(bande, opts = {}) {
+        const p = jsonDe(await appeler(bande, opts));
+        if (!p) return { illisible: true };
         return { setCode: p.setCode ?? null, number: p.number ?? null, total: p.total ?? null };
+    };
+}
+
+// ── F1-TAMPON : UNE question sur la carte entière — le mot « STAFF » est-il imprimé ou tamponné ? La certitude est exigée : « yes » seulement si les lettres se lisent.
+const PROMPT_TAMPON = `This image is a Pokémon trading card (a photo or a scan, possibly blurry or at an angle).
+Question: is the word "STAFF" printed or stamped on this card (a stamp or logo reading STAFF, as on the Staff promo versions of a card)?
+Answer "yes" ONLY if you can clearly read the letters S-T-A-F-F stamped on the card itself.
+Answer "no" if the whole card is clearly visible and no such stamp is there.
+Answer "uncertain" if the image is too blurry, cropped, dark or unclear to decide. Never guess.
+Reply ONLY with JSON: {"staff": "yes" | "no" | "uncertain"}`;
+const REPONSES_TAMPON = Object.freeze(['yes', 'no', 'uncertain']);
+
+/** Le lecteur du tampon. Rend { staff: 'yes'|'no'|'uncertain' } ou { illisible: true } (une valeur hors de ces trois : jamais un « yes » inventé). */
+function creerLecteurTampon({ post, modele, cle, surUsage } = {}) {
+    const appeler = creerAppel({ post, modele, cle, prompt: PROMPT_TAMPON, surUsage, nom: 'creerLecteurTampon' });
+    return async function lireTampon(bande, opts = {}) {
+        const p = jsonDe(await appeler(bande, opts));
+        return p && typeof p.staff === 'string' && REPONSES_TAMPON.includes(p.staff) ? { staff: p.staff } : { illisible: true };
+    };
+}
+
+const LARGEURS_TAMPON = Object.freeze([1000, 1400]);
+/**
+ * La préparation de l'image du tampon : DEUX images JPEG de la carte ENTIÈRE, de définitions distinctes (1000 et 1400 px de large, la seconde contrastée), pour deux essais qui ne lisent pas la même chose.
+ * `image` : les octets de l'APPELANT, et SEULEMENT la carte redressée validée de MODELE-VISUEL-API (JPEG 420 x 587) : une image d'une autre taille (une photo pleine, deux cartes côte à côte) est REFUSÉE (lève).
+ * Pas de géométrie, pas de redressement ici. Sans octets : []. Des octets illisibles : lève. Jamais un téléchargement.
+ */
+const CARTE_L = 420, CARTE_H = 587;
+function creerPreparateurTampon() {
+    return async function preparer({ image } = {}) {
+        if (!Buffer.isBuffer(image) || !image.length) return [];
+        const sharp = require('sharp');
+        const m = await sharp(image, { failOn: 'error', limitInputPixels: 50e6 }).metadata();
+        if (m.width !== CARTE_L || m.height !== CARTE_H) throw Object.assign(new Error('carte hors format'), { code: 'CARTE_HORS_FORMAT' });
+        return Promise.all(LARGEURS_TAMPON.map((largeur, i) => {
+            let img = sharp(image).resize({ width: largeur });
+            if (i === 1) img = img.normalise().sharpen({ sigma: 1.0 });
+            return img.jpeg({ quality: 92 }).toBuffer();
+        }));
     };
 }
 
@@ -97,4 +147,4 @@ function creerRecadreur({ largeur = 1000 } = {}) {
     };
 }
 
-module.exports = { redresser, bandes, creerLecteur, creerRecadreur, PROMPT, BANDES };
+module.exports = { redresser, bandes, creerLecteur, creerRecadreur, creerLecteurTampon, creerPreparateurTampon, PROMPT, PROMPT_TAMPON, BANDES };

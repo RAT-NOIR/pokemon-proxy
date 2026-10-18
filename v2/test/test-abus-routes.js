@@ -826,7 +826,13 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
+            V2_LECTURE_TAMPON: [c => c.lectureTampon, false, '2', 'leve'],      // F1-TAMPON : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_MODELE_EMPREINTE_ID: [c => c.modeleEmpreinte.id, null, 'identifiant invalide', 'ignore'], V2_MODELE_EMPREINTE_SHA256: [c => c.modeleEmpreinte.sha256, null, 'pas-un-sha256', 'ignore'],      // la version du modèle attendue : aucune par défaut (tous les vecteurs sont alors ignorés)
+            V2_MODELE_EMPREINTE_URL: [c => c.modeleEmpreinte.url, null, 'http://exemple.invalid/modele.onnx', 'ignore'], V2_MODELE_EMPREINTE_OCTETS: [c => c.modeleEmpreinte.octets, null, 'abc', 'ignore'],      // M2 : mal formée = ignorée (dite) ; VIDES tant que la publication du modèle sur R2 n'est pas accordée
+            V2_EMPREINTES_R2_OBJET: [c => c.modeleEmpreinte.objet, null, 'objet avec espace', 'ignore'],
+            V2_EMPREINTES_BANC_FICHIER: [c => c.modeleEmpreinte.fichierBanc, null, 'C:\\tmp\\intrus.rmei', { ferme: c => c.modeleEmpreinte.fichierBanc === null }, PROD],      // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
             V2_RESOLUTION_CARDMARKET: [c => c.resolutionCardmarket, false, 'true', 'ignore'],      // RESOUDRE-CARDMARKET : éteint par défaut ; seul « 1 » l'allume, toute autre valeur l'éteint sans invalider la configuration
             V2_PHOTO_ADMIN_DELAI_S: [c => c.photoAdmin.delaiS, 15, '301', 'leve'], V2_PHOTO_ADMIN_INTERVALLE_S: [c => c.photoAdmin.intervalleS, 10, '-1', 'leve'], V2_PHOTO_ADMIN_MAX_JOUR: [c => c.photoAdmin.maxJour, 400, '-1', 'leve']     // PHOTO-EXTENSION : le repli du téléchargement serveur (entiers, 0 à 3 600 et 0 à 100 000)
