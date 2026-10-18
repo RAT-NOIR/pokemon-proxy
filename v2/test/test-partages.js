@@ -169,5 +169,10 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     H.v('5h. un fournisseur sans partages (banc, archive d\'avant) : la question d\'avant, inchangée', [ancienne5.issue, montres(ancienne5)], ['question', [300, 400]]);
     const { idsACharger } = require('../identifier/jumeaux');
     H.v('5i. idsACharger : les partenaires des candidats d\'une question de la chaîne sont chargés', idsACharger(amb([300, 400]), fournisseurDe(v5)), [301]);
+    // ── 6. m8 : une question sur des produits PARTAGÉS n'invite pas à comparer l'illustration (elle est la même) : même code (liste fermée), aide propre
+    H.v('6a. holo/non-holo : code "visuel" (aucun code fermé ne convient), aide = brillance ou tampon, pas l\'illustration', [r1.question.code, /brillance|tampon/.test(r1.question.aide), /comparez l’illustration/.test(r1.question.aide)], ['visuel', true, false]);
+    const enAnglais = muet(() => adapter({ statutHttp: 200, corps: corpsDe(7001) }, { produits, langueInterface: 'en', cfg, jumeaux: fournisseurDe(v) }));
+    H.v('6b. en anglais : le même texte d\'aide propre', /shine|stamp/.test(enAnglais.question.aide), true);
+    H.v('6c. une question "visuel" SANS produits partagés garde l\'aide d\'avant (comparer l\'illustration)', [c4.question.code, /illustration/.test(c4.question.aide), /brillance/.test(c4.question.aide)], ['visuel', true, false]);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

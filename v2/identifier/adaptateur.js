@@ -89,7 +89,9 @@ function question(ids, etat, ctx) {
     const premiers = ids.slice(0, 3);                                    // l'ordre du classement n'est pas servi : on ne garde que le rang pour couper
     const ordre = choixPour(premiers).map(c => c.idProduct);             // puis ordre idProduct, jamais celui du classement
     const cands = ordre.map(id => construireProduit(source(ctx, id), pctx(ctx)));
-    const q = construireQuestion(cands, { langueInterface: ctx.langueInterface });
+    // m8 : des produits qui se partagent la même image (l'un est le partenaire de l'autre) : l'aide de la question isuel ne renvoie pas à l'illustration
+    const partages = ordre.some(i => partagesDuFournisseur(ctx.jumeaux, i).some(q => ordre.includes(q)));
+    const q = construireQuestion(cands, { langueInterface: ctx.langueInterface, partages });
     return enveloppe('question', carte('a-trancher', { candidats: cands, question: q, etat }), { question: q });
 }
 
