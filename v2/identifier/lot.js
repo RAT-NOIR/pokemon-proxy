@@ -42,8 +42,15 @@ function compterLot(cartes, cfg) {
     const n = s => cartes.filter(c => c.statut === s).length;
     return { cartesVues: cartes.length, identifiees: n('identifiee'), aTrancher: n('a-trancher'), introuvables: n('introuvable'), lectureLiveMax: cfg.lot.lectureLiveMax };
 }
-const zoneValide = z => (z && typeof z === 'object' && Number.isInteger(z.photo) && z.photo >= 0 && ['x', 'y', 'w', 'h'].every(k => typeof z[k] === 'number' && z[k] >= 0 && z[k] <= 1)
-    ? { photo: z.photo, x: z.x, y: z.y, w: z.w, h: z.h } : null);
+// `zone.photo` est un index d'`imageUrls`. Quand des photos ont été REÇUES, le lecteur n'a vu que celles-là, en liste compactée (imagesDeLaChaine) : sa `photo` N est sa N-ième image, soit `photosRecues[N].index` dans `imageUrls`.
+// Une `photo` hors de cette liste n'est pas devinée : zone sans photo (null).
+const zoneValide = (z, entree) => {
+    if (!(z && typeof z === 'object' && Number.isInteger(z.photo) && z.photo >= 0 && ['x', 'y', 'w', 'h'].every(k => typeof z[k] === 'number' && z[k] >= 0 && z[k] <= 1))) return null;
+    const recues = entree && Array.isArray(entree.photosRecues) && entree.photosRecues.length ? entree.photosRecues : null;
+    if (!recues) return { photo: z.photo, x: z.x, y: z.y, w: z.w, h: z.h };
+    const p = [...recues].sort((a, b) => a.index - b.index)[z.photo];
+    return p ? { photo: p.index, x: z.x, y: z.y, w: z.w, h: z.h } : null;
+};
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 
 /**
@@ -118,7 +125,7 @@ async function executerLot(p) {
         motifs[i] = a && typeof a.motif === 'string' ? a.motif : null;
         const c = a && a.issue !== 'panne' && a.analyse && Array.isArray(a.analyse.cartes) ? a.analyse.cartes[0] : null;
         if (!c) { pannes.push(a && a.erreur ? a.erreur.code : 'SERVEUR'); return { index: i, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'panne-lecture', etat: null, prixLive: null, zone: null }; }
-        return { ...c, index: i, zone: zoneValide(corpsDe(r).zone) };
+        return { ...c, index: i, zone: zoneValide(corpsDe(r).zone, entree) };
     });
     const lectures = resultats.map(r => ({ codeLangue: codeLangueDe(corpsDe(r)), reverseStrategie: corpsDe(r).reverse && typeof corpsDe(r).reverse.strategie === 'string' ? corpsDe(r).reverse.strategie : null }));
     // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), la nature du remboursement est `jumeaux`, UNE unité par carte
