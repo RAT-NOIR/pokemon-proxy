@@ -161,9 +161,12 @@ app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gerer
 
 // MODELE-VISUEL-API : l'extension joint la carte redressée (JPEG <= 200 Ko, <= 273 068 caractères base64) à chaque entrée de `empreintes`, 8 au plus : jusqu'à ≈ 2,19 Mo. La limite de 100 Ko est relevée à 2 400 Ko
 // POUR POST /api/identifier SEULEMENT, et SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : express.json() par défaut, inchangé). Les validations (forme, taille de chaque carte) restent dans v2/identifier.
-const jsonDefaut = express.json();
-const jsonIdentifier = process.env.V2_EMPREINTE_EXTENSION === '1' ? express.json({ limit: '2400kb' }) : jsonDefaut;
-app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/identifier' ? jsonIdentifier : jsonDefaut)(req, res, next));
+// Le grand analyseur passe AVANT l'analyseur global et ne prend que cette route ; l'analyseur global saute un corps déjà lu (body-parser : req._body).
+if (process.env.V2_EMPREINTE_EXTENSION === '1') {
+    const jsonIdentifier = express.json({ limit: '2400kb' });
+    app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/identifier' ? jsonIdentifier(req, res, next) : next()));
+}
+app.use(express.json());
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
 // se contourne en changeant d'identifiant). Ne s'applique QU'aux routes IA coûteuses —
