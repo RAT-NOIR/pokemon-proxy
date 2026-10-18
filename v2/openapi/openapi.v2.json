@@ -3869,6 +3869,14 @@
               null
             ],
             "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js."
+          },
+          "poche": {
+            "type": "string",
+            "enum": [
+              "achete",
+              "jour"
+            ],
+            "description": "Additif (ACHETE-AVANT-JOUR) : d'où vient l'analyse débitée par CETTE requête. `achete` : payée sur les analyses achetées avec la 1.0.5 (elle ne consomme pas le quota du jour, `offre.restant` ne baisse pas) ; `jour` : prise sur le quota du jour. Un lot dont toutes les unités sont payées sur `achete` dit `achete`, sinon `jour`. Présent sur la réponse qui débite /api/identifier (y compris remboursée : il dit où l'analyse avait été prise) ; absent quand rien n'est débité (administrateur, refus QUOTA) et sur les autres routes. Un lecteur lit son absence comme « non précisé »."
           }
         },
         "required": [
