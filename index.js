@@ -162,9 +162,21 @@ app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gerer
 // MODELE-VISUEL-API : l'extension joint la carte redressée (JPEG <= 200 Ko, <= 273 068 caractères base64) à chaque entrée de `empreintes`, 8 au plus : jusqu'à ≈ 2,19 Mo. La limite de 100 Ko est relevée à 2 400 Ko
 // POUR POST /api/identifier SEULEMENT, et SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : express.json() par défaut, inchangé). Les validations (forme, taille de chaque carte) restent dans v2/identifier.
 // Le grand analyseur passe AVANT l'analyseur global et ne prend que cette route ; l'analyseur global saute un corps déjà lu (body-parser : req._body).
-if (process.env.V2_EMPREINTE_EXTENSION === '1') {
+// TOUR 2 : ce grand analyseur n'existe que si V2_EMPREINTE_EXTENSION=1 ET l'API v2 est montée (RM_API_V2=1) ; la route héritée garde 100 Ko (I3/M1). Il n'est atteint qu'APRÈS : (1) un en-tête Authorization: Bearer présent ; (2) un Content-Length
+// annoncé au-delà de 100 Ko ; (3) le plafond par IP (v2/limiteur-heritage.js, plafondGrand). Sans jeton, ou sans Content-Length, c'est l'analyseur par défaut : 413 SANS LECTURE si Content-Length > 100 Ko, corps coupé à 100 Ko sans Content-Length.
+if (process.env.V2_EMPREINTE_EXTENSION === '1' && V2) {
     const jsonIdentifier = express.json({ limit: '2400kb' });
-    app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/identifier' ? jsonIdentifier(req, res, next) : next()));
+    app.use((req, res, next) => {
+        if (req.method !== 'POST' || req.path !== '/api/identifier') return next();
+        const annonce = Number(req.headers['content-length']);
+        // sans jeton et au-delà de 100 Ko annoncés : 413 tout de suite, le corps n'est jamais lu (body-parser attendrait la fin du corps avant de répondre)
+        if (!/^Bearer \S/.test(String(req.headers.authorization || '')) && Number.isFinite(annonce) && annonce > 100 * 1024) {
+            res.setHeader('Connection', 'close');
+            return res.status(413).json({ success: false, error: 'Requête illisible' });      // la même forme que le gestionnaire d'erreurs 4xx plus bas
+        }
+        if (!/^Bearer \S/.test(String(req.headers.authorization || '')) || !Number.isFinite(annonce) || annonce <= 100 * 1024) return next();
+        return V2.limiteurHerite.plafondGrand(req, res, () => jsonIdentifier(req, res, next));
+    });
 }
 app.use(express.json());
 

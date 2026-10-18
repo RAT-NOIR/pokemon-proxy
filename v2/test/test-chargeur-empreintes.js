@@ -27,6 +27,20 @@ const fauxClient = (buf, { erreur = null } = {}) => ({ appels: 0, async send(cmd
     H.v('1d. secret trop court : rien', L.demarrerPourConfig(cfgDe(), { env: { BANC_ISOLE: '1', V2_VISUELS_HMAC: 'court' }, journal: jr }), null);
     H.vrai('   la valeur du secret n\'est dans aucune ligne du journal', !journal.some(l => l.includes(A.SECRET)));
 
+    // ── M2 : une configuration du modèle mal formée ne fait jamais tomber le serveur
+    {
+        const avert = []; const w = console.warn; console.warn = m => avert.push(String(m));
+        let off, on;
+        try {
+            off = lireConfig({ MONGODB_BASE: 'test_scratch', V2_MODELE_EMPREINTE_SHA256: 'pas-un-sha' });
+            on = lireConfig({ MONGODB_BASE: 'test_scratch', V2_EMPREINTE_EXTENSION: '1', V2_MODELE_EMPREINTE_ID: 'id invalide !' });
+        } finally { console.warn = w; }
+        H.v('1e. 🔑 M2 drapeau éteint + sha mal formé : la fabrique ne lève pas, l\'empreinte reste éteinte, modèle vidé, UN avertissement', [off.empreinteExtension, off.modeleEmpreinte.sha256, avert.filter(m => /ignorée/.test(m)).length], [false, null, 1]);
+        H.v('1f. 🔑 M2 drapeau allumé + identifiant mal formé : les empreintes sont DÉSACTIVÉES (jamais une chute), et c\'est dit', [on.empreinteExtension, on.modeleEmpreinte.id, avert.filter(m => /DÉSACTIVÉES/.test(m)).length], [false, null, 1]);
+        H.vrai('1g. … sans afficher la valeur fautive', !avert.some(m => m.includes('pas-un-sha') || m.includes('id invalide')));
+        H.v('1h. variante : une configuration valide et allumée reste allumée', lireConfig(A.ENV_EMPREINTE).empreinteExtension, true);
+    }
+
     // ── l'index de BANC : local, installé tout de suite
     fs.writeFileSync(fichier, A.scelle());
     const banc = L.demarrerPourConfig(cfgDe(), { env: { ...ENV }, journal: jr });
