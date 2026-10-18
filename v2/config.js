@@ -81,6 +81,23 @@ function lireConfig(env = process.env) {
     // Tour 3 (I-6) : 21 jours AU PLUS. La marge avant les 12 mois est la longueur du mois de bascule (février : 28 jours) moins la passe quotidienne et l'étalement : 27 jours est la limite, 28 les atteignent ;
     // avec 21 il reste 6 jours (environ 12 000 lignes d'étalement). Un réglage qui violerait « 12 mois au maximum » n'est pas valide.
     if (bancGraceJours > 21) throw new Error(`configuration invalide : V2_BANC_GRACE_JOURS="${env.V2_BANC_GRACE_JOURS}" (21 jours au plus : au-delà, le lien pourrait atteindre 12 mois en février)`);
+    // MODELE-VISUEL-API (tour 2, M2) : la configuration du modèle d'empreinte ne fait JAMAIS tomber le serveur. Drapeau éteint : une valeur mal formée est ignorée et dite une fois. Drapeau allumé : les empreintes sont désactivées et c'est dit.
+    const empreinteVoulue = booleen('V2_EMPREINTE_EXTENSION', env.V2_EMPREINTE_EXTENSION, false);
+    let modeleEmpreinte = null, empreinteExtension = empreinteVoulue, variableFautive = '';
+    try {
+        const id = env.V2_MODELE_EMPREINTE_ID, sha = env.V2_MODELE_EMPREINTE_SHA256, objet = env.V2_EMPREINTES_R2_OBJET, octets = env.V2_MODELE_EMPREINTE_OCTETS;
+        if (id !== undefined && id !== '' && !/^[A-Za-z0-9._-]{1,60}$/.test(id)) { variableFautive = 'V2_MODELE_EMPREINTE_ID (1 à 60 caractères : lettres, chiffres, point, tiret, souligné)'; throw new Error('forme'); };
+        if (sha !== undefined && sha !== '' && !/^[0-9a-f]{64}$/.test(sha)) { variableFautive = 'V2_MODELE_EMPREINTE_SHA256 (64 chiffres hexadécimaux minuscules)'; throw new Error('forme'); };
+        if (objet !== undefined && objet !== '' && !/^[A-Za-z0-9._/-]{1,200}$/.test(objet)) { variableFautive = 'V2_EMPREINTES_R2_OBJET'; throw new Error('forme'); };
+        variableFautive = 'V2_MODELE_EMPREINTE_URL ou V2_MODELE_EMPREINTE_OCTETS';
+        modeleEmpreinte = { id: id || null, sha256: sha || null, url: url('V2_MODELE_EMPREINTE_URL', env.V2_MODELE_EMPREINTE_URL, null), octets: entier('V2_MODELE_EMPREINTE_OCTETS', octets, null, 1), objet: objet || null,
+                            fichierBanc: banc ? (env.V2_EMPREINTES_BANC_FICHIER || null) : null };
+    } catch (e) {
+        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, fichierBanc: null };
+        const raison = variableFautive || 'configuration du modèle';
+        if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
+        else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
+    }
     return gele({
         actif,
         base,
@@ -177,6 +194,13 @@ function lireConfig(env = process.env) {
             ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'ie', 'co.uk', 'hu', 'ro', 'si', 'hr', 'gr', 'lv', 'ee', 'dk', 'fi', 'com.au'].map(t => `vinted.${t}`)),
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
+        // MODELE-VISUEL-API : l'empreinte visuelle calculée par l'EXTENSION (modèle p8000 en poids 8 bits, onnxruntime-web), les voisins cherchés par l'API dans l'index de l'archive, la décision de la règle G
+        // sous la promotion mesurée (identifier/promotion-g.js). ÉTEINT par défaut (0) : la requête, la réponse, le débit et le journal sont alors identiques octet pour octet (aucune lecture de `empreintes`).
+        // `modeleEmpreinte` = LA version attendue (l'API n'en connaît qu'UNE) : identifiant + sha256 des poids ; une autre version ⇒ les empreintes sont ignorées (code « modele-inconnu »). `url` : où l'extension télécharge
+        // le modèle (113 Mo) — valeur de configuration, VIDE tant que le testeur n'a pas accordé la publication sur R2 ; servie dans `analyse.regleVerdict.modeleEmpreinte`. `objet` : l'objet R2 PRIVÉ de l'index (mêmes
+        // clés de lecture et même HMAC que l'archive des visuels). `fichierBanc` : un index LOCAL, honoré SEULEMENT en mode banc.
+        empreinteExtension,
+        modeleEmpreinte,
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),

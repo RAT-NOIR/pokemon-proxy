@@ -109,6 +109,8 @@ module.exports = {
         // TAUX-BCE (B4) : le déclencheur quotidien des taux, SEULEMENT si V2_TAUX_BCE=1 (cfg.tauxBce). `deps.tauxBce` ne règle que les injections des bancs (fetch, horloge) : aucune panne n'est injectable par là.
         require('./taux-declencheur').demarrerPourConfig(cfg, deps && deps.tauxBce && typeof deps.tauxBce === 'object' ? deps.tauxBce : {});
         require('../chargeur/montage').demarrerPourConfig(cfg);        // COTES-VISUELS : ne lit RIEN ici (premier chargement différé) ; en banc : aucun réseau
+        // MODELE-VISUEL-API : l'index des empreintes de l'archive — SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : le fichier n'est même pas chargé). Sans index, la règle G se tait pour les vecteurs de l'extension.
+        if (cfg.empreinteExtension === true) require('../chargeur/montage-empreintes').demarrerPourConfig(cfg, deps && deps.empreintes && typeof deps.empreintes === 'object' ? deps.empreintes : {});
     },
     balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge,
     arreterTaux: () => require('./taux-declencheur').arreterTaux()
