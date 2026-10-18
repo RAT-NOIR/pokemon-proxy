@@ -18,7 +18,7 @@ const sharp = require('sharp');
 const P = require('./collecte-cartes/pokedata');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { marqueDe } = require('./collecte-cartes/basse-definition');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 const { dansLeDepot, dansApportsManuels, dansRacineAutorisee, RACINE_AUTORISEE } = require('./recepteur-pikaqian');
@@ -198,11 +198,12 @@ function annonceRemplacement(cartes, remplacements) {
  * @param {object[]} plan  les AJOUTS (P.apparier().plan) — le numéro d'écriture est celui de la fiche, à défaut celui du relevé (sans zéros de tête perdus : on garde le texte du relevé)
  * @returns {Promise<{code: number, etat?: string, resultats: object[], attendu: number, reel: number, horsCache: number, altere: number}>}
  */
-async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS, remplacements = [], remplacer = [] } = {}) {
-    if (typeof deposer !== 'function' || typeof vignetter !== 'function') throw new Error('ecrire : deposer et vignetter sont exigés');
+async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS, remplacements = [], remplacer = [], simuler = false } = {}) {
+    if (!simuler && (typeof deposer !== 'function' || typeof vignetter !== 'function')) throw new Error('ecrire : deposer et vignetter sont exigés');
     const db = M.Carte.db.db;
     const index = lireIndex(dossierCache, 'image');
-    const seuil = largeurMinDe(P.SOURCE);
+    // 🔑 MCD-PDT (2026-10-18) : le seuil se juge PAR UNITÉ, par la règle unique `largeurAdmiseDe` (plancher de 200 px pour les quatre sets McDonald's nommés, 350 ailleurs) — jamais un nombre ici.
+    const seuilDe = u => largeurAdmiseDe(P.SOURCE, u.slugSet);
     const idsRemplacables = new Set((remplacements || []).flatMap(u => u.produits));
     const inconnus = (remplacer || []).filter(id => !idsRemplacables.has(id));
     if (inconnus.length) {
@@ -224,12 +225,26 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
         const _id = P.idImage(u.slugSet, u.carteId, numeroDe(u));
         const deja = await M.Image.findById(_id).select('etat').lean();
         if (deja?.etat === 'retire') { retires++; continue; }
-        prets.push({ u, _id, buffer, meta, num: numeroDe(u), petit: !meta.width || meta.width < seuil });
+        const seuil = seuilDe(u);
+        prets.push({ u, _id, buffer, meta, num: numeroDe(u), seuil, petit: !meta.width || meta.width < seuil });
     }
     const reel = prets.filter(p => !p.petit).length;
     if (attendu != null && attendu !== reel) {
         console.error(`❌ --attendu=${attendu} mais ${reel} image(s) à écrire (hors cache ${horsCache}, altérées ${altere}, retirées ${retires}, sous le seuil ${prets.filter(p => p.petit).length}) — rien n'est écrit.`);
         return { code: 2, etat: 'refuse-attendu', resultats: [], attendu, reel, horsCache, altere };
+    }
+    if (simuler) {
+        // L'ESSAI À BLANC : lecture seule de la base, le cache seulement, AUCUN dépôt, AUCUNE écriture. Pour chaque unité : la décision, le seuil, la largeur de l'original, et si la fiche est DÉJÀ servie.
+        const unites = []; let rejugeables = 0;
+        for (const p of prets) {
+            const c = await M.Carte.findById(p.u.carteId).select('images').lean();
+            const dejaServie = !!c && T.dejaServi({ images: (c.images || []).filter(e => e && !(e.source === P.SOURCE && e.set === p.u.slugSet && (e.numero ?? null) === (p.num ?? null))) }, p.u.slugSet, p.num ?? null);
+            const doc = await M.Image.findById(p._id).select('etat seuilApplique wOriginal w').lean();
+            const rejuge = doc?.etat === 'trop-petit' && aRejuger(doc, P.SOURCE, p.u.slugSet);
+            if (rejuge) rejugeables++;
+            unites.push({ carteId: p.u.carteId, slugSet: p.u.slugSet, numero: p.num, produits: p.u.produits, largeur: p.meta.width, seuil: p.seuil, decision: p.petit ? 'sous-le-seuil' : 'ecrire', basseDefinition: !p.petit && p.meta.width < 350, dejaServie, docAvant: doc?.etat ?? null, rejuge });
+        }
+        return { code: 0, etat: 'simulation', resultats: [], attendu: attendu ?? reel, reel, horsCache, altere, retires, unites, rejugeables };
     }
     const bucket = process.env.R2_BUCKET_IMAGES;
     const resultats = [];
@@ -245,18 +260,20 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
         const verrouSet = fabriquerVerrouSet ? fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat }) : null;
         if (verrouSet) { const tenu = await verrouSet.prendre(); if (tenu) { resultats.push({ code: slug, etat: 'refuse-verrou' }); continue; } }
         try {
-            let telecharges = 0, sautes = 0, tropPetits = 0;
+            let telecharges = 0, sautes = 0, tropPetits = 0, rejuges = 0;
             const ecrits = [], uniteDe = new Map();
             for (const p of unites) {
                 uniteDe.set(p._id, p.u);
                 const { u, _id, meta, buffer, num } = p;
                 const trace = P.tracer({ url: u.url });
-                const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
+                const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat seuilApplique wOriginal w').lean();
                 if (p.petit) {
                     tropPetits++;
-                    if (deja?.etat !== 'trop-petit') await M.Image.updateOne({ _id }, { $set: { ...trace, set: slug, carteId: u.carteId, numero: num, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: seuil } }, { upsert: true });
+                    // un `trop-petit` écrit sous un autre seuil (le lot du 18/10 : 350) est réécrit au seuil d'aujourd'hui : l'absence du champ ou une valeur différente est l'information (§23)
+                    if (deja?.etat !== 'trop-petit' || deja.seuilApplique !== p.seuil) await M.Image.updateOne({ _id }, { $set: { ...trace, set: slug, carteId: u.carteId, numero: num, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: p.seuil } }, { upsert: true });
                     continue;
                 }
+                if (deja?.etat === 'trop-petit' && aRejuger(deja, P.SOURCE, slug)) rejuges++;
                 if (deja?.etat === 'ok' && deja.sha256 && deja.urlOriginal === u.url) { sautes++; ecrits.push(_id); continue; }
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                 const cleR2 = P.cleR2(slug, num, u.carteId);
@@ -268,7 +285,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                     ...marqueDe({ wOriginal: meta.width }),
-                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: P.MENTION, mention: P.MENTION, telechargeLe: new Date(), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
+                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: P.MENTION, mention: P.MENTION, telechargeLe: new Date(), etat: 'ok' }, $unset: { erreur: 1, seuilApplique: 1 } }, { upsert: true });
                 telecharges++; ecrits.push(_id);
             }
             const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
@@ -305,7 +322,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)`}`);
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, lot: P.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, lot: P.LOT, unites: unites.length, telecharges, sautes, tropPetits, rejuges, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0 && telecharges + sautes + tropPetits === unites.length, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { bilanLotPdt: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });
@@ -359,12 +376,12 @@ module.exports = { fixerDossierArret, fabriquerPlancheEtiquetee, urlsAutorisees,
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE : un argument inconnu refuse avant toute connexion.
-const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
+const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--planche$/, /^--essai$/, /^--ecrire$/, /^--attendu=\d{1,4}$/, /^--echantillon=\d{1,3}$/, /^--releves=.+$/, /^--cache=.+$/, /^--sortie=.+$/, /^--remplacer=\d+(,\d+)*$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
-const modes = ['--plan', '--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
+const modes = ['--plan', '--telecharger', '--planche', '--essai', '--ecrire'].filter(m => args.includes(m));
 if (inconnus.length || modes.length > 1 || (args.some(a => a.startsWith('--attendu=')) && !args.includes('--ecrire')) || (args.includes('--ecrire') && !args.some(a => a.startsWith('--attendu='))) || (args.some(a => a.startsWith('--echantillon=')) && !args.includes('--planche'))) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --planche, --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche (la planche du lot, étiquetée : set, numéro, nom de NOTRE fiche). Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan (défaut), --telecharger, --planche, --essai (l'écriture À BLANC : décision par unité, zéro écriture), --ecrire ; --ecrire exige --attendu=<N> (et lui seul l'accepte) ; --echantillon=<N> va avec --planche (la planche du lot, étiquetée : set, numéro, nom de NOTRE fiche). Options : --releves=, --cache=, --sortie=, --remplacer=<idProduct,…>.`);
     process.exitCode = 2;
 }
 const val = (nom, defaut) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3) ?? defaut;
@@ -414,6 +431,15 @@ if (argsValides) (async () => {
                 fs.writeFileSync(fa, JSON.stringify(annonce, null, 1));
                 console.log(`annonce des baisses du remplacement (${Object.keys(annonce).length} groupe(s)) → ${fa} · pour lot-additif.js --annonce=`);
             }
+            return;
+        }
+        if (mode === '--essai') {
+            const r = await ecrire(p.plan, modeles(cx), { dossierCache, simuler: true, remplacements: p.remplacements, remplacer: voulus });
+            console.log(`ESSAI À BLANC : ${r.reel} à écrire · sous le seuil ${r.unites.filter(x => x.decision === 'sous-le-seuil').length} · trop-petit rejugeables ${r.rejugeables} · hors cache ${r.horsCache} · altérées ${r.altere} · REQUÊTES 0 · ÉCRITURES 0`);
+            for (const x of r.unites) console.log(`   ${x.decision === 'ecrire' ? '✍️ ' : '✗ '} ${x.slugSet} n° ${x.numero} carte ${x.carteId} · ${x.largeur} px (seuil ${x.seuil})${x.basseDefinition ? ' · basseDefinition' : ''}${x.dejaServie ? ' · DÉJÀ SERVIE (la nôtre cédera)' : ''}`);
+            const aEcrire = new Set(r.unites.filter(x => x.decision === 'ecrire').map(x => `${x.slugSet}|${x.carteId}`));
+            const pl = await fabriquerPlancheEtiquetee({ dossierCache, echantillon: p.plan.filter(u => aEcrire.has(`${u.slugSet}|${u.carteId}`)), sortie: path.join(P.DOSSIER_LOT, 'planche-essai.png') });
+            console.log(`PLANCHE DE L'ESSAI : ${pl.images}/${pl.total} image(s) → ${pl.sortie} (à regarder avant --ecrire)`);
             return;
         }
         const r2 = require('./collecte-cartes/r2');

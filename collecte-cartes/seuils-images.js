@@ -62,6 +62,7 @@ function largeurAdmiseDe(source, ligne = null) {
     if (typeof source !== 'string') return LARGEUR_MIN;
     if (SOURCES_A_PLANCHER.includes(source)) return Math.min(largeurMinDe(source), PLANCHER_BASSE_DEFINITION);
     if (source === SOURCE_POKUMON && typeof ligne === 'string' && LIGNES_POKUMON_A_PLANCHER.includes(ligne)) return PLANCHER_BASSE_DEFINITION;
+    if (source === SOURCE_PDT && typeof ligne === 'string' && SETS_PDT_A_PLANCHER.includes(ligne)) return PLANCHER_BASSE_DEFINITION;
     return largeurMinDe(source);
 }
 
@@ -80,6 +81,12 @@ const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com']);
 // le nom que le collecteur Pokumon ÉCRIT dans `images.source` (collecte-cartes/pokumon.js SOURCE ; le banc le compare) — pokumon.js charge CE module, il ne peut donc pas être requis ici
 const SOURCE_POKUMON = 'pokumon';
 const LIGNES_POKUMON_A_PLANCHER = Object.freeze(['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2']);
+// ➕ 2026-10-18 (MCD-PDT) — DÉCISION DU TESTEUR (mot pour mot) : « Les 31 McDonald's en 320 px : oui, en basseDefinition: true. Ils seront remplacés dès qu'une meilleure source apparaît (CardTrader
+// compris). » C'est la suite du ruling du 17/10 ci-dessus (« les McDonald's en 320 px sont écrits avec le champ basseDefinition: true »), qui ne nommait que les lignes du collecteur Pokumon : le lot
+// pdt du 18/10 (48 écrites) a refusé 31 McDonald's à 320-325 px (`trop-petit`, seuil 350). Le plancher vaut pour la source `pdt` et pour QUATRE sets, lus sur les 31 documents `images` (pas devinés) :
+// les quatre slugs d'expansion McDonald's de la base. Liste FERMÉE, comparaison EXACTE (casse, année, espaces) : tout autre set pdt (Trick or Trade, Black Star…) garde 350.
+const SOURCE_PDT = 'pdt';            // le nom que le collecteur pdt ÉCRIT dans `images.source` (collecte-cartes/pokedata.js SOURCE ; le banc le compare) — pokedata.js charge CE module
+const SETS_PDT_A_PLANCHER = Object.freeze(['McDonalds-Collection-2014', 'McDonalds-Collection-2015', 'McDonalds-Collection-2017', 'McDonald-s-Collection-2018-2']);
 
 // ➕ 2026-10-12 — « BASSE DÉFINITION » : UNE fonction, toutes sources confondues (§21 bis : aucun collecteur ne compare un nombre lui-même).
 // Une image est de basse définition quand la largeur de son ORIGINAL est sous LARGEUR_MIN (350). C'est la largeur de l'ORIGINAL qui compte, pas
@@ -127,4 +134,4 @@ function sourceDeUnite(unite, defaut) {
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, LARGEUR_MIN_PIKAQIAN, PLANCHER_BASSE_DEFINITION, SOURCES_A_PLANCHER, SOURCE_POKUMON, LIGNES_POKUMON_A_PLANCHER, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, largeurAdmiseDe, estBasseDefinition, largeurOriginaleDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, LARGEUR_MIN_PIKAQIAN, PLANCHER_BASSE_DEFINITION, SOURCES_A_PLANCHER, SOURCE_POKUMON, LIGNES_POKUMON_A_PLANCHER, SOURCE_PDT, SETS_PDT_A_PLANCHER, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, largeurAdmiseDe, estBasseDefinition, largeurOriginaleDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
