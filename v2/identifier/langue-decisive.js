@@ -36,7 +36,7 @@ const SANS_NUMEROTATION = Object.freeze([
 //   BAS = 4, HAUT = 20 : sur les 153 lignes-question du banc dont la vérité est parmi les choix, le plus haut score d'un autre candidat à côté d'une vérité <= 4 est 6 ; HAUT est 14 au-dessus (marge nommée : 14 inliers).
 const SEUIL_IMAGE = Object.freeze({ bas: 4, haut: 20 });
 
-const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0, R5: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0, indexFermes: 0, preparations: 0, preparationsRefusees: 0 };
+const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0, R5: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0, indexFermes: 0, indexTronques: 0, preparations: 0, preparationsRefusees: 0 };
 const compteurs = () => ({ ...compte, retraits: { ...compte.retraits } });
 
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -77,6 +77,21 @@ function langueDeTirage(tirage) {
  * `existe(setCode, numero)` : un produit du catalogue porte-t-il ce code (concordance de `seconde-lecture.comparer`, la définition de la production) ET ce numéro (mêmes chiffres : plus large que « exact »,
  * donc plus BLOQUANT) ? Taille : une chaîne courte par couple (chiffres, code) distinct (~ quelques dizaines de milliers de couples, quelques Mo).
  */
+// M-D, garde G2 : le code lu DÉSIGNE le code d'un produit quand `comparer` (la production) ne le juge pas contredit OU quand l'un des deux codes NORMALISÉS (`scoring.normaliserCodeSet`) est un PRÉFIXE de l'autre, dans un
+// sens ou dans l'autre, SANS plancher de longueur (« m6 » pour M6A, « s8 » pour S8A, « SV » pour SV-P, « m6a » face à M6 : `comparer` les juge contredits sous LONGUEUR_MIN_PARENTE = 3, et R4 y voyait « aucun produit »).
+// Un « X » initial (Additionals : xPRE) est ignoré d'UN seul côté à la fois, s'il reste au moins 2 caractères — le garde-fou de `scoring.codesApparentes`. Écrit par ce qu'elle autorise : seule la parenté ou le
+// désaccord franc laisse R4 jouer. Aucune exception « code = préfixe alphabétique du numéro » n'est ajoutée : le numéro lu passe en chiffres seuls, donc TG face à SIT (au n° TG18) ne se rapproche de rien.
+const sansXInitial = s => (s.startsWith('X') && s.length > 2 ? s.slice(1) : s);
+function codeDesigne(luCode, ligneCode, chiffres) {
+    const a = S.normaliserCodeSet(luCode), b = S.normaliserCodeSet(ligneCode);
+    if (!a || !b) return true;                                                    // un code illisible ne prouve pas l'absence : on bloque
+    for (const [x, y] of [[a, b], [sansXInitial(a), b], [a, sansXInitial(b)]]) {
+        const [court, long] = x.length <= y.length ? [x, y] : [y, x];
+        if (long.startsWith(court)) return true;
+    }
+    return !comparer({ numero: chiffres, setCode: luCode }, { numero: chiffres, set: { code: ligneCode } }).contredit.includes('code');
+}
+
 function creerIndexCodeNumero(lignes) {
     const parChiffres = new Map();
     let taille = 0;
@@ -105,7 +120,7 @@ function creerIndexCodeNumero(lignes) {
             const exclu = texte(exclureCode) ? S.normaliserCodeSet(exclureCode) : null;
             for (const ec of codes) {
                 if (exclu && ec === exclu) continue;
-                if (!comparer({ numero: k, setCode }, { numero: k, set: { code: ec } }).contredit.includes('code')) return true;
+                if (codeDesigne(setCode, ec, k)) return true;
             }
             return false;
         }
@@ -115,7 +130,13 @@ function creerIndexCodeNumero(lignes) {
 // M-B : le PLANCHER de taille de l'index. Le catalogue en porte ~62 000 couples (chiffres, code) ; un index vide ou minuscule (collection vide, champs renommés, projection cassée) n'est pas « aucun produit ne porte ce code »,
 // c'est un instrument en panne (un zéro sur une population censée non vide). Sous le plancher : LÈVE (l'appelant ferme R4), compté et journalisé sans aucune valeur lue.
 const INDEX_CODE_NUMERO_MIN = 10000;
-function construireIndexVerifie(lignes, plancher = INDEX_CODE_NUMERO_MIN) {
+// Tronquée : le plancher ne vaut que ~16 % des couples attendus ; l'appelant lit donc `countDocuments` de la même collection, avec le même filtre, AVANT la lecture (`attendu`) : moins de documents LUS que comptés = refus.
+function construireIndexVerifie(lignes, plancher = INDEX_CODE_NUMERO_MIN, attendu = null) {
+    if (Number.isInteger(attendu) && (lignes || []).length < attendu) {
+        compte.indexTronques++;
+        console.warn(`⚠️ [langue-decisive-v2] lecture tronquée de l'index code × numéro (${(lignes || []).length} documents lus pour ${attendu} comptés) : R4 fermée`);
+        throw new Error('index code × numéro : lecture tronquée');
+    }
     const idx = creerIndexCodeNumero(lignes);
     if (idx.taille < plancher) {
         compte.indexFermes++;
@@ -135,7 +156,7 @@ function codeSansDesignation({ corps, produits, catalogueExiste, pour } = {}) {
     if (lu.vivierIds.some(id => !produits.has(id))) return false;
     const k = S.chiffresDuNumero(lu.numero);
     if (!k) return false;
-    if (lu.vivierIds.some(id => id !== pour && !comparer({ numero: k, setCode: lu.setCode }, produits.get(id)).contredit.includes('code'))) return false;
+    if (lu.vivierIds.some(id => id !== pour && codeDesigne(lu.setCode, produits.get(id).set && produits.get(id).set.code, k))) return false;
     const L = Number.isInteger(pour) ? produits.get(pour) : null;
     try { return catalogueExiste(lu.setCode, lu.numero, L && L.set && L.set.code) === false; } catch { return false; }
 }
