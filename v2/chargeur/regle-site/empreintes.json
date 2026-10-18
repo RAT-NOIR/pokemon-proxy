@@ -1,11 +1,11 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 35ed580 par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
-  "commit": "35ed5806e28d1175bca45555ab54b4d3f528cf2a",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 4d1344d par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
+  "commit": "4d1344d54e07c18ce41687e4457151c07db5b555",
   "sources": {
     "imageDeLImpression.ts": "e6f06c44d7eb98a18be7cc56929b3c0253123ac460853b99db2dfdf3a1de89ed",
     "impressionDuSet.ts": "ed1a78021c1814589a6eced8ec9c360c83f41bb65d2062f9d2c043dbb92b3503",
     "impressionsDuSet.ts": "30fff0606b930a62c52133bdee4fc2330d70d8b2552c52e2da8b1c7fc570f427",
-    "cardmarket.ts": "b370aeeecbc26d7dc2a8fcc361782b926630e40848d9336e2188386c551ba586",
+    "cardmarket.ts": "842a658de492a511a190d846c068629d4efaa08e649b149243b97660c4ca55ae",
     "langueDuVisuel.ts": "c7a95ee600f5972bdf3a5155b4dfddcb45a6b6fd77c0c03dfa0b8699c34dc026",
     "expressionsSures.ts": "9399cb9db0b3aa59d0cd32a8d85fb1fecc8d0ffab47b4ed5261ef6a5920b9ae0",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
@@ -15,7 +15,7 @@
     "imageDeLImpression.mjs": "13bd64c51f228a299d54c6be0a8e7c51c6eb17c60a8dda5dc362569f3ea89591",
     "impressionDuSet.mjs": "a1fb0cecc55d73eac34f0fcb7eda7e0f1ec3b67eb2d8846b5fc54e1aa3d315a3",
     "impressionsDuSet.mjs": "97394b5526126f5f065c0939f5ab83cb6eaa59c1f6849404eb85f4cfbf1fc66a",
-    "cardmarket.mjs": "3ee05f71cca97934711f135eefc452ab65c8c2aba6261df0fb89c42b846d4fbd",
+    "cardmarket.mjs": "bec13ca7abd5e67cc80911ba58eee2892f948771398ef964b2e16074531d6895",
     "langueDuVisuel.mjs": "de700461c90cfd0863a39b4f02a550d17a5476b260440cbeeaeab22ddefe16bb",
     "expressionsSures.mjs": "39db4059c95e8556abd95740f45c397ad7d7a30e70b931de7bedc6a112879c0d",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
