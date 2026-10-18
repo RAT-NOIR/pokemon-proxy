@@ -145,6 +145,8 @@ function listeDesCorrectionsVues(table = CORRECTIONS_VUES) {
         if (vus.has(t.id)) throw new Error(`correction vue ${t.id} : id en double — rien n'est écrit`);
         vus.add(t.id);
         if (communs.has(t.id)) throw new Error(`correction vue ${t.id} : figure aussi dans CORRECTIONS — rien n'est écrit`);
+        if (typeof t.set !== 'string' || !t.set.trim()) throw new Error(`correction vue ${t.id} : sans set — rien n'est écrit`);
+        if (t.numero == null || !String(t.numero).trim()) throw new Error(`correction vue ${t.id} : sans numero — rien n'est écrit`);
         if (!varianteValide(t.vers)) throw new Error(`correction vue ${t.id} : variante « ${t.vers} » hors vocabulaire`);
         return { idProduct: t.id, de: t.de, vers: t.vers, nom: t.nom, set: t.set, numero: t.numero,
             preuve: `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} (zoom ×3) : logo de prérelease « ${t.logo} » visible${t.zoomSeul ? ' ; visible au zoom seulement' : ''} ; feu vert du testeur du ${DATE_RELEVE} (« corrige-les en prerelease, carte par carte, SEULEMENT là où le scan ou la vignette Cardmarket montre bien le logo de prérelease ») ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale` };

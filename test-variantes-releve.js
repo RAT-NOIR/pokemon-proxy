@@ -129,6 +129,11 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         verifier('preuve : vignette, zoom, feu vert ; Dhelmise = zoom seulement', [/vignette Cardmarket regardée par le coordinateur le 2026-10-18 \(zoom ×3\) : logo de prérelease « MEGA EVOLUTION » visible ; feu vert du testeur du 2026-10-18/.test(l[0].preuve), /visible au zoom seulement/.test(l.find(x => x.idProduct === 894263).preuve), l.filter(x => /au zoom seulement/.test(x.preuve)).length], [true, true, 1]);
         verifier('doublon refusé', /double|doublon/.test(await leve(() => R.listeDesCorrectionsVues([...t, t[0]])) || ''), true);
         verifier('variante hors vocabulaire refusée', /hors vocabulaire/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[0], vers: 'autre' }])) || ''), true);
+        const { set: _s, ...sansSet } = t[0], { numero: _n, ...sansNumero } = t[1];
+        verifier('sans set : refusé', /sans set/.test(await leve(() => R.listeDesCorrectionsVues([sansSet])) || ''), true);
+        verifier('set vide : refusé', /sans set/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[0], set: '' }])) || ''), true);
+        verifier('sans numéro : refusé', /sans numero/.test(await leve(() => R.listeDesCorrectionsVues([sansNumero])) || ''), true);
+        verifier('numéro vide : refusé', /sans numero/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[1], numero: '' }])) || ''), true);
         verifier('id commun avec CORRECTIONS refusé', /CORRECTIONS/.test(await leve(() => R.listeDesCorrectionsVues([{ ...t[0], id: 877546 }])) || ''), true);
     });
     const VUE = { id: 851043, de: 'normale', vers: 'prerelease', nom: 'Meganium', set: 'MEP-Black-Star-Promos', numero: '001', logo: 'MEGA EVOLUTION' };
