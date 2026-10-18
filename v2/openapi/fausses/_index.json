@@ -17,6 +17,12 @@
     "schema": "ReponseAnalyse",
     "description": "Prix qui ne sont pas présentés comme sûrs (lot F4-PRIX) : écart de la tendance aux moyennes (ecart-tendance), prix mélangé avec une version tamponnée (deux mentions fermées), le « De » dit tous états (deBase), deux impressions du même set et du même numéro séparées par leur version (V1, V2), badge du set par son nom quand le code se confond avec une série, ecartTendanceMax dans regleVerdict."
   },
+  "identifiee-tampon-staff.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Une paire séparée staff / normale tranchée par le tampon STAFF lu sur la photo (lot F1-TAMPON) : le produit Staff est affirmé (identifiee, debite 1), sa mention de prix est « version-tamponnee-prix-sous-estime » (règle 2) à la place de « peut-etre-gonfle-par-tampons »."
+  },
   "identifiee-hors-euro.json": {
     "route": "POST /api/identifier",
     "statut": 200,

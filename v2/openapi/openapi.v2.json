@@ -3061,10 +3061,11 @@
                 "ecart-tendance",
                 "ecart-non-mesurable",
                 "prix-indicatif-tampons-melanges",
-                "peut-etre-gonfle-par-tampons"
+                "peut-etre-gonfle-par-tampons",
+                "version-tamponnee-prix-sous-estime"
               ]
             },
-            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). La mention « version tamponnée : le prix Cardmarket sous-estime sa valeur » (tampon vu sur la photo) n'est PAS encore servie : elle attend la seconde lecture des marques."
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). `version-tamponnee-prix-sous-estime` (lot F1-TAMPON, règle 2) : le tampon STAFF a été lu sur la photo, deux fois à l'identique, pour une fiche marquée ; elle est servie À LA PLACE de `peut-etre-gonfle-par-tampons`, jamais avec elle (texte : « version tamponnée : le prix Cardmarket sous-estime sa valeur »). Derrière un interrupteur éteint (V2_LECTURE_TAMPON) : tant qu'il est éteint, ou que l'extension n'envoie pas la carte, elle n'est jamais servie."
           }
         },
         "required": [
