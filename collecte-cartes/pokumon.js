@@ -590,7 +590,8 @@ const transportFetch = {
         return { status: r.status, type, texte: await r.text(), pages: Number(r.headers.get('x-wp-totalpages')) || null, total: Number(r.headers.get('x-wp-total')) || null, cfMitigated };
     }
 };
-const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
 
 /**
  * Les SEULS chemins vers pokumon.com et son hôte d'images. Garde FERMÉE : aucune requête sans verrou global lié et tenu ; deux hôtes ÉNUMÉRÉS, chemins ÉNUMÉRÉS (robots.txt, la liste d'une
@@ -598,12 +599,13 @@ const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcap
  * 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête ; une redirection n'est JAMAIS suivie ; plafond de requêtes ; la liste d'une série se rejoue
  * depuis le CACHE (`cache` : { lire(cle) → texte|null, ecrire(cle, texte) }) sans requête.
  */
-function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null;
+function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null;
     const robots = new Map();                                 // hôte → texte | null (404) ; absent = pas encore lu
     let cadenceEff = Math.max(CADENCE_MIN_MS, Number(cadenceMs) || 0);
     function garde() {
         if (bloque) throw bloque;
+        if (pauseHote) throw pauseHote;                       // la pause de la passe : plus aucune requête vers cet hôte (pas un arrêt définitif)
         if (!lie) throw new Error(`${SOURCE} : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`${SOURCE} : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -617,7 +619,8 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         return transport.get(url, o);
     }
     const bloquer = (r, url) => { bloque = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, status: r.status }); throw bloque; };
-    const defi = r => r.status === 403 || r.status === 429 || !!r.cfMitigated || (typeof r.texte === 'string' && /html/i.test(r.type || '') && DEFI.test(r.texte.slice(0, 5000)));
+    // le jugement d'un défi sur une requête qui n'est pas une image (robots.txt, liste JSON) : la définition du module commun, sur les 5 000 premiers caractères comme avant
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null;
     /** une requête, UN réessai au plus (coupure ou 5xx), jamais une boucle */
     async function essayer(url, o) {
         let r;
@@ -644,11 +647,13 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         garde();
         const c = cheminAutorise(url);
         return enFile(async () => {
+            RH.garderHote(new URL(c.url).hostname, dossierPauses, suivi);          // une pause persistante tient : aucune requête
             await assurerRobots(c.hote);
             if (!T.autoriseParRobots(robots.get(c.hote), c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
             const r = await essayer(c.url, { binaire });
             if (defi(r)) bloquer(r, c.url);
-            if (r.status >= 300 && r.status < 400) throw new Error(`${SOURCE} : redirection ${r.status} non suivie sur ${c.url}`);
+            // une image se CLASSE (image() ci-dessous) : une redirection y est « inattendue » (pause) ; une liste ou une page garde son erreur
+            if (!binaire && r.status >= 300 && r.status < 400) throw new Error(`${SOURCE} : redirection ${r.status} non suivie sur ${c.url}`);
             return r;
         });
     }
@@ -676,9 +681,13 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
     /** Une image : les octets, ou null (404). */
     async function image(url) {
         const r = await requete(url, true);
-        if (r.status === 404 || r.status === 410) return null;
-        if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${url}`), { status: r.status });
-        if (!r.octets) throw new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${url})`);
+        // LA RÈGLE COMMUNE : image · absente (404) · fausse page introuvable (200 text/html sans marqueur → absente, et le compteur) · défi · ambiguë · transitoire · inattendue
+        const hote = new URL(url).hostname;
+        const x = RH.traiterImage(r, { suivi, hote, url, dossierPauses, connues });
+        if (x.action === 'arret-definitif') bloquer(r, url);
+        if (x.action === 'pause' || x.action === 'pause-persistante') { pauseHote = RH.erreurPause(x, hote, url, x.fichier ? { fichier: x.fichier } : {}); throw pauseHote; }
+        if (x.action === 'transitoire') throw Object.assign(new Error(`${r.status} ${url}`), { status: r.status });
+        if (x.action === 'absente') return null;
         return r.octets;
     }
     /** Relève le plafond d'une collecte dont le plan est connu (un fichier = une requête) ; jamais au-delà de PLAFOND_MAX, jamais sous ce qui est déjà parti. */
@@ -686,7 +695,7 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         if (!Number.isInteger(n) || n < compte || n > PLAFOND_MAX) throw new Error(`${SOURCE} : plafond ${n} refusé (déjà ${compte} requêtes, maximum ${PLAFOND_MAX})`);
         plafond = n;
     }
-    return { index, indexPromoSet, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque };
+    return { index, indexPromoSet, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque, pause: () => pauseHote, suivi: () => suivi };
 }
 
 // ── LA RÈGLE DU SITE : l'image propre l'emporte sur le substitut ───────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 // Banc de collecter-logos-officiels.js + retirer-logos-officiels : faux réseau, base EN MÉMOIRE (base-banc.js), faux stockage R2. Aucune requête,
 // aucune écriture en production. Chaque garde doit savoir dire NON (§41) : états FABRIQUÉS.
 //   node test-collecter-logos-officiels.js
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -20,8 +21,11 @@ const sets = new Map([['Undone-Seal', { _id: 'Undone-Seal', tirage: 'jp', region
 const action = (l, s = sets) => M.planifier(l, s).action;
 
 // ── un faux réseau : table url → réponse ; horloge fausse (attendre avance le temps)
-const rep = (status, corps = Buffer.alloc(0), h = {}) => ({ status, headers: { get: k => h[k.toLowerCase()] ?? null }, arrayBuffer: async () => { const b = Buffer.from(corps); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); }, text: async () => Buffer.from(corps).toString('utf8') });
+const RHL = require('./collecte-cartes/reponse-hote');
+const viderArrets = () => { const d = RHL.DOSSIER_PAUSES; for (const x of fs.existsSync(d) ? fs.readdirSync(d) : []) if (/^(ARRET|PAUSE)-HOTE-/.test(x)) fs.rmSync(path.join(d, x)); RHL.reinitialiserSuiviProcessus(); };
+const rep = (status, corps = Buffer.alloc(0), h = {}) => ({ status, headers: { get: k => h[k.toLowerCase()] ?? null }, clone() { return this; }, arrayBuffer: async () => { const b = Buffer.from(corps); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); }, text: async () => Buffer.from(corps).toString('utf8') });
 function reseau(table) {
+    viderArrets();      // CORRECTION 2 : un défi écrit un arrêt DURABLE (dossier temporaire du banc) ; chaque faux réseau repart d'un dossier vide
     const appels = []; let t = 0;
     return { appels, horloge: { maintenant: () => t, attendre: async ms => { t += ms; } },
         fetch: async (url, opts) => { appels.push({ url, t, opts }); const r = table[url]; if (!r) return rep(404); return typeof r === 'function' ? r() : r; } };
@@ -111,6 +115,39 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
         const n = R.appels.length;
         try { await c.get('https://billsarchive.com/a.webp'); } catch (e) { e2 = e; }
         verifier('défi anti-robot (403 Cloudflare) : arrêt, et PLUS AUCUNE requête ensuite', [e1?.arret === true, e2?.arret === true, R.appels.length === n], [true, true, true]);
+    }
+    // ── CORRECTION 2 (M3) : le logos officiels LISENT le corps (borné) pour les marqueurs, jugent un robots.txt HTML « inattendu », et lisent l'arrêt durable AVANT toute requête ──
+    {
+        const html = (t, h = {}) => rep(200, Buffer.from(t), { 'content-type': 'text/html', ...h });
+        const essai = async (table, url = URL_B) => { const R = reseau({ 'https://billsarchive.com/robots.txt': rep(404), 'https://assets.tcgdex.net/robots.txt': rep(404), ...table }); const c = M.creerClient({ fetch: R.fetch, ...R.horloge }); let e = null, r = null; try { r = await c.get(url); } catch (x) { e = x; } return { R, c, e, r }; };
+        let x = await essai({ [URL_B]: html('<html><title>Just a moment...</title></html>') });
+        verifier('M3 : un 200 text/html portant « Just a moment » = défi : arrêt (le corps est lu)', [x.e?.arret === true], [true]);
+        x = await essai({ [URL_B]: html('<html><body>page</body></html>', { 'x-cdn': 'Imperva' }) });
+        verifier('M3 : un 200 text/html derrière Imperva (corps qui n\'est pas une image) = défi : arrêt', [x.e?.arret === true], [true]);
+        x = await essai({ [URL_B]: rep(200, Buffer.from('89504e470d0a1a0a00000000', 'hex'), { 'content-type': 'image/png', 'x-cdn': 'Imperva' }) });
+        verifier('M3 : une vraie image derrière Imperva reste une image (aucun arrêt)', [x.e, x.r?.status], [null, 200]);
+        x = await essai({ [URL_B]: html('<html><body>Gym Challenge</body></html>') });
+        verifier('M3 : « challenge » seul n\'est pas un défi pour ce client (pas d\'arrêt)', [x.e, x.r?.status], [null, 200]);
+        x = await essai({ 'https://billsarchive.com/robots.txt': html('<html><body>Bienvenue</body></html>'), [URL_B]: rep(200, Buffer.from('x')) });
+        verifier('M3 : un robots.txt servi en HTML = réponse INATTENDUE (arrêt de l\'hôte), pas « aucune règle » : l\'image n\'est jamais demandée', [x.e?.arretHote === true, x.R.appels.filter(a => a.url === URL_B).length], [true, 0]);
+        x = await essai({ 'https://billsarchive.com/robots.txt': rep(200, Buffer.from('User-agent: *\nDisallow:\n'), { 'content-type': 'text/plain' }), [URL_B]: rep(200, Buffer.from('x')) });
+        verifier('M3 : un vrai robots.txt (text/plain) reste lu', [x.e, x.r?.status], [null, 200]);
+        // l'arrêt durable d'une source (écrit par le collecteur d'images) retient ce client AVANT toute requête
+        viderArrets(); RHL.arretHote('tcgdex.net', 'HTTP 403 (banc)', { dossier: RHL.DOSSIER_PAUSES });
+        const R2 = reseau({ [URL_T]: rep(200, Buffer.from('x')) }); viderArrets(); RHL.arretHote('tcgdex.net', 'HTTP 403 (banc)', { dossier: RHL.DOSSIER_PAUSES });
+        const c2 = M.creerClient({ fetch: R2.fetch, ...R2.horloge }); let e2 = null; try { await c2.get(URL_T); } catch (e) { e2 = e; }
+        verifier('M3 : l\'arrêt DURABLE de tcgdex.net retient ce client sur assets.tcgdex.net : AUCUNE requête (pas même robots.txt)', [!!e2, R2.appels.length], [true, 0]);
+        // et son propre défi s'ÉCRIT (durable) pour la source
+        x = await essai({ [URL_B]: rep(403, Buffer.from('non')) });
+        verifier('M3 : un défi sur billsarchive.com ÉCRIT l\'arrêt durable de la source (le collecteur d\'images la retient aussi)', [x.e?.arret === true, !!RHL.hoteArrete('billsarchive.com', RHL.DOSSIER_PAUSES)], [true, true]);
+        viderArrets();
+    }
+    // F3 (correction 1) : la définition du défi est celle du module commun — 401 et 410 sont des défis, comme 403 et 429
+    for (const st of [401, 410, 429]) {
+        const R = reseau({ 'https://billsarchive.com/robots.txt': rep(404), [URL_B]: rep(st, '<html>non</html>') });
+        const c = M.creerClient({ fetch: R.fetch, ...R.horloge });
+        let e1 = null; try { await c.get(URL_B); } catch (e) { e1 = e; }
+        verifier('F3 : HTTP ' + st + ' = défi anti-robot (module commun) : arrêt', e1?.arret === true, true);
     }
     {
         const R = reseau({ 'https://billsarchive.com/robots.txt': rep(503) });

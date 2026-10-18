@@ -40,7 +40,9 @@ const CIBLES_AUTRES = Object.freeze([297254, 297255, 297257, 297258, 297282, 297
 const lireCiblesAutres = () => ({ ids: [...CIBLES_AUTRES], parProduit: new Map() });
 const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemoncom-cache';
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
-const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident/i;
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans collecte-cartes/reponse-hote.js — ce collecteur les APPELLE, il n'en garde aucune copie.
+const RH = require('./collecte-cartes/reponse-hote');
+const fausseAbsenceRecente = RH.fausseAbsenceRecente;
 const MAGIES = { png: [Buffer.from('89504e470d0a1a0a', 'hex')], jpg: [Buffer.from('ffd8ff', 'hex')], jpeg: [Buffer.from('ffd8ff', 'hex')], webp: [Buffer.from('52494646', 'hex')] };
 /** Les octets reçus sont-ils l'image que l'extension de l'adresse annonce ? (un défi servi sous une adresse d'image ne l'est pas) */
 function octetsConformes(url, octets) {
@@ -112,17 +114,20 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number, plafond?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, octetsMax = OCTETS_MAX_PAR_IMAGE }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = P.CADENCE_MS, plafond: plafondMax = null, octetsMax = OCTETS_MAX_PAR_IMAGE, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !P.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
-    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent', 'refuse'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => P.urlImageValide(u) && !['ok', 'absent', 'refuse'].includes(index.images[u]?.statut) && !fausseAbsenceRecente(index.images[u], now()));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, P.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    // un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : un 404 sans marqueur est « absent ». Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps.
-    const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+    // un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : un 404 sans marqueur est « absent ». REPONSE-HOTE (2026-10-18) : la preuve est celle du module commun
+    // (401, 403, 410, 429, cf-mitigated, Imperva avec un corps de défi, marqueurs techniques dans le corps) ; une IMAGE attendue se CLASSE (image · absente · fausse page introuvable · défi · ambiguë · transitoire · inattendue).
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 3000 })) !== null;
+    const hoteImages = new URL(P.ROBOTS).hostname;
+    const rapportReponses = () => ({ reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) });
     // un 5xx INTERROMPT (compté dans l'index) ; le DEUXIÈME de suite, sans une seule réussite entre, est un arrêt définitif
     // (correction 3) « de suite » = rapprochés (6 h) : un 5xx d'il y a une semaine n'est pas le premier d'une série ; une réponse valide (image, 404) remet le compteur à zéro
     const erreur5xx = (url, r) => {
@@ -136,6 +141,8 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         dernier = now(); requetes++;
         return transport.get(url, o);
     };
+    // 0. une pause persistante de l'hôte tient : AUCUNE requête (pas même robots.txt)
+    try { RH.garderHote(hoteImages, dossierPauses, suivi); } catch (e) { return { etat: 'pause-hote', requetes, plafond, refusees, motif: e.message, pauseHote: { hote: hoteImages, persistante: true, empreinte: e.empreinte ?? null }, reponsesHotes: [] }; }
     // 1. robots.txt, d'abord
     let robots;
     try { robots = await demander(P.ROBOTS, {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
@@ -156,12 +163,17 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     for (const url of permises) {
         let r;
         try { r = await demander(url, { binaire: true, octetsMax }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
-        if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}${/html/i.test(r.type || '') ? ', HTML au lieu d\'une image' : ''}`);
-        if (r.status === 404) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; delete index.cinqCents; ecrireIndex(dossierCache, index); continue; }       // le SEUL « absent » : un 404 sans marqueur de défi
-        if (r.status >= 500) return erreur5xx(url, r);
-        if (r.status !== 200) return arret(url, r, `HTTP ${r.status} : ni l'image (200) ni l'absence (404) — 401, 410 et tout autre statut sont un arrêt définitif`);
+        // une image trop volumineuse n'est pas lue (le corps est abandonné au plafond) : seuls les statuts et en-têtes de défi la jugent, comme avant
+        const x = r.tropVolumineux
+            ? (defi(r) ? RH.reagir(suivi, hoteImages, { issue: 'defi', motif: `HTTP ${r.status} sur une image trop volumineuse` }) : { action: 'trop-volumineuse' })
+            : RH.traiterImage(r, { suivi, hote: hoteImages, url, dossierPauses, connues });
+        if (x.action === 'arret-definitif') return { ...arret(url, r, `${x.motif} (HTTP ${r.status})`), ...rapportReponses() };
+        if (x.action === 'pause' || x.action === 'pause-persistante') return { etat: 'pause-hote', requetes, plafond, refusees, motif: x.motif, pauseHote: { hote: hoteImages, issue: x.issue, empreinte: x.empreinte ?? null, persistante: x.action === 'pause-persistante', fichier: x.fichier ?? null }, ...rapportReponses() };
+        if (x.action === 'transitoire') return erreur5xx(url, r);
+        if (x.action === 'absente') { index.images[url] = RH.entreeAbsence(index.images[url], x, r.status, now()); delete index.cinqCents; ecrireIndex(dossierCache, index); continue; }       // les SEULS « absent » : un 404, ou une fausse page introuvable (200 text/html sans marqueur)
         if (r.tropVolumineux) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octetsAnnonces ?? null, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, plafond ${octetsMax} octets) : ${url}`); continue; }
-        if (!octetsConformes(url, r.octets)) return arret(url, r, 'les octets reçus ne sont pas l\'image que l\'adresse annonce (page de défi probable)');
+        // une image valide mais pas celle que l'extension annonce : « inattendue » (REPONSE-HOTE) — PAUSE de l'hôte, plus un arrêt définitif (les marqueurs de défi, eux, ont déjà été jugés)
+        if (!octetsConformes(url, r.octets)) { suivi.bloquer(hoteImages, 'octets non conformes à l\'adresse (réponse inattendue)'); return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus ne sont pas l\'image que l\'adresse annonce (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapportReponses() }; }
         if (r.octets.length > octetsMax) { index.images[url] = { statut: 'refuse', motif: 'trop-volumineuse', octets: r.octets.length, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); console.error(`   refusée (trop volumineuse, ${r.octets.length} octets) : ${url}`); continue; }
         delete index.cinqCents;
         const meta = await sharp(r.octets).metadata();
@@ -170,7 +182,7 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
         index.images[url] = { statut: 'ok', fichier, sha256: sha('sha256', r.octets), octets: r.octets.length, w: meta.width, h: meta.height, le: new Date().toISOString() };
         ecrireIndex(dossierCache, index);
     }
-    return { etat: 'termine', requetes, plafond, refusees };
+    return { etat: 'termine', requetes, plafond, refusees, ...rapportReponses() };
 }
 
 // ── LE CONTRÔLE DU CACHE (avant tout plan d'écriture) ─────────────────────────────────────────────────────────────────────

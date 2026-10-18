@@ -196,7 +196,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'plan' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: slug, etat: 'refuse-verrou' }; }
-    let bloque = null;
+    let bloque = null, pauseHote = null;
     try {
         const motifs = {}; for (const r of restesSerie) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         console.log(`\n══ ${slug} (S${serie}) : ${produits} produits · PROUVÉS ${planSerie.length} · restes ${JSON.stringify(motifs)} ══`.replace(`(S${serie})`, `(${unite.label})`));
@@ -243,6 +243,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 obtenus.push({ p, _id, meta: o.meta, webp: o.webp, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${p.url}) : ${err.message}`);
@@ -251,7 +252,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
             }
         }
         if (bloque) await conclureBloque(E, slug, bloque, client);
-        if (!bloque && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
+        if (!bloque && !pauseHote && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
 
         // ---- 4. R2 AVANT la ligne -------------------------------------------------------------------------------------------------------
         let telecharges = 0;
@@ -320,13 +321,16 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
             basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,
+            // REPONSE-HOTE : le rapport des réponses de l'hôte d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
+            concordance: garde && !erreurJointure && !bloque && !pauseHote && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokumon: complet } });
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes(), bilan: complet } });
         console.log(`   ${slug} : prouvés ${planSerie.length} · téléchargés ${telecharges} · repris ${sautes} · absents (404) ${absents} · sous le seuil ${tropPetits} · échecs ${echecs} · joints ${joints} · substituts ${substitutsAvant} → ${substitutsApres} · garde ${garde ? '✅' : '❌'} · requêtes ${client.compteRequetes()}`);
         if (bloque) return { code: slug, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: slug, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: slug, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: slug, etat: 'non-concordant', ...complet };
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;
@@ -380,7 +384,7 @@ async function lancerEcriture(series, M, { verrou, client, lireProduits, index =
         resultats.push(r);
         console.log(`SERIE ${serie} (${slug}) → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats, plan };
 }
@@ -422,7 +426,7 @@ async function lancerEcritureFamilles(ids, M, { verrou, client, lireProduits, in
         resultats.push(r);
         console.log(`UNITÉ ${labels} (${slug}) → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats, plan };
 }

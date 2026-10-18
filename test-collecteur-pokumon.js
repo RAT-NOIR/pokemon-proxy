@@ -7,6 +7,7 @@
 //   · défi : arrêt, alerte écrite, plus rien ; alerte posée : aucune requête ; tirage non occidental : refusé ;
 //   · le retrait en un lot retire EXACTEMENT le lot et rend les fiches à leur substitut.
 // TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE du dépôt (collecte-cartes/ + les deux scripts).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const { spawnSync } = require('child_process');
 const sharp = require('sharp');
@@ -202,6 +203,36 @@ const EVT = { 7720: 1, 7721: 2, 7838: 3, 8187: 4 };
     tr = reseau(url => { if (/EN_S1275/.test(url)) B5.col('cartes').get(104).images.push(structuredClone(course)); return null; });
     R = await lancer(B5, tr);
     verifier('une autre source pose la fiche pendant la collecte : son entrée est intacte, la nôtre cède (comptée), aucun doublon', [B5.col('cartes').get(104).images.map(({ vignette, ...e }) => e), R.resultats[2].dejaParAutre, R.resultats[2].etat], [[course], 1, 'verifie']);
+
+    // ── 6 quater. REPONSE-HOTE (2026-10-18) : la règle commune de réponse, VUE PAR LE COLLECTEUR (faux transport) ──────────────────────────────────
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'pk-col-pauses-'));
+        const clientRH = (tr, o = {}) => P.fabriquerClientPokumon({ transport: tr, verrou, pause, horloge: () => maintenant, cache: { lire: () => null, ecrire() { } }, dossierPauses: dp(), ...o });
+        const lancerRH = async (B, tr, c) => { const r = silencieux(); try { return await lancerEcriture([1, 2, 3, 4], B.M, { verrou, client: c, lireProduits, R2, vignetter, fabriquerVerrouSet: verrouSet }); } finally { r(); } };
+        const posees = B => [...B.col('cartes').values()].flatMap(c => c.images).filter(e => e.source === 'pokumon').length;
+        // (a) 200 text/html sur une adresse : fausse page introuvable → on passe à la suivante, SANS arrêt (aucune alerte), les autres images sont posées
+        const BH1 = fausseBase(); semer(BH1);
+        let trH = reseau(url => /EN_S1080/.test(url) ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : null);
+        const cH1 = clientRH(trH);
+        const RH1 = (await lancerRH(BH1, trH, cH1)).resultats;
+        verifier('REPONSE-HOTE : un 200 text/html sur une image → absente, on passe à la suivante : AUCUNE alerte, les autres images partent (Regieleki, Cheren), le client n\'est ni bloqué ni en pause',
+            [BH1.col('collecte_images_etat').get(P.ID_ALERTE) === undefined, trH.appels.filter(u => /EN_S/.test(u)).length, posees(BH1) > 0, cH1.bloque(), cH1.pause()], [true, 4, true, null, null]);
+        verifier('REPONSE-HOTE : …et le rapport de l\'unité nomme les fausses absences et l\'empreinte distincte', [RH1[0].reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length]), RH1[0].pauseHote], [[['cdn6966.templcdn.com', 1, 1]], null]);
+        // (b) un défi : arrêt définitif par le mécanisme existant (l'alerte), comme avant
+        const BH2 = fausseBase(); semer(BH2);
+        trH = reseau(url => /EN_S1080/.test(url) ? { status: 200, type: 'text/html', texte: '<title>Just a moment...</title>' } : null);
+        const RH2 = await lancerRH(BH2, trH, clientRH(trH));
+        verifier('REPONSE-HOTE : un défi (« Just a moment ») → arrêt DÉFINITIF par l\'alerte existante, les séries suivantes ne partent pas', [BH2.col('collecte_images_etat').get(P.ID_ALERTE)?.active, RH2.resultats.map(r => r.etat), trH.appels.filter(u => /EN_S/.test(u)).length], [true, ['incomplet'], 1]);
+        // (c) trop de fausses absences d'affilée : PAUSE, sans alerte ni arrêt définitif (le seuil du banc est abaissé à 2 : le plan n'a que 5 fichiers ; le 21 est prouvé au niveau du module et du client)
+        const BH3 = fausseBase(); semer(BH3);
+        trH = reseau(url => /EN_S/.test(url) ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : null);
+        const cH3 = clientRH(trH, { suivi: RH.suiviHote({ seuil: 1 }) });
+        const RH3 = await lancerRH(BH3, trH, cH3);
+        verifier('REPONSE-HOTE : au-delà du seuil de fausses absences d\'affilée → PAUSE de l\'hôte : « incomplet » avec la pause nommée, AUCUNE alerte (pas un arrêt définitif), plus de requête d\'image',
+            [RH3.resultats[0].etat, RH3.resultats[0].pauseHote?.hote, BH3.col('collecte_images_etat').get(P.ID_ALERTE) === undefined, trH.appels.filter(u => /EN_S/.test(u)).length, RH3.resultats.length, cH3.pause()?.issue], ['incomplet', 'cdn6966.templcdn.com', true, 2, 1, 'fausse-absente']);
+        verifier('REPONSE-HOTE : …et le bilan écrit en base dit la pause, les fausses absences et leurs empreintes', [BH3.col('sets').get(SLUG[1]).visuelsPokumon.pauseHote?.hote, BH3.col('sets').get(SLUG[1]).visuelsPokumon.reponsesHotes[0].fausses, BH3.col('sets').get(SLUG[1]).visuelsPokumon.concordance], ['cdn6966.templcdn.com', 2, false]);
+    }
 
     // ── 6 ter. une liste INCOMPLÈTE (le total annoncé dépasse les entrées lues) arrête tout, avant la moindre écriture ──────────────────────────────
     const B6 = fausseBase(); semer(B6);

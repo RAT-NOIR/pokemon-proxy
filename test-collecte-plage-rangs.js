@@ -6,6 +6,7 @@
 //   · une plage sans aucune entrée dans la liste → refus, rien demandé au-delà de la liste ;
 //   · le REJEU de la jointure (liste d'état non filtrée) écrit le même `completImages` que la collecte ;
 //   · une ligne SANS plage (témoin : IPB) télécharge toute sa liste comme avant.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');

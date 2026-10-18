@@ -2,6 +2,7 @@
 // (xxa, xxb) ; notre préfixe de numéro (a019, b016) EST la demi-liste, au même numéro. Pur : aucun réseau, aucune base.
 //   --figer  réécrit le plan de référence d'une ligne EXISTANTE (à ne lancer que sur le code d'AVANT ce lot : il prouve que le
 //            comportement d'une ligne à une liste n'a pas bougé d'un octet).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const T = require('./collecte-cartes/tpc');

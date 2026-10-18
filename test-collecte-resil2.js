@@ -6,6 +6,7 @@
 //   · l'erreur d'origine remonte INCHANGÉE (même objet) ;
 //   · un rendu qui échoue (base coupée) ne masque pas l'erreur d'origine et ne relance pas le battement ;
 //   · témoin : un retour nommé garde sa valeur, le verrou est rendu, aucun minuteur n'est resté armé.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');

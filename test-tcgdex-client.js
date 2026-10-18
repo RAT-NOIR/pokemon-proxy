@@ -1,6 +1,7 @@
 // node test-tcgdex-client.js — le client TCGdex (collecte-cartes/tcgdex.js), SANS réseau : un faux transport.
 // Ce qu'un client d'une source externe doit porter (§38) : une CADENCE tenue dans une file, un RÉESSAI BORNÉ, une
 // garde qui échoue FERMÉE — pas de verrou global tenu, pas de requête. On le fait dire non avant de lui faire confiance (§41).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const { fabriquerClient } = require('./collecte-cartes/tcgdex');
 
 let ok = 0, ko = 0;

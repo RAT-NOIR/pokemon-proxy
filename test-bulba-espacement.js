@@ -1,4 +1,5 @@
 // Banc du réessai espacé de Bulbapedia (décision 5 du testeur, 2026-10-08). Aucun réseau : faux client, fausse horloge, faux magasin.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const E = require('./collecte-cartes/bulba-espacement');
 

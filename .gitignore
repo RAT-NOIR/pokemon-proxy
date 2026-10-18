@@ -18,3 +18,5 @@ verrou/couverture/
 verrou/photos/
 # les revalidations du site qui n'ont pas pu partir (collecte-cartes/revalider-site.js) : l'état de CE poste
 revalidations-en-attente.json
+# les pauses persistantes des hôtes d'images (collecte-cartes/reponse-hote.js) : levées par le coordinateur, jamais versionnées
+collecte-cartes/pauses-hote/

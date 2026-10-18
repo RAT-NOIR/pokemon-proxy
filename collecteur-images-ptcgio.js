@@ -150,7 +150,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'plan' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: slug, etat: 'refuse-verrou' }; }
-    let bloque = null;
+    let bloque = null, pauseHote = null;
     try {
         const Pl = remplacerJumeau ? await planifierJumeauSlug(db, slug, await lireNumeros(slug), noms, set.tirage ?? set.region) : await planifierSlug(db, slug, await lireNumeros(slug));
         const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
@@ -182,6 +182,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 obtenus.push({ p, _id, meta, webp, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${p.url}) : ${err.message}`);
@@ -190,7 +191,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
             }
         }
         if (bloque) await conclureBloque(E, slug, bloque, client);
-        if (!bloque && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
+        if (!bloque && !pauseHote && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
 
         // ---- 3 bis. DIMENSIONS : par ligne (un kit a deux sets pokemontcg.io), la majorité fait la règle ---------------------------------------
         const admis = [];
@@ -290,7 +291,9 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 ...(remplacerJumeau ? { nJaRetirees: retirees.length, nEnPosees: joints } : {}) },
             ...(remplacerJumeau ? { mode: 'remplacement-jumeau', jumeaux: Pl.jumeaux, ecartes: Pl.ecartes.length } : {}),
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
+            // REPONSE-HOTE : le rapport des réponses des hôtes d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
+            concordance: garde && !erreurJointure && !bloque && !pauseHote && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()
         };
         // R5 : le bilan du remplacement a SON champ — celui du lot additif (visuelsPtcgio, lu par retirer-visuels-ptcgio.js) n'est pas écrasé
@@ -298,6 +301,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes(), [remplacerJumeau ? 'bilanJumeau' : 'bilan']: complet } });
         console.log(`   ${slug} : prouvés ${Pl.plan.length} · téléchargés ${telecharges} · repris ${sautes} · absents (404) ${absents} · sous le seuil ${tropPetits} · dimensions refusées ${refusDim} · échecs ${echecs} · joints ${joints} · garde ${garde ? '✅' : '❌'} · requêtes ${client.compteRequetes()}`);
         if (bloque) return { code: slug, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: slug, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: slug, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: slug, etat: 'non-concordant', ...complet };
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;
@@ -330,7 +334,7 @@ async function lancerEcriture(slugs, M, { verrou, client, lireNumeros, R2 = r2, 
         resultats.push(r);
         console.log(`SET ${slug} → ${r.etat}`);
         if (!['verifie', 'refuse-substitut', 'refuse-set-non-apparie'].includes(r.etat)) code = 1;   // (un 'refuse-nom' du mode remplacement fait donc un code 1 : un doute sur le témoin ne passe pas pour un succès)
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats };
 }

@@ -1,5 +1,6 @@
 // Banc du réessai espacé de PikaQian (décision du testeur, 2026-10-12) : « au moins 6 h, puis 24 h, en s'identifiant honnêtement ; trois blocages,
 // et la source est suspendue ». Aucun réseau : faux client, fausse horloge, faux magasin, fausse file.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const R = require('./collecte-cartes/reessai-pikaqian');
