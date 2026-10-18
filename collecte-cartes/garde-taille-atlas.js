@@ -62,10 +62,22 @@ function juger({ mesure, estimationMo = 0, essentiel, fichier } = {}) {
 }
 
 /** Mesure puis juge. NE LÈVE JAMAIS : une mesure impossible rend { autorise: false, niveau: 'inconnu' }. Un import essentiel ne mesure même pas. */
+// Une grappe LOCALE de banc (mongod du verrou, base mémoire) n'a pas de limite de 512 Mo : exemptée, sur une liste FERMÉE d'hôtes de boucle locale
+// lue sur le client RÉELLEMENT connecté (client.options.hosts), jamais sur une variable d'environnement. TOUS les hôtes doivent y être ; une URI srv,
+// une liste vide ou illisible n'est pas locale (donc mesurée, ou bloquée).
+const HOTES_LOCAUX = Object.freeze(['127.0.0.1', '::1', 'localhost']);
+function grappeLocale(client) {
+    const o = client?.options;
+    if (!o || o.srvHost) return false;
+    const hotes = o.hosts;
+    if (!Array.isArray(hotes) || !hotes.length) return false;
+    return hotes.every(h => HOTES_LOCAUX.includes(String(h?.host ?? '').toLowerCase().replace(/^\[|\]$/g, '')));
+}
 const CACHE_MS = 5 * 60000;
 const cacheProcessus = new Map();   // grappe -> { le, mesure } : par processus et par grappe, 5 min, jamais un échec
 async function verifierEcriture({ client, estimationMo = 0, essentiel, fichier, grappe, noms, sansCache = false, cache = cacheProcessus, maintenant = Date.now } = {}) {
     if (essentielValide(essentiel, fichier)) return { ...juger({ essentiel, fichier }), mesure: null };
+    if (grappeLocale(client)) return { autorise: true, niveau: 'locale', raison: 'grappe locale de banc : pas de limite Atlas', mesure: null };
     let mesure = null, erreur = null;
     const prise = grappe && !sansCache ? cache.get(grappe) : null;
     if (prise && maintenant() - prise.le < CACHE_MS) mesure = prise.mesure;
@@ -106,4 +118,4 @@ function porteursDuDrapeau(racine) {
     return trouves;
 }
 
-module.exports = { contientDrapeauEssentiel, porteursDuDrapeau, mesurerGrappe, juger, verifierEcriture, ligneAtlasApres, fichierEssentiel, LIMITE_MO, ALERTE, REFUS, ESSENTIEL, FICHIERS_ESSENTIELS, BASES_IGNOREES };
+module.exports = { grappeLocale, HOTES_LOCAUX, contientDrapeauEssentiel, porteursDuDrapeau, mesurerGrappe, juger, verifierEcriture, ligneAtlasApres, fichierEssentiel, LIMITE_MO, ALERTE, REFUS, ESSENTIEL, FICHIERS_ESSENTIELS, BASES_IGNOREES };

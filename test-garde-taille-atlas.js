@@ -171,6 +171,26 @@ const grappeA = p => faux({ test: { data: p * 5.12 * 0.9, index: p * 5.12 * 0.1 
     verifier('I1 : --connexion=ecriture choisit les URI d\'écriture, le défaut celles de lecture', [ma.variablesDe('ecriture'), ma.variablesDe('lecture')], [[['production', 'MONGODB_URI'], ['cartes', 'MONGODB_CARTES_URI']], [['production', 'MONGODB_LECTURE_URI'], ['cartes', 'MONGODB_CARTES_LECTURE_URI']]]);
     verifier('I1 : argument inconnu refusé', [ma.lireArguments(['--connexion=ecriture']).erreur, typeof ma.lireArguments(['--x']).erreur], [undefined, 'string']);
 
+    // CORRECTION 3 : une grappe LOCALE de banc (tous les hôtes en boucle locale, lus sur le client connecté) n'a pas de limite de 512 Mo
+    const avecHotes = (hotes, extra = {}) => Object.assign(faux({}), { options: { hosts: hotes.map(host => ({ host, port: 27017 })), ...extra } });
+    let loc = await M.verifierEcriture({ client: avecHotes(['127.0.0.1']) });
+    verifier('C3 : grappe vide sur 127.0.0.1 : PASSE (grappe locale de banc)', [loc.autorise, loc.niveau, /grappe locale de banc/.test(loc.raison)], [true, 'locale', true]);
+    verifier('C3 : ::1 et localhost aussi', [(await M.verifierEcriture({ client: avecHotes(['::1']) })).autorise, (await M.verifierEcriture({ client: avecHotes(['localhost']) })).autorise], [true, true]);
+    loc = await M.verifierEcriture({ client: avecHotes(['cluster0-shard-00-00.abcde.mongodb.net']) });
+    verifier('C3 : le même faux vide sur un hôte *.mongodb.net : BLOQUE', [loc.autorise, loc.niveau], [false, 'inconnu']);
+    loc = await M.verifierEcriture({ client: avecHotes(['127.0.0.1', 'cluster0-shard-00-00.abcde.mongodb.net']) });
+    verifier('C3 : un mélange (un local, un distant) : BLOQUE', loc.autorise, false);
+    loc = await M.verifierEcriture({ client: avecHotes(['127.0.0.1'], { srvHost: 'cluster0.abcde.mongodb.net' }) });
+    verifier('C3 : une URI srv n\'est jamais locale : BLOQUE', loc.autorise, false);
+    loc = await M.verifierEcriture({ client: faux({}) });
+    verifier('C3 : hôtes illisibles (aucune option) : BLOQUE', loc.autorise, false);
+    loc = await M.verifierEcriture({ client: avecHotes([]) });
+    verifier('C3 : liste d\'hôtes vide : BLOQUE', loc.autorise, false);
+    loc = await M.verifierEcriture({ client: avecHotes(['127.0.0.2']) });
+    verifier('C3 : 127.0.0.2 (hors liste fermée) : BLOQUE', loc.autorise, false);
+    loc = await M.verifierEcriture({ client: Object.assign(grappeA(95), { options: { hosts: [{ host: '127.0.0.1' }] } }) });
+    verifier('C3 : grappe locale PLEINE : passe aussi (pas de limite Atlas en local)', loc.autorise, true);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌', e); process.exit(1); });
