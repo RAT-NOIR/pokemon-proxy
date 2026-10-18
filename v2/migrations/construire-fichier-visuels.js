@@ -46,6 +46,10 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+    // m1 : les compteurs du lot REPLI-REIMPRESSIONS, lisibles dans la sortie (jamais seulement dans un banc)
+    if (c.repliRefuse) console.log('   repli : produits sans image d\'un autre tirage ' + c.repliRefuse.total + ' (' + Object.entries(c.repliRefuse.parFamille).map(([k, n]) => k + ' ' + n).join(' · ') + ') · basse définition exclue ' + (c.basseDefinitionExclue || 0)
+        + ' · partage incohérent écarté ' + (c.partageIncoherent || 0) + ' · variante sans preuve ' + (c.varianteSansPreuve || 0) + ' · marquages ' + JSON.stringify(c.marquees || null)
+        + ' · familles HORS LISTE FERMÉE : ' + ((c.familleHorsListe || []).length ? c.familleHorsListe.join(', ') : 'aucune'));
 
     let client = null;
     if (deposer) {

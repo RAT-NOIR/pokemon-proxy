@@ -20,7 +20,9 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     if (r.comptes.fichesLiees === 0) throw echec('0 lien fiche → produits : aucun fichier écrit');
     if (!r.version.colonneJumeaux) throw echec('JUMEAU-V2 : la version calculée n\'a pas la colonne des jumeaux (la route n\'affirmerait aucun produit) : aucun fichier écrit');
     if (!r.version.colonneMarquages) throw echec('REPLI-REIMPRESSIONS : la version calculée n\'a pas la colonne des marquages (la route ne saurait pas qu\'un produit est partagé) : aucun fichier écrit');
-    const entree = { sets: r.comptes.sets, cartes: r.comptes.cartes, produits: r.comptes.produits, catalogue: r.comptes.catalogue };
+    const entree = { sets: r.comptes.sets, cartes: r.comptes.cartes, produits: r.comptes.produits, catalogue: r.comptes.catalogue,
+        // m1 : les compteurs de REPLI voyagent dans l'en-tête, pour que le journal du chargeur les imprime aussi pour une archive précalculée
+        repli: { repliRefuse: r.comptes.repliRefuse, familleHorsListe: r.comptes.familleHorsListe, basseDefinitionExclue: r.comptes.basseDefinitionExclue, partageIncoherent: r.comptes.partageIncoherent, varianteSansPreuve: r.comptes.varianteSansPreuve } };
     const brut = F.serialiser(r.version, { entree });
     const gz = await F.compresser(brut);
     // ALLER-RETOUR : le consommateur lirait-il ce que je m'apprête à publier ? (identifiants uniques, structure, validation de chaque entrée, comptes)

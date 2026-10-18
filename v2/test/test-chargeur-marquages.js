@@ -113,8 +113,11 @@ const refuse = fn => { try { fn(); return null; } catch (e) { return e.name === 
         aCharger = vAncienne;
         const r1 = await ch.charger();
         H.v('6a. sans version en place, une archive d\'avant (sans marquages) s\'installe, et le journal DIT qu\'aucun partage n\'est connu', [r1.ok, E.version() === vAncienne, journal.some(m => /PAS la colonne des marquages/.test(m))], [true, true, true]);
+        journal.length = 0; await ch.charger();
+        H.v('6a bis. m5 : l\'avertissement est UNIQUE par processus (une seconde charge sans marquages ne le répète pas)', journal.filter(m => /PAS la colonne des marquages/.test(m)).length, 0);
         aCharger = v;
         const r2 = await ch.charger();
+        H.v('6b bis. m1 : le journal du chargeur imprime les marquages portés', journal.some(m => /repli : marquages holo 3 tampon 3 partages 6 basse 1/.test(m)), true);
         H.v('6b. une archive du format 2 la remplace', [r2.ok, E.version() === v, E.version().colonneMarquages], [true, true, true]);
         const b2 = creerConstructeur(); b2.entree(brut(1, { idMetacard: 5 })); b2.lien('Set-A', '1|001', [1]);
         aCharger = b2.finir(new Date('2026-10-18T10:00:00.000Z'));
