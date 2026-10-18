@@ -222,7 +222,8 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa 
         if (!k) { if (voieNomJaPvOuverte(nomJaPv, site, multi, t.carte)) essais.push({ t, base }); else restes.push({ ...base, motif: 'sans-numero' }); continue; }
         let pref = null;
         if (multi) {
-            pref = /^([A-Z]*)\d/.exec(k)?.[1] ?? '';
+            // TAIWAN (18/10) : un code de liste peut porter un trait d'union (« SV-P162 », « S-P162 ») — le préfixe se lit comme `cleNumero` l'écrit (`[A-Z-]*`), sans quoi il est « absent »
+            pref = /^([A-Z-]*)\d/.exec(k)?.[1] ?? '';
             if (!pref) { restes.push({ ...base, motif: 'prefixe-absent', detail: `n° ${t.numeroFiche} sans lettre de demi-liste (${P.join('/')}) sur une ligne à plusieurs listes` }); continue; }
             if (!P.includes(pref)) { restes.push({ ...base, motif: 'prefixe-inconnu', detail: `n° ${t.numeroFiche} : « ${pref} » n'est pas une liste de la ligne (${P.join('/')})` }); continue; }
         }

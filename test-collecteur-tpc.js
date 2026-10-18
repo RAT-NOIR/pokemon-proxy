@@ -247,6 +247,12 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     tr = reseau(normal);
     ({ b } = await lancer(B7, tr));
     verifier('aucun produit joint au set → « refuse-set », 0 requête', [b.etat, tr.appels.length], ['refuse-set', 0]);
+    // TAIWAN (18/10) : tpc-asie n'a AUCUNE voie sans numéro (la voie nomJa + PV est pokemon-card.com seulement) — un set dont aucune ligne ne porte de numéro ne peut rien prouver : refus, 0 requête
+    // (sans cette garde, une ligne ajoutée avant l'écriture des numeroFiche aurait demandé ~455 pages pour 0 preuve)
+    const B7b = fausseBase(); semer(B7b); for (const l of B7b.col('cartes_produits').values()) l.numeroFiche = null;
+    tr = reseau(normal);
+    ({ b } = await lancer(B7b, tr));
+    verifier('aucune ligne numérotée sur tpc-asie → « refuse-set », 0 requête (le motif nomme les numéros)', [b.etat, tr.appels.length, /numér/i.test(b.erreur || '')], ['refuse-set', 0, true]);
     // une fiche listée qui répond 404 : la liste et la source se contredisent — l'unité n'est pas « verifie »
     const LISTE2 = LISTE.replace(/class="resultNumber">1</, 'class="resultNumber">2<').replace('</ul>', '<li class="card"><a href="/id/card-search/detail/7126/"></a></li></ul>');
     const B8 = fausseBase(); semer(B8);

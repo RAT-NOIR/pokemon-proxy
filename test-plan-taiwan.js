@@ -43,7 +43,7 @@ B.col('collecte_images_etat').set(`tpc-asie/${MP}`, { _id: `tpc-asie/${MP}`, lis
 B.col('tpc_fiches').set('tpc-asie/tw/14091', { _id: 'tpc-asie/tw/14091', site: 'tpc-asie', langue: 'tw', idFiche: 14091, url: 'https://asia.pokemon-card.com/tw/card-search/detail/14091/', fiche });
 
 (async () => {
-    const R = await planTaiwan({ db: B.db, produitsDuCatalogue: async ids => ({ 6391: 4, 5960: 2 }[ids[0]]), ligneDe: (s, slug) => { const L = T.SITES && require('./collecte-cartes/tpc-sets').ligneTpc(s, slug); return L && { ...L, cartes: 1 }; } });
+    const R = await planTaiwan({ db: B.db, produitsDuCatalogue: async ids => ({ 6391: 4, 5960: 2 }[ids[0]]), ligneDe: (s, slug) => { const L = slug === MP && T.SITES && require('./collecte-cartes/tpc-sets').ligneTpc(s, slug); return L ? { ...L, cartes: 1 } : null; } });   // (18/10) la ligne Products existe désormais dans la table réelle : ce banc fige l'état d'AVANT (seule M-P), il ne la lit plus
     const m = R.sets.find(s => s.slug === MP), p = R.sets.find(s => s.slug === PROD);
     verifier('seuls les sets de tirage zh-hant sont pris', R.sets.map(s => s.slug).sort(), [PROD, MP].sort());
     verifier('M-P : catalogue 4, joints 3, SANS FICHE 1 (produit jamais joint à une carte)', [m.catalogue, m.joints, m.sansFiche], [4, 3, 1]);

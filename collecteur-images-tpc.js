@@ -180,6 +180,12 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     // rendait sinon un succès parfait sur une population vide, §41)
     const produits = await db.collection('cartes_produits').countDocuments({ slugSet: slug });
     if (!produits) return { code: unite._id, etat: 'refuse-set', erreur: `aucun produit joint au set ${slug} (cartes_produits.slugSet)`, sansJointure: true };
+    // TAIWAN (2026-10-18) : TPC Asie n'a AUCUNE voie sans numéro (la voie nomJa + PV est celle de pokemon-card.com) ; un set dont aucune ligne ne porte de numeroFiche ne peut rien prouver. Le dire
+    // AVANT de lire les listes et les fiches (~455 pages pour la ligne Products) : une garde ne passe pas par défaut — elle autorise ce qui a un numéro à prouver.
+    if (site === 'tpc-asie') {
+        const numerotes = (await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { numeroFiche: 1 } }).toArray()).filter(l => l.numeroFiche !== null && l.numeroFiche !== undefined && l.numeroFiche !== '').length;
+        if (!numerotes) return { code: unite._id, etat: 'refuse-set', erreur: `aucune des ${produits} lignes de ${slug} ne porte de numeroFiche : TPC Asie ne prouve que par le numéro — rien à demander`, sansJointure: true };
+    }
     const idEtat = `${site}/${slug}`;
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'liste' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
@@ -484,7 +490,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
             const P = await planifier(local, slug, L, fiches);
             for (const r of P.restes) if (r.motif === 'absente-de-la-source') { if (nonLues.has(cleNumero(r.numero))) r.motif = 'fiche-non-lue'; }
             const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
-            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
+            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z-]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
             const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
             console.log(JSON.stringify(ligne));
             bilan.push({ ...ligne, exemplesProuves: P.plan.slice(0, 4).map(x => `${x.numero} ${x.nomEn} ← ${x.fiche.nom} (${x.voie})`), exemplesTrous: P.restes.slice(0, 6).map(r => `${r.numero ?? '—'} ${r.nomEn}: ${r.motif}`) });

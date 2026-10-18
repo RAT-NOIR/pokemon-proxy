@@ -61,7 +61,7 @@ if (process.argv.includes('--figer')) {
     verifier('le plan de trois lignes existantes (SV-P, MA5, SM-P à numéros préfixés) est identique, octet pour octet, à celui d\'avant le lot', JSON.stringify(rejouerLigneSimple(TP_REJEU)), JSON.stringify(JSON.parse(fs.readFileSync(GOLDEN, 'utf8'))));
     verifier('   la ligne à numéros préfixés : SM001 et SM002 prouvés, « a005 » face à une fiche « 005 » = trou', [rejouerLigneSimple(TP_REJEU).smp.plan.map(x => x.numero), rejouerLigneSimple(TP_REJEU).smp.restes.map(r => `${r.numero}:${r.motif}`)], [['SM001', 'SM002'], ['a005:absente-de-la-source']]);
     const sans = S.TABLE_TPC.filter(l => !l.listes);
-    verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'Tag-Team-Collection'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
+    verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'Tag-Team-Collection', 'Traditional-Chinese-Products'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
     verifier('listesDe(ligne existante) = UNE liste, sans préfixe, au code et au compte de la ligne',
         S.TABLE_TPC.filter(l => !l.listes).every(l => { const x = S.listesDe(l); return x.length === 1 && x[0].prefixe === null && x[0].code === l.code && x[0].cartes === l.cartes; }), true);
 
@@ -119,6 +119,21 @@ if (process.argv.includes('--figer')) {
     P = T.planifierTpc({ trous: trousAC3, fiches: fichesAC3, code: 'AC3', site: 'tpc-asie', prefixes: ['a', 'b'] });
     verifier('AC3 : a1, a2, a3, a14, b1 prouvés (numéro + nom + PV) ; a213 et b208 (au-delà des listes de 205 / 204) = « absente-de-la-source », jamais la fiche voisine',
         [P.plan.map(x => x.numero), P.restes.map(r => `${r.numero}:${r.motif}`)], [['a1', 'a2', 'a3', 'a14', 'b1'], ['a213:absente-de-la-source', 'b208:absente-de-la-source']]);
+
+    // ── 4. TAIWAN (18/10) : deux listes à CODE À TRAIT D'UNION (SV-P, S-P) — le préfixe de notre numéro EST la liste, « SV-P162 » n'est pas « S-P162 » ──
+    const ft = (liste, n, nom, extra = {}) => ({ idFiche: (liste === 'SV-P' ? 6000 : 7000) + Number(n), nom, numero: n, denominateur: liste, prefixe: liste, listeCode: liste, image: `https://asia.pokemon-card.com/tw/card-img/${liste}${n}.png`, ...extra });
+    const giratina = { _id: -1, nomEn: 'Giratina VSTAR', categorie: 'pokemon', ndex: 487 }, rowlet = { _id: -2, nomEn: 'Rowlet', categorie: 'pokemon', ndex: 722 };
+    const fichesTW = [ft('SV-P', '162', '吉拉祈VSTAR', { dex: 487, categorie: 'pokemon' }), ft('S-P', '162', '木木梟', { dex: 722, categorie: 'pokemon' })];
+    const planTW = (t, fs_ = fichesTW) => T.planifierTpc({ trous: t, fiches: fs_, code: 'PKMTCH', site: 'tpc-asie', prefixes: ['SV-P', 'S-P'] });
+    P = planTW([{ carte: giratina, numeroFiche: 'SV-P162', idProduct: 1 }, { carte: rowlet, numeroFiche: 'S-P162', idProduct: 2 }]);
+    verifier('SV-P162 et S-P162 (le même numéro dans deux listes) : chacun prouvé dans SA liste, par le Pokédex', [P.plan.map(x => `${x.numero}:${x.fiche.idFiche}`), P.restes.length], [['SV-P162:6162', 'S-P162:7162'], 0]);
+    P = planTW([{ carte: giratina, numeroFiche: 'S-P162', idProduct: 3 }]);
+    verifier('Giratina cherché sous S-P162 : la fiche de S-P est un Rowlet (Pokédex 722 contre 487) → trou, jamais la fiche de l\'autre liste', [P.plan.length, P.restes[0]?.motif], [0, 'contradiction-pokedex']);
+    P = planTW([{ carte: giratina, numeroFiche: '162', idProduct: 4 }, { carte: giratina, numeroFiche: 'SVP162', idProduct: 5 }, { carte: giratina, numeroFiche: 'SV-P999', idProduct: 6 }]);
+    verifier('numéro sans liste, liste sans trait d\'union, numéro absent de la liste : trous nommés (prefixe-absent, prefixe-inconnu, absente-de-la-source)', P.restes.map(r => r.motif), ['prefixe-absent', 'prefixe-inconnu', 'absente-de-la-source']);
+    const PROD = S.ligneTpc('tpc-asie', 'Traditional-Chinese-Products');
+    verifier('la ligne Products : tpc-asie, tw, zh-hant, sansRemplacement, deux listes SV-P (238) et S-P (152)', [PROD?.langue, PROD?.tirage, PROD?.sansRemplacement, PROD ? S.listesDe(PROD).map(l => `${l.prefixe}:${l.code}:${l.cartes}`) : null], ['tw', 'zh-hant', true, ['SV-P:SV-P:238', 'S-P:S-P:152']]);
+    verifier('   l\'unité de file porte le code de la ligne (PKMTCH, celui du set)', PROD && S.uniteDeLaLigne(PROD).code, 'PKMTCH');
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
