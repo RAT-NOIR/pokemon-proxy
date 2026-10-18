@@ -43,7 +43,7 @@ const empreinte = async p => {
 
     // ── 1. l'ordre est FIXÉ DANS LE CODE : achete puis jour ; la configuration ne bouge pas
     H.v('1a. ordre des poches d\'un compte et d\'une installation : achete puis jour', [P.ordreDe({ type: 'compte' }, cfg), P.ordreDe({ type: 'installation' }, cfg)], [['achete', 'jour'], ['achete', 'jour']]);
-    H.v('1b. V2_ORDRE_POCHES garde son refus de nommer `achete` (et ne change pas l\'ordre fixé dans le code)', [(() => { try { lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'achete,jour' }); return 'accepté'; } catch (e) { return /n'est plus débitée/.test(e.message) ? 'refusé' : e.message; } })(), P.ordreDe({ type: 'compte' }, lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'jour' }))], ['refusé', ['achete', 'jour']]);
+    H.v('1b. V2_ORDRE_POCHES garde son refus de nommer `achete` (et ne change pas l\'ordre fixé dans le code)', [(() => { try { lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'achete,jour' }); return 'accepté'; } catch (e) { return /n'est pas configurable/.test(e.message) && !/n'est plus débitée/.test(e.message) ? 'refusé' : e.message; } })(), P.ordreDe({ type: 'compte' }, lireConfig({ MONGODB_BASE: 'test_scratch', V2_ORDRE_POCHES: 'jour' }))], ['refusé', ['achete', 'jour']]);
     H.v('1c. type de porteur inconnu : aucune poche', P.ordreDe({ type: 'x' }, cfg), []);
 
     // ── 2. le débit : achete d'abord, puis le quota du jour ; le quota et offre.restant ne bougent pas pour une analyse payée sur achete
@@ -224,7 +224,7 @@ const empreinte = async p => {
         const faux = await comptePlein(3); faux.administrateur = true; const rf = await deb(faux);
         H.v('    administrateur FORGÉ (rôle absent en base) : traité en compte ordinaire, il paie sur achete', [poches([rf]), await achete(faux)], [['achete'], 2]);
         const nv = await comptePlein(2, { verifie: false }); const r = []; for (let i = 0; i < 3; i++) r.push(await deb(nv));
-        H.v('8b. compte NON vérifié avec 2 achetées (payées, donc déjà à lui) : achete, achete, puis VERIFICATION', poches(r), ['achete', 'achete', 'VERIFICATION']);
+        H.v('8b. compte NON vérifié avec 2 achetées, appel DIRECT à debiter (jamais un porteur HTTP depuis O3) : VERIFICATION x3, la poche achete n\'est pas débitée (garde fermée par défaut : acheteDe exige verifie), aucun compteur du jour', [poches(r), await achete(nv), await cnt(nv), (await mouv(nv, { type: 'debit' })).length, P.acheteDe({ type: 'compte', id: nv.id }).filtre.verifie], [['VERIFICATION', 'VERIFICATION', 'VERIFICATION'], 2, 0, 0, true]);
         const nv0 = await comptePlein(0, { verifie: false });
         H.v('    non vérifié sans achetée : VERIFICATION comme aujourd\'hui, aucun compteur', [poches([await deb(nv0)]), await cnt(nv0)], [['VERIFICATION'], 0]);
         const lie = await inst({ achete: 4, compteId: (await compte()).id });
@@ -239,7 +239,7 @@ const empreinte = async p => {
         const avant = await S.peutPayer(p, cfg, t); await deb(p); const apres = await S.peutPayer(p, cfg, t);
         H.v('9a. peutPayer : quota épuisé mais 1 achetée -> ok ; achetée consommée -> QUOTA', [avant.ok, apres.ok, apres.code], [true, false, 'QUOTA']);
         const nv = await comptePlein(1, { verifie: false }), nv0 = await comptePlein(0, { verifie: false });
-        H.v('    non vérifié : ok avec une achetée, VERIFICATION sans', [(await S.peutPayer(nv, cfg, t)).ok, (await S.peutPayer(nv0, cfg, t)).code], [true, 'VERIFICATION']);
+        H.v('    non vérifié : VERIFICATION avec comme sans achetée (peutPayer lit la même définition que le débit)', [(await S.peutPayer(nv, cfg, t)).code, (await S.peutPayer(nv0, cfg, t)).code], ['VERIFICATION', 'VERIFICATION']);
         const i = await inst({ essais: 0, achete: 1 }); await db.col('quota_jour').insertOne({ porteur: `installation:${i.id}`, jour: JOUR, count: 3, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const lie = await inst({ achete: 2, compteId: (await compte()).id });
         H.v('    installation non liée : ok avec une achetée ; installation LIÉE : refusée comme aujourd\'hui', [(await S.peutPayer(i, cfg, t)).ok, (await S.peutPayer(lie, cfg, t)).ok], [true, false]);
@@ -259,6 +259,37 @@ const empreinte = async p => {
         await deb(c);
         const r2 = await svc.supprimerCompte({ compte: await frais(), motDePasse: 'un-mot-de-passe-solide', renonciation: false, cfg });
         H.v('10b. toutes consommées (achete 0) : la suppression passe sans renonciation', [r2.statut, await db.col('comptes').countDocuments({ _id: c.id })], [200, 0]);
+    }
+
+    // ── 11. la restitution passe par le porteur ACTUEL : une installation LIÉE entre le débit et l'annulation d'un supplément rend au COMPTE (jamais à une poche que plus rien ne débite)
+    {
+        const dest = await compte({ solde: { accueil: 0, achete: 0 } });
+        const p = await instPlein(1);
+        const scanId = cle(), orig = db.col; let lie = false;
+        // la liaison survient juste APRÈS l'écriture du mouvement de la 1re unité du supplément (#0, payée sur achete), AVANT la 2e (qui échoue : installation liée = plus de quota propre)
+        db.col = nom => { const c = orig(nom); if (nom !== 'mouvements') return c;
+            return new Proxy(c, { get(t0, m) { const v = t0[m]; if (m !== 'insertOne') return typeof v === 'function' ? v.bind(t0) : v;
+                return async (doc, ...a) => { const r = await v.call(t0, doc, ...a); if (!lie && doc && doc.type === 'debit' && String(doc.cleIdempotence).endsWith('#0')) { lie = true; await orig('installations').updateOne({ _id: p.id }, { $set: { compteId: dest.id } }); } return r; }; } }); };
+        let s; try { s = await Lot.debiterSupplement(p, { scanId, unites: 2, cleIdempotence: `${scanId}|supplement`, maintenant: t }, cfg); } finally { db.col = orig; }
+        const i = await lire(p), c = await lire(dest);
+        H.v('11a. installation achete 1, supplément de 2 unités : #0 sur achete, liaison, #1 refusée (QUOTA) -> annulation de #0 : l\'unité revient au COMPTE (achete 1), pas à l\'installation (0)', [lie, s.ok, s.code, i.achete, c.solde.achete], [true, false, 'QUOTA', 0, 1]);
+        const tr = await mouv(dest, { type: 'remboursement', delta: 1 });
+        H.v('    la trace +1 est écrite sur le COMPTE, poche achete, et rien d\'autre ne rend (un seul crédit en tout : installation 0 + compte 1 = l\'unité d\'origine)', [tr.map(m => m.poche), (await mouv(p, { type: 'remboursement' })).length, i.achete + c.solde.achete], [['achete'], 0, 1]);
+        const q = await instPlein(1); const dq = await deb(q, { scanId: 'lie2', cle: 'lie2' });
+        await db.col('installations').updateOne({ _id: q.id }, { $set: { compteId: dest.id } });
+        const rq = await Lg.rembourser(q, dq.credit, 'panne-SERVEUR', { scanId: 'lie2', maintenant: t }, cfg);
+        H.v('11b. (contrôle) le remboursement ordinaire d\'une analyse achetée par une installation liée depuis : rendu au compte (2), jamais deux fois', [rq.rendu, (await lire(q)).achete, (await lire(dest)).solde.achete, (await Lg.rembourser(q, dq.credit, 'panne-SERVEUR', { scanId: 'lie2', maintenant: t }, cfg)).raisonNonRembourse], [true, 0, 2, 'deja-rembourse']);
+    }
+
+    // ── 12. un achete NON ENTIER n'est jamais servi faux ni inventé : Math.floor si c'est un nombre fini >= 0, sinon 0, et compté
+    {
+        const avant = S.compteurs.acheteNonEntier;
+        const a = await compte({ solde: { accueil: 0, achete: 2.7 } }), b = await compte({ solde: { accueil: 0, achete: -3 } }), c = await compte({ solde: { accueil: 0, achete: 'abc' } }), d = await compte({ solde: { accueil: 0, achete: NaN } });
+        const i = await inst({ achete: 1.5 }), ok = await compte({ solde: { accueil: 0, achete: 4 } }), neuf = await compte({ solde: { accueil: 0 } });
+        const w0 = console.warn; console.warn = () => { }; let servis; try { servis = await Promise.all([a, b, c, d, i, ok, neuf].map(x => S.solde(x, cfg, t))); } finally { console.warn = w0; }
+        H.v('12a. achete 2.7 -> 2 ; -3 -> 0 ; "abc" -> 0 ; NaN -> 0 ; installation 1.5 -> 1 ; entier 4 -> 4 ; absent -> 0', servis.map(x => x.achete), [2, 0, 0, 0, 1, 4, 0]);
+        H.v('    compté : 5 valeurs non conformes (2.7, -3, abc, NaN, 1.5), ni l\'entier 4 ni l\'absent', S.compteurs.acheteNonEntier - avant, 5);
+        H.v('    la base n\'est pas touchée (2.7 reste 2.7 : on ne corrige jamais en silence)', (await lire(a)).solde.achete, 2.7);
     }
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
