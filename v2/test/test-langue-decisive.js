@@ -143,7 +143,7 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
     // M-A : un code lu TRONQUÉ ou de SOUS-SET que `comparer` ne juge pas contredit DÉSIGNE (vivier comme index)
     vrai('(6) M-A index : « sv4 » (tronqué) face à SV4A au n° 213 : désigne', idx.existe('sv4', '213') === true);
     vrai('(6) M-A index : « SV-P » face à SV-P/CS au n° 144 : désigne', idx.existe('SV-P', '144') === true);
-    vrai('(6) M-A index : « m6 » (2 caractères, sous LONGUEUR_MIN_PARENTE) face à M6A : `comparer` le juge CONTREDIT, R4 suit la production (ne désigne pas)', idx.existe('m6', '144') === false);
+    vrai('(6) M-D index : « m6 » (2 caractères) est PRÉFIXE de M6A au n° 144 : désigne (garde G2, sans plancher de longueur)', idx.existe('m6', '144') === true);
     vrai('(6) M-A index : un code CONTREDIT par tous les produits au numéro (TG lu, SIT au n° TG18) : ne désigne personne', idx.existe('TG', 'TG18') === false);
     vrai('(6) M-A index : le code du candidat testé est exclu (m6a au n° 144 exclu : reste SV-P/CS, contredit)', idx.existe('m6a', '144', 'M6A') === false && idx.existe('m6a', '144') === true);
     // M-A : le vivier — Y est un sous-set du code lu
@@ -319,7 +319,44 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
 // ── (13) M-B, le câblage du plancher : catalogue.indexCodeNumero passe par construireIndexVerifie (jamais creerIndexCodeNumero nu)
 {
     const cat = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
-    vrai('(13) catalogue.js construit l\'index par construireIndexVerifie (plancher) et non par creerIndexCodeNumero', /construireIndexVerifie\(await/.test(cat) && !/creerIndexCodeNumero\(/.test(cat));
+    vrai('(13) catalogue.js construit l\'index par construireIndexVerifie (plancher) et non par creerIndexCodeNumero', /construireIndexVerifie\(docs/.test(cat) && !/creerIndexCodeNumero\(/.test(cat));
 }
 
+// ── (14) M-D, garde G2 : un code lu qui est PRÉFIXE du code d'un produit (ou l'inverse) DÉSIGNE ce produit — vivier ET catalogue, sans plancher de longueur ; à travers la VRAIE adapter + critère A + R4
+{
+    const X = ligne(7501, 'Carte [Un | Deux]', 'BBB', '144', '100', 'jp'), Z = ligne(7502, 'Carte [Un | Deux]', 'CCC', '99', '100', 'jp');
+    const sonde = (setCode, { vivierPlus = [], catalogue = [] } = {}) => {
+        const idx = LD.creerIndexCodeNumero(catalogue);
+        const c = corps({ gagnant: 7501, lecture: { numero: '144', total: '100', setCode, attaque: null, attaqueConfiance: null }, nomBrut: 'ピカ', nom: 'Carte', vivier: [7501, 7502, ...vivierPlus.map(l => l.idProduct)] });
+        return jouer(c, { jumeaux: id => ({ conclu: true, ids: id === 7501 ? [7502] : id === 7502 ? [7501] : [] }), critereA: true, langueDecisive: { R1: false, R2: false, R2BIS: false, R4: true, R5: false }, codeNumeroExiste: idx.existe }, [X, Z, ...vivierPlus]);
+    };
+    const m6aV = ligne(7503, 'Carte [Un | Deux]', 'M6A', '144', '100', 'jp'), s8aV = ligne(7504, 'Carte [Un | Deux]', 'S8A', '144', '100', 'jp');
+    v('(14) « m6 » n° 144, M6A hors du vivier mais au catalogue : question (jamais un sûr sur X)', [sonde('m6', { catalogue: [{ codeSet: 'M6A', numero: '144' }] }).issue, idAffirme(sonde('m6', { catalogue: [{ codeSet: 'M6A', numero: '144' }] }))], ['question', null]);
+    v('(14) « m6 » n° 144, M6A DANS le vivier : question', sonde('m6', { vivierPlus: [m6aV] }).issue, 'question');
+    v('(14) « s8 » face à S8A (catalogue) : question', sonde('s8', { catalogue: [{ codeSet: 'S8A', numero: '144' }] }).issue, 'question');
+    v('(14) « s8 » face à S8A (vivier) : question', sonde('s8', { vivierPlus: [s8aV] }).issue, 'question');
+    v('(14) « SV » face à SV-P (catalogue) : question', sonde('SV', { catalogue: [{ codeSet: 'SV-P', numero: '144' }] }).issue, 'question');
+    v('(14) « m6a » lu face à un code M6 (plus court) du catalogue : question', sonde('m6a', { catalogue: [{ codeSet: 'M6', numero: '144' }] }).issue, 'question');
+    // deux témoins : R4 garde sa place quand le code n'a aucun parent
+    const autres = [{ codeSet: 'M6A', numero: '144' }, { codeSet: 'SV-P/CS', numero: '144' }];
+    v('(14) témoin : le cas réel « s8a-P » n° 144 (aucun parent au catalogue) : X reste SÛR', [sonde('s8a-P', { catalogue: autres }).issue, idAffirme(sonde('s8a-P', { catalogue: autres }))], ['affirmee', 7501]);
+    v('(14) témoin : un code sans aucun parent (ZZZZ) : X reste SÛR', idAffirme(sonde('ZZZZ', { catalogue: autres })), 7501);
+    // le X initial (Additionals) et le code égal à X : sûrs de la parenté
+    vrai('(14) index : « PRE » est préfixe de xPRE (X initial ignoré) : désigne ; « XY » ne se réduit pas à « Y »', LD.creerIndexCodeNumero([{ codeSet: 'xPRE', numero: '5' }]).existe('PRE', '5') === true && LD.creerIndexCodeNumero([{ codeSet: 'XY', numero: '5' }]).existe('Y', '5') === false);
+    // le code lu court qui est le préfixe alphabétique du NUMÉRO (TG18) ne désigne pas SIT : la garde G2 ne lui fait rien perdre
+    vrai('(14) témoin TG : « TG » face à SIT au n° TG18 : ne désigne personne', LD.creerIndexCodeNumero([{ codeSet: 'SIT', numeroUrl: 'TG18' }]).existe('TG', 'TG18') === false);
+}
+
+// ── (15) lecture TRONQUÉE de l'index : le nombre de documents LUS doit atteindre le nombre COMPTÉ (countDocuments, même collection, même filtre, AVANT la lecture)
+{
+    const lignes = n => Array.from({ length: n }, (_, i) => ({ codeSet: 'C' + i, numero: String(i + 1) }));
+    let leve = null; try { LD.construireIndexVerifie(lignes(20000), LD.INDEX_CODE_NUMERO_MIN, 62108); } catch (e) { leve = e; }
+    vrai('(15) 20 000 documents lus sur 62 108 comptés : refusé (R4 fermée), alors que le plancher de 10 000 est passé', leve instanceof Error && /tronqu/.test(String(leve.message)));
+    vrai('(15)     le message ne porte aucune valeur lue', leve && !/C\d/.test(String(leve.message)));
+    vrai('(15)     un compteur dédié monte', LD.compteurs().indexTronques >= 1);
+    vrai('(15) 62 108 lus sur 62 108 comptés : accepté', LD.construireIndexVerifie(lignes(12000), LD.INDEX_CODE_NUMERO_MIN, 12000).taille === 12000);
+    vrai('(15) aucun compte fourni : le plancher seul s\'applique (compatibilité)', LD.construireIndexVerifie(lignes(12000)).taille === 12000);
+    const cat = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
+    vrai('(15) catalogue.js compte (countDocuments) AVANT de lire, avec le même filtre, et passe le compte à construireIndexVerifie', /countDocuments\(\{\}\)/.test(cat) && /construireIndexVerifie\(.*attendu|construireIndexVerifie\(docs, .*, attendu\)/.test(cat) && cat.indexOf('countDocuments') < cat.indexOf('.find({}, { projection: { codeSet: 1'));
+}
 bilan();
