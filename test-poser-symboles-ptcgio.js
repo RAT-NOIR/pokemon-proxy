@@ -11,6 +11,7 @@ const tmp = pre => fs.mkdtempSync(path.join(os.tmpdir(), pre));
 const png = (w, h, c) => sharp({ create: { width: w, height: h, channels: 4, background: c } }).png().toBuffer();
 const sha1 = b => crypto.createHash('sha1').update(b).digest('hex');
 const HOTE = 'https://images.pokemontcg.io';
+const TCG = 'https://assets.tcgdex.net';
 
 async function banc(M) {
     let ok = 0, ko = 0;
@@ -42,23 +43,31 @@ async function banc(M) {
         set('D-Set', { symbole: { cleR2: 'symboles/D-Set-abc.png' }, visuelsPtcgio: { lignes: ['xy1'] } }),   // déjà pourvu → hors population
         set('A-Set-Additionals', { visuelsPtcgio: { lignes: ['sm35'] } }),                         // Additionals → hors population
         { _id: 'E-Set', visuelsPtcgio: { lignes: ['xy2'] } },                                       // pas de nomAffichage → hors population
-        set('F-Set', { tirage: 'jp', remplacementTcgdex: { tcgdexSet: 'sm1', langue: 'en' } }),     // identité TCGdex seulement : notée, jamais prise
-        set('G-Set', { remplacementTcgdex: { tcgdexSet: 'sm2', langue: 'fr' } }),                   // TCGdex en français : ni prise ni notée
+        // CORRECTION 1 : la seconde identité (TCGdex) et sa source ; la série se lit dans une adresse TCGdex déjà en base sur le set, jamais devinée
+        set('F-Set', { tirage: 'jp', remplacementTcgdex: { tcgdexSet: 'sm1', langue: 'en' }, logoFr: { urlSource: 'https://assets.tcgdex.net/fr/sm/sm1/logo.png' } }),   // TCGdex seul, série lue dans logoFr
+        set('G-Set', { remplacementTcgdex: { tcgdexSet: 'sm2' } }),                                 // identité TCGdex sans aucune adresse : série introuvable
         set('H-Set', { visuelsPtcgio: { lignes: ['me55c'] } }),                                     // hôte scrydex : pas de chemin de symbole autorisé
         set('I-Set', { visuelsPtcgio: { lignes: ['Mauvais/../id'] } }),                             // identifiant illisible → sauté
-        set('J-Set', { symbole: {}, visuelsPtcgio: { lignes: ['xy9'] } })                            // symbole vide (sans cleR2) → dans la population
+        set('J-Set', { symbole: {}, visuelsPtcgio: { lignes: ['xy9'] } }),                           // symbole vide (sans cleR2) → dans la population
+        set('K-Set', { remplacementTcgdex: { tcgdexSet: 'ex1', langue: 'fr' }, logoOfficiel: { en: { urlOriginal: 'https://assets.tcgdex.net/en/ex/ex1/logo.png' } } }),   // série lue dans logoOfficiel.en, langue quelconque
+        set('L-Set', { remplacementTcgdex: { tcgdexSet: 'ex2' }, logoFr: { urlSource: 'https://assets.tcgdex.net/fr/ex/ex3/logo.png' } }),   // l'id du chemin (ex3) ≠ tcgdexSet (ex2) → sauté
+        set('M-Set', { visuelsPtcgio: { lignes: ['xy3'] }, remplacementTcgdex: { tcgdexSet: 'xy3' }, logoFr: { urlSource: 'https://assets.tcgdex.net/fr/xy/xy3/logo.png' } }),   // les deux : pokemontcg.io gagne, TCGdex noté
+        set('N-Set', { visuelsPtcgio: { lignes: ['a1', 'b2'] }, remplacementTcgdex: { tcgdexSet: 'sv01' }, logoFr: { urlSource: 'https://assets.tcgdex.net/fr/sv/sv01/logo.png' } })   // ptcgio ambigu, TCGdex unique : TCGdex
     ];
     const P = M.planifier(sets);
-    verifier('plan : population = sets nommés, hors -Additionals, sans symbole.cleR2', P.population, 8);
-    verifier('plan : lignes planifiées (identité unique)', P.lignes.map(l => [l.slug, l.id, l.url]).sort(), [['A-Set', 'sm35', `${HOTE}/sm35/symbol.png`], ['J-Set', 'xy9', `${HOTE}/xy9/symbol.png`]]);
-    verifier('plan : sautés par raison', Object.fromEntries(P.sautes.map(s => [s.slug, s.raison])), { 'B-Set': 'identite-multiple', 'C-Set': 'identite-absente', 'F-Set': 'identite-absente', 'G-Set': 'identite-absente', 'H-Set': 'hote-scrydex', 'I-Set': 'identifiant-illisible' });
-    verifier('plan : identité TCGdex seule (en) notée, sans être prise', P.tcgdexSeul, [{ slug: 'F-Set', tcgdexSet: 'sm1' }]);
-    verifier('plan : par tirage', P.parTirage, { intl: 2 });
+    verifier('plan : population = sets nommés, hors -Additionals, sans symbole.cleR2', P.population, 12);
+    verifier('plan : lignes planifiées (source, adresse)', P.lignes.map(l => [l.slug, l.source, l.url]).sort(), [
+        ['A-Set', 'pokemontcg.io', `${HOTE}/sm35/symbol.png`], ['F-Set', 'tcgdex', `${TCG}/univ/sm/sm1/symbol.png`], ['J-Set', 'pokemontcg.io', `${HOTE}/xy9/symbol.png`], ['K-Set', 'tcgdex', `${TCG}/univ/ex/ex1/symbol.png`],
+        ['M-Set', 'pokemontcg.io', `${HOTE}/xy3/symbol.png`], ['N-Set', 'tcgdex', `${TCG}/univ/sv/sv01/symbol.png`]]);
+    verifier('plan : sautés par raison', Object.fromEntries(P.sautes.map(s => [s.slug, s.raison])), { 'B-Set': 'identite-multiple', 'C-Set': 'identite-absente', 'G-Set': 'serie-introuvable', 'H-Set': 'hote-scrydex', 'I-Set': 'identifiant-illisible', 'L-Set': 'id-du-chemin-different' });
+    verifier('plan : la série dit où elle a été lue', Object.fromEntries(P.lignes.filter(l => l.source === 'tcgdex').map(l => [l.slug, [l.serie, l.serieOu, l.tcgdexSet]])), { 'F-Set': ['sm', 'logoFr', 'sm1'], 'K-Set': ['ex', 'logoOfficiel.en', 'ex1'], 'N-Set': ['sv', 'logoFr', 'sv01'] });
+    verifier('plan : si les deux identités existent, pokemontcg.io gagne et TCGdex est seulement noté', P.tcgdexNotee, [{ slug: 'M-Set', tcgdexSet: 'xy3' }]);
+    verifier('plan : par tirage et par source', [P.parTirage, P.parSource], [{ intl: 5, jp: 1 }, { 'pokemontcg.io': 3, tcgdex: 3 }]);
     verifier('plan : le set pourvu et l\'Additionals ne sont ni planifiés ni sautés', [...P.lignes.map(l => l.slug), ...P.sautes.map(s => s.slug)].filter(s => ['D-Set', 'A-Set-Additionals', 'E-Set'].includes(s)), []);
     verifier('plan : population vide → LÈVE (champ faux = vide fabriqué)', (await leve(() => M.planifier([set('D', { symbole: { cleR2: 'x' } })]))) !== null, true);
     verifier('plan : aucune base lue → LÈVE', (await leve(() => M.planifier([]))) !== null, true);
     verifier('plan : url du symbole', M.urlSymbole('sm35'), `${HOTE}/sm35/symbol.png`);
-    verifier('plan : chemin permis — le symbole seul, l\'API et les autres chemins refusés', [`${HOTE}/sm35/symbol.png`, `${HOTE}/sm35/1_hires.png`, 'https://api.pokemontcg.io/v2/sets', `${HOTE}/sm35/symbol.png?x=1`, 'http://images.pokemontcg.io/sm35/symbol.png'].map(M.cheminPermis), [true, false, false, false, false]);
+    verifier('plan : chemin permis — le symbole seul, l\'API et les autres chemins refusés', [`${HOTE}/sm35/symbol.png`, `${HOTE}/sm35/1_hires.png`, 'https://api.pokemontcg.io/v2/sets', `${HOTE}/sm35/symbol.png?x=1`, 'http://images.pokemontcg.io/sm35/symbol.png', `${TCG}/univ/sm/sm1/symbol.png`, `${TCG}/univ/sm/sm1/logo.png`, `${TCG}/en/sm/sm1/symbol.png`, `${TCG}/v2/en/sets/sm1`].map(M.cheminPermis), [true, false, false, false, false, true, false, false, false]);
 
     // ── 3. LES REFUS ─────────────────────────────────────────────────────────────────────────────────────────────────
     const m = (statut, b, o = {}) => ({ statut, octets: b?.length ?? 0, sha1: b ? sha1(b) : null, w: o.w ?? 64, h: o.h ?? 64, format: o.format ?? 'png', decodable: o.decodable ?? true });
@@ -78,10 +87,11 @@ async function banc(M) {
     // ── 5. LE TÉLÉCHARGEMENT PASSE PAR reponse-hote (faux transport : aucune requête réelle) ─────────────────────────
     const lignes = ['s1', 's2', 's3'].map((s, i) => ({ slug: `Set-${s}`, nom: `Nom ${s}`, tirage: 'intl', id: `id${i + 1}`, url: M.urlSymbole(`id${i + 1}`) }));
     const robotsLibre = { status: 200, type: 'text/plain', texte: 'User-agent: *\nAllow: /\n' };
-    const fauxTransport = reponses => { const appels = []; return { appels, async get(url) { appels.push(url); const r = reponses[url.replace(HOTE, '')]; if (!r) return { status: 404, type: 'image/png' }; return r; } }; };
+    const fauxTransport = (reponses, now = () => 0) => { const appels = [], temps = []; return { appels, temps, async get(url) { appels.push(url); temps.push([new URL(url).hostname, now()]); const r = reponses[url] || reponses[url.replace(HOTE, '')] || (/robots\.txt$/.test(url) ? robotsLibre : null); if (!r) return { status: 404, type: 'image/png' }; return r; } }; };
     const horloge = () => { let t = 1000; const waits = []; return { waits, now: () => t, pause: async ms => { waits.push(ms); t += ms; } }; };
     const lancer = async (reponses, o = {}) => {
-        const cache = o.cache || tmp('symb-cache-'), dossierPauses = tmp('symb-pauses-'), tr = fauxTransport({ '/robots.txt': robotsLibre, ...reponses }), h = horloge();
+        const h = horloge();
+        const cache = o.cache || tmp('symb-cache-'), dossierPauses = tmp('symb-pauses-'), tr = fauxTransport({ '/robots.txt': robotsLibre, ...reponses }, h.now);
         const bilan = await M.telecharger({ lignes: o.lignes || lignes, cache, plafond: o.plafond ?? 10, transport: tr, pause: h.pause, now: h.now, suivi: RH.suiviHote(), dossierPauses, journal: () => { } });
         return { bilan, tr, h, cache, dossierPauses };
     };
@@ -112,6 +122,19 @@ async function banc(M) {
     // deux 5xx de suite
     const r5 = await lancer({ '/id1/symbol.png': { status: 503, type: 'text/plain', texte: 'x' }, '/id2/symbol.png': { status: 503, type: 'text/plain', texte: 'x' } });
     verifier('5xx sans défi : un réessai, puis l\'unité reste à refaire (pas de méta), le bilan le dit', [fs.existsSync(path.join(r5.cache, 'Set-s1.json')), r5.bilan.transitoires >= 1], [false, true]);
+
+    // 5.b DEUX HÔTES (correction 1) : la même règle, robots.txt par hôte, ≥ 5 s PAR hôte, un 404 est un absent compté (pas un arrêt), le plafond compte les deux hôtes
+    const URL_T = `${TCG}/univ/sm/sm1/symbol.png`, URL_T2 = `${TCG}/univ/sm/sm2/symbol.png`;
+    const mixtes = [{ ...lignes[0], source: 'pokemontcg.io' }, { slug: 'Set-t1', nom: 'T1', tirage: 'intl', id: 'sm1', url: URL_T, source: 'tcgdex' }, { slug: 'Set-t2', nom: 'T2', tirage: 'intl', id: 'sm2', url: URL_T2, source: 'tcgdex' }, { ...lignes[1], source: 'pokemontcg.io' }];
+    const rm = await lancer({ [lignes[0].url]: { status: 200, type: 'image/png', octets: bon }, [URL_T]: { status: 404, type: 'image/png' }, [URL_T2]: { status: 200, type: 'image/png', octets: autre }, [lignes[1].url]: { status: 200, type: 'image/png', octets: autre } }, { lignes: mixtes });
+    verifier('deux hôtes : robots.txt relu POUR CHAQUE hôte, une fois, avant sa première image', rm.tr.appels.filter(u => /robots\.txt$/.test(u)), [`${HOTE}/robots.txt`, `${TCG}/robots.txt`]);
+    const ecarts = {}; for (let i = 1; i < rm.tr.temps.length; i++) { /* écart au précédent du MÊME hôte */ for (let j = i - 1; j >= 0; j--) if (rm.tr.temps[j][0] === rm.tr.temps[i][0]) { (ecarts[rm.tr.temps[i][0]] ||= []).push(rm.tr.temps[i][1] - rm.tr.temps[j][1]); break; } }
+    verifier('deux hôtes : au moins 5 s entre deux requêtes d\'un MÊME hôte', Object.values(ecarts).flat().every(x => x >= 5000) && Object.values(ecarts).flat().length >= 3, true);
+    verifier('deux hôtes : 404 chez TCGdex = absent compté, sans arrêt, la suite part (3 gardées, 1 absent)', [rm.bilan.absents, rm.bilan.telecharges, rm.bilan.arret], [1, 3, null]);
+    const rmp = await leve(() => lancer({}, { lignes: mixtes, plafond: 3 }));
+    verifier('plafond : compte les adresses des DEUX hôtes (4 > 3) → refus avant toute requête', rmp !== null && /plafond/i.test(rmp), true);
+    const rdm = await lancer({ [lignes[0].url]: { status: 403, type: 'text/html', texte: '<title>Just a moment...</title>', cfMitigated: 'challenge' }, [URL_T2]: { status: 200, type: 'image/png', octets: autre } }, { lignes: [{ ...lignes[0], source: 'pokemontcg.io' }, mixtes[2]] });
+    verifier('défi chez un hôte : il est arrêté, l\'autre hôte continue', [!!rdm.bilan.arret, rdm.bilan.telecharges, !!RH.hoteArrete('images.pokemontcg.io', rdm.dossierPauses), RH.hoteArrete('assets.tcgdex.net', rdm.dossierPauses)], [true, 1, true, null]);
 
     // ── 6. LA PLANCHE ────────────────────────────────────────────────────────────────────────────────────────────────
     const pl = await M.fabriquerPlanche([{ slug: 'Set-s1', nom: 'Nom s1', buffer: bon }, { slug: 'Set-s2', nom: 'Nom s2', buffer: autre }, { slug: 'Set-s3', nom: 'Nom s3', buffer: bon }], { colonnes: 2 });
@@ -163,6 +186,14 @@ async function banc(M) {
         { cleR2: `symboles/W-Bon-${sha1(bon).slice(0, 10)}.png`, w: 64, h: 64, octets: bon.length, sha1: sha1(bon), fichier: 'symbol.png', source: 'pokemontcg.io', urlOriginal: `${HOTE}/w1/symbol.png`, mention: '© Pokémon / The Pokémon Company', lot: 'symboles-2026-10', retirable: true, vignette: true, le: true });
     verifier('valeur posée : la preuve nomme l\'identité et dit que le set n\'avait pas de symbole', /visuelsPtcgio\.lignes/.test(v.preuve) && /ptcgio-2026-10/.test(v.preuve) && /n'avait pas de symbole/.test(v.preuve), true);
     verifier('filtre de l\'écriture : _id ET symbole.cleR2 absent (jamais d\'écrasement)', db.journal.every(([, f]) => f['symbole.cleR2']?.$exists === false), true);
+    // 7.c bis ligne TCGdex : source 'tcgdex', preuve de l'identité et de l'endroit où la série a été lue, clé R2 toujours neutre
+    const cacheT = tmp('symb-tcgdex-');
+    fs.writeFileSync(path.join(cacheT, 'T-Set.png'), autre); fs.writeFileSync(path.join(cacheT, 'T-Set.json'), JSON.stringify({ slug: 'T-Set', id: 'ex1', url: `${TCG}/univ/ex/ex1/symbol.png`, ...m(200, autre, { w: 48, h: 48 }) }));
+    const dbT = fauxDb([{ _id: 'T-Set', nomAffichage: 't' }]), r2T = fauxR2();
+    const RT = await M.ecrire({ lignes: [{ slug: 'T-Set', nom: 't', tirage: 'intl', id: 'ex1', url: `${TCG}/univ/ex/ex1/symbol.png`, source: 'tcgdex', tcgdexSet: 'ex1', serie: 'ex', serieOu: 'logoFr' }], cache: cacheT, attendu: 1, db: dbT, r2: r2T, bucket: 'B', maintenant: () => new Date('2026-10-18') });
+    const vt = dbT.mem.get('T-Set').symbole;
+    verifier('écriture TCGdex : source tcgdex, preuve (identité + série lue où), clé R2 neutre', [RT.ecrits, vt.source, /remplacementTcgdex\.tcgdexSet/.test(vt.preuve) && /série lue dans logoFr/.test(vt.preuve) && /n'avait pas de symbole/.test(vt.preuve), /tcgdex|pokemontcg/i.test(vt.cleR2), vt.urlOriginal, vt.lot],
+        [['T-Set'], 'tcgdex', true, false, `${TCG}/univ/ex/ex1/symbol.png`, 'symboles-2026-10']);
     // 7.d symbole apparu depuis le plan : jamais écrasé, compté « non écrit »
     db = fauxDb([{ _id: 'W-Bon', nomAffichage: 'x', symbole: { cleR2: 'symboles/ailleurs.png' } }, { _id: 'W-Autre', nomAffichage: 'y' }]); r2 = fauxR2();
     const R2 = await M.ecrire({ lignes: lw, cache: cacheE, attendu: 2, db, r2, bucket: 'B', maintenant: () => new Date() });
@@ -201,7 +232,8 @@ const MUTATIONS = [
     ['accepter un argument inconnu', 'if (inconnus.length)', 'if (false)'],
     ['ignorer --attendu', 'gardes.length !== attendu', 'false'],
     ['accepter un symbole de moins de 24 px', 'm.w < TAILLE_MIN || m.h < TAILLE_MIN', 'false'],
-    ['ne plus contrôler le plafond', 'aDemander.length > plafond', 'false']
+    ['ne plus contrôler le plafond', 'aDemander.length > plafond', 'false'],
+    ['accepter un id de chemin différent de tcgdexSet', 'm[3] !== tcgdexSet', 'false']
 ];
 
 (async () => {

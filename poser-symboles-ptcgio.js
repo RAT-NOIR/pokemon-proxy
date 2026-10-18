@@ -21,6 +21,9 @@ const SOURCE = 'pokemontcg.io';
 const LOT = 'symboles-2026-10';
 const LOT_IDENTITE = 'ptcgio-2026-10';
 const HOTE = 'images.pokemontcg.io';
+const HOTE_TCGDEX = 'assets.tcgdex.net';
+const SOURCE_TCGDEX = 'tcgdex';
+const CHEMIN_SYMBOLE_TCGDEX = /^\/univ\/[a-z0-9]{1,12}\/[a-z0-9.-]{2,24}\/symbol\.png$/;
 const CADENCE_MS = 5000;
 const REESSAI_MS = 30000;
 const CRAWL_DELAY_MAX_S = 60;
@@ -50,10 +53,38 @@ function parserArguments(argv) {
 
 // ── le plan, pur ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const urlSymbole = id => `https://${HOTE}/${id}/symbol.png`;
-/** Vrai si l'adresse est EXACTEMENT `https://images.pokemontcg.io/<id>/symbol.png` (aucun paramètre, aucun port, aucun identifiant), faux sinon. */
+const urlSymboleTcgdex = (serie, id) => `https://${HOTE_TCGDEX}/univ/${serie}/${id}/symbol.png`;
+/** Vrai si l'adresse est EXACTEMENT `https://images.pokemontcg.io/<id>/symbol.png` ou `https://assets.tcgdex.net/univ/<série>/<id>/symbol.png` (aucun paramètre, port ni identifiant), faux sinon. */
 function cheminPermis(url) {
     let u; try { u = new URL(url); } catch { return false; }
-    return u.protocol === 'https:' && u.hostname === HOTE && !u.username && !u.password && !u.port && !u.search && !u.hash && CHEMIN_SYMBOLE.test(u.pathname);
+    if (u.protocol !== 'https:' || u.username || u.password || u.port || u.search || u.hash) return false;
+    return (u.hostname === HOTE && CHEMIN_SYMBOLE.test(u.pathname)) || (u.hostname === HOTE_TCGDEX && CHEMIN_SYMBOLE_TCGDEX.test(u.pathname));
+}
+/** Le nom d'hôte d'une adresse permise, sinon null. */
+const hoteDe = url => (cheminPermis(url) ? new URL(url).hostname : null);
+/**
+ * La SÉRIE TCGdex d'un set, lue dans une adresse TCGdex DÉJÀ en base sur ce set (`logoFr`, `logoOfficiel.<langue>` : `/<langue>/<série>/<id>/logo.(png|webp)`) — jamais devinée.
+ * L'`<id>` du chemin doit être égal à `tcgdexSet`, sinon l'adresse n'est pas celle de ce set. (`tcgdex_sets` ne porte pas la série : forme réelle `{_id, lu, n}`, liste `{id, name, cardCount}`.)
+ * @returns {{serie: string, ou: string}|{raison: string}}
+ */
+function serieTcgdex(s, tcgdexSet) {
+    const sources = [['logoFr', s.logoFr], ...Object.entries(s.logoOfficiel || {}).map(([l, v]) => [`logoOfficiel.${l}`, v])];
+    const trouvees = new Map();
+    let divergente = false;
+    for (const [ou, v] of sources) {
+        for (const adresse of [v?.urlSource, v?.urlOriginal]) {
+            if (typeof adresse !== 'string') continue;
+            let u; try { u = new URL(adresse); } catch { continue; }
+            if (u.hostname !== HOTE_TCGDEX) continue;
+            const m = /^\/([a-z]{2})\/([a-z0-9]{1,12})\/([a-z0-9.-]{2,24})\/logo\.(png|webp)$/.exec(u.pathname);
+            if (!m) continue;
+            if (m[3] !== tcgdexSet) { divergente = true; continue; }
+            if (!trouvees.has(m[2])) trouvees.set(m[2], ou);
+        }
+    }
+    if (trouvees.size > 1) return { raison: 'serie-ambigue' };
+    if (trouvees.size === 1) { const [serie, ou] = [...trouvees][0]; return { serie, ou }; }
+    return { raison: divergente ? 'id-du-chemin-different' : 'serie-introuvable' };
 }
 const aUnSymbole = s => typeof s.symbole?.cleR2 === 'string' && s.symbole.cleR2 !== '';
 /**
@@ -65,24 +96,36 @@ function planifier(sets) {
     const SCRYDEX = require('./collecte-cartes/ptcgio').SETS_SCRYDEX;
     const population = sets.filter(s => typeof s.nomAffichage === 'string' && s.nomAffichage.trim() !== '' && !/-Additionals$/i.test(String(s._id)) && !aUnSymbole(s));
     if (!population.length) throw new Error(`planifier : population vide sur ${sets.length} sets lus (nomAffichage chaîne, hors -Additionals, sans symbole.cleR2) — champ faux ou rien à faire ? un vide ne se déclare pas sans l'avoir ouvert`);
-    const lignes = [], sautes = [], tcgdexSeul = [], parTirage = {};
+    const lignes = [], sautes = [], tcgdexNotee = [], parTirage = {}, parSource = {};
+    const poser = (l) => { lignes.push(l); parTirage[l.tirage] = (parTirage[l.tirage] || 0) + 1; parSource[l.source] = (parSource[l.source] || 0) + 1; };
     for (const s of population) {
-        const slug = String(s._id), tirage = s.tirage ?? s.region ?? null;
+        const slug = String(s._id), tirage = s.tirage ?? s.region ?? null, nom = s.nomAffichage;
+        if (!SLUG_LISIBLE.test(slug)) { sautes.push({ slug, raison: 'slug-illisible' }); continue; }
+        // 1. pokemontcg.io : exactement un identifiant dans visuelsPtcgio.lignes (inchangé)
         const l = s.visuelsPtcgio?.lignes;
-        if (!Array.isArray(l) || l.length === 0) {
-            sautes.push({ slug, raison: 'identite-absente' });
-            if (s.remplacementTcgdex?.tcgdexSet && s.remplacementTcgdex.langue === 'en') tcgdexSeul.push({ slug, tcgdexSet: s.remplacementTcgdex.tcgdexSet });
+        let raisonP = null, idP = null;
+        if (!Array.isArray(l) || l.length === 0) raisonP = null;
+        else if (l.length !== 1) raisonP = 'identite-multiple';
+        else if (typeof l[0] !== 'string' || !ID_LISIBLE.test(l[0])) raisonP = 'identifiant-illisible';
+        else if (SCRYDEX.includes(l[0])) raisonP = 'hote-scrydex';
+        else idP = l[0];
+        const tcg = typeof s.remplacementTcgdex?.tcgdexSet === 'string' && s.remplacementTcgdex.tcgdexSet.trim() !== '' ? s.remplacementTcgdex.tcgdexSet.trim() : null;
+        if (idP) {
+            poser({ slug, nom, tirage, id: idP, url: urlSymbole(idP), source: SOURCE });
+            if (tcg) tcgdexNotee.push({ slug, tcgdexSet: tcg });          // les deux identités existent : pokemontcg.io gagne, TCGdex est seulement noté
             continue;
         }
-        if (l.length !== 1) { sautes.push({ slug, raison: 'identite-multiple' }); continue; }
-        const id = l[0];
-        if (typeof id !== 'string' || !ID_LISIBLE.test(id)) { sautes.push({ slug, raison: 'identifiant-illisible' }); continue; }
-        if (SCRYDEX.includes(id)) { sautes.push({ slug, raison: 'hote-scrydex' }); continue; }
-        if (!SLUG_LISIBLE.test(slug)) { sautes.push({ slug, raison: 'slug-illisible' }); continue; }
-        lignes.push({ slug, nom: s.nomAffichage, tirage, id, url: urlSymbole(id) });
-        parTirage[tirage] = (parTirage[tirage] || 0) + 1;
+        // 2. TCGdex : l'identité du collecteur de remplacement (quelle que soit sa langue), la série lue dans une adresse déjà en base
+        if (tcg) {
+            if (!/^[a-z0-9.-]{2,24}$/.test(tcg)) { sautes.push({ slug, raison: raisonP ?? 'identifiant-illisible' }); continue; }
+            const r = serieTcgdex(s, tcg);
+            if (r.serie) { poser({ slug, nom, tirage, id: tcg, url: urlSymboleTcgdex(r.serie, tcg), source: SOURCE_TCGDEX, tcgdexSet: tcg, serie: r.serie, serieOu: r.ou }); continue; }
+            sautes.push({ slug, raison: raisonP ?? r.raison });
+            continue;
+        }
+        sautes.push({ slug, raison: raisonP ?? 'identite-absente' });
     }
-    return { population: population.length, lignes, sautes, tcgdexSeul, parTirage };
+    return { population: population.length, lignes, sautes, tcgdexNotee, parTirage, parSource };
 }
 
 // ── les refus, purs ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -116,6 +159,24 @@ function lireMeta(cache, slug) {
     try { return JSON.parse(fs.readFileSync(fichierMeta(cache, slug), 'utf8')); } catch { return null; }
 }
 
+// ── le transport réel : les deux hôtes d'images de ce lot, rien d'autre ──────────────────────────────────────────────────────────────────────────
+const UA = 'pokemon-proxy-catalogue/1.0 (mesure, cadence lente)';
+const transportFetch = {
+    async get(url, { binaire = false } = {}) {
+        const robots = (() => { try { const u = new URL(url); return u.protocol === 'https:' && (u.hostname === HOTE || u.hostname === HOTE_TCGDEX) && u.pathname === '/robots.txt' && !u.search; } catch { return false; } })();
+        if (!robots && !cheminPermis(url)) throw new Error(`adresse hors de ce que ce lot demande : aucune requête (${url})`);   // le dernier mètre avant fetch : jamais une API
+        let r;
+        try { r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }   // une redirection n'est JAMAIS suivie
+        catch (e) { throw Object.assign(new Error(`${e.name === 'TimeoutError' ? 'ETIMEDOUT' : e.cause?.code || 'ERR_NETWORK'} ${url}`), { reseau: true }); }
+        const cfMitigated = r.headers.get('cf-mitigated');
+        if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location'), cfMitigated };
+        const type = r.headers.get('content-type') || '';
+        if (r.status === 404 || r.status === 410) return { status: r.status, type, cfMitigated };
+        if (binaire && r.ok && /^image\//.test(type)) return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()), cfMitigated };
+        return { status: r.status, type, texte: await r.text(), cfMitigated };
+    }
+};
+
 // ── le téléchargement, par la règle commune de réponse d'hôte ────────────────────────────────────────────────────────────────────────────────────
 /**
  * @param {{lignes: Array, cache: string, plafond: number, transport?: {get: Function}, pause?: Function, now?: Function, suivi?: object, dossierPauses?: string, journal?: Function}} o
@@ -126,68 +187,78 @@ async function telecharger({ lignes, cache, plafond, transport = null, pause = m
     const P = require('./collecte-cartes/ptcgio');
     const T = require('./collecte-cartes/tpc');
     const sharp = require('sharp');
-    const tr = transport || P.transportFetch;
+    const tr = transport || transportFetch;
     const sv = suivi || RH.suiviDuProcessus();
     const dp = dossierPauses || RH.DOSSIER_PAUSES;
     if (!Number.isInteger(plafond) || plafond < 1) throw new Error('telecharger : plafond obligatoire (entier ≥ 1)');
-    for (const l of lignes) if (!cheminPermis(l.url)) throw new Error(`telecharger : « ${l.url} » hors de ce que ce lot demande (https://${HOTE}/<id>/symbol.png) — aucune requête`);
+    for (const l of lignes) if (!cheminPermis(l.url)) throw new Error(`telecharger : « ${l.url} » hors de ce que ce lot demande (https://${HOTE}/<id>/symbol.png ou https://${HOTE_TCGDEX}/univ/<série>/<id>/symbol.png) — aucune requête`);
     fs.mkdirSync(cache, { recursive: true });
-    const bilan = { demandes: 0, telecharges: 0, absents: 0, repris: 0, transitoires: 0, arret: null };
+    const bilan = { demandes: 0, telecharges: 0, absents: 0, repris: 0, transitoires: 0, arret: null, arrets: [] };
     const aDemander = [];
     for (const l of lignes) { const m = lireMeta(cache, l.slug); if (m && m.url === l.url && m.statut != null) bilan.repris++; else aDemander.push(l); }
     if (aDemander.length > plafond) throw new Error(`telecharger : ${aDemander.length} adresses à demander pour un plafond de ${plafond} — rien n'est demandé (relancer avec un plafond assumé)`);
     if (!aDemander.length) return bilan;
 
-    let dernier = null, cadence = CADENCE_MS;
-    // ≥ 5 s (ou le Crawl-delay de robots.txt) entre deux requêtes sur l'hôte : la première part sans attente, toutes les suivantes attendent le reste de la cadence
-    const requete = async (url, o) => {
-        if (dernier !== null) { const a = dernier + cadence - now(); if (a > 0) await pause(a); }
-        dernier = now();
+    // UN état PAR HÔTE (les deux hôtes alternent dans le plan) : dernière requête, cadence, robots.txt, arrêt, transitoires de suite
+    const hotes = new Map();
+    const eh = h => hotes.get(h) || hotes.set(h, { dernier: null, cadence: CADENCE_MS, robots: undefined, arrete: false, transitoiresDeSuite: 0 }).get(h);
+    // ≥ 5 s (ou le Crawl-delay de robots.txt) entre deux requêtes sur LE MÊME hôte : la première part sans attente, les suivantes attendent le reste de la cadence
+    const requete = async (hote, url, o) => {
+        const e = eh(hote);
+        if (e.dernier !== null) { const a = e.dernier + e.cadence - now(); if (a > 0) await pause(a); }
+        e.dernier = now();
         return tr.get(url, o);
     };
-    // robots.txt : relu une fois, avant la première image ; un défi sur robots.txt arrête l'hôte (règle commune)
-    RH.garderHote(HOTE, dp, sv);
-    const rr = await requete(`https://${HOTE}/robots.txt`, {});
-    if (RH.detecterDefi(RH.entreeDepuisClient(rr, { borne: 5000 })) !== null) {
+    const noterArret = (hote, motif) => { eh(hote).arrete = true; bilan.arrets.push({ hote, motif }); bilan.arret = bilan.arret ?? { hote, motif }; journal(`   🛑 ${hote} : ${motif}`); };
+    // robots.txt : relu une fois PAR HÔTE, avant sa première image ; un défi sur robots.txt arrête l'hôte (règle commune)
+    const lireRobots = async hote => {
+        const e = eh(hote);
+        if (e.robots !== undefined) return e.robots;
+        const adresse = `https://${hote}/robots.txt`;
+        const rr = await requete(hote, adresse, {});
         const motif = RH.detecterDefi(RH.entreeDepuisClient(rr, { borne: 5000 }));
-        RH.arretHote(HOTE, `${motif} sur robots.txt`, { dossier: dp, url: `https://${HOTE}/robots.txt` });
-        bilan.arret = { hote: HOTE, motif };
-        return bilan;
-    }
-    let robots = null;
-    if (rr.status === 404 || rr.status === 410) robots = null;
-    else if (rr.status === 200) robots = rr.texte ?? '';
-    else throw new Error(`robots.txt de ${HOTE} illisible (HTTP ${rr.status}) — on ne peut pas conclure, aucune image`);
-    if (robots !== null) {
-        const d = T.delaiDesRobots(robots, P.UA);
-        if (d && d > CRAWL_DELAY_MAX_S) throw new Error(`robots.txt de ${HOTE} demande un Crawl-delay de ${d} s — on s'arrête`);
-        if (d) cadence = Math.max(cadence, d * 1000);
-    }
+        if (motif !== null) { RH.arretHote(hote, `${motif} sur robots.txt`, { dossier: dp, url: adresse }); noterArret(hote, `${motif} sur robots.txt`); e.robots = null; return null; }
+        let robots = null;
+        if (rr.status === 404 || rr.status === 410) robots = null;
+        else if (rr.status === 200) robots = rr.texte ?? '';
+        else throw new Error(`robots.txt de ${hote} illisible (HTTP ${rr.status}) — on ne peut pas conclure, aucune image`);
+        if (robots !== null) {
+            const d = T.delaiDesRobots(robots, P.UA);
+            if (d && d > CRAWL_DELAY_MAX_S) throw new Error(`robots.txt de ${hote} demande un Crawl-delay de ${d} s — on s'arrête`);
+            if (d) e.cadence = Math.max(e.cadence, d * 1000);
+        }
+        e.robots = robots;
+        return robots;
+    };
 
-    let transitoiresDeSuite = 0;
     for (const l of aDemander) {
-        RH.garderHote(HOTE, dp, sv);                                  // une pause ou un arrêt qui tient : aucune requête
+        const HOTE_L = new URL(l.url).hostname, e = eh(HOTE_L);
+        if (e.arrete) { journal(`   · ${l.slug} : ${HOTE_L} arrêté, non demandé`); continue; }
+        try { RH.garderHote(HOTE_L, dp, sv); }                          // une pause ou un arrêt qui tient : aucune requête vers cet hôte
+        catch (x) { if (x.bloque || x.pauseHote) { noterArret(HOTE_L, x.message); continue; } throw x; }
+        const robots = await lireRobots(HOTE_L);
+        if (e.arrete) continue;
         const chemin = new URL(l.url).pathname;
-        if (robots !== null && !T.autoriseParRobots(robots, chemin, P.UA)) throw Object.assign(new Error(`robots.txt de ${HOTE} interdit ${chemin} — aucune requête`), { robots: true });
+        if (robots !== null && !T.autoriseParRobots(robots, chemin, P.UA)) throw Object.assign(new Error(`robots.txt de ${HOTE_L} interdit ${chemin} — aucune requête`), { robots: true });
         let r;
-        try { r = await requete(l.url, { binaire: true }); }
-        catch (e) { if (!e.reseau) throw e; await pause(REESSAI_MS); dernier = now(); r = await tr.get(l.url, { binaire: true }); }
-        if (r.status >= 500) { await pause(REESSAI_MS); dernier = now(); r = await tr.get(l.url, { binaire: true }); }
+        try { r = await requete(HOTE_L, l.url, { binaire: true }); }
+        catch (x) { if (!x.reseau) throw x; await pause(REESSAI_MS); e.dernier = now(); r = await tr.get(l.url, { binaire: true }); }
+        if (r.status >= 500) { await pause(REESSAI_MS); e.dernier = now(); r = await tr.get(l.url, { binaire: true }); }
         bilan.demandes++;
         let lu;
-        try { lu = RH.lireImage(r, { suivi: sv, hote: HOTE, url: l.url, dossierPauses: dp }); }
-        catch (e) {
-            if (e.transitoire) {
-                bilan.transitoires++; transitoiresDeSuite++;
-                journal(`   ⚠️ ${l.slug} : ${e.message} (transitoire — à refaire au prochain lancement)`);
-                if (transitoiresDeSuite >= 2) { bilan.arret = { hote: HOTE, motif: 'deux réponses transitoires de suite' }; break; }
+        try { lu = RH.lireImage(r, { suivi: sv, hote: HOTE_L, url: l.url, dossierPauses: dp }); }
+        catch (x) {
+            if (x.transitoire) {
+                bilan.transitoires++; e.transitoiresDeSuite++;
+                journal(`   ⚠️ ${l.slug} : ${x.message} (transitoire — à refaire au prochain lancement)`);
+                if (e.transitoiresDeSuite >= 2) noterArret(HOTE_L, 'deux réponses transitoires de suite');
                 continue;
             }
-            if (e.bloque || e.pauseHote) { bilan.arret = { hote: HOTE, motif: e.message }; journal(`   🛑 ${e.message}`); break; }
-            throw e;
+            if (x.bloque || x.pauseHote) { noterArret(HOTE_L, x.message); continue; }
+            throw x;
         }
-        transitoiresDeSuite = 0;
-        const base = { slug: l.slug, nom: l.nom, id: l.id, url: l.url, tirage: l.tirage ?? null, le: new Date().toISOString() };
+        e.transitoiresDeSuite = 0;
+        const base = { slug: l.slug, nom: l.nom, id: l.id, url: l.url, source: l.source ?? SOURCE, tirage: l.tirage ?? null, le: new Date().toISOString() };
         if (lu.absente) {
             fs.writeFileSync(fichierMeta(cache, l.slug), JSON.stringify({ ...base, statut: 404, issue: lu.issue }));
             bilan.absents++; journal(`   · ${l.slug} (${l.id}) : absent (${lu.issue})`);
@@ -266,8 +337,11 @@ async function ecrire({ lignes, cache, attendu, db, r2, bucket, maintenant = () 
         const vg = await fabriquerVignetteSymbole(buf);
         const cv = cleVignette(cleR2);
         await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
-        const valeur = { cleR2, w: g.meta.w, h: g.meta.h, octets: g.meta.octets, sha1: g.meta.sha1, fichier: 'symbol.png', source: SOURCE, urlOriginal: g.url, mention: '© Pokémon / The Pokémon Company', lot: LOT, retirable: true,
-            preuve: `identité visuelsPtcgio.lignes (lot ${LOT_IDENTITE}) ; le set n'avait pas de symbole`, le: maintenant(), vignette: { cleR2: cv, w: vg.w, h: vg.h } };
+        const tcgdex = g.source === SOURCE_TCGDEX;
+        const preuve = tcgdex ? `identité remplacementTcgdex.tcgdexSet « ${g.tcgdexSet} » ; série lue dans ${g.serieOu} (« ${g.serie} ») ; le set n'avait pas de symbole`
+            : `identité visuelsPtcgio.lignes (lot ${LOT_IDENTITE}) ; le set n'avait pas de symbole`;
+        const valeur = { cleR2, w: g.meta.w, h: g.meta.h, octets: g.meta.octets, sha1: g.meta.sha1, fichier: 'symbol.png', source: tcgdex ? SOURCE_TCGDEX : SOURCE, urlOriginal: g.url, mention: '© Pokémon / The Pokémon Company', lot: LOT, retirable: true,
+            preuve, le: maintenant(), vignette: { cleR2: cv, w: vg.w, h: vg.h } };
         // la condition du plan, relue dans la requête : un symbole apparu depuis n'est jamais écrasé
         const u = await S.updateOne({ _id: g.slug, 'symbole.cleR2': { $exists: false } }, { $set: { symbole: valeur } });
         if (u.matchedCount === 1 && u.modifiedCount === 1) ecrits.push(g.slug); else nonEcrits.push({ slug: g.slug, raison: 'symbole-apparu' });
@@ -283,7 +357,7 @@ if (require.main === module) {
     let a;
     try { a = parserArguments(process.argv.slice(2)); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); }
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
-    const PROJECTION = { nomAffichage: 1, tirage: 1, region: 1, symbole: 1, visuelsPtcgio: 1, remplacementTcgdex: 1 };
+    const PROJECTION = { nomAffichage: 1, tirage: 1, region: 1, symbole: 1, visuelsPtcgio: 1, remplacementTcgdex: 1, logoFr: 1, logoOfficiel: 1 };
     (async () => {
         if (a.mode === 'planche') {
             const metas = fs.readdirSync(a.cache).filter(f => f.endsWith('.json')).map(f => JSON.parse(fs.readFileSync(path.join(a.cache, f), 'utf8'))).filter(m => m.statut === 200 && m.decodable)
@@ -303,11 +377,11 @@ if (require.main === module) {
             if (!avecIdentite) throw new Error(`aucun des ${sets.length} sets ne porte visuelsPtcgio.lignes — champ faux ou bilan retiré : un plan vide serait fabriqué`);
             const P = planifier(sets);
             console.log(`DÉNOMINATEUR : ${sets.length} sets lus · ${avecIdentite} portent visuelsPtcgio.lignes · population (nomAffichage, hors -Additionals, sans symbole.cleR2) : ${P.population}`);
-            console.log(`PLAN : ${P.lignes.length} à planifier (${Object.entries(P.parTirage).map(([t, n]) => `${t} ${n}`).join(', ')}) · ${P.sautes.length} sautés`);
+            console.log(`PLAN : ${P.lignes.length} à planifier (par source : ${Object.entries(P.parSource).map(([t, n]) => `${t} ${n}`).join(', ')} ; par tirage : ${Object.entries(P.parTirage).map(([t, n]) => `${t} ${n}`).join(', ')}) · ${P.sautes.length} sautés`);
             const parRaison = {}; for (const s of P.sautes) parRaison[s.raison] = (parRaison[s.raison] || 0) + 1;
             for (const [r, n] of Object.entries(parRaison)) console.log(`   sauté « ${r} » : ${n}${r === 'identite-absente' ? '' : ` — ${P.sautes.filter(s => s.raison === r).map(s => s.slug).join(', ')}`}`);
-            console.log(`   identité TCGdex seulement (non prise, à décider) : ${P.tcgdexSeul.length}${P.tcgdexSeul.length ? ` — ${P.tcgdexSeul.map(t => `${t.slug}=${t.tcgdexSet}`).join(', ')}` : ''}`);
-            for (const l of P.lignes) console.log(`   + ${String(l.tirage).padEnd(8)} ${l.slug.padEnd(48)} ${l.url}`);
+            console.log(`   identité TCGdex aussi portée par un set pris chez pokemontcg.io (seulement notée) : ${P.tcgdexNotee.length}${P.tcgdexNotee.length ? ` — ${P.tcgdexNotee.map(t => `${t.slug}=${t.tcgdexSet}`).join(', ')}` : ''}`);
+            for (const l of P.lignes) console.log(`   + ${l.source.padEnd(13)} ${String(l.tirage).padEnd(8)} ${l.slug.padEnd(48)} ${l.url}${l.serieOu ? `   (série lue dans ${l.serieOu})` : ''}`);
             if (a.mode === 'plan') { console.log('   (plan seul — 0 requête, rien d\'écrit)'); return; }
             if (a.mode === 'telecharger') {
                 const b = await telecharger({ lignes: P.lignes, cache: a.cache, plafond: a.plafond });
