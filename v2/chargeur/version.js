@@ -69,19 +69,22 @@ function sontJumeaux(jum, a, b) {
 //   tampon   l'indice dans la réserve de textes de tamponNonRepresente (-1 = aucun) ; pdeb/pfin les bornes de produitsPartages dans la liste plate `produits`.
 // Une version SANS cette colonne (archive d'avant) ne conclut rien : partagesDe rend null, jamais « aucun partage ».
 const MAR_COLS = Object.freeze(['flags', 'tampon', 'pdeb', 'pfin', 'produits']);
-const CHAMPS_FLAGS = Object.freeze([['holo', 0], ['tampon', 2], ['basse', 4]]);
+// LOT TAMPONS (B) : un quatrième champ de 2 bits (6-7), `prixMelangeTampon` (0 = inconnu, 1 = vrai, 2 = faux). RÉTROCOMPATIBLE : une archive d'avant n'a jamais ces bits, donc elle lit « inconnu » ; le
+// numéro de format ne change pas (les trois premiers champs, leurs bits et leurs verdicts sont ceux d'avant).
+const CHAMPS_FLAGS = Object.freeze([['holo', 0], ['tampon', 2], ['basse', 4], ['melange', 6]]);
 const codeBool = b => (b === true ? 1 : b === false ? 2 : 0);
 const boolDeCode = c => (c === 1 ? true : c === 2 ? false : null);
 const champDe = (flags, decalage) => (flags >> decalage) & 3;
-const fabriquerFlags = ({ partageeHoloNonHolo: h, partageeTamponNonSepare: t, basseDefinition: b }) => codeBool(h) | (codeBool(t) << 2) | (codeBool(b) << 4);
-const FLAGS_MASQUE = 0b111111, PARTAGES_MAX = 6;
+const fabriquerFlags = ({ partageeHoloNonHolo: h, partageeTamponNonSepare: t, basseDefinition: b, prixMelangeTampon: p }) => codeBool(h) | (codeBool(t) << 2) | (codeBool(b) << 4) | (codeBool(p) << 6);
+const FLAGS_MASQUE = 0b11111111, PARTAGES_MAX = 6;
 /** Les comptes de marquage, calculés sur les colonnes (le constructeur les écrit, la structure les revérifie). */
 function compterMarquees(mar) {
-    const c = { holo: 0, tampon: 0, partages: 0, basse: 0 };
+    const c = { holo: 0, tampon: 0, partages: 0, basse: 0, melange: 0 };
     for (let i = 0; i < mar.flags.length; i++) {
         if (champDe(mar.flags[i], 0) === 1) c.holo++;
         if (champDe(mar.flags[i], 2) !== 0) c.tampon++;
         if (champDe(mar.flags[i], 4) === 1) c.basse++;
+        if (champDe(mar.flags[i], 6) === 1) c.melange++;
         if (mar.pfin[i] > mar.pdeb[i]) c.partages++;
     }
     return c;
@@ -96,11 +99,11 @@ function assembler(d) {
     octets.total = octets.colonnes + octets.chaines;
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
     const marquagesDe = r => {                                                  // les cinq champs d'une ligne ; null partout sans colonne (le même jeu de clés dans les deux cas)
-        if (!mar) return { partageeHoloNonHolo: null, partageeTamponNonSepare: null, produitsPartages: null, tamponNonRepresente: null, basseDefinition: null };
+        if (!mar) return { partageeHoloNonHolo: null, partageeTamponNonSepare: null, produitsPartages: null, tamponNonRepresente: null, basseDefinition: null, prixMelangeTampon: null };
         const f = mar.flags[r];
         return { partageeHoloNonHolo: boolDeCode(champDe(f, 0)), partageeTamponNonSepare: boolDeCode(champDe(f, 2)),
             produitsPartages: mar.pfin[r] > mar.pdeb[r] ? Array.from(mar.produits.subarray(mar.pdeb[r], mar.pfin[r])) : null,
-            tamponNonRepresente: lire(texte, mar.tampon[r]), basseDefinition: boolDeCode(champDe(f, 4)) };
+            tamponNonRepresente: lire(texte, mar.tampon[r]), basseDefinition: boolDeCode(champDe(f, 4)), prixMelangeTampon: boolDeCode(champDe(f, 6)) };
     };
     // produit → les autres membres de son groupe de partage (l'union des listes qui le nomment), construit une fois, à la demande (quelques centaines de lignes marquées)
     let groupes = null;
@@ -124,7 +127,7 @@ function assembler(d) {
         const candidats = [];
         for (let r = 0; r < ids.length; r++) {
             const f = mar.flags[r];
-            if (champDe(f, 2) === 2 && champDe(f, 0) !== 1 && mar.pfin[r] <= mar.pdeb[r] && PV.VARIANTES_PAIRE.includes(lire(texte, cols.variante[r]))) candidats.push(r);
+            if (champDe(f, 2) === 2 && champDe(f, 0) !== 1 && mar.pfin[r] <= mar.pdeb[r] && PV.estVariantePaire(lire(texte, cols.variante[r]))) candidats.push(r);
         }
         if (!candidats.length) return variantes;
         const choisis = new Set(candidats.map(r => ids[r]));
@@ -216,7 +219,7 @@ function assembler(d) {
 }
 
 const unionBool = (a, b) => (a === true || b === true ? true : a === false || b === false ? false : null);
-const AVEC_MARQUES = d => d.partageeHoloNonHolo !== null || d.partageeTamponNonSepare !== null || d.produitsPartages !== null || d.tamponNonRepresente !== null || d.basseDefinition !== null;
+const AVEC_MARQUES = d => d.partageeHoloNonHolo !== null || d.partageeTamponNonSepare !== null || d.produitsPartages !== null || d.tamponNonRepresente !== null || d.basseDefinition !== null || d.prixMelangeTampon !== null;
 /** @param opts.marquages  vrai : le constructeur écrit la colonne des marquages (format 2). Faux (défaut) : une entrée qui porte un marquage LÈVE — jamais perdu en silence. */
 function creerConstructeur({ marquages = false } = {}) {
     const c = {}; for (const k of COLS) c[k] = colonne();
@@ -252,7 +255,7 @@ function creerConstructeur({ marquages = false } = {}) {
             if (!r.ok) { refusees++; motifs[r.motif] = (motifs[r.motif] || 0) + 1; return false; }
             const d = r.doc;
             if (!marquages && AVEC_MARQUES(d)) throw new Error('constructeur sans colonne de marquages : une entrée porte un marquage (jamais perdu en silence)');
-            const m = { holo: d.partageeHoloNonHolo, tampon: d.partageeTamponNonSepare, basse: d.basseDefinition, tn: d.tamponNonRepresente === null ? -1 : texte.id(d.tamponNonRepresente), liste: d.produitsPartages };
+            const m = { holo: d.partageeHoloNonHolo, tampon: d.partageeTamponNonSepare, basse: d.basseDefinition, melange: d.prixMelangeTampon, tn: d.tamponNonRepresente === null ? -1 : texte.id(d.tamponNonRepresente), liste: d.produitsPartages };
             // les valeurs, dans l'ordre de COLS
             const v = [d.idProduct, texte.id(d.vignette.cle), d.vignette.w, d.vignette.h, d.grande ? texte.id(d.grande.cle) : -1, d.grande ? d.grande.w : 0, d.grande ? d.grande.h : 0,
                 texte.id(d.mention), d.idMetacard === null ? -1 : d.idMetacard, texte.id(d.numero), texte.id(d.rarete), texte.id(d.total), texte.id(d.variante), texte.id(d.setNom), liensR.id(d.lien)];
@@ -266,7 +269,7 @@ function creerConstructeur({ marquages = false } = {}) {
                 doublons++; COLS.forEach((k, i) => c[k].set(r0, v[i]));
                 if (marquages) {                                                     // deux entrées au même visuel : les marquages s'ADDITIONNENT (un partage dit par l'une vaut), jamais « le dernier gagne »
                     const p = marques[r0];
-                    marques[r0] = { holo: unionBool(p.holo, m.holo), tampon: unionBool(p.tampon, m.tampon), basse: unionBool(p.basse, m.basse), tn: m.tn >= 0 ? m.tn : p.tn,
+                    marques[r0] = { holo: unionBool(p.holo, m.holo), tampon: unionBool(p.tampon, m.tampon), basse: unionBool(p.basse, m.basse), melange: unionBool(p.melange, m.melange), tn: m.tn >= 0 ? m.tn : p.tn,
                         liste: p.liste || m.liste ? [...new Set([...(p.liste || []), ...(m.liste || [])])].sort((a, b) => a - b) : null };
                 }
                 return true;
@@ -310,7 +313,7 @@ function creerConstructeur({ marquages = false } = {}) {
                 const flags = new Int32Array(n), tampon = new Int32Array(n), pdeb = new Int32Array(n), pfin = new Int32Array(n), plat = [];
                 for (let i = 0; i < n; i++) {
                     const x = marques[ordre[i]];
-                    flags[i] = fabriquerFlags({ partageeHoloNonHolo: x.holo, partageeTamponNonSepare: x.tampon, basseDefinition: x.basse }); tampon[i] = x.tn;
+                    flags[i] = fabriquerFlags({ partageeHoloNonHolo: x.holo, partageeTamponNonSepare: x.tampon, basseDefinition: x.basse, prixMelangeTampon: x.melange }); tampon[i] = x.tn;
                     pdeb[i] = plat.length; if (x.liste) for (const p of x.liste) plat.push(p); pfin[i] = plat.length;
                 }
                 mar = { flags, tampon, pdeb, pfin, produits: Int32Array.from(plat) };
@@ -391,7 +394,8 @@ function verifierStructure(d) {
             }
         }
         const calc = compterMarquees(x), dit = d.comptes && d.comptes.marquees;
-        if (!dit || typeof dit !== 'object' || ['holo', 'tampon', 'partages', 'basse'].some(k => dit[k] !== calc[k])) refuser('marquages : comptes de l\'en-tête différents de ceux des colonnes');
+        // « melange » (LOT TAMPONS B) : un en-tête d'AVANT n'a pas ce compte et reste lisible SI la colonne n'a aucun « vrai » ; s'il le porte, il doit être juste
+        if (!dit || typeof dit !== 'object' || ['holo', 'tampon', 'partages', 'basse'].some(k => dit[k] !== calc[k]) || (dit.melange === undefined ? calc.melange !== 0 : dit.melange !== calc.melange)) refuser('marquages : comptes de l\'en-tête différents de ceux des colonnes');
     } else if (d.comptes && d.comptes.marquees !== undefined) refuser('marquages : des comptes de marquage sans colonne');
     const c = d.comptes;
     if (!c || typeof c !== 'object' || c.visuels !== n || c.fichesLiees !== m || c.produitsLies !== d.fiches.produits.length) refuser('comptes de l\'en-tête différents de ceux des colonnes');

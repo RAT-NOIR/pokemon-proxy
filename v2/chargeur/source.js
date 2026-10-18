@@ -12,7 +12,7 @@ const PROJECTIONS = Object.freeze({
         'images.vignette.cleR2': 1, 'images.vignette.w': 1, 'images.vignette.h': 1,
         // REPLI-REIMPRESSIONS : les marquages du catalogue sur l'image servie (avis du 2026-10-17) et les deux drapeaux qui la retirent ou la signalent
         'images.partageeHoloNonHolo': 1, 'images.partageeTamponNonSepare': 1, 'images.produitsPartages': 1, 'images.tamponNonRepresente': 1, 'images.basseDefinition': 1, 'images.imageEmprunteeTirage': 1 }),
-    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1 })
+    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1, prixMelangeTampon: 1 })
 });
 const LOT = 500;
 
@@ -34,6 +34,7 @@ function compacterCarte(d, I) {
 function compacterLigne(d, I) {
     const v = d.visuelSubstitut;
     return { carteId: d.carteId, idProduct: d.idProduct, idExpansion: d.idExpansion, numeroFiche: I(d.numeroFiche), slug: d.slug, slugSet: I(d.slugSet), variante: I(d.variante), variantePreuve: typeof d.variantePreuve === 'string' && d.variantePreuve.trim() ? 'oui' : null,
+        prixMelangeTampon: d.prixMelangeTampon === true ? true : d.prixMelangeTampon === false ? false : null,      // LOT TAMPONS (B) : booléen seulement ; la preuve interne du catalogue (une source nommée) n'est JAMAIS lue
         visuelSubstitut: v && typeof v === 'object' ? { ...v, set: I(v.set), mention: I(v.mention) } : v };
 }
 async function lireEnFlux(collection, projection, convertir) {

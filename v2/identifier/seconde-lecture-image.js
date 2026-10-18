@@ -8,6 +8,7 @@
 //   · creerLecteur({post,modele,cle}) le modèle : DEUX champs (code du set, numéro), rien d'autre ; l'erreur levée ne porte jamais la clé ; un signal d'abandon est transmis au client ;
 //   · creerRecadreur({largeur})    octets de l'image → bandes : géométrie EXIGÉE (sans elle, ou sans octets, aucune bande).
 
+const MT = require('./marques-tampon');                                                    // LOT TAMPONS : la liste fermée des marques (module PUR)
 // La consigne du labo (VERSION v1-2026-10-04) : deux champs, jamais le nom ni le titre — la lecture reste indépendante de la première.
 const PROMPT = `This image is the BOTTOM EDGE of a Pokémon trading card (a photo, possibly blurry or at an angle).
 Read ONLY two printed things:
@@ -98,21 +99,45 @@ function creerLecteur({ post, modele, cle, surUsage } = {}) {
     };
 }
 
-// ── F1-TAMPON : UNE question sur la carte entière — le mot « STAFF » est-il imprimé ou tamponné ? La certitude est exigée : « yes » seulement si les lettres se lisent.
+// ── F1-TAMPON puis LOT TAMPONS : UNE question sur la carte entière — quelles MARQUES (tampons, logos d'événement ou d'enseigne ajoutés sur la carte) sont visibles, dans la LISTE FERMÉE de marques-tampon.js ?
+// La certitude est exigée : une marque n'est listée que si elle se voit clairement. Tout tampon hors de la liste se dit « other » (une question côté chaîne), une image qui ne permet pas de décider « unclear ».
+// Les descriptions sont écrites UNE fois par marque ; un module qui oublie une marque de la liste (ou en décrit une de trop) ne se charge pas.
+const DESCRIPTION_MARQUE = Object.freeze({
+    staff: 'the word STAFF stamped on the card',
+    prerelease: 'the word PRERELEASE or PRE-RELEASE stamped on the card',
+    league: 'a Pokémon League logo stamp',
+    championship: 'a Championships stamp (national, regional or world championship)',
+    'toys-r-us': 'the Toys "R" Us logo stamp',
+    gamestop: 'the GameStop logo stamp',
+    kfc: 'the KFC logo stamp',
+    indomilk: 'the Indomilk logo or word stamp',
+    professor: 'a Pokémon Professor stamp',
+    cosmo: 'a cosmos / galaxy holo foil pattern stamped over the card (not the holo foil of the card itself)',
+    snowflake: 'a snowflake stamp',
+    'play-pokemon': 'a "Play! Pokémon" stamp',
+    'place-1': 'a stamp for 1st place', 'place-2': 'a stamp for 2nd place', 'place-3': 'a stamp for 3rd place', 'place-4': 'a stamp for 4th place'
+});
+if (MT.MARQUES.length !== Object.keys(DESCRIPTION_MARQUE).length || !MT.MARQUES.every(m => typeof DESCRIPTION_MARQUE[m] === 'string')) throw new Error('seconde-lecture-image : la consigne des marques ne décrit pas exactement la liste fermée');
 const PROMPT_TAMPON = `This image is a Pokémon trading card (a photo or a scan, possibly blurry or at an angle).
-Question: is the word "STAFF" printed or stamped on this card (a stamp or logo reading STAFF, as on the Staff promo versions of a card)?
-Answer "yes" ONLY if you can clearly read the letters S-T-A-F-F stamped on the card itself.
-Answer "no" if the whole card is clearly visible and no such stamp is there.
-Answer "uncertain" if the image is too blurry, cropped, dark or unclear to decide. Never guess.
-Reply ONLY with JSON: {"staff": "yes" | "no" | "uncertain"}`;
-const REPONSES_TAMPON = Object.freeze(['yes', 'no', 'uncertain']);
+Question: which promotional stamps or marks are printed or stamped ON the card itself (a logo or word added on the artwork or the border, as on event, promo or store versions of a card)?
+Choose ONLY from this closed list of ids:
+${MT.MARQUES.map(m => `- "${m}": ${DESCRIPTION_MARQUE[m]}`).join('\n')}
+Rules: list a mark ONLY if you can clearly see it on the card. What belongs to every normal copy of the card (set symbol, regulation mark, rarity symbol, copyright line, the card's own holo foil, "1st Edition") is NOT a stamp.
+If you see any stamp or logo that is not in the list, set "other" to true. If the image is too blurry, cropped, dark or unclear to decide, set "unclear" to true.
+If the whole card is clearly visible and carries no stamp, return an empty list. Never guess.
+Reply ONLY with JSON: {"stamps": [ids from the list], "other": true | false, "unclear": true | false}`;
+const MARQUES_PAR_LECTURE_MAX = 12;
 
-/** Le lecteur du tampon. Rend { staff: 'yes'|'no'|'uncertain' } ou { illisible: true } (une valeur hors de ces trois : jamais un « yes » inventé). */
+/**
+ * Le lecteur des marques. Rend { marques: string[], autre: boolean, incertain: boolean } (les chaînes TELLES QUE LUES : la décision les juge, lecture-tampon.js::essaiDe) ou { illisible: true } pour toute
+ * forme qui n'est pas EXACTEMENT celle-là (jamais une marque inventée, jamais un champ manquant pris pour « faux »).
+ */
 function creerLecteurTampon({ post, modele, cle, surUsage } = {}) {
     const appeler = creerAppel({ post, modele, cle, prompt: PROMPT_TAMPON, surUsage, nom: 'creerLecteurTampon' });
     return async function lireTampon(bande, opts = {}) {
         const p = jsonDe(await appeler(bande, opts));
-        return p && typeof p.staff === 'string' && REPONSES_TAMPON.includes(p.staff) ? { staff: p.staff } : { illisible: true };
+        const forme = p && Array.isArray(p.stamps) && p.stamps.length <= MARQUES_PAR_LECTURE_MAX && p.stamps.every(x => typeof x === 'string') && typeof p.other === 'boolean' && typeof p.unclear === 'boolean';
+        return forme ? { marques: p.stamps.map(x => x.trim()), autre: p.other, incertain: p.unclear } : { illisible: true };
     };
 }
 

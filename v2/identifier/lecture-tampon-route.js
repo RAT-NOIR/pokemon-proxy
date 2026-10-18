@@ -1,18 +1,21 @@
 'use strict';
-// F1-TAMPON — la DÉCISION de la route : lire le tampon STAFF pour trancher une question dont les candidats sont EXACTEMENT une paire staff / normale séparée par l'étiquette.
-// DERRIÈRE DEUX interrupteurs (V2_LECTURE_TAMPON ET V2_EMPREINTE_EXTENSION) et un fournisseur deps.lectureTampon. Éteint, rien n'est appelé, rien n'est noté : la réponse est celle d'avant, octet pour octet.
-// Consultée APRÈS l'adaptateur et la seconde lecture, avant la règle G. Elle ne peut que PROMOUVOIR une question en affirmation du produit STAFF quand la preuve est faite ; toute autre issue (non, incertain,
-// désaccord, panne, délai, plafond de dépense, deuxième passage, pas de carte valide) laisse la réponse d'AVANT, sans débit ni remboursement de plus. 🔴 Elle n'affirme JAMAIS la version normale : un tampon manqué
-// n'est pas un tampon absent. Un JUMBO reste une question (la règle « jumbo par le titre » est RETIRÉE : elle ne se défend pas contre la négation).
+// F1-TAMPON puis LOT TAMPONS — la DÉCISION de la route : lire les MARQUES (liste fermée, marques-tampon.js) pour trancher une question dont les candidats sont EXACTEMENT une paire « ensemble de marques / normale »
+// séparée par l'étiquette. DERRIÈRE DEUX interrupteurs (V2_LECTURE_TAMPON ET V2_EMPREINTE_EXTENSION) et un fournisseur deps.lectureTampon. Éteint, rien n'est appelé, rien n'est noté : la réponse est celle d'avant, octet pour octet.
+// Consultée APRÈS l'adaptateur et la seconde lecture, avant la règle G. Elle ne peut que PROMOUVOIR une question en affirmation du produit TAMPONNÉ quand la preuve est faite : deux lectures identiques d'un ensemble
+// NON VIDE de marques de la liste, sans `autre`, EXACTEMENT celui de la variante prouvée du produit. Toute autre issue (rien lu, marque hors liste, ensemble différent, incertain, désaccord, panne, délai,
+// plafond de dépense, deuxième passage, pas de carte valide) laisse la réponse d'AVANT, sans débit ni remboursement de plus. 🔴 Elle n'affirme JAMAIS la version normale : un tampon manqué n'est pas un tampon absent.
+// Un JUMBO reste une question (la règle « jumbo par le titre » est RETIRÉE : elle ne se défend pas contre la négation).
 // UNE SEULE image : `entree.empreintes[i].carte`, la carte redressée que l'extension joint à son vecteur et que MODELE-VISUEL-API valide (carte-redressee.js : JPEG, 420 x 587, 200 Ko au plus). Pas de photo pleine,
 // pas d'octets bruts, pas de géométrie, jamais un téléchargement. Une question sans carte valide ne déclenche rien (0 appel).
 // La facturation est celle d'une affirmation (comme le critère A et la désignation).
 const LT = require('./lecture-tampon');
 const CR = require('./carte-redressee');
+const MT = require('./marques-tampon');
 const { statuts, lectureDe, CHAMPS } = require('./garde-contradiction');
 
 const DELAI_TAMPON_MS = 20000;
-const CRITERE_STAFF = 'tampon (staff) : STAFF lu sur la carte redressée par deux essais indépendants, seule la version Staff de la paire est affirmée';
+/** Le critère journalisé de l'affirmation : le jeton de variante lu (la liste fermée), jamais un texte libre. */
+const critereMarques = variante => `tampon (${variante}) : marques lues sur la carte redressée par deux essais indépendants, seule la version portant exactement ces marques de la paire est affirmée`;
 
 const idsDeLaQuestion = resultat => { const c = resultat && resultat.analyse && Array.isArray(resultat.analyse.cartes) ? resultat.analyse.cartes[0] : null; return c && Array.isArray(c.candidats) ? c.candidats.map(x => x && x.idProduct) : []; };
 
@@ -61,17 +64,23 @@ async function consulterLectureTampon({ deps, cfg, entree, scanId, resultat, cor
         if (!LT.premiereFois(String(scanId))) return { trace: { declenchee: false, appels: 0, issue: 'deja-tentee', raison: 'ce scan a déjà eu sa lecture du tampon' } };
         LT.noter('declenchees');
         const lu = await lire({ fournisseur, deps, carte, scanId, corpsChaine: c, avecBorne, journal });
-        const trace = { declenchee: true, appels: lu.appels, type: 'staff', issue: lu.issue, raison: lu.raison };
+        // la trace (journal `analyses.lectureTampon`, jamais servie au client) dit ce qui a été LU et si les deux lectures concordent
+        const trace = { declenchee: true, appels: lu.appels, type: paire.variante, marques: lu.marques, accord: lu.accord, issue: lu.issue, raison: lu.raison };
         if (lu.issue !== 'oui') return { trace };
+        // l'ensemble lu doit être EXACTEMENT celui du produit spécial de la paire (sa variante prouvée) : sinon la question reste, jamais une affirmation d'un produit aux autres marques
+        if (MT.jetonDeMarques(lu.marques) !== paire.variante) { LT.noter('nonConfirmees'); LT.noter('marquesSansProduit'); return { trace: { ...trace, issue: 'non-confirmee', raison: `les marques lues (${lu.marques.join('+')}) ne sont pas celles du produit tamponné de la paire (${paire.variante})` } }; }
         let aff = null;
-        try { aff = affirmer(paire.special, undefined, CRITERE_STAFF); } catch (e) { journal('affirmation', e); }
+        try { aff = affirmer(paire.special, undefined, critereMarques(paire.variante)); } catch (e) { journal('affirmation', e); }
         if (aff && aff.issue === 'affirmee') { LT.noter('affirmees'); return { resultat: aff, trace: { ...trace, issue: 'confirmee' } }; }
         LT.noter('nonConfirmees');
         return { trace: { ...trace, issue: 'non-confirmee', raison: 'l\'affirmation n\'a pas pu être construite' } };
     } catch (e) { journal('lecture du tampon', e); return null; }                  // une exception n'est jamais une affirmation : la réponse d'avant
 }
 
-/** L'appel borné au fournisseur : { issue: 'oui'|'non-confirmee'|'echec'|'delai'|'sans-image', appels, raison }. Chaque appel TENTÉ est compté (le coût), qu'il ait réussi ou non. */
+/**
+ * L'appel borné au fournisseur : { issue: 'oui'|'non-confirmee'|'echec'|'delai'|'sans-image'|'rien', appels, raison, marques, accord }. `oui` = deux essais lisent le même ensemble NON VIDE de marques de la liste (`marques`) ;
+ * `accord` dit seulement si les essais concordent (au journal). Chaque appel TENTÉ est compté (le coût), qu'il ait réussi ou non.
+ */
 async function lire({ fournisseur, deps, carte, scanId, corpsChaine, avecBorne, journal }) {
     let appels = 0;
     const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { LT.noter('appels', v - appels); appels = v; } } };
@@ -84,22 +93,24 @@ async function lire({ fournisseur, deps, carte, scanId, corpsChaine, avecBorne, 
         const delai = e && e.code === 'TAMPON_DELAI';
         if (delai) abandon.abort(); else journal('lecture du tampon (fournisseur)', e);
         LT.noter('echecs');
-        return { issue: delai ? 'delai' : 'echec', appels, raison: delai ? 'délai dépassé' : 'le fournisseur a levé' };
+        return { issue: delai ? 'delai' : 'echec', appels, raison: delai ? 'délai dépassé' : 'le fournisseur a levé', marques: [], accord: false };
     }
-    if (!lu || typeof lu !== 'object') { LT.noter('nonConfirmees'); return { issue: 'rien', appels, raison: 'le fournisseur n\'a rien rendu' }; }
-    if (lu.sansImage === true) { LT.noter('nonFaisables'); return { issue: 'sans-image', appels, raison: 'aucun octet d\'image fourni : pas de lecture du tampon' }; }
-    if (lu.echec === true) { LT.noter('echecs'); return { issue: 'echec', appels, raison: String(lu.raison || 'échec de la lecture').slice(0, 200) }; }
+    if (!lu || typeof lu !== 'object') { LT.noter('nonConfirmees'); return { issue: 'rien', appels, raison: 'le fournisseur n\'a rien rendu', marques: [], accord: false }; }
+    if (lu.sansImage === true) { LT.noter('nonFaisables'); return { issue: 'sans-image', appels, raison: 'aucun octet d\'image fourni : pas de lecture du tampon', marques: [], accord: false }; }
+    if (lu.echec === true) { LT.noter('echecs'); return { issue: 'echec', appels, raison: String(lu.raison || 'échec de la lecture').slice(0, 200), marques: [], accord: false }; }
     if (!(Array.isArray(lu.essais) && lu.essais.length)) LT.noter('nonFaisables');
-    // la décision se refait ICI sur les essais rendus : un fournisseur ne décide jamais à la place du module
+    // la décision se refait ICI sur les essais rendus : un fournisseur ne décide jamais à la place du module (ni l'ensemble de marques : c'est celui du module qui compte)
     const d = LT.decider({ essais: Array.isArray(lu.essais) ? lu.essais : [] });
-    if (d.staff && lu.lecture === 'oui') return { issue: 'oui', appels, raison: d.raison };
+    const accord = d.lecture !== 'desaccord' && Array.isArray(lu.essais) && lu.essais.length >= 2;
+    if (d.sur && lu.lecture === 'marques') return { issue: 'oui', appels, raison: d.raison, marques: d.marques, accord };
     LT.noter('nonConfirmees');
-    return { issue: 'non-confirmee', appels, raison: d.staff ? 'le fournisseur n\'a pas conclu' : `${d.lecture} : ${d.raison}` };
+    return { issue: 'non-confirmee', appels, raison: d.sur ? 'le fournisseur n\'a pas conclu' : `${d.lecture} : ${d.raison}`, marques: [], accord };
 }
 
 /**
- * Règle 2 des prix (F4) : une fiche à produit UNIQUE marquée `prixMelangeTampon`, déjà affirmée. STAFF lu deux fois => la mention « version tamponnée : le prix Cardmarket sous-estime sa valeur » remplace la règle 3.
- * Le verdict ne change pas (même idProduct) ; seule la mention change. Sans la lecture, rien ne bouge (la règle 3 reste). INERTE tant que le catalogue ne marque aucune fiche.
+ * Règle 2 des prix (F4) : une fiche à produit UNIQUE marquée `prixMelangeTampon`, déjà affirmée. Un ensemble NON VIDE de marques de la liste lu deux fois à l'identique (la photo montre un tampon) => la mention
+ * « version tamponnée : le prix Cardmarket sous-estime sa valeur » remplace la règle 3. Le verdict ne change pas (même idProduct) ; seule la mention change. Ici l'ensemble n'est PAS comparé à une variante :
+ * la fiche n'a qu'un produit, le tampon n'est pas ce qui la désigne, il dit seulement que le prix du guide (mélangé) sous-estime. Sans la lecture, rien ne bouge (la règle 3 reste).
  */
 async function prixDuTampon({ deps, fournisseur, entree, scanId, resultat, corpsChaine, produits, affirmer, avecBorne, journal }) {
     if (!(produits instanceof Map)) return null;
@@ -112,9 +123,9 @@ async function prixDuTampon({ deps, fournisseur, entree, scanId, resultat, corps
     if (!LT.premiereFois(String(scanId))) return { trace: { declenchee: false, appels: 0, issue: 'deja-tentee', raison: 'ce scan a déjà eu sa lecture du tampon' } };
     LT.noter('declenchees');
     const lu = await lire({ fournisseur, deps, carte, scanId, corpsChaine, avecBorne, journal });
-    const trace = { declenchee: true, appels: lu.appels, type: 'prix', issue: lu.issue, raison: lu.raison };
+    const trace = { declenchee: true, appels: lu.appels, type: 'prix', marques: lu.marques, accord: lu.accord, issue: lu.issue, raison: lu.raison };
     if (lu.issue !== 'oui') return { trace };
-    const marquee = { ...ligne, tamponStaffLu: true, impressions: Array.isArray(ligne.impressions) ? ligne.impressions.map(i => (i && i.idProduct === id ? { ...i, tamponStaffLu: true } : i)) : ligne.impressions };
+    const marquee = { ...ligne, tamponLu: true, impressions: Array.isArray(ligne.impressions) ? ligne.impressions.map(i => (i && i.idProduct === id ? { ...i, tamponLu: true } : i)) : ligne.impressions };
     const surcharge = new Map(produits); surcharge.set(id, marquee);
     let aff = null;
     try { aff = affirmer(id, surcharge, resultat.critere || null); } catch (e) { journal('mention du tampon', e); }
@@ -123,4 +134,4 @@ async function prixDuTampon({ deps, fournisseur, entree, scanId, resultat, corps
     return { trace: { ...trace, issue: 'non-confirmee', raison: 'la mention n\'a pas pu être construite' } };
 }
 
-module.exports = { consulterLectureTampon, carteValidee, DELAI_TAMPON_MS, CRITERE_STAFF };
+module.exports = { consulterLectureTampon, carteValidee, DELAI_TAMPON_MS, critereMarques };

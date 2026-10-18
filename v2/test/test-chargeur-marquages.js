@@ -56,7 +56,7 @@ const refuse = fn => { try { fn(); return null; } catch (e) { return e.name === 
     H.v('2g. partagesDe : les AUTRES produits du groupe (3001 ↔ 3002, 3005 ↔ 3006, 3009 ↔ 3010 : une paire séparée compte comme non séparée)', [v.partagesDe(3001), v.partagesDe(3002), v.partagesDe(3005), v.partagesDe(3009), v.partagesDe(3010)], [[3002], [3001], [3006], [3010], [3009]]);
     H.v('2h. partagesDe lit aussi dans l\'autre sens : 3021 (sans entrée) est nommé par 3020', [v.partagesDe(3021), v.partagesDe(3020)], [[3020], [3021]]);
     H.v('2i. un produit ordinaire, un produit inconnu : [] (concluant, la colonne est là)', [v.partagesDe(3000), v.partagesDe(424242)], [[], []]);
-    H.v('2j. comptes de marquage dans l\'en-tête de la version', v.comptes.marquees, { holo: 3, tampon: 3, partages: 6, basse: 1 });
+    H.v('2j. comptes de marquage dans l\'en-tête de la version', v.comptes.marquees, { holo: 3, tampon: 3, partages: 6, basse: 1, melange: 0 });
     H.vrai('2k. toutes les entrées de la version passent la validation d\'entrée', rejugerEntrees(v).ok);
 
     // ── 3. le fichier : format 2, aller-retour exact

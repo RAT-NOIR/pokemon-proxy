@@ -3,7 +3,7 @@
 const { v, vrai, bilan } = require('./_harnais');
 const { construireProduit, VARIANTES } = require('../identifier/produit');
 
-const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
+const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'marques', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
 const BON = 'https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/v/357044.webp';
 const base = (o = {}) => ({
     idProduct: 357044, nomCardmarket: 'Lapras', nomFr: 'Lokhlass',
@@ -134,7 +134,7 @@ const LIEN_IMP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Se
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
-v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', version: null, langue: null, set: { nom: 'Set de Base' },
+v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', marques: null, version: null, langue: null, set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, deBase: 'tous-etats', moyenne7: null, moyenne30: 1000, date: '2026-10-05', fiable: true, reserves: [] } });
 // F4 (b) le « ≈ 1,00 € » d'une impression est le « De » : l'offre la plus basse TOUS ÉTATS ; il le dit (deBase), jamais le prix de l'état retenu
 v('F4 (b) chaque prix d\'impression dit sa base : tous états', avecImp.impressions.map(i => i.prixGuide.deBase), ['tous-etats', 'tous-etats']);
@@ -151,7 +151,14 @@ v('F4 (c) impression : version hors forme -> null', P({ impressions: [imp({ vers
 v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
 v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);
 v('impression variante hors liste -> null', avecImp.impressions[1].variante, null);
-v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a ; F4 : `version`)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'version', 'langue', 'set', 'lien', 'prixGuide']);
+v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a ; F4 : `version` ; LOT TAMPONS : `marques`)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'marques', 'version', 'langue', 'set', 'lien', 'prixGuide']);
+// LOT TAMPONS : le champ ADDITIF `marques` (la liste fermée) ; `variante` ne change pas (son enum est lu par l'extension et le site)
+v('marques : un ensemble de la liste fermée est servi tel quel, dans l\'ordre canonique', [P({ marques: ['staff', 'prerelease'] }).marques, P({ marques: ['league'] }).marques], [['staff', 'prerelease'], ['league']]);
+v('marques : [] (prouvé sans tampon) est servi ; null / absent = on ne sait pas', [P({ marques: [] }).marques, P({ marques: null }).marques, P({}).marques], [[], null, null]);
+v('marques : une marque hors liste, un doublon, un autre ordre, pas un tableau, un élément pas une chaîne : null (jamais deviné)', [P({ marques: ['inconnue'] }).marques, P({ marques: ['staff', 'staff'] }).marques, P({ marques: ['prerelease', 'staff'] }).marques, P({ marques: 'staff' }).marques, P({ marques: [1] }).marques, P({ marques: ['staff', 'x'] }).marques], Array(6).fill(null));
+v('marques : variante ne change PAS (une variante hors de son enum reste null, même si les marques sont connues)', (p => [p.variante, p.marques])(P({ variante: 'staff+prerelease', marques: ['staff', 'prerelease'] })), [null, ['staff', 'prerelease']]);
+v('marques : le tableau servi est gelé (le client ne modifie pas la source)', (m => [Array.isArray(m), Object.isFrozen(m)])(P({ marques: ['staff'] }).marques), [true, true]);
+v('marques d\'une impression : même règle', [P({ impressions: [imp({ marques: ['kfc'] })] }).impressions[0].marques, P({ impressions: [imp({ marques: ['x'] })] }).impressions[0].marques, P({ impressions: [imp({})] }).impressions[0].marques], [['kfc'], null, null]);
 v('impression : langue en code fermé conservée (ja, zh-hans)', P({ impressions: [imp({ langue: 'ja' }), imp({ idProduct: 900003, langue: 'zh-hans' })] }).impressions.map(i => i.langue), ['ja', 'zh-hans']);
 v('impression : langue hors liste (JP, EN, texte libre, nombre) -> null, jamais devinée', P({ impressions: [imp({ langue: 'JP' }), imp({ idProduct: 900003, langue: 'EN' }), imp({ idProduct: 900005, langue: 'japonais' }), imp({ idProduct: 900006, langue: 7 })] }).impressions.map(i => i.langue), [null, null, null, null]);
 vrai('impressions gelées', Object.isFrozen(avecImp.impressions) && Object.isFrozen(avecImp.impressions[0]));

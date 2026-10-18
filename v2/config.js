@@ -204,7 +204,7 @@ function lireConfig(env = process.env) {
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
-        // F1-TAMPON : lire le tampon STAFF sur la carte redressée de l'extension pour trancher une paire SÉPARÉE staff / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet.
+        // F1-TAMPON puis LOT TAMPONS : lire les MARQUES (liste fermée : Staff, Prerelease, League, enseignes…) sur la carte redressée de l'extension pour trancher une paire SÉPARÉE marque(s) / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. À la mesure du lot TAMPONS : un faux positif réel (rapport) — il le reste.
         // N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (la carte vient de `empreintes[i].carte`), qu'un fournisseur est branché (montage : OPENROUTER_API_KEY) ET que la question est exactement une paire séparée.
         lectureTampon: booleen('V2_LECTURE_TAMPON', env.V2_LECTURE_TAMPON, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.

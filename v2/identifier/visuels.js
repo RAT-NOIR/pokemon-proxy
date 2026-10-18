@@ -11,6 +11,7 @@ const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
 const { langueDeTirage } = require('./langue-decisive');
 const { separeeParVariante } = require('./partage-variante');
+const { marquesProuvees } = require('./marques-tampon');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
 const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
@@ -59,7 +60,8 @@ const CHAMPS_IMPRESSION = Object.freeze(['idMetacard', 'numero', 'rarete', 'tota
 const PARTAGES_MAX = 6, TAMPON_MAX = 40;
 const booleenOuNull = x => x === undefined || x === null || typeof x === 'boolean';
 function lireMarquages(e) {
-    for (const c of ['partageeHoloNonHolo', 'partageeTamponNonSepare', 'basseDefinition']) if (!booleenOuNull(e[c])) return { motif: `champ "${c}" ni booleen ni null` };
+    // LOT TAMPONS (B) : `prixMelangeTampon` (la fiche réunit la version normale et une version tamponnée : le prix Cardmarket les MÉLANGE) est un booléen ou null (absent = inconnu), jamais coercé
+    for (const c of ['partageeHoloNonHolo', 'partageeTamponNonSepare', 'basseDefinition', 'prixMelangeTampon']) if (!booleenOuNull(e[c])) return { motif: `champ "${c}" ni booleen ni null` };
     const holo = e.partageeHoloNonHolo === undefined ? null : e.partageeHoloNonHolo, tampon = e.partageeTamponNonSepare === undefined ? null : e.partageeTamponNonSepare;
     const basse = e.basseDefinition === undefined ? null : e.basseDefinition;
     let tn = null;
@@ -78,7 +80,8 @@ function lireMarquages(e) {
     // PARTAGES-VARIANTE : UNE seule forme sans liste est admise — la paire séparée par la variante (partage-variante.js, la même définition que la décision, la structure de l'archive et F1) ; tout le reste reste refusé
     if (partage && liste === null && !separeeParVariante({ partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: null }, texte(e.variante))) return { motif: 'marquage de partage sans "produitsPartages"' };
     if (!partage && liste !== null) return { motif: '"produitsPartages" sans marquage de partage (partageeHoloNonHolo ou partageeTamponNonSepare)' };
-    return { marquages: { partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: liste, tamponNonRepresente: tn, basseDefinition: basse } };
+    const melange = e.prixMelangeTampon === undefined ? null : e.prixMelangeTampon;
+    return { marquages: { partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: liste, tamponNonRepresente: tn, basseDefinition: basse, prixMelangeTampon: melange } };
 }
 
 /**
@@ -155,6 +158,8 @@ function creerVisuels(opts = {}) {
             return Object.freeze({
                 idProduct: d.idProduct, numero, total: chaineOuNull(d.total), rarete,
                 variante: VARIANTES.includes(d.variante) ? d.variante : null,                          // V1/V2 n'a pas de sémantique (CLAUDE.md §7)
+                marques: marquesProuvees(d.variante),                                                  // LOT TAMPONS (ajout additif) : les marques prouvées de CETTE impression
+                prixMelangeTampon: d.prixMelangeTampon === true,                                      // LOT TAMPONS (B) : la colonne de l'archive (=== true seulement) ; le catalogue la réunit à numeros_cartes
                 langue: langueDeTirage(typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(d.idProduct) : null),   // CONTRAT 7a : la langue du TIRAGE de CETTE impression (jp -> ja, zh-hans, zh-hant, ko) ; intl, id, th, idth : null, jamais devinée
                 set: Object.freeze({ nom: texte(d.setNom) }), lien, prixGuide: prixGuide(guides.get(d.idProduct))
             });
