@@ -69,14 +69,15 @@ function familleDeExpansion(slug) {
 
 // ── le transport réel : l'agent du dépôt seul, aucun cookie, aucune redirection suivie, l'hôte nommé seul ─────────────────────────────────────
 const transportFetch = {
-    async get(url) {
+    async get(url, { binaire = false } = {}) {
         if (!hoteOk(url)) throw new Error(`cardtrader : adresse hors de l'hôte autorisé — aucune requête (${url})`);
         let r;
-        try { r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Encoding': 'gzip' }, redirect: 'manual', signal: AbortSignal.timeout(60000) }); }
+        try { r = await fetch(url, { headers: { 'User-Agent': UA, ...(binaire ? {} : { 'Accept-Encoding': 'gzip' }) }, redirect: 'manual', signal: AbortSignal.timeout(60000) }); }
         catch (e) { throw Object.assign(new Error(`${e.name === 'TimeoutError' ? 'ETIMEDOUT' : e.cause?.code || 'ERR_NETWORK'} ${url}`), { reseau: true }); }
         const type = r.headers.get('content-type') || '';
         const cfMitigated = r.headers.get('cf-mitigated');
         if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location'), type, cfMitigated };
+        if (binaire && r.ok && /^image\//i.test(type)) return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()), cfMitigated };
         let octets = Buffer.from(await r.arrayBuffer());
         if (octets[0] === 0x1f && octets[1] === 0x8b) octets = zlib.gunzipSync(octets);
         return { status: r.status, type, texte: octets.toString('utf8'), cfMitigated };
@@ -125,7 +126,152 @@ function fabriquerClient({ dossierCache, plafond, transport = transportFetch, ca
         if (d && d * 1000 > cadence) throw new Error(`robots.txt demande un Crawl-delay de ${d} s : au-delà de la cadence prévue, on s'arrête`);
         return r;
     }
-    return { lire, requetes: () => n, initialiserRobots, texteRobots: () => texteRobots };
+    /**
+     * UNE IMAGE de blueprint (/uploads/blueprints/image/<id>/<fichier>) : même file, même plafond, même garde, même cache disque (le fichier .bin à côté de la fiche .json) que les pages.
+     * La réponse est jugée par la règle commune (RH.lireImage) : redirection non suivie (pause), défi (arrêt définitif), 200 text/html sans défi = introuvable, tout le reste = pause.
+     * @returns {{octets?: Buffer, absente?: boolean, cache: boolean}}
+     */
+    async function lireImage(url) {
+        if (!hoteOk(url) || !CHEMIN_IMAGE.test(new URL(url).pathname)) throw new Error(`cardtrader : adresse d'image hors de ce qui est autorisé (hôte ${HOTE}, /uploads/blueprints/image/<id>/<fichier>) — aucune requête (${url})`);
+        const f = fichier(url), fb = f.replace(/\.json$/, '.bin');
+        if (fs.existsSync(f)) {
+            const m = JSON.parse(fs.readFileSync(f, 'utf8'));
+            if (m.statut === 'ok' && fs.existsSync(fb)) return { octets: fs.readFileSync(fb), cache: true, meta: m };
+            if (m.statut === 'absent' || (m.statut === 'fausse-absente' && RH.fausseAbsenceRecente(m, now()))) return { absente: true, cache: true, meta: m };
+        }
+        RH.garderHote(SOURCE_RACINE, dossierPauses, suivi);
+        if (!T.autoriseParRobots(texteRobots, new URL(url).pathname, UA)) throw new Error(`robots.txt interdit ${new URL(url).pathname} — aucune requête`);
+        if (n >= plafond) throw Object.assign(new Error(`plafond de requêtes atteint (${plafond})`), { plafond: true });
+        if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
+        dernier = now(); n++;
+        const r = await transport.get(url, { binaire: true });
+        const x = RH.lireImage(r, { suivi, hote: SOURCE_RACINE, url, dossierPauses });      // LÈVE : redirection/inattendue = pause, défi = arrêt définitif, 5xx = transitoire
+        if (x.absente) {
+            const precedente = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : undefined;
+            const m = { url, ...RH.entreeAbsence(precedente, { issue: x.issue, empreinte: x.empreinte }, r.status, now()) };
+            fs.writeFileSync(f, JSON.stringify(m));
+            return { absente: true, cache: false, meta: m };
+        }
+        const m = { url, statut: 'ok', status: r.status, type: r.type || '', octets: x.octets.length, sha256: crypto.createHash('sha256').update(x.octets).digest('hex'), le: new Date(now()).toISOString() };
+        fs.writeFileSync(fb, x.octets); fs.writeFileSync(f, JSON.stringify(m));
+        return { octets: x.octets, cache: false, meta: m };
+    }
+    return { lire, lireImage, requetes: () => n, initialiserRobots, texteRobots: () => texteRobots };
+}
+const CHEMIN_IMAGE = /^\/uploads\/blueprints\/image\/\d+\/[^/]+\.(?:jpe?g|png|webp)$/i;
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — le lot d'images : adresse d'image d'une page, contrôle de largeur, lot après exclusions, décision d'écriture, entrées neutres.
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+const { largeurMinDe } = require('./seuils-images');
+const { marqueDe, entreesARemplacer } = require('./basse-definition');
+const { champsTracabilite } = require('./tracabilite');
+const { cleNumero } = require('./jointure');
+const IE = require('./images-empruntees');
+
+const SOURCE = CODE_NEUTRE;                 // 'ctr' : jamais le nom de la source dans `source`, `lot`, une clé R2 ou une mention
+const LOT = 'ctr-2026-10';
+const MENTION = T.MENTION;
+
+/**
+ * L'adresse de l'image PLEINE TAILLE d'un blueprint, lue sur sa page HTML. Relevé sur 12 pages réelles (2026-10-18) : l'og:image est le fichier non préfixé
+ * (`/uploads/blueprints/image/<id>/<nom>.jpg`), la variante « show_ » en est une version réduite (~500 px), `back_image` est le DOS. Écrit par ce qu'il autorise :
+ * https, l'hôte, le chemin d'image du MÊME identifiant que la page, un fichier sans préfixe de variante. Un og:image qui est une vignette REFUSE (on ne cherche pas ailleurs).
+ * Sans og:image : l'image non préfixée citée par la page ; à défaut seulement `show_` (via 'show', la largeur dira). Le dos n'est jamais lu.
+ * @returns {{url: string, via: 'og'|'page'|'show'}|{refus: string}}
+ */
+function imageDePage(html, urlPage) {
+    const id = /\/cards\/(\d+)-/.exec(String(urlPage ?? ''))?.[1];
+    if (!id) return { refus: 'adresse de page illisible' };
+    const t = String(html ?? '');
+    const motif = new RegExp(`^https://${HOTE.replace(/\./g, '\\.')}/uploads/blueprints/image/${id}/([^/?#]+)\\.(?:jpe?g|png|webp)$`, 'i');
+    const classer = u => { const m = motif.exec(u); if (!m) return null; const v = /^([a-z]+)_/i.exec(m[1]); return v ? v[1].toLowerCase() : ''; };
+    const og = /<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']/i.exec(t) || /<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:image["']/i.exec(t);
+    if (og) {
+        const u = og[1].replace(/&amp;/g, '&');
+        const v = classer(u);
+        if (v === '') return { url: u, via: 'og' };
+        return { refus: v === null ? 'og:image hors du chemin d\'image de ce blueprint (hôte, chemin ou identifiant)' : `og:image est une variante réduite (« ${v}_ »)` };
+    }
+    const trouvees = [...t.matchAll(new RegExp(`(?:https://${HOTE.replace(/\./g, '\\.')})?(/uploads/blueprints/image/${id}/[^"'\\s)\\\\<>]+)`, 'g'))].map(m => `https://${HOTE}${m[1]}`);
+    const pleine = trouvees.find(u => classer(u) === '');
+    if (pleine) return { url: pleine, via: 'page' };
+    const show = trouvees.find(u => classer(u) === 'show');
+    if (show) return { url: show, via: 'show' };
+    return { refus: 'aucune image de blueprint dans la page' };
+}
+
+/** Le contrôle de largeur de l'ORIGINAL : au seuil de la source (350), sinon `trop-petit` avec sa largeur. Aucun plancher de 200 px (pas de décision). */
+function controleLargeur(largeur) {
+    const w = typeof largeur === 'number' && Number.isFinite(largeur) ? largeur : 0;
+    return w >= largeurMinDe(SOURCE) ? { statut: 'ok', largeur: w } : { statut: 'trop-petit', largeur: w };
+}
+
+const cleNum = n => (n == null || String(n).trim() === '' ? 'sn' : String(n).trim().replace(/[^A-Za-z0-9._-]/g, '_'));
+const cleR2 = (slugSet, numero, carteId) => `${SOURCE}/${slugSet}/${cleNum(numero)}-${carteId}-en.webp`;
+const idImage = (slugSet, carteId, numero) => `${SOURCE}/${slugSet}/${carteId}/${cleNum(numero)}/en`;
+const tamponDeLaFamille = slugSet => (IE.SETS_PRIZE_PACK.includes(slugSet) ? IE.TAMPON_PRIZE_PACK : undefined);
+const familleDe = o => { const g = String(o.groupe ?? o.slugSet ?? ''); return /^(WCD)/i.test(g) ? 'wcd' : /^(PP|Play-Pokemon)/i.test(g) ? 'pp' : /^(BA|Battle-Academy)/i.test(g) ? 'ba' : null; };
+
+/**
+ * LE LOT après les décisions du coordinateur (18/10) : seuls entrent les appariés SANS réserve et avec une carte où poser l'entrée. EXCLUS, raison écrite : « à réserve »
+ * (plusieurs variantes d'une même carte vers un blueprint), ambigu, introuvable, refusé par le témoin, sans carte, conflit (deux blueprints pour la même carte et le même set). Écrit par ce
+ * qu'il autorise : un statut inconnu est exclu. Les « clé seule » (témoin absent ou non applicable) RESTENT.
+ */
+function construireLot(produits) {
+    const exclus = [], groupes = new Map();
+    for (const p of produits || []) {
+        let raison = null;
+        if (p.statut === 'apparie') {
+            if (p.reserve) raison = 'a-reserve';
+            else if (!Number.isInteger(p.blueprint)) raison = 'blueprint-illisible';
+            else if (!Number.isInteger(p.carteId)) raison = 'sans-carte';
+        } else raison = { ambigu: 'ambigu', introuvable: 'introuvable', 'refuse-temoin': 'refuse-temoin' }[p.statut] ?? 'statut-inconnu';
+        if (raison) { exclus.push({ idProduct: p.idProduct, groupe: p.groupe, raison }); continue; }
+        const numero = p.numeroFiche == null || String(p.numeroFiche).trim() === '' ? null : String(p.numeroFiche).trim();
+        const k = `${p.carteId}|${p.slugSet}|${numero ?? ''}`;
+        (groupes.get(k) || groupes.set(k, []).get(k)).push({ p, numero });
+    }
+    const unites = [];
+    for (const g of groupes.values()) {
+        if (new Set(g.map(x => x.p.blueprint)).size > 1) { for (const x of g) exclus.push({ idProduct: x.p.idProduct, groupe: x.p.groupe, raison: 'conflit' }); continue; }
+        const p = g[0].p;
+        unites.push({ carteId: p.carteId, slugSet: p.slugSet, numero: g[0].numero, blueprint: p.blueprint, blueprintSlug: p.blueprintSlug, page: `https://${HOTE}/en-US/cards/${p.blueprint}-${p.blueprintSlug}`, groupe: p.groupe, famille: familleDe(p),
+            produits: g.map(x => x.p.idProduct).sort((a, b) => a - b), cles: [...new Set(g.map(x => x.p.cle))], temoins: [...new Set(g.map(x => x.p.temoin))] });
+    }
+    const parFamille = { wcd: 0, pp: 0, ba: 0 };
+    for (const u of unites) if (u.famille) parFamille[u.famille]++;
+    return { unites, exclus, parFamille };
+}
+
+const memeNumero = (e, numero) => e.numero == null || String(e.numero).trim() === '' || numero == null || cleNumero(e.numero) === cleNumero(numero);
+/**
+ * Ce que l'écriture d'une entrée candidate fait d'une carte, par la règle COMMUNE de remplacement (basse-definition.js, jamais une copie) : 'deja-posee' (reprise), 'cede' (le set est
+ * déjà servi par une entrée que la règle ne remplace pas — une image correcte au-dessus du seuil n'est jamais remplacée), ou 'ajouter' (avec les entrées remplacées : basse définition,
+ * empruntée à un Prize Pack par le vrai scan tamponné). `documents` : Map `source|set|cleR2` -> document `images` de chaque entrée (la règle ne conclut pas sans lui).
+ */
+function decisionEcriture(images, cand, { documents } = {}) {
+    const liste = (Array.isArray(images) ? images : []).filter(Boolean);
+    if (liste.some(e => e.source === cand.source && e.set === cand.set && e.cleR2 === cand.cleR2)) return { action: 'deja-posee', remplace: [] };
+    const sortantes = entreesARemplacer(liste, cand, { documents: documents ?? new Map() });
+    const restantes = liste.filter(e => !sortantes.includes(e));
+    if (restantes.some(e => e.set === cand.set && memeNumero(e, cand.numero))) return { action: 'cede', remplace: [], raison: 'le set est déjà servi par une entrée que la règle commune ne remplace pas' };
+    return { action: 'ajouter', remplace: sortantes };
+}
+
+const LANGUE_PREUVE = 'image de l\'impression exacte (tampon, bordure ou signature visibles) d\'un set déclaré anglais par la source';
+/** L'entrée `cartes.images` d'une unité. `meta` : { wOriginal, hOriginal, cleR2, sha256, w, h, fmt }. LÈVE sans adresse d'origine (traçabilité commune). */
+function entreeDeCarte(u, meta, le = new Date()) {
+    const tampon = tamponDeLaFamille(u.slugSet);
+    return { set: u.slugSet, source: SOURCE, lot: LOT, cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, numero: u.numero ?? null, wOriginal: meta.wOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
+        attribution: MENTION, mention: MENTION, langue: 'en', languePreuve: LANGUE_PREUVE, ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe: le }) };
+}
+/** Le document `images` d'une unité. */
+function documentImage(u, meta, le = new Date()) {
+    return { _id: idImage(u.slugSet, u.carteId, u.numero), source: SOURCE, lot: LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, blueprint: u.blueprint,
+        cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, wOriginal: meta.wOriginal, hOriginal: meta.hOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
+        langueSource: 'en', langue: 'en', languePreuve: LANGUE_PREUVE, attribution: MENTION, mention: MENTION, ...(tamponDeLaFamille(u.slugSet) ? { tampon: tamponDeLaFamille(u.slugSet) } : {}),
+        telechargeLe: new Date(le), etat: 'ok', ...champsTracabilite({ urlOriginal: u.url, collecteLe: le }) };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -338,4 +484,4 @@ function produitsServis({ liens, imagesParCarte, regionDe, slugParProduit = null
     return servis;
 }
 
-module.exports = { blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };
+module.exports = { imageDePage, controleLargeur, cleR2, idImage, tamponDeLaFamille, construireLot, decisionEcriture, entreeDeCarte, documentImage, SOURCE, LOT, MENTION, LANGUE_PREUVE, CHEMIN_IMAGE, familleDe, blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };

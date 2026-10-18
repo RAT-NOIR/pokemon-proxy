@@ -4,7 +4,7 @@ const assert = require('assert');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const C = require('./collecte-cartes/cardtrader');
+const C = require(process.env.CTR_MODULE || './collecte-cartes/cardtrader');
 
 let ok = 0, ko = 0;
 const test = async (nom, f) => { try { await f(); ok++; } catch (e) { ko++; console.log(`ECHEC ${nom}\n   ${e.message}`); } };
