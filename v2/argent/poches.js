@@ -16,7 +16,8 @@ function ordreDe(porteur, cfg) {
 //   · une unité s'ajoute au filtre de la prise (`>= 1`) : la poche ne descend jamais sous 0, une valeur négative ou fractionnaire (< 1) n'est jamais débitée.
 function acheteDe(porteur) {
     if (!porteur) return null;
-    if (porteur.type === 'compte') return { collection: 'comptes', filtre: { _id: porteur.id }, champ: 'solde.achete' };
+    // un compte NON vérifié n'a aucune poche débitable (garde fermée par défaut : depuis O3 il n'est jamais un porteur, et si un chemin futur en construisait un, il ne débiterait pas)
+    if (porteur.type === 'compte') return { collection: 'comptes', filtre: { _id: porteur.id, verifie: true }, champ: 'solde.achete' };
     if (porteur.type === 'installation') return { collection: 'installations', filtre: { _id: porteur.id, compteId: null }, champ: 'achete' };
     return null;
 }
