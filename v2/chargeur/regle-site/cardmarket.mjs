@@ -11,6 +11,8 @@
                                                          
      
                               
+                                                                                                                                           
+                           
      
                                                                             
                                                                     
@@ -203,6 +205,120 @@ export function slugPorteUnNumero(slug                           )          {
   return /\d/.test(s.slice(s.lastIndexOf("-") + 1));
 }
 
+/** La version Cardmarket du slug (« -V2- » au milieu, « -V2 » à la fin) comme NOMBRE : « V01 » = « V1 ». Une seule lecture, pour le prédicat et pour (c). */
+function versionDuSlug(slug                           )                {
+  const m = /-V(\d+)(?:-|$)/i.exec(slug ?? "");
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * LE PÉRIMÈTRE, PAR PRODUIT, de la règle « un produit sans numéro reste sur la fiche principale »
+ * (voir `produitsParLaFichePrincipale`) : aucun `numeroFiche`, un slug PRÉSENT qui ne porte AUCUN chiffre
+ * hors des marques de version (« -V1 ») et une version « V1 » ou aucune. Un « V2 » et au-delà n'en est
+ * pas : sa place est celle de son rang, pas la principale. L'étiquette du lien (lib/lienCardmarket.ts)
+ * s'appuie sur ce prédicat, pas sur une seconde écriture.
+ * Les conditions de DOCUMENT (plusieurs fiches, produit sur aucune fiche sans la règle, seul orphelin…)
+ * sont dans `produitsParLaFichePrincipale`.
+ * ⛔ TOUT chiffre du slug est refusé, pas seulement celui du dernier segment ou celui d'après le code du
+ * set (tour 1 de la relecture, I1) : « Geodude-Lv12-TK31-Gold » (DP-Trainer-Kit) porte son n° de demi-deck
+ * AU MILIEU, et « Pikachu-Lv15-RtA » un niveau. Sens sûr : un lien manque, jamais un faux. Cette garde
+ * unique remplace `slugPorteUnNumero` + `segmentApresLeCode`, qu'elle englobe (un slug sans chiffre n'a
+ * ni numéro de dernier segment ni segment chiffré après le code) : d'où l'absence du code du set ici.
+ */
+export function produitSansNumeroSurLaPrincipale(produit                      )          {
+  if (numeroComparable(produit.numeroFiche)) return false;
+  // Un slug ABSENT n'est pas un slug sans numéro : mesuré le 2026-10-17, 192 produits sans slug sur des
+  // documents à plusieurs fiches, dont la base dit elle-même « variante : sans-preuve — les frères ne
+  // partagent pas un numéro » (8 Gym Badge, 9 Field Blower sur une même fiche). Les placer serait deviner.
+  if (!produit.slug) return false;
+  if (/\d/.test(produit.slug.replace(/-V\d+(?=-|$)/gi, ""))) return false;
+  const version = versionDuSlug(produit.slug);
+  return version === null || version === 1;
+}
+
+/**
+ * UN PRODUIT SANS NUMÉRO RESTE SUR LA FICHE PRINCIPALE (demande de l'agent catalogue H-FIX, 2026-10-17,
+ * décisions du coordinateur). Les huit Énergies de base de Sword-Shield-Promos n'ont aucune impression
+ * numérotée : une seule fiche sans numéro porte 35 produits. Quand le serveur écrira une impression par
+ * numéro, les huit « Xxx-Energy-V1-S-P » (sans numéro) n'auraient plus de fiche — `parEliminationDesIllisibles`
+ * ne place un illisible que si le document a autant de produits que de fiches. Cette règle les garde.
+ *
+ * PÉRIMÈTRE (`produitSansNumeroSurLaPrincipale` + le document) — TOUTES les conditions :
+ *   · aucun `numeroFiche`, un slug PRÉSENT sans chiffre hors des marques de version, une version « V1 » ou
+ *     aucune (un « V2 » et au-delà : nulle part) ;
+ *   · le document a PLUSIEURS fiches dans le set (fiche unique : la règle de la fiche unique s'applique) ;
+ *   · le produit ne serait sur AUCUNE fiche sans la règle (une règle existante qui le place, ou un numéro qui
+ *     le contredit, passent avant : il ne bouge pas).
+ * Il va sur la fiche de rang 0 SEULEMENT (la principale de la BASE, `fichesDuDocument` : les appelants passent
+ * les numéros dans CET ordre, jamais dans celui de la grille). Ce n'est pas une preuve de numéro : le LIEN le
+ * dit (lib/lienCardmarket.ts, « numéro non renseigné »), et aucune image n'en dépend.
+ * L'interrupteur `sansNumero:false` n'est lu que par `placementsDeLaFiche` (relecture, M3 : le doubler ici ne
+ * pouvait être tué par aucun test). « Plusieurs fiches » (`numerosDuDocument.length < 2`) est GARDÉ ici bien
+ * qu'aucun test ne puisse le tuer — avec une seule fiche, tout produit sans numéro contradictoire est déjà
+ * placé, donc jamais orphelin : c'est une ceinture exprès, l'appel direct (script de mesure) restant permis.
+ * ⛔ Les produits SANS SLUG sont exclus : mesuré le 2026-10-17, 192 produits sur 81 documents, dont la base
+ * écrit « variante : sans-preuve — les frères ne partagent pas un numéro » (huit Gym Badge sur une fiche).
+ * Mesure aujourd'hui, sur la base : 0 placement (les Énergies S-P n'ont qu'une fiche) ; la règle attend le lot
+ * de données du catalogue. `scripts/mesurer-energies-sp.mjs`.
+ * Rend les produits que cette règle ajoute au rang 0 (le sous-ensemble dont l'étiquette dit le trou).
+ */
+export function produitsParLaFichePrincipale                                (
+  tous              ,
+  numerosDuDocument                            ,
+  codeSet                ,
+  options                           = { numeroFiche: NUMEROFICHE_ACTIF },
+)      {
+  if (numerosDuDocument.length < 2) return [];
+  const candidats = tous.filter((p) => produitSansNumeroSurLaPrincipale(p));
+  if (!candidats.length) return [];
+  // Placés par les règles d'avant, sur n'importe quelle fiche : la règle ne prend que le reste.
+  const places = new Set   ();
+  for (let rang = 0; rang < numerosDuDocument.length; rang++) {
+    for (const p of produitsAvantLaRegle(tous, rang, numerosDuDocument, codeSet, options)) places.add(p);
+  }
+  // CE QUE LES TESTS D'AVANT EXIGENT ENCORE (cinq tests de lib/cardmarket.test.ts, inchangés) : « un reste n'est
+  // pas une preuve ». Le produit n'est pris que s'il est LE SEUL produit à slug que aucune fiche ne montre, que
+  // le document en montre au moins un par UNE règle existante (numeroFiche, numéro du slug, rang de version,
+  // élimination : Cardmarket numérote les autres impressions, celle-ci est la sans-numéro), et que sa version
+  // « V1 » n'est portée que par lui (« V01 » = « V1 »). Un numéroté que rien ne place (famille des décalages),
+  // un autre illisible (Nessa, Nessa-V2), un V1 en double (Rotom-Dex) : on ne devine pas.
+  // (a) ne compte PAS les produits sans slug : chaque document d'Énergie en porte deux à quatre (Grass : 525030,
+  // 605824, 738957) et la demande n'a de sens qu'ainsi ; ils n'ont pas de lien, et le catalogue leur écrit un
+  // `numeroFiche` quand il en a la preuve. Un test à la forme réelle des énergies le tient.
+  const orphelins = tous.filter((p) => p.slug && !places.has(p));
+  if (places.size === 0 || orphelins.length !== 1 || !candidats.includes(orphelins[0])) return [];
+  if (versionDuSlug(orphelins[0].slug) === 1 && tous.filter((p) => versionDuSlug(p.slug) === 1).length !== 1) return [];
+  return [orphelins[0]];
+}
+
+/** Un produit montré sur une fiche, et COMMENT il y est : `parLaPrincipale` = placé par la règle « sans numéro » (son lien dit le trou). */
+                                  
+             
+                           
+ 
+
+/**
+ * LES PRODUITS D'UNE FICHE, CHACUN AVEC SON MODE DE PLACEMENT (tour 1 de la relecture, I3). Source unique : la
+ * fiche (getCarteParSlug) et le contrôle des liens (scripts/mesurer-liens-multiples.mjs) lisent ICI le mode, et
+ * `lienDuPlacement` (lib/lienCardmarket.ts) en tire le drapeau de l'étiquette : personne ne le pose à la main.
+ * Choisi plutôt que d'obliger l'étiquette à recalculer le prédicat : le recalcul exige les numéros du document
+ * ET les frères, donc la même logique en double ; un mode rendu avec le produit ne peut pas diverger du placement.
+ * `lib/etiquetteDuTrou.test.ts` relit les deux appelants.
+ */
+export function placementsDeLaFiche                                (
+  tous              ,
+  rang        ,
+  numerosDuDocument                            ,
+  codeSet                ,
+  options                                                 = { numeroFiche: NUMEROFICHE_ACTIF },
+)                    {
+  const ordinaires = produitsAvantLaRegle(tous, rang, numerosDuDocument, codeSet, options);
+  // `sansNumero: false` : la lecture d'avant la demande H-FIX (2026-10-17) ; sinon, sur la fiche de rang 0,
+  // les produits sans numéro que rien d'autre ne place.
+  const pris = rang === 0 && options.sansNumero !== false ? produitsParLaFichePrincipale(tous, numerosDuDocument, codeSet, options) : [];
+  return [...ordinaires.map((produit) => ({ produit, parLaPrincipale: false })), ...pris.map((produit) => ({ produit, parLaPrincipale: true }))];
+}
+
 /**
  * Les produits à montrer sur une fiche.
  *
@@ -227,7 +343,18 @@ export function produitsDeLaFiche                                (
   rang        ,
   numerosDuDocument                            ,
   codeSet                ,
-  options                           = { numeroFiche: NUMEROFICHE_ACTIF },
+  options                                                 = { numeroFiche: NUMEROFICHE_ACTIF },
+)      {
+  return placementsDeLaFiche(tous, rang, numerosDuDocument, codeSet, options).map((x) => x.produit);
+}
+
+/** Les placements d'AVANT la règle « sans numéro » (H-FIX) : numeroFiche, puis la lecture du slug. */
+function produitsAvantLaRegle                                (
+  tous              ,
+  rang        ,
+  numerosDuDocument                            ,
+  codeSet                           ,
+  options                          ,
 )      {
   // D'abord `numeroFiche`, quand le serveur l'a écrit ET que l'interrupteur est
   // levé (placementParNumeroFiche) ; les produits sans ce champ suivent la
