@@ -125,6 +125,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     await raw('idempotence').insertOne({ cle: `${porteur}|${routeIdem}|${valeur}`, empreinteCorps: empreinteDuCorps(corps), etat: 'en-cours', proprietaire: 'banc', creeLe: new Date(), expireLe: new Date(Date.now() + 120000) });
 }
 
+const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empreinte.js (derrière V2_EMPREINTE_EXTENSION=1)' };
 (async () => {
     // Les limiteurs du serveur comptent par FENÊTRE FIXE (heure, jour). Un banc qui franchirait une frontière en pleine série de « 3 essais puis 429 » verrait son compteur repartir à zéro :
     // état non joué, comptes différents d'une exécution à l'autre (constat du tour 1, M3). On attend donc la frontière avant de commencer quand elle est à moins de 4 minutes.
@@ -877,7 +878,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'GET /api/collection/sets/{slug}': { chemin: '/api/collection/sets/Banc-Set' },
             'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } }
         };
-        const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route]).map(o => o.route);
+        const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route] && !(o.route in JOUEE_AILLEURS)).map(o => o.route);
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);
         for (const [route, q] of Object.entries(REQ503)) {
             const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
@@ -910,11 +911,12 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const routesJoueesPar = es => new Set(es.filter(e => !e.garde).map(e => e.route));
     H.v('compteur de routes jouées : une route que la boucle 503 est seule à avoir jouée n\'est pas comptée', [...routesJoueesPar([{ route: 'GET /fabriquee', garde: true }, { route: 'GET /reelle', garde: false }])], ['GET /reelle']);
     const jouees = routesJoueesPar(dansContrat);
-    const nonJouees = OPERATIONS.filter(o => !jouees.has(o.route)).map(o => o.route);
+    const nonJouees = OPERATIONS.filter(o => !jouees.has(o.route) && !(o.route in JOUEE_AILLEURS)).map(o => o.route);
     console.log(`   routes : ${OPERATIONS.length} dans paths, ${OPERATIONS.length - nonJouees.length} jouées par un état réel (hors boucle 503 de la garde d'index : ${gardes.length} réponses à part)`);
     H.v(`routes de paths jouées par un état RÉEL (${OPERATIONS.length - nonJouees.length} / ${OPERATIONS.length}) — la boucle 503 ne compte pas`, nonJouees, []);
     // chaque statut documenté : joué par un état réel, joué par la garde d'index (503 seulement), ou déclaré non joué avec sa raison — et une déclaration périmée est vue
     const NON_JOUES = {
+        ...Object.fromEntries(['302', '404', '429', '502', '503'].map(st => [`GET /api/modele-empreinte/{sha256} ${st}`, 'INDEX-EMPREINTES : route derrière V2_EMPREINTE_EXTENSION=1, absente de ce banc (drapeau éteint) ; ses cinq statuts sont joués sur un serveur réel par test-modele-empreinte.js (302 vers l\'adresse présignée, 404, 429, 502, 503)'])),
         'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',
         'POST /api/compte/deconnexion 401': 'aucun chemin ne rend 401 : v2/comptes/routes.js l.63-69 — la déconnexion rend 200 même sans cookie ; seul le garde de site peut refuser (403)',
         'POST /api/identifier 403': 'O3 : le 403 VERIFICATION n\'est plus atteignable — un compte non confirmé n\'est plus un porteur (v2/porteur.js : session refusée, installation liée = installation seule) ; la garde de la chaîne reste en profondeur. Le contrat OpenAPI le documente encore (aucun contrat changé par O3 hors comptes)',
