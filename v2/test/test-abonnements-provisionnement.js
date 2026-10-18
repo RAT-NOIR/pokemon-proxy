@@ -39,7 +39,7 @@ const SITE = 'https://rat-market.fr', URL_WH = 'https://rat-market-api-essai.onr
     H.v('   chaque prix est rattaché au bon produit', faux.E.prix.every(p => faux.E.produits.find(x => x.id === p.product).metadata.rm_cle === `rm_v2_${p.lookup_key.split('_')[2]}`), true);
     const we = faux.E.endpoints[0];
     H.v('   l\'endpoint : l\'URL de la route v2 de l\'essai, les 6 événements exactement, la version d\'API épinglée', [we.url, [...we.enabled_events].sort(), we.api_version], [URL_WH, [...EVENEMENTS].sort(), '2026-06-24.dahlia']);
-    H.v('   les 6 événements sont ceux de la consigne', EVENEMENTS, ['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
+    H.v('   les 7 événements : les six de la consigne + checkout.session.expired (la réservation d\'une place Fondateurs n\'est rendue que pour SA session)', EVENEMENTS, ['checkout.session.completed', 'checkout.session.expired', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
     const portails = o => faux.E.configs.find(c => c.metadata && c.metadata.rm_cle === 'rat-market-v2-portail-' + o && c.active);
     const produitDe = o => faux.E.produits.find(p => p.metadata && p.metadata.rm_cle === 'rm_v2_' + o).id;
     for (const o of ['pro', 'fondateurs']) {

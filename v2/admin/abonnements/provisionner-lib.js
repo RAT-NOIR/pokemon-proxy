@@ -8,7 +8,7 @@
 //     l'endpoint qu'on vient de créer est SUPPRIMÉ (il n'a aucun secret conservé) : le prochain passage le recrée proprement.
 //   · le fichier local de sortie ne porte que des identifiants non secrets ; il est contrôlé avant l'écriture (aucune forme de clé ni de secret).
 const O = require('../../abonnements/offres');
-const EVENEMENTS = Object.freeze(['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
+const EVENEMENTS = Object.freeze(['checkout.session.completed', 'checkout.session.expired', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
 const CLE_PORTAIL = 'rat-market-v2';                       // la marque de la configuration UNIQUE du premier jet (retrouvée seulement pour être désactivée) et de l'endpoint
 const clePortail = offre => `rat-market-v2-portail-${offre}`;
 const NOM_VARIABLE_SECRET = 'V2_STRIPE_WEBHOOK_SECRET';

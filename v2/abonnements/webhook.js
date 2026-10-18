@@ -5,10 +5,10 @@
 //      ailleurs est refusé (409, Stripe réessaiera) ; un échec laisse l'événement rejouable (500) ;
 //   3. le traitement est IDEMPOTENT par construction (écritures « poser une valeur » comparées à la date de l'événement, primes à clé unique, places à _id unique) ;
 //   4. un événement pour un compte INCONNU est enregistré, signalé dans les journaux, et acquitté (200) : le rejouer ne le ferait pas exister. Aucun plantage.
-// Les six événements : checkout.session.completed · customer.subscription.created|updated|deleted · invoice.paid · invoice.payment_failed. Tout autre type : enregistré, ignoré, acquitté.
+// Les sept événements : checkout.session.completed · checkout.session.expired · customer.subscription.created|updated|deleted · invoice.paid · invoice.payment_failed. Tout autre type : enregistré, ignoré, acquitté.
 const express = require('express');
 const { col } = require('../db');
-const Cl = require('./client'); const Et = require('./etat'); const Pr = require('./primes');
+const Cl = require('./client'); const Et = require('./etat'); const Pr = require('./primes'); const Fo = require('./fondateurs');
 const { idDe, objetId, dateDe } = Et;
 const dupliquee = e => Boolean(e) && e.code === 11000;
 const SIGNATURE_TOLERANCE_S = 300;
@@ -30,7 +30,7 @@ async function marquerFacture(compteId, champ, evtDate) {
 }
 async function apresApplication(res, ctx) {
     // M1 : un abonnement DÉJÀ connu (événement rejoué après une panne en milieu de traitement) reprend aussi les primes en attente
-    if ((res.etat === 'applique' || (res.etat === 'ignore' && res.raison === 'deja-connu')) && res.compte) await Pr.reprendre({ stripe: ctx.stripe, parrainId: res.compte._id, maintenant: ctx.evtDate });
+    if ((res.etat === 'applique' || (res.etat === 'ignore' && res.raison === 'deja-connu')) && res.compte) await Pr.reprendre({ stripe: ctx.stripe, cfgAbo: ctx.cfgAbo, parrainId: res.compte._id, maintenant: ctx.evtDate });
 }
 
 const GESTIONNAIRES = {
@@ -50,25 +50,40 @@ const GESTIONNAIRES = {
         const brut = evt.data.object;
         const sub = evt.type === 'customer.subscription.deleted' ? { ...brut, status: 'canceled' } : brut;       // un « deleted » est une fin, quoi que dise le statut recopié
         const res = await Et.appliquer(sub, { cfgAbo: ctx.cfgAbo, version: evt.created, evtDate: ctx.evtDate });
+        if (res.etat === 'rejete' && res.raison === 'compte-inconnu') await resilierOrphelin(sub, ctx, evt);
         await apresApplication(res, ctx);
         return { ...res, compteId: res.compte && res.compte._id };
+    },
+    // I1 : la page de paiement dont la session a expiré rend SA réservation de place — et seulement la sienne
+    async 'checkout.session.expired'(evt, ctx) {
+        const s = evt.data.object, compteId = Et.objetId(s && s.client_reference_id);
+        if (!s || s.mode !== 'subscription' || !compteId || typeof s.id !== 'string') return { etat: 'ignore', raison: 'session-sans-reservation' };
+        const r = await Fo.libererSession(compteId, s.id);
+        return { etat: 'traite', raison: r.deletedCount ? 'reservation-rendue' : 'rien-a-rendre', compteId };
     },
     async 'invoice.paid'(evt, ctx) {
         const inv = evt.data.object, client = idDe(inv && inv.customer);
         const compte = client ? await col('comptes').findOne({ stripeClient: client }) : null;
         if (!compte) return { etat: 'rejete', raison: 'compte-inconnu', signal: true };
         await marquerFacture(compte._id, 'dernierPaiementLe', ctx.evtDate);
+        // I3 : la place Fondateurs se CONFIRME à la première facture PAYÉE (montant > 0) ; pendant l'essai elle n'est que réservée
+        if (typeof inv.amount_paid === 'number' && inv.amount_paid > 0) {
+            const sid0 = sidDeFacture(inv), entree = sid0 && Et.subsDe(compte.abonnement && compte.abonnement.stripe)[sid0];
+            let offre = entree ? entree.offre : null;
+            if (!entree && sid0) offre = Et.lireSubscription(await ctx.stripe.subscriptions.retrieve(sid0), ctx.cfgAbo).offre;
+            if (offre === 'fondateurs') await Fo.confirmer(compte._id, ctx.cfgAbo.fondateurs.places, ctx.evtDate);
+        }
         let parrainId = compte.abonnement && compte.abonnement.stripe ? compte.abonnement.stripe.parrain : null;
         const montant = typeof inv.amount_paid === 'number' ? inv.amount_paid : 0;
         if (montant > 0) {
             const sid = sidDeFacture(inv);
             if (!parrainId && sid) { const sub = await ctx.stripe.subscriptions.retrieve(sid); parrainId = Et.lireSubscription(sub, ctx.cfgAbo).parrain; }
             if (parrainId) {
-                const r = await Pr.ouvrir({ stripe: ctx.stripe, filleul: compte, parrainId, factureId: idDe(inv), maintenant: ctx.evtDate });
+                const r = await Pr.ouvrir({ stripe: ctx.stripe, cfgAbo: ctx.cfgAbo, filleul: compte, parrainId, factureId: idDe(inv), maintenant: ctx.evtDate });
                 if (r.signal) signaler(r.signal, evt);
             }
         }
-        await Pr.reprendre({ stripe: ctx.stripe, parrainId: compte._id, maintenant: ctx.evtDate });
+        await Pr.reprendre({ stripe: ctx.stripe, cfgAbo: ctx.cfgAbo, parrainId: compte._id, maintenant: ctx.evtDate });
         return { etat: 'traite', compteId: compte._id };
     },
     async 'invoice.payment_failed'(evt, ctx) {
@@ -81,8 +96,20 @@ const GESTIONNAIRES = {
     }
 };
 GESTIONNAIRES['customer.subscription.created'] = GESTIONNAIRES['customer.subscription.updated'] = GESTIONNAIRES['customer.subscription.deleted'] = GESTIONNAIRES.abonnement;
-const TYPES = Object.freeze(['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
+const TYPES = Object.freeze(['checkout.session.completed', 'checkout.session.expired', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed']);
 
+/**
+ * I2 : un abonnement VIVANT dont le compte n'existe plus (supprimé pendant que la page de paiement était ouverte) serait facturé pour rien. Il est RÉSILIÉ chez Stripe tout de suite, SANS prorata ni facture
+ * finale, et signalé. Jamais de remboursement automatique : toute question de remboursement reste une décision humaine. Seuls les abonnements qui portent un `compteId` bien formé (les nôtres) sont visés.
+ * Une panne de Stripe fait échouer l'événement (rejouable) : un orphelin n'est jamais laissé en silence ; « introuvable » veut dire qu'il n'existe déjà plus.
+ */
+async function resilierOrphelin(sub, ctx, evt) {
+    const s = Et.lireSubscription(sub, ctx.cfgAbo);
+    if (!s.sid || !Et.VIVANTS.includes(s.statut) || !s.compteMeta) return;
+    try { await ctx.stripe.subscriptions.cancel(s.sid, { prorate: false, invoice_now: false }); }
+    catch (e) { if (!(e && (e.code === 'resource_missing' || (e.raw && e.raw.code === 'resource_missing')))) throw e; }
+    signaler('abonnement-orphelin-resilie (compte supprimé ; aucun remboursement automatique, décision humaine)', evt);
+}
 /** Prend l'événement dans le registre. { nouveau } | { fait } | { occupe }. */
 async function reclamer(evt, maintenant) {
     const ligne = { _id: evt.id, type: evt.type, creeLe: dateDe(evt.created), recuLe: maintenant, etat: 'en-cours', tentatives: 1 };

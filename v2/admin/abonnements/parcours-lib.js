@@ -108,13 +108,13 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
             await abonnerSurHorloge('filleul', { prixId: prix.proMois, essaiJours: 30, parrain: 'parrain' });
             const sF = await jusqua('filleul', s => s.abonnement.statut === 'essai', 'filleul en essai');
             note('parrainage : le filleul a 30 jours d\'essai', proche(sF.abonnement.essai.finLe, t0 + 30 * JOUR, JOUR), sF.abonnement.essai.finLe);
-            const avant = await stripe.subscriptions.retrieve(P.sid, { expand: ['discounts'] });
-            note('parrainage : pas de mois offert au parrain tant que le filleul n\'a rien payé', (avant.discounts || []).length === 0);
+            const avoirs = async () => ((await stripe.customers.listBalanceTransactions(P.customer, { limit: 20 })).data || []).filter(x => x.amount < 0);
+            note('parrainage : pas de mois offert au parrain tant que le filleul n\'a rien payé', (await avoirs()).length === 0);
             await avancer(31);
             await jusqua('filleul', s => s.abonnement.statut === 'actif', 'premier paiement du filleul');
-            let apres = null;
-            for (let i = 0; i < Math.ceil(delaiS / pasS); i++) { apres = await stripe.subscriptions.retrieve(P.sid, { expand: ['discounts'] }); if ((apres.discounts || []).length) break; await attendre(pasS * 1000); }
-            note('parrainage : le premier paiement du filleul pose UN mois offert (coupon 100 %, une fois) sur l\'abonnement du parrain', (apres.discounts || []).length === 1);
+            let apres = [];
+            for (let i = 0; i < Math.ceil(delaiS / pasS); i++) { apres = await avoirs(); if (apres.length) break; await attendre(pasS * 1000); }
+            note('parrainage : le premier paiement du filleul pose UN mois offert : un AVOIR de 499 centimes (le prix mensuel Pro) au solde du client du parrain', apres.length === 1 && apres[0].amount === -499, apres.map(x => x.amount).join(','));
             await avancer(31);
             const f = await stripe.invoices.list({ subscription: P.sid, limit: 5 });
             const derniere = [...f.data].sort((a, b) => (b.created || 0) - (a.created || 0))[0];

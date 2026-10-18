@@ -140,6 +140,22 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     for (let i = 0; i < 12; i++) codes.push((await checkout(brute, { offre: 'fondateurs', periode: 'mois', code: `ESSAI-${i}` })).statut);
     H.v('essais de code : 10 par heure et par compte, puis 429', [codes.slice(0, 10).every(s => s === 422), codes.slice(10)], [true, [429, 429]]);
 
+    // ── 6 bis. I1 (CE2) : deux Checkout Fondateurs, le second en panne — la réservation de la PREMIÈRE session reste, et le payeur a son Pro ──
+    await db.col('abo_places').deleteMany({});
+    const ce2 = await A.compteConnecte();
+    const ce2a = await checkout(ce2, { offre: 'fondateurs', periode: 'mois', code: A.CODE_FONDATEURS });
+    const sessionA = [...faux.E.sessions.values()].filter(s => s.client_reference_id === String(ce2.id)).at(-1);
+    faux.panneSur = 'checkout.sessions.create';
+    const ce2b = await checkout(ce2, { offre: 'fondateurs', periode: 'an', code: A.CODE_FONDATEURS });
+    faux.panneSur = null;
+    const placeCe2 = await db.col('abo_places').findOne({ compteId: ce2.id });
+    H.v('une SECONDE session en panne ne rend PAS la réservation de la première (elle n\'a pas créé cette réservation) : place toujours réservée, attachée à la première session, qui est toujours ouverte', [ce2a.statut, ce2b.statut, placeCe2 && placeCe2.etat, placeCe2 && placeCe2.sessionId === sessionA.id, sessionA.status], [200, 503, 'reservee', true, 'open']);
+    const finCe2 = Math.floor(Date.now() / 1000) + 14 * 86400;
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_ce2', client: (await A.lireCompte(ce2.id)).stripeClient, statut: 'trialing', prixId: A.PRIX.fondMois, fin: finCe2, trialEnd: finCe2, metadata: { compteId: String(ce2.id), offre: 'fondateurs', periode: 'mois' } }), Math.floor(Date.now() / 1000)));
+    const apresCe2 = await A.lireCompte(ce2.id);
+    H.v('   le client paie la première session : il est Pro (offre Fondateurs), sa place l\'attend', [apresCe2.abonnement.actif, apresCe2.abonnement.stripe.offre, (await db.col('abo_places').findOne({ compteId: ce2.id })).etat], [true, 'fondateurs', 'reservee']);
+    await db.col('abo_places').deleteMany({});
+
     // ── 7. PARRAINAGE ──
     const parrain = await A.compteConnecte();
     const st = await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: parrain.cookie } });
@@ -159,6 +175,16 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('un code inconnu : 422 « code-invalide »', [inconnu.statut, inconnu.json.erreur.detail], [422, 'code-invalide']);
     const avecEssai = await A.compteConnecte({ 'abonnement': { actif: false, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: null, stripe: { essaiUtilise: true } } });
     H.v('   un compte qui a déjà eu un essai : pas de parrainage non plus', (await checkout(avecEssai, { offre: 'pro', periode: 'mois', code })).json.erreur.detail, 'parrainage-non-eligible');
+
+    // M1 : réciproque refusé ; un Fondateurs n'est pas parrain
+    const rA = await A.compteConnecte(), rB = await A.compteConnecte();
+    const kA = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: rA.cookie } })).json.parrainage.code, kB = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: rB.cookie } })).json.parrainage.code;
+    const rAB = await checkout(rA, { offre: 'pro', periode: 'mois', code: kB }), rBA = await checkout(rB, { offre: 'pro', periode: 'mois', code: kA });
+    H.v('M1 : A ouvre un Checkout avec le code de B : accepté ; B avec le code de A : REFUSÉ (parrainage réciproque, raison écrite au contrat)', [rAB.statut, rBA.statut, rBA.json.erreur.detail], [200, 422, 'parrainage-non-eligible']);
+    const fonda = await A.compteConnecte({ abonnement: { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 864e5), stripe: { sid: 'sub_fp', statut: 'active', offre: 'fondateurs', periode: 'mois', version: 1 } } });
+    const kF = (await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: fonda.cookie } })).json.parrainage.code;
+    const rFp = await checkout(await A.compteConnecte(), { offre: 'pro', periode: 'mois', code: kF });
+    H.v('   le code d\'un FONDATEURS est refusé (le parrainage est sur Pro seulement)', [rFp.statut, rFp.json.erreur.detail], [422, 'parrainage-non-eligible']);
 
     // ── 8. LE PORTAIL ──
     const sansClient = await A.compteConnecte();
@@ -271,7 +297,32 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('   le mot de passe reste vérifié AVANT : un mauvais mot de passe est 401, jamais l\'état de l\'abonnement', mauvaisMdp.statut, 401);
     const srvEteint = await A.serveur(A.cfgAbo({ V2_ABONNEMENTS: '' }), lotsCompte());
     const horsFlag = await compteMdp({ sid: 'sub_o', statut: 'active', offre: 'pro', periode: 'mois', version: 1 });
-    H.v('   drapeau éteint : la suppression est celle d\'avant (aucun changement de comportement)', [(await sup(horsFlag, srvEteint)).statut, Boolean(await A.lireCompte(horsFlag.id))], [200, false]);
+    const rHF = await sup(horsFlag, srvEteint);
+    H.v('M4 : la garde de suppression vaut AUSSI quand V2_ABONNEMENTS est éteint (un abonnement vivant chez Stripe continuerait de facturer sans compte)', [rHF.statut, rHF.json.erreur.detail, Boolean(await A.lireCompte(horsFlag.id))], [409, 'abonnement-actif', true]);
+    const simple = await compteMdp(null);
+    H.v('   drapeau éteint, aucun abonnement ni client : la suppression est celle d\'avant', [(await sup(simple, srvEteint)).statut, Boolean(await A.lireCompte(simple.id))], [200, false]);
+    // I2 : la suppression expire d'abord TOUTES les sessions ouvertes du client, puis ANONYMISE le client Stripe (adresse e-mail)
+    const dsup = await A.compteConnecte({ motDePasse: await P.hacher(mdp) });
+    await H.appel(srv.url, '/api/abonnement/checkout', { methode: 'POST', corps: { offre: 'pro', periode: 'mois' }, entetes: { ...A.SITE, cookie: dsup.cookie, 'x-forwarded-for': '10.9.0.1' } });
+    const cDsup = await A.lireCompte(dsup.id), ouvertesAvant = (await faux.checkout.sessions.list({ customer: cDsup.stripeClient, status: 'open' })).data.length;
+    await faux.customers.update(cDsup.stripeClient, { name: 'Nom Prénom', phone: '0102030405' });
+    const rDsup = await sup(dsup);
+    const cuApres = faux.E.customers.get(cDsup.stripeClient);
+    H.v('I2 : compte supprimé avec une page de paiement OUVERTE : 200, la session est EXPIRÉE (elle ne peut plus donner un abonnement orphelin)', [ouvertesAvant, rDsup.statut, (await faux.checkout.sessions.list({ customer: cDsup.stripeClient, status: 'open' })).data.length, Boolean(await A.lireCompte(dsup.id))], [1, 200, 0, false]);
+    H.v('M4 : le client Stripe est ANONYMISÉ (adresse e-mail, nom, téléphone, lien avec le compte effacés), pas supprimé : la suppression résilierait sans prorata et perdrait les factures que la comptabilité conserve', [cuApres.email, cuApres.name, cuApres.phone, cuApres.metadata.compteId, faux.E.customers.has(cDsup.stripeClient), faux.E.appels.some(a => a.nom === 'customers.del')], [null, null, null, undefined, true, false]);
+    const horsLigne = await A.compteConnecte({ motDePasse: await P.hacher(mdp), stripeClient: (await faux.customers.create({ email: 'z@exemple.fr' })).id });
+    faux.panneSur = 'checkout.sessions.list';
+    const rPanneSup = await sup(horsLigne);
+    faux.panneSur = null;
+    H.v('   Stripe en panne pendant le nettoyage : la suppression est REFUSÉE (503, à rejouer), le compte et son client intacts', [rPanneSup.statut, rPanneSup.json.erreur.detail, Boolean(await A.lireCompte(horsLigne.id))], [503, 'paiement-indisponible', true]);
+    const abonneStripe = await A.compteConnecte({ motDePasse: await P.hacher(mdp), stripeClient: (await faux.customers.create({ email: 'v@exemple.fr' })).id });
+    await faux.subscriptions.create({ customer: abonneStripe.compte.stripeClient || (await A.lireCompte(abonneStripe.id)).stripeClient, items: [{ price: A.PRIX.proMois }], metadata: {}, default_payment_method: 'pm_card_visa' });
+    H.v('   un abonnement vivant connu de Stripe SEULEMENT (webhook pas encore reçu) : suppression refusée aussi', (await sup(abonneStripe)).json.erreur.detail, 'abonnement-actif');
+    Cl.debrancher();
+    const sansStripe = await A.compteConnecte({ motDePasse: await P.hacher(mdp), stripeClient: 'cus_jamais_configure' });
+    logs.length = 0;
+    H.v('   Stripe pas configuré du tout (jamais d\'accès) : la suppression passe, et DIT que le client n\'est pas anonymisé', [(await sup(sansStripe, srvEteint)).statut, logs.some(l => l.includes('client-stripe-non-anonymise'))], [200, true]);
+    Cl.brancher(faux);
     await srvEteint.fermer(); await srvC.fermer();
 
     // ── 9 quater. LES INDEX : créés partout, exigés seulement quand les abonnements sont allumés ──

@@ -99,11 +99,11 @@ function routesAbonnements(router, cfg) {
                 if (typeof b.code !== 'string' || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);
                 const place = await Fo.reserver(compte._id, abo().fondateurs.places, new Date());
                 if (!place.ok) return conflit(res, 'places-epuisees');
-                reserveePour = place.deja === 'prise' ? null : compte._id;
+                reserveePour = place.deja ? null : compte._id;       // I1 : seule une réservation CRÉÉE par cet appel est rendue si la suite échoue (jamais celle d'une session déjà ouverte)
             } else if (b.code !== undefined) {
                 parrain = await Pa.parrainDe(b.code);
                 if (!parrain) return entree(res, 'code-invalide', 422);
-                if (!Pa.parrainageAdmis(parrain, compte) || !Pa.eligibleFilleul(compte)) return entree(res, 'parrainage-non-eligible', 422);
+                if (!Pa.parrainUtilisable(parrain, compte) || !Pa.eligibleFilleul(compte)) return entree(res, 'parrainage-non-eligible', 422);
             }
             const essai = await essaiPermis(stripe, compte);
             if (parrain && !essai) return entree(res, 'parrainage-non-eligible', 422);
@@ -125,6 +125,8 @@ function routesAbonnements(router, cfg) {
             try { const ouvertes = await stripe.checkout.sessions.list({ customer: client, status: 'open', limit: 20 }); for (const o of (ouvertes && ouvertes.data) || []) if (o.id !== session.id) await stripe.checkout.sessions.expire(o.id).catch(() => { /* déjà expirée ou complétée */ }); }
             catch (e) { console.error(`🔴 [v2 abonnement checkout] sessions ouvertes non expirées (${nomErreur(e)})`); }
             reserveePour = null;
+            if (b.offre === 'fondateurs') await Fo.attacher(compte._id, session.id);          // la réservation est portée par CETTE session : elle n'est rendue que si Stripe dit qu'elle a expiré
+            if (parrain) await col('comptes').updateOne({ _id: compte._id }, { $set: { 'abonnement.stripe.parrainPrevu': parrain._id } });   // M1 : le parrainage annoncé (refuse le réciproque avant tout abonnement)
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, url: session.url });
         } catch (e) {

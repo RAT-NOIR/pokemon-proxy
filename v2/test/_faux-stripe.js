@@ -37,6 +37,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
     function facturer(s, t, raison) {
         const c = E.customers.get(s.customer), prix = prixDe(s.prixId);
         let montant = prix.unit_amount || 0;
+        if ((c.balance || 0) < 0 && montant > 0) { const utilise = Math.min(montant, -c.balance); montant -= utilise; c.balance += utilise; }       // l'avoir du client (solde négatif) réduit la facture, jamais plus qu'elle
         if (s.discounts.length) { const d = s.discounts[0]; const cp = E.coupons.get(d.coupon); if (cp && !d.consomme) { montant = Math.round(montant * (100 - cp.percent_off) / 100); d.consomme = true; } }
         s.discounts = s.discounts.filter(d => !d.consomme);
         const inv = { id: nid('in'), customer: s.customer, sub: s.id, amount_due: montant, amount_paid: 0, status: 'open', raison, essais: 1, t };
@@ -64,8 +65,10 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
     f.customers = {
         async create(p, o) { panne('customers.create'); note('customers.create', p, o); return avecCle(o, () => { const id = nid('cus'); const c = { id, object: 'customer', email: p.email, metadata: p.metadata || {}, test_clock: p.test_clock || null, pm: null }; E.customers.set(id, c); return { ...c }; }, p); },
         async retrieve(id) { const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); return { ...c }; },
+        async createBalanceTransaction(id, p, o) { panne('customers.createBalanceTransaction'); note('customers.createBalanceTransaction', { id, ...p }, o); return avecCle(o, () => { const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); c.balance = (c.balance || 0) + p.amount; (c.transactions = c.transactions || []).push({ id: nid('cbtxn'), object: 'customer_balance_transaction', amount: p.amount, currency: p.currency, description: p.description, metadata: { ...(p.metadata || {}) }, created: horloge(id) }); return { ...c.transactions.at(-1) }; }, { id, ...p }); },
+        async listBalanceTransactions(id, p = {}) { panne('customers.listBalanceTransactions'); note('customers.listBalanceTransactions', { id, ...p }); const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); return { data: [...(c.transactions || [])].reverse().map(x => ({ ...x })), has_more: false }; },
         async search(p) { panne('customers.search'); note('customers.search', p); const m = /metadata\['compteId'\]:'([0-9a-f]+)'/.exec(p.query || ''); return { data: [...E.customers.values()].filter(c => m && c.metadata && c.metadata.compteId === m[1]).map(c => ({ ...c })) }; },
-        async update(id, p) { note('customers.update', p); const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); if (p.invoice_settings && p.invoice_settings.default_payment_method) c.pm = p.invoice_settings.default_payment_method; return { ...c }; },
+        async update(id, p) { note('customers.update', p); const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); if (p.invoice_settings && p.invoice_settings.default_payment_method) c.pm = p.invoice_settings.default_payment_method; for (const k of ['email', 'name', 'phone', 'description']) if (k in p) c[k] = p[k] === '' ? null : p[k]; if ('address' in p) c.address = p.address === '' ? null : p.address; if (p.metadata) c.metadata = Object.fromEntries(Object.entries({ ...c.metadata, ...p.metadata }).filter(([, v]) => v !== '')); return { ...c }; },
         async del(id) { E.customers.delete(id); return { id, deleted: true }; }
     };
     f.paymentMethods = { async attach(pm, p) { note('paymentMethods.attach', { pm, ...p }); const c = E.customers.get(p.customer); if (!c) throw erreur('resource_missing'); c.pm = pm; return { id: pm, customer: p.customer }; } };
@@ -79,7 +82,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
             }, p);
         },
         async retrieve(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); return { ...s }; },
-        async list(p = {}) { return { data: [...E.sessions.values()].filter(s => (!p.customer || s.customer === p.customer) && (!p.status || s.status === p.status)).map(s => ({ ...s })) }; },
+        async list(p = {}) { panne('checkout.sessions.list'); return { data: [...E.sessions.values()].filter(s => (!p.customer || s.customer === p.customer) && (!p.status || s.status === p.status)).map(s => ({ ...s })) }; },
         async expire(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); s.status = 'expired'; return { ...s }; },
         async listLineItems(id) { const s = E.sessions.get(id); if (!s) throw erreur('resource_missing'); return { data: (s.line_items || []).map(l => ({ price: { id: l.price }, quantity: l.quantity })) }; }
     } };
@@ -114,6 +117,12 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
             return o;
         },
         async list(p = {}) { note('subscriptions.list', p); return { data: [...E.subs.values()].filter(s => (!p.customer || s.customer === p.customer) && (p.status === 'all' || !p.status ? true : s.status === p.status)).map(vue) }; },
+        async cancel(id, p = {}, o) {
+            panne('subscriptions.cancel'); note('subscriptions.cancel', { id, ...p }, o);
+            const s = E.subs.get(id); if (!s) throw erreur('resource_missing');
+            if (s.status !== 'canceled') { s.status = 'canceled'; s.endedAt = horloge(s.customer); emit('customer.subscription.deleted', vue(s), s.endedAt); }
+            return vue(s);
+        },
         async update(id, p, o) {
             panne('subscriptions.update'); note('subscriptions.update', { id, ...p }, o);
             return avecCle(o, () => {

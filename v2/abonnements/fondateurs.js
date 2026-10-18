@@ -56,10 +56,19 @@ async function confirmer(compteId, max, maintenant = new Date()) {
     if (existante && existante.etat === 'prise') return { ok: true, deja: true };
     const n = await reserver(compteId, max, maintenant);
     if (n.ok) { await col(COL).updateOne({ compteId, etat: 'reservee' }, { $set: { etat: 'prise', priseLe: maintenant }, $unset: { expireLe: '' } }); return { ok: true, repris: true }; }
-    // plus de place : dépassement ASSUMÉ et tracé (place hors plage), le client est honoré
-    try { await col(COL).insertOne({ _id: `depassement:${String(compteId)}`, compteId, etat: 'prise', depassement: true, priseLe: maintenant }); } catch (e) { if (!dupliquee(e)) throw e; }
+    await marquerDepassement(compteId, maintenant);
     return { ok: true, depassement: true };
 }
+/** Plus de place disponible pour un client qui PAIE : le DÉPASSEMENT est assumé et tracé (un document hors plage, compté), jamais un client privé de son Pro. */
+async function marquerDepassement(compteId, maintenant = new Date()) {
+    try { await col(COL).insertOne({ _id: `depassement:${String(compteId)}`, compteId, etat: 'prise', depassement: true, priseLe: maintenant }); } catch (e) { if (!dupliquee(e)) throw e; }
+}
+/** La session Checkout qui porte la réservation (la dernière ouverte par ce compte). Une réservation n'est rendue que pour SA session. */
+async function attacher(compteId, sessionId) { return col(COL).updateOne({ compteId, etat: 'reservee' }, { $set: { sessionId } }); }
+/** Stripe dit que CETTE session a expiré : la réservation qu'elle porte est rendue — et seulement elle (une autre session du compte, ou une place prise, ne bouge pas). */
+async function libererSession(compteId, sessionId) { return col(COL).deleteOne({ compteId, etat: 'reservee', sessionId }); }
+/** L'abonnement Fondateurs est en ESSAI : la réservation (qui compte contre le plafond) vit jusqu'à `expireLe` (fin de l'essai + marge), pas l'heure de la session. */
+async function prolonger(compteId, expireLe) { return col(COL).updateOne({ compteId, etat: 'reservee', expireLe: { $lt: expireLe } }, { $set: { expireLe } }); }
 /** Libère une RÉSERVATION (jamais une place prise) : session abandonnée. */
 async function liberer(compteId) { return col(COL).deleteOne({ compteId, etat: 'reservee' }); }
-module.exports = { reserver, confirmer, liberer, occupees, COL };
+module.exports = { reserver, confirmer, liberer, libererSession, attacher, prolonger, marquerDepassement, occupees, COL };

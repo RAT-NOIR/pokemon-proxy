@@ -17,7 +17,7 @@
 //     que celui déjà appliqué pour CET abonnement est ignoré (égalité : le statut le plus avancé gagne). L'écriture est une comparaison-et-échange sur `rev`.
 const { ObjectId } = require('mongoose').Types;
 const { col } = require('../db');
-const { DEPUIS_LOOKUP, GRACE_IMPAYE_JOURS, MARGE_RENOUVELLEMENT_HEURES } = require('./offres');
+const { DEPUIS_LOOKUP, GRACE_IMPAYE_JOURS, MARGE_RENOUVELLEMENT_HEURES, MARGE_ESSAI_PLACE_JOURS } = require('./offres');
 const Fo = require('./fondateurs');
 
 const STATUTS = Object.freeze(['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']);
@@ -132,8 +132,11 @@ async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, comp
         const effectif = { ...s };
         if (!effectif.offre) signaux.push('prix-inconnu');
         if (effectif.offre === 'fondateurs' && VIVANTS.includes(effectif.statut) && !(await aUnePlace(compte._id, evtDate))) {
-            effectif.offre = entree && entree.offre === 'pro' ? 'pro' : null;
-            signaux.push('fondateurs-sans-place');
+            if (entree && entree.offre === 'pro') { effectif.offre = 'pro'; signaux.push('fondateurs-sans-place'); }       // un abonné Pro qui passe au prix Fondateurs reste Pro, aucune place prise
+            else {                                                                                                         // un NOUVEL abonnement : on ne prive jamais un client qui paie (ou paiera)
+                const repris = await Fo.reserver(compte._id, cfgAbo.fondateurs.places, evtDate);                           // une place LIBRE est reprise ; sinon le dépassement est compté et signalé
+                if (!repris.ok) { await Fo.marquerDepassement(compte._id, evtDate); signaux.push('fondateurs-depassement'); } else signaux.push('fondateurs-place-reprise');
+            }
         }
         const v = valeurs(effectif, evtDate, entree);
         const nouvelle = { statut: s.statut, version, offre: effectif.offre, periode: s.periode, creeSub: s.creeSub, jusquAu: v.jusquAu, actif: v.actif, finPeriode: dateDe(s.finPeriode), finEssai: dateDe(s.finEssai), resiliation: s.resiliation };
@@ -150,8 +153,13 @@ async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, comp
         if (s.parrain && !(st && st.parrain)) pose['abonnement.stripe.parrain'] = s.parrain;
         const res = await col('comptes').updateOne({ _id: compte._id, 'abonnement.stripe.rev': st && Number.isInteger(st.rev) ? st.rev : null }, { $set: pose });
         if (res.matchedCount === 1) {
-            // une place Fondateurs se CONFIRME dès que l'abonnement Fondateurs (reconnu) vit
-            if (effectif.offre === 'fondateurs' && VIVANTS.includes(s.statut)) await Fo.confirmer(compte._id, cfgAbo.fondateurs.places, evtDate);
+            // La place Fondateurs : réservée pendant l'ESSAI (elle compte contre le plafond, jusqu'à la fin de l'essai + marge), CONFIRMÉE à la première facture payée (webhook invoice.paid, ou ici un
+            // abonnement déjà `active` : il a payé), RENDUE si l'abonnement meurt avant tout paiement (une place prise ne se rend jamais).
+            if (effectif.offre === 'fondateurs' || (entree && entree.offre === 'fondateurs')) {
+                if (s.statut === 'active' && effectif.offre === 'fondateurs') await Fo.confirmer(compte._id, cfgAbo.fondateurs.places, evtDate);
+                else if (s.statut === 'trialing' && effectif.offre === 'fondateurs' && s.finEssai !== null) await Fo.prolonger(compte._id, new Date(s.finEssai * 1000 + MARGE_ESSAI_PLACE_JOURS * 86400e3));
+                else if (TERMINAUX.includes(s.statut) || s.statut === 'unpaid') await Fo.liberer(compte._id);
+            }
             return { etat: 'applique', compte: await col('comptes').findOne({ _id: compte._id }), signaux, parrain: s.parrain, offre: effectif.offre, statut: s.statut };
         }
         compte = await col('comptes').findOne({ _id: compte._id });                 // quelqu'un a écrit entre-temps : on relit et on recommence

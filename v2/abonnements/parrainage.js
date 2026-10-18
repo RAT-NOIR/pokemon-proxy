@@ -57,4 +57,12 @@ function parrainageAdmis(parrain, filleul) {
     if (parrain.stripeClient && filleul.stripeClient && parrain.stripeClient === filleul.stripeClient) return false;
     return true;
 }
-module.exports = { codeDe, parrainDe, eligibleFilleul, parrainageAdmis, normaliserCodeParrainage, FORME_CODE };
+/** Le code de ce parrain peut-il être utilisé par ce filleul AU CHECKOUT ? Jamais un Fondateurs (le parrainage est sur Pro seulement), jamais un parrainage réciproque (le parrain déjà parrainé — ou sur le point de l'être — par ce filleul). */
+function parrainUtilisable(parrain, filleul) {
+    if (!parrainageAdmis(parrain, filleul)) return false;
+    const sp = parrain.abonnement && parrain.abonnement.stripe;
+    if (sp && sp.offre === 'fondateurs') return false;
+    if (sp && ((sp.parrain && String(sp.parrain) === String(filleul._id)) || (sp.parrainPrevu && String(sp.parrainPrevu) === String(filleul._id)))) return false;
+    return true;
+}
+module.exports = { parrainUtilisable, codeDe, parrainDe, eligibleFilleul, parrainageAdmis, normaliserCodeParrainage, FORME_CODE };

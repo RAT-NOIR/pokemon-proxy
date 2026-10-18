@@ -206,12 +206,87 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const cc = await A.lireCompte(c.id);
     H.v('Pro qui passe au prix Fondateurs sans place : il reste sur ce que sa place permet (offre pro), AUCUNE place prise, signalé', [cc.abonnement.stripe.offre, cc.abonnement.actif, await db.col('abo_places').countDocuments({ compteId: c.id }), logs.some(l => l.includes('fondateurs-sans-place'))], ['pro', true, 0, true]);
     const c2 = await A.compteConnecte(); const metaC2 = { compteId: String(c2.id), offre: 'fondateurs', periode: 'mois' };
-    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c2', client: 'cus_c2', statut: 'active', prixId: A.PRIX.fondMois, fin, metadata: metaC2 }), T));
-    H.v('   un NOUVEL abonnement au prix Fondateurs sans place : aucun droit, aucune place', [(await A.lireCompte(c2.id)).abonnement.actif, await db.col('abo_places').countDocuments({ compteId: c2.id })], [false, 0]);
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c2', client: 'cus_c2', statut: 'trialing', prixId: A.PRIX.fondMois, fin, trialEnd: fin, metadata: metaC2 }), T));
+    const c2c = await A.lireCompte(c2.id);
+    H.v('   un NOUVEL abonnement au prix Fondateurs dont la réservation a disparu : on ne prive JAMAIS un payeur — Pro quand même, une place LIBRE est reprise (réservée jusqu\'au premier paiement)', [c2c.abonnement.actif, c2c.abonnement.stripe.offre, (await db.col('abo_places').findOne({ compteId: c2.id })).etat], [true, 'fondateurs', 'reservee']);
     const c3 = await A.compteConnecte(); const metaC3 = { compteId: String(c3.id), offre: 'fondateurs', periode: 'mois' };
     await A.placePrise(c3.id);
     await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_c3', client: 'cus_c3', statut: 'active', prixId: A.PRIX.fondMois, fin, metadata: metaC3 }), T));
     H.v('   avec une place prise par ce compte : l\'abonnement Fondateurs est reconnu', [(await A.lireCompte(c3.id)).abonnement.actif, (await A.lireCompte(c3.id)).abonnement.stripe.offre], [true, 'fondateurs']);
+
+    // ── 12 quinquies. I1 : plus de place libre → Pro quand même, DÉPASSEMENT compté et signalé, le statut ne montre rien d'anormal ──
+    logs.length = 0;
+    const cq4 = await A.compteConnecte(); const metaCq4 = { compteId: String(cq4.id), offre: 'fondateurs', periode: 'mois' };
+    H.v('avant : toutes les places (3) sont occupées', await db.col('abo_places').countDocuments({}), 3);
+    await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_cq4', client: 'cus_cq4', statut: 'trialing', prixId: A.PRIX.fondMois, fin, trialEnd: fin, metadata: metaCq4 }), T));
+    const ccq4 = await A.lireCompte(cq4.id);
+    H.v('un abonnement Fondateurs sans place disponible : le compte est Pro quand même, le DÉPASSEMENT est compté et signalé', [ccq4.abonnement.actif, ccq4.abonnement.stripe.offre, await db.col('abo_places').countDocuments({ depassement: true }), logs.some(l => l.includes('fondateurs-depassement'))], [true, 'fondateurs', 1, true]);
+
+    // ── 12 sexies. I3 : la place se CONFIRME à la première facture PAYÉE ; pendant l'essai elle est réservée et compte contre le plafond ; elle est RENDUE si l'essai s'arrête ──
+    const Fo = require('../abonnements/fondateurs');
+    await db.col('abo_places').deleteMany({}); const NP = 3;
+    const essais = [];
+    for (let i = 0; i < NP; i++) {
+        const x = await A.compteConnecte(); await Fo.reserver(x.id, NP, new Date());
+        const meta = { compteId: String(x.id), offre: 'fondateurs', periode: 'mois' };
+        await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: 'sub_t' + i, client: 'cus_t' + i, statut: 'trialing', prixId: A.PRIX.fondMois, fin: T + 14 * JOUR, trialEnd: T + 14 * JOUR, metadata: meta }), T));
+        essais.push({ x, meta, i });
+    }
+    const pl = await db.col('abo_places').find({}).toArray();
+    H.v('trois essais Fondateurs : les 3 places sont RÉSERVÉES (aucune « prise »), leur échéance dépasse la fin de l\'essai (la réservation de la session, d\'une heure, ne les rendrait pas)', [pl.map(p => p.etat), pl.every(p => p.expireLe.getTime() > (T + 14 * JOUR) * 1000)], [['reservee', 'reservee', 'reservee'], true]);
+    H.v('   le plafond est tenu : un quatrième acheteur est refusé', (await Fo.reserver((await A.compteConnecte()).id, NP, new Date())).ok, false);
+    const zeroE = A.evenement('invoice.paid', { id: 'in_t0', object: 'invoice', customer: 'cus_t0', amount_paid: 0, parent: { subscription_details: { subscription: 'sub_t0' } } }, T + 1);
+    await A.livrer(srv.url, zeroE);
+    H.v('   une facture de 0 € (ouverture de l\'essai) ne confirme rien', (await db.col('abo_places').findOne({ compteId: essais[0].x.id })).etat, 'reservee');
+    await A.livrer(srv.url, A.evenement('invoice.paid', { id: 'in_t0b', object: 'invoice', customer: 'cus_t0', amount_paid: 299, parent: { subscription_details: { subscription: 'sub_t0' } } }, T + 14 * JOUR));
+    H.v('   la PREMIÈRE facture payée (299 > 0) confirme la place : « prise » (définitive)', [(await db.col('abo_places').findOne({ compteId: essais[0].x.id })).etat, (await db.col('abo_places').findOne({ compteId: essais[0].x.id })).expireLe], ['prise', undefined]);
+    await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: 'sub_t1', client: 'cus_t1', statut: 'canceled', prixId: A.PRIX.fondMois, fin: T + 14 * JOUR, endedAt: T + 3 * JOUR, metadata: essais[1].meta }), T + 3 * JOUR));
+    H.v('   un essai RÉSILIÉ avant tout paiement rend sa place', await db.col('abo_places').countDocuments({ compteId: essais[1].x.id }), 0);
+    await A.livrer(srv.url, A.evenement('customer.subscription.updated', A.sub({ id: 'sub_t2', client: 'cus_t2', statut: 'incomplete_expired', prixId: A.PRIX.fondMois, fin: T + 14 * JOUR, metadata: essais[2].meta }), T + 15 * JOUR));
+    H.v('   un essai qui finit sans paiement (incomplete_expired) rend la sienne aussi ; la place payée, elle, reste', [await db.col('abo_places').countDocuments({ compteId: essais[2].x.id }), await db.col('abo_places').countDocuments({ etat: 'prise' })], [0, 1]);
+    // « 100 essais sans paiement n'épuisent pas les places pour toujours » : 3 places, 6 vagues d'essais qui s'arrêtent
+    for (let v = 0; v < 6; v++) {
+        const vague = [];
+        for (let i = 0; i < NP - 1; i++) { const x = await A.compteConnecte(); const r = await Fo.reserver(x.id, NP, new Date()); vague.push([x, r.ok]); }
+        const ok = vague.every(([, r]) => r);
+        for (const [x] of vague) { const meta = { compteId: String(x.id), offre: 'fondateurs', periode: 'mois' }; const sid = 'sub_v' + v + String(x.id).slice(-6);
+            await A.livrer(srv.url, A.evenement('customer.subscription.created', A.sub({ id: sid, client: 'cus_' + sid, statut: 'trialing', prixId: A.PRIX.fondMois, fin: T + 14 * JOUR, trialEnd: T + 14 * JOUR, metadata: meta }), T));
+            await A.livrer(srv.url, A.evenement('customer.subscription.deleted', A.sub({ id: sid, client: 'cus_' + sid, statut: 'canceled', prixId: A.PRIX.fondMois, fin: T + 14 * JOUR, endedAt: T + 20, metadata: meta }), T + 20)); }
+        if (!ok) { H.v('vague ' + v + ' : les places sont de nouveau disponibles', ok, true); break; }
+    }
+    H.v('   6 vagues de 2 essais abandonnés sur 3 places (dont 1 payée) : aucune n\'a épuisé les places', await db.col('abo_places').countDocuments({}), 1);
+
+    // ── 12 septies. I1 : une réservation n'est rendue que pour SA session (checkout.session.expired) ──
+    await db.col('abo_places').deleteMany({});
+    const ex = await A.compteConnecte(); await Fo.reserver(ex.id, 3, new Date()); await Fo.attacher(ex.id, 'cs_test_A');
+    const expiree = (id, ref) => A.evenement('checkout.session.expired', { id, object: 'checkout.session', mode: 'subscription', client_reference_id: String(ref) }, T + 5);
+    H.v('la session d\'un AUTRE compte, ou une AUTRE session du même compte, expirée : la réservation reste', [(await A.livrer(srv.url, expiree('cs_test_B', ex.id))).statut, (await db.col('abo_places').findOne({ compteId: ex.id })).etat], [200, 'reservee']);
+    await Fo.attacher(ex.id, 'cs_test_C');
+    await A.livrer(srv.url, expiree('cs_test_A', ex.id));
+    H.v('   la première session expire alors que la RÉSERVATION est passée à la seconde (nouvelle session ouverte) : elle reste', (await db.col('abo_places').findOne({ compteId: ex.id })).sessionId, 'cs_test_C');
+    await A.livrer(srv.url, expiree('cs_test_C', ex.id));
+    H.v('   la session qui porte la réservation expire (Stripe le dit) : la place est RENDUE', await db.col('abo_places').countDocuments({ compteId: ex.id }), 0);
+    const pris = await A.compteConnecte(); await A.placePrise(pris.id);
+    await A.livrer(srv.url, expiree('cs_test_D', pris.id));
+    H.v('   une place déjà PRISE ne se rend jamais', (await db.col('abo_places').findOne({ compteId: pris.id })).etat, 'prise');
+
+    // ── 12 octies. I2 : un abonnement pour un compte inconnu (supprimé) est RÉSILIÉ chez Stripe tout de suite, sans prorata ni remboursement, et signalé ──
+    logs.length = 0;
+    const idSupprime = '0123456789abcdef0123abcd';
+    const cuO = await faux.customers.create({ email: 'orphelin@exemple.fr', metadata: { compteId: idSupprime } });
+    const sO = await faux.subscriptions.create({ customer: cuO.id, items: [{ price: A.PRIX.proMois }], trial_period_days: 14, metadata: { compteId: idSupprime, offre: 'pro', periode: 'mois' } });
+    const evO = faux.E.evenements.filter(e => e.type === 'customer.subscription.created').at(-1);
+    const rO = await A.livrer(srv.url, evO);
+    const cancels = faux.E.appels.filter(a => a.nom === 'subscriptions.cancel' && a.params.id === sO.id);
+    H.v('abonnement d\'un compte supprimé : 200, RÉSILIÉ chez Stripe, sans prorata ni facture finale, aucun remboursement, signalé', [rO.statut, faux.sub(sO.id).status, cancels.length, cancels[0] && cancels[0].params.prorate, cancels[0] && cancels[0].params.invoice_now, faux.E.appels.some(a => /refund|credit_note/i.test(a.nom)), logs.some(l => l.includes('abonnement-orphelin-resilie'))], [200, 'canceled', 1, false, false, false, true]);
+    const sO2 = await faux.subscriptions.create({ customer: cuO.id, items: [{ price: A.PRIX.proMois }], trial_period_days: 14, default_payment_method: 'pm_card_visa', metadata: {} });
+    await A.livrer(srv.url, faux.E.evenements.filter(e => e.type === 'customer.subscription.created').at(-1));
+    H.v('   un abonnement inconnu SANS compteId (pas le nôtre) n\'est jamais résilié', [faux.sub(sO2.id).status !== 'canceled', faux.E.appels.filter(a => a.nom === 'subscriptions.cancel' && a.params.id === sO2.id).length], [true, 0]);
+    const sO3 = await faux.subscriptions.create({ customer: cuO.id, items: [{ price: A.PRIX.proMois }], trial_period_days: 14, default_payment_method: 'pm_card_visa', metadata: { compteId: idSupprime } });
+    faux.panneSur = 'subscriptions.cancel';
+    const rO3 = await A.livrer(srv.url, faux.E.evenements.filter(e => e.type === 'customer.subscription.created').at(-1));
+    faux.panneSur = null;
+    H.v('   Stripe en panne à la résiliation : 500, rejouable (jamais un orphelin laissé en silence)', [rO3.statut, faux.sub(sO3.id).status !== 'canceled'], [500, true]);
 
     // ── 13. LA ROUTE EST ÉTEINTE sans le drapeau, et le webhook refuse quand la configuration est incomplète ──
     const cfgEteint = A.cfgAbo({ V2_ABONNEMENTS: '' });
@@ -219,8 +294,9 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     H.v('V2_ABONNEMENTS absent : la route de webhook n\'existe pas (404)', (await A.livrer(srvOff.url, e0)).statut, 404);
     const cfgIncomplet = A.cfgAbo({ V2_STRIPE_WEBHOOK_SECRET: '' });
     H.v('   configuration incomplète : pret false, secret et clé nommés par leurs variables seulement', [cfgIncomplet.abonnements.pret, cfgIncomplet.abonnements.manquantes], [false, ['V2_STRIPE_WEBHOOK_SECRET']]);
+    const nInvoicesAvant = await reg().countDocuments({ type: 'invoice.paid' });
     const srvInc = await A.serveur(cfgIncomplet);
-    H.v('   le webhook d\'une configuration incomplète répond 503 (Stripe réessaiera), sans rien écrire', [(await A.livrer(srvInc.url, A.evenement('invoice.paid', { id: 'in_z', customer: 'cus_u', amount_paid: 1 }, T))).statut, await reg().countDocuments({ type: 'invoice.paid' })], [503, 1]);
+    H.v('   le webhook d\'une configuration incomplète répond 503 (Stripe réessaiera), sans rien écrire', [(await A.livrer(srvInc.url, A.evenement('invoice.paid', { id: 'in_z', customer: 'cus_u', amount_paid: 1 }, T))).statut, await reg().countDocuments({ type: 'invoice.paid' }) - nInvoicesAvant], [503, 0]);
     await srvOff.fermer(); await srvInc.fermer(); await srv.fermer();
     H.v('dans tous les journaux du banc : aucune valeur de clé ni de secret', logs.some(l => l.includes('sk_test_BANC') || l.includes('whsec_')), false);
     Cl.debrancher(); console.error = errOrig;

@@ -3022,7 +3022,7 @@
             }
           },
           "422": {
-            "description": "ENTREE : `code-invalide`, `parrainage-non-eligible`.",
+            "description": "ENTREE : `code-invalide`, `parrainage-non-eligible` (soi-même, client non neuf, parrain Fondateurs, parrainage réciproque).",
             "content": {
               "application/json": {
                 "schema": {
