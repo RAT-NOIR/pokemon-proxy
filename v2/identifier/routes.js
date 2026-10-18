@@ -475,7 +475,7 @@ function traiterIdentifier(cfg, deps = {}) {
             catch (e3) { journalErreur('facturation après exception', e3); facturation = { debite: rendu || admin ? 0 : 1, reserve: 0, rembourse: rendu, motif: admin ? 'administrateur' : 'panne', raisonNonRembourse: rendu || admin ? null : 'erreur' }; }
             const s = await soldeSur(), o = await offreP();
             await fermer();                                // le scan est rendu (ou dit non rendu) : le résultat est produit
-            return repondreErreur(res, 'SERVEUR', undefined, { facturation: PS.avecPoche(facturation, credit ? credit.poche : null), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
+            return repondreErreur(res, 'SERVEUR', undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
         }
         // 7. le solde, relu APRÈS les mouvements
         const solde = await soldeSur(), offre = await offreP();
