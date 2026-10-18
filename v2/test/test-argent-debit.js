@@ -20,10 +20,10 @@ const cnt = async (p, jour) => { const d = await db.col('quota_jour').findOne({ 
     H.v('3 analyses (poche « jour ») puis QUOTA', rs.map(r => r.ok ? r.credit.poche : r.code), ['jour', 'jour', 'jour', 'QUOTA']);
     H.v('compteur du jour à 3, jamais 4 ; les essais en base (3) ne bougent plus', [await cnt(pi, JOUR), (await lire(pi)).essais], [3, 3]);
     // 2. un compte vérifié : 10 par jour, quels que soient ses anciens soldes (jamais débités)
-    const pc = await compte({ solde: { accueil: 2, achete: 1 }, abonnement: { actif: true, quotaMensuel: 1, moisCle: '2026-10', restant: 1, jusquAu: new Date('2026-09-01') } });   // abonnement ÉCHU : gratuit
+    const pc = await compte({ solde: { accueil: 2, achete: 0 }, abonnement: { actif: true, quotaMensuel: 1, moisCle: '2026-10', restant: 1, jusquAu: new Date('2026-09-01') } });   // abonnement ÉCHU : gratuit
     const ordre = []; for (let i = 0; i < 12; i++) { const r = await Lg.debiter(pc, { cleIdempotence: `o${i}`, maintenant: t }, cfg); ordre.push(r.ok ? r.credit.poche : r.code); }
-    H.v('compte gratuit : 10 fois « jour » puis QUOTA, QUOTA (les soldes accueil 2 / achete 1 ne sont jamais touchés)', ordre, [...Array(10).fill('jour'), 'QUOTA', 'QUOTA']);
-    H.v('   anciens soldes intacts', (await lire(pc)).solde, { accueil: 2, achete: 1 });
+    H.v('compte gratuit : 10 fois « jour » puis QUOTA, QUOTA (accueil 2 jamais touché ; achete 0 : la poche achete a son banc, test-achete-avant-jour.js)', ordre, [...Array(10).fill('jour'), 'QUOTA', 'QUOTA']);
+    H.v('   anciens soldes intacts', (await lire(pc)).solde, { accueil: 2, achete: 0 });
     // 3. compte NON vérifié : jamais de quota ; l'erreur est VERIFICATION, pas QUOTA
     const pn = await compte({ verifie: false });
     H.v('non vérifié => VERIFICATION', (await Lg.debiter(pn, { cleIdempotence: 'nv', maintenant: t }, cfg)).code, 'VERIFICATION');

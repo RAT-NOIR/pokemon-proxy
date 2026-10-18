@@ -23,8 +23,14 @@ async function incrementerJour(porteurCle, jour, now) {
     try { return await col('quota_jour').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
     catch (e) { if (e.code !== 11000) throw e; return col('quota_jour').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
 }
-// Seule la poche `jour` se DÉBITE. Les anciennes (essai, accueil, hebdo, abonnement, achete) ne le sont plus : leurs soldes restent en base, lisibles, intacts.
+// Deux poches se DÉBITENT : `achete` (les analyses payées avec la 1.0.5, prise atomique `>= 1`, jamais sous 0) puis `jour` (le quota du jour). Les autres anciennes (essai, accueil, hebdo, abonnement) ne le sont plus :
+// leurs soldes restent en base, lisibles, intacts. Une analyse payée sur `achete` ne touche NI le compteur du jour NI `offre.restant`.
 async function essayerPoche(poche, p, cfg, now) {
+    if (poche === 'achete') {
+        const a = P.acheteDe(p); if (!a) return null;
+        const pris = await col(a.collection).findOneAndUpdate({ ...a.filtre, [a.champ]: { $gte: 1 } }, { $inc: { [a.champ]: -1 } });   // lire-puis-écrire serait une course : la condition et le décrément sont UNE écriture
+        return pris ? { poche } : null;
+    }
     if (poche !== 'jour') return null;   // poche inconnue ou ancienne : on n'invente rien
     // la limite se lit EN BASE à chaque débit (offre.etatDe) : l'instantané du porteur n'est jamais la preuve de son offre
     const e = await Of.etatDe(p, cfg, now);
@@ -115,14 +121,15 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
                 try {
                     // MOYENS-B2a tour 2 (I-2, N-7) : la compensation porte l'IDENTITÉ du débit (`mv._id`, posée avant l'écriture) sur la poche, dans la même écriture que le crédit. Si l'écriture d'origine arrive TARD (limite M2), le débit
                     // tardif a le même `_id` : tout chemin qui voudrait le rendre reçoit « poche-deja-compensee » (le crédit de CE débit existe), jamais un second crédit. Plus de trace séparée, plus d'horodatage à comparer.
-                    const r = await rendrePoche(porteur, credit, cfg, maintenant, mv._id);
+                    // (ACHETE-AVANT-JOUR) par `rendreUnite` : si l'installation a été LIÉE entre le débit et cette compensation, l'unité revient au porteur ACTUEL de la poche (le compte), pas à une poche que plus rien ne débite
+                    const r = await rendreUnite(porteur, credit, cfg, maintenant, mv._id);
                     if (!r.rendu) console.error(`🔴 [v2 debiter] poche ${credit.poche} NON rendue après l'échec du mouvement (${r.raison}) — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`);
                 } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${codeErr(e2)} — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`); }
             }
             if (ecrit !== true) throw e;
             return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };
         }
-        await rendrePoche(porteur, credit, cfg, maintenant);                   // une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
+        await rendreUnite(porteur, credit, cfg, maintenant);                   // (porteur ACTUEL, voir plus haut) une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
         const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
         return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };
     }

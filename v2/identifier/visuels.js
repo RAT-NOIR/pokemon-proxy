@@ -9,6 +9,7 @@ const db = require('../db');
 const etat = require('../chargeur/etat');
 const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
+const { langueDeTirage } = require('./langue-decisive');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
 const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
@@ -152,6 +153,7 @@ function creerVisuels(opts = {}) {
             return Object.freeze({
                 idProduct: d.idProduct, numero, total: chaineOuNull(d.total), rarete,
                 variante: VARIANTES.includes(d.variante) ? d.variante : null,                          // V1/V2 n'a pas de sémantique (CLAUDE.md §7)
+                langue: langueDeTirage(typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(d.idProduct) : null),   // CONTRAT 7a : la langue du TIRAGE de CETTE impression (jp -> ja, zh-hans, zh-hant, ko) ; intl, id, th, idth : null, jamais devinée
                 set: Object.freeze({ nom: texte(d.setNom) }), lien, prixGuide: prixGuide(guides.get(d.idProduct))
             });
         });

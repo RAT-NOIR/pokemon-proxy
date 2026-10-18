@@ -109,12 +109,14 @@ const LIEN_IMP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Se
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
-v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
+v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', langue: null, set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, moyenne30: 1000, date: '2026-10-05' } });
 v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
 v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);
 v('impression variante hors liste -> null', avecImp.impressions[1].variante, null);
-v('impression : clés', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'set', 'lien', 'prixGuide']);
+v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'langue', 'set', 'lien', 'prixGuide']);
+v('impression : langue en code fermé conservée (ja, zh-hans)', P({ impressions: [imp({ langue: 'ja' }), imp({ idProduct: 900003, langue: 'zh-hans' })] }).impressions.map(i => i.langue), ['ja', 'zh-hans']);
+v('impression : langue hors liste (JP, EN, texte libre, nombre) -> null, jamais devinée', P({ impressions: [imp({ langue: 'JP' }), imp({ idProduct: 900003, langue: 'EN' }), imp({ idProduct: 900005, langue: 'japonais' }), imp({ idProduct: 900006, langue: 7 })] }).impressions.map(i => i.langue), [null, null, null, null]);
 vrai('impressions gelées', Object.isFrozen(avecImp.impressions) && Object.isFrozen(avecImp.impressions[0]));
 
 process.exitCode = 0;

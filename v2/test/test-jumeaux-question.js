@@ -203,7 +203,7 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
     const s1 = await inst(); const r1b = await poster(s1.jeton), j1 = r1b.json || {}, c0 = j1.analyse && j1.analyse.cartes[0];
     H.v('(d) la chaîne affirme A, qui a 4 jumeaux (5 produits) : 200, a-trancher, UNE question de départage à 3 — A, puis les deux numéros lus exacts (C, E), jamais B (autre numéro) ni D (inconnu)',
         [r1b.statut, c0 && c0.statut, c0 && c0.candidats.map(x => x.idProduct).sort((a, b) => a - b), c0 && c0.carte], [200, 'a-trancher', [A, C, E], null]);
-    H.v('(d) facturation d\'une question ordinaire : RÉSERVÉE { debite:0, reserve:1, rembourse:false, motif:question }, solde 3 -> 2', [j1.facturation, j1.offre && j1.offre.restant], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+    H.v('(d) facturation d\'une question ordinaire : RÉSERVÉE { debite:0, reserve:1, rembourse:false, motif:question }, solde 3 -> 2', [j1.facturation, j1.offre && j1.offre.restant], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }, 2]);
     H.v('   grand livre : un débit « reserve », aucun remboursement', await livre(s1), { essais: 2, net: -1, mouvements: 1, ouverts: ['reserve'], remboursements: 0 });
     const q1 = await raw('questions_v2').findOne({ _id: `${j1.scanId}:0` });
     H.v('   la question est écrite en attente avec les 3 choix du contrat', [q1 && q1.etat, q1 && q1.choix.map(x => x.idProduct).sort((a, b) => a - b)], ['en-attente', [A, C, E]]);

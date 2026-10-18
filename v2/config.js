@@ -1,6 +1,7 @@
 'use strict';
-// OFFRE-QUOTA (2026-10-13) : plus de poches de crédits à débiter. La SEULE poche débitable est `jour` (un quota quotidien par porteur, selon son offre).
-// Les anciennes (essai, accueil, hebdo, abonnement, achete) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
+// OFFRE-QUOTA (2026-10-13) : plus de poches de crédits à vendre. La seule poche CONFIGURABLE est `jour` (un quota quotidien par porteur, selon son offre).
+// ACHETE-AVANT-JOUR (2026-10-17) : la poche `achete` (analyses payées avec la 1.0.5) se débite AVANT `jour`, ordre FIXÉ dans le code (poches.ordreDe) ; V2_ORDRE_POCHES ne peut pas la nommer.
+// Les autres anciennes (essai, accueil, hebdo, abonnement) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
@@ -41,6 +42,7 @@ function lireConfig(env = process.env) {
     signalerVariablesSansObjet(env);
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
     for (const p of ordre) {
+        if (p === 'achete') throw new Error('configuration invalide : la poche "achete" n\'est pas configurable : elle est débitée AVANT "jour", dans le code (ACHETE-AVANT-JOUR) ; V2_ORDRE_POCHES ne nomme que "jour"');
         if (POCHES_ANCIENNES.includes(p)) throw new Error(`configuration invalide : la poche "${p}" n'est plus débitée (quota quotidien : seule "jour" l'est)`);
         if (!POCHES.includes(p)) throw new Error(`configuration invalide : poche inconnue "${p}"`);
     }

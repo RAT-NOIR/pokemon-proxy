@@ -108,7 +108,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     H.v('1. un candidat sans jumeau : 200, a-trancher, UN candidat, question `confirmation` à un choix `a`',
         [s1.r.statut, s1.j.analyse.statut, s1.c0.statut, s1.c0.candidats.map(c => c.idProduct), s1.c0.question.code, s1.c0.question.choix.map(c => [c.id, c.idProduct])], [200, 'a-trancher', 'a-trancher', [ID_A], 'confirmation', [['a', ID_A]]]);
     H.v('   facturation RÉSERVÉE { debite:0, reserve:1, rembourse:false, motif:question }, solde.essai 3 -> 2',
-        [s1.j.facturation, s1.j.offre.restant], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 2]);
+        [s1.j.facturation, s1.j.offre.restant], [{ debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }, 2]);
     const q1 = await ligneQ(s1.scanId);
     H.v('   la question est écrite en attente, avec les choix du contrat (choixPour), le crédit réservé', [q1 && q1.etat, q1 && q1.choix, q1 && q1.lot], ['en-attente', choixPour([ID_A]), false]);
     H.v('   grand livre après le scan : essai 2, net -1, un débit « reserve », aucun remboursement', await livre(s1), { essais: 2, net: -1, mouvements: 1, ouverts: ['reserve'], remboursements: 0 });
@@ -179,7 +179,7 @@ const ligneQ = async scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` 
     {
         const A = s1, R = await scan('refus-egalite-seul');
         H.v('8. refus egalite-parfaite à 1 candidat : a-trancher, 1 candidat, confirmation, facturation de l\'ambiguë { debite:0, reserve:1 }',
-            [R.c0.statut, R.c0.candidats.map(c => c.idProduct), R.c0.question.code, R.j.facturation], [ 'a-trancher', [ID_A], 'confirmation', { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }]);
+            [R.c0.statut, R.c0.candidats.map(c => c.idProduct), R.c0.question.code, R.j.facturation], [ 'a-trancher', [ID_A], 'confirmation', { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }]);
         H.v('   grand livre après le scan : identique à celui de l\'ambiguë (essai 2, net -1, un débit réservé)', await livre(R), { essais: 2, net: -1, mouvements: 1, ouverts: ['reserve'], remboursements: 0 });
         H.vrai('   (le grand livre de l\'ambiguë, lu avant sa réponse, avait cette même forme : voir 1.)', A !== null);
         const rep = await repondre(sv.url, R.jeton, { scanId: R.scanId, choix: 'aucune' });
