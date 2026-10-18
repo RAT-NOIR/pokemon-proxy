@@ -132,7 +132,7 @@ t('le plan par set compte cibles / ajoutées / déjà / sans substitut / WCD', (
 const fauxClient = cartes => {
     const corresp = (e, cond) => Object.entries(cond).every(([k, v]) => v && v.$in ? v.$in.some(x => (e[k] ?? null) === x) : (e[k] ?? null) === v);
     const ok = (c, filter) => c._id === filter._id && (!filter.images || (filter.images.$not ? !(c.images || []).some(e => corresp(e, filter.images.$not.$elemMatch)) : false));
-    return { appliquer(ops) {
+    return { executer(ops) {
         let touches = 0;
         for (const o of ops) {
             assert.strictEqual(o.coll, 'cartes');
@@ -150,13 +150,13 @@ t('écritures : un $push gardé par $not/$elemMatch ; rejouées deux fois, la se
     assert.strictEqual(ops.length, 3);
     for (const o of ops) { assert(o.update.$push && o.update.$push.images && !o.update.$set); assert(o.filter.images.$not.$elemMatch.set); }
     const cx = fauxClient(new Map([...e.cartes].map(([k, c]) => [k, JSON.parse(JSON.stringify(c))])));
-    assert.strictEqual(cx.appliquer(ops), 3); assert.strictEqual(cx.appliquer(ops), 0);
+    assert.strictEqual(cx.executer(ops), 3); assert.strictEqual(cx.executer(ops), 0);
 });
 t('écritures : sur le faux client, une entrée du set posée entre-temps bloque le push (garde réelle)', () => {
     const e = etat([ligne(10, PP)]);
     const ops = E.operationsVersMongo(plan(e));
     const c = JSON.parse(JSON.stringify(carte())); c.images.push({ set: PP, source: 'autre', cleR2: 'v.webp', numero: '5' });
-    assert.strictEqual(fauxClient(new Map([[1, c]])).appliquer(ops), 0);
+    assert.strictEqual(fauxClient(new Map([[1, c]])).executer(ops), 0);
     assert.strictEqual(c.images.length, 2);
 });
 t('retrait exact : le manifeste appliqué puis retiré rend l\'état d\'origine ; un vrai scan posé depuis reste ; une entrée modifiée aussi', () => {
@@ -176,9 +176,9 @@ t('retrait exact en écritures : $pull borné par set + cleR2 + source + lot ; n
     assert.strictEqual(pull.source, 'emprunt'); assert.strictEqual(pull.lot, 'emprunt-2026-10'); assert.strictEqual(pull.set, PP); assert.strictEqual(pull.cleR2, 'tcgdex/Destined-Rivals/034-1.webp'); assert.strictEqual(pull.imageEmprunteeTirage, true);
     const c = JSON.parse(JSON.stringify(carte()));
     const cx = fauxClient(new Map([[1, c]]));
-    cx.appliquer(E.operationsVersMongo(p)); assert.strictEqual(c.images.length, 2);
+    cx.executer(E.operationsVersMongo(p)); assert.strictEqual(c.images.length, 2);
     c.images.push({ set: PP, source: 'emprunt', lot: 'autre-lot', cleR2: 'tcgdex/Destined-Rivals/034-1.webp', numero: null, imageEmprunteeTirage: true });
-    assert.strictEqual(cx.appliquer(ops), 1);
+    assert.strictEqual(cx.executer(ops), 1);
     assert.strictEqual(c.images.length, 2); assert(c.images.some(x => x.lot === 'autre-lot'));
 });
 t('retrait en mémoire : une entrée de même set et même clé mais d\'une autre source ou d\'un autre lot reste', () => {
