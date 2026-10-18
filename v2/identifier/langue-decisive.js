@@ -17,9 +17,12 @@ const { idsAffirmes } = require('./jumeaux');
 //   R2 ÉTEINTE  : 0 faux avec deux seuils, +1 sûr seule, +3 avec R4 — mais la photo et les vecteurs ne sont pas encore fournis à l'adaptateur par la route (ctx.scoresImage), et la calibration tient sur 153 lignes ;
 //                 allumée sans score elle ne ferait rien. Elle s'allume ici le jour où la route l'alimente (un lot à part).
 //   R2 bis ÉTEINTE : 0 faux mais aucun sûr de plus que R1 + R2 (elle réduit une question de 3 à 2) ; « Crush » contredit aussi la vraie carte du cas fondateur ; la garde dit « l'attaque est une contradiction, pas un veto ».
-//   R5 ALLUMÉE  (tour de correction 1) : un candidat d'un set SANS numérotation est retiré quand le numéro et le total sont lus et qu'un autre candidat hors liste a un total concordant ; liste FIGÉE ci-dessous.
+//   R5 ÉTEINTE  (2026-10-18, décision du testeur : « elle passe seulement à 0 faux, sur les deux bancs ») : un candidat d'un set SANS numérotation est retiré quand le numéro et le total sont lus et qu'un
+//                 autre candidat hors liste a un total concordant ; liste FIGÉE ci-dessous. Sur le banc de RÉGLAGE (309 cartes à vérité, code fusionné 42882427) : 0 faux, 0 sûr de plus, 2 questions
+//                 resserrées, la bonne carte gardée dans les deux. Le banc de CONTRÔLE (étiquetées depuis le 17/10 au soir, hors réglage) est VIDE : elle n'y est pas mesurable, donc elle ne passe pas.
+//                 Elle se rallume ici quand une mesure sur le banc de contrôle rend 0 faux.
 //   Tour de correction 1 : la résolution d'un candidat SEUL applique TOUTES les conditions du critère A (`critere-a.conditions`) et la garde des jumeaux du candidat ; R4 se juge sur le CATALOGUE ENTIER (code × numéro).
-const REGLES = Object.freeze({ R1: true, R2: false, R2BIS: false, R4: true, R5: true });
+const REGLES = Object.freeze({ R1: true, R2: false, R2BIS: false, R4: true, R5: false });
 // R5 — LES SETS SANS NUMÉROTATION, liste FIGÉE (jamais calculée à l'exécution), en idExpansion Cardmarket, 9 sets. Preuve : expansions dont 100 % des produits (hors cartes-code) sont sans numéro au catalogue (numero ET numeroUrl
 // nuls) ET dont l'archive Bulbapedia ne porte AUCUN numéro jp (0 page manquante, témoin contrôlé sur ADV1, PCG1, PCG2 : VERIF-R5-SETS-SANS-NUMERO.md). Un set non prouvé SORT de la liste ; un set nouveau n'y entre jamais seul.
 // EXCLUS (décision du coordinateur, 2026-10-18) : DP2 (4317), DP4d (4308), DP4m (4309), HRDK (4303) et EP08 (4306). Les cartes Pokémon des sets DP impriment en bas à droite un « DPBP#nnn » (Remoraid DPBP#280, Magmortar
