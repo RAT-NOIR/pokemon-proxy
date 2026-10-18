@@ -97,8 +97,8 @@ async function executer({ cartesDb, regle, ecrire = false, attendu, sauvegarde, 
     const k = plan.comptes;
     log(`\n════ TAIWAN numeroFiche : ${k.lignes} lignes · ${k.pose} à numéroter ${JSON.stringify(k.parListe)} par ${JSON.stringify(k.parVoie)} · laissées ${k.laissees} ${JSON.stringify(k.parMotif)} ════`);
     for (const l of plan.laissees) log(`      ✗ ${l.idProduct} « ${l.slug} » : ${l.motif}${l.numeroFiche ? ` (${l.numeroFiche})` : ''}`);
-    const deduits = plan.pose.filter(p => p.voie !== 'slug');
-    log(`   liste DÉDUITE (slug sans code de liste) : ${deduits.length} → ${deduits.map(p => p.numeroFiche).join(', ')}`);
+    const nonLues = plan.laissees.filter(l => l.motif === 'liste-non-lue-dans-le-slug');
+    log(`   liste NON LUE dans le slug (jamais déduite, jamais écrite — règle « les cas douteux sont sautés ») : ${nonLues.length}`);
     const listes = {}; for (const p of plan.pose) (listes[p.numeroFiche] ||= []).push(p.idProduct);
     log(`   numéros distincts : ${Object.keys(listes).length} pour ${plan.pose.length} lignes (les doublons sont des produits d'une MÊME carte)`);
     const garde = gardeSimulee(lignes, plan.pose);

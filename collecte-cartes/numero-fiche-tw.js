@@ -49,6 +49,9 @@ function planDesLignes(lignes) {
         if (l.numeroFiche !== null && l.numeroFiche !== undefined && l.numeroFiche !== '') { laissees.push({ ...base, motif: 'deja-numerotee', numeroFiche: l.numeroFiche }); continue; }
         const r = lireSlug(l.slug);
         if (r.motif) { laissees.push({ ...base, motif: r.motif }); continue; }
+        // RULING DU COORDINATEUR (2026-10-18, règle du testeur « les cas douteux sont sautés ») : une liste DÉDUITE n'est jamais écrite. « PKMTCH231 » peut être la numérotation interne de Cardmarket pour
+        // l'expansion, pas le numéro de la promo SV-P : poser « SV-P231 » serait écrire une hypothèse en base. Aucune option ne les réintègre.
+        if (r.voie !== 'slug') { laissees.push({ ...base, motif: 'liste-non-lue-dans-le-slug', numeroFiche: `${r.liste}${r.numero}` }); continue; }
         candidates.push({ ...base, liste: r.liste, numeroFiche: `${r.liste}${r.numero}`, voie: r.voie });
     }
     // une (liste, numéro) pour deux CARTES : la clé ne désigne rien — les deux sont laissées

@@ -85,13 +85,14 @@ const regleMutante = { ...regleSimple, produitsDeLaFiche: prods => prods.filter(
     });
     await essayer('plan reel', () => {
         const p = N.planDesLignes(REELLES.map(t => ligne(t)));
-        verifier('les 45 lignes réelles : 44 à numéroter (40 SV-P, 4 S-P), 1 laissée (slug sans numéro)', [p.comptes.pose, p.comptes.parListe, p.comptes.laissees, p.comptes.parMotif], [44, { 'SV-P': 40, 'S-P': 4 }, 1, { 'slug-sans-numero': 1 }]);
-        verifier('par voie : 33 lus dans le slug, 11 à liste déduite', p.comptes.parVoie, { slug: 33, 'slug+liste-deduite': 11 });
-        verifier('le 45e est Terapagos & Friends (775962), laissé', p.laissees.map(l => [l.idProduct, l.motif]), [[775962, 'slug-sans-numero']]);
+        verifier('les 45 lignes réelles : 33 à numéroter (29 SV-P, 4 S-P), 12 laissées (11 listes non lues + le slug sans numéro)', [p.comptes.pose, p.comptes.parListe, p.comptes.laissees, p.comptes.parMotif], [33, { 'SV-P': 29, 'S-P': 4 }, 12, { 'slug-sans-numero': 1, 'liste-non-lue-dans-le-slug': 11 }]);
+        verifier('par voie : les 33 sont lus dans le slug, aucune liste déduite n\'est écrite', p.comptes.parVoie, { slug: 33 });
+        verifier('le 45e (775962) et les 11 PKMTCH nus sont laissés avec leur raison', [p.laissees.filter(l => l.motif === 'slug-sans-numero').map(l => l.idProduct), p.laissees.filter(l => l.motif === 'liste-non-lue-dans-le-slug').map(l => l.idProduct).sort()], [[775962], [886521, 886522, 886523, 886524, 886525, 886526, 886527, 886528, 886529, 886530, 886531]]);
+        verifier('aucun numeroFiche posé ne vient d\'une liste déduite', p.pose.some(x => /PKMTCH\d{3}$/.test(x.slug)), false);
         const par = id => p.pose.find(x => x.idProduct === id)?.numeroFiche;
         verifier('162, 163, 164 : SV-P et S-P sont SÉPARÉS (six produits, six numéros)', [800111, 800112, 800113, 724652, 724658, 724662].map(par), ['SV-P162', 'SV-P163', 'SV-P164', 'S-P162', 'S-P163', 'S-P164']);
-        verifier('les numéros posés sont tous distincts sauf pour une même carte (44 numéros pour 44 lignes)', new Set(p.pose.map(x => x.numeroFiche)).size, 44);
-        verifier('la preuve nomme le slug et la liste ; celle d\'une liste déduite le dit', [/« Fuecoco-SV-P117 » : liste SV-P, numéro 117/.test(p.pose.find(x => x.idProduct === 775957).preuve), /DÉDUITE/.test(p.pose.find(x => x.idProduct === 886521).preuve), /DÉDUITE/.test(p.pose.find(x => x.idProduct === 775957).preuve)], [true, true, false]);
+        verifier('les numéros posés sont tous distincts sauf pour une même carte (33 numéros pour 33 lignes)', new Set(p.pose.map(x => x.numeroFiche)).size, 33);
+        verifier('la preuve nomme le slug et la liste lue', /« Fuecoco-SV-P117 » : liste SV-P, numéro 117/.test(p.pose.find(x => x.idProduct === 775957).preuve), true);
         verifier('trois produits d\'une MÊME carte (Pikachu 302117) : trois numéros, aucun conflit', p.pose.filter(x => x.carteId === 302117).map(x => x.numeroFiche).sort(), ['SV-P153', 'SV-P169', 'SV-P243']);
     });
     await essayer('plan garde', () => {
@@ -105,29 +106,29 @@ const regleMutante = { ...regleSimple, produitsDeLaFiche: prods => prods.filter(
         const avant = JSON.parse(B.instantane());
         const plan = N.planDesLignes((await B.db.collection('cartes_produits').find({ slugSet: N_SLUG }).toArray()));
         const sim = await P.appliquer(B.db, plan, { ecrire: false });
-        verifier('à blanc : rien n\'est écrit, 44 annoncées', [B.writes.length, sim.lignes], [0, 44]);
+        verifier('à blanc : rien n\'est écrit, 33 annoncées', [B.writes.length, sim.lignes], [0, 33]);
         let m1 = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 45, sauvegarde: f }); } catch (e) { m1 = String(e.message); }
-        verifier('--attendu=45 alors que 44 sont prouvées : refuse AVANT d\'écrire (rien d\'écrit, pas de sauvegarde)', [/45/.test(m1 || ''), B.writes.length, fs.existsSync(f)], [true, 0, false]);
+        verifier('--attendu=45 alors que 33 sont prouvées : refuse AVANT d\'écrire (rien d\'écrit, pas de sauvegarde)', [/45/.test(m1 || ''), B.writes.length, fs.existsSync(f)], [true, 0, false]);
         let m2 = null; try { await P.appliquer(B.db, plan, { ecrire: true, sauvegarde: f }); } catch (e) { m2 = String(e.message); }
-        let m3 = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 44 }); } catch (e) { m3 = String(e.message); }
+        let m3 = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 33 }); } catch (e) { m3 = String(e.message); }
         verifier('--ecrire sans --attendu, ou sans sauvegarde : refuse (et dit laquelle manque)', [/attendu/.test(m2 || ''), /sauvegarde/.test(m3 || ''), B.writes.length], [true, true, 0]);
-        const r = await P.appliquer(B.db, plan, { ecrire: true, attendu: 44, sauvegarde: f });
-        verifier('écriture : 44 lignes, relu 44 posées / 0 nulles', [r.lignes, r.relu], [44, { poses: 44, nuls: 0 }]);
+        const r = await P.appliquer(B.db, plan, { ecrire: true, attendu: 33, sauvegarde: f });
+        verifier('écriture : 33 lignes, relu 33 posées / 0 nulles', [r.lignes, r.relu], [33, { poses: 33, nuls: 0 }]);
         const l = id => B.col('cartes_produits').get(id);
         verifier('écriture : numeroFiche et preuve posés ; le 45e et tous les autres champs inchangés', [l('-800111|800111').numeroFiche, typeof l('-800111|800111').numeroFichePreuve, l('315731|775962').numeroFiche, l('315731|775962').numeroFichePreuve, l('-800111|800111').slug, l('-800111|800111').preuve], ['SV-P162', 'string', null, undefined, 'Giratina-VSTAR-PKMTCHSV-P-162', 'x']);
-        verifier('écriture : seul cartes_produits est écrit, une fois par ligne, sous un filtre conditionnel (numeroFiche null)', [[...new Set(B.writes.map(w => w.n))], B.writes.length, B.writes.every(w => w.f.numeroFiche === null && w.f.slugSet === N_SLUG)], [['cartes_produits'], 44, true]);
+        verifier('écriture : seul cartes_produits est écrit, une fois par ligne, sous un filtre conditionnel (numeroFiche null)', [[...new Set(B.writes.map(w => w.n))], B.writes.length, B.writes.every(w => w.f.numeroFiche === null && w.f.slugSet === N_SLUG)], [['cartes_produits'], 33, true]);
         const sauve = JSON.parse(fs.readFileSync(f, 'utf8'));
-        verifier('sauvegarde : 44 lignes, valeur d\'avant null', [sauve.lignes.length, sauve.lignes.every(x => x.numeroFiche === null)], [44, true]);
+        verifier('sauvegarde : 33 lignes, valeur d\'avant null', [sauve.lignes.length, sauve.lignes.every(x => x.numeroFiche === null)], [33, true]);
         const nw = B.writes.length;
         const plan2 = N.planDesLignes(await B.db.collection('cartes_produits').find({ slugSet: N_SLUG }).toArray());
-        verifier('idempotence : rejoué, le plan ne voit plus rien à poser (44 déjà numérotées)', [plan2.pose.length, plan2.comptes.parMotif['deja-numerotee'], B.writes.length - nw], [0, 44, 0]);
+        verifier('idempotence : rejoué, le plan ne voit plus rien à poser (33 déjà numérotées)', [plan2.pose.length, plan2.comptes.parMotif['deja-numerotee'], B.writes.length - nw], [0, 33, 0]);
         let m4 = null; try { await P.restaurer(B.db, f, { ecrire: true, attendu: 43 }); } catch (e) { m4 = String(e.message); }
         verifier('restauration : --attendu faux refuse avant d\'écrire', [/43/.test(m4 || ''), B.writes.length - nw], [true, 0]);
-        const rr = await P.restaurer(B.db, f, { ecrire: true, attendu: 44 });
-        verifier('restauration : 44 lignes remises à null, preuve retirée, relu', [rr.lignes, rr.relu], [44, { nuls: 44 }]);
+        const rr = await P.restaurer(B.db, f, { ecrire: true, attendu: 33 });
+        verifier('restauration : 33 lignes remises à null, preuve retirée, relu', [rr.lignes, rr.relu], [33, { nuls: 33 }]);
         const trie = x => Array.isArray(x) ? x.map(trie) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k => [k, trie(x[k])])) : x;
         verifier('restauration : le monde est celui d\'avant (mêmes champs, mêmes valeurs)', JSON.stringify(trie(JSON.parse(B.instantane()))) === JSON.stringify(trie(avant)), true);
-        let m5 = null; try { await P.restaurer(B.db, f, { ecrire: true, attendu: 44 }); } catch (e) { m5 = String(e.message); }
+        let m5 = null; try { await P.restaurer(B.db, f, { ecrire: true, attendu: 33 }); } catch (e) { m5 = String(e.message); }
         verifier('restauration rejouée : refuse (déjà restaurée)', /déjà restaurée/.test(m5 || ''), true);
     });
     await essayer('relu', async () => {
@@ -136,22 +137,22 @@ const regleMutante = { ...regleSimple, produitsDeLaFiche: prods => prods.filter(
         const vraie = B.db.collection;
         const db = { collection: n => { const c = vraie(n); return n === 'cartes_produits' ? { ...c, updateOne: async (...a) => { await c.updateOne(a[0], { $set: {} }); return { matchedCount: 1, modifiedCount: 1 }; } } : c; } };
         const plan = N.planDesLignes(await db.collection('cartes_produits').find({ slugSet: N_SLUG }).toArray());
-        const r = await P.appliquer(db, plan, { ecrire: true, attendu: 44, sauvegarde: f });
-        verifier('le compte réel est RELU après l\'écriture : 44 lignes qui n\'ont rien reçu sont vues', r.relu, { poses: 0, nuls: 44 });
+        const r = await P.appliquer(db, plan, { ecrire: true, attendu: 33, sauvegarde: f });
+        verifier('le compte réel est RELU après l\'écriture : 33 lignes qui n\'ont rien reçu sont vues', r.relu, { poses: 0, nuls: 33 });
     });
     await essayer('restauration gardée', async () => {
         const B = monde(); const f = path.join(tmp(), 'r.json');
         const plan = N.planDesLignes(await B.db.collection('cartes_produits').find({ slugSet: N_SLUG }).toArray());
-        await P.appliquer(B.db, plan, { ecrire: true, attendu: 44, sauvegarde: f });
+        await P.appliquer(B.db, plan, { ecrire: true, attendu: 33, sauvegarde: f });
         B.col('cartes_produits').get('-800111|800111').numeroFiche = 'SV-P999';   // quelqu'un a reposé une autre valeur depuis
-        let m = null; try { await P.restaurer(B.db, f, { ecrire: true, attendu: 44 }); } catch (e) { m = String(e.message); }
+        let m = null; try { await P.restaurer(B.db, f, { ecrire: true, attendu: 33 }); } catch (e) { m = String(e.message); }
         verifier('--restaurer n\'écrase pas une valeur reposée entre-temps (condition sur la valeur posée) : elle s\'arrête', [/introuvable ou déjà restaurée/.test(m || ''), B.col('cartes_produits').get('-800111|800111').numeroFiche], [true, 'SV-P999']);
     });
     await essayer('conditionnelle', async () => {
         const B = monde(); const f = path.join(tmp(), 'c.json');
         const plan = N.planDesLignes(await B.db.collection('cartes_produits').find({ slugSet: N_SLUG }).toArray());
         B.col('cartes_produits').get('-800111|800111').numeroFiche = 'SV-P999';   // quelqu'un l'a numérotée entre le plan et l'écriture
-        let m = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 44, sauvegarde: f }); } catch (e) { m = String(e.message); }
+        let m = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 33, sauvegarde: f }); } catch (e) { m = String(e.message); }
         verifier('une ligne déjà numérotée entre le plan et l\'écriture : l\'update conditionnel ne la touche pas et le lot s\'arrête', [/déjà numérotée/.test(m || ''), B.col('cartes_produits').get('-800111|800111').numeroFiche], [true, 'SV-P999']);
     });
     await essayer('executeur', async () => {
@@ -159,21 +160,21 @@ const regleMutante = { ...regleSimple, produitsDeLaFiche: prods => prods.filter(
         const base = { cartesDb: B.db, regle: regleSimple, log: s => sortie.push(s), attenduLignes: 45 };
         const r = await P.executer({ ...base });
         const txt = sortie.join('\n');
-        verifier('essai à blanc de bout en bout : 44 à numéroter, le 45e et sa raison, listes déduites, garde, servi, rien d\'écrit', [B.writes.length, /44 à numéroter/.test(txt), /775962 « Terapagos-Friends-SV-P » : slug-sans-numero/.test(txt), /liste DÉDUITE[^\n]*11/.test(txt), /aucune annonce nécessaire/.test(txt), /perdus 0 · gagnés 0 · fiche changée 0/.test(txt), /essai à blanc/.test(txt)], [0, true, true, true, true, true, true]);
-        verifier('le diff « servi » : 44/44 avant, 44/44 après', [r.servi.servisAvant, r.servi.servisApres, r.servi.touches], [44, 44, 44]);
+        verifier('essai à blanc de bout en bout : 33 à numéroter, le 45e et sa raison, listes déduites, garde, servi, rien d\'écrit', [B.writes.length, /33 à numéroter/.test(txt), /775962 « Terapagos-Friends-SV-P » : slug-sans-numero/.test(txt), /liste NON LUE dans le slug[^\n]*: 11/.test(txt) && (txt.match(/» : liste-non-lue-dans-le-slug/g) || []).length === 11, /aucune annonce nécessaire/.test(txt), /perdus 0 · gagnés 0 · fiche changée 0/.test(txt), /essai à blanc/.test(txt)], [0, true, true, true, true, true, true]);
+        verifier('le diff « servi » : 33/33 avant, 33/33 après', [r.servi.servisAvant, r.servi.servisApres, r.servi.touches], [33, 33, 33]);
         let msg = null; try { await P.executer({ ...base, attenduLignes: 46 }); } catch (e) { msg = String(e.message); }
         verifier('un set qui ne compte pas 45 lignes arrête tout (la mesure n\'est plus celle du 18/10)', [/46/.test(msg || ''), B.writes.length], [true, 0]);
         let msg2 = null; try { await P.executer({ ...base, regle: regleMutante }); } catch (e) { msg2 = String(e.message); }
-        verifier('un diff « servi » qui voit une perte arrête l\'essai : une règle réagissant au numeroFiche → 44 produits perdus', [/44 produit\(s\) perdu\(s\)/.test(msg2 || ''), B.writes.length], [true, 0]);
+        verifier('un diff « servi » qui voit une perte arrête l\'essai : une règle réagissant au numeroFiche → 33 produits perdus', [/33 produit\(s\) perdu\(s\)/.test(msg2 || ''), B.writes.length], [true, 0]);
         sortie.length = 0;
-        await P.executer({ ...base, ecrire: true, attendu: 44, sauvegarde: f });
-        verifier('écriture de bout en bout : relue 44 posées / 0 nulles', /relu : 44 portent leur numeroFiche, 0 sont encore nulles/.test(sortie.join('\n')), true);
+        await P.executer({ ...base, ecrire: true, attendu: 33, sauvegarde: f });
+        verifier('écriture de bout en bout : relue 33 posées / 0 nulles', /relu : 33 portent leur numeroFiche, 0 sont encore nulles/.test(sortie.join('\n')), true);
     });
     await essayer('script', () => {
         const { spawnSync } = require('child_process');
         const lancer = (...args) => spawnSync(process.execPath, [path.join(DIR, 'poser-numero-fiche-tw.js'), ...args], { encoding: 'utf8', env: { ...process.env, MONGODB_URI: '', MONGODB_CARTES_URI: '' } });
         verifier('ligne de commande : argument inconnu → code 2 avant toute connexion', [lancer('--bidon').status, lancer('--ecrire=1').status], [2, 2]);
-        verifier('ligne de commande : --ecrire sans --attendu → 2 ; sans --sauvegarde → 2', [lancer('--ecrire').status, lancer('--ecrire', '--attendu=44').status], [2, 2]);
+        verifier('ligne de commande : --ecrire sans --attendu → 2 ; sans --sauvegarde → 2', [lancer('--ecrire').status, lancer('--ecrire', '--attendu=33').status], [2, 2]);
     });
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
