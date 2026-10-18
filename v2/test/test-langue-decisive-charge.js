@@ -103,6 +103,21 @@ const j0 = () => ({ conclu: false, ids: [] });
         const r = await muet(() => preparer({ corpsListe: [corpsDe(9001, [9001, 9002, 9003])], produits: monde(), jumeaux: j0, catalogue, version }));
         vrai('(8) index en panne : codeNumeroExiste absent (R4 fermée), pas d\'exception', r.codeNumeroExiste === undefined);
     }
+    // (10) l'index n'est PAS PRÊT (construit en arrière-plan) : aucune attente, R4 fermée, la construction est déclenchée
+    {
+        const { catalogue, version } = compteur(() => []);
+        let declenchee = 0, attendu = 0;
+        catalogue.indexSansAttente = () => { declenchee++; return null; };
+        catalogue.indexCodeNumero = async () => { attendu++; return new Promise(() => { }); };      // si le module l'attendait, il ne rendrait jamais
+        const debut = Date.now();
+        const r = await muet(() => preparer({ corpsListe: [corpsDe(9001, [9001, 9002, 9003])], produits: monde(), jumeaux: j0, catalogue, version }));
+        vrai('(10) index pas prêt : rendu sans attente (bien moins d\'une seconde), codeNumeroExiste absent (R4 fermée)', Date.now() - debut < 1000 && r.codeNumeroExiste === undefined);
+        vrai('(10)     la demande de construction part (indexSansAttente), l\'index n\'est jamais attendu (indexCodeNumero non appelé)', declenchee === 1 && attendu === 0);
+        const pret = LD.creerIndexCodeNumero([{ codeSet: 'QQQ', numero: '1' }]);
+        catalogue.indexSansAttente = () => pret;
+        const r2 = await muet(() => preparer({ corpsListe: [corpsDe(9001, [9001, 9002, 9003])], produits: monde(), jumeaux: j0, catalogue, version }));
+        vrai('(10) index prêt : la fonction est fournie, le scan suivant en profite', typeof r2.codeNumeroExiste === 'function' && r2.codeNumeroExiste('QQQ', '1') === true);
+    }
     // (9) le CÂBLAGE : la route ET le lot appellent `preparer` avec la version d'origine (m-1) et passent l'index à l'adaptateur (le banc fonctionnel est test-langue-decisive-cablage.js)
     {
         const fs = require('fs'), path = require('path');
