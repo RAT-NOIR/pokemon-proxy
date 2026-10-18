@@ -50,9 +50,9 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
     // 4. plafond PAR PORTEUR, jour UTC
     const p4 = await compteN(3); const c4 = await prendre(p4, 'a4');
     H.v('un autre compte n\'est pas touché par le plafond atteint de p3', (await Lg.rembourser(p4, c4, 'ia-echec', { scanId: 'a4', maintenant: t }, cfg)).rendu, true);
-    const i4 = await instN(3, { achete: 3 }); const ci4 = await prendre(i4, 'i4');
+    const i4 = await instN(3, { achete: 0 }); const ci4 = await prendre(i4, 'i4');      // ACHETE-AVANT-JOUR : sans achetée, la poche débitée est « jour » (la poche achete a son banc)
     H.v('une installation non liée a son propre compteur', (await Lg.rembourser(i4, ci4, 'ia-echec', { scanId: 'i4', maintenant: t }, cfg)).rendu, true);
-    H.v('   et son quota est revenu (3) ; son solde acheté ancien n\'a jamais bougé (3)', [await restant(i4), (await lire(i4)).achete], [3, 3]);
+    H.v('   et son quota est revenu (3) ; sa poche achetée (0) n\'a jamais bougé', [await restant(i4), (await lire(i4)).achete], [3, 0]);
     const lendemain = new Date('2026-10-09T00:00:01Z');
     const cL = await prendre(p3, 'lendemain', cfg, lendemain);
     H.v('le lendemain (UTC) p3 repart à 0 : une panne est rendue', (await Lg.rembourser(p3, cL, 'ia-echec', { scanId: 'lendemain', maintenant: lendemain }, cfg)).rendu, true);
@@ -117,10 +117,10 @@ const debitAncien = async (base, credit, scanId) => { await db.col('mouvements')
     const av12 = [await db.col('mouvements').countDocuments({}), await restant(p12)];
     H.v('remboursement d\'un scan jamais débité : aucun-debit, rien rendu, rien écrit', [await Lg.rembourser(p12, { poche: 'jour' }, 'ia-echec', { scanId: 'jamais-debite', maintenant: t }, cfg), await db.col('mouvements').countDocuments({}), await restant(p12), await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|jamais-debite' })],
         [{ rendu: false, raisonNonRembourse: 'aucun-debit' }, av12[0], av12[1], 0]);
-    const pi12 = await instN(1, { essais: 1, achete: 4 }); const ci12 = await prendre(pi12, 'menteur');
+    const pi12 = await instN(1, { essais: 1, achete: 0 }); const ci12 = await prendre(pi12, 'menteur');
     H.v('   installation : débit sur « jour »', ci12.poche, 'jour');
     const rm = await Lg.rembourser(pi12, { poche: 'achete' }, 'ia-echec', { scanId: 'menteur', maintenant: t }, cfg);   // l'appelant prétend que c'était un crédit acheté
-    H.v('   l\'appelant présente la poche « achete » : c\'est la poche DÉBITÉE (jour) qui est rendue, les anciens soldes (essais 1, achete 4) ne bougent pas', [rm.rendu, await restant(pi12), (await lire(pi12)).essais, (await lire(pi12)).achete], [true, 1, 1, 4]);
+    H.v('   l\'appelant présente la poche « achete » : c\'est la poche DÉBITÉE (jour) qui est rendue, les soldes (essais 1, achete 0) ne bougent pas', [rm.rendu, await restant(pi12), (await lire(pi12)).essais, (await lire(pi12)).achete], [true, 1, 1, 0]);
     // le plafond ne se contourne pas en rejouant sous un autre scanId : chaque remboursement exige SON débit
     const pj = await compteN(9); const cj = await prendre(pj, 'unique');
     await Lg.rembourser(pj, cj, 'ia-echec', { scanId: 'unique', maintenant: t }, cfg);
