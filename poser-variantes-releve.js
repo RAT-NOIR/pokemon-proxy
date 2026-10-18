@@ -27,29 +27,32 @@ function lireSources(chemins = CHEMINS) {
     const inv = JSON.parse(fs.readFileSync(chemins.inventaire, 'utf8'));
     if (!Array.isArray(inv.produits) || !inv.produits.length) throw new Error(`${chemins.inventaire} : aucune étiquette — un inventaire vide ne prouve rien`);
     const etiquettes = new Map(inv.produits.map(p => [p.idProduct, String(p.ocr ? p.ocr.join(' ') : p.classe ?? '')]));
-    return { fiches, dates, etiquettes, idsReleve: new Set(lignesCsv.map(l => l.idProduct)), denominateurs: { produitsExport: ex.products.length, datesLues: dates.size, vignettesInventaire: inv.vignettes, etiquettesInventaire: inv.produits.length, lignesReleve: lignesCsv.length } };
+    const corrections = R.listeDesCorrections(lignesCsv);
+    return { fiches, corrections, dates, etiquettes, idsReleve: new Set(lignesCsv.map(l => l.idProduct)), denominateurs: { produitsExport: ex.products.length, datesLues: dates.size, vignettesInventaire: inv.vignettes, etiquettesInventaire: inv.produits.length, lignesReleve: lignesCsv.length } };
 }
 
 async function executer({ cartesDb, regle, sources, ecrire = false, attendu, log = console.log, annonceVers = null, rapport = null, sauvegardeVers = null }) {
     log(`DÉNOMINATEURS : ${JSON.stringify(sources.denominateurs)}`);
-    const plan = await R.construirePlan({ cartesDb, fiches: sources.fiches, dates: sources.dates, idsReleve: sources.idsReleve, etiquettes: sources.etiquettes });
-    const k = plan.comptes;
-    log(`\n════ ${k.fiches} FICHES · PROUVÉES ${k.items} · REFUSÉES ${k.refus} ${k.items + k.refus === k.fiches ? '' : '🔴 la somme ne fait pas la liste'}════`);
+    const plan = await R.construirePlan({ cartesDb, fiches: sources.fiches, dates: sources.dates, idsReleve: sources.idsReleve, etiquettes: sources.etiquettes, corrections: sources.corrections });
+    const k = plan.comptes, refusFiches = plan.refus.filter(r => !r.motif.startsWith('correction')).length, refusCorr = plan.refus.length - refusFiches;
+    log(`\n════ ${k.fiches} FICHES · PROUVÉES ${k.items} · REFUSÉES ${refusFiches} ${k.items + refusFiches === k.fiches ? '' : '🔴 la somme ne fait pas la liste'}════ + ${sources.corrections.length} CORRECTIONS · PROUVÉES ${k.corrections} · REFUSÉES ${refusCorr} (attendu à l'écriture : ${k.items + k.corrections})`);
     for (const r of plan.refus) log(`   ✗ ${r.idProduct} [${r.variante}] : ${r.motif}`);
+    for (const c of plan.corrections) log(`   CORRECTION ${c.idProduct} ${c.nom} : « ${c.avant} » → « ${c.vers} »${c.deja ? ' (déjà)' : ''} · entrée(s) d'image NON modifiée(s) : ${JSON.stringify(c.entreesNonModifiees)}`);
     for (const i of plan.items) log(`   ${i.idProduct} ${i.set} ${i.numero} → V2 « ${i.variante} »${i.v2.deja ? ' (déjà)' : ''} · V1 ${i.v1 ? `${i.v1.idProduct} « normale »${i.v1.deja ? ' (déjà)' : ''}` : `non (${i.v1Motif})`} · entrée ${i.entree ? `« ${i.entree.cible} »${i.entree.deja ? ' (déjà)' : ''}` : `non (${i.entreeMotif})`}${i.doc ? ' · document oui' : (i.docMotif ? ` · document non (${i.docMotif})` : '')}${i.reserve ? ` · RÉSERVE : ${i.reserve}` : ''}`);
     const op = R.operations(plan);
-    log(`   À ÉCRIRE : ${op.lignes.length} ligne(s) cartes_produits (V2 ${plan.items.filter(i => !i.v2.deja).length}, V1 ${plan.items.filter(i => i.v1 && !i.v1.deja).length}) · ${op.entrees.length} entrée(s) cartes.images · ${op.docs.length} document(s) images`);
+    log(`   À ÉCRIRE : ${op.lignes.length} ligne(s) cartes_produits (V2 ${plan.items.filter(i => !i.v2.deja).length}, V1 ${plan.items.filter(i => i.v1 && !i.v1.deja).length}, corrections ${plan.corrections.filter(c => !c.deja).length}) · ${op.entrees.length} entrée(s) cartes.images · ${op.docs.length} document(s) images`);
     // diff « servis » et annonce de lot par les fonctions de la garde (pseudo-plan de la forme que lisent ces fonctions)
     const paires = plan.items.map(i => ({ set: i.set, idNormale: i.v1?.idProduct ?? -1, idEtiquete: i.idProduct,
         lignes: [{ _id: i.v2._id, cible: i.variante, preuve: i.v2.preuve }, ...(i.v1 ? [{ _id: i.v1._id, cible: 'normale', preuve: i.v1.preuve }] : [])],
         entree: i.entree ? { carteId: i.entree.carteId, set: i.entree.set, cleR2: i.entree.cleR2, cible: i.entree.cible } : { carteId: -1, set: '', cleR2: '', cible: '' } }));
+    for (const c of plan.corrections) paires.push({ set: c.set, idNormale: -1, idEtiquete: c.idProduct, lignes: [{ _id: c._id, cible: c.vers, preuve: c.preuve }], entree: { carteId: -1, set: '', cleR2: '', cible: '' } });
     const annonces = await T.annonceDePlan(cartesDb, { paires: paires.filter(p => p.entree.carteId !== -1) });
     log(`   ANNONCE DE LOT (fonction de la garde) : ${JSON.stringify(annonces)}`);
     if (annonceVers) { fs.mkdirSync(path.dirname(path.resolve(annonceVers)), { recursive: true }); fs.writeFileSync(annonceVers, JSON.stringify(annonces, null, 1)); log(`   annonce → ${annonceVers}`); }
     const servis = await T.diffServis({ cartesDb, regle, plan: { paires } });
     log(`   SERVIS (règle du site importée) : ${servis.servisAvant}/${servis.produits} produits touchés servis avant, ${servis.servisApres}/${servis.produits} après · perdus ${servis.perdus.length} · fiche changée ${servis.changes.length}`);
     if (servis.perdus.length || servis.changes.length) throw new Error(`le diff « servis » voit ${servis.perdus.length} produit(s) perdu(s) et ${servis.changes.length} fiche(s) changée(s) : rien n'est écrit`);
-    if (rapport) { fs.mkdirSync(path.dirname(path.resolve(rapport)), { recursive: true }); fs.writeFileSync(rapport, JSON.stringify({ le: new Date().toISOString(), denominateurs: sources.denominateurs, comptes: k, annonces, servis, items: plan.items, refus: plan.refus }, null, 1)); log(`   plan complet → ${rapport}`); }
+    if (rapport) { fs.mkdirSync(path.dirname(path.resolve(rapport)), { recursive: true }); fs.writeFileSync(rapport, JSON.stringify({ le: new Date().toISOString(), denominateurs: sources.denominateurs, comptes: k, annonces, servis, items: plan.items, corrections: plan.corrections, refus: plan.refus }, null, 1)); log(`   plan complet → ${rapport}`); }
     const sauvegarder = async obj => {
         const f = sauvegardeVers || `${LOT}sauvegarde-variantes-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
         fs.mkdirSync(path.dirname(path.resolve(f)), { recursive: true });
@@ -61,8 +64,8 @@ async function executer({ cartesDb, regle, sources, ecrire = false, attendu, log
     const r = await R.appliquer(cartesDb, plan, { ecrire, attendu, sauvegarder });
     if (!ecrire) { log(`\n   (essai à blanc — rien n'est écrit${r.dejaFait ? ' ; TOUT EST DÉJÀ ÉCRIT' : ''})`); return { ...r, plan, annonces, servis }; }
     log(`\n   ${r.dejaFait ? '↩️ rien à écrire : tout était déjà écrit (idempotent)' : `✅ écrit : ${r.lignes} ligne(s), ${r.entrees} entrée(s), ${r.documents} document(s)`}`);
-    const apres = await R.construirePlan({ cartesDb, fiches: sources.fiches, dates: sources.dates, idsReleve: sources.idsReleve, etiquettes: sources.etiquettes });
-    const reste = R.operations(apres), bon = apres.items.length === plan.items.length && !reste.lignes.length && !reste.entrees.length && !reste.docs.length;
+    const apres = await R.construirePlan({ cartesDb, fiches: sources.fiches, dates: sources.dates, idsReleve: sources.idsReleve, etiquettes: sources.etiquettes, corrections: sources.corrections });
+    const reste = R.operations(apres), bon = apres.items.length === plan.items.length && apres.corrections.length === plan.corrections.length && !reste.lignes.length && !reste.entrees.length && !reste.docs.length;
     log(`   relu : ${reste.lignes.length} ligne(s), ${reste.entrees.length} entrée(s), ${reste.docs.length} document(s) restent à écrire${bon ? '' : '  🔴 DIFFÉRENT DE CE QUI DEVAIT ÊTRE ÉCRIT'}`);
     if (!bon) process.exitCode = 1;
     return { ...r, plan, annonces, servis };

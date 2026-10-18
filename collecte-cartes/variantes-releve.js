@@ -14,10 +14,10 @@
 // Aucune requête réseau. Idempotent. Le reste est un refus NOMMÉ.
 const { cleNumero } = require('./jointure');
 
-const JETONS = Object.freeze(['staff', 'prerelease', 'league', 'championship', 'toys-r-us', 'gamestop', 'kfc', 'indomilk', 'professor', 'cosmo', 'place-1', 'place-2', 'place-3', 'place-4']);
+const JETONS = Object.freeze(['staff', 'prerelease', 'league', 'championship', 'toys-r-us', 'gamestop', 'kfc', 'indomilk', 'professor', 'cosmo', 'snowflake', 'place-1', 'place-2', 'place-3', 'place-4']);
 const SEULS = Object.freeze(['normale', 'jumbo']);
 const AFFICHAGE = Object.freeze({ staff: 'Staff', prerelease: 'Prerelease', league: 'League', championship: 'Championship', 'toys-r-us': 'Toys "R" Us', gamestop: 'GameStop', kfc: 'KFC', indomilk: 'Indomilk',
-    professor: 'Professor', cosmo: 'Cosmo', 'place-1': '1re place', 'place-2': '2e place', 'place-3': '3e place', 'place-4': '4e place' });
+    professor: 'Professor', cosmo: 'Cosmo', snowflake: 'Snowflake', 'place-1': '1re place', 'place-2': '2e place', 'place-3': '3e place', 'place-4': '4e place' });
 const DATE_RELEVE = '2026-10-18', DATE_OCR = '2026-10-17';
 
 /** Une variante est valide si c'est normale | jumbo, ou 1 à n jetons de la liste fermée, sans doublon, dans l'ordre de la liste. */
@@ -44,7 +44,8 @@ const FICHES = Object.freeze([
     { id: 882908, colonne: 'Prerelease', corrobore: ['prerelease'], ajouts: [] },
     { id: 882889, colonne: 'Prerelease', corrobore: ['prerelease'], ajouts: [] },
     { id: 275575, colonne: 'Prerelease', corrobore: ['prerelease'], ajouts: [] },
-    { id: 882210, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'cosmo', mot: 'cosmos' }], reserve: 'prerelease (titre seul ; la colonne dit Autre et l\'étiquette Cardmarket lue dit « Snowflake Stamp Countdown Calendar Promo »)' },
+    // Kricketot : « Snowflake Stamp » (flocon, calendrier de l'Avent) n'est PAS « cosmo » (le motif holo Cosmos). L'étiquette Cardmarket lue ne dit pas « Cosmos » : snowflake seul ; cosmo viendrait du titre seul.
+    { id: 882210, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'snowflake', mot: 'flocon' }], reserve: 'prerelease et cosmo (titre seul ; la colonne dit Autre et l\'étiquette Cardmarket lue dit « Snowflake Stamp Countdown Calendar Promo », sans Cosmos)' },
     { id: 449653, colonne: 'Championship', corrobore: ['championships'], ajouts: [], reserve: 'staff (titre seul ; la colonne ne le nomme pas, contrairement à Tropius)' },
     { id: 371590, colonne: 'League', corrobore: ['stamp'], ajouts: [] },
     { id: 708073, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'toys-r-us', mot: 'toysrus' }] },
@@ -54,7 +55,7 @@ const FICHES = Object.freeze([
 ]);
 
 /** Ce que dit une étiquette OCR de Cardmarket, par une table fermée de motifs. Une étiquette qui nomme une marque que nos jetons n'ont pas CONTREDIT le relevé : refus. */
-const MOTIFS_ETIQUETTE = Object.freeze([[/game\s*stop/i, 'gamestop'], [/snowflake|cosmo/i, 'cosmo'], [/pre-?rel|rerel/i, 'prerelease'], [/staff/i, 'staff'], [/toys/i, 'toys-r-us']]);
+const MOTIFS_ETIQUETTE = Object.freeze([[/game\s*stop/i, 'gamestop'], [/snowflake/i, 'snowflake'], [/cosmo/i, 'cosmo'], [/pre-?rel|rerel/i, 'prerelease'], [/staff/i, 'staff'], [/toys/i, 'toys-r-us']]);
 const jetonsDeEtiquette = txt => MOTIFS_ETIQUETTE.filter(([re]) => re.test(String(txt ?? ''))).map(([, j]) => j);
 
 /** Le CSV du testeur en lignes {url, idProduct, stamp, propre} ; entête et lignes vérifiées, rien de deviné. */
@@ -92,6 +93,24 @@ function listeDesFiches(lignesCsv, table = FICHES) {
     });
 }
 
+/**
+ * LES CORRECTIONS (feu vert du testeur, DEMANDE-API-VISUELS.md ~22:00 UTC, mot pour mot : « Doublade MEP 067 (877546) et Delphox MEP 074 (884752) : OUI, corrige-les en tamponnés (variante prerelease).
+ * Le relevé de l'utilisateur fait foi. »). LISTE FERMÉE DE 2 ; la condition est que la valeur d'avant soit EXACTEMENT « normale » (la séparation du 17/10 a supposé V1 = normale). Leur V2 (staff) ne bouge pas,
+ * ni leur entrée d'image (`tamponNonRepresente: "Staff"` : le coordinateur regarde le scan d'abord).
+ */
+const CORRECTIONS = Object.freeze([{ id: 877546, de: 'normale', vers: 'prerelease', nom: 'Doublade MEP 067', mot: 'prerelease' }, { id: 884752, de: 'normale', vers: 'prerelease', nom: 'Delphox MEP 074', mot: 'prerelease' }]);
+function listeDesCorrections(lignesCsv, table = CORRECTIONS) {
+    const parId = new Map(lignesCsv.map(l => [l.idProduct, l]));
+    return table.map(t => {
+        const l = parId.get(t.id);
+        if (!l) throw new Error(`correction ${t.id} : absente du relevé du testeur — rien n'est écrit`);
+        if (l.propre !== 'oui' || l.stamp !== 'Autre') throw new Error(`correction ${t.id} : le relevé dit « ${l.stamp} » / propre « ${l.propre} », la table attend « Autre » / « oui » — rien n'est écrit`);
+        if (!String(l.url).toLowerCase().includes(t.mot)) throw new Error(`correction ${t.id} : le mot « ${t.mot} » ne figure pas dans l'URL de l'annonce — rien n'est écrit`);
+        if (!varianteValide(t.vers)) throw new Error(`correction ${t.id} : variante « ${t.vers} » hors vocabulaire`);
+        return { idProduct: t.id, de: t.de, vers: t.vers, nom: t.nom, preuve: `relevé du testeur, ${DATE_RELEVE} (annonce ${l.url}, colonne « ${l.stamp} ») et feu vert du testeur du ${DATE_RELEVE} (« le relevé de l'utilisateur fait foi ») : ce produit est le tamponné ${t.vers} ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale` };
+    });
+}
+
 const preuveV2 = (f, etiquette) => `relevé du testeur, ${DATE_RELEVE} (annonce ${f.url}, colonne « ${f.colonne} »)${etiquette ? ` ; étiquette Cardmarket lue : « ${etiquette} » (OCR ${DATE_OCR})` : ''}`;
 const preuveV1 = (f, v1, dates) => `version sans marque : produit le plus ancien de la fiche (dateAdded ${dates.get(v1)} contre ${dates.get(f.idProduct)} pour l'autre produit, idProduct ${f.idProduct}), aucune étiquette lue sur sa vignette Cardmarket (OCR ${DATE_OCR}), non désigné par le relevé du testeur du ${DATE_RELEVE}`;
 
@@ -101,7 +120,7 @@ const nf = l => cleNumero(l.numeroFiche);
  * LE PLAN. @param {{cartesDb, fiches: object[], dates: Map<number,string>, idsReleve: Set<number>, etiquettes: Map<number,string>}} o
  * @returns {{items: object[], refus: object[], comptes: object}}
  */
-async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes }) {
+async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, corrections = [] }) {
     const ids = fiches.map(f => f.idProduct);
     const l2 = await cartesDb.collection('cartes_produits').find({ idProduct: { $in: ids } }).toArray();
     const carteIds = [...new Set(l2.map(l => l.carteId))];
@@ -167,13 +186,30 @@ async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes }
             else i.doc = { _id: d._id, avant: { partageeTamponNonSepare: d.partageeTamponNonSepare ?? null, tamponNonRepresente: d.tamponNonRepresente ?? null }, deja: d.partageeTamponNonSepare === false && d.tamponNonRepresente === e.cible };
         }
     }
+    // les corrections de liste fermée : « normale » -> variante tamponnée, SEULEMENT si la valeur d'avant est exactement celle de la table
+    const corr = [];
+    if (corrections.length) {
+        const lc = await cartesDb.collection('cartes_produits').find({ idProduct: { $in: corrections.map(c => c.idProduct) } }).toArray();
+        const cc = await cartesDb.collection('cartes').find({ _id: { $in: [...new Set(lc.map(l => l.carteId))] } }, { projection: { images: 1 } }).toArray();
+        for (const c of corrections) {
+            const non = motif => refus.push({ idProduct: c.idProduct, variante: c.vers, motif: `correction : ${motif}` });
+            const ls = lc.filter(l => l.idProduct === c.idProduct);
+            if (ls.length !== 1) { non(ls.length ? 'lignes-multiples' : 'produit-sans-ligne'); continue; }
+            const L = ls[0], deja = L.variante === c.vers && !!L.variantePreuve;
+            if (!deja && L.variante !== c.de) { non(`valeur-d-avant-inattendue : ${L.variante ?? 'absente'}`); continue; }
+            // l'entrée d'image : NON modifiée, seulement listée pour le coordinateur
+            const imgs = (cc.find(x => x._id === L.carteId)?.images || []).filter(e => e && e.set === L.slugSet && e.numero != null && cleNumero(e.numero) === nf(L));
+            corr.push({ idProduct: c.idProduct, nom: c.nom, set: L.slugSet, _id: L._id, avant: L.variante ?? null, avantPreuve: L.variantePreuve ?? null, vers: c.vers, preuve: c.preuve, deja,
+                entreesNonModifiees: imgs.map(e => ({ set: e.set, cleR2: e.cleR2, source: e.source ?? null, tamponNonRepresente: e.tamponNonRepresente ?? null, partageeTamponNonSepare: e.partageeTamponNonSepare ?? null })) });
+        }
+    }
     const parMotif = {}; for (const r of refus) { const k = r.motif.split(' : ')[0]; parMotif[k] = (parMotif[k] || 0) + 1; }
-    const comptes = { fiches: fiches.length, items: items.length, refus: refus.length, parMotif, v2: items.length, v1: items.filter(i => i.v1).length, entrees: items.filter(i => i.entree).length, documents: items.filter(i => i.doc).length,
+    const comptes = { fiches: fiches.length, corrections: corr.length, items: items.length, refus: refus.length, parMotif, v2: items.length, v1: items.filter(i => i.v1).length, entrees: items.filter(i => i.entree).length, documents: items.filter(i => i.doc).length,
         entreesNonEcrites: items.filter(i => !i.entree).length };
-    return { items, refus, comptes };
+    return { items, corrections: corr, refus, comptes };
 }
 
-const verifierAttendu = (attendu, n) => { if (attendu !== undefined && attendu !== null && attendu !== n) throw new Error(`--attendu=${attendu} mais ${n} fiche(s) prouvée(s) : rien n'est écrit`); };
+const verifierAttendu = (attendu, n) => { if (attendu !== undefined && attendu !== null && attendu !== n) throw new Error(`--attendu=${attendu} mais ${n} fiche(s)/correction(s) prouvée(s) : rien n'est écrit`); };
 
 /** Ce que l'écriture change, champ par champ (pour la sauvegarde ET le comptage). */
 function operations(plan) {
@@ -184,6 +220,7 @@ function operations(plan) {
         if (i.entree && !i.entree.deja) entrees.push({ carteId: i.entree.carteId, set: i.entree.set, cleR2: i.entree.cleR2, avant: i.entree.avant, ecrit: { partageeTamponNonSepare: false, tamponNonRepresente: i.entree.cible } });
         if (i.doc && !i.doc.deja) docs.push({ _id: i.doc._id, cleR2: i.entree.cleR2, avant: i.doc.avant, ecrit: { partageeTamponNonSepare: false, tamponNonRepresente: i.entree.cible } });
     }
+    for (const c of plan.corrections || []) if (!c.deja) lignes.push({ _id: c._id, idProduct: c.idProduct, avant: c.avant, avantPreuve: c.avantPreuve, correction: true, ecrit: { variante: c.vers, variantePreuve: c.preuve } });
     return { lignes, entrees, docs };
 }
 
@@ -193,9 +230,9 @@ function operations(plan) {
  */
 async function appliquer(cartesDb, plan, { ecrire = false, attendu, sauvegarder = null } = {}) {
     if (ecrire && !Number.isInteger(attendu)) throw new Error('--ecrire exige --attendu=<N> (le nombre de fiches lu à l\'essai à blanc) : rien n\'est écrit');
-    verifierAttendu(attendu, plan.items.length);
+    verifierAttendu(attendu, plan.items.length + (plan.corrections || []).length);
     const op = operations(plan);
-    const r = { fiches: plan.items.length, lignes: op.lignes.length, entrees: op.entrees.length, documents: op.docs.length, dejaFait: !op.lignes.length && !op.entrees.length && !op.docs.length };
+    const r = { fiches: plan.items.length, corrections: (plan.corrections || []).length, lignes: op.lignes.length, entrees: op.entrees.length, documents: op.docs.length, dejaFait: !op.lignes.length && !op.entrees.length && !op.docs.length };
     if (!ecrire) return r;
     if (typeof sauvegarder !== 'function') throw new Error('l\'écriture exige une sauvegarde préalable (sauvegarder) : rien n\'est écrit');
     if (!r.dejaFait) await sauvegarder({ le: new Date().toISOString(), ...op });
@@ -236,7 +273,7 @@ async function restaurer(cartesDb, sauvegarde, { ecrire = false, attendu } = {})
     };
     for (const l of sauvegarde.lignes) {
         const cur = (await cartesDb.collection('cartes_produits').find({ idProduct: l.idProduct }).toArray()).find(x => x._id === l._id);
-        await maj('cartes_produits', { _id: l._id }, { variante: l.avant, variantePreuve: null }, l.ecrit, cur, undefined, '', `ligne ${l._id}`);
+        await maj('cartes_produits', { _id: l._id }, { variante: l.avant, variantePreuve: l.avantPreuve ?? null }, l.ecrit, cur, undefined, '', `ligne ${l._id}`);
     }
     for (const e of sauvegarde.entrees) {
         const c = (await cartesDb.collection('cartes').find({ _id: { $in: [e.carteId] } }, { projection: { images: 1 } }).toArray())[0];
@@ -250,4 +287,4 @@ async function restaurer(cartesDb, sauvegarde, { ecrire = false, attendu } = {})
     return r;
 }
 
-module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };
+module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, CORRECTIONS, listeDesCorrections, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };

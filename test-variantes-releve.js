@@ -59,14 +59,15 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     });
     await essayer('libellés', () => verifier('libellés', [R.libelleTampon('staff+prerelease'), R.libelleTampon('league+place-2'), R.libelleTampon('toys-r-us+cosmo'), R.libelleTampon('gamestop')], ['Staff + Prerelease', 'League + 2e place', 'Toys "R" Us + Cosmo', 'GameStop']));
     await essayer('libellé d\'une variante non tamponnée', async () => verifier('normale refusée', /pas une variante tamponnée/.test(await leve(() => R.libelleTampon('normale')) || ''), true));
-    await essayer('étiquettes lues', () => verifier('motifs', [R.jetonsDeEtiquette('Stamp rerel lease'), R.jetonsDeEtiquette('GameStop Promo'), R.jetonsDeEtiquette('Snowflake Stamp Countdown Calendar Promo'), R.jetonsDeEtiquette('Staff Version'), R.jetonsDeEtiquette('rien')], [['prerelease'], ['gamestop'], ['cosmo'], ['staff'], []]));
+    await essayer('étiquettes lues', () => verifier('motifs', [R.jetonsDeEtiquette('Stamp rerel lease'), R.jetonsDeEtiquette('GameStop Promo'), R.jetonsDeEtiquette('Snowflake Stamp Countdown Calendar Promo'), R.jetonsDeEtiquette('Staff Version'), R.jetonsDeEtiquette('rien'), R.jetonsDeEtiquette('Cosmos holo'), R.jetonsDeEtiquette('Snowflake Cosmos')], [['prerelease'], ['gamestop'], ['snowflake'], ['staff'], [], ['cosmo'], ['snowflake', 'cosmo']]));
+    await essayer('snowflake après cosmo', () => verifier('ordre de la liste fermée', [R.JETONS.indexOf('snowflake') - R.JETONS.indexOf('cosmo'), R.varianteValide('cosmo+snowflake'), R.varianteValide('snowflake+cosmo'), R.libelleTampon('snowflake')], [1, true, false, 'Snowflake']));
 
     // ── la table des 13 face au CSV ──
     const CSV_URL = f => `https://v/${f.id}-${[...f.corrobore, ...f.ajouts.map(a => a.mot)].join('-')}`;
     const lignesCsv = (mod = x => x) => R.FICHES.map(f => mod({ url: CSV_URL(f), idProduct: f.id, stamp: f.colonne, propre: 'oui' }));
     await essayer('table : 13 fiches, variantes attendues', () => {
         const l = R.listeDesFiches(lignesCsv());
-        verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'cosmo', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-2']);
+        verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-2']);
         verifier('toutes valides', l.every(f => R.varianteValide(f.variante)), true);
         verifier('les réserves sont nommées', l.filter(f => f.reserve).map(f => f.idProduct), [882210, 449653]);
     });
@@ -78,6 +79,41 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     await essayer('CSV', () => {
         const l = R.lireCsv('annonce_vinted;idProduct;stamp;fiche_cardmarket_propre\n"https://a/1";12;"Staff + Prerelease";oui\n');
         verifier('lecture', l, [{ url: 'https://a/1', idProduct: 12, stamp: 'Staff + Prerelease', propre: 'oui' }]);
+    });
+
+    // ── les corrections de la liste fermée (Doublade 877546, Delphox 884752) ──
+    const CSV_C = [{ url: 'https://v/doublade-mep-067-prerelease', idProduct: 877546, stamp: 'Autre', propre: 'oui' }, { url: 'https://v/delphox-prerelease-promo', idProduct: 884752, stamp: 'Autre', propre: 'oui' }];
+    await essayer('corrections : liste fermée de 2', async () => {
+        const c = R.listeDesCorrections(CSV_C);
+        verifier('deux, normale -> prerelease, preuve datée', [c.map(x => [x.idProduct, x.de, x.vers]), /feu vert du testeur du 2026-10-18/.test(c[0].preuve)], [[[877546, 'normale', 'prerelease'], [884752, 'normale', 'prerelease']], true]);
+        verifier('une colonne différente refuse', /attend « Autre »/.test(await leve(() => R.listeDesCorrections([{ ...CSV_C[0], stamp: 'Staff' }, CSV_C[1]])) || ''), true);
+        verifier('un mot absent refuse', /ne figure pas dans l'URL/.test(await leve(() => R.listeDesCorrections([{ ...CSV_C[0], url: 'https://v/x' }, CSV_C[1]])) || ''), true);
+        verifier('une ligne absente refuse', /absente du relevé/.test(await leve(() => R.listeDesCorrections([CSV_C[0]])) || ''), true);
+    });
+    const monC = (o = {}) => ({ produits: [LP(877546, 3, 'MEP', '067', { variante: 'normale', variantePreuve: 'ancienne preuve V1 = normale', ...(o.l1 || {}) }), LP(879312, 3, 'MEP', '067', { variante: 'staff', variantePreuve: 'p2' })],
+        cartes: [{ _id: 3, images: [ENTREE('MEP', '067', 'kc', { tamponNonRepresente: 'Staff', partageeTamponNonSepare: false })] }], images: [{ _id: 'dc', cleR2: 'kc', carteId: 3, set: 'MEP', tamponNonRepresente: 'Staff', partageeTamponNonSepare: false }] });
+    const planC = (w, corrections) => R.construirePlan({ cartesDb: w.db, fiches: [], dates: DATES, idsReleve: new Set(), etiquettes: new Map(), corrections });
+    await essayer('corrections : plan, écriture, entrée NON touchée, restauration exacte', async () => {
+        const cor = R.listeDesCorrections(CSV_C).slice(0, 1), w = fausseBase(monC()), avant = w.instantane();
+        const p = await planC(w, cor);
+        verifier('une correction prouvée, V2 hors plan, entrée listée sans modification', [p.corrections.length, p.corrections[0].avant, p.corrections[0].entreesNonModifiees, R.operations(p).entrees.length, R.operations(p).docs.length], [1, 'normale', [{ set: 'MEP', cleR2: 'kc', source: 'tcgdex', tamponNonRepresente: 'Staff', partageeTamponNonSepare: false }], 0, 0]);
+        verifier('attendu = fiches + corrections', /attendu=2 mais 1/.test(await leve(() => R.appliquer(w.db, p, { ecrire: true, attendu: 2, sauvegarder: async () => {} })) || ''), true);
+        let sv = null;
+        await R.appliquer(w.db, p, { ecrire: true, attendu: 1, sauvegarder: async o => { sv = JSON.parse(JSON.stringify(o)); } });
+        verifier('prerelease + preuve ; le V2 et l\'entrée intacts', [w.col.cartes_produits.get('3|877546').variante, /feu vert du testeur/.test(w.col.cartes_produits.get('3|877546').variantePreuve), w.col.cartes_produits.get('3|879312').variante, w.journal.filter(j => j.n !== 'cartes_produits').length], ['prerelease', true, 'staff', 0]);
+        const r = await R.restaurer(w.db, sv, { ecrire: true, attendu: 1 });
+        verifier('restauration EXACTE (variante ET preuve d\'avant)', [r.restaurees, w.instantane() === avant], [1, true]);
+        const w2 = fausseBase(monC()); const p2 = await planC(w2, cor);
+        await R.appliquer(w2.db, p2, { ecrire: true, attendu: 1, sauvegarder: async () => {} });
+        const p3 = await planC(w2, cor);
+        verifier('idempotent', [p3.corrections[0].deja, (await R.appliquer(w2.db, p3, { ecrire: true, attendu: 1, sauvegarder: async () => { throw new Error('ne doit pas sauvegarder'); } })).dejaFait], [true, true]);
+    });
+    await essayer('corrections : la valeur d\'avant doit être exactement « normale »', async () => {
+        const cor = R.listeDesCorrections(CSV_C).slice(0, 1);
+        for (const v of ['staff', undefined, 'prerelease+cosmo']) {
+            const w = fausseBase(monC({ l1: { variante: v, variantePreuve: v ? 'x' : undefined } })); const p = await planC(w, cor);
+            verifier(`avant « ${v} » : refusée`, [p.corrections.length, /^correction : valeur-d-avant-inattendue/.test(p.refus[0]?.motif)], [0, true]);
+        }
     });
 
     // ── le plan ──
