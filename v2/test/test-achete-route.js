@@ -117,7 +117,7 @@ const affirme = id => ({ success: true, question: null, carte: { idProduct: id, 
         const rd = await poster(plusieurs, d, 3);
         H.v('5d. lot de 25 cartes (3 unités) pour 2 unités disponibles : 429 QUOTA lot-trop-grand, crédit initial rendu, poche « achete » (celle du débit initial), tout ou rien', [rd.statut, rd.json.erreur && rd.json.erreur.detail, rd.json.facturation && rd.json.facturation.rembourse, rd.json.facturation && rd.json.facturation.poche, await achete(d), await quota(d)], [429, 'lot-trop-grand', true, 'achete', 1, 1]);
         const net = await db.col('mouvements').aggregate([{ $match: { installationId: d.i._id } }, { $group: { _id: '$poche', s: { $sum: '$delta' } } }]).toArray();
-        H.v('    grand livre : net achete = +1 (ouverture) -1 +1 = 1, net jour = 0 ; réconciliation sans écart', [Object.fromEntries(net.map(n => [n._id, n.s])), (await require('../argent/reconcilier').reconcilier(d.p, { cfg, maintenant: new Date() })).ecarts], [{ achete: 1, jour: 0 }, []]);
+        H.v('    grand livre : net achete = +1 (ouverture) -1 +1 = 1, net jour = 0 ; réconciliation sans écart', [(o => ({ achete: o.achete, jour: o.jour }))(Object.fromEntries(net.map(n => [n._id, n.s]))), (await require('../argent/reconcilier').reconcilier(d.p, { cfg, maintenant: new Date() })).ecarts], [{ achete: 1, jour: 0 }, []]);
         nCartes = 1;
     }
     await un.fermer(); await plusieurs.fermer();
