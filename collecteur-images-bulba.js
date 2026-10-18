@@ -42,6 +42,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { numerosServisParRemplacement } = require('./collecte-cartes/jumeau-en');
+const RH0 = require('./collecte-cartes/reponse-hote');   // CORRECTION 2 : le bilan d'une unité arrêtée par un hôte (arret-hote / pause-hote), une seule définition
 const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
@@ -206,7 +207,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         // ---- 4. originaux -> WebP -> R2 -> images ------------------------------------------------
         const bucket = process.env.R2_BUCKET_IMAGES;
         const aFaire = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w >= largeurMin);
-        let telecharges = 0, sautes = 0, echecs = 0;
+        let telecharges = 0, sautes = 0, echecs = 0, arretHote = null;
         for (const p of aFaire) {
             if (arretDemande) break;
             const _id = `${SOURCE}/${slug}/${p.carteId}/${numeroEntier(p.numero)}`;
@@ -235,6 +236,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
                 telecharges++;
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: bulba.compteRequetes() } });
             } catch (err) {
+                if (err.bloque || err.pauseHote) { arretHote = err; break; }     // REPONSE-HOTE : défi = arrêt définitif de l'hôte ; pause = la passe s'arrête (pas un verdict sur le fichier)
                 echecs++;
                 console.warn(`   ✗ ${_id} (${p.fichier}) : ${err.message}`);
                 await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carteId, numero: p.numero, fichier: p.fichier, etat: 'echec', erreur: err.message } }, { upsert: true });
@@ -242,6 +244,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         }
         console.log(`4. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, sur ${aFaire.length} à faire`);
         if (arretDemande) return { code, etat: 'interrompu', telecharges };
+        if (arretHote) { console.error(`⛔ ${code} : ${arretHote.message}`); return RH0.bilanDeLArret(code, arretHote, { telecharges, echecs, reponsesHotes: bulba.rapportReponses() }); }
 
         // ---- 5. jointure -------------------------------------------------------------------------
         const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();

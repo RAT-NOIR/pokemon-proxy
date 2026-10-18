@@ -8,6 +8,7 @@
 //   · `plageDeRangs` n'est déclarée que par IPNC [1,40] et IPNT [41,80] ; `numerosPartages` que par pcgG ; aucune de ces lignes ne déclare `gardeSansNumero` (mesuré inutile : 0 image refusée) ;
 //   · les trois fichiers regardés à l'œil le 2026-10-13 sont des corrections (Mewtwo LV.X et Gliscor LV.X que la page nomme « Mewtwo » et « Gliscor », Milotic ex nommé « Milotic ») ;
 //   · rien d'autre ne bouge : ARTOFPKM ne gagne que neuf lignes, les lignes du lot JA gardent leur source.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');

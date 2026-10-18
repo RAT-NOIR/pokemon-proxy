@@ -1,6 +1,7 @@
 // node test-collecteur-tcgdex.js — la garde du collecteur TCGdex (`releve`) s'écrit par ce qu'elle AUTORISE : une ligne
 // de table, un tirage intl, un set TCGdex nommé par l'unité, présent dans la liste ET portant le nom de l'expansion de la
 // ligne. On la fait dire NON sur des unités fabriquées avant de lui confier la file (§41) — et OUI une seule fois.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const { releve } = require('./collecteur-images-tcgdex');
 const { TABLE } = require('./collecte-cartes/table-sets');
 

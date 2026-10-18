@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const C = 'collecte-cartes/pikaqian.js', COL = 'collecteur-images-pikaqian.js', RET = 'retirer-visuels-pikaqian.js', ENF = 'enfiler-pikaqian.js', SEUIL = 'collecte-cartes/seuils-images.js', LANG = 'collecte-cartes/langue-visuel.js';
+const RHM = 'collecte-cartes/reponse-hote.js', C = 'collecte-cartes/pikaqian.js', COL = 'collecteur-images-pikaqian.js', RET = 'retirer-visuels-pikaqian.js', ENF = 'enfiler-pikaqian.js', SEUIL = 'collecte-cartes/seuils-images.js', LANG = 'collecte-cartes/langue-visuel.js';
 const BC = 'test-pikaqian.js', BCOL = 'test-collecteur-pikaqian.js', BENF = 'test-enfiler-pikaqian.js', BSEUIL = 'test-seuils-images.js', BP2 = 'test-pikaqian-promo2.js', REE = 'collecte-cartes/reessai-pikaqian.js', BREE = 'test-reessai-pikaqian.js';
 const M = (nom, fichier, de, vers, banc) => ({ nom, fichier, de, vers, banc });
 const MUTANTS = [
@@ -37,11 +37,11 @@ const MUTANTS = [
     M('client : cadence demandée plus basse acceptée', C, 'let cadenceEff = Math.max(CADENCE_MS, Number(cadenceMs) || 0);', 'let cadenceEff = Number(cadenceMs) || 0;', BC),
     M('client : le Crawl-delay ne relève pas la cadence', C, 'if (d) cadenceEff = Math.max(cadenceEff, d * 1000);', '', BC),
     M('client : un Crawl-delay de 90 s toléré', C, 'if (d && d > CRAWL_DELAY_MAX_S) {', 'if (false) {', BC),
-    M('client : le 403 n\'est plus un défi', C, 'r.status === 403 || r.status === 429 ||', 'r.status === 429 ||', BC),
-    M('client : le 429 n\'est plus un défi', C, 'r.status === 403 || r.status === 429 ||', 'r.status === 403 ||', BC),
-    M('client : cf-mitigated ignoré', C, '!!r.cfMitigated ||', 'false ||', BC),
-    M('client : la page de défi (corps) ignorée', C, "(typeof r.texte === 'string' && DEFI.test(r.texte.slice(0, 5000)))", 'false', BC),
-    M('client : un défi ne ferme pas le client', C, 'bloque = arret = Object.assign(new Error(`${SOURCE} BLOQUÉ', 'bloque = Object.assign(new Error(`${SOURCE} BLOQUÉ', BC),
+    // I4 (correction 1) : la définition du défi vit dans le module commun (collecte-cartes/reponse-hote.js) ; les mutants visent ce code, jugé par les bancs pikaqian
+    M('client : le 403 n\'est plus un défi', RHM, 'const STATUTS_DEFI = Object.freeze([401, 403, 410, 429]);', 'const STATUTS_DEFI = Object.freeze([401, 410, 429]);', BC),
+    M('client : le 429 n\'est plus un défi', RHM, 'const STATUTS_DEFI = Object.freeze([401, 403, 410, 429]);', 'const STATUTS_DEFI = Object.freeze([401, 403, 410]);', BC),
+    M('client : cf-mitigated ignoré', RHM, "if (h['cf-mitigated'])", 'if (false)', BC),
+    M('client : la page de défi (corps) ignorée', RHM, 'for (const [re, nom] of MARQUEURS) if (re.test(texte)) return', 'for (const [re, nom] of []) if (re.test(texte)) return', BC),
     M('client : l\'erreur répétée n\'arrête jamais', C, 'const ECHECS_DE_SUITE_MAX = 2;', 'const ECHECS_DE_SUITE_MAX = 999;', BC),
     M('client : l\'erreur répétée s\'arrête dès la première', C, 'const ECHECS_DE_SUITE_MAX = 2;', 'const ECHECS_DE_SUITE_MAX = 1;', BC),
     M('client : un succès ne remet pas le compteur d\'échecs à zéro', C, '                suite = 0;\n                return r;', '                return r;', BC),
@@ -72,22 +72,22 @@ const MUTANTS = [
     M('seuil : le seuil de pikaqian (300) s\'applique à toutes les sources', SEUIL, "    if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;\n    return LARGEUR_MIN;", "    return LARGEUR_MIN_PIKAQIAN;", BC),
     M('seuil : pikaqian prend le seuil des officielles (257) au lieu de 300', SEUIL, 'if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;', 'if (source === PIKAQIAN) return LARGEUR_MIN_OFFICIELLE;', BC),
     M('seuil : les officielles prennent le seuil de pikaqian (300) au lieu de 257', SEUIL, 'if (SOURCES_OFFICIELLES.includes(source)) return LARGEUR_MIN_OFFICIELLE;', 'if (SOURCES_OFFICIELLES.includes(source)) return LARGEUR_MIN_PIKAQIAN;', BC),
-    M('seuil : pikaqian entre dans SOURCES_OFFICIELLES (la liste officielle gardée par le banc des seuils)', SEUIL, "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);", "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com', 'pikaqian']);", BSEUIL),
+    M('seuil : pikaqian entre dans SOURCES_OFFICIELLES (la liste officielle gardée par le banc des seuils)', SEUIL, "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon.com']);", "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon.com', 'pikaqian']);", BSEUIL),
     M('langue : pikaqian sans règle de langue', LANG, "if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'", "if (im.source === 'pikaqian') return false && im.langueSource === 'zh-hans'", BCOL),
     // ── le collecteur ──
     M('collecteur : la ligne de table n\'est plus comparée mot pour mot', COL, '|| unite.codePk !== L.codePk ||', '||', BCOL),
     M('collecteur : une source bloquée reçoit des requêtes', COL, 'if (bloquee) return refus(', 'if (false) return refus(', BCOL),
     M('collecteur : le tirage du set n\'est pas vérifié', COL, 'if ((set.tirage ?? set.region) !== L.tirage) return', 'if (false) return', BCOL),
     M('collecteur : la taille de la base n\'est pas vérifiée', COL, 'if (st.dataSize + st.indexSize > stopOctets) {', 'if (false) {', BCOL),
-    M('collecteur : un set sans produit joint passe', COL, 'if (!produits) return refus(', 'if (false) return refus(', BCOL),
+    M('collecteur : un set sans produit joint passe', COL, 'if (!produits) return { ok: false', 'if (false) return { ok: false', BCOL),
     M('collecteur : une page qui ne désigne pas le set est acceptée', COL, 'if (!V.ok) { await E.updateOne', 'if (false) { await E.updateOne', BCOL),
     M('collecteur : un visuel retiré est repris', COL, "if (deja?.etat === 'retire') { retires++; continue; }", '', BCOL),
     M('collecteur : la reprise redemande les images déjà prises', COL, "if (deja?.sha256 && deja.urlOriginal === p.url && deja.etat === 'ok') { sautes++; continue; }", '', BCOL),
     M('collecteur : un trop-petit est redemandé à chaque passage', COL, "if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url && !aRejuger(deja, P.SOURCE)) { tropPetits++; continue; }", '', BCOL),
     M('collecteur : plus de seuil de largeur', COL, 'if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) {', 'if (!meta.width) {', BCOL),
     M('collecteur : le seuil écrit n\'est pas celui appliqué', COL, 'seuilApplique: largeurMinDe(P.SOURCE)', 'seuilApplique: 350', BCOL),
-    M('collecteur : une autre source qui sert déjà le numéro est écrasée', COL, 'if (T.dejaServi({ images: autres }, slug, im.numero)) {', 'if (false) {', BCOL),
-    M('collecteur : la garde de la jointure ne compare plus', COL, 'const garde = avant.autres === apres.autres && apres.siennes === joints;', 'const garde = true;', BCOL),
+    M('collecteur : une autre source qui sert déjà le numéro est écrasée', COL, 'restantes => T.dejaServi({ images: restantes }, slug, im.numero)', 'restantes => false', BCOL),
+    M('collecteur : la garde de la jointure ne compare plus', COL, 'const garde = attenduesAutres === apres.autres && apres.siennes === joints;', 'const garde = true;', BCOL),
     M('collecteur : les vignettes ne conditionnent plus « verifie »', COL, 'const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;', 'const vignettesOk = true;', BCOL),
     M('collecteur : l\'erreur répétée n\'arrête pas la boucle', COL, 'if (err.arret) { arretClient = err; break; }', '', BCOL),
     M('collecteur : le compteur d\'échecs n\'est pas relu entre les unités', COL, "client.fixerSuite((await E.findOne({ _id: P.ID_SUITE }))?.suite ?? 0);", '', BCOL),
@@ -131,9 +131,11 @@ const lire = f => { if (!original.has(f)) original.set(f, fs.readFileSync(path.j
 const restaurer = () => { for (const [f, t] of original) fs.writeFileSync(path.join(__dirname, f), t); };
 process.on('exit', restaurer);
 
-function banc(b) { const r = spawnSync(process.execPath, [b], { cwd: __dirname, encoding: 'utf8' }); return { code: r.status, rouges: (r.stdout.match(/^(❌|\s*ECHEC )/gm) || []).length, sortie: r.stdout }; }
+function banc(b) { const r = spawnSync(process.execPath, [b], { cwd: __dirname, encoding: 'utf8' }); const lignes = r.stdout.split(/\r?\n/); const sig = lignes.map((x, i) => (/^(❌|\s*ECHEC )/.test(x) ? lignes.slice(i, i + 3).join(' | ') : null)).filter(Boolean).join('\n'); return { code: r.status, rouges: (r.stdout.match(/^(❌|\s*ECHEC )/gm) || []).length, sig, sortie: r.stdout }; }
 let tues = 0, vivants = [], sansAttache = [], redondants = [];
-for (const b of [BC, BCOL, BENF, BSEUIL, BREE, BP2]) { const r = banc(b); if (r.code !== 0) { console.error(`❌ le banc ${b} n'est pas vert avant les mutants (code ${r.code})`); process.exit(2); } }
+// I4 (correction 1) : un échec DÉJÀ présent sur la base (test-pikaqian.js : « seuils 257/350 », sans rapport) ne bloque plus l'outil ; il fixe la ligne de base de ce banc, et un mutant est tué s'il ajoute un ❌
+const LIGNE_DE_BASE = {}, SIG_DE_BASE = {};
+for (const b of [BC, BCOL, BENF, BSEUIL, BREE, BP2]) { const r = banc(b); LIGNE_DE_BASE[b] = r.rouges; SIG_DE_BASE[b] = r.sig; if (r.code !== 0 && r.rouges === 0) { console.error(`❌ le banc ${b} plante avant les mutants (code ${r.code}, aucune ligne ❌)`); process.exit(2); } }
 console.log(`bancs verts avant mutation ; ${MUTANTS.length} mutants\n`);
 for (const m of MUTANTS) {
     const t = lire(m.fichier);
@@ -146,7 +148,7 @@ for (const m of MUTANTS) {
     let muté = t; des.forEach((d, i) => { muté = muté.replace(d, () => vers[i]); });
     fs.writeFileSync(path.join(__dirname, m.fichier), muté);
     let r; try { r = banc(m.banc); } finally { fs.writeFileSync(path.join(__dirname, m.fichier), t); }
-    const tue = r.rouges > 0;                       // une ligne ❌ au moins : un plantage SEUL (aucun ❌) ne prouve rien
+    const tue = r.rouges > (LIGNE_DE_BASE[m.banc] ?? 0) || (r.rouges > 0 && r.sig !== SIG_DE_BASE[m.banc]);   // un ❌ de plus, OU un ❌ qui change de contenu (ce que le mutant a fait dire au banc déjà rouge)                       // une ligne ❌ au moins : un plantage SEUL (aucun ❌) ne prouve rien
     if (tue) tues++; else vivants.push(`${m.nom} (code ${r.code}, ${r.rouges} ❌)`);
     console.log(`${tue ? '🔴 rouge vu' : '⚠️ VIVANT  '}  ${m.nom}  [${r.rouges} ❌ au banc ${m.banc}]`);
 }

@@ -16,6 +16,7 @@
 // restaurerait), le « après » dans la base, et le banc (test-garde-lot.js) dans des documents fabriqués. Même code partout :
 // la sonde ne diverge pas de la production (en tête du catalogue).
 const { EJSON } = require('mongodb').BSON;
+const { estMatiereSpeciale } = require('./matiere-speciale');
 
 // L'ordre est celui de l'impression ; chaque compteur nomme son groupe.
 const COMPTEURS = Object.freeze({
@@ -52,6 +53,11 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
     const m = new Map();
     const inc = k => m.set(k, (m.get(k) || 0) + 1);
     const vus = new Set();
+    // 🔴 LOT METAL (correction 1, I1) : les lignes et les liens.idProduct qui portent un produit de la table fermée (matiere-speciale.js, lue, jamais recopiée) sont comptés à part ;
+    // `comparer` arrête tout lot qui en FAIT AUGMENTER le compte (une ligne déjà là avant n'est pas le fait du lot).
+    // (correction 2, M-1) le compte est PAR LIGNE (_id) et par couple (carte, produit) pour les liens : remplacer la ligne X par la ligne Y sur le même produit (1 → 1) est une hausse de Y
+    for (const l of cartesProduits) if (estMatiereSpeciale(l.idProduct)) inc(`matiere-speciale prod:${Number(l.idProduct)} ligne:${l._id ?? `${l.carteId}|${l.idProduct}`}`);
+    for (const c of cartes) for (const id of new Set(c.liens?.idProduct || [])) if (estMatiereSpeciale(id)) inc(`matiere-speciale prod:${Number(id)} lien:${c._id}`);
     for (const l of cartesProduits) {
         const k = `${l.idExpansion}|${l.idProduct}`;
         if (vus.has(k)) continue;
@@ -104,7 +110,7 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
-        if (compteur === 'entrees-cles' || compteur === 'vignettes-set') continue;   // interne / traité après
+        if (compteur === 'entrees-cles' || compteur === 'vignettes-set' || compteur === 'matiere-speciale') continue;   // interne / traité après
         // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
         if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, setDe(groupe), n - m); continue; }
         const baisse = n - m, annonce = annonces[cle] || 0;
@@ -131,7 +137,12 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
     }
     for (const [cle, m] of apres) {
         const d = m - (avant.get(cle) || 0);
-        if (d > 0) { const [compteur] = decouper(cle); if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d; }
+        if (d > 0) {
+            const [compteur, groupe] = decouper(cle);
+            // LOT METAL : une ligne ou un lien sur un produit en matière spéciale POSÉ par ce lot = ARRÊT (jamais autorisé, jamais annonçable)
+            if (compteur === 'matiere-speciale') { baisses.push({ cle, compteur, groupe, avant: avant.get(cle) || 0, apres: m, baisse: 0, annonce: 0, autorisee: null, motif: 'produit en matière spéciale (table fermée) : un trou, jamais la fiche de la carte normale' }); continue; }
+            if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d;
+        }
     }
     const annoncesNonRealisees = Object.entries(annonces)
         .map(([cle, a]) => ({ cle, annonce: a, baisse: baisses.find(b => b.cle === cle)?.baisse || 0 }))
@@ -280,4 +291,11 @@ function setsTouches({ avant, apres }) {
     return { sets: [...touches].sort(), catalogue, especes, setsInfo };
 }
 
-module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+// (correction 2, I-1) LA projection de l'état « après » que lot-additif lit dans la base — UNE constante, lue par lot-additif ET par le banc : ce que compterEtat/setsTouches lisent y figure,
+// `liens.idProduct` compris (sans lui, la garde des liens de la table fermée valait toujours 0 en production).
+const PROJECTION_ETAT = Object.freeze({
+    cartes: Object.freeze({ sets: 1, nomEn: 1, categorie: 1, 'liens.idProduct': 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.vignette': 1, 'images.partageeHoloNonHolo': 1, 'images.produitsPartages': 1, 'images.partageeTamponNonSepare': 1, 'images.tamponNonRepresente': 1 }),
+    cartesProduits: Object.freeze({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1, 'visuelSubstitut.cleR2': 1 }),
+});
+
+module.exports = { PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };

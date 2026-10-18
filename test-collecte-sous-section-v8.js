@@ -5,6 +5,7 @@
 //   · sous-section absente de la liste → `refuse-sous-section-absente`, rien de demandé au-delà de la liste ;
 //   · le REJEU de la jointure (qui relit la liste d'état NON filtrée) écrit le même `completImages` que la collecte (B-I1) ;
 //   · une ligne SANS sous-section se comporte comme avant (témoin).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');

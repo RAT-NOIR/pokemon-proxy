@@ -182,7 +182,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     const client = clientInjecte || T.fabriquerClientTpc({ site, verrou });
     const compteurs = {};
     const compter = k => { compteurs[k] = (compteurs[k] || 0) + 1; };
-    let bloque = null;
+    let bloque = null, pauseHote = null;
     try {
         let liste, fiches;
         try {
@@ -210,7 +210,12 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
                 liste = { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) };
             }
-        } catch (e) { if (!e.bloque) throw e; bloque = e; }
+        } catch (e) {
+            // REPONSE-HOTE : une pause de l'hôte (persistante, ou tenue par la passe) arrête l'unité AVANT toute requête de plus — pas un arrêt définitif, aucune alerte
+            if (e.pauseHote) return { code: unite._id, etat: 'incomplet', erreur: e.message, pauseHote: { hote: e.hote, issue: e.issue ?? null, motif: e.motif ?? e.message, empreinte: e.empreinte ?? null, persistante: !!e.pausePersistante }, sansJointure: true };
+            if (!e.bloque) throw e;
+            bloque = e;
+        }
         if (bloque) return await conclureBloque(E, unite, site, bloque, client);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
         const P = await planifier(db, slug, L, fiches);
@@ -267,6 +272,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${url}) : ${err.message}`);
@@ -276,7 +282,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             }
         }
         if (bloque) await conclureBloque(E, unite, site, bloque, client, { seulementAlerte: true });
-        if (!bloque && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
+        if (!bloque && !pauseHote && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 6. JOINTURE ADDITIVE, sous sa garde ----------------------------------------------------
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
@@ -325,8 +331,10 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, tpcApres: apres.siennes, ok: garde }, compteurs,
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
+            // REPONSE-HOTE : le rapport des réponses de l'hôte d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
             concordance: garde && !erreurJointure && telecharges + sautes + tropPetits + retires === P.plan.length && echecs === 0 && fiches404 === 0 && cartesAbsentes === 0
-                && joints + dejaParAutre === images.length && liste.complete && !bloque,
+                && joints + dejaParAutre === images.length && liste.complete && !bloque && !pauseHote,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { [`visuelsTpc.${site}`]: complet } });
@@ -335,6 +343,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         // bloquée en cours de route : ce qui a été prouvé et téléchargé AVANT est joint (et la page se revalide) ; l'unité refuse (`incomplet`),
         // l'alerte est écrite, l'alimentateur n'enfile plus ce site
         if (bloque) return { code: unite._id, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: unite._id, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: unite._id, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: unite._id, etat: 'non-concordant', ...complet };
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;

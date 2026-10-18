@@ -1,6 +1,7 @@
 // node test-pikaqian.js — pikaqian.com : le CLIENT (hôtes fermés, robots, redirections, défi, erreur répétée, cadence), la LECTURE de la page de
 // set, la PREUVE par produit, le plan, le seuil de largeur et le plan de retrait. Aucune requête réelle : transport simulé, horloge simulée.
 // PK_MODULE (banc des mutants, rouge-pikaqian.js) : un module à tester à la place du vrai.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const P = require(process.env.PK_MODULE ? path.resolve(process.env.PK_MODULE) : './collecte-cartes/pikaqian');
@@ -19,11 +20,11 @@ const tuile = (n, code, num, nom, { src } = {}) => `<a class="w-full group" data
 const page = (...tuiles) => `<!DOCTYPE html><html><head><title>Set</title></head><body><nav><a href="/sets">Sets</a></nav>${tuiles.join('')}</body></html>`;
 
 // ── le réseau simulé et l'horloge ───────────────────────────────────────────────────────────────────────────────────
-function monde({ repondre, cadence = 10000, verrou = { tenu: true, perdu: false } } = {}) {
-    let t = 1_000_000;
+function monde({ repondre, processus = false, cadence = 10000, verrou = { tenu: true, perdu: false }, dossierPauses = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pq-pauses-')) } = {}) {
+    if (!processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); let t = 1_000_000;
     const appels = [];
     const transport = { async get(url, o) { appels.push({ url, t, binaire: !!o?.binaire }); return repondre(url, o, appels.length); } };
-    const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; } });
+    const client = P.fabriquerClientPikaqian({ transport, cadenceMs: cadence, verrou, horloge: () => t, pause: async ms => { t += ms; }, dossierPauses });
     return { client, appels, avancer: ms => { t += ms; } };
 }
 const ROBOTS = 'User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /auth/\nDisallow: /login\nDisallow: /logout\nDisallow: /currency\nSitemap: https://pikaqian.com/sitemap.xml\n';
@@ -32,7 +33,7 @@ const normal = (extra = {}) => (url, o) => {
     if (extra[url]) return extra[url](url, o);
     if (url.endsWith('/robots.txt')) return url.startsWith('https://pikaqian.com') ? { status: 200, texte: ROBOTS } : { status: 404, texte: '' };
     if (url.includes('/sets/')) return { status: 200, type: 'text/html', texte: HTML };
-    if (url.endsWith('.webp')) return { status: 200, type: 'image/webp', octets: Buffer.from('webp') };
+    if (url.endsWith('.webp')) return { status: 200, type: 'image/webp', octets: Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(8)]) };   // (REPONSE-HOTE : la règle commune exige les OCTETS d'un webp, pas le mot « webp »)
     return { status: 404, texte: 'non' };
 };
 const chemins = appels => appels.map(a => a.url.replace('https://', ''));
@@ -161,8 +162,33 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     const rs = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
     verifier('deux coupures réseau de suite → arrêt aussi', [rs?.arret === true, rs?.repetee === true], [true, true]);
     w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp']: () => ({ status: 200, type: 'text/html', texte: '<html>pas une image</html>' }) }) });
+    verifier('REPONSE-HOTE : un 200 text/html à la place de l\'image = fausse page introuvable → null (absente), ni erreur ni blocage, comptée', [await w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'), !!w.client.bloque(), !!w.client.pause(), w.client.suivi().rapport('images.pikaqian.com').fausses], [null, false, false, 1]);
+    w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp']: () => ({ status: 200, type: 'application/json', texte: '{"a":1}' }) }) });
     e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
-    verifier('une réponse qui n\'est pas une image : une erreur nommée', /n'est pas une image/.test(e?.message ?? ''), true);
+    verifier('une réponse qui n\'est pas une image (JSON) : une erreur nommée — une PAUSE de l\'hôte (inattendue), pas un blocage', [/n'est pas une image/.test(e?.message ?? ''), e?.pauseHote === true, !!e?.bloque, e?.issue], [true, true, false, 'inattendue']);
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const U = n => `https://images.pikaqian.com/cs1bc/${UUID(n)}.webp`;
+        const PAGE = { status: 200, type: 'text/html; charset=utf-8', texte: '<html>Page introuvable</html>' };
+        // (on prouve les 20/21 sur des adresses distinctes, toutes servies par la même fausse page)
+        w = monde({ repondre: url => (url.endsWith('.webp') ? PAGE : normal({})(url)) });
+        w.client.fixerSuite(0);
+        let nuls = 0; for (let i = 1; i <= 20; i++) if ((await w.client.image(U(i))) === null) nuls++;
+        e = await leve(() => w.client.image(U(21)));
+        verifier('REPONSE-HOTE : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un blocage, pas d\'arrêt)', [nuls, e?.pauseHote === true, !!e?.bloque, w.client.bloque(), w.client.arret(), !!w.client.pause()], [20, true, false, null, null, true]);
+        const e22 = await leve(() => w.client.image(U(22)));
+        verifier('REPONSE-HOTE : …plus aucune requête pendant la pause', [e22?.pauseHote === true], [true]);
+        { const U1 = 'https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp';
+      const wa = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'application/json', texte: '{}' } : normal({})(url)) });
+      const ea = await leve(() => wa.client.image(U1));
+      const wb = monde({ repondre: normal({}), processus: true });
+      const eb = await leve(() => wb.client.image(U1));
+      verifier('I3 pikaqian : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [ea?.pauseHote === true, eb?.pauseHote === true, wb.appels.length], [true, true, 0]); }
+    w = monde({ repondre: url => (url.endsWith('.webp') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal({})(url)) });
+        e = await leve(() => w.client.image(U(1)));
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), pas un blocage', [e?.pauseHote === true, e?.pausePersistante === true, !!e?.bloque], [true, true, false]);
+        void RH;
+    }
     w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp']: () => ({ status: 404, texte: '<Error/>' }) }) });
     verifier('image en 404 → null', await w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp'), null);
 
@@ -303,7 +329,9 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     // ════ 4. LE SEUIL ═════════════════════════════════════════════════════════════════════════════════════════
     verifier('largeurMinDe(\'pikaqian\') = 300 (décision du testeur 2026-10-11 : usage vignette 157 px)', S.largeurMinDe('pikaqian'), 300);
     verifier('les autres sources ne bougent pas', ['bulbapedia', 'artofpkm', 'tcgdex', 'pokemontcg.io', 'quelque-part', 'PIKAQIAN', 'Pikaqian', '', undefined, 'constructor'].map(S.largeurMinDe), [350, 350, 350, 350, 350, 350, 350, 350, 350, 350]);
-    verifier('les sources TPC sont à 257 (décision du testeur, 2026-10-12) ; PikaQian, qui n\'est pas officielle, garde 300', ['tpc-asie', 'pokemon-card-com', 'pokemon-com'].map(S.largeurMinDe), [257, 257, 257]);
+    verifier('les sources TPC sont à 257 (décision du testeur, 2026-10-12) ; nom de source pokemon.com depuis le 2026-10-17 ; PikaQian, qui n\'est pas officielle, garde 300', ['tpc-asie', 'pokemon-card-com', 'pokemon.com'].map(S.largeurMinDe), [257, 257, 257]);
+    verifier('l\'ancien nom pokemon-com n\'est écrit par personne : pas une source officielle (350)', S.largeurMinDe('pokemon-com'), 350);
+    verifier('basse définition : pokemon.com a un plancher de 200 (décision du 2026-10-17)', S.largeurAdmiseDe('pokemon.com'), 200);
     verifier('aRejuger(pikaqian, trop-petit à 350 de 320 px) → oui (le seuil a baissé)', S.aRejuger({ wOriginal: 320 }, 'pikaqian'), true);
     verifier('sourceDeUnite : le préfixe « pikaqian/ » est une source connue', S.sourceDeUnite({ _id: 'pikaqian/Dynamax-Clash-Flame' }, 'artofpkm'), 'pikaqian');
 

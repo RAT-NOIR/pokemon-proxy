@@ -3,6 +3,7 @@
 // (DP1 « Space-Time-Creation », EP08 « Entry-Pack-08 » : Cardmarket ne numérote aucun de leurs produits). Rien n'y est inventé.
 // Ce que le banc garde : la voie ne s'ouvre QUE sur option, QUE sur pokemon-card.com, QUE pour un reste « sans-numero » dans un set dont une part
 // notable des produits n'a pas de numéro ; la voie par le numéro reste prioritaire ; et chaque garde dit NON sur un cas fabriqué.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const T = require('./collecte-cartes/tpc');
 
 let ok = 0, ko = 0;

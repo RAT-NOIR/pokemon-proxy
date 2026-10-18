@@ -1,5 +1,6 @@
 // Banc de la PARTIE 1 du lot P2 : le worker ne contacte plus PikaQian, par aucun chemin. Faux réseau qui ÉCHOUE au premier appel vers un hôte PikaQian
 // (pikaqian.com, images.pikaqian.com, cdn.pokemon-tcg.cn) ; états fabriqués : unité en attente, alerte échue, alimentateur avec des trous PikaQian.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 

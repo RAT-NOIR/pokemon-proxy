@@ -40,5 +40,19 @@ verifier('404 « absent chez TCGdex » → définitif', echecTransitoire(err('ab
 verifier('une image illisible (sharp) → définitif', echecTransitoire(err('Input buffer contains unsupported image format')), false);
 verifier('un verrou perdu → définitif pour ce passage (l\'unité est interrompue, pas incomplète)', echecTransitoire(err('TCGdex : verrou global PERDU — pas de requête sans verrou')), false);
 
+// ── CORRECTION 2 (I1) : un arrêt durable ou une pause d'hôte n'est PAS un verdict — l'unité revient en attente, le worker s'ARRÊTE pour cet hôte, rien n'est rangé en « refuse » ──
+const ATTENTE_ARRET = { etat: 'attente', arreter: true };
+for (const etat of ['arret-hote', 'pause-hote', 'bloque']) verifier(`I1 : « ${etat} » → attente, et le worker s'arrête`, issueDeLUnite({ etat }, {}, maintenant), ATTENTE_ARRET);
+verifier('I1 : « incomplet » portant une pause d\'hôte → attente, le worker s\'arrête (jamais refuse)', issueDeLUnite({ etat: 'incomplet', pauseHote: { hote: 'tcgdex.net' } }, {}, maintenant), ATTENTE_ARRET);
+verifier('I1 : « refuse-source-bloquee » portant un arrêt d\'hôte durable → attente, le worker s\'arrête', issueDeLUnite({ etat: 'refuse-source-bloquee', arretHote: { hote: 'artofpkm.com' } }, {}, maintenant), ATTENTE_ARRET);
+verifier('I1 : « incomplet » SANS pause (un 404 sur 106) reste refuse', issueDeLUnite({ etat: 'incomplet', pauseHote: null }, {}, maintenant), { etat: 'refuse', arreter: false });
+verifier('I1 : un arrêt d\'hôte ne compte pas comme tentative transitoire (aucune pasAvant, aucune tentative)', Object.keys(issueDeLUnite({ etat: 'arret-hote' }, { tentatives: 2 }, maintenant)).sort(), ['arreter', 'etat']);
+const { bilanDeLException } = require('./collecte-cartes/issue-unite');
+const ex = (message, props) => Object.assign(new Error(message), props);
+verifier('I1 : une exception `bloque` (arrêt durable) → bilan « arret-hote », sans jointure, issue = attente + arrêt', [bilanDeLException('A', ex('artofpkm.com ARRÊTÉ', { bloque: true, arretDefinitif: true })).etat, bilanDeLException('A', ex('x', { bloque: true })).sansJointure, issueDeLUnite(bilanDeLException('A', ex('x', { bloque: true })), {}, maintenant)], ['arret-hote', true, ATTENTE_ARRET]);
+verifier('I1 : une exception `pauseHote` → bilan « pause-hote », issue = attente + arrêt', [bilanDeLException('A', ex('x', { pauseHote: true })).etat, issueDeLUnite(bilanDeLException('A', ex('x', { pauseHote: true })), {}, maintenant)], ['pause-hote', ATTENTE_ARRET]);
+verifier('I1 : une exception 503 → bilan « incomplet-transitoire » (inchangé) ; une autre → « erreur »', [bilanDeLException('A', ex('503 https://x', { status: 503 })).etat, bilanDeLException('A', ex('Input buffer contains unsupported image format')).etat], ['incomplet-transitoire', 'erreur']);
+verifier('I1 : le bilan garde le code et le message de l\'exception', (b => [b.code, b.erreur])(bilanDeLException('SV1', ex('quelque chose', { pauseHote: true }))), ['SV1', 'quelque chose']);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

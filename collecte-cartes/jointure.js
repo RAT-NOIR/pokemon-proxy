@@ -26,6 +26,7 @@
 const normaliserNom = n => String(n || '').normalize('NFC').toLowerCase()
     .replace(/[’‘ʼ`´]/g, "'").replace(/[–—‐]/g, '-')
     .replace(/♂/g, 'm').replace(/♀/g, 'f').replace(/[\s\-'.&:!?,]/g, '');
+const { estMatiereSpeciale, motifMatiere } = require('./matiere-speciale');   // TABLE FERMÉE (lot METAL) : un produit en métal ne se joint jamais à la fiche de la carte normale
 const { aliasDe } = require('./alias-noms');   // global (ALIAS_CARDMARKET_VERS_BULBAPEDIA) ou limité à l'expansion de la cible (ALIAS_PAR_EXPANSION, lot CEL)
 const chiffresDuNumero = n => { const m = String(n ?? '').match(/\d+/); return m ? String(parseInt(m[0], 10)) : null; };
 // LA CLÉ DE NUMÉRO GARDE SON PRÉFIXE ALPHABÉTIQUE. `chiffresDuNumero` (« S04 » -> « 4 ») joignait les
@@ -249,6 +250,8 @@ function joindre(cartes, produits, cible) {
         if (alias) { const k = normaliserNom(alias); if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(p); }
     }
     const attache = (carte, p, preuve, detail, numeroFiche = null) => {
+        // 🔴 LOT METAL (2026-10-17) : un produit de la table fermée ne s'attache à AUCUNE carte (ni par le numéro, ni par le nom) ; il retombe en reste « produit-sans-carte » qui le dit.
+        if (estMatiereSpeciale(p.idProduct)) return;
         // `slug` et `slugSet` VOYAGENT AVEC LA LIGNE : ils font l'URL Cardmarket, et le site n'a pas
         // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
         // en texte nu. Ils n'ont jamais été spécifiés — ce n'était pas un rejeu manqué, c'était une
@@ -454,7 +457,7 @@ function joindre(cartes, produits, cible) {
     }
     for (const p of produits) {
         const c = produitsJoints.get(p.idProduct);
-        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}${contredits.has(p.idProduct) ? ' — le nom contredit le numéro (fiche-contredite-par-le-nom)' : ''}` });
+        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}${estMatiereSpeciale(p.idProduct) ? ` — matière spéciale (table fermée) : ${motifMatiere(p.idProduct)}` : ''}${contredits.has(p.idProduct) ? ' — le nom contredit le numéro (fiche-contredite-par-le-nom)' : ''}` });
         else if (c.length > 1) restes.push({ type: 'produit-vers-plusieurs-cartes', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » -> cartes ${c.join(', ')}` });
     }
     return {

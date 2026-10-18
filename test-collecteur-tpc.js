@@ -4,6 +4,7 @@
 // la liste est la même page réduite à cette fiche (une liste d'une carte : « resultNumber » 1, une page).
 // Ce que le banc garde : la collecte additive (les entrées des autres sources ne bougent pas), la MENTION et le LOT sur chaque visuel, la
 // REPRISE sans requête, un visuel RETIRÉ jamais repris, l'ARRÊT au premier blocage (et plus rien ensuite), la garde de TAILLE.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -80,7 +81,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     const ligneBanc = (site, slug) => { const L = ligneTpc(site, slug); return L && { ...L, cartes: 1 }; };
     const lancer = async (B, tr, o = {}) => {
         const depots = [];
-        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou, ...(o.clientOpts || {}) });
         const r = silencieux();
         try { return { b: await collecterSet(o.unite || uniteDeLaLigne(ligneTpc('tpc-asie', SLUG)), B.M, { verrou, client, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets, ligneDe: o.ligneDe || ligneBanc }), depots }; }
         finally { r(); }
@@ -105,6 +106,38 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     verifier('une carte déjà servie à ce numéro par une autre source : intacte (additif)', c2.images.map(e => `${e.source}:${e.numero}`), ['tcgdex:002']);
     verifier('le bilan du set : 1 prouvé, garde verte', [B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.prouves, B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.garde?.ok], [1, true]);
     verifier('la fiche lue est gardée (`tpc_fiches`)', [...B.col('tpc_fiches').keys()], ['tpc-asie/id/7125']);
+
+    // ── 1 bis. REPONSE-HOTE (2026-10-18) : la règle commune de réponse, vue par le collecteur ──────────────────────────────────────────────────────
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'tpc-col-pauses-'));
+        // (a) 200 text/html à la place de l'image : fausse page introuvable → absente, AUCUNE alerte, l'unité n'est pas « verifie » mais n'est pas bloquée
+        const BH1 = fausseBase(); semer(BH1);
+        let trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : normal(url));
+        let RH1 = await lancer(BH1, trH, { clientOpts: { dossierPauses: dp() } });
+        verifier('REPONSE-HOTE : un 200 text/html à la place de l\'image → absente, AUCUNE alerte, aucune écriture de visuel, l\'unité n\'est pas bloquée', [RH1.b.etat !== 'refuse-source-bloquee', BH1.col('collecte_images_etat').get('alerte/source-bloquee/tpc-asie') === undefined, [...BH1.col('images').values()].filter(d => d.etat === 'ok').length, RH1.b.reponsesHotes?.[0]?.fausses, RH1.b.pauseHote ?? null], [true, true, 0, 1, null]);
+        // (b) un défi : arrêt définitif par l'alerte existante
+        const BH2 = fausseBase(); semer(BH2);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<title>Just a moment...</title>' } : normal(url));
+        const RH2 = await lancer(BH2, trH, { clientOpts: { dossierPauses: dp() } });
+        verifier('REPONSE-HOTE : un défi à la place de l\'image → arrêt DÉFINITIF par l\'alerte existante', [RH2.b.etat, [...BH2.col('collecte_images_etat').values()].some(d => d.active === true && /bloqu/i.test(d._id))], ['incomplet', true]);
+        // (c) une PAUSE sans alerte ni arrêt définitif (le plan du banc n'a qu'un fichier : le 21 est prouvé au client ; ici la pause persistante d'une page ambiguë)
+        const BH3 = fausseBase(); semer(BH3);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal(url));
+        const d3 = dp();
+        const RH3 = await lancer(BH3, trH, { clientOpts: { dossierPauses: d3 } });
+        verifier('REPONSE-HOTE : une page ambiguë à la place de l\'image → PAUSE persistante de l\'hôte, « incomplet », AUCUNE alerte de blocage, le fichier de pause nomme l\'empreinte',
+            [RH3.b.etat, RH3.b.pauseHote?.persistante, BH3.col('collecte_images_etat').get('alerte/source-bloquee/tpc-asie') === undefined, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(d3, 'asia.pokemon-card.com')?.empreinte || '')], ['incomplet', true, true, true]);
+        const nAvant = trH.appels.length;
+        const RH3b = await lancer(BH3, trH, { clientOpts: { dossierPauses: d3 } });
+        verifier('REPONSE-HOTE : …et la passe suivante, tant que la pause tient, ne fait AUCUNE requête', [RH3b.b.etat, RH3b.b.pauseHote?.persistante, trH.appels.length === nAvant], ['incomplet', true, true]);
+        // (d) la 21e fausse absence d'affilée sur le même collecteur (seuil du banc à 1 : un seul fichier au plan, deux unités successives partagent le client)
+        const BH4 = fausseBase(); semer(BH4);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : normal(url));
+        const suiviH = RH.suiviHote({ seuil: 1 });
+        await lancer(BH4, trH, { clientOpts: { dossierPauses: dp(), suivi: suiviH } });
+        verifier('REPONSE-HOTE : le compteur de la passe vit au niveau du client (une fausse absence comptée par le collecteur)', suiviH.rapport('asia.pokemon-card.com').fausses, 1);
+    }
 
     // ── 2. la reprise : aucune requête ───────────────────────────────────────────────────────────────────────────────
     tr = reseau(normal);
