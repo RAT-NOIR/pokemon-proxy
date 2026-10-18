@@ -67,11 +67,26 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     const lignesCsv = (mod = x => x) => R.FICHES.map(f => mod({ url: CSV_URL(f), idProduct: f.id, stamp: f.colonne, propre: 'oui' }));
     await essayer('table : 13 fiches, variantes attendues', () => {
         const l = R.listeDesFiches(lignesCsv());
-        verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-1']);
+        verifier('13 variantes', l.map(f => f.variante), ['prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'staff+championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-1']);
         verifier('Frosmoth : la vignette fait foi, le conflit avec le relevé est signalé ; 3 frères lus', [l[12].vignettes, l[12].conflit, l[12].freres.map(x => x.variante)], [['1ST PLACE'], 'le relevé du testeur disait 2e place pour ce produit ; décision du testeur du 2026-10-18 : la vignette fait foi (1re place), l\'annonce de l\'utilisateur correspond à 450598 (2e place)', ['league+place-2', 'league+place-3', 'league+place-4']]);
         verifier('Ogerpon : 1 frère lu, 2 sans jeton', [l[10].freres.map(x => [x.id, x.variante]), Object.keys(l[10].sansJeton)], [[[800148, 'cosmo']], ['771357', '786105']]);
         verifier('toutes valides', l.every(f => R.varianteValide(f.variante)), true);
-        verifier('les réserves sont nommées', l.filter(f => f.reserve).map(f => f.idProduct), [882210, 449653]);
+        verifier('les réserves sont nommées', l.filter(f => f.reserve).map(f => f.idProduct), [882210]);
+    });
+    // ── B4 : décision du testeur (2026-10-19) sur Dark Gyarados 275574 et Karrablast 449653 ──
+    await essayer('B4 : décision du testeur, champ explicite', async () => {
+        const l = R.listeDesFiches(lignesCsv()), g = l.find(f => f.idProduct === 275574), k = l.find(f => f.idProduct === 449653);
+        verifier('variantes décidées', [g.variante, k.variante, g.jetons, k.jetons, k.reserve], ['prerelease', 'staff+championship', ['prerelease'], ['staff', 'championship'], null]);
+        verifier('les 11 autres inchangées', l.filter(f => ![275574, 449653].includes(f.idProduct)).map(f => f.variante), ['staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-1']);
+        verifier('la décision est dans la table, pas déduite', R.FICHES.filter(f => f.decisionTesteur).map(f => f.id), [275574, 449653]);
+        verifier('colonne CSV toujours vérifiée : 449653 « Staff + Championship » refusé', /la colonne du relevé est « Staff \+ Championship »/.test(await leve(() => R.listeDesFiches(lignesCsv(x => x.idProduct === 449653 ? { ...x, stamp: 'Staff + Championship' } : x))) || ''), true);
+        verifier('colonne CSV toujours vérifiée : 275574 « Prerelease » refusé', /la colonne du relevé est « Prerelease »/.test(await leve(() => R.listeDesFiches(lignesCsv(x => x.idProduct === 275574 ? { ...x, stamp: 'Prerelease' } : x))) || ''), true);
+        const w = fausseBase({ produits: [LP(275574, 20, 'S', '8'), LP(274061, 20, 'S', '8'), LP(449653, 21, 'T', '8'), LP(280131, 21, 'T', '8')],
+            cartes: [{ _id: 20, images: [ENTREE('S', '8', 'g8')] }, { _id: 21, images: [ENTREE('T', '8', 'k8t')] }], images: [{ _id: 'dg', cleR2: 'g8', carteId: 20, set: 'S' }, { _id: 'dk', cleR2: 'k8t', carteId: 21, set: 'T' }] });
+        const p = await R.construirePlan({ cartesDb: w.db, fiches: [g, k], dates: new Map(), idsReleve: new Set([275574, 449653]), etiquettes: new Map(), normalesVues: new Set([274061, 280131]) });
+        const pg = p.items.find(i => i.idProduct === 275574), pk = p.items.find(i => i.idProduct === 449653);
+        verifier('preuves : décision citée', [/; décision du testeur du 2026-10-19 \(relayée par l'API, photo à l'appui\) : « Dark Gyarados TR 8, 275574 : tampon PRERELEASE seul/.test(pg.v2.preuve), /; décision du testeur du 2026-10-19 \(relayée par l'API, photo à l'appui\) : « Karrablast NVI 8, 449653 : STAFF \+ CHAMPIONSHIP/.test(pk.v2.preuve)], [true, true]);
+        verifier('libellés d\'entrée suivent la variante', [pg.entree?.cible, pk.entree?.cible, pg.v1?.idProduct, pk.v1?.idProduct], ['Prerelease', 'Staff + Championship', 274061, 280131]);
     });
     await essayer('table : colonne différente', async () => verifier('refus', /la colonne du relevé est « Staff »/.test(await leve(() => R.listeDesFiches(lignesCsv(x => x.idProduct === 275574 ? { ...x, stamp: 'Staff' } : x))) || ''), true));
     await essayer('table : mot absent de l\'URL', async () => verifier('refus', /ne figure pas dans l'URL/.test(await leve(() => R.listeDesFiches(lignesCsv(x => x.idProduct === 771356 ? { ...x, url: 'https://v/rien' } : x))) || ''), true));

@@ -40,7 +40,8 @@ const COLONNES = Object.freeze({ 'Staff': ['staff'], 'Prerelease': ['prerelease'
  * nomme (le mot doit figurer dans l'URL). `reserve` : ce que le titre dit et que la table NE retient PAS (colonne ou étiquette Cardmarket qui ne le confirment pas : un doute est un trou).
  */
 const FICHES = Object.freeze([
-    { id: 275574, colonne: 'Staff + Prerelease', corrobore: ['prerelease'], ajouts: [] },
+    // B4 : `decisionTesteur` = les jetons posés viennent de la décision du testeur (2026-10-19, relayée par l'API, photo à l'appui), JAMAIS déduits ; la colonne du relevé reste vérifiée telle quelle.
+    { id: 275574, colonne: 'Staff + Prerelease', corrobore: ['prerelease'], ajouts: [], decisionTesteur: { jetons: ['prerelease'], texte: 'Dark Gyarados TR 8, 275574 : tampon PRERELEASE seul ⇒ jeton `prerelease` (et non `staff+prerelease`). 274061 reste le normal.' } },
     { id: 882904, colonne: 'Staff + Prerelease', corrobore: ['pre-release', 'staff'], ajouts: [] },
     { id: 449213, colonne: 'Staff + Championship', corrobore: ['staff', 'championship'], ajouts: [] },
     { id: 882908, colonne: 'Prerelease', corrobore: ['prerelease'], ajouts: [] },
@@ -48,7 +49,7 @@ const FICHES = Object.freeze([
     { id: 275575, colonne: 'Prerelease', corrobore: ['prerelease'], ajouts: [] },
     // Kricketot : « Snowflake Stamp » (flocon, calendrier de l'Avent) n'est PAS « cosmo » (le motif holo Cosmos). L'étiquette Cardmarket lue ne dit pas « Cosmos » : snowflake seul ; cosmo viendrait du titre seul.
     { id: 882210, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'snowflake', mot: 'flocon' }], reserve: 'prerelease et cosmo (titre seul ; la colonne dit Autre et l\'étiquette Cardmarket lue dit « Snowflake Stamp Countdown Calendar Promo », sans Cosmos)' },
-    { id: 449653, colonne: 'Championship', corrobore: ['championships'], ajouts: [], reserve: 'staff (titre seul ; la colonne ne le nomme pas, contrairement à Tropius)' },
+    { id: 449653, colonne: 'Championship', corrobore: ['championships'], ajouts: [], decisionTesteur: { jetons: ['staff', 'championship'], texte: 'Karrablast NVI 8, 449653 : STAFF + CHAMPIONSHIP ⇒ jeton `staff+championship` (et non `championship`). 280131 reste le normal.' } },
     { id: 371590, colonne: 'League', corrobore: ['stamp'], ajouts: [] },
     { id: 708073, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'toys-r-us', mot: 'toysrus' }] },
     // Ogerpon : 800148 « Cosmo Holo Box Set Promo » = cosmo (vignette regardée). 771357 « EB Games Promo » : aucun jeton ; 786105 « Cosmo Holo Twilight Masquerade Stamped Promo » : tampon de logo d'extension sans jeton sûr :
@@ -98,12 +99,14 @@ function listeDesFiches(lignesCsv, table = FICHES) {
         for (const m of [...t.corrobore, ...t.ajouts.map(a => a.mot).filter(Boolean)]) if (!url.includes(m)) throw new Error(`fiche ${t.id} : le mot « ${m} » ne figure pas dans l'URL de l'annonce — rien n'est écrit`);
         const base = COLONNES[t.colonne];
         if (!base) throw new Error(`fiche ${t.id} : colonne « ${t.colonne} » hors table`);
-        const jetons = [...new Set([...base, ...t.ajouts.map(a => a.jeton)])].sort((a, b) => JETONS.indexOf(a) - JETONS.indexOf(b));
+        const dec = t.decisionTesteur ?? null;
+        if (dec && (!Array.isArray(dec.jetons) || !dec.jetons.length || typeof dec.texte !== 'string' || !dec.texte.trim())) throw new Error(`fiche ${t.id} : decisionTesteur incomplète (jetons et texte exigés) — rien n'est écrit`);
+        const jetons = dec ? [...dec.jetons] : [...new Set([...base, ...t.ajouts.map(a => a.jeton)])].sort((a, b) => JETONS.indexOf(a) - JETONS.indexOf(b));
         if (!jetons.length) throw new Error(`fiche ${t.id} : aucune marque nommée (colonne « ${t.colonne} » sans titre qui la précise) : un doute est un trou`);
         const variante = jetons.join('+');
         if (!varianteValide(variante)) throw new Error(`fiche ${t.id} : variante « ${variante} » hors vocabulaire fermé`);
         const freres = (t.freres || []).map(x => { if (!varianteValide(x.variante) || SEULS.includes(x.variante)) throw new Error(`fiche ${t.id} : frère ${x.id} : variante « ${x.variante} » hors vocabulaire tamponné`); return { ...x }; });
-        return { idProduct: t.id, jetons, variante, colonne: t.colonne, url: l.url, reserve: t.reserve ?? null, vignettes: t.ajouts.filter(a => a.vignette).map(a => a.vignette), conflit: t.conflit ?? null, freres, sansJeton: t.sansJeton ?? {} };
+        return { idProduct: t.id, jetons, variante, colonne: t.colonne, url: l.url, reserve: t.reserve ?? null, vignettes: t.ajouts.filter(a => a.vignette).map(a => a.vignette), conflit: t.conflit ?? null, decision: dec?.texte ?? null, freres, sansJeton: t.sansJeton ?? {} };
     });
 }
 
@@ -161,7 +164,8 @@ function listeDesCorrectionsVues(table = CORRECTIONS_VUES) {
 }
 
 const preuveV2 = (f, etiquette) => `relevé du testeur, ${DATE_RELEVE} (annonce ${f.url}, colonne « ${f.colonne} »)${etiquette ? ` ; étiquette Cardmarket lue : « ${etiquette} » (OCR ${DATE_OCR})` : ''}`
-    + (f.vignettes?.length ? ` ; étiquette lue sur la vignette Cardmarket (${f.vignettes.join(', ')}), regardée par le coordinateur le ${DATE_RELEVE}` : '') + (f.conflit ? ` ; ${f.conflit}` : '');
+    + (f.vignettes?.length ? ` ; étiquette lue sur la vignette Cardmarket (${f.vignettes.join(', ')}), regardée par le coordinateur le ${DATE_RELEVE}` : '') + (f.conflit ? ` ; ${f.conflit}` : '')
+    + (f.decision ? ` ; décision du testeur du 2026-10-19 (relayée par l'API, photo à l'appui) : « ${f.decision} »` : '');
 const preuveFrere = x => `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} : « ${x.etiquette} »`;
 
 const nf = l => cleNumero(l.numeroFiche);
