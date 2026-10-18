@@ -38,6 +38,7 @@ class Panne extends Error { constructor(code, diagnostic, motif = null) { super(
 const panne = (code, diagnostic, motif) => { throw new Panne(code, diagnostic, motif); };
 
 const etatValide = x => (ETATS.includes(x) ? x : null);
+// `declare` n'est que l'ÉCHO du texte du vendeur (clé requise du contrat, E12) : il n'entre dans aucune décision. `retenu` (donc `etatVise`) ne vient que de l'avis du modèle sur la photo.
 function etatDe(e) {
     const o = e && typeof e === 'object' ? e : {};
     const defauts = (Array.isArray(o.defautsVus) ? o.defautsVus : []).filter(x => typeof x === 'string' && x.trim()).slice(0, 10).map(x => x.slice(0, 200));

@@ -93,7 +93,8 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // ── L'ÉTAT, sur un refus. Valeurs RÉELLES : « Très bon état » est un des quatre
         // textes que `etatVintedVersCardmarket` reconnaît, et il transpose vers EX.
         etatVinted: 'Très bon état', etatMin: 'EX',
-        etatEstimeIA: 'NM', etatConfianceIA: 'haute', etatRetenu: 'EX',
+        // ETAT-VENDEUR (2026-10-18) : l'état retenu est l'avis du modèle (NM, confiance haute) ; le vendeur (EX) n'y entre plus.
+        etatEstimeIA: 'NM', etatConfianceIA: 'haute', etatRetenu: 'NM',
         defautsVus: ['léger blanchiment sur le bord droit'],
         // La grille et son compteur. `PO` est volontairement à 0 offre et `XX` hors
         // échelle : les deux doivent être ÉCARTÉS, pas écrits.
@@ -161,8 +162,9 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         verifier('etatEstimeIA', echec.etatEstimeIA, 'NM');
         verifier('etatConfianceIA', echec.etatConfianceIA, 'haute');
         // 🔑 LE CHAMP QUI DÉCIDE DU PRIX : l'IA dit NM avec une confiance haute, le vendeur
-        // dit EX — et c'est EX qui sort. L'avis de l'IA ne peut que DÉGRADER.
-        verifier('etatRetenu = le PIRE des deux avis', echec.etatRetenu, 'EX');
+        // dit EX — et c'est NM qui sort, l'état du vendeur reste une information journalisée
+        // (décision de l'utilisateur, 2026-10-18 ; avant : « le PIRE des deux avis » donnait EX).
+        verifier('etatRetenu = l\'avis du modèle, jamais celui du vendeur', echec.etatRetenu, 'NM');
         verifier('defautsVus', echec.defautsVus, ['léger blanchiment sur le bord droit']);
         // La grille : clé hors échelle ÉCARTÉE, et 0 offre écarté aussi — un 0 dirait
         // « aucune offre », ce qui est une affirmation, là où l'absence dit « on ne sait pas ».

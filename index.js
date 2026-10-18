@@ -3024,15 +3024,19 @@ function prixPourEtat(grille, etat) {
     return prix.length ? Math.min(...prix) : null;
 }
 
-// Renvoie le PIRE des deux états (le plus dégradé). Sert à croiser l'avis de
-// l'IA et celui du vendeur : en cas de désaccord, on prend le moins favorable,
-// car surestimer l'état conduit à surpayer.
-function pireEtat(a, b) {
-    const ia = ORDRE_ETATS.indexOf(String(a || '').toUpperCase());
-    const ib = ORDRE_ETATS.indexOf(String(b || '').toUpperCase());
-    if (ia === -1) return ib === -1 ? null : ORDRE_ETATS[ib];
-    if (ib === -1) return ORDRE_ETATS[ia];
-    return ORDRE_ETATS[Math.max(ia, ib)]; // index le plus grand = état le plus dégradé
+// ÉTAT RETENU = L'AVIS DU MODÈLE SUR LA PHOTO, ET RIEN D'AUTRE (décision de l'utilisateur, 2026-10-18 :
+// « l'état d'une carte ne vient JAMAIS du vendeur »). Avant cette date, la fonction `pireEtat` croisait cet avis
+// avec l'état déclaré par le vendeur et prenait le moins favorable : la base du prix passait de 4,75 € à 1,50 €
+// sur le même produit selon ce que le vendeur avait écrit, et le verdict s'inversait. Elle est supprimée : l'état
+// du vendeur n'a plus aucune entrée dans cette fonction, ni dans aucune décision en aval.
+// La PORTE DE CONFIANCE est inchangée : sous « moyenne », l'avis du modèle est ignoré en bloc (pas pondéré).
+// Sans avis retenu (confiance basse, absente, état hors barème), l'état retenu vaut null et la chaîne fait ce
+// qu'elle fait sans état.
+function etatRetenuDuModele(cardInfo) {
+    const c = cardInfo || {};
+    if (c.etatConfiance !== 'haute' && c.etatConfiance !== 'moyenne') return null;
+    const e = String(c.etatEstime || '').toUpperCase();
+    return ORDRE_ETATS.includes(e) ? e : null;
 }
 
 // Retrouve les idExpansion Cardmarket correspondant à un set TCGdex.
@@ -3116,10 +3120,10 @@ async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null, setCod
     }
 }
 
-// Correspondance état Vinted -> état Cardmarket (minimum demandé).
-// ⚠️ L'échelle Vinted est pensée pour les vêtements et l'état est DÉCLARÉ par le
-// vendeur : c'est un indice, pas un grading. On reste donc volontairement prudent
-// (ex: "Neuf sans étiquette" -> NM et pas MT, car les vendeurs surestiment).
+// Correspondance état Vinted -> état Cardmarket. ⚠️ DEPUIS LE 2026-10-18 ELLE NE SERT PLUS À DÉCIDER : « l'état d'une carte
+// ne vient JAMAIS du vendeur ». Son résultat (`etatMin`, `declareCardmarket`, `etatCardmarket`) est un ÉCHO d'information
+// (réponse et journal) ; aucun état retenu, aucun prix, aucun verdict ne le lit.
+// (Historique : l'échelle Vinted est pensée pour les vêtements, l'état est DÉCLARÉ — « Neuf sans étiquette » -> NM et pas MT.)
 function etatVintedVersCardmarket(etatVinted) {
     if (!etatVinted) return null;
     const e = etatVinted.toLowerCase();
@@ -3157,8 +3161,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             return res.json({ success: false, error: "Aucune image reçue" });
         }
 
+        // L'état déclaré par le vendeur est REÇU et RENVOYÉ EN ÉCHO (`etatVinted`, `etatCardmarket`), jamais utilisé : aucun prix, aucun verdict n'en dépend.
         const etatMin = etatVintedVersCardmarket(vintedEtat);
-        if (vintedEtat) console.log(`🏷️ État Vinted : "${vintedEtat}" -> Cardmarket ${etatMin || '(non mappé)'}${etatMin ? ' minimum' : ''}`);
+        if (vintedEtat) console.log(`🏷️ État Vinted reçu : "${vintedEtat}" (écho seulement, ignoré : ${etatMin || 'non mappé'})`);
 
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         console.log(`📷 ${photos.length} photo(s) envoyée(s) à l'IA.`);
@@ -3740,11 +3745,11 @@ async function gererIdentifier(req, res) {
         // jours par l'extension, le journal ne l'est que le jour où on veut mesurer.
         //
         // CE QUE ÇA RENDAIT IMPOSSIBLE, et pas seulement difficile : « combien de fois le
-        // verdict s'inverse selon l'état retenu ». `etatRetenu` vaut le PIRE de l'avis IA et
-        // de l'état déclaré par le vendeur — l'IA ne peut que DÉGRADER, jamais relever. Sur
-        // un cas réel : base EX+ à 1,50 € donne « 167 % au-dessus », base NM à 4,75 € donne
-        // une bonne affaire. LE VERDICT S'INVERSE. Sans ces champs la question n'attendait
-        // pas plus de volume : elle était sans réponse à tout volume.
+        // verdict s'inverse selon l'état retenu ». (Avant le 2026-10-18, `etatRetenu` valait le PIRE de l'avis IA et
+        // de l'état déclaré par le vendeur ; sur un cas réel : base EX+ à 1,50 € donne « 167 % au-dessus », base NM à
+        // 4,75 € donne une bonne affaire, LE VERDICT S'INVERSAIT selon ce que le vendeur avait écrit. Décision de
+        // l'utilisateur, 2026-10-18 : l'état ne vient JAMAIS du vendeur — `etatRetenu` ne vient plus que de l'avis du
+        // modèle sur la photo, voir `etatRetenuDuModele`.) Sans ces champs la question était sans réponse à tout volume.
         //
         // ⚠️ UNE FONCTION, PAS UN OBJET FIGÉ, pour la même raison que `champsVivier` :
         // `cardInfo` n'existe pas encore à cette ligne (l'IA n'est pas appelée) et il est
@@ -3754,7 +3759,7 @@ async function gererIdentifier(req, res) {
         //
         // ⚠️ ET LA RÉPONSE HTTP LIT CE MÊME BLOC (voir `etat:` plus bas). C'est le point :
         // deux expressions « qui se ressemblent » — l'une pour l'extension, l'autre pour le
-        // journal — divergeraient au premier changement de la règle du pire état, et on
+        // journal — divergeraient au premier changement de la règle de l'état retenu, et on
         // mesurerait alors autre chose que ce qu'on affiche.
         const champsEtat = () => {
             const c = cardInfo || {};
@@ -3768,10 +3773,9 @@ async function gererIdentifier(req, res) {
                 // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
                 // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
                 // devient mesurable maintenant qu'il est journalisé.
-                etatRetenu: pireEtat(
-                    (c.etatConfiance === 'haute' || c.etatConfiance === 'moyenne') ? c.etatEstime : null,
-                    etatMin
-                )
+                // ⚠️ L'ÉTAT DU VENDEUR (`etatVinted`, `etatMin`) EST ICI UNE INFORMATION JOURNALISÉE, PAS UNE ENTRÉE :
+                // l'état retenu ne vient que de l'avis du modèle (voir `etatRetenuDuModele`).
+                etatRetenu: etatRetenuDuModele(c)
             };
         };
 
@@ -3820,8 +3824,8 @@ async function gererIdentifier(req, res) {
             const motifIA = motifDuRefusIA(diagnosticIA);        // `ia-echec` SEULEMENT pour une panne du fournisseur prouvée ; sinon `depense-modele-plafond` ou `ia-sans-lecture` (plafonné)
             const rendu = await rembourserScan(req, motifIA);
             // ⚠️ `cardInfo` EST NUL ICI, ET LE BLOC RESTE UTILE : `etatVinted` et `etatMin`
-            // ne viennent pas de l'IA mais de l'annonce. Une panne de lecture n'efface pas
-            // ce que le vendeur a déclaré. Les trois champs d'origine IA seront nuls, et ce
+            // ne viennent pas de l'IA mais de l'annonce (information journalisée, jamais une entrée). Une panne de lecture
+            // n'efface pas ce que le vendeur a déclaré. Les champs d'origine IA et `etatRetenu` seront nuls, et ce
             // null-là est une information : la lecture a échoué, pas l'annonce.
             enregistrerEchec({
                 _id: req.scanIdImpose,
@@ -5903,8 +5907,6 @@ async function gererIdentifier(req, res) {
         const produitGagnant = produits.find(p => p.idProduct === classement[0]?.idProduct);
         const nomProduit = produitGagnant ? String(produitGagnant.name).split('[')[0].trim() : null;
 
-        const etatMin = etatVintedVersCardmarket(vintedEtat);
-
         // ════════════════════════════════════════════════════════════════════
         // LE PRIX GUIDE RÉELLEMENT RETENU — l'autre moitié de la paire
         // ════════════════════════════════════════════════════════════════════
@@ -6292,7 +6294,8 @@ async function gererIdentifier(req, res) {
                     defautsVus: e.defautsVus || [],
                     declareVendeur: e.etatVinted,
                     declareCardmarket: e.etatMin,
-                    // L'état à retenir = le PIRE des deux avis (voir explication plus haut)
+                    // L'état à retenir = l'avis du modèle sur la photo, jamais celui du vendeur (voir `etatRetenuDuModele`).
+                    // `declareVendeur` et `declareCardmarket` ne sont que l'ÉCHO du texte reçu : ils n'entrent dans aucune décision.
                     retenu: e.etatRetenu
                 };
             })(),

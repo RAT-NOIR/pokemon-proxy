@@ -113,6 +113,23 @@ Les deux routes du scanner sont **conditionnelles** : elles ne seront livrées q
 }
 ```
 
+#### 1.2 bis — L'état d'une carte ne vient JAMAIS du vendeur (décision de l'utilisateur, 2026-10-18)
+
+> **L'état déclaré par le vendeur est reçu et ignoré : il n'entre ni dans l'état retenu, ni dans le prix, ni dans le verdict.**
+
+- `vintedEtat` (requête) est accepté (chaîne, 100 caractères au plus, sinon `400 ENTREE`) et journalisé comme une information. Il n'est lu par aucune décision : ni `etat.retenu`, ni `prixLive.etatVise`, ni aucun prix, ni aucun verdict, ni le classement, ni la question de départage.
+- `etat.declare` (réponse) n'est que l'**écho** du texte reçu (`null` si absent). La clé reste servie parce que le contrat l'exige (E12, §7.3 bis) ; **ne pas l'afficher comme l'état de la carte**, et ne rien en déduire.
+- `etat.retenu` ne vient **que de l'avis du modèle sur la photo**, avec la porte de confiance inchangée : l'avis (`etat.estime`) est retenu si `etat.confiance` est `haute` ou `moyenne`. Sinon `etat.retenu` vaut `null` et la chaîne fait ce qu'elle fait sans état. Avant cette date, `retenu` valait « le pire de l'avis du modèle et du texte du vendeur » : les analyses journalisées d'avant le 2026-10-18 portent l'ancienne règle.
+- Cela vaut pour la route héritée `POST /api/identifier` **sans** `contrat: 2` (celle que l'extension 1.0.x appelle) : même règle, même réponse, qu'un `vintedEtat` soit absent, connu (« Neuf avec étiquette », « Très bon état », « Bon état », « Satisfaisant ») ou inconnu. Sa réponse garde les échos `etat.declareVendeur` et `etat.declareCardmarket` (transposition Cardmarket du texte du vendeur) : ce sont des échos d'information, jamais des entrées. Banc : `v2/test/test-etat-vendeur.js` (la réponse entière est identique, hors écho et identifiant de scan, pour six valeurs de `vintedEtat` et trois lectures du modèle).
+- `POST /api/analyser` (héritée) : le texte du vendeur n'entrait déjà dans aucun prix ; ses échos `etatVinted` et `etatCardmarket` restent des échos.
+- Il n'existe pas de route `/api/identifier-lot` : le lot est un crochet interne (`identifierLot`), non branché en production aujourd'hui ; quand il le sera, il transmet `vintedEtat` à la chaîne héritée, qui l'ignore.
+
+**Et le TITRE de l'annonce ? (réponse à l'entrée « lot L3 » de `DEMANDE-SERVEUR-SITE.md`, mesurée sur le code du 2026-10-18.)** On ne peut **pas** écrire aujourd'hui que l'état n'est lu que sur les photos.
+- Le titre (`title`, expurgé par l'extension) part dans **le même appel au modèle** que l'estimation de l'état : `getCardIdFromAI` (`index.js`) envoie un seul message qui porte le prompt, le titre (« Titre de l'annonce (contexte) : … », dernière ligne du prompt) et toutes les photos ; `etatEstime`, `etatConfiance` et `defautsVus` sortent de ce même appel.
+- Le prompt **ne dit pas d'où vient l'état** : son paragraphe « ÉVALUATION DE L'ÉTAT » décrit un barème et parle de faces et de photos (« la PIRE face observée », « si aucune photo du verso n'est fournie »), mais aucune ligne n'interdit au modèle de tirer l'état du titre (« neuf », « excellent état »). Il interdit le titre ailleurs (« la langue se déduit du texte visible sur la carte, pas du titre »), jamais pour l'état.
+- Le prompt n'a **pas** été modifié : le changer demande une mesure payante (appels au modèle). Tant qu'elle n'est pas faite, la formulation vraie est « l'état est estimé par le modèle, à partir des photos et du contexte de l'annonce », pas « à partir des photos seules ». La lecture de secours (modèle en panne) lit le titre pour le nom et le numéro seulement : elle rend `etatEstime: null`.
+- L'extension v2 n'envoie aucun `vintedEtat` (constat du site). L'extension 1.0.x : la route héritée lit `req.body.vintedEtat` s'il est envoyé et le journalise ; ce dépôt ne contient pas le code de la 1.0.5, on ne peut donc pas dire d'ici si elle l'envoie. Sa conséquence est la même dans tous les cas : ignoré.
+
 La réponse a **trois issues par carte**, jamais une quatrième. Une carte identifiée :
 
 ```json schema=ReponseAnalyse
