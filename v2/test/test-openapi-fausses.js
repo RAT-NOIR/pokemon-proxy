@@ -121,6 +121,26 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('un champ interne qui fuit dans le prix (prixMelangeTampon)', c => { c.analyse.cartes[0].carte.prixGuide.prixMelangeTampon = true; }, 'ReponseAnalyse', pi);
     refuse('un champ interne qui fuit sur le Produit (tamponsConnus)', c => { c.analyse.cartes[0].carte.tamponsConnus = ['staff']; }, 'ReponseAnalyse', pi);
 }
+{ // MODELE-VISUEL-API : la fausse de l'empreinte de l'extension, et ce que le schéma REFUSE
+    const em = lire('identifiee-empreinte.json');
+    H.v('MVA : la fausse porte `empreinte` et `regleVerdict.modeleEmpreinte`', [em.empreinte, em.analyse.regleVerdict.modeleEmpreinte.id, em.analyse.regleVerdict.modeleEmpreinte.url], [{ utilisee: true, code: null }, 'p8000-poids8s-1', null]);
+    H.v('contrôle : la fausse saine est acceptée', valider(em, ref('ReponseAnalyse'), doc).ok, true);
+    refuse('un code d\'empreinte hors liste', c => { c.empreinte = { utilisee: false, code: 'trop-lent' }; }, 'ReponseAnalyse', em);
+    refuse('une empreinte sans `utilisee`', c => { delete c.empreinte.utilisee; }, 'ReponseAnalyse', em);
+    refuse('un champ en trop dans l\'empreinte (score)', c => { c.empreinte.score = 0.9; }, 'ReponseAnalyse', em);
+    refuse('un sha256 de modèle qui n\'est pas hexadécimal', c => { c.analyse.regleVerdict.modeleEmpreinte.sha256 = 'z'.repeat(64); }, 'ReponseAnalyse', em);
+    refuse('un modeleEmpreinte sans url (null attendu, pas absent)', c => { delete c.analyse.regleVerdict.modeleEmpreinte.url; }, 'ReponseAnalyse', em);
+    refuse('un octets de modèle à zéro', c => { c.analyse.regleVerdict.modeleEmpreinte.octets = 0; }, 'ReponseAnalyse', em);
+    const rq = { contrat: 2, imageUrls: ['https://images1.vinted.net/t/01_00000_fictif/f800/1.jpeg'], empreintes: [{ photo: 0, vecteur: 'A'.repeat(683) + '=' }], modeleEmpreinte: { id: 'p8000-poids8s-1', sha256: 'a'.repeat(64) } };
+    H.v('MVA : une requête saine avec empreintes est acceptée', valider(rq, ref('RequeteIdentifier'), doc).ok, true);
+    const refuseRq = (nom, abimer) => { const c = clone(rq); abimer(c); H.vrai(`requête refusée : ${nom}`, !valider(c, ref('RequeteIdentifier'), doc).ok); };
+    refuseRq('un vecteur de 683 caractères', c => { c.empreintes[0].vecteur = 'A'.repeat(682) + '='; });
+    refuseRq('un vecteur en base64 URL', c => { c.empreintes[0].vecteur = 'A'.repeat(100) + '-' + 'A'.repeat(582) + '='; });
+    refuseRq('neuf entrées', c => { c.empreintes = Array.from({ length: 9 }, () => c.empreintes[0] || { photo: 0, vecteur: 'A'.repeat(683) + '=' }); c.empreintes.forEach(e => { e.vecteur = 'A'.repeat(683) + '='; }); });
+    refuseRq('un champ en trop dans une entrée', c => { c.empreintes[0].score = 0.9; });
+    refuseRq('un index de photo à 20', c => { c.empreintes[0].photo = 20; });
+    refuseRq('un modèle sans sha256', c => { delete c.modeleEmpreinte.sha256; });
+}
 const er = lire('quota-compte.json');
 H.v('contrôle : une erreur saine est acceptée', valider(er, ref('ReponseErreur'), doc).ok, true);
 refuse('un code d\'erreur inconnu', c => { c.erreur.code = 'INCONNU'; }, 'ReponseErreur', er);
@@ -159,7 +179,8 @@ const listes = {
     'verdicts': S.RequeteRetourLive.properties.verdictAffiche.enum, 'causes de lecture ratée': S.RequeteRetourLive.properties.lectureRatee.properties.cause.enum,
     'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum,
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
-    'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null)
+    'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
+    'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null)
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);
 for (const mot of ['code-maitre', 'administrateur', 'Idempotency-Key', 'X-Rat-Market', 'rm_session', 'ce que les clients doivent aligner', '90 jours', '24 mois'])

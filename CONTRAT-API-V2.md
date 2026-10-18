@@ -453,6 +453,42 @@ Une carte introuvable (remboursée, `motif: introuvable`) :
 
 Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candidats, lot de 4 cartes, une fausse `introuvable` par raison, les pannes, les refus.
 
+### 1.2 bis L'empreinte visuelle calculée par l'extension (lot MODELE-VISUEL-API, facultatif, ÉTEINT par défaut)
+
+**Rien ne change tant que le serveur n'a pas `V2_EMPREINTE_EXTENSION=1`** : les champs ci-dessous ne sont pas lus (même une enveloppe monstrueuse), la réponse, le débit et le journal sont ceux d'avant, octet pour octet. Allumé, l'extension peut joindre à `POST /api/identifier` le vecteur d'UN essai par photo ; le serveur cherche les voisins dans l'index de l'archive et la règle visuelle (règle G) peut **promouvoir** une question en affirmation (mesure : 138 justes, 5 variantes, 0 faux, 144 sûrs sur 303 cartes). Le prétraitement exact, le format, la version du modèle et les temps mesurés sont dans `CONTRAT-EMPREINTE-EXTENSION.md`.
+
+```json schema=RequeteIdentifier
+{
+  "contrat": 2,
+  "imageUrls": ["https://images1.vinted.net/t/01_00000_fictif/f800/1.jpeg"],
+  "title": "Lokhlass 30th Celebration 017/128",
+  "prixVinted": 12.5,
+  "devise": "EUR",
+  "marche": "vinted.fr",
+  "langueInterface": "fr",
+  "versionExtension": "2.0.0",
+  "empreintes": [
+    {
+      "photo": 0,
+      "redressee": true,
+      "vecteur": "+aEuLTShhy0Rq/wthaR+qUwujyCRqLmiKCrULB0utKr/LUCtQZWrLXmnVyoHrgyun6fAJy+uwiQoqVEpUiu/LSAoNytCqFAoDCipIVQlMBXfqoiqe6obqDiqjKaBLlYigKoXrsqs7qURrE2iQ59crqOs3SWcrSslMip1oe6e+J0MKaQm0qw7rSSuuq39na4oDiYrLJIo16SorMQq7q2sKnUqaKkhKuanNixvrlyudao0K22tOqHlKmIq9ymJKDKuaCDhrXsjCq77pymtVa1hLTYtu60prlOjOatvKPSi/6q5rI4aAyHpqoetGioapmatKS5wrIynOyrbqiStsCWbm1+tRatuLXUuXyq3rEOpPKpfqq0sryp/pFUufK2XKoUsf655LUioZ6xILTsq7a27K4ksVq5pLmKmBSvunmQqPKwjrTYtsC0JrLCQwqEPKSMqp6o4rJmo4SKnIX+prSxXLQcsO6lepuIt76QaLuuqMyZPLTctISQ+KjUfLK4tLB4tPKo+pHQtzyA4rsislydKqSMsyq2Wq1OpDymZLdwsH6x4LSOua57qrB0s+KvhLVYq7K2arJWna63apnOoaizcLBut/ihOKNgo9SyprJapuyzeqB4mTi1jqwws9C0orAwtaSS4rXwtSy0cGT6u/S3wqFQhXqxWI/EsdCqeqp2tCSw="
+    }
+  ],
+  "modeleEmpreinte": {
+    "id": "p8000-poids8s-1",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+- **`empreintes`** : au plus **une entrée par photo** envoyée, 8 au plus. `photo` = l'index dans `imageUrls` ; `vecteur` = **256 nombres en float16 petit-boutiste, base64 standard avec bourrage, exactement 684 caractères** (512 octets) ; `redressee` = vrai si le vecteur est celui de la première carte redressée de la photo, faux (défaut) s'il est celui de la photo entière. **Un seul essai par photo** : la première carte redressée, sinon la photo entière. Le serveur ne juge qu'UN vecteur (celui de la photo de plus petit index).
+- **`modeleEmpreinte`** : l'`id` et le `sha256` reçus dans `analyse.regleVerdict.modeleEmpreinte` d'une réponse précédente (le serveur n'attend QU'UNE version). Une autre version, ou aucune : les vecteurs sont ignorés.
+- **La vérification du serveur est écrite par ce qu'elle autorise** : 256 nombres finis, chacun de valeur absolue au plus 0,5 ; une norme L2 dans [0,999 ; 1,001] ; un meilleur cosinus à l'index d'au moins 0,30. Tout le reste : le vecteur ne sert pas, **la requête n'est JAMAIS refusée** (200, la chaîne décide, le débit est celui d'une analyse ordinaire) et la réponse le dit.
+- **`empreinte`** (réponse, racine, facultatif) : présent SEULEMENT quand la requête portait `empreintes` ET que le serveur les accepte. `{ "utilisee": true, "code": null }` : le vecteur a été vérifié et la règle visuelle a rendu une décision (cela ne dit pas qu'elle a changé la réponse). `{ "utilisee": false, "code": … }` avec `code` parmi les valeurs fermées : `modele-inconnu` (une autre version du modèle, ou aucune annoncée), `invalide` (enveloppe ou vecteur refusé), `indisponible` (index absent, délai dépassé ou panne), `muette` (vecteur valide, la règle ne peut pas conclure — p. ex. la garde des zones demande des pixels que le serveur n'a pas).
+- **`analyse.regleVerdict.modeleEmpreinte`** (facultatif) : `{ id, sha256, url, octets }` — la version attendue, l'adresse de téléchargement du modèle (**`null` tant que la publication sur R2 n'est pas faite** : l'extension n'envoie alors aucun vecteur) et sa taille. Servi dans `regleVerdict` plutôt que dans `/ping` : l'extension le lit déjà à chaque réponse, il est versionné avec le contrat, et `/ping` reste un sondage de santé sans configuration.
+- **Ce que le vecteur peut changer** : une affirmation de la chaîne qui contredit la règle visuelle devient une **question** (jamais tranchée en silence) ; une **question** de la chaîne peut devenir une **affirmation** si la règle visuelle affirme et que la garde sur le produit désigné (`garde-contradiction`) laisse passer ; l'**introuvable** de la chaîne n'est jamais promu (le crédit est déjà rendu). Une promotion est facturée comme une affirmation (`debite: 1`), le crédit réservé par la question est réglé comme une réponse.
+- **Isolement entre utilisateurs** : un résultat que le vecteur a changé n'entre jamais dans une donnée partagée (banc réel, statistiques) sans une lecture concordante ; il est marqué dans la ligne `analyses` (`empreinteExtension`, interne, jamais servi). Un vecteur forgé ne change le résultat d'aucun autre utilisateur (`v2/test/test-empreinte-isolement.js`).
+
 ### 1.3 Répondre à une question
 
 `choix` est l'`id` d'un choix (`a`, `b` ou `c`), `aucune` ou `ne-sait-pas`. Sur une question de confirmation (un seul candidat, §3.3), `a` est OUI et `aucune` est NON.
