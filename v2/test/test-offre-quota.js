@@ -31,9 +31,9 @@ const futur = new Date('2027-06-01T00:00:00Z');
 
     // ── 2. les trois offres
     {
-        const p = await inst({ essais: 0, achete: 9 });        // les anciens documents ne comptent pour rien : 3 par jour quand même
+        const p = await inst({ essais: 0, achete: 0 });        // l'ancien essai (0) ne compte pour rien : 3 par jour (ACHETE-AVANT-JOUR : les analyses achetées passent AVANT le quota, banc test-achete-avant-jour.js)
         const rs = await debiterN(p, 4);
-        H.v('2a. sans compte : 3 analyses puis QUOTA (essais 0 et achete 9 en base n\'y changent rien)', rs.map(issue), ['ok', 'ok', 'ok', 'QUOTA']);
+        H.v('2a. sans compte : 3 analyses puis QUOTA (essais 0 en base n\'y change rien)', rs.map(issue), ['ok', 'ok', 'ok', 'QUOTA']);
         H.v('    le crédit pris porte la poche « jour », son jour de Paris et son compteur', rs[0].credit, { poche: 'jour', jour: JOUR, porteurCle: `installation:${p.id}` });
         H.v('    compteur du jour 3, jamais 4 (le jeton du refus est rendu)', await cnt(p), 3);
         const o = await Of.offre(p, cfg, t);
@@ -62,7 +62,7 @@ const futur = new Date('2027-06-01T00:00:00Z');
 
     // ── 3. l'offre se relit EN BASE, et une garde s'écrit par ce qu'elle autorise
     {
-        const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 4 } }); nv.compte = { ...nv.compte, verifie: true };   // l'instantané ment : « vérifié »
+        const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } }); nv.compte = { ...nv.compte, verifie: true };   // l'instantané ment : « vérifié »
         H.v('3a. compte NON vérifié en base (instantané « vérifié ») : VERIFICATION, aucun compteur', [issue((await debiterN(nv, 1))[0]), await cnt(nv)], ['VERIFICATION', null]);
         H.v('    offre : gratuit, restant 0 (jamais 10)', (await Of.offre(nv, cfg, t)), { nom: 'gratuit', restant: 0, remiseAZero: '2026-10-14T00:00:00+02:00' });
         const v = await compte({ verifie: true }); v.compte = { ...v.compte, verifie: false };      // l'instantané dit « non vérifié », la base dit vérifié
@@ -191,9 +191,9 @@ const futur = new Date('2027-06-01T00:00:00Z');
         H.v('8b. administrateur FORGÉ sur un compte sans rôle : traité en gratuit (10 puis QUOTA)', [rf.filter(x => x.ok && !x.administrateur).length, issue(rf[10])], [10, 'QUOTA']);
     }
 
-    // ── 9. les anciennes poches : jamais débitées, jamais créditées, lisibles et intactes (avant = après, document par document)
+    // ── 9. les anciennes poches (hors `achete`, qui a son banc : test-achete-avant-jour.js) : jamais débitées, jamais créditées, lisibles et intactes (avant = après, document par document)
     {
-        const c = await compte({ solde: { accueil: 25, achete: 50 }, abonnement: abo(futur) }), i = await inst({ essais: 3, achete: 7 });
+        const c = await compte({ solde: { accueil: 25, achete: 0 }, abonnement: abo(futur) }), i = await inst({ essais: 3, achete: 0 });
         const avant = JSON.stringify([await lire(c), await lire(i)]);
         await debiterN(c, 12); await debiterN(i, 5);
         const dc = await Lg.debiter(c, { scanId: 'z', cleIdempotence: 'z', maintenant: new Date('2026-10-14T10:00:00Z') }, cfg);
@@ -202,14 +202,15 @@ const futur = new Date('2027-06-01T00:00:00Z');
         H.v('    aucun mouvement ne porte une ancienne poche', await db.col('mouvements').countDocuments({ poche: { $in: ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'] }, $or: [{ compteId: c.id }, { installationId: i.id }] }), 0);
         const directs = []; for (const poche of ['essai', 'accueil', 'hebdo', 'abonnement', 'achete']) directs.push(await Lg.essayerPoche(poche, c, cfg, t), await Lg.essayerPoche(poche, i, cfg, t));
         H.v('9b. essayerPoche sur une ancienne poche : null (10 appels), documents toujours intacts', [directs.every(x => x === null), JSON.stringify([await lire(c), await lire(i)]) === avant], [true, true]);
-        const solde = await S.solde(c, cfg, t);
+        const lect = await compte({ solde: { accueil: 25, achete: 50 }, abonnement: abo(futur) });      // un compte qui ne débite pas : ses soldes se LISENT
+        const solde = await S.solde(lect, cfg, t);
         H.v('9c. le Solde reste LISIBLE avec ses champs (accueil 25, achete 50, abonnement 100)', [solde.accueil, solde.achete, solde.abonnement && solde.abonnement.restant], [25, 50, 100]);
         const mvAvant = await db.col('mouvements').countDocuments({});
-        const ach = await Pay.crediterAchat({ compteId: c.id, scans: 50, reference: 'cs_test_oq', maintenant: t }, cfg);
-        H.v('9d. crediterAchat : REFUSÉ, journalisé, aucune écriture (solde achete 50, aucun mouvement de plus)', [ach.ok, ach.raison, (await lire(c)).solde.achete, await db.col('mouvements').countDocuments({}) - mvAvant], [false, 'vente-arretee', 50, 0]);
+        const ach = await Pay.crediterAchat({ compteId: lect.id, scans: 50, reference: 'cs_test_oq', maintenant: t }, cfg);
+        H.v('9d. crediterAchat : REFUSÉ, journalisé, aucune écriture (solde achete 50, aucun mouvement de plus)', [ach.ok, ach.raison, (await lire(lect)).solde.achete, await db.col('mouvements').countDocuments({}) - mvAvant], [false, 'vente-arretee', 50, 0]);
         await db.col('credits').insertOne({ _id: 'cred-oq', userId: 'u-oq', email: 'rat@x.fr', soldeScans: 40 });
-        const rat = await Hr.rattacherAchats({ compteId: c.id, maintenant: t }, cfg, { emailCle: e => e });
-        H.v('    rattacherAchats (achats de l\'ancien portefeuille) : refusé, ni le compte, ni `credits`, ni `mouvements` ne bougent', [rat.ok, (await lire(c)).solde.achete, (await db.col('credits').findOne({ _id: 'cred-oq' })).soldeScans, await db.col('mouvements').countDocuments({}) - mvAvant], [false, 50, 40, 0]);    }
+        const rat = await Hr.rattacherAchats({ compteId: lect.id, maintenant: t }, cfg, { emailCle: e => e });
+        H.v('    rattacherAchats (achats de l\'ancien portefeuille) : refusé, ni le compte, ni `credits`, ni `mouvements` ne bougent', [rat.ok, (await lire(lect)).solde.achete, (await db.col('credits').findOne({ _id: 'cred-oq' })).soldeScans, await db.col('mouvements').countDocuments({}) - mvAvant], [false, 50, 40, 0]);    }
 
     // ── 10. peutPayer (le contrôle SANS débit du scanner) suit la même offre
     {
