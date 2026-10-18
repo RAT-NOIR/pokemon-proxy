@@ -98,8 +98,9 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     const stockPhotos = creerPhotosRecues({ horloge: () => horloge.t });
     let chaineAppels = 0, tel = 0, vusParLaChaine = [];
     const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+    let signauxVus = [];                          // tour 3 : les signaux d'arrêt (AbortSignal) que la chaîne a reçus dans sa requête
     let retardChaine = null, reqsVues = [];       // retardChaine : une promesse que la chaîne attend (un scan LONG) ; reqsVues : les requêtes Express vues par le banc (pour regarder `req.entree` après la réponse)
-    const chaine = async (req, res) => { chaineAppels++; vusParLaChaine.push([...(req.body.imageUrls || [])]); if (retardChaine) await retardChaine; res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) }); };
+    const chaine = async (req, res) => { chaineAppels++; vusParLaChaine.push([...(req.body.imageUrls || [])]); if (req.signalArret) signauxVus.push(req.signalArret); if (retardChaine) await retardChaine; res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) }); };
     for (const [id, nom] of [[4242, 'Pikachu']]) { await db.col('catalogue_produits').insertOne({ idProduct: id, name: nom, idMetacard: id }); await db.col('numeros_cartes').insertOne({ idProduct: id, slugSet: 'Base-Set', numero: String(id % 100) }); }
     const monter = async (cfg, reglage = { placesMax: 2, delaiLectureMs: 1200 }, photos = stockPhotos, extra = {}) => {
         const app = express(); app.set('trust proxy', true);
@@ -603,6 +604,71 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         H.v('19. un corps d\'erreur qui cite la requête : seul le statut et un code court sortent', [s.includes('data:'), s.includes('400'), s2, s3.includes('data:'), s3.includes('502')], [false, true, 'statut=- code=ECONNABORTED', false, true]);
         const index = require('fs').readFileSync(require.resolve('../../index.js'), 'utf8');
         H.vrai('19. index.js n\'écrit plus e.response?.data du fournisseur et passe par le résumé', !/e\.response\?\.data \|\| e\.message/.test(index) && /resumeErreurFournisseur\(e\)/.test(index));
+    });
+
+    // ═══ 20. TOUR 3 : la borne de 90 s est tenue par le SERVEUR (min de dépôt + 120 s et début + 90 s) ; l'abandon du client ne fait jamais télécharger ═══
+    await essayer('20', async () => {
+        const MP = require('../identifier/photos-recues');
+        const U = await acteur({});          // un utilisateur ORDINAIRE (quota, crédit) : le magasin lui reçoit des photos par dépôt direct (la route /api/photo est réservée à l'administrateur en phase 1)
+        const cible = (porteur, store) => store.deposer(porteur, 0, jpg, jpg);
+        // (a) une chaîne qui dure plus que la borne : coupée à la borne, signal levé, échec rendu (crédit rendu), octets libérés
+        {
+            const store = MP.creerPhotosRecues({ scanMs: 300, vieMs: 5000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const id = cible(U.porteur, store); signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const t0 = Date.now(); const R = await identifier(svB, U, corpsId({ photoIds: [{ index: 0, photoId: id }] })); const dt = Date.now() - t0;
+            const req = reqsVues[reqsVues.length - 1];
+            H.v('20.1 chaîne bloquée, borne de 300 ms : coupée à la borne (réponse avant 2 s), échec SERVEUR, ce qui a été pris est RENDU', [R.statut, code(R), R.json && R.json.facturation && R.json.facturation.rembourse, dt < 2000], [500, 'SERVEUR', true, true]);
+            H.v('20.1 le signal d\'arrêt a été levé et donné à la chaîne ; les octets sont libérés (photosRecues vide, imageOctets nul)', [signauxVus.length, signauxVus[0] && signauxVus[0].aborted, req.entree.photosRecues, req.entree.imageOctets], [1, true, [], null]);
+            rendre(); retardChaine = null; await attendre(100); await svB.fermer(); store.arreter();
+        }
+        // (b) la borne se compte depuis le DÉPÔT : horloge injectée, dépôt à 560 ms de 600 ms de vie ⇒ coupure à ~40 ms, bien avant la borne de scan (5 s)
+        {
+            const h = { t: 1e6 }; const store = MP.creerPhotosRecues({ horloge: () => h.t, scanMs: 5000, vieMs: 600, serviceMs: 4000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const U2 = await acteur({}); const id = cible(U2.porteur, store); h.t += 560; signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const t0 = Date.now(); const R = await identifier(svB, U2, corpsId({ photoIds: [{ index: 0, photoId: id }] })); const dt = Date.now() - t0;
+            H.v('20.2 dépôt + 120 s plus tôt que début + 90 s : coupure au plus tôt des deux (≈ 40 ms, jamais les 5 s de la borne de scan)', [R.statut, dt < 1500, signauxVus[0] && signauxVus[0].aborted], [500, true, true]);
+            rendre(); retardChaine = null; await attendre(100); await svB.fermer(); store.arreter();
+        }
+        // (c) une chaîne dans la borne n'est pas touchée
+        {
+            const store = MP.creerPhotosRecues({ scanMs: 3000, vieMs: 5000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const U3 = await acteur({}); const id = cible(U3.porteur, store); signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const enCours = identifier(svB, U3, corpsId({ photoIds: [{ index: 0, photoId: id }] })); await attendre(200); rendre(); retardChaine = null;
+            const R = await enCours; await attendre(150);
+            const req = reqsVues[reqsVues.length - 1];
+            H.v('20.3 chaîne de 200 ms dans la borne de 3 s : 200, signal NON levé, photo servie puis libérée à la fin de la réponse', [R.statut, signauxVus[0] && signauxVus[0].aborted, req.entree.photosRecues], [200, false, []]);
+            await svB.fermer(); store.arreter();
+        }
+        H.vrai('20.4 le banc des constantes (30 + 90 <= 120) reste, et les bornes du serveur viennent des MÊMES constantes', MP.creerPhotosRecues.SERVICE_S + MP.creerPhotosRecues.SCAN_MAX_S <= MP.creerPhotosRecues.VIE_MAX_S && /SCAN_MAX_S \* 1000/.test(require('fs').readFileSync(require.resolve('../identifier/photos-recues.js'), 'utf8')));
+        // N-1 : le client coupe à 30 ms, la chaîne est lente ⇒ l'étape du banc de l'administrateur ne télécharge JAMAIS
+        {
+            const D = await acteur({ role: 'administrateur' }); const p0 = await poster(D, 0);
+            tel = 0; const sN = sorties.length; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const CP = require('../banc/photo-admin'); const compte0 = () => (CP.compteurs ? CP.compteurs().sansReference : -1); const avantC = compte0();
+            await new Promise(fin => {
+                const corps = JSON.stringify(corpsId({ photoIds: [{ index: 0, photoId: p0.json.photoId }] }));
+                const rq = http.request(sv.url + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${D.jeton}`, 'idempotency-key': `photos-${++nCle}-${Date.now()}-abcdefgh`, 'content-length': Buffer.byteLength(corps) } }, () => { });
+                rq.on('error', () => { }); rq.end(corps);
+                setTimeout(() => { rq.destroy(); fin(); }, 30);
+            });
+            await attendre(150); rendre(); retardChaine = null; await attendre(900);
+            H.v('N-1 : le client abandonne à 30 ms, chaîne lente : AUCUN téléchargement (téléchargeur, appels sortants), et le banc a compté « rien reçu pour ce scan »', [tel, sorties.slice(sN), compte0() - avantC], [0, [], 1]);
+            const imgs = MP.imagesDeLaChaine({ imageUrls: ['https://a'], photosRecues: [], photosRecuesPourCeScan: true });
+            H.v('N-1 : une photo reçue puis libérée ne ramène JAMAIS aux URLs (imagesDeLaChaine rend [])', imgs, []);
+        }
+        // la détection du banc (deps.detection) ne reçoit JAMAIS les octets d'un utilisateur ordinaire ; l'administrateur est l'exception nommée
+        {
+            const communP = require.resolve('../banc/commun'), crochetP = require.resolve('../banc/crochet');
+            const sauveC = require.cache[communP], sauveK = require.cache[crochetP];
+            require.cache[communP] = { id: communP, filename: communP, loaded: true, children: [], paths: [], exports: { ...require(communP), consentementAutorise: async () => true } }; delete require.cache[crochetP];
+            try {
+                const K = require('../banc/crochet'); const appels = [];
+                const analyse = { statut: 'identifiee', cartes: [{ statut: 'identifiee', carte: { idProduct: 4242 } }] };
+                const lancer = async (admin, photos) => { const n = appels.length; K.apresIdentifier({ cfg: cfgOn, deps: { detection: async a => { appels.push(a); return null; } }, req: { v2: { porteur: { surface: 'extension', administrateur: admin } }, body: {}, entree: { imageUrls: ['https://images1.vinted.net/a.jpeg'], ...(photos ? { photosRecues: [{ index: 0, octets: Buffer.from('xy') }], photosRecuesPourCeScan: true } : {}) } }, scanId: oid(), analyse }); await attendre(120); return appels.slice(n); };
+                const ordinaire = await lancer(false, true), admin = await lancer(true, true), temoin = await lancer(false, false);
+                H.v('20.5 la détection du banc : un ordinaire AVEC photo reçue ne l\'appelle pas ; l\'administrateur oui (data:) ; un ordinaire SANS photo reçue oui (cas témoin, URLs)', [ordinaire.length, admin.length && admin[0].imageUrls.every(u => u.startsWith('data:')), temoin.length && temoin[0].imageUrls[0].startsWith('https://')], [0, true, true]);
+            } finally { if (sauveC) require.cache[communP] = sauveC; else delete require.cache[communP]; if (sauveK) require.cache[crochetP] = sauveK; else delete require.cache[crochetP]; }
+        }
     });
 
     await sv.fermer(); await svOff.fermer(); await svPlafond.fermer(); monterBanc.arreterPurge();
