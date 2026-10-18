@@ -49,16 +49,16 @@ const I = require('../identifier/seconde-lecture-image');
 
     // ── 2. la PRÉPARATION de l'image : deux images distinctes de la carte entière
     {
-        const carte = await sharp({ create: { width: 640, height: 894, channels: 3, background: { r: 120, g: 120, b: 120 } } }).webp().toBuffer();
+        const carte = await sharp({ create: { width: 420, height: 587, channels: 3, background: { r: 120, g: 120, b: 120 } } }).jpeg({ quality: 92 }).toBuffer();     // la carte redressée de MODELE-VISUEL-API : JPEG 420 x 587
         const prep = I.creerPreparateurTampon();
         const deux = await prep({ image: carte, corps: {} });
         const metas = await Promise.all(deux.map(b => sharp(b).metadata()));
         H.v('2a. une carte déjà redressée (sans géométrie) : DEUX images JPEG de la carte entière, de largeurs distinctes (1000 et 1400), jamais deux fois la même', [deux.length, metas.map(m => m.format), metas.map(m => m.width), new Set(deux.map(b => b.toString('base64'))).size], [2, ['jpeg', 'jpeg'], [1000, 1400], 2]);
         const photo = await sharp({ create: { width: 2000, height: 2800, channels: 3, background: { r: 200, g: 30, b: 30 } } }).png().toBuffer();
         const geo = { W: 2000, quad: [{ x: 0, y: 0 }, { x: 2000, y: 0 }, { x: 2000, y: 2800 }, { x: 0, y: 2800 }] };
-        const redresse = await prep({ image: photo, corps: { geometrie: geo } });
-        const m2 = await Promise.all(redresse.map(b => sharp(b).metadata()));
-        H.v('2b. une photo avec la géométrie de la détection : redressée d\'abord (rapport d\'une carte), puis les deux images', [redresse.length, m2.map(m => m.width), m2.map(m => Math.round(m.height / m.width * 63 / 88 * 100))], [2, [1000, 1400], [100, 100]]);
+        const plein = await prep({ image: photo, corps: { geometrie: geo } }).then(() => 'rien', e => e.code);
+        const autre = await prep({ image: await sharp({ create: { width: 640, height: 894, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer(), corps: {} }).then(() => 'rien', e => e.code);
+        H.v('2b. une photo pleine (même avec une géométrie), ou une carte d\'une autre taille que 420 × 587 : REFUSÉE (CARTE_HORS_FORMAT), jamais envoyée au modèle ; plus aucun redressement ici', [plein, autre], ['CARTE_HORS_FORMAT', 'CARTE_HORS_FORMAT']);
         H.v('2c. sans octets (absents, une URL, vide, null) : aucune image — jamais un téléchargement', await Promise.all([undefined, 'https://images1.vinted.net/p.png', Buffer.alloc(0), null].map(image => prep({ image, corps: {} }))), [[], [], [], []]);
         H.v('2d. des octets qui ne sont pas une image : lève (le fournisseur le rend en échec, jamais en lecture)', await prep({ image: Buffer.from('pas une image'), corps: {} }).then(() => 'rien', () => 'lève'), 'lève');
         let appels = 0; const fetchOrigine = globalThis.fetch; globalThis.fetch = () => { appels++; throw new Error('fetch interdit'); };
@@ -69,12 +69,12 @@ const I = require('../identifier/seconde-lecture-image');
     // ── 3. aucun module de la lecture du tampon n'importe ni n'appelle de client réseau (sauf le `post` INJECTÉ du lecteur)
     {
         const dir = path.join(__dirname, '..', 'identifier');
-        const MODULES = ['lecture-tampon.js', 'lecture-tampon-route.js', 'seconde-lecture-image.js'];
+        const MODULES = ['lecture-tampon.js', 'lecture-tampon-route.js', 'seconde-lecture-image.js', 'fournisseur-tampon.js'];
         const requis = f => [...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
-        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction']);
-        H.v('3a. les modules n\'importent que sharp, opencv-js, scoring et leurs voisins de la lecture (ni http, https, net, axios, undici, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], [], []]);
+        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction', './carte-redressee', './seconde-lecture-image']);
+        H.v('3a. les modules n\'importent que sharp, opencv-js, scoring et leurs voisins de la lecture (ni http, https, net, axios, undici, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], [], [], []]);
         const code = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
-        H.v('3b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios`, `import(` dans le code (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], [], []]);
+        H.v('3b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios`, `import(` dans le code (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], [], [], []]);
     }
     H.bilan();
 })().catch(e => { console.error(e); process.exitCode = 1; });

@@ -13,12 +13,12 @@ const type = (ids, a = ARCHIVE) => { const r = LT.paireSeparee({ ids, entree: id
     // ── 1. LE DÉCLENCHEMENT : écrit par ce qu'il autorise (un seul chemin mène à une paire)
     H.v('1a. la paire staff/normale séparée, prouvée par l\'archive : staff = 12, normale = 11 (quel que soit l\'ordre des candidats)', [type([11, 12]), type([12, 11])], [['staff', 12, 11], ['staff', 12, 11]]);
     const J = { 21: e({ variante: 'normale', produitsPartages: [21, 22], tamponNonRepresente: null }), 22: e({ variante: 'jumbo', produitsPartages: [21, 22], tamponNonRepresente: null }) };
-    H.v('1b. la paire jumbo/normale séparée : type jumbo', type([21, 22], J), ['jumbo', 22, 21]);
+    H.v('1b. la paire jumbo/normale séparée : RIEN (un jumbo reste une question ; la règle « jumbo par le titre » est retirée)', type([21, 22], J), 'les variantes ne sont pas une paire staff/normale');
     const nonSepare = { 11: e({ partageeTamponNonSepare: true }), 12: e({ variante: 'staff', partageeTamponNonSepare: true }) };
     H.v('1c. une paire NON séparée (true) ne déclenche rien', type([11, 12], nonSepare), 'la paire n\'est pas marquée séparée');
     H.v('1d. un candidat sans entrée d\'archive, ou une archive sans marquage (null) : rien', [type([11, 99]), type([11, 12], { 11: e({ partageeTamponNonSepare: null }), 12: e({ partageeTamponNonSepare: null, variante: 'staff' }) })], ['un candidat n\'a pas d\'entrée d\'archive', 'la paire n\'est pas marquée séparée']);
     H.v('1e. deux normales (ou deux staff), ou une variante inconnue : rien — jamais deviné', [type([11, 12], { 11: e({ variante: 'normale' }), 12: e({ variante: 'normale' }) }), type([11, 12], { 11: e({ variante: 'staff' }), 12: e({ variante: 'staff' }) }), type([11, 12], { 11: e({ variante: null }), 12: e({ variante: 'staff' }) })],
-        ['les variantes ne sont pas une paire staff/normale ou jumbo/normale', 'les variantes ne sont pas une paire staff/normale ou jumbo/normale', 'les variantes ne sont pas une paire staff/normale ou jumbo/normale']);
+        ['les variantes ne sont pas une paire staff/normale', 'les variantes ne sont pas une paire staff/normale', 'les variantes ne sont pas une paire staff/normale']);
     H.v('1f. la liste de partage ne nomme pas exactement les deux : rien', [type([11, 12], { 11: e({ produitsPartages: [11, 12, 13] }), 12: e({ variante: 'staff', produitsPartages: [11, 12, 13] }) }), type([11, 12], { 11: e({ produitsPartages: null }), 12: e({ variante: 'staff' }) }), type([11, 12], { 11: e({ produitsPartages: [11, 12] }), 12: e({ variante: 'staff', produitsPartages: [12, 13] }) })],
         ['la liste de partage ne nomme pas exactement la paire', 'la liste de partage ne nomme pas exactement la paire', 'la liste de partage ne nomme pas exactement la paire']);
     H.v('1g. une question à 3 (la paire et un tiers), à 1, ou des doublons : rien (un tiers pourrait être la vérité)', [type([11, 12, 13]), type([11]), type([11, 11]), type([]), type(null)], ['la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire', 'la question n\'est pas exactement la paire']);
@@ -26,12 +26,8 @@ const type = (ids, a = ARCHIVE) => { const r = LT.paireSeparee({ ids, entree: id
     H.v('1i. un partage holo/non-holo en plus : rien', type([11, 12], { 11: e({ partageeHoloNonHolo: true }), 12: e({ variante: 'staff' }) }), 'un partage holo / non-holo se mêle à la paire');
     H.v('1j. une entrée qui lève, ou un fournisseur absent : rien (ne lève jamais)', [LT.paireSeparee({ ids: [11, 12], entree: () => { throw new Error('boum'); } }).ok, LT.paireSeparee({ ids: [11, 12] }).ok], [false, false]);
 
-    // ── 2. LE TITRE « JUMBO » : liste fermée, minuscules, mots entiers, jamais une négation
-    const t = x => LT.titreJumbo(x);
-    H.v('2a. jumbo, oversize, géante — en mots entiers, casse ignorée', [t('Pikachu JUMBO promo'), t('carte oversize pokemon'), t('Dracaufeu Géante'), t('jumbo')], [true, true, true, true]);
-    H.v('2b. pas un mot entier, pas dans la liste : non', [t('jumbos'), t('oversized'), t('Pikachu géantes'), t('superjumbo'), t('carte normale'), t('geante')], [false, false, false, false, false, false]);
-    H.v('2c. une négation juste avant : non (pas, non, not, no, sans, without, ni)', [t('pas jumbo'), t('Non Jumbo'), t('not jumbo'), t('sans oversize'), t('no jumbo'), t('without jumbo'), t('ni jumbo ni autre')], [false, false, false, false, false, false, false]);
-    H.v('2d. null, vide, pas un texte : non', [t(null), t(''), t(undefined), t(12), t({})], [false, false, false, false, false]);
+    // ── 2. LA RÈGLE « JUMBO PAR LE TITRE » EST RETIRÉE DU CODE (tour 1, C1) : plus aucune fonction ne lit un titre
+    H.v('2. le module n\'exporte plus aucune règle de titre (ni titreJumbo, ni liste de mots)', Object.keys(LT).filter(k => /titre|jumbo|MOTS|NEGATION/i.test(k)), []);
 
     // ── 3. LE CONSENSUS : DEUX essais « oui » à l'identique, rien d'autre
     const d = essais => { const r = LT.decider({ essais }); return [r.staff, r.lecture]; };
@@ -58,7 +54,10 @@ const type = (ids, a = ARCHIVE) => { const r = LT.paireSeparee({ ids, entree: id
     {
         const lecteur = lecteurDe([{ illisible: true }, { staff: 'oui' }]); const compteur = { appels: 0 };
         const r = await LT.creerFournisseur({ preparer: prep, lecteur })({ image: IMG, corps: {}, compteur });
-        H.v('4c. une réponse illisible vaut « incertain » (jamais un oui) : pas de lecture', [r.lecture, r.echec], ['desaccord', false]);
+        H.v('4c. une réponse illisible au premier essai vaut « incertain » (jamais un oui) : pas de second appel (coût évité), pas de lecture', [r.lecture, r.echec, compteur.appels], ['incertain', false, 1]);
+        const l2 = lecteurDe([{ staff: 'no' }, { staff: 'yes' }]), c2 = { appels: 0 };
+        const rn = await LT.creerFournisseur({ preparer: prep, lecteur: l2 })({ image: IMG, corps: {}, compteur: c2 });
+        H.v('4c bis. un premier « non » : UN seul appel, lecture « non » (le second « oui » n\'est même pas demandé : jamais STAFF)', [rn.lecture, c2.appels, l2.vus.length], ['non', 1, 1]);
     }
     {
         const compteur = { appels: 0 };
@@ -86,6 +85,6 @@ const type = (ids, a = ARCHIVE) => { const r = LT.paireSeparee({ ids, entree: id
     // ── 5. UNE FOIS PAR SCAN, et les compteurs
     LT.reinitialiser();
     H.v('5a. premiereFois : vrai une fois, faux ensuite ; sans identifiant : faux', [LT.premiereFois('s1'), LT.premiereFois('s1'), LT.premiereFois(''), LT.premiereFois(7)], [true, false, false, false]);
-    H.v('5b. les compteurs nomment ce qui est compté (declenchees, affirmees, jumbo, nonConfirmees, echecs, appels, dejaTentees, nonFaisables)', Object.keys(LT.compteurs()), ['declenchees', 'affirmees', 'jumbo', 'nonConfirmees', 'echecs', 'appels', 'dejaTentees', 'nonFaisables']);
+    H.v('5b. les compteurs nomment ce qui est compté (declenchees, affirmees, nonConfirmees, echecs, appels, dejaTentees, nonFaisables)', Object.keys(LT.compteurs()), ['declenchees', 'affirmees', 'nonConfirmees', 'echecs', 'appels', 'dejaTentees', 'nonFaisables']);
     H.bilan();
 })().catch(x => { console.error(x); process.exitCode = 1; });

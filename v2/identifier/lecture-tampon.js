@@ -1,12 +1,12 @@
 'use strict';
-// F1-TAMPON (2026-10-18) — lire le tampon STAFF sur la photo (et le contexte « jumbo » du titre) pour trancher une paire SÉPARÉE par l'étiquette Cardmarket, à 0 faux. Module PUR : ni base, ni réseau, ni modèle
+// F1-TAMPON (2026-10-18) — lire le tampon STAFF sur la photo pour trancher une paire SÉPARÉE par l'étiquette Cardmarket, à 0 faux. Module PUR : ni base, ni réseau, ni modèle
 // (la préparation de l'image et le lecteur sont INJECTÉS ; les octets viennent de l'appelant, jamais d'un téléchargement).
-// Décision du testeur (17/10) : « STAFF lu => l'idProduct staff ; un Jumbo par la taille ou le contexte ; sinon une question ».
+// Décision du testeur (17/10) : « STAFF lu => l'idProduct staff ; sinon une question ». Un JUMBO reste une question : la règle « jumbo par le titre » est RETIRÉE (tour 1 : elle ne se défend pas contre la négation).
 // 🔑 Écrit par ce qu'il AUTORISE :
-//   · le déclenchement : la question est EXACTEMENT une paire que l'archive prouve séparée (partageeTamponNonSepare false des deux côtés, listes de partage = la paire, variantes staff/normale ou jumbo/normale) ;
+//   · le déclenchement : la question est EXACTEMENT une paire que l'archive prouve séparée (partageeTamponNonSepare false des deux côtés, listes de partage = la paire, variantes staff/normale) ;
 //   · un seul chemin mène à « STAFF lu » : DEUX essais indépendants répondent « oui » à l'identique. Non, incertain, désaccord, panne, délai : la question reste, inchangée ;
 //   · 🔴 ON N'AFFIRME JAMAIS LA VERSION NORMALE sur une absence de lecture : un tampon manqué n'est pas un tampon absent. Ce module ne sait même pas désigner la normale.
-const COMPTEURS = ['declenchees', 'affirmees', 'jumbo', 'nonConfirmees', 'echecs', 'appels', 'dejaTentees', 'nonFaisables'];
+const COMPTEURS = ['declenchees', 'affirmees', 'nonConfirmees', 'echecs', 'appels', 'dejaTentees', 'nonFaisables'];
 const compte = Object.fromEntries(COMPTEURS.map(k => [k, 0]));
 const compteurs = () => ({ ...compte });
 const noter = (k, n = 1) => { compte[k] += n; };
@@ -27,7 +27,7 @@ const memeListe = (l, a, b) => Array.isArray(l) && l.length === 2 && l.every(Num
 /**
  * @param ids     les idProduct de la question
  * @param entree  (idProduct) => l'entrée d'archive (format 2) ou null
- * @returns { ok: true, type: 'staff'|'jumbo', special: idProduct, normale: idProduct } | { ok: false, motif }
+ * @returns { ok: true, type: 'staff', special: idProduct, normale: idProduct } | { ok: false, motif }
  */
 function paireSeparee({ ids, entree } = {}) {
     try {
@@ -39,31 +39,13 @@ function paireSeparee({ ids, entree } = {}) {
         if (!memeListe(ea.produitsPartages, a, b) || !memeListe(eb.produitsPartages, a, b)) return refus('la liste de partage ne nomme pas exactement la paire');
         if (ea.partageeHoloNonHolo === true || eb.partageeHoloNonHolo === true) return refus('un partage holo / non-holo se mêle à la paire');
         const v = [ea.variante, eb.variante];
-        const special = ['staff', 'jumbo'].find(s => v.includes(s) && v.includes('normale') && v[0] !== v[1]);
-        if (!special) return refus('les variantes ne sont pas une paire staff/normale ou jumbo/normale');
+        const special = 'staff';
+        if (!(v.includes(special) && v.includes('normale') && v[0] !== v[1])) return refus('les variantes ne sont pas une paire staff/normale');
         const idSpecial = ea.variante === special ? a : b, idNormale = idSpecial === a ? b : a;
-        if (special === 'staff') {
-            const dit = [ea, eb].some(x => typeof x.tamponNonRepresente === 'string' && x.tamponNonRepresente.trim().toLowerCase() === 'staff');
-            if (!dit) return refus('l\'archive ne dit pas que le tampon Staff n\'est pas représenté');
-        }
+        const dit = [ea, eb].some(x => typeof x.tamponNonRepresente === 'string' && x.tamponNonRepresente.trim().toLowerCase() === 'staff');
+        if (!dit) return refus('l\'archive ne dit pas que le tampon Staff n\'est pas représenté');
         return { ok: true, type: special, special: idSpecial, normale: idNormale };
     } catch { return refus('archive illisible'); }
-}
-
-// ── le contexte « jumbo » : une liste FERMÉE de mots entiers, en minuscules, jamais derrière une négation
-const MOTS_JUMBO = Object.freeze(['jumbo', 'oversize', 'géante']);
-const NEGATIONS = Object.freeze(['pas', 'non', 'not', 'no', 'sans', 'without', 'ni']);
-const LETTRE = '\\p{L}\\p{N}';
-function titreJumbo(titre) {
-    if (typeof titre !== 'string' || !titre.trim()) return false;
-    const t = titre.toLowerCase();
-    const re = new RegExp(`(?<![${LETTRE}])(${MOTS_JUMBO.join('|')})(?![${LETTRE}])`, 'gu');
-    for (const m of t.matchAll(re)) {
-        const avant = t.slice(0, m.index).match(new RegExp(`([${LETTRE}]+)[^${LETTRE}]*$`, 'u'));
-        if (avant && NEGATIONS.includes(avant[1])) continue;
-        return true;
-    }
-    return false;
 }
 
 // ── le consensus : DEUX essais « oui » à l'identique
@@ -96,11 +78,13 @@ function creerFournisseur({ preparer, lecteur } = {}) {
                 c.appels = (c.appels || 0) + 1;                                    // compté AVANT l'appel : un appel qui échoue a coûté quand même
                 const r = await lecteur(bande, { signal });
                 essais.push(r && typeof r === 'object' && !r.illisible && VERS_FR[r.staff] ? VERS_FR[r.staff] : 'incertain');
+                if (essais[0] !== 'oui') break;                                    // un premier essai qui ne dit pas « oui » ne peut plus mener à STAFF : le second appel est évité (coût)
             }
         } catch (e) { return { lecture: 'incertain', essais, echec: true, sansImage: false, raison: `échec de la lecture (${(e && (e.code || e.name)) || 'erreur'})` }; }
+        if (essais.length === 1) return fin(essais[0], { raison: `le premier essai répond « ${essais[0]} » : pas de second appel` });
         const d = decider({ essais });
         return fin(d.lecture, { raison: d.raison });
     };
 }
 
-module.exports = { paireSeparee, titreJumbo, decider, creerFournisseur, premiereFois, reinitialiser, compteurs, noter, MOTS_JUMBO, NEGATIONS };
+module.exports = { paireSeparee, decider, creerFournisseur, premiereFois, reinitialiser, compteurs, noter };

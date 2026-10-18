@@ -119,18 +119,18 @@ function creerLecteurTampon({ post, modele, cle, surUsage } = {}) {
 const LARGEURS_TAMPON = Object.freeze([1000, 1400]);
 /**
  * La préparation de l'image du tampon : DEUX images JPEG de la carte ENTIÈRE, de définitions distinctes (1000 et 1400 px de large, la seconde contrastée), pour deux essais qui ne lisent pas la même chose.
- * `image` : les octets de l'APPELANT. Avec `corps.geometrie` ({ W, quad }), c'est une photo : elle est redressée d'abord ; sans géométrie, c'est une carte déjà redressée (celle que l'extension envoie).
- * Sans octets : []. Des octets illisibles : lève. Jamais un téléchargement.
+ * `image` : les octets de l'APPELANT, et SEULEMENT la carte redressée validée de MODELE-VISUEL-API (JPEG 420 x 587) : une image d'une autre taille (une photo pleine, deux cartes côte à côte) est REFUSÉE (lève).
+ * Pas de géométrie, pas de redressement ici. Sans octets : []. Des octets illisibles : lève. Jamais un téléchargement.
  */
+const CARTE_L = 420, CARTE_H = 587;
 function creerPreparateurTampon() {
-    return async function preparer({ image, corps } = {}) {
+    return async function preparer({ image } = {}) {
         if (!Buffer.isBuffer(image) || !image.length) return [];
-        const geo = corps && corps.geometrie;
-        const sharp = geo ? (await outils()).sharp : require('sharp');                  // opencv (le redressement) ne se charge que pour une photo à redresser
-        const carte = geo ? await redresser(image, geo, { largeur: 1400 }) : await sharp(image, { failOn: 'error', limitInputPixels: 50e6 }).rotate().png().toBuffer();
-        if (!carte) return [];
+        const sharp = require('sharp');
+        const m = await sharp(image, { failOn: 'error', limitInputPixels: 50e6 }).metadata();
+        if (m.width !== CARTE_L || m.height !== CARTE_H) throw Object.assign(new Error('carte hors format'), { code: 'CARTE_HORS_FORMAT' });
         return Promise.all(LARGEURS_TAMPON.map((largeur, i) => {
-            let img = sharp(carte).resize({ width: largeur });
+            let img = sharp(image).resize({ width: largeur });
             if (i === 1) img = img.normalise().sharpen({ sigma: 1.0 });
             return img.jpeg({ quality: 92 }).toBuffer();
         }));
