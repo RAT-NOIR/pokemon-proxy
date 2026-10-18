@@ -26,7 +26,7 @@ const futur = new Date('2027-06-01T00:00:00Z');
     H.v('   idem pour les deux autres variables', [leve({ V2_QUOTA_SANS_COMPTE: '0' }), leve({ V2_QUOTA_PRO_PLAFOND: '1001' })].map(m => /configuration invalide/.test(m || '')), [true, true]);
     H.v('   l\'ordre des poches est [jour]', cfg.ordrePoches, ['jour']);
     H.v('   V2_ORDRE_POCHES=jour accepté', cfgAvec({ V2_ORDRE_POCHES: 'jour' }).ordrePoches, ['jour']);
-    H.v('   une ancienne poche dans l\'ordre (achete, accueil, essai, hebdo, abonnement) : configuration invalide', ['achete', 'accueil', 'essai', 'hebdo', 'abonnement', 'jour,achete'].map(v => /n'est plus débitée/.test(leve({ V2_ORDRE_POCHES: v }) || '')), [true, true, true, true, true, true]);
+    H.v('   une ancienne poche dans l\'ordre (accueil, essai, hebdo, abonnement) : configuration invalide ; `achete` aussi, avec sa vraie raison (non configurable)', [...['accueil', 'essai', 'hebdo', 'abonnement'].map(v => /n'est plus débitée/.test(leve({ V2_ORDRE_POCHES: v }) || '')), ...['achete', 'jour,achete'].map(v => /n'est pas configurable/.test(leve({ V2_ORDRE_POCHES: v }) || ''))], [true, true, true, true, true, true]);
     H.v('   poche inconnue, doublon, ordre sans jour : configuration invalide', ['x', 'jour,jour', ','].map(v => /configuration invalide/.test(leve({ V2_ORDRE_POCHES: v }) || 'aucune erreur')), [true, true, true]);
 
     // ── 2. les trois offres
