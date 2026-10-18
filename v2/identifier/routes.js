@@ -67,7 +67,7 @@ function verifierEntree(corps, cfg) {
     return { entree: {
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
-        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // CONTRAT-2.md l. 24 : passé à la chaîne héritée (B1b.3) ; borné (mineur reporté de B1b.1)
+        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // REÇU et JOURNALISÉ, jamais utilisé (ETAT-VENDEUR, 2026-10-18) : passé à la chaîne héritée, qui le journalise et ne le lit pour aucune décision ; borné (mineur reporté de B1b.1)
         langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim(),
         ...(empreintes ? { empreintes } : {})
     } };
