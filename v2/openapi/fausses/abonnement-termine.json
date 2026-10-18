@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "abonnement": {
+    "actif": false,
+    "plan": "pro",
+    "periode": "mois",
+    "statut": "termine",
+    "finPeriode": "2026-10-10T10:00:00.000Z",
+    "resiliationPrevue": false,
+    "essai": {
+      "enCours": false,
+      "finLe": null,
+      "disponible": false
+    },
+    "paiementEchoue": false
+  },
+  "quota": {
+    "nom": "gratuit",
+    "restant": 10,
+    "remiseAZero": "2026-10-19T00:00:00+02:00"
+  },
+  "parrainage": {
+    "code": "K7M2QX9P",
+    "essaiFilleulJours": 30
+  },
+  "offres": {
+    "pro": {
+      "mois": 499,
+      "an": 3900
+    },
+    "devise": "EUR",
+    "essaiJours": 14
+  }
+}

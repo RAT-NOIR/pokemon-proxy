@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "Requête invalide",
+    "detail": "offre-inconnue"
+  },
+  "facturation": null
+}

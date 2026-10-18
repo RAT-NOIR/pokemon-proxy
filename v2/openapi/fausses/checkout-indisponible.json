@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "INDISPONIBLE",
+    "message": "Service momentanément indisponible",
+    "detail": "abonnements-indisponibles"
+  },
+  "facturation": null
+}

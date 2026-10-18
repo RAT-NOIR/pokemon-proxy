@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Opération impossible dans l'état actuel du compte",
+    "detail": "deja-abonne"
+  },
+  "facturation": null
+}
