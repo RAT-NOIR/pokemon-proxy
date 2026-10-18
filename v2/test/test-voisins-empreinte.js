@@ -45,10 +45,11 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     rejet('2b. neuf entrées (8 au plus)', { empreintes: Array.from({ length: 9 }, () => ({ photo: 0, vecteur: bonne })) }, 9);
     rejet('2c. deux entrées pour la même photo (au plus UNE par photo)', { empreintes: [{ photo: 0, vecteur: bonne }, { photo: 0, vecteur: bonne }] });
     rejet('2d. un index de photo hors des imageUrls', { empreintes: [{ photo: 2, vecteur: bonne }] });
+    H.v('2d2. 🔑 M4 `photo` vaut 0 à 7 : 7 accepté (avec 20 images), 8 rejeté', [(L({ empreintes: [{ photo: 7, vecteur: bonne }] }, 20) || {}).rejet, (L({ empreintes: [{ photo: 8, vecteur: bonne }] }, 20) || {}).rejet], [null, 'enveloppe']);
     rejet('2e. un index négatif ou non entier', { empreintes: [{ photo: -1, vecteur: bonne }] });
     rejet('2f. un index non entier (1,5)', { empreintes: [{ photo: 1.5, vecteur: bonne }] });
     rejet('2g. une entrée qui n\'est pas un objet', { empreintes: [bonne] });
-    rejet('2h. un champ en trop dans l\'entrée', { empreintes: [{ photo: 0, vecteur: bonne, score: 1 }] });
+    { const e2h = L({ empreintes: [{ photo: 0, vecteur: bonne, score: 1 }, { photo: 1, vecteur: bonne }] }); H.v('2h. 🔑 M4 une clé inconnue dans une entrée rejette CETTE ENTRÉE seulement (marquée), jamais l\'enveloppe : l\'autre entrée reste lue', [e2h.rejet, e2h.entrees.map(e => !!e.invalide)], [null, [true, false]]); }
     rejet('2i. `redressee` qui n\'est pas un booléen', { empreintes: [{ photo: 0, vecteur: bonne, redressee: 'oui' }] });
     rejet('2j. un vecteur qui n\'est pas une chaîne', { empreintes: [{ photo: 0, vecteur: [1, 2, 3] }] });
     rejet('2k. un vecteur démesuré (plus de 2 000 caractères : jamais retenu en mémoire)', { empreintes: [{ photo: 0, vecteur: 'A'.repeat(5000) }] });
@@ -71,6 +72,8 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     r = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe({ id: null, sha256: null }) }), entreeDe([ent(0, ligneDe(3))]));
     H.v('3d. le serveur ne connaît AUCUNE version (configuration vide) : « modele-inconnu », jamais « tout est bon »', [r.ok, r.code], [false, 'modele-inconnu']);
     r = await appel(sans, { ...entreeDe([ent(0, ligneDe(3))]), empreintes: { rejet: 'enveloppe', modele: { id: MODELE.id, sha256: MODELE.sha256 }, entrees: [] } });
+    r = await appel(sans, entreeDe([{ ...ent(0, ligneDe(3)), invalide: true }]));
+    H.v('3f. 🔑 M4 l\'entrée jugée porte une clé inconnue (marquée) : « invalide », aucune recherche, la règle G se tait', [r.ok, r.code, aucun.appels], [false, 'invalide', 0]);
     H.v('3e. enveloppe rejetée à la lecture de la requête : « invalide »', [r.ok, r.code, aucun.appels], [false, 'invalide', 0]);
     r = await appel(sans, entreeDe([]));
     H.v('3f. aucune entrée : « invalide » (rien à chercher)', [r.ok, r.code], [false, 'invalide']);
@@ -173,6 +176,66 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     const eD = V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 'A'.repeat(300000) }], modeleEmpreinte: A_MODELE() }, 1);
     H.v('10b. une carte démesurée (> 273 068 caractères) : l\'enveloppe reste valide, la carte est écartée (null) — la photo ne conclura pas', [eD.rejet, eD.entrees[0].carte], [null, null]);
     H.v('10c. une carte qui n\'est pas une chaîne : écartée, enveloppe valide', [V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 5 }] }, 1).rejet, V.lireEnveloppe({ empreintes: [{ photo: 0, vecteur: bonne, carte: 5 }] }, 1).entrees[0].carte], [null, null]);
+
+    // ── TOUR 2 (I2) : la garde des zones est BORNÉE — budget de mesures par requête, longueur de la file, arrêt au délai. Chaque borne a sa variante qui échoue (la borne retirée change l'issue).
+    {
+        const compteur = { paires: 0, zones: 0 };
+        const lente = (ms, porte = null) => ({
+            photoGrise: async () => ({ delete() { } }),
+            comparerPaire: async () => { compteur.paires++; if (porte) await porte; else await new Promise(r => setTimeout(r, ms)); return [0.30, 0.20]; },
+            scoresZones: async () => { compteur.zones++; if (porte) await porte; else await new Promise(r => setTimeout(r, ms)); return { haut: 0.9, bas: 0.9, inliers: 120 }; }
+        });
+        const req5 = () => entreeDe([ent(0, ligneDe(5), true)]);          // jeu-5 et son jumeau jeu-6 : DEUX mesures (la paire, puis les zones)
+        // budget
+        let x = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(0), scan, budget: 1 }), req5());
+        H.v('11a. budget de mesures par requête = 1 (la règle en demande 2) : « indisponible », G se tait', [x.ok, x.code], [false, 'indisponible']);
+        x = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(0), scan, budget: 2 }), req5());
+        H.v('11b. 🔑 variante : le même budget relevé à 2 ⇒ la requête aboutit (la borne est ce qui refusait)', x.ok, true);
+        H.v('11c. le budget par défaut est une constante nommée et suffit au rejeu mesuré', [typeof V.BUDGET_MESURES, V.BUDGET_MESURES >= 2], ['number', true]);
+        // file
+        let ouvrir; const porte = new Promise(r => { ouvrir = r; });
+        compteur.paires = 0; compteur.zones = 0;
+        const fournisseurFile = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(0, porte), scan, fileMax: 2 });
+        const lot = [0, 1, 2, 3].map(() => appel(fournisseurFile, req5()));
+        await new Promise(r => setTimeout(r, 300));
+        const rapides = await Promise.race([Promise.all(lot.map(p => Promise.race([p, new Promise(r => setTimeout(() => r('attente'), 50))])))]);
+        H.v('12a. file de la garde des zones limitée à 2 : sur 4 requêtes simultanées, 2 sont refusées TOUT DE SUITE (« indisponible »), sans avoir mesuré', [rapides.filter(r => r && r.code === 'indisponible').length, rapides.filter(r => r === 'attente').length], [2, 2]);
+        ouvrir();
+        const finales = await Promise.all(lot);
+        H.v('12b. … les deux autres aboutissent une fois la porte ouverte', finales.filter(r => r.ok).length, 2);
+        H.v('12c. le compteur de la file retombe à 0 (aucune fuite après succès, refus ou erreur)', V.enFile(), 0);
+        ouvrir = null;
+        let ouvrir2; const porte2 = new Promise(r => { ouvrir2 = r; });
+        const sansFile = V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(0, porte2), scan, fileMax: 99 });
+        const lot2 = [0, 1, 2, 3].map(() => appel(sansFile, req5()));
+        await new Promise(r => setTimeout(r, 200));
+        const att = await Promise.all(lot2.map(p => Promise.race([p, new Promise(r => setTimeout(() => r('attente'), 30))])));
+        H.v('12d. 🔑 variante : file de 99 ⇒ AUCUNE requête refusée (les 4 attendent la porte) — la borne de 2 est ce qui refusait', att.filter(r => r && r.code === 'indisponible').length, 0);
+        ouvrir2(); await Promise.all(lot2);
+        // arrêt au délai
+        compteur.paires = 0; compteur.zones = 0;
+        x = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(120), scan, delaiMs: 80 }), req5());
+        const apresReponse = compteur.paires + compteur.zones;
+        await new Promise(r => setTimeout(r, 400));
+        H.v('13a. délai de 80 ms, mesures de 120 ms : « indisponible », et le travail CESSE (aucune mesure de plus après le délai)', [x.ok, x.code, compteur.paires + compteur.zones - apresReponse], [false, 'indisponible', 0]);
+        compteur.paires = 0; compteur.zones = 0;
+        x = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: lente(120), scan, delaiMs: 5000 }), req5());
+        H.v('13b. 🔑 variante : délai de 5 s ⇒ les deux mesures ont lieu et la requête aboutit', [x.ok, compteur.paires, compteur.zones], [true, 1, 1]);
+    }
+    // M5 : scanArchivePublic lit en flux borné
+    {
+        const png = n => Buffer.alloc(n, 7);
+        const flux = (taille, entetes = {}) => { let lus = 0; const morceau = 64 * 1024; return { stat: () => lus, fetch: async () => { const body = new ReadableStream({ pull(c) { if (lus >= taille) return c.close(); const n = Math.min(morceau, taille - lus); lus += n; c.enqueue(new Uint8Array(png(n))); } }); return new Response(body, { status: 200, headers: { 'content-type': 'image/webp', ...entetes } }); } }; };
+        const lire = async (f, max) => V.scanArchivePublic({ hote: 'h.invalide', fetchFn: f.fetch, octetsMax: max })('banc-reel/v2/x.webp');
+        const f1 = flux(500 * 1024);
+        H.v('14a. une image de 500 Ko sous la borne de 2 Mo : lue en entier', (await lire(f1, 2 * 1048576) || Buffer.alloc(0)).length, 500 * 1024);
+        const f2 = flux(50 * 1048576);
+        H.v('14b. 🔑 un corps de 50 Mo SANS Content-Length : refusé, et la lecture S\'ARRÊTE près de la borne (moins de 3 Mo tirés)', [await lire(f2, 2 * 1048576), f2.stat() < 3 * 1048576], [null, true]);
+        const f3 = flux(50 * 1048576, { 'content-length': String(50 * 1048576) });
+        H.v('14c. Content-Length de 50 Mo annoncé : refusé sans rien lire de plus d\'un morceau', [await lire(f3, 2 * 1048576), f3.stat() <= 64 * 1024], [null, true]);
+        const f4 = flux(500 * 1024);
+        H.v('14d. variante : la même image avec une borne de 100 Ko ⇒ refusée (la borne est ce qui refuse)', await lire(f4, 100 * 1024), null);
+    }
     // l'index qui lève
     installerIndex().voisins = () => { throw new Error('index cassé'); };
     r = await appel(sans, entreeDe([ent(0, ligneDe(3))]));
