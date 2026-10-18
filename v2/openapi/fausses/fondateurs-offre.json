@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "offre": {
+    "nom": "fondateurs",
+    "devise": "EUR",
+    "prix": {
+      "mois": 299,
+      "an": 2900
+    },
+    "places": {
+      "total": 100,
+      "restantes": 87
+    },
+    "essaiJours": 14
+  }
+}

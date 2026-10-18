@@ -52,7 +52,7 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('Pro mensuel : 200 et une adresse de paiement (rien d\'autre)', [r1.statut, Object.keys(r1.json).sort(), /^https:\/\/checkout\.stripe\.test\//.test(r1.json.url)], [200, ['success', 'url'], true]);
     H.v('   mode subscription, le prix de la configuration, une quantité, le compte pour référence', [p1.mode, p1.line_items, p1.client_reference_id], ['subscription', [{ price: A.PRIX.proMois, quantity: 1 }], String(u.id)]);
     H.v('   les CGV exigées (consent_collection[terms_of_service]=required)', p1.consent_collection, { terms_of_service: 'required' });
-    H.v('   essai de 14 jours, carte exigée, aucun code promotionnel libre', [p1.subscription_data.trial_period_days, p1.payment_method_collection, p1.allow_promotion_codes, p1.subscription_data.trial_settings.end_behavior.missing_payment_method], [14, 'always', false, 'cancel']);
+    H.v('   essai de 14 jours SANS carte (if_required : la première facture est de 0 €), aucun code promotionnel libre, fin d\'essai sans moyen de paiement = résiliation', [p1.subscription_data.trial_period_days, p1.payment_method_collection, p1.allow_promotion_codes, p1.subscription_data.trial_settings.end_behavior.missing_payment_method], [14, 'if_required', false, 'cancel']);
     H.v('   retours : le site, succès et abandon', [p1.success_url, p1.cancel_url], ['https://rat-market.fr/fr/compte?abonnement=succes', 'https://rat-market.fr/fr/tarifs?abonnement=annule']);
     H.v('   métadonnées sur la session ET l\'abonnement (le webhook s\'en sert)', [p1.metadata, p1.subscription_data.metadata], [{ compteId: String(u.id), offre: 'pro', periode: 'mois' }, { compteId: String(u.id), offre: 'pro', periode: 'mois' }]);
     const c1 = await A.lireCompte(u.id);
@@ -208,7 +208,8 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
 
     // ── 9. LE STATUT : des états, jamais d'identifiant Stripe ──
     const s0 = await H.appel(srv.url, '/api/abonnement', { entetes: { cookie: sansClient.cookie } });
-    H.v('statut d\'un compte sans abonnement', [s0.statut, s0.json.abonnement, s0.json.quota.nom, s0.entetes['cache-control']], [200, { actif: false, plan: null, periode: null, statut: 'aucun', finPeriode: null, resiliationPrevue: false, essai: { enCours: false, finLe: null, disponible: true }, paiementEchoue: false }, 'gratuit', 'no-store']);
+    H.v('statut d\'un compte sans abonnement', [s0.statut, s0.json.abonnement, s0.json.quota.nom, s0.entetes['cache-control']], [200, { actif: false, plan: null, periode: null, statut: 'aucun', finPeriode: null, finDePeriode: null, resiliationPrevue: false, finPrevueLe: null, prochaineEcheance: null, essaiFinLe: null, debutEssai: null, finEssai: null, maintienJusqua: null,
+        essai: { enCours: false, debutLe: null, finLe: null, carteEnregistree: null, disponible: true, refus: null }, paiementEchoue: false }, 'gratuit', 'no-store']);
     const fin = Math.floor(Date.now() / 1000) + 10 * 86400;
     const suivre = async (statut, extra = {}) => {
         const x = await A.compteConnecte(); await A.placePrise(x.id); const meta = { compteId: String(x.id), offre: 'fondateurs', periode: 'an' };
@@ -345,7 +346,21 @@ H.appel = async (url, chemin, o = {}) => { const r = await appelOrigine(url, che
     H.v('configuration incomplète : 503 INDISPONIBLE propre, rien chez Stripe', [inc.statut, inc.json.erreur.code, inc.json.erreur.detail], [503, 'INDISPONIBLE', 'abonnements-indisponibles']);
     const incP = await H.appel(srvInc.url, '/api/abonnement/portail', { methode: 'POST', corps: {}, entetes: { ...A.SITE, cookie: u.cookie } });
     H.v('   le portail aussi : 503 propre', [incP.statut, incP.json.erreur.detail], [503, 'abonnements-indisponibles']);
+    const incF = await H.appel(srvInc.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: A.CODE_FONDATEURS }, entetes: { ...A.SITE, cookie: u.cookie } });
+    H.v('   la route réservée des Fondateurs aussi : 503 propre', [incF.statut, incF.json.erreur.detail], [503, 'abonnements-indisponibles']);
     await srvInc.fermer();
+    // la route réservée des Fondateurs (STRIPE-DECISIONS) : chaque statut documenté est joué ici ; le détail (prix, indiscernabilité, limite partagée, aucune fuite publique) est dans test-abonnements-decisions.js
+    {
+        const fo = await A.compteConnecte(); const appelF = (corps, entetes = {}) => H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps, entetes: { ...A.SITE, ...ipN(), cookie: fo.cookie, ...entetes } });
+        const f200 = await appelF({ code: A.CODE_FONDATEURS });
+        H.v('route réservée : code valide 200 (l\'offre), mauvais code 422, champ en trop 400, sans origine 403, sans session 401',
+            [f200.statut, f200.json.offre.nom, (await appelF({ code: 'PAS-LE-BON' })).statut, (await appelF({ code: A.CODE_FONDATEURS, x: 1 })).statut,
+                (await H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: A.CODE_FONDATEURS }, entetes: { cookie: fo.cookie, ...ipN() } })).statut,
+                (await H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: A.CODE_FONDATEURS }, entetes: { ...A.SITE, ...ipN() } })).statut], [200, 'fondateurs', 422, 400, 403, 401]);
+        const lim = await A.compteConnecte(); let dernierF = null;
+        for (let i = 0; i < 11; i++) dernierF = await H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: `ESSAI-${i}` }, entetes: { ...A.SITE, ...ipN(), cookie: lim.cookie } });
+        H.v('   le 11e essai de code dans l\'heure : 429 DEBIT', [dernierF.statut, dernierF.json.erreur.code], [429, 'DEBIT']);
+    }
     // les plafonds horaires : le statut (réglable, V2_COMPTE_HEURE) et le portail (20 par heure et par compte)
     const srvLim = await A.serveur(A.cfgAbo({ V2_COMPTE_HEURE: '2' }));
     const lim = await A.compteConnecte(), g = [];

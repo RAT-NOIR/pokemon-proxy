@@ -6,22 +6,38 @@
     "periode": "mois",
     "statut": "impaye",
     "finPeriode": "2026-11-18T10:00:00.000Z",
+    "finDePeriode": "2026-11-18T10:00:00.000Z",
     "resiliationPrevue": false,
+    "finPrevueLe": null,
+    "prochaineEcheance": null,
+    "essaiFinLe": null,
+    "debutEssai": "2026-09-04T10:00:00.000Z",
+    "finEssai": "2026-09-18T10:00:00.000Z",
+    "maintienJusqua": "2026-10-21T10:00:00.000Z",
     "essai": {
       "enCours": false,
+      "debutLe": null,
       "finLe": null,
-      "disponible": false
+      "carteEnregistree": null,
+      "disponible": false,
+      "refus": "essai-deja-utilise"
     },
     "paiementEchoue": true
   },
   "quota": {
     "nom": "pro",
+    "offre": "pro",
+    "limite": null,
+    "utilisees": 0,
     "restant": null,
     "remiseAZero": "2026-10-19T00:00:00+02:00"
   },
   "parrainage": {
     "code": "K7M2QX9P",
-    "essaiFilleulJours": 30
+    "essaiFilleulJours": 30,
+    "moisOfferts": 2,
+    "plafondMois": 12,
+    "fenetreJours": 365
   },
   "offres": {
     "pro": {

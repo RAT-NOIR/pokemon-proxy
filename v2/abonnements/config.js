@@ -14,6 +14,7 @@
 //   V2_FONDATEURS_PLACES      le nombre de places Fondateurs (100 par défaut, de 1 à 1000)
 //   V2_FONDATEURS_CODE        la valeur du code Fondateurs  — OU —  V2_FONDATEURS_CODE_EMPREINTE  son empreinte sha256 en hexadécimal (jamais les deux)
 const crypto = require('crypto');
+const CODE_FONDATEURS_MIN = 12;       // le code Fondateurs est un secret devinable à la rafale par des comptes en nombre : 12 caractères au moins (la forme canonique, espaces retirés)
 
 const NOMS = Object.freeze({
     mode: 'V2_STRIPE_MODE', cle: 'V2_STRIPE_CLE', webhook: 'V2_STRIPE_WEBHOOK_SECRET', portail: Object.freeze({ pro: 'V2_STRIPE_PORTAIL_CONFIG_PRO', fondateurs: 'V2_STRIPE_PORTAIL_CONFIG_FONDATEURS' }),
@@ -64,7 +65,7 @@ function lireAbonnements(env = process.env) {
     // le code Fondateurs : la valeur OU l'empreinte, jamais les deux (deux sources = une qui ment)
     const code = env[NOMS.code], emp = env[NOMS.codeEmpreinte];
     if (!vide(code) && !vide(emp)) { faux(NOMS.code); faux(NOMS.codeEmpreinte); }
-    else if (!vide(code)) { const n = normaliserCode(code); if (n.length < 6) faux(NOMS.code); else base.fondateurs.empreinteCode = sha256(n).toString('hex'); }   // en hexadécimal : la configuration est gelée en profondeur (un Buffer ne se gèle pas)
+    else if (!vide(code)) { const n = normaliserCode(code); if (n.length < CODE_FONDATEURS_MIN) faux(NOMS.code); else base.fondateurs.empreinteCode = sha256(n).toString('hex'); }   // en hexadécimal : la configuration est gelée en profondeur (un Buffer ne se gèle pas)
     else if (!vide(emp)) { if (!/^[0-9a-f]{64}$/i.test(String(emp).trim())) faux(NOMS.codeEmpreinte); else base.fondateurs.empreinteCode = String(emp).trim().toLowerCase(); }
     base.fondateurs.ouvert = Boolean(base.fondateurs.empreinteCode && base.prix.fondateurs.mois && base.prix.fondateurs.an && base.portail.fondateurs);
     base.pret = base.manquantes.length === 0 && base.invalides.length === 0 && Boolean(base.prix.pro.mois && base.prix.pro.an && base.portail.pro);
@@ -80,4 +81,4 @@ function codeFondateursValide(saisie, empreinteHex) {
     const n = normaliserCode(saisie);
     return n.length >= 1 && crypto.timingSafeEqual(sha256(n), Buffer.from(empreinteHex, 'hex'));
 }
-module.exports = { lireAbonnements, codeFondateursValide, normaliserCode, NOMS, PLACES_DEFAUT, PLACES_MAX };
+module.exports = { CODE_FONDATEURS_MIN, lireAbonnements, codeFondateursValide, normaliserCode, NOMS, PLACES_DEFAUT, PLACES_MAX };
