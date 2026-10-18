@@ -106,7 +106,7 @@ async function semer(mode) {                              // 'double' (A, B) | '
     const liste = mode === 'triple' ? [[ID_A, 'normale', 1.0], [ID_B, 'reverse', 2.5], [ID_C, 'normale', null]] : [[ID_A, 'normale', 1180], [ID_B, 'reverse', 1.0]];
     for (const [id, variante, trend] of liste) {
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 + (id === ID_C ? 1 : 0) });
-        await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
+        await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}), ...(id === ID_A ? { prixMelangeTampon: true, tamponsConnus: ['league'], prixMelangeTamponPreuve: ['banc'] } : {}) });       // F4 tour 1 (I3) : A est une fiche au prix MÉLANGÉ (champs internes du catalogue) ; c'est A que la chaîne fabriquée affirme à ce moment du banc
         if (trend !== null) await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: 0.5, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
         VIS.set(id, VB.doc(id, { variante }));
     }
@@ -356,7 +356,19 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const V = sv.url;
     // identifier : les états que SEULE la chaîne fabriquée sait produire
     {
-        mode = 'affirmee';   const a = await inst(3); await ident(V, 'identifiée (verdict ferme)', 200, a.jeton);
+        mode = 'affirmee';   const a = await inst(3); const rF4 = await ident(V, 'identifiée (verdict ferme)', 200, a.jeton);
+        {   // F4-PRIX : chaque champ de prix fermé est servi par un état RÉEL (jugé aussi contre le schéma publié par `consigner`), pas seulement décrit au contrat
+            const an = rF4.json && rF4.json.analyse, c0 = an && an.cartes[0], pg = c0 && c0.carte && c0.carte.prixGuide;
+            // la chaîne fabriquée affirme A (895789, base « triple ») : tendance = moyennes = 1,00 au guide semé (écart mesuré, nul) ; sa ligne numeros_cartes porte prixMelangeTampon: true (I3)
+            H.v('F4-PRIX réel : prixGuide sert deBase, moyenne7, fiable, reserves — la fiche au prix mélangé n\'est JAMAIS fiable, avec les deux mentions fermées', pg && [pg.deBase, pg.moyenne7, pg.fiable, pg.reserves], ['tous-etats', 1, false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']]);
+            H.v('F4-PRIX réel : …et les impressions : A mélangée, B mesurée et fiable, C sans guide (pas de prix)', c0 && c0.carte.impressions.map(i => [i.idProduct, i.prixGuide && i.prixGuide.fiable, i.prixGuide && i.prixGuide.reserves]),
+                [[ID_A, false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']], [ID_B, true, []], [ID_C, null, null]]);
+            H.v('F4-PRIX réel : le set sert son badge (le code PBL ne se confond avec aucune série)', c0 && [c0.carte.set.code, c0.carte.set.badge, c0.carte.set.badgeSource], ['PBL', 'PBL', 'code']);
+            H.v('F4-PRIX réel : regleVerdict sert ecartTendanceMax (la constante du serveur, 30 %)', an && an.regleVerdict && an.regleVerdict.ecartTendanceMax, 0.3);
+            const imp = c0 && c0.carte.impressions;
+            H.v('F4-PRIX réel : chaque impression sert sa version Cardmarket (V2 pour B, rien pour A et C) et la base de son « De » (C n\'a pas de guide : pas de prix, donc pas de base)', imp && imp.map(i => [i.idProduct, i.version, i.prixGuide && i.prixGuide.deBase]), [[ID_A, null, 'tous-etats'], [ID_B, 'V2', 'tous-etats'], [ID_C, null, null]]);
+            H.v('F4-PRIX réel : aucun champ interne ne fuit (prixMelangeTampon, tamponsConnus)', JSON.stringify(rF4.json).match(/prixMelangeTampon|tamponsConnus/g), null);
+        }
         mode = 'affirmee';   const aq = await compte(); const al = await instLiee(aq); await ident(V, 'identifiée, compte lié (solde de compte)', 200, al.jeton);
         mode = 'sans-prix';  const sp = await inst(3); await ident(V, 'identifiée sans prix au guide (prixGuide null)', 200, sp.jeton);
         mode = 'ambigue2';   const a2 = await inst(3); await ident(V, 'a-trancher à 2', 200, a2.jeton);

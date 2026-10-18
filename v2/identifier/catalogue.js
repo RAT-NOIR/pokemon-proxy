@@ -11,6 +11,7 @@ const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
 const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
+const { versionDe } = require('./fiabilite-prix');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -19,6 +20,9 @@ function colLue(nom) {
 }
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const lisible = slug => slug.replace(/-/g, ' ');
+
+const IMPRESSIONS_MAX_TIME_MS = 1500;      // côté base : la requête des versions d'impressions ne dépasse jamais 1,5 s
+const IMPRESSIONS_DELAI_MS = 2000;         // côté serveur : au-delà, abandonnée (les impressions sont non lues)
 
 function creerCatalogue(opts = {}) {
     const cfg = opts.cfg || lireConfig();
@@ -80,12 +84,42 @@ function creerCatalogue(opts = {}) {
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
-                prixGuide: g ? { trend: g.trend, low: g.low, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import)
+                prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
+                // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
+                // version tamponnée : `prixMelangeTampon`, posé par le catalogue). Lus sur la ligne du produit, par le chemin qui sert déjà l'identification ; === true seulement.
+                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true,
                 lienCardmarket: texte(v.lien), impressions
             });
         }
+        await completerImpressions(table, N);
         return table;
+    }
+    // Les impressions d'une métacarte viennent de la version en mémoire du chargeur (visuels.js), qui ne lit pas numeros_cartes (liste fermée). Leur version Cardmarket et leur prix mélangé se lisent
+    // ici, en UNE requête indexée sur tous les produits des impressions qu'on ne connaît pas encore. Une impression absente de numeros_cartes : version null, prix non mélangé (rien d'inventé).
+    // Tour tour 1 (I2) : la requête est BORNÉE (maxTimeMS nommé, limit = nombre d'ids demandés, délai nommé côté serveur) et ISOLÉE (try) : sa panne ne casse JAMAIS l'identification. Une impression dont la ligne
+    // n'a pas été lue (absente de numeros_cartes, ou lecture en panne) est `nonLu: true` : version null, prixMelangeTampon false SANS valeur de preuve, et son prix n'est jamais fiable (ecart-non-mesurable).
+    async function completerImpressions(table, deja) {
+        const ids = new Set();
+        for (const ligne of table.values()) for (const i of ligne.impressions) if (!deja.has(i.idProduct)) ids.add(i.idProduct);
+        let autres = new Map();
+        if (ids.size) {
+            let minuterie;
+            try {
+                const lecture = Promise.resolve().then(() => colLue('numeros_cartes').find({ idProduct: { $in: [...ids] } },
+                    { projection: { idProduct: 1, variante: 1, prixMelangeTampon: 1 }, maxTimeMS: IMPRESSIONS_MAX_TIME_MS, limit: ids.size }).toArray());
+                const delai = new Promise((_, ko) => { minuterie = setTimeout(() => ko(new Error('délai dépassé')), opts.delaiImpressionsMs || IMPRESSIONS_DELAI_MS); });
+                autres = new Map((await Promise.race([lecture, delai])).map(d => [d.idProduct, d]));
+            } catch (e) {
+                autres = new Map();
+                console.warn(`⚠️ [catalogue] lecture des versions des impressions en panne (${(e && (e.code || e.name)) || 'erreur'}) : ${ids.size} impression(s) non lue(s), prix non fiables`);
+            } finally { clearTimeout(minuterie); }
+        }
+        for (const ligne of table.values())
+            ligne.impressions = ligne.impressions.map(i => {
+                const d = deja.get(i.idProduct) || autres.get(i.idProduct);
+                return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: false, nonLu: true });
+            });
     }
     return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente };
 }
-module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };
+module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };

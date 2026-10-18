@@ -103,6 +103,24 @@ refuse('un a-trancher avec une carte', c => { c.analyse.cartes[0].carte = c.anal
 refuse('un a-trancher sans question', c => { c.analyse.cartes[0].question = null; }, 'ReponseAnalyse', tr);
 refuse('un code de question inconnu', c => { c.analyse.cartes[0].question.code = 'prix'; }, 'ReponseAnalyse', tr);
 refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.choix[0].id = 'z'; }, 'ReponseAnalyse', tr);
+{ // F4-PRIX : les champs de prix fermés — la fausse publiée les montre, et le schéma REFUSE ce qui sort de la liste
+    const pi = lire('identifiee-prix-incertains.json'), c0 = pi.analyse.cartes[0];
+    H.v('F4 : la fausse porte un prix non fiable (ecart-tendance), un prix mélangé (deux mentions), deux impressions V1/V2 du même set et numéro, un badge par le nom, ecartTendanceMax',
+        [c0.carte.prixGuide.fiable, c0.carte.prixGuide.reserves, c0.carte.impressions[2].prixGuide.reserves, c0.carte.impressions.slice(0, 2).map(i => [i.numero, i.total, i.set.nom, i.version]), c0.carte.set.badgeSource, pi.analyse.regleVerdict.ecartTendanceMax],
+        [false, ['ecart-tendance'], ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'], [['15', '147', 'Victoires Fictives', 'V1'], ['15', '147', 'Victoires Fictives', 'V2']], 'nom', 0.3]);
+    H.v('contrôle : la fausse saine est acceptée', valider(pi, ref('ReponseAnalyse'), doc).ok, true);
+    refuse('une réserve hors liste (peut-etre-cher)', c => { c.analyse.cartes[0].carte.prixGuide.reserves.push('peut-etre-cher'); }, 'ReponseAnalyse', pi);
+    refuse('un deBase hors liste (etat-retenu : le guide n\'a aucun prix par état)', c => { c.analyse.cartes[0].carte.prixGuide.deBase = 'etat-retenu'; }, 'ReponseAnalyse', pi);
+    refuse('un deBase nul', c => { c.analyse.cartes[0].carte.prixGuide.deBase = null; }, 'ReponseAnalyse', pi);
+    refuse('fiable en texte', c => { c.analyse.cartes[0].carte.prixGuide.fiable = 'non'; }, 'ReponseAnalyse', pi);
+    refuse('une version qui n\'est pas V<n> (reverse)', c => { c.analyse.cartes[0].carte.impressions[0].version = 'reverse'; }, 'ReponseAnalyse', pi);
+    refuse('une version en minuscule (v2)', c => { c.analyse.cartes[0].carte.version = 'v2'; }, 'ReponseAnalyse', pi);
+    refuse('un badgeSource hors liste (sigle)', c => { c.analyse.cartes[0].carte.set.badgeSource = 'sigle'; }, 'ReponseAnalyse', pi);
+    refuse('un ecartTendanceMax au-delà de 1', c => { c.analyse.regleVerdict.ecartTendanceMax = 30; }, 'ReponseAnalyse', pi);
+    refuse('une moyenne7 négative', c => { c.analyse.cartes[0].carte.prixGuide.moyenne7 = -1; }, 'ReponseAnalyse', pi);
+    refuse('un champ interne qui fuit dans le prix (prixMelangeTampon)', c => { c.analyse.cartes[0].carte.prixGuide.prixMelangeTampon = true; }, 'ReponseAnalyse', pi);
+    refuse('un champ interne qui fuit sur le Produit (tamponsConnus)', c => { c.analyse.cartes[0].carte.tamponsConnus = ['staff']; }, 'ReponseAnalyse', pi);
+}
 const er = lire('quota-compte.json');
 H.v('contrôle : une erreur saine est acceptée', valider(er, ref('ReponseErreur'), doc).ok, true);
 refuse('un code d\'erreur inconnu', c => { c.erreur.code = 'INCONNU'; }, 'ReponseErreur', er);
@@ -139,7 +157,9 @@ const listes = {
     'raisons': S.CarteIntrouvable.properties.raison.enum, 'variantes': S.Produit.properties.variante.enum.filter(x => x !== null),
     'états Cardmarket': S.EtatCarte.properties.estime.enum.filter(x => x !== null), 'devises': S.RequeteIdentifier.properties.devise.enum,
     'verdicts': S.RequeteRetourLive.properties.verdictAffiche.enum, 'causes de lecture ratée': S.RequeteRetourLive.properties.lectureRatee.properties.cause.enum,
-    'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum
+    'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum,
+    'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
+    'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null)
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);
 for (const mot of ['code-maitre', 'administrateur', 'Idempotency-Key', 'X-Rat-Market', 'rm_session', 'ce que les clients doivent aligner', '90 jours', '24 mois'])

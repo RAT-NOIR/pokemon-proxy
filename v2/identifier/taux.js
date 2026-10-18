@@ -7,7 +7,9 @@ const { col: colDefaut } = require('../db');
 const URL_BCE = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
 const HEURE_LECTURE_PARIS = 16;       // la BCE publie vers 16 h CET : pas de lecture avant 16 h 00 heure de Paris
 const AGE_MAX_JOURS = 7;              // au-delà, aucun verdict (versEUR null)
-const REGLE = Object.freeze({ bonneAffaireSous: -30, cherAuDela: 15 });
+const { ECART_TENDANCE_MAX } = require('./fiabilite-prix');
+// F4-PRIX (e) : `ecartTendanceMax` = la part de la moyenne (7 ou 30 jours) au-delà de laquelle la tendance ne dit plus le marché ; le prix n'est alors pas présenté comme sûr et le verdict n'est jamais certain.
+const REGLE = Object.freeze({ bonneAffaireSous: -30, cherAuDela: 15, ecartTendanceMax: ECART_TENDANCE_MAX });
 const MARQUE = '__lu';                // document de `taux` { devise: '__lu', date: <jour Paris> } : « lu aujourd'hui ? oui » (unique par jour)
 
 const arrondi6 = x => Math.round(x * 1e6) / 1e6;
