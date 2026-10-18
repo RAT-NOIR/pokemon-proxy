@@ -356,7 +356,16 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const V = sv.url;
     // identifier : les états que SEULE la chaîne fabriquée sait produire
     {
-        mode = 'affirmee';   const a = await inst(3); await ident(V, 'identifiée (verdict ferme)', 200, a.jeton);
+        mode = 'affirmee';   const a = await inst(3); const rF4 = await ident(V, 'identifiée (verdict ferme)', 200, a.jeton);
+        {   // F4-PRIX : chaque champ de prix fermé est servi par un état RÉEL (jugé aussi contre le schéma publié par `consigner`), pas seulement décrit au contrat
+            const an = rF4.json && rF4.json.analyse, c0 = an && an.cartes[0], pg = c0 && c0.carte && c0.carte.prixGuide;
+            H.v('F4-PRIX réel : prixGuide sert deBase, moyenne7, fiable, reserves', pg && [pg.deBase, pg.moyenne7, pg.fiable, pg.reserves], ['tous-etats', 1, true, []]);       // la chaîne fabriquée affirme B (895790) : tendance = moyennes = 1,00 au guide semé
+            H.v('F4-PRIX réel : le set sert son badge (le code PBL ne se confond avec aucune série)', c0 && [c0.carte.set.code, c0.carte.set.badge, c0.carte.set.badgeSource], ['PBL', 'PBL', 'code']);
+            H.v('F4-PRIX réel : regleVerdict sert ecartTendanceMax (la constante du serveur, 30 %)', an && an.regleVerdict && an.regleVerdict.ecartTendanceMax, 0.3);
+            const imp = c0 && c0.carte.impressions;
+            H.v('F4-PRIX réel : chaque impression sert sa version Cardmarket (V2 pour B, rien pour A et C) et la base de son « De » (C n\'a pas de guide : pas de prix, donc pas de base)', imp && imp.map(i => [i.idProduct, i.version, i.prixGuide && i.prixGuide.deBase]), [[ID_A, null, 'tous-etats'], [ID_B, 'V2', 'tous-etats'], [ID_C, null, null]]);
+            H.v('F4-PRIX réel : aucun champ interne ne fuit (prixMelangeTampon, tamponsConnus)', JSON.stringify(rF4.json).match(/prixMelangeTampon|tamponsConnus/g), null);
+        }
         mode = 'affirmee';   const aq = await compte(); const al = await instLiee(aq); await ident(V, 'identifiée, compte lié (solde de compte)', 200, al.jeton);
         mode = 'sans-prix';  const sp = await inst(3); await ident(V, 'identifiée sans prix au guide (prixGuide null)', 200, sp.jeton);
         mode = 'ambigue2';   const a2 = await inst(3); await ident(V, 'a-trancher à 2', 200, a2.jeton);

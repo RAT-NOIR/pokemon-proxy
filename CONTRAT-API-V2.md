@@ -974,8 +974,50 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 
 Les réponses du serveur sont **fermées** : une clé que le schéma ne nomme pas n'est jamais servie (`additionalProperties: false`). Un client qui reçoit une clé inconnue la tolère ; un banc du serveur, lui, l'aurait refusée.
 
-**Le prix.** L'extension lit le prix EN DIRECT sur Cardmarket (`prixLive` dit quoi lire). Le scanner affiche **le guide du jour** (`prixGuide` : `tendance`, `de` = le prix le plus bas, `moyenne30`, et `date`, celle du GUIDE) ; il n'y a **pas de `prixParEtat`**, le serveur ne va jamais chercher un prix par état.
+**Le prix.** L'extension lit le prix EN DIRECT sur Cardmarket (`prixLive` dit quoi lire). Le scanner affiche **le guide du jour** (`prixGuide` : `tendance`, `de` = le prix le plus bas **tous états** (§2 bis), `moyenne7`, `moyenne30`, et `date`, celle du GUIDE) ; il n'y a **pas de `prixParEtat`**, le serveur ne va jamais chercher un prix par état.
 **Un lot** coûte `max(1, ceil(cartesVues / 10))` crédits, questions comprises ; `cartesVues` compte les cartes introuvables.
+
+### 2 bis. Les prix qui ne sont pas présentés comme sûrs (lot F4-PRIX, 2026-10-18)
+
+Règle du projet : « tout ce qui donne un chiffre au client se compte dans les faux ». **Un prix présenté comme sûr qui ne l'est pas est un faux.** Tous les champs ci-dessous sont des **AJOUTS FACULTATIFS** du schéma (un client d'avant ne casse pas) que le serveur sert **toujours** ; les valeurs sont des codes fermés, jamais du texte libre.
+
+**(a) « Prix illisible » n'est permis que si AUCUNE offre n'est reçue.** Écrite par ce qu'elle autorise :
+- l'extension peut dire « prix illisible » (`lectureRatee`, ou un prix `originePrix: "tendance"` sans verdict) **seulement** si la page Cardmarket, une fois chargée, ne porte **aucune** ligne d'offre ; si elle en porte et qu'aucune ne se lit, c'est un **échec de lecture** (`lectureRatee { cause: "grille-vide", definitive: false }`, jamais remboursé, à retenter), **pas** un « prix illisible » ;
+- une tendance (`originePrix: "tendance"`) n'est **jamais** un prix d'offre et ne porte **jamais** de verdict (elle ne l'a jamais fait : `src/commun/prix.js`) ;
+- le serveur ne fait **aucune** requête Cardmarket : il ne voit des offres que si l'extension les lui envoie (`prixLive`, `prixLiveEtat`, `originePrix: "grille"`). Le cas Arcanin [G] Lv.60 (Supreme Victors 15/147, scan `6ad3eaf22fdf39af3f1a8b24`) : le serveur a reçu `prixLive: 7,67`, `originePrix: "tendance"`, ni `prixLiveEtat`, ni `prixLiveNM`, ni grille. **Il n'a reçu aucune offre** ; elles se perdent dans la lecture de la page par l'extension (voir `REPONSE-API-EXTENSION-F4.md`).
+
+**(b) Le « De » est l'offre la plus basse, TOUS ÉTATS.** `prixGuide.de` (et le « ≈ 1,00 € » d'une impression) est l'offre la plus basse de la fiche, tous états et toutes langues confondus : une carte Poor suffit. Le guide ne porte **aucun prix par état** : seul `prixLive`, lu en direct par l'extension dans `etat.retenu`, donne un prix dans l'état. Le champ fermé `prixGuide.deBase` le dit : `tous-etats` (la seule valeur servie). **Le « De » n'est jamais présenté comme le prix de l'état de l'annonce**, et n'entre dans aucun verdict.
+
+**(c) Deux impressions au même set et au même numéro se séparent par leur `version`.** `Produit.version` et `Impression.version` : `V1`, `V2`… (forme `V<1 à 99>`), la version Cardmarket du produit, lue sur la même ligne que le slug (« Arcanine-G-Lv60-**V1**-SV15 » et « …-**V2**-SV15 »). Elle **n'a aucune signification** (ni reverse, ni holo, ni édition : `variante` le dit quand on le sait, sinon `null`) et ne se devine pas ; `null` = Cardmarket n'a qu'un produit à ce numéro, ou on ne le sait pas. À afficher à côté de « set · n° ». Quand deux lignes ont le même set, le même numéro **et** la même `version` (ou aucune), **rien ne les sépare dans nos données** : ne rien inventer.
+
+**(d) Le badge du set.** `set.badge` + `set.badgeSource` (`code` ou `nom`). Le **code** du set quand il ne se confond avec aucune série ; sinon le **nom** du set. « SV » est Supreme Victors, pas Scarlet & Violet (qui commence par `SV1`) : `badge: "Supreme Victors"`, `badgeSource: "nom"`. Mesuré sur les 783 codes du catalogue (2026-10-18) : 13 sont égaux au préfixe d'une série connue (`SV`, `SWSH`, `SM`, `XY`, `BW`, `DP`, `PL`, `HS`, `EX`, `HGSS`, `BS`, `NP`, `SS`) et passent donc par le nom ; 65 sont le préfixe strict d'un autre code (par exemple `BK` et `BKP`), ce qui n'est pas une confusion avec une série. `set.code` n'est jamais modifié. L'extension affiche `badge` ; le nom est long : à tronquer à l'affichage, pas à raccourcir ici.
+
+**(e) L'écart de la tendance.** Si la tendance s'écarte de **plus de 30 %** (constante nommée `ECART_TENDANCE_MAX`, 0,3) de la moyenne sur 7 jours **ou** de celle sur 30 jours, le prix n'est **pas** présenté comme sûr et un verdict de bonne affaire n'est **jamais** certain. L'écart se mesure à la moyenne : `|tendance − moyenne| / moyenne`, sur une moyenne valide seulement (une moyenne absente ne se devine pas). Deux endroits :
+- **le guide** (`prixGuide`, servi par le serveur) : `moyenne7`, `moyenne30`, `fiable` (booléen), `reserves` (liste) ; `ecart-tendance` est dans `reserves` quand l'écart dépasse 30 % ;
+- **la fiche lue en direct** (l'extension) : elle applique **la même constante**, servie dans `analyse.regleVerdict.ecartTendanceMax` (0,3), aux valeurs qu'elle lit sur la page (cas réel : tendance 7,67 € contre 13,45 € à 30 jours et 14,35 € à 7 jours : écart 43 % et 47 %).
+
+```json schema=PrixGuide
+{
+  "tendance": 10.18,
+  "de": 1,
+  "moyenne30": 13.15,
+  "date": "2026-10-12",
+  "deBase": "tous-etats",
+  "moyenne7": 14.59,
+  "fiable": false,
+  "reserves": ["ecart-tendance"]
+}
+```
+
+**Les prix mélangés.** Certaines promos existent en version Staff, Prerelease, League… mais Cardmarket n'a **qu'un produit** pour la carte : le guide mélange les versions. Le catalogue marque ces fiches `prixMelangeTampon` (67 le 2026-10-18). Pour un produit marqué, `prixGuide.fiable` est `false`, **le prix n'est jamais présenté comme sûr**, et `prixGuide.reserves` porte les deux codes fermés ci-dessous (règles 1 et 3 de l'éditeur). Les champs internes (`prixMelangeTampon`, `tamponsConnus`, la preuve) ne sortent **jamais**.
+
+| code de `reserves` | texte à afficher (celui de l'éditeur) | quand |
+|---|---|---|
+| `ecart-tendance` | « La tendance s'écarte de plus de 30 % des moyennes sur 7 et 30 jours : ce prix n'est pas sûr. » (texte proposé par l'implémenteur, non fourni par l'éditeur) | la tendance s'écarte de plus de 30 % de `moyenne7` ou de `moyenne30` |
+| `prix-indicatif-tampons-melanges` | « prix indicatif : versions tamponnées vendues sous la même fiche Cardmarket » | fiche marquée `prixMelangeTampon` (règle 1) |
+| `peut-etre-gonfle-par-tampons` | « peut être gonflé par les ventes de versions tamponnées » | fiche marquée et **aucun tampon visible** sur la photo (règle 3). **Aujourd'hui aucun tampon n'est lu** : toujours avec la précédente |
+
+**Règle 2 — À VENIR, non codée.** Quand la seconde lecture des marques (lot F1) verra un tampon sur la photo : verdict sur l'`idProduct`, avec la mention « version tamponnée : le prix Cardmarket sous-estime sa valeur » (jamais une bonne affaire présentée comme certaine). Elle attend F1 : aucun code ne la porte encore, et `peut-etre-gonfle-par-tampons` reste servi tant qu'aucun tampon n'est lu.
 
 ---
 

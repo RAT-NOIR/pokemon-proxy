@@ -11,6 +11,12 @@
     "schema": "ReponseAnalyse",
     "description": "Identifiée avec quatre impressions (un lien dès que le numéro est connu, vers la page exacte du produit)."
   },
+  "identifiee-prix-incertains.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Prix qui ne sont pas présentés comme sûrs (lot F4-PRIX) : écart de la tendance aux moyennes (ecart-tendance), prix mélangé avec une version tamponnée (deux mentions fermées), le « De » dit tous états (deBase), deux impressions du même set et du même numéro séparées par leur version (V1, V2), badge du set par son nom quand le code se confond avec une série, ecartTendanceMax dans regleVerdict."
+  },
   "identifiee-hors-euro.json": {
     "route": "POST /api/identifier",
     "statut": 200,

@@ -122,6 +122,19 @@ comparerAuCode('Produit.variante', variantesEnum, 'identifier/produit.js', 'tamp
 H.vrai('Produit.variante est nullable (on ne devine pas l\'édition, §7 / Q31)', nullable('Produit.properties.variante'));
 H.v('Impression.variante = Produit.variante', liste('Impression.properties.variante'), variantesEnum);
 H.vrai('Impression.variante est nullable', nullable('Impression.properties.variante'));
+// F4-PRIX : les listes fermées du prix ont UNE source (identifier/fiabilite-prix.js), le schéma les reprend ensemble pour ensemble
+{
+    const F = require('../identifier/fiabilite-prix');
+    H.v('PrixGuide.reserves : schéma = fiabilite-prix.RESERVES (les trois codes fermés)', diff(aller(S, 'PrixGuide.properties.reserves.items.enum'), [...F.RESERVES]), { enTrop: [], manquants: [] });
+    H.v('PrixGuide.deBase : schéma = [fiabilite-prix.BASE_DE] (« tous-etats », seule valeur servie)', aller(S, 'PrixGuide.properties.deBase.enum'), [F.BASE_DE]);
+    H.v('SetProduit.badgeSource : code · nom (nullable)', [liste('SetProduit.properties.badgeSource'), nullable('SetProduit.properties.badgeSource')], [['code', 'nom'], true]);
+    H.v('Produit.version et Impression.version : la même forme V<n> que fiabilite-prix.versionDe', [aller(S, 'Produit.properties.version.pattern'), aller(S, 'Impression.properties.version.pattern')], ['^V[1-9][0-9]?$', '^V[1-9][0-9]?$']);
+    const motifVersion = new RegExp(aller(S, 'Produit.properties.version.pattern'));
+    H.v('   le motif du schéma accepte et refuse exactement ce que versionDe accepte et refuse', ['V1', 'V18', 'V99', 'V0', 'V100', 'v2', 'V', 'reverse'].map(x => motifVersion.test(x) === (F.versionDe(x) !== null)), [true, true, true, true, true, true, true, true]);
+    H.v('RegleVerdict.ecartTendanceMax : un nombre entre 0 et 1, optionnel pour les clients, jamais exigé', [aller(S, 'RegleVerdict.properties.ecartTendanceMax.type'), aller(S, 'RegleVerdict.required').includes('ecartTendanceMax')], ['number', false]);
+    for (const [nom, champ] of [['PrixGuide', ['deBase', 'moyenne7', 'fiable', 'reserves']], ['SetProduit', ['badge', 'badgeSource']], ['Produit', ['version']], ['Impression', ['version']]])
+        H.v(`${nom} : ${champ.join(', ')} sont des AJOUTS FACULTATIFS (jamais requis : un client d'avant le lot F4-PRIX reste valide)`, champ.filter(c => (aller(S, `${nom}.required`) || []).includes(c)), []);
+}
 // B7b.1 tour 1 (M6) : la liste des causes de non-remboursement a UNE source (sources.js), le schéma la reprend ensemble pour ensemble
 const { RAISONS_NON_REMBOURSE } = require('../../sources');
 H.v('Facturation.raisonNonRembourse : schéma = RAISONS_NON_REMBOURSE (sources.js)', diff(liste('Facturation.properties.raisonNonRembourse'), [...RAISONS_NON_REMBOURSE]), { enTrop: [], manquants: [] });

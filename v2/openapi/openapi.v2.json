@@ -3033,6 +3033,37 @@
           "date": {
             "type": "string",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "deBase": {
+            "type": "string",
+            "enum": [
+              "tous-etats"
+            ],
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi. Ce qu'est `de` : l'offre la plus basse TOUS ÉTATS et toutes langues confondus (une carte Poor suffit), jamais le prix de l'état retenu pour l'annonce. Le guide ne porte aucun prix par état ; seul `prixLive`, lu en direct par l'extension, donne un prix dans l'état. Une valeur fermée, la seule servie aujourd'hui."
+          },
+          "moyenne7": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : la moyenne du guide sur 7 jours (avg7), ou null. Avec `moyenne30`, elle sert à juger l'écart de la tendance."
+          },
+          "fiable": {
+            "type": "boolean",
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi. `true` seulement si `reserves` est vide. `false` : ce prix n'est pas présenté comme sûr, et un verdict de bonne affaire fondé dessus n'est jamais certain."
+          },
+          "reserves": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ecart-tendance",
+                "prix-indicatif-tampons-melanges",
+                "peut-etre-gonfle-par-tampons"
+              ]
+            },
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). La mention « version tamponnée : le prix Cardmarket sous-estime sa valeur » (tampon vu sur la photo) n'est PAS encore servie : elle attend la seconde lecture des marques."
           }
         },
         "required": [
@@ -3042,7 +3073,7 @@
           "date"
         ],
         "additionalProperties": false,
-        "description": "Le guide quotidien de Cardmarket (trend, low, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
+        "description": "Le guide quotidien de Cardmarket (trend, low, avg7, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
       },
       "SetProduit": {
         "type": "object",
@@ -3081,6 +3112,25 @@
                 "$ref": "#/components/schemas/Image"
               }
             ]
+          },
+          "badge": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : le texte à afficher dans le badge du set. Le `code` quand il ne se confond avec aucune série connue ; sinon le NOM du set (« SV » est Supreme Victors, pas Scarlet & Violet). `code` n'est jamais modifié."
+          },
+          "badgeSource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "code",
+              "nom",
+              null
+            ],
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : d'où vient `badge` (`code` ou `nom`) ; null si le set n'a ni code ni nom."
           }
         },
         "required": [
@@ -3131,6 +3181,14 @@
               "jumbo",
               null
             ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^V[1-9][0-9]?$",
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : la version Cardmarket de CETTE impression (`V1`, `V2`…). Deux impressions au même set et au même numéro (« Supreme Victors n° 15/147 ») ne se séparent que par elle : à afficher à côté de l'étiquette. Sans signification (voir `Produit.version`) ; null = rien ne les sépare dans nos données, on ne devine pas."
           },
           "langue": {
             "type": [
@@ -3248,6 +3306,14 @@
               null
             ],
             "description": "null = on ne sait pas (jamais « normale » deviné)."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^V[1-9][0-9]?$",
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : la version Cardmarket du produit (`V1`, `V2`…), ce qui le sépare d'un autre produit au même set et au même numéro (« …-V1-SV15 » et « …-V2-SV15 »). Elle n'a AUCUNE signification (ni reverse, ni holo, ni édition : `variante` le dit quand on le sait) et ne se devine pas ; null = Cardmarket n'a qu'un produit à ce numéro, ou on ne le sait pas."
           },
           "rarete": {
             "type": [
@@ -3825,6 +3891,12 @@
           },
           "cherAuDela": {
             "type": "number"
+          },
+          "ecartTendanceMax": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : 0,3 = 30 %. Si la tendance s'écarte de plus de cette part de la moyenne sur 7 jours OU de celle sur 30 jours, le prix n'est pas présenté comme sûr et le verdict n'est jamais certain. Même constante que `PrixGuide.reserves` (`ecart-tendance`) : l'extension l'applique aux valeurs LUES en direct sur la fiche."
           },
           "versEUR": {
             "type": [
