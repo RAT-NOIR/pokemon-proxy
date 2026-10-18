@@ -329,7 +329,9 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     // ════ 4. LE SEUIL ═════════════════════════════════════════════════════════════════════════════════════════
     verifier('largeurMinDe(\'pikaqian\') = 300 (décision du testeur 2026-10-11 : usage vignette 157 px)', S.largeurMinDe('pikaqian'), 300);
     verifier('les autres sources ne bougent pas', ['bulbapedia', 'artofpkm', 'tcgdex', 'pokemontcg.io', 'quelque-part', 'PIKAQIAN', 'Pikaqian', '', undefined, 'constructor'].map(S.largeurMinDe), [350, 350, 350, 350, 350, 350, 350, 350, 350, 350]);
-    verifier('les sources TPC sont à 257 (décision du testeur, 2026-10-12) ; PikaQian, qui n\'est pas officielle, garde 300', ['tpc-asie', 'pokemon-card-com', 'pokemon-com'].map(S.largeurMinDe), [257, 257, 257]);
+    verifier('les sources TPC sont à 257 (décision du testeur, 2026-10-12) ; nom de source pokemon.com depuis le 2026-10-17 ; PikaQian, qui n\'est pas officielle, garde 300', ['tpc-asie', 'pokemon-card-com', 'pokemon.com'].map(S.largeurMinDe), [257, 257, 257]);
+    verifier('l\'ancien nom pokemon-com n\'est écrit par personne : pas une source officielle (350)', S.largeurMinDe('pokemon-com'), 350);
+    verifier('basse définition : pokemon.com a un plancher de 200 (décision du 2026-10-17)', S.largeurAdmiseDe('pokemon.com'), 200);
     verifier('aRejuger(pikaqian, trop-petit à 350 de 320 px) → oui (le seuil a baissé)', S.aRejuger({ wOriginal: 320 }, 'pikaqian'), true);
     verifier('sourceDeUnite : le préfixe « pikaqian/ » est une source connue', S.sourceDeUnite({ _id: 'pikaqian/Dynamax-Clash-Flame' }, 'artofpkm'), 'pikaqian');
 
