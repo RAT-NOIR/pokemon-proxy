@@ -118,6 +118,37 @@ async function lireFiches(db, client, site, L, ids, { compter }) {
     return fiches;
 }
 
+/** Combien de lignes du set portent un `numeroFiche` (le seul chemin de preuve de TPC Asie). */
+async function compterNumerotes(db, slug) {
+    return (await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { numeroFiche: 1 } }).toArray()).filter(l => l.numeroFiche !== null && l.numeroFiche !== undefined && l.numeroFiche !== '').length;
+}
+
+/**
+ * Les listes puis les fiches d'une ligne — UNE fonction, celle de `collecterSet` ET du lanceur dédié (collecter-tpc-set.js). `refus` (texte) quand une liste ne tient pas sa mesure ; les erreurs
+ * de la source (bloque, pauseHote, plafond) remontent à l'appelant.
+ */
+async function lireListesEtFiches(db, client, site, L, idEtat, compter) {
+    // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
+    // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
+    const sources = listesDe(L);
+    const lues = [];
+    for (const S of sources) {
+        const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+        // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
+        // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
+        // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
+        if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
+            return { refus: `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set` };
+        }
+        lues.push({ S, l });
+    }
+    if (!L.listes) { const liste = lues[0].l; return { liste, fiches: await lireFiches(db, client, site, L, liste.ids, { compter }) }; }
+    const fiches = [];
+    for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
+    // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
+    return { liste: { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) }, fiches };
+}
+
 /** 3-4. Les trous du set, et le plan — pur une fois les fiches lues. */
 async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
@@ -183,7 +214,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     // TAIWAN (2026-10-18) : TPC Asie n'a AUCUNE voie sans numéro (la voie nomJa + PV est celle de pokemon-card.com) ; un set dont aucune ligne ne porte de numeroFiche ne peut rien prouver. Le dire
     // AVANT de lire les listes et les fiches (~455 pages pour la ligne Products) : une garde ne passe pas par défaut — elle autorise ce qui a un numéro à prouver.
     if (site === 'tpc-asie') {
-        const numerotes = (await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { numeroFiche: 1 } }).toArray()).filter(l => l.numeroFiche !== null && l.numeroFiche !== undefined && l.numeroFiche !== '').length;
+        const numerotes = await compterNumerotes(db, slug);
         if (!numerotes) return { code: unite._id, etat: 'refuse-set', erreur: `aucune des ${produits} lignes de ${slug} ne porte de numeroFiche : TPC Asie ne prouve que par le numéro — rien à demander`, sansJointure: true };
     }
     const idEtat = `${site}/${slug}`;
@@ -197,30 +228,13 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     try {
         let liste, fiches;
         try {
-            // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
-            // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
-            const sources = listesDe(L);
-            const lues = [];
-            for (const S of sources) {
-                const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
-                // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
-                // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
-                // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
-                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
-                    const motif = `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set`;
-                    await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
-                    console.error(`❌ ${unite._id} : ${motif}.`);
-                    return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
-                }
-                lues.push({ S, l });
+            const lu = await lireListesEtFiches(db, client, site, L, idEtat, compter);
+            if (lu.refus) {
+                await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif: lu.refus } });
+                console.error(`❌ ${unite._id} : ${lu.refus}.`);
+                return { code: unite._id, etat: 'refuse-liste', erreur: lu.refus, sansJointure: true };
             }
-            if (!L.listes) { liste = lues[0].l; fiches = await lireFiches(db, client, site, L, liste.ids, { compter }); }
-            else {
-                fiches = [];
-                for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
-                // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
-                liste = { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) };
-            }
+            ({ liste, fiches } = lu);
         } catch (e) {
             // REPONSE-HOTE : une pause de l'hôte (persistante, ou tenue par la passe) arrête l'unité AVANT toute requête de plus — pas un arrêt définitif, aucune alerte
             if (e.pauseHote) return { code: unite._id, etat: 'incomplet', erreur: e.message, pauseHote: { hote: e.hote, issue: e.issue ?? null, motif: e.motif ?? e.message, empreinte: e.empreinte ?? null, persistante: !!e.pausePersistante }, sansJointure: true };
@@ -382,7 +396,7 @@ async function conclureBloque(E, unite, site, err, client, { seulementAlerte = f
 }
 
 // `planReel` et `baseLocale` (plus bas) sont des déclarations de fonction : hissées, donc exportables ici, avant la garde de la ligne de commande.
-module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale };
+module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale, lireListesEtFiches, lireFiches, compterNumerotes, conclureBloque };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
