@@ -448,5 +448,23 @@
     "statut": 409,
     "schema": "ReponseErreur",
     "description": "Le compte a déjà un abonnement vivant (essai, actif, impayé, suspendu) : un seul abonnement par compte ; le site renvoie vers le portail."
+  },
+  "abonnement-essai-sans-carte.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Essai de 14 jours SANS carte : Pro pendant l'essai, `carteEnregistree: false`, la fin est annoncée (`resiliationPrevue`, `finPrevueLe`), aucun renouvellement (`prochaineEcheance: null`) ; à la fin de l'essai, retour au gratuit sans aucun prélèvement."
+  },
+  "fondateurs-offre.json": {
+    "route": "POST /api/abonnement/fondateurs",
+    "statut": 200,
+    "schema": "ReponseOffreFondateurs",
+    "description": "L'offre Fondateurs, rendue à qui présente le code de la page réservée (jamais publique : le site la sert en noindex, hors sitemap, aucun prix sur une page publique)."
+  },
+  "fondateurs-code-invalide.json": {
+    "route": "POST /api/abonnement/fondateurs",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Mauvais code, code absent, ou offre fermée : la MÊME réponse (indiscernables)."
   }
 }

@@ -6,7 +6,8 @@
 const Stripe = require('../../node_modules/stripe');
 const JOUR = 86400, MOIS = 30 * JOUR, AN = 365 * JOUR;
 const erreur = (code, message) => Object.assign(new Error(message || code), { type: 'StripeInvalidRequestError', code, raw: { code } });
-function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), formeRecente = true } = {}) {
+// `clientsParHorloge` : la limite de Stripe est de 3 clients par horloge d'essai ; les bancs qui la tiennent la passent (parcours, décisions), les plus anciens, écrits avec une horloge commune, ne la posent pas.
+function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), formeRecente = true, clientsParHorloge = Infinity } = {}) {
     const E = { customers: new Map(), subs: new Map(), coupons: new Map(), sessions: new Map(), invoices: [], produits: [], prix: [], endpoints: [], configs: [], clocks: new Map(), idem: new Map(), appels: [], evenements: [] };
     let n = 0; const nid = pre => `${pre}_${String(++n).padStart(6, '0')}`;
     const note = (nom, params, opts) => E.appels.push({ nom, params: params === undefined ? undefined : JSON.parse(JSON.stringify(params)), opts: opts ? JSON.parse(JSON.stringify(opts)) : undefined });
@@ -25,7 +26,8 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
     function vue(s) {
         const item = { id: `si_${s.id}`, price: prixDe(s.prixId), ...(formeRecente ? { current_period_start: s.debut, current_period_end: s.fin } : {}) };
         const o = { id: s.id, object: 'subscription', customer: s.customer, status: s.status, created: s.created, trial_start: s.trialStart, trial_end: s.trialEnd, cancel_at_period_end: s.cancelAtPeriodEnd, cancel_at: null,
-            ended_at: s.endedAt, metadata: { ...s.metadata }, items: { object: 'list', data: [item] }, discounts: s.discounts.map(d => d.id), livemode: f.modeLive };
+            ended_at: s.endedAt, metadata: { ...s.metadata }, items: { object: 'list', data: [item] }, discounts: s.discounts.map(d => d.id), livemode: f.modeLive, default_payment_method: s.defaultPm || null, default_source: null,
+            trial_settings: s.finSansCarte ? { end_behavior: { missing_payment_method: s.finSansCarte } } : { end_behavior: { missing_payment_method: 'create_invoice' } } };
         if (!formeRecente) { o.current_period_start = s.debut; o.current_period_end = s.fin; }
         return o;
     }
@@ -53,7 +55,9 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
         for (let garde = 0; garde < 50; garde++) {
             const t = s.status === 'trialing' ? s.trialEnd : s.status === 'active' ? s.fin : s.status === 'past_due' ? s.impayeDepuis + 14 * JOUR : Infinity;
             if (!(t <= cible)) return;
-            if (s.status === 'trialing') facturer(s, t, 'subscription_cycle');
+            // comme Stripe : à la fin d'un essai SANS moyen de paiement, `trial_settings.end_behavior.missing_payment_method: 'cancel'` résilie l'abonnement — aucune facture n'est tentée
+            if (s.status === 'trialing' && s.finSansCarte === 'cancel' && !s.defaultPm && !E.customers.get(s.customer).pm) { s.status = 'canceled'; s.endedAt = t; emit('customer.subscription.deleted', vue(s), t); }
+            else if (s.status === 'trialing') facturer(s, t, 'subscription_cycle');
             else if (s.status === 'active') {
                 if (s.cancelAtPeriodEnd) { s.status = 'canceled'; s.endedAt = t; emit('customer.subscription.deleted', vue(s), t); }
                 else facturer(s, t, 'subscription_cycle');
@@ -63,7 +67,10 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
 
     // ── les ressources ──
     f.customers = {
-        async create(p, o) { panne('customers.create'); note('customers.create', p, o); return avecCle(o, () => { const id = nid('cus'); const c = { id, object: 'customer', email: p.email, metadata: p.metadata || {}, test_clock: p.test_clock || null, pm: null }; E.customers.set(id, c); return { ...c }; }, p); },
+        async create(p, o) { panne('customers.create'); note('customers.create', p, o); return avecCle(o, () => {
+            // comme Stripe : une horloge d'essai porte au plus 3 clients (quand le banc demande cette fidélité)
+            if (p.test_clock && [...E.customers.values()].filter(c => c.test_clock === p.test_clock).length >= clientsParHorloge) throw erreur('test_clock_customer_limit', 'A test clock can have at most 3 customers.');
+            const id = nid('cus'); const c = { id, object: 'customer', email: p.email, metadata: p.metadata || {}, test_clock: p.test_clock || null, pm: null }; E.customers.set(id, c); return { ...c }; }, p); },
         async retrieve(id) { const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); return { ...c }; },
         async createBalanceTransaction(id, p, o) { panne('customers.createBalanceTransaction'); note('customers.createBalanceTransaction', { id, ...p }, o); return avecCle(o, () => { const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); c.balance = (c.balance || 0) + p.amount; (c.transactions = c.transactions || []).push({ id: nid('cbtxn'), object: 'customer_balance_transaction', amount: p.amount, currency: p.currency, description: p.description, metadata: { ...(p.metadata || {}) }, created: horloge(id) }); return { ...c.transactions.at(-1) }; }, { id, ...p }); },
         async listBalanceTransactions(id, p = {}) { panne('customers.listBalanceTransactions'); note('customers.listBalanceTransactions', { id, ...p }); const c = E.customers.get(id); if (!c) throw erreur('resource_missing'); return { data: [...(c.transactions || [])].reverse().map(x => ({ ...x })), has_more: false }; },
@@ -102,7 +109,8 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
                 const prixId = p.items[0].price, t = horloge(p.customer), jours = p.trial_period_days || 0, id = nid('sub');
                 const prix = prixDe(prixId), dur = (prix.recurring && prix.recurring.interval === 'year') ? AN : MOIS;
                 if (p.default_payment_method) c.pm = p.default_payment_method;
-                const s = { id, customer: p.customer, prixId, status: jours ? 'trialing' : 'incomplete', created: t, trialStart: jours ? t : null, trialEnd: jours ? t + jours * JOUR : null, debut: t, fin: jours ? t + jours * JOUR : t + dur,
+                const finSansCarte = p.trial_settings && p.trial_settings.end_behavior ? p.trial_settings.end_behavior.missing_payment_method : null;
+                const s = { id, customer: p.customer, prixId, defaultPm: p.default_payment_method || null, finSansCarte, status: jours ? 'trialing' : 'incomplete', created: t, trialStart: jours ? t : null, trialEnd: jours ? t + jours * JOUR : null, debut: t, fin: jours ? t + jours * JOUR : t + dur,
                     cancelAtPeriodEnd: false, endedAt: null, metadata: { ...(p.metadata || {}) }, discounts: [], impayeDepuis: null };
                 E.subs.set(id, s);
                 emit('customer.subscription.created', vue(s), t);
@@ -113,6 +121,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
         async retrieve(id, p) {
             panne('subscriptions.retrieve'); note('subscriptions.retrieve', { id, ...p }); const s = E.subs.get(id); if (!s) throw erreur('resource_missing');
             const o = vue(s);
+            if (p && Array.isArray(p.expand) && p.expand.includes('customer')) { const c = E.customers.get(s.customer); o.customer = { id: c.id, object: 'customer', default_source: null, invoice_settings: { default_payment_method: c.pm || null } }; }
             if (p && Array.isArray(p.expand) && p.expand.includes('discounts')) o.discounts = s.discounts.map(d => ({ id: d.id, object: 'discount', source: { type: 'coupon', coupon: d.coupon } }));   // forme récente : source.coupon
             return o;
         },

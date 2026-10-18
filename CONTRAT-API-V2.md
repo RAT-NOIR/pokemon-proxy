@@ -31,6 +31,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/compte/reinitialiser` | site | aucune (jeton du lien) | non | `RequeteReinitialisation` → `ReponseSimple` |
 | `GET /api/abonnement` | site | cookie | non | → `ReponseAbonnement` (STRIPE-V2, derrière `V2_ABONNEMENTS` : voir `CONTRAT-STRIPE-V2.md`) |
 | `POST /api/abonnement/checkout` | site | cookie | non | `RequeteCheckout` → `ReponseUrlPaiement` (voir `CONTRAT-STRIPE-V2.md`) |
+| `POST /api/abonnement/fondateurs` | site | cookie | non | `RequeteFondateurs` → `ReponseOffreFondateurs` (l'offre Fondateurs, à qui présente le code de la page réservée ; mauvais code et offre fermée : la même réponse ; voir `CONTRAT-STRIPE-V2.md` §2 quater) |
 | `POST /api/abonnement/portail` | site | cookie | non | rien → `ReponseUrlPaiement` (voir `CONTRAT-STRIPE-V2.md`) |
 | `POST /api/compte/renvoyer-verification` | site | aucune | non | `RequeteRenvoiVerification` → `202 ReponseSimple` (toujours, que l'adresse existe, soit vérifiée ou non) |
 | `POST /api/banc/correction` | extension | Bearer | non | `RequeteCorrectionBanc` → `ReponseSimple` (200 quoi qu'il arrive après les contrôles) |

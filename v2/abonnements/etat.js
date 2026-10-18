@@ -18,7 +18,7 @@
 const { ObjectId } = require('mongoose').Types;
 const { col } = require('../db');
 const { DEPUIS_LOOKUP, GRACE_IMPAYE_JOURS, MARGE_RENOUVELLEMENT_HEURES, MARGE_ESSAI_PLACE_JOURS } = require('./offres');
-const Fo = require('./fondateurs');
+const Fo = require('./fondateurs'); const Essai = require('./essai');
 
 const STATUTS = Object.freeze(['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']);
 const TERMINAUX = Object.freeze(['canceled', 'incomplete_expired']);
@@ -41,7 +41,7 @@ function lireSubscription(sub, cfgAbo) {
     const meta = (sub && sub.metadata && typeof sub.metadata === 'object') ? sub.metadata : {};
     return {
         sid: id, statut: sub && sub.status, offre: lue ? lue.offre : null, periode: lue ? lue.periode : null, finPeriode, coupeLe: nombre(sub && sub.cancel_at),
-        finEssai: nombre(sub && sub.trial_end), aEuEssai: nombre(sub && sub.trial_end) !== null || nombre(sub && sub.trial_start) !== null,
+        finEssai: nombre(sub && sub.trial_end), debutEssai: nombre(sub && sub.trial_start), aEuEssai: nombre(sub && sub.trial_end) !== null || nombre(sub && sub.trial_start) !== null,
         resiliation: Boolean(sub && (sub.cancel_at_period_end === true || nombre(sub.cancel_at) !== null)), termineLe: nombre(sub && sub.ended_at),
         creeSub: nombre(sub && sub.created), client: idDe(sub && sub.customer), compteMeta: objetId(meta.compteId), parrain: objetId(meta.parrain),
         remises: Array.isArray(sub && sub.discounts) ? sub.discounts.length : (sub && sub.discount ? 1 : 0), nbLignes: items.length
@@ -78,7 +78,7 @@ function decider(entree, statut, version) {
 function subsDe(st) {
     if (!st) return {};
     if (st.subs && typeof st.subs === 'object') return st.subs;
-    if (st.sid) return { [st.sid]: { statut: st.statut, version: st.version ?? 0, offre: st.offre ?? null, periode: st.periode ?? null, creeSub: st.creeSub ?? null, jusquAu: st.jusquAu ?? null, actif: VIVANTS.includes(st.statut), finPeriode: st.finPeriode ?? null, finEssai: st.finEssai ?? null, resiliation: Boolean(st.resiliation) } };
+    if (st.sid) return { [st.sid]: { statut: st.statut, version: st.version ?? 0, offre: st.offre ?? null, periode: st.periode ?? null, creeSub: st.creeSub ?? null, jusquAu: st.jusquAu ?? null, actif: VIVANTS.includes(st.statut), finPeriode: st.finPeriode ?? null, finEssai: st.finEssai ?? null, debutEssai: st.debutEssai ?? null, resiliation: Boolean(st.resiliation) } };
     return {};
 }
 /** Pure : le droit du compte, déduit de TOUS ses abonnements. Pro tant qu'au moins un est vivant ; l'abonnement « principal » (celui qui va plus loin, sinon le plus récent) est ce que le site affiche. */
@@ -139,20 +139,22 @@ async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, comp
             }
         }
         const v = valeurs(effectif, evtDate, entree);
-        const nouvelle = { statut: s.statut, version, offre: effectif.offre, periode: s.periode, creeSub: s.creeSub, jusquAu: v.jusquAu, actif: v.actif, finPeriode: dateDe(s.finPeriode), finEssai: dateDe(s.finEssai), resiliation: s.resiliation };
+        const nouvelle = { statut: s.statut, version, offre: effectif.offre, periode: s.periode, creeSub: s.creeSub, jusquAu: v.jusquAu, actif: v.actif, finPeriode: dateDe(s.finPeriode), finEssai: dateDe(s.finEssai), debutEssai: dateDe(s.debutEssai), resiliation: s.resiliation };
         const tous = { ...subs, [s.sid]: nouvelle };
         const ag = agreger(tous), p = ag.principal;
         if (ag.double) signaux.push('double-abonnement');
         const pose = {
             'abonnement.actif': ag.actif, 'abonnement.jusquAu': ag.jusquAu, 'abonnement.stripe.subs': tous, 'abonnement.stripe.double': ag.double,
             'abonnement.stripe.sid': p.sid, 'abonnement.stripe.offre': p.offre, 'abonnement.stripe.periode': p.periode, 'abonnement.stripe.statut': p.statut, 'abonnement.stripe.finPeriode': p.finPeriode,
-            'abonnement.stripe.finEssai': p.finEssai, 'abonnement.stripe.resiliation': p.resiliation, 'abonnement.stripe.version': p.version, 'abonnement.stripe.creeSub': p.creeSub,
+            'abonnement.stripe.finEssai': p.finEssai, 'abonnement.stripe.debutEssai': p.debutEssai ?? null, 'abonnement.stripe.resiliation': p.resiliation, 'abonnement.stripe.version': p.version, 'abonnement.stripe.creeSub': p.creeSub,
             'abonnement.stripe.jusquAu': p.jusquAu, 'abonnement.stripe.majLe': evtDate, 'abonnement.stripe.rev': (st && Number.isInteger(st.rev) ? st.rev : 0) + 1
         };
         if (s.aEuEssai) pose['abonnement.stripe.essaiUtilise'] = true;
         if (s.parrain && !(st && st.parrain)) pose['abonnement.stripe.parrain'] = s.parrain;
         const res = await col('comptes').updateOne({ _id: compte._id, 'abonnement.stripe.rev': st && Number.isInteger(st.rev) ? st.rev : null }, { $set: pose });
         if (res.matchedCount === 1) {
+            // STRIPE-DECISIONS : l'essai existe vraiment — la réservation de la boîte et des installations du compte (faite au Checkout) devient définitive (essai.js ; idempotent, sans effet hors essai)
+            if (s.aEuEssai) await Essai.confirmer(compte._id, evtDate);
             // La place Fondateurs : réservée pendant l'ESSAI (elle compte contre le plafond, jusqu'à la fin de l'essai + marge), CONFIRMÉE à la première facture payée (webhook invoice.paid, ou ici un
             // abonnement déjà `active` : il a payé), RENDUE si l'abonnement meurt avant tout paiement (une place prise ne se rend jamais).
             if (effectif.offre === 'fondateurs' || (entree && entree.offre === 'fondateurs')) {

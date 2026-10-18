@@ -59,10 +59,13 @@ async function lier({ installation, code, argent, maintenant = new Date(), rejeu
     // O3 tour 2 (I-A) : un code d'une génération révolue (la réinitialisation est passée depuis sa création) ne lie rien, même vivant. Champ absent : jamais égal.
     if (!Number.isInteger(pris.generation) || !Number.isInteger(compte.generation) || pris.generation !== compte.generation) return { statut: 404, code: 'CODE_INVALIDE' };
     const jeton = J.genererJeton();
-    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0, rejeuLiaison: installation.rejeuLiaison ?? null } });
+    const dejaLiee = (installation.comptesLies || []).some(x => String(x) === String(compte._id));
+    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0, rejeuLiaison: installation.rejeuLiaison ?? null },
+        ...(dejaLiee ? {} : { $pull: { comptesLies: compte._id } }) });          // une liaison défaite n'a jamais eu lieu : sa trace s'en va aussi (sauf si l'installation avait DÉJÀ été liée à ce compte)
     const r = await col('installations').updateOne({ _id: installation._id, compteId: null, revoqueeLe: null, jetonEmpreinte: installation.jetonEmpreinte },
         { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton), generation: pris.generation,
-            rejeuLiaison: rejeu ? { ancienneEmpreinte: installation.jetonEmpreinte, cle: J.empreinte(rejeu.cle), expireLe: rejeu.expireLe } : null } });   // l'installation porte la génération du CODE
+            rejeuLiaison: rejeu ? { ancienneEmpreinte: installation.jetonEmpreinte, cle: J.empreinte(rejeu.cle), expireLe: rejeu.expireLe } : null },   // l'installation porte la génération du CODE
+          $addToSet: { comptesLies: compte._id } });   // STRIPE-DECISIONS : la trace durable « cette installation a été liée à ce compte » (la garde de l'essai : une installation, un essai), même après `delier`
     if (r.modifiedCount !== 1) { await rendre(); return { statut: 409, code: 'DEJA_LIE' }; }
     // relecture APRÈS l'écriture : si la réinitialisation est passée entre la lecture du compte et cette écriture, l'installation (déjà inerte : génération révolue) est déliée tout de suite,
     // faute de quoi elle resterait « liée » sans pouvoir ni se relier (DEJA_LIE) ni dépenser sa poche (compteId non nul)
