@@ -29,7 +29,9 @@ v('prixGuide complet, date du GUIDE (F4 : base du « De », moyenne 7 j, fiabili
     { tendance: 15.2, de: 12.4, deBase: 'tous-etats', moyenne7: null, moyenne30: 14, date: '2026-10-04', fiable: true, reserves: [] });
 v('prixGuide : jamais la date d\'import (majAt)', P({ majAt: new Date('2026-10-08T10:00:00Z') }).prixGuide.date, '2026-10-04');
 v('valeur absente -> null (pas 0)', P({ prixGuide: { trend: 15.2, low: null, guideDu: new Date('2026-10-04') } }).prixGuide,
-    { tendance: 15.2, de: null, deBase: 'tous-etats', moyenne7: null, moyenne30: null, date: '2026-10-04', fiable: true, reserves: [] });
+    { tendance: 15.2, de: null, deBase: 'tous-etats', moyenne7: null, moyenne30: null, date: '2026-10-04', fiable: false, reserves: ['ecart-non-mesurable'] });       // tour 1 (I1) : aucune moyenne, l'écart n'est pas mesuré : jamais fiable
+v('F4 I1 : un guide qui n\'a que « low » (aucune tendance, aucune moyenne) : non mesurable', (({ fiable, reserves }) => ({ fiable, reserves }))(P({ prixGuide: { low: 1, guideDu: new Date('2026-10-04') } }).prixGuide), { fiable: false, reserves: ['ecart-non-mesurable'] });
+v('F4 I1 : ligne produit NON LUE (nonLu === true) : non fiable même à écart nul', (({ fiable, reserves }) => ({ fiable, reserves }))(P({ nonLu: true, prixGuide: { trend: 5, low: 4, avg7: 5, avg30: 5, guideDu: new Date('2026-10-04') } }).prixGuide), { fiable: false, reserves: ['ecart-non-mesurable'] });
 // F4 (e) : l'écart de la tendance aux moyennes. Valeurs du cas réel (Arcanin [G] Lv.60, guide du 2026-10-12 : 10,18 / 14,59 / 13,15)
 v('F4 (e) cas réel : tendance 10,18 contre la moyenne 7 j 14,59 (−30,2 %) : non fiable, ecart-tendance',
     (({ fiable, reserves }) => ({ fiable, reserves }))(P({ prixGuide: { trend: 10.18, low: 1, avg7: 14.59, avg30: 13.15, guideDu: new Date('2026-10-12') } }).prixGuide), { fiable: false, reserves: ['ecart-tendance'] });
@@ -144,6 +146,7 @@ v('F4 (b) chaque prix d\'impression dit sa base : tous états', avecImp.impressi
     v('F4 (e) sur l\'impression V2 : tendance 10,18 contre la moyenne 7 j 14,59 -> non fiable', [sv[0].prixGuide.fiable, sv[1].prixGuide.fiable, sv[1].prixGuide.reserves], [true, false, ['ecart-tendance']]);
 }
 v('F4 impression : prixMelangeTampon -> les deux mentions, le champ interne ne sort pas', (i => [i.prixGuide.fiable, i.prixGuide.reserves, Object.keys(i).filter(k => /tampon/i.test(k))])(P({ impressions: [imp({ prixMelangeTampon: true })] }).impressions[0]), [false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'], []]);
+v('F4 I1 impression non lue (absente de numeros_cartes) : jamais fiable, ecart-non-mesurable, le champ interne ne sort pas', (i => [i.prixGuide.fiable, i.prixGuide.reserves, Object.keys(i).filter(k => /nonLu/i.test(k))])(P({ impressions: [imp({ nonLu: true, prixGuide: { trend: 5, low: 4, avg7: 5, avg30: 5, guideDu: new Date('2026-10-05') } })] }).impressions[0]), [false, ['ecart-non-mesurable'], []]);
 v('F4 (c) impression : version hors forme -> null', P({ impressions: [imp({ version: 'staff' })] }).impressions[0].version, null);
 v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
 v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);

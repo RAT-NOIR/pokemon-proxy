@@ -12,7 +12,9 @@ const ECART_TENDANCE_MAX = 0.30;
 // Les réserves, dans l'ordre où elles sont rendues. Les deux dernières viennent du catalogue (`prixMelangeTampon`) : Cardmarket n'a qu'UN produit pour la carte, mais une version tamponnée
 // existe (Staff, Prerelease, League…) ; les vendeurs le disent dans leurs notes, pas dans la fiche. RÈGLE 2 du testeur (la photo montre le tampon : verdict sur l'idProduct, mention « version
 // tamponnée : le prix Cardmarket sous-estime sa valeur ») : NON CODÉE, elle attend la seconde lecture des marques (F1). Aujourd'hui aucun tampon n'est lu : règle 3, toujours.
-const RESERVES = Object.freeze(['ecart-tendance', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
+// `ecart-non-mesurable` (tour 1, I1) : aucune comparaison de la tendance à une moyenne n'a pu avoir lieu (tendance absente, aucune moyenne valide) OU la ligne du produit n'a pas été lue (absente de
+// numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». Texte proposé à l'éditeur : « Écart non vérifiable : prix indicatif. » (à valider par le testeur).
+const RESERVES = Object.freeze(['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 
 // Le « De » du guide (`low`) est l'offre la PLUS BASSE, tous états et toutes langues confondus (une carte Poor suffit). Le guide ne porte aucun prix par état : un prix dans l'état retenu
 // n'existe que lu en direct par l'extension (`prixLive`). La seule valeur servie dit donc ce que le « De » est.
@@ -31,6 +33,7 @@ function reservesDe(o = {}) {
     const r = [];
     const ecarts = [ecartTendance(o.tendance, o.moyenne7), ecartTendance(o.tendance, o.moyenne30)];
     if (ecarts.some(e => e !== null && e > ECART_TENDANCE_MAX * (1 + 1e-9))) r.push('ecart-tendance');       // « plus de 30 % » : pile 30 % ne déclenche pas
+    if (o.nonLu === true || ecarts.every(e => e === null)) r.push('ecart-non-mesurable');                    // fiable = MESURÉ et dans la borne ; sans mesure, ou sur une ligne non lue, jamais
     if (o.prixMelangeTampon === true) r.push('prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons');   // === true : « true » (texte), 1, null, absent ne marquent rien
     return Object.freeze(r);
 }

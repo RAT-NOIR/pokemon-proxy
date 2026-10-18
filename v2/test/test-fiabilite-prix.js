@@ -9,7 +9,7 @@ const { v, vrai, bilan } = require('./_harnais');
 const F = require('../identifier/fiabilite-prix');
 
 v('le seuil est une constante nommée, de 30 %', F.ECART_TENDANCE_MAX, 0.30);
-v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
+v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 v('l\'unique base du « De » : tous états', F.BASE_DE, 'tous-etats');
 vrai('les listes sont gelées', Object.isFrozen(F.RESERVES));
 
@@ -34,16 +34,24 @@ v('écart vers le HAUT aussi (tendance trop haute)', R({ tendance: 14, moyenne30
 v('un seul des deux écarts suffit (7 j seul)', R({ tendance: 10, moyenne7: 15, moyenne30: 10 }), ['ecart-tendance']);
 v('un seul des deux écarts suffit (30 j seul)', R({ tendance: 10, moyenne7: 10, moyenne30: 15 }), ['ecart-tendance']);
 v('tendance proche des deux moyennes : aucune réserve', R({ tendance: 10, moyenne7: 10.5, moyenne30: 9.8 }), []);
-v('aucune moyenne : rien à comparer, aucune réserve d\'écart (on ne devine pas)', R({ tendance: 10 }), []);
-v('aucune tendance : rien à comparer', R({ moyenne7: 10, moyenne30: 14 }), []);
+// F4-PRIX tour 1 (I1) : la garde s'écrit par ce qu'elle AUTORISE. `fiable` n'est vrai que si l'écart a été MESURÉ et tient dans la borne ; sans comparaison possible : réserve fermée `ecart-non-mesurable`
+v('aucune moyenne : rien à comparer -> ecart-non-mesurable (jamais « tout va bien »)', R({ tendance: 10 }), ['ecart-non-mesurable']);
+v('aucune tendance : rien à comparer -> ecart-non-mesurable', R({ moyenne7: 10, moyenne30: 14 }), ['ecart-non-mesurable']);
+v('rien du tout -> ecart-non-mesurable', R({}), ['ecart-non-mesurable']);
+v('moyennes nulles ou négatives = non mesurables', R({ tendance: 10, moyenne7: 0, moyenne30: -2 }), ['ecart-non-mesurable']);
+v('une moyenne mesurable suffit : pas de réserve de non-mesure', R({ tendance: 10, moyenne30: 10 }), []);
 v('une moyenne seule suffit à juger', R({ tendance: 5, moyenne30: 10 }), ['ecart-tendance']);
+v('ligne NON LUE (absente de numeros_cartes, ou lecture en panne) : ecart-non-mesurable même avec un écart nul', R({ tendance: 10, moyenne7: 10, moyenne30: 10, nonLu: true }), ['ecart-non-mesurable']);
+v('nonLu seulement si === true (« true », 1 ne marquent rien)', ['true', 1, false, null].map(x => R({ tendance: 10, moyenne30: 10, nonLu: x })), [[], [], [], []]);
+v('ligne non lue ET écart mesuré dépassé : les deux réserves, jamais fiable', R({ tendance: 5, moyenne30: 10, nonLu: true }), ['ecart-tendance', 'ecart-non-mesurable']);
+v('ligne non lue + prix mélangé : non-mesurable puis les deux mentions', R({ tendance: 10, moyenne30: 10, nonLu: true, prixMelangeTampon: true }), ['ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 
 // ── les prix mélangés : deux mentions fermées (règles 1 et 3 du testeur) ; la règle 2 (tampon vu sur la photo) n'est PAS codée
 v('prixMelangeTampon === true : les deux mentions', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 v('prixMelangeTampon + écart : l\'écart d\'abord, puis les deux mentions', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
-for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`prixMelangeTampon ${JSON.stringify(x)} (≠ true) : aucune mention`, R({ tendance: 10, prixMelangeTampon: x }), []);
+for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`prixMelangeTampon ${JSON.stringify(x)} (≠ true) : aucune mention`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: x }), []);
 v('le résultat est gelé', Object.isFrozen(R({ tendance: 5, moyenne30: 10 })), true);
-v('aucun argument : aucune réserve, sans lever', F.reservesDe(), []);
+v('aucun argument : sans lever, et rien n\'a été mesuré -> ecart-non-mesurable', F.reservesDe(), ['ecart-non-mesurable']);
 
 // ── fiable = aucune réserve (écrit par ce qu'il autorise)
 v('fiable : aucune réserve', F.fiable([]), true);
