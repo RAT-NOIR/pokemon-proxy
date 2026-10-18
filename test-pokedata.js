@@ -114,6 +114,33 @@ verifier('la seule adresse « fabriquée » est celle d\'une PAGE de set de la t
 verifier('un relevé douteux (numéro qui contredit le fichier) est écarté par lireReleves, compté', (() => { const d = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'pdt-lr-')); require('fs').writeFileSync(path.join(d, 'releve--x.json'), JSON.stringify({ schema: 1, set: 'Trick or Trade 2024', complet: false, cartes: [{ numero: '037b', nom: 'A', img: ok1, numeroDoute: true }, { numero: '057a', nom: 'B', img: IMG('Trick+or+Trade+2024', '057a.webp') }] })); const r = P.lireReleves(d); return [r.cartes.length, r.douteuses]; })(), [1, 1]);
 verifier('les 10 pages à ouvrir sont celles de sets où nous avons des manques (table des sets utiles : chacune désigne au moins un set à nous)', P.PAGES_A_OUVRIR.map(u => P.nomDeSegment(new URL(u).pathname.replace(/^\/set\//, ''), Object.keys(P.SETS_UTILES))).filter(n => !n || !P.SETS_UTILES[n].length), []);
 
+// ── 4 bis. POKEDATA-SUITE : le témoin du nom lit le texte alternatif « Nom [Variante] Numéro » (la sonde ne doit pas fabriquer le refus) ─────────
+{
+    const UF = 'Unseen Forces', USLUG = 'EX-Unseen-Forces';
+    const potion = carte(10, 'Potion'), gen = carte(11, 'Gengar'), rai = carte(12, 'Raikou');
+    const un = (c, n) => trou(c._id * 100, c, USLUG, n, null);
+    verifier('nomDepouille : le dernier mot égal au numéro est retiré (zéros de tête et suffixe r tolérés)', [P.nomDepouille('Potion 95', '95'), P.nomDepouille('Potion Reverse Holo 95', '95r'), P.nomDepouille('Gengar Cosmos Holo 057', '057'), P.nomDepouille('Gengar 57', '057'), P.nomDepouille('Gengar 057', '57')], ['Potion', 'Potion', 'Gengar', 'Gengar', 'Gengar']);
+    verifier('nomDepouille : un numéro dans le nom DIFFÉRENT du numéro relevé n\'est pas retiré', [P.nomDepouille('Potion 96', '95'), P.nomDepouille('Potion Reverse Holo 96', '95r')], ['Potion 96', 'Potion Reverse Holo 96']);
+    verifier('nomDepouille : liste fermée de mentions finales (Reverse Holo, Cosmos Holo, Holo) ; « Gold Star », « δ », « ex », « LV.X » restent', [P.nomDepouille('Raikou Gold Star 114', '114'), P.nomDepouille('Pikachu δ 12', '12'), P.nomDepouille('Mew ex Holo 7', '7'), P.nomDepouille('Palkia LV.X 9', '9'), P.nomDepouille('Holo Charizard 4', '4'), P.nomDepouille('Holo 4', '4')], ['Raikou Gold Star', 'Pikachu δ', 'Mew ex', 'Palkia LV.X', 'Holo Charizard', 'Holo']);
+    verifier('nomDepouille : sans numéro à retirer, la mention finale part quand même ; une valeur non chaîne ne plante pas', [P.nomDepouille('Gengar Cosmos Holo', '057'), P.nomDepouille(null, '1'), P.nomDepouille('Potion', undefined)], ['Gengar', null, 'Potion']);
+    let q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95', 'Potion 95'), rel(UF, '95r', 'Potion Reverse Holo 95', '95r.webp')], refus: refusNeutre });
+    verifier('Potion 95 + Potion Reverse Holo 95 : l\'image NORMALE 95.webp est retenue, jamais …r.webp', [q.plan.map(u => u.url), q.restes.map(x => x.motif)], [[IMG('Unseen+Forces', '95.webp')], []]);
+    q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95r', 'Potion Reverse Holo 95', '95r.webp'), rel(UF, '95', 'Potion 95')], refus: refusNeutre });
+    verifier('   (même résultat si la reverse est relevée avant la normale)', q.plan.map(u => u.url), [IMG('Unseen+Forces', '95.webp')]);
+    q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95r', 'Potion Reverse Holo 95', '95r.webp')], refus: refusNeutre });
+    verifier('seule la reverse existe : rien n\'est retenu, reste « seulement-reverse »', [q.plan.length, q.restes.map(x => x.motif)], [0, ['seulement-reverse']]);
+    q = P.apparier({ trous: [un(gen, '57')], cartes: [rel(UF, '057', 'Gengar Cosmos Holo 057')], refus: refusNeutre });
+    verifier('Gengar Cosmos Holo 057 : comparé « Gengar » => retenu', [q.plan.map(u => u.nomEn), q.restes.length], [['Gengar'], 0]);
+    q = P.apparier({ trous: [un(rai, '114')], cartes: [rel(UF, '114', 'Raikou Gold Star 114')], refus: refusNeutre });
+    verifier('Raikou Gold Star 114 contre la fiche « Raikou » : reste « nom-contredit » (le sens sûr)', [q.plan.length, q.restes.map(x => x.motif)], [0, ['nom-contredit']]);
+    q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95', 'Gengar 95')], refus: refusNeutre });
+    verifier('un nom différent reste contredit', q.restes.map(x => x.motif), ['nom-contredit']);
+    q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95', 'Potion 96')], refus: refusNeutre });
+    verifier('un numéro dans le nom différent du numéro relevé n\'est pas retiré : « Potion 96 » contredit la fiche', q.restes.map(x => x.motif), ['nom-contredit']);
+    q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95r', 'Gengar Reverse Holo 95', '95r.webp')], refus: refusNeutre });
+    verifier('seule une reverse d\'un AUTRE nom : « nom-contredit », pas « seulement-reverse »', q.restes.map(x => x.motif), ['nom-contredit']);
+}
+
 // ── 5. constantes de politesse ─────────────────────────────────────────────────────────────────────────────────────────
 verifier('cadence ≥ 5 s ; hôtes : deux, nommés ; pas de source 0 requête dans le module (aucun require réseau)', [P.CADENCE_MS >= 5000, P.HOTE_PAGES, P.HOTE_IMAGES, /require\('(axios|http|https|node-fetch)'\)/.test(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'pokedata.js'), 'utf8'))], [true, 'www.pokedata.io', 'pokemoncardimages.pokedata.io', false]);
 

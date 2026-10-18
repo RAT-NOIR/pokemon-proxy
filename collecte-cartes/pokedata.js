@@ -122,7 +122,30 @@ function numeroDuSlug(slug) {
     return segs.length > 1 && /^\d+$/.test(segs.at(-1)) ? segs.at(-1) : null;
 }
 const baseNumero = n => { const k = cleNumero(n); return k == null ? null : k.replace(/(\d)[A-Z]+$/, '$1'); };
-function nomOk(c, t) { return !!c.nom && nomNorm(c.nom) === nomNorm(t.carte.nomEn); }
+// 🔑 POKEDATA-SUITE (2026-10-18) — le « nom » d'une carte relevée est le TEXTE ALTERNATIF de l'image : « Nom [Variante] Numéro » (« Potion 95 », « Potion Reverse Holo 95 », « Gengar Cosmos Holo 057 »).
+// Le comparer tel quel à notre fiche fabriquait le refus (326 « nom-contredit »). Avant comparaison : (a) le DERNIER mot égal au numéro relevé part (zéros de tête et suffixe r tolérés), (b) puis une mention
+// de variante FINALE d'une liste FERMÉE. Rien d'autre ne part : « Gold Star », « δ », « ex », « LV.X » font partie du nom ou désignent une autre carte — s'ils contredisent, la carte reste un reste.
+const MENTIONS_DE_VARIANTE = Object.freeze(['Reverse Holo', 'Cosmos Holo', 'Holo']);          // la plus longue d'abord
+const sansZeros = s => String(s).toLowerCase().replace(/^0+(?=\d)/, '');
+function nomDepouille(nom, numero) {
+    if (typeof nom !== 'string') return nom ?? null;
+    let mots = nom.trim().split(/\s+/);
+    const dernier = mots.length > 1 ? sansZeros(mots.at(-1)) : null;
+    const num = numero == null ? null : sansZeros(numero), numSansR = num != null ? num.replace(/^(\d+)r$/, '$1') : null;
+    if (dernier != null && num != null && (dernier === num || dernier === numSansR)) mots = mots.slice(0, -1);
+    const reste = mots.join(' ');
+    for (const m of MENTIONS_DE_VARIANTE) {
+        if (reste.length > m.length && reste.toLowerCase().endsWith(` ${m.toLowerCase()}`)) return reste.slice(0, -(m.length + 1)).trim();
+    }
+    return reste;
+}
+/** Une image REVERSE : un nom de fichier « <chiffres>r.webp » (« 95r.webp ») ; « 037a » n'en est pas une. */
+const estReverse = c => /^\d+r$/i.test(String(c?.img ?? '').split('/').pop().replace(/\.webp$/i, ''));
+function nomOk(c, t) {
+    if (!c.nom) return false;
+    const fiche = nomNorm(t.carte.nomEn);
+    return nomNorm(c.nom) === fiche || nomNorm(nomDepouille(c.nom, c.numero)) === fiche;
+}
 /** Pourquoi une entrée ADMISE par la règle du site peut quand même être remplacée (doctrine du testeur), ou null : une image correcte n'est jamais remplacée par une équivalente. */
 function raisonDeRemplacement(e, largeurAttendue) {
     if (e?.basseDefinition === true) return 'basse-definition';
@@ -150,7 +173,13 @@ function apparier({ trous, cartes, noms = new Map(), refus = REFUS_PAR_DEFAUT, l
         const cle = cleNumero(numeroRef), base = baseNumero(numeroRef);
         const parBase = duSet.filter(c => baseNumero(c.numero) === base);
         if (!parBase.length) { reste(t, 'numero-absent-du-releve'); continue; }
-        const avecNom = parBase.filter(c => nomOk(c, t));
+        // une reverse (…r.webp) n'est JAMAIS retenue quand l'image normale du même numéro est relevée ; si seule la reverse existe : reste « seulement-reverse »
+        const normales = parBase.filter(c => !estReverse(c));
+        if (!normales.length) {
+            const rev = parBase.filter(c => nomOk(c, t));
+            if (rev.length) { reste(t, 'seulement-reverse', `seules des reverses relevées (${rev.map(c => c.numero).join(', ')})`); continue; }
+        }
+        const avecNom = normales.filter(c => nomOk(c, t));
         if (!avecNom.length) { reste(t, 'nom-contredit', `relevé ${parBase.map(c => `« ${c.nom} » n°${c.numero}`).join(', ')}, fiche « ${t.carte.nomEn} »`); continue; }
         if (new Set(avecNom.map(c => c.img)).size > 1) { reste(t, 'numero-ambigu', `${new Set(avecNom.map(c => c.img)).size} images pour la base ${base} et le nom « ${t.carte.nomEn} »`); continue; }
         const choisie = avecNom[0];
@@ -228,6 +257,6 @@ function planRetrait(cartes) {
 }
 
 module.exports = { SOURCE, LOT, MENTION, HOTE_PAGES, HOTE_IMAGES, PREFIXE_CHEMIN, UA, CADENCE_MS, CADENCE_MIN_MS, LARGEUR_ATTENDUE, PLUS_GRANDE, DOSSIER_CACHE, DOSSIER_LOT, SETS_UTILES, REFUS_PAR_DEFAUT,
-    PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet,
+    PAGES_A_OUVRIR, SETS_ANGLAIS, segmentDeSet, nomDepouille, estReverse,
     nomsDuSlug, nomNorm, nomDeSegment, urlImageValide, urlPageValide, urlPageDuSet, lireNextData, lireListeDesSets, lireReleves, numeroDuSlug, baseNumero, raisonDeRemplacement,
     apparier, cleNum, cleR2, idImage, tracer, langueDe, duLot, planRetrait, estDosDeCarte };
