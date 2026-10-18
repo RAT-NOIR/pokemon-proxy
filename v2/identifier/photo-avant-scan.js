@@ -11,7 +11,7 @@ const { repondreErreur } = require('../erreurs');
 const PE = require('./photo-extension');
 const { lireCorpsBorne } = require('../banc/lecture-corps');
 const { magasin } = require('./photos-recues');
-const { TTL_S } = require('./photos-recues').creerPhotosRecues;
+const { SERVICE_S } = require('./photos-recues').creerPhotosRecues;      // I-2 : la photo n'est servie que dans les 30 s qui suivent son dépôt
 
 const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000, COTE_MODELE = 800;
 const journal = (ou, e) => console.error(`❌ [v2 photo-avant-scan] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
@@ -101,7 +101,7 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
         try { photoId = magasin(deps).deposer(cle, index, propre.octets, propre.modele); }
         catch (e) { journal('magasin', e); return repondreErreur(res, 'INDISPONIBLE'); }
         PE.noter('ok');
-        return res.status(200).json({ success: true, photoId, expireDans: TTL_S });
+        return res.status(200).json({ success: true, photoId, expireDans: SERVICE_S });
     };
 }
 
