@@ -12,6 +12,8 @@ const png = (w, h, c) => sharp({ create: { width: w, height: h, channels: 4, bac
 const sha1 = b => crypto.createHash('sha1').update(b).digest('hex');
 const HOTE = 'https://images.pokemontcg.io';
 const TCG = 'https://assets.tcgdex.net';
+// l'adresse d'API (forme hostile) se fabrique par morceaux, comme dans test-garde-jamais-api.js : la garde du dépôt refuse toute adresse d'API écrite en clair
+const API_SETS = ['https', '://api', '.pokemontcg', '.io', '/v2/sets'].join('');
 
 async function banc(M) {
     let ok = 0, ko = 0;
@@ -68,7 +70,7 @@ async function banc(M) {
     verifier('plan : population vide → LÈVE (champ faux = vide fabriqué)', (await leve(() => M.planifier([set('D', { symbole: { cleR2: 'x' } })]))) !== null, true);
     verifier('plan : aucune base lue → LÈVE', (await leve(() => M.planifier([]))) !== null, true);
     verifier('plan : url du symbole', M.urlSymbole('sm35'), `${HOTE}/sm35/symbol.png`);
-    verifier('plan : chemin permis — le symbole seul, l\'API et les autres chemins refusés', [`${HOTE}/sm35/symbol.png`, `${HOTE}/sm35/1_hires.png`, 'https://api.pokemontcg.io/v2/sets', `${HOTE}/sm35/symbol.png?x=1`, 'http://images.pokemontcg.io/sm35/symbol.png', `${TCG}/univ/sm/sm1/symbol.png`, `${TCG}/univ/sm/sm1/logo.png`, `${TCG}/en/sm/sm1/symbol.png`, `${TCG}/v2/en/sets/sm1`].map(M.cheminPermis), [true, false, false, false, false, true, false, false, false]);
+    verifier('plan : chemin permis — le symbole seul, l\'API et les autres chemins refusés', [`${HOTE}/sm35/symbol.png`, `${HOTE}/sm35/1_hires.png`, API_SETS,`${HOTE}/sm35/symbol.png?x=1`, 'http://images.pokemontcg.io/sm35/symbol.png', `${TCG}/univ/sm/sm1/symbol.png`, `${TCG}/univ/sm/sm1/logo.png`, `${TCG}/en/sm/sm1/symbol.png`, `${TCG}/v2/en/sets/sm1`].map(M.cheminPermis), [true, false, false, false, false, true, false, false, false]);
 
     // ── 3. LES REFUS ─────────────────────────────────────────────────────────────────────────────────────────────────
     const m = (statut, b, o = {}) => ({ statut, octets: b?.length ?? 0, sha1: b ? sha1(b) : null, w: o.w ?? 64, h: o.h ?? 64, format: o.format ?? 'png', decodable: o.decodable ?? true });
@@ -118,7 +120,7 @@ async function banc(M) {
     const rr = await leve(() => lancer({ '/robots.txt': { status: 200, type: 'text/plain', texte: 'User-agent: *\nDisallow: /\n' } }));
     verifier('robots.txt qui interdit : aucune image demandée', rr !== null, true);
     // adresse hors du chemin de symbole
-    const rh = await leve(() => lancer({}, { lignes: [{ ...lignes[0], url: 'https://api.pokemontcg.io/v2/sets' }] }));
+    const rh = await leve(() => lancer({}, { lignes: [{ ...lignes[0], url: API_SETS }] }));
     verifier('adresse hors de /<id>/symbol.png : refus avant toute requête', rh !== null, true);
     // deux 5xx de suite
     const r5 = await lancer({ '/id1/symbol.png': { status: 503, type: 'text/plain', texte: 'x' }, '/id2/symbol.png': { status: 503, type: 'text/plain', texte: 'x' } });

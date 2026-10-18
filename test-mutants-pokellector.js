@@ -70,10 +70,13 @@ if (base.some(b => b.code !== 0)) { console.log('❌ la référence n\'est pas v
 let tues = 0, vivants = [], neutres = 0;
 for (const m of MUTANTS) {
     const original = fs.readFileSync(m.fichier, 'utf8');
-    const n = original.split(m.de).length - 1;
+    // main est extrait en CRLF (core.autocrlf=true) : un motif sur plusieurs lignes s'écrit avec la fin de ligne du fichier, sinon il ne mord plus (MUTANT INVALIDE)
+    const fdl = original.includes('\r\n') ? '\r\n' : '\n';
+    const de = m.de.replace(/\r?\n/g, fdl), vers = m.vers.replace(/\r?\n/g, fdl);
+    const n = original.split(de).length - 1;
     if (n !== 1) { console.log(`⚪ ${m.nom} : motif trouvé ${n} fois (attendu 1)${/témoin/.test(m.nom) ? ' — c\'est le témoin, attendu' : ' — MUTANT INVALIDE'}`); if (!/témoin/.test(m.nom)) vivants.push(`${m.nom} (motif ${n}×)`); else neutres++; continue; }
     try {
-        fs.writeFileSync(m.fichier, original.replace(m.de, () => m.vers));
+        fs.writeFileSync(m.fichier, original.replace(de, () => vers));
         const s = lancer();
         const vu = s.some(x => x.code !== 0 || x.echecs > 0);
         console.log(`${vu ? '☠️ tué ' : '🧟 VIVANT'} ${m.nom} — ${s.map(x => `code ${x.code}/${x.echecs}❌`).join(' ')}`);
