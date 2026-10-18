@@ -28,6 +28,7 @@ const {
 // ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
 // fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
 const SCORING = require('./scoring');
+const TEMPS_CHAINE = require('./v2/identifier/temps-chaine');   // LOT TEMPS-CHAINE : pré-filtre du numéro, image non calculée (réglage « 1 » seulement)
 const { blocLectureGarde } = require('./v2/identifier/garde-contradiction');   // GARDE-CONTRADICTION : le bloc `lectureGarde` de la réponse d'une requête v2 (une seule écriture, testée sans serveur)
 const { classerPanneIA, panneDansLeCorps, lectureDuTitre, causeApresErreur, causeApresReponse, motifDuRefusIA } = require('./lecture-de-secours');
 const {
@@ -2616,8 +2617,10 @@ async function trouverProduitsParNumeroPartout(numeroLu) {
         // On ne peut pas filtrer côté Mongo : la comparaison de numéros est normalisée
         // (zéros de tête, préfixes) et doit rester STRICTEMENT celle du scoring. On lit
         // donc les numéros connus et on départage en mémoire, comme ci-dessus.
+        // LOT TEMPS-CHAINE : la lecture complète de numeros_cartes (≈ 70 000 documents) coûtait ~10 s sur 3 % des scans. Mongo ne rend plus que les documents dont le PREMIER groupe de
+        // chiffres vaut celui du numéro lu : un sur-ensemble de ce que comparerNumeros retient (motif et preuve : v2/identifier/temps-chaine.js), le tri exact ci-dessous ne change pas.
         const docs = await NumeroCarte.find(
-            { $or: [{ numero: { $type: 'string', $ne: '' } }, { numeroUrl: { $type: 'string', $ne: '' } }] },
+            TEMPS_CHAINE.filtreNumeroPartout(numeroLu),
             { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }
         ).lean();
         return departagerParNumero(docs, numeroLu, 'tout le catalogue');
@@ -5337,10 +5340,15 @@ async function gererIdentifier(req, res) {
         let departageParImage = false;
         let champsImage = {};
         {
-            const avis = await departagerParImage({
-                imageUrl: photos[0], langue: cardInfo.language,
-                total: cardInfo.total, classement
-            });
+            // LOT TEMPS-CHAINE (V2_TC_IMAGE_PRIORITAIRE=1) : quand le symbole ou l'attaque a DÉJÀ décidé, l'avis de l'image est jeté (voir ci-dessous) — mais son téléchargement de photo a coûté
+            // jusqu'à ~6 s sur 4 scans de 326. On ne le demande plus ; le journal dit « non calculée ». Aucun départage, aucun classement, aucune réserve n'en dépend.
+            const prioritaireSansImage = (departageParSymbole || departageParAttaqueFait) && TEMPS_CHAINE.reglages().imagePrioritaireSansCalcul;
+            const avis = prioritaireSansImage
+                ? { departage: false, gagnant: null, champs: TEMPS_CHAINE.champsImageNonCalcules(departageParSymbole ? 'symbole' : 'attaque') }
+                : await departagerParImage({
+                    imageUrl: photos[0], langue: cardInfo.language,
+                    total: cardInfo.total, classement
+                });
             champsImage = avis.champs;
             if ((departageParSymbole || departageParAttaqueFait) && avis.departage) {
                 const prioritaire = departageParSymbole ? 'symbole' : 'attaque';
