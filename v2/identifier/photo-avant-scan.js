@@ -1,9 +1,9 @@
 'use strict';
-// PHOTOS-MULTIPLES (7d) — POST /api/photo?index=<0..7> : l'extension de l'ADMINISTRATEUR envoie, en OCTETS BRUTS (JPEG, PNG ou WebP tels que Vinted les sert), une photo de l'annonce AVANT le scan. Le serveur la garde 120 s
+// PHOTOS-MULTIPLES (7d) — POST /api/photo (SANS paramètre : `?index=` est facultatif et IGNORÉ, l'index vient de `photoIds`) : l'extension de l'ADMINISTRATEUR envoie, en OCTETS BRUTS (JPEG, PNG ou WebP tels que Vinted les sert), une photo de l'annonce AVANT le scan. Le serveur la garde 120 s
 // EN MÉMOIRE (identifier/photos-recues.js) et rend un `photoId` que POST /api/identifier désigne ensuite (`photoIds`). Dès qu'une photo est reçue, aucune image n'est téléchargée chez Vinted pour ce scan.
 // 🔑 Écrit par ce qu'il AUTORISE. L'ordre est celui de POST /api/banc/photo (banc/photo.js, qu'on lira d'abord), jugé AVANT de lire un seul octet du corps :
 //   1. porteur v2 authentifié (401 JETON) ; 2. compte `administrateur` RELU en base (le 404 natif de la route inexistante sinon : exigerAdministrateurPhoto, monté AVANT ce gestionnaire) ; 3. un plafond horaire par porteur (429 DEBIT) ;
-//   4. la requête : `index` entier de 0 à 7, AUCUN autre paramètre (400) ; 5. `Content-Type` ∈ JPEG, PNG, WebP (415) ; 6. `Content-Length` entier, > 0 et ≤ 2 Mio (400 / 413) ;
+//   4. la requête : aucun paramètre, sauf `index` (facultatif, ignoré) ; tout autre paramètre est refusé (400) ; 5. `Content-Type` ∈ JPEG, PNG, WebP (415) ; 6. `Content-Length` entier, > 0 et ≤ 2 Mio (400 / 413) ;
 //   7. une place de lecture : 4 au total, 1 par porteur (429 DEBIT + Retry-After) ; 8. un délai de lecture (15 s : une connexion lente est coupée, banc/lecture-corps.js).
 // Puis le corps : validé par identifier/photo-extension.js::evaluerOctets (la validation de /api/banc/photo, jamais recopiée), PUIS réencodé sans métadonnées (EXIF, XMP, ICC : sharp n'en écrit aucune), orientation appliquée, 1 600 px
 // au plus : c'est CETTE image-là qui est retenue et transmise au modèle. Rien n'est écrit en base, rien au bucket, rien dans un journal ; aucun argent.
@@ -13,7 +13,7 @@ const { lireCorpsBorne } = require('../banc/lecture-corps');
 const { magasin } = require('./photos-recues');
 const { TTL_S } = require('./photos-recues').creerPhotosRecues;
 
-const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000, INDEX_FORME = /^[0-7]$/, COTE_MODELE = 800;
+const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000, COTE_MODELE = 800;
 const journal = (ou, e) => console.error(`❌ [v2 photo-avant-scan] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
 
 /** Réencode l'image validée en JPEG sans métadonnées, orientation appliquée, 1 600 px au plus (jamais agrandie) ; si elle dépasse encore `max`, une seconde fois plus petite. null si rien ne tient. */
@@ -53,8 +53,8 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
         // 4. la requête
         const q = req.query || {};
         if (Object.keys(q).some(k => k !== 'index')) return refus('ENTREE', undefined, 'champ-inconnu');
-        if (typeof q.index !== 'string' || !INDEX_FORME.test(q.index)) return refus('ENTREE', undefined, 'index');
-        const index = Number(q.index);
+        // (A, C1) `index` est ignoré, quelle que soit sa valeur : c'est `photoIds` de POST /api/identifier qui dit la position de chaque photo ; le magasin ne garde qu'un rang de dépôt, sans effet
+        const index = 0;
         // 5. le type annoncé
         const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         if (!PE.TYPES.includes(type)) return refus('IMAGE', 'Format d\'image non pris en charge', 'type', 415);
