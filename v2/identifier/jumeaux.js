@@ -29,18 +29,36 @@ const NE_CONCLUT_PAS = (motif = null) => () => ({ conclu: false, ids: [], ...(mo
  * ancien : un produit PLUS RÉCENT qu'elle, de la MÊME métacarte que le produit affirmé, est peut-être son jumeau qu'elle ne connaît pas → pour CE produit seulement, `jumeaux-perimes`.
  * `undefined` = pas de contrôle (le fournisseur est celui d'un banc ou d'un rejeu) ; une Map : tout produit qui n'y figure pas ne conclut pas (jamais un défaut passant).
  */
+// REPLI-REIMPRESSIONS : les produits que l'IMAGE ne sépare pas du produit `id` (partageeHoloNonHolo, partageeTamponNonSepare — une paire séparée par l'étiquette compte comme non séparée tant que la lecture du tampon
+// n'existe pas — lus dans la colonne des marquages de l'archive). Ce sont des variantes du MÊME créneau (expansion, numéro) : la colonne des jumeaux ne les compte pas, elles sont donc ajoutées ICI, pour que la garde
+// ci-dessous (question de départage, critère A, seconde lecture, lot) les traite comme tout produit qu'on ne sait pas séparer. Une archive SANS la colonne (d'avant) ne conclut rien : [] (comportement d'avant).
+function partagesDeLaVersion(version, id) {
+    if (!version || version.colonneMarquages !== true || typeof version.partagesDe !== 'function') return [];
+    const p = version.partagesDe(id);
+    return Array.isArray(p) ? p : [];
+}
+
 function fournisseurDe(version, verdicts) {
     if (!version || version.colonneJumeaux !== true || typeof version.jumeauxDe !== 'function') return NE_CONCLUT_PAS('jumeaux-indisponibles');
     if (verdicts !== undefined && !(verdicts instanceof Map)) return NE_CONCLUT_PAS('jumeaux-indisponibles');
-    return id => {
+    const f = id => {
         if (verdicts !== undefined) {
             const v = verdicts.get(id);
             if (v === 'perime') return { conclu: false, ids: [], motif: 'jumeaux-perimes' };
             if (v !== 'ok') return { conclu: false, ids: [], motif: 'jumeaux-indisponibles' };
         }
         const j = version.jumeauxDe(id);
-        return j === null || j === undefined ? { conclu: false, ids: [], motif: 'jumeaux-indisponibles' } : { conclu: true, ids: j };
+        if (j === null || j === undefined) return { conclu: false, ids: [], motif: 'jumeaux-indisponibles' };
+        const partages = partagesDeLaVersion(version, id);
+        return { conclu: true, ids: partages.length ? [...new Set([...j, ...partages])].sort((a, b) => a - b) : j, ...(partages.length ? { partages } : {}) };
     };
+    // M1 (relecture r1) : les partenaires d'un produit QUELCONQUE (un candidat d'une question de la chaîne n'est pas « affirmé » : le contrôle de péremption ci-dessus ne le couvre pas, la colonne des marquages seule suffit)
+    f.partagesDe = id => partagesDeLaVersion(version, id);
+    return f;
+}
+/** Les partenaires de partage d'un produit selon le fournisseur (`partagesDe`), ou [] (fournisseur de banc, archive d'avant). */
+function partagesDuFournisseur(f, id) {
+    try { const p = f && typeof f.partagesDe === 'function' ? f.partagesDe(id) : []; return entiers(p) ? [...new Set(p)].filter(i => i !== id) : []; } catch { return []; }
 }
 
 const idsDe = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
@@ -93,14 +111,19 @@ async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
 
 /** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux (au plus MAX_CHARGE) — au plus 2 tiennent dans la question, au-delà le choix des 3 a besoin de leurs lignes. */
 function idsACharger(corps, fournisseur) {
+    if (typeof fournisseur !== 'function') return [];
+    // M1 : les partenaires de partage de CHAQUE candidat d'une question de la chaîne (sans leur ligne, la question ne pourrait pas les montrer)
+    const candidats = corps && typeof corps === 'object' && Array.isArray(corps.candidats) ? idsDe(corps.candidats) : [];
+    const partenaires = candidats.flatMap(c => partagesDuFournisseur(fournisseur, c)).filter(i => !candidats.includes(i));
     const p = idsAffirmes(corps)[0];                                    // le produit affirmé, ou le candidat UNIQUE (UN-CANDIDAT)
-    if (p === undefined || typeof fournisseur !== 'function') return [];
-    try {
-        const r = fournisseur(p);
-        if (!r || r.conclu !== true || !entiers(r.ids)) return [];
-        const ids = [...new Set(r.ids)].filter(i => i !== p);
-        return ids.length >= 1 && ids.length <= MAX_CHARGE ? ids : [];
-    } catch { return []; }
+    let ids = [];
+    if (p !== undefined) {
+        try {
+            const r = fournisseur(p);
+            if (r && r.conclu === true && entiers(r.ids)) { const x = [...new Set(r.ids)].filter(i => i !== p); if (x.length >= 1 && x.length <= MAX_CHARGE) ids = x; }
+        } catch { ids = []; }
+    }
+    return [...new Set([...ids, ...partenaires])];
 }
 
 /**
@@ -121,11 +144,13 @@ function garde(ctx, idProduct, sonde = false) {                       // sonde :
     if (r.conclu !== true || !entiers(r.ids)) return panne('jumeaux-indisponibles', '(forme inconnue)');
     const jumeaux = [...new Set(r.ids)].filter(i => i !== idProduct);
     if (!jumeaux.length) return { action: 'affirmer' };
-    if (1 + jumeaux.length > MAX_PRODUITS) return { action: 'nombreux', ids: [idProduct, ...jumeaux] };     // l'adaptateur choisit les 3 (ou retombe sur l'introuvable, et COMPTE alors jumeaux-trop-nombreux)
+    // M1 : les partenaires de partage (l'image ne les sépare pas de P) : ils ne sont JAMAIS coupés d'une question ; l'adaptateur les met en premier
+    const partages = entiers(r.partages) ? [...new Set(r.partages)].filter(i => i !== idProduct && jumeaux.includes(i)) : [];
+    if (1 + jumeaux.length > MAX_PRODUITS) return { action: 'nombreux', ids: [idProduct, ...jumeaux], partages };     // l'adaptateur choisit les 3 (ou retombe sur l'introuvable, et COMPTE alors jumeaux-trop-nombreux)
     const produits = ctx.produits instanceof Map ? ctx.produits : new Map();
     if (!produits.has(idProduct) || jumeaux.some(i => !produits.has(i))) return panne('jumeaux-incomplets', '(un produit sans ligne au catalogue de l\'API)');
     noterGarde('question-de-jumeaux', idProduct, `(${1 + jumeaux.length} produits)`);
-    return { action: 'question', ids: [idProduct, ...jumeaux] };
+    return { action: 'question', ids: [idProduct, ...jumeaux], partages };
 }
 
-module.exports = { garde, fournisseurDe, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
+module.exports = { garde, fournisseurDe, partagesDeLaVersion, partagesDuFournisseur, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
