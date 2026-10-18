@@ -140,6 +140,21 @@ const muet = f => { const w = console.warn; console.warn = () => { }; try { retu
     H.v('4k. (a) la forme d\'AVANT (listes = la paire) se déclenche toujours, sans fournisseur de fiche', LT.paireSeparee({ ids: [11, 12], entree: id => ({ 11: { partageeHoloNonHolo: null, partageeTamponNonSepare: false, produitsPartages: [11, 12], tamponNonRepresente: 'Staff', variante: 'normale' },
         12: { partageeHoloNonHolo: null, partageeTamponNonSepare: false, produitsPartages: [11, 12], tamponNonRepresente: 'Staff', variante: 'staff' } })[id] || null }).ok, true);
 
+    // tour de correction 1 : staff + jumbo, deux jumbo, et les absences de visuel (entrées fabriquées, memeFiche toujours vrai : seul le reste est jugé)
+    const ent = (id, variante, o = {}) => ({ idProduct: id, partageeTamponNonSepare: false, partageeHoloNonHolo: null, produitsPartages: null, tamponNonRepresente: 'Staff', variante, vignette: { cle: 'v/x.webp', w: 200, h: 279 }, grande: { cle: 'g/x.webp', w: 600, h: 838 }, ...o });
+    const tous = () => true;
+    const pp = (ea, eb) => { const r = PV.pairePar(ea, eb, tous); return r.ok ? [r.special, r.normale, r.variante] : r.motif; };
+    const f1 = (ea, eb) => { const x = LT.paireSeparee({ ids: [1, 2], entree: id => (id === 1 ? ea : eb), memeFiche: tous }); return x.ok ? [x.special, x.normale] : x.motif; };
+    const MV = 'les variantes ne sont pas une paire staff|jumbo/normale', MF1 = 'les variantes ne sont pas une paire staff/normale';
+    H.v('4n. pairePar : staff/normale et jumbo/normale sont des paires (le special est nomme)', [pp(ent(1, 'staff'), ent(2, 'normale')), pp(ent(1, 'normale'), ent(2, 'jumbo'))], [[1, 2, 'staff'], [2, 1, 'jumbo']]);
+    H.v('4o. pairePar : staff + jumbo, jumbo + staff, deux jumbo, deux staff, deux normales : jamais une paire', [pp(ent(1, 'staff'), ent(2, 'jumbo')), pp(ent(1, 'jumbo'), ent(2, 'staff')), pp(ent(1, 'jumbo'), ent(2, 'jumbo')), pp(ent(1, 'staff'), ent(2, 'staff')), pp(ent(1, 'normale'), ent(2, 'normale'))], [MV, MV, MV, MV, MV]);
+    H.v('4p. F1 (paireSeparee) : staff + jumbo, jumbo + staff et deux jumbo ne declenchent rien', [f1(ent(1, 'staff'), ent(2, 'jumbo')), f1(ent(1, 'jumbo'), ent(2, 'staff')), f1(ent(1, 'jumbo'), ent(2, 'jumbo'))], [MF1, MF1, MF1]);
+    H.v('4q. F1 : staff + normale declenche (controle de 4p), jumbo + normale non', [f1(ent(1, 'staff'), ent(2, 'normale')), f1(ent(1, 'jumbo'), ent(2, 'normale'))], [[1, 2], MF1]);
+    const MVIS = 'les deux produits ne partagent pas le même visuel';
+    H.v('4r. deux vignettes ABSENTES ne sont pas « le meme visuel » (jamais admis pour la vignette), ni vignette absente d\'un seul cote', [pp(ent(1, 'staff', { vignette: null }), ent(2, 'normale', { vignette: null })), pp(ent(1, 'staff', { vignette: undefined }), ent(2, 'normale', { vignette: undefined })), pp(ent(1, 'staff', { vignette: null }), ent(2, 'normale'))], [MVIS, MVIS, MVIS]);
+    H.v('4s. deux grandes ABSENTES : le meme visuel (la vignette dit le fichier) ; une seule absente : refuse ; F1 pareil', [pp(ent(1, 'staff', { grande: null }), ent(2, 'normale', { grande: null })), pp(ent(1, 'staff', { grande: null }), ent(2, 'normale')), f1(ent(1, 'staff', { grande: null }), ent(2, 'normale', { grande: null })), f1(ent(1, 'staff', { vignette: null }), ent(2, 'normale', { vignette: null }))],
+        [[1, 2, 'staff'], MVIS, [1, 2], MVIS]);
+
     // F1 de bout en bout (route) sur la forme (b) : la lecture « oui » deux fois affirme le Staff, et le déclenchement exige la fiche commune
     const CARTE = (await sharp({ create: { width: 420, height: 587, channels: 3, background: { r: 90, g: 90, b: 90 } } }).jpeg({ quality: 92 }).toBuffer()).toString('base64');
     const cfg = lireConfig({ V2_LECTURE_TAMPON: '1', V2_EMPREINTE_EXTENSION: '1' });

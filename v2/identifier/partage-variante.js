@@ -18,7 +18,9 @@ function separeeParVariante(m, variante) {
     return Boolean(m) && typeof m === 'object' && m.partageeTamponNonSepare === false && m.partageeHoloNonHolo !== true && sansListe(m.produitsPartages) && VARIANTES_PAIRE.includes(variante);
 }
 
-const memeFichier = (x, y) => (x === null || x === undefined) && (y === null || y === undefined) ? true : Boolean(x && y && typeof x.cle === 'string' && x.cle && x.cle === y.cle);
+// Deux fichiers sont « le même » s'ils portent la même clé. Deux ABSENCES ne sont l'égalité que pour `grande` (absenteAdmise) : une paire dont les deux vignettes manquent n'est pas « le même visuel ».
+const absent = x => x === null || x === undefined;
+const memeFichier = (x, y, absenteAdmise = false) => (absent(x) && absent(y) ? absenteAdmise === true : Boolean(x && y && typeof x.cle === 'string' && x.cle && x.cle === y.cle));
 
 /**
  * Deux entrées d'archive (format 2) forment-elles une paire séparée par la variante ? (b) de F1 et colonne des partages de la version.
@@ -31,7 +33,7 @@ function pairePar(ea, eb, memeFiche) {
     if (!separeeParVariante(ea, ea.variante) || !separeeParVariante(eb, eb.variante)) return refus('la paire n\'est pas séparée par la variante (marquage, liste ou variante)');
     const sa = VARIANTES_SPECIALES.includes(ea.variante), sb = VARIANTES_SPECIALES.includes(eb.variante);
     if (!(sa !== sb && (sa ? eb : ea).variante === 'normale')) return refus('les variantes ne sont pas une paire staff|jumbo/normale');
-    if (!memeFichier(ea.vignette, eb.vignette) || !memeFichier(ea.grande, eb.grande)) return refus('les deux produits ne partagent pas le même visuel');
+    if (!memeFichier(ea.vignette, eb.vignette) || !memeFichier(ea.grande, eb.grande, true)) return refus('les deux produits ne partagent pas le même visuel');
     if (typeof memeFiche !== 'function') return refus('la fiche commune n\'est pas connue');
     let meme = false;
     try { meme = memeFiche(ea.idProduct, eb.idProduct) === true; } catch { meme = false; }
