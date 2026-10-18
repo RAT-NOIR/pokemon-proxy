@@ -18,7 +18,10 @@ const apresDelai = (p, ms) => new Promise((resolve, reject) => { const t = setTi
 async function preparer({ corpsListe, produits, jumeaux, catalogue, version, deps = {}, delaiMaxMs = LD.DELAI_PREPARATION_MS } = {}) {
     let codeNumeroExiste;
     try {
-        if (catalogue && typeof catalogue.indexCodeNumero === 'function') { const idx = await catalogue.indexCodeNumero(); codeNumeroExiste = (c, n, exclure) => idx.existe(c, n, exclure); }
+        // l'index se construit EN ARRIÈRE-PLAN dès le premier besoin (`indexSansAttente`) : tant qu'il n'est pas prêt R4 est FERMÉE et on ne l'attend pas (le scan suivant en profite) ; un catalogue sans cette méthode (banc)
+        // est attendu comme avant.
+        const idx = catalogue && typeof catalogue.indexSansAttente === 'function' ? catalogue.indexSansAttente() : (catalogue && typeof catalogue.indexCodeNumero === 'function' ? await catalogue.indexCodeNumero() : null);
+        if (idx) codeNumeroExiste = (c, n, exclure) => idx.existe(c, n, exclure);
     } catch (e) { console.warn('⚠️ [langue-decisive-v2] index code × numéro indisponible : R4 fermée'); }
     const avant = { jumeaux, produits, codeNumeroExiste };
     if (deps.jumeaux || !(produits instanceof Map)) return avant;                                  // banc : le fournisseur injecté fait foi
