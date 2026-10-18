@@ -254,10 +254,11 @@ const ABSENTE = cl({ statut: 404 });
 {
     const { spawnSync } = require('child_process');
     const afficher = env => spawnSync(process.execPath, [path.join(__dirname, 'affiche-dossier-arrets.js')], { encoding: 'utf8', env: { ...process.env, ARRETS_HOTES_DOSSIER: '', ...env } }).stdout.trim();
-    const DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
-    verifier('M1 : le dossier par défaut est C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes', afficher({}), DEFAUT);
+    const DEFAUT = afficher({});
+    verifier('M1 : le dossier par défaut est un chemin ABSOLU, non vide, nommé arrets-hotes', [DEFAUT.length > 0, path.isAbsolute(DEFAUT), path.basename(DEFAUT)], [true, true, 'arrets-hotes']);
+    const sousArbre = (enfant, parent) => { const r = path.relative(path.resolve(parent), path.resolve(enfant)); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+    verifier('M1 : le dossier par défaut n\'est sous AUCUN dossier de l\'arbre du code (la racine du banc, ni un de ses sous-dossiers)', [sousArbre(DEFAUT, __dirname), sousArbre(DEFAUT, path.join(__dirname, 'collecte-cartes'))], [false, false]);
     verifier('M1 : ARRETS_HOTES_DOSSIER remplace le dossier par défaut', afficher({ ARRETS_HOTES_DOSSIER: path.join(os.tmpdir(), 'autre-dossier-arrets') }), path.join(os.tmpdir(), 'autre-dossier-arrets'));
-    verifier('M1 : le dossier par défaut n\'est PAS dans l\'arbre du code (ni sous collecte-cartes, ni sous le dépôt)', [path.resolve(DEFAUT).startsWith(path.resolve(__dirname)), path.resolve(DEFAUT).startsWith(path.resolve(__dirname, 'collecte-cartes'))], [false, false]);
     verifier('M1 : l\'ancienne variable RM_PAUSES_HOTE n\'est plus lue', afficher({ RM_PAUSES_HOTE: path.join(os.tmpdir(), 'ancien') }), DEFAUT);
     // le dossier est créé s'il est absent ; illisible (un fichier à sa place, ou non créable), la lecture BLOQUE (sens fermé)
     const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-doss-'));

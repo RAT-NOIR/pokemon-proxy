@@ -39,7 +39,7 @@ function issueDeLUnite(bilan, unite, maintenant = new Date()) {
 }
 
 /**
- * Le bilan d'une unité dont le collecteur a LEVÉ : un arrêt durable (loque) → rret-hote, une pause (pauseHote) → pause-hote (l'unité revient en attente, le worker s'arrête) ;
+ * Le bilan d'une unité dont le collecteur a LEVÉ : un arrêt durable (bloque) -> arret-hote, une pause (pauseHote) -> pause-hote (l'unité revient en attente, le worker s'arrête) ;
  * une cause passagère → incomplet-transitoire ; le reste → erreur. Une seule définition pour tous les collecteurs du worker.
  */
 function bilanDeLException(code, e) {
