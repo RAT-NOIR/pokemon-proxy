@@ -49,10 +49,14 @@ function mention(m, langue) {
     return texte(m);
 }
 
+// CONTRAT 7a : les quinze langues de Cardmarket, en code fermé minuscule (idLanguage 2 1 3 4 5 8 12 13 9 14 15 7 10 6 11 ; extension v2, DEMANDE-SERVEUR-EXTENSION.md §Lot 8). Tout autre texte : null.
+const LANGUES = Object.freeze(['fr', 'en', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'cs', 'hu', 'ja', 'ko', 'zh-hans', 'zh-hant']);
+const langueFermee = x => (LANGUES.includes(x) ? x : null);
+
 function impression(i, ctx) {
     const numero = chaineOuNull(i.numero), rarete = texte(i.rarete);
     return Object.freeze({
-        idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
+        idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante), langue: langueFermee(i.langue),   // CONTRAT 7a (ajout) : le code fermé de la langue de CETTE impression, ou null (jamais devinée)
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
         lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide)
     });
@@ -88,4 +92,4 @@ function construireProduit(source, ctx = {}) {
         impressions: Object.freeze(Array.isArray(source.impressions) ? source.impressions.filter(i => i && Number.isInteger(i.idProduct)).map(i => impression(i, ctx)) : [])
     });
 }
-module.exports = { construireProduit, VARIANTES, urlAdmise };
+module.exports = { construireProduit, VARIANTES, LANGUES, urlAdmise };

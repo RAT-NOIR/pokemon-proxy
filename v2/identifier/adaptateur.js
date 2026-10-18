@@ -24,6 +24,7 @@ const { choisirTrois } = require('./jumeaux-nombreux');
 const { garderCompatibles } = require('./nom-compatible');
 const { contredire } = require('./garde-contradiction');
 const { critereA, CRITERE_A } = require('./critere-a');
+const LD = require('./langue-decisive');
 
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
@@ -101,10 +102,41 @@ function apresGarde(g, etat, ctx, corps) {
 }
 // GARDE-CONTRADICTION : un champ lu sur la photo (total, attaque, set TCGdex, numéro, code) contredit P ET désigne un autre candidat du vivier => jamais une affirmation de P, une QUESTION entre P et ce que les champs désignent
 // (3 au plus : P d'abord, puis les plus étayés). Le résultat porte `contradiction` (le résumé, pour le journal) ; la seconde lecture ne s'y applique pas (routes.js). null : rien ne contredit P.
+// LANGUE-DECISIVE : une QUESTION (de la garde contradiction ou des jumeaux) est réduite par ce que la photo dit (langue certaine R1, illustration R2, attaque R2 bis) ; il ne reste qu'UN candidat et il tient les
+// conditions du critère A (numéro concordant, aucun veto, code concordant ou R4) => SÛR (`critere` côté serveur, la réservation éventuelle se règle comme une réponse : routes.js) ; il en reste 2 ou 3 => la question
+// ne porte que sur eux ; aucun retrait, ou tous retirés, ou un seul qui ne tient pas => null (la question d'avant, inchangée). Les règles : ctx.langueDecisive (bancs, mesure) sinon les constantes de langue-decisive.js.
+function parLangueDecisive(ids, idProduct, etat, ctx, corps) {
+    const regles = { ...LD.REGLES, ...(ctx.langueDecisive && typeof ctx.langueDecisive === 'object' ? ctx.langueDecisive : {}) };
+    if (!regles.R1 && !regles.R2 && !regles.R2BIS && !regles.R5) return null;
+    const r = LD.reduire({ ids, corps, produits: ctx.produits, regles, scoresImage: ctx.scoresImage });
+    if (!r.retires.length) return null;
+    const regs = [...new Set(r.retires.map(x => x.regle))].join('+');
+    if (r.ids.length === 1) {
+        // B1 : le candidat seul passe par la MÊME garde des jumeaux que toute affirmation (groupe lu dans la colonne des jumeaux et le catalogue, jamais dans le vivier) ; sans jumeau : groupe vide ;
+        // la garde ne conclut pas (colonne absente ou périmée, ligne manquante…) : groupe null, refus.
+        const gj = garde(ctx, r.ids[0], true);                          // une SONDE : ni compteur ni journal de la garde des jumeaux (m-2)
+        const groupe = gj.action === 'affirmer' ? [] : (gj.action === 'question' || gj.action === 'nombreux') ? gj.ids.filter(i => i !== r.ids[0]) : null;
+        const a = LD.affirmableSeul({ corps, id: r.ids[0], produits: ctx.produits, regles, groupe, catalogueExiste: ctx.codeNumeroExiste });
+        if (!a.affirme) {
+            // un seul candidat qui ne tient pas toutes les conditions : jamais un sûr. La question n'est pas réduite à UN choix (la confirmation « est-ce cette carte ? » n'est pas ce qu'on mesure) ; on garde la
+            // réduction de la langue seule (R1) quand elle laisse au moins deux candidats, sinon la question d'avant, inchangée.
+            const r1 = LD.reduire({ ids, corps, produits: ctx.produits, regles: { ...regles, R2: false, R2BIS: false, R5: false } });
+            return r1.retires.length && r1.ids.length >= 2 && r1.ids.length <= 3 ? { ...question(r1.ids, etat, ctx), langueDecisive: 'R1' } : null;
+        }
+        console.warn(`ℹ️ [langue-decisive-v2] affirmation produit=${r.ids[0]} retires=${r.retires.map(x => `${x.id}:${x.regle}`).join(',')}`);
+        return affirmer(r.ids[0], etat, ctx, corps, `langue décisive (${regs}) : ${a.raison}`);
+    }
+    if (r.ids.length >= 2 && r.ids.length <= 3) return { ...question(r.ids, etat, ctx), langueDecisive: regs };
+    return null;
+}
 function parContradiction(idProduct, etat, ctx, corps) {
     const g = contredire({ corps, gagnant: idProduct, produits: ctx.produits });
     if (!g) return null;
     console.warn(`⚠️ [garde-contradiction-v2] produit=${idProduct} ${g.resume}`);
+    if (g.designe.length) {
+        const ld = parLangueDecisive([g.gagnant, ...g.designe.map(d => d.idProduct)], idProduct, etat, ctx, corps);
+        if (ld) return { ...ld, contradiction: g.resume };
+    }
     // Un candidat DÉSIGNÉ : la question entre P et lui. Numéro ou total seul (personne de désigné) : l'issue la plus prudente existante, la question de confirmation « est-ce cette carte ? » à UN candidat — après la garde
     // des jumeaux (si P a des jumeaux, leur question ou leur refus passe d'abord) — jamais une affirmation.
     const r = g.designe.length ? question([g.gagnant, ...g.designe.map(d => d.idProduct)], etat, ctx) : (apresGarde(garde(ctx, idProduct), etat, ctx, corps) || question([idProduct], etat, ctx));
@@ -115,8 +147,12 @@ function parContradiction(idProduct, etat, ctx, corps) {
 // et le candidat unique ; la règle G et la seconde lecture ne voient qu'un résultat. Aucune règle recopiée : critere-a.js appelle les fonctions de production.
 function parCritereA(g, idProduct, ctx, corps) {
     if (g.action !== 'question' && g.action !== 'nombreux') return null;
-    const r = critereA({ corps, gagnant: idProduct, jumeaux: g.ids.slice(1), produits: ctx.produits, actif: ctx.critereA === undefined ? CRITERE_A : ctx.critereA });
+    const r = critereA({ corps, gagnant: idProduct, jumeaux: g.ids.slice(1), produits: ctx.produits, actif: ctx.critereA === undefined ? CRITERE_A : ctx.critereA,
+        r4: ctx.langueDecisive && ctx.langueDecisive.R4 !== undefined ? ctx.langueDecisive.R4 === true : LD.REGLES.R4, catalogueExiste: ctx.codeNumeroExiste });
     return r.affirme ? r.raison : null;
+}
+function parLangueDesJumeaux(g, idProduct, etat, ctx, corps) {
+    return g.action === 'question' || g.action === 'nombreux' ? parLangueDecisive(g.ids, idProduct, etat, ctx, corps) : null;
 }
 function affirmer(idProduct, etat, ctx, corps, critere = null) {
     const produit = construireProduit(source(ctx, idProduct), pctx(ctx));
@@ -131,7 +167,7 @@ function candidatUnique(idProduct, etat, ctx, corps) {
     const g = garde(ctx, idProduct);
     const critere = parCritereA(g, idProduct, ctx, corps);
     if (critere) return affirmer(idProduct, etat, ctx, corps, critere);
-    return apresGarde(g, etat, ctx, corps) || question([idProduct], etat, ctx);
+    return parLangueDesJumeaux(g, idProduct, etat, ctx, corps) || apresGarde(g, etat, ctx, corps) || question([idProduct], etat, ctx);
 }
 
 function traduire(statutHttp, corps, ctx) {
@@ -153,6 +189,8 @@ function traduire(statutHttp, corps, ctx) {
             const gJumeaux = garde(ctx, c.idProduct);
             const critere = parCritereA(gJumeaux, c.idProduct, ctx, corps);                // CRITÈRE A : après la contradiction (ci-dessus), à la place du refus de la garde des jumeaux
             if (critere) return affirmer(c.idProduct, etat, ctx, corps, critere);
+            const parLangue = parLangueDesJumeaux(gJumeaux, c.idProduct, etat, ctx, corps);   // LANGUE-DECISIVE : la question des jumeaux réduite par la photo
+            if (parLangue) return parLangue;
             const refusGarde = apresGarde(gJumeaux, etat, ctx, corps);
             if (refusGarde) return refusGarde;
             return affirmer(c.idProduct, etat, ctx, corps);

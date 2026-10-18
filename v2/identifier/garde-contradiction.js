@@ -77,7 +77,7 @@ function memeSetTcgdex(lu, ligne) {
     return f && g && f === g && classeDe(lu) === classeDe(ligne) ? false : null;
 }
 // La langue lue (EN, FR, JP, ZH…) face au tirage de la ligne (intl, jp, zh-hans, zh-hant, ko ; id, th, idth : inconnu). true / false / null (inconnu d'un côté ou tirage hors table).
-const OUEST = new Set(['EN', 'FR', 'DE', 'ES', 'IT', 'PT', 'NL', 'RU']);
+const OUEST = new Set(['EN', 'FR', 'DE', 'ES', 'IT', 'PT', 'NL', 'RU', 'PL', 'CS', 'HU']);   // LANGUE-DECISIVE : les 11 langues occidentales du code fermé de l'extension (la chaîne héritée n'en lit que 8 ; PL, CS, HU n'ajoutent rien tant qu'elle ne les lit pas)
 function langueCompatible(langue, tirage) {
     const l = texte(langue) ? langue.trim().toUpperCase().replace(/^JA$/, 'JP') : null, t = texte(tirage) ? tirage.trim().toLowerCase() : null;
     if (!l || !t) return null;

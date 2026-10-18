@@ -108,9 +108,10 @@ function idsACharger(corps, fournisseur) {
  * @returns {{ action: 'affirmer' } | { action: 'question', ids: number[] } | { action: 'nombreux', ids: number[] } | { action: 'panne', motif: string }}   (`nombreux` : P d'abord puis tous ses jumeaux, plus de 3 produits)
  * ctx : { jumeaux: (idProduct) => { conclu, ids, motif? }, produits: Map<idProduct, ligne> }
  */
-function garde(ctx, idProduct) {
-    const introuvable = (motif, detail) => { noter(motif, idProduct, detail); return { action: 'introuvable', motif }; };
-    const panne = (motif, detail) => { noter(motif, idProduct, detail); return { action: 'panne', motif }; };
+function garde(ctx, idProduct, sonde = false) {                       // sonde : un candidat que la résolution de LANGUE-DECISIVE interroge sans qu'il soit affirmé — ni compteur ni journal (m-2)
+    const noterGarde = sonde ? () => { } : noter;
+    const introuvable = (motif, detail) => { noterGarde(motif, idProduct, detail); return { action: 'introuvable', motif }; };
+    const panne = (motif, detail) => { noterGarde(motif, idProduct, detail); return { action: 'panne', motif }; };
     const f = ctx && ctx.jumeaux;
     if (typeof f !== 'function') return panne('jumeaux-indisponibles', '(aucun fournisseur)');
     let r;
@@ -123,7 +124,7 @@ function garde(ctx, idProduct) {
     if (1 + jumeaux.length > MAX_PRODUITS) return { action: 'nombreux', ids: [idProduct, ...jumeaux] };     // l'adaptateur choisit les 3 (ou retombe sur l'introuvable, et COMPTE alors jumeaux-trop-nombreux)
     const produits = ctx.produits instanceof Map ? ctx.produits : new Map();
     if (!produits.has(idProduct) || jumeaux.some(i => !produits.has(i))) return panne('jumeaux-incomplets', '(un produit sans ligne au catalogue de l\'API)');
-    noter('question-de-jumeaux', idProduct, `(${1 + jumeaux.length} produits)`);
+    noterGarde('question-de-jumeaux', idProduct, `(${1 + jumeaux.length} produits)`);
     return { action: 'question', ids: [idProduct, ...jumeaux] };
 }
 
