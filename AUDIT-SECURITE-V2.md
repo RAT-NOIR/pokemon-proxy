@@ -450,3 +450,12 @@ Décision du testeur : ce que le SERVEUR constate (panne, exception, carte intro
 - Lots : une requête peut porter jusqu'à 20 cartes et un lot entièrement introuvable est rendu en entier ; si chaque carte coûte une lecture, l'amplification est de 20 : jusqu'à 2 400 lectures par heure et par porteur, 12 000 par heure et par IP, de l'ordre de 40 USD par heure et par IP. C'est un plafond théorique haut (la concurrence admise par route et le délai entre lots le réduisent probablement d'un ordre de grandeur ; non mesuré).
 - Ce qui borne ce pire cas AUJOURD'HUI : (1) le plafond horaire hérité par IP (3 600 requêtes par heure et par IP, limiteur-heritage.js) ; (2) la limite de dépense de la clé OpenRouter du service de test, qui arrête les lectures quand elle est atteinte (les analyses tombent alors en panne, rendues sans coût pour le client). Rien dans le code de ce lot ne borne le volume constaté par porteur.
 - Non couvert : rotation d'adresses IP ou création d'installations en série (limites de création non relues ici).
+
+
+## MODELE-VISUEL-API, tour 2 (relecture de sécurité)
+
+- I1 : un résultat que le vecteur de l'extension a changé (promotion, question neuve) n'est jamais écrit dans une donnée partagée (crochet du banc non appelé ; `banc/etiquette-ligne.js` et `mesures/exporter-banc-admin.js` excluent le marqueur `analyses.empreinteExtension.influence`).
+- I2 : file des mesures de zones bornée (FILE_MESURES_MAX), indicateur d'arrêt vérifié à chaque tour et posé au délai (DELAI_MESURES_MS), budget de mesures par requête (BUDGET_MESURES) ; au-delà, `indisponible` et la règle G se tait.
+- I3 / M1 : le corps de 2 400 Ko n'est lu que pour POST /api/identifier avec V2_EMPREINTE_EXTENSION=1 ET RM_API_V2=1, un `Authorization: Bearer` et un `Content-Length` annoncé, et après le plafond par IP (`plafondGrand`, compté une seule fois). Sans jeton au-delà de 100 Ko annoncés : 413 sans lecture ; sans Content-Length : coupé à 100 Ko.
+- M2 : la configuration du modèle d'empreinte mal formée ne lève jamais (ignorée et dite drapeau éteint ; empreintes désactivées et dit drapeau allumé).
+- M5 : `scanArchivePublic` lit en flux borné à 2 Mo (annulation du flux au dépassement).

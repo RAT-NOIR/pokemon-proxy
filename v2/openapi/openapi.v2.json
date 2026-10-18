@@ -193,6 +193,20 @@
               }
             }
           },
+          "413": {
+            "description": "Corps trop volumineux. Au-delà de 100 Ko, et de 2 400 Ko quand le serveur a V2_EMPREINTE_EXTENSION=1, une requête portant `Authorization: Bearer` ET `Content-Length` et dans le plafond par IP ; sans jeton ou sans Content-Length la limite reste 100 Ko (rendu sans lecture du corps quand le Content-Length annoncé la dépasse). Corps JSON `{ success: false, error: \"Requête illisible\" }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "enum": [ false ] },
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
           "400": {
             "description": "Entrée invalide (ENTREE).",
             "content": {
@@ -3988,8 +4002,8 @@
           "photo": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 19,
-            "description": "L'index de la photo dans `imageUrls` (0 = la première). Au plus UNE entrée par photo."
+            "maximum": 7,
+            "description": "L'index de la photo dans `imageUrls` (0 = la première), de 0 à 7, et inférieur au nombre d'images. Au plus UNE entrée par photo, 8 entrées au plus. Une clé inconnue dans l'entrée rejette CETTE ENTRÉE seulement (la règle visuelle se tait si c'est la photo jugée), pas l'enveloppe."
           },
           "vecteur": {
             "type": "string",
@@ -4004,7 +4018,7 @@
             "type": "string",
             "maxLength": 273068,
             "pattern": "^[A-Za-z0-9+/]+={0,2}$",
-            "description": "La CARTE REDRESSÉE dont le vecteur a été tiré : un JPEG (qualité 0,92, sans métadonnées), EXACTEMENT 420 × 587, au plus 200 Ko décodés (273 068 caractères base64), base64 standard. Ce sont les pixels de la garde des zones. Absente, trop lourde, d'une autre taille, ou qui n'est pas un JPEG décodable : la règle visuelle se tait pour cette photo (`empreinte.code: muette`), la requête n'est pas refusée. Seule la carte de la photo de plus petit index est lue."
+            "description": "La CARTE REDRESSÉE dont le vecteur a été tiré : un JPEG (qualité 0,92, sans métadonnées recommandé ; un EXIF éventuel est accepté, jamais conservé), EXACTEMENT 420 × 587, au plus 200 Ko = 204 800 octets de JPEG comptés après décodage du base64 (273 068 caractères base64), base64 standard. Ce sont les pixels de la garde des zones. Absente, trop lourde, d'une autre taille, ou qui n'est pas un JPEG décodable : la règle visuelle se tait pour cette photo (`empreinte.code: muette`), la requête n'est pas refusée. Seule la carte de la photo de plus petit index est lue."
           }
         },
         "required": [
