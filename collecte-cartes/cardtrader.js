@@ -113,6 +113,8 @@ function fabriquerClient({ dossierCache, plafond, transport = transportFetch, ca
             let f2 = null; try { f2 = RH.arretHote(SOURCE_RACINE, `${defi} (HTTP ${r.status})`, { dossier: dossierPauses, url }); } catch (e) { suivi.bloquer(SOURCE_RACINE, `écriture de l'arrêt impossible (${e.message})`); }
             throw Object.assign(new Error(`${SOURCE_RACINE} BLOQUÉ (${defi}) sur ${url} — ARRÊT définitif de l'hôte${f2 ? ` (${f2})` : ''}`), { bloque: true, arretDefinitif: true, status: r.status });
         }
+        // un 5xx (sans défi : le défi a été jugé plus haut) est TRANSITOIRE : l'appelant saute cette adresse, deux de suite l'arrêtent
+        if (r.status >= 500 && r.status < 600) throw Object.assign(new Error(`HTTP ${r.status} sur ${url} — erreur serveur transitoire`), { status: r.status, transitoire: true });
         if (r.status !== 200 && r.status !== 404) throw Object.assign(new Error(`HTTP ${r.status} sur ${url} — réponse non prévue, on s'arrête`), { status: r.status });
         const sortie = { url, status: r.status, type: r.type || '', texte: r.status === 200 ? (reduire ? reduire(r.texte) : r.texte) : '', le: new Date(now()).toISOString() };
         fs.writeFileSync(f, JSON.stringify(sortie));
@@ -253,13 +255,58 @@ function construireLot(produits) {
     const unites = [];
     for (const g of groupes.values()) {
         if (new Set(g.map(x => x.p.blueprint)).size > 1) { for (const x of g) exclus.push({ idProduct: x.p.idProduct, groupe: x.p.groupe, raison: 'conflit' }); continue; }
+        // I2 — UNE UNITÉ = UN PRODUIT, imposé ICI (jamais seulement par le drapeau « à réserve » du plan) : deux variantes d'une même carte ne reçoivent pas la même image
+        if (g.length > 1) { for (const x of g) exclus.push({ idProduct: x.p.idProduct, groupe: x.p.groupe, raison: 'variantes' }); continue; }
         const p = g[0].p;
-        unites.push({ carteId: p.carteId, slugSet: p.slugSet, numero: g[0].numero, blueprint: p.blueprint, blueprintSlug: p.blueprintSlug, page: `https://${HOTE}/en-US/cards/${p.blueprint}-${p.blueprintSlug}`, groupe: p.groupe, famille: familleDe(p), slugCM: p.slug ?? null, carteNom: p.carteNom ?? null, preuve: p.preuve ?? null,
-            produits: g.map(x => x.p.idProduct).sort((a, b) => a - b), cles: [...new Set(g.map(x => x.p.cle))], temoins: [...new Set(g.map(x => x.p.temoin))] });
+        // I1 — le nom de NOTRE fiche (hors clé : la clé ne lit que le slug Cardmarket) contre le nom du blueprint, par la même normalisation que l'appariement
+        const nomBlueprint = nomDuBlueprint(p.blueprint, p.blueprintSlug);
+        const carteNom = p.carteNom == null || String(p.carteNom).trim() === '' ? null : String(p.carteNom);
+        let nomFiche = 'absent';
+        if (carteNom) {
+            if (nomBlueprint == null) { exclus.push({ idProduct: p.idProduct, groupe: p.groupe, raison: 'blueprint-illisible', nomFiche: carteNom }); continue; }
+            if (!clesDeNom(carteNom).some(c => clesDeNom(nomBlueprint).includes(c))) { exclus.push({ idProduct: p.idProduct, groupe: p.groupe, raison: 'nom-fiche-different-du-blueprint', nomFiche: carteNom, nomBlueprint }); continue; }
+            nomFiche = 'concordant';
+        }
+        const cleSeule = p.temoin !== 'confirme' || p.cle === 'nom-seul';
+        // une « clé seule » n'a, par définition, pas de total qui la confirme : sans le nom de fiche concordant elle n'a AUCUN témoin
+        if (cleSeule && nomFiche !== 'concordant') { exclus.push({ idProduct: p.idProduct, groupe: p.groupe, raison: 'cle-seule-sans-temoin' }); continue; }
+        unites.push({ carteId: p.carteId, slugSet: p.slugSet, numero: g[0].numero, blueprint: p.blueprint, blueprintSlug: p.blueprintSlug, page: `https://${HOTE}/en-US/cards/${p.blueprint}-${p.blueprintSlug}`, groupe: p.groupe, famille: familleDe(p), slugCM: p.slug ?? null, carteNom, nomBlueprint, nomFiche, temoinNom: nomFiche === 'concordant', preuve: p.preuve ?? null,
+            produits: [p.idProduct], cles: [p.cle], temoins: [p.temoin] });
     }
-    const parFamille = { wcd: 0, pp: 0, ba: 0 };
-    for (const u of unites) if (u.famille) parFamille[u.famille]++;
-    return { unites, exclus, parFamille };
+    const parFamille = { wcd: 0, pp: 0, ba: 0 }, cleSeuleParFamille = { wcd: 0, pp: 0, ba: 0 };
+    for (const u of unites) if (u.famille) { parFamille[u.famille]++; if (estCleSeule(u)) cleSeuleParFamille[u.famille]++; }
+    return { unites, exclus, parFamille, cleSeuleParFamille };
+}
+
+/**
+ * Le JOUEUR que NOTRE fiche Cardmarket porte : une parenthèse « (Prénom Nom "Deck") » à la fin du nom du produit (la forme des Live/Online Code Cards). Rien d'autre : ni table écrite à la main, ni
+ * l'année, ni le numéro. Mesuré le 18/10 sur les 1 956 produits WCD (numeros_cartes, catalogue_produits, cartes_produits, cartes) : seules 8 cartes-code la portent, AUCUNE carte jouable.
+ * @returns {string|null} le joueur normalisé, ou null
+ */
+function joueurDeLaFiche({ nomProduit } = {}) {
+    const m = /\(([^()"]+?)\s+"{1,2}[^"]+"{1,2}\)\s*$/.exec(String(nomProduit ?? ''));
+    const j = m ? norm(m[1]) : '';
+    return j && j.split(' ').length >= 2 ? j : null;
+}
+/**
+ * La CALIBRATION de la levée par le joueur, sur les WCD déjà appariés sans ambiguïté (le joueur caché comme s'il y avait ambiguïté : la règle lirait le joueur de la fiche et le comparerait au candidat).
+ * `produits[i].joueurFiche` et `resultats[i]` (statut 'apparie' + blueprint). Un seul FAUX éteint la règle (`active: false`), comme zéro cas évaluable.
+ */
+function calibrerJoueur(produits, resultats) {
+    let evaluables = 0, justes = 0, faux = 0, nonEvaluables = 0;
+    produits.forEach((p, i) => {
+        const j = p.joueurFiche ? norm(p.joueurFiche) : null, r = resultats[i];
+        if (!j || r?.statut !== 'apparie' || !r.blueprint?.joueur) { nonEvaluables++; return; }
+        evaluables++;
+        if (r.blueprint.joueur === j) justes++; else faux++;
+    });
+    return { evaluables, justes, faux, nonEvaluables, active: evaluables > 0 && faux === 0 };
+}
+
+/** Le nom d'un blueprint, lu sur son slug de page par la MÊME fonction que l'appariement (`blueprintDepuisPage`). null si le slug n'est pas lisible. */
+function nomDuBlueprint(id, slug) {
+    const b = blueprintDepuisPage(`https://${HOTE}/en-US/cards/${id}-${slug}`);
+    return b && !b.type && b.nom ? b.nom : null;
 }
 
 /** « Clé seule » : aucun témoin hors de la clé n'a CONFIRMÉ l'appariement (témoin absent, non applicable, ou nom seul). */
@@ -508,7 +555,20 @@ function apparier(produits, blueprints, tous = produits) {
         const cause = pr.famille === 'wcd' ? (new Set(bs.map(b => b.joueur)).size > 1 ? 'joueurs' : 'doublon')
             : pr.famille === 'pp' ? (new Set(bs.map(b => b.finition ?? '')).size > 1 ? 'finition' : 'doublon')
                 : (new Set(bs.map(b => b.position ?? '')).size > 1 ? 'position' : 'doublon');
-        return { idProduct: pr.idProduct, statut: 'ambigu', cause, candidats: bs.map(b => b.id), temoin, cle };
+        let raisonTrou;
+        if (pr.famille === 'wcd' && cause === 'joueurs') {
+            // LEVÉE PAR LE JOUEUR, sous la condition du testeur : seulement si NOTRE fiche porte le joueur (`joueurFiche`, lu sur la fiche — jamais déduit de l'année ni du numéro), par ÉGALITÉ du nom
+            // normalisé (tokens entiers, aucune inclusion), sur une carte DÉJÀ appariée (les candidats sont ceux du même nom et du même numéro d'origine), et s'il ne reste qu'UN candidat
+            const j = pr.joueurFiche ? norm(pr.joueurFiche) : null;
+            if (!j) raisonTrou = 'fiche-sans-joueur';
+            else {
+                const memeJoueur = bs.filter(b => b.joueur === j);
+                if (memeJoueur.length === 1) { const g = gardes.find(x => x.b === memeJoueur[0]); return { idProduct: pr.idProduct, statut: 'apparie', blueprint: g.b, temoin: g.t, cle: 'nom+numero+joueur', preuve: `${pr.famille} ${s.nom} n°${s.numero ?? '—'} joueur « ${j} » (fiche = blueprint)` }; }
+                if (memeJoueur.length > 1) return { idProduct: pr.idProduct, statut: 'ambigu', cause: 'doublon', candidats: memeJoueur.map(b => b.id), temoin, cle, raisonTrou: 'doublon-du-joueur' };
+                raisonTrou = 'joueur-different';
+            }
+        }
+        return { idProduct: pr.idProduct, statut: 'ambigu', cause, candidats: bs.map(b => b.id), temoin, cle, ...(raisonTrou ? { raisonTrou } : {}) };
     });
 }
 
@@ -531,4 +591,4 @@ function produitsServis({ liens, imagesParCarte, regionDe, slugParProduit = null
     return servis;
 }
 
-module.exports = { reduirePage, lireDuCache, nomCache, choisirEchantillon, estCleSeule, prng, imageDePage, controleLargeur, cleR2, idImage, tamponDeLaFamille, construireLot, decisionEcriture, entreeDeCarte, documentImage, SOURCE, LOT, MENTION, LANGUE_PREUVE, CHEMIN_IMAGE, familleDe, blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };
+module.exports = { joueurDeLaFiche, calibrerJoueur, nomDuBlueprint, reduirePage, lireDuCache, nomCache, choisirEchantillon, estCleSeule, prng, imageDePage, controleLargeur, cleR2, idImage, tamponDeLaFamille, construireLot, decisionEcriture, entreeDeCarte, documentImage, SOURCE, LOT, MENTION, LANGUE_PREUVE, CHEMIN_IMAGE, familleDe, blueprintDepuisPage, produitDepuisSlug, apparier, produitsServis, norm, HOTE, SOURCE_RACINE, UA, CADENCE_MIN_MS, CODE_NEUTRE, sitemapsDesRobots, lireSitemap, blueprintDepuisImage, familleDeExpansion, fabriquerClient, transportFetch, hoteOk };

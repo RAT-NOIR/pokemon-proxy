@@ -77,7 +77,7 @@ const mkCli = (transport, dossier, plafond = 50) => CT.fabriquerClient({ dossier
     await test('téléchargement : une page HTML servie à la place d\'une image (200 text/html) = absente ; JSON = pause de l\'hôte, rien au cache', async () => {
         const mk = rep => mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : rep; } }, tmp());
         const r1 = await K.telecharger({ unites: unites.slice(0, 1), releves, cli: mk({ status: 200, type: 'text/html', texte: '<html>introuvable</html>' }), fichier: path.join(tmp(), 'a.json') });
-        assert.deepStrictEqual(r1.parStatut, { absent: 1 });
+        assert.deepStrictEqual(r1.parStatut, { 'fausse-absente': 1 });
         const r2 = await K.telecharger({ unites: unites.slice(0, 1), releves, cli: mk({ status: 200, type: 'application/json', texte: '{}' }), fichier: path.join(tmp(), 'b.json') });
         assert.strictEqual(r2.etat, 'pause-hote');
     });
@@ -103,13 +103,179 @@ const mkCli = (transport, dossier, plafond = 50) => CT.fabriquerClient({ dossier
     });
     await test('ligne de commande : argument inconnu, mode manquant ou double, plafond manquant, --ecrire sans --attendu : refus (code 2) sans connexion', () => {
         const lance = (...a) => spawnSync(process.execPath, [COLL_FILE, ...a], { encoding: 'utf8', timeout: 20000 });
-        for (const a of [['--inconnu'], [], ['--plan', '--releve'], ['--releve'], ['--telecharger'], ['--ecrire'], ['--plan', '--attendu=3'], ['--releve', '--plafond=5', '--echantillon=3'], ['--plan', '--plafond=5']]) assert.strictEqual(lance(...a).status, 2, JSON.stringify(a));
+        for (const a of [['--inconnu'], [], ['--plan', '--releve'], ['--releve'], ['--telecharger'], ['--ecrire'], ['--plan', '--attendu=3'], ['--releve', '--plafond=5', '--echantillon=3'], ['--plan', '--plafond=5'], ['--plan', '--cle-seule'], ['--releve', '--plafond=5', '--fichier-plan=a.json'], ['--plan', '--fichier-lot=a\\b.json'], ['--plan', '--fichier-plan=../x.json']]) assert.strictEqual(lance(...a).status, 2, JSON.stringify(a));
     });
     await test('--ecrire hors de lot-additif.js : refusé avant toute connexion (garde de lot)', () => {
         const lot = tmp();
         fs.writeFileSync(path.join(lot, 'lot.json'), JSON.stringify({ unites: [] }));
         const r = spawnSync(process.execPath, [COLL_FILE, '--ecrire', '--attendu=1', `--lot=${lot}`], { encoding: 'utf8', timeout: 20000 });
         assert.notStrictEqual(r.status, 0); assert.ok(/lot-additif\.js/.test(r.stderr), r.stderr);
+    });
+    // ───────── I3 : `ecrire` / `decider` sur de FAUX modèles (en mémoire), faux R2 ─────────
+    const { fauxModeles } = require('./faux-modeles-cardtrader');
+    process.env.R2_BUCKET_IMAGES = process.env.R2_BUCKET_IMAGES || 'banc-sans-bucket-reel';
+    const SET_PP = 'Play-Pokemon-Prize-Pack-Series-Five';
+    async function preparer(n, { statuts = {} } = {}) {
+        const dossier = tmp(), bon = await jpeg(500, 698);
+        const cli = mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : { status: 200, type: 'image/jpeg', octets: bon }; } }, dossier, 200);
+        await cli.initialiserRobots();
+        const us = [], rels = {}, idx = {};
+        for (let i = 0; i < n; i++) {
+            const u = { carteId: 100 + i, slugSet: SET_PP, numero: String(70 + i), blueprint: 900 + i, blueprintSlug: `x-${i}`, page: `https://www.cardtrader.com/en-US/cards/${900 + i}-x-${i}`, produits: [7000 + i], famille: 'pp', groupe: 'PP S5', slugCM: `S-${i}`, carteNom: `N${i}`, temoins: ['confirme'], cles: [] };
+            const url = `https://www.cardtrader.com/uploads/blueprints/image/${900 + i}/x.jpg`;
+            const r = await cli.lireImage(url);
+            us.push(u); rels[u.blueprint] = { url };
+            idx[url] = statuts[i] ? { statut: statuts[i] } : { statut: 'ok', w: 500, h: 698, sha256: r.meta.sha256 };
+        }
+        const deposes = [];
+        return { dossier, us, rels, idx, deposes, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) };
+    }
+    const lancerEcrire = (p, M, o = {}) => K.ecrire(p.us, M, { dossierCache: p.dossier, releves: p.rels, indexImages: p.idx, deposer: p.deposer, vignetter: p.vignetter, ...o });
+    const cartesVides = n => Array.from({ length: n }, (_, i) => ({ _id: 100 + i, images: [] }));
+    const SILENCE = async f => { const l = console.log, e = console.error; const sortie = []; console.log = (...a) => sortie.push(a.join(' ')); console.error = (...a) => sortie.push(a.join(' ')); try { return [await f(), sortie]; } finally { console.log = l; console.error = e; } };
+
+    await test('I3 écriture : un ajout (document, entrée neutre, objet R2, bilan du set vérifié)', async () => {
+        const p = await preparer(1), { M, etat } = fauxModeles({ cartes: cartesVides(1), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1 }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.reel, 1); assert.strictEqual(r.resultats[0].etat, 'verifie');
+        const c = etat.carte(100);
+        assert.strictEqual(c.images.length, 1); assert.strictEqual(c.images[0].source, 'ctr'); assert.strictEqual(c.images[0].lot, 'ctr-2026-10'); assert.strictEqual(c.images[0].retirable, true);
+        assert.deepStrictEqual(p.deposes, [`ctr/${SET_PP}/70-100-en.webp`]);
+        assert.strictEqual(etat.image(`ctr/${SET_PP}/100/70/en`).etat, 'ok');
+        assert.deepStrictEqual(r.orphelins, []);
+    });
+    await test('I3 écriture : une image empruntée d\'un Prize Pack est REMPLACÉE par le vrai scan tamponné', async () => {
+        const p = await preparer(1);
+        const emprunt = { set: SET_PP, numero: '70', langue: 'en', source: 'emprunt', cleR2: 'e', w: 600, imageEmprunteeTirage: true, tamponNonRepresente: 'Play! Pokémon' };
+        const { M, etat } = fauxModeles({ cartes: [{ _id: 100, images: [emprunt] }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1 }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.resultats[0].remplacees, 1);
+        assert.deepStrictEqual(etat.carte(100).images.map(e => e.source), ['ctr']);
+    });
+    await test('I3 écriture : une basse définition de même impression est REMPLACÉE, son document passe à « remplace »', async () => {
+        const p = await preparer(1);
+        const bas = { set: SET_PP, numero: '70', langue: 'en', source: 'pokumon', cleR2: 'a', w: 245, wOriginal: 245, basseDefinition: true, tampon: 'Play! Pokémon' };
+        const { M, etat } = fauxModeles({ cartes: [{ _id: 100, images: [bas] }], images: [{ _id: 'pk1', source: 'pokumon', set: SET_PP, cleR2: 'a', carteId: 100, etat: 'ok', tampon: 'Play! Pokémon' }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1 }));
+        assert.strictEqual(r.code, 0); assert.deepStrictEqual(etat.carte(100).images.map(e => e.source), ['ctr']);
+        assert.strictEqual(etat.image('pk1').etat, 'remplace');
+    });
+    await test('I3 écriture : devant une entrée correcte au-dessus du seuil, l\'unité CÈDE (rien déposé, rien écrit, entrée intacte)', async () => {
+        const p = await preparer(1);
+        const bonne = { set: SET_PP, numero: '70', langue: 'en', source: 'tcgdex', cleR2: 't', w: 600, wOriginal: 600 };
+        const { M, etat, journal } = fauxModeles({ cartes: [{ _id: 100, images: [bonne] }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 0 }));
+        assert.strictEqual(r.reel, 0); assert.strictEqual(r.cedees, 1); assert.deepStrictEqual(p.deposes, []);
+        assert.deepStrictEqual(etat.carte(100).images.map(e => e.source), ['tcgdex']); assert.deepStrictEqual(journal.filter(j => j[0] === 'carte'), []);
+    });
+    await test('I3 écriture : un échec R2 n\'écrit RIEN en base ; le set sort « incomplet », code 1, aucun orphelin', async () => {
+        const p = await preparer(2);
+        const { M, etat, journal } = fauxModeles({ cartes: cartesVides(2), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 2, deposer: async () => { throw new Error('R2 en panne'); } }));
+        assert.strictEqual(r.code, 1); assert.strictEqual(r.resultats[0].etat, 'incomplet'); assert.match(r.resultats[0].erreurJointure, /R2 en panne/);
+        assert.deepStrictEqual(r.orphelins, []); assert.strictEqual(etat.carte(100).images.length, 0); assert.deepStrictEqual(journal.filter(j => j[0] === 'carte'), []);
+    });
+    await test('I3 écriture : R2 réussit puis Mongo échoue -> l\'objet R2 est un ORPHELIN, compté et LISTÉ ; la relance le reprend', async () => {
+        const p = await preparer(2);
+        let panne = true;
+        const { M, etat } = fauxModeles({ cartes: cartesVides(2), sets: [{ _id: SET_PP, tirage: 'intl' }], echecs: { carte: (f, u) => (panne && u.$push ? 'Mongo en panne' : undefined) } });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 2 }));
+        assert.strictEqual(r.code, 1); assert.strictEqual(r.resultats[0].etat, 'incomplet');
+        assert.deepStrictEqual(r.orphelins, [`ctr/${SET_PP}/70-100-en.webp`]); assert.strictEqual(r.resultats[0].orphelins.length, 1);
+        assert.strictEqual(etat.carte(100).images.length, 0);
+        panne = false;
+        const [r2] = await SILENCE(() => lancerEcrire(p, M, { attendu: 2 }));
+        assert.strictEqual(r2.code, 0); assert.deepStrictEqual(r2.orphelins, []);
+        assert.strictEqual(etat.carte(100).images.length, 1); assert.strictEqual(etat.carte(101).images.length, 1);
+    });
+    await test('I3/I4 écriture : --attendu faux REFUSÉ (rien déposé, rien écrit) et le nombre réel d\'unités est imprimé AVANT de refuser', async () => {
+        const p = await preparer(3, { statuts: { 2: 'absent' } });
+        const { M, journal } = fauxModeles({ cartes: cartesVides(3), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r, sortie] = await SILENCE(() => lancerEcrire(p, M, { attendu: 5 }));
+        assert.strictEqual(r.code, 2); assert.strictEqual(r.etat, 'refuse-attendu'); assert.strictEqual(r.reel, 2); assert.strictEqual(r.unitesAAjouter, 2);
+        assert.deepStrictEqual(p.deposes, []); assert.deepStrictEqual(journal.filter(j => j[0] !== 'set'), []);
+        assert.ok(sortie.some(l => /unités à ajouter dont l'image est ok : 2/.test(l)), sortie.join('|'));
+        assert.strictEqual((await SILENCE(() => lancerEcrire(p, fauxModeles({ cartes: cartesVides(3), sets: [{ _id: SET_PP, tirage: 'intl' }] }).M, { attendu: 2 })))[0].code, 0);
+    });
+    await test('I4 — --compter : le nombre d\'unités à ajouter (la valeur de --attendu) sans rien déposer ni écrire, sans lot-additif, sans R2', async () => {
+        const p = await preparer(3, { statuts: { 2: 'absent' } });
+        const { M, journal } = fauxModeles({ cartes: cartesVides(3), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r, sortie] = await SILENCE(() => K.ecrire(p.us, M, { dossierCache: p.dossier, releves: p.rels, indexImages: p.idx, compterSeulement: true }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.etat, 'compte'); assert.strictEqual(r.reel, 2);
+        assert.deepStrictEqual(p.deposes, []); assert.deepStrictEqual(journal.filter(j => j[0] !== 'set'), []);
+        assert.ok(sortie.some(l => /unités à ajouter dont l'image est ok : 2/.test(l)));
+    });
+    await test('I4/M4 — --attendu compte des UNITÉS à ajouter ; une unité déjà posée au rejeu n\'y entre pas ; une image écartée (absent) n\'est pas une erreur (code 0)', async () => {
+        const p = await preparer(3, { statuts: { 2: 'absent' } });
+        const { M } = fauxModeles({ cartes: cartesVides(3), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 2 }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.ecartees, 1); assert.strictEqual(r.horsCache, 0);
+        const [r2] = await SILENCE(() => lancerEcrire(p, M, { attendu: 0 }));
+        assert.strictEqual(r2.reel, 0); assert.strictEqual(r2.code, 0);
+    });
+    await test('M4 — une image « ok » dont le fichier manque au cache est une vraie erreur (hors cache, code 1)', async () => {
+        const p = await preparer(1);
+        p.idx[p.rels[900].url] = { statut: 'ok', w: 500, h: 698, sha256: 'a'.repeat(64) };
+        const { M } = fauxModeles({ cartes: cartesVides(1), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { dossierCache: tmp(), attendu: 0 }));
+        assert.strictEqual(r.horsCache, 1); assert.strictEqual(r.code, 1);
+    });
+
+    // ───────── M5 / M6 : fausse absence, 5xx ─────────
+    await test('M5 — une « fausse absence » (200 text/html) n\'est jamais définitive au premier coup : seconde preuve après 24 h', async () => {
+        const u1 = unites.slice(0, 1), fichier = path.join(tmp(), 'i.json'), dossier = tmp();
+        let n = 0, t = Date.parse('2026-10-18T12:00:00Z');
+        const transport = { async get(u) { n++; return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : { status: 200, type: 'text/html', texte: '<html>introuvable</html>' }; } };
+        const mk = () => CT.fabriquerClient({ dossierCache: dossier, plafond: 50, transport, cadenceMs: 0, pause: async () => {}, now: () => t, dossierPauses: tmp(), robots: null, suivi: RH.suiviHote() });
+        const a = await K.telecharger({ unites: u1, releves, cli: mk(), fichier, now: () => t });
+        assert.strictEqual(JSON.parse(fs.readFileSync(fichier, 'utf8'))[releves[u1[0].blueprint].url].statut, 'fausse-absente'); assert.strictEqual(a.parStatut['fausse-absente'], 1);
+        const avant = n;
+        await K.telecharger({ unites: u1, releves, cli: mk(), fichier, now: () => t + 3600e3 });
+        assert.strictEqual(n, avant);
+        t += 25 * 3600e3;
+        await K.telecharger({ unites: u1, releves, cli: mk(), fichier, now: () => t });
+        assert.ok(n > avant);
+        assert.strictEqual(JSON.parse(fs.readFileSync(fichier, 'utf8'))[releves[u1[0].blueprint].url].statut, 'absent');
+    });
+    await test('M6 — téléchargement : un 5xx ISOLÉ saute l\'image sans arrêter ; deux de suite ARRÊTENT', async () => {
+        const bon = await jpeg(500, 698);
+        const faire = (mauvais) => {
+            const vus = []; const dossier = tmp();
+            const transport = { async get(url) { if (url.endsWith('robots.txt')) return { status: 200, type: 'text/plain', texte: '' }; const id = Number(/image\/(\d+)\//.exec(url)[1]); vus.push(id); return mauvais.includes(id) ? { status: 503, type: 'text/html', texte: 'oups' } : { status: 200, type: 'image/jpeg', octets: bon }; } };
+            return { vus, run: () => K.telecharger({ unites, releves, cli: mkCli(transport, dossier), fichier: path.join(tmp(), 'i.json') }) };
+        };
+        const id = i => unites[i].blueprint;
+        const a = faire([id(3)]), ra = await a.run();
+        assert.strictEqual(ra.etat, 'termine'); assert.strictEqual(ra.transitoires, 1); assert.strictEqual(ra.parStatut.ok, 11); assert.strictEqual(ra.restantes, 1);
+        const b = faire([id(3), id(4)]), rb = await b.run();
+        assert.strictEqual(rb.etat, 'serveur-indisponible'); assert.ok(!b.vus.includes(id(5)), 'aucune requête après le deuxième 5xx');
+        const c = faire([id(3), id(5)]), rc = await c.run();       // non consécutifs : le compteur retombe sur un succès
+        assert.strictEqual(rc.etat, 'termine'); assert.strictEqual(rc.transitoires, 2);
+    });
+    await test('M6 — relevé : un 5xx isolé saute la page sans arrêter ; deux de suite arrêtent', async () => {
+        const html = new Map(pages.map(p => [p.url, p.html]));
+        const faire = mauvais => mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : mauvais.includes(u) ? { status: 502, type: 'text/html', texte: 'bad gateway' } : { status: 200, type: 'text/html', texte: html.get(u) }; } }, tmp());
+        const r1 = await K.releve({ unites, cli: faire([unites[2].page]), fichier: path.join(tmp(), 'r.json') });
+        assert.strictEqual(r1.etat, 'termine'); assert.strictEqual(r1.transitoires, 1); assert.strictEqual(r1.avecImage, 11);
+        const r2 = await K.releve({ unites, cli: faire([unites[2].page, unites[3].page]), fichier: path.join(tmp(), 'r2.json') });
+        assert.strictEqual(r2.etat, 'serveur-indisponible'); assert.strictEqual(r2.avecImage, 2);
+    });
+
+    // ───────── I1 : la planche montre TOUTES les « clé seule » restantes, avec le nom de fiche réel ─────────
+    await test('I1 planche --cle-seule : toutes les « clé seule » du lot, nom de fiche et nom du blueprint dans la description', async () => {
+        const dossier = tmp(), sortie = tmp(), bon = await jpeg(500, 698);
+        const cli = mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : { status: 200, type: 'image/jpeg', octets: bon }; } }, dossier, 400);
+        await cli.initialiserRobots();
+        const us = [], rels = {}, idx = {};
+        for (let i = 0; i < 60; i++) {
+            const u = { blueprint: 6000 + i, page: `https://www.cardtrader.com/en-US/cards/${6000 + i}-x`, famille: ['wcd', 'pp'][i % 2], groupe: 'G', slugCM: `S-${i}`, carteNom: `Fiche ${i}`, nomBlueprint: `bp ${i}`, numero: String(i), temoins: i % 4 === 0 ? ['non-applicable'] : ['confirme'], cles: [], nomFiche: 'concordant' };
+            const url = `https://www.cardtrader.com/uploads/blueprints/image/${u.blueprint}/x.jpg`;
+            const r = await cli.lireImage(url); us.push(u); rels[u.blueprint] = { url }; idx[url] = { statut: 'ok', w: 500, h: 698, sha256: r.meta.sha256 };
+        }
+        const p = await K.planches({ unites: us, releves: rels, indexImages: idx, dossierCache: dossier, sortieDossier: sortie, cleSeuleSeulement: true });
+        assert.strictEqual(p.images, 15); assert.strictEqual(p.cleSeule, 15); assert.strictEqual(p.planches.length, 1);
+        const d = JSON.parse(fs.readFileSync(path.join(sortie, 'planche.json'), 'utf8'));
+        assert.ok(d.every(x => /^Fiche \d+$/.test(x.carteNom) && /^bp \d+$/.test(x.nomBlueprint) && x.cleSeule));
     });
     await test('retrait : à blanc par défaut ; le plan compte les entrées, les documents et les clés R2 (vignettes comprises) de la seule source', () => {
         const cartes = [{ _id: 1, images: [{ source: 'ctr', set: 'A', cleR2: 'ctr/A/1', vignette: { cleR2: 'vignettes/ctr/A/1' } }, { source: 'autre', set: 'A', cleR2: 'x' }] }, { _id: 2, images: [{ source: 'ctr', set: 'B', cleR2: 'ctr/B/2' }] }];

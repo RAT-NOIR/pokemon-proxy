@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const CT = require('./collecte-cartes/cardtrader');
 
-const AUTORISES = [/^--sonder=https:\/\/www\.cardtrader\.com\/\S*$/, /^--enumerer$/, /^--plan$/, /^--cache=.+$/, /^--plafond=\d{1,3}$/, /^--sortie=.+$/];
+const AUTORISES = [/^--sonder=https:\/\/www\.cardtrader\.com\/\S*$/, /^--enumerer$/, /^--plan$/, /^--cache=.+$/, /^--plafond=\d{1,3}$/, /^--sortie=.+$/, /^--suffixe=-[A-Za-z0-9]{1,12}$/];
 const args = process.argv.slice(2);
 const val = nom => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const nbCache = d => (fs.existsSync(d) ? fs.readdirSync(d).filter(f => /^[0-9a-f]{16}-.*\.json$/.test(f)).length : 0);
@@ -120,12 +120,19 @@ async function plan({ enumeration }) {
             const ls = liensDe.get(p.idProduct) || [];
             const c = ls.length === 1 ? carte.get(ls[0].carteId) : null;      // plusieurs cartes pour un produit : aucune ne témoigne
             return { idProduct: p.idProduct, famille: f.famille, annee: f.annee, serie: f.serie, groupe: f.groupe, slugSet: p.slugSet, slug: p.slug, numeroCM: p.numero ?? null, variante: p.variante ?? null,
-                carteId: ls.length === 1 ? ls[0].carteId : null, numeroFiche: ls.length === 1 ? (ls[0].numeroFiche ?? null) : null, carteNom: c?.nomEn ?? null, impressions: c ? (c.impressions || []).map(i => ({ numero: i.numero, total: i.total })) : null, liens: ls.length };
+                carteId: ls.length === 1 ? ls[0].carteId : null, numeroFiche: ls.length === 1 ? (ls[0].numeroFiche ?? null) : null, joueurFiche: CT.joueurDeLaFiche({ nomProduit: noms.get(p.idProduct) }), carteNom: c?.nomEn ?? null, impressions: c ? (c.impressions || []).map(i => ({ numero: i.numero, total: i.total })) : null, liens: ls.length };
         };
         const produits = nonServis.map(fabriquer);
         const tousProduits = nonCode.map(fabriquer);        // le contexte des origines : servis ou non
         const blueprints = enumeration.blueprints;
-        const res = CT.apparier(produits, blueprints, tousProduits);
+        // LEVÉE PAR LE JOUEUR (testeur, 18/10) : seulement si NOTRE fiche le porte. Calibrée AVANT d'être câblée sur les WCD déjà appariés ; un seul faux, ou aucun cas évaluable : règle éteinte.
+        const sansJoueur = ps => ps.map(p => ({ ...p, joueurFiche: null }));
+        const res0 = CT.apparier(sansJoueur(produits), blueprints, tousProduits);
+        const calibration = CT.calibrerJoueur(produits.filter(p => p.famille === 'wcd'), res0.filter((r, i) => produits[i].famille === 'wcd'));
+        const res = calibration.active ? CT.apparier(produits, blueprints, tousProduits) : res0;
+        const joueurs = { calibration, regleActive: calibration.active, leveesParJoueur: res.filter(r => r.cle === 'nom+numero+joueur').length, restesTrous: {}, produitsWCDAvecJoueurSurLaFiche: produits.filter(p => p.famille === 'wcd' && p.joueurFiche).length,
+            pagesNonRelevéesNécessaires: 0, note: 'le joueur de CardTrader est dans le slug du sitemap (enumeration.json) : aucune page de plus' };
+        for (const r of res) if (r.raisonTrou) joueurs.restesTrous[r.raisonTrou] = (joueurs.restesTrous[r.raisonTrou] || 0) + 1;
         // les introuvables s'ouvrent (§22) : le même numéro, la même année, chez CardTrader — pour lire la cause à l'œil
         const parNumero = new Map();
         for (const b of blueprints.filter(b => !b.type && b.numero != null)) { const k = `${b.famille}|${b.famille === 'pp' ? '' : b.annee}|${b.numero}`; (parNumero.get(k) || parNumero.set(k, []).get(k)).push(b.slug); }
@@ -189,7 +196,7 @@ async function plan({ enumeration }) {
                 liensParProduit: { zero: nonServis.filter(p => !(liensDe.get(p.idProduct) || []).length).length, un: nonServis.filter(p => (liensDe.get(p.idProduct) || []).length === 1).length, plusieurs: nonServis.filter(p => (liensDe.get(p.idProduct) || []).length > 1).length },
                 blueprintsLus: blueprints.length, blueprintsSingles: blueprints.filter(b => !b.type).length
             },
-            parFamille, tableau, lectures,
+            parFamille, tableau, lectures, joueurs,
             collecte: { ...requetesCollecte, secondes: requetesCollecte.total * CADENCE_S, heures: +(requetesCollecte.total * CADENCE_S / 3600).toFixed(2), blueprintsPartagesParPlusieursProduits: nPartages, blueprintsCandidatsDesAmbigus: candidatsAmbigus.size,
                 note: 'L\'adresse de l\'image N\'EST PAS dans le sitemap (aucune balise image:loc) et le nom du fichier diffère du slug de la page (311538 : image « …2019-world-championships-promo-henry-brand… », page « …wcd-2019-henry-brand-071-236… ») : il faut lire la page HTML de chaque blueprint (1 requête) puis l\'image (1 requête).' },
             produits: produits.map((p, i) => ({ idProduct: p.idProduct, groupe: p.groupe, slugSet: p.slugSet, carteId: p.carteId, numeroFiche: p.numeroFiche, carteNom: p.carteNom, slug: p.slug, numeroCM: p.numeroCM, variante: p.variante, liens: p.liens, ...res[i], blueprint: res[i].blueprint ? res[i].blueprint.id : undefined, blueprintSlug: res[i].blueprint ? res[i].blueprint.slug : undefined, blueprintFinition: res[i].blueprint ? res[i].blueprint.finition : undefined }))
@@ -241,8 +248,10 @@ if (require.main === module) (async () => {
         if (!fs.existsSync(f)) { console.error(`${f} absent : lancer --enumerer d'abord`); process.exitCode = 2; return; }
         const enumeration = JSON.parse(fs.readFileSync(f, 'utf8'));
         const { doc, echant } = await plan({ enumeration });
-        fs.writeFileSync(path.join(sortie, 'plan.json'), JSON.stringify(doc, null, 1));
-        fs.writeFileSync(path.join(sortie, 'echantillon.json'), JSON.stringify(echant, null, 1));
+        // `--suffixe=-v2` : plan-v2.json / echantillon-v2.json — un autre plan à côté du premier, que rien ne remplace
+        const suffixe = val('suffixe') ?? '';
+        fs.writeFileSync(path.join(sortie, `plan${suffixe}.json`), JSON.stringify(doc, null, 1));
+        fs.writeFileSync(path.join(sortie, `echantillon${suffixe}.json`), JSON.stringify(echant, null, 1));
         const { produits, ...resume } = doc;
         console.log(JSON.stringify(resume, null, 1));
         return;

@@ -79,11 +79,14 @@ const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardt
         const r = C.construireLot([ap(1, { carteId: null })]);
         assert.strictEqual(r.unites.length, 0); assert.strictEqual(r.exclus[0].raison, 'sans-carte');
     });
-    await test('lot : deux produits de la même carte et du même set au même blueprint -> UNE unité ; deux blueprints -> conflit, aucun écrit', () => {
+    await test('I2 — une unité = un produit : deux produits de la même carte et du même set au MÊME blueprint sont exclus (raison « variantes »), quel que soit le drapeau du plan ; deux blueprints = conflit', () => {
         const a = C.construireLot([ap(1, { carteId: 5 }), ap(2, { carteId: 5, blueprint: 101 })]);
-        assert.strictEqual(a.unites.length, 1); assert.deepStrictEqual(a.unites[0].produits, [1, 2]);
+        assert.strictEqual(a.unites.length, 0); assert.deepStrictEqual(a.exclus.map(e => [e.idProduct, e.raison]), [[1, 'variantes'], [2, 'variantes']]);
         const b = C.construireLot([ap(1, { carteId: 5 }), ap(2, { carteId: 5, blueprint: 999 })]);
         assert.strictEqual(b.unites.length, 0); assert.deepStrictEqual(b.exclus.map(e => e.raison), ['conflit', 'conflit']);
+        // aucune unité du lot n'a jamais plus d'un produit
+        const c = C.construireLot([ap(1), ap(2), ap(3, { carteId: 5 }), ap(4, { carteId: 5 })]);
+        assert.ok(c.unites.every(u => u.produits.length === 1)); assert.strictEqual(c.unites.length, 2);
     });
     await test('lot : tout ce qui n\'est pas explicitement « apparie » sans réserve est exclu (statut inconnu, réserve vague)', () => {
         const r = C.construireLot([ap(1, { statut: 'autre' }), ap(2, { reserve: 'x' }), ap(3, { statut: undefined })]);
@@ -92,6 +95,78 @@ const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardt
     await test('lot : comptes par famille', () => {
         const r = C.construireLot([ap(1), ap(2, { groupe: 'PP S5', slugSet: 'Play-Pokemon-Prize-Pack-Series-Five' }), ap(3, { groupe: 'BA 2022', slugSet: 'Battle-Academy-2022' }), ap(4, { reserve: 'v' })]);
         assert.deepStrictEqual(r.parFamille, { wcd: 1, pp: 1, ba: 1 });
+    });
+
+    // ───────── levée d'une ambiguïté WCD par le JOUEUR, seulement si NOTRE fiche le porte ─────────
+    const Bw = s => C.blueprintDepuisPage(`https://www.cardtrader.com/en-US/cards/${s}`);
+    const trois = [Bw('315511-welder-wcd-2019-shintaro-ito-189-214-world-championship-decks-2019'), Bw('316603-welder-wcd-2019-kaya-lichtleitner-189-214-world-championship-decks-2019'), Bw('317698-welder-wcd-2019-henry-brand-189-214-world-championship-decks-2019')];
+    const welder = (o = {}) => ({ idProduct: 1, famille: 'wcd', annee: '2019', slug: 'Welder-WCD19UNB-189', impressions: [{ numero: '189', total: '214' }], carteNom: 'Welder', ...o });
+    await test('joueur : lu sur NOTRE fiche seulement (parenthèse « (Prénom Nom "Deck") » du nom du produit) ; une carte ordinaire n\'en porte pas', () => {
+        assert.strictEqual(C.joueurDeLaFiche({ nomProduit: 'Live Code Card (Evan Pavelski ""Regidrago VSTAR"")' }), 'evan pavelski');
+        assert.strictEqual(C.joueurDeLaFiche({ nomProduit: 'Jirachi [Stellar Wish | Slap]' }), null);
+        assert.strictEqual(C.joueurDeLaFiche({ nomProduit: 'Welder', slug: 'Welder-WCD19UNB-189', slugSet: 'WCD-2019' }), null);
+        assert.strictEqual(C.joueurDeLaFiche({}), null);
+    });
+    await test('joueur : la fiche porte « kaya lichtleitner » -> UN seul candidat reste -> apparié (clé nom+numero+joueur)', () => {
+        const r = C.apparier([welder({ joueurFiche: 'Kaya Lichtleitner' })], trois)[0];
+        assert.strictEqual(r.statut, 'apparie'); assert.strictEqual(r.blueprint.id, 316603); assert.strictEqual(r.cle, 'nom+numero+joueur');
+    });
+    await test('joueur : égalité de tokens ENTIERS — « kaya » seul, « lichtleitner » seul, « henry brand jr » ne lèvent rien (aucune inclusion de chaîne)', () => {
+        for (const j of ['kaya', 'lichtleitner', 'henry brand jr', 'Kay Lichtleitner']) {
+            const r = C.apparier([welder({ joueurFiche: j })], trois)[0];
+            assert.strictEqual(r.statut, 'ambigu', j); assert.strictEqual(r.raisonTrou, 'joueur-different', j);
+        }
+    });
+    await test('joueur : fiche sans joueur -> reste un trou, raison « fiche-sans-joueur » ; joueur qui n\'existe pas chez CardTrader -> « joueur-different »', () => {
+        const a = C.apparier([welder()], trois)[0];
+        assert.deepStrictEqual([a.statut, a.cause, a.raisonTrou], ['ambigu', 'joueurs', 'fiche-sans-joueur']);
+        const b = C.apparier([welder({ joueurFiche: 'Quelqu\'un D\'autre' })], trois)[0];
+        assert.deepStrictEqual([b.statut, b.raisonTrou], ['ambigu', 'joueur-different']);
+    });
+    await test('joueur : la levée exige la carte DÉJÀ appariée (même nom, même numéro d\'origine) ; deux candidats du même joueur restent un doublon', () => {
+        assert.strictEqual(C.apparier([welder({ slug: 'Welder-WCD19UNB-190', impressions: [{ numero: '190', total: '214' }], joueurFiche: 'Kaya Lichtleitner' })], trois)[0].statut, 'introuvable');
+        const dbl = [...trois, Bw('316604-welder-wcd-2019-kaya-lichtleitner-189-214-world-championship-decks-2019')];
+        const r = C.apparier([welder({ joueurFiche: 'kaya lichtleitner' })], dbl)[0];
+        assert.deepStrictEqual([r.statut, r.cause], ['ambigu', 'doublon']);
+    });
+    await test('joueur — calibration : sur les WCD déjà appariés, la règle est jugée justes/faux/non évaluables ; un seul faux l\'éteint', () => {
+        const ok = { statut: 'apparie', blueprint: trois[1] }, mauvais = { statut: 'apparie', blueprint: trois[2] };
+        const c = C.calibrerJoueur([{ joueurFiche: 'kaya lichtleitner' }, { joueurFiche: 'kaya lichtleitner' }, {}, { joueurFiche: 'x y' }], [ok, mauvais, ok, ok]);
+        assert.deepStrictEqual(c, { evaluables: 3, justes: 1, faux: 2, nonEvaluables: 1, active: false });
+        assert.deepStrictEqual(C.calibrerJoueur([{ joueurFiche: 'kaya lichtleitner' }], [ok]), { evaluables: 1, justes: 1, faux: 0, nonEvaluables: 0, active: true });
+        assert.deepStrictEqual(C.calibrerJoueur([{}, {}], [ok, ok]), { evaluables: 0, justes: 0, faux: 0, nonEvaluables: 2, active: false });
+    });
+
+    // ───────── I1 : le nom de NOTRE fiche contre le nom du blueprint ─────────
+    const SLUG_JIRACHI = 'jirachi-wcd-2019-kaya-lichtleitner-099-181-world-championship-decks-2019';
+    await test('I1 — le nom de la fiche concorde avec le blueprint (même normalisation que l\'appariement) : l\'unité reste, marquée', () => {
+        const r = C.construireLot([ap(1, { carteNom: 'Jirachi', blueprintSlug: SLUG_JIRACHI }), ap(2, { carteNom: 'Professor\'s Research (Professor Sada)', blueprintSlug: 'professor-s-research-professor-sada-wcd-2023-tord-reklev-189-198-world-championship-decks-2023' })]);
+        assert.strictEqual(r.unites.length, 2); assert.ok(r.unites.every(u => u.nomFiche === 'concordant'));
+    });
+    await test('I1 — un DÉSACCORD entre la fiche et le blueprint exclut l\'unité (raison écrite, noms listés), même avec un total confirmé', () => {
+        const r = C.construireLot([ap(1, { carteNom: 'Cinccino', blueprintSlug: SLUG_JIRACHI, temoin: 'confirme', temoins: ['confirme'] })]);
+        assert.strictEqual(r.unites.length, 0);
+        assert.strictEqual(r.exclus[0].raison, 'nom-fiche-different-du-blueprint');
+        assert.deepStrictEqual([r.exclus[0].nomFiche, r.exclus[0].nomBlueprint], ['Cinccino', 'jirachi']);
+    });
+    await test('I1 — fiche sans nom : pas un désaccord ; une « clé seule » SANS aucun témoin (ni total, ni nom de fiche concordant) est exclue, avec le nom concordant elle reste, marquée', () => {
+        const seule = { temoin: 'non-applicable', cle: 'nom-seul' };
+        const r = C.construireLot([ap(1, { temoin: 'confirme' }), ap(2, seule), ap(3, { ...seule, carteNom: 'Jirachi', blueprintSlug: SLUG_JIRACHI }), ap(4, { temoin: 'absent', cle: 'nom+numero', carteNom: 'Jirachi', blueprintSlug: SLUG_JIRACHI })]);
+        assert.deepStrictEqual(r.unites.map(u => u.produits[0]), [1, 3, 4]);
+        assert.deepStrictEqual(r.exclus.map(e => [e.idProduct, e.raison]), [[2, 'cle-seule-sans-temoin']]);
+        const u3 = r.unites.find(u => u.produits[0] === 3);
+        assert.strictEqual(u3.nomFiche, 'concordant'); assert.strictEqual(u3.temoinNom, true); assert.ok(C.estCleSeule(u3));
+        assert.strictEqual(r.unites.find(u => u.produits[0] === 1).temoinNom, false);
+    });
+    await test('I1 — le nom du blueprint vient du slug par la MÊME fonction que l\'appariement ; un slug illisible avec un nom de fiche exclut', () => {
+        assert.strictEqual(C.nomDuBlueprint(101, SLUG_JIRACHI), 'jirachi');
+        assert.strictEqual(C.nomDuBlueprint(101, 'n-importe-quoi'), null);
+        const r = C.construireLot([ap(1, { carteNom: 'Jirachi', blueprintSlug: 'n-importe-quoi' })]);
+        assert.strictEqual(r.exclus[0].raison, 'blueprint-illisible');
+    });
+    await test('I1 — les produits « cle seule » comptés par famille après I1', () => {
+        const r = C.construireLot([ap(1, { temoin: 'confirme' }), ap(2, { groupe: 'PP S5', slugSet: 'Play-Pokemon-Prize-Pack-Series-Five', cle: 'nom-seul', temoin: 'non-applicable', carteNom: 'Jirachi', blueprintSlug: SLUG_JIRACHI })]);
+        assert.deepStrictEqual(r.parFamille, { wcd: 1, pp: 1, ba: 0 }); assert.deepStrictEqual(r.cleSeuleParFamille, { wcd: 0, pp: 1, ba: 0 });
     });
 
     // ───────── la décision d'écriture (règle commune de remplacement) ─────────
