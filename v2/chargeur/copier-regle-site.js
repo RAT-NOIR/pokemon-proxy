@@ -10,9 +10,9 @@ const fs = require('fs'); const path = require('path'); const crypto = require('
 const DOSSIER = path.join(__dirname, 'regle-site');
 const SITE_LIB = path.join(__dirname, '..', '..', '..', 'rat-market-site', 'lib');
 const REPO_SITE = path.dirname(SITE_LIB);
-// LE COMMIT NOMMÉ du site dont la copie est tirée (lot 2-A, le filtre par deck). Les sources se lisent par `git show <commit>:lib/<fichier>` (octets du commit, jamais ceux de l'arbre de travail, que les fins de ligne du poste changent).
+// LE COMMIT NOMMÉ du site dont la copie est tirée (RESYNC-REGLE-SITE : le dernier commit du site qui touche l'une des huit sources, cardmarket.ts ; avant lui 35ed580, lot 2-A, le filtre par deck). Les sources se lisent par `git show <commit>:lib/<fichier>` (octets du commit, jamais ceux de l'arbre de travail, que les fins de ligne du poste changent).
 // Le changer est un geste volontaire : on relance l'outil, on relit le diff des .mjs, et empreintes.json porte le commit (forme complète).
-const COMMIT = '35ed580';
+const COMMIT = '4d1344d';
 // la fermeture TRANSITIVE des imports des modules dont la décision a besoin (fichesDuDocument/setParImpression/impressionDuSet, produitsDeLaFiche/cardmarketUrl, visuelAdmisPourLaRegion, normaliserNumero)
 const TS = Object.freeze(['imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts', 'expressionsSures.ts']);
 const JSONS = Object.freeze(['visuels-japonais-sur-sets-intl.json', 'visuels-anglais-regardes.json']);

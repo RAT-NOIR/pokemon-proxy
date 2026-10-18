@@ -1,0 +1,206 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-prix-incertains-0007",
+  "analyse": {
+    "statut": "identifiee",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000202,
+          "nom": "Arcanin [G] Lv.60",
+          "nomCardmarket": "Arcanine [G] Lv.60 [Extreme Speed | Overrun]",
+          "set": {
+            "slug": "Set-Fictif-Victoires",
+            "nom": "Victoires Fictives",
+            "code": "SV",
+            "tirage": null,
+            "annee": null,
+            "symbole": null,
+            "badge": "Victoires Fictives",
+            "badgeSource": "nom"
+          },
+          "numero": "15",
+          "total": "147",
+          "langue": null,
+          "variante": null,
+          "version": "V2",
+          "rarete": "Rare",
+          "visuel": null,
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 10.18,
+            "de": 1,
+            "moyenne30": 13.15,
+            "date": "2026-10-12",
+            "deBase": "tous-etats",
+            "moyenne7": 14.59,
+            "fiable": false,
+            "reserves": [
+              "ecart-tendance"
+            ]
+          },
+          "liens": {
+            "cardmarket": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-Fictif-Victoires/Arcanine-G-Lv60-V2-SV15",
+            "fiche": null
+          },
+          "impressions": [
+            {
+              "idProduct": 9000201,
+              "numero": "15",
+              "total": "147",
+              "rarete": "Rare",
+              "variante": null,
+              "version": "V1",
+              "set": {
+                "nom": "Victoires Fictives"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-Fictif-Victoires/Arcanine-G-Lv60-V1-SV15",
+              "prixGuide": {
+                "tendance": 3.35,
+                "de": 0.47,
+                "moyenne30": 3.42,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": 3.3,
+                "fiable": true,
+                "reserves": []
+              }
+            },
+            {
+              "idProduct": 9000202,
+              "numero": "15",
+              "total": "147",
+              "rarete": "Rare",
+              "variante": null,
+              "version": "V2",
+              "set": {
+                "nom": "Victoires Fictives"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Set-Fictif-Victoires/Arcanine-G-Lv60-V2-SV15",
+              "prixGuide": {
+                "tendance": 10.18,
+                "de": 1,
+                "moyenne30": 13.15,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": 14.59,
+                "fiable": false,
+                "reserves": [
+                  "ecart-tendance"
+                ]
+              }
+            },
+            {
+              "idProduct": 9000203,
+              "numero": "19",
+              "total": "82",
+              "rarete": "Uncommon",
+              "variante": null,
+              "version": null,
+              "set": {
+                "nom": "Fusée Fictive"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Fusee-Fictive/Dark-Arbok-FF19",
+              "prixGuide": {
+                "tendance": 3,
+                "de": 1,
+                "moyenne30": 3,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": 3,
+                "fiable": false,
+                "reserves": [
+                  "prix-indicatif-tampons-melanges",
+                  "peut-etre-gonfle-par-tampons"
+                ]
+              }
+            },
+            {
+              "idProduct": 9000204,
+              "numero": "20",
+              "total": "82",
+              "rarete": null,
+              "variante": null,
+              "version": null,
+              "set": {
+                "nom": "Fusée Fictive"
+              },
+              "lien": null,
+              "prixGuide": {
+                "tendance": 2,
+                "de": 1,
+                "moyenne30": null,
+                "date": "2026-10-12",
+                "deBase": "tous-etats",
+                "moyenne7": null,
+                "fiable": false,
+                "reserves": [
+                  "ecart-non-mesurable"
+                ]
+              }
+            }
+          ]
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "NM",
+          "confiance": "haute",
+          "defauts": [],
+          "declare": null,
+          "retenu": "NM"
+        },
+        "prixLive": {
+          "idProduct": 9000202,
+          "langues": [
+            1
+          ],
+          "reverseHolo": false,
+          "etatVise": "NM"
+        },
+        "zone": null
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "ecartTendanceMax": 0.3,
+      "versEUR": 1,
+      "tauxDate": null
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "affirmee",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  }
+}

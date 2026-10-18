@@ -13,8 +13,8 @@ const corpsDe = (gagnant, vivier) => ({ success: true, carte: { idProduct: gagna
     candidats: [{ idProduct: gagnant }], classement: [], codeLangue: 7, lectureGarde: { ...LU, vivierIds: vivier } });
 const SANS = LD.SANS_NUMEROTATION[0].idExpansion;
 
-// le monde : W (chinois, produit affirmé), S (japonais numéroté, le survivant), V (japonais d'un set sans numérotation, retiré par R5)
-const W = ligne(9001, 'AAAC', '144', null, 'zh-hans'), S = ligne(9002, 'BBBJ', '144', '103', 'jp'), V = ligne(9003, 'CCCN', null, null, 'jp', { idExpansion: SANS });
+// le monde : W (chinois, produit affirmé), S (japonais numéroté, le survivant), V (chinois aussi, retiré par R1 avec W : `preparer` lit les règles LIVRÉES, et R5 y est éteinte depuis le 2026-10-18)
+const W = ligne(9001, 'AAAC', '144', null, 'zh-hans'), S = ligne(9002, 'BBBJ', '144', '103', 'jp'), V = ligne(9003, 'CCCN', null, null, 'zh-hans', { idExpansion: SANS });
 const monde = () => new Map([W, S, V].map(l => [l.idProduct, l]));
 const compteur = (jumeauxDe, { lireLeve = false, lireBloque = false } = {}) => {
     const rec = { lire: [], plus: 0 };

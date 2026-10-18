@@ -113,12 +113,12 @@ const urlDe = (hote, f) => `https://${hote}/${f.cle}`;
 const prix = x => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);
 const dateGuide = d => (d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10)
     : typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? d : null);
-/** Ligne de guide -> la forme que construireProduit lit ({ trend, low, avg30, guideDu }) ; un prix non daté n'est pas servi. */
+/** Ligne de guide -> la forme que construireProduit lit ({ trend, low, avg7, avg30, guideDu }) ; un prix non daté n'est pas servi. F4-PRIX : avg7 sert à juger l'écart de la tendance. */
 function prixGuide(g) {
     if (!g) return null;
-    const guideDu = dateGuide(g.guideDu), trend = prix(g.trend), low = prix(g.low), avg30 = prix(g.avg30);
+    const guideDu = dateGuide(g.guideDu), trend = prix(g.trend), low = prix(g.low), avg7 = prix(g.avg7), avg30 = prix(g.avg30);
     if (!guideDu || (trend === null && low === null && avg30 === null)) return null;
-    return Object.freeze({ trend, low, avg30, guideDu });
+    return Object.freeze({ trend, low, avg7, avg30, guideDu });
 }
 
 function creerVisuels(opts = {}) {
