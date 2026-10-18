@@ -137,6 +137,16 @@ verifier('les 10 pages à ouvrir sont celles de sets où nous avons des manques 
     verifier('un nom différent reste contredit', q.restes.map(x => x.motif), ['nom-contredit']);
     q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95', 'Potion 96')], refus: refusNeutre });
     verifier('un numéro dans le nom différent du numéro relevé n\'est pas retiré : « Potion 96 » contredit la fiche', q.restes.map(x => x.motif), ['nom-contredit']);
+    // 🔑 correction 1 : comparaison insensible aux accents des DEUX côtés (NFD, marques diacritiques retirées) — et rien d'autre
+    { const pb = carte(20, 'Poké Ball'), pr = carte(21, 'Pokémon Reversal'), sans = carte(22, 'Poke Ball'), sin = carte(23, 'Sinistea');
+      q = P.apparier({ trous: [un(pb, '87'), un(pr, '88')], cartes: [rel(UF, '87', 'Poke Ball 87'), rel(UF, '87r', 'Poke Ball Reverse Holo 87', '87r.webp'), rel(UF, '88', 'Pokemon Reversal 88')], refus: refusNeutre });
+      verifier('« Poke Ball » (relevé) = « Poké Ball » (fiche) ; « Pokemon Reversal » = « Pokémon Reversal » : retenus, image normale', [q.plan.map(u => [u.nomEn, u.url.split('/').pop()]).sort(), q.restes.length], [[['Poké Ball', '87.webp'], ['Pokémon Reversal', '88.webp']], 0]);
+      q = P.apparier({ trous: [un(sans, '87')], cartes: [rel(UF, '87', 'Poké Ball 87')], refus: refusNeutre });
+      verifier('   et dans l\'autre sens (accent côté relevé, aucun côté fiche)', q.plan.length, 1);
+      q = P.apparier({ trous: [un(pb, '87')], cartes: [rel(UF, '87', 'Poke Bell 87')], refus: refusNeutre });
+      verifier('   un nom réellement différent reste contredit malgré les accents', q.restes.map(x => x.motif), ['nom-contredit']);
+      q = P.apparier({ trous: [un(sin, '89')], cartes: [rel(UF, '089s', 'Sinistea 089', '089s.webp'), rel(UF, '089', 'Drifloon 089')], refus: refusNeutre });
+      verifier('   un numéro à lettre de la source (« Sinistea 089 » n°089s) reste un reste : la lettre n\'est pas tolérée', [q.plan.length, q.restes.map(x => x.motif)], [0, ['nom-contredit']]); }
     q = P.apparier({ trous: [un(potion, '95')], cartes: [rel(UF, '95r', 'Gengar Reverse Holo 95', '95r.webp')], refus: refusNeutre });
     verifier('seule une reverse d\'un AUTRE nom : « nom-contredit », pas « seulement-reverse »', q.restes.map(x => x.motif), ['nom-contredit']);
 }

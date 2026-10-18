@@ -141,10 +141,13 @@ function nomDepouille(nom, numero) {
 }
 /** Une image REVERSE : un nom de fichier « <chiffres>r.webp » (« 95r.webp ») ; « 037a » n'en est pas une. */
 const estReverse = c => /^\d+r$/i.test(String(c?.img ?? '').split('/').pop().replace(/\.webp$/i, ''));
+// comparaison insensible aux ACCENTS des deux côtés (décomposition NFD, marques diacritiques retirées) : « Poke Ball » = « Poké Ball » — et rien d'autre
+const sansAccents = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+const nomComparable = s => nomNorm(sansAccents(s));
 function nomOk(c, t) {
     if (!c.nom) return false;
-    const fiche = nomNorm(t.carte.nomEn);
-    return nomNorm(c.nom) === fiche || nomNorm(nomDepouille(c.nom, c.numero)) === fiche;
+    const fiche = nomComparable(t.carte.nomEn);
+    return nomComparable(c.nom) === fiche || nomComparable(nomDepouille(c.nom, c.numero)) === fiche;
 }
 /** Pourquoi une entrée ADMISE par la règle du site peut quand même être remplacée (doctrine du testeur), ou null : une image correcte n'est jamais remplacée par une équivalente. */
 function raisonDeRemplacement(e, largeurAttendue) {
