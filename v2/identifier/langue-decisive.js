@@ -36,7 +36,7 @@ const SANS_NUMEROTATION = Object.freeze([
 //   BAS = 4, HAUT = 20 : sur les 153 lignes-question du banc dont la vérité est parmi les choix, le plus haut score d'un autre candidat à côté d'une vérité <= 4 est 6 ; HAUT est 14 au-dessus (marge nommée : 14 inliers).
 const SEUIL_IMAGE = Object.freeze({ bas: 4, haut: 20 });
 
-const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0, R5: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0 };
+const compte = { jugees: 0, retraits: { R1: 0, R2: 0, R2BIS: 0, R5: 0 }, tousRetires: 0, affirmees: 0, nonAffirmables: 0, indexFermes: 0, preparations: 0, preparationsRefusees: 0 };
 const compteurs = () => ({ ...compte, retraits: { ...compte.retraits } });
 
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -91,36 +91,69 @@ function creerIndexCodeNumero(lignes) {
     }
     return {
         taille,
-        existe(setCode, numero) {
+        /**
+         * Un produit du catalogue DÉSIGNE-t-il ce code au numéro de mêmes chiffres ? « Désigne » = le code lu n'est pas CONTREDIT par le sien (`comparer` : concordant OU apparenté — tronqué « sv4 » face à SV4A, sous-set
+         * « SV-P » face à SV-P/CS, « m6 » face à M6A — M-A) ; seul un code contredit ne désigne pas. Le numéro est comparé par ses chiffres des deux côtés, pour que l'exception « le code lu est le préfixe du numéro »
+         * (TG face à TG18) ne rende pas le code non contredit à tort. `exclureCode` : le code du candidat testé (il est exclu : c'est lui que R4 relâche).
+         */
+        existe(setCode, numero, exclureCode) {
             const num = numero == null ? null : texte(String(numero));
             const k = num ? S.chiffresDuNumero(num) : null;
             if (!texte(setCode) || !k) return false;
             const codes = parChiffres.get(k);
             if (!codes) return false;
-            for (const ec of codes) if (comparer({ numero: num, setCode }, { numero: num, set: { code: ec } }).concorde.includes('code')) return true;
+            const exclu = texte(exclureCode) ? S.normaliserCodeSet(exclureCode) : null;
+            for (const ec of codes) {
+                if (exclu && ec === exclu) continue;
+                if (!comparer({ numero: k, setCode }, { numero: k, set: { code: ec } }).contredit.includes('code')) return true;
+            }
             return false;
         }
     };
 }
 
+// M-B : le PLANCHER de taille de l'index. Le catalogue en porte ~62 000 couples (chiffres, code) ; un index vide ou minuscule (collection vide, champs renommés, projection cassée) n'est pas « aucun produit ne porte ce code »,
+// c'est un instrument en panne (un zéro sur une population censée non vide). Sous le plancher : LÈVE (l'appelant ferme R4), compté et journalisé sans aucune valeur lue.
+const INDEX_CODE_NUMERO_MIN = 10000;
+function construireIndexVerifie(lignes, plancher = INDEX_CODE_NUMERO_MIN) {
+    const idx = creerIndexCodeNumero(lignes);
+    if (idx.taille < plancher) {
+        compte.indexFermes++;
+        console.warn(`⚠️ [langue-decisive-v2] index code × numéro sous le plancher (${idx.taille} couples pour ${plancher} attendus au moins) : R4 fermée`);
+        throw new Error(`index code × numéro sous le plancher (${plancher})`);
+    }
+    return idx;
+}
+
 // ── R4 : le code lu ne désigne AUCUN produit — ni du vivier (« s8a-P » pris pour le logo des 25 ans), ni du CATALOGUE ENTIER avec ce numéro (M2 : un code bien lu qui désigne la vraie carte hors du vivier BLOQUE).
 // Écrit par ce qui est AUTORISÉ : le code ET le numéro sont lus, le vivier est connu et ENTIÈREMENT chargé, et l'index du catalogue (`catalogueExiste`) est fourni et répond FAUX franc. Index absent ou qui lève : fermée.
-function codeSansDesignation({ corps, produits, catalogueExiste } = {}) {
+// M-A : « désigne » = NON CONTREDIT (concordant OU apparenté : tronqué, sous-set) ; R4 ne joue que si le code lu est CONTREDIT par tous les produits du vivier (hors le candidat testé `pour`) ET par tous ceux de l'index
+// au même numéro (hors le code du candidat testé). Le numéro lu est passé en chiffres seuls à `comparer` pour que son exception « code lu = préfixe du numéro » n'absolve pas un produit.
+function codeSansDesignation({ corps, produits, catalogueExiste, pour } = {}) {
     const lu = lectureDe(corps);
     if (!lu || !texte(lu.setCode) || !texte(lu.numero) || typeof catalogueExiste !== 'function' || !(produits instanceof Map) || !lu.vivierIds.length || lu.vivierIds.length > VIVIER_MAX) return false;
     if (lu.vivierIds.some(id => !produits.has(id))) return false;
-    if (lu.vivierIds.some(id => comparer({ numero: lu.numero, setCode: lu.setCode }, produits.get(id)).concorde.includes('code'))) return false;
-    try { return catalogueExiste(lu.setCode, lu.numero) === false; } catch { return false; }
+    const k = S.chiffresDuNumero(lu.numero);
+    if (!k) return false;
+    if (lu.vivierIds.some(id => id !== pour && !comparer({ numero: k, setCode: lu.setCode }, produits.get(id)).contredit.includes('code'))) return false;
+    const L = Number.isInteger(pour) ? produits.get(pour) : null;
+    try { return catalogueExiste(lu.setCode, lu.numero, L && L.set && L.set.code) === false; } catch { return false; }
 }
 
-/** Les candidats qu'une réduction pourrait LAISSER SEULS (la route charge leurs jumeaux avant l'adaptation) : ceux que la garde contradiction désigne à côté du produit affirmé. [] si rien ne contredit. */
-function candidatsDeReduction({ corps, produits } = {}) {
+// M-C : borne de ce que `preparer` lit. PLAFOND_CHARGE : au plus 200 produits lus en plus pour un scan (ou un lot) ; DELAI_PREPARATION_MS : au plus 3 s pour toute la préparation.
+const PLAFOND_CHARGE = 200;
+const DELAI_PREPARATION_MS = 3000;
+
+/** Le SURVIVANT UNIQUE de la réduction (règles livrées) pour l'affirmation de la chaîne : le seul candidat que la résolution pourrait affirmer, dont `preparer` lit les jumeaux. null s'il n'y en a pas. */
+function survivantUnique({ corps, produits, regles = REGLES } = {}) {
     try {
         const w = idsAffirmes(corps)[0];
-        if (!Number.isInteger(w) || !(produits instanceof Map)) return [];
+        if (!Number.isInteger(w) || !(produits instanceof Map)) return null;
         const g = contredire({ corps, gagnant: w, produits });
-        return g ? g.designe.map(d => d.idProduct).filter(Number.isInteger) : [];
-    } catch { return []; }
+        if (!g || !g.designe.length) return null;
+        const r = reduire({ ids: [g.gagnant, ...g.designe.map(d => d.idProduct)], corps, produits, regles });
+        return r.retires.length && r.ids.length === 1 ? r.ids[0] : null;
+    } catch { return null; }
 }
 
 /**
@@ -175,7 +208,7 @@ function affirmableSeul({ corps, id, produits, regles = REGLES, groupe = null, c
         if (!Array.isArray(groupe)) return non('la garde des jumeaux ne conclut pas pour ce candidat');
         const CA = require('./critere-a');                                              // à l'appel : critere-a.js importe ce module (cycle)
         const autres = [...new Set(groupe)].filter(i => i !== id);
-        const c = CA.conditions({ corps, gagnant: id, autres, produits, r4: regles.R4 === true, catalogueExiste, toleres: regles.attaqueTolereeRestant === true ? ['attaque'] : [] });
+        const c = CA.conditions({ corps, gagnant: id, autres, produits, r4: regles.R4 === true, catalogueExiste });
         if (!c.ok) return non(c.raison);
         const lu = lectureDe(corps);
         compte.affirmees++;
@@ -185,4 +218,5 @@ function affirmableSeul({ corps, id, produits, regles = REGLES, groupe = null, c
     }
 }
 
-module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, creerIndexCodeNumero, candidatsDeReduction, reduire, affirmableSeul, compteurs, REGLES, SEUIL_IMAGE, SANS_NUMEROTATION };
+module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, creerIndexCodeNumero, construireIndexVerifie, survivantUnique, reduire, affirmableSeul, compteurs, noterPreparation: ok => { compte[ok ? 'preparations' : 'preparationsRefusees']++; },
+    REGLES, SEUIL_IMAGE, SANS_NUMEROTATION, INDEX_CODE_NUMERO_MIN, PLAFOND_CHARGE, DELAI_PREPARATION_MS };
