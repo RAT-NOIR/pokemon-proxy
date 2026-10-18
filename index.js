@@ -6281,10 +6281,10 @@ async function gererIdentifier(req, res) {
                 rangGagnant: rangsScoring?.rangGagnant ?? null
             },
             // ⚠️ CE BLOC EST DÉRIVÉ DE `champsEtat()`, IL NE RECALCULE PLUS RIEN.
-            // Il portait sa propre copie de la règle du pire état ; le journal en aurait eu
-            // une seconde, et les deux auraient divergé au premier changement de règle — on
-            // aurait alors mesuré autre chose que ce qu'on affiche, sans que rien ne le
-            // dise. Les NOMS de la réponse sont conservés tels quels : l'extension déployée
+            // La règle d'aujourd'hui : `retenu` = l'avis du modèle sur la photo (`etatRetenuDuModele`, porte de
+            // confiance), jamais l'état du vendeur ; `declareVendeur` / `declareCardmarket` ne sont que l'écho du
+            // texte reçu. Ce bloc ne porte aucune copie de la règle : réponse et journal lisent `champsEtat()`, donc
+            // ne peuvent pas diverger (on mesurerait sinon autre chose que ce qu'on affiche). Les NOMS de la réponse sont conservés tels quels : l'extension déployée
             // les lit, et les renommer casserait un contrat pour une raison interne.
             etat: (() => {
                 const e = champsEtat();

@@ -120,7 +120,59 @@ async function inst() {
         }
     }
 
-    // ── 3. le lot (crochet `identifierLot`, en processus) : le texte du vendeur n'est jamais lu par la couche v2 pour décider — il est seulement transmis à la chaîne héritée (qui l'ignore, §1-2)
+    // ── 2 bis. UNE CARTE IDENTIFIÉE (produit unique, garde des jumeaux conclue : aucun jumeau) : un vrai `prixLive` (états, langue), un vrai `prixGuide`, le verdict (regleVerdict…).
+    // La chaîne héritée est FABRIQUÉE (deps.gererIdentifier) : seule façon d'obtenir `identifiee` avec un catalogue de banc (le faux réseau ne rend que des questions) ; elle rend, pour une lecture
+    // du modèle donnée, EXACTEMENT ce que rend la chaîne héritée corrigée (`etat.retenu` ne dépend pas du vendeur) ; seul `declareVendeur` varie. Ce qui est éprouvé ici est donc la couche v2 réelle
+    // (route, adaptateur, prix, verdict, lot) : si elle lisait le texte du vendeur pour choisir l'état visé ou un prix, la réponse changerait.
+    {
+        const express = require('express'); const pret = require('../pret');
+        const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
+        VB.installer([...VIS.values()]);
+        const cfgIp = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_QUOTA_GRATUIT: '1000', V2_LOT_CARTES_MAX: '20' });
+        const cartePoser = (id, vendeur, [, estime, conf, retenu]) => ({ success: true, question: null,
+            carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false },
+            etat: { estimeIA: estime, confianceIA: conf, defautsVus: [], declareVendeur: vendeur === undefined ? null : vendeur, declareCardmarket: vendeur === undefined ? null : 'NM', retenu },
+            candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc-Set', prix: 1, photoUrl: null }], classement: [{ idProduct: id, score: 90, prix: 1 }], guidePrix: {},
+            reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
+        let lecture = LECTURES[0], vendeurCourant;
+        const chaine = async (req, res) => res.json({ ...cartePoser(ID_A, vendeurCourant, lecture), scanId: String(req.scanIdImpose) });
+        const lotRecu = [];
+        const identifierLot = async req => { lotRecu.push(req.body.vintedEtat === undefined ? null : req.body.vintedEtat); return [0, 1].map(() => ({ statutHttp: 200, corps: cartePoser(ID_A, vendeurCourant, lecture) })); };
+        const monter = async deps => {
+            const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+            pret.armer(M.verifierIndex);
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgIp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+            return H.serveur(app);
+        };
+        const svUne = await monter({}), svLot = await monter({ identifierLot });
+        const jouer = async (sv, vendeur, imgs) => {
+            vendeurCourant = vendeur;
+            const corps = { contrat: 2, imageUrls: Array(imgs).fill(photo(0)), title: null, description: null, prixVinted: 5, devise: 'EUR', marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...(vendeur === undefined ? {} : { vintedEtat: vendeur }) };
+            return H.appel(sv.url, '/api/identifier', { methode: 'POST', corps, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${await inst()}`, 'idempotency-key': cle() } });
+        };
+        for (const [nomS, sv, imgs] of [['carte identifiée (une carte)', svUne, 1], ['lot de 2 cartes identifiées (crochet de lot)', svLot, 2]]) {
+            for (const L of LECTURES) {
+                lecture = L; const [nomL, , , retenuAttendu] = L;
+                const rs = []; for (const [nomV, v] of VENDEURS) rs.push({ nomV, r: await jouer(sv, v, imgs) });
+                const carte = r => r.json && r.json.analyse && r.json.analyse.cartes[0];
+                const ref = rs[0].r, c0 = carte(ref);
+                H.vrai(`${nomS} · ${nomL} : la référence est une carte identifiée avec un prixLive (dénominateur : le prix est bien produit)`, c0 && c0.statut === 'identifiee' && c0.prixLive && typeof c0.prixLive === 'object');
+                H.v(`${nomS} · ${nomL} : prixLive.etatVise = l'état retenu du modèle (null sans avis retenu)`, c0 && c0.prixLive && c0.prixLive.etatVise, retenuAttendu);
+                H.vrai(`${nomS} · ${nomL} : le bloc de prix et de verdict existe (carte.prixGuide et analyse.regleVerdict)`, c0 && c0.carte && c0.carte.prixGuide && ref.json.analyse.regleVerdict !== undefined);
+                const refTexte = JSON.stringify(nettoyer(ref.json));
+                for (const { nomV, r } of rs.slice(1)) {
+                    const c = carte(r);
+                    H.v(`${nomS} · ${nomL} · vendeur « ${nomV} » : prixLive.etatVise identique (jamais tiré du vendeur)`, c && c.prixLive && c.prixLive.etatVise, retenuAttendu);
+                    H.v(`${nomS} · ${nomL} · vendeur « ${nomV} » : prixGuide et verdict (regleVerdict) identiques`, JSON.stringify([c && c.carte && c.carte.prixGuide, r.json.analyse.regleVerdict]), JSON.stringify([c0.carte.prixGuide, ref.json.analyse.regleVerdict]));
+                    H.v(`${nomS} · ${nomL} · vendeur « ${nomV} » : l'analyse ENTIÈRE est identique, hors écho et identifiant`, JSON.stringify(nettoyer(r.json)) === refTexte, true);
+                }
+            }
+        }
+        H.vrai('lot : le crochet de lot a bien été joué par la vraie route (il a reçu le texte du vendeur pour le journal, sans effet)', lotRecu.length >= LECTURES.length * VENDEURS.length && lotRecu.some(x => x === 'Satisfaisant'));
+        await svUne.fermer(); await svLot.fermer();
+    }
+
+    // ── 3. contrôle statique complémentaire du lot : le texte du vendeur n'est jamais lu par la couche v2 pour décider — il est seulement transmis à la chaîne héritée (qui l'ignore, §1-2)
     {
         const lot = fs.readFileSync(path.join(R, 'v2', 'identifier', 'lot.js'), 'utf8');
         const routes = fs.readFileSync(path.join(R, 'v2', 'identifier', 'routes.js'), 'utf8');
