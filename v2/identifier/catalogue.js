@@ -11,6 +11,7 @@ const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
 const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
+const { versionDe } = require('./fiabilite-prix');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -80,11 +81,24 @@ function creerCatalogue(opts = {}) {
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
-                prixGuide: g ? { trend: g.trend, low: g.low, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import)
+                prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
+                // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
+                // version tamponnée : `prixMelangeTampon`, posé par le catalogue). Lus sur la ligne du produit, par le chemin qui sert déjà l'identification ; === true seulement.
+                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true,
                 lienCardmarket: texte(v.lien), impressions
             });
         }
+        await completerImpressions(table, N);
         return table;
+    }
+    // Les impressions d'une métacarte viennent de la version en mémoire du chargeur (visuels.js), qui ne lit pas numeros_cartes (liste fermée). Leur version Cardmarket et leur prix mélangé se lisent
+    // ici, en UNE requête indexée sur tous les produits des impressions qu'on ne connaît pas encore. Une impression absente de numeros_cartes : version null, prix non mélangé (rien d'inventé).
+    async function completerImpressions(table, deja) {
+        const ids = new Set();
+        for (const ligne of table.values()) for (const i of ligne.impressions) if (!deja.has(i.idProduct)) ids.add(i.idProduct);
+        const autres = ids.size ? new Map((await colLue('numeros_cartes').find({ idProduct: { $in: [...ids] } }, { projection: { idProduct: 1, variante: 1, prixMelangeTampon: 1 } }).toArray()).map(d => [d.idProduct, d])) : new Map();
+        for (const ligne of table.values())
+            ligne.impressions = ligne.impressions.map(i => { const d = deja.get(i.idProduct) || autres.get(i.idProduct) || {}; return Object.freeze({ ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true }); });
     }
     return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente };
 }
