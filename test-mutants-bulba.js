@@ -92,10 +92,10 @@ const MUTANTS = [
 let survivants = 0, tues = 0;
 const log = console.log;
 for (const [mod, nom, ancien, nouveau] of MUTANTS) {
-    const [suite, fichier] = SUITES[mod];
+    const [lancerSuite, fichier] = SUITES[mod];
     let r;
     console.log = () => {};
-    try { r = suite(charger(fichier, ancien, nouveau)); } catch (e) { r = { ok: 0, ko: 1, erreur: e.message }; }
+    try { r = lancerSuite(charger(fichier, ancien, nouveau)); } catch (e) { r = { ok: 0, ko: 1, erreur: e.message }; }
     console.log = log;
     // un motif introuvable n'est PAS un mutant tué : c'est un mutant invalide (le code a changé), il fait échouer le banc
     if (r.erreur && /^motif (absent|multiple)/.test(r.erreur)) { survivants++; log(`🔴 INVALIDE [${mod}] ${nom} — ${r.erreur.slice(0, 120)}`); continue; }
@@ -106,7 +106,7 @@ for (const [mod, nom, ancien, nouveau] of MUTANTS) {
 // la suite non mutée doit rester verte (sinon « tout est tué » ne prouve rien)
 let verts = 0;
 console.log = () => {};
-const base = Object.fromEntries(Object.entries(SUITES).map(([k, [suite, f]]) => [k, suite(require(f))]));
+const base = Object.fromEntries(Object.entries(SUITES).map(([k, [lancerSuite, f]]) => [k, lancerSuite(require(f))]));
 console.log = log;
 for (const [k, r] of Object.entries(base)) { log(`${r.ko === 0 ? '✅' : '❌'} suite non mutée [${k}] : ${r.ok} passés, ${r.ko} en échec`); if (r.ko === 0) verts++; }
 log(`\n${MUTANTS.length} mutants : ${tues} tués, ${survivants} survivants · suites non mutées vertes : ${verts}/${Object.keys(SUITES).length}`);

@@ -118,10 +118,10 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
             return { M: { Carte: vide, Image, EtatImages, Set: vide, Etat: { findById: () => req(null) }, Reste: vide }, echecs };
         };
         const entree = (sid, n) => ({ titre: `C${n}`, sourceSetId: sid, n, original: `https://cdn.faux/${sid}-${n}`, cleCdn: `${sid}-${n}`, vignette: null });
-        const brancherC = telecharger => {
+        const brancherC = fauxTelecharger => {
             const apps = []; AP.listerSet = async () => { const l = [1, 2, 3].map(n => entree(649, n)); Object.defineProperty(l, 'pages', { value: [{ lot: 1, chemin: 'sets/176/cards', lues: 3, nouvelles: 3, suites: [] }] }); return l; };
             AP.enTeteImage = async () => ({ fmt: 'webp', w: 500, h: 700, octets: 1000, type: 'image/webp' });
-            AP.pageCarte = async () => ({}); AP.telecharger = async u => { apps.push(u); return telecharger(u, apps.length); }; r2.deposerBinaire = async () => { };
+            AP.pageCarte = async () => ({}); AP.telecharger = async u => { apps.push(u); return fauxTelecharger(u, apps.length); }; r2.deposerBinaire = async () => { };
             return apps;
         };
         const doss = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-axios-col-'));
