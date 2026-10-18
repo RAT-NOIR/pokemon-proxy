@@ -115,9 +115,9 @@ const { lireEntree } = require('../identifier/visuels');
     // ── (6) le producteur de bout en bout : le calcul de l'API écrit la colonne des marquages, même quand rien n'est marqué
     const { calculer } = require('../chargeur/calcul');
     const cal = await calculer({ sets, docs, lignes, metacarte, regle });
-    H.v('6a. calculer : la version porte la colonne des marquages et ses comptes', [cal.version.colonneMarquages, cal.version.comptes.marquees, cal.comptes.repliRefuse.total], [true, { holo: 2, tampon: 4, partages: 6, basse: 2, melange: 0 }, 8]);
+    H.v('6a. calculer : la version porte la colonne des marquages et ses comptes', [cal.version.colonneMarquages, cal.version.comptes.marquees, cal.comptes.repliRefuse.total], [true, { holo: 2, tampon: 4, partages: 6, basse: 2 }, 8]);
     const vide = await calculer({ sets: sets.filter(x => ['Set-A', 'Set-B'].includes(x._id)), docs, lignes: lignes.filter(l => l.idProduct === 1001), metacarte: new Map([[1001, 1]]), regle });
-    H.v('6b. rien de marqué : la colonne est quand même là (« aucun » est une réponse, l\'absence de colonne n\'en est pas une)', [vide.version.colonneMarquages, vide.version.comptes.marquees, vide.version.partagesDe(1001)], [true, { holo: 0, tampon: 0, partages: 0, basse: 0, melange: 0 }, []]);
+    H.v('6b. rien de marqué : la colonne est quand même là (« aucun » est une réponse, l\'absence de colonne n\'en est pas une)', [vide.version.colonneMarquages, vide.version.comptes.marquees, vide.version.partagesDe(1001)], [true, { holo: 0, tampon: 0, partages: 0, basse: 0 }, []]);
     // ── (7) basseDefinition : la constante nommée, les deux valeurs
     H.v('7a. la constante livrée est false (gardées) ; par défaut les entrées basseDefinition sont servies et comptées à 0 exclue', [EXCLURE_BASSE_DEFINITION, d.basseDefinitionExclue, e(2301).basseDefinition], [false, 0, true]);
     const ex = await decider({ sets, docs, lignes, metacarte, regle, exclureBasseDefinition: true });

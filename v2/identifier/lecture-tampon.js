@@ -98,14 +98,15 @@ const cleDeEssai = x => {
 function decider({ essais } = {}) {
     const r = (sur, lecture, marques, raison) => ({ sur, lecture, marques, raison });
     if (!Array.isArray(essais) || essais.length < 2) return r(false, 'incertain', [], 'moins de deux essais lisibles');
-    const cles = essais.map(cleDeEssai);
+    // M2 : un essai BRUT (la forme du lecteur, qui porte `incertain`) passe par essaiDe ; un essai déjà normalisé se juge tel quel
+    const cles = essais.map(x => cleDeEssai(x && typeof x === 'object' && 'incertain' in x ? essaiDe(x) : x));
     if (cles.some(k => k === null)) return r(false, 'incertain', [], 'un essai illisible');
     if (!cles.every(k => k === cles[0])) return r(false, 'desaccord', [], 'les essais ne répondent pas à l\'identique');
     const k = cles[0];
     if (k === 'incertain') return r(false, 'incertain', [], 'les essais sont incertains');
     if (k === 'autre') return r(false, 'autre', [], 'une marque hors de la liste fermée (ou « autre ») est lue : une question');
     if (k === 'm:') return r(false, 'aucune', [], 'aucune marque lue : un tampon manqué n\'est pas un tampon absent');
-    return r(true, 'marques', MT.ensembleDe(essais[0].marques), 'deux essais indépendants lisent le même ensemble de marques');
+    return r(true, 'marques', MT.ensembleDe(essais[0].marques.map(m => String(m).trim().toLowerCase())), 'deux essais indépendants lisent le même ensemble de marques');
 }
 /** Le jeton de variante de l'ensemble lu quand la lecture est sûre ; sinon null. */
 const jetonLu = d => (d && d.sur === true ? MT.jetonDeMarques(d.marques) : null);

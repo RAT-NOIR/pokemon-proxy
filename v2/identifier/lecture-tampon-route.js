@@ -109,8 +109,8 @@ async function lire({ fournisseur, deps, carte, scanId, corpsChaine, avecBorne, 
 
 /**
  * Règle 2 des prix (F4) : une fiche à produit UNIQUE marquée `prixMelangeTampon`, déjà affirmée. Un ensemble NON VIDE de marques de la liste lu deux fois à l'identique (la photo montre un tampon) => la mention
- * « version tamponnée : le prix Cardmarket sous-estime sa valeur » remplace la règle 3. Le verdict ne change pas (même idProduct) ; seule la mention change. Ici l'ensemble n'est PAS comparé à une variante :
- * la fiche n'a qu'un produit, le tampon n'est pas ce qui la désigne, il dit seulement que le prix du guide (mélangé) sous-estime. Sans la lecture, rien ne bouge (la règle 3 reste).
+ * « version tamponnée : le prix Cardmarket sous-estime sa valeur » remplace la règle 3. Le verdict ne change pas (même idProduct) ; seule la mention change. TOUR 1 (I3) : la mention exige la MÊME preuve qu'un sûr — l'ensemble lu est exactement la
+ * variante prouvée d'un produit de la fiche ; sinon aucune mention (la règle 3 reste). Sans la lecture, rien ne bouge.
  */
 async function prixDuTampon({ deps, fournisseur, entree, scanId, resultat, corpsChaine, produits, affirmer, avecBorne, journal }) {
     if (!(produits instanceof Map)) return null;
@@ -125,6 +125,11 @@ async function prixDuTampon({ deps, fournisseur, entree, scanId, resultat, corps
     const lu = await lire({ fournisseur, deps, carte, scanId, corpsChaine, avecBorne, journal });
     const trace = { declenchee: true, appels: lu.appels, type: 'prix', marques: lu.marques, accord: lu.accord, issue: lu.issue, raison: lu.raison };
     if (lu.issue !== 'oui') return { trace };
+    // I3 (tour 1) : la MÊME preuve qu'un sûr — l'ensemble lu doit être EXACTEMENT une variante PROUVÉE d'un produit de la fiche (le produit lui-même ou une impression de sa métacarte). Sinon aucune mention :
+    // un faux positif de lecture (brillant holo lu « cosmo », logo imprimé sur toutes les copies) n'affiche jamais « version tamponnée ».
+    const jeton = MT.jetonDeMarques(lu.marques);
+    const prouvees = [ligne.marques, ...(Array.isArray(ligne.impressions) ? ligne.impressions.map(i => i && i.marques) : [])].filter(m => Array.isArray(m) && m.length).map(m => MT.jetonDeMarques(m));
+    if (jeton === null || !prouvees.includes(jeton)) { LT.noter('nonConfirmees'); LT.noter('marquesSansProduit'); return { trace: { ...trace, issue: 'non-confirmee', raison: `les marques lues (${lu.marques.join('+')}) ne sont une variante prouvée d'aucun produit de la fiche : aucune mention` } }; }
     const marquee = { ...ligne, tamponLu: true, impressions: Array.isArray(ligne.impressions) ? ligne.impressions.map(i => (i && i.idProduct === id ? { ...i, tamponLu: true } : i)) : ligne.impressions };
     const surcharge = new Map(produits); surcharge.set(id, marquee);
     let aff = null;

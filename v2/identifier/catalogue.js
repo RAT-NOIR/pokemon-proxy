@@ -113,8 +113,9 @@ function creerCatalogue(opts = {}) {
                 prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
                 // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
                 // version tamponnée : `prixMelangeTampon`, posé par le catalogue). Lus sur la ligne du produit, par le chemin qui sert déjà l'identification ; === true seulement.
-                // LOT TAMPONS (B) : la colonne de l'ARCHIVE (cartes_produits.prixMelangeTampon, lue par le chargeur) OU l'ancien champ de numeros_cartes : une SOURCE qui dit « vrai » suffit, aucune ne dit « faux » pour l'autre
-                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true || v.prixMelangeTampon === true,
+                // LOT TAMPONS (B, tour 1) : la colonne PROPRE de l'ARCHIVE (cartes_produits.prixMelangeTampon, lue par idProduct : le produit a une entrée d'archive ou non) OU l'ancien champ de numeros_cartes :
+                // une SOURCE qui dit « vrai » suffit, aucune ne dit « faux » pour l'autre
+                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true || (typeof vis.prixMelange === 'function' && vis.prixMelange(id) === true),
                 lienCardmarket: texte(v.lien), impressions
             });
         }

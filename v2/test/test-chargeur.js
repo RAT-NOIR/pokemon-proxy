@@ -218,7 +218,7 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
     const rFil = await chFil.charger();
     H.v('fil de banc : le résultat revient (5 visuels, 1 fiche liée), version installée', [rFil.ok, E.version() && E.version().comptes.visuels, E.version() && E.version().produitsDeLaFiche('Set-F', '1|001')], [true, 5, [101, 102]]);
     H.v('   la version reçue d\'un autre fil se lit (tampons transférés, aucune copie) : entree(103)', E.version().entree(103), { idProduct: 103, vignette: { cle: 'v/103.webp', w: 2, h: 3 }, grande: null, mention: null, idMetacard: 70, numero: '001', rarete: 'Rare', total: '10', variante: null, setNom: 'Set Fil', lien: null,
-        partageeHoloNonHolo: null, partageeTamponNonSepare: null, produitsPartages: null, tamponNonRepresente: null, basseDefinition: null, prixMelangeTampon: null });       // REPLI-REIMPRESSIONS : les cinq marquages, nuls pour une image ordinaire ; LOT TAMPONS : + `prixMelangeTampon` (inconnu = null)
+        partageeHoloNonHolo: null, partageeTamponNonSepare: null, produitsPartages: null, tamponNonRepresente: null, basseDefinition: null });       // REPLI-REIMPRESSIONS : les cinq marquages, nuls pour une image ordinaire
     const garde = E.version();
     const rOOM = await creerChargeur({ executer: surFil('gourmand', {}, { maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 8 }), catalogue: async () => catalogue(100), journal: m => journal.push(m), pret: async () => true }).charger();
     H.v('fil qui dépasse son plafond de tas : TUÉ (le serveur vit : ce banc continue), échec nommé, version précédente gardée', [rOOM.ok, /fil tué : dépassement de mémoire/.test(rOOM.motif), E.version() === garde], [false, true, true]);

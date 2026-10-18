@@ -112,6 +112,7 @@ function creerChargeur(opts = {}) {
             // m1 : les compteurs du lot REPLI-REIMPRESSIONS (jamais seulement dans un banc) : marquages portés, produits sans image d'un autre tirage par famille, familles qui ressemblent à une liste fermée sans y figurer
             const repli = [];
             if (v && v.comptes && v.comptes.marquees) repli.push(`marquages ${Object.entries(v.comptes.marquees).map(([k, n]) => `${k} ${n}`).join(' ')}`);
+            if (v && v.comptes && v.comptes.melange !== undefined) repli.push(`prix mélangés : produits marqués dans cartes_produits : ${comptes.melangeProduits ?? v.comptes.melange} · dans la colonne : ${v.comptes.melange}`);
             if (comptes.repliRefuse) repli.push(`sans image d'un autre tirage ${comptes.repliRefuse.total} (${Object.entries(comptes.repliRefuse.parFamille).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucune'})`);
             if (Array.isArray(comptes.familleHorsListe) && comptes.familleHorsListe.length) repli.push(`FAMILLES HORS LISTE FERMÉE ${comptes.familleHorsListe.join(', ')}`);
             for (const [k, nom] of [['basseDefinitionExclue', 'basse définition exclue'], ['partageIncoherent', 'partage incohérent écarté'], ['varianteSansPreuve', 'variante sans preuve'], ['varianteHorsListe', 'variante hors liste']]) if (comptes[k]) repli.push(`${nom} ${comptes[k]}`);

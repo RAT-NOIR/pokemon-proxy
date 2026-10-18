@@ -24,6 +24,12 @@ const TYPES = Object.freeze({
     'Staff + Autre': { exact: null, minimum: ['staff'], autre: true }, 'Autre': { exact: null, minimum: [], autre: true }
 });
 function typeDuReleve(texte) { return Object.prototype.hasOwnProperty.call(TYPES, texte) ? TYPES[texte] : null; }
+/** M4 : un type de relevé hors de la liste fait LEVER (le dénominateur), jamais un `sans-relevé` muet qui sortirait des comptes. */
+function exigerType(texte) {
+    const t = typeDuReleve(texte);
+    if (!t) throw new Error(`type de relevé inconnu « ${String(texte).slice(0, 60)} » : la mesure s'arrête (types connus : ${Object.keys(TYPES).join(', ')})`);
+    return t;
+}
 const memeEnsemble = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && [...a].sort().join('+') === [...b].sort().join('+');
 
 /**
@@ -43,13 +49,17 @@ function comparerType(attendu, lecture) {
     if (lu) return lu.length && attendu.minimum.every(m => lu.includes(m)) ? 'a-juger' : 'autre-ensemble';        // un relevé « Autre » ne dit pas l'ensemble : on regarde, on ne tranche pas d'ici
     return lecture && lecture.lecture === 'autre' ? 'conforme-autre' : 'non-lu';
 }
-/** La carte porte-t-elle un tampon vu ? vu = le premier essai a lu quelque chose (une marque ou `autre`) ; consensus = deux essais concordants sur des marques ou `autre`. */
+/**
+ * La carte porte-t-elle un tampon vu ? vu = le premier essai a lu quelque chose (une marque ou `autre`) ; consensus = DEUX lectures IDENTIQUES de marques (jamais un `autre`, qui s'arrête au premier essai) ;
+ * autreLu = un `autre` lu (UNE fois : le fournisseur ne fait pas de second appel), compté à part sous son nom (I1 de la relecture).
+ */
 function detection(lecture) {
     const e = lecture && Array.isArray(lecture.essais) ? lecture.essais : [];
     const premier = e[0];
     const vu = Boolean(premier && premier !== 'incertain' && (premier.autre === true || (premier.marques && premier.marques.length)));
-    const consensus = Boolean(lecture && (lecture.lecture === 'marques' || lecture.lecture === 'autre'));
-    return { vu, consensus };
+    const consensus = Boolean(lecture && lecture.lecture === 'marques');
+    const autreLu = Boolean(lecture && lecture.lecture === 'autre');
+    return { vu, consensus, autreLu };
 }
 /**
  * L'issue de la chaîne avec la nouvelle règle, SIMULÉE sur la question réelle de l'essai.
@@ -58,11 +68,13 @@ function detection(lecture) {
  *   La règle n'est consultée que pour une QUESTION de deux produits dont le bon ET dont le relevé donne l'ensemble complet ; elle affirme alors le produit tamponné SEULEMENT si l'ensemble lu en consensus est le sien.
  */
 function issueDeLaChaine(c) {
-    if (c.statut === 'identifiee') return { issue: c.identifie === c.verite ? 'sur-juste-chaine' : 'faux-chaine', declenchable: false, regle: false };
-    if (!Array.isArray(c.choix) || !c.choix.includes(c.verite)) return { issue: 'question-sans-la-bonne-carte', declenchable: false, regle: false };
+    // I2 : sur une carte dont le relevé n'a PAS d'ensemble exact (« Autre », « Staff + Autre »), tout sûr ou toute mention que la règle produirait se compte « à juger » : jamais en silence un non-faux
+    const aJuger = Boolean(c.attendu && !c.attendu.exact && c.lecture && c.lecture.lecture === 'marques');
+    if (c.statut === 'identifiee') return { issue: c.identifie === c.verite ? 'sur-juste-chaine' : 'faux-chaine', declenchable: false, regle: false, aJuger };
+    if (!Array.isArray(c.choix) || !c.choix.includes(c.verite)) return { issue: 'question-sans-la-bonne-carte', declenchable: false, regle: false, aJuger };
     const declenchable = c.choix.length === 2 && Boolean(c.attendu && c.attendu.exact);
     const regle = declenchable && c.lecture && c.lecture.lecture === 'marques' && memeEnsemble(c.lecture.marques, c.attendu.exact);
-    return { issue: regle ? 'sur-juste-regle' : 'propose', declenchable, regle: Boolean(regle) };
+    return { issue: regle ? 'sur-juste-regle' : 'propose', declenchable, regle: Boolean(regle), aJuger };
 }
 /** Le FAUX au pire cas d'une carte AVEC tampon : un consensus de marques qui n'est pas l'ensemble du relevé (quand le relevé le donne en entier). */
 const fauxAvecTampon = (attendu, lecture) => ['sous-ensemble', 'autre-ensemble'].includes(comparerType(attendu, lecture));
@@ -75,7 +87,8 @@ function bilanReleve(rendus) {
     const normaux = rendus.filter(x => !x.aPart), exacts = normaux.filter(x => x.attendu && x.attendu.exact), autres = normaux.filter(x => x.attendu && !x.attendu.exact);
     return {
         cartes: rendus.length, aPart: n(x => x.aPart), evaluees: normaux.length,
-        detectes: { vu: normaux.filter(x => detection(x.lecture).vu).length, consensus: normaux.filter(x => detection(x.lecture).consensus).length },
+        detectes: { vu: normaux.filter(x => detection(x.lecture).vu).length, consensus: normaux.filter(x => detection(x.lecture).consensus).length, autreLu: normaux.filter(x => detection(x.lecture).autreLu).length },
+        aJugerRegle: normaux.filter(x => x.issue.aJuger).length,
         typesExacts: { cartes: exacts.length, justes: exacts.filter(x => comparerType(x.attendu, x.lecture) === 'juste').length, nonLus: exacts.filter(x => comparerType(x.attendu, x.lecture) === 'non-lu').length, sousEnsemble: exacts.filter(x => comparerType(x.attendu, x.lecture) === 'sous-ensemble').length, autreEnsemble: exacts.filter(x => comparerType(x.attendu, x.lecture) === 'autre-ensemble').length },
         typesAutre: { cartes: autres.length, conformes: autres.filter(x => comparerType(x.attendu, x.lecture) === 'conforme-autre').length, aJuger: autres.filter(x => comparerType(x.attendu, x.lecture) === 'a-juger').length, nonLus: autres.filter(x => comparerType(x.attendu, x.lecture) === 'non-lu').length, autreEnsemble: autres.filter(x => comparerType(x.attendu, x.lecture) === 'autre-ensemble').length },
         issues: { surJusteChaine: normaux.filter(x => x.issue.issue === 'sur-juste-chaine').length, surJusteRegle: normaux.filter(x => x.issue.issue === 'sur-juste-regle').length, proposes: normaux.filter(x => x.issue.issue === 'propose').length, questionsSansLaBonneCarte: normaux.filter(x => x.issue.issue === 'question-sans-la-bonne-carte').length, fauxChaine: normaux.filter(x => x.issue.issue === 'faux-chaine').length },
@@ -83,7 +96,7 @@ function bilanReleve(rendus) {
         fauxPireCas: normaux.filter(x => fauxAvecTampon(x.attendu, x.lecture)).length
     };
 }
-module.exports = { TYPES, typeDuReleve, memeEnsemble, comparerType, detection, issueDeLaChaine, fauxAvecTampon, fauxPositif, bilanReleve, MODELE };
+module.exports = { TYPES, typeDuReleve, exigerType, memeEnsemble, comparerType, detection, issueDeLaChaine, fauxAvecTampon, fauxPositif, bilanReleve, MODELE };
 
 // ── l'exécution
 function arg(nom, defaut) { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : defaut; }
@@ -149,7 +162,7 @@ async function principal() {
         if (carnet.etat().arret) { arret = carnet.etat().arret; break; }
         const scanId = l.scans[0].scanId, a = parId.get(scanId), k = a && a.cartes && a.cartes[0];
         const choix = k && k.question && Array.isArray(k.question.choix) ? k.question.choix.map(x => (x && typeof x === 'object') ? x.idProduct : x).filter(Number.isInteger) : null;
-        const attendu = typeDuReleve(l.stamp), lecture = await lire(scanId);
+        const attendu = exigerType(l.stamp), lecture = await lire(scanId);                 // M4 : un type de relevé inconnu fait LEVER (le dénominateur)
         const issue = issueDeLaChaine({ statut: k && k.statut, choix, verite: l.idProduct, identifie: k && Number.isInteger(k.idProduct) ? k.idProduct : null, attendu, lecture });
         const aPart = CONFLITS.has(l.idProduct) ? 'conflit-archive-normale' : l.veriteEnDoute ? 'verite-en-doute' : null;
         const r = { verite: l.idProduct, type: l.stamp, attendu, scanId, statut: k && k.statut, choix, lecture, issue, aPart };
@@ -168,7 +181,8 @@ async function principal() {
     const lusSans = fs.readFileSync(fichierRes, 'utf8').split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l)).filter(x => x.groupe === 'sans-tampon');
     const b = bilanReleve(rendus);
     console.log(`\n## RELEVÉ : ${b.cartes} cartes lues (${b.aPart} À PART : conflits d'archive et vérité en doute), ${b.evaluees} évaluées`);
-    console.log(`  détectées : consensus ${b.detectes.consensus}/${b.evaluees} (marques ou « autre » lus deux fois), vues au premier essai ${b.detectes.vu}/${b.evaluees}`);
+    console.log(`  détectées : consensus de MARQUES (deux lectures identiques) ${b.detectes.consensus}/${b.evaluees} · « autre » lu UNE fois ${b.detectes.autreLu}/${b.evaluees} · vues au premier essai ${b.detectes.vu}/${b.evaluees}`);
+    console.log(`  À JUGER (relevé sans ensemble exact : un sûr ou une mention que la règle produirait ne se compte jamais comme un non-faux) : ${b.aJugerRegle}`);
     console.log(`  relevé à ensemble COMPLET : justes ${b.typesExacts.justes}/${b.typesExacts.cartes} · non lus ${b.typesExacts.nonLus} · sous-ensemble ${b.typesExacts.sousEnsemble} · autre ensemble ${b.typesExacts.autreEnsemble}`);
     console.log(`  relevé « Autre » : « autre » lu ${b.typesAutre.conformes} · marques lues à juger ${b.typesAutre.aJuger} · non lus ${b.typesAutre.nonLus} · hors minimum ${b.typesAutre.autreEnsemble} (sur ${b.typesAutre.cartes})`);
     console.log(`  issue de la chaîne (question réelle de l'essai + règle) : sûrs justes ${b.issues.surJusteChaine + b.issues.surJusteRegle} (chaîne ${b.issues.surJusteChaine}, GAGNÉS PAR LA RÈGLE ${b.issues.surJusteRegle}) · proposés ${b.issues.proposes} · questions sans la bonne carte ${b.issues.questionsSansLaBonneCarte} · faux de la chaîne ${b.issues.fauxChaine} · règle déclenchable ${b.declenchables}`);

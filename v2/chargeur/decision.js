@@ -177,7 +177,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // les sets qui RESSEMBLENT à une famille sans figurer dans sa liste fermée : servis comme avant, mais nommés (une liste fermée qui vieillit ne doit pas vieillir en silence)
         familleHorsListe: sets.map(s => s._id).filter(id => RESSEMBLANCES.some(re => re.test(id)) && familleDuSet(id) === null).sort(),
         // les marquages portés par les entrées écrites
-        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0, melange: 0 } };
+        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 }, melangeProduits: 0 };
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
@@ -185,7 +185,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     // JUMEAU-V2 : le créneau (expansion, numéro de fiche) et la langue de tirage de CHAQUE produit du catalogue, avec sa métacarte — le producteur de la colonne que la route lit pour ne jamais
     // affirmer un produit qui a un jumeau. Émis AVANT les écartements ci-dessous (un produit sans visuel ou sans fiche du site a quand même des jumeaux). Un produit du catalogue sans ligne :
     // créneau et langue INCONNUS (jamais devinés) ; un champ inconnu reste un jumeau côté route. Sans `sink`, la liste est rendue (les bancs).
-    const jumeaux = [], emis = new Set();
+    const jumeaux = [], emis = new Set(), melanges = new Set();
     const emettre = j => { if (sink) { if (typeof sink.jumeau === 'function') sink.jumeau(j); } else jumeaux.push(j); };
     const metaDe = id => (entier(metacarte.get(id)) ? metacarte.get(id) : null);
     n = 0;
@@ -193,6 +193,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (++n % 2000 === 0) await pause();
         const { s, f, plusieurs } = choisir(l), c = carteDe.get(l.carteId);
         emis.add(l.idProduct);
+        // LOT TAMPONS (B, tour 1) : le prix de la fiche mélange-t-il la version normale et une version tamponnée ? Vient de la LIGNE (cartes_produits), === true seulement, et se pose pour CHAQUE ligne marquée,
+        // ICI, avant tout écartement : la marque ne dépend d'AUCUN visuel (un produit sans entrée d'archive la porte aussi). Dénominateur : d.melangeProduits (les distincts de cartes_produits).
+        if (l.prixMelangeTampon === true && entier(l.idProduct)) { melanges.add(l.idProduct); if (sink) { if (typeof sink.melange === 'function') sink.melange(l.idProduct); } }
         emettre({ idProduct: l.idProduct, idMetacard: metaDe(l.idProduct), idExpansion: entier(l.idExpansion) ? l.idExpansion : null,
             numero: l.numeroFiche == null ? null : texte(regle.normaliserNumero(l.numeroFiche)), tirage: s ? texte(s.tirage ?? s.region) : null });
         if (plusieurs) d.plusieursSets++;
@@ -230,9 +233,6 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
             lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
         Object.assign(e, marquagesDe(im, l.idProduct, e.variante));
-        // LOT TAMPONS (B) : le prix de la fiche mélange-t-il la version normale et une version tamponnée ? Vient de la LIGNE du produit (cartes_produits), === booléen seulement ; absent = inconnu (null)
-        e.prixMelangeTampon = l.prixMelangeTampon === true ? true : l.prixMelangeTampon === false ? false : null;
-        if (e.prixMelangeTampon === true) d.marquees.melange++;
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
@@ -245,7 +245,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     }
     for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);
-    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux }) };
+    d.melangeProduits = melanges.size;
+    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b) }) };
 }
 
 module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };

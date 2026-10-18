@@ -82,7 +82,8 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         mar(PC, { idMetacard: META + 1 }),
         mar(JA, { idMetacard: METAJ, variante: 'normale', numero: '5', partageeTamponNonSepare: false, produitsPartages: [JA, JB] }),
         mar(JB, { idMetacard: METAJ, variante: 'jumbo', numero: '5', partageeTamponNonSepare: false, produitsPartages: [JA, JB] }),
-        mar(PX, { idMetacard: METAX, numero: '9' }),
+        mar(PX, { idMetacard: METAX, numero: '9', variante: 'staff' }),                  // le produit marqué : sa variante STAFF est PROUVÉE (I3 : la règle 2 exige la même preuve qu'un sûr)
+        mar(895852, { idMetacard: METAX, numero: '9', variante: 'league' }),             // un frère de la fiche (même métacarte), variante LEAGUE prouvée : une impression sans ligne de catalogue
         mar(LA, { idMetacard: METAL, numero: '7', variante: 'normale', partageeTamponNonSepare: false, produitsPartages: [LA, LB], tamponNonRepresente: 'League' }),
         mar(LB, { idMetacard: METAL, numero: '7', variante: 'league', partageeTamponNonSepare: false, produitsPartages: [LA, LB], tamponNonRepresente: 'League' }),
         mar(SA, { idMetacard: METAS, numero: '8', variante: 'normale', partageeTamponNonSepare: false, produitsPartages: [SA, SB], tamponNonRepresente: 'Staff' }),
@@ -271,9 +272,9 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         // LOT TAMPONS : n'importe quelle marque de la liste lue deux fois (League, une enseigne…) donne la règle 2 ; une marque hors liste, des ensembles qui diffèrent ou rien : la règle 3
         const mentionPour = async (essais, lecture) => { Object.assign(modele, { lecture, essais }); return prix(await scan(svOn, 'prix-seul')); };
         const R2 = ['prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime'], R3 = ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons'];
-        H.v('8d. [league] lu deux fois, [kfc] lu deux fois : la règle 2 ; `autre`, [league] puis [kfc], aucune marque, incertain : la règle 3', [await mentionPour([{ marques: ['league'] }, { marques: ['league'] }], 'marques'), await mentionPour([{ marques: ['kfc'] }, { marques: ['kfc'] }], 'marques'),
+        H.v('8d. I3 : [league] lu deux fois (variante PROUVÉE d\'un produit de la fiche) : la règle 2 ; [kfc] ou [cosmo] (aucun produit de la fiche ne les porte : le faux positif Rayquaza, le logo imprimé), un sur-ensemble : la règle 3 ; `autre`, [league] puis [kfc], aucune marque, incertain : la règle 3', [await mentionPour([{ marques: ['league'] }, { marques: ['league'] }], 'marques'), await mentionPour([{ marques: ['kfc'] }, { marques: ['kfc'] }], 'marques'),
             await mentionPour([{ autre: true }, { autre: true }], 'autre'), await mentionPour([{ marques: ['league'] }, { marques: ['kfc'] }], 'desaccord'), await mentionPour([{ marques: [] }, { marques: [] }], 'aucune'), await mentionPour(['incertain', 'incertain'], 'incertain'),
-            await mentionPour([{ marques: ['league'] }, { autre: true }], 'marques')], [R2, R2, R3, R3, R3, R3, R3]);              // le dernier : le fournisseur dit « marques » (à tort), ses essais ne le disent pas
+            await mentionPour([{ marques: ['league'] }, { autre: true }], 'marques'), await mentionPour([{ marques: ['cosmo'] }, { marques: ['cosmo'] }], 'marques'), await mentionPour([{ marques: ['league', 'staff'] }, { marques: ['league', 'staff'] }], 'marques')], [R2, R3, R3, R3, R3, R3, R3, R3, R3]);              // le dernier : le fournisseur dit « marques » (à tort), ses essais ne le disent pas
         Object.assign(modele, { lecture: 'oui', essais: ['oui', 'oui'] });
     }
 
@@ -323,7 +324,7 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         H.v('10c. garde 3 — l\'archive SANS colonne des marquages (ou sans version) : rien (null), aucun appel, même si l\'entrée de la paire existe', [r3, VERSION_SANS.colonneMarquages, appels() - a3], [[null, null, null], false, 0]);
         // (4) prixMelangeTampon === true : « true » (texte), 1, null ne marquent rien
         const a4 = appels();
-        const ligneX = v => new Map([[PX, { ...ligne(PX), prixMelangeTampon: v }]]);
+        const ligneX = v => new Map([[PX, { ...ligne(PX), prixMelangeTampon: v, marques: ['staff'] }]]);       // I3 : la variante staff du produit est prouvée
         const affX = { issue: 'affirmee', analyse: { cartes: [{ carte: { idProduct: PX } }] } };
         const r4 = [];
         for (const [i, v] of ['true', 1, null, undefined, 'oui'].entries()) r4.push(await consulterLectureTampon({ ...base, scanId: `scan-prix-${i}`, resultat: affX, produits: ligneX(v) }));

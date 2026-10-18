@@ -21,11 +21,15 @@ const SECTIONS = Object.freeze([...SECTIONS_BASE, ...SECTIONS_JUM]);
 // REPLI-REIMPRESSIONS : la colonne des MARQUAGES est le FORMAT 2 (le numéro de format ne ment pas : un lecteur d'avant refuse ce fichier au lieu d'ignorer des marquages qu'il ne connaît pas).
 // Les listes de sections permises sont énumérées, jamais déduites : format 1 = BASE ou BASE+JUM (les archives publiées jusqu'au 2026-10-17) ; format 2 = BASE+MAR ou BASE+JUM+MAR.
 const SECTIONS_MAR = Object.freeze(['flags', 'tampon', 'pdeb', 'pfin', 'produits'].map(n => ({ nom: `mar.${n}`, t: 'i32' })));
+// LOT TAMPONS (B) : la colonne des PRIX MÉLANGÉS (`mel.produits`, la liste triée des idProduct marqués) est facultative et ne vient qu'avec les marquages (format 2) ; une archive d'avant en reste lisible.
+const SECTIONS_MEL = Object.freeze([{ nom: 'mel.produits', t: 'i32' }]);
 const LISTES = Object.freeze([
-    { format: 1, sections: SECTIONS_BASE, jum: false, mar: false },
-    { format: 1, sections: SECTIONS, jum: true, mar: false },
-    { format: 2, sections: Object.freeze([...SECTIONS_BASE, ...SECTIONS_MAR]), jum: false, mar: true },
-    { format: 2, sections: Object.freeze([...SECTIONS, ...SECTIONS_MAR]), jum: true, mar: true }
+    { format: 1, sections: SECTIONS_BASE, jum: false, mar: false, mel: false },
+    { format: 1, sections: SECTIONS, jum: true, mar: false, mel: false },
+    { format: 2, sections: Object.freeze([...SECTIONS_BASE, ...SECTIONS_MAR]), jum: false, mar: true, mel: false },
+    { format: 2, sections: Object.freeze([...SECTIONS, ...SECTIONS_MAR]), jum: true, mar: true, mel: false },
+    { format: 2, sections: Object.freeze([...SECTIONS_BASE, ...SECTIONS_MAR, ...SECTIONS_MEL]), jum: false, mar: true, mel: true },
+    { format: 2, sections: Object.freeze([...SECTIONS, ...SECTIONS_MAR, ...SECTIONS_MEL]), jum: true, mar: true, mel: true }
 ]);
 const TAILLE = { i32: 4, u32: 4, u8: 1 }, CLASSE = { i32: Int32Array, u32: Uint32Array, u8: Uint8Array };
 // PLAFONDS, écrits par ce qu'ils protègent : la mémoire de l'instance (512 Mio dont ~110 à 150 Mo de base de serveur, offre gratuite, ~11 réveils par jour sans version en mémoire : un dépassement
@@ -52,7 +56,7 @@ function serialiser(version, { entree = null } = {}) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { donnees } = version.paquet();
     const regions = [], descr = [];
-    const liste = LISTES.find(l => l.jum === Boolean(donnees.jum) && l.mar === Boolean(donnees.mar));
+    const liste = LISTES.find(l => l.jum === Boolean(donnees.jum) && l.mar === Boolean(donnees.mar) && l.mel === Boolean(donnees.mel));
     for (const s of liste.sections) {
         const a = cible(donnees, s.nom), oct = Buffer.from(a.buffer, a.byteOffset, a.byteLength);
         descr.push({ nom: s.nom, t: s.t, n: a.length }); regions.push(oct); const pad = aligner(oct.length) - oct.length; if (pad) regions.push(Buffer.alloc(pad));
@@ -89,10 +93,10 @@ function deserialiser(buf) {
     // le numéro de format DIT quelles sections suivent (1 : sans marquages, 2 : avec) ; une liste qui n'est pas l'une des quatre énumérées est refusée
     const candidates = LISTES.filter(l => l.format === entete.format);
     if (!Array.isArray(entete.sections)) refuser('liste de sections incomplète');
-    const liste = candidates.find(l => l.sections.length === entete.sections.length);
+    const liste = candidates.find(l => l.sections.length === entete.sections.length && l.sections.every((s, i) => entete.sections[i] && entete.sections[i].nom === s.nom));
     if (!liste) refuser('liste de sections incomplète');
     const attendues = liste.sections;       // sans la colonne des jumeaux : un fichier d'avant elle ; sans celle des marquages : un fichier du format 1
-    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(liste.jum ? { jum: {} } : {}), ...(liste.mar ? { mar: {} } : {}) };
+    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(liste.jum ? { jum: {} } : {}), ...(liste.mar ? { mar: {} } : {}), ...(liste.mel ? { mel: {} } : {}) };
     attendues.forEach((s, i) => {
         const x = entete.sections[i];
         if (!x || x.nom !== s.nom || x.t !== s.t || !Number.isInteger(x.n) || x.n < 0) refuser(`section « ${s.nom} » absente ou mal décrite`);
@@ -101,7 +105,7 @@ function deserialiser(buf) {
         const copie = buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + octets);           // COPIE alignée : le tampon du fichier est libéré ensuite
         const a = new CLASSE[s.t](copie);
         const [p, q] = s.nom.split('.');
-        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else if (p === 'mar') d.mar[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
+        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else if (p === 'mar') d.mar[q] = a; else if (p === 'mel') d.mel[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
         o += aligner(octets);
     });
     if (o !== buf.length - 32) refuser('octets en trop entre la dernière section et le hachage');
