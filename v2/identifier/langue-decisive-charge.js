@@ -35,12 +35,18 @@ async function preparer({ corpsListe, produits, jumeaux, catalogue, version, dep
     const avant = { jumeaux, produits, codeNumeroExiste };
     if (deps.jumeaux || !(produits instanceof Map)) return avant;                                  // banc : le fournisseur injecté fait foi
     try {
-        const survivants = [...new Set((corpsListe || []).flatMap(c => [LD.survivantUnique({ corps: c, produits }), ...(desActives && codeNumeroExiste && codeNumeroExiste.famille ? DES.candidatsAPreparer({ corps: c, produits, regles: reglesDes }) : [])]).filter(Number.isInteger))];
-        if (!survivants.length) return avant;
+        const survivantsLD = [...new Set((corpsListe || []).map(c => LD.survivantUnique({ corps: c, produits })).filter(Number.isInteger))];
+        // l'EXTENSION de la désignation : ses candidats possibles en plus (I3 : au plafond, seule elle est abandonnée, jamais la préparation propre de LANGUE-DECISIVE)
+        const survivantsDes = desActives && codeNumeroExiste && codeNumeroExiste.famille ? [...new Set((corpsListe || []).flatMap(c => DES.candidatsAPreparer({ corps: c, produits, regles: reglesDes })))].filter(i => !survivantsLD.includes(i)) : [];
+        if (!survivantsLD.length && !survivantsDes.length) return avant;
         const affirmes = (corpsListe || []).flatMap(c => idsAffirmes(c));
         const r = await apresDelai((async () => {
-            const j2 = await fournisseurParDefaut(catalogue, version, [...new Set([...affirmes, ...survivants])]);
-            const manquants = [...new Set(survivants.flatMap(id => { const g = j2(id); return g && g.conclu === true && Array.isArray(g.ids) ? g.ids : []; }))].filter(i => Number.isInteger(i) && !produits.has(i));
+            const preparer1 = async survivants => {
+                const j2 = await fournisseurParDefaut(catalogue, version, [...new Set([...affirmes, ...survivants])]);
+                return { j2, manquants: [...new Set(survivants.flatMap(id => { const g = j2(id); return g && g.conclu === true && Array.isArray(g.ids) ? g.ids : []; }))].filter(i => Number.isInteger(i) && !produits.has(i)) };
+            };
+            let { j2, manquants } = await preparer1([...survivantsLD, ...survivantsDes]);
+            if (survivantsDes.length && manquants.length > LD.PLAFOND_CHARGE) ({ j2, manquants } = await preparer1(survivantsLD));    // I3 : seule l'extension de la désignation est abandonnée
             if (manquants.length > LD.PLAFOND_CHARGE) return null;                                 // au-delà du plafond : rien n'est lu
             const p2 = new Map(produits);
             if (manquants.length) for (const [k, v] of await catalogue.lire(manquants)) p2.set(k, v);

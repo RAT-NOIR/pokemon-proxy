@@ -257,16 +257,15 @@ function traduire(statutHttp, corps, ctx) {
     return panne('SERVEUR', `natureRefus inconnue : ${nature}`);
 }
 
-// DESIGNATION (2026-10-18) : APRÈS le critère A et LANGUE-DECISIVE (déjà passés dans traduire), une QUESTION que rien n'a tranchée est relue : si les champs déjà lus ne satisfont que l'un de ses candidats (designation.js : toutes
-// les règles éteintes par défaut), il est affirmé à la place. Une désignation qui échoue ne change rien : la question d'avant, jamais une panne.
+// DESIGNATION (2026-10-18) : APRÈS le critère A et LANGUE-DECISIVE (déjà passés dans traduire), une QUESTION que rien n'a tranchée est relue : si les champs déjà lus ne satisfont que l'un de ses candidats (designation.js : seule la
+// règle `numero` est allumée), il est affirmé à la place. Une désignation qui échoue ne change rien : la question d'avant, jamais une panne.
 function parDesignation(r, corps, ctx) {
     if (!r || r.issue !== 'question') return r;
     const regles = DES.reglesDe({ ...DES.REGLES_DESIGNATION, ...(ctx.designation && typeof ctx.designation === 'object' ? ctx.designation : {}) });
     if (!DES.actives(regles).length) return r;
     try {
         const c = r.analyse.cartes[0];
-        const d = DES.designer({ ids: c.candidats.map(x => x.idProduct), corps, produits: ctx.produits, jumeaux: ctx.jumeaux, regles, catalogueExiste: ctx.codeNumeroExiste, assouplir: ctx.designationAssoupli,
-            r4: ctx.langueDecisive && ctx.langueDecisive.R4 !== undefined ? ctx.langueDecisive.R4 === true : LD.REGLES.R4 });
+        const d = DES.designer({ ids: c.candidats.map(x => x.idProduct), corps, produits: ctx.produits, jumeaux: ctx.jumeaux, regles, catalogueExiste: ctx.codeNumeroExiste });
         return d ? affirmer(d.id, c.etat, ctx, corps, d.critere) : r;
     } catch { return r; }
 }
