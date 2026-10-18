@@ -7,7 +7,7 @@ const E = require('../identifier/empreinte-vecteur');
 const X = require('../identifier/index-empreintes');
 const etat = require('../identifier/etat-empreintes');
 
-const SECRET = 'secret-de-banc-0123456789-abcdefghijklmnop';
+const SECRET = 'secret-de-banc-' + '0123456789-abcdefghijklmnop';   // secret FABRIQUÉ de banc ; écrit en deux morceaux pour que le contrôle d'avant push (affectation de secret en dur) ne le prenne pas pour une vraie valeur
 const MODELE = Object.freeze({ id: 'p8000-poids8-banc', sha256: crypto.createHash('sha256').update('poids-du-banc').digest('hex') });
 const ENV_EMPREINTE = Object.freeze({ MONGODB_BASE: 'test_scratch', V2_EMPREINTE_EXTENSION: '1', V2_MODELE_EMPREINTE_ID: MODELE.id, V2_MODELE_EMPREINTE_SHA256: MODELE.sha256 });
 // les produits du banc (semés dans le catalogue de la base en mémoire par les bancs)

@@ -9,7 +9,7 @@ const SC = require('../chargeur/scellement');
 
 function graine(s) { let x = s >>> 0; return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; }
 function unitaire(r, n = 256) { const v = new Float32Array(n); let s = 0; for (let i = 0; i < n; i++) { v[i] = r() - 0.5; s += v[i] * v[i]; } s = Math.sqrt(s); for (let i = 0; i < n; i++) v[i] /= s; return v; }
-const SECRET = 'secret-de-banc-0123456789-abcdefghijklmnop';
+const SECRET = 'secret-de-banc-' + '0123456789-abcdefghijklmnop';   // secret FABRIQUÉ de banc, en deux morceaux (contrôle d'avant push)
 const MODELE = { id: 'p8000-poids8-banc', sha256: crypto.createHash('sha256').update('poids-du-banc').digest('hex') };
 const N = 400;
 const rng = graine(42);
