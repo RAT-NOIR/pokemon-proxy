@@ -250,11 +250,11 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const ferme = await post('/api/abonnement/fondateurs', O1, { code: A.CODE_FONDATEURS }, {}, srvFerme.url);
     const fermeMauvais = await post('/api/abonnement/fondateurs', O1, { code: 'PAS-LE-BON' }, {}, srvFerme.url);
     const sansDate = r => ({ statut: r.statut, json: r.json, entetes: Object.fromEntries(Object.entries(r.entetes).filter(([k]) => !['date', 'etag', 'x-request-id'].includes(k))) });
-    H.v('un mauvais code : 422 code-invalide, rien d\'autre', [mauvais.statut, mauvais.json.erreur.detail, JSON.stringify(mauvais.json).includes('299')], [422, 'code-invalide', false]);
+    H.v('un mauvais code : 422 code-invalide, rien d\'autre', [mauvais.statut, mauvais.json.erreur.detail, 'offre' in mauvais.json], [422, 'code-invalide', false]);
     H.v('   l\'offre FERMÉE (code bon ou mauvais) donne une réponse IDENTIQUE à celle d\'un mauvais code : statut, corps et en-têtes', [JSON.stringify(sansDate(ferme)) === JSON.stringify(sansDate(mauvais)), JSON.stringify(sansDate(fermeMauvais)) === JSON.stringify(sansDate(mauvais))], [true, true]);
     await srvFerme.fermer();
     const sansSession = await H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: A.CODE_FONDATEURS }, entetes: { ...A.SITE, ...ipN() } });
-    H.v('sans session : 401, aucune offre', [sansSession.statut, JSON.stringify(sansSession.json).includes('299')], [401, false]);
+    H.v('sans session : 401, aucune offre', [sansSession.statut, 'offre' in sansSession.json], [401, false]);
     const sansOrigine = await H.appel(srv.url, '/api/abonnement/fondateurs', { methode: 'POST', corps: { code: A.CODE_FONDATEURS }, entetes: { cookie: O1.cookie, ...ipN() } });
     H.v('   sans l\'origine du site : 403', sansOrigine.statut, 403);
     H.v('   un champ en trop : 400 ; un corps sans code ou mal typé : 422 code-invalide (indiscernable)', [(await post('/api/abonnement/fondateurs', O1, { code: A.CODE_FONDATEURS, offre: 'x' })).statut, (await post('/api/abonnement/fondateurs', O1, {})).json.erreur.detail, (await post('/api/abonnement/fondateurs', O1, { code: 42 })).json.erreur.detail], [400, 'code-invalide', 'code-invalide']);
@@ -264,7 +264,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     for (let i = 0; i < 5; i++) codes.push((await checkout(brute, { offre: 'fondateurs', periode: 'mois', code: `ESSAI-${i}` })).statut);
     const onze = await post('/api/abonnement/fondateurs', brute, { code: A.CODE_FONDATEURS });
     const onzeCk = await checkout(brute, { offre: 'fondateurs', periode: 'mois', code: A.CODE_FONDATEURS });
-    H.v('la limite d\'essais est PARTAGÉE avec le Checkout : 5 + 5 essais, puis le 11e (même avec le BON code) est refusé 429 des deux côtés', [codes, onze.statut, onze.json.erreur.code, onzeCk.statut, JSON.stringify(onze.json).includes('299')], [[422, 422, 422, 422, 422, 422, 422, 422, 422, 422], 429, 'DEBIT', 429, false]);
+    H.v('la limite d\'essais est PARTAGÉE avec le Checkout : 5 + 5 essais, puis le 11e (même avec le BON code) est refusé 429 des deux côtés', [codes, onze.statut, onze.json.erreur.code, onzeCk.statut, 'offre' in onze.json], [[422, 422, 422, 422, 422, 422, 422, 422, 422, 422], 429, 'DEBIT', 429, false]);
 
     // ═══ 10. AUCUNE RÉPONSE PUBLIQUE NE DONNE LE PRIX NI LE LIEN FONDATEURS ═══
     const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi', 'openapi.v2.json'), 'utf8'));
@@ -279,7 +279,9 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const pub = await H.serveur(app);
     const code = A.CODE_FONDATEURS;
     const INTERDITS = [[/\b299\b/, '299'], [/\b2 ?900\b/, '2900'], [/2[,.]99\b/, '2,99'], [/\b29 ?€/, '29 €'], [new RegExp(code.replace(/[-]/g, '[- ]?'), 'i'), 'le code'], [/fondateurs\?code=/i, 'fondateurs?code=']];
-    const trouve = r => INTERDITS.filter(([re]) => re.test(r.texte) || re.test(JSON.stringify(r.entetes))).map(x => x[1]);
+    // (le délai avant réessai d'un 429 est un nombre de secondes qui peut valoir 299 : il est retiré avant la recherche, sinon le contrôle crierait au hasard de la seconde)
+    const sansDelai = t => String(t).replace(/"reessayerDans":\d+/g, '"reessayerDans":0').replace(/retry-after":"\d+"/gi, 'retry-after":"0"');
+    const trouve = r => INTERDITS.filter(([re]) => re.test(sansDelai(r.texte)) || re.test(sansDelai(JSON.stringify(r.entetes)))).map(x => x[1]);
     H.v('le contrôle SAIT voir : la réponse de la route réservée (code valide) contient bien le prix', trouve({ texte: bon.texte, entetes: bon.entetes }), ['299', '2900']);
     // les routes de l'OpenAPI, PUIS toutes les routes réellement montées (router.stack) que l'OpenAPI ne décrit pas : « toutes » ne s'arrête pas à ce qui est documenté
     const ops = []; for (const [chemin, item] of Object.entries(doc.paths)) for (const m of ['get', 'post', 'put', 'patch', 'delete']) if (item[m]) ops.push({ chemin: chemin.replace(/\{[^}]+\}/g, 'x'), methode: m.toUpperCase(), cle: `${m.toUpperCase()} ${chemin}`, openapi: true });
