@@ -29,7 +29,8 @@ const MUTANTS = [
     ['checkout.session.completed rejoué : la prime n\'est pas reprise', 'abonnements/webhook.js', " || (res.etat === 'ignore' && res.raison === 'deja-connu')", "", 'test-abonnements-parrainage.js'],
     // — routes : Checkout, portail, essai, places, codes —
     ['CGV non exigées', 'abonnements/routes.js', "consent_collection: { terms_of_service: 'required' },", "", 'test-abonnements-routes.js'],
-    ['essai accordé à chaque fois', 'abonnements/routes.js', "if (s && (s.essaiUtilise || s.sid)) return false;", "", 'test-abonnements-routes.js'],
+    ['essai accordé à chaque fois', 'abonnements/routes.js', "if (s && (s.essaiUtilise || s.sid)) return false;", "", 'test-abonnements-routes.js', 'depuis STRIPE-DECISIONS la même condition est relue par la garde de l\'essai (essai.js, « essai-deja-utilise ») : retirer cette copie ne change rien d\'observable ; la copie de essai.js a son propre mutant ci-dessous'],
+    ['garde : un compte qui a déjà eu un essai ou un abonnement en reçoit un autre (essai.js)', 'abonnements/essai.js', "if (s && (s.essaiUtilise || s.sid)) return { permis: false, detail: 'essai-deja-utilise' };", "", 'test-abonnements-decisions.js'],
     ['code Fondateurs non vérifié', 'abonnements/routes.js', "if (typeof b.code !== 'string' || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);", "", 'test-abonnements-routes.js'],
     ['places : plus de plafond', 'abonnements/fondateurs.js', "for (let k = 0; k < max; k++) {", "for (let k = 0; k < max + 7; k++) {", 'test-abonnements-routes.js'],
     ['places : la vérification du reste est retirée', 'abonnements/fondateurs.js', "if ((await occupees(maintenant)) >= max) return { ok: false, raison: 'epuisees' };", "", 'test-abonnements-routes.js', 'pré-contrôle d\'optimisation : la boucle d\'insertion refuse déjà au-delà du plafond'],
@@ -88,7 +89,46 @@ const MUTANTS = [
     ['parcours : un état jamais atteint passe pour réussi', 'admin/abonnements/parcours-lib.js', "throw new AttentePerdue(", "return dernier; throw new AttentePerdue(", 'test-abonnements-parcours.js'],
     // — configuration —
     ['configuration : la clé s\'énumère', 'abonnements/config.js', "for (const k of ['cle', 'webhookSecret']) Object.defineProperty(base, k, { value: base[k], enumerable: false,", "for (const k of ['cle', 'webhookSecret']) Object.defineProperty(base, k, { value: base[k], enumerable: true,", 'test-abonnements-config.js'],
-    ['configuration : les deux portails peuvent être le même', 'abonnements/config.js', "if (base.portail.pro && base.portail.pro === base.portail.fondateurs) {", "if (false) {", 'test-abonnements-config.js']
+    ['configuration : les deux portails peuvent être le même', 'abonnements/config.js', "if (base.portail.pro && base.portail.pro === base.portail.fondateurs) {", "if (false) {", 'test-abonnements-config.js'],
+    // — STRIPE-DECISIONS : l'essai sans carte et sa garde —
+    ['essai : la carte est exigée dès le Checkout (always)', 'abonnements/routes.js', "payment_method_collection: 'if_required', allow_promotion_codes", "payment_method_collection: 'always', allow_promotion_codes", 'test-abonnements-decisions.js'],
+    ['essai : la fin sans moyen de paiement ne résilie plus (une facture serait tentée)', 'abonnements/routes.js', "trial_settings: { end_behavior: { missing_payment_method: 'cancel' } }", "trial_settings: { end_behavior: { missing_payment_method: 'create_invoice' } }", 'test-abonnements-decisions.js'],
+    ['garde : la clé est l\'adresse du compte, pas sa BOÎTE (a+x@ et a@ ont chacun leur essai)', 'abonnements/essai.js', "cleBoite(compte.emailCle)", "compte.emailCle", 'test-abonnements-decisions.js'],
+    ['garde : les installations du compte ne sont pas lues', 'abonnements/essai.js', "for (const inst of await installationsDuCompte(compte._id)) cles.push(", "for (const inst of []) cles.push(", 'test-abonnements-decisions.js'],
+    ['garde : une installation DÉLIÉE n\'est plus comptée (comptesLies ignoré)', 'abonnements/essai.js', "{ $or: [{ compteId }, { comptesLies: compteId }] }", "{ compteId }", 'test-abonnements-decisions.js'],
+    ['garde : la liaison ne laisse aucune trace durable (comptesLies)', 'installations/liaison.js', "$addToSet: { comptesLies: compte._id } }", "}", 'test-abonnements-decisions.js'],
+    ['garde : le domaine jetable est toléré', 'abonnements/essai.js', "estJetable(compte.emailCle.split('@')[1] || '')", "false", 'test-abonnements-decisions.js'],
+    ['garde : la ligne d\'un AUTRE compte ne bloque pas', 'abonnements/essai.js', "String(d.compteId) !== String(compteId) &&", "false &&", 'test-abonnements-decisions.js'],
+    ['garde : la réservation n\'est pas atomique (aucune ligne écrite au Checkout)', 'abonnements/essai.js', "const r = await prendre(c, compte._id, jours, maintenant);", "const r = { ok: true, cree: false };", 'test-abonnements-decisions.js'],
+    ['garde : le webhook ne confirme pas l\'essai (la ligne reste une réservation qui expire)', 'abonnements/etat.js', "if (s.aEuEssai) await Essai.confirmer(compte._id, evtDate);", "", 'test-abonnements-decisions.js'],
+    ['garde : un refus de l\'essai refuse aussi l\'abonnement', 'abonnements/routes.js', "else essai = false;", "else return indispo(res, 'essai-refuse');", 'test-abonnements-decisions.js'],
+    ['garde : la réservation n\'est pas rendue quand Stripe échoue', 'abonnements/routes.js', "if (compteEssai) await Essai.rendre(compteEssai, essaiReserve).catch(() => { /* la réservation expire seule */ });", "", 'test-abonnements-decisions.js'],
+    ['index de confort de l\'essai : exigés (déployer avant de les créer fermerait les routes)', 'modeles.js', "(avecAbonnements === true ? TOUS : INDEX)", "(avecAbonnements === true ? CREES : INDEX)", 'test-abonnements-decisions.js'],
+    // — la carte pendant l'essai, les dates du statut —
+    ['carte : Stripe injoignable est lu comme « sans carte » (une affirmation fausse)', 'abonnements/carte.js', "catch (e) { console.error(`🔴 [v2 abonnements] carte pendant l'essai", "catch (e) { valeur = false; console.error(`🔴 [v2 abonnements] carte pendant l'essai", 'test-abonnements-decisions.js'],
+    ['carte : une carte inconnue (null) est annoncée sans carte', 'abonnements/routes.js', "(extras.carte === true || extras.carte === false) ? extras.carte : null;", "extras.carte === true;", 'test-abonnements-decisions.js'],
+    ['statut : un essai sans carte n\'annonce pas sa fin', 'abonnements/routes.js', "resiliationPrevue: resiliationExplicite || essaiSansCarte,", "resiliationPrevue: resiliationExplicite,", 'test-abonnements-decisions.js'],
+    ['statut : un essai sans carte annonce un renouvellement', 'abonnements/routes.js', "(statut === 'actif' || (essaiEnCours && carte === true))", "(statut === 'actif' || essaiEnCours)", 'test-abonnements-decisions.js'],
+    ['statut : la fin de la grâce de l\'impayé n\'est pas donnée', 'abonnements/routes.js', "maintienJusqua: grace ? dateIso(s.jusquAu) : null,", "maintienJusqua: null,", 'test-abonnements-decisions.js'],
+    ['statut : le début de l\'essai n\'est pas lu chez Stripe', 'abonnements/etat.js', "debutEssai: nombre(sub && sub.trial_start),", "debutEssai: null,", 'test-abonnements-decisions.js'],
+    ['statut : le quota ne dit pas les analyses du jour', 'abonnements/routes.js', "utilisees: await Offre.prisAuJour(porteur, Offre.jourDeParis(maintenant)) };", "utilisees: 0 };", 'test-abonnements-decisions.js'],
+    // — le plafond du parrainage —
+    ['plafond : aucun (tous les filleuls sont crédités)', 'abonnements/primes.js', "if ((await moisDansLaFenetre(parrain._id, filleulId, appliqueLe)) >= O.PLAFOND_PARRAINAGE_MOIS) {", "if (false) {", 'test-abonnements-decisions.js'],
+    ['plafond : 13 mois au lieu de 12', 'abonnements/offres.js', "const PLAFOND_PARRAINAGE_MOIS = 12;", "const PLAFOND_PARRAINAGE_MOIS = 13;", 'test-abonnements-decisions.js'],
+    ['plafond : la fenêtre ne glisse jamais (3 650 jours)', 'abonnements/offres.js', "const FENETRE_PARRAINAGE_JOURS = 365;", "const FENETRE_PARRAINAGE_JOURS = 3650;", 'test-abonnements-decisions.js'],
+    ['plafond : compté sans verrou (deux primes simultanées se croisent)', 'abonnements/primes.js', "return sousVerrou(parrain._id, async () => {", "return ((p, f) => f())(parrain._id, async () => {", 'test-abonnements-decisions.js'],
+    ['plafond : les mois offerts du statut ne sont pas bornés à la fenêtre', 'abonnements/primes.js', "etat: 'applique', appliqueLe: { $gt: fenetreDebut(maintenant), $lte: maintenant } });", "etat: 'applique' });", 'test-abonnements-decisions.js'],
+    // — l'offre Fondateurs réservée —
+    ['Fondateurs : la route rend l\'offre sans vérifier le code', 'abonnements/routes.js', "if (!abo().fondateurs.ouvert || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);", "", 'test-abonnements-decisions.js'],
+    ['Fondateurs : l\'offre fermée se distingue d\'un mauvais code', 'abonnements/routes.js', "if (!abo().fondateurs.ouvert || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);", "if (!abo().fondateurs.ouvert) return entree(res, 'offre-fermee', 422); if (!Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);", 'test-abonnements-decisions.js'],
+    ['Fondateurs : la route ne compte pas les essais de code (limite partagée)', 'abonnements/routes.js', "const compte = req.v2.porteur.compte;\n            const essais = await L.consommer(`abo-code:${String(compte._id)}`, { max: 10,", "const compte = req.v2.porteur.compte;\n            const essais = await L.consommer(`abo-code:${String(compte._id)}`, { max: 1000000,", 'test-abonnements-decisions.js'],
+    ['Fondateurs : le prix fuit dans le statut public', 'abonnements/routes.js', "offres: { pro: prixPublics.pro, source: prixPublics.source,", "offres: { pro: prixPublics.pro, fondateurs: { mois: 299, an: 2900 }, source: prixPublics.source,", 'test-abonnements-decisions.js'],
+    ['Fondateurs : la route est ouverte sans session', 'abonnements/routes.js', "router.post('/api/abonnement/fondateurs', ...parSession,", "router.post('/api/abonnement/fondateurs', resoudrePorteur(cfg),", 'test-abonnements-decisions.js'],
+    ['Fondateurs : le portail ne permet plus d\'ajouter une carte', 'admin/abonnements/provisionner-lib.js', "payment_method_update: { enabled: true },", "payment_method_update: { enabled: false },", 'test-abonnements-provisionnement.js'],
+    // — le parcours —
+    ['parcours : une horloge d\'essai partagée par tous les scénarios', 'admin/abonnements/parcours-lib.js', "finally { await supprimerHorloge(); }", "finally { /* horloge gardée */ }", 'test-abonnements-parcours.js'],
+    ['parcours : un scénario absent de la table des rôles est joué', 'admin/abonnements/parcours-lib.js', "const refuses = choisis.filter(k => !Object.prototype.hasOwnProperty.call(ROLES_DES_SCENARIOS, k));", "const refuses = [];", 'test-abonnements-parcours.js'],
+    ['parcours : les préconditions portent sur tous les comptes fournis', 'admin/abonnements/parcours-lib.js', "const roles = [...new Set(joues.flatMap(k => ROLES_DES_SCENARIOS[k]))];", "const roles = Object.keys(comptes);", 'test-abonnements-parcours.js']
 ];
 
 function rejouer({ seulement = null, journal = console.log } = {}) {
