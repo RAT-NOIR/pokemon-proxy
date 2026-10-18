@@ -9,7 +9,7 @@ const { v, vrai, bilan } = require('./_harnais');
 const F = require('../identifier/fiabilite-prix');
 
 v('le seuil est une constante nommée, de 30 %', F.ECART_TENDANCE_MAX, 0.30);
-v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
+v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'version-tamponnee-prix-sous-estime']);
 v('l\'unique base du « De » : tous états', F.BASE_DE, 'tous-etats');
 vrai('les listes sont gelées', Object.isFrozen(F.RESERVES));
 
@@ -46,10 +46,15 @@ v('nonLu seulement si === true (« true », 1 ne marquent rien)', ['true', 1, fa
 v('ligne non lue ET écart mesuré dépassé : les deux réserves, jamais fiable', R({ tendance: 5, moyenne30: 10, nonLu: true }), ['ecart-tendance', 'ecart-non-mesurable']);
 v('ligne non lue + prix mélangé : non-mesurable puis les deux mentions', R({ tendance: 10, moyenne30: 10, nonLu: true, prixMelangeTampon: true }), ['ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 
-// ── les prix mélangés : deux mentions fermées (règles 1 et 3 du testeur) ; la règle 2 (tampon vu sur la photo) n'est PAS codée
+// ── les prix mélangés : deux mentions fermées (règles 1 et 3 du testeur) ; la règle 2 (tampon vu sur la photo, F1-TAMPON) en fin de bloc
 v('prixMelangeTampon === true : les deux mentions', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 v('prixMelangeTampon + écart : l\'écart d\'abord, puis les deux mentions', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`prixMelangeTampon ${JSON.stringify(x)} (≠ true) : aucune mention`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: x }), []);
+// F1-TAMPON, règle 2 : STAFF lu deux fois sur la photo d'une fiche à produit unique marquée => la mention « version tamponnée : le prix sous-estime sa valeur » REMPLACE la règle 3 (jamais en plus)
+v('règle 2 : prix mélangé + STAFF lu : la règle 1 puis la mention de la règle 2, plus « peut être gonflé »', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: true }), ['prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
+v('règle 2 : tamponStaffLu sans fiche marquée : rien (le tampon lu ne marque pas une fiche)', R({ tendance: 10, moyenne7: 10, moyenne30: 10, tamponStaffLu: true }), []);
+for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`règle 2 : tamponStaffLu ${JSON.stringify(x)} (≠ true) : la règle 3 reste`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: x }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
+v('règle 2 + écart : l\'écart d\'abord', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
 v('le résultat est gelé', Object.isFrozen(R({ tendance: 5, moyenne30: 10 })), true);
 v('aucun argument : sans lever, et rien n\'a été mesuré -> ecart-non-mesurable', F.reservesDe(), ['ecart-non-mesurable']);
 

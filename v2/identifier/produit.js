@@ -39,12 +39,12 @@ function dateDuGuide(d) {
  * F4-PRIX : `deBase` dit ce qu'est le « De » (l'offre la plus basse TOUS ÉTATS, jamais le prix de l'état retenu) ; `fiable`/`reserves` disent si le prix peut être présenté comme sûr
  * (écart de la tendance aux moyennes > 30 %, prix mélangé avec une version tamponnée : fiabilite-prix.js). `melange` = le `prixMelangeTampon` de la ligne du produit (catalogue), vrai seulement si === true.
  */
-function prixGuideDe(g, melange = false, nonLu = false) {
+function prixGuideDe(g, melange = false, nonLu = false, tamponStaffLu = false) {
     if (!g || typeof g !== 'object') return null;
     const date = dateDuGuide(g.guideDu);
     const tendance = prix(g.trend), de = prix(g.low), moyenne7 = prix(g.avg7), moyenne30 = prix(g.avg30);
     if (!date || (tendance === null && de === null && moyenne30 === null)) return null;
-    const reserves = reservesDe({ tendance, moyenne7, moyenne30, prixMelangeTampon: melange, nonLu: nonLu === true });
+    const reserves = reservesDe({ tendance, moyenne7, moyenne30, prixMelangeTampon: melange, nonLu: nonLu === true, tamponStaffLu: tamponStaffLu === true });
     return Object.freeze({ tendance, de, deBase: BASE_DE, moyenne7, moyenne30, date, fiable: fiable(reserves), reserves });
 }
 // LIEN-CARDMARKET : un lien dès que le NUMÉRO est connu (la rareté n'est plus exigée), vers la page EXACTE du produit — la garde vit dans lien-cardmarket.js (un seul exemplaire).
@@ -66,7 +66,7 @@ function impression(i, ctx) {
         version: versionDe(i.version),                                                 // F4 (c) : V1, V2… — ce qui sépare deux produits au même set et au même numéro chez Cardmarket ; null = rien ne les sépare dans nos données
         langue: langueFermee(i.langue),   // CONTRAT 7a (ajout) : le code fermé de la langue de CETTE impression, ou null (jamais devinée)
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
-        lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide, i.prixMelangeTampon === true, i.nonLu === true)
+        lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide, i.prixMelangeTampon === true, i.nonLu === true, i.tamponStaffLu === true)
     });
 }
 
@@ -93,7 +93,7 @@ function construireProduit(source, ctx = {}) {
         variante: varianteDe(source.variante), version: versionDe(source.version), rarete,
         visuel: visuel && Object.freeze(visuel),
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
-        prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true),
+        prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true, source.tamponStaffLu === true),     // F1-TAMPON règle 2 : posé par la route SEULEMENT quand STAFF est lu deux fois
         // `source.lienCardmarket` = le lien de la FICHE PRODUIT (ligne de catalogue) ; `lien` d'une impression (i.lien, plus haut) = le lien de CETTE impression.
         liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero),
                                fiche: ctx.ficheServie ? `https://rat-market.fr/fr/p/${source.idProduct}` : null }),
