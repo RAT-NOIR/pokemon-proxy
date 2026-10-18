@@ -3,6 +3,7 @@
 // `validerEntree` n'écrit nulle part : un refus ici ne touche ni `mouvements` ni aucune autre collection.
 const { repondreErreur } = require('../erreurs');
 const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');   // la liste blanche de la production, pas une copie
+const { lireEnveloppe } = require('./voisins-empreinte');             // MODELE-VISUEL-API : la forme des empreintes de l'extension
 
 const TITRE_MAX = 300, DESCRIPTION_MAX = 4000;
 
@@ -60,11 +61,15 @@ function verifierEntree(corps, cfg) {
         if (urlAmbigue(u)) return refus('ENTREE', 'imageUrls : URL ambiguë (identifiant, port, barre inverse ou espace)', 'image-url');
     }
     if (!urls || !urls.length) return refus('IMAGE', 'aucune image à analyser', 'aucune-image');
+    // MODELE-VISUEL-API : `empreintes` / `modeleEmpreinte` ne sont LUS que si V2_EMPREINTE_EXTENSION=1 (éteint : la requête est jugée comme avant, octet pour octet). Une enveloppe fautive ne refuse JAMAIS la requête :
+    // l'empreinte est un plus, jamais un passage obligé ; le défaut est dit dans la réponse (`empreinte`, code « invalide »).
+    const empreintes = cfg.empreinteExtension === true ? lireEnveloppe(corps, urls.length) : null;
     return { entree: {
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
         vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // CONTRAT-2.md l. 24 : passé à la chaîne héritée (B1b.3) ; borné (mineur reporté de B1b.1)
-        langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim()
+        langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim(),
+        ...(empreintes ? { empreintes } : {})
     } };
 }
 
@@ -237,9 +242,31 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
         d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils);
     } catch (e) { journalErreur('règle G', e); return null; }
     if (!d) return null;
+    return appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits, catalogue, adapterFn, d });
+}
+
+// La décision de G, appliquée à la réponse de la chaîne. Extraite de consulterRegleG (MODELE-VISUEL-API) pour que la voie du vecteur de l'extension (consulterEmpreinte) applique le MÊME code : `arbitre` vaut
+// l'arbitrage prudent d'arbitrage-g.js par défaut (la voie de V2_REGLE_G ne bouge pas d'un octet) ; la voie du vecteur y met l'arbitrage AVEC promotion (promotion-g.js), qui peut répondre « promouvoir ».
+// @returns { resultat, desaccord, questionNeuve, promotion?, concordante? }
+async function appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits, catalogue, adapterFn, d, arbitre = arbitrer, jumeaux = null }) {
     const c0 = resultat.analyse.cartes[0];
-    const arb = arbitrer({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct) }, d);
+    const arb = arbitre({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct) }, d);
     if (arb.action === 'garder') return { resultat, desaccord: arb.desaccord, questionNeuve: false };
+    if (arb.action === 'promouvoir') {
+        // PROMOTION (règle (b) de la mesure combinée) : la chaîne posait une question, G AFFIRME Q et la garde (2) l'a laissé passer. Q est affirmé SANS la garde des jumeaux : G a jugé les jumeaux au niveau du visuel
+        // (même précédent que la seconde lecture, qui confirme par `rejouer`). Tout ce qui empêche de fabriquer cette affirmation laisse la réponse de la CHAÎNE (jamais pire que la chaîne seule).
+        const Q = arb.ids[0], garder = retenue => ({ resultat, desaccord: { ...arb.desaccord, retenue }, questionNeuve: false });
+        const tout = new Map(produits);
+        try { if (!tout.has(Q)) for (const [k, p] of await catalogue.lire([Q])) tout.set(k, p); } catch (e) { journalErreur('catalogue (promotion)', e); return garder('promotion-impossible'); }
+        if (!tout.has(Q)) return garder('promotion-impossible');
+        const c = corpsChaine || {};
+        const corps = { ...c, success: true, carte: { ...(c.carte || {}), idProduct: Q, ambigu: false }, candidats: [{ idProduct: Q }] };
+        let r = null;
+        try { r = adapterFn({ statutHttp: 200, corps }, { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: id => (id === Q ? { conclu: true, ids: [] } : (typeof jumeaux === 'function' ? jumeaux(id) : { conclu: false, ids: [] })) }); }
+        catch (e) { journalErreur('promotion (adaptateur)', e); return garder('promotion-impossible'); }
+        if (!r || r.issue !== 'affirmee' || !r.analyse || r.analyse.cartes[0].carte.idProduct !== Q) return garder('promotion-impossible');
+        return { resultat: r, desaccord: arb.desaccord, questionNeuve: false, promotion: true, concordante: arb.concordante === true };
+    }
     // la lecture du catalogue peut TOMBER : c'est une panne (remboursée par le filet de l'appelant), jamais une absence
     const tout = new Map(produits);
     try {
@@ -271,8 +298,46 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
     return { resultat: intro, desaccord: { ...arb.desaccord, retenue: 'introuvable-regle-g' }, questionNeuve: false };
 }
 
+// ── MODELE-VISUEL-API : la règle G alimentée par le VECTEUR de l'extension (V2_EMPREINTE_EXTENSION). Consultée APRÈS la chaîne héritée, à sa suite, jamais à sa place. Le fournisseur (voisins-empreinte.js) vérifie le vecteur,
+// cherche les voisins dans l'index de l'API et mesure la garde des zones ; la décision est celle de la règle G ; l'arbitrage est celui de la mesure combinée (promotion-g.js : l'arbitrage prudent pour une chaîne qui affirme,
+// plus la promotion d'une question quand G affirme et que la garde (2) laisse passer). 🔴 L'INTROUVABLE de la chaîne n'est JAMAIS promu ici (`depuisIntrouvable` reste faux) : la chaîne l'a déjà REMBOURSÉ, une
+// affirmation après un remboursement serait un scan gratuit (2 des 44 promotions de la mesure) ; et la garde (2) ne peut pas juger un refus, qui ne porte aucune lecture.
+// @returns { resultat, desaccord, questionNeuve, promotion?, empreinte: { public: {utilisee, code}, influence, promotion, lectureConcordante } } — ne lève jamais ; `empreinte.public` est ce que la réponse dit.
+async function consulterEmpreinte({ deps, cfg, fournisseur, entree, scanId, resultat, corpsChaine, produits, catalogue, adapterFn, jumeaux }) {
+    const sans = code => ({ resultat, desaccord: null, questionNeuve: false, empreinte: { public: { utilisee: false, code }, influence: false, promotion: false, lectureConcordante: false } });
+    let v;
+    try {
+        const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
+        v = await avecBorne(() => fournisseur({ entree, scanId: String(scanId) }), ms, 'voisins (empreinte)');
+    } catch (e) { journalErreur('empreinte (voisins)', e); return sans('indisponible'); }
+    if (!v || v.ok !== true) return sans(v && CODES_EMPREINTE.includes(v.code) ? v.code : 'indisponible');
+    let d;
+    try { d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils); }
+    catch (e) { journalErreur('empreinte (règle G)', e); return sans('indisponible'); }
+    if (!d) return sans('muette');
+    const c = corpsChaine && typeof corpsChaine === 'object' ? corpsChaine : {};
+    // la garde (2) n'est jugée que là où elle peut servir : la chaîne n'affirme pas et G affirme
+    let garde = null;
+    if (resultat.issue === 'question' && d.issue === 'affirmee') {
+        const tout = new Map(produits || []);
+        try { if (!tout.has(d.produit)) for (const [k, p] of await catalogue.lire([d.produit])) tout.set(k, p); } catch (e) { journalErreur('catalogue (garde de la promotion)', e); }
+        garde = PG.evaluerGarde({ corps: c, gagnant: d.produit, produits: tout });
+    }
+    let r;
+    try { r = await appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits, catalogue, adapterFn, d, jumeaux, arbitre: (ch, g) => PG.arbitrerAvecPromotion(ch, g, { garde, depuisIntrouvable: false }) }); }
+    catch (e) { journalErreur('empreinte (décision)', e); return sans('indisponible'); }
+    const influence = r.resultat !== resultat;
+    return { ...r, empreinte: { public: { utilisee: true, code: null }, influence, promotion: r.promotion === true, lectureConcordante: r.promotion === true && r.concordante === true } };
+}
+const CODES_EMPREINTE = require('./voisins-empreinte').CODES;
+const PG = require('./promotion-g');
+
 function traiterIdentifier(cfg, deps = {}) {
     const catalogue = deps.catalogue || creerCatalogue({ cfg });
+    // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place + crochet de pixels, non branché par ce lot : G se tait quand elle a besoin des zones)
+    const fournisseurEmpreinte = cfg.empreinteExtension === true
+        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, pixels: deps.pixelsEmpreinte || null, zones: deps.zonesEmpreinte || null }))
+        : null;
     const interne = async function traiterIdentifierV2(req, res, etat) {
         const porteur = req.v2 && req.v2.porteur, entree = req.entree;
         let argent;
@@ -327,7 +392,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, empreinteInfo = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: natureDuMotif(motif) });
@@ -402,6 +467,13 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     // une AFFIRMATION de la chaîne devenue une question (le produit a des jumeaux) : son crédit est encore pris, il est RÉSERVÉ plus bas, comme pour la règle G
                     if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
+                    // MODELE-VISUEL-API : le vecteur de l'extension, si (et seulement si) V2_EMPREINTE_EXTENSION est allumé ET que la requête en porte ; jamais sur une panne. La voie V2_REGLE_G ci-dessous reste pour les requêtes sans vecteur.
+                    if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
+                        const g = await consulterEmpreinte({ deps, cfg, fournisseur: fournisseurEmpreinte, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter, jumeaux });
+                        resultat = g.resultat; desaccordG = g.desaccord; empreinteInfo = g.empreinte;
+                        if (g.questionNeuve) reqH.regleGRaison = 'regle-g';
+                        if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
+                    } else
                     // B1b.7 : la règle G, si (et seulement si) l'interrupteur est allumé ET qu'un fournisseur de voisins est branché ; jamais sur une panne
                     if (resultat.issue !== 'panne' && RG.regleGActive(cfg, deps)) {
                         const g = await consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter });
@@ -457,7 +529,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}) };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}) };
             });
             }
         } catch (e) {
@@ -497,6 +569,10 @@ function traiterIdentifier(cfg, deps = {}) {
         // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
         let regle = null;
         try { regle = await regleVerdict(entree.devise); } catch (e) { journalErreur('taux', e); }
+        // MODELE-VISUEL-API : la version du modèle que le serveur attend, et où le télécharger. Servie ICI (et non dans /ping) parce que l'extension lit déjà `regleVerdict` à chaque réponse, qu'elle est versionnée avec le
+        // contrat, et que /ping reste un sondage de santé sans configuration. Éteint, ou version non configurée : le champ n'existe pas (la réponse est celle d'avant, octet pour octet).
+        const me = cfg.empreinteExtension === true && regle && cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? cfg.modeleEmpreinte : null;
+        if (me) regle = { ...regle, modeleEmpreinte: { id: me.id, sha256: me.sha256, url: me.url ?? null, octets: me.octets ?? null } };
         const analyse = { ...resultat.analyse, regleVerdict: regle };
         // 9. les écritures annexes : sans effet sur la réponse
         try {
@@ -514,6 +590,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(sortie.motif ? { motifJumeaux: sortie.motif } : {}),                    // JUMEAU-V2 : le motif distinct d'un introuvable de la garde (jamais servi au client : le contrat public ne change pas)
                 ...(sortie.secondeLecture ? { secondeLecture: sortie.secondeLecture } : {}),     // SECONDE-LECTURE : ce qu'elle a COÛTÉ (appels) et son issue — interne, jamais servi
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
+                // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
+                ...(sortie.empreinte ? { empreinteExtension: { utilisee: sortie.empreinte.public.utilisee, code: sortie.empreinte.public.code, influence: sortie.empreinte.influence, promotion: sortie.empreinte.promotion, lectureConcordante: sortie.empreinte.lectureConcordante, modele: cfg.modeleEmpreinte ? cfg.modeleEmpreinte.id : null } } : {}),
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
         } catch (e) { journalErreur('analyses', e); }
@@ -523,10 +601,14 @@ function traiterIdentifier(cfg, deps = {}) {
         // Le gestionnaire VIVANT ferme `livre` lui-même, que le client soit encore là ou non : une coupure du client ne rend rien.
         if (req.marqueFermeeParLaReponse === true) { req.fermerMarque = fermer; etat.differe = true; } else await fermer();
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
-        require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
+        // MODELE-VISUEL-API : un résultat que le vecteur de l'extension a CHANGÉ (promotion, question neuve) n'entre jamais dans les données partagées du banc sans une lecture concordante (la garde (2) a jugé ET un champ lu confirme
+        // le produit) : un vecteur forgé ne peut pas fabriquer une ligne de banc. Un résultat que le vecteur n'a pas changé, ou qu'il a promu avec une lecture concordante, passe comme avant.
+        const emp = sortie.empreinte;
+        if (!(emp && emp.influence && !emp.lectureConcordante)) require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
-        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
+        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre),
+            ...(sortie.empreinte ? { empreinte: sortie.empreinte.public } : {}) });          // MODELE-VISUEL-API : seulement quand la requête portait des empreintes et que le drapeau est allumé
     };
     return async function traiterIdentifierV2(req, res) {
         const etat = { suivi: null, differe: false };
