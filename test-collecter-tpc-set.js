@@ -156,6 +156,56 @@ const ligneBanc = (site, slug) => { const x = ligneTpc(site, slug); return x && 
         verifier('un plantage au milieu : le cumul de 3 requêtes (robots, liste, la requête qui a planté) est déjà sur le disque', [/boom|ERR/.test(e.e || ''), JSON.parse(fs.readFileSync(path.join(rc, 'compteur.json'), 'utf8')).requetes], [true, 3]);
     }
 
+    // ── 3 bis. correction 1 de la relecture L3b : le compteur se lit de façon SÛRE ──
+    {
+        const Bk = fausseBase(); semer(Bk);
+        for (const [nom, contenu] of [['JSON tronqué', '{"requetes":'], ['requetes en texte', '{"requetes":"12"}'], ['requetes négatif', '{"requetes":-1}'], ['requetes décimal', '{"requetes":1.5}'], ['un tableau', '[]'], ['objet vide', '{}'], ['vide', '']]) {
+            const rk = tmp(); fs.writeFileSync(path.join(rk, 'compteur.json'), contenu);
+            const trk = reseau(); const vk = verrou();
+            const e = await essayer(() => dl(Bk, rk, 460, trk, { verrou: vk }));
+            verifier(`compteur illisible (${nom}) : REFUS de partir, le message nomme le fichier, ZÉRO requête, verrou rendu, compteur laissé tel quel`, [/compteur\.json/.test(e.e || ''), trk.appels.length, vk.rendus, fs.readFileSync(path.join(rk, 'compteur.json'), 'utf8') === contenu], [true, 0, vk.prises, true]);
+        }
+        {   // une erreur de lecture AUTRE qu'une absence (ici : compteur.json est un dossier) n'est pas un « 0 »
+            const rd = tmp(); fs.mkdirSync(path.join(rd, 'compteur.json')); const trd = reseau();
+            const e = await essayer(() => dl(Bk, rd, 460, trd));
+            verifier('compteur illisible pour une AUTRE raison que l\'absence (EISDIR) : REFUS à la LECTURE (« illisible », il nomme le fichier), ZÉRO requête', [/compteur\.json illisible/.test(e.e || ''), trd.appels.length], [true, 0]);
+        }
+        const ra = tmp(); const tra = reseau();
+        const ba = await dl(Bk, ra, 460, tra);
+        verifier('compteur ABSENT (premier passage) : on part de 0', [ba.compteInitial, ba.etat], [0, 'termine']);
+        verifier('   aucun fichier temporaire ne reste à côté du compteur', fs.readdirSync(ra).filter(n => /compteur/.test(n)), ['compteur.json']);
+        // écriture ATOMIQUE : chaque mise à jour du compteur passe par un fichier temporaire puis un renommage
+        const renommages = [], renOrigine = fs.renameSync, ecrOrigine = fs.writeFileSync, ecrits = [];
+        fs.renameSync = (a, c) => { renommages.push([path.basename(a), path.basename(c)]); return renOrigine(a, c); };
+        fs.writeFileSync = (f, ...r) => { ecrits.push(path.basename(String(f))); return ecrOrigine(f, ...r); };
+        const rb = tmp(); let bb;
+        try { bb = await dl(Bk, rb, 460, reseau()); } finally { fs.renameSync = renOrigine; fs.writeFileSync = ecrOrigine; }
+        verifier('compteur.json n\'est JAMAIS écrit en place : seulement par renommage d\'un fichier temporaire', [ecrits.includes('compteur.json'), renommages.filter(r => r[1] === 'compteur.json').length >= bb.requetes, renommages.filter(r => r[1] === 'compteur.json').every(r => r[0] !== 'compteur.json' && /compteur/.test(r[0]))], [false, true, true]);
+    }
+    // 3 ter. lire le cumul APRÈS la prise du verrou (un lancement qui attendait ne part pas d'un cumul périmé)
+    {
+        const Bv = fausseBase(); semer(Bv); const rv = tmp(); const trv = reseau();
+        const vv = verrou(); vv.prendre = async () => { fs.writeFileSync(path.join(rv, 'compteur.json'), JSON.stringify({ requetes: 7 })); return null; };   // « A » finit pendant l'attente et laisse 7
+        const bv = await dl(Bv, rv, 8, trv, { verrou: vv });
+        verifier('cumul lu APRÈS la prise du verrou : 7 repris, robots = 8e, la liste (9e) est refusée', [bv.compteInitial, bv.etat, trv.appels], [7, 'plafond-atteint', ['/robots.txt']]);
+    }
+    // ── 3 quater. correction 2 : un blocage de PAGE tient d'une relance à l'autre (la règle commune reponse-hote : ARRET-HOTE, lu par garderHote) ──
+    {
+        const RH = require(path.join(DIR, 'collecte-cartes', 'reponse-hote'));
+        for (const [nom, statut, corps] of [['403', 403, 'Forbidden'], ['429', 429, 'Too many'], ['401', 401, 'no'], ['410', 410, 'gone'], ['défi', 200, '<title>Just a moment...</title>']]) {
+            const Bz = fausseBase(); semer(Bz); const rz = tmp(); const dpz = tmp();
+            const bloquant = { appels: [], async get(url) { this.appels.push(url); if (url.endsWith('/robots.txt')) return { status: 200, texte: '' }; return { status: statut, type: 'text/html', texte: corps }; } };
+            const q2 = silencieux(); let b1; try { b1 = await L.telecharger({ reelle: Bz.db, slug: SLUG, cacheDir: rz, racineAutorisee: rz, plafond: 50, verrou: verrou(), transport: bloquant, cadenceMs: 0, pourBanc: true, dossierPauses: dpz, ligneDe: ligneBanc }); } finally { q2(); }
+            const fichierArret = RH.fichierArret(dpz, 'asia.pokemon-card.com');
+            verifier(`page en ${nom} : « bloque », l'arrêt DURABLE est écrit dans le dossier des arrêts (injecté, jamais le vrai), après 2 requêtes (robots, liste)`, [b1.etat, fs.existsSync(fichierArret), bloquant.appels.length], ['bloque', true, 2]);
+            fs.writeFileSync(fichierArret, JSON.stringify({ ...JSON.parse(fs.readFileSync(fichierArret, 'utf8')), marqueur: 'intact' }));   // si la relance le réécrit, le marqueur disparaît
+            const t2 = reseau(); const q3 = silencieux(); let b2; try { b2 = await L.telecharger({ reelle: Bz.db, slug: SLUG, cacheDir: rz, racineAutorisee: rz, plafond: 50, verrou: verrou(), transport: t2, cadenceMs: 0, pourBanc: true, dossierPauses: dpz, ligneDe: ligneBanc }); } finally { q3(); }
+            verifier(`   relance après ${nom} : ZÉRO requête (pas même robots.txt), « bloque », l'arrêt n'est pas réécrit`, [b2.etat, t2.appels.length, JSON.parse(fs.readFileSync(fichierArret, 'utf8')).marqueur], ['bloque', 0, 'intact']);
+        }
+        // le vrai dossier des arrêts n'est jamais touché par le banc
+        verifier('le banc écrit ses arrêts dans un dossier temporaire (ARRETS_HOTES_DOSSIER), jamais dans le vrai', [RH.DOSSIER_PAUSES.startsWith(os.tmpdir()), /arrets-hotes$/.test(RH.DOSSIER_PAUSES) && !RH.DOSSIER_PAUSES.startsWith(os.tmpdir())], [true, false]);
+    }
+
     // ── 4. PLANCHE : zéro requête ──
     const nAppels = tr.appels.length + tr2.appels.length + tr3.appels.length + tr4.appels.length;
     const q = silencieux(); let pl; try { pl = await L.planche({ reelle: B.db, slug: SLUG, cacheDir: racine, racineAutorisee: racine, ligneDe: ligneBanc }); } finally { q(); }

@@ -24,6 +24,7 @@ const T = require('./collecte-cartes/tpc');
 const { ligneTpc, listesDe } = require('./collecte-cartes/tpc-sets');
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');
 const C = require('./collecteur-images-tpc');
+const RH = require('./collecte-cartes/reponse-hote');          // la règle COMMUNE de réponse : arrêt durable par hôte (arretHote), lu par garderHote avant toute requête
 
 const SETS_AUTORISES = Object.freeze(['Traditional-Chinese-Products']);
 const SITE = 'tpc-asie';
@@ -48,8 +49,27 @@ function lectureSeule(reelle) {
 }
 
 const fichiers = dossier => ({ etat: path.join(dossier, 'etat-local.json'), compteur: path.join(dossier, 'compteur.json'), index: path.join(dossier, 'images', 'index.json'), plan: path.join(dossier, 'plan.json') });
-const lireJson = (f, defaut) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return defaut; } };
-const ecrireJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)); };
+// Lecture SÛRE (correction 1 de la relecture L3b) : fichier ABSENT = la valeur par défaut (premier passage) ; fichier présent mais illisible = on ne part pas, et le message le NOMME. Un repli silencieux sur
+// « 0 » remettrait le plafond de 460 à neuf après une coupure en pleine écriture.
+const lireJson = (f, defaut) => {
+    let texte;
+    try { texte = fs.readFileSync(f, 'utf8'); }
+    catch (e) { if (e.code === 'ENOENT') return defaut; throw new Error(`${f} illisible (${e.message}) — on ne part pas, rien n'est demandé`); }
+    try { return JSON.parse(texte); } catch (e) { throw new Error(`${f} illisible (JSON invalide : ${e.message}) — on ne part pas, rien n'est demandé ; le restaurer ou le supprimer est une décision du coordinateur`); }
+};
+/** Écriture ATOMIQUE : fichier temporaire voisin, puis renommage — une coupure laisse l'ancien contenu ou le nouveau, jamais un fichier tronqué. */
+const ecrireJson = (f, v) => {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const tmp = `${f}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(v));
+    fs.renameSync(tmp, f);
+};
+/** Le cumul de requêtes : absent → 0 ; présent → un objet `{ requetes: entier ≥ 0 }` ou le refus, qui nomme le fichier. */
+function lireCompteur(f) {
+    const j = lireJson(f, { requetes: 0 });
+    if (!j || typeof j !== 'object' || Array.isArray(j) || !Number.isInteger(j.requetes) || j.requetes < 0) throw new Error(`${f} de forme inattendue (${JSON.stringify(j)}) : « requetes » doit être un entier ≥ 0 — on ne part pas, rien n'est demandé`);
+    return j.requetes;
+}
 
 function cadre({ slug, cacheDir, racineAutorisee, ligneDe = ligneTpc }) {
     if (!SETS_AUTORISES.includes(slug)) throw new Error(`set « ${slug} » : hors de la liste fermée (${SETS_AUTORISES.join(', ')}) — rien n'est demandé`);
@@ -95,15 +115,16 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
 
     fs.mkdirSync(path.join(dossier, 'images'), { recursive: true });
     const local = C.baseLocale(lecture, f.etat);
-    const compteInitial = lireJson(f.compteur, { requetes: 0 }).requetes;
-    let aEcrire = 0;
-    const surRequete = n => { ecrireJson(f.compteur, { requetes: n, plafond, le: new Date().toISOString() }); if (++aEcrire % 10 === 0) local.ecrireFichier(); };
     const tenuPar = verrou.prendre ? await verrou.prendre() : null;
     if (tenuPar) throw new Error(`verrou global ${SITE} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} — on s'arrête, aucune requête`);
-    const client = T.fabriquerClientTpc({ site: SITE, verrou, transport, cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
-    const bilan = { etat: 'termine', plafond, compteInitial, listes: null, fiches: 0, prouves: 0, images: { telechargees: 0, enCache: 0, absentes: 0 }, restes: {} };
-    const compteurs = {}, compter = k => { compteurs[k] = (compteurs[k] || 0) + 1; };
     try {
+        // le cumul se lit APRÈS la prise du verrou : un lancement qui attendait un autre ne part pas d'un cumul périmé
+        const compteInitial = lireCompteur(f.compteur);
+        let aEcrire = 0;
+        const surRequete = n => { ecrireJson(f.compteur, { requetes: n, plafond, le: new Date().toISOString() }); if (++aEcrire % 10 === 0) local.ecrireFichier(); };
+        const client = T.fabriquerClientTpc({ site: SITE, verrou, transport, cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
+        const bilan = { etat: 'termine', plafond, compteInitial, listes: null, fiches: 0, prouves: 0, images: { telechargees: 0, enCache: 0, absentes: 0 }, restes: {}, dossierPauses: dossierPauses ?? RH.DOSSIER_PAUSES };
+        const compteurs = {}, compter = k => { compteurs[k] = (compteurs[k] || 0) + 1; };
         let lu;
         try { lu = await C.lireListesEtFiches(local, client, SITE, L, idEtat, compter); }
         catch (e) { return conclure(e, bilan, client, local, f, log); }
@@ -134,7 +155,15 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
 }
 function conclure(e, bilan, client, local, f, log) {
     if (e.plafond) bilan.etat = 'plafond-atteint';
-    else if (e.bloque) { bilan.etat = 'bloque'; bilan.motif = e.message; }
+    else if (e.bloque) {
+        bilan.etat = 'bloque'; bilan.motif = e.message;
+        // 401/403/410/429/défi sur une PAGE : le client LÈVE mais ne retient rien d'une relance à l'autre. On retient l'arrêt par la règle COMMUNE (reponse-hote.js `arretHote`, le fichier que
+        // `garderHote` lit avant TOUTE requête, pages comme images) — pas un second mécanisme. Un arrêt déjà tenu (`arretDefinitif`) n'est pas réécrit. Si l'écriture échoue, on le dit : l'état reste « bloque ».
+        if (!e.arretDefinitif) {
+            try { bilan.arretEcrit = RH.arretHote(new URL(T.SITES[SITE].hote).hostname, e.message, { dossier: bilan.dossierPauses }); }
+            catch (er) { bilan.arretEcrit = null; bilan.ecritureArretImpossible = er.message; process.exitCode = 1; }
+        }
+    }
     else if (e.pauseHote) { bilan.etat = 'pause'; bilan.motif = e.message; }
     else throw e;
     bilan.motif ??= e.message;
