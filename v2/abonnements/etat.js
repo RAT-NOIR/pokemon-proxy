@@ -18,7 +18,7 @@
 const { ObjectId } = require('mongoose').Types;
 const { col } = require('../db');
 const { DEPUIS_LOOKUP, GRACE_IMPAYE_JOURS, MARGE_RENOUVELLEMENT_HEURES, MARGE_ESSAI_PLACE_JOURS } = require('./offres');
-const Fo = require('./fondateurs'); const Essai = require('./essai');
+const Fo = require('./fondateurs'); const Essai = require('./essai'); const Cl = require('./client');
 
 const STATUTS = Object.freeze(['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']);
 const TERMINAUX = Object.freeze(['canceled', 'incomplete_expired']);
@@ -154,7 +154,12 @@ async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, comp
         const res = await col('comptes').updateOne({ _id: compte._id, 'abonnement.stripe.rev': st && Number.isInteger(st.rev) ? st.rev : null }, { $set: pose });
         if (res.matchedCount === 1) {
             // STRIPE-DECISIONS : l'essai existe vraiment — la réservation de la boîte et des installations du compte (faite au Checkout) devient définitive (essai.js ; idempotent, sans effet hors essai)
-            if (s.aEuEssai) await Essai.confirmer(compte._id, evtDate);
+            // Un essai qui n'aurait pas dû démarrer (la boîte ou une installation du compte a DÉJÀ servi un autre essai confirmé : réservation expirée, installation liée entre le Checkout et ce
+            // webhook) est CLOS tout de suite : fin de l'essai maintenant — résiliation s'il n'y a pas de carte (missing_payment_method=cancel), premier paiement s'il y en a une. Un échec de Stripe fait rejouer l'événement.
+            if (s.aEuEssai) {
+                const g = await Essai.confirmer(compte, evtDate);
+                if (g.clore && s.statut === 'trialing') { await Cl.obtenir(cfgAbo).subscriptions.update(s.sid, { trial_end: 'now' }); signaux.push(`essai-clos:${g.detail}`); }
+            }
             // La place Fondateurs : réservée pendant l'ESSAI (elle compte contre le plafond, jusqu'à la fin de l'essai + marge), CONFIRMÉE à la première facture payée (webhook invoice.paid, ou ici un
             // abonnement déjà `active` : il a payé), RENDUE si l'abonnement meurt avant tout paiement (une place prise ne se rend jamais).
             if (effectif.offre === 'fondateurs' || (entree && entree.offre === 'fondateurs')) {

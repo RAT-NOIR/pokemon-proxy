@@ -43,7 +43,7 @@ async function porteurDeRejeu(req) {
 
 /** → { statut, code } en cas de refus ; { ok:true, compte, jeton } sinon. `argent` est vérifié par l'appelant AVANT l'appel.
  *  `rejeu` : { cle, expireLe } quand la requête porte une Idempotency-Key (la fenêtre de rejeu est posée dans la MÊME écriture que la rotation du jeton). */
-async function lier({ installation, code, argent, maintenant = new Date(), rejeu = null }) {
+async function lier({ installation, code, argent, maintenant = new Date(), rejeu = null, cfg = null }) {
     if (installation.compteId) return { statut: 409, code: 'DEJA_LIE' };      // avant de toucher au code : il reste utilisable ailleurs
     const texte = typeof code === 'string' ? code.trim().toUpperCase() : '';
     if (!RE_CODE.test(texte)) return { statut: 404, code: 'CODE_INVALIDE' };
@@ -81,6 +81,8 @@ async function lier({ installation, code, argent, maintenant = new Date(), rejeu
         await rendre();
         return { statut: 503, code: 'INDISPONIBLE' };
     }
+    // STRIPE-DECISIONS : liée APRÈS un essai (ou entre le Checkout et le webhook), l'installation entre au registre de l'essai du compte (une installation qui a servi un essai n'en ouvre jamais un second)
+    if (cfg) { try { await require('../abonnements/essai').noterLiaison(compte, installation._id, cfg, maintenant); } catch (e) { console.error(`❌ [v2 liaison] registre de l'essai non mis à jour (${(e && (e.code || e.name)) || 'erreur'})`); } }
     return { ok: true, compte, jeton, emailMasque: masquer(compte.email) };
 }
 

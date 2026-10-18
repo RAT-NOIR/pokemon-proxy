@@ -75,26 +75,30 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date() })
     return sousVerrou(parrain._id, async () => {
         const fraiche = await col('abo_primes').findOne({ _id: filleulId });
         if (!fraiche || !ATTENTES.includes(fraiche.etat)) return { etat: 'ignore', raison: fraiche ? fraiche.etat : 'absente' };
-        const appliqueLe = maintenant;
-        if ((await moisDansLaFenetre(parrain._id, filleulId, appliqueLe)) >= O.PLAFOND_PARRAINAGE_MOIS) {
+        // L'HEURE DE LA DÉCISION, pas la date de l'événement : un événement en retard (reprise de Stripe après un 500) porte une date ancienne, mais il est décidé MAINTENANT ; les avoirs déjà appliqués
+        // (même datés de « plus tard » que lui) comptent tous. (`maintenant` plus tardif que l'horloge : les bancs, qui fixent la date de décision.)
+        const decision = new Date(Math.max(maintenant.getTime(), Date.now()));
+        // L'ÉTAT RÉEL chez Stripe d'abord : un avoir DÉJÀ posé (panne entre l'avoir et l'écriture « applique », reprise) reste « applique » et compte dans le plafond — la base ne dit jamais « refusee » pour un avoir qui existe.
+        const dejaPose = await avoirDejaPose(stripe, parrain.stripeClient, filleulId);
+        if (!dejaPose && (await moisDansLaFenetre(parrain._id, filleulId, decision)) >= O.PLAFOND_PARRAINAGE_MOIS) {
             await col('abo_primes').updateOne({ _id: filleulId, etat: { $in: ATTENTES } }, { $set: { etat: 'refusee', raison: 'plafond-annuel', majLe: maintenant } });
             signaler(`prime refusee : plafond-annuel (le parrain ${String(parrain._id)} a déjà ${O.PLAFOND_PARRAINAGE_MOIS} mois offerts sur ${O.FENETRE_PARRAINAGE_JOURS} jours ; filleul ${String(filleulId)})`);
             return { etat: 'ignore', raison: 'plafond-annuel', signal: 'plafond-annuel' };
         }
         const montant = (await Pub.lire(stripe, cfgAbo)).pro.mois;                              // UN mois : le prix mensuel Pro (lu chez Stripe), quelle que soit la période du parrain
-        if (!(await avoirDejaPose(stripe, parrain.stripeClient, filleulId))) {
+        if (!dejaPose) {
             await stripe.customers.createBalanceTransaction(parrain.stripeClient, { amount: -montant, currency: O.DEVISE, description: DESCRIPTION, metadata: { rm_prime: String(filleulId), rm_parrain: String(parrain._id) } }, { idempotencyKey: `prime-${String(filleulId)}` });
         }
-        await col('abo_primes').updateOne({ _id: filleulId, etat: { $ne: 'applique' } }, { $set: { etat: 'applique', appliqueLe, montant, sid: st.sid, majLe: maintenant } });
+        await col('abo_primes').updateOne({ _id: filleulId, etat: { $ne: 'applique' } }, { $set: { etat: 'applique', appliqueLe: decision, montant, sid: st.sid, majLe: maintenant } });
         return { etat: 'applique' };
     });
 }
 const fenetreDebut = fin => new Date(fin.getTime() - O.FENETRE_PARRAINAGE_JOURS * 86400e3);
-/** Les mois déjà offerts à ce parrain dans la fenêtre glissante (fenetreDebut(t), t] qui se termine à la date d'application de la prime en cours d'examen (elle-même exclue). */
-async function moisDansLaFenetre(parrainId, filleulId, appliqueLe) {
-    return col('abo_primes').countDocuments({ parrainId, _id: { $ne: filleulId }, etat: 'applique', appliqueLe: { $gt: fenetreDebut(appliqueLe), $lte: appliqueLe } });
+/** Les mois déjà offerts à ce parrain dans la fenêtre glissante qui PRÉCÈDE l'heure de la décision (fenetreDebut(t), ∞) — sans borne haute : tout avoir appliqué compte, quelle que soit la date de l'événement qui l'a fait naître. */
+async function moisDansLaFenetre(parrainId, filleulId, decision) {
+    return col('abo_primes').countDocuments({ parrainId, _id: { $ne: filleulId }, etat: 'applique', appliqueLe: { $gt: fenetreDebut(decision) } });
 }
-const VERROUS = 'abo_primes_verrous', VERROU_MS = 60e3, ATTENTE_VERROU_TOURS = 200;
+const VERROUS = 'abo_primes_verrous', VERROU_MS = 300e3, ATTENTE_VERROU_TOURS = 200;      // 5 min : bien plus que la plus longue section (20 pages de soldes chez Stripe) — pas de renouvellement à gérer
 const dormir = ms => new Promise(r => setTimeout(r, ms));
 /** Exécute `f` seul pour ce parrain. Le verrou est un document à _id unique : l'insertion est atomique, un verrou périmé (processus mort) se reprend sous condition d'expiration. */
 async function sousVerrou(parrainId, f) {
@@ -120,4 +124,4 @@ async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date() })
     for (const p of primes) { const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant }); if (r.etat === 'applique') faites++; }
     return primes.length ? { etat: faites ? 'applique' : 'en-attente', faites } : { etat: 'ignore', raison: 'rien-en-attente' };
 }
-module.exports = { ouvrir, appliquer, reprendre, raisonDeRefus, moisOfferts, moisDansLaFenetre, VIVANTS, ATTENTES };
+module.exports = { ouvrir, appliquer, reprendre, raisonDeRefus, moisOfferts, moisDansLaFenetre, sousVerrou, VERROUS, VIVANTS, ATTENTES };

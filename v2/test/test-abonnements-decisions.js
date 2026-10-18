@@ -82,7 +82,7 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     const cA = A.cfgAbo();
     const argentFaux = { fusionnerALaLiaison: async () => ({ ok: true }) };
     const nouvelleInstallation = async () => { const i = M.nouvelleInstallation({ jetonEmpreinte: `e${n()}${n()}`, essais: 0, libelle: 'banc' }); await db.col('installations').insertOne(i); return i; };
-    const lier = async (compte, installation) => { const code = await Li.creerCode(compte.id, cA); const r = await Li.lier({ installation: await db.col('installations').findOne({ _id: installation._id }), code: code.code, argent: argentFaux }); if (!r.ok) throw new Error(`liaison : ${r.code}`); };
+    const lier = async (compte, installation) => { const code = await Li.creerCode(compte.id, cA); const r = await Li.lier({ installation: await db.col('installations').findOne({ _id: installation._id }), code: code.code, argent: argentFaux, cfg: cA }); if (!r.ok) throw new Error(`liaison : ${r.code}`); };
     const inst = await nouvelleInstallation();
     const C = await compteMail(`inst${n()}@exemple.fr`), D = await compteMail(`autre${n()}@exemple.fr`), E = await compteMail(`sans${n()}@exemple.fr`);
     await lier(C, inst);
@@ -302,6 +302,108 @@ const logs = []; const errOrig = console.error; console.error = (...a) => { logs
     await pub.fermer();
     const st = await statut(O1);
     H.v('le statut public annonce l\'essai et les offres Pro seulement (jamais Fondateurs)', [Object.keys(st.offres).sort(), JSON.stringify(st).includes('fondateurs')], [['devise', 'essaiJours', 'pro', 'source'], false]);
+    // ═══ 11. TOUR DE CORRECTION 1 — les contournements de la relecture 1 (chacun tombait sur le code d'avant) ═══
+    // R1 : lier l'installation APRÈS l'essai
+    const IX = await nouvelleInstallation();
+    const C1 = await compteMail(`apres${n()}@exemple.fr`), D1 = await compteMail(`autre${n()}@exemple.fr`);
+    await checkout(C1, { offre: 'pro', periode: 'mois' }); await abonner(C1);
+    await lier(C1, IX); await Li.delier(await db.col('installations').findOne({ _id: IX._id }));
+    await lier(D1, IX);
+    await checkout(D1, { offre: 'pro', periode: 'mois' });
+    H.v('R1 : une installation liée APRÈS l\'essai du compte entre au registre : un autre compte qui la lie ensuite n\'a PAS d\'essai', [dernier().params.subscription_data.trial_period_days, (await statut(D1)).abonnement.essai.refus], [undefined, 'installation-deja-utilisee']);
+    // R1b : liée entre le Checkout et le webhook
+    const IX2 = await nouvelleInstallation(); const C2 = await compteMail(`entre${n()}@exemple.fr`), D2 = await compteMail(`autre${n()}@exemple.fr`);
+    await checkout(C2, { offre: 'pro', periode: 'mois' }); await lier(C2, IX2); await abonner(C2);
+    H.v('R1b : liée entre le Checkout et le webhook : la ligne de l\'installation est CONFIRMÉE avec l\'essai', (await essaiDe(C2.id)).map(d => `${d.genre}:${d.etat}`).sort(), ['boite:pris', 'installation:pris']);
+    await Li.delier(await db.col('installations').findOne({ _id: IX2._id })); await lier(D2, IX2); await checkout(D2, { offre: 'pro', periode: 'mois' });
+    H.v('   un autre compte qui la lie ensuite : pas d\'essai', dernier().params.subscription_data.trial_period_days, undefined);
+    // un essai qui n'aurait pas dû démarrer (installation déjà servie, liée trop tard) est CLOS : fin d'essai maintenant, résiliation sans carte
+    const IX3 = await nouvelleInstallation(); const G1 = await compteMail(`premier${n()}@exemple.fr`), G2 = await compteMail(`tard${n()}@exemple.fr`), G3 = await compteMail(`tard${n()}@exemple.fr`);
+    await lier(G1, IX3); await checkout(G1, { offre: 'pro', periode: 'mois' }); await abonner(G1);
+    await Li.delier(await db.col('installations').findOne({ _id: IX3._id }));
+    await checkout(G2, { offre: 'pro', periode: 'mois' }); await lier(G2, IX3); logs.length = 0;
+    const abG2 = await abonner(G2);
+    H.v('ESSAI CLOS : le second compte (installation déjà servie, liée après son Checkout) démarre son essai, le webhook le CLÔT : fin d\'essai maintenant, SANS carte → résilié, statut termine, aucune facture payée', [(await statut(G2)).abonnement.statut, faux.sub(abG2.sid).status, faux.E.invoices.filter(i => i.sub === abG2.sid && i.amount_paid > 0).length, logs.some(l => l.includes('essai-clos:installation-deja-utilisee'))], ['termine', 'canceled', 0, true]);
+    H.v('   le premier compte garde son essai et ses lignes', (await essaiDe(G1.id)).map(d => `${d.genre}:${d.etat}`).sort(), ['boite:pris', 'installation:pris']);
+    await Li.delier(await db.col('installations').findOne({ _id: IX3._id }));
+    await checkout(G3, { offre: 'pro', periode: 'mois' }); await lier(G3, IX3);
+    const abG3 = await abonner(G3, { carte: 'pm_card_visa', finSansCarte: null });
+    H.v('   avec une carte, la clôture de l\'essai lance le premier paiement (499), l\'abonnement est actif', [faux.sub(abG3.sid).status, faux.E.invoices.filter(i => i.sub === abG3.sid && i.amount_paid === 499).length], ['active', 1]);
+    // R2 : la réservation de la boîte expire avant la confirmation
+    const loc3 = `lapse${n()}`; const L1 = await compteMail(`${loc3}@exemple.fr`), L2 = await compteMail(`${loc3}+b@exemple.fr`);
+    await checkout(L1, { offre: 'pro', periode: 'mois' });
+    await db.col('abo_essais').updateOne({ compteId: L1.id, genre: 'boite' }, { $set: { expireLe: new Date(Date.now() - 1000) } });
+    await checkout(L2, { offre: 'pro', periode: 'mois' });
+    const dureeRes = (await db.col('abo_essais').findOne({ compteId: L2.id, genre: 'boite' })).expireLe.getTime() - Date.now();
+    await abonner(L2); await abonner(L1);
+    H.v('R2 : réservation expirée puis reprise par un autre compte de la boîte : le second à CONFIRMER est clos (statut termine), la boîte reste au premier confirmé', [(await statut(L1)).abonnement.statut, (await statut(L2)).abonnement.statut, String((await db.col('abo_essais').findOne({ genre: 'boite', compteId: L2.id })).etat)], ['termine', 'essai', 'pris']);
+    H.v('   la réservation couvre au moins la vie d\'une session Checkout (70 min) et sa marge', dureeRes >= 100 * 60e3, true);
+    const L3 = await compteMail(`libre${n()}@exemple.fr`); await checkout(L3, { offre: 'pro', periode: 'mois' });
+    await db.col('abo_essais').deleteMany({ compteId: L3.id });
+    await abonner(L3);
+    H.v('   la boîte LIBRE au webhook (ligne disparue) : l\'essai est gardé et la ligne est confirmée', [(await statut(L3)).abonnement.statut, (await essaiDe(L3.id)).map(d => d.etat)], ['essai', ['pris']]);
+    // R4 : plafond et événement en désordre
+    const maintenantR = Date.now();
+    const Q4 = await creerParrainManuel();
+    for (let i = 1; i <= 12; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q4.id, etat: 'applique', creeLe: new Date(), appliqueLe: new Date(maintenantR + i * 60e3), montant: 499 });
+    const [idTard] = await insererPrimes(Q4, 1);
+    const rTard = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: idTard, maintenant: new Date(maintenantR - 3600e3) });
+    H.v('R4 : 12 avoirs appliqués à des dates plus tardives, un événement EN RETARD (date ancienne) : la 13e est refusée, pas de 13e avoir', [rTard.etat, (await db.col('abo_primes').findOne({ _id: idTard })).etat, (faux.E.customers.get(Q4.compte.stripeClient).transactions || []).length], ['ignore', 'refusee', 0]);
+    // la décision se juge à l'heure RÉELLE : 12 avoirs vieux de 366 jours sont sortis de la fenêtre, même si l'événement en retard porte une date plus ancienne qui les y garderait
+    const Q6 = await creerParrainManuel();
+    for (let i = 0; i < 12; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q6.id, etat: 'applique', creeLe: new Date(), appliqueLe: new Date(maintenantR - 366 * JOUR * 1000), montant: 499 });
+    const [id6] = await insererPrimes(Q6, 1);
+    H.v('   la fenêtre se juge à l\'heure de la décision, pas à la date de l\'événement : 12 avoirs de 366 jours ne comptent plus, la nouvelle prime est appliquée', (await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id6, maintenant: new Date(maintenantR - 2 * JOUR * 1000) })).etat, 'applique');
+    // R5 : un avoir déjà posé chez Stripe ne devient jamais « refusee »
+    const Q5 = await creerParrainManuel();
+    for (let i = 0; i < 12; i++) await db.col('abo_primes').insertOne({ _id: new ObjectId(), parrainId: Q5.id, etat: 'applique', creeLe: new Date(), appliqueLe: new Date(), montant: 499 });
+    const [id13] = await insererPrimes(Q5, 1);
+    await faux.customers.createBalanceTransaction(Q5.compte.stripeClient, { amount: -499, currency: 'eur', description: 'x', metadata: { rm_prime: String(id13), rm_parrain: String(Q5.id) } });
+    const r13 = await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id13, maintenant: new Date() });
+    H.v('R5 : l\'avoir de la 13e prime existe DÉJÀ chez Stripe (reprise après panne) : la base dit « applique », jamais « refusee », et il n\'y a toujours qu\'UN avoir', [r13.etat, (await db.col('abo_primes').findOne({ _id: id13 })).etat, (faux.E.customers.get(Q5.compte.stripeClient).transactions || []).length], ['applique', 'applique', 1]);
+    const [id14] = await insererPrimes(Q5, 1);
+    H.v('   et cet avoir compte dans le plafond : la 14e est refusée', [(await Pr.appliquer({ stripe: faux, cfgAbo, filleulId: id14, maintenant: new Date() })).etat, (await db.col('abo_primes').findOne({ _id: id14 })).etat], ['ignore', 'refusee']);
+    // les mutants de la relecture : carteDe sur une clé absente, le verrou d'un autre, un compte sans emailCle
+    H.v('carteDe : la clé default_payment_method ABSENTE de l\'abonnement = on ne sait pas (null), jamais « sans carte »', Carte.carteDe({ customer: { invoice_settings: { default_payment_method: null } } }), null);
+    {
+        const idP = new ObjectId(); let libereA, libereB; const porteA = new Promise(r => { libereA = r; }), porteB = new Promise(r => { libereB = r; });
+        const A1 = Pr.sousVerrou(idP, () => porteA);
+        await new Promise(r => setTimeout(r, 150));
+        await db.col(Pr.VERROUS).updateOne({ _id: `parrain:${String(idP)}` }, { $set: { expireLe: new Date(Date.now() - 1000) } });          // le verrou de A est périmé
+        const B1 = Pr.sousVerrou(idP, () => porteB);
+        await new Promise(r => setTimeout(r, 300));
+        libereA(); await A1;
+        H.v('verrou du parrain : A (périmé) finit APRÈS que B l\'a repris — il ne retire PAS le verrou de B', await db.col(Pr.VERROUS).countDocuments({ _id: `parrain:${String(idP)}` }), 1);
+        libereB(); await B1;
+        H.v('   B finit : le verrou est retiré', await db.col(Pr.VERROUS).countDocuments({ _id: `parrain:${String(idP)}` }), 0);
+    }
+    let leve = null, rSans = null;
+    try { rSans = await Essai.verifier({ _id: new ObjectId(), abonnement: {} }, cfg, new Date()); } catch (e) { leve = e.name; }
+    H.v('un compte sans emailCle : la garde REFUSE (domaine-jetable), elle ne lève pas', [leve, rSans], [null, { permis: false, detail: 'domaine-jetable' }]);
+    // L'oracle de l'offre Fondateurs dans le Checkout : offre ouverte ou fermée, un code faux reçoit la MÊME réponse
+    const srvFerme2 = await A.serveur(A.cfgAbo({ V2_FONDATEURS_CODE: '' }));
+    const abonneEtat = { actif: true, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: new Date(Date.now() + 86400e3), stripe: { sid: 'sub_vivant', statut: 'active', version: 1, offre: 'pro', periode: 'mois', jusquAu: new Date(Date.now() + 86400e3) } };
+    // (le délai avant réessai d'un 429 dépend de la seconde : exclu, comme les dates)
+    const sd = r => JSON.stringify({ s: r.statut, j: JSON.parse(JSON.stringify(r.json), (k, v) => (k === 'reessayerDans' ? undefined : v)), e: Object.fromEntries(Object.entries(r.entetes).filter(([k]) => !['date', 'etag', 'x-request-id', 'content-length', 'retry-after'].includes(k))) });
+    const suite = async (url, corpsDe) => { const u = await compteMail(`oracle${n()}@exemple.fr`, { abonnement: abonneEtat }); const out = []; for (let i = 0; i < 12; i++) out.push(sd(await H.appel(url, '/api/abonnement/checkout', { methode: 'POST', corps: corpsDe(i), entetes: { ...A.SITE, ...ipN(), cookie: u.cookie } }))); return out; };
+    const ouvertSans = await suite(srv.url, () => ({ offre: 'fondateurs', periode: 'mois' })), fermeSans = await suite(srvFerme2.url, () => ({ offre: 'fondateurs', periode: 'mois' }));
+    const ouvertFaux = await suite(srv.url, i => ({ offre: 'fondateurs', periode: 'mois', code: `FAUX-${i}` })), fermeFaux = await suite(srvFerme2.url, i => ({ offre: 'fondateurs', periode: 'mois', code: `FAUX-${i}` }));
+    H.v('ORACLE : un compte déjà abonné, offre Fondateurs SANS code puis avec 12 codes faux : offre ouverte et offre fermée donnent les MÊMES réponses (statut, corps, en-têtes), le 429 au 11e essai aux deux', [JSON.stringify(ouvertSans) === JSON.stringify(fermeSans), JSON.stringify(ouvertFaux) === JSON.stringify(fermeFaux), JSON.parse(ouvertFaux[10]).s, JSON.parse(fermeFaux[10]).s, JSON.parse(ouvertFaux[0]).s, JSON.parse(ouvertSans[0]).s], [true, true, 429, 429, 422, 422]);
+    await srvFerme2.fermer();
+    // 8. LA MENTION LÉGALE DES FACTURES : TVA non applicable, art. 293 B du CGI — posée à la création du client, rattrapée sur un client ancien, jamais d'automatic_tax
+    const O2 = require('../abonnements/offres');
+    H.v('la mention est UNE constante, exactement la phrase de l\'éditeur', O2.MENTION_FACTURE, 'TVA non applicable, art. 293 B du CGI');
+    const M1 = await compteMail(`pied${n()}@exemple.fr`); await checkout(M1, { offre: 'pro', periode: 'mois' });
+    const clM1 = (await A.lireCompte(M1.id)).stripeClient;
+    H.v('un client créé par le Checkout porte le pied de facture dès sa création', [faux.E.appels.filter(a => a.nom === 'customers.create').at(-1).params.invoice_settings, faux.E.customers.get(clM1).invoice_settings.footer], [{ footer: O2.MENTION_FACTURE }, O2.MENTION_FACTURE]);
+    const vieux = await faux.customers.create({ email: 'v@exemple.fr', metadata: { compteId: 'x' } });
+    const M2 = await compteMail(`ancien${n()}@exemple.fr`, { stripeClient: vieux.id });
+    H.v('   un client plus ancien, sans pied : le contrôle de départ le voit absent', faux.E.customers.get(vieux.id).invoice_settings.footer, null);
+    await checkout(M2, { offre: 'pro', periode: 'mois' });
+    H.v('   il reçoit le pied au passage suivant par le Checkout (et un client déjà à jour n\'est pas réécrit)', [faux.E.customers.get(vieux.id).invoice_settings.footer, faux.E.appels.filter(a => a.nom === 'customers.update' && a.params.invoice_settings && a.params.invoice_settings.footer).length], [O2.MENTION_FACTURE, 1]);
+    await checkout(M2, { offre: 'pro', periode: 'an' });
+    H.v('   un second passage ne réécrit rien', faux.E.appels.filter(a => a.nom === 'customers.update' && a.params.invoice_settings && a.params.invoice_settings.footer).length, 1);
+    H.v('le Checkout ne demande JAMAIS automatic_tax (aucune session créée dans ce banc n\'en porte)', [faux.E.appels.filter(a => a.nom === 'checkout.sessions.create').length > 20, faux.E.appels.filter(a => a.nom === 'checkout.sessions.create').some(a => JSON.stringify(a.params).includes('automatic_tax'))], [true, false]);
     // les index de CONFORT de l'essai sont créés avec les autres mais jamais EXIGÉS : déployer avant de les créer ne ferme aucune route
     const nomsConfort = ['abo_essais_ttl', 'abo_essais_compte', 'installations_comptes_lies'];
     const presentsAvant = [...(await db.col('abo_essais').indexes()), ...(await db.col('installations').indexes())].map(i => i.name);

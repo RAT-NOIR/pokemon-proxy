@@ -8,6 +8,7 @@ module.exports = {
     enTete(app, cfg) {
         if (!cfg.abonnements || !cfg.abonnements.actif) return;
         for (const a of cfg.abonnements.avertissements) console.error(`🔴 [v2 abonnements] ${a}`);
+        require('./essai').armer(cfg);          // le secret d'empreinte pour la confirmation de l'essai par le webhook
         monterWebhook(app, () => cfg.abonnements);
     },
     routes(router, cfg) {

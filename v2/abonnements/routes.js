@@ -66,12 +66,18 @@ async function assurerClient(stripe, compte) {
     let c = null;
     try { const r = await stripe.customers.search({ query: `metadata['compteId']:'${String(compte._id)}'`, limit: 1 }); c = r && Array.isArray(r.data) && r.data[0] && !r.data[0].deleted ? r.data[0] : null; } catch (e) { console.error(`🔴 [v2 abonnement] recherche du client impossible (${nomErreur(e)}) — création`); }
     // un client Stripe par compte : l'identifiant d'idempotence rend le client DÉTERMINISTE (deux requêtes simultanées reçoivent le même), la pose en base est conditionnelle
-    if (!c) c = await stripe.customers.create({ email: compte.email, metadata: { compteId: String(compte._id) } }, { idempotencyKey: `cust-${String(compte._id)}` });
+    if (!c) c = await stripe.customers.create({ email: compte.email, metadata: { compteId: String(compte._id) }, invoice_settings: { footer: O.MENTION_FACTURE } }, { idempotencyKey: `cust-${String(compte._id)}` });
     const r = await col('comptes').updateOne({ _id: compte._id, stripeClient: null }, { $set: { stripeClient: c.id } });
     if (r.matchedCount === 1) return c.id;
     const relu = await col('comptes').findOne({ _id: compte._id }, { projection: { stripeClient: 1 } });
     if (relu && relu.stripeClient) return relu.stripeClient;
     throw new Error('client Stripe : pose impossible');
+}
+/** Les factures et les reçus sont ceux de Stripe : chacun doit porter la mention légale (O.MENTION_FACTURE) en pied. Un client créé sans ce pied (ou avec un autre) le reçoit au passage suivant par le Checkout. */
+async function assurerPied(stripe, clientId) {
+    const c = await stripe.customers.retrieve(clientId);
+    if (c && c.invoice_settings && c.invoice_settings.footer === O.MENTION_FACTURE) return;
+    await stripe.customers.update(clientId, { invoice_settings: { footer: O.MENTION_FACTURE } });
 }
 /** L'essai est accordé UNE fois par compte : jamais si le compte a eu un essai ou un abonnement (en base, ou chez Stripe pour son client). */
 async function essaiPermis(stripe, compte) {
@@ -107,19 +113,25 @@ function routesAbonnements(router, cfg) {
             if (b.code !== undefined && !(typeof b.code === 'string' && b.code.length >= 1 && b.code.length <= 64)) return entree(res, 'code-invalide', 422);
             if (b.retour !== undefined && !(typeof b.retour === 'string' && FORME_RETOUR.test(b.retour))) return entree(res, 'retour-invalide');
             const porteur = req.v2.porteur, compte = porteur.compte;
+            // L'OFFRE FONDATEURS d'abord, avant tout contrôle qui parle du compte (prix, déjà abonné) : un code faux reçoit la MÊME réponse que l'offre soit ouverte ou fermée — même 422, même compteur d'essais
+            // (10 par heure et par compte, compté avant de lire le code). Sinon « déjà abonné » (409) ou le 429 du 11e essai trahiraient l'existence de l'offre à qui n'a pas le code.
+            if (b.offre === 'fondateurs') {
+                if (typeof b.code !== 'string') return entree(res, 'code-invalide', 422);
+                const essaisF = await L.consommer(`abo-code:${String(compte._id)}`, { max: 10, fenetreMs: HEURE });
+                if (!essaisF.permis) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: essaisF.reessayerDans });
+                if (!abo().fondateurs.ouvert || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);
+            }
             const prix = abo().prix[b.offre][b.periode];
-            if (b.offre === 'fondateurs' && !abo().fondateurs.ouvert) return entree(res, 'code-invalide', 422);   // l'offre est fermée : indiscernable d'un mauvais code (on ne révèle pas qu'elle existe)
             if (!prix) return indispo(res, 'prix-non-configure');
             const stripe = Cl.obtenir(abo());
             if (await dejaAbonne(stripe, compte)) return conflit(res, 'abonnement-actif');
-            // le code (Fondateurs ou parrainage) : au plus 10 essais par heure et par compte, comptés AVANT de le lire
+            // le code de parrainage : au plus 10 essais par heure et par compte, comptés AVANT de le lire (le code Fondateurs est compté plus haut)
             let parrain = null;
-            if (b.code !== undefined) {
+            if (b.offre !== 'fondateurs' && b.code !== undefined) {
                 const essais = await L.consommer(`abo-code:${String(compte._id)}`, { max: 10, fenetreMs: HEURE });
                 if (!essais.permis) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: essais.reessayerDans });
             }
             if (b.offre === 'fondateurs') {
-                if (typeof b.code !== 'string' || !Cfg.codeFondateursValide(b.code, abo().fondateurs.empreinteCode)) return entree(res, 'code-invalide', 422);
                 const place = await Fo.reserver(compte._id, abo().fondateurs.places, new Date());
                 if (!place.ok) return conflit(res, 'places-epuisees');
                 reserveePour = place.deja ? null : compte._id;       // I1 : seule une réservation CRÉÉE par cet appel est rendue si la suite échoue (jamais celle d'une session déjà ouverte)
@@ -138,6 +150,7 @@ function routesAbonnements(router, cfg) {
             if (parrain && !essai) return entree(res, 'parrainage-non-eligible', 422);
             const jours = !essai ? 0 : parrain ? O.ESSAI_PARRAINAGE_JOURS : O.ESSAI_JOURS;
             const client = await assurerClient(stripe, compte);
+            await assurerPied(stripe, client);          // la mention légale des factures (TVA non applicable) : posée à la création, rattrapée sur un client plus ancien
             const tranche = Math.floor(Date.now() / 600000), retour = b.retour || null, ok = `${site}${retour || '/fr/compte'}?abonnement=succes`, ko = `${site}${retour || '/fr/tarifs'}?abonnement=annule`;
             const metadata = { compteId: String(compte._id), offre: b.offre, periode: b.periode, ...(parrain ? { parrain: String(parrain._id) } : {}) };
             const session = await stripe.checkout.sessions.create({

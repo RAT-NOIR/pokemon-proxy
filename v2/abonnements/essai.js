@@ -13,7 +13,7 @@
 const crypto = require('crypto');
 const { col } = require('../db');
 const { cleBoite, estJetable } = require('../comptes/email-cle');
-const { SESSION_MINUTES, MARGE_RESERVATION_MINUTES } = require('./offres');
+const { ESSAI_RESERVATION_MINUTES } = require('./offres');
 
 const COL = 'abo_essais';
 const DETAILS = Object.freeze(['essai-deja-utilise', 'domaine-jetable', 'boite-deja-utilisee', 'installation-deja-utilisee']);
@@ -22,7 +22,7 @@ const hmac = (cfg, genre, valeur) => {
     if (!cfg || !cfg.empreinte || !cfg.empreinte.secret) throw new Error('secret-empreinte-absent');       // fail-closed : jamais d'empreinte sans secret
     return crypto.createHmac('sha256', cfg.empreinte.secret).update(`essai|${genre}|${valeur}`).digest('hex');
 };
-const expiration = maintenant => new Date(maintenant.getTime() + (SESSION_MINUTES + MARGE_RESERVATION_MINUTES) * 60000);
+const expiration = maintenant => new Date(maintenant.getTime() + ESSAI_RESERVATION_MINUTES * 60000);
 
 /** Les identifiants des installations liées au compte, ou qui l'ont été (`comptesLies` est posé à chaque liaison). */
 async function installationsDuCompte(compteId) {
@@ -73,8 +73,48 @@ async function reserver(compte, cfg, maintenant = new Date()) {
 }
 /** Rend les réservations créées par un Checkout qui n'a pas abouti (jamais une ligne confirmée). */
 async function rendre(compteId, ids) { if (ids && ids.length) await col(COL).deleteMany({ _id: { $in: ids }, compteId, etat: 'reserve' }); }
-/** L'essai existe vraiment (webhook) : les réservations du compte deviennent définitives pour la durée de rétention. Idempotent. */
-async function confirmer(compteId, evtDate) {
-    await col(COL).updateMany({ compteId, etat: 'reserve' }, [{ $set: { etat: 'pris', prisLe: evtDate, expireLe: { $add: [evtDate, { $multiply: [{ $ifNull: ['$dureeJours', 365] }, 86400000] }] } } }]);
+// La configuration de l'application (secret d'empreinte), armée au montage : le webhook ne reçoit que la configuration des abonnements.
+let cfgApp = null;
+const armer = c => { cfgApp = c || null; };
+/** Confirme UNE ligne pour ce compte, par `_id` : libre → prise ; déjà au compte → confirmée ; à un AUTRE → refusée seulement s'il l'a déjà CONFIRMÉE (essai « pris » encore vivant) ; sa réservation (vivante ou non) ou une ligne périmée se reprend. */
+async function confirmerLigne(c, compteId, jours, evtDate, deuxieme = false) {
+    const expireLe = new Date(evtDate.getTime() + jours * 86400e3), pose = { compteId, genre: c.genre, etat: 'pris', prisLe: evtDate, expireLe, dureeJours: jours };
+    try { await col(COL).insertOne({ _id: c.id, ...pose, creeLe: evtDate }); return true; } catch (e) { if (!dupliquee(e)) throw e; }
+    const d = await col(COL).findOne({ _id: c.id });
+    if (!d) return deuxieme ? false : confirmerLigne(c, compteId, jours, evtDate, true);
+    if (String(d.compteId) === String(compteId)) { await col(COL).updateOne({ _id: c.id, compteId }, { $set: pose }); return true; }
+    if (d.etat === 'pris' && d.expireLe instanceof Date && d.expireLe.getTime() > evtDate.getTime()) return false;
+    return (await col(COL).updateOne({ _id: c.id, compteId: d.compteId, etat: d.etat, expireLe: d.expireLe }, { $set: pose })).modifiedCount === 1;
 }
-module.exports = { verifier, reserver, rendre, confirmer, installationsDuCompte, COL, DETAILS };
+/**
+ * L'essai existe vraiment (webhook). LA RÈGLE, écrite par ce qu'elle autorise : l'essai n'est GARDÉ que si la boîte ET chaque installation du compte (liée ou l'ayant été, y compris celles liées
+ * APRÈS le Checkout) sont libres ou à ce compte — alors elles deviennent définitives (rétention). Si l'une a déjà été CONFIRMÉE par un autre compte, l'essai doit être CLOS : { clore: true, detail }.
+ * (Le webhook peut arriver longtemps après la réservation, qui a pu expirer et être reprise ; une installation peut avoir été liée entre le Checkout et le webhook.)
+ * Sans configuration armée (bancs anciens), l'ancienne confirmation par compteId seule.
+ */
+async function confirmer(compte, evtDate) {
+    if (!cfgApp || !cfgApp.empreinte || !cfgApp.empreinte.secret) {
+        await col(COL).updateMany({ compteId: compte._id, etat: 'reserve' }, [{ $set: { etat: 'pris', prisLe: evtDate, expireLe: { $add: [evtDate, { $multiply: [{ $ifNull: ['$dureeJours', 365] }, 86400000] }] } } }]);
+        return { clore: false };
+    }
+    const jours = cfgApp.empreinte.jours;
+    for (const c of await clesDe(compte, cfgApp)) {
+        if (!(await confirmerLigne(c, compte._id, jours, evtDate))) {
+            await col(COL).deleteMany({ compteId: compte._id, etat: 'reserve' });          // ses réservations restantes ne verrouillent plus personne
+            return { clore: true, detail: detailDe(c.genre) };
+        }
+    }
+    return { clore: false };
+}
+/** Une installation vient d'être liée à ce compte : si le compte a un essai (réservé ou pris, encore vivant), l'installation entre au registre dans le même état — liée APRÈS l'essai, elle compte quand même. */
+async function noterLiaison(compte, installationId, cfg, maintenant = new Date()) {
+    const boite = await col(COL).findOne({ compteId: compte._id, genre: 'boite' });
+    if (!boite || !(boite.expireLe instanceof Date) || boite.expireLe.getTime() <= maintenant.getTime()) return;
+    const id = `installation:${hmac(cfg, 'installation', String(installationId))}`;
+    const doc = { genre: 'installation', compteId: compte._id, etat: boite.etat, expireLe: boite.expireLe, dureeJours: boite.dureeJours, ...(boite.prisLe ? { prisLe: boite.prisLe } : {}), creeLe: maintenant };
+    try { await col(COL).insertOne({ _id: id, ...doc }); return; } catch (e) { if (!dupliquee(e)) throw e; }
+    const d = await col(COL).findOne({ _id: id });
+    if (d && String(d.compteId) !== String(compte._id) && d.expireLe instanceof Date && d.expireLe.getTime() <= maintenant.getTime())          // la ligne d'un autre est périmée : reprise sous condition
+        await col(COL).updateOne({ _id: id, compteId: d.compteId, expireLe: d.expireLe }, { $set: doc });
+}
+module.exports = { verifier, reserver, rendre, confirmer, noterLiaison, armer, installationsDuCompte, COL, DETAILS };
