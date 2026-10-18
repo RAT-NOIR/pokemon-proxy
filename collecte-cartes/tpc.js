@@ -222,7 +222,8 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa 
         if (!k) { if (voieNomJaPvOuverte(nomJaPv, site, multi, t.carte)) essais.push({ t, base }); else restes.push({ ...base, motif: 'sans-numero' }); continue; }
         let pref = null;
         if (multi) {
-            pref = /^([A-Z]*)\d/.exec(k)?.[1] ?? '';
+            // TAIWAN (18/10) : un code de liste peut porter un trait d'union (« SV-P162 », « S-P162 ») — le préfixe se lit comme `cleNumero` l'écrit (`[A-Z-]*`), sans quoi il est « absent »
+            pref = /^([A-Z-]*)\d/.exec(k)?.[1] ?? '';
             if (!pref) { restes.push({ ...base, motif: 'prefixe-absent', detail: `n° ${t.numeroFiche} sans lettre de demi-liste (${P.join('/')}) sur une ligne à plusieurs listes` }); continue; }
             if (!P.includes(pref)) { restes.push({ ...base, motif: 'prefixe-inconnu', detail: `n° ${t.numeroFiche} : « ${pref} » n'est pas une liste de la ligne (${P.join('/')})` }); continue; }
         }
@@ -382,11 +383,14 @@ const RH = require('./reponse-hote');
  * première page et respecté ; cadence tenue dans une FILE (deux appelants concurrents attendent leur tour) ; un réessai sur une coupure
  * ou un 5xx, puis l'échec LÈVE ; 403, 429, défi ou captcha : BLOQUÉ — l'erreur est retenue et plus aucune requête ne part.
  */
-function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+// TAIWAN (2026-10-18, lanceur dédié) : `plafond` = le nombre de requêtes qu'AUCUNE relance ne peut dépasser — `compteInitial` est le cumul des passages précédents (lu dans le cache disque du lanceur),
+// `surRequete(compte)` le lui rend après CHAQUE requête. Le client REFUSE la requête n° plafond + 1 (erreur `plafond: true`), avant d'envoyer quoi que ce soit. Sans `plafond`, rien ne change.
+function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null, plafond = null, compteInitial = 0, surRequete = null } = {}) {
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
+    if (plafond !== null && !(Number.isInteger(plafond) && plafond > 0)) throw new Error(`TPC : plafond « ${plafond} » : un entier positif ou rien`);
     const hoteNom = new URL(S.hote).hostname;
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null, robots;   // robots : undefined = pas encore lu
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = compteInitial, bloque = null, pauseHote = null, robots;   // robots : undefined = pas encore lu
     const statuts = {};
     let cadenceEff = cadenceMs;                                     // relevée par un Crawl-delay plus lent, jamais abaissée
     const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -401,7 +405,9 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         const attente = dernier + cadenceEff - Date.now();
         if (attente > 0) await pause(attente);
         garde();                                                     // le verrou a pu être perdu pendant l'attente
+        if (plafond !== null && compte >= plafond) throw Object.assign(new Error(`${site} : plafond de ${plafond} requête(s) atteint (cumul ${compte}) — la requête n° ${compte + 1} est refusée, rien n'est envoyé`), { plafond: true });
         dernier = Date.now(); compte++;
+        if (surRequete) surRequete(compte);
         const rep = await transport.get(url, o);
         statuts[rep.status] = (statuts[rep.status] || 0) + 1;       // le compte des statuts HTTP reçus (200, 3xx, 403, 429, 5xx…) : l'absence de blocage se LIT
         return rep;
@@ -507,5 +513,5 @@ module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
     preuveDeCorrespondance, planifierTpc, contexteNomJaPv, SEUIL_PART_SANS_NUMERO, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
-    autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait
+    autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch
 };

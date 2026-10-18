@@ -17,7 +17,9 @@ const TABLE_TPC = Object.freeze([
       mesure: "251 cartes chez TPC Asie id pour SV-P « Kartu Promo », 296 trous sur 296 produits (2026-10-07)" },
     { slug: "Sword-Shield-Indonesian-Promos", site: "tpc-asie", langue: "id", code: "S-P", tirage: "id", trous: 266, cartes: 320,
       mesure: "320 cartes chez TPC Asie id pour S-P « Kartu Promo », 266 trous sur 266 produits (2026-10-07)" },
-    { slug: "M-P-Traditional-Chinese-Promos", site: "tpc-asie", langue: "tw", code: "M-P", tirage: "zh-hant", trous: 197, cartes: 208,
+    // `sansRemplacement: true` (LOT TAIWAN, décision du testeur du 2026-10-17 : « Taïwan reste ouvert, mais uniquement pour ce qui nous manque ») : tout TPC Asie tw ne comble que les
+    // numéros SANS aucune entrée ; une entrée existante (basse définition, empruntée, fausse, correcte) n'est jamais remplacée. Lu par le plan ET par la jointure du collecteur.
+    { slug: "M-P-Traditional-Chinese-Promos", site: "tpc-asie", langue: "tw", code: "M-P", tirage: "zh-hant", trous: 197, cartes: 208, sansRemplacement: true,
       mesure: "208 cartes chez TPC Asie tw pour M-P « 特典卡 超級進化 », 197 trous sur 197 produits (2026-10-07)" },
     { slug: "30th-Celebration-IDTH", site: "tpc-asie", langue: "id", code: "MA6", tirage: "idth", trous: 191, cartes: 199,
       mesure: "199 cartes chez TPC Asie id pour MA6 « Booster Pack \"30th CELEBRATION\" », 191 trous sur 191 produits (2026-10-07)" },
@@ -153,6 +155,13 @@ const TABLE_TPC = Object.freeze([
       mesure: "49 cartes chez pokemon-card.com pour pg=mF, 1 trous sur 44 produits (2026-10-07)" },
     { slug: "ex-Starter-Set-Pikachu-ex-Pawmot", site: "pokemon-card-com", langue: "ja", code: "svC", tirage: "jp", trous: 1, cartes: 24,
       mesure: "24 cartes chez pokemon-card.com pour pg=svC, 1 trous sur 24 produits (2026-10-07)" },
+    // ── TAIWAN, 18/10 : « Traditional Chinese Products » — DEUX listes TPC tw (SV-P 238 cartes, 12 pages ; S-P 152 cartes, 8 pages, mesure du 2026-10-18 : couverture/S7/TAIWAN/cache-mesure) ──
+    // Les 33 lignes dont la liste est LUE dans le slug portent `numeroFiche` « SV-P117 » / « S-P162 » (poser-numero-fiche-tw.js, collecte-cartes/numero-fiche-tw.js) : le préfixe EST la liste, car 162, 163 et 164 existent dans les deux.
+    // `sansRemplacement: true` (décision du testeur du 2026-10-17 : n'écrire que l'absent). `code` = celui du set (PKMTCH) ; chaque liste a SON code (celui du dénominateur imprimé « 001/SV-P »).
+    // `trous` : les 33 produits numérotés (les 11 `PKMTCH<nnn>` à liste non lue et le 45e sont sautés). Le collecteur REFUSE de partir tant qu'aucune ligne du set ne porte de numéro (`refuse-set`, zéro requête) : écrire les numeroFiche d'abord.
+    { slug: "Traditional-Chinese-Products", site: "tpc-asie", langue: "tw", code: "PKMTCH", tirage: "zh-hant", trous: 33, cartes: 390, sansRemplacement: true,
+      listes: [{ prefixe: "SV-P", code: "SV-P", cartes: 238 }, { prefixe: "S-P", code: "S-P", cartes: 152 }],
+      mesure: "SV-P 238 + S-P 152 cartes chez TPC Asie tw ; 45 produits dont 33 numérotés avec liste lue dans leur slug (2026-10-18)" },
     // ── LIGNES À DEMI-LISTES (lot TPC-AS, mesure du 2026-10-11 : scratch/mesure-tpc-asie-2.json, 33 requêtes) ─────────────────────────────
     // TPC Asie (indonésien) sert les sets idth AS1-AS4 par DEMI-LISTES `expansionCodes=<code>a|b` ; notre `numeroFiche` porte la lettre de la
     // demi-liste (a019, b016) et le numéro est le MÊME dans la liste (calibré : b016 « EspeonGX » = Espeon GX, a019 « Celebi Bersinar » =
