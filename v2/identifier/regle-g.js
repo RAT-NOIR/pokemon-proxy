@@ -13,7 +13,7 @@ function regleGActive(cfg, deps) {
 }
 
 // REPLI-REIMPRESSIONS : les produits que l'IMAGE ne sépare pas d'un produit (colonne des marquages de l'archive EN PLACE, comme visuels.js lit la version en place) ; [] sans archive ni colonne.
-const partagesDeLaVersionEnPlace = id => { try { return require('./jumeaux').partagesDeLaVersion(require('../chargeur/etat').version(), id); } catch { return []; } };
+const partagesDeLaVersionEnPlace = id => require('./jumeaux').partagesDeLaVersion(require('../chargeur/etat').version(), id);     // m4 : aucun bâillon — une lecture qui échoue se voit (jamais un [] qui ressemble à « aucun partage »)
 
 /**
  * @returns null (aucun voisin, OU la règle ne tranche pas : la chaîne héritée décide) ou
