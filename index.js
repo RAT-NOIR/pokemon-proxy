@@ -1083,7 +1083,8 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
 
     } catch (e) {
         // Log complet : c'est ici que tu verras la vraie cause (clé invalide, quota, timeout...)
-        console.error("❌ Erreur getCardIdFromAI:", e.response?.data || e.message);
+        // PHOTOS-MULTIPLES (m-6) : le statut et un code court SEULEMENT — jamais le corps de la réponse du fournisseur ni le message (la requête peut porter la photo d'un utilisateur en `data:`).
+        console.error("❌ Erreur getCardIdFromAI:", require('./v2/identifier/erreur-fournisseur').resumeErreurFournisseur(e));
         dire(causeApresErreur(e));        // le plafond de dépense, une panne du service classée, ou « sans lecture » (JSON invalide, erreur non classée)
         return null;
     }
