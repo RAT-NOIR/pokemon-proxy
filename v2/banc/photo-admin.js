@@ -60,9 +60,10 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
         if (recues.length) {
             const p0 = recues.find(p => p.index === 0);
             if (!p0 || !Buffer.isBuffer(p0.octets)) return 'ignore';
+            const octets0 = p0.octets;          // I-2 : SA référence, prise AVANT le premier await — la réponse libère les octets de req.entree (libererPhotos) ; la photo de l'ADMINISTRATEUR (le banc) est la seule exception nommée
             let n0; try { n0 = await db.col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' }); } catch (e) { journal('rôle', e); return 'echec'; }
             if (!(n0 > 0)) return 'ignore';
-            const r0 = await banc.conserverPhoto({ scanId: String(scanId), buffer: p0.octets });
+            const r0 = await banc.conserverPhoto({ scanId: String(scanId), buffer: octets0 });
             return r0 === 'ecrit' || r0 === 'deja' ? 'ecrit' : 'echec';
         }
         const urls = req && req.entree && Array.isArray(req.entree.imageUrls) ? req.entree.imageUrls : [];
