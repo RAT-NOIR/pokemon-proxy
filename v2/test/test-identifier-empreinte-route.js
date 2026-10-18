@@ -55,9 +55,10 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources');
     const { assembler } = require('../index');
+    let strategieChaine = null;                                       // M3 : la stratégie reverse que la chaîne annonce (null = normale)
     const lecture = (id, o = {}) => ({ success: true, question: null, carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false, ...o },
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
-        candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
+        candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: strategieChaine }, codeLangue: 2 });
     let chaine = null, appelsChaine = 0;
     const chaineFabriquee = async (req, res) => {
         appelsChaine++;
@@ -129,7 +130,15 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const an = await analyseDe(c.j);
         H.v('3e. `analyses` : désaccord journalisé (chaîne question, G affirme, retenue « promotion »), et ce que le vecteur a fait (promotion, lecture concordante)',
             [an.desaccordRegleG, an.empreinteExtension], [{ chaine: 'question', regleG: 'affirmee', retenue: 'promotion', produitsChaine: [A.ID_A, A.ID_B], produitsRegleG: [A.ID_P] }, { utilisee: true, code: null, influence: true, promotion: true, lectureConcordante: true, modele: A.MODELE.id }]);
-        H.v('3f. promotion AVEC lecture concordante : le banc réel est appelé comme avant (une fois, statut identifiee)', appelsCrochet, ['identifiee']);
+        H.v('3f. 🔑 TOUR 2 (I1) : une PROMOTION par le vecteur, même à lecture concordante, n\'écrit JAMAIS dans le banc partagé : le client choisit entre les produits qui partagent les champs lus', appelsCrochet, []);
+        {   // M3 : le prixLive d'une promotion décrit la PHOTO (langue lue, reverse), pas la chaîne seule : juste pour Q
+            const p0 = cartesDe(c.j).prixLive;
+            H.v('3h. 🔑 M3 promotion, photo normale : prixLive du produit PROMU (langue 2, pas de reverse)', p0, { idProduct: A.ID_P, langues: [2], reverseHolo: false, etatVise: null });
+            strategieChaine = 'filtre-url';
+            const rv = await jouer(sv, { mode: 'ambigue', ids: [A.ID_A, A.ID_B] }, vec(3));
+            strategieChaine = null;
+            H.v('3i. 🔑 M3 promotion, photo reverse (stratégie filtre-url) : prixLive du produit promu, reverseHolo vrai', cartesDe(rv.j).prixLive, { idProduct: A.ID_P, langues: [2], reverseHolo: true, etatVise: null });
+        }
         // le produit de G est DANS les choix de la chaîne : promu aussi
         const d = await jouer(sv, { mode: 'ambigue', ids: [A.ID_A, A.ID_B] }, vec(5));
         H.v('3g. G affirme A, qui est DÉJÀ un choix de la chaîne [A, B] : promu quand même (19 des 44 promotions de la mesure) — identifiee A', [cartesDe(d.j).statut, cartesDe(d.j).carte && cartesDe(d.j).carte.idProduct, d.j.facturation.motif], ['identifiee', A.ID_A, 'affirmee']);

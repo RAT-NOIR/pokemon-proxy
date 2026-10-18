@@ -119,7 +119,7 @@ function partages(avant, apres, signes) {
     const a = await jouer(L, forge);
     const apres = await photographier();
     H.v('1a. le vecteur forgé de A PROMEUT P (hors des choix de la chaîne) — la menace est réelle, A obtient un sûr', [a.j.analyse.statut, a.j.analyse.cartes[0].carte && a.j.analyse.cartes[0].carte.idProduct, a.j.empreinte], ['identifiee', A.ID_P, { utilisee: true, code: null }]);
-    H.v('1b. 🔑 la promotion de A avait une lecture concordante (numéro, total, code lus = ceux de P) : le faux banc reçoit UNE écriture, celle de A — et A seul', ecrituresBanc.map(e => e.idProduct), [A.ID_P]);
+    H.v('1b. 🔑 TOUR 2 (I1) : la promotion de A, même à lecture concordante (numéro, total, code lus = ceux de P), n\'écrit RIEN dans le banc partagé : promotion par G ⇒ 0 écriture partagée', ecrituresBanc.map(e => e.idProduct), []);
     const signesA = [String(a.i._id), a.j.scanId];
     const partagesForge = partages(avant, apres, signesA);
     // la référence : A scanne la MÊME annonce SANS vecteur — ce que la route écrit de partagé quand le vecteur n'y est pour rien

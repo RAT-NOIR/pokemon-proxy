@@ -337,7 +337,7 @@ function traiterIdentifier(cfg, deps = {}) {
     // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place ; les PIXELS sont la carte redressée jointe par l'extension, les scans
     // viennent de NOTRE bucket public de visuels ou de deps.scanEmpreinte en banc). Le serveur ne télécharge jamais la photo.
     const fournisseurEmpreinte = cfg.empreinteExtension === true
-        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, scan: typeof deps.scanEmpreinte === 'function' ? deps.scanEmpreinte : require('./voisins-empreinte').scanArchivePublic({ hote: cfg.images.hotesPublics[0] }), zones: deps.zonesEmpreinte || null }))
+        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, scan: typeof deps.scanEmpreinte === 'function' ? deps.scanEmpreinte : require('./voisins-empreinte').scanArchivePublic({ hote: cfg.images.hotesPublics[0] }), zones: deps.zonesEmpreinte || null, ...(Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? { delaiMs: deps.delaiVoisinsMs } : {}) }))
         : null;
     const interne = async function traiterIdentifierV2(req, res, etat) {
         const porteur = req.v2 && req.v2.porteur, entree = req.entree;
@@ -602,10 +602,11 @@ function traiterIdentifier(cfg, deps = {}) {
         // Le gestionnaire VIVANT ferme `livre` lui-même, que le client soit encore là ou non : une coupure du client ne rend rien.
         if (req.marqueFermeeParLaReponse === true) { req.fermerMarque = fermer; etat.differe = true; } else await fermer();
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
-        // MODELE-VISUEL-API : un résultat que le vecteur de l'extension a CHANGÉ (promotion, question neuve) n'entre jamais dans les données partagées du banc sans une lecture concordante (la garde (2) a jugé ET un champ lu confirme
-        // le produit) : un vecteur forgé ne peut pas fabriquer une ligne de banc. Un résultat que le vecteur n'a pas changé, ou qu'il a promu avec une lecture concordante, passe comme avant.
+        // MODELE-VISUEL-API (tour 2, I1 — ruling du coordinateur) : un résultat que le vecteur de l'extension a CHANGÉ (promotion, question neuve) n'est JAMAIS écrit dans une donnée partagée (banc réel, statistiques, communauté, cache) :
+        // « lecture concordante » veut dire « non contredite », et un client choisit entre les produits qui partagent les champs lus. Il ne sert que la réponse de son auteur, son journal et sa facturation. Seul un résultat que
+        // le vecteur n'a pas changé passe comme avant.
         const emp = sortie.empreinte;
-        if (!(emp && emp.influence && !emp.lectureConcordante)) require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
+        if (!(emp && emp.influence)) require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre),
