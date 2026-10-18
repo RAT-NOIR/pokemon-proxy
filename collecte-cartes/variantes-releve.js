@@ -7,8 +7,10 @@
 //   Ni « enseigne » ni « autre » : une marque que ni le relevé (colonne + titre de l'annonce, vérifiés par le testeur) ni l'étiquette Cardmarket lue ne nomme n'existe pas (un doute est un trou).
 // ÉCRIT PAR CE QU'IL AUTORISE :
 //   · le V2 (le produit du testeur) reçoit sa variante + sa preuve, si sa ligne n'en porte pas une AUTRE ;
-//   · le frère V1 reçoit « normale » SEULEMENT si les trois conditions tiennent : c'est le produit le plus ancien de la fiche (dateAdded, strictement), aucune étiquette n'est lue sur sa vignette Cardmarket
-//     (inventaire OCR), le relevé ne le désigne pas. Les frères V3 et plus ne reçoivent rien ;
+//   · le frère V1 reçoit « normale » SEULEMENT s'il figure dans la LISTE FERMÉE des V1 REGARDÉS À L'ŒIL par le coordinateur le 2026-10-18 (vignette Cardmarket en pleine résolution : aucun tampon, aucune étiquette) et que le relevé
+//     ne le désigne pas. Ni l'ancienneté (dateAdded vaut « 0000-00-00 » sur 9 V1 : une sentinelle n'est JAMAIS une preuve, elle ne sert qu'à CONTREDIRE quand les deux dates sont réelles) ni l'absence d'étiquette OCR
+//     (rappel ≈ 38 %) ne prouvent une version normale ;
+//   · les frères que le coordinateur a lus à l'œil (FICHES[].freres : « 2ND PLACE », « Cosmo Holo Box Set Promo »…) reçoivent leur variante avec cette preuve ; les autres frères ne reçoivent rien ;
 //   · l'entrée `cartes.images` servie et son document `images` reçoivent `partageeTamponNonSepare: false` + `tamponNonRepresente` SEULEMENT si la séparation est prouvée des deux côtés ET qu'aucun autre produit ne
 //     partage la fiche (sinon un produit non séparé serait servi par une entrée qui dit « séparé »). Jamais de `produitsPartages` (l'API juge incohérente une liste qui ne contient pas tous les produits servis).
 // Aucune requête réseau. Idempotent. Le reste est un refus NOMMÉ.
@@ -49,10 +51,21 @@ const FICHES = Object.freeze([
     { id: 449653, colonne: 'Championship', corrobore: ['championships'], ajouts: [], reserve: 'staff (titre seul ; la colonne ne le nomme pas, contrairement à Tropius)' },
     { id: 371590, colonne: 'League', corrobore: ['stamp'], ajouts: [] },
     { id: 708073, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'toys-r-us', mot: 'toysrus' }] },
-    { id: 771356, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'gamestop', mot: 'gamestop' }] },
+    // Ogerpon : 800148 « Cosmo Holo Box Set Promo » = cosmo (vignette regardée). 771357 « EB Games Promo » : aucun jeton ; 786105 « Cosmo Holo Twilight Masquerade Stamped Promo » : tampon de logo d'extension sans jeton sûr :
+    // ni l'un ni l'autre ne reçoit rien, donc la fiche n'est PAS entièrement séparée et son entrée d'image ne reçoit pas de marque.
+    { id: 771356, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'gamestop', mot: 'gamestop' }], freres: [{ id: 800148, variante: 'cosmo', etiquette: 'Cosmo Holo Box Set Promo' }], sansJeton: { 771357: 'EB Games Promo', 786105: 'Cosmo Holo Twilight Masquerade Stamped Promo' } },
     { id: 359285, colonne: 'Autre', corrobore: [], ajouts: [{ jeton: 'toys-r-us', mot: 'toys-r-us' }, { jeton: 'cosmo', mot: 'cosmo' }] },
-    { id: 450593, colonne: 'League', corrobore: [], ajouts: [{ jeton: 'place-2', mot: '2ieme-place' }] }
+    // Frosmoth : la vignette Cardmarket de 450593 dit « 1ST PLACE » (League Challenge), pas « 2e place » comme le relevé et le titre de l'annonce : la vignette fait foi pour la marque, le conflit est SIGNALÉ dans la preuve.
+    // Les frères, lus à l'œil : 450598 « 2ND PLACE », 450603 « 3RD PLACE », 450608 « 4TH PLACE » -> la fiche est entièrement séparée (V1 normale + 4 places).
+    { id: 450593, colonne: 'League', corrobore: ['2ieme-place'], ajouts: [{ jeton: 'place-1', vignette: '1ST PLACE' }], conflit: 'le relevé du testeur dit 2e place pour ce produit : signalé',
+        freres: [{ id: 450598, variante: 'league+place-2', etiquette: '2ND PLACE' }, { id: 450603, variante: 'league+place-3', etiquette: '3RD PLACE' }, { id: 450608, variante: 'league+place-4', etiquette: '4TH PLACE' }] }
 ]);
+
+/** Les V1 REGARDÉS À L'ŒIL par le coordinateur le 2026-10-18 (vignette Cardmarket en pleine résolution : aucun tampon, aucune étiquette). LISTE FERMÉE : hors d'elle, aucun « normale ». */
+const NORMALES_VUES = Object.freeze(new Set([274061, 277806, 281026, 278344, 277333, 274145, 277715, 280131, 279780, 311922, 769198, 299511, 436454]));
+const PREUVE_NORMALE = 'vignette Cardmarket regardée par le coordinateur le 2026-10-18 : aucun tampon ni étiquette';
+/** Une date de catalogue est RÉELLE si elle se lit et n'est pas la sentinelle « 0000-00-00 » de Cardmarket. Une date non réelle ne prouve rien. */
+const dateReelle = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s ?? '')); return !!m && Number(m[1]) >= 1996 && Number(m[2]) >= 1 && Number(m[3]) >= 1 && !Number.isNaN(Date.parse(String(s).replace(' ', 'T'))); };
 
 /** Ce que dit une étiquette OCR de Cardmarket, par une table fermée de motifs. Une étiquette qui nomme une marque que nos jetons n'ont pas CONTREDIT le relevé : refus. */
 const MOTIFS_ETIQUETTE = Object.freeze([[/game\s*stop/i, 'gamestop'], [/snowflake/i, 'snowflake'], [/cosmo/i, 'cosmo'], [/pre-?rel|rerel/i, 'prerelease'], [/staff/i, 'staff'], [/toys/i, 'toys-r-us']]);
@@ -82,14 +95,15 @@ function listeDesFiches(lignesCsv, table = FICHES) {
         if (l.propre !== 'oui') throw new Error(`fiche ${t.id} : « fiche propre » vaut « ${l.propre} » au relevé, la partie B ne traite que les « oui »`);
         if (l.stamp !== t.colonne) throw new Error(`fiche ${t.id} : la colonne du relevé est « ${l.stamp} », la table dit « ${t.colonne} » — rien n'est écrit`);
         const url = String(l.url).toLowerCase();
-        for (const m of [...t.corrobore, ...t.ajouts.map(a => a.mot)]) if (!url.includes(m)) throw new Error(`fiche ${t.id} : le mot « ${m} » ne figure pas dans l'URL de l'annonce — rien n'est écrit`);
+        for (const m of [...t.corrobore, ...t.ajouts.map(a => a.mot).filter(Boolean)]) if (!url.includes(m)) throw new Error(`fiche ${t.id} : le mot « ${m} » ne figure pas dans l'URL de l'annonce — rien n'est écrit`);
         const base = COLONNES[t.colonne];
         if (!base) throw new Error(`fiche ${t.id} : colonne « ${t.colonne} » hors table`);
         const jetons = [...new Set([...base, ...t.ajouts.map(a => a.jeton)])].sort((a, b) => JETONS.indexOf(a) - JETONS.indexOf(b));
         if (!jetons.length) throw new Error(`fiche ${t.id} : aucune marque nommée (colonne « ${t.colonne} » sans titre qui la précise) : un doute est un trou`);
         const variante = jetons.join('+');
         if (!varianteValide(variante)) throw new Error(`fiche ${t.id} : variante « ${variante} » hors vocabulaire fermé`);
-        return { idProduct: t.id, jetons, variante, colonne: t.colonne, url: l.url, reserve: t.reserve ?? null };
+        const freres = (t.freres || []).map(x => { if (!varianteValide(x.variante) || SEULS.includes(x.variante)) throw new Error(`fiche ${t.id} : frère ${x.id} : variante « ${x.variante} » hors vocabulaire tamponné`); return { ...x }; });
+        return { idProduct: t.id, jetons, variante, colonne: t.colonne, url: l.url, reserve: t.reserve ?? null, vignettes: t.ajouts.filter(a => a.vignette).map(a => a.vignette), conflit: t.conflit ?? null, freres, sansJeton: t.sansJeton ?? {} };
     });
 }
 
@@ -111,8 +125,9 @@ function listeDesCorrections(lignesCsv, table = CORRECTIONS) {
     });
 }
 
-const preuveV2 = (f, etiquette) => `relevé du testeur, ${DATE_RELEVE} (annonce ${f.url}, colonne « ${f.colonne} »)${etiquette ? ` ; étiquette Cardmarket lue : « ${etiquette} » (OCR ${DATE_OCR})` : ''}`;
-const preuveV1 = (f, v1, dates) => `version sans marque : produit le plus ancien de la fiche (dateAdded ${dates.get(v1)} contre ${dates.get(f.idProduct)} pour l'autre produit, idProduct ${f.idProduct}), aucune étiquette lue sur sa vignette Cardmarket (OCR ${DATE_OCR}), non désigné par le relevé du testeur du ${DATE_RELEVE}`;
+const preuveV2 = (f, etiquette) => `relevé du testeur, ${DATE_RELEVE} (annonce ${f.url}, colonne « ${f.colonne} »)${etiquette ? ` ; étiquette Cardmarket lue : « ${etiquette} » (OCR ${DATE_OCR})` : ''}`
+    + (f.vignettes?.length ? ` ; étiquette lue sur la vignette Cardmarket (${f.vignettes.join(', ')}), regardée par le coordinateur le ${DATE_RELEVE}` : '') + (f.conflit ? ` ; ${f.conflit}` : '');
+const preuveFrere = x => `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} : « ${x.etiquette} »`;
 
 const nf = l => cleNumero(l.numeroFiche);
 
@@ -120,7 +135,7 @@ const nf = l => cleNumero(l.numeroFiche);
  * LE PLAN. @param {{cartesDb, fiches: object[], dates: Map<number,string>, idsReleve: Set<number>, etiquettes: Map<number,string>}} o
  * @returns {{items: object[], refus: object[], comptes: object}}
  */
-async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, corrections = [] }) {
+async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, corrections = [], normalesVues = NORMALES_VUES }) {
     const ids = fiches.map(f => f.idProduct);
     const l2 = await cartesDb.collection('cartes_produits').find({ idProduct: { $in: ids } }).toArray();
     const carteIds = [...new Set(l2.map(l => l.carteId))];
@@ -140,21 +155,29 @@ async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, 
         const freres = voisines.filter(l => l.carteId === L2.carteId && l.slugSet === L2.slugSet && l.idProduct !== f.idProduct && L2.numeroFiche != null && l.numeroFiche != null && nf(l) === nf(L2));
         const item = { idProduct: f.idProduct, variante: f.variante, jetons: f.jetons, reserve: f.reserve, carteId: L2.carteId, set: L2.slugSet, numero: L2.numeroFiche, freres: freres.map(l => l.idProduct),
             v2: { _id: L2._id, avant: L2.variante ?? null, variante: f.variante, preuve: preuveV2(f, etiq), deja: L2.variante === f.variante && !!L2.variantePreuve }, v1: null, v1Motif: null, entree: null, entreeMotif: null, doc: null };
-        // V1 : le plus ancien, strictement, sans étiquette, hors relevé
-        const tous = [...freres.map(l => l.idProduct), f.idProduct], connus = tous.filter(id => dates.get(id));
-        const cand = connus.length === tous.length ? [...tous].sort((a, b) => new Date(dates.get(a)) - new Date(dates.get(b))) : null;
+        // les frères lus à l'œil (variante + preuve « vignette regardée »)
+        const vus = new Set((f.freres || []).map(x => x.id));
+        item.freresVus = []; item.freresVusRefus = [];
+        for (const x of f.freres || []) {
+            const Lx = freres.find(l => l.idProduct === x.id);
+            if (!Lx) item.freresVusRefus.push(`${x.id} : absent de la fiche`);
+            else if (Lx.variante != null && Lx.variante !== x.variante) item.freresVusRefus.push(`${x.id} : variante-contraire ${Lx.variante}`);
+            else item.freresVus.push({ _id: Lx._id, idProduct: x.id, avant: Lx.variante ?? null, variante: x.variante, preuve: preuveFrere(x), deja: Lx.variante === x.variante && !!Lx.variantePreuve });
+        }
+        // V1 : un V1 REGARDÉ (liste fermée), jamais déduit d'une date ; deux dates RÉELLES peuvent seulement le CONTREDIRE (une sentinelle « 0000-00-00 » ou une date illisible ne prouve ni ne contredit)
+        const candV1 = freres.filter(l => normalesVues.has(l.idProduct) && !vus.has(l.idProduct));
         if (!freres.length) item.v1Motif = 'aucun-frere';
-        else if (!cand) item.v1Motif = 'date-d-un-frere-absente';
-        else if (cand[0] === f.idProduct || new Date(dates.get(cand[0])) >= new Date(dates.get(cand[1]))) item.v1Motif = cand[0] === f.idProduct ? 'le-produit-du-testeur-est-le-plus-ancien' : 'plus-ancien-pas-strict';
+        else if (candV1.length !== 1) item.v1Motif = candV1.length ? 'plusieurs-v1-dans-la-liste' : 'aucun-frere-dans-la-liste-des-v1-vus';
         else {
-            const id1 = cand[0], L1 = freres.find(l => l.idProduct === id1);
+            const L1 = candV1[0], id1 = L1.idProduct, d1 = dates.get(id1), d2 = dates.get(f.idProduct);
             if (idsReleve.has(id1)) item.v1Motif = 'designe-par-le-releve';
             else if (etiquettes.has(id1)) item.v1Motif = `etiquette-lue-sur-la-vignette : ${etiquettes.get(id1)}`;
             else if (L1.variante != null && L1.variante !== 'normale') item.v1Motif = `variante-contraire : ${L1.variante}`;
-            else item.v1 = { _id: L1._id, idProduct: id1, avant: L1.variante ?? null, preuve: preuveV1(f, id1, dates), deja: L1.variante === 'normale' && !!L1.variantePreuve };
+            else if (dateReelle(d1) && dateReelle(d2) && !(new Date(d1) < new Date(d2))) item.v1Motif = 'date-contredit';
+            else item.v1 = { _id: L1._id, idProduct: id1, avant: L1.variante ?? null, preuve: PREUVE_NORMALE, deja: L1.variante === 'normale' && L1.variantePreuve === PREUVE_NORMALE };
         }
         // l'entrée servie : seulement si la séparation est prouvée des deux côtés ET qu'aucun autre produit ne partage la fiche
-        const autres = freres.filter(l => !item.v1 || l.idProduct !== item.v1.idProduct).map(l => l.idProduct);
+        const autres = freres.filter(l => !(item.v1 && l.idProduct === item.v1.idProduct) && !item.freresVus.some(x => x.idProduct === l.idProduct)).map(l => l.idProduct);
         item.autres = autres;
         if (!item.v1) item.entreeMotif = `v1-non-prouve : ${item.v1Motif}`;
         else if (autres.length) item.entreeMotif = `autres-produits-sur-la-fiche : ${autres.join('+')}`;
@@ -163,7 +186,8 @@ async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, 
             const es = (c?.images || []).filter(e => e && e.set === L2.slugSet && e.numero != null && cleNumero(e.numero) === nf(L2));
             if (es.length !== 1) item.entreeMotif = es.length ? 'entree-ambigue' : 'entree-introuvable';
             else {
-                const e = es[0], cible = libelleTampon(f.variante);
+                // plusieurs tampons DISTINCTS sur la même entrée (Frosmoth : 4 places) : leurs libellés joints par « / » (ruling proposé)
+                const e = es[0], cible = [...new Set([f.variante, ...item.freresVus.map(x => x.variante)])].map(libelleTampon).join(' / ');
                 if (e.partageeTamponNonSepare === true || e.produitsPartages !== undefined || e.partageeHoloNonHolo === true) item.entreeMotif = 'entree-deja-marquee';
                 else if (e.tamponNonRepresente !== undefined && e.tamponNonRepresente !== cible) item.entreeMotif = `tampon-inattendu : ${e.tamponNonRepresente}`;
                 else item.entree = { carteId: c._id, set: e.set, cleR2: e.cleR2, avant: { partageeTamponNonSepare: e.partageeTamponNonSepare ?? null, tamponNonRepresente: e.tamponNonRepresente ?? null }, cible, deja: e.partageeTamponNonSepare === false && e.tamponNonRepresente === cible };
@@ -217,6 +241,7 @@ function operations(plan) {
     for (const i of plan.items) {
         if (!i.v2.deja) lignes.push({ _id: i.v2._id, idProduct: i.idProduct, avant: i.v2.avant, ecrit: { variante: i.v2.variante, variantePreuve: i.v2.preuve } });
         if (i.v1 && !i.v1.deja) lignes.push({ _id: i.v1._id, idProduct: i.v1.idProduct, avant: i.v1.avant, ecrit: { variante: 'normale', variantePreuve: i.v1.preuve } });
+        for (const x of i.freresVus || []) if (!x.deja) lignes.push({ _id: x._id, idProduct: x.idProduct, avant: x.avant, ecrit: { variante: x.variante, variantePreuve: x.preuve } });
         if (i.entree && !i.entree.deja) entrees.push({ carteId: i.entree.carteId, set: i.entree.set, cleR2: i.entree.cleR2, avant: i.entree.avant, ecrit: { partageeTamponNonSepare: false, tamponNonRepresente: i.entree.cible } });
         if (i.doc && !i.doc.deja) docs.push({ _id: i.doc._id, cleR2: i.entree.cleR2, avant: i.doc.avant, ecrit: { partageeTamponNonSepare: false, tamponNonRepresente: i.entree.cible } });
     }
@@ -287,4 +312,4 @@ async function restaurer(cartesDb, sauvegarde, { ecrire = false, attendu } = {})
     return r;
 }
 
-module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, CORRECTIONS, listeDesCorrections, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };
+module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, NORMALES_VUES, PREUVE_NORMALE, dateReelle, CORRECTIONS, listeDesCorrections, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };

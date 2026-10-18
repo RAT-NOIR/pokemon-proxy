@@ -49,7 +49,7 @@ const monde = (o = {}) => ({
 });
 const DATES = new Map([[99, '2019-01-01'], [100, '2020-02-02'], [98, '2019-05-05'], [97, '2021-01-01']]);
 const F = (o = {}) => ({ idProduct: 100, jetons: ['prerelease'], variante: 'prerelease', colonne: 'Prerelease', url: 'https://x/prerelease', reserve: null, ...o });
-const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), etiquettes = new Map() } = {}) => R.construirePlan({ cartesDb: w.db, fiches, dates, idsReleve, etiquettes });
+const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), etiquettes = new Map(), normalesVues = new Set([99]) } = {}) => R.construirePlan({ cartesDb: w.db, fiches, dates, idsReleve, etiquettes, normalesVues });
 
 (async () => {
     // ── le vocabulaire fermé ──
@@ -67,7 +67,9 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     const lignesCsv = (mod = x => x) => R.FICHES.map(f => mod({ url: CSV_URL(f), idProduct: f.id, stamp: f.colonne, propre: 'oui' }));
     await essayer('table : 13 fiches, variantes attendues', () => {
         const l = R.listeDesFiches(lignesCsv());
-        verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-2']);
+        verifier('13 variantes', l.map(f => f.variante), ['staff+prerelease', 'staff+prerelease', 'staff+championship', 'prerelease', 'prerelease', 'prerelease', 'snowflake', 'championship', 'league', 'toys-r-us', 'gamestop', 'toys-r-us+cosmo', 'league+place-1']);
+        verifier('Frosmoth : la vignette fait foi, le conflit avec le relevé est signalé ; 3 frères lus', [l[12].vignettes, l[12].conflit, l[12].freres.map(x => x.variante)], [['1ST PLACE'], 'le relevé du testeur dit 2e place pour ce produit : signalé', ['league+place-2', 'league+place-3', 'league+place-4']]);
+        verifier('Ogerpon : 1 frère lu, 2 sans jeton', [l[10].freres.map(x => [x.id, x.variante]), Object.keys(l[10].sansJeton)], [[[800148, 'cosmo']], ['771357', '786105']]);
         verifier('toutes valides', l.every(f => R.varianteValide(f.variante)), true);
         verifier('les réserves sont nommées', l.filter(f => f.reserve).map(f => f.idProduct), [882210, 449653]);
     });
@@ -122,7 +124,7 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         const i = p.items[0];
         verifier('V2 prerelease, V1 normale, entrée et document', [i.v2.variante, i.v1?.idProduct, i.entree?.cible, i.doc?._id, p.refus.length, i.freres], ['prerelease', 99, 'Prerelease', 'd8', 0, [99]]);
         verifier('la preuve nomme le relevé et la date', /relevé du testeur, 2026-10-18 \(annonce https:\/\/x\/prerelease, colonne « Prerelease »\)/.test(i.v2.preuve), true);
-        verifier('la preuve du V1 nomme les trois conditions', /produit le plus ancien.*aucune étiquette.*non désigné par le relevé/.test(i.v1.preuve), true);
+        verifier('la preuve du V1 est le regard du coordinateur, pas une date ni l\'OCR', [i.v1.preuve, /dateAdded|OCR/.test(i.v1.preuve)], [R.PREUVE_NORMALE, false]);
         verifier('le frère d\'un autre numéro n\'est pas un frère', i.freres.includes(98), false);
     });
     await essayer('V1 désigné par le relevé', async () => {
@@ -133,17 +135,45 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         const p = await plan(fausseBase(monde()), { etiquettes: new Map([[99, 'Staff Version']]) });
         verifier('pas de normale', [p.items[0].v1, /^etiquette-lue/.test(p.items[0].v1Motif)], [null, true]);
     });
-    await essayer('V1 plus récent que le V2', async () => {
-        const p = await plan(fausseBase(monde()), { dates: new Map([[99, '2021-01-01'], [100, '2020-02-02']]) });
-        verifier('le produit du testeur est le plus ancien : pas de normale', [p.items[0].v1, p.items[0].v1Motif], [null, 'le-produit-du-testeur-est-le-plus-ancien']);
+    await essayer('dates réelles qui CONTREDISENT (V1 plus récent ou égal)', async () => {
+        const a = await plan(fausseBase(monde()), { dates: new Map([[99, '2021-01-01'], [100, '2020-02-02']]) });
+        verifier('V1 plus récent : pas de normale', [a.items[0].v1, a.items[0].v1Motif], [null, 'date-contredit']);
+        const b = await plan(fausseBase(monde()), { dates: new Map([[99, '2020-02-02'], [100, '2020-02-02']]) });
+        verifier('égalité : pas de normale', [b.items[0].v1, b.items[0].v1Motif], [null, 'date-contredit']);
     });
-    await essayer('dates égales', async () => {
-        const p = await plan(fausseBase(monde()), { dates: new Map([[99, '2020-02-02'], [100, '2020-02-02']]) });
-        verifier('égalité : pas strict, pas de normale', [p.items[0].v1, p.items[0].v1Motif], [null, 'plus-ancien-pas-strict']);
+    await essayer('dateReelle : la sentinelle et l\'illisible ne sont pas des dates', () => verifier('dateReelle', ['2019-01-01', '2019-01-01 10:20:30', '0000-00-00 00:00:00', '0000-00-00', '', null, undefined, 'hier', '2019-13-45 00:00:00', '1970-01-01'].map(R.dateReelle), [true, true, false, false, false, false, false, false, false, false]));
+    await essayer('sentinelles : une date non réelle ne prouve rien, ne contredit rien', async () => {
+        const S = '0000-00-00 00:00:00';
+        for (const [nom, d] of [['0000 contre 0000', new Map([[99, S], [100, S]])], ['V1 0000 contre V2 réelle', new Map([[99, S], [100, '2020-02-02']])], ['V1 réelle contre V2 0000', new Map([[99, '2021-01-01'], [100, S]])], ['dates absentes', new Map()]]) {
+            const p = await plan(fausseBase(monde()), { dates: d });
+            verifier(`${nom} : le V1 est prouvé par la LISTE, la preuve ne cite aucune date`, [p.items[0].v1?.idProduct, p.items[0].v1?.preuve, p.items[0].v1Motif], [99, R.PREUVE_NORMALE, null]);
+        }
     });
-    await essayer('date d\'un frère absente', async () => {
-        const p = await plan(fausseBase(monde()), { dates: new Map([[100, '2020-02-02']]) });
-        verifier('on ne devine pas l\'ancienneté', [p.items[0].v1, p.items[0].v1Motif], [null, 'date-d-un-frere-absente']);
+    await essayer('V1 hors de la liste des V1 regardés', async () => {
+        const p = await plan(fausseBase(monde()), { normalesVues: new Set([12345]) });
+        verifier('plus ancien, sans étiquette, hors relevé — mais pas regardé : pas de normale, pas d\'entrée', [p.items[0].v1, p.items[0].v1Motif, p.items[0].entree], [null, 'aucun-frere-dans-la-liste-des-v1-vus', null]);
+        verifier('la liste réelle est fermée à 13', [R.NORMALES_VUES.size, [...R.NORMALES_VUES].sort((a, b) => a - b)], [13, [274061, 274145, 277333, 277715, 277806, 278344, 280131, 281026, 279780, 299511, 311922, 436454, 769198].sort((a, b) => a - b)]);
+        verifier('la preuve écrite', R.PREUVE_NORMALE, 'vignette Cardmarket regardée par le coordinateur le 2026-10-18 : aucun tampon ni étiquette');
+    });
+    await essayer('frères lus à l\'œil (Frosmoth) : fiche entièrement séparée', async () => {
+        const w = monde({ plus: [LP(101, 1, 'S', '8'), LP(102, 1, 'S', '8'), LP(103, 1, 'S', '8')] });
+        const f = F({ variante: 'league+place-1', jetons: ['league', 'place-1'], vignettes: ['1ST PLACE'], conflit: 'le relevé du testeur dit 2e place pour ce produit : signalé',
+            freres: [{ id: 101, variante: 'league+place-2', etiquette: '2ND PLACE' }, { id: 102, variante: 'league+place-3', etiquette: '3RD PLACE' }, { id: 103, variante: 'league+place-4', etiquette: '4TH PLACE' }] });
+        const p = await plan(fausseBase(w), { fiches: [f] }), i = p.items[0];
+        verifier('V1 + 4 places, entrée et document écrits, libellés distincts joints par « / »', [i.v1?.idProduct, i.freresVus.map(x => [x.idProduct, x.variante]), i.autres, i.entree?.cible, !!i.doc, R.operations(p).lignes.length],
+            [99, [[101, 'league+place-2'], [102, 'league+place-3'], [103, 'league+place-4']], [], 'League + 1re place / League + 2e place / League + 3e place / League + 4e place', true, 5]);
+        verifier('preuves : vignette regardée + conflit signalé', [/1ST PLACE.*signalé/.test(i.v2.preuve), i.freresVus[0].preuve], [true, 'vignette Cardmarket regardée par le coordinateur le 2026-10-18 : « 2ND PLACE »']);
+        const w2 = monde({ plus: [LP(101, 1, 'S', '8', { variante: 'staff' }), LP(102, 1, 'S', '8'), LP(103, 1, 'S', '8')] });
+        const q = await plan(fausseBase(w2), { fiches: [f] });
+        verifier('un frère déjà marqué autrement : refusé, la fiche reste non séparée, pas d\'entrée', [q.items[0].freresVusRefus.length, q.items[0].autres, q.items[0].entree], [1, [101], null]);
+    });
+    await essayer('Ogerpon : frères sans jeton, fiche NON séparée', async () => {
+        const w = monde({ plus: [LP(101, 1, 'S', '8'), LP(102, 1, 'S', '8'), LP(103, 1, 'S', '8')] });
+        const f = F({ variante: 'gamestop', jetons: ['gamestop'], freres: [{ id: 101, variante: 'cosmo', etiquette: 'Cosmo Holo Box Set Promo' }] });
+        const p = await plan(fausseBase(w), { fiches: [f] }), i = p.items[0];
+        verifier('cosmo posé sur le frère lu ; 2 autres sans jeton ; pas d\'entrée', [i.freresVus.map(x => x.variante), i.autres, i.entree, /autres-produits-sur-la-fiche/.test(i.entreeMotif)], [['cosmo'], [102, 103], null, true]);
+        const g = await plan(fausseBase(w), { fiches: [F({ variante: 'gamestop', jetons: ['gamestop'], freres: [{ id: 555, variante: 'cosmo', etiquette: 'x' }] })] });
+        verifier('un frère lu qui n\'est pas sur la fiche : refusé, nommé', [g.items[0].freresVus.length, g.items[0].freresVusRefus], [0, ['555 : absent de la fiche']]);
     });
     await essayer('autre produit sur la fiche (V3)', async () => {
         const p = await plan(fausseBase(monde({ plus: [LP(97, 1, 'S', '8')] })));
