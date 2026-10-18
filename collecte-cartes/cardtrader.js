@@ -162,13 +162,15 @@ function blueprintDepuisPage(url) {
         const mots = f[1].split('-');
         if (!mots.some(estNb)) return { id, famille: 'pp', type: 'scelle', slug: reste };
         let numero = null, total = null, code = null;
+        const fin = [];
+        // la finition (non holo / cosmos holo / reverse holo) se lit AVANT ou APRÈS le numéro selon le blueprint
+        while (mots.length && MOTS_FINITION.has(mots[mots.length - 1])) fin.unshift(mots.pop());
         const dernier = mots[mots.length - 1];
-        if (!estNb(dernier)) return { id, famille: 'pp', nom: norm(f[1]), numero: null, total: null, code: null, finition: null, slug: reste };
+        if (!estNb(dernier ?? '')) return { id, famille: 'pp', nom: norm(mots.join(' ')), numero: null, total: null, code: null, finition: fin.length ? fin.join(' ') : null, slug: reste };
         mots.pop();
         const avant = mots[mots.length - 1];
         if (avant && estNb(avant)) { total = Number(dernier); numero = Number(avant); mots.pop(); }
         else { numero = Number(dernier); if (avant && /^[a-z]{2,5}$/.test(avant) && !NON_CODES.has(avant) && !MOTS_FINITION.has(avant)) { code = avant; mots.pop(); } }
-        const fin = [];
         while (mots.length && MOTS_FINITION.has(mots[mots.length - 1])) fin.unshift(mots.pop());
         return { id, famille: 'pp', nom: norm(mots.join(' ')), numero, total, code, finition: fin.length ? fin.join(' ') : null, slug: reste };
     }
@@ -198,22 +200,40 @@ function produitDepuisSlug(slug, famille) {
     const p = slug.split('-');
     let variante = null, code = null, numero = null;
     if (famille === 'ba') {
+        // 2022/2024 : « BA22C13 » = deck C, position 13 ; « BA24DAR » = deck à code de trois lettres, sans position ; 2020 et certains 2022 : « HIF9 » = tirage d'origine + numéro
+        let deck = null, position = null, m;
         const dernier = p[p.length - 1];
-        if (/^BA\d{2}[A-Z]*$/.test(dernier)) p.pop();
-        else { const m = /^([A-Za-z]+)(\d+)$/.exec(dernier); if (m) { code = m[1].toLowerCase(); numero = Number(m[2]); p.pop(); } }
+        if ((m = /^BA\d{2}([A-Z])(\d{1,2})$/.exec(dernier))) { deck = m[1].toLowerCase(); position = Number(m[2]); p.pop(); }
+        else if ((m = /^BA\d{2}([A-Z]{3})$/.exec(dernier))) { deck = m[1].toLowerCase(); p.pop(); }
+        else if (/^BA\d{2}$/.test(dernier)) p.pop();
+        else if ((m = /^([A-Za-z]+)(\d+)$/.exec(dernier))) { code = m[1].toLowerCase(); numero = Number(m[2]); p.pop(); }
         const v = p[p.length - 1];
         if (/^V\d+$/.test(v)) { variante = v; p.pop(); }
-        return p.length ? { nom: norm(p.join(' ')), code, numero, variante } : null;
+        return p.length ? { nom: norm(p.join(' ')), code, numero, variante, deck, position } : null;
     }
-    if (!estNb(p[p.length - 1] ?? '')) return null;
-    numero = Number(p.pop());
-    const c = p[p.length - 1] ?? '';
-    const m = famille === 'pp' ? /^PPS\d([A-Za-z0-9]*)$/.exec(c) : /^(?:WCD)?\d{2}([A-Za-z0-9]+)$/.exec(c);
-    if (m) { code = m[1] ? m[1].toLowerCase() : null; p.pop(); }
-    else if (famille === 'wcd' && /^[A-Za-z][A-Za-z0-9]{2,}$/.test(c) && !/^V\d+$/.test(c)) { code = c.toLowerCase(); p.pop(); }
+    const dernier = p[p.length - 1] ?? '';
+    let m;
+    if (estNb(dernier)) {
+        numero = Number(p.pop());
+        const c = p[p.length - 1] ?? '';
+        const mc = famille === 'pp' ? /^PPS\d([A-Za-z0-9]*)$/.exec(c) : /^(?:WCD)?\d{2}([A-Za-z0-9]+)$/.exec(c);
+        if (mc) { code = mc[1] ? mc[1].toLowerCase() : null; p.pop(); }
+        else if (famille === 'wcd' && /^[A-Za-z][A-Za-z0-9]{2,}$/.test(c) && !/^V\d+$/.test(c)) { code = c.toLowerCase(); p.pop(); }
+    } else if (famille === 'wcd' && (m = /^WCD\d{2}(\d{3})$/.exec(dernier))) { numero = Number(m[1]); p.pop(); }              // « WCD25196 » : l'année et le numéro collés (WCD 2025)
+    else if (famille === 'wcd' && (m = /^WCD\d{2}([A-Za-z]+)$/.exec(dernier))) { code = m[1].toLowerCase(); p.pop(); }          // « WCD19SUM » : un code d'origine, aucun numéro (Énergie de base)
+    else if (famille === 'wcd' && /^WCD\d{2}$/.test(dernier)) p.pop();                                                          // « WCD25 » : Énergie de base, rien d'autre
+    else if (famille === 'pp' && /^PPS\d$/.test(dernier)) p.pop();                                                            // « PPS1 » : Énergie de base, ni code ni numéro
+    else return null;
     if (/^V\d+$/.test(p[p.length - 1] ?? '')) { variante = p.pop(); }
     return p.length ? { nom: norm(p.join(' ')), code, numero, variante } : null;
 }
+
+/** La clé de nom : sans espaces (l'apostrophe n'est pas un séparateur : « Professors » / « professor s »), « Lv 35 » = « Lv35 », et le « Basic » des Énergies de base est facultatif. */
+function clesDeNom(nom) {
+    const c = norm(nom).replace(/ /g, '');
+    return c ? (c.startsWith('basic') && c.length > 5 ? [c, c.slice(5)] : [c]) : [];
+}
+const subsuite = (petit, grand) => { let i = 0; for (const ch of grand ?? '') if (ch === petit[i]) i++; return i === petit.length; };
 
 const entier = x => { const m = /^\D*(\d+)\D*$/.exec(String(x ?? '')); return m ? Number(m[1]) : null; };
 
@@ -225,31 +245,64 @@ const entier = x => { const m = /^\D*(\d+)\D*$/.exec(String(x ?? '')); return m 
  * @param {object[]} produits { idProduct, famille, annee?, serie?, slug, numeroCM?, impressions?: [{numero,total}], carteNom? }
  * @param {object[]} blueprints sortie de blueprintDepuisPage (les 'scelle' sont ignorés)
  */
-function apparier(produits, blueprints) {
-    const singles = blueprints.filter(b => b && b.nom && !b.type);
+function apparier(produits, blueprints, tous = produits) {
+    const singles = blueprints.filter(b => b && b.nom && !b.type).map(b => ({ b, cles: clesDeNom(b.nom) }));
     const parFam = new Map();
-    for (const b of singles) { const k = `${b.famille}|${b.annee ?? ''}`; (parFam.get(k) || parFam.set(k, []).get(k)).push(b); }
-    const parPP = singles.filter(b => b.famille === 'pp');
+    for (const x of singles) { const k = `${x.b.famille}|${x.b.annee ?? ''}`; (parFam.get(k) || parFam.set(k, []).get(k)).push(x); }
+    const parPP = singles.filter(x => x.b.famille === 'pp');
+    const clesProduit = (pr, s) => new Set([...clesDeNom(s.nom), ...clesDeNom(pr.carteNom)]);
+    // les ORIGINES d'un nom dans une famille (le contexte : tous les produits, servis ou non) — pour « une seule carte d'origine » quand la clé est le nom seul
+    const origines = new Map();
+    for (const pr of tous) {
+        const s = produitDepuisSlug(pr.slug, pr.famille);
+        if (!s) continue;
+        for (const c of clesProduit(pr, s)) {
+            const k = `${pr.famille}|${pr.famille === 'pp' ? '' : pr.annee ?? ''}|${c}`;
+            (origines.get(k) || origines.set(k, new Set()).get(k)).add(`${s.code ?? ''}|${s.numero ?? ''}`);
+        }
+    }
     return produits.map(pr => {
         const s = produitDepuisSlug(pr.slug, pr.famille);
         if (!s) return { idProduct: pr.idProduct, statut: 'introuvable', cause: 'slug-illisible', temoin: 'absent' };
-        const noms = new Set([s.nom, norm(pr.carteNom)].filter(Boolean));
+        const cles = clesProduit(pr, s);
         const pool = pr.famille === 'pp' ? parPP : (parFam.get(`${pr.famille}|${pr.annee ?? ''}`) || []);
+        const memeNom = pool.filter(x => x.cles.some(c => cles.has(c))).map(x => x.b);
         let codeContredit = false;
-        let cands = pool.filter(b => noms.has(b.nom) && (s.numero == null ? b.numero == null : b.numero === s.numero));
-        if (pr.famille === 'pp') {
-            const avant = cands.length;
-            cands = cands.filter(b => !(s.code && b.code) || s.code === b.code);
-            codeContredit = avant > 0 && cands.length === 0;
-        }
+        let cands = [], cle = 'nom+numero';
         if (pr.famille === 'ba') {
-            const m = /^([A-Z])(\d+)$/.exec(pr.numeroCM ?? '');
-            if (m) cands = cands.filter(b => b.position === Number(m[2]) && (b.deck ?? '').startsWith(m[1].toLowerCase()));
+            // la clé d'un Battle Academy : le nom, le deck et la position (« C60 », « P15 ») ; un deck à trois lettres (« EVE », « DAR ») n'a pas de position
+            const m = /^([A-Z])(\d+)$/.exec(pr.numeroCM ?? ''), m3 = /^[A-Z]{3}$/.exec(pr.numeroCM ?? '');
+            const deck = m ? m[1].toLowerCase() : m3 ? m3[0].toLowerCase() : s.deck, position = m ? Number(m[2]) : m3 ? null : s.position;
+            cle = 'nom+deck+position';
+            cands = memeNom.filter(b => (deck ? (deck.length === 1 ? (b.deck ?? '').startsWith(deck) : subsuite(deck, b.deck)) : false)
+                && (position != null ? b.position === position : b.position == null) && (s.numero == null || b.numero == null || b.numero === s.numero));
+        } else {
+            cands = memeNom.filter(b => s.numero != null && b.numero === s.numero);
+            if (pr.famille === 'pp') {
+                const avant = cands.length;
+                cands = cands.filter(b => !(s.code && b.code) || s.code === b.code);
+                codeContredit = avant > 0 && cands.length === 0;
+            }
+            if (!cands.length && !codeContredit) {
+                // le NOM SEUL : le blueprint ne porte aucun numéro (WCD 2024/2025, Énergies) — permis seulement si le nom ne désigne qu'UNE carte d'origine (sinon on ne sait pas laquelle)
+                const faibles = memeNom.filter(b => b.numero == null && !(pr.famille === 'pp' && s.code && b.code && s.code !== b.code));
+                if (faibles.length) {
+                    const orig = origines.get(`${pr.famille}|${pr.famille === 'pp' ? '' : pr.annee ?? ''}|${[...cles][0]}`) || new Set();
+                    const multiples = [...cles].some(c => (origines.get(`${pr.famille}|${pr.famille === 'pp' ? '' : pr.annee ?? ''}|${c}`) || new Set()).size > 1) || orig.size > 1;
+                    if (multiples) return { idProduct: pr.idProduct, statut: 'ambigu', cause: 'origine', candidats: faibles.map(b => b.id), temoin: 'non-applicable', cle: 'nom-seul' };
+                    cands = faibles; cle = 'nom-seul';
+                }
+            }
         }
         if (!cands.length) return { idProduct: pr.idProduct, statut: 'introuvable', cause: codeContredit ? 'code-contredit' : 'aucun-blueprint', temoin: 'absent' };
         // le témoin : le total
         const imps = Array.isArray(pr.impressions) ? pr.impressions : [];
         const avecTemoin = cands.map(b => {
+            // BA : la clé est nom+deck+position, le NUMÉRO d'origine du blueprint n'y entre pas — il peut donc contredire (même sans total)
+            if (pr.famille === 'ba' && b.numero != null && b.total == null) {
+                if (!imps.length) return { b, t: 'absent' };
+                return { b, t: imps.some(i => entier(i.numero) === b.numero) ? 'confirme' : 'contredit' };
+            }
             if (b.total == null || b.numero == null) return { b, t: 'non-applicable' };
             if (!imps.length) return { b, t: 'absent' };
             return { b, t: imps.some(i => entier(i.numero) === b.numero && entier(i.total) === b.total) ? 'confirme' : 'contredit' };
@@ -257,11 +310,12 @@ function apparier(produits, blueprints) {
         const gardes = avecTemoin.filter(x => x.t !== 'contredit');
         if (!gardes.length) return { idProduct: pr.idProduct, statut: 'refuse-temoin', cause: 'total-contredit', candidats: cands.map(b => b.id), temoin: 'contredit' };
         const temoin = gardes.every(x => x.t === 'confirme') ? 'confirme' : gardes.some(x => x.t === 'confirme') ? 'confirme' : gardes[0].t;
-        if (gardes.length === 1) return { idProduct: pr.idProduct, statut: 'apparie', blueprint: gardes[0].b, temoin, preuve: `${pr.famille} ${s.nom} n°${s.numero ?? '—'}${s.code ? ` (${s.code})` : ''}${gardes[0].b.total != null ? ` /${gardes[0].b.total}` : ''}` };
+        if (gardes.length === 1) return { idProduct: pr.idProduct, statut: 'apparie', blueprint: gardes[0].b, temoin, cle, preuve: `${pr.famille} ${s.nom} n°${s.numero ?? '—'}${s.code ? ` (${s.code})` : ''}${gardes[0].b.total != null ? ` /${gardes[0].b.total}` : ''} [${cle}]` };
         const bs = gardes.map(x => x.b);
         const cause = pr.famille === 'wcd' ? (new Set(bs.map(b => b.joueur)).size > 1 ? 'joueurs' : 'doublon')
-            : pr.famille === 'pp' ? (new Set(bs.map(b => b.finition ?? '')).size > 1 ? 'finition' : 'doublon') : 'position';
-        return { idProduct: pr.idProduct, statut: 'ambigu', cause, candidats: bs.map(b => b.id), temoin };
+            : pr.famille === 'pp' ? (new Set(bs.map(b => b.finition ?? '')).size > 1 ? 'finition' : 'doublon')
+                : (new Set(bs.map(b => b.position ?? '')).size > 1 ? 'position' : 'doublon');
+        return { idProduct: pr.idProduct, statut: 'ambigu', cause, candidats: bs.map(b => b.id), temoin, cle };
     });
 }
 

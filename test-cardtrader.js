@@ -91,7 +91,6 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ctr-'));
     });
     // ───────── les blueprints (formes réelles relevées dans les sitemaps du 2026-10-18) ─────────
     const P = C.blueprintDepuisPage;
-    C.blueprintDepuisPage;
     const U = s => `https://www.cardtrader.com/en-US/cards/${s}`;
     await test('page WCD : nom, année, joueur, numéro/total', () => {
         const b = P(U('315523-dedenne-gx-wcd-2019-shintaro-ito-057-214-world-championship-decks-2019'));
@@ -140,8 +139,8 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ctr-'));
         assert.deepStrictEqual(S('Jirachi-WCD19TEU-099', 'wcd'), { nom: 'jirachi', code: 'teu', numero: 99, variante: null });
         assert.deepStrictEqual(S('Dedenne-GX-V1-WCD19UNB-057', 'wcd'), { nom: 'dedenne gx', code: 'unb', numero: 57, variante: 'V1' });
         assert.deepStrictEqual(S('Buddy-Buddy-Poffin-V2-PPS6TEF-144', 'pp'), { nom: 'buddy buddy poffin', code: 'tef', numero: 144, variante: 'V2' });
-        assert.deepStrictEqual(S('Pikachu-V-VIV43', 'ba'), { nom: 'pikachu v', code: 'viv', numero: 43, variante: null });
-        assert.deepStrictEqual(S('Darkness-Energy-BA22', 'ba'), { nom: 'darkness energy', code: null, numero: null, variante: null });
+        assert.deepStrictEqual(S('Pikachu-V-VIV43', 'ba'), { nom: 'pikachu v', code: 'viv', numero: 43, variante: null, deck: null, position: null });
+        assert.deepStrictEqual(S('Darkness-Energy-BA22', 'ba'), { nom: 'darkness energy', code: null, numero: null, variante: null, deck: null, position: null });
     });
     await test('slug Cardmarket illisible -> null (jamais deviné)', () => {
         assert.strictEqual(S('', 'wcd'), null);
@@ -198,8 +197,60 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ctr-'));
         const m2 = { ...m, numeroCM: 'P15', slug: 'Blitzle-BLW53', carteNom: 'Blitzle', impressions: [{ numero: '53', total: '185' }], annee: '2022' };
         const r = A([m2], [bp('302783-blitzle-053-185-15-pikachu-stamped-battle-academy-2022'), bp('302786-blitzle-053-185-55-pikachu-stamped-battle-academy-2022')]);
         assert.strictEqual(r[0].statut, 'apparie');           // la position 15 désigne un seul des deux
+        // un deck à code de trois lettres n'a pas de position : seules les cartes sans position sont candidates
         const m3 = { ...m2, numeroCM: 'EVE' };
-        assert.strictEqual(A([m3], [bp('302783-blitzle-053-185-15-pikachu-stamped-battle-academy-2022'), bp('302786-blitzle-053-185-55-pikachu-stamped-battle-academy-2022')])[0].statut, 'ambigu');
+        assert.strictEqual(A([m3], [bp('302783-blitzle-053-185-15-pikachu-stamped-battle-academy-2022'), bp('302786-blitzle-053-185-55-pikachu-stamped-battle-academy-2022')])[0].statut, 'introuvable');
+        const e1 = bp('302900-blitzle-053-185-eevee-stamped-battle-academy-2022'), e2 = bp('302901-blitzle-053-185-eevee-stamped-battle-academy-2022');
+        assert.strictEqual(A([m3], [e1])[0].statut, 'apparie');
+        assert.strictEqual(A([m3], [e1, e2])[0].statut, 'ambigu');
+    });
+    await test('BA : le slug 2022/2024 porte deck+position ou le code du deck', () => {
+        assert.deepStrictEqual(S('Vulpix-V1-BA22C13', 'ba'), { nom: 'vulpix', code: null, numero: null, variante: 'V1', deck: 'c', position: 13 });
+        assert.deepStrictEqual(S('Basic-Darkness-Energy-BA24DAR', 'ba'), { nom: 'basic darkness energy', code: null, numero: null, variante: null, deck: 'dar', position: null });
+    });
+    await test('BA : le numéro d\'origine du blueprint, hors de la clé, est le témoin (confirme / contredit)', () => {
+        const b = bp('296655-ampharos-109-pikachu-28-battle-academy-2024');
+        const mk = impressions => ({ idProduct: 1, famille: 'ba', annee: '2024', slug: 'Ampharos-BA24P28', numeroCM: 'P28', impressions, carteNom: 'Ampharos' });
+        assert.strictEqual(A([mk([{ numero: '109', total: '198' }])], [b])[0].temoin, 'confirme');
+        const r = A([mk([{ numero: '055', total: '198' }])], [b]);
+        assert.strictEqual(r[0].statut, 'refuse-temoin');
+        assert.strictEqual(A([mk(null)], [b])[0].temoin, 'absent');
+    });
+    await test('slug WCD réduit à l\'année : Énergie de base sans code ni numéro', () => {
+        assert.deepStrictEqual(S('Basic-Grass-Energy-V1-WCD25', 'wcd'), { nom: 'basic grass energy', code: null, numero: null, variante: 'V1' });
+    });
+    await test('BA : numéro Cardmarket sans position, deck à code long : sous-suite du nom du deck', () => {
+        const b = bp('296663-basic-darkness-energy-007-darkrai-deck-battle-academy-2024');
+        const r = A([{ idProduct: 1, famille: 'ba', annee: '2024', slug: 'Basic-Darkness-Energy-BA24DAR', numeroCM: 'DAR', impressions: null, carteNom: null }], [b]);
+        assert.strictEqual(r[0].statut, 'apparie');
+    });
+    await test('slugs sans numéro ou collés : WCD25196, WCD19SUM, PPS1', () => {
+        assert.deepStrictEqual(S('Ultra-Ball-V2-WCD25196', 'wcd'), { nom: 'ultra ball', code: null, numero: 196, variante: 'V2' });
+        assert.deepStrictEqual(S('Fire-Energy-V1-WCD19SUM', 'wcd'), { nom: 'fire energy', code: 'sum', numero: null, variante: 'V1' });
+        assert.deepStrictEqual(S('Fire-Energy-V1-PPS1', 'pp'), { nom: 'fire energy', code: null, numero: null, variante: 'V1' });
+    });
+    await test('PP : finition après le numéro', () => {
+        const b = bp('244123-double-turbo-energy-151-172-non-holo-reverse-holo-play-pokemon-prize-pack-series');
+        assert.deepStrictEqual([b.nom, b.numero, b.total, b.finition], ['double turbo energy', 151, 172, 'non holo reverse holo']);
+    });
+    await test('noms : l\'apostrophe n\'est pas un séparateur (Professors / professor-s), Basic ignoré, Lv collé', () => {
+        const pp = bp('296390-professor-s-research-professor-sada-non-holo-170-182-play-pokemon-prize-pack-series');
+        const r = A([{ idProduct: 1, famille: 'pp', slug: 'Professors-Research-Professor-Sada-V1-PPS5SVI-170', impressions: [{ numero: '170', total: '182' }], carteNom: null }], [pp]);
+        assert.strictEqual(r[0].statut, 'apparie');
+        const w = bp('314152-uxie-lv-35-wcd-2009-david-cohen-043-146-world-championship-decks-2009');
+        const r2 = A([{ idProduct: 2, famille: 'wcd', annee: '2009', slug: 'Uxie-Lv35-WCD09LA-043', impressions: [{ numero: '43', total: '146' }], carteNom: null }], [w]);
+        assert.strictEqual(r2[0].statut, 'apparie');
+    });
+    await test('nom seul (le blueprint n\'a pas de numéro) : une seule origine -> apparié "nom-seul" ; deux origines -> ambigu', () => {
+        const b = bp('327700-dragapult-ex-wcd-2024-sakuya-ota-world-championship-decks-2024');
+        const p1 = { idProduct: 1, famille: 'wcd', annee: '2024', slug: 'Dragapult-ex-WCD24TWM-130', impressions: null, carteNom: null };
+        const r = A([p1], [b], [p1]);
+        assert.strictEqual(r[0].statut, 'apparie'); assert.strictEqual(r[0].cle, 'nom-seul'); assert.strictEqual(r[0].temoin, 'non-applicable');
+        const p2 = { idProduct: 2, famille: 'wcd', annee: '2024', slug: 'Dragapult-ex-WCD24SFA-130', impressions: null, carteNom: null };
+        const r2 = A([p1], [b], [p1, p2]);
+        assert.strictEqual(r2[0].statut, 'ambigu'); assert.strictEqual(r2[0].cause, 'origine');
+        const b2 = bp('327701-dragapult-ex-wcd-2024-autre-joueur-world-championship-decks-2024');
+        assert.strictEqual(A([p1], [b, b2], [p1])[0].cause, 'joueurs');
     });
     await test('servi : même prédicat que mesure-catalogue (visuel du bon tirage, jamais le scan du jumeau)', () => {
         const liens = [{ idProduct: 1, carteId: 10, slugSet: 'WCD-2019' }, { idProduct: 2, carteId: 11, slugSet: 'WCD-2019' }, { idProduct: 3, carteId: 12, slugSet: 'WCD-2019' }];
