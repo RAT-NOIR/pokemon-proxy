@@ -374,6 +374,17 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         retardLot = async () => nAff(25);
         const unSeul = await inst(1, { achete: 0 }); await Q.poserRestant(`installation:${unSeul.i._id}`, 1, { limite: 3 });      // OFFRE-QUOTA : une seule analyse devant lui, le lot en demande 3
         await ident(svLot.url, 'lot trop grand pour le solde (QUOTA lot-trop-grand)', 429, unSeul.jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        // ACHETE-AVANT-JOUR : `facturation.poche` servi par un état RÉEL (jugé contre le schéma publié par `consigner`) — une carte payée sur les analyses achetées, puis un lot de 11 cartes (2 unités) à cheval sur les deux poches
+        const pa = await inst(3, { achete: 2 }); mode = 'affirmee';
+        const ra = await ident(V, 'identifiée payée sur les analyses achetées (facturation.poche achete, le quota du jour intact)', 200, pa.jeton);
+        H.v('   facturation.poche « achete », solde.achete 2 -> 1, offre.restant inchangé (3)', ra.json && [ra.json.facturation.poche, ra.json.solde.achete, ra.json.offre.restant], ['achete', 1, 3]);
+        retardLot = async () => nAff(11);
+        const pm = await inst(3, { achete: 1 });
+        const rm = await ident(svLot.url, 'lot de 11 cartes à cheval sur achete et le quota du jour (facturation.poche jour)', 200, pm.jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        H.v('   à cheval : poche « jour », debite 2, achete 1 -> 0, offre.restant 3 -> 2 (une seule unité du quota)', rm.json && [rm.json.facturation.poche, rm.json.facturation.debite, rm.json.solde.achete, rm.json.offre.restant], ['jour', 2, 0, 2]);
+        const pt = await inst(3, { achete: 2 });
+        const rt = await ident(svLot.url, 'lot de 11 cartes entièrement payé sur achete (facturation.poche achete)', 200, pt.jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        H.v('   entièrement achetées : poche « achete », debite 2, achete 2 -> 0, offre.restant inchangé (3)', rt.json && [rt.json.facturation.poche, rt.json.facturation.debite, rt.json.solde.achete, rt.json.offre.restant], ['achete', 2, 0, 3]);
         retardLot = null;
         // le scanner sur un lot (la clé de lot passe par le même traiterIdentifier)
         const cl = await compte();
