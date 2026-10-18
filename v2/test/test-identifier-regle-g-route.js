@@ -173,7 +173,7 @@ function chargerFixtures() {
         // G pose une question sur Q, la chaîne pose la même question : accord => a-trancher, crédit réservé
         const b = await jouer(svOn, { mode: 'ambigue', ids: Q }, 'question');
         const qb = await raw('questions_v2').findOne({ _id: `${b.j.scanId}:0` });
-        H.v('3b. G pose une question, la chaîne pose la même : a-trancher, facturation { debite:0, reserve:1, motif:question }, aucun désaccord', [b.j.analyse.statut, b.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort(), b.j.facturation, (await analyseDe(b.j)).desaccordRegleG], ['a-trancher', [...Q].sort(), { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, undefined]);
+        H.v('3b. G pose une question, la chaîne pose la même : a-trancher, facturation { debite:0, reserve:1, motif:question }, aucun désaccord', [b.j.analyse.statut, b.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort(), b.j.facturation, (await analyseDe(b.j)).desaccordRegleG], ['a-trancher', [...Q].sort(), { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }, undefined]);
         H.v('   la question existe, en-attente, ses choix = choixPour(candidats)', [qb && qb.etat, qb && qb.choix], ['en-attente', choixPour(Q.slice(0, 3))]);
         // JUMEAU-V2 (C1 de la relecture 1) : la règle G, quand elle est d'accord avec une affirmation de la chaîne, ne la RESTAURE jamais — le produit a un jumeau, la réponse reste une question (crédit réservé)
         const svJum = await appFabrique(cfgOn, { voisins, jumeaux: id => ({ conclu: true, ids: id === P ? [ID_B] : [] }) });
@@ -197,7 +197,7 @@ function chargerFixtures() {
             // 4d. la chaîne ne trouve RIEN (introuvable, déjà remboursée), G affirme : on n'affirme pas contre un « introuvable »
             d = await jouer(svOn, { mode: 'introuvable', ids: [] }, 'affirmee');
         } finally { console.warn = w; }
-        const reserve = { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null };
+        const reserve = { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' };
         const net = async x => (await mouvements(x.i._id)).reduce((s, m) => s + m.delta, 0);
         const ouverts = async x => (await mouvements(x.i._id)).filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat);
         H.v('4a. chaîne affirme / G question : a-trancher avec les candidats de G, facturation reserve (celle de l\'issue RETENUE, pas de l\'affirmation)', [a.j.analyse.statut, a.j.analyse.cartes[0].candidats.map(c => c.idProduct).sort((x, y) => x - y), a.j.facturation], ['a-trancher', [...Q].slice(0, 3).sort((x, y) => x - y), reserve]);
@@ -240,7 +240,7 @@ function chargerFixtures() {
         // prudent, et 0 faux affirmé) : candidats = {chaîne} ∪ {candidats de G présents} ; ≥ 2 => question ; sinon introuvable remboursé ; lecture en panne => panne remboursée.
         const netDe = async x => { const m = await mouvements(x.i._id); const s = m.reduce((t, y) => t + y.delta, 0); console.log(`   (dénominateur : ${m.length} mouvement(s) du scan, somme des delta ${s})`); return s; };
         const ouvertsDe = async x => (await mouvements(x.i._id)).filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat);
-        const reserve = { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null };
+        const reserve = { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' };
         const remettreQ = async () => { for (const id of Q) { await raw('catalogue_produits').deleteOne({ idProduct: id }); await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 }); } };
         // (i) un seul des candidats de G est présent : {A, Q0} => question
         await raw('catalogue_produits').deleteOne({ idProduct: Q[1] });
