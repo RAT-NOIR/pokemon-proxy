@@ -35,6 +35,9 @@
       "name": "collection"
     },
     {
+      "name": "abonnements"
+    },
+    {
       "name": "sante"
     }
   ],
@@ -2866,6 +2869,324 @@
         }
       }
     },
+    "/api/abonnement": {
+      "get": {
+        "operationId": "lireAbonnement",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "L'abonnement du compte : plan, période, fin, essai, résiliation prévue, quota réel, code de parrainage",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "Des ÉTATS seulement, jamais un identifiant Stripe. Crée le code de parrainage du compte à la première lecture. `404` natif si les abonnements sont éteints (V2_ABONNEMENTS).",
+        "responses": {
+          "200": {
+            "description": "L'état de l'abonnement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseAbonnement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (plafond par heure).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/checkout": {
+      "post": {
+        "operationId": "creerSessionCheckout",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "Ouvre une session Checkout (abonnement Pro ou Fondateurs) et rend son adresse",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "mode `subscription`, CGV TOUJOURS exigées, un seul client Stripe par compte, `client_reference_id` = le compte. Essai de 14 jours, UNE fois par compte ; 30 jours avec un code de parrainage valide (Pro) ; `code` est le code Fondateurs pour `offre: fondateurs`, un code de parrainage pour `offre: pro`. Voir CONTRAT-STRIPE-V2.md.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteCheckout"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'adresse de la page de paiement Stripe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseUrlPaiement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : offre, période, champ ou retour inconnu (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : `abonnement-actif` (le compte a déjà un abonnement vivant : le site renvoie vers le portail), `places-epuisees`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE : `code-invalide`, `parrainage-non-eligible` (soi-même, client non neuf, parrain Fondateurs, parrainage réciproque).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (20 sessions par heure et par compte, 10 essais de code par heure).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : abonnements non configurés ou Stripe injoignable (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/portail": {
+      "post": {
+        "operationId": "creerSessionPortail",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "Ouvre le portail client Stripe (résiliation en fin de période, mensuel ↔ annuel, carte, factures)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'adresse du portail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseUrlPaiement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : `aucun-abonnement` (le compte n'a pas de client Stripe).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ping": {
       "get": {
         "operationId": "ping",
@@ -4142,6 +4463,235 @@
           "restant",
           "quotaMensuel",
           "renouvelleLe"
+        ],
+        "additionalProperties": false
+      },
+      "RequeteCheckout": {
+        "type": "object",
+        "properties": {
+          "offre": {
+            "type": "string",
+            "enum": [
+              "pro",
+              "fondateurs"
+            ]
+          },
+          "periode": {
+            "type": "string",
+            "enum": [
+              "mois",
+              "an"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Code Fondateurs (offre `fondateurs`) ou code de parrainage (offre `pro`). Casse et espaces ignorés."
+          },
+          "retour": {
+            "type": "string",
+            "pattern": "^/fr(?:/[a-z0-9_-]{1,40}){0,3}$",
+            "description": "Chemin du site où revenir (`?abonnement=succes` ou `?abonnement=annule` est ajouté). Défaut : `/fr/compte` (succès), `/fr/tarifs` (abandon)."
+          }
+        },
+        "required": [
+          "offre",
+          "periode"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseUrlPaiement": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          }
+        },
+        "required": [
+          "success",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "AbonnementStatut": {
+        "type": "object",
+        "properties": {
+          "actif": {
+            "type": "boolean",
+            "description": "Vrai si le compte est Pro MAINTENANT (essai, actif, ou impayé encore dans sa grâce de 3 jours)."
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pro",
+              "fondateurs",
+              null
+            ]
+          },
+          "periode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "mois",
+              "an",
+              null
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "aucun",
+              "en-attente",
+              "essai",
+              "actif",
+              "impaye",
+              "suspendu",
+              "termine"
+            ]
+          },
+          "finPeriode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de la période payée (ou de l'essai)."
+          },
+          "resiliationPrevue": {
+            "type": "boolean"
+          },
+          "essai": {
+            "type": "object",
+            "properties": {
+              "enCours": {
+                "type": "boolean"
+              },
+              "finLe": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Faux dès qu'un essai ou un abonnement a existé pour ce compte (UNE fois par compte)."
+              }
+            },
+            "required": [
+              "enCours",
+              "finLe",
+              "disponible"
+            ],
+            "additionalProperties": false
+          },
+          "paiementEchoue": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actif",
+          "plan",
+          "periode",
+          "statut",
+          "finPeriode",
+          "resiliationPrevue",
+          "essai",
+          "paiementEchoue"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseAbonnement": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "abonnement": {
+            "$ref": "#/components/schemas/AbonnementStatut"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/Offre"
+          },
+          "parrainage": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-HJKMNP-Z2-9]{8}$"
+              },
+              "essaiFilleulJours": {
+                "type": "integer",
+                "const": 30
+              }
+            },
+            "required": [
+              "code",
+              "essaiFilleulJours"
+            ],
+            "additionalProperties": false
+          },
+          "offres": {
+            "type": "object",
+            "properties": {
+              "pro": {
+                "type": "object",
+                "properties": {
+                  "mois": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "an": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "mois",
+                  "an"
+                ],
+                "additionalProperties": false
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "stripe",
+                  "constantes"
+                ],
+                "description": "D'où viennent les montants : lus chez Stripe (cache de 10 minutes) ou, si la lecture échoue, les constantes de repli."
+              },
+              "devise": {
+                "const": "EUR"
+              },
+              "essaiJours": {
+                "type": "integer",
+                "const": 14
+              }
+            },
+            "required": [
+              "pro",
+              "source",
+              "devise",
+              "essaiJours"
+            ],
+            "additionalProperties": false,
+            "description": "Montants en centimes, relus des PRIX Stripe. L'offre Fondateurs (sur code) n'est jamais annoncée."
+          }
+        },
+        "required": [
+          "success",
+          "abonnement",
+          "quota",
+          "parrainage",
+          "offres"
         ],
         "additionalProperties": false
       },

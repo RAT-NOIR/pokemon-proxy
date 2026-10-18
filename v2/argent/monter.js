@@ -4,8 +4,9 @@ const paiement = require('./paiement'); const { aiguilleur } = require('../herit
 const Lg = require('./ledger'); const Q = require('./questions'); const S = require('./solde'); const Lot = require('./lot'); const Fa = require('./facturation');
 const Of = require('./offre'); const Fu = require('./fusion'); const He = require('./heritage'); const Ab = require('./abonnement'); const Pont = require('./pont-acces');
 module.exports = {
-    enTete(app, cfg) { },
+    enTete(app, cfg) { require('../abonnements/monter').enTete(app, cfg); },     // STRIPE-V2 : le webhook (corps brut), derrière V2_ABONNEMENTS
     routes(router, cfg, deps) {
+        require('../abonnements/monter').routes(router, cfg);                    // STRIPE-V2 : /api/abonnement (checkout, portail, statut), derrière V2_ABONNEMENTS
         // INT2 : /api/creer-recharge recouvre une route HÉRITÉE (heritage.js) : l'assembleur exige un aiguilleur en premier handler. Même prédicat que celui de
         // creerRecharge (porteur v2 posé en amont) : tout autre appelant (1.0.x) tombe sur la route héritée, avant la garde d'index.
         router.post('/api/creer-recharge', aiguilleur(req => Boolean(req.v2 && req.v2.porteur)), paiement.creerRecharge);

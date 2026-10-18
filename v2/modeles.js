@@ -48,10 +48,14 @@ const INDEX = Object.freeze([
     // `collection_registre` (un document par set, { _id: slug, cles }) n'a pas d'autre index que `_id` : il se lit et s'écrit par `_id` seulement.
     I('compteurs', 'compteurs_cle', { cle: 1 }, { unique: true })
 ]);
+// STRIPE-V2 : les index des abonnements (stripeClient unique, places Fondateurs, codes de parrainage). Ils sont CRÉÉS avec les autres (migrations/creer-index.js) mais EXIGÉS par verifierIndex
+// seulement quand les abonnements sont allumés (verifierIndex(true), armé par v2/index.js) : déployer ce code sans V2_ABONNEMENTS ne ferme donc jamais une route v2 sur un index que personne n'a créé.
+const { INDEX_ABO } = require('./abonnements/index-db');
+const TOUS = Object.freeze([...INDEX, ...INDEX_ABO]);
 
-// `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle. `colFn` est injectable pour les bancs.
+// `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle (et les index des abonnements). `colFn` est injectable pour les bancs.
 async function creerIndex(collections, colFn = col) {
-    const choisis = Array.isArray(collections) ? INDEX.filter(i => collections.includes(i.c)) : INDEX;
+    const choisis = Array.isArray(collections) ? TOUS.filter(i => collections.includes(i.c)) : TOUS;
     for (const i of choisis) await colFn(i.c).createIndex(i.cle, i.opts);
     return choisis.length;
 }
@@ -66,9 +70,9 @@ function ecarts(declare, present) {
     if (sig(present.partialFilterExpression) !== sig(declare.opts.partialFilterExpression)) e.push('partialFilterExpression');
     return e;
 }
-async function verifierIndex() {
+async function verifierIndex(avecAbonnements = false) {
     const manquants = [];
-    for (const i of INDEX) {
+    for (const i of (avecAbonnements === true ? TOUS : INDEX)) {
         let presents = [];
         try { presents = await col(i.c).indexes(); } catch (e) { if (e.codeName !== 'NamespaceNotFound' && e.code !== 26) throw e; }
         const p = presents.find(x => x.name === i.opts.name);
@@ -89,4 +93,4 @@ const nouvelleInstallation = ({ jetonEmpreinte, essais, libelle, now = maintenan
     _id: crypto.randomBytes(16).toString('hex'), jetonEmpreinte, compteId: null, essais, libelle, creeLe: now, lieeLe: null, revoqueeLe: null,
     heriteEmpreinte: null, derniereAnalyseLe: null, achete: 0, generation: 0   // O3 tour 2 : la liaison y pose la génération du code ; sans égalité avec celle du compte, l'installation est anonyme
 });
-module.exports = { INDEX, creerIndex, verifierIndex, nouveauCompte, nouvelleInstallation };
+module.exports = { INDEX, INDEX_ABO, creerIndex, verifierIndex, nouveauCompte, nouvelleInstallation };

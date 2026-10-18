@@ -29,6 +29,9 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/compte/deconnexion` | site | cookie | non | rien → `ReponseSimple` |
 | `POST /api/compte/mot-de-passe-oublie` | site | aucune | non | `RequeteMotDePasseOublie` → `202 ReponseSimple` (toujours) |
 | `POST /api/compte/reinitialiser` | site | aucune (jeton du lien) | non | `RequeteReinitialisation` → `ReponseSimple` |
+| `GET /api/abonnement` | site | cookie | non | → `ReponseAbonnement` (STRIPE-V2, derrière `V2_ABONNEMENTS` : voir `CONTRAT-STRIPE-V2.md`) |
+| `POST /api/abonnement/checkout` | site | cookie | non | `RequeteCheckout` → `ReponseUrlPaiement` (voir `CONTRAT-STRIPE-V2.md`) |
+| `POST /api/abonnement/portail` | site | cookie | non | rien → `ReponseUrlPaiement` (voir `CONTRAT-STRIPE-V2.md`) |
 | `POST /api/compte/renvoyer-verification` | site | aucune | non | `RequeteRenvoiVerification` → `202 ReponseSimple` (toujours, que l'adresse existe, soit vérifiée ou non) |
 | `POST /api/banc/correction` | extension | Bearer | non | `RequeteCorrectionBanc` → `ReponseSimple` (200 quoi qu'il arrive après les contrôles) |
 | `DELETE /api/banc/contributions` | extension | Bearer | non | `RequeteEffacementBanc` → `ReponseEffacementBanc` |

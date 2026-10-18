@@ -358,5 +358,95 @@
     "statut": 429,
     "schema": "ReponseErreur",
     "description": "Plus de 600 requêtes dans l'heure pour ce porteur : attendre reessayerDans secondes."
+  },
+  "abonnement-aucun.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Aucun abonnement : gratuit, l'essai est disponible, le code de parrainage du compte."
+  },
+  "abonnement-essai.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Essai de 14 jours en cours : Pro, jusqu'à la fin de l'essai ; l'essai n'est plus disponible."
+  },
+  "abonnement-actif-resiliation.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Abonnement Fondateurs annuel actif, résiliation prévue en fin de période : Pro jusqu'au bout."
+  },
+  "abonnement-impaye.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Paiement échoué : Pro maintenu 3 jours après le premier échec (`actif` vrai), `paiementEchoue` vrai — le site invite à mettre la carte à jour par le portail."
+  },
+  "abonnement-termine.json": {
+    "route": "GET /api/abonnement",
+    "statut": 200,
+    "schema": "ReponseAbonnement",
+    "description": "Abonnement terminé (résilié, ou impayé au bout des relances) : retour au gratuit."
+  },
+  "checkout-url.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 200,
+    "schema": "ReponseUrlPaiement",
+    "description": "L'adresse de la page de paiement : le site y envoie le navigateur (aucune autre donnée)."
+  },
+  "portail-url.json": {
+    "route": "POST /api/abonnement/portail",
+    "statut": 200,
+    "schema": "ReponseUrlPaiement",
+    "description": "L'adresse du portail client."
+  },
+  "checkout-entree.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 400,
+    "schema": "ReponseErreur",
+    "description": "Entrée refusée : `offre-inconnue`, `periode-inconnue`, `champ-inconnu`, `retour-invalide`, `corps`."
+  },
+  "checkout-places-epuisees.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Code Fondateurs valide mais toutes les places sont prises ou réservées."
+  },
+  "checkout-code-invalide.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Code Fondateurs ou de parrainage faux, ou offre Fondateurs fermée (indiscernable d'un mauvais code)."
+  },
+  "checkout-parrainage-non-eligible.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Parrainage refusé : soi-même, ou un compte qui n'est pas un client neuf (client Stripe, essai ou abonnement déjà connus)."
+  },
+  "checkout-limite.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "20 sessions par heure et par compte, 10 essais de code par heure et par compte : attendre `reessayerDans` secondes."
+  },
+  "checkout-indisponible.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 503,
+    "schema": "ReponseErreur",
+    "description": "Abonnements non configurés (`abonnements-indisponibles`, `prix-non-configure`) ou Stripe injoignable (`paiement-indisponible`)."
+  },
+  "portail-aucun-abonnement.json": {
+    "route": "POST /api/abonnement/portail",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Le compte n'a jamais eu de client Stripe : pas de portail."
+  },
+  "checkout-abonnement-actif.json": {
+    "route": "POST /api/abonnement/checkout",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Le compte a déjà un abonnement vivant (essai, actif, impayé, suspendu) : un seul abonnement par compte ; le site renvoie vers le portail."
   }
 }

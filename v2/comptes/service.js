@@ -252,6 +252,10 @@ async function installationsDuCompte(compteId) {
 async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintenant = new Date() }) {
     if (!(await P.verifier(typeof motDePasse === 'string' ? motDePasse : '', compte.motDePasse))) return { statut: 401, code: 'IDENTIFIANTS' };
     if ((compte.solde && compte.solde.achete > 0) && renonciation !== true) return { statut: 409, code: 'CREDITS_ACHETES' };
+    // STRIPE-V2 : supprimer le compte ne résilie pas l'abonnement chez Stripe (le client serait débité sans compte) : refus tant qu'un abonnement est vivant — AVEC OU SANS le drapeau —, sessions de paiement
+    // ouvertes expirées, client Stripe anonymisé (voir abonnements/suppression.js). Stripe en panne : refus, à rejouer.
+    const stripe = await require('../abonnements/suppression').avant(compte, cfg);
+    if (!stripe.ok) return { statut: stripe.statut, code: stripe.code, detail: stripe.detail };
     const id = compte._id, porteurs = [`compte:${id}`, String(id)];
     if (compte.offertesAccordeesLe) await noterAdresse(compte.emailCle, cfg, maintenant);
     await col('sessions').deleteMany({ compteId: id });                               // d'abord : le cookie cesse de valoir tout de suite
@@ -265,6 +269,7 @@ async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintena
     await col('codes_liaison').deleteMany({ compteId: id });
     await col('liens_email').deleteMany({ compteId: id });
     await require('../collection/service').supprimerDuCompte(id, cfg);                      // « Ma collection » part avec le compte
+    if (stripe.finaliser) await stripe.finaliser();                                      // le client Stripe anonymisé, le code de parrainage et la réservation de place rendus (avant la suppression : une panne se rejoue)
     await col('comptes').deleteOne({ _id: id });                                       // en dernier : une panne en cours de route se rejoue
     return { statut: 200 };
 }

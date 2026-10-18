@@ -213,6 +213,8 @@ function lireConfig(env = process.env) {
         // RESOUDRE-CARDMARKET : POST /api/banc/resoudre-cardmarket (adresse Cardmarket collée → idProduct, administrateur seulement). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) SANS rendre la configuration invalide : un drapeau mal écrit ne doit jamais coûter un 503 au service.
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
+        // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
+        abonnements: require('./abonnements/config').lireAbonnements(env),
         turnstile,
         cookieSecure
     });
