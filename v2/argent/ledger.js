@@ -121,14 +121,15 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
                 try {
                     // MOYENS-B2a tour 2 (I-2, N-7) : la compensation porte l'IDENTITÉ du débit (`mv._id`, posée avant l'écriture) sur la poche, dans la même écriture que le crédit. Si l'écriture d'origine arrive TARD (limite M2), le débit
                     // tardif a le même `_id` : tout chemin qui voudrait le rendre reçoit « poche-deja-compensee » (le crédit de CE débit existe), jamais un second crédit. Plus de trace séparée, plus d'horodatage à comparer.
-                    const r = await rendrePoche(porteur, credit, cfg, maintenant, mv._id);
+                    // (ACHETE-AVANT-JOUR) par `rendreUnite` : si l'installation a été LIÉE entre le débit et cette compensation, l'unité revient au porteur ACTUEL de la poche (le compte), pas à une poche que plus rien ne débite
+                    const r = await rendreUnite(porteur, credit, cfg, maintenant, mv._id);
                     if (!r.rendu) console.error(`🔴 [v2 debiter] poche ${credit.poche} NON rendue après l'échec du mouvement (${r.raison}) — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`);
                 } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${codeErr(e2)} — clé ${cleJournal(cleEff)}, porteur ${porteur.type}:${porteur.id}`); }
             }
             if (ecrit !== true) throw e;
             return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };
         }
-        await rendrePoche(porteur, credit, cfg, maintenant);                   // une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
+        await rendreUnite(porteur, credit, cfg, maintenant);                   // (porteur ACTUEL, voir plus haut) une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
         const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
         return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };
     }
