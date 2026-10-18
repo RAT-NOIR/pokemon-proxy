@@ -10,7 +10,7 @@ const db = require('../db');
 const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
-const { creerIndexCodeNumero } = require('./langue-decisive');
+const { construireIndexVerifie } = require('./langue-decisive');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -39,7 +39,7 @@ function creerCatalogue(opts = {}) {
     const INDEX_DUREE_MS = 6 * 3600 * 1000;
     async function indexCodeNumero() {
         if (indexEnCours && Date.now() - indexLe < INDEX_DUREE_MS) return indexEnCours;
-        const p = (async () => creerIndexCodeNumero(await colLue('numeros_cartes').find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray()))();
+        const p = (async () => construireIndexVerifie(await colLue('numeros_cartes').find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray()))();     // M-B : sous le plancher, LÈVE (R4 fermée)
         indexEnCours = p; indexLe = Date.now();
         p.catch(() => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
         return p;
