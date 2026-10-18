@@ -10,7 +10,7 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     const dossier = C.DOSSIER;
     const emp = JSON.parse(fs.readFileSync(path.join(dossier, 'empreintes.json'), 'utf8'));
     H.v('les huit sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
-    H.v('le commit NOMMÉ est écrit dans les empreintes (35ed580, forme complète de 40 caractères)', [/^35ed580[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '35ed580']);
+    H.v('le commit NOMMÉ est écrit dans les empreintes (4d1344d, forme complète de 40 caractères)', [/^4d1344d[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '4d1344d']);
     // la copie n'a pas été retouchée à la main : chaque fichier produit porte l'empreinte écrite
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : empreinte de la copie conforme au fichier`, sha(fs.readFileSync(path.join(dossier, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts (imports réécrits en .mjs)', Object.keys(emp.produits).filter(n => n.endsWith('.mjs')).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(dossier, n), 'utf8'))), []);
@@ -120,6 +120,15 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
         for (const reg of ['jp', 'intl', 'zh-hans', 'idth', 'ko']) H.v(`   visuelAdmisPourLaRegion(${reg}) : identique au site`, vis.map(v => regle.visuelAdmisPourLaRegion(v, reg)), vis.map(v => site.visuelAdmisPourLaRegion(v, reg)));
         const prod = [{ idProduct: 1, slug: 'Agatha-V1', slugSet: 'X' }, { idProduct: 2, slug: 'Agatha-V2', slugSet: 'X' }, { idProduct: 3, slug: 'Agatha-V3', slugSet: 'X' }];
         H.v('   produitsDeLaFiche : identique au site', [0, 1, 2].map(r => regle.produitsDeLaFiche(prod, r, ['210', '129', '186'], 'SV')), [0, 1, 2].map(r => site.produitsDeLaFiche(prod, r, ['210', '129', '186'], 'SV')));
+        // RESYNC-REGLE-SITE : la règle « un produit sans numéro reste sur la fiche principale » (site 11fb6c1, 99c0896) est dans la copie, et dit la même chose que le site
+        const nums = ['039', '040', '041', '042'];        // plus de fiches que de produits : l'élimination des illisibles ne s'applique pas, seule la règle nouvelle place le produit sans numéro
+        const ids = (R, tous, r) => R.produitsDeLaFiche(tous, r, nums, 'SWSH').map(p => p.idProduct);
+        const energie = { idProduct: 11, slug: 'Grass-Energy-V1-S-P', slugSet: 'Sword-Shield-Promos' }, place = { idProduct: 12, slug: 'Pikachu-SWSH039', slugSet: 'Sword-Shield-Promos' };
+        const cas = { 'un seul produit sans numéro (V1, aucun chiffre hors version)': [energie, place], 'un V2 sans numéro à côté : on ne devine pas': [energie, place, { idProduct: 14, slug: 'Grass-Energy-V2-S-P', slugSet: 'Sword-Shield-Promos' }],
+            'un slug à chiffre au milieu (Geodude-Lv12-TK31-Gold) : refusé': [{ idProduct: 13, slug: 'Geodude-Lv12-TK31-Gold', slugSet: 'DP-Trainer-Kit' }, place] };
+        for (const [nom, tous] of Object.entries(cas)) H.v(`   produitsDeLaFiche, ${nom} : identique au site (rang 0 et rang 1)`, [0, 1].map(r => ids(regle, tous, r)), [0, 1].map(r => ids(site, tous, r)));
+        H.v('   le produit sans numéro est placé sur la fiche principale (rang 0) seulement', [0, 1].map(r => ids(regle, cas['un seul produit sans numéro (V1, aucun chiffre hors version)'], r).includes(11)), [true, false]);
+        H.v('   un V2 sans numéro à côté, ou un chiffre au milieu du slug : le produit ne bouge pas (rang 0)', [ids(regle, cas['un V2 sans numéro à côté : on ne devine pas'], 0).includes(11), ids(regle, cas['un slug à chiffre au milieu (Geodude-Lv12-TK31-Gold) : refusé'], 0).includes(13)], [false, false]);
         H.v('   cardmarketUrl : identique au site', regle.cardmarketUrl({ slug: 'Pikachu-V1-BS58', slugSet: 'Base-Set' }), site.cardmarketUrl({ slug: 'Pikachu-V1-BS58', slugSet: 'Base-Set' }));
     }
     H.bilan();
