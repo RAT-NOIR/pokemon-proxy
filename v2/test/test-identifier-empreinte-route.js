@@ -72,7 +72,7 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         throw new Error(`mode inconnu ${mode}`);
     };
     const appFabrique = async (cfgApp, deps = {}) => {
-        const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        const app = express(); app.set('trust proxy', true); app.use(express.json({ limit: '2400kb' }));   // la limite de index.js quand V2_EMPREINTE_EXTENSION=1 (test-corps-identifier-empreinte.js) app.use((q, s, n) => dansUnScan(n));
         pret.armer(require('../modeles').verifierIndex);
         app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, ...deps }));
         return H.serveur(app);
@@ -85,6 +85,7 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
     const crochet = require('../banc/crochet'); const origCrochet = crochet.apresIdentifier; let appelsCrochet = [];
     crochet.apresIdentifier = a => { appelsCrochet.push(a.analyse.statut); };
     const cartesDe = j => j.analyse.cartes[0];
+    await A.preparer();
     A.installerIndex();
 
     // ── (1) EN PREMIER : drapeau ÉTEINT — la requête, la réponse et le débit sont ceux d'avant, que la requête porte des empreintes ou non
@@ -211,7 +212,40 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         H.v('8f. un fournisseur qui rend des voisins SANS contexte G : la règle lève, la chaîne décide, « indisponible »', [cartesDe(f.j).statut, f.j.empreinte], ['a-trancher', { utilisee: false, code: 'indisponible' }]);
         await faux.fermer();
     }
-    // ── (9) la panne de la chaîne : G n'est pas consultée, aucun champ `empreinte`
+    // ── (8 bis) LA CARTE REDRESSÉE : les pixels de la garde des zones. Sans carte autorisée, G se tait ; une carte FORGÉE ne produit jamais un sûr que la lecture de la photo contredit.
+    {
+        const ch = { mode: 'ambigue', ids: [A.ID_A, A.ID_B] };
+        const C = A.cartes();
+        const zones = A.fausseZones();
+        const svZ = await appFabrique(cfgOn, { zonesEmpreinte: zones, scanEmpreinte: A.scanBanc });
+        const requete = (i, carte) => ({ empreintes: [A.entree(0, i, true, carte)], modeleEmpreinte: A.modeleAnnonce() });
+        const sansEffet = async (nom, req) => { const o = await jouer(svZ, ch, req); H.v(nom, [o.r.statut, cartesDe(o.j).statut, o.j.empreinte, await essaisDe(o.i._id)], [200, 'a-trancher', { utilisee: false, code: 'muette' }, 2]); return o; };
+        const honn = await jouer(svZ, ch, requete(10));
+        H.v('8bis-a. carte honnête, jumeaux jeu-10 / jeu-11 : la garde des zones tranche sur la carte — identifiee B (jeu-10), facturation affirmee', [cartesDe(honn.j).statut, cartesDe(honn.j).carte && cartesDe(honn.j).carte.idProduct, honn.j.empreinte, honn.j.facturation.motif], ['identifiee', A.ID_B, { utilisee: true, code: null }, 'affirmee']);
+        H.vrai('8bis-b. … et la photo redressée donnée aux zones est EXACTEMENT la carte jointe (empreinte de ses pixels), jamais autre chose', zones.appels.filter(a => a[0] === 'photo').every(a => a[1] === C.SHA_CARTE));
+        // sans carte, ou une carte que le serveur n'autorise pas : G se tait, même pour un vecteur parfait
+        await sansEffet('8bis-c. entrée SANS carte : G se tait (« muette »), la question de la chaîne reste, rien n\'est perdu', requete(10, false));
+        await sansEffet('8bis-d. carte qui n\'est pas un JPEG : « muette »', requete(10, Buffer.from('pas une image').toString('base64')));
+        await sansEffet('8bis-e. carte d\'une autre taille (419 × 587) : « muette »', requete(10, (await A.jpeg(419, 587, 5)).toString('base64')));
+        await sansEffet('8bis-f. carte de plus de 200 Ko : « muette »', requete(10, (await A.jpeg(420, 587, 5, 100)).toString('base64')));
+        await sansEffet('8bis-g. carte démesurée (> 273 068 caractères) : « muette », la requête n\'est pas refusée', requete(10, 'A'.repeat(300000)));
+        const autreIndex = await jouer(svZ, ch, { empreintes: [A.entree(0, 10, true, false), A.entree(1, 10, true)], imageUrls: [IMAGE, IMAGE2], modeleEmpreinte: A.modeleAnnonce() });
+        H.v('8bis-h. la carte de la photo 1 ne sert pas au vecteur de la photo 0 : « muette »', [cartesDe(autreIndex.j).statut, autreIndex.j.empreinte], ['a-trancher', { utilisee: false, code: 'muette' }]);
+        // 🔑 la carte FORGÉE : les pixels du jumeau qui contredit la lecture (jeu-11 → X, numéro 002), avec le VRAI vecteur de la photo (jeu-10)
+        const forg = await jouer(svZ, ch, requete(10, C.CARTE_FORGEE));
+        H.v('8bis-i. 🔑 carte forgée (les zones donnent la victoire à jeu-11, produit X, numéro 002) : G affirme X, la garde (2) le retire — la question de la chaîne reste, JAMAIS un sûr que la lecture contredit', [cartesDe(forg.j).statut, cartesDe(forg.j).candidats.map(x => x.idProduct).sort(), (await analyseDe(forg.j)).desaccordRegleG.retenue], ['a-trancher', [A.ID_A, A.ID_B], 'garde-contradiction']);
+        H.vrai('8bis-j. … la preuve que la carte forgée a bien été JUGÉE comme autre chose (les zones ont vu l\'empreinte de pixels de la forgée)', zones.appels.some(a => a[1] === 'forgee'));
+        // contre-épreuve (la variante du banc qui affirme l'inverse) : SANS lecture de la chaîne, la garde (2) ne peut pas retirer X — la même carte forgée obtient alors X. Le banc 8bis-i peut donc ÉCHOUER ; il réussit grâce à la lecture.
+        appelsCrochet = [];
+        const sansLecture = await jouer(svZ, { mode: 'ambigue-sans-lecture', ids: [A.ID_A, A.ID_B] }, requete(10, C.CARTE_FORGEE));
+        const sl = await analyseDe(sansLecture.j);
+        H.v('8bis-k. contre-épreuve : la même carte forgée contre une chaîne SANS lecture obtient X (identifiee) — pour elle seule, lecture non concordante', [cartesDe(sansLecture.j).carte && cartesDe(sansLecture.j).carte.idProduct, sl.empreinteExtension.lectureConcordante], [A.ID_X, false]);
+        H.v('8bis-l. … et rien de partagé : sans lecture concordante le banc réel n\'est pas appelé', appelsCrochet, []);        // entre deux jumeaux qui CONCORDENT avec la lecture, la carte choisit — pour l'utilisateur seul
+        appelsCrochet = [];
+        const c12 = await jouer(svZ, ch, requete(12, C.CARTE)), c12f = await jouer(svZ, ch, requete(12, C.CARTE_FORGEE));
+        H.v('8bis-m. jumeaux jeu-12 (P) / jeu-13 (A), tous deux concordants : la carte honnête donne P, la carte forgée donne A — la limite connue, pour le seul utilisateur qui la forge', [cartesDe(c12.j).carte.idProduct, cartesDe(c12f.j).carte.idProduct], [A.ID_P, A.ID_A]);
+        await svZ.fermer();
+    }    // ── (9) la panne de la chaîne : G n'est pas consultée, aucun champ `empreinte`
     {
         chaine = { mode: 'exception-absente', ids: [] };
         const x = await inst(3); const r = await poster(sv.url, x.jeton, corps(vec(3)));

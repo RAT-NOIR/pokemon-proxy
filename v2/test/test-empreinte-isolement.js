@@ -75,6 +75,7 @@ function partages(avant, apres, signes) {
     await raw('codes_set').insertOne({ idExpansion: 990001, codeSet: 'PBL', apprisLe: new Date() });
     for (const id of [A.ID_A, A.ID_B, A.ID_P]) await semer(id, '001');
     VB.installer(VIS);
+    await A.preparer();
     A.installerIndex();
 
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
@@ -94,8 +95,9 @@ function partages(avant, apres, signes) {
     // le crochet du banc RÉEL : détection fabriquée + faux banc qui espionne. Aucun octet n'est écrit ailleurs que dans le tableau.
     const ecrituresBanc = [];
     registre.fournir('banc', { apresVerdict: async o => { ecrituresBanc.push({ issue: o.issue, idProduct: o.idProduct }); return { ok: true }; }, apresReponse: async () => { }, apresAbandon: async () => { } });
-    const deps = { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, detection: async () => ({ imageRedressee: Buffer.from('image-redressee-du-banc'), detectionSure: true, versionModele: 'banc' }) };
-    const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+    const zonesFausses = A.fausseZones();
+    const deps = { zonesEmpreinte: zonesFausses, scanEmpreinte: A.scanBanc, jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee, detection: async () => ({ imageRedressee: Buffer.from('image-redressee-du-banc'), detectionSure: true, versionModele: 'banc' }) };
+    const app = express(); app.set('trust proxy', true); app.use(express.json({ limit: '2400kb' }));   // la limite de index.js quand V2_EMPREINTE_EXTENSION=1 (test-corps-identifier-empreinte.js) app.use((q, s, n) => dansUnScan(n));
     pret.armer(require('../modeles').verifierIndex);
     app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgOn, deps));
     const sv = await H.serveur(app);
@@ -156,6 +158,26 @@ function partages(avant, apres, signes) {
     H.v('5b. B, après tous les vecteurs forgés d\'A : toujours la réponse du monde sans A', empreinteDe(JSON.stringify(sansVolatil(b2.j))), empreinteDe(JSON.stringify(sansVolatil(b0.j))));
     H.vrai('6. aucun état de processus du module du vecteur n\'est partagé : l\'index est en lecture seule (gelé), et la recherche ne retient rien du vecteur', Object.isFrozen(A.etat.courante()) && (() => { const i = A.etat.courante().index; const k = Object.keys(i).sort().join(); return k === 'cles,contexteG,mat16,n,octetsMatrice'; })());
 
+    // ── LA CARTE FORGÉE : le VRAI vecteur de la photo (jumeaux jeu-12 / jeu-13) et les pixels de l'AUTRE jumeau. A choisit le jumeau pour lui seul ; B, qui scanne L sans rien, ne le voit jamais.
+    {
+        const C = A.cartes();
+        ecrituresBanc.length = 0; zonesFausses.appels.length = 0;
+        const avF = await photographier();
+        const honnete = await jouer(L, { empreintes: [A.entree(0, 12, true)], modeleEmpreinte: A.modeleAnnonce() });
+        H.v('6a. carte honnête, vrai vecteur de jeu-12 : A obtient P (le jumeau que montrent les pixels)', honnete.j.analyse.cartes[0].carte && honnete.j.analyse.cartes[0].carte.idProduct, A.ID_P);
+        const forgee = await jouer(L, { empreintes: [A.entree(0, 12, true, C.CARTE_FORGEE)], modeleEmpreinte: A.modeleAnnonce() });
+        const apF = await photographier();
+        H.v('6b. carte FORGÉE (les pixels de l\'autre jumeau), même vrai vecteur : A obtient A (l\'autre jumeau) — la limite connue : la carte départage les jumeaux, pour A seul', forgee.j.analyse.cartes[0].carte && forgee.j.analyse.cartes[0].carte.idProduct, A.ID_A);
+        H.vrai('6c. … les zones ont bien vu deux cartes DIFFÉRENTES (empreintes de pixels honnête et forgée)', new Set(zonesFausses.appels.filter(a => a[0] === 'photo').map(a => a[1])).size === 2 && zonesFausses.appels.some(a => a[1] === 'forgee'));
+        const partF = partages(avF, apF, [String(honnete.i._id), honnete.j.scanId, String(forgee.i._id), forgee.j.scanId]);
+        H.v('6d. 🔑 inventaire : aucun document partagé nouveau ou changé par les requêtes à carte (honnête ou forgée) qui ne désigne pas leur auteur', partF, partagesRef);
+        const bC = await jouer(L);
+        H.v('6e. 🔑 B scanne L SANS rien après la carte forgée d\'A : la réponse du monde sans A (octet pour octet)', empreinteDe(JSON.stringify(sansVolatil(bC.j))), empreinteDe(JSON.stringify(sansVolatil(b0.j))));
+        H.vrai('6f. … sa ligne `analyses` aussi, et aucune trace de la carte ou du vecteur d\'A', empreinteDe(JSON.stringify(sansPropre(await analyseDe(bC.j)))) === empreinteDe(JSON.stringify(a0)) && !('empreinte' in bC.j));
+        // un utilisateur C qui envoie SA propre carte honnête n'est pas touché par la carte forgée d'A : le résultat de C est celui du monde sans A
+        const cH = await jouer(L, { empreintes: [A.entree(0, 12, true)], modeleEmpreinte: A.modeleAnnonce() });
+        H.v('6g. C, avec sa carte honnête après la carte forgée d\'A : P, comme A honnête — aucune mémoire de la carte forgée', cH.j.analyse.cartes[0].carte && cH.j.analyse.cartes[0].carte.idProduct, A.ID_P);
+    }
     await sv.fermer();
     const monter = require('../identifier/monter'); monter.arreterBalayage(); monter.arreterPurge(); require('../argent/marque-scan').arreterRattrapage();
     A.etat.vider();
