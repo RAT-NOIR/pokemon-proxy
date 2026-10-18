@@ -4,8 +4,8 @@
 // 🔑 DÉCISION DU TESTEUR (2026-10-17) : la source est ROUVERTE. Les visuels appartiennent à The Pokémon Company ; on ne les prend que pour ce qui nous manque, retirables à la
 // demande. Hôte d'images : pokemoncardimages.pokedata.io (robots.txt en 404 : permis), pleine taille seulement — /images/<nom du set>/<numéro>.webp, JAMAIS le suffixe _240w.
 // Pages : www.pokedata.io, seulement la liste des sets et les pages de set de la table fermée ci-dessous. Aucune API, aucun prix, aucune page en série.
-// Le mot « pokedata » n'apparaît jamais dans un champ que le site ou l'API lisent : la clé R2 est neutre (pdt/…), la mention est celle de l'éditeur ; `source`, `urlOriginal` et `lot`
-// sont des champs INTERNES de traçabilité (celui qui retire le lot en a besoin).
+// Le mot « pokedata » n'apparaît jamais dans un champ que le site ou l'API lisent : la clé R2 est neutre (pdt/…), la mention est celle de l'éditeur ; `source` (`pdt`) et `lot` (`pdt-2026-10`) sont neutres AUSSI (le site LIT `source`, lireDonnee.ts) ; seul `urlOriginal` nomme l'hôte :
+// champ INTERNE de traçabilité (celui qui retire le lot en a besoin).
 //
 // 🔴 CE QUE LA SONDE DU 2026-10-17 A APPRIS (4 requêtes, fixtures/pokedata-*.html) : la LISTE des sets est rendue côté serveur (694 sets dans __NEXT_DATA__ : id, name, code,
 // language, release_date) ; une PAGE de set est une coquille rendue côté client — son HTML ne porte ni cartes, ni numéros, ni adresses d'image (pageProps vide). Les cartes arrivent
@@ -17,8 +17,8 @@ const { cleNumero, normaliserNom } = require('./jointure');
 const T = require('./tpc');
 const { estDosDeCarte } = require('./hotes-images-ptcgio');
 
-const SOURCE = 'pokedata';
-const LOT = 'pokedata-2026-10';
+const SOURCE = 'pdt';
+const LOT = 'pdt-2026-10';
 const MENTION = T.MENTION;
 const HOTE_PAGES = 'www.pokedata.io';
 const HOTE_IMAGES = 'pokemoncardimages.pokedata.io';

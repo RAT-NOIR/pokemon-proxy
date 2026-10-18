@@ -277,19 +277,23 @@ const SLUG = 'Trick-or-Trade-2024';
     verifier('écrire : 3 images écrites, la 4e (300 px) est « trop-petit » ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
     const doc = B.col('images').get(P.idImage(SLUG, 1, '37'));
     verifier('R2 AVANT la ligne : clé NEUVE pdt/…, WebP ; la clé ne contient pas le nom de la source', [dp.l[0][1], dp.l[0][3], dp.l.some(x => /pokedata/i.test(x[1]))], [P.cleR2(SLUG, '37', 1) === dp.l[0][1] ? dp.l[0][1] : 'cle-inattendue', 'image/webp', false]);
-    verifier('le document `images` : source, lot, adresse d\'origine, retirable, date, mention, langue', [doc.source, doc.lot, doc.urlOriginal, doc.retirable, doc.collecteLe instanceof Date, doc.mention, doc.langue], ['pokedata', 'pokedata-2026-10', plan[0].url, true, true, P.MENTION, 'en']);
+    verifier('le document `images` : source, lot, adresse d\'origine, retirable, date, mention, langue', [doc.source, doc.lot, doc.urlOriginal, doc.retirable, doc.collecteLe instanceof Date, doc.mention, doc.langue], ['pdt', 'pdt-2026-10', plan[0].url, true, true, P.MENTION, 'en']);
     verifier('le document de l\'image sous le seuil : « trop-petit », seuil 350, rien de joint', [B.col('images').get(P.idImage(SLUG, 4, '136'))?.etat, B.col('images').get(P.idImage(SLUG, 4, '136'))?.seuilApplique, B.col('cartes').get(4).images.length], ['trop-petit', 350, 1]);
-    const e1 = B.col('cartes').get(1).images.find(e => e.source === 'pokedata');
-    verifier('l\'entrée de la carte : set, source, lot, traçabilité, mention, langue ; l\'autre source INTACTE', [e1.set, e1.source, e1.lot, e1.retirable, e1.urlOriginal, e1.collecteLe instanceof Date, e1.mention, e1.langue, B.col('cartes').get(1).images.find(e => e.source === 'tcgdex').cleR2], [SLUG, 'pokedata', 'pokedata-2026-10', true, plan[0].url, true, P.MENTION, 'en', 'tcgdex/x.webp']);
-    const publics = e => JSON.stringify([e.cleR2, e.vignette?.cleR2, e.attribution, e.mention, e.langue, e.languePreuve, e.numero, e.set, e.fmt]);
-    verifier('AUCUN champ lu par le site ou l\'API (clé, vignette, attribution, mention, langue, preuve, numéro, set, format) ne contient « pokedata »', [publics(e1), publics(doc)].map(s => /pokedata/i.test(s)), [false, false]);
+    const e1 = B.col('cartes').get(1).images.find(e => e.source === 'pdt');
+    verifier('l\'entrée de la carte : set, source, lot, traçabilité, mention, langue ; l\'autre source INTACTE', [e1.set, e1.source, e1.lot, e1.retirable, e1.urlOriginal, e1.collecteLe instanceof Date, e1.mention, e1.langue, B.col('cartes').get(1).images.find(e => e.source === 'tcgdex').cleR2], [SLUG, 'pdt', 'pdt-2026-10', true, plan[0].url, true, P.MENTION, 'en', 'tcgdex/x.webp']);
+    // 🔑 POKEDATA-SUITE correction 1 : le site LIT set, cleR2, w, h, numero, langue, languePreuve, source, mention, noteVariante, vignette, basseDefinition (lireDonnee.ts) + attribution ; seul urlOriginal peut nommer l'hôte
+    const publics = e => JSON.stringify([e.set, e.cleR2, e.w, e.h, e.numero, e.langue, e.languePreuve, e.source, e.mention, e.noteVariante, e.vignette, e.basseDefinition, e.attribution, e.fmt, e.lot]);
+    const sansOrigine = e => JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'urlOriginal')));
+    verifier('AUCUN champ lu par le site (set, cleR2, w, h, numero, langue, languePreuve, source, mention, noteVariante, vignette, basseDefinition, attribution) ne contient « pokedata » — entrée cartes.images ET document images', [publics(e1), publics(doc)].map(s => /pokedata/i.test(s)), [false, false]);
+    verifier('   et dans toute l\'entrée / tout le document, seul `urlOriginal` peut nommer l\'hôte', [sansOrigine(e1), sansOrigine(doc)].map(s => /pokedata/i.test(s)), [false, false]);
+    verifier('   (…et urlOriginal nomme bien l\'hôte : traçabilité)', [/pokedata/i.test(e1.urlOriginal), /pokedata/i.test(doc.urlOriginal)], [true, true]);
     verifier('le bilan du set ne porte pas le nom de la source dans son nom de champ', Object.keys(B.col('sets').get(SLUG)).some(k => /pokedata/i.test(k)), false);
     verifier('le bilan du set : garde verte, 3 joints', [B.col('sets').get(SLUG).bilanLotPdt?.garde?.ok, B.col('sets').get(SLUG).bilanLotPdt?.joints], [true, 3]);
     ({ b, dp } = await ecrire(B, { attendu: 3 }));
-    verifier('rejeu : rien de redéposé, une entrée par fiche (idempotent)', [dp.l.length, B.col('cartes').get(1).images.filter(e => e.source === 'pokedata').length], [0, 1]);
+    verifier('rejeu : rien de redéposé, une entrée par fiche (idempotent)', [dp.l.length, B.col('cartes').get(1).images.filter(e => e.source === 'pdt').length], [0, 1]);
     B = fausseBase(); semer(B); B.col('cartes').get(2).images.push({ set: SLUG, source: 'bulbapedia', numero: '057', cleR2: 'bulbapedia/b.webp', langue: 'en' });
     ({ b, dp } = await ecrire(B, { attendu: 3 }));
-    verifier('additif : une autre source a servi ce numéro entre-temps => la nôtre CÈDE, l\'entrée de l\'autre est intacte', [b.resultats.find(x => x.code === SLUG).dejaParAutre, B.col('cartes').get(2).images.filter(e => e.source === 'pokedata').length, B.col('cartes').get(2).images.find(e => e.source === 'bulbapedia').cleR2], [1, 0, 'bulbapedia/b.webp']);
+    verifier('additif : une autre source a servi ce numéro entre-temps => la nôtre CÈDE, l\'entrée de l\'autre est intacte', [b.resultats.find(x => x.code === SLUG).dejaParAutre, B.col('cartes').get(2).images.filter(e => e.source === 'pdt').length, B.col('cartes').get(2).images.find(e => e.source === 'bulbapedia').cleR2], [1, 0, 'bulbapedia/b.webp']);
     B = fausseBase(); semer(B);
     const dc2 = tmp(); await lancer(urls.slice(0, 2), reseau(normal), dc2);
     ({ b, dp } = await ecrire(B, { dossierCache: dc2, attendu: 2 }));
@@ -314,7 +318,7 @@ const SLUG = 'Trick-or-Trade-2024';
     verifier('--remplacer avec un idProduct hors des remplacements du plan : REFUSÉ avant toute écriture (liste fermée)', [b.code, b.etat, dp.l.length], [2, 'refuse-remplacer', 0]);
     B = fausseBase(); semerAnc(B);
     ({ b, dp } = await ecrire(B, { plan: [], remplacements: remp, remplacer: [900], attendu: 1 }));
-    verifier('--remplacer=900 : l\'ancienne entrée sort, la nôtre entre au même (set, numéro) ; l\'autre source reste', [b.code, B.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}`).sort()], [0, ['pokedata:37', 'tcgdex:1']]);
+    verifier('--remplacer=900 : l\'ancienne entrée sort, la nôtre entre au même (set, numéro) ; l\'autre source reste', [b.code, B.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}`).sort()], [0, ['pdt:37', 'tcgdex:1']]);
     verifier('   le document remplacé n\'est pas supprimé : état « remplace », motif et remplaçante écrits', [B.col('images').get('anc').etat, !!B.col('images').get('anc').remplaceMotif, B.col('images').get('anc').remplaceePar], ['remplace', true, P.idImage(SLUG, 1, '37')]);
 
     // ── 4. RETIRER : toute la source, en une commande, à blanc par défaut ────────────────────────────────────────────────────
@@ -322,13 +326,13 @@ const SLUG = 'Trick-or-Trade-2024';
     B = fausseBase(); semer(B); await ecrire(B, { attendu: 3 });
     B.col('cartes').get(2).images.push({ set: SLUG, source: 'pokumon', lot: 'x', numero: '9', cleR2: 'pokumon/autre.webp' });
     const sup = []; const blanc = await retirerLot(B.db, {});
-    verifier('retrait À BLANC par défaut : comptes, rien n\'est modifié', [blanc.entrees, blanc.cartes.length, B.col('cartes').get(1).images.some(e => e.source === 'pokedata')], [3, 3, true]);
+    verifier('retrait À BLANC par défaut : comptes, rien n\'est modifié', [blanc.entrees, blanc.cartes.length, B.col('cartes').get(1).images.some(e => e.source === 'pdt')], [3, 3, true]);
     const rr = await retirerLot(B.db, { ecrire: true, effacerR2: true, supprimer: async (bk, cles) => sup.push(...cles), verifierBucket: async () => { }, bucket: 'bucket-banc' });
-    verifier('retrait : toutes les entrées de la source sortent ; l\'autre source reste ; documents « retire » ; le bilan de set est nettoyé', [B.col('cartes').get(1).images.some(e => e.source === 'pokedata'), B.col('cartes').get(2).images.some(e => e.source === 'pokumon'), B.col('images').get(P.idImage(SLUG, 1, '37')).etat, B.col('sets').get(SLUG).bilanLotPdt, rr.reste], [false, true, 'retire', undefined, 0]);
+    verifier('retrait : toutes les entrées de la source sortent ; l\'autre source reste ; documents « retire » ; le bilan de set est nettoyé', [B.col('cartes').get(1).images.some(e => e.source === 'pdt'), B.col('cartes').get(2).images.some(e => e.source === 'pokumon'), B.col('images').get(P.idImage(SLUG, 1, '37')).etat, B.col('sets').get(SLUG).bilanLotPdt, rr.reste], [false, true, 'retire', undefined, 0]);
     verifier('   les clés R2 effacées sont celles de la source seule (pdt/ et ses vignettes)', [sup.length > 0 && sup.every(c => c.startsWith('pdt/') || c.startsWith('vignettes/pdt/'))], [true]);
-    { const Bs = fausseBase(); semer(Bs); await ecrire(Bs, { attendu: 3 }); Bs.col('cartes').get(1).images.find(e => e.source === 'pokedata').lot = 'pokedata-2099-01';
+    { const Bs = fausseBase(); semer(Bs); await ecrire(Bs, { attendu: 3 }); Bs.col('cartes').get(1).images.find(e => e.source === 'pdt').lot = 'pdt-2099-01';
       const rs = await retirerLot(Bs.db, { ecrire: true });
-      verifier('retrait de TOUTE la source : un autre lot de la même source part aussi (c\'est la source, pas un lot)', [Bs.col('cartes').get(1).images.some(e => e.source === 'pokedata'), rs.reste], [false, 0]); }
+      verifier('retrait de TOUTE la source : un autre lot de la même source part aussi (c\'est la source, pas un lot)', [Bs.col('cartes').get(1).images.some(e => e.source === 'pdt'), rs.reste], [false, 0]); }
 
     global.fetch = fetchOrigine;
     console.log(`\n${ok} passés, ${ko} en échec`);

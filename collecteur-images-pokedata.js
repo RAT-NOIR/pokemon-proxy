@@ -4,7 +4,7 @@
 //   node collecteur-images-pokedata.js --plan [--releves=<dossier>] [--sortie=<plan.json>]   (défaut) SIMULATION : zéro requête réseau, lecture seule de la base, écrit plan.json
 //   node collecteur-images-pokedata.js --telecharger            LES SEULES REQUÊTES D'IMAGES : les adresses du plan présentes dans un relevé, robots.txt d'abord, ≥ 5 s, arrêt définitif
 //   node collecteur-images-pokedata.js --planche [--echantillon=50]    une planche-contact de l'échantillon du cache, à REGARDER avant l'écriture (zéro requête)
-//   node lot-additif.js --quoi="N visuels (lot pokedata-2026-10)" --collections=cartes,images,sets --compte=images:source=pokedata -- node collecteur-images-pokedata.js --ecrire --attendu=<N>
+//   node lot-additif.js --quoi="N visuels (lot pdt-2026-10)" --collections=cartes,images,sets --compte=images:source=pdt -- node collecteur-images-pokedata.js --ecrire --attendu=<N>
 //
 // ⛔ Un SEUL flux réseau (jamais deux processus à la fois), deux hôtes nommés : www.pokedata.io (la liste des sets et les pages de set de la table, jamais une API) et
 // pokemoncardimages.pokedata.io (/images/<set>/<n°>.webp, JAMAIS _240w). --plan, --planche et --ecrire ne font AUCUNE requête (l'écriture lit le cache seulement).

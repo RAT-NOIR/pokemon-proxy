@@ -92,13 +92,13 @@ verifier('doctrine : sans image => AJOUT', unique([]).plan.map(u => u.genre), ['
 verifier('clé R2 neutre : pdt/<slugSet>/<n°>-<carteId>-en.webp', P.cleR2('Trick-or-Trade-2024', '037', 785), 'pdt/Trick-or-Trade-2024/037-785-en.webp');
 verifier('clé R2 : un numéro à lettre garde sa lettre ; sans numéro => sans-numero', [P.cleR2('S', '37A', 1), P.cleR2('S', null, 1)], ['pdt/S/37A-1-en.webp', 'pdt/S/sans-numero-1-en.webp']);
 const tr = P.tracer({ url: ok1, le: new Date('2026-10-17T20:00:00Z') });
-verifier('traçabilité : source, adresse d\'origine, date, retirable: true, lot (UNE fonction, tracer())', tr, { source: 'pokedata', urlOriginal: ok1, collecteLe: new Date('2026-10-17T20:00:00Z'), retirable: true, lot: 'pokedata-2026-10' });
+verifier('traçabilité : source, adresse d\'origine, date, retirable: true, lot (UNE fonction, tracer())', tr, { source: 'pdt', urlOriginal: ok1, collecteLe: new Date('2026-10-17T20:00:00Z'), retirable: true, lot: 'pdt-2026-10' });
 verifier('traçabilité : une adresse hors règle LÈVE (rien ne se trace sans adresse valable)', /adresse/.test(leve(() => P.tracer({ url: 'https://autre.example/x.webp' })) || ''), true);
 const publics = JSON.stringify({ cleR2: P.cleR2('Trick-or-Trade-2024', '037', 785), mention: P.MENTION, attribution: P.MENTION, langue: P.langueDe(ok1, 'en') });
 verifier('aucun champ lu par le site ou l\'API (clé R2, mention, attribution, langue, preuve de langue) ne contient « pokedata »', /pokedata/i.test(publics), false);
 verifier('langue : « en » pour une adresse valable déclarée en anglais ; sinon null', [P.langueDe(ok1, 'en').langue, P.langueDe(ok1, null).langue, P.langueDe('https://autre.example/x.webp', 'en').langue], ['en', null, null]);
-const lot = { source: 'pokedata', lot: P.LOT };
-const cs = [{ _id: 1, images: [{ ...lot, cleR2: 'pdt/a/1-1-en.webp', vignette: { cleR2: 'v/pdt/a/1.webp' } }, { source: 'pokumon', lot: 'x', cleR2: 'k' }] }, { _id: 2, images: [{ source: 'pokedata', lot: 'autre-lot', cleR2: 'z' }] }, { _id: 3, images: [] }];
+const lot = { source: 'pdt', lot: P.LOT };
+const cs = [{ _id: 1, images: [{ ...lot, cleR2: 'pdt/a/1-1-en.webp', vignette: { cleR2: 'v/pdt/a/1.webp' } }, { source: 'pokumon', lot: 'x', cleR2: 'k' }] }, { _id: 2, images: [{ source: 'pdt', lot: 'autre-lot', cleR2: 'z' }] }, { _id: 3, images: [] }];
 verifier('retrait : exactement le lot (source ET lot), vignettes comprises', P.planRetrait(cs), { cartes: [1], entrees: 1, cles: ['pdt/a/1-1-en.webp', 'v/pdt/a/1.webp'] });
 
 // ── 4 bis. CORRECTION 1 : la construction directe des adresses, depuis NOS données (0 requête) ─────────────────────────────

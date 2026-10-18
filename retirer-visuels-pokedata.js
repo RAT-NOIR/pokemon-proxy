@@ -5,7 +5,7 @@
 //   node lot-additif.js --quoi="retrait des visuels de la source" --collections=cartes,images,sets --annonce=<annonce> -- node retirer-visuels-pokedata.js --ecrire [--effacer-r2]
 //
 // Ne s'exécute QUE sur demande du testeur (une suppression attend son feu vert ; les visuels sont retirables à la demande de The Pokémon Company). Il retire TOUTE la source :
-// les entrées `cartes.images` de source `pokedata`, quel que soit le lot (planRetrait ne filtre que la source ici), vignettes comprises, passe les documents `images` de la source à
+// les entrées `cartes.images` de source `pdt`, quel que soit le lot (planRetrait ne filtre que la source ici), vignettes comprises, passe les documents `images` de la source à
 // « retire » (une recollecte ne les reprend pas) et nettoie le bilan de set. Les objets R2 restent (un retour arrière est un rejeu) ; `--effacer-r2` les supprime définitivement.
 require('dotenv').config();
 const fs = require('fs');
