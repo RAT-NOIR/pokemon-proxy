@@ -98,14 +98,14 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
     const chaine = async (req, res) => { chaineAppels++; vusParLaChaine.push([...(req.body.imageUrls || [])]); res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) }); };
     for (const [id, nom] of [[4242, 'Pikachu']]) { await db.col('catalogue_produits').insertOne({ idProduct: id, name: nom, idMetacard: id }); await db.col('numeros_cartes').insertOne({ idProduct: id, slugSet: 'Base-Set', numero: String(id % 100) }); }
-    const monter = async (cfg, reglage = { placesMax: 2, delaiLectureMs: 1200 }, photos = stockPhotos) => {
+    const monter = async (cfg, reglage = { placesMax: 2, delaiLectureMs: 1200 }, photos = stockPhotos, extra = {}) => {
         const app = express(); app.set('trust proxy', true);
         for (const l of require('../index').LOTS) l.enTete(app, cfg);       // les en-têtes de sécurité et le CORS de v2, comme en production (le 404 natif d'une route absente se compare AVEC eux)
         app.use((q, s, n) => { const wh = s.writeHead; s.writeHead = function (...a) { lus.set(q.headers['x-essai'], q.socket.bytesRead); return wh.apply(this, a); }; n(); });
         app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
         const purgeStub = { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) };
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: purgeStub, photoRoute: reglage, photoAvantScan: reglage, photosRecues: photos, telechargerPhoto: async () => { tel++; return bruit(); } }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: purgeStub, photoRoute: reglage, photoAvantScan: reglage, photosRecues: photos, telechargerPhoto: async () => { tel++; return bruit(); }, ...extra }));
         return H.serveur(app);
     };
     const sv = await monter(cfgOn), svOff = await monter(cfgOff), svPlafond = await monter(cfgPlafond);
@@ -121,7 +121,7 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     const IMG = i => `https://images1.vinted.net/t/01_00000_abcdef/f800/17000000${i}.jpeg`;
     const corpsId = (extra = {}, n = 1) => ({ contrat: 2, imageUrls: Array.from({ length: n }, (_, i) => IMG(i)), title: 'Pikachu 58/102', description: '', prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...extra });
     const identifier = (srv, a, corps) => fetch(srv.url + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${a.jeton}`, 'idempotency-key': `photos-${++nCle}-${Date.now()}-abcdefgh` }, body: JSON.stringify(corps) }).then(async r => { const texte = await r.text(); let json = null; try { json = JSON.parse(texte); } catch { /* */ } return { statut: r.status, json, texte }; });
-    const poster = async (a, index, corps = jpg, type = 'image/jpeg') => envoyer(url, { query: `index=${index}`, jeton: a.jeton, corps, type }).fini;
+    const poster = async (a, index, corps = jpg, type = 'image/jpeg') => envoyer(url, { jeton: a.jeton, corps, type }).fini;      // A (C1) : aucun paramètre ; `index` (l'argument) n'est que l'intention du banc, il part dans photoIds
     const dataVersOctets = u => Buffer.from(String(u).split(',')[1], 'base64');
     const lireAn = id => db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(id) });
 
@@ -168,16 +168,14 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     // ═══ 3. la requête : `index` seul, 0 à 7 ═══
     await essayer('3', async () => {
         const P1 = ADM.porteur;
-        await refus('3. index absent', { jeton: ADM.jeton, porteur: P1 }, 400, 'index');
-        for (const i of ['8', '-1', '9', 'a', '1.5', '01', '', '1e0', ' 1', '0x1']) await refus(`3. index=${JSON.stringify(i)}`, { query: `index=${encodeURIComponent(i)}`, jeton: ADM.jeton, porteur: P1 }, 400, 'index');
-        await refus('3. index donné deux fois', { query: 'index=1&index=2', jeton: ADM.jeton, porteur: P1 }, 400, 'index');
+        // A (C1) : POST /api/photo SANS paramètre ; `index` est facultatif et IGNORÉ (l'index vient de `photoIds`, qui fait foi)
+        for (const q of [undefined, 'index=0', 'index=8', 'index=-1', 'index=zz', 'index=', 'index=1&index=2']) { const r = await envoyer(url, { query: q, jeton: ADM2.jeton, corps: jpg }).fini; H.v(`3. A : ${q === undefined ? 'sans aucun paramètre' : '?' + q} : accepté (200), l'index est ignoré`, [r.statut, r.json && FORME_ID.test(r.json.photoId)], [200, true]); }
         await refus('3. un paramètre de plus (scanId)', { query: `index=0&scanId=${oid()}`, jeton: ADM.jeton, porteur: P1 }, 400, 'champ-inconnu');
         await refus('3. un autre paramètre seul', { query: 'photo=0', jeton: ADM.jeton, porteur: P1 }, 400, 'champ-inconnu');
         for (const type of ['text/plain', 'image/gif', 'image/svg+xml', 'image/heic', null]) await refus(`3. Content-Type ${type}`, { query: 'index=0', jeton: ADM.jeton, type, porteur: P1 }, 415, 'type');
         await refus('3. sans Content-Length (chunked)', { query: 'index=0', jeton: ADM.jeton, contentLength: null, porteur: P1 }, 400, 'content-length');
         await refus('3. Content-Length 0', { query: 'index=0', jeton: ADM.jeton, contentLength: 0, corps: Buffer.alloc(0), partiel: null, porteur: P1 }, 400, 'content-length');
         await refus('3. Content-Length au-delà de 2 Mio', { query: 'index=0', jeton: ADM.jeton, contentLength: 2 * MIO + 1, porteur: P1 }, 413, 'trop-lourde');
-        for (const i of ['0', '7']) { const r = await poster(ADM2, i); H.v(`3. index=${i} accepté`, r.statut, 200); }
         const src = require('fs').readFileSync(require.resolve('../identifier/photo-avant-scan.js'), 'utf8');
         H.vrai('3. la validation est celle de photo-extension.js::evaluerOctets, jamais recopiée', /evaluerOctets/.test(src) && !/typeDesOctets|analyserImage|PIXELS_MAX\s*=/.test(src));
     });
@@ -228,11 +226,16 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         H.v('6. la place est rendue', (await poster(ADM2, 0)).statut, 200);
         const R = require('../identifier/photo-avant-scan');
         H.v('6. les défauts de production sont ceux de /api/banc/photo : 4 places, délai de 15 s', [R.PLACES_MAX, R.DELAI_LECTURE_MS], [4, 15000]);
-        // le plafond horaire : 3 ici, comme etiquetteParPorteurHeure ; la 4e demande est refusée AVANT la lecture
+        // B : le plafond horaire de /api/photo est d'AU MOINS 600 par porteur, même si V2_ETIQUETTE_HEURE est réglé plus bas (3 ici : 75 scans de 8 photos ne doivent pas être étouffés par le réglage du banc)
         const sp = svPlafond.url;
-        const e3 = []; for (let i = 0; i < 3; i++) e3.push((await envoyer(sp, { query: 'index=0', jeton: ADM5.jeton, corps: jpg }).fini).statut);
-        const c4 = envoyer(sp, { query: 'index=0', jeton: ADM5.jeton, corps: jpg, partiel: 16 }); const r4 = await c4.fini;
-        H.v('6. plafond horaire par porteur (3 ici) : la 4e demande est 429 DEBIT + Retry-After, corps non lu', [e3, r4.statut, code(r4), Boolean(r4.entetes['retry-after']), pasLu(c4)], [[200, 200, 200], 429, 'DEBIT', true, true]);
+        const e4 = []; for (let i = 0; i < 4; i++) e4.push((await envoyer(sp, { jeton: ADM5.jeton, corps: jpg }).fini).statut);
+        H.v('6. B : V2_ETIQUETTE_HEURE=3 ne plafonne PAS /api/photo à 3 : quatre envois passent (plancher de 600)', e4, [200, 200, 200, 200]);
+        const debut = Math.floor(Date.now() / 3600e3) * 3600e3, cleL = `photo-avant-scan:compte:${ADM5.c._id}|${debut}`;
+        await db.col('limites').updateOne({ cle: cleL }, { $set: { n: 600, expireLe: new Date(debut + 7200e3) } }, { upsert: true });
+        const c4 = envoyer(sp, { jeton: ADM5.jeton, corps: jpg, partiel: 16 }); const r4 = await c4.fini;
+        H.v('6. B : 600 envois dans l\'heure : le suivant est 429 DEBIT + Retry-After, corps non lu', [r4.statut, code(r4), Boolean(r4.entetes['retry-after']), pasLu(c4)], [429, 'DEBIT', true, true]);
+        const src6 = require('fs').readFileSync(require.resolve('../identifier/monter.js'), 'utf8');
+        H.vrai('6. B : le plancher de 600 est écrit dans le montage (Math.max)', /Math\.max\(\s*600/.test(src6));
     });
 
     // ═══ 7. le MAGASIN : 120 s, un par service, bornes par porteur (8 photos, 8 Mio) ═══
@@ -277,8 +280,9 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         await nuls('photoId mal formé (33 caractères)', corpsId({ photoId: 'b'.repeat(33) }), 'photo-id');
         await nuls('photoId qui n\'est pas une chaîne', corpsId({ photoId: 12 }), 'photo-id');
         await nuls('photoId null', corpsId({ photoId: null }), 'photo-id');
-        await nuls('photoIds : un photoId mal formé', corpsId({ photoIds: [{ index: 0, photoId: 'zz' }] }), 'photo-id');
-        await nuls('photoIds : photoId absent', corpsId({ photoIds: [{ index: 0 }] }), 'photo-id');
+        await nuls('C : photoIds : un photoId mal formé DANS photoIds', corpsId({ photoIds: [{ index: 0, photoId: 'zz' }] }), 'photo-ids');
+        await nuls('C : photoIds : photoId absent', corpsId({ photoIds: [{ index: 0 }] }), 'photo-ids');
+        await nuls('C : photoIds vide (de 1 à 8 couples)', corpsId({ photoIds: [] }), 'photo-ids');
         await nuls('photoIds : pas un tableau', corpsId({ photoIds: 'x' }), 'photo-ids');
         await nuls('photoIds : un objet', corpsId({ photoIds: { index: 0, photoId: bon } }), 'photo-ids');
         await nuls('photoIds : un élément qui n\'est pas un objet', corpsId({ photoIds: [bon] }), 'photo-ids');
@@ -463,6 +467,48 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         const rs = await Promise.all(trio.map(a => envoyer(svD.url, { query: 'index=0', jeton: a.jeton, type: 'image/png', corps: douze }).fini));
         H.v('14. trois photos de 12 Mpx en même temps : au plus 2 décodages vivants à la fois, les autres reçoivent 429 DEBIT', [PEx.picDecodages() <= PEx.DECODAGES_MAX, rs.every(r => r.statut === 200 || (r.statut === 429 && code(r) === 'DEBIT')), rs.filter(r => r.statut === 200).length >= 1], [true, true, true]);
         await svD.fermer();
+    });
+
+    // ═══ 15. REPRISE : analyse.photosRecues / photoRecue (D), identifier-lot avec photoIds (F), un scan = UNE analyse (G) ═══
+    await essayer('15', async () => {
+        const D = await acteur({ role: 'administrateur' });
+        const p0 = await poster(D, 0), p3 = await poster(D, 3);
+        const R = await identifier(sv, D, corpsId({ photoIds: [{ index: 3, photoId: p3.json.photoId }, { index: 0, photoId: p0.json.photoId }] }, 4));
+        H.v('15. D : index 0 et 3 reçus : analyse.photosRecues = [0, 3] (croissant), photoRecue vrai', [R.statut, R.json.analyse.photosRecues, R.json.analyse.photoRecue], [200, [0, 3], true]);
+        const q3 = await poster(D, 3);
+        const R3 = await identifier(sv, D, corpsId({ photoIds: [{ index: 3, photoId: q3.json.photoId }] }, 4));
+        H.v('15. D : seul l\'index 3 reçu : photosRecues = [3], photoRecue FAUX (vrai si et seulement si l\'index 0 est reçu)', [R3.json.analyse.photosRecues, R3.json.analyse.photoRecue], [[3], false]);
+        const Ri = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: 'e'.repeat(32) }] }));
+        H.v('15. D : photoIds envoyé mais rien de reçu (inconnu) : photosRecues = [] présent, photoRecue faux', [Ri.statut, Ri.json.analyse.photosRecues, Ri.json.analyse.photoRecue], [200, [], false]);
+        const o0 = await poster(D, 0);
+        const Ro = await identifier(sv, D, corpsId({ photoId: o0.json.photoId }));
+        H.v('15. D : l\'ancien `photoId` seul (index 0) reçu : photoRecue vrai (son sens est gardé), photosRecues = [0]', [Ro.json.analyse.photoRecue, Ro.json.analyse.photosRecues], [true, [0]]);
+        const Rn = await identifier(sv, D, corpsId());
+        H.v('15. D : sans photoIds ni photoId, AUCUN des deux champs dans l\'analyse (réponse d\'aujourd\'hui)', ['photosRecues' in Rn.json.analyse, 'photoRecue' in Rn.json.analyse], [false, false]);
+        const Roff = await identifier(svOff, D, corpsId({ photoIds: [{ index: 0, photoId: 'e'.repeat(32) }] }));
+        H.v('15. D : drapeau éteint, photoIds envoyé : AUCUN des deux champs (champ inconnu ignoré)', ['photosRecues' in Roff.json.analyse, 'photoRecue' in Roff.json.analyse], [false, false]);
+        // G : un scan reste UNE analyse, quel que soit le nombre de photos ; le corps JSON reste minuscule (les octets ne passent pas par lui)
+        const huit = []; for (let i = 0; i < 8; i++) huit.push((await poster(D, i, await bruit(120, 160))).json.photoId);
+        const corps8 = corpsId({ photoIds: huit.map((photoId, index) => ({ index, photoId })) }, 8);
+        const an0 = await db.col('analyses').countDocuments({}), mv0 = await db.col('mouvements').countDocuments({});
+        const R8 = await identifier(sv, D, corps8);
+        const mvBase = await (async () => { const a = await db.col('mouvements').countDocuments({}); await identifier(sv, D, corpsId()); await attendre(300); return (await db.col('mouvements').countDocuments({})) - a; })();
+        H.v('15. G : 8 photos = UNE analyse, les mêmes lignes `mouvements` qu\'un scan sans photo, corps JSON de moins de 2 ko', [R8.statut, R8.json.analyse.photosRecues, (await db.col('analyses').countDocuments({})) - an0 >= 1, JSON.stringify(corps8).length < 2000, (await db.col('mouvements').countDocuments({})) - mv0 - mvBase === mvBase], [200, [0, 1, 2, 3, 4, 5, 6, 7], true, true, true]);
+        H.v('15. G : chacune des 8 images part au modèle en 800 px au plus', await (async () => { const v = vusParLaChaine[vusParLaChaine.length - 2]; const d = await Promise.all(v.map(async u => { const m = await sharp(dataVersOctets(u)).metadata(); return Math.max(m.width, m.height) <= 800; })); return [v.length, d.every(Boolean)]; })(), [8, true]);
+        // F : identifier-lot (le crochet deps.identifierLot) reçoit les photos reçues avec photoIds, par la vraie route
+        const vusLot = []; let corpsUn = null;
+        await chaine({ body: { imageUrls: [] }, scanIdImpose: oid() }, { json: c => { corpsUn = c; } });
+        const svLot = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, stockPhotos, { identifierLot: async reqLot => { vusLot.push([...reqLot.body.imageUrls]); return [0, 1, 2].map(() => ({ statutHttp: 200, corps: corpsUn })); } });
+        const l0 = await (await fetch(svLot.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: jpg })).json();
+        const l2 = await (await fetch(svLot.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: await bruit(130, 170) })).json();
+        tel = 0; const sL = sorties.length;
+        const RL = await identifier(svLot, D, corpsId({ photoIds: [{ index: 2, photoId: l2.photoId }, { index: 0, photoId: l0.photoId }] }, 3));
+        await attendre(400);
+        H.v('15. F : un lot avec photoIds (index de SES imageUrls) : 200, le crochet du lot reçoit les 2 photos en `data:` (ordre des index), aucune URL, rien téléchargé', [RL.statut, vusLot.length, vusLot[0] && vusLot[0].length, vusLot[0] && vusLot[0].every(u => u.startsWith('data:')), tel, sorties.slice(sL)], [200, 1, 2, true, 0, []]);
+        H.v('15. F : et l\'analyse du lot dit les index reçus', [RL.json.analyse.photosRecues, RL.json.analyse.photoRecue], [[0, 2], true]);
+        const mauvaisL = await identifier(svLot, D, corpsId({ photoIds: [{ index: 3, photoId: l0.photoId }] }, 3));
+        H.v('15. F : un index hors des imageUrls du lot : 400 photo-ids', [mauvaisL.statut, detail(mauvaisL)], [400, 'photo-ids']);
+        await svLot.fermer();
     });
 
     await sv.fermer(); await svOff.fermer(); await svPlafond.fermer(); monterBanc.arreterPurge();
