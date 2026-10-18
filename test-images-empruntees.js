@@ -188,6 +188,26 @@ t('retrait en mémoire : une entrée de même set et même clé mais d\'une autr
     const r = E.retirer({ cartes: ap.cartes }, m).cartes.get(1);
     assert.strictEqual(r.images.length, 3); assert(!r.images.some(x => x.lot === 'emprunt-2026-10'));
 });
+// ── Correction 1 : une empruntée SANS document `images` est remplaçable par un vrai scan tamponné (règle de basse-definition.js)
+const BD = require('./collecte-cartes/basse-definition');
+const empruntee = () => plan(etat([ligne(10, PP)])).ajouts[0].entree;
+const vrai = (o = {}) => ({ set: PP, numero: null, langue: 'en', source: 'pokumon', cleR2: 'pokumon/x.webp', wOriginal: 700, tampon: 'Play! Pokémon', ...o });
+t('correction 1 : sans document, un candidat au marqueur POSITIF de tampon égal remplace l\'empruntée', () => {
+    assert.strictEqual(BD.entreesARemplacer([empruntee()], vrai(), { documents: new Map() }).length, 1);
+    assert.strictEqual(BD.entreesARemplacer([empruntee()], vrai()).length, 1);   // documents omis
+});
+t('correction 1 : sans document, un candidat simple non tamponné (ou d\'un autre tampon) ne remplace pas l\'empruntée', () => {
+    assert.strictEqual(BD.entreesARemplacer([empruntee()], vrai({ tampon: undefined }), { documents: new Map() }).length, 0);
+    assert.strictEqual(BD.entreesARemplacer([empruntee()], vrai({ tampon: 'Staff' }), { documents: new Map() }).length, 0);
+});
+t('correction 1 : sans document, une entrée qui n\'est pas une « emprunt » (même marquée empruntée, ou basse définition) reste non remplaçable', () => {
+    assert.strictEqual(BD.entreesARemplacer([{ ...empruntee(), source: 'autre' }], vrai(), { documents: new Map() }).length, 0);
+    assert.strictEqual(BD.entreesARemplacer([{ ...empruntee(), imageEmprunteeTirage: false }], vrai({ wOriginal: 2000 }), { documents: new Map() }).length, 0);   // nettement plus grande : remplacerait si l'entrée était lisible
+    assert.strictEqual(BD.entreesARemplacer([{ ...empruntee(), source: 'autre' }], vrai({ wOriginal: 2000 }), { documents: new Map() }).length, 0);
+    assert.strictEqual(BD.entreesARemplacer([{ ...empruntee(), imageEmprunteeTirage: false, tamponNonRepresente: undefined, basseDefinition: true }], vrai({ tampon: undefined }), { documents: new Map() }).length, 0);   // source « emprunt » mais non marquée empruntée, en basse définition
+    const basse = { set: PP, source: 'tpc', cleR2: 'b.webp', numero: null, langue: 'en', basseDefinition: true };
+    assert.strictEqual(BD.entreesARemplacer([basse], { set: PP, numero: null, langue: 'en', source: 'pokumon', cleR2: 'n.webp', wOriginal: 700 }, { documents: new Map() }).length, 0);
+});
 t('motifDArret : refus au plan, --attendu absent ou différent ; le compte juste passe', () => {
     assert(E.motifDArret({ nbOperations: 3, nbRefus: 1, attendu: 3 }));
     assert(E.motifDArret({ nbOperations: 3, nbRefus: 0, attendu: NaN }));
