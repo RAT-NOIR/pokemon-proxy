@@ -65,6 +65,11 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
         9002: { idProduct: 9002, numero: '6', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: `${CM}/Base-Set/Ok-6`, vignette: img('v/2.webp') } })[id] || null };
     const imE = await V.creerVisuels({ cfg, version: () => versionEtrange }).impressions(1);
     H.v('   un lien d\'un autre hôte que Cardmarket n\'est JAMAIS servi (null), le lien Cardmarket l\'est', imE.map(i => [i.idProduct, i.lien]), [[9001, null], [9002, `${CM}/Base-Set/Ok-6`]]);
+    // LANGUE-DECISIVE (contrat 7a) : la langue d'une impression vient de la langue de TIRAGE de la colonne des jumeaux ; intl, id, th, idth, inconnu : null
+    const tirages = { 9101: 'jp', 9102: 'zh-hans', 9103: 'intl', 9104: 'idth', 9105: null, 9106: 'ko' };
+    const versionLangues = { produitsDeMetacarte: () => Object.keys(tirages).map(Number), tirageJumeaux: id => tirages[id] ?? null, entree: id => (id in tirages ? { idProduct: id, numero: String(id - 9100), rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: null, vignette: img('v/' + id + '.webp') } : null) };
+    const imL = await V.creerVisuels({ cfg, version: () => versionLangues }).impressions(1);
+    H.v('   langue d\'une impression : jp -> ja, zh-hans, ko ; intl, idth, null -> null', imL.map(i => [i.idProduct, i.langue]), [[9101, 'ja'], [9102, 'zh-hans'], [9103, null], [9104, null], [9105, null], [9106, 'ko']]);
     // M6 : un jeu de lecteurs LIÉ à la version en place à cet instant : la bascule d'une autre version ne s'y mêle pas
     E.installer(VB.construire([brut(4001, { setNom: 'Version A' })]));
     const fige = V.creerVisuels({ cfg }).instantane();
@@ -74,7 +79,7 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.v('   AUCUNE version chargée : « sans visuel » (null), impressions [], aucune exception', [await S.resoudre(1001), await S.impressions(77), S.entree(1001)], [null, [], null]);
 
     // 5. impressions : TOUT vient de la version en mémoire (+ le guide de prix de la base de production). Aucune lecture de `cartes`.
-    await db.col('guide_prix').insertOne({ idProduct: 3004, trend: 4.5, low: 2, avg30: 3.1, guideDu: '2026-10-01' });
+    await db.col('guide_prix').insertOne({ idProduct: 3004, trend: 4.5, low: 2, avg7: 4.2, avg30: 3.1, guideDu: '2026-10-01' });
     const I = (id, o) => brut(id, { idMetacard: 77, setNom: 'Base Set', ...o });
     const v5 = VB.construire([
         I(3001, { numero: '58', total: '102', rarete: 'Rare Holo', variante: 'premiere-edition', lien: `${CM}/Base-Set/Pikachu-V1-BS58` }),
@@ -95,14 +100,15 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.v('   numéro inconnu : lien null (jamais anonyme)', [par[3003].numero, par[3003].lien], [null, null]);
     H.v('   lien non donné : null même avec numéro et rareté', [par[3005].rarete, par[3005].lien], ['Commune', null]);
     H.v('   variante de la liste conservée, hors liste (V1) : null', [par[3001].variante, par[3004].variante], ['premiere-edition', null]);
-    H.v('   prix guide daté, forme de LIGNE de catalogue (jamais sans date)', [par[3004].prixGuide, par[3001].prixGuide], [{ trend: 4.5, low: 2, avg30: 3.1, guideDu: '2026-10-01' }, null]);
-    H.v('   clés d\'une impression : `lien` seul (contrat 2)', Object.keys(par[3001]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'set', 'lien', 'prixGuide']);
+    H.v('   prix guide daté, forme de LIGNE de catalogue (jamais sans date)', [par[3004].prixGuide, par[3001].prixGuide], [{ trend: 4.5, low: 2, avg7: 4.2, avg30: 3.1, guideDu: '2026-10-01' }, null]);
+    H.v('   clés d\'une impression : `lien` seul (contrat 2) — la version et le prix mélangé viennent de numeros_cartes (catalogue.js), pas des visuels', Object.keys(par[3001]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'langue', 'set', 'lien', 'prixGuide']);
+    H.v('   langue d\'une impression : null sans colonne de tirage (jamais devinée)', par[3001].langue, null);
     H.v('   métacarte inconnue ou non entière : []', [await S.impressions(424242), await S.impressions('77'), await S.impressions(null)], [[], [], []]);
     // le sortie de impressions() traverse construireProduit (produit.js lit `lien`) : le contrat 2 sort intact
     const prod = construireProduit({ idProduct: 3001, nomCardmarket: 'Pikachu', set: { slug: 'base-set', nom: 'Base Set' }, impressions: imps }, { cfg });
     const pp = Object.fromEntries(prod.impressions.map(i => [i.idProduct, i]));
     H.v('   via construireProduit : lien conservé, prixGuide au contrat, lien sans numéro reste null',
-        [pp[3001].lien, pp[3004].prixGuide, pp[3003].lien], [`${CM}/Base-Set/Pikachu-V1-BS58`, { tendance: 4.5, de: 2, moyenne30: 3.1, date: '2026-10-01' }, null]);
+        [pp[3001].lien, pp[3004].prixGuide, pp[3003].lien], [`${CM}/Base-Set/Pikachu-V1-BS58`, { tendance: 4.5, de: 2, deBase: 'tous-etats', moyenne7: 4.2, moyenne30: 3.1, date: '2026-10-01', fiable: false, reserves: ['ecart-tendance'] }, null]);       // 4,5 contre la moyenne 30 j 3,1 : +45 % (> 30 %), la moyenne 7 j (4,2) ne suffit pas à l'excuser
     // la base de l'API ne contient aucune collection de l'autre grappe, ni `visuels`
     const noms = (await require('mongoose').connection.db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name.replace(db.prefixeCourant(), ''));
     H.v('aucune collection cartes / cartes_produits / catalogue_produits / numeros_cartes / visuels dans la base de l\'API (dénominateur ' + noms.length + ')',

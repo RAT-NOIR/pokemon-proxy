@@ -10,7 +10,10 @@ const ref = n => ({ $ref: `#/components/schemas/${n}` });
 // ── les opérations du contrat, DÉRIVÉES de `paths` (jamais une liste en dur)
 const METHODES = ['get', 'post', 'put', 'delete', 'patch'];
 const OPERATIONS = [];
-for (const [chemin, ops] of Object.entries(SCHEMA.paths)) for (const m of METHODES) if (ops[m]) OPERATIONS.push({ route: `${m.toUpperCase()} ${chemin}`, chemin, methode: m.toUpperCase(), op: ops[m] });
+// STRIPE-V2 : les opérations de l'étiquette « abonnements » (derrière V2_ABONNEMENTS, avec un faux Stripe) sont jouées état par état par test-abonnements-routes.js, qui contrôle LUI-MÊME que chaque statut
+// documenté est joué ou déclaré non joué, et valide chaque réponse contre ce même schéma ; ce banc-ci ne monte pas ce drapeau.
+const JUGEES_AILLEURS = op => (op.tags || []).includes('abonnements');
+for (const [chemin, ops] of Object.entries(SCHEMA.paths)) for (const m of METHODES) if (ops[m] && !JUGEES_AILLEURS(ops[m])) OPERATIONS.push({ route: `${m.toUpperCase()} ${chemin}`, chemin, methode: m.toUpperCase(), op: ops[m] });
 // les statuts documentés de chaque opération : (route, statut)
 const STATUTS_DOCUMENTES = OPERATIONS.flatMap(o => Object.keys(o.op.responses || {}).map(s => ({ route: o.route, statut: Number(s) })));
 

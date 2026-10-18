@@ -10,6 +10,9 @@ const db = require('../db');
 const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
+const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
+const { versionDe } = require('./fiabilite-prix');
+const { creerIndexFamilles } = require('./designation');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
@@ -18,6 +21,9 @@ function colLue(nom) {
 }
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const lisible = slug => slug.replace(/-/g, ' ');
+
+const IMPRESSIONS_MAX_TIME_MS = 1500;      // côté base : la requête des versions d'impressions ne dépasse jamais 1,5 s
+const IMPRESSIONS_DELAI_MS = 2000;         // côté serveur : au-delà, abandonnée (les impressions sont non lues)
 
 function creerCatalogue(opts = {}) {
     const cfg = opts.cfg || lireConfig();
@@ -30,6 +36,52 @@ function creerCatalogue(opts = {}) {
         if (!Number.isInteger(maxArchive) || !Number.isInteger(idMetacard)) throw new Error('plusRecentDansMetacarte : entiers attendus');
         const trouves = await colLue('catalogue_produits').find({ idProduct: { $gt: maxArchive }, idMetacard }, { projection: { idProduct: 1 } }).limit(1).toArray();
         return trouves.length > 0;
+    }
+
+    // LANGUE-DECISIVE M2 : l'index code × numéro du CATALOGUE ENTIER (numeros_cartes : 73 756 lignes, projection de trois champs), construit UNE fois puis gardé 6 h (le catalogue change à chaque import quotidien) ;
+    // coût mémoire : une chaîne courte par couple (chiffres du numéro, code) distinct, mesuré dans le rapport du lot. Une lecture qui ÉCHOUE lève : l'appelant ferme R4 (jamais une R4 sans index).
+    // La lecture est précédée d'un COMPTE de la même collection avec le même filtre : moins de documents lus que comptés = lecture tronquée, refusée (R4 fermée) ; plancher de 10 000 couples en plus (M-B).
+    let indexEnCours = null, indexLe = 0, indexPret = null;
+    const INDEX_DUREE_MS = 6 * 3600 * 1000;
+    async function indexCodeNumero() {
+        if (indexEnCours && Date.now() - indexLe < INDEX_DUREE_MS) return indexEnCours;
+        const p = (async () => {
+            const col = colLue('numeros_cartes');
+            const attendu = await col.countDocuments({});
+            const docs = await col.find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray();
+            return construireIndexVerifie(docs, INDEX_CODE_NUMERO_MIN, attendu);               // sous le plancher ou tronqué : LÈVE (R4 fermée)
+        })();
+        indexEnCours = p; indexLe = Date.now();
+        p.then(idx => { if (indexEnCours === p) indexPret = idx; }, () => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
+        return p;
+    }
+    // Sans attente : l'index PRÊT (même un peu périmé pendant sa reconstruction), ou null — et la construction part en ARRIÈRE-PLAN. Tant qu'il n'est pas prêt R4 est FERMÉE, le scan ne l'attend jamais (le suivant en profite).
+    function indexSansAttente() {
+        if (!indexEnCours || Date.now() - indexLe >= INDEX_DUREE_MS) indexCodeNumero().catch(() => { });
+        return indexPret;
+    }
+
+    // DESIGNATION (condition d) : l'index des FAMILLES du catalogue entier (même métacarte ou même nom : numeros_cartes + catalogue_produits, 74 000 lignes), même discipline que l'index code × numéro : construit UNE fois
+    // puis gardé 6 h, comptes de contrôle AVANT la lecture (moins de documents lus que comptés = tronqué, refusé), plancher de taille ; un échec LÈVE et n'est pas gardé. Jamais lu tant qu'aucune règle n'est allumée.
+    let famEnCours = null, famLe = 0, famPret = null;
+    async function indexFamilles() {
+        if (famEnCours && Date.now() - famLe < INDEX_DUREE_MS) return famEnCours;
+        const p = (async () => {
+            const colN = colLue('numeros_cartes'), colC = colLue('catalogue_produits');
+            const [attN, attC] = await Promise.all([colN.countDocuments({}), colC.countDocuments({})]);
+            const [numeros, produits] = await Promise.all([colN.find({}, { projection: { idProduct: 1, codeSet: 1, numero: 1, numeroUrl: 1, setTcgdex: 1 } }).toArray(), colC.find({}, { projection: { idProduct: 1, idMetacard: 1, name: 1 } }).toArray()]);
+            if (numeros.length < attN || produits.length < attC) throw new Error('index des familles : lecture tronquée');
+            const idx = creerIndexFamilles(numeros, produits, () => { const vis = visuels.instantane ? visuels.instantane() : visuels; return id => ({ total: (vis.entree && (vis.entree(id) || {}).total) ?? null, tirage: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null) }); });
+            if (idx.taille < INDEX_CODE_NUMERO_MIN) throw new Error(`index des familles sous le plancher (${INDEX_CODE_NUMERO_MIN})`);
+            return idx;
+        })();
+        famEnCours = p; famLe = Date.now();
+        p.then(idx => { if (famEnCours === p) famPret = idx; }, () => { if (famEnCours === p) { famEnCours = null; famLe = 0; } });
+        return p;
+    }
+    function indexFamillesSansAttente() {
+        if (!famEnCours || Date.now() - famLe >= INDEX_DUREE_MS) indexFamilles().catch(() => { });
+        return famPret;
     }
 
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
@@ -51,17 +103,47 @@ function creerCatalogue(opts = {}) {
             const visuel = await vis.resoudre(id);
             const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
             table.set(id, {
-                idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr),
+                idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr), idExpansion: Number.isInteger(n.idExpansion) ? n.idExpansion : (Number.isInteger(c.idExpansion) ? c.idExpansion : null),   // R5 (non servi : construireProduit ne le lit pas)
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
-                prixGuide: g ? { trend: g.trend, low: g.low, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import)
+                prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
+                // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
+                // version tamponnée : `prixMelangeTampon`, posé par le catalogue). Lus sur la ligne du produit, par le chemin qui sert déjà l'identification ; === true seulement.
+                version: versionDe(n.variante), prixMelangeTampon: n.prixMelangeTampon === true,
                 lienCardmarket: texte(v.lien), impressions
             });
         }
+        await completerImpressions(table, N);
         return table;
     }
-    return { lire, plusRecentDansMetacarte };
+    // Les impressions d'une métacarte viennent de la version en mémoire du chargeur (visuels.js), qui ne lit pas numeros_cartes (liste fermée). Leur version Cardmarket et leur prix mélangé se lisent
+    // ici, en UNE requête indexée sur tous les produits des impressions qu'on ne connaît pas encore. Une impression absente de numeros_cartes : version null, prix non mélangé (rien d'inventé).
+    // Tour tour 1 (I2) : la requête est BORNÉE (maxTimeMS nommé, limit = nombre d'ids demandés, délai nommé côté serveur) et ISOLÉE (try) : sa panne ne casse JAMAIS l'identification. Une impression dont la ligne
+    // n'a pas été lue (absente de numeros_cartes, ou lecture en panne) est `nonLu: true` : version null, prixMelangeTampon false SANS valeur de preuve, et son prix n'est jamais fiable (ecart-non-mesurable).
+    async function completerImpressions(table, deja) {
+        const ids = new Set();
+        for (const ligne of table.values()) for (const i of ligne.impressions) if (!deja.has(i.idProduct)) ids.add(i.idProduct);
+        let autres = new Map();
+        if (ids.size) {
+            let minuterie;
+            try {
+                const lecture = Promise.resolve().then(() => colLue('numeros_cartes').find({ idProduct: { $in: [...ids] } },
+                    { projection: { idProduct: 1, variante: 1, prixMelangeTampon: 1 }, maxTimeMS: IMPRESSIONS_MAX_TIME_MS, limit: ids.size }).toArray());
+                const delai = new Promise((_, ko) => { minuterie = setTimeout(() => ko(new Error('délai dépassé')), opts.delaiImpressionsMs || IMPRESSIONS_DELAI_MS); });
+                autres = new Map((await Promise.race([lecture, delai])).map(d => [d.idProduct, d]));
+            } catch (e) {
+                autres = new Map();
+                console.warn(`⚠️ [catalogue] lecture des versions des impressions en panne (${(e && (e.code || e.name)) || 'erreur'}) : ${ids.size} impression(s) non lue(s), prix non fiables`);
+            } finally { clearTimeout(minuterie); }
+        }
+        for (const ligne of table.values())
+            ligne.impressions = ligne.impressions.map(i => {
+                const d = deja.get(i.idProduct) || autres.get(i.idProduct);
+                return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: false, nonLu: true });
+            });
+    }
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente };
 }
-module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };
+module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };

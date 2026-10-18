@@ -164,9 +164,11 @@ function faussesReponses(corps = XML, ok = true) { let n = 0; return { appels: (
     {
         await vider();
         await T.rafraichirTaux({ fetch: faussesReponses().fetch, maintenant: J8_17H });
-        v('regleVerdict GBP', await T.regleVerdict('GBP', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, versEUR: 1.176471, tauxDate: '2026-10-08' });
-        v('regleVerdict EUR', await T.regleVerdict('EUR', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, versEUR: 1, tauxDate: null });
-        v('regleVerdict sans taux => versEUR null (l\'extension n\'affiche aucun verdict)', await T.regleVerdict('XXX', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, versEUR: null, tauxDate: null });
+        // F4-PRIX (e) : `ecartTendanceMax` (30 %) voyage avec les seuils du verdict : l'extension juge l'écart de la tendance LIVE aux moyennes avec la constante du serveur, jamais la sienne (§21 bis)
+        v('regleVerdict GBP', await T.regleVerdict('GBP', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, ecartTendanceMax: 0.3, versEUR: 1.176471, tauxDate: '2026-10-08' });
+        v('regleVerdict EUR', await T.regleVerdict('EUR', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, ecartTendanceMax: 0.3, versEUR: 1, tauxDate: null });
+        v('regleVerdict sans taux => versEUR null (l\'extension n\'affiche aucun verdict)', await T.regleVerdict('XXX', { maintenant: J8_17H }), { bonneAffaireSous: -30, cherAuDela: 15, ecartTendanceMax: 0.3, versEUR: null, tauxDate: null });
+        v('F4 (e) ecartTendanceMax est LA constante de fiabilite-prix.js (une seule définition)', T.REGLE.ecartTendanceMax, require('../identifier/fiabilite-prix').ECART_TENDANCE_MAX);
     }
 
     globalThis.fetch = fetchOrigine;

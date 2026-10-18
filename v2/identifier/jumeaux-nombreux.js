@@ -43,15 +43,19 @@ function classeDuNumero(lu, ligne) {
  * @returns {number[]|null} les candidats montrés (3 au plus) : P d'abord s'il reste compatible, puis les jumeaux ; [] si le nom lu les contredit TOUS ; null si une ligne manque (pas de choix).
  *   Le filtre de nom s'applique à P comme aux jumeaux (un nom contredit n'est jamais proposé) ; l'appelant décide de ce que valent 0, 1 ou 2+ candidats.
  */
-function choisirTrois({ p, jumeaux, corps, produits } = {}) {
+function choisirTrois({ p, jumeaux, partages = [], corps, produits } = {}) {
     if (!Number.isInteger(p) || !Array.isArray(jumeaux) || !(produits instanceof Map) || !produits.has(p)) return null;
     const uniques = [...new Set(jumeaux)].filter(i => Number.isInteger(i) && i !== p);
     if (uniques.some(i => !produits.has(i))) return null;
     const gardes = garderCompatibles([p, ...uniques], corps, produits);              // le nom lu contredit un produit (P compris) : il n'entre pas
     const rangs = rangsDe(corps), lu = numeroLuDe(corps);
+    // M1 : P et ses PARTENAIRES de partage (l'image ne les sépare pas) passent EN PREMIER, avant tout jumeau, sans classement ; s'ils dépassent à eux seuls les 3 choix : aucune question tronquée, null
+    // (l'appelant retombe sur l'introuvable impression-indeterminee)
+    const part = [...new Set(Array.isArray(partages) ? partages : [])].filter(i => i !== p && uniques.includes(i) && gardes.includes(i)).sort((a, b) => a - b);
+    const tete = [...(gardes.includes(p) ? [p] : []), ...part];
+    if (tete.length > NB_CHOIX) return null;
     const cle = i => [rangs.has(i) ? rangs.get(i) : Infinity, classeDuNumero(lu, produits.get(i)), i];
-    const ordonnes = gardes.filter(i => i !== p).sort((a, b) => { const x = cle(a), y = cle(b); return x[0] === y[0] ? (x[1] === y[1] ? x[2] - y[2] : x[1] - y[1]) : (x[0] < y[0] ? -1 : 1); });
-    const tete = gardes.includes(p) ? [p] : [];
+    const ordonnes = gardes.filter(i => i !== p && !part.includes(i)).sort((a, b) => { const x = cle(a), y = cle(b); return x[0] === y[0] ? (x[1] === y[1] ? x[2] - y[2] : x[1] - y[1]) : (x[0] < y[0] ? -1 : 1); });
     return [...tete, ...ordonnes].slice(0, NB_CHOIX);
 }
 

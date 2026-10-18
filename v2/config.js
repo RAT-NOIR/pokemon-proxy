@@ -1,6 +1,7 @@
 'use strict';
-// OFFRE-QUOTA (2026-10-13) : plus de poches de crédits à débiter. La SEULE poche débitable est `jour` (un quota quotidien par porteur, selon son offre).
-// Les anciennes (essai, accueil, hebdo, abonnement, achete) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
+// OFFRE-QUOTA (2026-10-13) : plus de poches de crédits à vendre. La seule poche CONFIGURABLE est `jour` (un quota quotidien par porteur, selon son offre).
+// ACHETE-AVANT-JOUR (2026-10-17) : la poche `achete` (analyses payées avec la 1.0.5) se débite AVANT `jour`, ordre FIXÉ dans le code (poches.ordreDe) ; V2_ORDRE_POCHES ne peut pas la nommer.
+// Les autres anciennes (essai, accueil, hebdo, abonnement) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
@@ -41,6 +42,7 @@ function lireConfig(env = process.env) {
     signalerVariablesSansObjet(env);
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
     for (const p of ordre) {
+        if (p === 'achete') throw new Error('configuration invalide : la poche "achete" n\'est pas configurable : elle est débitée AVANT "jour", dans le code (ACHETE-AVANT-JOUR) ; V2_ORDRE_POCHES ne nomme que "jour"');
         if (POCHES_ANCIENNES.includes(p)) throw new Error(`configuration invalide : la poche "${p}" n'est plus débitée (quota quotidien : seule "jour" l'est)`);
         if (!POCHES.includes(p)) throw new Error(`configuration invalide : poche inconnue "${p}"`);
     }
@@ -79,6 +81,23 @@ function lireConfig(env = process.env) {
     // Tour 3 (I-6) : 21 jours AU PLUS. La marge avant les 12 mois est la longueur du mois de bascule (février : 28 jours) moins la passe quotidienne et l'étalement : 27 jours est la limite, 28 les atteignent ;
     // avec 21 il reste 6 jours (environ 12 000 lignes d'étalement). Un réglage qui violerait « 12 mois au maximum » n'est pas valide.
     if (bancGraceJours > 21) throw new Error(`configuration invalide : V2_BANC_GRACE_JOURS="${env.V2_BANC_GRACE_JOURS}" (21 jours au plus : au-delà, le lien pourrait atteindre 12 mois en février)`);
+    // MODELE-VISUEL-API (tour 2, M2) : la configuration du modèle d'empreinte ne fait JAMAIS tomber le serveur. Drapeau éteint : une valeur mal formée est ignorée et dite une fois. Drapeau allumé : les empreintes sont désactivées et c'est dit.
+    const empreinteVoulue = booleen('V2_EMPREINTE_EXTENSION', env.V2_EMPREINTE_EXTENSION, false);
+    let modeleEmpreinte = null, empreinteExtension = empreinteVoulue, variableFautive = '';
+    try {
+        const id = env.V2_MODELE_EMPREINTE_ID, sha = env.V2_MODELE_EMPREINTE_SHA256, objet = env.V2_EMPREINTES_R2_OBJET, octets = env.V2_MODELE_EMPREINTE_OCTETS;
+        if (id !== undefined && id !== '' && !/^[A-Za-z0-9._-]{1,60}$/.test(id)) { variableFautive = 'V2_MODELE_EMPREINTE_ID (1 à 60 caractères : lettres, chiffres, point, tiret, souligné)'; throw new Error('forme'); };
+        if (sha !== undefined && sha !== '' && !/^[0-9a-f]{64}$/.test(sha)) { variableFautive = 'V2_MODELE_EMPREINTE_SHA256 (64 chiffres hexadécimaux minuscules)'; throw new Error('forme'); };
+        if (objet !== undefined && objet !== '' && !/^[A-Za-z0-9._/-]{1,200}$/.test(objet)) { variableFautive = 'V2_EMPREINTES_R2_OBJET'; throw new Error('forme'); };
+        variableFautive = 'V2_MODELE_EMPREINTE_URL ou V2_MODELE_EMPREINTE_OCTETS';
+        modeleEmpreinte = { id: id || null, sha256: sha || null, url: url('V2_MODELE_EMPREINTE_URL', env.V2_MODELE_EMPREINTE_URL, null), octets: entier('V2_MODELE_EMPREINTE_OCTETS', octets, null, 1), objet: objet || null,
+                            fichierBanc: banc ? (env.V2_EMPREINTES_BANC_FICHIER || null) : null };
+    } catch (e) {
+        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, fichierBanc: null };
+        const raison = variableFautive || 'configuration du modèle';
+        if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
+        else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
+    }
     return gele({
         actif,
         base,
@@ -175,21 +194,33 @@ function lireConfig(env = process.env) {
             ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'ie', 'co.uk', 'hu', 'ro', 'si', 'hr', 'gr', 'lv', 'ee', 'dk', 'fi', 'com.au'].map(t => `vinted.${t}`)),
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
+        // MODELE-VISUEL-API : l'empreinte visuelle calculée par l'EXTENSION (modèle p8000 en poids 8 bits, onnxruntime-web), les voisins cherchés par l'API dans l'index de l'archive, la décision de la règle G
+        // sous la promotion mesurée (identifier/promotion-g.js). ÉTEINT par défaut (0) : la requête, la réponse, le débit et le journal sont alors identiques octet pour octet (aucune lecture de `empreintes`).
+        // `modeleEmpreinte` = LA version attendue (l'API n'en connaît qu'UNE) : identifiant + sha256 des poids ; une autre version ⇒ les empreintes sont ignorées (code « modele-inconnu »). `url` : où l'extension télécharge
+        // le modèle (113 Mo) — valeur de configuration, VIDE tant que le testeur n'a pas accordé la publication sur R2 ; servie dans `analyse.regleVerdict.modeleEmpreinte`. `objet` : l'objet R2 PRIVÉ de l'index (mêmes
+        // clés de lecture et même HMAC que l'archive des visuels). `fichierBanc` : un index LOCAL, honoré SEULEMENT en mode banc.
+        empreinteExtension,
+        modeleEmpreinte,
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
+        // F1-TAMPON : lire le tampon STAFF sur la carte redressée de l'extension pour trancher une paire SÉPARÉE staff / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet.
+        // N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (la carte vient de `empreintes[i].carte`), qu'un fournisseur est branché (montage : OPENROUTER_API_KEY) ET que la question est exactement une paire séparée.
+        lectureTampon: booleen('V2_LECTURE_TAMPON', env.V2_LECTURE_TAMPON, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
         // RESOUDRE-CARDMARKET : POST /api/banc/resoudre-cardmarket (adresse Cardmarket collée → idProduct, administrateur seulement). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) SANS rendre la configuration invalide : un drapeau mal écrit ne doit jamais coûter un 503 au service.
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
-        // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7> (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
+        // PHOTOS-MULTIPLES (7d) : POST /api/photo (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) et laisse /api/identifier tel qu'il est aujourd'hui, SANS rendre la configuration invalide. Phase 1 : administrateur seulement.
         photosMultiples: env.V2_PHOTOS_MULTIPLES === '1',
         // PHOTOS-MULTIPLES, second état (la PHASE 2 : tous les porteurs). LU et RIEN D'AUTRE : aucune ligne du code ne le consulte, la route reste réservée à l'administrateur même allumé. Il ne vaut que si le premier l'est.
         // Le jour où la phase 2 s'ouvre, c'est ici que se pose la lecture, et un lot dédié (limites, mémoire globale) la câble.
         photosMultiplesTous: env.V2_PHOTOS_MULTIPLES === '1' && env.V2_PHOTOS_MULTIPLES_TOUS === '1',
+        // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
+        abonnements: require('./abonnements/config').lireAbonnements(env),
         turnstile,
         cookieSecure
     });

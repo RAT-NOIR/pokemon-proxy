@@ -7,7 +7,7 @@
 const crypto = require('crypto'); const zlib = require('zlib'); const os = require('os');
 const { depuisPaquet } = require('./version');
 
-const MAGIE = Buffer.from('RMV1'), FORMAT = 1;
+const MAGIE = Buffer.from('RMV1'), FORMAT = 1, FORMAT_MARQUES = 2;
 const SECTIONS_BASE = Object.freeze([
     ...['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 'rar', 'tot', 'variante', 'set', 'lien'].map(n => ({ nom: n, t: 'i32' })),
     { nom: 'meta.cle', t: 'i32' }, { nom: 'meta.produit', t: 'i32' },
@@ -15,8 +15,18 @@ const SECTIONS_BASE = Object.freeze([
     { nom: 'texte.off', t: 'u32' }, { nom: 'texte.octets', t: 'u8' }, { nom: 'liens.off', t: 'u32' }, { nom: 'liens.octets', t: 'u8' }
 ]);
 // JUMEAU-V2 : la colonne des jumeaux est une extension FACULTATIVE (mêmes numéro de format et magie) : un fichier d'avant la colonne (SECTIONS_BASE seules) reste lisible, SANS la colonne ;
-// toute autre liste de sections est refusée. La liste complète est la base + la colonne, dans CET ordre.
-const SECTIONS = Object.freeze([...SECTIONS_BASE, ...['meta', 'id', 'exp', 'num', 'tir', 'ordre'].map(n => ({ nom: `jum.${n}`, t: 'i32' }))]);
+// toute autre liste de sections est refusée (voir LISTES plus bas). La liste complète est la base + la colonne, dans CET ordre.
+const SECTIONS_JUM = Object.freeze(['meta', 'id', 'exp', 'num', 'tir', 'ordre'].map(n => ({ nom: `jum.${n}`, t: 'i32' })));
+const SECTIONS = Object.freeze([...SECTIONS_BASE, ...SECTIONS_JUM]);
+// REPLI-REIMPRESSIONS : la colonne des MARQUAGES est le FORMAT 2 (le numéro de format ne ment pas : un lecteur d'avant refuse ce fichier au lieu d'ignorer des marquages qu'il ne connaît pas).
+// Les listes de sections permises sont énumérées, jamais déduites : format 1 = BASE ou BASE+JUM (les archives publiées jusqu'au 2026-10-17) ; format 2 = BASE+MAR ou BASE+JUM+MAR.
+const SECTIONS_MAR = Object.freeze(['flags', 'tampon', 'pdeb', 'pfin', 'produits'].map(n => ({ nom: `mar.${n}`, t: 'i32' })));
+const LISTES = Object.freeze([
+    { format: 1, sections: SECTIONS_BASE, jum: false, mar: false },
+    { format: 1, sections: SECTIONS, jum: true, mar: false },
+    { format: 2, sections: Object.freeze([...SECTIONS_BASE, ...SECTIONS_MAR]), jum: false, mar: true },
+    { format: 2, sections: Object.freeze([...SECTIONS, ...SECTIONS_MAR]), jum: true, mar: true }
+]);
 const TAILLE = { i32: 4, u32: 4, u8: 1 }, CLASSE = { i32: Int32Array, u32: Uint32Array, u8: Uint8Array };
 // PLAFONDS, écrits par ce qu'ils protègent : la mémoire de l'instance (512 Mio dont ~110 à 150 Mo de base de serveur, offre gratuite, ~11 réveils par jour sans version en mémoire : un dépassement
 // serait un redémarrage en boucle). L'archive réelle fait 2,8 Mo compressée et 11 Mo décompressée : 16 Mo (×5,7) et 48 Mo (×4,4). Dépassement = échec de chargement, jamais un redémarrage.
@@ -42,11 +52,12 @@ function serialiser(version, { entree = null } = {}) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { donnees } = version.paquet();
     const regions = [], descr = [];
-    for (const s of donnees.jum ? SECTIONS : SECTIONS_BASE) {
+    const liste = LISTES.find(l => l.jum === Boolean(donnees.jum) && l.mar === Boolean(donnees.mar));
+    for (const s of liste.sections) {
         const a = cible(donnees, s.nom), oct = Buffer.from(a.buffer, a.byteOffset, a.byteLength);
         descr.push({ nom: s.nom, t: s.t, n: a.length }); regions.push(oct); const pad = aligner(oct.length) - oct.length; if (pad) regions.push(Buffer.alloc(pad));
     }
-    const entete = { format: FORMAT, chargeLe: donnees.chargeLe.toISOString(), comptes: donnees.comptes, sets: donnees.fiches.sets, prefixe: donnees.liens.prefixe, entree, sections: descr };
+    const entete = { format: liste.format, chargeLe: donnees.chargeLe.toISOString(), comptes: donnees.comptes, sets: donnees.fiches.sets, prefixe: donnees.liens.prefixe, entree, sections: descr };
     return assemblerFichier(entete, Buffer.concat(regions));
 }
 
@@ -74,10 +85,14 @@ function deserialiser(buf) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { entete, debut } = ouvrirEntete(buf);
     if (!hache(buf.subarray(0, buf.length - 32)).equals(buf.subarray(buf.length - 32))) refuser('hachage faux : fichier abîmé ou tronqué');
-    if (entete.format !== FORMAT) refuser(`numéro de format inconnu (${String(entete.format).slice(0, 10)})`);
-    if (!Array.isArray(entete.sections) || ![SECTIONS_BASE.length, SECTIONS.length].includes(entete.sections.length)) refuser('liste de sections incomplète');
-    const attendues = entete.sections.length === SECTIONS.length ? SECTIONS : SECTIONS_BASE;       // sans la colonne des jumeaux : un fichier d'avant elle
-    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(attendues === SECTIONS ? { jum: {} } : {}) };
+    if (entete.format !== FORMAT && entete.format !== FORMAT_MARQUES) refuser(`numéro de format inconnu (${String(entete.format).slice(0, 10)})`);
+    // le numéro de format DIT quelles sections suivent (1 : sans marquages, 2 : avec) ; une liste qui n'est pas l'une des quatre énumérées est refusée
+    const candidates = LISTES.filter(l => l.format === entete.format);
+    if (!Array.isArray(entete.sections)) refuser('liste de sections incomplète');
+    const liste = candidates.find(l => l.sections.length === entete.sections.length);
+    if (!liste) refuser('liste de sections incomplète');
+    const attendues = liste.sections;       // sans la colonne des jumeaux : un fichier d'avant elle ; sans celle des marquages : un fichier du format 1
+    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(liste.jum ? { jum: {} } : {}), ...(liste.mar ? { mar: {} } : {}) };
     attendues.forEach((s, i) => {
         const x = entete.sections[i];
         if (!x || x.nom !== s.nom || x.t !== s.t || !Number.isInteger(x.n) || x.n < 0) refuser(`section « ${s.nom} » absente ou mal décrite`);
@@ -86,7 +101,7 @@ function deserialiser(buf) {
         const copie = buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + octets);           // COPIE alignée : le tampon du fichier est libéré ensuite
         const a = new CLASSE[s.t](copie);
         const [p, q] = s.nom.split('.');
-        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
+        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else if (p === 'mar') d.mar[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
         o += aligner(octets);
     });
     if (o !== buf.length - 32) refuser('octets en trop entre la dernière section et le hachage');
@@ -106,4 +121,4 @@ async function decompresser(buf, { max = PLAT_MAX, maxArchive = ARCHIVE_MAX } = 
     return new Promise((ok, ko) => zlib.gunzip(buf, { maxOutputLength: max }, (e, r) => (e ? ko(new FormatInvalide(e.code === 'ERR_BUFFER_TOO_LARGE' ? 'archive plus grande que la taille permise' : 'archive gzip illisible')) : ok(r))));
 }
 
-module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, SECTIONS, PLAFONDS };
+module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, FORMAT_MARQUES, SECTIONS, PLAFONDS };

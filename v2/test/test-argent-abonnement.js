@@ -67,8 +67,10 @@ Module.prototype.require = function (id) { if (id === 'stripe') { tentativesStri
     const motif = new RegExp(["require\\(\\s*['\"]", "str", "ipe['\"]"].join(''));
     const rec = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? rec(path.join(d, e.name)) : [path.join(d, e.name)]);
     const fichiers = rec(path.join(__dirname, '..')).filter(f => f.endsWith('.js'));
-    const touches = fichiers.filter(f => motif.test(fs.readFileSync(f, 'utf8')));
-    H.v(`0 chargement du module de paiement tiers dans v2/ (${fichiers.length} fichiers .js lus)`, touches.map(f => path.basename(f)), []);
+    // STRIPE-V2 : UN SEUL fichier de v2/ charge le SDK — v2/abonnements/sdk.js, de façon PARESSEUSE (le chargement n'a lieu qu'à la création d'un client, jamais à l'import). Tout autre est refusé.
+    const touches = fichiers.filter(f => motif.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(path.join(__dirname, '..'), f).replace(/\\/g, '/'));
+    H.v(`un seul fichier de v2/ charge le module de paiement tiers (${fichiers.length} fichiers .js lus) : le chargeur paresseux des abonnements`, touches, ['abonnements/sdk.js']);
+    H.v('   et ce chargeur ne lit le module qu\'à la demande (aucun require au niveau du module)', /^const charger = \(\) => \(Stripe \|\| \(Stripe = require\('stripe'\)\)\);$/m.test(fs.readFileSync(path.join(__dirname, '..', 'abonnements', 'sdk.js'), 'utf8')), true);
     // 5. le script administrateur
     const pa = await compte({ email: 'abonne@exemple.fr', emailCle: 'abonne@exemple.fr', solde: { accueil: 0, achete: 0 } });
     const cli = path.join(__dirname, '..', 'admin', 'poser-abonnement.js');

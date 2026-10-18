@@ -52,7 +52,7 @@ async function inst(o = {}) {
     await db.col('installations').insertOne(i); return { i, jeton, base: { installationId: i._id } };
 }
 async function compteLie(solde, role) {
-    const c = Object.assign(M.nouveauCompte({ email: `lot${++nCle}@x.fr`, emailCle: `lot${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde }, role ? { role } : {});
+    const c = Object.assign(M.nouveauCompte({ email: `lot${++nCle}@x.fr`, emailCle: `lot${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde: { ...solde, achete: 0 } }, role ? { role } : {});      // ACHETE-AVANT-JOUR : la poche achete se DÉBITE désormais ; l'ancien stock devient du QUOTA ci-dessous, le document garde achete 0 (la poche achete a son banc : test-achete-avant-jour.js)
     await db.col('comptes').insertOne(c);
     await Q.poserRestant(`compte:${c._id}`, (solde.accueil || 0) + (solde.achete || 0), { limite: Q.GRAND });      // l'ancien stock (accueil + achete) devient « autant d'analyses devant lui aujourd'hui »
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'banc' }), { compteId: c._id });
@@ -121,7 +121,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         H.v('1. 4 cartes => analyse.statut lot, 4 cartes, lot { cartesVues:4, identifiees:3, aTrancher:1, introuvables:0, lectureLiveMax:5 }',
             [r.statut, a.statut, (a.cartes || []).length, a.lot], [200, 'lot', 4, { cartesVues: 4, identifiees: 3, aTrancher: 1, introuvables: 0, lectureLiveMax: 5 }]);
         H.v('   1 crédit (essai 3 -> 2), facturation { debite:1, reserve:0, rembourse:false, motif:lot }, le crochet appelé UNE fois, la chaîne à une carte jamais',
-            [await essais(x), j.facturation, appelsLot, appelsChaine], [2, { debite: 1, reserve: 0, rembourse: false, motif: 'lot', raisonNonRembourse: null }, 1, 0]);
+            [await essais(x), j.facturation, appelsLot, appelsChaine], [2, { debite: 1, reserve: 0, rembourse: false, motif: 'lot', raisonNonRembourse: null, poche: 'jour' }, 1, 0]);
         const v = valider(j, ref('ReponseAnalyse'), SCHEMA);
         H.vrai(`   la réponse valide contre ReponseAnalyse (${v.ok ? 'ok' : v.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')})`, v.ok);
         H.vrai('   le crochet ne reçoit AUCUN crédit (il ne peut ni débiter ni rembourser), mais l\'annonce et le scan imposé', derniereReq && derniereReq.credit === undefined && derniereReq.body && derniereReq.scanIdImpose);
@@ -218,7 +218,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         const x = await inst(); lot(nIntro(5));
         const r = await poster(sv.url, x.jeton); const j = r.json || {};
         H.v('6. 5 cartes, aucune identifiée : remboursé, motif introuvable, essai 3, somme 0, cartesVues 5 et introuvables 5', [r.statut, j.facturation, await essais(x), await net(x, 'lot introuvable'), j.analyse && j.analyse.lot && [j.analyse.lot.cartesVues, j.analyse.lot.introuvables]],
-            [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null }, 3, 0, [5, 5]]);
+            [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null, poche: 'jour' }, 3, 0, [5, 5]]);
         const y = await inst(); lot([...nIntro(4), aff(P5)]);
         const r2 = await poster(sv.url, y.jeton);
         H.v('   4 introuvables + 1 identifiée : pas de remboursement (essai 2), motif lot', [r2.json.facturation.motif, r2.json.facturation.rembourse, await essais(y)], ['lot', false, 2]);
@@ -479,7 +479,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
             const ligne = await raw('questions_v2').findOne({ _id: `${q.json.scanId}:0` });
             H.v('U2. 1 résultat à trancher : a-trancher à 2 candidats, facturation { debite:0, reserve:1, motif question }, question réservée (PAS de lot:true), crochet 1 fois, chaîne 0',
                 [q.statut, qa.statut, (qa.cartes[0].candidats || []).length, qa.lot, q.json.facturation, ligne && ligne.etat, ligne && ligne.lot, appelsLot, appelsChaine],
-                [200, 'a-trancher', 2, null, { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 'en-attente', false, 1, 0]);
+                [200, 'a-trancher', 2, null, { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null, poche: 'jour' }, 'en-attente', false, 1, 0]);
             const ab = await repondre(sv.url, y.jeton, { scanId: q.json.scanId, carte: 0, choix: 'aucune' });
             H.v('   répondre « aucune » à cette question : le crédit est RENDU (essai 3, somme 0), facturation rembourse', [ab.statut, ab.json.facturation && ab.json.facturation.rembourse, await essais(y), await net(y, 'question à 1 résultat abandonnée')], [200, true, 3, 0]);
             const z = await inst(); lot([intro()]);
@@ -562,7 +562,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         // le registre « argent » est global au processus et LIÉ à la configuration du dernier montage : on le relie à la configuration ordinaire pour la suite
         await (await monter(cfg, {})).fermer();
         H.v('3d. lot de 25 introuvable, ancienne variable de plafond de pannes à 0 (sans objet) : rendu en entier { debite:0, rembourse:true, motif introuvable }, achete 10',
-            [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null }, 10]);
+            [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null, poche: 'jour' }, 10]);
     }
     // ── N1. un résultat unique NON CONFORME ne rappelle JAMAIS la vraie chaîne (une seconde lecture payante) : 500 SERVEUR remboursé
     {

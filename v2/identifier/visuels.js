@@ -9,6 +9,7 @@ const db = require('../db');
 const etat = require('../chargeur/etat');
 const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
+const { langueDeTirage } = require('./langue-decisive');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
 const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
@@ -48,9 +49,40 @@ function lienCardmarket(u) {
 /** Les champs d'impression doivent être PRÉSENTS (null admis : « non lu »), jamais absents : un champ qui manque n'est pas un champ non lu. */
 const CHAMPS_IMPRESSION = Object.freeze(['idMetacard', 'numero', 'rarete', 'total']);
 
+// REPLI-REIMPRESSIONS — les MARQUAGES « partagée » que le catalogue pose sur l'image servie (cartes.images) : un visuel qui sert plusieurs produits que l'IMAGE ne sépare pas.
+//   partageeHoloNonHolo     true : le même scan sert le produit holo ET le non-holo (Prize Packs S1-S4) ;
+//   partageeTamponNonSepare true : le même scan sert une paire dont l'une est tamponnée (Staff…) et l'on ne sait pas laquelle ; false : la paire est SÉPARÉE par l'étiquette Cardmarket (la liste est gardée) ;
+//   produitsPartages        les idProduct qui partagent ce scan (celui de l'entrée compris) ; tamponNonRepresente le tampon que le scan ne montre pas (« Staff », « Play! Pokémon ») ;
+//   basseDefinition         l'original est sous 350 px (gardé dans l'archive, décision du coordinateur).
+// Écrit par ce qu'il AUTORISE : un booléen est true/false/null (absent = null), rien d'autre ; une liste n'existe qu'avec un marquage de partage, et inversement ; elle contient le produit de l'entrée.
+const PARTAGES_MAX = 6, TAMPON_MAX = 40;
+const booleenOuNull = x => x === undefined || x === null || typeof x === 'boolean';
+function lireMarquages(e) {
+    for (const c of ['partageeHoloNonHolo', 'partageeTamponNonSepare', 'basseDefinition']) if (!booleenOuNull(e[c])) return { motif: `champ "${c}" ni booleen ni null` };
+    const holo = e.partageeHoloNonHolo === undefined ? null : e.partageeHoloNonHolo, tampon = e.partageeTamponNonSepare === undefined ? null : e.partageeTamponNonSepare;
+    const basse = e.basseDefinition === undefined ? null : e.basseDefinition;
+    let tn = null;
+    if (e.tamponNonRepresente !== undefined && e.tamponNonRepresente !== null) {
+        if (typeof e.tamponNonRepresente !== 'string' || !e.tamponNonRepresente.trim() || e.tamponNonRepresente.trim().length > TAMPON_MAX) return { motif: 'champ "tamponNonRepresente" ni null ni un texte non vide' };
+        tn = e.tamponNonRepresente.trim();
+    }
+    const partage = holo === true || tampon !== null;
+    let liste = null;
+    if (e.produitsPartages !== undefined && e.produitsPartages !== null) {
+        const l = e.produitsPartages;
+        if (!Array.isArray(l) || l.length < 2 || l.length > PARTAGES_MAX || !l.every(x => Number.isInteger(x) && x > 0) || new Set(l).size !== l.length) return { motif: `champ "produitsPartages" : entre 2 et ${PARTAGES_MAX} idProduct entiers distincts attendus` };
+        if (!l.includes(e.idProduct)) return { motif: 'champ "produitsPartages" ne contient pas le produit de l\'entrée' };
+        liste = [...l].sort((a, b) => a - b);
+    }
+    if (partage && liste === null) return { motif: 'marquage de partage sans "produitsPartages"' };
+    if (!partage && liste !== null) return { motif: '"produitsPartages" sans marquage de partage (partageeHoloNonHolo ou partageeTamponNonSepare)' };
+    return { marquages: { partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: liste, tamponNonRepresente: tn, basseDefinition: basse } };
+}
+
 /**
  * Une entrée d'export -> le document `visuels`, ou un refus MOTIVÉ. Entrée : { idProduct, vignette:{cle,w,h}, grande:{cle,w,h}|null,
- * visuel?:'du-set'|'substitut'|'autre-tirage', mention?, idMetacard:int|null, numero, rarete, total, variante?, setNom?, lien? }.
+ * visuel?:'du-set'|'substitut'|'autre-tirage', mention?, idMetacard:int|null, numero, rarete, total, variante?, setNom?, lien?,
+ * partageeHoloNonHolo?, partageeTamponNonSepare?, produitsPartages?, tamponNonRepresente?, basseDefinition? }.
  * Un visuel qui n'est pas celui du set n'est admis qu'avec sa mention.
  */
 function lireEntree(e) {
@@ -67,10 +99,13 @@ function lireEntree(e) {
     for (const c of CHAMPS_IMPRESSION) if (e[c] === undefined) return { ok: false, motif: `champ "${c}" absent (null admis, absent non)` };
     if (e.idMetacard !== null && !(Number.isInteger(e.idMetacard) && e.idMetacard > 0)) return { ok: false, motif: 'idMetacard ni entier ni null' };
     if (e.lien !== undefined && e.lien !== null && !lienCardmarket(e.lien)) return { ok: false, motif: 'lien hors Cardmarket (https://www.cardmarket.com/…)' };
+    const m = lireMarquages(e);
+    if (!m.marquages) return { ok: false, motif: m.motif };
     return { ok: true, doc: {
         idProduct: e.idProduct, vignette: v.fichier, grande: g, mention,
         idMetacard: e.idMetacard, numero: chaineOuNull(e.numero), rarete: texte(e.rarete), total: chaineOuNull(e.total),
-        variante: texte(e.variante), setNom: texte(e.setNom), lien: e.lien ? e.lien : null
+        variante: texte(e.variante), setNom: texte(e.setNom), lien: e.lien ? e.lien : null,
+        ...m.marquages
     } };
 }
 
@@ -78,12 +113,12 @@ const urlDe = (hote, f) => `https://${hote}/${f.cle}`;
 const prix = x => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);
 const dateGuide = d => (d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10)
     : typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? d : null);
-/** Ligne de guide -> la forme que construireProduit lit ({ trend, low, avg30, guideDu }) ; un prix non daté n'est pas servi. */
+/** Ligne de guide -> la forme que construireProduit lit ({ trend, low, avg7, avg30, guideDu }) ; un prix non daté n'est pas servi. F4-PRIX : avg7 sert à juger l'écart de la tendance. */
 function prixGuide(g) {
     if (!g) return null;
-    const guideDu = dateGuide(g.guideDu), trend = prix(g.trend), low = prix(g.low), avg30 = prix(g.avg30);
+    const guideDu = dateGuide(g.guideDu), trend = prix(g.trend), low = prix(g.low), avg7 = prix(g.avg7), avg30 = prix(g.avg30);
     if (!guideDu || (trend === null && low === null && avg30 === null)) return null;
-    return Object.freeze({ trend, low, avg30, guideDu });
+    return Object.freeze({ trend, low, avg7, avg30, guideDu });
 }
 
 function creerVisuels(opts = {}) {
@@ -118,6 +153,7 @@ function creerVisuels(opts = {}) {
             return Object.freeze({
                 idProduct: d.idProduct, numero, total: chaineOuNull(d.total), rarete,
                 variante: VARIANTES.includes(d.variante) ? d.variante : null,                          // V1/V2 n'a pas de sémantique (CLAUDE.md §7)
+                langue: langueDeTirage(typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(d.idProduct) : null),   // CONTRAT 7a : la langue du TIRAGE de CETTE impression (jp -> ja, zh-hans, zh-hant, ko) ; intl, id, th, idth : null, jamais devinée
                 set: Object.freeze({ nom: texte(d.setNom) }), lien, prixGuide: prixGuide(guides.get(d.idProduct))
             });
         });

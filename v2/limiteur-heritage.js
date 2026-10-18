@@ -57,9 +57,7 @@ function fabrique(lireCfg, o = {}) {
     const fenetres = new Map();
     let balai = null;
     function purger() { const t = maintenant(); for (const [ip, w] of fenetres) if (t - w.debut >= FENETRE_MS) fenetres.delete(ip); }
-    function plafondIp(req, res, next) {
-        const cfg = actif();
-        if (!cfg || !requeteDeLaV2(req)) return next();
+    function compterIp(req, res, next, cfg) {
         const plafond = plafondDe(cfg), t = maintenant(), ip = ipKeyGenerator(String(req.ip || '?'));   // la clé du limiteur hérité (IPv6 regroupée par /56) : la MÊME fonction, importée
         let w = fenetres.get(ip);
         if (!w || t - w.debut >= FENETRE_MS) {
@@ -69,9 +67,21 @@ function fabrique(lireCfg, o = {}) {
         }
         if (w.n >= plafond) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: Math.max(1, Math.ceil((w.debut + FENETRE_MS - t) / 1000)) });
         w.n++;
+        req._plafondIpCompte = true;                                                        // compté UNE fois : plafondIp ne recompte pas une requête déjà comptée par plafondGrand
         return next();
     }
-    return { sauter, refuser, plafondIp, taillePlafond: () => fenetres.size, purger };
+    function plafondIp(req, res, next) {
+        const cfg = actif();
+        if (!cfg || !requeteDeLaV2(req) || req._plafondIpCompte) return next();
+        return compterIp(req, res, next, cfg);
+    }
+    // MODELE-VISUEL-API (tour 2, I3) : le même plafond par IP, appliqué AVANT la lecture d'un GRAND corps de POST /api/identifier (le corps n'est pas encore lu : on ne sait pas s'il porte contrat 2, la route est candidate par son chemin).
+    function plafondGrand(req, res, next) {
+        const cfg = actif();
+        if (!cfg || !req || req.method !== 'POST' || cheminDe(req) !== CHEMIN_IDENTIFIER) return repondreErreur(res, 'ENTREE', 'corps trop grand', { detail: 'corps' });
+        return compterIp(req, res, next, cfg);
+    }
+    return { sauter, refuser, plafondIp, plafondGrand, taillePlafond: () => fenetres.size, purger };
 }
 // Le plafond se DÉRIVE des limites par porteur de la v2 : PORTEURS_PAR_IP porteurs derrière une même IP (foyer, petit bureau, NAT), chacun au maximum de ses deux routes
 // (identifications + réponses par heure : transport/limites.js, config.js identifierParCompteHeure 120 et reponseParPorteurHeure 600) = 5 × (120 + 600) = 3600 par heure.

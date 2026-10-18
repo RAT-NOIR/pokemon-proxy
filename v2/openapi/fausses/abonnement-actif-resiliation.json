@@ -1,0 +1,35 @@
+{
+  "success": true,
+  "abonnement": {
+    "actif": true,
+    "plan": "fondateurs",
+    "periode": "an",
+    "statut": "actif",
+    "finPeriode": "2027-10-18T10:00:00.000Z",
+    "resiliationPrevue": true,
+    "essai": {
+      "enCours": false,
+      "finLe": null,
+      "disponible": false
+    },
+    "paiementEchoue": false
+  },
+  "quota": {
+    "nom": "pro",
+    "restant": null,
+    "remiseAZero": "2026-10-19T00:00:00+02:00"
+  },
+  "parrainage": {
+    "code": "K7M2QX9P",
+    "essaiFilleulJours": 30
+  },
+  "offres": {
+    "pro": {
+      "mois": 499,
+      "an": 3900
+    },
+    "source": "stripe",
+    "devise": "EUR",
+    "essaiJours": 14
+  }
+}

@@ -28,6 +28,7 @@ const {
 // ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
 // fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
 const SCORING = require('./scoring');
+const TEMPS_CHAINE = require('./v2/identifier/temps-chaine');   // LOT TEMPS-CHAINE : pré-filtre du numéro, image non calculée (réglage « 1 » seulement)
 const { blocLectureGarde } = require('./v2/identifier/garde-contradiction');   // GARDE-CONTRADICTION : le bloc `lectureGarde` de la réponse d'une requête v2 (une seule écriture, testée sans serveur)
 const { classerPanneIA, panneDansLeCorps, lectureDuTitre, causeApresErreur, causeApresReponse, motifDuRefusIA } = require('./lecture-de-secours');
 const {
@@ -159,6 +160,25 @@ app.use((req, res, next) => dansUnScan(next));
 // middlewares est garanti sans éparpiller le code Stripe en haut du fichier.
 app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gererWebhookStripe);
 
+// MODELE-VISUEL-API : l'extension joint la carte redressée (JPEG <= 200 Ko, <= 273 068 caractères base64) à chaque entrée de `empreintes`, 8 au plus : jusqu'à ≈ 2,19 Mo. La limite de 100 Ko est relevée à 2 400 Ko
+// POUR POST /api/identifier SEULEMENT, et SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : express.json() par défaut, inchangé). Les validations (forme, taille de chaque carte) restent dans v2/identifier.
+// Le grand analyseur passe AVANT l'analyseur global et ne prend que cette route ; l'analyseur global saute un corps déjà lu (body-parser : req._body).
+// TOUR 2 : ce grand analyseur n'existe que si V2_EMPREINTE_EXTENSION=1 ET l'API v2 est montée (RM_API_V2=1) ; la route héritée garde 100 Ko (I3/M1). Il n'est atteint qu'APRÈS : (1) un en-tête Authorization: Bearer présent ; (2) un Content-Length
+// annoncé au-delà de 100 Ko ; (3) le plafond par IP (v2/limiteur-heritage.js, plafondGrand). Sans jeton, ou sans Content-Length, c'est l'analyseur par défaut : 413 SANS LECTURE si Content-Length > 100 Ko, corps coupé à 100 Ko sans Content-Length.
+if (process.env.V2_EMPREINTE_EXTENSION === '1' && V2) {
+    const jsonIdentifier = express.json({ limit: '2400kb' });
+    app.use((req, res, next) => {
+        if (req.method !== 'POST' || req.path !== '/api/identifier') return next();
+        const annonce = Number(req.headers['content-length']);
+        // sans jeton et au-delà de 100 Ko annoncés : 413 tout de suite, le corps n'est jamais lu (body-parser attendrait la fin du corps avant de répondre)
+        if (!/^Bearer \S/.test(String(req.headers.authorization || '')) && Number.isFinite(annonce) && annonce > 100 * 1024) {
+            res.setHeader('Connection', 'close');
+            return res.status(413).json({ success: false, error: 'Requête illisible' });      // la même forme que le gestionnaire d'erreurs 4xx plus bas
+        }
+        if (!/^Bearer \S/.test(String(req.headers.authorization || '')) || !Number.isFinite(annonce) || annonce <= 100 * 1024) return next();
+        return V2.limiteurHerite.plafondGrand(req, res, () => jsonIdentifier(req, res, next));
+    });
+}
 app.use(express.json());
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
@@ -2616,8 +2636,10 @@ async function trouverProduitsParNumeroPartout(numeroLu) {
         // On ne peut pas filtrer côté Mongo : la comparaison de numéros est normalisée
         // (zéros de tête, préfixes) et doit rester STRICTEMENT celle du scoring. On lit
         // donc les numéros connus et on départage en mémoire, comme ci-dessus.
+        // LOT TEMPS-CHAINE : la lecture complète de numeros_cartes (≈ 70 000 documents) coûtait ~10 s sur 3 % des scans. Mongo ne rend plus que les documents dont le PREMIER groupe de
+        // chiffres vaut celui du numéro lu : un sur-ensemble de ce que comparerNumeros retient (motif et preuve : v2/identifier/temps-chaine.js), le tri exact ci-dessous ne change pas.
         const docs = await NumeroCarte.find(
-            { $or: [{ numero: { $type: 'string', $ne: '' } }, { numeroUrl: { $type: 'string', $ne: '' } }] },
+            TEMPS_CHAINE.filtreNumeroPartout(numeroLu),
             { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }
         ).lean();
         return departagerParNumero(docs, numeroLu, 'tout le catalogue');
@@ -5337,10 +5359,15 @@ async function gererIdentifier(req, res) {
         let departageParImage = false;
         let champsImage = {};
         {
-            const avis = await departagerParImage({
-                imageUrl: photos[0], langue: cardInfo.language,
-                total: cardInfo.total, classement
-            });
+            // LOT TEMPS-CHAINE (V2_TC_IMAGE_PRIORITAIRE=1) : quand le symbole ou l'attaque a DÉJÀ décidé, l'avis de l'image est jeté (voir ci-dessous) — mais son téléchargement de photo a coûté
+            // jusqu'à ~6 s sur 4 scans de 326. On ne le demande plus ; le journal dit « non calculée ». Aucun départage, aucun classement, aucune réserve n'en dépend.
+            const prioritaireSansImage = (departageParSymbole || departageParAttaqueFait) && TEMPS_CHAINE.reglages().imagePrioritaireSansCalcul;
+            const avis = prioritaireSansImage
+                ? { departage: false, gagnant: null, champs: TEMPS_CHAINE.champsImageNonCalcules(departageParSymbole ? 'symbole' : 'attaque') }
+                : await departagerParImage({
+                    imageUrl: photos[0], langue: cardInfo.language,
+                    total: cardInfo.total, classement
+                });
             champsImage = avis.champs;
             if ((departageParSymbole || departageParAttaqueFait) && avis.departage) {
                 const prioritaire = departageParSymbole ? 'symbole' : 'attaque';

@@ -41,7 +41,7 @@ H.v('schéma de sécurité « session »', aller(doc, 'components.securityScheme
     { t: 'apiKey', i: 'cookie', n: 'rm_session' });
 const ATTENDUS = ['Image', 'Visuel', 'Produit', 'Impression', 'Zone', 'ZoneQuestion', 'Question', 'Choix', 'EtatCarte', 'PrixLive', 'PrixGuide', 'CarteAnalysee', 'Lot', 'RegleVerdict',
     'Facturation', 'Solde', 'Abonnement', 'ReponseAnalyse', 'ReponseQuestion', 'ReponseErreur', 'CompteSession', 'Installation', 'LigneHistorique', 'ReponseCompte',
-    'RequeteIdentifier', 'RequeteReponse', 'RequeteRetourLive', 'RequeteInstallation', 'RequeteInscription'];
+    'RequeteIdentifier', 'RequeteReponse', 'RequeteRetourLive', 'RequeteInstallation', 'RequeteInscription', 'ModeleEmpreinte', 'ModeleEmpreinteServi', 'EmpreinteEntree', 'ReponseEmpreinte'];
 H.v('schémas attendus tous présents', ATTENDUS.filter(n => !S[n]), []);
 
 // ── 2. le schéma est lisible en entier par NOTRE validateur (mot-clé inconnu, $ref cassé, required sans propriété) ──
@@ -122,6 +122,19 @@ comparerAuCode('Produit.variante', variantesEnum, 'identifier/produit.js', 'tamp
 H.vrai('Produit.variante est nullable (on ne devine pas l\'édition, §7 / Q31)', nullable('Produit.properties.variante'));
 H.v('Impression.variante = Produit.variante', liste('Impression.properties.variante'), variantesEnum);
 H.vrai('Impression.variante est nullable', nullable('Impression.properties.variante'));
+// F4-PRIX : les listes fermées du prix ont UNE source (identifier/fiabilite-prix.js), le schéma les reprend ensemble pour ensemble
+{
+    const F = require('../identifier/fiabilite-prix');
+    H.v('PrixGuide.reserves : schéma = fiabilite-prix.RESERVES (les trois codes fermés)', diff(aller(S, 'PrixGuide.properties.reserves.items.enum'), [...F.RESERVES]), { enTrop: [], manquants: [] });
+    H.v('PrixGuide.deBase : schéma = [fiabilite-prix.BASE_DE] (« tous-etats », seule valeur servie)', aller(S, 'PrixGuide.properties.deBase.enum'), [F.BASE_DE]);
+    H.v('SetProduit.badgeSource : code · nom (nullable)', [liste('SetProduit.properties.badgeSource'), nullable('SetProduit.properties.badgeSource')], [['code', 'nom'], true]);
+    H.v('Produit.version et Impression.version : la même forme V<n> que fiabilite-prix.versionDe', [aller(S, 'Produit.properties.version.pattern'), aller(S, 'Impression.properties.version.pattern')], ['^V[1-9][0-9]?$', '^V[1-9][0-9]?$']);
+    const motifVersion = new RegExp(aller(S, 'Produit.properties.version.pattern'));
+    H.v('   le motif du schéma accepte et refuse exactement ce que versionDe accepte et refuse', ['V1', 'V18', 'V99', 'V0', 'V100', 'v2', 'V', 'reverse'].map(x => motifVersion.test(x) === (F.versionDe(x) !== null)), [true, true, true, true, true, true, true, true]);
+    H.v('RegleVerdict.ecartTendanceMax : un nombre entre 0 et 1, optionnel pour les clients, jamais exigé', [aller(S, 'RegleVerdict.properties.ecartTendanceMax.type'), aller(S, 'RegleVerdict.required').includes('ecartTendanceMax')], ['number', false]);
+    for (const [nom, champ] of [['PrixGuide', ['deBase', 'moyenne7', 'fiable', 'reserves']], ['SetProduit', ['badge', 'badgeSource']], ['Produit', ['version']], ['Impression', ['version']]])
+        H.v(`${nom} : ${champ.join(', ')} sont des AJOUTS FACULTATIFS (jamais requis : un client d'avant le lot F4-PRIX reste valide)`, champ.filter(c => (aller(S, `${nom}.required`) || []).includes(c)), []);
+}
 // B7b.1 tour 1 (M6) : la liste des causes de non-remboursement a UNE source (sources.js), le schéma la reprend ensemble pour ensemble
 const { RAISONS_NON_REMBOURSE } = require('../../sources');
 H.v('Facturation.raisonNonRembourse : schéma = RAISONS_NON_REMBOURSE (sources.js)', diff(liste('Facturation.properties.raisonNonRembourse'), [...RAISONS_NON_REMBOURSE]), { enTrop: [], manquants: [] });
@@ -140,6 +153,16 @@ H.v('confiance de l\'état (une chaîne de liste fermée, jamais un score)', dif
 // valeurs de config : la liste du code
 H.v('devises : schéma = cfg.devises', diff(aller(S, 'RequeteIdentifier.properties.devise.enum'), cfg.devises), { enTrop: [], manquants: [] });
 H.v('imageUrls : au plus cfg.images.imageUrlsMax', aller(S, 'RequeteIdentifier.properties.imageUrls.maxItems'), cfg.images.imageUrlsMax);
+{ // MODELE-VISUEL-API : les constantes de l'empreinte de l'extension sont CELLES du code (une seule définition : le module de vérification et le fournisseur)
+    const EV = require('../identifier/empreinte-vecteur'), VE = require('../identifier/voisins-empreinte');
+    H.v('empreintes : au plus VE.ENTREES_MAX (8) entrées, un index de photo de 0 à 7 (ENTREES_MAX - 1)', [aller(S, 'RequeteIdentifier.properties.empreintes.maxItems'), aller(S, 'EmpreinteEntree.properties.photo.maximum') + 1], [VE.ENTREES_MAX, VE.ENTREES_MAX]);
+    H.v('vecteur : 684 caractères base64 (512 octets, 256 nombres fp16) — le motif du schéma est celui du code', [S.EmpreinteEntree.properties.vecteur.pattern, EV.BASE64_LONGUEUR, EV.OCTETS, EV.DIM], [`^[A-Za-z0-9+/]{${EV.BASE64_LONGUEUR - 1}}=$`, 684, 512, 256]);
+    { const CR = require('../identifier/carte-redressee'); H.v('carte : 420 × 587, au plus 200 Ko décodés — la taille base64 du schéma est celle du code', [S.EmpreinteEntree.properties.carte.maxLength, CR.BASE64_MAX, CR.OCTETS_MAX, CR.LARGEUR, CR.HAUTEUR], [273068, 273068, 204800, 420, 587]); H.v('carte facultative dans le schéma (le serveur se tait sans elle, il ne refuse pas)', S.EmpreinteEntree.required, ['photo', 'vecteur']); }
+    H.v('empreinte.code : la liste fermée du schéma = celle du fournisseur (+ null)', diff(aller(S, 'ReponseEmpreinte.properties.code.enum').filter(x => x !== null), VE.CODES), { enTrop: [], manquants: [] });
+    H.v('l\'entrée de la requête est fermée, `photo` et `vecteur` sont exigés, `redressee` facultatif', [S.EmpreinteEntree.additionalProperties, S.EmpreinteEntree.required], [false, ['photo', 'vecteur']]);
+    H.v('ni `empreintes` ni `modeleEmpreinte` ne sont exigés de la requête (facultatif)', ['empreintes', 'modeleEmpreinte'].filter(k => S.RequeteIdentifier.required.includes(k)), []);
+    H.v('`empreinte` n\'est pas exigé de la réponse, et RegleVerdict.modeleEmpreinte non plus (additifs)', [S.ReponseAnalyse.required.includes('empreinte'), S.RegleVerdict.required.includes('modeleEmpreinte')], [false, false]);
+}
 H.v('libellé d\'installation : au plus cfg.comptes.libelleMax', aller(S, 'RequeteInstallation.properties.libelle.maxLength'), cfg.comptes.libelleMax);
 H.v('mot de passe (choisi à la confirmation, D6) : cfg.comptes.motDePasseMin caractères au moins', aller(S, 'RequeteVerification.properties.motDePasse.minLength'), cfg.comptes.motDePasseMin);
 H.v('D6 : l\'inscription ne déclare plus de mot de passe', aller(S, 'RequeteInscription.properties.motDePasse'), undefined);
@@ -180,7 +203,7 @@ H.v('aucune propriété « score » dans le contrat (règle 4)', nomsProps.filte
 H.v('EtatCarte.confiance n\'est pas un nombre', JSON.stringify(S.EtatCarte.properties.confiance).includes('"number"'), false);
 // les réponses du contrat sont FERMÉES : additionalProperties:false sur chaque schéma de réponse
 const FERMES = ['Image', 'Visuel', 'Produit', 'Impression', 'Zone', 'ZoneQuestion', 'Question', 'Choix', 'EtatCarte', 'PrixLive', 'PrixGuide', 'CarteIdentifiee', 'CarteATrancher', 'CarteIntrouvable', 'Lot', 'RegleVerdict',
-    'Facturation', 'Solde', 'Abonnement', 'ReponseAnalyse', 'ReponseQuestion', 'ReponseErreur', 'CompteSession', 'Installation', 'ReponseCompte'];
+    'Facturation', 'Solde', 'Abonnement', 'ReponseAnalyse', 'ReponseQuestion', 'ReponseErreur', 'CompteSession', 'Installation', 'ReponseCompte', 'ModeleEmpreinteServi', 'ReponseEmpreinte'];
 H.v('les schémas de réponse refusent les clés en trop', FERMES.filter(n => !S[n] || S[n].additionalProperties !== false), []);
 
 // ── 4. (5) chaque route de `paths` existe dans le code (le routeur v2 monté) — un contrat qui promet une route inexistante n'est pas publiable ──
