@@ -99,11 +99,12 @@ async function executerLot(p) {
     const corpsDe = r => (r && r.corps && typeof r.corps === 'object' ? r.corps : {});
     let produits;
     // JUMEAU-V2 : la même garde que la route d'une carte (une version de la colonne pour tout le lot) ; les jumeaux d'une affirmation qui tient dans une question sont chargés avec elle
-    const jumeaux0 = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version(), resultats.flatMap(r => idsAffirmes(corpsDe(r))));
+    const version0 = etatChargeur.version();                                  // UNE lecture de la version pour tout le lot (m-1) : passée au premier appel ET à preparer
+    const jumeaux0 = deps.jumeaux || await fournisseurParDefaut(catalogue, version0, resultats.flatMap(r => idsAffirmes(corpsDe(r))));
     try { produits = await catalogue.lire(resultats.flatMap(r => { const c = corpsDe(r); return [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux0), ...idsDeLaGarde(c)]; })); }
     catch (e) { journal('catalogue', e); return panne('INDISPONIBLE'); }
     // LANGUE-DECISIVE (B1, M2) : comme la route d'une carte, les jumeaux des candidats que la photo pourrait laisser seuls et l'index code × numéro du catalogue entier
-    const pr = await preparerLD({ corpsListe: resultats.map(corpsDe), produits, jumeaux: jumeaux0, catalogue, version: etatChargeur.version(), deps });
+    const pr = await preparerLD({ corpsListe: resultats.map(corpsDe), produits, jumeaux: jumeaux0, catalogue, version: version0, deps });
     produits = pr.produits;
     const jumeaux = pr.jumeaux, ctxLD = pr.codeNumeroExiste ? { codeNumeroExiste: pr.codeNumeroExiste } : {};
     // 3. une carte par résultat, dans l'ordre d'ENTRÉE ; une carte illisible devient « introuvable / panne-lecture » (comptée vue : la lecture a eu lieu)
