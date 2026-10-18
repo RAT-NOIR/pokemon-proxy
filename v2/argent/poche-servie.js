@@ -7,16 +7,20 @@
 const db = require('../db');
 const POCHES = Object.freeze(['achete', 'jour']);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
+// La poche d'un scan, lue sur ses LIGNES de débit au grand livre (elles restent après un remboursement) : "achete" si TOUTES ses unités l'étaient, sinon "jour" ; null si aucune ligne.
+// Une lecture qui échoue lève : l'appelant décide du repli.
+async function pocheDesDebits(porteur, scanId) {
+    const l = await db.col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1, credit: { $ne: null } }, { projection: { 'credit.poche': 1 } }).toArray();
+    const ps = l.map(d => d.credit && d.credit.poche).filter(x => POCHES.includes(x));
+    if (!ps.length) return null;
+    return ps.every(x => x === 'achete') ? 'achete' : 'jour';
+}
 // `credit` : celui du débit initial ; `lot` : la requête est un lot (les unités se lisent au grand livre)
 async function pocheDuScan(porteur, scanId, credit, lot) {
     if (!credit || !POCHES.includes(credit.poche)) return null;
     if (!lot) return credit.poche;
-    try {
-        const l = await db.col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1, credit: { $ne: null } }, { projection: { 'credit.poche': 1 } }).toArray();
-        const ps = l.map(d => d.credit && d.credit.poche).filter(x => POCHES.includes(x));
-        if (!ps.length) return credit.poche;
-        return ps.every(x => x === 'achete') ? 'achete' : 'jour';
-    } catch (_) { return credit.poche; }       // une lecture qui échoue ne casse pas la réponse : la poche du débit initial
+    try { return (await pocheDesDebits(porteur, scanId)) || credit.poche; }
+    catch (_) { return credit.poche; }       // une lecture qui échoue ne casse pas la réponse : la poche du débit initial
 }
 const avecPoche = (facturation, poche) => (facturation && facturation.motif !== 'administrateur' && POCHES.includes(poche) ? { ...facturation, poche } : facturation);
-module.exports = { pocheDuScan, avecPoche, POCHES };
+module.exports = { pocheDuScan, pocheDesDebits, avecPoche, POCHES };
