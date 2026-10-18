@@ -1,0 +1,35 @@
+# Reveil de la production (offre gratuite de Render : le service s'endort apres 15 min sans trafic entrant, et son reveil prend environ une minute).
+# Decision du testeur (2026-10-18) : un ping toutes les 5 minutes de 8 h a minuit, heure de Paris ; RIEN la nuit.
+# Les 750 heures gratuites de Render se comptent par ESPACE DE TRAVAIL (production + essai) : 16 h 15 par jour x 31 jours ~ 504 h pour la production,
+# ce qui laisse environ 245 h a l'essai. L'essai n'est PAS pinge. Aucun secret, aucune ecriture : un GET de /ping, rien d'autre.
+# GitHub ne connait que l'heure UTC : la tache tourne de 06:00 a 22:55 UTC (couvre 8 h - minuit a Paris en heure d'ete comme en heure d'hiver),
+# et chaque passage verifie l'heure de Paris avant d'appeler.
+name: reveil-production
+
+on:
+  schedule:
+    - cron: '*/5 6-22 * * *'
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: reveil-production
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /ping seulement entre 8 h et minuit, heure de Paris
+        env:
+          URL_PING: https://pokemon-proxy-ratnoir666.onrender.com/ping
+        run: |
+          heure=$(TZ=Europe/Paris date +%H)
+          if [ "$((10#$heure))" -lt 8 ]; then
+            echo "hors fenetre : ${heure} h a Paris, aucun appel"
+            exit 0
+          fi
+          code=$(curl -sS --max-time 120 -o /dev/null -w '%{http_code}' "$URL_PING" || echo "echec")
+          echo "${heure} h a Paris : /ping -> ${code}"

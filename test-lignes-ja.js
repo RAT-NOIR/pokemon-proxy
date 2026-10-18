@@ -8,6 +8,7 @@
 //   · les sets NON prouvés n'ont AUCUNE source active : CGY (aucune page lue, plafond de requêtes), IPNC/IPNT (une liste, deux decks, aucun numéro, aucune sous-section),
 //     pcgG (six listes dont deux jamais lues), HRDK (liste jamais lue) ; les deux « PROBABLE » devenus actifs (sm2+, MCRP) sortent de sources-sets-en-attente.json ;
 //   · aucune source existante n'a bougé (le nombre de lignes de ARTOFPKM n'augmente que de six).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');

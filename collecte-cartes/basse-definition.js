@@ -59,6 +59,13 @@ const cleDocument = e => `${e?.source}|${e?.set}|${e?.cleR2}`;
  */
 function marqueursEffectifs(e, documents) {
     const d = documents instanceof Map ? documents.get(cleDocument(e)) : undefined;
+    // ➕ LOT TAMPONNEES : une entrée « emprunt » (image du tirage normal posée pour l'affichage) n'a PAS de document `images` par construction ; ses marqueurs se lisent sur elle-même.
+    // Liste fermée : source 'emprunt' ET imageEmprunteeTirage === true, et seulement quand le document manque. Tout autre « sans document » reste null (on ne sait pas de quelle impression il s'agit).
+    if (d == null && e && e.source === 'emprunt' && e.imageEmprunteeTirage === true) {
+        const eff = {};
+        for (const k of MARQUEURS_DE_VARIANTE) eff[k] = marqueurDe(e, k) !== null ? e[k] : null;
+        return eff;
+    }
     if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
     const eff = {};
     for (const k of MARQUEURS_DE_VARIANTE) {

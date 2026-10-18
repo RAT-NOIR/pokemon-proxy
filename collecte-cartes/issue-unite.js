@@ -11,7 +11,9 @@
 // TENTATIVES_MAX passages. Au-delà, elle refuse, et le nombre de passages est écrit : une panne longue reste VISIBLE (§29).
 const TENTATIVES_MAX = 3;
 const DELAI_REPRISE_MS = 10 * 60 * 1000;
-const ARRETS = /^(interrompu|refuse-verrou|refuse-texte-en-cours)$/;   // pas un verdict : on rend l'unité et on s'arrête
+// REPONSE-HOTE (correction 2, I1) : un arrêt DURABLE d'hôte (arret-hote, bloque) ou une PAUSE d'hôte (pause-hote) n'est pas un verdict non plus : l'unité revient en attente et le worker s'arrête
+// pour cet hôte (collecte-cartes/reponse-hote.js) ; rien n'est rangé en « refuse », la file reste intacte (§21 n°3).
+const ARRETS = /^(interrompu|refuse-verrou|refuse-texte-en-cours|arret-hote|pause-hote|bloque)$/;   // pas un verdict : on rend l'unité et on s'arrête
 
 /** Un échec de téléchargement est transitoire s'il vient du serveur (5xx) ou du réseau — et de rien d'autre.
  *  Le message a la forme du client TCGdex, « <status ou code> <url> » : c'est aussi ce que la ligne `images` garde
@@ -27,6 +29,7 @@ function echecTransitoire(err) {
 function issueDeLUnite(bilan, unite, maintenant = new Date()) {
     if (bilan?.etat === 'verifie') return { etat: 'fait', arreter: false };
     if (ARRETS.test(bilan?.etat)) return { etat: 'attente', arreter: true };
+    if (bilan?.pauseHote || bilan?.arretHote) return { etat: 'attente', arreter: true };      // un bilan qui PORTE une pause ou un arrêt d'hôte (incomplet, refuse-source-bloquee…)
     if (bilan?.etat === 'incomplet-transitoire') {
         const tentatives = (unite?.tentatives || 0) + 1;
         if (tentatives < TENTATIVES_MAX) return { etat: 'attente', arreter: false, enQueue: true, tentatives, pasAvant: new Date(maintenant.getTime() + DELAI_REPRISE_MS) };
@@ -35,4 +38,13 @@ function issueDeLUnite(bilan, unite, maintenant = new Date()) {
     return { etat: 'refuse', arreter: false };
 }
 
-module.exports = { issueDeLUnite, echecTransitoire, TENTATIVES_MAX, DELAI_REPRISE_MS };
+/**
+ * Le bilan d'une unité dont le collecteur a LEVÉ : un arrêt durable (bloque) -> arret-hote, une pause (pauseHote) -> pause-hote (l'unité revient en attente, le worker s'arrête) ;
+ * une cause passagère → incomplet-transitoire ; le reste → erreur. Une seule définition pour tous les collecteurs du worker.
+ */
+function bilanDeLException(code, e) {
+    const etat = e?.bloque ? 'arret-hote' : e?.pauseHote ? 'pause-hote' : echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur';
+    return { code, etat, erreur: e?.message ?? String(e), sansJointure: true };
+}
+
+module.exports = { bilanDeLException, issueDeLUnite, echecTransitoire, TENTATIVES_MAX, DELAI_REPRISE_MS };

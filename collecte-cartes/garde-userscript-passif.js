@@ -11,7 +11,9 @@ const esprima = require('esprima');
 // et un profil n'ouvre pas l'autre : le script Cardmarket est refusé par le profil Collectorviper (défaut) et inversement.
 const PROFILS = Object.freeze({
     collectorviper: Object.freeze({ nom: 'Rat-Market — Relevé passif Collectorviper', match: 'https://collectorviper.livejournal.com/*', hotes: Object.freeze(['collectorviper.livejournal.com', 'recepteur-collectorviper.js']) }),   // chaînes à points admises dans le code (garde de lieu, commande affichée)
-    'cardmarket-fiche': Object.freeze({ nom: 'Rat-Market — Relevé passif fiches Cardmarket', match: 'https://www.cardmarket.com/*/Pokemon/Products/Singles/*', hotes: Object.freeze(['www.cardmarket.com', 'recepteur-cardmarket-fiche.js']) })
+    'cardmarket-fiche': Object.freeze({ nom: 'Rat-Market — Relevé passif fiches Cardmarket', match: 'https://www.cardmarket.com/*/Pokemon/Products/Singles/*', hotes: Object.freeze(['www.cardmarket.com', 'recepteur-cardmarket-fiche.js']) }),
+    // lot POKEDATA (correction 2) : LISTE FERMÉE de @match (les 10 pages de set à ouvrir, adresses exactes, apostrophe brute comme dans la barre d'adresse), jamais un motif à joker. Une @match de plus ou de moins échoue.
+    pokedata: Object.freeze({ nom: 'Rat-Market — Relevé passif pages de set', match: null, matchs: Object.freeze([...new Set(require('./pokedata').PAGES_A_OUVRIR.flatMap(u => [u, u.replace(/%27/g, "'")]))]), hotes: Object.freeze(['recepteur-pokedata.js']) })   // (matchs : les deux écritures de l'apostrophe, brute ou %27, selon le lien suivi)
 });
 const PROFIL_DEFAUT = 'collectorviper';
 const profilDe = p => { if (!Object.prototype.hasOwnProperty.call(PROFILS, p)) throw new Error(`profil « ${String(p)} » inconnu : ${Object.keys(PROFILS).join(', ')}`); return PROFILS[p]; };
@@ -25,7 +27,7 @@ const enteteAdmis = profil => Object.freeze({
     namespace: v => v === 'rat-market',
     version: v => v === '1.0',
     description: v => v !== '' && sansHote(v),
-    match: v => v === profil.match,
+    match: v => (profil.matchs ? profil.matchs.includes(v) : v === profil.match),
     grant: v => v === 'GM_xmlhttpRequest',
     connect: v => v === '127.0.0.1',
     'run-at': v => v === 'document-idle',
@@ -42,18 +44,20 @@ const IDENTIFIANTS_REFUSES = new Set(['window', 'self', 'top', 'parent', 'frames
 const CHAINES_REFUSEES = /^(fetch|src|srcset|href|sendBeacon|XMLHttpRequest|Worker|Audio|crossOrigin|innerHTML)$/;
 
 function violationsEntete(entete, nomProfil = PROFIL_DEFAUT) {
-    const ENTETE_ADMIS = enteteAdmis(profilDe(nomProfil));
-    const v = [], vues = [];
+    const profil = profilDe(nomProfil), ENTETE_ADMIS = enteteAdmis(profil);
+    const v = [], vues = [], matchsVus = [];
     for (const ligne of entete.split(/\r?\n/)) {
         const d = /^\/\/\s*@(\S+)(?:\s+(.*?))?\s*$/.exec(ligne);
         if (!d) { v.push(`en-tête : ligne qui n'est pas une directive « ${ligne.slice(0, 80)} »`); continue; }
         const [, cle, valeur = ''] = d;
         if (!Object.prototype.hasOwnProperty.call(ENTETE_ADMIS, cle)) { v.push(`en-tête : directive @${cle} hors de la liste fermée`); continue; }
-        if (vues.includes(cle)) v.push(`en-tête : @${cle} écrite deux fois`);
+        if (cle === 'match' && profil.matchs) { if (matchsVus.includes(valeur)) v.push(`en-tête : @match « ${valeur.slice(0, 80)} » écrite deux fois`); matchsVus.push(valeur); }   // (liste fermée : chaque page une fois)
+        else if (vues.includes(cle)) v.push(`en-tête : @${cle} écrite deux fois`);
         vues.push(cle);
         if (!ENTETE_ADMIS[cle](valeur)) v.push(`en-tête : valeur « ${valeur.slice(0, 80)} » non admise pour @${cle}`);
     }
     for (const cle of ['name', 'version', 'match', 'grant', 'connect', 'noframes']) if (!vues.includes(cle)) v.push(`en-tête : @${cle} absente`);
+    if (profil.matchs) for (const m of profil.matchs) if (!matchsVus.includes(m)) v.push(`en-tête : @match « ${m} » de la liste fermée absente`);
     return v;
 }
 

@@ -1,5 +1,5 @@
 // ============================================================
-// UNE PASSE D'IMPORT POUR GITHUB ACTIONS — le guide des prix (05:00 UTC) et le catalogue (12:15 UTC) Cardmarket (testeur, 2026-10-17)
+// UNE PASSE D'IMPORT POUR GITHUB ACTIONS — le guide des prix (dû dès 04:45 UTC, cron 04:47 + secours 06:47) et le catalogue (dû dès 12:15 UTC, cron 12:17 + secours 14:17) Cardmarket (testeur, 2026-10-17)
 // ============================================================
 //   node imports-cardmarket-ci.js [--import=guide|catalogue|auto]      (auto par défaut)
 // Ce fichier ne réécrit AUCUNE garde : il appelle `collecte-cartes/imports-quotidiens.js` (mêmes horaires, mêmes essais, même journal, mêmes

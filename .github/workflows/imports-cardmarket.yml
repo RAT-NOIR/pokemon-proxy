@@ -1,4 +1,6 @@
-# Les imports Cardmarket quotidiens (guide des prix 05:00 UTC, catalogue 12:15 UTC) — décision du testeur, 2026-10-17.
+# Les imports Cardmarket quotidiens (guide des prix 04:47 UTC, catalogue 12:17 UTC) — décision du testeur, 2026-10-17.
+# Minutes NON rondes (GitHub fait glisser les crons à l'heure pile : 4 h 20 de retard le 2026-10-18) et un passage de secours 2 h après
+# chacun (06:47, 14:17) : la MÊME passe `auto`, sans code propre — elle ne fait rien si l'import du jour est déjà en base (journal).
 # Appelle le MÊME module que l'ancien worker (collecte-cartes/imports-quotidiens.js) via imports-cardmarket-ci.js.
 # Un import en échec = job rouge = courriel GitHub au propriétaire. Secrets du dépôt : MONGODB_URI_IMPORTS, R2_BUCKET_BRUT,
 # R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID (aucune valeur dans ce fichier).
@@ -6,8 +8,10 @@ name: imports-cardmarket
 
 on:
   schedule:
-    - cron: '0 5 * * *'
-    - cron: '15 12 * * *'
+    - cron: '47 4 * * *'
+    - cron: '47 6 * * *'
+    - cron: '17 12 * * *'
+    - cron: '17 14 * * *'
   workflow_dispatch:
     inputs:
       import:

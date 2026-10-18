@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
+const { garderMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
 const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { ligne } = require('./collecte-cartes/table-sets');
@@ -139,6 +140,8 @@ function grouperParCarte(aEcrire, metaDe) {
         console.log(`   SETS TOUCHÉS ${Object.keys(setsTouches).length} : ${Object.entries(setsTouches).map(([k, d]) => `${d.code}=${k} (${d.fichesNouvelles} fiches nouvelles + ${d.rattachements} rattachements)`).join(' · ')}`);
         if (RAPPORT) { fs.writeFileSync(RAPPORT, JSON.stringify({ export: EXPORT, le: new Date().toISOString(), codes: CODES, denominateur: decisions.length, parCause, reperes: ctl, setsTouches, decisions }, null, 1)); console.log(`   rapport local écrit : ${RAPPORT}`); }
     }
+    // 🔴 LOT METAL : un produit en matière spéciale (table fermée) ne reçoit jamais la fiche de sa carte normale — la désignation par métacarte est exactement le chemin qui la lui donnerait
+    try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-par-metacarte'); } catch (e) { console.error(e.message); await fermer(); process.exit(1); }
     if (!ecrire || !aEcrire.length) { await fermer(); return; }
 
     const le = new Date();

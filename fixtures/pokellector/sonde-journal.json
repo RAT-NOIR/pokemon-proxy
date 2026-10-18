@@ -1,0 +1,80 @@
+{
+ "n": 8,
+ "images": 3,
+ "dernier": 1792268249535,
+ "arret": null,
+ "journal": [
+  {
+   "url": "https://www.pokellector.com/sets",
+   "status": 200,
+   "type": "text/html; charset=UTF-8",
+   "octets": 88378,
+   "location": null,
+   "server": "Apache/2.4.25 (CentOS) OpenSSL/1.0.1e-fips",
+   "cf": null
+  },
+  {
+   "url": "https://www.pokellector.com/Twilight-Masquerade-Expansion/",
+   "status": 200,
+   "type": "text/html; charset=UTF-8",
+   "octets": 206001,
+   "location": null,
+   "server": "Apache/2.4.25 (CentOS) OpenSSL/1.0.1e-fips",
+   "cf": null
+  },
+  {
+   "url": "https://www.pokellector.com/Twilight-Masquerade-Expansion/Fezandipiti-Card-96",
+   "status": 200,
+   "type": "text/html; charset=UTF-8",
+   "octets": 31957,
+   "location": null,
+   "server": "Apache/2.4.25 (CentOS) OpenSSL/1.0.1e-fips",
+   "cf": null
+  },
+  {
+   "url": "https://www.pokellector.com/Twilight-Masquerade-Expansion/Infernape-Card-173",
+   "status": 200,
+   "type": "text/html; charset=UTF-8",
+   "octets": 30201,
+   "location": null,
+   "server": "Apache/2.4.25 (CentOS) OpenSSL/1.0.1e-fips",
+   "cf": null
+  },
+  {
+   "url": "https://www.pokellector.com/ajax/views/card-overlay?cardid=54075",
+   "status": 200,
+   "type": "text/html; charset=UTF-8",
+   "octets": 953,
+   "location": null,
+   "server": "Apache/2.4.25 (CentOS) OpenSSL/1.0.1e-fips",
+   "cf": null
+  },
+  {
+   "url": "https://den-cards.pokellector.com/392/Fezandipiti.TWM.96.53249.png",
+   "status": 200,
+   "type": "image/png",
+   "octets": 814347,
+   "location": null,
+   "server": "BunnyCDN-FR1-1317",
+   "cf": null
+  },
+  {
+   "url": "https://den-cards.pokellector.com/392/Infernape.TWM.173.53319.png",
+   "status": 200,
+   "type": "image/png",
+   "octets": 898959,
+   "location": null,
+   "server": "BunnyCDN-FR1-1273",
+   "cf": null
+  },
+  {
+   "url": "https://den-cards.pokellector.com/392/Fezandipiti.TWM.96.54075.mobile.jpg",
+   "status": 200,
+   "type": "image/jpeg",
+   "octets": 46894,
+   "location": null,
+   "server": "BunnyCDN-FR1-1273",
+   "cf": null
+  }
+ ]
+}

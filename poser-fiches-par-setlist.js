@@ -14,6 +14,7 @@
 // ➕ REPRISE : les lignes déjà posées par cet outil (`preuve: 'metacarte+setlist'`) ne comptent ni comme « jointes » ni comme frères de métacarte
 // (pas de preuve circulaire) ; le plan est donc le même après un arrêt, les écritures sont idempotentes, et la relance achève cartes et impressions.
 require('dotenv').config();
+const { garderMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
 const { indexerMetacartes } = require('./collecte-cartes/cle-nom-attaques');
 const { lireSetlistDuSet, planDuSet } = require('./collecte-cartes/cle-setlist-metacarte');
 const { calibrer, verdict, imprimer, chargerExport, MINIMUMS } = require('./collecte-cartes/calibration-setlist-metacarte');
@@ -86,6 +87,8 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
             for (const x of P.impressions.values()) impressions.push({ carteId: x.d.carte._id, imp: { tirage: L.bulba.tirage, expansion, numero: x.d.numero, total: null, deck: null, rarete: null, source: 'setlist' } });
         }
         log(`\n   ${aEcrire.length} fiches, ${impressions.length} impressions${ecrire ? '' : ' — (simulation)'}`);
+        // 🔴 LOT METAL : un produit en matière spéciale (table fermée) ne reçoit jamais la fiche de sa carte normale : refus, même à blanc
+        try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-fiches-par-setlist'); } catch (e) { err(e.message); return 1; }
         if (!ecrire || !aEcrire.length) return 0;
 
         // ── l'écriture, ADDITIVE et idempotente ──

@@ -66,6 +66,8 @@ function langueDuVisuel(im) {
         : { langue: null, preuve: `pokumon, langue source « ${im.langueSource} » sans règle` };
     // ➕ 2026-10-17 (PKMCOM-IMPORT) — pokemon.com (relevés passifs du testeur) : la langue est DÉCLARÉE par le nom du fichier servi (« …_EN_… ») ; l'adresse doit être valable (require paresseux : pas de cycle)
     if (im.source === 'pokemon.com') return require('./pokemoncom').langueDe(im.urlOriginal);
+    // ➕ 2026-10-17 (POKEDATA) — visuels pleine taille d'un set déclaré ANGLAIS par la source : la langue est portée par `langueSource: 'en'`, l'adresse doit être valable ; la preuve ne nomme pas l'hôte
+    if (im.source === 'pdt') return require('./pokedata').langueDe(im.urlOriginal, im.langueSource);
     // ➕ 2026-10-17 (PKMNCARDS) — source « pkc » : des scans de cartes ANGLAISES (le set est celui d'un tirage occidental, vérifié par la table fermée de collecte-cartes/pkmncards.js et par la
     // concordance set + numéro + nom de chaque carte). Par ce qu'elle AUTORISE : l'adresse d'origine doit être valable (require paresseux : pas de cycle) ; la preuve est PUBLIQUE et ne nomme ni la source ni l'hôte.
     if (im.source === 'pkc') return require('./pkmncards').urlImageValide(im.urlOriginal)

@@ -1,0 +1,340 @@
+// node test-collecteur-pokedata.js — le collecteur (collecteur-images-pokedata.js) en phases, le retrait et les gardes.
+// Aucune requête (transport simulé ; global.fetch REMPLACÉ par un piège qui lève), aucune base réelle (base en mémoire), aucun R2 (faux dépôt), dossiers TEMPORAIRES
+// (jamais un vrai chemin du testeur). Ce que le banc garde :
+//   · TÉLÉCHARGER (images ET pages) : seules les adresses valables ; robots.txt d'abord ; cadence ≥ 5 s ; plafond ; 401/403/410/429/défi/HTML/3xx/octets inattendus => ARRÊT DÉFINITIF
+//     (fichier d'arrêt, relance refusée) ; 404 => absent ; 5xx / coupure => interrompu sans arrêt ; dos de carte et forme inattendue refusés ;
+//   · ÉCRIRE : depuis le cache seulement, additif, clé R2 neutre, traçabilité, seuil 350, --attendu, remplacement derrière --remplacer, aucun champ public avec « pokedata » ;
+//   · RETIRER : toute la source, en une commande, à blanc par défaut.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const sharp = require('sharp');
+// 🔑 POKEDATA-SUITE : le dossier des arrêts d'hôtes de la règle commune (reponse-hote.js) pointe un dossier TEMPORAIRE pour tout le banc, avant le premier require (jamais le vrai dossier du coordinateur)
+process.env.ARRETS_HOTES_DOSSIER = fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-arrets-hotes-'));
+const RH = require('./collecte-cartes/reponse-hote');
+const P = require('./collecte-cartes/pokedata');
+const C = require('./collecteur-images-pokedata');
+const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
+
+let ok = 0, ko = 0;
+const verifier = (nom, obtenu, attendu) => {
+    const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
+    if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
+};
+const silencieux = () => { const l = console.log, w = console.warn, e = console.error; console.log = console.warn = console.error = () => { }; return () => { console.log = l; console.warn = w; console.error = e; }; };
+
+function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
+    const cols = new Map();
+    const col = n => cols.get(n) || cols.set(n, new Map()).get(n);
+    const lire = (o, k) => k.split('.').reduce((x, p) => Array.isArray(x) && !/^\d+$/.test(p) ? x.flatMap(e => e?.[p]) : x?.[p], o);
+    const ecrireChamp = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
+    const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+        ? ('$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
+        : (x => Array.isArray(x) ? x.includes(v) : x === v)(lire(d, k)));
+    const appliquer = (d, u) => {
+        for (const [k, v] of Object.entries(u.$set || {})) ecrireChamp(d, k, v);
+        for (const k of Object.keys(u.$unset || {})) delete d[k];
+        for (const [k, v] of Object.entries(u.$pull || {})) d[k] = (d[k] || []).filter(e => !accepte(e, v));
+        for (const [k, v] of Object.entries(u.$push || {})) (d[k] ??= []).push(...(v.$each || [v]));
+    };
+    const tous = (n, f) => [...col(n).values()].filter(d => accepte(d, f));
+    const collection = n => ({
+        async findOne(f) { return structuredClone(tous(n, f)[0] ?? null); },
+        find(f) { return { toArray: async () => structuredClone(tous(n, f)) }; },
+        async countDocuments(f) { return tous(n, f).length; },
+        async updateOne(f, u, o = {}) {
+            let d = tous(n, f)[0];
+            if (!d) { if (!o.upsert) return { matchedCount: 0, modifiedCount: 0 }; d = { _id: f._id, ...(u.$setOnInsert || {}) }; col(n).set(d._id, d); }
+            appliquer(d, u); return { matchedCount: 1, modifiedCount: 1 };
+        }
+    });
+    const db = { collection, async command(c) { if (c.dbStats) return { dataSize, indexSize }; throw new Error(`commande inattendue ${JSON.stringify(c)}`); } };
+    const modele = n => ({
+        db: { db },
+        findById: id => ({ select: () => ({ lean: async () => structuredClone(col(n).get(id) ?? null) }) }),
+        find: f => ({ lean: async () => structuredClone(tous(n, f)) }),
+        updateOne: (f, u, o) => collection(n).updateOne(f, u, o)
+    });
+    return { cols, col, db, M: { Carte: modele('cartes'), Image: modele('images'), Set: modele('sets'), EtatImages: modele('collecte_images_etat') } };
+}
+
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-banc-'));
+const IMG = (set, f) => `https://pokemoncardimages.pokedata.io/images/${set}/${f}`;
+const SLUG = 'Trick-or-Trade-2024';
+
+(async () => {
+    const webp = (w, h = Math.round(w * 1000 / 728)) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 30, g: 120, b: 200 } } }).webp().toBuffer();
+    const grand = await webp(728), petit = await webp(200), moyen = await webp(300), carre = await webp(728, 728);
+    const FIXE = tmp(); C.fixerDossierArret(FIXE);          // l'emplacement FIXE de l'arrêt pointe un dossier temporaire pour tout le banc (jamais le vrai cache du testeur)
+    const fetchOrigine = global.fetch, vusFetch = [];
+    global.fetch = async (u, init) => { vusFetch.push([String(u), init]); throw new Error('réseau interdit dans le banc'); };
+
+    const defs = [[1, 'Mimikyu', '037a', '037'], [2, 'Gengar', '057', '057'], [3, 'Pikachu', '018', '018'], [4, 'Darkrai', '136', '136']];
+    const plan = defs.map(([id, nom, rel, num], i) => ({ carteId: id, nomEn: nom, slugSet: SLUG, numero: null, produits: [900 + i], ligne: 'Trick or Trade 2024', numeroReleve: rel, url: IMG('Trick+or+Trade+2024', `${rel}.webp`), voie: 'set+numero-du-slug+nom', preuve: `${rel}`, genre: 'ajout', releve: 'releve--x.json' }));
+    plan[0].correspondance = { relevee: '037a', fiche: '37', preuve: 'banc' };          // « 037a » lue 37 (preuve dans le plan) : le numéro D'ÉCRITURE est 37
+    const cartes = plan.map(p => ({ set: 'Trick or Trade 2024', numero: p.numeroReleve, nom: p.nomEn, img: p.url }));
+
+    // ── 1. les adresses autorisées ───────────────────────────────────────────────────────────────────────────────────────
+    const aut = C.urlsAutorisees([...plan, { ...plan[0], url: IMG('Trick+or+Trade+2024', '999.webp') }, { ...plan[0], url: IMG('Trick+or+Trade+2024', '037a_240w.webp') }, { ...plan[0], url: 'https://autre.example/x.webp' }], cartes);
+    verifier('adresses : celles du plan présentes mot pour mot dans le relevé passent ; hors relevé, _240w et autre hôte sont refusées et nommées', [aut.ok.length, aut.refusees.map(r => r.motif)], [4, ['hors-releve', 'adresse-hors-regle', 'adresse-hors-regle']]);
+
+    // ── 2. TÉLÉCHARGER ───────────────────────────────────────────────────────────────────────────────────────────────────
+    const reseau = rep => { try { fs.unlinkSync(C.fichierArret(FIXE)); } catch { /* aucun arrêt fixe posé */ } const appels = [];      // (chaque scénario repart sans arrêt fixe)
+         return { appels, async get(url, o) { appels.push(url); return rep(url, o); } }; };
+    const estRobots = u => /\/robots\.txt$/.test(u);
+    const robotsLibre = { status: 404, type: 'application/xml', texte: '<Error>NoSuchKey</Error>' };       // l'hôte d'images : 404, aucune règle
+    const normal = (url) => estRobots(url) ? robotsLibre : { status: 200, type: 'image/webp', octets: grand };
+    const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, attentes }; };
+    const dpHotes = () => tmp();                                       // un dossier d'arrêts d'hôtes NEUF par lancement (sauf si le scénario passe le sien)
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, dossierPauses: dpHotes(), suivi: RH.suiviHote(), ...o });
+    const urls = plan.map(p => p.url);
+
+    let d = tmp(), h = horloge(), tr = reseau(normal);
+    let r = await lancer(urls, tr, d, h);
+    verifier('télécharger : robots.txt de l\'hôte d\'images D\'ABORD, puis les 4 images — 5 requêtes, plafond 4 + 1', [tr.appels[0], tr.appels.length, r.plafond, r.etat], ['https://pokemoncardimages.pokedata.io/robots.txt', 5, 5, 'termine']);
+    verifier('cadence : jamais moins de 5 s entre deux requêtes', [h.attentes.length >= 4 && h.attentes.every(ms => ms >= 5000)], [true]);
+    { const h0 = horloge(), t0 = reseau(normal); await lancer(urls, t0, tmp(), h0, { cadenceMs: 0 }); verifier('cadence : un réglage à 0 est RELEVÉ à 5 s', [h0.attentes.length, h0.attentes.every(ms => ms >= 5000)], [4, true]); }
+    { const tp = reseau(normal), rp = await lancer(urls, tp, tmp(), horloge(), { plafond: 3 }); verifier('plafond : à 3 requêtes le téléchargement s\'arrête, sans fichier d\'arrêt', [rp.etat, tp.appels.length], ['interrompu', 3]); }
+    const idx = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8'));
+    verifier('cache : une entrée par adresse (fichier, sha256, 728 de large, .webp)', [Object.keys(idx.images).length, Object.values(idx.images).every(e => e.statut === 'ok' && e.w === 728 && /^[0-9a-f]{64}$/.test(e.sha256) && /\.webp$/.test(e.fichier) && fs.existsSync(path.join(d, e.fichier)))], [4, true]);
+    tr = reseau(normal); r = await lancer(urls, tr, d);
+    verifier('reprise : tout est en cache => zéro requête', [r.etat, tr.appels.length], ['rien-a-faire', 0]);
+    d = tmp(); tr = reseau(u => estRobots(u) ? { status: 200, type: 'text/plain', texte: 'User-agent: *\nDisallow: /images/\n' } : normal(u));
+    r = await lancer(urls, tr, d);
+    verifier('robots.txt qui interdit : aucune image demandée, « robots-interdit », pas de fichier d\'arrêt', [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['robots-interdit', 1, false]);
+    d = tmp(); tr = reseau(normal);
+    r = await lancer(['https://autre.example/x.webp', IMG('Trick+or+Trade+2024', '037a_240w.webp'), 'https://pokemoncardimages.pokedata.io/api/cards/1.webp', IMG('Trick+or+Trade+2024', '037a.webp') + '?x=1'], tr, d);
+    verifier('adresse hors règle (autre hôte, _240w, API, paramètre) : refusée AVANT toute requête, même pas robots.txt', [r.etat, tr.appels.length, r.refusees.length], ['rien-a-faire', 0, 4]);
+
+    const defis = [['401', () => ({ status: 401, type: 'text/html', texte: 'non' })], ['403', () => ({ status: 403, type: 'text/html', texte: 'non' })], ['410', () => ({ status: 410, type: 'text/html', texte: 'parti' })], ['429', () => ({ status: 429, type: 'text/html', texte: 'non' })],
+        ['HTML avec marqueur « Just a moment »', () => ({ status: 200, type: 'text/html', texte: '<html>Just a moment</html>' })], ['cf-mitigated', () => ({ status: 200, type: 'image/webp', octets: grand, cfMitigated: 'challenge' })],
+        ['Imperva avec un corps qui n\'est pas une image', () => ({ status: 200, type: 'text/html', texte: '<html>bienvenue</html>', imperva: true })], ['503 avec un défi', () => ({ status: 503, type: 'text/html', texte: '<html>Just a moment</html>' })],
+        ['marqueur cf-chl', () => ({ status: 200, type: 'text/html', texte: '<script src="/cdn-cgi/challenge-platform/h/b/orchestrate/cf-chl-opt"></script>' })], ['403 à corps vide', () => ({ status: 403, type: '', texte: '' })],
+        ['403 dont le corps est une image', () => ({ status: 403, type: 'image/webp', octets: grand })], ['429 à corps vide', () => ({ status: 429 })], ['connexion obligatoire (corps « sign in »)', () => ({ status: 200, type: 'text/html', texte: '<html>Please sign in to continue, captcha</html>' })]];
+    for (const [nom, rep] of defis) {
+        d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : rep());
+        r = await lancer(urls, tr, d);
+        verifier(`défi (${nom}) : ARRÊT DÉFINITIF dès la première image (robots + 1 image), fichier d'arrêt écrit`, [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['arret-definitif', 2, true]);
+        tr = reseau(normal); const r2 = await lancer(urls, tr, d);
+        verifier('   le lancement suivant REFUSE de partir tant que le fichier existe (zéro requête)', [r2.etat, tr.appels.length], ['refuse-arret', 0]);
+    }
+    d = tmp(); tr = reseau(u => estRobots(u) ? { status: 403, type: 'text/html', texte: 'non' } : normal(u)); r = await lancer(urls, tr, d);
+    verifier('robots.txt en 403 : arrêt définitif, une seule requête', [r.etat, tr.appels.length], ['arret-definitif', 1]);
+    d = tmp(); tr = reseau(u => estRobots(u) ? { status: 404, type: 'text/html', texte: '<html><title>Just a moment...</title></html>' } : normal(u)); r = await lancer(urls, tr, d);
+    verifier('robots.txt 404 AVEC marqueur de défi : arrêt définitif', [r.etat, tr.appels.length], ['arret-definitif', 1]);
+    d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : /136/.test(u) ? { status: 404, type: 'text/html', texte: '<Error>NoSuchKey</Error>' } : { status: 200, type: 'image/webp', octets: grand });
+    r = await lancer(urls, tr, d);
+    verifier('404 : « absent », les autres continuent, pas d\'arrêt', [r.etat, JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images[plan[3].url]?.statut, fs.existsSync(C.fichierArret(d))], ['termine', 'absent', false]);
+    d = tmp(); let n = 0; tr = reseau(u => estRobots(u) ? robotsLibre : (++n === 2 ? { status: 503, type: 'text/html', texte: 'x' } : { status: 200, type: 'image/webp', octets: grand }));
+    r = await lancer(urls, tr, d);
+    verifier('5xx : « interrompu » sans fichier d\'arrêt, pas de réessai', [r.etat, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['interrompu', 3, false]);
+    d = tmp(); tr = reseau(u => { if (estRobots(u)) return robotsLibre; throw Object.assign(new Error('ECONNRESET'), { reseau: true }); }); r = await lancer(urls, tr, d);
+    verifier('coupure réseau : « interrompu », pas d\'arrêt définitif', [r.etat, fs.existsSync(C.fichierArret(d))], ['interrompu', false]);
+    // ── POKEDATA-SUITE : la RÈGLE COMMUNE de réponse d'hôte (collecte-cartes/reponse-hote.js) — un test par cas, faux transport, aucune requête réelle ──
+    const HOTE_IMG = P.HOTE_IMAGES, introuvable = { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' };
+    d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : /136/.test(u) ? introuvable : { status: 200, type: 'image/webp', octets: grand });
+    r = await lancer(urls, tr, d);
+    { const e = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images[plan[3].url];
+      verifier('200 text/html SANS marqueur de défi = fausse page introuvable : ABSENTE (empreinte gardée), les autres continuent, aucun arrêt', [r.etat, e?.statut, /^[0-9a-f]{64}$/.test(e?.empreinte || ''), fs.existsSync(C.fichierArret(d)), tr.appels.length], ['termine', 'fausse-absente', true, false, 5]); }
+    d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : introuvable);
+    { const dpX = dpHotes(); r = await lancer(urls, tr, d, horloge(), { dossierPauses: dpX });
+      verifier('une fausse page introuvable ne pose PAS d\'arrêt durable de l\'hôte', [RH.hoteArrete(HOTE_IMG, dpX)], [null]); }
+    { const beaucoup = Array.from({ length: 25 }, (_, i) => IMG('Trick+or+Trade+2024', `${String(i + 1).padStart(3, '0')}.webp`));
+      d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : introuvable); const dpP = dpHotes();
+      r = await lancer(beaucoup, tr, d, horloge(), { dossierPauses: dpP });
+      verifier('plus de 20 fausses absences d\'affilée : PAUSE de l\'hôte (21e), note au rapport, aucun arrêt définitif, plus aucune requête', [r.etat, tr.appels.length, r.pauseHote?.persistante, r.reponsesHotes?.[0]?.fausses, fs.existsSync(C.fichierArret(d)), RH.hoteArrete(HOTE_IMG, dpP)], ['pause-hote', 22, false, 21, false, null]);
+      d = tmp(); let k = 0; tr = reseau(u => estRobots(u) ? robotsLibre : (++k % 21 === 0 ? { status: 200, type: 'image/webp', octets: grand } : introuvable));
+      r = await lancer(beaucoup, tr, d);
+      verifier('une image entre deux séries de 20 remet le compteur à zéro : pas de pause', [r.etat], ['termine']); }
+    for (const [nom, rep, issue] of [['redirection 302', { status: 302, location: 'https://autre.example/x' }, 'inattendue'], ['200 JSON', { status: 200, type: 'application/json', texte: '{}' }, 'inattendue'], ['octets qui ne sont pas un WebP sans marqueur', { status: 200, type: 'image/webp', octets: Buffer.from('<html>bonjour</html>') }, 'inattendue'], ['200 sans Content-Type', { status: 200, texte: 'x' }, 'inattendue']]) {
+        d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : rep); r = await lancer(urls, tr, d);
+        verifier(`inattendue (${nom}) : PAUSE de l'hôte, pas un arrêt définitif, aucun fichier d'arrêt (robots + 1 image)`, [r.etat, r.pauseHote?.issue, tr.appels.length, fs.existsSync(C.fichierArret(d))], ['pause-hote', issue, 2, false]);
+    }
+    { const dpD = dpHotes(); d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : { status: 403, type: 'text/html', texte: 'non' });
+      r = await lancer(urls, tr, d, horloge(), { dossierPauses: dpD });
+      const a = RH.hoteArrete(HOTE_IMG, dpD);
+      verifier('défi : l\'ARRÊT DURABLE du module est posé pour l\'hôte (nature arret-definitif, motif, adresse)', [r.etat, a?.nature, /403/.test(a?.motif || ''), typeof a?.url], ['arret-definitif', 'arret-definitif', true, 'string']);
+      const tr2 = reseau(normal), dNeuf = tmp(); fs.rmSync(C.fichierArret(FIXE), { force: true });
+      const r2 = await lancer(urls, tr2, dNeuf, horloge(), { dossierPauses: dpD });
+      verifier('   un autre dossier de cache NE contourne PAS l\'arrêt durable : refusé, zéro requête (pas même robots.txt)', [r2.etat, tr2.appels.length], ['refuse-arret', 0]); }
+    { const dpR = dpHotes(); d = tmp(); tr = reseau(u => estRobots(u) ? { status: 429, type: 'text/html', texte: '' } : normal(u));
+      r = await lancer(urls, tr, d, horloge(), { dossierPauses: dpR });
+      verifier('robots.txt en 429 : arrêt définitif durable aussi (une requête)', [r.etat, tr.appels.length, RH.hoteArrete(HOTE_IMG, dpR)?.nature], ['arret-definitif', 1, 'arret-definitif']); }
+    { d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : { status: 200, type: 'text/html', texte: '<nav>Gym Heroes · Gym Challenge</nav>' }); const dpA = dpHotes();
+      r = await lancer(urls, tr, d, horloge(), { dossierPauses: dpA });
+      verifier('le mot « challenge » seul = ambiguë : pause PERSISTANTE, pas d\'arrêt définitif', [r.etat, r.pauseHote?.persistante, fs.existsSync(C.fichierArret(d)), tr.appels.length], ['pause-hote', true, false, 2]);
+      tr = reseau(normal); const r3 = await lancer(urls, tr, d, horloge(), { dossierPauses: dpA });
+      verifier('   tant que la pause persistante tient : AUCUNE requête', [r3.etat, tr.appels.length], ['pause-hote', 0]); }
+    { const png = await sharp({ create: { width: 728, height: 1000, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png().toBuffer();
+      d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : { status: 200, type: 'image/png', octets: png }); r = await lancer(urls, tr, d);
+      verifier('une vraie image qui n\'est pas un WebP : jamais au cache, PAUSE de l\'hôte (inattendue), aucun arrêt définitif', [r.etat, r.pauseHote?.issue, fs.existsSync(path.join(d, 'index.json')) ? Object.keys(JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images).length : 0, fs.existsSync(C.fichierArret(d))], ['pause-hote', 'inattendue', 0, false]); }
+    d = tmp(); tr = reseau(normal); const hRobots = horloge(); await lancer(urls, tr, d, hRobots);
+    verifier('robots.txt d\'abord ; un seul flux ; ≥ 5 s entre deux requêtes (règle conservée)', [tr.appels[0], hRobots.attentes.every(ms => ms >= 5000)], ['https://pokemoncardimages.pokedata.io/robots.txt', true]);
+    // 404 : empreinte absente (un vrai 404 n'est pas une fausse absence)
+    d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : /136/.test(u) ? { status: 404, type: 'text/html', texte: '<Error>NoSuchKey</Error>' } : { status: 200, type: 'image/webp', octets: grand }); await lancer(urls, tr, d);
+    verifier('un vrai 404 reste « absent » (statut absent, pas fausse-absente)', JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images[plan[3].url]?.statut, 'absent');
+    // M4 : une fausse absence n'est pas un absent définitif (redemandée une fois, pas avant 24 h)
+    { const hM = horloge(), mk = f => reseau(u => estRobots(u) ? robotsLibre : (f(u) ?? { status: 200, type: 'image/webp', octets: grand })); const fausse136 = u => (/136/.test(u) ? introuvable : null);
+      const dM = tmp(); await lancer(urls, mk(fausse136), dM, hM);
+      const e1 = JSON.parse(fs.readFileSync(path.join(dM, 'index.json'), 'utf8')).images[plan[3].url];
+      const tM = mk(fausse136); const rM = await lancer(urls, tM, dM, hM);
+      verifier('une fausse absence n\'est PAS redemandée avant 24 h : rien à faire, zéro requête', [e1.statut, e1.n, rM.etat, tM.appels.length], ['fausse-absente', 1, 'rien-a-faire', 0]);
+      const hM2 = { ...hM, now: () => hM.now() + 25 * 3600 * 1000 }; const tM2 = mk(fausse136); const rM2 = await lancer(urls, tM2, dM, hM2);
+      verifier('25 h plus tard : redemandée UNE fois (robots + 1) ; une SECONDE fausse absence la rend définitive (absent, secondeFois)', [rM2.etat, tM2.appels.length, JSON.parse(fs.readFileSync(path.join(dM, 'index.json'), 'utf8')).images[plan[3].url]].map((x, i) => i === 2 ? [x.statut, x.secondeFois] : x), ['termine', 2, ['absent', true]]); }
+    // le collecteur n'a PLUS sa propre décision : la règle commune seule
+    { const src = fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8').replace(/(^|\s)\/\/.*$/gm, '$1');
+      verifier('le collecteur appelle le module commun (traiterImage, garderHote, arretHote) et ne porte plus sa décision ni sa liste de marqueurs', [/RH\.traiterImage\(/.test(src), /RH\.garderHote\(/.test(src), /RH\.arretHote\(/.test(src), /jugerReponse|estDefi|MARQUEUR_DE_DEFI/.test(src), 'jugerReponse' in C], [true, true, true, false, false]); }
+
+    // le dos de carte et la forme inattendue : refusés, on continue, rien dans le cache
+    const dos = fs.readFileSync(path.join(__dirname, 'fixtures', 'dos-de-carte-serveur-images.png'));
+    d = tmp(); tr = reseau(u => estRobots(u) ? robotsLibre : /037a/.test(u) ? { status: 200, type: 'image/png', octets: dos } : /057/.test(u) ? { status: 200, type: 'image/webp', octets: carre } : /018/.test(u) ? { status: 200, type: 'image/webp', octets: petit } : { status: 200, type: 'image/webp', octets: grand });
+    r = await lancer(urls, tr, d);
+    const ix = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
+    verifier('dos de carte (empreinte) et image carrée : REFUSÉS (statuts nommés, rien en cache) ; une petite image de forme juste est gardée (le seuil se juge à l\'écriture) ; pas d\'arrêt', [r.etat, plan.map(p => ix[p.url]?.statut), fs.existsSync(C.fichierArret(d))], ['termine', ['dos-de-carte', 'forme-inattendue', 'ok', 'ok'], false]);
+
+    // 🔴 CORRECTION 3 : AUCUNE page de set ne s'ouvre — le relevé est PASSIF, au clic ; plus de genre « page », plus de --releve
+    verifier('le client ne connaît que le genre « image » ; telecharger refuse tout autre genre ; plus de lecteur de pages', [Object.keys(C.GENRES), 'releverDepuisPages' in C, await C.telecharger({ urls: [P.urlPageDuSet('Trick or Trade 2024')], dossierCache: tmp(), genre: 'page', transport: reseau(normal) }).then(() => 'a-demande', e => /genre inconnu/.test(e.message) ? 'refuse' : e.message)], [['image'], false, 'refuse']);
+    { vusFetch.length = 0; let e1 = null; try { await C.transportFetch.get(P.urlPageDuSet('Trick or Trade 2024'), { genre: 'page' }); } catch (e) { e1 = e; }
+      verifier('transport réel : une adresse de page de set est refusée AVANT fetch (zéro requête)', [!!e1, vusFetch.length], [true, 0]);
+      const srcC = fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8').replace(/(^|\s)\/\/.*$/gm, '$1');
+      verifier('le collecteur ne cite plus ni l\'hôte des pages, ni urlPageValide, ni urlPageDuSet, ni un genre « page »', [/HOTE_PAGES|urlPageValide|urlPageDuSet|genre === 'page'|genre: 'page'|--releve(?!s)/.test(srcC)], [false]); }
+    // les gardes de chemin du collecteur (mêmes que le récepteur) : --cache, --releves, --sortie
+    { const ok2 = (() => { try { C.verifierChemins({ cache: path.join(os.tmpdir(), 'c1'), releves: path.join(os.tmpdir(), 'r1'), sortie: path.join(os.tmpdir(), 'p', 'plan.json') }, { racine: os.tmpdir() }); return 'accepte'; } catch (e) { return e.message; } })();
+      verifier('chemins : sous la racine, hors dépôt, hors apports => acceptés', ok2, 'accepte');
+      const motif = (chemins, racine) => { try { C.verifierChemins(chemins, { racine }); return ''; } catch (e) { return e.message; } };
+      verifier('chemins : --sortie est un FICHIER — c\'est son dossier qui est jugé (un fichier nommé comme un dossier d\'apports, dans un dossier permis, passe)', motif({ sortie: path.join(os.tmpdir(), 'ok', 'apport-manuel') }, os.tmpdir()), '');
+      verifier('chemins : --cache dans le dépôt => refusé', /dépôt/.test(motif({ cache: path.join(__dirname, 'x') }, __dirname)), true);
+      verifier('chemins : --releves hors de la racine => refusé', /racine autorisée/.test(motif({ releves: path.join(os.tmpdir(), 'ailleurs') }, path.join(os.tmpdir(), 'racine-autre'))), true);
+      verifier('chemins : --sortie (fichier) hors de la racine => refusé', /racine autorisée/.test(motif({ sortie: path.join(os.tmpdir(), 'ailleurs', 'plan.json') }, path.join(os.tmpdir(), 'racine-autre'))), true);
+      verifier('chemins : un dossier d\'apports manuels => refusé', /apports manuels/.test(motif({ cache: path.join(os.tmpdir(), 'apport-manuel', 'c') }, os.tmpdir())), true);
+      verifier('chemins : une traversée (..) qui sort de la racine => refusée', /racine autorisée/.test(motif({ cache: path.join(os.tmpdir(), 'a', '..', '..', 'evade') }, path.join(os.tmpdir(), 'a'))), true);
+      const { spawnSync } = require('child_process');
+      for (const opt of ['cache', 'releves', 'sortie']) { const x = spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), '--plan', `--${opt}=${path.join(os.tmpdir(), 'hors-racine', 'x')}`], { encoding: 'utf8', timeout: 60000, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+        verifier(`CLI --${opt}=<hors racine> : refus (code 2) avant toute connexion, message « racine autorisée »`, [x.status, /racine autorisée/.test(x.stderr || '')], [2, true]); } }
+
+    // le CLI : sortie propre, arguments inconnus refusés avant toute connexion
+    verifier('le CLI ne contient AUCUN process.exit( (process.exitCode seulement)', /process\.exit\(/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8')), false);
+    { const { spawnSync } = require('child_process'); const dos2 = tmp();
+      const cli = a => spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), ...a], { encoding: 'utf8', cwd: dos2, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+      for (const a of [['--inconnu'], ['--plan', '--ecrire'], ['--ecrire'], ['--attendu=3'], ['--telecharger', '--sets=../x']]) { const m = cli(a); verifier(`CLI ${a.join(' ')} : code 2 propre, refus avant toute connexion`, [m.status, /argument inconnu|un seul mode|exige/.test(m.stderr || ''), /Assertion failed/.test(m.stderr || '')], [2, true, false]); }
+      fs.mkdirSync(path.join(dos2, 'cache')); fs.writeFileSync(path.join(dos2, 'plan.json'), JSON.stringify({ plan: [], remplacements: [], setsAReleve: [] })); fs.writeFileSync(path.join(dos2, 'cache', 'ARRET-DEFINITIF.json'), '{}');
+      const m = cli(['--telecharger', `--cache=${path.join(dos2, 'cache')}`, `--sortie=${path.join(dos2, 'plan.json')}`, `--releves=${path.join(dos2, 'rel')}`]);
+      verifier('CLI --telecharger avec un --cache hors racine : code 2 propre (la garde de chemin passe avant le fichier d\'arrêt)', [m.status, /Assertion failed/.test(m.stderr || ''), /racine autorisée/.test(m.stderr || '')], [2, false, true]); }
+
+    // le transport RÉEL : agent honnête seul, redirection jamais suivie, garde de l'hôte avant fetch
+    vusFetch.length = 0; let err = null;
+    try { await C.transportFetch.get(plan[0].url, { genre: 'image', binaire: true }); } catch (e) { err = e; }
+    verifier('transport réel : en-têtes = l\'agent du dépôt seul, redirect « manual », aucun cookie', [vusFetch.length, Object.keys(vusFetch[0]?.[1]?.headers || {}), vusFetch[0]?.[1]?.redirect, vusFetch[0]?.[1]?.credentials ?? null], [1, ['User-Agent'], 'manual', null]);
+    for (const u of ['https://autre.example/x.webp', 'https://www.pokedata.io/api/sets', 'https://pokemoncardimages.pokedata.io/images/Trick+or+Trade+2024/037a_240w.webp']) {
+        vusFetch.length = 0; err = null; try { await C.transportFetch.get(u, { genre: 'image' }); } catch (e) { err = e; }
+        verifier(`transport réel : ${u.slice(8, 60)}… refusé AVANT fetch`, [!!err, vusFetch.length], [true, 0]);
+    }
+    vusFetch.length = 0; err = null; try { await C.transportFetch.get(IMG('Trick+or+Trade+2024', '037a.webp'), { genre: 'page' }); } catch (e) { err = e; }
+    verifier('transport réel : une adresse d\'image demandée comme PAGE est refusée avant fetch', [!!err, vusFetch.length], [true, 0]);
+
+    // ── 2 bis. CORRECTION 2 : aucune adresse ne se construit ; la décision sur une réponse est UNE fonction ; l'arrêt a un emplacement FIXE ─────────
+    { const src = fs.readFileSync(path.join(__dirname, 'collecteur-images-pokedata.js'), 'utf8').replace(/(^|\s)\/\/.*$/gm, '$1');
+      verifier('le collecteur n\'exporte ni ne contient aucun chemin de construction ni d\'échantillon d\'adresses construites', ['sonderEchantillon', 'tauxDeReponse', 'choisirEchantillon', 'construire'].filter(k => k in C || src.includes(k)), []);
+      const { spawnSync } = require('child_process'); const dosC = tmp();
+      const cliC = a => spawnSync(process.execPath, [path.join(__dirname, 'collecteur-images-pokedata.js'), ...a], { encoding: 'utf8', cwd: dosC, env: { ...process.env, NODE_PATH: process.env.NODE_PATH } });
+      for (const a of [['--releve'], ['--releve', '--plan'], ['--construire'], ['--sonde-echantillon=20'], ['--plan', '--construit'], ['--telecharger', '--construit'], ['--produits=x'], ['--plan-construit=x']]) { const x = cliC(a); verifier(`CLI ${a.join(' ')} : refusé (code 2), aucune connexion`, [x.status, /argument inconnu/.test(x.stderr || '')], [2, true]); } }
+    // (la décision sur une réponse vit désormais dans collecte-cartes/reponse-hote.js : voir les cas « POKEDATA-SUITE » plus haut)
+    // l'emplacement FIXE de l'arrêt : un autre --cache ne contourne pas
+    { const fixe = FIXE; const autreCache = tmp(), t = reseau(normal); fs.writeFileSync(C.fichierArret(fixe), '{}');
+      const rf = await lancer(urls, t, autreCache);
+      verifier('arrêt à emplacement FIXE : un fichier d\'arrêt à l\'endroit fixe refuse un téléchargement dans un AUTRE dossier de cache (zéro requête)', [rf.etat, t.appels.length], ['refuse-arret', 0]);
+      const t2 = reseau(u => (estRobots(u) ? robotsLibre : { status: 403, type: 'text/html', texte: 'non' }));
+      const autre2 = tmp(); const r2 = await lancer(urls, t2, autre2);
+      verifier('un vrai défi écrit l\'arrêt AUSSI à l\'emplacement fixe (le dossier de travail et le fixe)', [r2.etat, fs.existsSync(C.fichierArret(autre2)), fs.existsSync(C.fichierArret(fixe))], ['arret-definitif', true, true]);
+    }
+    // la planche étiquetée : la vignette + le set / numéro de la source / nom de NOTRE fiche (images posées en cache, aucune requête)
+    { const dP = tmp(); const set20 = ['Trick+or+Trade+2024', 'Pitch+Black', 'Chaos+Rising', 'Stellar+Crown'];
+      const echant = Array.from({ length: 20 }, (_, i) => ({ carteId: 500 + i, nomEn: `Carte ${i}`, slugSet: `S${i % 4}`, ligne: set20[i % 4].replace(/\+/g, ' '), numeroReleve: String(i + 1).padStart(3, '0'), url: IMG(set20[i % 4], `${String(i + 1).padStart(3, '0')}.webp`) }));
+      await lancer(echant.map(u => u.url), reseau(normal), dP);
+      const pl = await C.fabriquerPlancheEtiquetee({ dossierCache: dP, echantillon: echant, sortie: path.join(dP, 'planche.png') });
+      const mp = await sharp(path.join(dP, 'planche.png')).metadata();
+      verifier('planche étiquetée : 20 vignettes, 5 par rang, une bande d\'étiquette sous chacune', [pl.images, mp.width, mp.height > 4 * 330], [20, 1200, true]);
+      verifier('planche étiquetée : les étiquettes portent set, numéro de la source et nom de NOTRE fiche', pl.etiquettes.every(e => /Carte \d+/.test(e.ligne2) && /^[A-Za-z0-9 ']+ \d{3}$/.test(e.ligne1)), true); }
+
+    // ── 3. ÉCRIRE : depuis le cache seulement ───────────────────────────────────────────────────────────────────────────────
+    process.env.R2_BUCKET_IMAGES = 'bucket-banc';
+    const dc = tmp();
+    await lancer(urls, reseau(u => estRobots(u) ? robotsLibre : /136/.test(u) ? { status: 200, type: 'image/webp', octets: moyen } : { status: 200, type: 'image/webp', octets: grand }), dc);
+    const semer = B => {
+        B.col('sets').set(SLUG, { _id: SLUG, tirage: 'intl', region: 'intl' });
+        for (const [id, nom, , , prod] of defs.map((x, i) => [...x, 900 + i])) {
+            B.col('cartes').set(id, { _id: id, nomEn: nom, images: [{ set: 'Autre', source: 'tcgdex', numero: '1', cleR2: 'tcgdex/x.webp', langue: 'en' }] });
+            B.col('cartes_produits').set(`${id}|${prod}`, { _id: `${id}|${prod}`, carteId: id, idProduct: prod, numeroFiche: null, slugSet: SLUG });
+        }
+    };
+    const depotsDe = () => { const l = []; return { l, f: async (...a) => l.push(a) }; };
+    const verrouSet = () => ({ prendre: async () => null, rendre: async () => { } });
+    const vignetterBanc = () => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, journal: { error() { } }, assurer: async (db2, { slug: s }) => { let k = 0; for (const c of await db2.collection('cartes').find({}).toArray()) { let t = false; const images = (c.images || []).map(e => { if (e.set !== s || !e.cleR2 || e.vignette) return e; t = true; k++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2}`, w: 200, h: 279 } }; }); if (t) await db2.collection('cartes').updateOne({ _id: c._id }, { $set: { images } }); } return { entrees: k, cles: k, traitees: k, fabriquees: k, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: k ? [s] : [] }; } });
+    const ecrire = async (B, o = {}) => { const dp = depotsDe(); const q = silencieux(); try { const b = await C.ecrire(o.plan || plan, B.M, { dossierCache: o.dossierCache || dc, attendu: o.attendu, remplacements: o.remplacements, remplacer: o.remplacer, deposer: dp.f, vignetter: vignetterBanc(), fabriquerVerrouSet: verrouSet }); return { b, dp }; } finally { q(); } };
+    let B = fausseBase(); semer(B);
+    verifier('--attendu qui diffère du compte réel (3 à écrire : l\'une, 300 px, est sous le seuil de 350) : REFUSÉ avant toute écriture', await (async () => { const { b, dp } = await ecrire(B, { attendu: 4 }); return [b.code, b.etat, dp.l.length, B.col('images').size]; })(), [2, 'refuse-attendu', 0, 0]);
+    let { b, dp } = await ecrire(B, { attendu: 3 });
+    verifier('écrire : 3 images écrites, la 4e (300 px) est « trop-petit » ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
+    const doc = B.col('images').get(P.idImage(SLUG, 1, '37'));
+    verifier('R2 AVANT la ligne : clé NEUVE pdt/…, WebP ; la clé ne contient pas le nom de la source', [dp.l[0][1], dp.l[0][3], dp.l.some(x => /pokedata/i.test(x[1]))], [P.cleR2(SLUG, '37', 1) === dp.l[0][1] ? dp.l[0][1] : 'cle-inattendue', 'image/webp', false]);
+    verifier('le document `images` : source, lot, adresse d\'origine, retirable, date, mention, langue', [doc.source, doc.lot, doc.urlOriginal, doc.retirable, doc.collecteLe instanceof Date, doc.mention, doc.langue], ['pdt', 'pdt-2026-10', plan[0].url, true, true, P.MENTION, 'en']);
+    verifier('le document de l\'image sous le seuil : « trop-petit », seuil 350, rien de joint', [B.col('images').get(P.idImage(SLUG, 4, '136'))?.etat, B.col('images').get(P.idImage(SLUG, 4, '136'))?.seuilApplique, B.col('cartes').get(4).images.length], ['trop-petit', 350, 1]);
+    const e1 = B.col('cartes').get(1).images.find(e => e.source === 'pdt');
+    verifier('l\'entrée de la carte : set, source, lot, traçabilité, mention, langue ; l\'autre source INTACTE', [e1.set, e1.source, e1.lot, e1.retirable, e1.urlOriginal, e1.collecteLe instanceof Date, e1.mention, e1.langue, B.col('cartes').get(1).images.find(e => e.source === 'tcgdex').cleR2], [SLUG, 'pdt', 'pdt-2026-10', true, plan[0].url, true, P.MENTION, 'en', 'tcgdex/x.webp']);
+    // 🔑 POKEDATA-SUITE correction 1 : le site LIT set, cleR2, w, h, numero, langue, languePreuve, source, mention, noteVariante, vignette, basseDefinition (lireDonnee.ts) + attribution ; seul urlOriginal peut nommer l'hôte
+    const publics = e => JSON.stringify([e.set, e.cleR2, e.w, e.h, e.numero, e.langue, e.languePreuve, e.source, e.mention, e.noteVariante, e.vignette, e.basseDefinition, e.attribution, e.fmt, e.lot]);
+    const sansOrigine = e => JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'urlOriginal')));
+    verifier('AUCUN champ lu par le site (set, cleR2, w, h, numero, langue, languePreuve, source, mention, noteVariante, vignette, basseDefinition, attribution) ne contient « pokedata » — entrée cartes.images ET document images', [publics(e1), publics(doc)].map(s => /pokedata/i.test(s)), [false, false]);
+    verifier('   et dans toute l\'entrée / tout le document, seul `urlOriginal` peut nommer l\'hôte', [sansOrigine(e1), sansOrigine(doc)].map(s => /pokedata/i.test(s)), [false, false]);
+    verifier('   (…et urlOriginal nomme bien l\'hôte : traçabilité)', [/pokedata/i.test(e1.urlOriginal), /pokedata/i.test(doc.urlOriginal)], [true, true]);
+    verifier('le bilan du set ne porte pas le nom de la source dans son nom de champ', Object.keys(B.col('sets').get(SLUG)).some(k => /pokedata/i.test(k)), false);
+    verifier('le bilan du set : garde verte, 3 joints', [B.col('sets').get(SLUG).bilanLotPdt?.garde?.ok, B.col('sets').get(SLUG).bilanLotPdt?.joints], [true, 3]);
+    ({ b, dp } = await ecrire(B, { attendu: 3 }));
+    verifier('rejeu : rien de redéposé, une entrée par fiche (idempotent)', [dp.l.length, B.col('cartes').get(1).images.filter(e => e.source === 'pdt').length], [0, 1]);
+    B = fausseBase(); semer(B); B.col('cartes').get(2).images.push({ set: SLUG, source: 'bulbapedia', numero: '057', cleR2: 'bulbapedia/b.webp', langue: 'en' });
+    ({ b, dp } = await ecrire(B, { attendu: 3 }));
+    verifier('additif : une autre source a servi ce numéro entre-temps => la nôtre CÈDE, l\'entrée de l\'autre est intacte', [b.resultats.find(x => x.code === SLUG).dejaParAutre, B.col('cartes').get(2).images.filter(e => e.source === 'pdt').length, B.col('cartes').get(2).images.find(e => e.source === 'bulbapedia').cleR2], [1, 0, 'bulbapedia/b.webp']);
+    B = fausseBase(); semer(B);
+    const dc2 = tmp(); await lancer(urls.slice(0, 2), reseau(normal), dc2);
+    ({ b, dp } = await ecrire(B, { dossierCache: dc2, attendu: 2 }));
+    verifier('une adresse du plan absente du cache n\'est pas écrite (« hors-cache »)', [b.horsCache, dp.l.length], [2, 2]);
+    const i3 = JSON.parse(fs.readFileSync(path.join(dc2, 'index.json'), 'utf8')); fs.writeFileSync(path.join(dc2, Object.values(i3.images)[0].fichier), Buffer.from('altéré'));
+    B = fausseBase(); semer(B);
+    ({ b, dp } = await ecrire(B, { dossierCache: dc2, attendu: 1 }));
+    verifier('un fichier du cache dont le sha256 ne correspond plus est refusé', [b.altere, dp.l.length], [1, 1]);
+    B = fausseBase(); semer(B); B.col('sets').set(SLUG, { _id: SLUG, tirage: 'jp', region: 'jp' });
+    ({ b, dp } = await ecrire(B, { attendu: 3 }));
+    verifier('un set dont le tirage n\'est pas occidental : refusé (la source ne sert que des cartes anglaises), rien déposé', [dp.l.length, b.resultats[0]?.etat], [0, 'refuse-set']);
+
+    // ── 3 bis. LE REMPLACEMENT (doctrine) : préparé, jamais actif sans --remplacer ──────────────────────────────────────────
+    const ANC = { set: SLUG, source: 'pokumon', numero: '037', cleR2: 'pokumon/anc.webp', langue: 'en', w: 320, wOriginal: 320, basseDefinition: true };
+    const semerAnc = Bx => { semer(Bx); Bx.col('cartes').get(1).images.push({ ...ANC }); Bx.col('images').set('anc', { _id: 'anc', source: 'pokumon', set: SLUG, carteId: 1, cleR2: ANC.cleR2, etat: 'ok' }); };
+    const remp = [{ ...plan[0], genre: 'remplacement', motifRemplacement: 'basse-definition', refusees: [{ cleR2: ANC.cleR2, source: 'pokumon', numero: '037', langue: 'en' }] }];
+    B = fausseBase(); semerAnc(B);
+    ({ b, dp } = await ecrire(B, { plan: [], remplacements: remp, attendu: 0 }));
+    verifier('SANS --remplacer : rien ne bouge (ni l\'entrée en basse définition, ni le document, ni un dépôt R2)', [dp.l.length, B.col('cartes').get(1).images.map(e => e.source), B.col('images').get('anc').etat], [0, ['tcgdex', 'pokumon'], 'ok']);
+    B = fausseBase(); semerAnc(B);
+    ({ b, dp } = await ecrire(B, { plan: [], remplacements: remp, remplacer: [999], attendu: 0 }));
+    verifier('--remplacer avec un idProduct hors des remplacements du plan : REFUSÉ avant toute écriture (liste fermée)', [b.code, b.etat, dp.l.length], [2, 'refuse-remplacer', 0]);
+    B = fausseBase(); semerAnc(B);
+    ({ b, dp } = await ecrire(B, { plan: [], remplacements: remp, remplacer: [900], attendu: 1 }));
+    verifier('--remplacer=900 : l\'ancienne entrée sort, la nôtre entre au même (set, numéro) ; l\'autre source reste', [b.code, B.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}`).sort()], [0, ['pdt:37', 'tcgdex:1']]);
+    verifier('   le document remplacé n\'est pas supprimé : état « remplace », motif et remplaçante écrits', [B.col('images').get('anc').etat, !!B.col('images').get('anc').remplaceMotif, B.col('images').get('anc').remplaceePar], ['remplace', true, P.idImage(SLUG, 1, '37')]);
+
+    // ── 4. RETIRER : toute la source, en une commande, à blanc par défaut ────────────────────────────────────────────────────
+    const { retirerLot } = require('./retirer-visuels-pokedata');
+    B = fausseBase(); semer(B); await ecrire(B, { attendu: 3 });
+    B.col('cartes').get(2).images.push({ set: SLUG, source: 'pokumon', lot: 'x', numero: '9', cleR2: 'pokumon/autre.webp' });
+    const sup = []; const blanc = await retirerLot(B.db, {});
+    verifier('retrait À BLANC par défaut : comptes, rien n\'est modifié', [blanc.entrees, blanc.cartes.length, B.col('cartes').get(1).images.some(e => e.source === 'pdt')], [3, 3, true]);
+    const rr = await retirerLot(B.db, { ecrire: true, effacerR2: true, supprimer: async (bk, cles) => sup.push(...cles), verifierBucket: async () => { }, bucket: 'bucket-banc' });
+    verifier('retrait : toutes les entrées de la source sortent ; l\'autre source reste ; documents « retire » ; le bilan de set est nettoyé', [B.col('cartes').get(1).images.some(e => e.source === 'pdt'), B.col('cartes').get(2).images.some(e => e.source === 'pokumon'), B.col('images').get(P.idImage(SLUG, 1, '37')).etat, B.col('sets').get(SLUG).bilanLotPdt, rr.reste], [false, true, 'retire', undefined, 0]);
+    verifier('   les clés R2 effacées sont celles de la source seule (pdt/ et ses vignettes)', [sup.length > 0 && sup.every(c => c.startsWith('pdt/') || c.startsWith('vignettes/pdt/'))], [true]);
+    { const Bs = fausseBase(); semer(Bs); await ecrire(Bs, { attendu: 3 }); Bs.col('cartes').get(1).images.find(e => e.source === 'pdt').lot = 'pdt-2099-01';
+      const rs = await retirerLot(Bs.db, { ecrire: true });
+      verifier('retrait de TOUTE la source : un autre lot de la même source part aussi (c\'est la source, pas un lot)', [Bs.col('cartes').get(1).images.some(e => e.source === 'pdt'), rs.reste], [false, 0]); }
+
+    global.fetch = fetchOrigine;
+    console.log(`\n${ok} passés, ${ko} en échec`);
+    process.exitCode = ko ? 1 : 0;
+})().catch(e => { console.error('❌', e.stack || e.message); process.exitCode = 1; });
