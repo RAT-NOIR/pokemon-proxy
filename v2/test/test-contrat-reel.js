@@ -848,8 +848,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             const sharp = require('sharp');
             const JPG = await sharp(crypto.randomBytes(120 * 160 * 3), { raw: { width: 120, height: 160, channels: 3 } }).jpeg().toBuffer();
             const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm);
-            const recue = await jouerBinaire(V, R, 'une photo reçue (200, photoId)', 200, `${CH}?index=0`, JPG, 'image/jpeg', extH(xa.jeton));
-            await jouerBinaire(V, R, 'index hors de 0..7 (400)', 400, `${CH}?index=8`, JPG, 'image/jpeg', extH(xa.jeton));
+            const recue = await jouerBinaire(V, R, 'une photo reçue (200, photoId), sans aucun paramètre', 200, CH, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'paramètre inconnu (400 champ-inconnu ; `?index=` est ignoré)', 400, `${CH}?scanId=x`, JPG, 'image/jpeg', extH(xa.jeton));
             await jouerBinaire(V, R, 'sans Authorization', 401, `${CH}?index=0`, JPG, 'image/jpeg', extH(null));
             {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
                 const rn = await jouerBinaireBrut(V, `${CH}?index=0`, JPG, 'image/jpeg', extH(x.jeton));
