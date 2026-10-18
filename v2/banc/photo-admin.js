@@ -14,6 +14,10 @@ const registre = require('../registre');
 
 const journal = (ou, e) => console.error(`❌ [v2 banc-photo-admin] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : il peut citer une URL
 const OCTETS_MAX = 5 * 1024 * 1024, DELAI_MS = 8000;
+// N-1 : des photos ont été REÇUES pour ce scan, mais la référence prise avant tout `await` n'est plus là (le client a abandonné, la borne du scan est atteinte : les octets sont libérés). L'étape ne retombe JAMAIS sur l'adresse de
+// l'annonce : le banc ne reçoit rien pour ce scan, c'est COMPTÉ ici et journalisé (un code, ni octet ni empreinte).
+const compte = { sansReference: 0 };
+const compteurs = () => ({ ...compte });
 
 /** Réglages effectifs : ceux de la production, sauf ce qu'un banc injecte explicitement. */
 function reglages(deps) {
@@ -66,6 +70,11 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
             const r0 = await banc.conserverPhoto({ scanId: String(scanId), buffer: octets0 });
             return r0 === 'ecrit' || r0 === 'deja' ? 'ecrit' : 'echec';
         }
+        if (req && req.entree && req.entree.photosRecuesPourCeScan === true) {
+            compte.sansReference++;
+            console.warn('📷 [v2 banc-photo-admin] photo reçue libérée avant l\'étape du banc : rien pour ce scan (aucun téléchargement)');
+            return 'ignore';
+        }
         const urls = req && req.entree && Array.isArray(req.entree.imageUrls) ? req.entree.imageUrls : [];
         if (!urls.length || !urlAutorisee(urls[0], reg)) return 'ignore';
         const ms = ((cfg && cfg.photoAdmin && cfg.photoAdmin.delaiS) || 0) * 1000;
@@ -84,4 +93,4 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
     } catch (e) { journal('photo non conservée', e); return 'echec'; }
 }
 
-module.exports = { apresIdentifierAdmin, urlAutorisee, telechargerParDefaut };
+module.exports = { apresIdentifierAdmin, urlAutorisee, telechargerParDefaut, compteurs };
