@@ -188,6 +188,74 @@ t('retrait en mémoire : une entrée de même set et même clé mais d\'une autr
     const r = E.retirer({ cartes: ap.cartes }, m).cartes.get(1);
     assert.strictEqual(r.images.length, 3); assert(!r.images.some(x => x.lot === 'emprunt-2026-10'));
 });
+// ── Correction 2 : Trick or Trade 2024 sans visuelSubstitut — l'image est l'entrée de LA MÊME carte, dans le set d'ORIGINE, au numéro d'origine
+const ORI = 'Paldean-Fates';
+const entreeOri = (o = {}) => ({ set: ORI, source: 'tcgdex', cleR2: 'tcgdex/Paldean-Fates/057-1.webp', numero: '057', langue: 'en', w: 600, h: 825, vignette: { cleR2: 'vignettes/tcgdex/Paldean-Fates/057-1.webp', w: 200, h: 275 }, ...o });
+const ligneToT = (idProduct, o = {}) => ({ _id: `1|${idProduct}`, carteId: 1, idProduct, slugSet: TOT, preuve: 'reimpression+origine+numero', origine: { code: 'PAF', numero: '057' },
+    detail: 'slug Gengar-BOO24PAF-057 → tirage d\'origine PAF n°057 → produit(s) 751595/794904 → une seule carte', ...o });
+const ligneMeta = (idProduct, o = {}) => ({ _id: `1|${idProduct}`, carteId: 1, idProduct, slugSet: TOT, preuve: 'metacarte+nom+attaques', numeroFiche: null,
+    detail: 'BOO24 n°— « Sinistcha [Cursed Drop | Spill the Tea] » → « Sinistcha (Twilight Masquerade 22) » : métacarte Cardmarket 433704 (une seule carte chez nous)', ...o });
+const etatToT = (lignes, images = [entreeOri()], o = {}) => ({ ...etat(lignes, [carte(images)]), produits: new Map([[751595, { slugSet: ORI }], [794904, { slugSet: 'Autre' }]]), setsParNom: new Map([['Twilight Masquerade', ['Twilight-Masquerade']]]), ...o });
+t('ToT 2024 « réimpression » : l\'image est l\'entrée de la même carte dans le set d\'origine (slugSet du PREMIER produit cité) au numéro d\'origine ; pas de tamponNonRepresente', () => {
+    const p = plan(etatToT([ligneToT(20)]));
+    assert.strictEqual(p.ajouts.length, 1); assert.strictEqual(p.refus.length, 0); assert.strictEqual(p.sansSubstitut.length, 0);
+    const e = p.ajouts[0].entree;
+    assert.strictEqual(e.set, TOT); assert.strictEqual(e.numero, null); assert.strictEqual(e.cleR2, 'tcgdex/Paldean-Fates/057-1.webp'); assert.strictEqual(e.w, 600); assert.strictEqual(e.h, 825);
+    assert(!('tamponNonRepresente' in e)); assert.strictEqual(e.imageEmprunteeTirage, true); assert.strictEqual(e.source, 'emprunt'); assert.strictEqual(e.langue, 'en');
+    assert.deepStrictEqual(e.vignette, entreeOri().vignette);
+    assert.strictEqual(p.parSet[TOT].ajouts, 1);
+});
+t('ToT 2024 « réimpression » : un autre numéro d\'origine dans le set, ou une langue autre que « en », ne conviennent pas', () => {
+    assert.strictEqual(plan(etatToT([ligneToT(20)], [entreeOri({ numero: '131' })])).ajouts.length, 0);
+    assert.strictEqual(plan(etatToT([ligneToT(20)], [entreeOri({ langue: 'ja' })])).ajouts.length, 0);
+    assert.strictEqual(plan(etatToT([ligneToT(20)], [entreeOri({ set: 'Autre' })])).ajouts.length, 0);
+    assert.strictEqual(plan(etatToT([ligneToT(20)], [entreeOri({ numero: '57' })])).ajouts.length, 1);   // même clé de numéro (zéros)
+});
+t('ToT 2024 : zéro, deux entrées ou un substitut sans taille → refus nommé, aucune entrée', () => {
+    for (const images of [[], [entreeOri(), entreeOri({ cleR2: 'tcgdex/Paldean-Fates/057b-1.webp' })], [entreeOri({ w: undefined })]]) {
+        const p = plan(etatToT([ligneToT(20)], images));
+        assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 1); assert(/Trick|origine|entrée|image/.test(p.refus[0].raison), p.refus[0].raison);
+    }
+});
+t('ToT 2024 : produit d\'origine inconnu ou detail illisible → refus nommé', () => {
+    assert.strictEqual(plan(etatToT([ligneToT(20)], undefined, { produits: new Map() })).refus.length, 1);
+    assert.strictEqual(plan(etatToT([ligneToT(20, { detail: 'rien', origine: undefined })])).refus.length, 1);
+});
+t('ToT 2024 « métacarte » : le set vient du nom entre parenthèses, égalité exacte avec nomAffichage/nomEn, une seule correspondance', () => {
+    const img = [entreeOri({ set: 'Twilight-Masquerade', cleR2: 'tcgdex/Twilight-Masquerade/022-1.webp', numero: '022' })];
+    const p = plan(etatToT([ligneMeta(21)], img));
+    assert.strictEqual(p.ajouts.length, 1); assert.strictEqual(p.ajouts[0].entree.cleR2, 'tcgdex/Twilight-Masquerade/022-1.webp'); assert(!('tamponNonRepresente' in p.ajouts[0].entree));
+    assert.strictEqual(plan(etatToT([ligneMeta(21, { detail: 'x → « Sinistcha (twilight masquerade 22) » : y' })], img)).ajouts.length, 0);   // casse différente : pas d'égalité exacte
+    assert.strictEqual(plan(etatToT([ligneMeta(21)], img, { setsParNom: new Map() })).refus.length, 1);
+    assert.strictEqual(plan(etatToT([ligneMeta(21)], img, { setsParNom: new Map([['Twilight Masquerade', ['Twilight-Masquerade', 'Twilight-Masquerade-Additionals']]]) })).refus.length, 1);
+});
+t('ToT 2024 « métacarte » : un set dont le nomAffichage est exactement le nom l\'emporte sur un jumeau qui ne l\'a que comme nomEn', () => {
+    const img = [entreeOri({ set: 'Twilight-Masquerade', cleR2: 'tcgdex/Twilight-Masquerade/022-1.webp', numero: '022' })];
+    const union = new Map([['Twilight Masquerade', ['Mask-of-Change', 'Twilight-Masquerade']]]);
+    assert.strictEqual(plan(etatToT([ligneMeta(21)], img, { setsParNom: union })).refus.length, 1);   // sans priorité : ambigu
+    const p = plan(etatToT([ligneMeta(21)], img, { setsParNom: union, setsParNomAffichage: new Map([['Twilight Masquerade', ['Twilight-Masquerade']]]) }));
+    assert.strictEqual(p.ajouts.length, 1); assert.strictEqual(p.ajouts[0].entree.cleR2, 'tcgdex/Twilight-Masquerade/022-1.webp');
+    assert.strictEqual(plan(etatToT([ligneMeta(21)], img, { setsParNom: union, setsParNomAffichage: new Map([['Twilight Masquerade', ['A', 'B']]]) })).refus.length, 1);   // deux nomAffichage égaux : toujours ambigu
+});
+t('ToT 2024 : une ligne déjà couverte par une entrée du set est sautée (« déjà »), sans dériver ; PP/BA sans substitut restent « sans substitut »', () => {
+    const p = plan(etatToT([ligneToT(20)], [entreeOri(), { set: TOT, source: 'pokumon', cleR2: 'v.webp', numero: null }]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.deja.length, 1);
+    const q = plan(etatToT([ligne(30, PP, { visuelSubstitut: undefined }), ligne(31, BA, { _id: '1|31', visuelSubstitut: undefined })]));
+    assert.strictEqual(q.sansSubstitut.length, 2); assert.strictEqual(q.ajouts.length, 0);
+});
+t('ToT 2024 : deux produits de la même carte, même origine → UNE entrée', () => {
+    const p = plan(etatToT([ligneToT(20), ligneToT(22, { _id: '1|22' })]));
+    assert.strictEqual(p.ajouts.length, 1); assert.deepStrictEqual([...p.ajouts[0].produits].sort(), [20, 22]);
+});
+t('chaîne de la mention : la vraie sélection par suffixe de cleR2 sans le set prend l\'entrée d\'origine (aucune mention) ; avec le set, l\'empruntée', () => {
+    const imageServieDe = (images, url) => { let c = null, l = 0; for (const i of images || []) { const k = i?.cleR2; if (typeof k !== 'string' || !k || !url.endsWith(`/${k}`)) continue; if (k.length > l) { c = i; l = k.length; } } return c; };
+    const mention = v => (v && v.imageEmprunteeTirage === true ? 'tampon non représenté' : null);
+    const p = plan(etatToT([ligneToT(20)])); const cartes = E.appliquer(etatToT([ligneToT(20)]), p).cartes;
+    const imgs = cartes.get(1).images;
+    const r = E.mentionServie({ images: imgs, cleR2: p.ajouts[0].entree.cleR2, set: TOT, imageServieDe, mentionDuVisuelEmprunte: mention });
+    assert.deepStrictEqual(r, { reelle: null, siCorrectif: 'tampon non représenté' });
+});
+
 // ── Correction 1 : une empruntée SANS document `images` est remplaçable par un vrai scan tamponné (règle de basse-definition.js)
 const BD = require('./collecte-cartes/basse-definition');
 const empruntee = () => plan(etat([ligne(10, PP)])).ajouts[0].entree;
@@ -242,6 +310,11 @@ t('script : le motif d\'arrêt est vérifié (et arrête) AVANT la copie du mani
     const iArret = src.search(/const arret = E\.motifDArret\([^)]*\);\s*\n\s*if \(arret\) \{[^\n]*process\.exitCode = 1; return;/);
     const iFige = src.indexOf('fs.copyFileSync(fichier(\'manifeste.json\')'), iEcrit = src.lastIndexOf('.updateOne(');
     assert(iArret > 0 && iArret < iFige && iFige < iEcrit);
+});
+t('script : le retrait partiel n\'affiche pas ✅ et sort en erreur ; la lecture des WCD est insensible à la casse', () => {
+    const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
+    assert(/touches === ops\.length \? '✅' : '⚠️ retrait PARTIEL/.test(src)); assert(/touches !== ops\.length\) process\.exitCode = 1/.test(src));
+    assert(/slugSet: \/\^wcd\/i/.test(src));
 });
 t('--ecrire refuse de tourner hors de lot-additif.js (pid du lot = pid du parent)', () => {
     assert.throws(() => E.garderSousLot({}, 4242), /lot-additif/);

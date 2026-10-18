@@ -22,12 +22,21 @@ async function lireEtat(dbCartes) {
     E.verifierPerimetre(sets.map(s => s._id));
     const exps = [...new Set(sets.flatMap(s => [].concat(s.idExpansion ?? [])))];
     const proj = { idProduct: 1, carteId: 1, slugSet: 1, idExpansion: 1, numeroFiche: 1, slug: 1, detail: 1, visuelSubstitut: 1 };
-    const lignes = await dbCartes.collection('cartes_produits').find({ $or: [{ idExpansion: { $in: exps } }, { slugSet: /^WCD/ }] }, { projection: proj }).toArray();
+    const lignes = await dbCartes.collection('cartes_produits').find({ $or: [{ idExpansion: { $in: exps } }, { slugSet: /^wcd/i }] }, { projection: { ...proj, preuve: 1, origine: 1 } }).toArray();
     const cartesDocs = await dbCartes.collection('cartes').find({ sets: { $in: [...E.PERIMETRE] } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray();
     // les cartes des substituts (la même carte porte l'image d'origine) : déjà dans cartesDocs quand elle est du périmètre ; sinon lues à part
     const manque = [...new Set(lignes.filter(l => E.dansLePerimetre(l.slugSet) && l.carteId > 0 && l.visuelSubstitut?.cleR2).map(l => l.carteId))].filter(id => !cartesDocs.some(c => c._id === id));
     if (manque.length) cartesDocs.push(...await dbCartes.collection('cartes').find({ _id: { $in: manque } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray());
-    return { sets, lignes, cartesDocs, cartes: new Map(cartesDocs.map(c => [c._id, c])) };
+    // Trick or Trade 2024 : le set d'origine se lit sur la ligne du premier produit d'origine cité, ou sur le nom de set entre parenthèses (égalité exacte avec nomAffichage / nomEn)
+    const idsOrigine = [...new Set(lignes.filter(l => E.SETS_TRICK_OR_TRADE.includes(l.slugSet) && !l.visuelSubstitut?.cleR2).map(l => E.origineDeLaLigne(l).idProduct).filter(x => Number.isInteger(x)))];
+    const produits = new Map((await dbCartes.collection('cartes_produits').find({ idProduct: { $in: idsOrigine } }, { projection: { idProduct: 1, slugSet: 1 } }).toArray()).map(p => [p.idProduct, { slugSet: p.slugSet }]));
+    const setsParNom = new Map(), setsParNomAffichage = new Map();
+    const range = (m, nom, id) => { if (!m.has(nom)) m.set(nom, []); m.get(nom).push(id); };
+    for (const s of await dbCartes.collection('sets').find({}, { projection: { nomAffichage: 1, nomEn: 1 } }).toArray()) {
+        if (typeof s.nomAffichage === 'string' && s.nomAffichage) range(setsParNomAffichage, s.nomAffichage, s._id);
+        for (const nom of new Set([s.nomAffichage, s.nomEn].filter(x => typeof x === 'string' && x))) range(setsParNom, nom, s._id);
+    }
+    return { sets, lignes, cartesDocs, cartes: new Map(cartesDocs.map(c => [c._id, c])), produits, setsParNom, setsParNomAffichage };
 }
 
 async function ouvrirLecture() {
@@ -78,7 +87,9 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
             if (ops.length !== ATTENDU) { console.error(`❌ ARRÊT : ${ops.length} écritures, attendu ${ATTENDU} — rien n'est retiré`); process.exitCode = 1; return; }
             let touches = 0;
             for (const o of ops) touches += (await cx.dbCartes.collection(o.coll).updateOne(o.filter, o.update, o.options || {})).modifiedCount;
-            console.log(`${touches <= ops.length ? '✅' : '🔴'} retirées ${touches}/${ops.length}`);
+            // un retrait partiel (une entrée déjà remplacée ou retirée) n'est pas un succès complet : ✅ seulement si tout est retiré
+            console.log(`${touches === ops.length ? '✅' : '⚠️ retrait PARTIEL —'} retirées ${touches}/${ops.length}${touches === ops.length ? '' : ' (les autres étaient déjà absentes ou ont changé : à vérifier)'}`);
+            if (touches !== ops.length) process.exitCode = 1;
             return;
         }
 
@@ -100,7 +111,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const ap = H.servir(R, { sets: etat.sets, cartes: cartesApres, lignes: etat.lignes });
         const dif = H.diff(av, ap);
         const T = await import(pathToFileURL(path.join(SITE_LIB, 'tamponNonRepresente.ts')).href);
-        if (typeof T.mentionDuVisuelEmprunte !== 'function') throw new Error('mentionDuVisuelEmprunte absente du site : règle introuvable');
+        if (typeof T.mentionDuVisuelEmprunte !== 'function' || typeof T.imageServieDe !== 'function') throw new Error('mentionDuVisuelEmprunte absente du site : règle introuvable');
         const perdus = dif.filter(d => d.nature.startsWith('PRODUIT PERDU') || d.nature === 'produit sorti de la sortie');
         const gagnes = dif.filter(d => d.nature === 'produit gagné une fiche');
         const visuelGagne = dif.filter(d => d.nature === 'visuel changé' && d.a.cleR2 == null && d.b.cleR2);
@@ -108,21 +119,30 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const fichesChangees = dif.filter(d => d.nature.startsWith('fiche changée'));
         const emprunte = (cartes, k, cleR2) => { const e = (cartes.get(k.carteId)?.images || []).find(x => x.set === k.set && x.cleR2 === cleR2 && x.imageEmprunteeTirage === true); return e || null; };
         const cartesApresMap = new Map(cartesApres.map(c => [c._id, c]));
-        const mentions = {};
+        const mentions = {}, mentionsReelles = {}, mentionsSiCorrectif = {};
         const parSetSite = {};
+        const compte = (o, m) => { const c = m ?? '(aucune)'; o[c] = (o[c] || 0) + 1; };
         for (const [k, b] of ap) {
             if (!E.dansLePerimetre(b.set)) continue;
             const s = (parSetSite[b.set] ||= { produits: 0, avecFiche: 0, visuelAvant: 0, visuelApres: 0, empruntes: 0 });
             const a = av.get(k);
             s.produits++; if (b.fiche) s.avecFiche++; if (a?.cleR2) s.visuelAvant++; if (b.cleR2) s.visuelApres++;
             const e = b.cleR2 ? emprunte(cartesApresMap, b, b.cleR2) : null;
-            if (e) { s.empruntes++; const m = T.mentionDuVisuelEmprunte(e); mentions[m] = (mentions[m] || 0) + 1; }
+            if (e) {
+                s.empruntes++; const m = T.mentionDuVisuelEmprunte(e); mentions[m] = (mentions[m] || 0) + 1;
+                // la VRAIE chaîne du site : imageServieDe sur toutes les images de la carte, avec l'adresse que la grille donne (…/<cleR2 servie>)
+                const r = E.mentionServie({ images: cartesApresMap.get(b.carteId)?.images, cleR2: b.cleR2, set: b.set, imageServieDe: T.imageServieDe, mentionDuVisuelEmprunte: T.mentionDuVisuelEmprunte });
+                compte(mentionsReelles, r.reelle); compte(mentionsSiCorrectif, r.siCorrectif);
+                s.mentionReelle = (s.mentionReelle || 0) + (r.reelle ? 1 : 0); s.mentionSiCorrectif = (s.mentionSiCorrectif || 0) + (r.siCorrectif ? 1 : 0);
+            }
         }
         const nat = {}; for (const d of dif) nat[d.nature] = (nat[d.nature] || 0) + 1;
         console.log(`SITE (lib ${SITE_LIB}) : ${av.size} produits rejoués · ${dif.length} différences ${JSON.stringify(nat)} · gagnés (fiche) ${gagnes.length} · visuels GAGNÉS ${visuelGagne.length} · visuels déjà servis qui CHANGENT ${visuelChange.length} · fiches changées ${fichesChangees.length} · perdus ${perdus.length}`);
         console.log('SITE PAR SET (produits avec fiche / visuel avant → après / servis par une emprunt) :');
         for (const [s, c] of Object.entries(parSetSite).sort()) console.log(`   ${s} : ${JSON.stringify(c)}`);
-        console.log(`MENTIONS (règle du site, mentionDuVisuelEmprunte) : ${JSON.stringify(mentions)}`);
+        console.log(`MENTIONS de l'entrée posée (mentionDuVisuelEmprunte sur l'entrée) : ${JSON.stringify(mentions)}`);
+        console.log(`MENTIONS RÉELLEMENT SERVIES (imageServieDe du site, sans le set) : ${JSON.stringify(mentionsReelles)}`);
+        console.log(`MENTIONS SI le site cherchait d'abord dans le set : ${JSON.stringify(mentionsSiCorrectif)}`);
 
         // ── la garde de lot sur l'état simulé
         const garde = require('./collecte-cartes/garde-lot');
@@ -134,7 +154,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const nomDe = id => etat.cartes.get(id)?.nomEn ?? id;
         const echantillon = melange(plan.ajouts, 20261018).slice(0, 10).map(a => ({ carteId: a.carteId, nom: nomDe(a.carteId), set: a.set, numero: a.numero, produits: a.produits, cleR2: a.entree.cleR2, tamponNonRepresente: a.entree.tamponNonRepresente ?? null, mention: T.mentionDuVisuelEmprunte(a.entree) }));
 
-        const sortie = { date: new Date().toISOString().slice(0, 10), siteLib: SITE_LIB, plan: { ajouts: plan.ajouts.map(a => ({ carteId: a.carteId, set: a.set, numero: a.numero, produits: a.produits, cleR2: a.entree.cleR2 })), deja: plan.deja, sansSubstitut: plan.sansSubstitut.length, sansCarte: plan.sansCarte.length, refus: plan.refus, refusWCD: plan.refusWCD.length, parSet: plan.parSet }, site: { natures: nat, parSet: parSetSite, mentions, perdus: perdus.length, visuelsGagnes: visuelGagne.length, visuelsChanges: visuelChange.length, fichesChangees: fichesChangees.length }, garde: { baisses: cmp.baisses.length, nonAutorisees: cmp.nonAutorisees.length, hausses: cmp.hausses, annonce }, echantillon };
+        const sortie = { date: new Date().toISOString().slice(0, 10), siteLib: SITE_LIB, plan: { ajouts: plan.ajouts.map(a => ({ carteId: a.carteId, set: a.set, numero: a.numero, produits: a.produits, cleR2: a.entree.cleR2 })), deja: plan.deja, sansSubstitut: plan.sansSubstitut.length, sansCarte: plan.sansCarte.length, refus: plan.refus, refusWCD: plan.refusWCD.length, parSet: plan.parSet }, site: { natures: nat, parSet: parSetSite, mentions, mentionsReelles, mentionsSiCorrectif, perdus: perdus.length, visuelsGagnes: visuelGagne.length, visuelsChanges: visuelChange.length, fichesChangees: fichesChangees.length }, garde: { baisses: cmp.baisses.length, nonAutorisees: cmp.nonAutorisees.length, hausses: cmp.hausses, annonce }, echantillon };
 
         if (ECRIRE) {
             const simule = fs.existsSync(fichier('manifeste.json')) ? fs.readFileSync(fichier('manifeste.json'), 'utf8') : null;

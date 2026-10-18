@@ -19,7 +19,7 @@ const MUTANTS = [
     { nom: 'entrée : la vignette de l\'origine n\'est plus reprise', fichier: M, de: 'if (origine) entree.vignette', vers: 'if (false) entree.vignette' },
     { nom: 'plan : des substituts divergents ne sont plus refusés', fichier: M, de: 'if (g.sub.cleR2 !== sub.cleR2 || g.sub.w !== sub.w || g.sub.h !== sub.h) g.diverge = true;', vers: '' },
     { nom: 'plan : une ligne sans carteId > 0 est traitée', fichier: M, de: 'if (!entier(l.carteId)) {', vers: 'if (false) {' },
-    { nom: 'plan : un substitut sans cleR2 est accepté', fichier: M, de: "if (!sub || typeof sub.cleR2 !== 'string' || !sub.cleR2) {", vers: 'if (!sub) {' },
+    { nom: 'plan : un substitut sans cleR2 est accepté', fichier: M, de: "const aSubstitut = !!sub && typeof sub.cleR2 === 'string' && !!sub.cleR2;", vers: 'const aSubstitut = !!sub;' },
     { nom: 'écriture : le $push n\'est plus gardé par $not/$elemMatch', fichier: M, de: 'filter: { _id: a.carteId, images: { $not:', vers: 'filter: { _id: a.carteId, images0: { $not:' },
     { nom: 'retrait : le $pull ne borne plus par le lot', fichier: M, de: 'source: SOURCE, lot: LOT, imageEmprunteeTirage: true, numero: o.numero ?? null', vers: 'source: SOURCE, imageEmprunteeTirage: true, numero: o.numero ?? null' },
     { nom: 'retrait : le retrait en mémoire ignore la source', fichier: M, de: 'e.source === SOURCE && e.lot === LOT &&', vers: '' },
@@ -34,6 +34,16 @@ const MUTANTS = [
     { nom: 'écriture : le nombre d\'écritures n\'est plus comparé à --attendu', fichier: M, de: 'if (nbOperations !== attendu) return', vers: 'if (false) return' },
     { nom: 'écriture : un refus au plan n\'arrête plus l\'écriture', fichier: M, de: 'if (nbRefus) return', vers: 'if (false) return' },
     { nom: 'script : le motif d\'arrêt n\'est plus appelé avant l\'écriture', fichier: S, de: 'if (arret) {', vers: 'if (false) {' },
+    { nom: 'correction 2 : le premier produit d\'origine devient le dernier', fichier: M, de: "ids[1].split('/')[0]", vers: "ids[1].split('/').pop()" },
+    { nom: 'correction 2 : la langue « en » n\'est plus exigée', fichier: M, de: "e.set === setOrigine && e.langue === 'en' && ", vers: 'e.set === setOrigine && ' },
+    { nom: 'correction 2 : plusieurs entrées d\'origine acceptées', fichier: M, de: 'if (trouvees.length !== 1) return', vers: 'if (trouvees.length < 1) return' },
+    { nom: 'correction 2 : un nom de set ambigu est accepté', fichier: M, de: 'if (ids.length !== 1) return { refus: `Trick or Trade : le nom', vers: 'if (ids.length < 1) return { refus: `Trick or Trade : le nom' },
+    { nom: 'correction 2 : le nomAffichage ne prime plus sur nomEn', fichier: M, de: 'const ids = parAffichage.length ? parAffichage : (etat.setsParNom?.get(o.nomSet) || []);', vers: 'const ids = etat.setsParNom?.get(o.nomSet) || [];' },
+    { nom: 'correction 2 : tout set sans substitut dérive de son origine (PP, BA aussi)', fichier: M, de: '!aSubstitut && SETS_TRICK_OR_TRADE.includes(set);', vers: '!aSubstitut && true;' },
+    { nom: 'correction 2 : la dérivation n\'a jamais lieu', fichier: M, de: "if (depuisOrigine) { const d = substitutDepuisOrigine(l, c, etat);", vers: "if (false) { const d = substitutDepuisOrigine(l, c, etat);" },
+    { nom: 'correction 2 : la mention « si correctif » ne filtre plus sur le set', fichier: M, de: "(images || []).filter(e => e && e.set === set)", vers: '(images || [])' },
+    { nom: 'correction 2 : le retrait partiel affiche ✅', fichier: S, de: "touches === ops.length ? '✅' : '⚠️ retrait PARTIEL —'", vers: "true ? '✅' : '⚠️ retrait PARTIEL —'" },
+    { nom: 'correction 2 : la lecture des WCD redevient sensible à la casse', fichier: S, de: '{ slugSet: /^wcd/i }', vers: '{ slugSet: /^WCD/ }' },
 ];
 
 let tues = 0, survivants = [];

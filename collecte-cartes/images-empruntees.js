@@ -49,6 +49,57 @@ function couverte(images, set, numero) {
     return duSet.some(e => e.numero == null || String(e.numero).trim() === '' || cleNumero(e.numero) === cle);
 }
 
+/** Ce que la jointure d'une ligne Trick or Trade dit de son origine : `{ idProduct, numero }` (réimpression) ou `{ nomSet, numero }` (métacarte), ou `{ refus }`. */
+function origineDeLaLigne(l) {
+    const detail = String(l.detail ?? '');
+    if (l.preuve === 'reimpression+origine+numero') {
+        const ids = /produit\(s\) (\d+(?:\/\d+)*)/.exec(detail);
+        const num = l.origine?.numero ?? (/tirage d'origine \S+ n°(\S+)/.exec(detail) || [])[1];
+        if (!ids || num == null || String(num).trim() === '') return { refus: 'origine illisible : produit d\'origine ou numéro absent du detail de la jointure' };
+        return { idProduct: Number(ids[1].split('/')[0]), numero: String(num).trim() };
+    }
+    if (l.preuve === 'metacarte+nom+attaques') {
+        const tous = [...detail.matchAll(/« [^»]*? \(([^()]+?) (\d+)\) »/g)];
+        if (!tous.length) return { refus: 'origine illisible : aucun « Nom (Set N) » dans le detail de la jointure' };
+        const m = tous[tous.length - 1];
+        return { nomSet: m[1], numero: m[2] };
+    }
+    return { refus: `preuve de jointure sans origine lisible (${l.preuve ?? 'aucune'})` };
+}
+
+/** Le substitut d'une ligne Trick or Trade : l'UNIQUE entrée `cartes.images` de la même carte, dans le set d'origine, au numéro d'origine, en langue « en ». Sinon un refus nommé. */
+function substitutDepuisOrigine(l, carte, etat) {
+    const o = origineDeLaLigne(l);
+    if (o.refus) return { refus: `Trick or Trade : ${o.refus}` };
+    let setOrigine;
+    if (o.idProduct != null) {
+        const p = etat.produits?.get(o.idProduct);
+        if (!p || typeof p.slugSet !== 'string' || !p.slugSet) return { refus: `Trick or Trade : le produit d'origine ${o.idProduct} n'a pas de ligne cartes_produits (set d'origine inconnu)` };
+        setOrigine = p.slugSet;
+    } else {
+        // égalité exacte : d'abord le nomAffichage (le nom du set lui-même), puis seulement à défaut nomEn (qui est aussi celui d'un jumeau d'une autre région)
+        const parAffichage = etat.setsParNomAffichage?.get(o.nomSet) || [];
+        const ids = parAffichage.length ? parAffichage : (etat.setsParNom?.get(o.nomSet) || []);
+        if (ids.length !== 1) return { refus: `Trick or Trade : le nom de set « ${o.nomSet} » désigne ${ids.length} set(s) (égalité exacte, un seul attendu)` };
+        setOrigine = ids[0];
+    }
+    const cle = cleNumero(o.numero);
+    const trouvees = (carte.images || []).filter(e => e && e.set === setOrigine && e.langue === 'en' && cleNumero(e.numero) === cle);
+    if (trouvees.length !== 1) return { refus: `Trick or Trade : ${trouvees.length} entrée(s) d'image en « en » dans ${setOrigine} au n°${o.numero} pour cette carte (une seule attendue)` };
+    const e = trouvees[0];
+    if (typeof e.cleR2 !== 'string' || !e.cleR2 || !entier(e.w) || !entier(e.h)) return { refus: `Trick or Trade : l'entrée d'origine de ${setOrigine} n°${o.numero} n'a pas de clé ou de taille` };
+    return { sub: { cleR2: e.cleR2, w: e.w, h: e.h } };
+}
+
+/**
+ * La mention que la fiche rend VRAIMENT pour une entrée empruntée (la sélection du site, `imageServieDe`, par suffixe de cleR2 sur TOUTES les images de la carte, sans le set)
+ * et celle qu'elle rendrait si le site cherchait d'abord dans le set de l'entrée. Les deux fonctions du site sont injectées (importées de sa lib par le script).
+ */
+function mentionServie({ images, cleR2, set, imageServieDe, mentionDuVisuelEmprunte }) {
+    const url = `https://exemple.invalide/${cleR2}`;
+    return { reelle: mentionDuVisuelEmprunte(imageServieDe(images, url)), siCorrectif: mentionDuVisuelEmprunte(imageServieDe((images || []).filter(e => e && e.set === set), url)) };
+}
+
 const compteurs = () => ({ lignes: 0, cibles: 0, ajouts: 0, deja: 0, sansSubstitut: 0, sansCarte: 0, refus: 0 });
 
 /**
@@ -66,14 +117,18 @@ function planifier(etat, { maintenant = new Date() } = {}) {
         const b = bucket(set); b.lignes++;
         const idProduct = l.idProduct;
         if (!entier(l.carteId)) { plan.sansCarte.push({ idProduct, slugSet: set }); b.sansCarte++; continue; }
-        const sub = l.visuelSubstitut;
-        if (!sub || typeof sub.cleR2 !== 'string' || !sub.cleR2) { plan.sansSubstitut.push({ idProduct, slugSet: set }); b.sansSubstitut++; continue; }
+        let sub = l.visuelSubstitut;
+        const aSubstitut = !!sub && typeof sub.cleR2 === 'string' && !!sub.cleR2;
+        // Trick or Trade 2024 n'a pas de visuelSubstitut : son image est l'entrée de la même carte dans le set d'ORIGINE (liste fermée : ce set seulement)
+        const depuisOrigine = !aSubstitut && SETS_TRICK_OR_TRADE.includes(set);
+        if (!aSubstitut && !depuisOrigine) { plan.sansSubstitut.push({ idProduct, slugSet: set }); b.sansSubstitut++; continue; }
         const refus = raison => { plan.refus.push({ carteId: l.carteId, set, numero: numeroDeLigne(l), produits: [idProduct], raison }); b.refus++; };
         const c = etat.cartes.get(l.carteId);
         if (!c) { refus('carte introuvable en base'); continue; }
-        if (!entier(sub.w) || !entier(sub.h)) { refus('substitut incomplet (largeur ou hauteur absente)'); continue; }
+        if (aSubstitut && (!entier(sub.w) || !entier(sub.h))) { refus('substitut incomplet (largeur ou hauteur absente)'); continue; }
         const numero = numeroDeLigne(l);
         if (couverte(c.images, set, numero)) { plan.deja.push({ idProduct, carteId: l.carteId, set, numero }); b.deja++; continue; }
+        if (depuisOrigine) { const d = substitutDepuisOrigine(l, c, etat); if (d.refus) { refus(d.refus); continue; } sub = d.sub; }
         const cle = `${l.carteId}|${set}|${numero == null ? '' : cleNumero(numero)}`;
         const g = groupes.get(cle);
         if (!g) groupes.set(cle, { carteId: l.carteId, set, numero, sub, carte: c, produits: [idProduct], diverge: false });
@@ -151,5 +206,5 @@ function garderSousLot(env, ppid) {
     if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="TAMPONNEES : N entrées" --collections=cartes --annonce=<annonce.json> -- node poser-images-empruntees.js --ecrire --attendu=N (rien n\'est écrit)');
 }
 
-module.exports = { motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
+module.exports = { origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };
