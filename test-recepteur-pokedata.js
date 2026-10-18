@@ -82,6 +82,30 @@ const bon = () => ({ schema: 1, set: 'Trick or Trade 2024', url: 'https://www.po
       const ff = JSON.parse(fs.readFileSync(path.join(d3, 'releve--Trick-or-Trade-2024.json'), 'utf8')).cartes.find(c => c.img.endsWith('037b.webp'));
       verifier('numéro qui contredit le nom de fichier de l\'image : la carte est gardée MARQUÉE « numeroDoute » (numéro = celui du fichier) et le plan l\'ignore', [ff?.numero, ff?.numeroDoute, P.lireReleves(d3).cartes.some(c => c.img.endsWith('037b.webp')), P.lireReleves(d3).douteuses], ['037b', true, false, 1]);
       s3.close(); }
+    // ── POKEDATA-SUITE : le récepteur DIT ce qu'il fait (le testeur ne savait pas si un relevé était arrivé) ──
+    { const d5 = fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-rec5-')); const lignes = [];
+      const s5 = R.creerServeur({ dossier: d5, racine: os.tmpdir(), journal: l => lignes.push(l) }); await new Promise(r => s5.listen(0, '127.0.0.1', r)); const p5 = s5.address().port;
+      const po = (corps, { chemin = '/releve', entetes = {} } = {}) => new Promise(res => { const data = typeof corps === 'string' ? corps : JSON.stringify(corps); const rq = http.request({ host: '127.0.0.1', port: p5, path: chemin, method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rat-Market': R.VALEUR_MARQUE, 'Content-Length': Buffer.byteLength(data), ...entetes } }, rs => { rs.resume(); rs.on('end', () => res(rs.statusCode)); }); rq.on('error', e => res(e.code)); rq.end(data); });
+      await po(bon());
+      verifier('console : un relevé ACCEPTÉ => « reçu : <set> — 2 cartes (total du set dans le fichier : 2) »', lignes, ['reçu : Trick or Trade 2024 — 2 cartes (total du set dans le fichier : 2)']);
+      lignes.length = 0; const neuf = bon(); neuf.cartes = [{ numero: '099a', nom: 'Darkrai', img: IMG('Trick+or+Trade+2024', '099a.webp') }]; await po(neuf);
+      verifier('console : un second relevé du même set => 1 carte reçue, total du set dans le fichier : 3 (fusion sans perte)', lignes, ['reçu : Trick or Trade 2024 — 1 cartes (total du set dans le fichier : 3)']);
+      lignes.length = 0; const mauvais = bon(); mauvais.cartes[0].img = IMG('Trick+or+Trade+2024', '037a_240w.webp'); mauvais.cartes[0].nom = 'SECRET-DU-CORPS'; mauvais.set = 'SET-INVENTE-SECRET';
+      const st1 = await po(mauvais);
+      verifier('console : un relevé REFUSÉ => « refusé : <motif> » sans contenu du corps (ni nom de carte, ni valeur envoyée)', [st1, lignes.length, /^refusé : /.test(lignes[0] || ''), /SECRET/.test(lignes.join('')), /hors de la table/.test(lignes[0] || '')], [422, 1, true, false, true]);
+      lignes.length = 0; await po('{pas du json'); await po(bon(), { entetes: { 'X-Rat-Market': 'non' } }); await po(bon(), { chemin: '/autre' });
+      verifier('console : JSON illisible, marque absente, mauvais chemin => une ligne « refusé : … » chacun', [lignes.length, lignes.every(l => /^refusé : /.test(l))], [3, true]);
+      lignes.length = 0; { const o = bon(); o.cle = 1; await po(o); }
+      verifier('console : le motif d\'un schéma refusé ne recopie pas les clés reçues', [/refusé : /.test(lignes[0] || ''), /cle/.test(lignes[0] || '')], [true, false]);
+      s5.close();
+      const vu = []; const lg = console.log; console.log = (...a) => vu.push(a.join(' '));
+      let d6, s6, p6; try { d6 = fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-rec6-')); s6 = R.creerServeur({ dossier: d6, racine: os.tmpdir() }); await new Promise(r => s6.listen(0, '127.0.0.1', r)); p6 = s6.address().port;
+        await new Promise(res => { const data = JSON.stringify(bon()); const rq = http.request({ host: '127.0.0.1', port: p6, path: '/releve', method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rat-Market': R.VALEUR_MARQUE, 'Content-Length': Buffer.byteLength(data) } }, rs => { rs.resume(); rs.on('end', res); }); rq.end(data); }); }
+      finally { console.log = lg; if (s6) s6.close(); }
+      verifier('console : sans réglage, la sortie est la console du processus (capturée ici)', vu.some(l => /^reçu : Trick or Trade 2024 — 2 cartes/.test(l)), true);
+      verifier('console : au démarrage, une ligne « écoute sur http://127.0.0.1:<port>/releve — dossier <chemin> »', R.ligneDeDemarrage(8767, 'C:\\x\\releves'), 'écoute sur http://127.0.0.1:8767/releve — dossier C:\\x\\releves');
+      verifier('console : le CLI imprime cette ligne (et plus l\'ancienne « récepteur sur »)', [/ligneDeDemarrage\(/.test(fs.readFileSync(path.join(__dirname, 'recepteur-pokedata.js'), 'utf8').split('require.main !== module')[1] || ''), /récepteur sur http/.test(fs.readFileSync(path.join(__dirname, 'recepteur-pokedata.js'), 'utf8'))], [true, false]);
+    }
     // 🔴 CORRECTION 3 (B2) : un fichier de relevé corrompu (JSON valide mais de forme inattendue) ne fait pas planter le récepteur
     { const d4 = fs.mkdtempSync(path.join(os.tmpdir(), 'pdt-rec4-')); const s4 = R.creerServeur({ dossier: d4, racine: os.tmpdir() }); await new Promise(r => s4.listen(0, '127.0.0.1', r)); const p4 = s4.address().port;
       const po = corps => new Promise(res => { const data = JSON.stringify(corps); const rq = http.request({ host: '127.0.0.1', port: p4, path: '/releve', method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rat-Market': R.VALEUR_MARQUE, 'Content-Length': Buffer.byteLength(data) } }, rs => { let t = ''; rs.on('data', c => t += c); rs.on('end', () => res(rs.statusCode)); }); rq.on('error', e => res(e.code)); rq.end(data); });

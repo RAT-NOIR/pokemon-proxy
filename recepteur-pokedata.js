@@ -69,12 +69,16 @@ const slugFichier = s => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
 /** Le serveur (non démarré). `dossier` : où écrire. */
-function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE } = {}) {
+/** Le motif journalisé d'un refus : celui du client, SANS rien de ce que le corps contenait (les valeurs citées entre « » sont masquées). */
+const motifPublic = texte => String(texte).replace(/«[^»]*»/g, '« … »');
+/** La ligne affichée au démarrage. */
+const ligneDeDemarrage = (port, dossier) => `écoute sur http://${HOTE}:${port}/releve — dossier ${dossier}`;
+function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, journal = l => console.log(l) } = {}) {
     if (dansLeDepot(dossier)) throw new Error(`le dossier « ${dossier} » est dans le dépôt : les relevés n'y entrent jamais`);
     if (!dansRacineAutorisee(dossier, racine)) throw new Error(`le dossier « ${dossier} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);
     if (dansApportsManuels(dossier)) throw new Error(`le dossier « ${dossier} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     return http.createServer((req, res) => {
-        const fin = (statut, texte) => { res.writeHead(statut, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' }); res.end(texte); req.resume(); };
+        const fin = (statut, texte) => { if (statut >= 400) journal(`refusé : ${motifPublic(texte)}`); res.writeHead(statut, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' }); res.end(texte); req.resume(); };
         if (req.method !== 'POST') return fin(405, 'POST seulement');
         if (req.url !== '/releve') return fin(404, 'chemin inconnu');
         const hote = req.headers.host || '';
@@ -98,13 +102,14 @@ function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE } = 
             const f = fusionner(ancien, o);
             fs.writeFileSync(path.join(dossier, `releve--${nom}.json`), JSON.stringify({ schema: 1, set: o.set, complet: f.complet, le: new Date().toISOString(), cartes: f.cartes }, null, 1));
             fs.writeFileSync(path.join(dossier, `diag--${nom}--${horodatage()}.json`), JSON.stringify({ set: o.set, url: o.url, cartes: o.cartes.length, diag: o.diag }, null, 1));
+            journal(`reçu : ${o.set} — ${o.cartes.length} cartes (total du set dans le fichier : ${f.cartes.length})`);
             fin(200, `${o.cartes.length} carte(s) enregistrée(s) pour ${o.set}`);
             } catch (e) { console.error(`récepteur : erreur interne (relevé existant corrompu ?) — ${e.message}`); if (!res.headersSent) fin(500, 'erreur interne : relevé existant illisible'); }
         });
     });
 }
 
-module.exports = { validerReleve, fusionner, creerServeur, HOTE, PORT_DEFAUT, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT };
+module.exports = { ligneDeDemarrage, validerReleve, fusionner, creerServeur, HOTE, PORT_DEFAUT, ENTETE_MARQUE, VALEUR_MARQUE, DOSSIER_DEFAUT };
 
 if (require.main !== module) return;
 const arg = n => process.argv.slice(2).find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -113,6 +118,7 @@ if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' '
 else {
     const port = Number(arg('port') ?? PORT_DEFAUT);
     try {
-        creerServeur({ dossier: arg('dossier') ?? DOSSIER_DEFAUT }).listen(port, HOTE, () => console.log(`récepteur sur http://${HOTE}:${port}/releve → ${arg('dossier') ?? DOSSIER_DEFAUT} (aucune requête sortante)`));
+        const srv = creerServeur({ dossier: arg('dossier') ?? DOSSIER_DEFAUT });
+        srv.listen(port, HOTE, () => console.log(ligneDeDemarrage(srv.address().port, arg('dossier') ?? DOSSIER_DEFAUT)));
     } catch (e) { console.error(`❌ ${e.message}`); process.exitCode = 1; }
 }
