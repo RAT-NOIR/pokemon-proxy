@@ -78,6 +78,8 @@ module.exports = {
         if (cfg.regleG === true && !(deps && typeof deps.voisins === 'function')) console.warn('⚠️ [v2] règle G demandée, aucun fournisseur de voisins (V2_REGLE_G=1) — la chaîne héritée décide');
         // SECONDE-LECTURE : même règle. Demandée (V2_SECONDE_LECTURE=1) sans fournisseur (deps.secondeLecture), elle ne peut rien : la question de la garde des jumeaux reste. On le DIT, une fois, au montage.
         if (cfg.secondeLecture === true && !(deps && typeof deps.secondeLecture === 'function')) console.warn('⚠️ [v2] seconde lecture demandée, aucun fournisseur (V2_SECONDE_LECTURE=1) — la question de la garde des jumeaux reste');
+        // F1-TAMPON : même règle. Demandée (V2_LECTURE_TAMPON=1) sans fournisseur (deps.lectureTampon), la lecture du tampon ne peut rien : la question reste. On le DIT, une fois, au montage.
+        if (cfg.lectureTampon === true && !(deps && typeof deps.lectureTampon === 'function')) console.warn('⚠️ [v2] lecture du tampon demandée, aucun fournisseur (V2_LECTURE_TAMPON=1) — la question de la paire reste');
         // Sans `contrat: 2` la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
         // L'aiguilleur EN TÊTE (registre d'A0), prédicat strictement booléen. Puis : porteur, installation exigée, limiteur par COMPTE/installation (120/h),
         // idempotence (clé obligatoire : le débit en exige une), entrée validée AVANT tout débit, traitement.

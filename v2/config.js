@@ -180,6 +180,11 @@ function lireConfig(env = process.env) {
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
+        // F1-TAMPON : lire le tampon STAFF sur la photo pour trancher une paire SÉPARÉE staff / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet.
+        // N'agit que si un fournisseur est branché (deps.lectureTampon) ET que la question est exactement une paire séparée. V2_LECTURE_TAMPON_JUMBO : le contexte « jumbo » du titre (sans appel au modèle),
+        // à mesurer à part ; il n'agit que si V2_LECTURE_TAMPON est allumé aussi.
+        lectureTampon: booleen('V2_LECTURE_TAMPON', env.V2_LECTURE_TAMPON, false),
+        lectureTamponJumbo: booleen('V2_LECTURE_TAMPON_JUMBO', env.V2_LECTURE_TAMPON_JUMBO, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),

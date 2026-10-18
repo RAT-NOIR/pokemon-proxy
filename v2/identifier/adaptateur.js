@@ -281,5 +281,10 @@ function adapter({ statutHttp, corps } = {}, ctx = {}) {
         return { issue: 'panne', analyse: null, erreur: { code }, diagnostic, ...(e instanceof Panne && e.motif ? { motif: e.motif } : {}) };
     }
 }
+/** F1-TAMPON : l'affirmation d'un produit CHOISI par la route (STAFF lu deux fois), construite par la MÊME fonction que toute affirmation. Le produit doit être dans ctx.produits (sinon la panne SERVEUR d'avant). */
+function affirmerParLaRoute(corps, idProduct, ctx, critere) {
+    source(ctx, idProduct);
+    return affirmer(idProduct, etatDe(corps && corps.etat), ctx, corps || {}, critere);
+}
 // codeLangueDe / prixLiveDe : exportés pour que /api/identifier/reponse (B1b.5) fabrique le prixLive d'une carte tranchée par la MÊME règle que l'adaptateur (§21 bis : jamais une copie).
-module.exports = { adapter, RAISONS, codeLangueDe, prixLiveDe };
+module.exports = { adapter, RAISONS, codeLangueDe, prixLiveDe, affirmerParLaRoute };

@@ -826,6 +826,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
             V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
+            V2_LECTURE_TAMPON: [c => c.lectureTampon, false, '2', 'leve'], V2_LECTURE_TAMPON_JUMBO: [c => c.lectureTamponJumbo, false, '2', 'leve'],      // F1-TAMPON : éteintes par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
             V2_RESOLUTION_CARDMARKET: [c => c.resolutionCardmarket, false, 'true', 'ignore'],      // RESOUDRE-CARDMARKET : éteint par défaut ; seul « 1 » l'allume, toute autre valeur l'éteint sans invalider la configuration
