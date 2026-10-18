@@ -92,7 +92,15 @@ const bon = () => ({ schema: 1, set: 'Trick or Trade 2024', url: 'https://www.po
       verifier('console : un second relevé du même set => 1 carte reçue, total du set dans le fichier : 3 (fusion sans perte)', lignes, ['reçu : Trick or Trade 2024 — 1 cartes (total du set dans le fichier : 3)']);
       lignes.length = 0; const mauvais = bon(); mauvais.cartes[0].img = IMG('Trick+or+Trade+2024', '037a_240w.webp'); mauvais.cartes[0].nom = 'SECRET-DU-CORPS'; mauvais.set = 'SET-INVENTE-SECRET';
       const st1 = await po(mauvais);
-      verifier('console : un relevé REFUSÉ => « refusé : <motif> » sans contenu du corps (ni nom de carte, ni valeur envoyée)', [st1, lignes.length, /^refusé : /.test(lignes[0] || ''), /SECRET/.test(lignes.join('')), /hors de la table/.test(lignes[0] || '')], [422, 1, true, false, true]);
+      verifier('console : un relevé REFUSÉ => « refusé : <motif> » sans contenu du corps (ni nom de carte, ni valeur envoyée)', [st1, lignes.length, /^refusé : /.test(lignes[0] || ''), /SECRET/.test(lignes.join('')), /hors de la table/.test(lignes[0] || '')], [422, 1, true, false, false]);
+      verifier('console : le refus s\'écrit « refusé : HTTP <statut> — <catégorie fixe> »', lignes[0], 'refusé : HTTP 422 — set');
+      lignes.length = 0;
+      { const a = bon(); a.schema = 'SECRET-XYZ'; const b = bon(); b.set = 'SECRET-SET'; const c = bon(); c['SECRET-CLE'] = 1; const e = bon(); e.cartes[0]['SECRET-CLE'] = 2; const f = bon(); f.cartes[0].numero = 'SECRET/NUM'; const g = bon(); g.url = 'https://SECRET.example/x'; const h = bon(); h.diag = { SECRET: 1 };
+        for (const o of [a, b, c, e, f, g, h]) await po(o);
+        verifier('console : schéma « SECRET-XYZ », set « SECRET-SET », clés « SECRET-CLE », numéro, adresse, diag => AUCUNE de ces chaînes dans la console', [lignes.length, /SECRET/i.test(lignes.join('\n'))], [7, false]);
+        verifier('console : chaque refus porte une catégorie fixe', lignes.every(l => /^refusé : HTTP \d{3} — [a-zéêè ]+$/.test(l)), true);
+        verifier('console : catégories (schéma, set, clés, carte, adresse de page, diag)', lignes.map(l => l.split(' — ')[1]), ['schéma', 'set', 'clés', 'carte', 'carte', 'adresse de page', 'diag']); }
+      lignes.length = 0;
       lignes.length = 0; await po('{pas du json'); await po(bon(), { entetes: { 'X-Rat-Market': 'non' } }); await po(bon(), { chemin: '/autre' });
       verifier('console : JSON illisible, marque absente, mauvais chemin => une ligne « refusé : … » chacun', [lignes.length, lignes.every(l => /^refusé : /.test(l))], [3, true]);
       lignes.length = 0; { const o = bon(); o.cle = 1; await po(o); }

@@ -29,23 +29,23 @@ const cles = o => Object.keys(o).sort().join(',');
 
 /** Valide un relevé déjà lu en JSON. Rend { ok: true } ou { ok: false, statut, motif }. */
 function validerReleve(o) {
-    const non = (statut, motif) => ({ ok: false, statut, motif });
-    if (!o || typeof o !== 'object' || Array.isArray(o)) return non(400, 'le corps doit être un objet JSON');
-    if (o.schema !== 1) return non(400, `schéma ${o.schema} inconnu : seul le schéma 1 est accepté`);
-    if (cles(o) !== 'cartes,diag,schema,set,url') return non(400, `clés reçues « ${cles(o).slice(0, 200)} » : seules cartes,diag,schema,set,url sont acceptées`);
-    if (typeof o.set !== 'string' || !Object.hasOwn(P.SETS_UTILES, o.set)) return non(422, `set « ${String(o.set).slice(0, 80)} » hors de la table`);
-    if (!P.urlPageValide(o.url) || P.nomDeSegment(new URL(o.url).pathname.replace(/^\/set\//, ''), Object.keys(P.SETS_UTILES)) !== o.set) return non(422, 'adresse de page : ce n\'est pas la page du set déclaré');
-    if (!Array.isArray(o.cartes) || o.cartes.length > CARTES_MAX) return non(400, `cartes : un tableau de ${CARTES_MAX} cartes au plus`);
+    const non = (statut, motif, categorie) => ({ ok: false, statut, motif, categorie });
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return non(400, 'le corps doit être un objet JSON', 'corps');
+    if (o.schema !== 1) return non(400, `schéma ${o.schema} inconnu : seul le schéma 1 est accepté`, 'schéma');
+    if (cles(o) !== 'cartes,diag,schema,set,url') return non(400, `clés reçues « ${cles(o).slice(0, 200)} » : seules cartes,diag,schema,set,url sont acceptées`, 'clés');
+    if (typeof o.set !== 'string' || !Object.hasOwn(P.SETS_UTILES, o.set)) return non(422, `set « ${String(o.set).slice(0, 80)} » hors de la table`, 'set');
+    if (!P.urlPageValide(o.url) || P.nomDeSegment(new URL(o.url).pathname.replace(/^\/set\//, ''), Object.keys(P.SETS_UTILES)) !== o.set) return non(422, 'adresse de page : ce n\'est pas la page du set déclaré', 'adresse de page');
+    if (!Array.isArray(o.cartes) || o.cartes.length > CARTES_MAX) return non(400, `cartes : un tableau de ${CARTES_MAX} cartes au plus`, 'cartes');
     for (let i = 0; i < o.cartes.length; i++) {
         const c = o.cartes[i];
-        if (!c || typeof c !== 'object' || Array.isArray(c) || cles(c) !== 'img,nom,numero') return non(400, `carte ${i} : clés exactes img,nom,numero exigées`);
-        if (!estChaine(c.nom, 200) || typeof c.numero !== 'string' || !/^[A-Za-z0-9-]{1,12}$/.test(c.numero)) return non(400, `carte ${i} : nom (200 caractères) et numéro [A-Za-z0-9-]{1,12} exigés`);
-        if (!P.urlImageValide(c.img)) return non(422, `carte ${i} : adresse d'image hors des règles (hôte, chemin, jamais _240w)`);
-        if (P.nomDeSegment(new URL(c.img).pathname.slice(P.PREFIXE_CHEMIN.length).split('/')[0]) !== o.set) return non(422, `carte ${i} : l'image n'est pas celle du set déclaré`);
+        if (!c || typeof c !== 'object' || Array.isArray(c) || cles(c) !== 'img,nom,numero') return non(400, `carte ${i} : clés exactes img,nom,numero exigées`, 'carte');
+        if (!estChaine(c.nom, 200) || typeof c.numero !== 'string' || !/^[A-Za-z0-9-]{1,12}$/.test(c.numero)) return non(400, `carte ${i} : nom (200 caractères) et numéro [A-Za-z0-9-]{1,12} exigés`, 'carte');
+        if (!P.urlImageValide(c.img)) return non(422, `carte ${i} : adresse d'image hors des règles (hôte, chemin, jamais _240w)`, 'carte');
+        if (P.nomDeSegment(new URL(c.img).pathname.slice(P.PREFIXE_CHEMIN.length).split('/')[0]) !== o.set) return non(422, `carte ${i} : l'image n'est pas celle du set déclaré`, 'carte');
     }
     const d = o.diag;
-    if (!d || typeof d !== 'object' || Array.isArray(d) || cles(d) !== 'complet,imgs,structure') return non(400, 'diag : clés exactes complet,imgs,structure exigées');
-    if (typeof d.complet !== 'boolean' || !Number.isInteger(d.imgs) || !Array.isArray(d.structure) || d.structure.length > 5 || !d.structure.every(x => estChaine(x, 300) && STRUCTURE.test(x))) return non(400, 'diag : complet booléen, imgs entier, au plus 5 chemins « BALISE.classe / … / IMG[src,alt] » de 300 caractères (aucun texte, aucun autre attribut)');
+    if (!d || typeof d !== 'object' || Array.isArray(d) || cles(d) !== 'complet,imgs,structure') return non(400, 'diag : clés exactes complet,imgs,structure exigées', 'diag');
+    if (typeof d.complet !== 'boolean' || !Number.isInteger(d.imgs) || !Array.isArray(d.structure) || d.structure.length > 5 || !d.structure.every(x => estChaine(x, 300) && STRUCTURE.test(x))) return non(400, 'diag : complet booléen, imgs entier, au plus 5 chemins « BALISE.classe / … / IMG[src,alt] » de 300 caractères (aucun texte, aucun autre attribut)', 'diag');
     return { ok: true };
 }
 // un résumé STRUCTUREL seulement : des balises (et leurs classes) de haut en bas, jusqu'à l'image ; jamais un texte, jamais un attribut autre que src/alt de l'image
@@ -69,8 +69,6 @@ const slugFichier = s => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const horodatage = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
 
 /** Le serveur (non démarré). `dossier` : où écrire. */
-/** Le motif journalisé d'un refus : celui du client, SANS rien de ce que le corps contenait (les valeurs citées entre « » sont masquées). */
-const motifPublic = texte => String(texte).replace(/«[^»]*»/g, '« … »');
 /** La ligne affichée au démarrage. */
 const ligneDeDemarrage = (port, dossier) => `écoute sur http://${HOTE}:${port}/releve — dossier ${dossier}`;
 function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, journal = l => console.log(l) } = {}) {
@@ -78,24 +76,24 @@ function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, jou
     if (!dansRacineAutorisee(dossier, racine)) throw new Error(`le dossier « ${dossier} » n'est pas sous la racine autorisée « ${racine} » : le récepteur n'écrit que là`);
     if (dansApportsManuels(dossier)) throw new Error(`le dossier « ${dossier} » est un dossier d'apports manuels (ou est dedans) : jamais écrit par un outil`);
     return http.createServer((req, res) => {
-        const fin = (statut, texte) => { if (statut >= 400) journal(`refusé : ${motifPublic(texte)}`); res.writeHead(statut, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' }); res.end(texte); req.resume(); };
-        if (req.method !== 'POST') return fin(405, 'POST seulement');
-        if (req.url !== '/releve') return fin(404, 'chemin inconnu');
+        const fin = (statut, texte, categorie = 'requête') => { if (statut >= 400) journal(`refusé : HTTP ${statut} — ${categorie}`); res.writeHead(statut, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' }); res.end(texte); req.resume(); };
+        if (req.method !== 'POST') return fin(405, 'POST seulement', 'méthode');
+        if (req.url !== '/releve') return fin(404, 'chemin inconnu', 'chemin');
         const hote = req.headers.host || '';
-        if (!/^(127\.0\.0\.1|localhost):\d+$/.test(hote)) return fin(403, 'hôte refusé');
-        if (req.headers[ENTETE_MARQUE.toLowerCase()] !== VALEUR_MARQUE) return fin(403, 'marque absente');
+        if (!/^(127\.0\.0\.1|localhost):\d+$/.test(hote)) return fin(403, 'hôte refusé', 'hôte');
+        if (req.headers[ENTETE_MARQUE.toLowerCase()] !== VALEUR_MARQUE) return fin(403, 'marque absente', 'marque');
         const origine = req.headers.origin;
-        if (origine !== undefined && origine !== ORIGINE_SITE && !ORIGINE_EXTENSION.test(origine)) return fin(403, 'origine refusée');
-        if (!/^application\/json(\s*;|$)/i.test(req.headers['content-type'] || '')) return fin(415, 'JSON seulement');
-        if (Number(req.headers['content-length'] || 0) > CORPS_MAX_OCTETS) return fin(413, 'corps trop gros');
+        if (origine !== undefined && origine !== ORIGINE_SITE && !ORIGINE_EXTENSION.test(origine)) return fin(403, 'origine refusée', 'origine');
+        if (!/^application\/json(\s*;|$)/i.test(req.headers['content-type'] || '')) return fin(415, 'JSON seulement', 'type de contenu');
+        if (Number(req.headers['content-length'] || 0) > CORPS_MAX_OCTETS) return fin(413, 'corps trop gros', 'corps trop gros');
         const morceaux = []; let taille = 0, trop = false;
         req.on('data', c => { taille += c.length; if (taille > CORPS_MAX_OCTETS) trop = true; else morceaux.push(c); });
         req.on('end', () => {
-            if (trop) return fin(413, 'corps trop gros');
+            if (trop) return fin(413, 'corps trop gros', 'corps trop gros');
             try {
-            let o; try { o = JSON.parse(Buffer.concat(morceaux).toString('utf8')); } catch { return fin(400, 'JSON illisible'); }
+            let o; try { o = JSON.parse(Buffer.concat(morceaux).toString('utf8')); } catch { return fin(400, 'JSON illisible', 'corps illisible'); }
             const v = validerReleve(o);
-            if (!v.ok) return fin(v.statut, v.motif);
+            if (!v.ok) return fin(v.statut, v.motif, v.categorie);
             fs.mkdirSync(dossier, { recursive: true });
             const nom = slugFichier(o.set);
             let ancien = null; try { ancien = JSON.parse(fs.readFileSync(path.join(dossier, `releve--${nom}.json`), 'utf8')); } catch { /* premier relevé de ce set */ }
@@ -104,7 +102,7 @@ function creerServeur({ dossier = DOSSIER_DEFAUT, racine = RACINE_AUTORISEE, jou
             fs.writeFileSync(path.join(dossier, `diag--${nom}--${horodatage()}.json`), JSON.stringify({ set: o.set, url: o.url, cartes: o.cartes.length, diag: o.diag }, null, 1));
             journal(`reçu : ${o.set} — ${o.cartes.length} cartes (total du set dans le fichier : ${f.cartes.length})`);
             fin(200, `${o.cartes.length} carte(s) enregistrée(s) pour ${o.set}`);
-            } catch (e) { console.error(`récepteur : erreur interne (relevé existant corrompu ?) — ${e.message}`); if (!res.headersSent) fin(500, 'erreur interne : relevé existant illisible'); }
+            } catch (e) { console.error(`récepteur : erreur interne (relevé existant corrompu ?) — ${e.message}`); if (!res.headersSent) fin(500, 'erreur interne : relevé existant illisible', 'erreur interne'); }
         });
     });
 }
