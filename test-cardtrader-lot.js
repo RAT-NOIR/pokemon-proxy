@@ -48,11 +48,13 @@ const pages = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'cardt
         assert.ok(C.imageDePage('<body><img src="/uploads/blueprints/image/77/thumb_x.jpg"><img src="/uploads/blueprints/image/77/small_x.jpg"></body>', url).refus);
         assert.ok(C.imageDePage('<body><img src="/uploads/blueprints/back_image/77/x.jpg"><img src="https://www.cardtrader.com/uploads/blueprints/back_image/77/show_x.jpg"></body>', url).refus);
     });
-    await test('largeur : >= 350 ok, sinon trop-petit AVEC sa largeur (aucun plancher de 200 px)', () => {
+    await test('largeur : >= 350 ok ; 200 <= w < 350 basse-definition (plancher du testeur, 18/10) ; < 200 trop-petit AVEC sa largeur', () => {
         assert.deepStrictEqual(C.controleLargeur(350), { statut: 'ok', largeur: 350 });
         assert.deepStrictEqual(C.controleLargeur(500), { statut: 'ok', largeur: 500 });
-        assert.deepStrictEqual(C.controleLargeur(349), { statut: 'trop-petit', largeur: 349 });
-        assert.deepStrictEqual(C.controleLargeur(200), { statut: 'trop-petit', largeur: 200 });
+        assert.deepStrictEqual(C.controleLargeur(349), { statut: 'basse-definition', largeur: 349 });
+        assert.deepStrictEqual(C.controleLargeur(255), { statut: 'basse-definition', largeur: 255 });
+        assert.deepStrictEqual(C.controleLargeur(200), { statut: 'basse-definition', largeur: 200 });
+        assert.deepStrictEqual(C.controleLargeur(199), { statut: 'trop-petit', largeur: 199 });
         assert.strictEqual(C.controleLargeur(0).statut, 'trop-petit');
         assert.strictEqual(C.controleLargeur(undefined).statut, 'trop-petit');
     });

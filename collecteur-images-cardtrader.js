@@ -18,6 +18,7 @@ const sharp = require('sharp');
 const CT = require('./collecte-cartes/cardtrader');
 const RH = require('./collecte-cartes/reponse-hote');
 const { WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { marqueDe } = require('./collecte-cartes/basse-definition');
 
 const DOSSIER_LOT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\CARDTRADER';
 const DOSSIER_CACHE = path.join(DOSSIER_LOT, 'cache-lot');
@@ -80,7 +81,13 @@ async function juger(octets) {
     const ratio = meta.height / meta.width;
     if (ratio < RATIO_MIN || ratio > RATIO_MAX) return { statut: 'forme-inattendue', w: meta.width, h: meta.height, format: meta.format };
     const c = CT.controleLargeur(meta.width);
-    return { statut: c.statut, w: meta.width, h: meta.height, format: meta.format };
+    // l'index garde `ok` (>= 350) ou `trop-petit` AVEC la largeur ; qu'une image sous 350 soit une basse définition ADMISE (200 <= w < 350) se REJOUE depuis cette largeur (`jugementDe`)
+    return { statut: c.statut === 'ok' ? 'ok' : 'trop-petit', w: meta.width, h: meta.height, format: meta.format };
+}
+/** Le jugement d'une entrée de l'index d'images, rejoué depuis sa largeur enregistrée : `ok` | `basse-definition` | `trop-petit` | tout autre statut inchangé (absent, forme-inattendue…). Aucune requête. */
+function jugementDe(ix) {
+    if (ix?.statut === 'trop-petit') return CT.controleLargeur(ix.w).statut;
+    return ix?.statut;
 }
 async function telecharger({ unites, releves, cli, fichier, now = Date.now }) {
     const idx = lireJson(fichier, {});
@@ -115,8 +122,10 @@ async function telecharger({ unites, releves, cli, fichier, now = Date.now }) {
 
 // ── 3. LES PLANCHES ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const echapper = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-async function planches({ unites, releves, indexImages, dossierCache, sortieDossier, n = 50, cleSeuleSeulement = false }) {
-    const dispo = unites.filter(u => { const url = releves[u.blueprint]?.url; return url && indexImages[url]?.statut === 'ok' && CT.lireDuCache(dossierCache, url); });
+async function planches({ unites, releves, indexImages, dossierCache, sortieDossier, n = 50, cleSeuleSeulement = false, basseDefinition = false }) {
+    // `basseDefinition` : la planche des SEULES unités dont l'image est admise en basse définition (jugée depuis sa largeur enregistrée) ; sinon, comme avant, les `ok`
+    const statutVoulu = basseDefinition ? 'basse-definition' : 'ok';
+    const dispo = unites.filter(u => { const url = releves[u.blueprint]?.url; return url && (basseDefinition ? jugementDe(indexImages[url]) : indexImages[url]?.statut) === statutVoulu && CT.lireDuCache(dossierCache, url); });
     if (!dispo.length) throw new Error('planche : aucune image au cache pour le lot');
     // `cleSeuleSeulement` : TOUTES les « clé seule » du lot (pas un échantillon), triées par famille puis par blueprint — l'œil les voit toutes
     const choix = cleSeuleSeulement ? dispo.filter(CT.estCleSeule).sort((a, b) => String(a.famille).localeCompare(String(b.famille)) || a.blueprint - b.blueprint) : CT.choisirEchantillon(dispo, n);
@@ -129,7 +138,7 @@ async function planches({ unites, releves, indexImages, dossierCache, sortieDoss
             const u = lot[i], left = (i % COL) * L, top = Math.floor(i / COL) * (H + B), c = CT.lireDuCache(dossierCache, releves[u.blueprint].url);
             tuiles.push({ input: await sharp(c.octets).resize(L, H, { fit: 'fill' }).png().toBuffer(), left, top });
             const seule = CT.estCleSeule(u);
-            const l1 = u.slugCM ?? '?', l2 = `fiche : ${u.carteNom ?? 'aucun nom de fiche'} · n°${u.numero ?? '—'}`, l3 = `blueprint : ${u.nomBlueprint ?? '?'}`, l4 = `${u.groupe} · ${seule ? `CLÉ SEULE${u.temoinNom ? ' + nom ok' : ''}` : 'témoin ok'} · bp ${u.blueprint}`;
+            const l1 = `${basseDefinition ? `${indexImages[releves[u.blueprint].url].w}px · ` : ''}${u.slugCM ?? '?'}`, l2 = `fiche : ${u.carteNom ?? 'aucun nom de fiche'} · n°${u.numero ?? '—'}`, l3 = `blueprint : ${u.nomBlueprint ?? '?'}`, l4 = `${u.groupe} · ${seule ? `CLÉ SEULE${u.temoinNom ? ' + nom ok' : ''}` : 'témoin ok'} · bp ${u.blueprint}`;
             const ligne = (y, t, c = '#000') => `<text x="4" y="${y}" font-family="Arial" font-size="13" fill="${c}">${echapper(t.slice(0, 38))}</text>`;
             tuiles.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${L}" height="${B}"><rect width="${L}" height="${B}" fill="#fff"/>${ligne(16, l1)}${ligne(34, l2)}${ligne(52, l3)}${ligne(70, l4, seule ? '#c00' : '#060')}</svg>`), left, top: top + H });
         }
@@ -138,7 +147,7 @@ async function planches({ unites, releves, indexImages, dossierCache, sortieDoss
         await sharp({ create: { width: L * COL, height: (H + B) * rangs, channels: 3, background: { r: 255, g: 255, b: 255 } } }).composite(tuiles).png().toFile(f);
         fichiers.push(f);
     }
-    ecrireJson(path.join(sortieDossier, 'planche.json'), choix.map(u => ({ blueprint: u.blueprint, famille: u.famille, groupe: u.groupe, slugCM: u.slugCM, carteNom: u.carteNom, nomBlueprint: u.nomBlueprint ?? null, numero: u.numero, cleSeule: CT.estCleSeule(u), page: u.page, image: releves[u.blueprint].url })));
+    ecrireJson(path.join(sortieDossier, 'planche.json'), choix.map(u => ({ blueprint: u.blueprint, famille: u.famille, groupe: u.groupe, slugCM: u.slugCM, carteNom: u.carteNom, nomBlueprint: u.nomBlueprint ?? null, numero: u.numero, cleSeule: CT.estCleSeule(u), page: u.page, image: releves[u.blueprint].url, ...(basseDefinition ? { largeur: indexImages[releves[u.blueprint].url].w } : {}) })));
     return { images: choix.length, cleSeule: choix.filter(CT.estCleSeule).length, parFamille: choix.reduce((m, u) => (m[u.famille] = (m[u.famille] || 0) + 1, m), {}), planches: fichiers };
 }
 
@@ -155,7 +164,7 @@ async function compterEntrees(db, carteIds, slug) {
 const candidatDe = (u, entree) => ({ set: u.slugSet, numero: u.numero, langue: 'en', source: CT.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(entree.tampon ? { tampon: entree.tampon } : {}) });
 
 /** La décision de chaque unité sur l'état de la base (lecture seule). `M` : modèles de la base `cartes`. */
-async function decider(unites, M, { cleR2 = CT.cleR2 } = {}) {
+async function decider(unites, M, { cleR2 = CT.cleR2, largeurDe = null } = {}) {
     const ids = [...new Set(unites.map(u => u.carteId))];
     const cartes = new Map((await M.Carte.find({ _id: { $in: ids } }).select('images').lean()).map(c => [c._id, c]));
     const docs = await M.Image.find({ carteId: { $in: ids } }).lean();
@@ -164,14 +173,21 @@ async function decider(unites, M, { cleR2 = CT.cleR2 } = {}) {
         const c = cartes.get(u.carteId);
         if (!c) return { ...u, decision: { action: 'cede', raison: 'carte introuvable en base', remplace: [] } };
         const cle = cleR2(u.slugSet, u.numero, u.carteId);
-        return { ...u, cleR2: cle, decision: CT.decisionEcriture(c.images || [], candidatDe(u, { cleR2: cle, wOriginal: 500, tampon: CT.tamponDeLaFamille(u.slugSet) }), { documents }) };
+        // `largeurDe` (mode basse définition) : la VRAIE largeur de l'original ; la candidate est alors marquée (marqueDe) et la règle commune la fait céder devant toute entrée existante. Sans lui : 500 nominal (comme avant)
+        const w = largeurDe ? largeurDe(u) : null, wOriginal = w ?? 500;
+        return { ...u, cleR2: cle, decision: CT.decisionEcriture(c.images || [], candidatDe(u, { cleR2: cle, wOriginal, ...marqueDe({ wOriginal }), tampon: CT.tamponDeLaFamille(u.slugSet) }), { documents }) };
     });
 }
 
-async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS, compterSeulement = false } = {}) {
+async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu = null, deposer, vignetter, fabriquerVerrouSet = null, stopOctets = STOP_OCTETS, compterSeulement = false, basseDefinition = false } = {}) {
     if (!compterSeulement && (typeof deposer !== 'function' || typeof vignetter !== 'function')) throw new Error('ecrire : deposer et vignetter sont exigés');
     const db = M.Carte.db.db;
-    const decidees = await decider(unites, M);
+    // MODE BASSE DÉFINITION (`--basse-definition`) : ne traite QUE les unités dont l'image est admise sous le seuil (200 <= w < 350, jugée depuis la largeur enregistrée) ; les `ok` sont « hors mode » (le lot normal les écrit).
+    // Sans le drapeau, rien de ce bloc ne s'exécute.
+    const urlDe = u => releves[u.blueprint]?.url;
+    const horsMode = basseDefinition ? unites.filter(u => jugementDe(indexImages[urlDe(u)]) === 'ok').length : undefined;
+    const aTraiter = basseDefinition ? unites.filter(u => jugementDe(indexImages[urlDe(u)]) !== 'ok') : unites;
+    const decidees = await decider(aTraiter, M, basseDefinition ? { largeurDe: u => indexImages[urlDe(u)]?.w ?? null } : {});
     const prets = [];
     let horsCache = 0, altere = 0, retires = 0, cedees = 0, tropPetits = 0, dejaPosees = 0, ecartees = 0;
     const orphelins = [];
@@ -182,9 +198,10 @@ async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu =
         // ÉCARTÉES (pas une erreur) : le relevé n'a trouvé aucune image / la page est absente / l'image est absente, illisible, de mauvaise forme — HORS CACHE (une erreur) : jamais relevée ou téléchargée, ou fichier manquant
         if (rel && !url) { ecartees++; continue; }
         if (!url || !ix) { horsCache++; continue; }
-        if (ix.statut === 'trop-petit') { tropPetits++; continue; }
-        if (['absent', 'fausse-absente', 'forme-inattendue', 'illisible'].includes(ix.statut)) { ecartees++; continue; }
-        if (ix.statut !== 'ok') { horsCache++; continue; }
+        const st = basseDefinition ? jugementDe(ix) : ix.statut;           // (le mode basse définition rejoue le jugement depuis la largeur enregistrée ; sinon, le statut de l'index tel quel)
+        if (st === 'trop-petit') { tropPetits++; continue; }
+        if (['absent', 'fausse-absente', 'forme-inattendue', 'illisible'].includes(st)) { ecartees++; continue; }
+        if (st !== (basseDefinition ? 'basse-definition' : 'ok')) { horsCache++; continue; }
         const c = CT.lireDuCache(dossierCache, url);
         if (!c) { horsCache++; continue; }
         if (sha('sha256', c.octets) !== ix.sha256) { altere++; console.error(`❌ cache altéré (sha256) : ${url}`); continue; }
@@ -195,8 +212,9 @@ async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu =
     }
     const reel = prets.length;
     // I4 — `--attendu` = le nombre d'UNITÉS à ajouter dont l'image est `ok` (une unité = un produit = une entrée ; deux unités PP peuvent partager un blueprint, donc UNE image) : imprimé AVANT tout refus
-    console.log(`unités à ajouter dont l'image est ok : ${reel} (cédées ${cedees}, déjà posées ${dejaPosees}, écartées ${ecartees}, trop petites ${tropPetits}, hors cache ${horsCache}, altérées ${altere}, retirées ${retires})`);
-    if (compterSeulement) return { code: 0, etat: 'compte', reel, unitesAAjouter: reel, horsCache, altere, ecartees, cedees, dejaPosees, tropPetits, orphelins };      // la valeur de --attendu, sans rien écrire
+    if (basseDefinition) console.log(`unités basse définition à ajouter : ${reel} (hors mode, image ok : ${horsMode}, cédées ${cedees}, déjà posées ${dejaPosees}, écartées ${ecartees}, sous le plancher de 200 px ${tropPetits}, hors cache ${horsCache}, altérées ${altere}, retirées ${retires})`);
+    else console.log(`unités à ajouter dont l'image est ok : ${reel} (cédées ${cedees}, déjà posées ${dejaPosees}, écartées ${ecartees}, trop petites ${tropPetits}, hors cache ${horsCache}, altérées ${altere}, retirées ${retires})`);
+    if (compterSeulement) return { code: 0, etat: 'compte', reel, unitesAAjouter: reel, horsCache, altere, ecartees, cedees, dejaPosees, tropPetits, horsMode, retires, orphelins };      // la valeur de --attendu, sans rien écrire
     if (attendu != null && attendu !== reel) {
         console.error(`❌ --attendu=${attendu} mais ${reel} unité(s) à ajouter — rien n'est écrit.`);
         return { code: 2, etat: 'refuse-attendu', resultats: [], attendu, reel, unitesAAjouter: reel, horsCache, altere, ecartees, cedees, orphelins };
@@ -211,7 +229,7 @@ async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu =
         if ((set.tirage ?? set.region) !== 'intl') { refus('refuse-set', `tirage ${set.tirage ?? set.region} en base : la source ne sert que des cartes anglaises`); continue; }
         const st = await db.command({ dbStats: 1 });
         if (st.dataSize + st.indexSize > stopOctets) { refus('refuse-taille-base', 'base au-delà de 400 Mo'); continue; }
-        const idEtat = `${CT.SOURCE}/${slug}`;
+        const idEtat = basseDefinition ? `${CT.SOURCE}-basse/${slug}` : `${CT.SOURCE}/${slug}`;       // (le lot basse définition a son état et son bilan : il ne recouvre pas ceux du lot des `ok`)
         const verrouSet = fabriquerVerrouSet ? fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat }) : null;
         if (verrouSet) { const tenu = await verrouSet.prendre(); if (tenu) { resultats.push({ code: slug, etat: 'refuse-verrou' }); continue; } }
         try {
@@ -260,12 +278,13 @@ async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu =
             }
             const apres = await compterEntrees(db, carteIds, slug);
             const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');
-            const garde = attenduesAutres === apres.autres && apres.siennes === joints;
+            // (mode basse définition : les entrées `ctr` déjà posées par le lot des `ok` sur ces cartes restent ; on compare l'AJOUT de ce passage)
+            const garde = attenduesAutres === apres.autres && apres.siennes === (basseDefinition ? avant.siennes : 0) + joints;
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
             const complet = { vignettes: W.vg, lot: CT.LOT, unites: unitesDuSet.length, deposees, sautees, joints, cedees: cedeesDuSet, remplacees, cartesAbsentes, orphelins: orphelinsDuSet, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0, verifieLe: new Date() };
-            await M.Set.updateOne({ _id: slug }, { $set: { bilanLotCtr: complet } });
+            await M.Set.updateOne({ _id: slug }, { $set: { [basseDefinition ? 'bilanLotCtrBasse' : 'bilanLotCtr']: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });
             console.log(`   ${slug} : unités ${unitesDuSet.length} · déposées ${deposees} · reprises ${sautees} · joints ${joints} · cédées ${cedeesDuSet} · remplacées ${remplacees} · garde ${garde ? '✅' : '❌'} · requêtes 0`);
             resultats.push({ code: slug, etat: erreurJointure ? 'incomplet' : !garde ? 'non-concordant' : complet.concordance ? 'verifie' : 'incomplet', ...complet });
@@ -275,12 +294,12 @@ async function ecrire(unites, M, { dossierCache, releves, indexImages, attendu =
     if (orphelins.length) console.error(`🔴 ${orphelins.length} objet(s) R2 orphelin(s) : ${orphelins.join(' ; ')} — une relance les reprend (même clé), sinon --effacer-r2 du retrait`);
     return { code, resultats, attendu: attendu ?? reel, reel, unitesAAjouter: reel, horsCache, altere, ecartees, cedees, dejaPosees, tropPetits, orphelins };
 }
-module.exports = { releve, telecharger, planches, juger, decider, ecrire, client, verifierChemin, DOSSIER_LOT, DOSSIER_CACHE };
+module.exports = { releve, telecharger, planches, juger, jugementDe, decider, ecrire, client, verifierChemin, DOSSIER_LOT, DOSSIER_CACHE };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
 
-const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--compter$/, /^--plafond=\d{1,5}$/, /^--attendu=\d{1,5}$/, /^--echantillon=\d{1,3}$/, /^--cache=.+$/, /^--lot=.+$/, /^--fichier-plan=[\w.-]+\.json$/, /^--fichier-lot=[\w.-]+\.json$/, /^--cle-seule$/];
+const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--compter$/, /^--plafond=\d{1,5}$/, /^--attendu=\d{1,5}$/, /^--echantillon=\d{1,3}$/, /^--cache=.+$/, /^--lot=.+$/, /^--fichier-plan=[\w.-]+\.json$/, /^--fichier-lot=[\w.-]+\.json$/, /^--cle-seule$/, /^--basse-definition$/];
 const args = process.argv.slice(2);
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const modes = ['--plan', '--releve', '--telecharger', '--planche', '--ecrire', '--compter'].filter(m => args.includes(m));
@@ -295,6 +314,8 @@ else if (val('echantillon') && modes[0] !== '--planche') erreurArgs = '--echanti
 else if (val('plafond') && !['--releve', '--telecharger'].includes(modes[0])) erreurArgs = '--plafond ne va qu\'avec --releve ou --telecharger';
 else if (args.includes('--cle-seule') && modes[0] !== '--planche') erreurArgs = '--cle-seule ne va qu\'avec --planche';
 else if (val('fichier-plan') && modes[0] !== '--plan') erreurArgs = '--fichier-plan ne va qu\'avec --plan';
+else if (args.includes('--basse-definition') && !['--compter', '--planche', '--ecrire'].includes(modes[0])) erreurArgs = '--basse-definition ne va qu\'avec --compter, --planche ou --ecrire';
+else if (args.includes('--basse-definition') && args.includes('--cle-seule')) erreurArgs = '--basse-definition ne se combine pas avec --cle-seule';
 if (erreurArgs) { console.error(`❌ ${erreurArgs}`); process.exitCode = 2; return; }
 
 (async () => {
@@ -353,7 +374,9 @@ if (erreurArgs) { console.error(`❌ ${erreurArgs}`); process.exitCode = 2; retu
     if (mode === '--planche') {
         // le dossier de planches suit le fichier de lot (lot.json -> planches ; lot-v2.json -> planches-v2) : une autre planche n'écrase jamais la précédente
         const suffixe = nomLot === 'lot.json' ? '' : nomLot.replace(/^lot/, '').replace(/\.json$/, '');
-        const r = await planches({ unites: aFaire, releves, indexImages, dossierCache: D.cache, sortieDossier: path.join(D.lot, `planches${args.includes('--cle-seule') ? '-cle-seule' : ''}${suffixe}`), n: Number(val('echantillon') ?? 50), cleSeuleSeulement: args.includes('--cle-seule') });
+        // --basse-definition : un dossier à elle (`planches-basse-def-<nom du fichier de lot>`), jamais celui des `ok`
+        const dossierPlanches = args.includes('--basse-definition') ? `planches-basse-def-${nomLot.replace(/\.json$/, '')}` : `planches${args.includes('--cle-seule') ? '-cle-seule' : ''}${suffixe}`;
+        const r = await planches({ unites: aFaire, releves, indexImages, dossierCache: D.cache, sortieDossier: path.join(D.lot, dossierPlanches), n: Number(val('echantillon') ?? 50), cleSeuleSeulement: args.includes('--cle-seule'), basseDefinition: args.includes('--basse-definition') });
         console.log(`PLANCHES : ${r.images} image(s) dont ${r.cleSeule} « clé seule » · ${JSON.stringify(r.parFamille)} · ${r.planches.join(' ; ')} (à REGARDER avant --ecrire)`);
         return;
     }
@@ -363,8 +386,9 @@ if (erreurArgs) { console.error(`❌ ${erreurArgs}`); process.exitCode = 2; retu
         const { modeles } = require('./collecte-cartes/schemas');
         const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
         try {
-            const r = await ecrire(aFaire, modeles(cx), { dossierCache: D.cache, releves, indexImages, compterSeulement: true });
-            console.log(`COMPTE : --attendu=${r.reel} (cédées ${r.cedees}, déjà posées ${r.dejaPosees}, écartées ${r.ecartees}, trop petites ${r.tropPetits}, hors cache ${r.horsCache}, altérées ${r.altere})`);
+            const basse = args.includes('--basse-definition');
+            const r = await ecrire(aFaire, modeles(cx), { dossierCache: D.cache, releves, indexImages, compterSeulement: true, basseDefinition: basse });
+            console.log(`COMPTE${basse ? ' BASSE DÉFINITION' : ''} : --attendu=${r.reel} (cédées ${r.cedees}, déjà posées ${r.dejaPosees}, écartées ${r.ecartees}, ${basse ? `hors mode (image ok) ${r.horsMode}, sous le plancher de 200 px` : 'trop petites'} ${r.tropPetits}, hors cache ${r.horsCache}, altérées ${r.altere}, retirées ${r.retires})`);
         } finally { await fermer(); }
         return;
     }
@@ -379,7 +403,7 @@ if (erreurArgs) { console.error(`❌ ${erreurArgs}`); process.exitCode = 2; retu
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
     try {
         await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
-        const r = await ecrire(aFaire, modeles(cx), { dossierCache: D.cache, releves, indexImages, attendu: Number(val('attendu')), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure,
+        const r = await ecrire(aFaire, modeles(cx), { dossierCache: D.cache, releves, indexImages, attendu: Number(val('attendu')), basseDefinition: args.includes('--basse-definition'), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure,
             fabriquerVerrouSet: ({ Modele, id }) => fabriquerVerrou({ Modele, id, dureeMs: 10 * 60 * 1000, surInsertion: { debute: new Date(), phase: 'plan' }, nom: `verrou de set ${id}` }) });
         console.log(`ÉCRITURE : code ${r.code} · attendu ${r.attendu} · unités à ajouter (réel) ${r.reel} · écartées ${r.ecartees} · cédées ${r.cedees} · hors cache ${r.horsCache} · altérées ${r.altere} · orphelins R2 ${r.orphelins?.length ?? 0} · REQUÊTES 0`);
         process.exitCode = r.code;

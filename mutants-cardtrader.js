@@ -16,8 +16,11 @@ const COLLECTEUR = {
 };
 
 const MUTANTS_MODULE = [
-    ['supprimer le seuil de largeur', 'return w >= largeurMinDe(SOURCE) ?', 'return true ?'],
-    ['abaisser le seuil à un plancher de 200 px', 'return w >= largeurMinDe(SOURCE) ?', 'return w >= 200 ?'],
+    ['supprimer le seuil de largeur', 'if (w >= largeurMinDe(SOURCE)) return', 'if (true) return'],
+    ['abaisser le seuil de la source à 200 px (tout est « ok »)', 'if (w >= largeurMinDe(SOURCE)) return', 'if (w >= 200) return'],
+    ['basse définition : plancher supprimé (tout est admis)', 'return w >= largeurAdmiseDe(SOURCE) ?', 'return true ?'],
+    ['basse définition : plancher abaissé à 150 px', 'return w >= largeurAdmiseDe(SOURCE) ?', 'return w >= 150 ?'],
+    ['basse définition : plus aucune admise (le plancher redevient le seuil)', 'return w >= largeurAdmiseDe(SOURCE) ?', 'return w >= largeurMinDe(SOURCE) ?'],
     ['accepter une vignette en og:image', "if (v === '') return { url: u, via: 'og' };", "if (v === '' || v) return { url: u, via: 'og' };"],
     ['accepter une vignette dans la page (variante quelconque)', "const show = trouvees.find(u => classer(u) === 'show');", 'const show = trouvees.find(u => classer(u) !== null);'],
     ['accepter le dos de la carte (deux endroits)', ['blueprints/image/${id}/([^/?#]+)', '(/uploads/blueprints/image/${id}/[^"'], ['blueprints/(?:back_)?image/${id}/([^/?#]+)', '(/uploads/blueprints/(?:back_)?image/${id}/[^"']],
@@ -48,7 +51,14 @@ const MUTANTS_MODULE = [
     ['joueur : la calibration ne coupe plus la règle', 'active: evaluables > 0 && faux === 0', 'active: true'],
 ];
 const MUTANTS_COLLECTEUR = [
-    ['juger : accepter toute largeur', 'return { statut: c.statut, w: meta.width, h: meta.height, format: meta.format };', "return { statut: 'ok', w: meta.width, h: meta.height, format: meta.format };"],
+    ['juger : accepter toute largeur', "return { statut: c.statut === 'ok' ? 'ok' : 'trop-petit', w: meta.width, h: meta.height, format: meta.format };", "return { statut: 'ok', w: meta.width, h: meta.height, format: meta.format };"],
+    ['jugement rejoué : l\'index n\'est plus relu depuis la largeur', "if (ix?.statut === 'trop-petit') return CT.controleLargeur(ix.w).statut;", ''],
+    ['mode basse définition : traite aussi les images ok', 'const aTraiter = basseDefinition ? unites.filter(u => jugementDe(indexImages[urlDe(u)]) !== \'ok\') : unites;', 'const aTraiter = unites;'],
+    ['mode basse définition : la décision ignore la vraie largeur (la candidate passe pour 500 px et remplacerait une basse définition)', 'const w = largeurDe ? largeurDe(u) : null, wOriginal = w ?? 500;', 'const w = null, wOriginal = 500;'],
+    ['mode basse définition : le bilan recouvre celui du lot des ok', "[basseDefinition ? 'bilanLotCtrBasse' : 'bilanLotCtr']", 'bilanLotCtr'],
+    ['mode basse définition : la garde ne compte plus l\'ajout seul', "(basseDefinition ? avant.siennes : 0) + joints", '0 + joints'],
+    ['planche basse définition : montre les ok', "const statutVoulu = basseDefinition ? 'basse-definition' : 'ok';", "const statutVoulu = 'ok';"],
+    ['--basse-definition accepté avec n\'importe quel mode', "else if (args.includes('--basse-definition') && !['--compter', '--planche', '--ecrire'].includes(modes[0]))", 'else if (false)'],
     ['juger : ne pas contrôler la forme de carte', 'if (ratio < RATIO_MIN || ratio > RATIO_MAX)', 'if (false)'],
     ['juger : accepter des octets illisibles', "catch { return { statut: 'illisible' }; }", "catch { return { statut: 'ok', w: 500, h: 698, format: 'jpeg' }; }"],
     ['--ecrire hors de lot-additif.js', "require('./collecte-cartes/images-empruntees').garderSousLot(process.env, process.ppid);\n    const { ouvrirConnexions } = require('./collecte-cartes/garde');\n    const { modeles }", "const { ouvrirConnexions } = require('./collecte-cartes/garde');\n    const { modeles }"],

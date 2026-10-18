@@ -77,7 +77,11 @@ function largeurAdmiseDe(source, ligne = null) {
 // Une image admise SOUS le seuil de sa source (donc < 257 pour pokemon.com, < 350 pour Pokumon) est de basse définition : `marqueDe` (basse-definition.js) la marque d'après la
 // largeur de l'ORIGINAL, comme toute image sous 350 px.
 const PLANCHER_BASSE_DEFINITION = 200;
-const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com']);
+// ➕ 2026-10-18 (CTR-BASSE) — DÉCISION DU TESTEUR (mot pour mot) : « Les 589 images CardTrader en 255 px : OUI, en basseDefinition: true (au-dessus du plancher de 200 px). Même chaîne :
+// planche (échantillon de 50), essai à blanc, écriture, revérification. » La source CardTrader entre donc dans la liste FERMÉE, sous le nom que son collecteur ÉCRIT dans `images.source`
+// (`SOURCE` de collecte-cartes/cardtrader.js, 'ctr' : le banc compare les deux ; cardtrader.js charge CE module, il ne peut pas être requis ici). Son seuil reste 350 (`largeurMinDe`) : sous 350
+// et à partir de 200, l'image est admise ET marquée basseDefinition (`marqueDe`), remplaçable dès qu'une source au-dessus du seuil existe ; sous 200, elle est refusée.
+const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com', 'ctr']);
 // le nom que le collecteur Pokumon ÉCRIT dans `images.source` (collecte-cartes/pokumon.js SOURCE ; le banc le compare) — pokumon.js charge CE module, il ne peut donc pas être requis ici
 const SOURCE_POKUMON = 'pokumon';
 const LIGNES_POKUMON_A_PLANCHER = Object.freeze(['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2']);

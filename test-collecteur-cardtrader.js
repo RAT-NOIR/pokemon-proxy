@@ -115,17 +115,20 @@ const mkCli = (transport, dossier, plafond = 50) => CT.fabriquerClient({ dossier
     const { fauxModeles } = require('./faux-modeles-cardtrader');
     process.env.R2_BUCKET_IMAGES = process.env.R2_BUCKET_IMAGES || 'banc-sans-bucket-reel';
     const SET_PP = 'Play-Pokemon-Prize-Pack-Series-Five';
-    async function preparer(n, { statuts = {} } = {}) {
-        const dossier = tmp(), bon = await jpeg(500, 698);
-        const cli = mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : { status: 200, type: 'image/jpeg', octets: bon }; } }, dossier, 200);
+    async function preparer(n, { statuts = {}, larges = {} } = {}) {
+        const dossier = tmp(), octetsParId = {};
+        const cli = mkCli({ async get(u) { return u.endsWith('robots.txt') ? { status: 200, type: 'text/plain', texte: '' } : { status: 200, type: 'image/jpeg', octets: octetsParId[Number(/image\/(\d+)\//.exec(u)[1])] }; } }, dossier, 200);
         await cli.initialiserRobots();
         const us = [], rels = {}, idx = {};
         for (let i = 0; i < n; i++) {
             const u = { carteId: 100 + i, slugSet: SET_PP, numero: String(70 + i), blueprint: 900 + i, blueprintSlug: `x-${i}`, page: `https://www.cardtrader.com/en-US/cards/${900 + i}-x-${i}`, produits: [7000 + i], famille: 'pp', groupe: 'PP S5', slugCM: `S-${i}`, carteNom: `N${i}`, temoins: ['confirme'], cles: [] };
             const url = `https://www.cardtrader.com/uploads/blueprints/image/${900 + i}/x.jpg`;
+            const larg = larges[i] ?? 500, haut = Math.round(larg * 1.4);
+            octetsParId[900 + i] = await jpeg(larg, haut);
             const r = await cli.lireImage(url);
             us.push(u); rels[u.blueprint] = { url };
-            idx[url] = statuts[i] ? { statut: statuts[i] } : { statut: 'ok', w: 500, h: 698, sha256: r.meta.sha256 };
+            // l'index tel que `juger` l'écrit : `ok` à partir de 350, sinon `trop-petit` AVEC sa largeur (le jugement basse définition se rejoue depuis cette largeur)
+            idx[url] = statuts[i] ? { statut: statuts[i] } : { statut: larg >= 350 ? 'ok' : 'trop-petit', w: larg, h: haut, sha256: r.meta.sha256 };
         }
         const deposes = [];
         return { dossier, us, rels, idx, deposes, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) };
@@ -219,6 +222,107 @@ const mkCli = (transport, dossier, plafond = 50) => CT.fabriquerClient({ dossier
         const { M } = fauxModeles({ cartes: cartesVides(1), sets: [{ _id: SET_PP, tirage: 'intl' }] });
         const [r] = await SILENCE(() => lancerEcrire(p, M, { dossierCache: tmp(), attendu: 0 }));
         assert.strictEqual(r.horsCache, 1); assert.strictEqual(r.code, 1);
+    });
+
+    // ───────── BASSE DÉFINITION (décision du testeur, 18/10) : « Les 589 images CardTrader en 255 px : OUI, en basseDefinition: true » ─────────
+    await test('BASSE juger : l\'index garde « trop-petit » AVEC la largeur (255 comme 199) ; le jugement basse définition se REJOUE depuis cette largeur (jugementDe)', async () => {
+        assert.deepStrictEqual((({ statut, w }) => ({ statut, w }))(await K.juger(await jpeg(255, 357))), { statut: 'trop-petit', w: 255 });
+        assert.deepStrictEqual((({ statut, w }) => ({ statut, w }))(await K.juger(await jpeg(199, 279))), { statut: 'trop-petit', w: 199 });
+        const j = K.jugementDe;
+        assert.deepStrictEqual([j({ statut: 'trop-petit', w: 255 }), j({ statut: 'trop-petit', w: 200 }), j({ statut: 'trop-petit', w: 349 }), j({ statut: 'trop-petit', w: 199 }), j({ statut: 'trop-petit' }), j({ statut: 'ok', w: 500 }), j({ statut: 'absent' }), j(undefined)],
+            ['basse-definition', 'basse-definition', 'basse-definition', 'trop-petit', 'trop-petit', 'ok', 'absent', undefined]);
+    });
+    const lotBasse = { statuts: { 3: 'absent' }, larges: { 0: 255, 1: 500, 2: 150, 4: 349 } };       // 0 : 255 (basse), 1 : 500 (ok), 2 : 150 (< 200), 3 : absent, 4 : 349 (basse)
+    await test('BASSE --compter : seules les basses définitions sont comptées (255 et 349) ; l\'ok est « hors mode », le 150 « trop petit » ; SANS le drapeau, le compte est exactement celui d\'avant (1 ok, 3 trop petits)', async () => {
+        const p = await preparer(5, lotBasse);
+        const { M, journal } = fauxModeles({ cartes: cartesVides(5), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [b, sortieB] = await SILENCE(() => K.ecrire(p.us, M, { dossierCache: p.dossier, releves: p.rels, indexImages: p.idx, compterSeulement: true, basseDefinition: true }));
+        assert.strictEqual(b.reel, 2); assert.strictEqual(b.horsMode, 1); assert.strictEqual(b.tropPetits, 1); assert.strictEqual(b.ecartees, 1); assert.strictEqual(b.horsCache, 0);
+        assert.ok(sortieB.some(l => /basse définition à ajouter : 2/.test(l)), sortieB.join('|'));
+        const [n] = await SILENCE(() => K.ecrire(p.us, M, { dossierCache: p.dossier, releves: p.rels, indexImages: p.idx, compterSeulement: true }));
+        assert.strictEqual(n.reel, 1); assert.strictEqual(n.tropPetits, 3); assert.strictEqual(n.ecartees, 1); assert.strictEqual(n.horsMode, undefined);
+        assert.deepStrictEqual(journal.filter(j => j[0] !== 'set'), []);
+    });
+    await test('BASSE --ecrire : sans le drapeau, une basse définition n\'est JAMAIS écrite (comportement d\'avant, octet pour octet)', async () => {
+        const p = await preparer(2, { larges: { 0: 255, 1: 500 } });
+        const { M, etat } = fauxModeles({ cartes: cartesVides(2), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1 }));
+        assert.strictEqual(r.code, 0); assert.deepStrictEqual(p.deposes, [`ctr/${SET_PP}/71-101-en.webp`]);
+        assert.strictEqual(etat.carte(100).images.length, 0); assert.strictEqual(etat.carte(101).images[0].basseDefinition, undefined);
+    });
+    await test('BASSE --ecrire --basse-definition : face à RIEN, l\'entrée ET le document sont ajoutés et marqués basseDefinition ; la webp n\'est jamais agrandie ; bilan à part', async () => {
+        const p = await preparer(2, { larges: { 0: 255, 1: 500 } });
+        const { M, etat } = fauxModeles({ cartes: cartesVides(2), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1, basseDefinition: true }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.reel, 1); assert.strictEqual(r.resultats[0].etat, 'verifie');
+        assert.deepStrictEqual(p.deposes, [`ctr/${SET_PP}/70-100-en.webp`]);
+        const e = etat.carte(100).images[0];
+        assert.strictEqual(e.source, 'ctr'); assert.strictEqual(e.basseDefinition, true); assert.strictEqual(e.wOriginal, 255); assert.strictEqual(e.w, 255);
+        const d = etat.image(`ctr/${SET_PP}/100/70/en`);
+        assert.strictEqual(d.basseDefinition, true); assert.strictEqual(d.etat, 'ok'); assert.strictEqual(d.w, 255); assert.strictEqual(d.wOriginal, 255);
+        assert.strictEqual(etat.carte(101).images.length, 0);                                  // l'image « ok » n'est pas du mode
+        assert.ok(etat.set(SET_PP).bilanLotCtrBasse && !etat.set(SET_PP).bilanLotCtr, 'le bilan du lot basse définition ne recouvre pas celui du lot des ok');
+    });
+    await test('BASSE --ecrire : une basse définition ne remplace JAMAIS une image correcte (elle CÈDE : rien déposé, rien écrit, entrée intacte)', async () => {
+        const p = await preparer(1, { larges: { 0: 255 } });
+        const bonne = { set: SET_PP, numero: '70', langue: 'en', source: 'tcgdex', cleR2: 't', w: 600, wOriginal: 600 };
+        const { M, etat, journal } = fauxModeles({ cartes: [{ _id: 100, images: [bonne] }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 0, basseDefinition: true }));
+        assert.strictEqual(r.reel, 0); assert.strictEqual(r.cedees, 1); assert.deepStrictEqual(p.deposes, []);
+        assert.deepStrictEqual(etat.carte(100).images.map(e => e.source), ['tcgdex']); assert.deepStrictEqual(journal.filter(j => j[0] === 'carte' || j[0] === 'image'), []);
+    });
+    await test('BASSE --ecrire : ni une autre basse définition, ni une image empruntée ne sont remplacées par une basse définition (elle cède)', async () => {
+        const p = await preparer(2, { larges: { 0: 255, 1: 255 } });
+        const bas = { set: SET_PP, numero: '70', langue: 'en', source: 'pokumon', cleR2: 'a', w: 245, wOriginal: 245, basseDefinition: true, tampon: 'Play! Pokémon' };
+        const emprunt = { set: SET_PP, numero: '71', langue: 'en', source: 'emprunt', cleR2: 'e', w: 600, imageEmprunteeTirage: true, tamponNonRepresente: 'Play! Pokémon' };
+        const { M, etat } = fauxModeles({ cartes: [{ _id: 100, images: [bas] }, { _id: 101, images: [emprunt] }], images: [{ _id: 'pk1', source: 'pokumon', set: SET_PP, cleR2: 'a', carteId: 100, etat: 'ok', tampon: 'Play! Pokémon' }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 0, basseDefinition: true }));
+        assert.strictEqual(r.reel, 0); assert.strictEqual(r.cedees, 2); assert.deepStrictEqual(p.deposes, []);
+        assert.deepStrictEqual([etat.carte(100).images.map(e => e.source), etat.carte(101).images.map(e => e.source)], [['pokumon'], ['emprunt']]); assert.strictEqual(etat.image('pk1').etat, 'ok');
+    });
+    await test('BASSE --ecrire : --attendu faux REFUSÉ (rien déposé) ; une copie altérée du cache (sha256) n\'est pas écrite ; une basse définition SANS octets au cache reste hors lot (comptée)', async () => {
+        const p = await preparer(3, { larges: { 0: 255, 1: 255, 2: 255 } });
+        const { M, journal } = fauxModeles({ cartes: cartesVides(3), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r1] = await SILENCE(() => lancerEcrire(p, M, { attendu: 9, basseDefinition: true }));
+        assert.strictEqual(r1.code, 2); assert.strictEqual(r1.etat, 'refuse-attendu'); assert.deepStrictEqual(p.deposes, []); assert.deepStrictEqual(journal.filter(j => j[0] !== 'set'), []);
+        p.idx[p.rels[901].url].sha256 = 'b'.repeat(64);
+        p.idx[p.rels[902].url].statut = 'trop-petit'; for (const ext of ['.json', '.bin']) fs.rmSync(path.join(p.dossier, CT.nomCache(p.rels[902].url).replace(/\.json$/, ext)), { force: true });
+        const [r2] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1, basseDefinition: true }));
+        assert.strictEqual(r2.reel, 1); assert.strictEqual(r2.altere, 1); assert.strictEqual(r2.horsCache, 1); assert.strictEqual(r2.code, 1);
+    });
+    await test('BASSE --ecrire : la carte porte déjà une entrée du lot des ok (autre numéro, même set) -> la garde compte l\'AJOUT de ce passage et reste verte', async () => {
+        const p = await preparer(1, { larges: { 0: 255 } });
+        const deja = { set: SET_PP, numero: '99', langue: 'en', source: 'ctr', lot: 'ctr-2026-10', cleR2: 'ctr/x', w: 500, wOriginal: 500 };
+        const { M, etat } = fauxModeles({ cartes: [{ _id: 100, images: [deja] }], sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        const [r] = await SILENCE(() => lancerEcrire(p, M, { attendu: 1, basseDefinition: true }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.resultats[0].etat, 'verifie'); assert.strictEqual(r.resultats[0].garde.ok, true);
+        assert.strictEqual(etat.carte(100).images.length, 2);
+    });
+    await test('une page relevée SANS adresse d\'image est « écartée » (pas une erreur de cache), dans les deux modes', async () => {
+        const p = await preparer(1, { larges: { 0: 255 } });
+        p.rels[900] = { page: p.us[0].page, refus: 'aucune image de blueprint dans la page' };
+        const { M } = fauxModeles({ cartes: cartesVides(1), sets: [{ _id: SET_PP, tirage: 'intl' }] });
+        for (const basseDefinition of [false, true]) {
+            const [r] = await SILENCE(() => K.ecrire(p.us, M, { dossierCache: p.dossier, releves: p.rels, indexImages: p.idx, compterSeulement: true, basseDefinition }));
+            assert.deepStrictEqual([r.ecartees, r.horsCache, r.reel], [1, 0, 0]);
+        }
+    });
+    await test('BASSE --planche : ne montre QUE les basses définitions, dans un dossier à elle ; sans le drapeau la planche ne montre toujours que les « ok »', async () => {
+        const p = await preparer(6, { larges: { 0: 255, 1: 255, 2: 500, 3: 255, 4: 150, 5: 300 } });
+        const sortie = tmp();
+        const b = await K.planches({ unites: p.us, releves: p.rels, indexImages: p.idx, dossierCache: p.dossier, sortieDossier: sortie, n: 50, basseDefinition: true });
+        assert.strictEqual(b.images, 4);
+        assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(sortie, 'planche.json'), 'utf8')).map(x => x.blueprint).sort(), [900, 901, 903, 905]);
+        const n = await K.planches({ unites: p.us, releves: p.rels, indexImages: p.idx, dossierCache: p.dossier, sortieDossier: tmp(), n: 50 });
+        assert.strictEqual(n.images, 1);
+        await assert.rejects(() => K.planches({ unites: [p.us[2]], releves: p.rels, indexImages: p.idx, dossierCache: p.dossier, sortieDossier: tmp(), n: 50, basseDefinition: true }), /aucune image/);
+    });
+    await test('BASSE ligne de commande : --basse-definition ne va qu\'avec --compter, --planche, --ecrire (refus code 2 sans connexion)', () => {
+        const lance = (...a) => spawnSync(process.execPath, [COLL_FILE, ...a], { encoding: 'utf8', timeout: 20000 });
+        for (const a of [['--plan', '--basse-definition'], ['--releve', '--plafond=5', '--basse-definition'], ['--telecharger', '--plafond=5', '--basse-definition'], ['--basse-definition'], ['--ecrire', '--basse-definition'], ['--basse-definition=1', '--compter']]) assert.strictEqual(lance(...a).status, 2, JSON.stringify(a));
+        const lot = tmp(); fs.writeFileSync(path.join(lot, 'lot.json'), JSON.stringify({ unites: [] }));
+        const r = lance('--ecrire', '--attendu=0', '--basse-definition', `--lot=${lot}`);
+        assert.notStrictEqual(r.status, 2); assert.ok(/lot-additif\.js/.test(r.stderr), r.stderr);       // l'écriture basse définition reste sous lot-additif
     });
 
     // ───────── M5 / M6 : fausse absence, 5xx ─────────

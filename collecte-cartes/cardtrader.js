@@ -183,7 +183,7 @@ const CHEMIN_IMAGE = /^\/uploads\/blueprints\/image\/\d+\/[^/]+\.(?:jpe?g|png|we
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // PHASE 2 — le lot d'images : adresse d'image d'une page, contrôle de largeur, lot après exclusions, décision d'écriture, entrées neutres.
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-const { largeurMinDe } = require('./seuils-images');
+const { largeurMinDe, largeurAdmiseDe } = require('./seuils-images');
 const { marqueDe, entreesARemplacer } = require('./basse-definition');
 const { champsTracabilite } = require('./tracabilite');
 const { cleNumero } = require('./jointure');
@@ -221,10 +221,14 @@ function imageDePage(html, urlPage) {
     return { refus: 'aucune image de blueprint dans la page' };
 }
 
-/** Le contrôle de largeur de l'ORIGINAL : au seuil de la source (350), sinon `trop-petit` avec sa largeur. Aucun plancher de 200 px (pas de décision). */
+/**
+ * Le contrôle de largeur de l'ORIGINAL : au seuil de la source (350) -> `ok` ; du plancher de la source (200, décision du testeur du 18/10, seuils-images.js) jusqu'au seuil -> `basse-definition`
+ * (admise, et marquée basseDefinition à l'écriture) ; sous le plancher -> `trop-petit`. Les deux nombres viennent de seuils-images.js, aucun n'est écrit ici.
+ */
 function controleLargeur(largeur) {
     const w = typeof largeur === 'number' && Number.isFinite(largeur) ? largeur : 0;
-    return w >= largeurMinDe(SOURCE) ? { statut: 'ok', largeur: w } : { statut: 'trop-petit', largeur: w };
+    if (w >= largeurMinDe(SOURCE)) return { statut: 'ok', largeur: w };
+    return w >= largeurAdmiseDe(SOURCE) ? { statut: 'basse-definition', largeur: w } : { statut: 'trop-petit', largeur: w };
 }
 
 const cleNum = n => (n == null || String(n).trim() === '' ? 'sn' : String(n).trim().replace(/[^A-Za-z0-9._-]/g, '_'));

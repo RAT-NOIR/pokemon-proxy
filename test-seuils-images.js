@@ -143,7 +143,14 @@ if (typeof S.largeurAdmiseDe === 'function') {
 { const PK = require('./collecte-cartes/pokumon');
   const mcd = (S.LIGNES_POKUMON_A_PLANCHER || []);
   verifier('LIGNES_POKUMON_A_PLANCHER = les quatre lignes du ruling, toutes famille « mcd » de LIGNES_AUTRES', [[...mcd].sort(), mcd.map(id => PK.LIGNES_AUTRES.find(l => l.id === id)?.famille)], [['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2'], ['mcd', 'mcd', 'mcd', 'mcd']]);
-  verifier('SOURCES_A_PLANCHER = [pokemon.com] ; le nom « pokumon » écrit ici est celui que le collecteur ÉCRIT (SOURCE)', [[...(S.SOURCES_A_PLANCHER || [])], S.SOURCE_POKUMON, PK.SOURCE], [['pokemon.com'], 'pokumon', 'pokumon']); }
+  verifier('SOURCES_A_PLANCHER = [pokemon.com, ctr] ; le nom « pokumon » écrit ici est celui que le collecteur ÉCRIT (SOURCE)', [[...(S.SOURCES_A_PLANCHER || [])], S.SOURCE_POKUMON, PK.SOURCE], [['pokemon.com', 'ctr'], 'pokumon', 'pokumon']); }
+// ➕ 2026-10-18 (CTR-BASSE) — CardTrader : « Les 589 images CardTrader en 255 px : OUI, en basseDefinition: true (au-dessus du plancher de 200 px). » La source est celle que le collecteur ÉCRIT (SOURCE).
+{ const CTR = require('./collecte-cartes/cardtrader'), a = S.largeurAdmiseDe;
+  verifier('le nom de la source CardTrader écrit dans la liste fermée est celui que le collecteur ÉCRIT (SOURCE)', [CTR.SOURCE, (S.SOURCES_A_PLANCHER || []).includes(CTR.SOURCE)], ['ctr', true]);
+  verifier('ctr → 200 (plancher) ; son seuil reste 350 (largeurMinDe)', [a('ctr'), a('ctr', 'mcd-2014'), S.largeurMinDe('ctr')], [200, 200, 350]);
+  verifier('les autres sources ne bougent pas : pokemon.com 200, pdt (set hors liste) 350, pdt (set McDonald\'s) 200, pokumon 350, inconnue 350, casse/prototype 350',
+      [a('pokemon.com'), a('pdt', 'Trick-or-Trade-2023'), a('pdt', 'McDonalds-Collection-2014'), a('pokumon'), a('quelque-part'), a('CTR'), a('Ctr'), a('constructor')], [200, 350, 200, 350, 350, 350, 350, 350]);
+  verifier('collecte-cartes/cardtrader.js passe par largeurAdmiseDe et ne compare à aucun 200 écrit en dur', [sansCommentaires(lire('collecte-cartes/cardtrader.js')).includes('largeurAdmiseDe('), /[<>]=?\s*200\b/.test(sansCommentaires(lire('collecte-cartes/cardtrader.js')))], [true, false]); }
 // une décision de seuil se relit (§23) : un `trop-petit` pokemon.com jugé à 257 entre 200 et 256 px est à rejuger ; sous 200 il reste refusé ; l'ancienne règle de pokumon (non McD) ne bouge pas
 if (typeof S.aRejuger === 'function') {
     const r = S.aRejuger;
