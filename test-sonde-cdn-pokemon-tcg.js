@@ -1,4 +1,5 @@
 // Banc de la sonde du serveur d'images officiel (cdn.pokemon-tcg.cn). Aucun réseau : faux transport, fausse pause, faux magasin.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const assert = require('assert');
 const sharp = require('sharp');
 const S = require('./collecte-cartes/sonde-cdn-pokemon-tcg');

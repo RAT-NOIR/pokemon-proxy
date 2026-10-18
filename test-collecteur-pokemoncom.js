@@ -6,6 +6,7 @@
 //     404 => absent, on continue ; 5xx / coupure => interrompu SANS fichier d'arrêt ; reprise sans requête pour ce qui est en cache ; en-têtes : l'agent honnête seul ;
 //   · ÉCRIRE : depuis le cache seulement (0 requête), additif, seuil de largeur, --attendu, aucun champ public ne nomme l'hôte, vignettes, garde de lot ;
 //   · RETIRER : exactement le lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -64,7 +65,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
 
 (async () => {
     const png = w => sharp({ create: { width: w, height: Math.round(w * 1.4), channels: 3, background: { r: 30, g: 120, b: 200 } } }).png().toBuffer();
-    const grand = await png(734), petit = await png(200), moyen = await png(300);
+    const grand = await png(734), petit = await png(199), moyen = await png(300);   // (BASSE-DEF : 199 px est SOUS le plancher absolu de 200 px ; 200 à 349 px est admis, marqué)
     // ── le réseau est INTERDIT à tout ce qui n'est pas le transport simulé ───────────────────────────────────────────────
     const fetchOrigine = global.fetch, vusFetch = [];
     global.fetch = async (u, init) => { vusFetch.push([String(u), init]); throw new Error('réseau interdit dans le banc'); };
@@ -76,6 +77,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const { largeurMinDe } = require('./collecte-cartes/seuils-images');
     const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
     verifier('seuil : la source ÉCRITE (« pokemon.com ») est une source OFFICIELLE → 257 px ; l\'ancien nom « pokemon-com » n\'existe plus et retombe à 350', [largeurMinDe(PK.SOURCE), largeurMinDe('pokemon-com')], [257, 350]);
+    verifier('plancher (BASSE-DEF) : la largeur ADMISE de la source écrite est 200 px, la norme (largeurMinDe) reste 257', [require('./collecte-cartes/seuils-images').largeurAdmiseDe(PK.SOURCE), largeurMinDe(PK.SOURCE)], [200, 257]);
     verifier('langue : « en » déclarée par le nom du fichier (_EN_), sans nommer l\'hôte ; sans adresse valable, null', [langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_EN_1.png') }).langue, /assets\./.test(langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_EN_1.png') }).preuve), langueDuVisuel({ source: PK.SOURCE, urlOriginal: 'https://autre.example/x_EN_1.png' }).langue, langueDuVisuel({ source: PK.SOURCE, urlOriginal: URL('SM2', 'SM2_JA_1.png') }).langue], ['en', false, null, null]);
 
     // ── 1. les adresses autorisées ───────────────────────────────────────────────────────────────────────────────────────
@@ -87,7 +89,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const robotsLibre = { status: 404, type: 'application/xml', texte: '' };       // le robots.txt de l'hôte d'images, vu le 17/10 : 404 (AmazonS3), aucune règle
     const normal = (url, o) => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand };
     const horloge = () => { let t = 1e6; const attentes = []; return { now: () => t, pause: async ms => { attentes.push(ms); t += ms; }, avance: ms => { t += ms; }, attentes }; };
-    const lancer = (urls, tr, d, h = horloge(), o = {}) => C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o });
+    const lancer = (urls, tr, d, h = horloge(), o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), C.telecharger({ urls, dossierCache: d, transport: tr, pause: h.pause, now: h.now, ...o }));
 
     let d = tmp(), h = horloge(), tr = reseau(normal);
     let r = await lancer(plan.map(p => p.url), tr, d, h);
@@ -116,10 +118,12 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     // arrêt définitif
     const png8 = Buffer.from('89504e470d0a1a0a', 'hex');
     const defis = [['403', () => ({ status: 403, type: 'text/html', texte: 'non' })], ['429', () => ({ status: 429, type: 'text/html', texte: 'non' })], ['HTML au lieu d\'une image', () => ({ status: 200, type: 'text/html', texte: '<html>Just a moment</html>' })],
-        ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })], ['Imperva', () => ({ status: 200, type: 'image/png', octets: grand, imperva: true })], ['redirection 302', () => ({ status: 302, location: 'https://autre.example/x' })],
-        ['octets qui ne sont pas un PNG', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>defi</html>') })],
+        ['cf-mitigated', () => ({ status: 200, type: 'image/png', octets: grand, cfMitigated: 'challenge' })], ['Imperva avec un corps qui n\'est pas une image (REPONSE-HOTE : l\'en-tête seul ne prouve rien)', () => ({ status: 200, type: 'text/html', texte: '<html><body>page</body></html>', imperva: true })],
+        ['octets qui ne sont pas un PNG mais portent un marqueur de défi', () => ({ status: 200, type: 'image/png', octets: Buffer.from('<html>Just a moment</html>') })],
         ['403 à corps VIDE (ni HTML ni image)', () => ({ status: 403, type: '', texte: '' })], ['403 dont le corps est une IMAGE', () => ({ status: 403, type: 'image/png', octets: grand })],
-        ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })]];
+        ['429 à corps vide', () => ({ status: 429 })], ['429 dont le corps est une image', () => ({ status: 429, type: 'image/png', octets: grand })],
+        ['401 (REPONSE-HOTE)', () => ({ status: 401, type: 'text/html', texte: 'login' })], ['410 sur une image (REPONSE-HOTE : 410 est un défi, plus un absent)', () => ({ status: 410, type: 'text/html', texte: 'gone' })],
+        ['marqueur technique « _Incapsula_Resource »', () => ({ status: 200, type: 'text/html', texte: '<script src="/_Incapsula_Resource?x=1"></script>' })]];
     for (const [nom, rep] of defis) {
         d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep());
         r = await lancer(plan.map(p => p.url), tr, d);
@@ -128,6 +132,84 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
         tr = reseau(normal);
         const r2 = await lancer(plan.map(p => p.url), tr, d);
         verifier(`   le lancement suivant REFUSE de partir tant que le fichier existe (zéro requête)`, [r2.etat, tr.appels.length], ['refuse-arret', 0]);
+    }
+    // REPONSE-HOTE (2026-10-18) : la règle commune de réponse, vue par le collecteur
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => tmp();
+        // (a) 200 text/html sans marqueur : fausse page introuvable → absente, on passe à la suivante, AUCUN arrêt
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : { status: 200, type: 'image/png', octets: grand });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        const idxF = JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images;
+        verifier('REPONSE-HOTE : un 200 text/html sans marqueur → absente (empreinte gardée), les autres continuent, AUCUN arrêt', [r.etat, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.statut, idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.n, /^[0-9a-f]{64}$/.test(idxF[URL('EX10', 'EX10_EN_Unown_B.png')]?.empreinte || ''), Object.values(idxF).filter(e => e.statut === 'ok').length, fs.existsSync(C.fichierArret(d)), r.reponsesHotes.map(h => [h.hote, h.fausses, h.empreintes.length])],
+            ['termine', 'fausse-absente', 1, true, 3, false, [['assets.pokemon.com', 1, 1]]]);
+        // I3 (correction 1) : deux unités de suite — la seconde, après la pause de la première (réponse inattendue), ne fait AUCUNE requête
+        {
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'application/json', texte: '{}' }));
+            const a = await lancer(plan.map(p => p.url), t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(plan.map(p => p.url), t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('I3 pokemoncom : deux unités de suite — la seconde ne fait AUCUNE requête (pas même robots.txt)', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
+        // CORRECTION 2 (faible) : la pause « image valide mais pas un PNG » vaut pour le PROCESSUS : la seconde unité ne fait AUCUNE requête
+        {
+            const jpg = await require('sharp')({ create: { width: 700, height: 980, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+            const t1 = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: jpg }));
+            const a = await lancer(plan.map(p => p.url), t1, tmp(), horloge(), { dossierPauses: dp() });
+            const t2 = reseau(normal); const b = await lancer(plan.map(p => p.url), t2, tmp(), horloge(), { dossierPauses: dp(), processus: true });
+            verifier('F3 pokemoncom : la pause « pas un PNG » vaut pour le processus — la seconde unité ne fait AUCUNE requête', [a.etat, b.etat, t2.appels.length], ['pause-hote', 'pause-hote', 0]);
+        }
+        // M4 (correction 1) : une fausse absence N'EST PAS un absent définitif — notée « fausse-absente » (empreinte, date), redemandée UNE fois, pas avant 24 h ; une seconde fausse absence la rend définitive
+        {
+            const hM = horloge(), fausseB = url => (/Unown_B/.test(url) ? { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' } : null);
+            const dM = tmp(); const mk = f => reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : (f(url) ?? { status: 200, type: 'image/png', octets: grand })));
+            await lancer(plan.map(p => p.url), mk(fausseB), dM, hM, { dossierPauses: dp() });
+            const lireB = () => JSON.parse(fs.readFileSync(path.join(dM, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_B.png')];
+            const e1 = lireB();
+            hM.avance(3600 * 1000);
+            let trM = mk(fausseB); let rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : une heure plus tard, la fausse absence n\'est PAS redemandée (moins de 24 h) : rien à faire, zéro requête', [e1.statut, e1.n, /^[0-9a-f]{64}$/.test(e1.empreinte || ''), typeof e1.le, rM.etat, trM.appels.length], ['fausse-absente', 1, true, 'string', 'rien-a-faire', 0]);
+            hM.avance(25 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            const e2 = lireB();
+            verifier('M4 : 25 h plus tard, elle est redemandée UNE fois (robots + 1 image) ; une SECONDE fausse absence la rend DÉFINITIVE (absent, secondeFois)', [rM.etat, trM.appels.length, e2.statut, e2.fausseAbsente, e2.secondeFois], ['termine', 2, 'absent', true, true]);
+            hM.avance(48 * 3600 * 1000);
+            trM = mk(fausseB); rM = await lancer(plan.map(p => p.url), trM, dM, hM, { dossierPauses: dp() });
+            verifier('M4 : devenue définitive, elle ne se redemande plus jamais', [rM.etat, trM.appels.length], ['rien-a-faire', 0]);
+            const dM2 = tmp(); const hM2 = horloge();
+            await lancer(plan.map(p => p.url), mk(fausseB), dM2, hM2, { dossierPauses: dp() });
+            hM2.avance(25 * 3600 * 1000);
+            trM = mk(() => null); await lancer(plan.map(p => p.url), trM, dM2, hM2, { dossierPauses: dp() });
+            const e3 = JSON.parse(fs.readFileSync(path.join(dM2, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_B.png')];
+            verifier('M4 : si la page redonne l\'image à la seconde demande, elle entre au cache (ok)', [e3.statut, trM.appels.length], ['ok', 2]);
+        }
+        // M1 : aucune image non PNG n'entre au cache (la garde amont de pokemoncom, restaurée)
+        { d = tmp(); const jpg = await require('sharp')({ create: { width: 700, height: 980, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+          tr = reseau(url => (/robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/jpeg', octets: jpg }));
+          r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+          verifier('M1 : un JPEG valide n\'entre PAS au cache pokemoncom (hôte en pause, réponse inattendue), aucun fichier d\'arrêt, aucune image cachée', [r.etat, r.pauseHote?.issue, fs.existsSync(C.fichierArret(d)), fs.existsSync(path.join(d, 'index.json')) ? Object.values(JSON.parse(fs.readFileSync(path.join(d, 'index.json'), 'utf8')).images).filter(e => e.statut === 'ok').length : 0, tr.appels.length], ['pause-hote', 'inattendue', false, 0, 2]); }
+        // (b) un défi → arrêt définitif par le fichier d'arrêt (couvert par la liste « défis » ci-dessous)
+        // (c) trop de fausses absences d'affilée → PAUSE, sans fichier d'arrêt définitif (seuil du banc : 2, le plan n'a que 4 fichiers ; le 21 est prouvé au module)
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<html><body>Page introuvable</body></html>' });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { suivi: RH.suiviHote({ seuil: 2 }), dossierPauses: dp() });
+        verifier('REPONSE-HOTE : au-delà du seuil de fausses absences → PAUSE de l\'hôte (etat « pause-hote »), AUCUN fichier d\'arrêt définitif, plus de requête (robots + 3 images)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.hote, r.pauseHote?.persistante, r.reponsesHotes[0].fausses], ['pause-hote', false, 4, 'assets.pokemon.com', false, 3]);
+        tr = reseau(normal); const r2p = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : …et la passe SUIVANTE repart (la pause n\'est pas un arrêt définitif) : compteur à zéro ; les 2 absences déjà notées au cache ne se redemandent pas (robots + les 2 images restantes)', [r2p.etat, tr.appels.length], ['termine', 3]);
+        // (d) « Gym Challenge » seul : ambiguë → pause PERSISTANTE ; aucune requête tant qu'elle tient
+        d = tmp(); const dPause = dp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'text/html', texte: '<nav>Gym Heroes · Gym Challenge</nav>' });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier daté), pas d\'arrêt définitif (robots + 1 image seulement)', [r.etat, r.pauseHote?.persistante, fs.existsSync(C.fichierArret(d)), tr.appels.length, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(dPause, 'assets.pokemon.com')?.empreinte || '')], ['pause-hote', true, false, 2, true]);
+        tr = reseau(normal); const r3p = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dPause });
+        verifier('REPONSE-HOTE : …la passe suivante, tant que le fichier de pause tient : AUCUNE requête', [r3p.etat, tr.appels.length], ['pause-hote', 0]);
+        // (e) inattendue : redirection, JSON, octets faux sans marqueur → PAUSE (pas d'arrêt définitif)
+        for (const [nom, rep] of [['redirection 302', { status: 302, location: 'https://autre.example/x' }], ['200 JSON', { status: 200, type: 'application/json', texte: '{}' }], ['octets qui ne sont pas une image', { status: 200, type: 'image/png', octets: Buffer.from('pas une image') }]]) {
+            d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : rep);
+            r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+            verifier(`REPONSE-HOTE : ${nom} = inattendue → PAUSE de l'hôte, jamais un arrêt définitif (robots + 1 image)`, [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length, r.pauseHote?.issue], ['pause-hote', false, 2, 'inattendue']);
+        }
+        // une VRAIE image derrière Imperva reste une image
+        d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: grand, imperva: true });
+        r = await lancer(plan.map(p => p.url), tr, d, horloge(), { dossierPauses: dp() });
+        verifier('REPONSE-HOTE : une vraie image servie derrière Imperva est une image (l\'en-tête seul ne prouve rien)', [r.etat, fs.existsSync(C.fichierArret(d))], ['termine', false]);
     }
     // 404 : absent, on continue ; 5xx : interrompu sans arrêt
     d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsLibre : /Unown_B/.test(url) ? { status: 404, type: 'image/png' } : { status: 200, type: 'image/png', octets: grand });
@@ -164,7 +246,7 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     verifier('image 404 AVEC marqueur de défi (challenge) : arrêt définitif', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
     d = tmp(); tr = reseau(url => /robots\.txt$/.test(url) ? robotsS3 : { status: 200, type: 'text/html', texte: '<html><body>page</body></html>' });
     r = await lancer(plan.map(p => p.url), tr, d);
-    verifier('image 200 qui n\'est pas une image (HTML sans marqueur) : arrêt définitif (une IMAGE était attendue)', [r.etat, fs.existsSync(C.fichierArret(d))], ['arret-definitif', true]);
+    verifier('image 200 qui n\'est pas une image (HTML sans marqueur) : fausse page introuvable → absente, JAMAIS un arrêt définitif (REPONSE-HOTE ; pause au-delà de 20 d\'affilée, ici 4)', [r.etat, fs.existsSync(C.fichierArret(d)), tr.appels.length], ['termine', false, 5]);
     // le transport RÉEL rend aussi le corps des 404/410 (sinon un marqueur de défi y serait invisible)
     { const fo = global.fetch; global.fetch = async () => new Response('<html>Just a moment</html>', { status: 404, headers: { 'content-type': 'text/html' } });
       try { const t = await C.transportFetch.get('https://assets.pokemon.com/robots.txt', {}); verifier('transport réel : un 404 rend son corps (le défi caché derrière un 404 se voit)', [t.status, /just a moment/i.test(t.texte || '')], [404, true]); } finally { global.fetch = fo; } }
@@ -208,13 +290,22 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const vignetterBanc = () => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, journal: { error() { } }, assurer: async (db2, { slug: s }) => { let k = 0; for (const c of await db2.collection('cartes').find({}).toArray()) { let t = false; const images = (c.images || []).map(e => { if (e.set !== s || !e.cleR2 || e.vignette) return e; t = true; k++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2}`, w: 200, h: 279 } }; }); if (t) await db2.collection('cartes').updateOne({ _id: c._id }, { $set: { images } }); } return { entrees: k, cles: k, traitees: k, fabriquees: k, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: k ? [s] : [] }; } });
     const ecrire = async (B, o = {}) => { const dp = depotsDe(); const q = silencieux(); try { const b = await C.ecrire(o.plan || plan, B.M, { dossierCache: o.dossierCache || dc, attendu: o.attendu, remplacements: o.remplacements, remplacer: o.remplacer, deposer: dp.f, vignetter: vignetterBanc(), fabriquerVerrouSet: verrouSet }); return { b, dp }; } finally { q(); } };
     let B = fausseBase(); semer(B);
-    verifier('--attendu qui diffère du compte réel (3 à écrire : l\'une est sous le seuil) : REFUSÉ avant toute écriture', await (async () => { const { b, dp } = await ecrire(B, { attendu: 4 }); return [b.code, b.etat, dp.l.length, B.col('images').size]; })(), [2, 'refuse-attendu', 0, 0]);
+    verifier('--attendu qui diffère du compte réel (3 à écrire : l\'une est sous le plancher) : REFUSÉ avant toute écriture', await (async () => { const { b, dp } = await ecrire(B, { attendu: 4 }); return [b.code, b.etat, dp.l.length, B.col('images').size]; })(), [2, 'refuse-attendu', 0, 0]);
     let { b, dp } = await ecrire(B, { attendu: 3 });
-    verifier('écrire : 3 images écrites (A, B, énergie), la 4e (C, 200 px) est sous le seuil de 257 px ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
+    verifier('écrire : 3 images écrites (A, B, énergie), la 4e (C, 199 px) est sous le plancher de 200 px ; code 0 ; AUCUNE requête (fetch jamais appelé)', [b.code, dp.l.length, vusFetch.length], [0, 3, 0]);
     const doc = B.col('images').get('pokemon.com/EX-Unseen-Forces/100/A/en');
     verifier('le document `images` : source, lot, mention, langue, état, adresse d\'origine, produits, largeur', [doc.source, doc.lot, doc.mention, doc.langue, doc.etat, doc.urlOriginal, doc.produits, doc.wOriginal], ['pokemon.com', 'pokemoncom-2026-10', '© Pokémon / The Pokémon Company', 'en', 'ok', URL('EX10', 'EX10_EN_Unown_A.png'), [900], 734]);
     verifier('   R2 AVANT la ligne : clé du set, WebP', [dp.l[0][1], dp.l[0][3]], ['pokemon.com/EX-Unseen-Forces/A-100-en.webp', 'image/webp']);
-    verifier('le document de l\'image sous le seuil : « trop-petit », seuil 257, rien de joint', [B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.etat, B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.seuilApplique, B.col('cartes').get(102).images.length], ['trop-petit', 257, 1]);
+    verifier('le document de l\'image sous le plancher : « trop-petit », seuil appliqué 200, rien de joint', [B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.etat, B.col('images').get('pokemon.com/EX-Unseen-Forces/102/C/en')?.seuilApplique, B.col('cartes').get(102).images.length], ['trop-petit', 200, 1]);
+    // ➕ BASSE-DEF — le plancher 200 : 199 refusé / 200, 245, 256, 257, 349 admis MARQUÉS (document ET entrée) / 350 admis sans marque
+    const pngs = {}; for (const w of [199, 200, 245, 256, 257, 349, 350]) pngs[w] = await png(w);
+    for (const [w, admis, marque] of [[199, false, null], [200, true, true], [245, true, true], [256, true, true], [257, true, true], [349, true, true], [350, true, false]]) {
+        const dcw = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: pngs[w] }), dcw);
+        const Bw = fausseBase(); semer(Bw); const { b: bw } = await ecrire(Bw, { plan: [plan[0]], dossierCache: dcw, attendu: admis ? 1 : 0 });
+        const docw = Bw.col('images').get('pokemon.com/EX-Unseen-Forces/100/A/en'), entw = Bw.col('cartes').get(100).images.find(e => e.source === 'pokemon.com');
+        verifier(`plancher : ${w} px → ${admis ? `admise ${marque ? 'MARQUÉE basseDefinition' : 'sans marque'} (document ET entrée)` : 'REFUSÉE (trop-petit, seuil 200), rien de joint'}`,
+            [bw.code, docw?.etat, docw?.basseDefinition === true, entw ? entw.basseDefinition === true : null, docw?.etat === 'trop-petit' ? docw.seuilApplique : null], [admis ? 0 : 0, admis ? 'ok' : 'trop-petit', !!marque, admis ? !!marque : null, admis ? null : 200]);
+    }
     // 300 px : au-dessus du seuil officiel (257), sous 350 : écrite AVEC la marque basseDefinition (document ET entrée)
     { const dcb = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets: moyen }), dcb);
       const Bb = fausseBase(); semer(Bb); const { b: bb } = await ecrire(Bb, { plan: [plan[0]], dossierCache: dcb, attendu: 1 });
@@ -222,7 +313,10 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     const e1 = B.col('cartes').get(100).images.find(e => e.source === 'pokemon.com');
     verifier('l\'entrée de la carte : set, source, lot, mention, langue, numéro, vignette ; l\'autre source INTACTE', [e1.set, e1.source, e1.lot, e1.mention, e1.langue, e1.numero, !!e1.vignette?.cleR2, B.col('cartes').get(100).images.find(e => e.source === 'tcgdex').cleR2], ['EX-Unseen-Forces', 'pokemon.com', 'pokemoncom-2026-10', '© Pokémon / The Pokémon Company', 'en', 'A', true, 'tcgdex/x.webp']);
     verifier('une fiche SANS numéro garde numero null (l\'énergie)', B.col('cartes').get(103).images.find(e => e.source === 'pokemon.com')?.numero, null);
-    verifier('AUCUN champ public ne nomme l\'hôte : ni l\'entrée de carte, ni la preuve de langue', [JSON.stringify(B.col('cartes').get(100).images).includes('assets.'), /assets\./.test(e1.languePreuve || '')], [false, false]);
+    // (doctrine 2026-10-17 : l'entrée porte désormais `urlOriginal` — l'adresse d'origine est OBLIGATOIRE, comme pour artofpkm / Bulbapedia / TCGdex ; c'est le seul champ qui contient l'hôte)
+    verifier('aucun champ AUTRE que `urlOriginal` ne nomme l\'hôte : ni la preuve de langue, ni la mention, ni les autres champs de l\'entrée', [JSON.stringify((({ urlOriginal, ...r }) => r)(e1)).includes('assets.'), /assets\./.test(e1.languePreuve || '')], [false, false]);
+    verifier('traçabilité : la date de collecte du document est celle du TÉLÉCHARGEMENT lue dans le cache disque (pas la date d\'écriture)', doc.collecteLe.toISOString(), JSON.parse(fs.readFileSync(path.join(dc, 'index.json'), 'utf8')).images[URL('EX10', 'EX10_EN_Unown_A.png')].le);
+    verifier('traçabilité : document ET entrée portent retirable, urlOriginal, collecteLe', [doc.retirable, doc.urlOriginal, doc.collecteLe instanceof Date, e1.retirable, e1.urlOriginal, e1.collecteLe instanceof Date], [true, URL('EX10', 'EX10_EN_Unown_A.png'), true, true, URL('EX10', 'EX10_EN_Unown_A.png'), true]);
     verifier('le bilan du set : garde verte, 2 joints', [B.col('sets').get('EX-Unseen-Forces').visuelsPokemoncom?.garde?.ok, B.col('sets').get('EX-Unseen-Forces').visuelsPokemoncom?.joints], [true, 2]);
     const avant0 = compterEtat({ cartes: [{ _id: 1, sets: ['EX-Unseen-Forces'], images: [] }] }), apres0 = compterEtat({ cartes: [{ _id: 1, sets: ['EX-Unseen-Forces'], images: [e1] }] });
     verifier('la garde de lot VOIT la hausse des images (par set), et ne signale aucune baisse', [apres0.get('images set:EX-Unseen-Forces') - (avant0.get('images set:EX-Unseen-Forces') || 0), comparer(avant0, apres0).baisses.length], [1, 0]);
@@ -265,6 +359,24 @@ const carteRel = (nom, numero, set, fichier) => ({ nom, numero, numeroDoute: fal
     verifier('   si une entrée ADMISE sert ce numéro à l\'écriture, la nôtre cède et rien n\'est retiré', [B.col('cartes').get(100).images.some(e => e.source === 'pokemon.com'), B.col('cartes').get(100).images.some(e => e.cleR2 === JAE.cleR2)], [false, true]);
     const ann = C.annonceRemplacement([{ _id: 100, sets: ['EX-Unseen-Forces'], images: [{ ...JAE, vignette: { cleR2: 'v/ja' } }] }], remp);
     verifier('annonce pour lot-additif : la garde verrait la baisse des vignettes (l\'entrée refusée portait la sienne) ; sans remplacement, aucune annonce', [Object.keys(ann).length > 0, Object.keys(C.annonceRemplacement([{ _id: 100, sets: ['EX-Unseen-Forces'], images: [{ ...JAE }] }], [])).length], [true, 0]);
+
+    // ── 3 ter. ➕ BASSE-DEF : le REMPLACEMENT d'une entrée MARQUÉE par une image non marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ────────────
+    const MARQ = { set: 'EX-Unseen-Forces', source: 'tcgdex', numero: 'A', cleR2: 'tcgdex/EX/A-basse.webp', langue: 'en', w: 300, basseDefinition: true };
+    const semerMarquee = (Bx, o = {}) => { semer(Bx); Bx.col('cartes').get(100).images.push({ ...MARQ, ...o }); Bx.col('images').set('mq', { _id: 'mq', source: MARQ.source, set: MARQ.set, carteId: 100, cleR2: (o.cleR2 ?? MARQ.cleR2), etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); };
+    const ecrireAvec = async (octets, mod) => { const dcr = tmp(); await lancer([plan[0].url], reseau(url => /robots\.txt$/.test(url) ? robotsLibre : { status: 200, type: 'image/png', octets }), dcr); const Br = fausseBase(); semerMarquee(Br, mod); const { b: br } = await ecrire(Br, { plan: [plan[0]], dossierCache: dcr, attendu: 1 }); return { Br, br }; };
+    pngs[400] = await png(400);
+    { const { Br, br } = await ecrireAvec(pngs[400]);
+      verifier('REMPLACEMENT : 400 px (non marquée) + une entrée MARQUÉE d\'une autre source au même (set, numéro, langue) → l\'entrée marquée sort, la nôtre entre (sans marque)', [br.code, Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => `${e.source}:${e.numero}:${e.basseDefinition === true}`)], [0, ['pokemon.com:A:false']]);
+      verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), avec son adresse d\'origine et sa clé R2', [Br.col('images').get('mq')?.etat, Br.col('images').get('mq')?.remplacePar, !!Br.col('images').get('mq')?.remplaceLe, Br.col('images').get('mq')?.urlOriginal, Br.col('images').get('mq')?.cleR2], ['remplace', { source: 'pokemon.com', cleR2: 'pokemon.com/EX-Unseen-Forces/A-100-en.webp' }, true, 'https://hote.example/ancienne.png', 'tcgdex/EX/A-basse.webp']);
+      verifier('   la garde du set est VERTE : l\'entrée sortie est attendue absente (un échange 1 pour 1), les autres sources intactes', [Br.col('sets').get('EX-Unseen-Forces').visuelsPokemoncom?.garde?.ok, Br.col('cartes').get(100).images.some(e => e.set === 'Autre' && e.source === 'tcgdex')], [true, true]); }
+    { const { Br, br } = await ecrireAvec(pngs[245]);
+      verifier('JAMAIS L\'INVERSE : 245 px (marquée) face à une entrée marquée → la nôtre CÈDE, l\'entrée marquée reste, son document n\'est pas touché', [br.code, Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [0, ['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(grand, { basseDefinition: undefined, w: 600, cleR2: 'tcgdex/EX/A-haute.webp' });
+      verifier('une entrée NON marquée n\'est jamais remplacée : la nôtre cède', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(pngs[400], { langue: 'ja' });
+      verifier('une entrée marquée d\'une AUTRE langue (ja) n\'est pas remplacée : le numéro reste servi, la nôtre cède', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source), Br.col('images').get('mq')?.etat], [['tcgdex'], 'ok']); }
+    { const { Br } = await ecrireAvec(pngs[400], { langue: null });
+      verifier('une entrée marquée de langue INCONNUE n\'est pas remplacée', [Br.col('cartes').get(100).images.filter(e => e.set === 'EX-Unseen-Forces').map(e => e.source)], [['tcgdex']]); }
 
     // ── 4. RETIRER : exactement le lot ────────────────────────────────────────────────────────────────────────────────────
     const { retirerLot } = require('./retirer-visuels-pokemoncom');

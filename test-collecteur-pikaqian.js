@@ -4,6 +4,7 @@
 // la PROVENANCE et la LANGUE sur chaque visuel, le seuil de 300 px, la REPRISE sans requête d'image, un visuel RETIRÉ jamais repris, l'ARRÊT au
 // premier défi (alerte) et à l'erreur répétée (pas de refus définitif), les vignettes avant « verifie », la garde de TAILLE, et le RETRAIT en un lot.
 // PK_COLLECTEUR / PK_RETRAIT (banc des mutants, rouge-pikaqian.js) : des fichiers à tester à la place des vrais.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const sharp = require('sharp');
 const P = require('./collecte-cartes/pikaqian');
@@ -225,7 +226,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     const BI = fausseBase(); semer(BI);
     BI.col('cartes_produits').set('9|99', { _id: '9|99', carteId: 9, idProduct: 99, numeroFiche: '002', slugSet: SLUG });
     BI.col('cartes').set(9, { _id: 9, nomEn: 'Raichu', images: [] }); BI.col('cartes').get(2).images = [];
-    ({ b } = await lancer(BI, reseau(url => url.endsWith('.webp') ? { status: 200, type: 'image/webp', octets: Buffer.from('pas une image') } : normal()(url))));
+    ({ b } = await lancer(BI, reseau(url => url.endsWith('.webp') ? { status: 200, type: 'image/webp', octets: Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPcorrompu'), Buffer.alloc(8)]) } : normal()(url))));   // (REPONSE-HOTE : un webp CORROMPU — l'en-tête RIFF/WEBP passe la règle commune, sharp refuse le fichier)
     verifier('deux fichiers illisibles de suite → arrêt, alerte posée', [BI.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian')?.active, [...BI.col('images').values()].filter(d => d.etat === 'echec').length], [true, 2]);
     // le plafond de requêtes de l'unité : une page qui ne mène qu'à 1 image ne peut pas déclencher d'avalanche
     const BL = fausseBase(); semer(BL);
@@ -332,6 +333,39 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     tr = reseau(normal());
     ({ b } = await lancer(BR, tr));
     verifier('   une recollecte après le retrait : refusée (source fermée), 0 requête', [b.etat, tr.appels.length], ['refuse-source-bloquee', 0]);
+
+    // ── ➕ 2026-10-17 (BASSE-DEF) : la JOINTURE de PikaQian arbitre une entrée MARQUÉE d'une autre source (la même fonction que les autres collecteurs) ────────────────────
+    // (les images de PikaQian font 300 px, donc MARQUÉES : elles ne remplacent rien — mais si une image sort un jour au-dessus de 350 px, elle remplace ; le plan n'est pas élargi : télécharger un
+    // 300 px pour le voir céder serait une requête pour rien.)
+    {
+        const { joindreAdditif } = require(process.env.PK_COLLECTEUR ? path.resolve(process.env.PK_COLLECTEUR) : './collecteur-images-pikaqian');
+        const MARQ = { set: SLUG, source: 'tcgdex', numero: '003', cleR2: 'tcgdex/Dynamax/003-basse.webp', langue: P.LANGUE, w: 300, basseDefinition: true };
+        const monde = (w, images = [MARQ]) => {
+            const Bm = fausseBase(); semer(Bm); Bm.col('cartes').get(3).images = structuredClone(images);
+            Bm.col('images').set('mq', { _id: 'mq', source: 'tcgdex', set: SLUG, carteId: 3, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 });
+            const id = P.idImagePikaqian(SLUG, 3, '003');
+            Bm.col('images').set(id, { _id: id, source: P.SOURCE, set: SLUG, carteId: 3, numero: '003', cleR2: `pikaqian/${SLUG}/003-3-${P.LANGUE}.webp`, sha256: 'x', w: Math.min(w, 700), h: 600, fmt: 'webp', wOriginal: w, urlOriginal: 'https://images.pikaqian.com/x.webp', preuve: 'p', langue: P.LANGUE, languePreuve: 'l', etat: 'ok', lot: P.LOT, provenance: 'p' });
+            return { Bm, id };
+        };
+        const des = Bm => Bm.col('cartes').get(3).images.map(e => `${e.source}:${e.basseDefinition === true}`);
+        { const { Bm } = monde(400); const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          verifier('REMPLACEMENT : une image PikaQian de 400 px (non marquée) remplace une entrée MARQUÉE d\'une autre source (même set, numéro, langue) ; garde verte, 1 jointe', [des(Bm), J.garde, J.joints, Bm.col('images').get('mq').etat, Bm.col('images').get('mq').remplacePar?.source, Bm.col('images').get('mq').urlOriginal], [['pikaqian:false'], true, 1, 'remplace', 'pikaqian', 'https://hote.example/ancienne.png']); }
+        { const { Bm } = monde(300); const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          verifier('JAMAIS L\'INVERSE : une image PikaQian de 300 px (marquée) face à une entrée marquée → elle CÈDE, l\'entrée marquée reste, son document n\'est pas touché', [des(Bm), J.garde, J.joints, J.dejaParAutre, Bm.col('images').get('mq').etat], [['tcgdex:true'], true, 0, 1, 'ok']); }
+        // ➕ doctrine 2026-10-17 : traçabilité (document ET entrée), adresse d'origine obligatoire, « nettement plus grande » 1,49 × refusé / 1,5 × admis
+        { const { Bm } = monde(400); const r = silencieux(); try { await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          const e = Bm.col('cartes').get(3).images.find(x => x.source === P.SOURCE);
+          verifier('TRAÇABILITÉ : l\'entrée posée porte retirable, urlOriginal, collecteLe', [e.retirable, e.urlOriginal, e.collecteLe instanceof Date], [true, 'https://images.pikaqian.com/x.webp', true]); }
+        { const { Bm, id } = monde(400); delete Bm.col('images').get(id).urlOriginal; const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          verifier('REJEU d\'un document ancien SANS adresse d\'origine : la jointure ne s\'arrête pas (pas d\'erreur), l\'entrée est posée SANS urlOriginal inventée, le bilan compte 1 document sans adresse', [J.erreurJointure, Bm.col('cartes').get(3).images.find(x => x.source === P.SOURCE)?.urlOriginal ?? null, J.sansUrlOriginal], [null, null, 1]); }
+        { const { Bm: B149 } = monde(596, [{ ...MARQ, basseDefinition: undefined, w: 400, wOriginal: 400 }]); const { Bm: B15 } = monde(600, [{ ...MARQ, basseDefinition: undefined, w: 400, wOriginal: 400 }]);
+          const r = silencieux(); try { await joindreAdditif(B149.db, B149.M, SLUG); await joindreAdditif(B15.db, B15.M, SLUG); } finally { r(); }
+          verifier('NETTEMENT PLUS GRANDE : 400 → 596 (1,49 ×) refusé, 400 → 600 (1,5 ×) admis (même impression)', [des(B149), des(B15)], [['tcgdex:false'], ['pikaqian:false']]); }
+        { const { Bm } = monde(400, [{ ...MARQ, basseDefinition: undefined, w: 600 }]); const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          verifier('une entrée NON marquée n\'est jamais remplacée : PikaQian cède', [des(Bm), J.dejaParAutre, Bm.col('images').get('mq').etat], [['tcgdex:false'], 1, 'ok']); }
+        { const { Bm } = monde(400, [{ ...MARQ, langue: 'ja' }]); const r = silencieux(); let J; try { J = await joindreAdditif(Bm.db, Bm.M, SLUG); } finally { r(); }
+          verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : PikaQian cède', [des(Bm), J.dejaParAutre], [['tcgdex:true'], 1]); }
+    }
 
     console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);
     process.exit(ko ? 1 : 0);

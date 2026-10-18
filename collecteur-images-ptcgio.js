@@ -22,6 +22,7 @@ const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');   // les vignettes de 200 px des images neuves, après la jointure (règle du dépôt, 2026-10-06)
@@ -30,6 +31,7 @@ const P = require('./collecte-cartes/ptcgio');
 const J = require('./collecte-cartes/jumeau-en');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const preseance = require('./collecte-cartes/preseance-images');   // ➕ 2026-10-13 : la préséance de résolution (une règle, lue par pokemontcg.io ET par le worker TCGdex)
+const { arbitrer, sansRemplacables, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // ➕ 2026-10-17 (BASSE-DEF) : une entrée marquée est REMPLAÇABLE par une image non marquée
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;
@@ -46,8 +48,12 @@ async function planifierSlug(db, slug, numerosCm) {
     if (!(numerosCm instanceof Map) || !numerosCm.size) throw new Error(`${slug} : numéros Cardmarket absents — l'adresse se construit sur le numéro du PRODUIT, jamais sur le numéro de fiche (réimpressions)`);
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
-    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null))
-        .map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, numeroCm: numerosCm.get(l.idProduct) ?? null, idProduct: l.idProduct }));
+    // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une AUTRE source, même set / numéro, en anglais (la langue que nous écrivons), ne « sert » pas la fiche : pokemontcg.io sert des PNG
+    // haute définition (admis dès 350 px, donc jamais marqués) qui la remplaceront à la jointure. `planifierPtcgio` regarde la même carte vue sans elle (son propre `dejaServi`).
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: slug }).toArray());   // correction 5 : les documents des entrées du set
+    const vue = (carte, numero) => sansRemplacables(carte, { set: slug, numero, langue: 'en', source: P.SOURCE, documents });
+    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(vue(cartes.get(l.carteId), l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null), slug, l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null))
+        .map(l => ({ carte: vue(cartes.get(l.carteId), l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null), numeroFiche: l.numeroFiche ?? null, numeroCm: numerosCm.get(l.idProduct) ?? null, idProduct: l.idProduct }));
     return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous, tousNumerosCm: P.numerosDuSet(lignes, numerosCm) }) };
 }
 
@@ -144,7 +150,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'plan' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: slug, etat: 'refuse-verrou' }; }
-    let bloque = null;
+    let bloque = null, pauseHote = null;
     try {
         const Pl = remplacerJumeau ? await planifierJumeauSlug(db, slug, await lireNumeros(slug), noms, set.tirage ?? set.region) : await planifierSlug(db, slug, await lireNumeros(slug));
         const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
@@ -176,6 +182,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 obtenus.push({ p, _id, meta, webp, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${p.url}) : ${err.message}`);
@@ -184,7 +191,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
             }
         }
         if (bloque) await conclureBloque(E, slug, bloque, client);
-        if (!bloque && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
+        if (!bloque && !pauseHote && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
 
         // ---- 3 bis. DIMENSIONS : par ligne (un kit a deux sets pokemontcg.io), la majorité fait la règle ---------------------------------------
         const admis = [];
@@ -214,7 +221,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en', urlOriginal: p.url })),
-                    attribution: P.MENTION, mention: P.MENTION, lot: LOT, telechargeLe: new Date(), etat: 'ok'
+                    attribution: P.MENTION, mention: P.MENTION, lot: LOT, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: p.url, collecteLe: new Date() })
                 }, $unset: { erreur: 1 }
             }, { upsert: true });
             telecharges++;
@@ -224,7 +231,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, slug, LOT);
         const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, preseanceRemplacees = 0;
+        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, preseanceRemplacees = 0, basseDefRemplacees = 0;
         const retirees = [];                                    // R5 : les entrées japonaises sorties de cartes.images, par la clé de compterEntrees
         try {
             for (const im of images) {
@@ -234,12 +241,16 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                 const jumeauxIci = remplacerJumeau ? (c.images || []).filter(e => e && e.set === slug && e.source !== P.SOURCE && e.numero != null && cleNumero(e.numero) === cleNumero(im.numero) && J.scanJumeau(e, set.tirage ?? set.region)) : [];
                 const autres = (c.images || []).filter(e => !(e.source === P.SOURCE && e.set === slug && e.numero === im.numero) && !jumeauxIci.includes(e));
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                 // ➕ 2026-10-13 (décision 4 du testeur) : LA PRÉSÉANCE DE RÉSOLUTION (collecte-cartes/preseance-images.js — la règle du worker TCGdex aussi). Contre une AUTRE source
                 // jugeable (TCGdex) au même numéro : la plus grande aire garde sa place, à égalité TCGdex. Notre entrée qui perd CÈDE (comme avant) ; qui gagne, elle retire la perdante.
                 const pres = preseance.contre(autres, entree);
                 const restantes = autres.filter(e => !pres.aRetirer.includes(e));
-                if (pres.perd || T.dejaServi({ images: restantes }, slug, im.numero)) {
+                // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à notre image (haute définition, jamais marquée) : elle sort — la même fonction que artofpkm /
+                // Bulbapedia / TCGdex. Une image marquée ne remplace rien et cède.
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(restantes, entree, rest => T.dejaServi({ images: rest }, slug, im.numero), { documents: await documentsDesEntrees(M, restantes) });
+                if (pres.perd || arb.servie) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                     dejaParAutre++;
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
@@ -252,6 +263,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                     retirees.push(`${c._id}|${l.source}|${l.set}|${l.numero ?? ''}|${l.cleR2 ?? ''}`);
                     preseanceRemplacees++;
                 }
+                if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                 // R5 — LE REMPLACEMENT : l'anglais prouvé PREND LA PLACE du jumeau japonais, au même numéro ; le document `images` japonais reste, marqué
                 for (const j of jumeauxIci) {
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: j.source, cleR2: j.cleR2 } } });
@@ -274,12 +286,14 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         const complet = {
             vignettes: W.vg,
             source: P.SOURCE, mention: P.MENTION, lot: LOT, lignes: P.lignesDe(slug).map(l => l.id), produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs,
-            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes, preseanceRemplacees,
+            telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes, preseanceRemplacees, basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attendues === apres.autres, siennesApres: apres.siennes, ok: garde,
                 ...(remplacerJumeau ? { nJaRetirees: retirees.length, nEnPosees: joints } : {}) },
             ...(remplacerJumeau ? { mode: 'remplacement-jumeau', jumeaux: Pl.jumeaux, ecartes: Pl.ecartes.length } : {}),
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
+            // REPONSE-HOTE : le rapport des réponses des hôtes d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
+            concordance: garde && !erreurJointure && !bloque && !pauseHote && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()
         };
         // R5 : le bilan du remplacement a SON champ — celui du lot additif (visuelsPtcgio, lu par retirer-visuels-ptcgio.js) n'est pas écrasé
@@ -287,6 +301,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes(), [remplacerJumeau ? 'bilanJumeau' : 'bilan']: complet } });
         console.log(`   ${slug} : prouvés ${Pl.plan.length} · téléchargés ${telecharges} · repris ${sautes} · absents (404) ${absents} · sous le seuil ${tropPetits} · dimensions refusées ${refusDim} · échecs ${echecs} · joints ${joints} · garde ${garde ? '✅' : '❌'} · requêtes ${client.compteRequetes()}`);
         if (bloque) return { code: slug, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: slug, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: slug, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: slug, etat: 'non-concordant', ...complet };
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;
@@ -319,7 +334,7 @@ async function lancerEcriture(slugs, M, { verrou, client, lireNumeros, R2 = r2, 
         resultats.push(r);
         console.log(`SET ${slug} → ${r.etat}`);
         if (!['verifie', 'refuse-substitut', 'refuse-set-non-apparie'].includes(r.etat)) code = 1;   // (un 'refuse-nom' du mode remplacement fait donc un code 1 : un doute sur le témoin ne passe pas pour un succès)
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats };
 }

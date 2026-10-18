@@ -68,6 +68,11 @@ function langueDuVisuel(im) {
     if (im.source === 'pokemon.com') return require('./pokemoncom').langueDe(im.urlOriginal);
     // ➕ 2026-10-17 (POKEDATA) — visuels pleine taille d'un set déclaré ANGLAIS par la source : la langue est portée par `langueSource: 'en'`, l'adresse doit être valable ; la preuve ne nomme pas l'hôte
     if (im.source === 'pokedata') return require('./pokedata').langueDe(im.urlOriginal, im.langueSource);
+    // ➕ 2026-10-17 (PKMNCARDS) — source « pkc » : des scans de cartes ANGLAISES (le set est celui d'un tirage occidental, vérifié par la table fermée de collecte-cartes/pkmncards.js et par la
+    // concordance set + numéro + nom de chaque carte). Par ce qu'elle AUTORISE : l'adresse d'origine doit être valable (require paresseux : pas de cycle) ; la preuve est PUBLIQUE et ne nomme ni la source ni l'hôte.
+    if (im.source === 'pkc') return require('./pkmncards').urlImageValide(im.urlOriginal)
+        ? { langue: 'en', preuve: 'scan de l\'impression anglaise (carte du tirage occidental, set, numéro et nom concordants avec la fiche)' }
+        : { langue: null, preuve: 'adresse d\'origine hors des règles : sans règle de langue' };
     if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };

@@ -1,6 +1,7 @@
 // node test-ptcgio-sets.js — le lot PTCGIO-SETS (2026-10-17) : les sets de nos trous occidentaux que le serveur d'images prouve. Pur : aucune requête, aucune base.
 // Ce que le banc garde : chaque set prouvé n'adresse que ses numéros couverts par un témoin, par ce qu'il AUTORISE ; les formes qu'il n'a pas vues (« 143a », sans numéro) restent des trous ;
 // les McDonald's 2014/15/17/18 ne sont PAS des lignes (scans scrydex de 320 px pour la plupart, sous le seuil de 350 ; mcd18 numérote autrement que Cardmarket).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const P = require('./collecte-cartes/ptcgio');
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {

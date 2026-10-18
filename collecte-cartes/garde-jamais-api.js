@@ -21,6 +21,9 @@ const HOTE_IMAGES_PKM = 'assets.pokemon.com';                       // = collect
 const PREFIXE_PKM = '/static-assets/content-assets/cms2/img/cards/';
 const HOTES_PKM_PERMIS = Object.freeze(['pokemon.com', 'www.pokemon.com', 'press.pokemon.com', 'image.pokemon.com.cn', HOTE_IMAGES_PKM]);
 const FICHIERS_DE_BANC_PKM = Object.freeze(['test-userscript-pokemoncom.js', 'test-recepteur-pokemoncom.js']);
+const JETON_PKC = /[a-z0-9._-]*pkmncards\.com(?:\.[a-z0-9-]+)*/gi;
+const HOTE_PKC = 'pkmncards.com';                                       // = collecte-cartes/pkmncards.js HOTE (le banc vérifie l'égalité)
+const CHEMINS_PKC_PERMIS = /^(?:|\/robots\.txt|\/wp-content\/uploads\/(?:[A-Za-z0-9_.-]+)?)$/;
 const NOMS_NUS = new Set(['pokemontcg.io', 'scrydex.com']);
 const ROUTES_API = /^\/(?:v\d+|api|cards|sets|rarities|types|subtypes|supertypes|pokemon\/v\d+)(?![a-z0-9])/i;
 const TAILLE_MAX = 20 * 1024 * 1024;
@@ -44,6 +47,14 @@ function analyserTexte(fichier, texte) {
         // (le nom nu, www et press — pages vues par un humain —, image….cn et l'hôte d'images) ET, pour l'hôte d'images, si le chemin est celui des cartes ou robots.txt.
         // Tout le reste — api, graphql, gateway, un hôte inventé, un suffixe, un chemin d'API — est refusé SANS être nommé. Les fichiers de banc du userscript (liste fermée
         // de deux NOMS) reproduisent des formes hostiles pour leurs propres refus.
+        // ➕ 2026-10-17 (PKMNCARDS) : l'hôte de la source de scans, ÉCRITE PAR CE QU'ELLE AUTORISE. Une mention n'est permise que si son hôte est EXACTEMENT le nom (ni sous-domaine, ni suffixe) ET si le chemin
+        // qui la suit est vide, robots.txt, le répertoire plat /wp-content/uploads/ ou un fichier de ce répertoire. Tout le reste — une page de carte, la racine, la recherche (?s=), l'API WordPress, une
+        // remontée de chemin — est refusé. Aucune route n'est énumérée : seul le petit ensemble stable passe.
+        for (const m of contenu.matchAll(JETON_PKC)) {
+            const jeton = m[0].toLowerCase().replace(/\.+$/, '');
+            const chemin = /^[^\s"'`)<>(\]\[,;{}|]*/.exec(contenu.slice(m.index + m[0].length))[0].replace(/[.:]+$/, '');
+            if (!(jeton === HOTE_PKC && CHEMINS_PKC_PERMIS.test(chemin))) violations.push({ fichier, ligne: i + 1, jeton: m[0] });
+        }
         if (!FICHIERS_DE_BANC_PKM.includes(fichier)) for (const m of contenu.matchAll(JETON_PKM)) {
             const jeton = m[0].toLowerCase().replace(/\.+$/, '');
             const suite = contenu.slice(m.index + m[0].length);

@@ -26,7 +26,11 @@ const PREUVES_GARDEES_PRODUITES = Object.freeze([]);
 const PREUVES_D_OUTILS_GARDEES = Object.freeze(['metacarte+setlist', 'metacarte+freres']);
 
 /** Le filtre d'effacement d'un rejeu : les lignes des cartes du set, de ses expansions, ET d'une preuve que joindre() refabrique. */
-const filtreDeRegeneration = (idsCartes, expsDeCeSet) => ({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet }, preuve: { $in: [...PREUVES_DE_JOINDRE] } });
+// ➕ STAFF-ECRITURE (2026-10-17) : une ligne qui porte `variante` ou `variantePreuve` (posée à la main par poser-variante-staff.js, sur 122 lignes de preuve set+numero) est une MARQUE
+// que joindre() ne sait pas refabriquer : elle n'est jamais effacée (la règle : tout ce qu'un outil ne sait pas refaire porte la marque de sa conservation, posée dans le même geste que l'écriture).
+// La ligne que joindre() réécrit est un `$set` par champs (ecrire-jointure.js) : il laisse `variante` en place, donc garder suffit — aucun report à recopier.
+const filtreDeRegeneration = (idsCartes, expsDeCeSet) => ({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet }, preuve: { $in: [...PREUVES_DE_JOINDRE] },
+    variante: { $exists: false }, variantePreuve: { $exists: false } });
 
 /**
  * Efface ce que joindre() va réécrire, recompose les liens dénormalisés depuis ce qui RESTE. Les lignes gardées gardent leurs liens : `liens.idMetacards`
@@ -41,8 +45,8 @@ async function effacerRefabricables(M, idsCartes, expsDeCeSet) {
     await M.CarteProduit.deleteMany(filtreDeRegeneration(idsCartes, expsDeCeSet));
     let gardees = 0;
     for (const id of idsCartes) {
-        const restantes = await M.CarteProduit.find({ carteId: id }).select('idProduct preuve').lean();
-        const dejaGardees = restantes.filter(x => !PREUVES_DE_JOINDRE.includes(x.preuve)).length;
+        const restantes = await M.CarteProduit.find({ carteId: id }).select('idProduct preuve variante variantePreuve').lean();
+        const dejaGardees = restantes.filter(x => !PREUVES_DE_JOINDRE.includes(x.preuve) || x.variante !== undefined || x.variantePreuve !== undefined).length;
         gardees += dejaGardees;
         await M.Carte.updateOne({ _id: id }, dejaGardees
             ? { $set: { 'liens.idProduct': restantes.map(x => x.idProduct) } }

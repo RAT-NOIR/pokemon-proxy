@@ -2,6 +2,7 @@
 // propre et le substitut. Aucune requête, aucune base, rien sur R2 : un transport simulé et des cas RÉELS de la mesure du 2026-10-17 (S7/MESURE-OCC).
 // TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE du module (le rouge se voit en cassant le code).
 // RACINE_SITE=<dossier> : le dossier dont le VOISIN `rat-market-site` porte la règle du site (défaut : le dépôt principal).
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 const P = require(path.join(DIR, 'collecte-cartes', 'pokumon.js'));
@@ -197,16 +198,19 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
 
     // ── 5. le CLIENT : garde fermée, hôtes et chemins énumérés, cadence, réessai, plafond, arrêt au premier blocage ───────────────
     const reseau = repondre => { const appels = []; return { appels, async get(url, o) { appels.push(url); return repondre(url, o); } }; };
-    const ROBOTS = 'User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n';
+    // REPONSE-HOTE : la règle commune exige les OCTETS d'une image (« PNG » en clair n'en est pas une) ; les pauses persistantes du banc vont dans un dossier temporaire
+    const PNG_BANC = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
+    const DOSSIER_PAUSES_BANC = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pk-pauses-'));
+    const ROBOTS ='User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n';
     const JSON_INDEX = JSON.stringify([RAW.kricketune, RAW.cherrim]);
     const normal = (url, o) => /\/robots\.txt$/.test(url) ? { status: 200, texte: ROBOTS }
         : /wp-json\/wp\/v2\/card/.test(url) ? { status: 200, type: 'application/json; charset=UTF-8', texte: JSON_INDEX, pages: 1 }
-            : /\.(png|jpg)$/.test(url) ? { status: 200, type: 'image/png', octets: Buffer.from('PNG') } : { status: 404, type: 'text/html' };
+            : /\.(png|jpg)$/.test(url) ? { status: 200, type: 'image/png', octets: PNG_BANC } : { status: 404, type: 'text/html' };
     const verrou = { tenu: true, perdu: false };
     const attentes = [];
     let maintenant = 1e12;                                          // l'horloge du banc ne bouge que par les pauses : la cadence se mesure exactement
     const pause = async ms => { attentes.push(ms); maintenant += ms; };
-    const client = (tr, v = verrou, o = {}) => P.fabriquerClientPokumon({ transport: tr, verrou: v, pause, horloge: () => maintenant, ...o });
+    const client = (tr, v = verrou, o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), P.fabriquerClientPokumon({ transport: tr, verrou: v, pause, horloge: () => maintenant, dossierPauses: DOSSIER_PAUSES_BANC, ...o }));
     const essayer = async f => { try { await f(); return null; } catch (e) { return e; } };
 
     let tr = reseau(normal), c = client(tr, null);
@@ -260,6 +264,61 @@ const prod = (idProduct, serie, nomCm, slugProduit) => ({ idProduct, serie, nomC
     tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 301, location: `${CDN}/2024/11/ailleurs.png` }); c = client(tr);
     err = await essayer(() => c.image(E.kricketune.img));
     verifier('redirection vers le MÊME hôte : non suivie non plus (une seule requête d\'image, aucune seconde adresse)', [/redirection/.test(err?.message || ''), tr.appels.filter(u => !/robots/.test(u)).length], [true, 1]);
+    // ── REPONSE-HOTE : la règle commune de réponse, au niveau du client ────────────────────────────────────────────────────────────
+    const PAGE_INTROUVABLE = { status: 200, type: 'text/html; charset=utf-8', texte: '<html><body>Page introuvable</body></html>' };
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : PAGE_INTROUVABLE); c = client(tr);
+    verifier('REPONSE-HOTE : 200 text/html sans marqueur = fausse page introuvable → image absente (null), le client n\'est NI bloqué NI en pause', [await c.image(E.kricketune.img), !!c.bloque(), !!c.pause(), c.suivi().rapport('cdn6966.templcdn.com').fausses], [null, false, false, 1]);
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : PAGE_INTROUVABLE); c = client(tr, verrou, { plafond: 400 });
+    let nul = 0; for (let i = 0; i < 20; i++) if ((await c.image(`${CDN}/2024/11/a${i}.png`)) === null) nul++;
+    verifier('REPONSE-HOTE : 20 fausses absences d\'affilée → on continue (20 null, pas de pause)', [nul, !!c.pause()], [20, false]);
+    err = await essayer(() => c.image(`${CDN}/2024/11/a21.png`));
+    const avant21 = tr.appels.length;
+    const err2 = await essayer(() => c.image(`${CDN}/2024/11/a22.png`));
+    verifier('REPONSE-HOTE : la 21e → PAUSE (pas un arrêt définitif : bloque() reste nul), et plus aucune requête ensuite', [!!err?.pauseHote, !!err?.bloque, c.bloque(), !!err2?.pauseHote, tr.appels.length === avant21, c.suivi().rapport('cdn6966.templcdn.com').pause, err?.issue], [true, false, null, true, true, true, 'fausse-absente']);
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : (new URL(url).pathname.endsWith('/image.png') ? { status: 200, type: 'image/png', octets: PNG_BANC } : PAGE_INTROUVABLE)); c = client(tr, verrou, { plafond: 400 });
+    for (let i = 0; i < 20; i++) await c.image(`${CDN}/2024/11/a${i}.png`);
+    await c.image(`${CDN}/2024/11/image.png`);
+    verifier('REPONSE-HOTE : une image remet le compteur à zéro (20 fausses + image + 20 fausses → pas de pause)', await (async () => { for (let i = 0; i < 20; i++) await c.image(`${CDN}/2024/11/b${i}.png`); return !!c.pause(); })(), false);
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : (/introuvable/.test(url) ? { status: 404, type: 'text/html' } : PAGE_INTROUVABLE)); c = client(tr, verrou, { plafond: 400 });
+    for (let i = 0; i < 20; i++) await c.image(`${CDN}/2024/11/a${i}.png`);
+    for (let i = 0; i < 5; i++) await c.image(`${CDN}/2024/11/introuvable${i}.png`);
+    err = await essayer(() => c.image(`${CDN}/2024/11/z.png`));
+    verifier('REPONSE-HOTE : un vrai 404 ne remet pas le compteur à zéro (la 21e fausse, 404 entre-temps, met en pause)', [!!err?.pauseHote], [true]);
+    const menuGym = '<html><nav>Gym Heroes · Gym Challenge</nav><p>Page introuvable</p></html>';
+    const pGym = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pk-pauses-gym-'));      // la pause persistante du scénario ne déborde pas sur les suivants
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'text/html', texte: menuGym }); c = client(tr, verrou, { dossierPauses: pGym });
+    err = await essayer(() => c.image(E.kricketune.img));
+    const nAvant = tr.appels.length;
+    const cPasse2 = client(tr, verrou, { dossierPauses: pGym });
+    const err3 = await essayer(() => cPasse2.image(E.kricketune.img));
+    verifier('REPONSE-HOTE : « Gym Challenge » dans une page introuvable = ambiguë → PAUSE PERSISTANTE (fichier daté qui nomme l\'empreinte), PAS un blocage', [!!err?.pauseHote, !!err?.pausePersistante, !!err?.bloque, c.bloque(), require('fs').existsSync(err?.fichier || ''), /^[0-9a-f]{64}$/.test(err?.empreinte || '')], [true, true, false, null, true, true]);
+    verifier('REPONSE-HOTE : …et un AUTRE client (une autre passe) ne part pas non plus tant que la pause tient : aucune requête', [!!err3?.pauseHote, tr.appels.length === nAvant], [true, true]);
+    const pDossier = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pk-pauses2-'));
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'text/html', texte: menuGym }); c = client(tr, verrou, { dossierPauses: pDossier, connues: [require('crypto').createHash('sha256').update(menuGym).digest('hex')] });
+    verifier('REPONSE-HOTE : l\'empreinte déclarée « page introuvable connue » vaut fausse absence (null), plus de pause', [await c.image(E.kricketune.img), !!c.pause()], [null, false]);
+    for (const [nom, rep] of [['410 (image)', { status: 410, type: 'text/html', texte: 'gone' }], ['401', { status: 401, type: 'text/html', texte: 'login' }]]) {
+        tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : rep); c = client(tr);
+        err = await essayer(() => c.image(E.kricketune.img));
+        verifier(`REPONSE-HOTE : ${nom} = défi → client BLOQUÉ (arrêt définitif), plus aucune requête`, [!!err?.bloque, !!c.bloque()], [true, true]);
+    }
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    verifier('REPONSE-HOTE : 200 JSON pour une image = inattendue → PAUSE de la passe (pas de blocage)', [!!err?.pauseHote, !!err?.bloque, err?.issue], [true, false, 'inattendue']);
+    // I3 (correction 1) : le suivi vit pour le PROCESSUS — une SECONDE unité (un second client, le registre par défaut) ne fait AUCUNE requête après la pause de la première
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    { const tr2 = reseau(normal), c2 = client(tr2, verrou, { processus: true }); const e2 = await essayer(() => c2.image(E.kricketune.img));
+      verifier('I3 pokumon : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!err?.pauseHote, !!e2?.pauseHote, tr2.appels.length], [true, true, 0]); }
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: Buffer.from('ceci n\'est pas une image') }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    verifier('REPONSE-HOTE : 200 image/png aux octets faux = inattendue → pause', [!!err?.pauseHote, err?.issue], [true, 'inattendue']);
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: PNG_BANC, cfMitigated: 'challenge' }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    verifier('REPONSE-HOTE : cf-mitigated sur une image = défi → BLOQUÉ', [!!err?.bloque], [true]);
+    tr = reseau(url => /robots/.test(url) ? { status: 200, texte: '' } : { status: 200, type: 'text/html', texte: '<div class="g-recaptcha"></div>' }); c = client(tr);
+    err = await essayer(() => c.image(E.kricketune.img));
+    verifier('REPONSE-HOTE : un captcha dans une page à la place de l\'image = défi → BLOQUÉ', [!!err?.bloque], [true]);
+
     tr = reseau(url => /robots/.test(url) ? { status: 200, texte: 'User-agent: *\nDisallow: /wp-content/\n' } : normal(url)); c = client(tr);
     err = await essayer(() => c.image(E.kricketune.img));
     verifier('robots.txt respecté : un chemin interdit ne part pas', [/robots/.test(err?.message || ''), tr.appels.filter(u => !/robots/.test(u)).length], [true, 0]);

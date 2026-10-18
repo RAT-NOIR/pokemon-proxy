@@ -453,22 +453,25 @@ const LIGNES_AUTRES = Object.freeze([
       echantillon: [ech(34847, 'Wartortle (Base Set 2 63/130, 1296 px)', '2021/07/EN_S047Special-Print.jpg', 1296), ech(34844, 'Kabuto (Fossil 50/62)', '2021/07/EN_S044Special-Print.jpg', 400), ech(34853, 'Brock\'s Vulpix (Gym Challenge 37/132, 1296 px)', '2021/07/EN_S053Special-Print.jpg', 1296)] }
 ].map(l => Object.freeze(l)));
 const LOT_FAMILLES = LIGNES_AUTRES.map(l => l.id);
-const { largeurMinDe } = require('./seuils-images');
-const nImage = n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
+const { largeurAdmiseDe } = require('./seuils-images');
+const { sansRemplacables, normaliserTampon } = require('./basse-definition');
+// Correction 5 : le tampon d'un scan Pokumon = sa `marque` normalisée (document ET entrée). Une famille McDonald's n'a pas de tampon (une année, pas une réimpression tamponnée).
+const marqueDeSerie = serie => `Prize Pack Series ${serie} : tampon « Play! Pokémon »`;
+const tamponDeLaMarque = marque => (typeof marque === 'string' && !/^mcd-/.test(marque) ? normaliserTampon(marque) : null);
+const nImage =n => { const s = String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, ''); return s === '' ? null : s; };   // la même normalisation que le site (normaliserNumero)
 
 /**
  * LE PLAN des autres familles (pur). `produits` : TOUS les produits des sets des lignes (servis ou non : un groupe se compte sur tous) ; `cartes` : Map(carteId → { nomEn, images }).
  * 🔑 Le numéro posé sur l'image est celui de la FICHE (l'impression de la carte : « 033 » pour MEP033, « 009 » pour 9/15) — le site compare ce numéro à celui de la fiche — ; Trick or Trade et
  * Professor Program n'ont pas de fiche numérotée, l'image garde le numéro imprimé de l'entrée. Une image sous le seuil de largeur est un reste COMPTÉ (« sous-le-seuil »), jamais téléchargée.
  */
-function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) {
+function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index, documents }) {
     const { resultats, comptes } = apparierFamille({ lignes, produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const cleFiche = p => `${p.carteId}|${p.unite}|${cleMesure(p.numero) ?? ''}`;
     const parFiche = new Map();
     for (const r of resultats) { const k = cleFiche(parId.get(r.idProduct)); (parFiche.get(k) || parFiche.set(k, []).get(k)).push(r); }
     const plan = [], restes = [];
-    const seuil = largeurMinDe(SOURCE);
     for (const r of resultats) {
         const p = parId.get(r.idProduct);
         const base = { idProduct: p.idProduct, carteId: p.carteId, slugSet: p.unite, nomCm: p.nomCm };
@@ -479,11 +482,14 @@ function planifierFamilles({ lignes = LIGNES_AUTRES, produits, cartes, index }) 
         // PK-PROMOS : une ligne dont les images n'ont pas été REGARDÉES (`lu` absent) ne pose rien — écrit par ce qu'il autorise : seule une date de lecture ouvre la ligne
         if (!l.lu) { restes.push({ ...base, motif: 'ligne-non-regardee' }); continue; }
         const numero = ['mcd', 'bsp'].includes(r.famille) ? r.numeroFiche : e.numero;
-        if ((carte.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : le SEUIL est celui de la LIGNE (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 ailleurs) ; une entrée MARQUÉE (basse définition) d'une autre source ne « sert »
+        // pas la fiche face à une image qui sortira NON marquée — la largeur est connue ICI (l'index la porte), donc une image sous 350 px (qui sera marquée) ne remplace rien : « deja-servi » reste
+        const visible = sansRemplacables(carte, { set: p.unite, numero, langue: 'en', source: SOURCE, wOriginal: e.w, documents, tampon: tamponDeLaMarque(`${l.id} : ${l.tampon}`) });
+        if ((visible.images || []).some(m => m && m.set === p.unite && m.cleR2 && (nImage(m.numero) === null || nImage(m.numero) === nImage(numero)))) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(cleFiche(p));
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === e.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(e.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
-        if (!(e.w >= seuil)) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
+        if (!(e.w >= largeurAdmiseDe(SOURCE, l.id))) { restes.push({ ...base, motif: 'sous-le-seuil', w: e.w }); continue; }
         if (plan.some(x => x.carteId === p.carteId && x.slugSet === p.unite && nImage(x.numero) === nImage(numero))) continue;
         // BS-HOLO : l'image est celle de TOUT le couple ; le champ explicite et la liste exacte des produits suivent l'image (document `images` ET entrée `cartes.images`), et la preuve dit pourquoi
         const partage = r.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: [...r.produitsPartages] } : {};
@@ -539,7 +545,7 @@ const urlImageValide = url => { try { return cheminAutorise(url).genre === 'imag
  * 🔑 LE SITE AFFICHE UN SEUL VISUEL PAR FICHE (carte, set) : une fiche sans numéro (les Prize Packs) montre la première image du set. Une fiche qui porte plusieurs produits dont un n'est pas
  * prouvé du même visuel montrerait notre image sur le produit d'à côté : TROU « fiche-partagee ». Une carte qui a déjà un visuel dans CE set n'est jamais touchée (additif).
  */
-function planifierPokumon({ produits, cartes, index }) {
+function planifierPokumon({ produits, cartes, index, documents }) {
     const { resultats, comptes } = apparier({ produits, index });
     const parId = new Map(produits.map(p => [p.idProduct, p]));
     const parFiche = new Map();
@@ -551,7 +557,8 @@ function planifierPokumon({ produits, cartes, index }) {
         if (r.verdict !== 'prouve') { restes.push({ ...base, motif: r.motif }); continue; }
         const carte = cartes.get(p.carteId);
         if (!carte) { restes.push({ ...base, motif: 'carte-absente' }); continue; }
-        if ((carte.images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
+        // ➕ BASSE-DEF : une entrée marquée (basse définition) d'une autre source, même set / numéro / langue, ne « sert » pas la fiche face à une image qui sortira non marquée (largeur de l'index)
+        if ((sansRemplacables(carte, { set: p.slugSet, numero: r.entree.numero, langue: 'en', source: SOURCE, wOriginal: r.entree.w, documents, tampon: tamponDeLaMarque(marqueDeSerie(p.serie)) }).images || []).some(e => e && e.set === p.slugSet && e.cleR2)) { restes.push({ ...base, motif: 'deja-servi' }); continue; }
         const fiche = parFiche.get(`${p.carteId}|${p.slugSet}`);
         if (fiche.length > 1 && !fiche.every(x => x.verdict === 'prouve' && x.entree.id === r.entree.id)) { restes.push({ ...base, motif: 'fiche-partagee' }); continue; }
         if (!urlImageValide(r.entree.img)) { restes.push({ ...base, motif: 'url-hors-liste' }); continue; }
@@ -583,7 +590,8 @@ const transportFetch = {
         return { status: r.status, type, texte: await r.text(), pages: Number(r.headers.get('x-wp-totalpages')) || null, total: Number(r.headers.get('x-wp-total')) || null, cfMitigated };
     }
 };
-const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
+const RH = require('./reponse-hote');
 
 /**
  * Les SEULS chemins vers pokumon.com et son hôte d'images. Garde FERMÉE : aucune requête sans verrou global lié et tenu ; deux hôtes ÉNUMÉRÉS, chemins ÉNUMÉRÉS (robots.txt, la liste d'une
@@ -591,12 +599,13 @@ const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcap
  * 5xx, puis l'échec LÈVE ; 403, 429, `cf-mitigated`, défi : BLOQUÉ, plus aucune requête ; une redirection n'est JAMAIS suivie ; plafond de requêtes ; la liste d'une série se rejoue
  * depuis le CACHE (`cache` : { lire(cle) → texte|null, ecrire(cle, texte) }) sans requête.
  */
-function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null;
+function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, plafond = PLAFOND_REQUETES, cache = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null } = {}) {
+    let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, pauseHote = null;
     const robots = new Map();                                 // hôte → texte | null (404) ; absent = pas encore lu
     let cadenceEff = Math.max(CADENCE_MIN_MS, Number(cadenceMs) || 0);
     function garde() {
         if (bloque) throw bloque;
+        if (pauseHote) throw pauseHote;                       // la pause de la passe : plus aucune requête vers cet hôte (pas un arrêt définitif)
         if (!lie) throw new Error(`${SOURCE} : aucun verrou global lié (${VERROU_GLOBAL}) — pas de requête sans verrou`);
         if (lie.perdu || !lie.tenu) throw new Error(`${SOURCE} : verrou global ${lie.perdu ? 'PERDU' : 'non tenu'} — pas de requête sans verrou`);
     }
@@ -610,7 +619,8 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         return transport.get(url, o);
     }
     const bloquer = (r, url) => { bloque = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, status: r.status }); throw bloque; };
-    const defi = r => r.status === 403 || r.status === 429 || !!r.cfMitigated || (typeof r.texte === 'string' && /html/i.test(r.type || '') && DEFI.test(r.texte.slice(0, 5000)));
+    // le jugement d'un défi sur une requête qui n'est pas une image (robots.txt, liste JSON) : la définition du module commun, sur les 5 000 premiers caractères comme avant
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null;
     /** une requête, UN réessai au plus (coupure ou 5xx), jamais une boucle */
     async function essayer(url, o) {
         let r;
@@ -637,11 +647,13 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         garde();
         const c = cheminAutorise(url);
         return enFile(async () => {
+            RH.garderHote(new URL(c.url).hostname, dossierPauses, suivi);          // une pause persistante tient : aucune requête
             await assurerRobots(c.hote);
             if (!T.autoriseParRobots(robots.get(c.hote), c.chemin, UA)) throw Object.assign(new Error(`${SOURCE} : robots.txt interdit ${c.chemin} — aucune requête`), { robots: true });
             const r = await essayer(c.url, { binaire });
             if (defi(r)) bloquer(r, c.url);
-            if (r.status >= 300 && r.status < 400) throw new Error(`${SOURCE} : redirection ${r.status} non suivie sur ${c.url}`);
+            // une image se CLASSE (image() ci-dessous) : une redirection y est « inattendue » (pause) ; une liste ou une page garde son erreur
+            if (!binaire && r.status >= 300 && r.status < 400) throw new Error(`${SOURCE} : redirection ${r.status} non suivie sur ${c.url}`);
             return r;
         });
     }
@@ -669,9 +681,13 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
     /** Une image : les octets, ou null (404). */
     async function image(url) {
         const r = await requete(url, true);
-        if (r.status === 404 || r.status === 410) return null;
-        if (r.status >= 400) throw Object.assign(new Error(`${r.status} ${url}`), { status: r.status });
-        if (!r.octets) throw new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${url})`);
+        // LA RÈGLE COMMUNE : image · absente (404) · fausse page introuvable (200 text/html sans marqueur → absente, et le compteur) · défi · ambiguë · transitoire · inattendue
+        const hote = new URL(url).hostname;
+        const x = RH.traiterImage(r, { suivi, hote, url, dossierPauses, connues });
+        if (x.action === 'arret-definitif') bloquer(r, url);
+        if (x.action === 'pause' || x.action === 'pause-persistante') { pauseHote = RH.erreurPause(x, hote, url, x.fichier ? { fichier: x.fichier } : {}); throw pauseHote; }
+        if (x.action === 'transitoire') throw Object.assign(new Error(`${r.status} ${url}`), { status: r.status });
+        if (x.action === 'absente') return null;
         return r.octets;
     }
     /** Relève le plafond d'une collecte dont le plan est connu (un fichier = une requête) ; jamais au-delà de PLAFOND_MAX, jamais sous ce qui est déjà parti. */
@@ -679,7 +695,7 @@ function fabriquerClientPokumon({ transport = transportFetch, cadenceMs = CADENC
         if (!Number.isInteger(n) || n < compte || n > PLAFOND_MAX) throw new Error(`${SOURCE} : plafond ${n} refusé (déjà ${compte} requêtes, maximum ${PLAFOND_MAX})`);
         plafond = n;
     }
-    return { index, indexPromoSet, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque };
+    return { index, indexPromoSet, image, brut, lier(v) { lie = v; }, fixerPlafond, plafond: () => plafond, compteRequetes: () => compte, cadence: () => cadenceEff, bloque: () => bloque, pause: () => pauseHote, suivi: () => suivi };
 }
 
 // ── LA RÈGLE DU SITE : l'image propre l'emporte sur le substitut ───────────────────────────────────────────────────────────────────────────────
@@ -734,5 +750,5 @@ function planRetraitPokumon(cartes, { seulementPartagees = false, sets = null } 
 module.exports = {
     SOURCE, HOTE_API, HOTE_IMG, HOTES, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, REESSAI_MS, PLAFOND_REQUETES, PLAFOND_MAX, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, EVENEMENTS,
     TABLE_POKUMON, ligneDe, seriesAdmises, lireEntree, estPlaceholder, construireIndex, cleMesure, nomPokumon, numeroOrigine, codeOrigine, temoinsDeLEntree, denominateurDuCode,
-    LIGNES_AUTRES, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
+    LIGNES_AUTRES, marqueDeSerie, tamponDeLaMarque, nImage, groupeHoloNonHolo, groupeHoloNonHoloBlackStar, planifierFamilles, apparierFamille, temoinImpression, sDuFichier, anneeToT, REGLES, apparier, planifierPokumon, urlIndex, urlIndexPromoSet, urlIndexAutorisee, PROMO_SETS, urlImageValide, fabriquerClientPokumon, chargerRegleDuSite, visuelServi, idImagePokumon, planRetraitPokumon, setsDesLignes
 };

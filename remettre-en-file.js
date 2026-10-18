@@ -194,6 +194,8 @@ async function etatDuWorker(cx, { comparerArbre = require('./collecte-cartes/tab
                 `   lequel des deux prendra l'unité que j'enfile. On attend qu'il n'en reste qu'un.`);
 
         const b = balises[0];
+        if (!b.commit && b.raisonSansCommit)
+            return bloquer(`🔴 processus local, arbre modifié ou HEAD changé (pid ${b.pid} sur ${b.hote}) : la balise ne publie pas de commit — ${b.raisonSansCommit}`);
         if (!b.commit)
             return bloquer(`🔴 la balise (pid ${b.pid} sur ${b.hote}) n'écrit pas son commit — elle tourne sur du code antérieur au 2026-09-21.`);
         if (b.commit === 'local')

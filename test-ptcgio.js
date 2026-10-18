@@ -6,6 +6,7 @@
 //   · le collecteur : additif (un produit déjà pourvu n'est jamais touché), mention + lot + source + langue, reprise sans requête,
 //     un visuel retiré ne revient pas, dimensions hétérogènes refusées, R2 avant la ligne ;
 //   · le retrait en un lot retire EXACTEMENT le lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const sharp = require('sharp');
 const P = require('./collecte-cartes/ptcgio');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
@@ -106,7 +107,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const verrou = { tenu: true, perdu: false };
     const attentes = [];
     const pause = async ms => { attentes.push(ms); };
-    const client = (tr, v = verrou, o = {}) => P.fabriquerClientPtcgio({ transport: tr, verrou: v, pause, ...o });
+    const client = (tr, v = verrou, o = {}) => (o.processus || require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(), P.fabriquerClientPtcgio({ transport: tr, verrou: v, pause, ...o }));
 
     let tr = reseau(normal);
     let c = client(tr, null);
@@ -173,7 +174,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const vignetterBanc = (erreur = null) => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, assurer: assurerBanc(erreur), journal: { error() { } } });
     const lancer = async (B, transport, o = {}) => {
         const depots = [];
-        const cl = P.fabriquerClientPtcgio({ transport, verrou, pause });
+        require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const cl = P.fabriquerClientPtcgio({ transport, verrou, pause });
         const r = silencieux();
         try { return { b: await collecterSlug(o.slug || SLUG, B.M, { verrou, client: cl, vignetter: vignetterBanc(o.erreurVignettes), lireNumeros: o.sansNumeros ? undefined : lireNumeros, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets }), depots, cl }; }
         finally { r(); }
@@ -189,6 +190,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('R2 AVANT la ligne : 2 dépôts WebP à la clé du set', [depots.length, depots[0]?.[1], depots[0]?.[3]], [2, 'pokemontcg.io/Celebrations/005-1-en.webp', 'image/webp']);
     verifier('la carte reçoit SON visuel et garde celui de l\'autre set', B.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `pokemontcg.io:${SLUG}:005`]);
     verifier('   l\'entrée porte mention, lot, langue, attribution, source', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source])(B.col('cartes').get(2).images[0]), ['© Pokémon / The Pokémon Company', 'ptcgio-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokemontcg.io']);
+    verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.urlOriginal, im.collecteLe instanceof Date, B.col('cartes').get(1).images[1].retirable, B.col('cartes').get(1).images[1].urlOriginal, B.col('cartes').get(1).images[1].collecteLe instanceof Date], [true, 'https://images.pokemontcg.io/cel25/5_hires.png', true, true, 'https://images.pokemontcg.io/cel25/5_hires.png', true]);
     verifier('un produit DÉJÀ pourvu par une autre source : intact (additif ; la vignette est un champ NEUF que assurerVignettes pose partout, vignette.js)', B.col('cartes').get(3).images.map(({ vignette, ...e }) => e), [{ set: SLUG, source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/h.webp', langue: 'en' }]);
     verifier('la Classic « BS 15 » est demandée à cel25c ; le serveur simulé répond 404 (le numéro n\'existe pas à la source) : le trou reste, aucune entrée', B.col('cartes').get(4).images, []);
     verifier('VIGNETTES : après la jointure, le collecteur appelle vignetterApresJointure avec le bucket des images et le set', appelsVignettes[0], ['bucket-banc', SLUG]);
@@ -228,6 +230,30 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         verifier('PRÉSÉANCE : une entrée Bulbapedia au même numéro n\'est pas jugée par cette règle — notre entrée cède comme avant (dejaServi), Bulbapedia intacte', R.Bp.col('cartes').get(2).images.map(e => `${e.source}:${e.numero}`), ['bulbapedia:011']);
     }
 
+    // ➕ 2026-10-17 (BASSE-DEF) : une entrée MARQUÉE (basse définition) d'une autre source est REMPLAÇÉE par l'image haute définition de pokemontcg.io (jamais l'inverse)
+    {
+        const MARQ = { set: SLUG, source: 'tcgdex', numero: '001', cleR2: 'tcgdex/Celebrations/001-3-basse.webp', w: 300, langue: 'en', basseDefinition: true };
+        const monde = (images = [MARQ]) => { const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(3).images = structuredClone(images);
+            Bx.col('images').set('mq', { _id: 'mq', source: 'tcgdex', set: SLUG, carteId: 3, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); return Bx; };
+        const des = Bx => Bx.col('cartes').get(3).images.map(e => `${e.source}:${e.basseDefinition === true}`);
+        { const Bx = monde(); const r = await lancer(Bx, reseau(normal));
+          verifier('REMPLACEMENT : une entrée MARQUÉE (autre source, même set, numéro, langue) face à l\'image HD de pokemontcg.io → elle sort, la nôtre entre sans marque ; garde verte', [r.b.etat, des(Bx), r.b.garde?.ok, r.depots.length], ['verifie', ['pokemontcg.io:false'], true, 3]);
+          verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), adresse d\'origine et clé R2 lisibles', [Bx.col('images').get('mq').etat, Bx.col('images').get('mq').remplacePar, !!Bx.col('images').get('mq').remplaceLe, Bx.col('images').get('mq').urlOriginal, Bx.col('images').get('mq').cleR2], ['remplace', { source: 'pokemontcg.io', cleR2: 'pokemontcg.io/Celebrations/001-3-en.webp' }, true, 'https://hote.example/ancienne.png', MARQ.cleR2]); }
+        { const Bx = monde([{ ...MARQ, langue: 'ja' }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : le numéro reste servi, 001 jamais demandé', [des(Bx), trX.appels.some(u => /\/1_hires/.test(u))], [['tcgdex:true'], false]); }
+        { const Bx = monde([{ ...MARQ, source: 'pokemontcg.io' }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('une entrée marquée de pokemontcg.io lui-même n\'est pas retéléchargée', [trX.appels.some(u => /\/1_hires/.test(u))], [false]); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600, imageEmprunteeTirage: true }]); const r = await lancer(Bx, reseau(normal));
+          verifier('EMPRUNTÉE (correction 4) : une image simple ne remplace pas une entrée `imageEmprunteeTirage` (aucun marqueur positif de tampon) ; garde verte', [des(Bx), Bx.col('images').get('mq').etat, r.b.garde?.ok], [['tcgdex:false'], 'ok', true]); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600, wOriginal: 600 }]); const trX = reseau(normal); await lancer(Bx, trX);
+          verifier('JAMAIS une image correcte au-dessus du seuil par une équivalente : 600 px sain face à 734 px (1,22 ×) → rien n\'est même demandé', [des(Bx), trX.appels.some(u => /\/1_hires/.test(u))], [['tcgdex:false'], false]); }
+        { // course : l'entrée marquée est posée PENDANT le téléchargement ; la jointure arbitre
+          const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(3).images = [];
+          const trX = reseau(url => { if (/\/1_hires/.test(url)) { Bx.col('cartes').get(3).images.push(structuredClone(MARQ)); Bx.col('images').set('mq', { _id: 'mq', source: 'tcgdex', set: SLUG, carteId: 3, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return normal(url); });
+          const r = await lancer(Bx, trX);
+          verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (même arbitrage), garde verte', [des(Bx), Bx.col('images').get('mq')?.etat, r.b.garde?.ok], [['pokemontcg.io:false'], 'remplace', true]); }
+    }
+
     // défi en cours de route : arrêt, ce qui est prouvé avant est joint, l'alerte est écrite
     const B2 = fausseBase(); semer(B2);
     tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : /\/5_hires/.test(url) ? { status: 200, type: 'image/png', octets: png } : { status: 403, texte: 'Just a moment' });
@@ -236,6 +262,57 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     tr = reseau(normal);
     ({ b } = await lancer(B2, tr));
     verifier('source bloquée : aucune requête ensuite', [b.etat, tr.appels.length], ['refuse-source-bloquee', 0]);
+
+    // ── REPONSE-HOTE (2026-10-18) : la règle commune de réponse, au niveau du client ET du collecteur ─────────────────────────────────────────
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'ptcgio-pauses-'));
+        const PAGE = { status: 200, type: 'text/html; charset=utf-8', texte: '<html>Page introuvable</html>' };
+        const lancerRH = async (B_, transport, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const cl = P.fabriquerClientPtcgio({ transport, verrou, pause, dossierPauses: dp(), ...o }); const r = silencieux(); try { return { b: await collecterSlug(SLUG, B_.M, { verrou, client: cl, vignetter: vignetterBanc(), lireNumeros, deposer: async () => { }, fabriquerVerrouSet: verrouSet }), cl }; } finally { r(); } };
+        // client
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : PAGE); c = client(tr, verrou, { dossierPauses: dp() });
+        verifier('REPONSE-HOTE client : 200 text/html sans marqueur = fausse page introuvable → null, ni bloqué ni en pause, comptée', [await c.image(P.urlHires('cel25', 5)), !!c.bloque(), !!c.pause(), c.suivi().rapport('images.pokemontcg.io').fausses], [null, false, false, 1]);
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : PAGE); c = client(tr, verrou, { dossierPauses: dp() });
+        let nuls = 0; for (let i = 1; i <= 20; i++) if ((await c.image(P.urlHires('cel25', i))) === null) nuls++;
+        let e21 = null; try { await c.image(P.urlHires('cel25', 21)); } catch (e) { e21 = e; }
+        verifier('REPONSE-HOTE client : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un blocage), et plus aucune requête', [nuls, !!e21?.pauseHote, !!e21?.bloque, c.bloque(), !!c.pause()], [20, true, false, null, true]);
+        const avantP = tr.appels.length; let e22 = null; try { await c.image(P.urlHires('cel25', 22)); } catch (e) { e22 = e; }
+        verifier('REPONSE-HOTE client : …plus aucune requête pendant la pause de la passe', [!!e22?.pauseHote, tr.appels.length === avantP], [true, true]);
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : /\/(\d+)_hires/.test(url) && Number(/\/(\d+)_hires/.exec(url)[1]) === 5 ? { status: 200, type: 'image/png', octets: png } : PAGE); c = client(tr, verrou, { dossierPauses: dp() });
+        for (let i = 6; i <= 25; i++) await c.image(P.urlHires('cel25', i));
+        await c.image(P.urlHires('cel25', 5));
+        for (let i = 26; i <= 30; i++) await c.image(P.urlHires('cel25', i));
+        verifier('REPONSE-HOTE client : une image remet le compteur à zéro (20 fausses, une image, 5 fausses → pas de pause)', [!!c.pause(), c.suivi().rapport('images.pokemontcg.io').consecutives], [false, 5]);
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' }); c = client(tr, verrou, { dossierPauses: dp() });
+        err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
+        verifier('REPONSE-HOTE client : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), jamais un blocage', [!!err?.pauseHote, !!err?.pausePersistante, !!err?.bloque, require('fs').existsSync(err?.fichier || '')], [true, true, false, true]);
+        for (const [nom, rep] of [['410', { status: 410, type: 'text/html', texte: 'gone' }], ['401', { status: 401, type: 'text/html', texte: 'login' }]]) {
+            tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : rep); c = client(tr, verrou, { dossierPauses: dp() });
+            err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
+            verifier(`REPONSE-HOTE client : ${nom} = défi → BLOQUÉ`, [!!err?.bloque], [true]);
+        }
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'application/json', texte: '{}' }); c = client(tr, verrou, { dossierPauses: dp() });
+        err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
+        { const tr2 = reseau(normal), c2 = client(tr2, verrou, { dossierPauses: dp(), processus: true }); let e2 = null; try { await c2.image(P.urlHires('cel25', 6)); } catch (e) { e2 = e; }
+          verifier('I3 ptcgio : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!err?.pauseHote, !!e2?.pauseHote, tr2.appels.length], [true, true, 0]); }
+        tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: Buffer.from('pas une image') }); c = client(tr, verrou, { dossierPauses: dp() });
+        err = null; try { await c.image(P.urlHires('cel25', 5)); } catch (e) { err = e; }
+        verifier('REPONSE-HOTE client : 200 image/png aux octets faux = inattendue → pause', [!!err?.pauseHote, err?.issue], [true, 'inattendue']);
+        // collecteur
+        const BR1 = fausseBase(); semer(BR1);
+        tr = reseau(url => /\/5_hires/.test(url) ? PAGE : normal(url));
+        const R1c = await lancerRH(BR1, tr);
+        verifier('REPONSE-HOTE collecteur : un 200 text/html sur une adresse → on passe à la suivante, AUCUNE alerte, les autres images sont posées', [R1c.b.etat, BR1.col('collecte_images_etat').get('alerte/source-bloquee/pokemontcg-io') === undefined, tr.appels.filter(u => /_hires/.test(u)).length, BR1.col('cartes').get(2).images.length > 0, R1c.b.reponsesHotes?.[0]?.fausses], ['verifie', true, 3, true, 1]);
+        const BR2 = fausseBase(); semer(BR2);
+        tr = reseau(url => /\/5_hires/.test(url) ? { status: 200, type: 'text/html', texte: '<title>Just a moment...</title>' } : normal(url));
+        const R2c = await lancerRH(BR2, tr);
+        verifier('REPONSE-HOTE collecteur : un défi → arrêt DÉFINITIF par l\'alerte existante', [R2c.b.etat, BR2.col('collecte_images_etat').get('alerte/source-bloquee/pokemontcg-io')?.active], ['incomplet', true]);
+        const BR3 = fausseBase(); semer(BR3);
+        tr = reseau(url => /_hires/.test(url) ? PAGE : normal(url));
+        const R3c = await lancerRH(BR3, tr, { suivi: RH.suiviHote({ seuil: 1 }) });
+        verifier('REPONSE-HOTE collecteur : au-delà du seuil de fausses absences → PAUSE de l\'hôte, « incomplet », AUCUNE alerte (le seuil du banc est 1 : le plan n\'a que 3 fichiers ; le 21 est prouvé au client)',
+            [R3c.b.etat, R3c.b.pauseHote?.hote, BR3.col('collecte_images_etat').get('alerte/source-bloquee/pokemontcg-io') === undefined, tr.appels.filter(u => /_hires/.test(u)).length, R3c.b.concordance], ['incomplet', 'images.pokemontcg.io', true, 2, false]);
+    }
 
     // dimensions hétérogènes : l'écart est refusé, rien n'est écrit pour lui
     const petit = await sharp({ create: { width: 600, height: 825, channels: 3, background: { r: 10, g: 10, b: 10 } } }).png().toBuffer();   // 600×825 : au-dessus du seuil, mais pas les dimensions des autres

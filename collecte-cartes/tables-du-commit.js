@@ -14,9 +14,16 @@ const { execFileSync } = require('child_process');
 
 const FICHIERS = ['collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json', 'sets-vintage-japonais.js'];
 
+/** La version la plus récente parmi des dossiers `app-x.y.z`, comparée en NOMBRES (le tri lexicographique met app-3.10 avant app-3.9). */
+function versionLaPlusRecente(noms) {
+    const cle = n => n.replace(/^app-/, '').split(/[.\-]/).map(x => (Number.isNaN(Number(x)) ? 0 : Number(x)));
+    const cmp = (a, b) => { const A = cle(a), B = cle(b); for (let i = 0; i < Math.max(A.length, B.length); i++) { const d = (B[i] || 0) - (A[i] || 0); if (d) return d; } return 0; };
+    return [...noms].sort(cmp)[0];
+}
+
 function gitExe() {
     const base = path.join(process.env.LOCALAPPDATA || '', 'GitHubDesktop');
-    const app = fs.readdirSync(base).filter(d => /^app-/.test(d)).sort().reverse()[0];
+    const app = versionLaPlusRecente(fs.readdirSync(base).filter(d => /^app-/.test(d)));
     if (!app) throw new Error('git introuvable (GitHubDesktop\\app-*)');
     return path.join(base, app, 'resources', 'app', 'git', 'cmd', 'git.exe');
 }
@@ -93,4 +100,4 @@ function dependancesLocales(entrees, { racine = path.join(__dirname, '..') } = {
     return [...vus].map(f => path.relative(racine, f).split(path.sep).join('/')).sort();
 }
 
-module.exports = { tablesDuCommit, fabriquerJuge, reglesDifferentes, dependancesLocales, FICHIERS };
+module.exports = { tablesDuCommit, fabriquerJuge, reglesDifferentes, dependancesLocales, FICHIERS, gitExe, versionLaPlusRecente };

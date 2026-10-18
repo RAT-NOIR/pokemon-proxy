@@ -96,7 +96,7 @@ async function main() {
     console.log("Connexion à MongoDB...");
     // Base nommée explicitement, sinon refus (voir mongo-connexion.js) : ce script
     // ÉCRIT, et la base de production s'appelle `test`.
-    const base = await connecterMongo({ script: 'import-price-guide.js', ecrit: true, confirmationProduction: true });
+    const base = await connecterMongo({ script: 'import-price-guide.js', ecrit: true, confirmationProduction: true, essentiel: 'import-cardmarket', fichier: __filename });   // GARDE-ATLAS : un import est essentiel, jamais bloqué
     // la base RÉELLEMENT connectée, pas seulement l'argument (relecture du 2026-09-28 : MONGODB_BASE du .env passait sans --base=)
     if (!['test', 'test_scratch'].includes(base)) { console.error(`❌ le guide des prix vit dans « test » (ou « test_scratch » pour le banc), pas dans « ${base} » : rien n'est importé`); await mongoose.disconnect(); process.exit(2); }
     console.log("✅ Connecté.");

@@ -67,8 +67,23 @@ const CORRECTIONS = [
         ['artofpkm/166/5.webp', 41758, 'Leafeon LV.X', 'リーフィア LV.X HP110, Illus. Ryo Ueda'],
         ['artofpkm/172/34.webp', 50209, 'Azelf LV.X', 'アグノム LV.X HP90, Illus. Shizurow'],
         ['artofpkm/164/39.webp', 36172, 'Cresselia LV.X', 'クレセリア LV.X HP100, Illus. Shizurow']
-    ].map(([cleR2, carteId, nomEn, lu]) => ({ cleR2, carteId, nomEn, lu, le: '2026-10-17', cause: 'fichier LV.X joint aussi à la carte de base du même nom par le nom seul (audit VIGN-AUDIT)' }))
+    ].map(([cleR2, carteId, nomEn, lu]) => ({ cleR2, carteId, nomEn, lu, le: '2026-10-17', cause: 'fichier LV.X joint aussi à la carte de base du même nom par le nom seul (audit VIGN-AUDIT)' })),
+    // (2026-10-17, BANC-ABSENTS-2) PALKIA LV.X CONSTRUCTED STANDARD DECK (DP3p) : les fichiers 158/4 et 158/5 se nomment tous deux « Palkia » chez artofpkm. REGARDÉS (planche-palkia.png) :
+    // 158/4 = Lv.67 (Spacial Rend / Transback, DPBP#523, Illus. Daisuke Ito) ; 158/5 = LV.X (Hydro Reflect, Illus. Ryo Ueda). Sans ces lignes, le nom seul les poserait tous deux sur la carte Lv.67.
+    // ⚠️ La carte 32017 n'est « dans le set » (cartes.sets) qu'après le rattachement par rattacher-sets-depuis-jointure.js : la correction ne joint que si la carte nommée est dans le set.
+    {
+        cleR2: 'artofpkm/158/4.webp', carteId: 32017, nomEn: 'Palkia', lu: 'パルキア LV.67 HP90, 「あくうせつだん 10」「トランスバック 40」, DPBP#523, Illus. Daisuke Ito', le: '2026-10-17',
+        cause: 'Palkia LV.X Constructed Standard Deck : la page artofpkm 158/4 se nomme « Palkia » comme 158/5 (LV.X) ; le fichier est la carte Lv.67 (produits 698733 / 698734)'
+    },
+    {
+        cleR2: 'artofpkm/158/5.webp', carteId: 36174, nomEn: 'Palkia LV.X', lu: 'パルキア LV.X HP120, 「ポケパワー リコンストラクション」「ハイドロリフレクト 60」, Illus. Ryo Ueda', le: '2026-10-17',
+        cause: 'Palkia LV.X Constructed Standard Deck : la page artofpkm 158/5 se nomme « Palkia » (sans « LV.X ») ; le fichier est la carte LV.X (produit 698735)'
+    }
 ];
 const PAR_CLE = new Map(CORRECTIONS.map(c => [c.cleR2, c]));
 
-module.exports = { CORRECTIONS, correctionDe: cleR2 => PAR_CLE.get(cleR2) || null };
+// ➕ 2026-10-17, doctrine de collecte (article 4) : « un remplacement est permis si l'image actuelle est FAUSSE ». Une image n'est fausse que sur décision ÉCRITE, une ligne par entrée, clé `source|cleR2`
+// (comme CORRECTIONS ci-dessus, lue à l'œil) — jamais déduite d'une mesure (§54 : un témoin ne vaut que sa donnée). Table FERMÉE ; livrée VIDE : aucune décision n'est encore écrite.
+const IMAGES_DECLAREES_FAUSSES = Object.freeze([]);
+
+module.exports = { CORRECTIONS, IMAGES_DECLAREES_FAUSSES, correctionDe: cleR2 => PAR_CLE.get(cleR2) || null };

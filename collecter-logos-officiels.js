@@ -338,9 +338,18 @@ function autorise(regles, chemin) {
     }
     return !meilleure || meilleure.allow;
 }
-const defi = r => {
+// F3 (correction 1) : la définition du défi est celle du module commun (collecte-cartes/reponse-hote.js) — plus de copie ici. Le corps n'est pas lu à ce stade : statut et en-têtes seuls.
+const RH = require('./collecte-cartes/reponse-hote');
+// CORRECTION 2 (M3) : le corps est LU (borné, sur une copie : l'appelant relit le sien) pour tout ce qui n'est pas une image — un 200 Imperva ou une page « Just a moment » se voient ; le motif est rendu (ou null).
+const motifDeDefi = (r, debutCorps) => {
     const h = k => (r.headers?.get ? r.headers.get(k) : null) ?? '';
-    return !!h('cf-mitigated') || /imperva/i.test(h('x-cdn')) || [403, 429].includes(r.status);
+    return RH.detecterDefi({ statut: r.status, typeContenu: h('content-type'), entetes: { 'cf-mitigated': h('cf-mitigated'), 'x-cdn': h('x-cdn'), 'x-iinfo': h('x-iinfo') }, debutCorps });
+};
+const defi = (r, debutCorps) => motifDeDefi(r, debutCorps) !== null;
+const lireDebut = async r => {
+    const type = (r.headers?.get ? r.headers.get('content-type') : null) ?? '';
+    if (/^\s*image\//i.test(type)) return undefined;                // une image n'est pas lue pour chercher un marqueur
+    try { return Buffer.from((await (typeof r.clone === 'function' ? r.clone() : r).text()).slice(0, RH.BORNE_CORPS)); } catch { return undefined; }
 };
 class ArretDefi extends Error { constructor(m) { super(m); this.arret = true; } }
 // L'arrêt D'UN HÔTE (§75 : arrêt au premier blocage) : erreur réseau, 5xx, robots.txt illisible. Les autres hôtes continuent ; rien n'est redemandé à celui-ci.
@@ -359,13 +368,22 @@ function creerClient({ fetch = globalThis.fetch, attendre = ms => new Promise(r 
     async function requete(url, quoi = '') {
         const h = hoteDe(url);
         if (arretes.has(h)) throw arretes.get(h);   // rien n'est redemandé à un hôte arrêté
+        // CORRECTION 2 (M3) : l'arrêt DURABLE de la source (écrit par un autre collecteur, ou par celui-ci au défi précédent), la pause du processus : AVANT toute requête
+        try { RH.garderHote(RH.hoteRacine(h), undefined, RH.suiviDuProcessus()); }
+        catch (e) { throw arreter(h, `${e.message}`); }
         if (derniere !== null) { const reste = cadenceMs - (maintenant() - derniere); if (reste > 0) await attendre(reste); }
         derniere = maintenant();
         compte[h] = (compte[h] || 0) + 1;
         let r;
         try { r = await fetch(url, { redirect: 'manual', headers: { 'User-Agent': AGENT, Accept: 'image/*,*/*;q=0.5' } }); }
         catch (e) { throw arreter(h, `${quoi}erreur réseau (${e.cause?.code || e.message})`); }
-        if (defi(r)) { arret = new ArretDefi(`ARRÊT : ${url} a répondu ${r.status} (défi anti-robot ou limite) — plus aucune requête`); throw arret; }
+        const debutCorps = await lireDebut(r);
+        const motif = motifDeDefi(r, debutCorps);
+        if (motif) {
+            arret = new ArretDefi(`ARRÊT : ${url} a répondu ${r.status} (défi anti-robot ou limite : ${motif}) — plus aucune requête`);
+            try { RH.arretHote(RH.hoteRacine(h), `${motif} (HTTP ${r.status})`, { url }); } catch (e) { arret.message += ` ; ÉCRITURE DE L'ARRÊT DURABLE IMPOSSIBLE (${e.message})`; }      // le défi s'ÉCRIT : la source reste arrêtée pour les autres collecteurs
+            throw arret;
+        }
         if (r.status >= 500) throw arreter(h, `${quoi}HTTP ${r.status}`);
         return r;
     }
@@ -374,7 +392,11 @@ function creerClient({ fetch = globalThis.fetch, attendre = ms => new Promise(r 
         const r = await requete(`https://${hote}/robots.txt`, 'robots.txt : ');
         let reg;
         if (r.status === 404 || r.status === 410) reg = [];
-        else if (r.status === 200) reg = regleRobots(await r.text());
+        else if (r.status === 200) {
+            // CORRECTION 2 (M3) : un robots.txt servi en HTML n'est PAS « aucune règle » : réponse INATTENDUE, l'hôte est arrêté pour ce lancement
+            if (/html/i.test((r.headers?.get ? r.headers.get('content-type') : null) ?? '')) throw arreter(hote, 'robots.txt servi en HTML (réponse inattendue) : je ne sais pas, je ne demande rien');
+            reg = regleRobots(await r.text());
+        }
         else throw arreter(hote, `robots.txt illisible (HTTP ${r.status}) : je ne sais pas, je ne demande rien`);
         robots.set(hote, reg); return reg;
     }

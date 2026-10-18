@@ -3,6 +3,7 @@
 // posés parce que le nom de l'image ne servait qu'en départage. Fragments : les cas de l'audit (ids et noms RELEVÉS dans la base
 // `cartes`, numéros et decks idem) ; les noms japonais sont des étiquettes de fixture (le test porte sur la LOGIQUE du témoin).
 // Chaque cas est vu rouge sur main (module absent) puis vert.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const { fabriquerTemoinImages, appliquerTemoin } = require('./collecte-cartes/temoin-images-artofpkm');
 
 let ok = 0, ko = 0;

@@ -21,18 +21,21 @@ const sharp = require('sharp');
 const PK = require('./collecte-cartes/pokemoncom');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
-const { marqueDe } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici)
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');           // « basseDefinition » : sous 350 px, d'après la largeur de l'ORIGINAL (jamais un nombre recopié ici) ; le remplacement d'une entrée marquée par une image non marquée (BASSE-DEF)
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 
 const STOP_OCTETS = 400 * 1024 * 1024;
 const CRAWL_DELAY_MAX_S = 60;
 const CIBLES_PAR_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-CLICS\\croisement-reel.json';
 const ROBOTS = `https://${PK.HOTE_IMAGES}/robots.txt`;
+const PNG_MAGIE = Buffer.from('89504e470d0a1a0a', 'hex');       // M1 : la garde amont de pokemoncom — aucune image non PNG n'entre au cache
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
-const MARQUEUR_DE_DEFI = /just a moment|captcha|challenge|attention required|cf-chl|_incapsula|incapsula incident/i;
-const PNG_MAGIE =Buffer.from('89504e470d0a1a0a', 'hex');
+// 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans collecte-cartes/reponse-hote.js — ce collecteur les APPELLE, il n'en garde aucune copie.
+const RH = require('./collecte-cartes/reponse-hote');
+const fausseAbsenceRecente = RH.fausseAbsenceRecente;
 
 // ── le plan (lecture seule de la base) ────────────────────────────────────────────────────────────────────────────────────
 /** Les cibles : les idProduct du croisement (clé `chez[].produits[].idProduct`). */
@@ -109,25 +112,28 @@ const transportFetch = {
  * LA PHASE RÉSEAU. @param {{urls: string[], dossierCache: string, transport?: object, pause?: Function, now?: Function, cadenceMs?: number}} o
  * @returns {{etat: 'termine'|'rien-a-faire'|'refuse-arret'|'robots-interdit'|'arret-definitif'|'interrompu', requetes: number, plafond: number, refusees: object[], motif?: string}}
  */
-async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS, plafond: plafondMax = null }) {
+async function telecharger({ urls, dossierCache, transport = transportFetch, pause = ms => new Promise(r => setTimeout(r, ms)), now = Date.now, cadenceMs = PK.CADENCE_MS, plafond: plafondMax = null, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null }) {
     if (fs.existsSync(fichierArret(dossierCache))) return { etat: 'refuse-arret', requetes: 0, plafond: 0, refusees: [], motif: `${fichierArret(dossierCache)} existe : un arrêt définitif a eu lieu, seul le testeur décide de le lever` };
     const refusees = [...new Set(urls)].filter(u => !PK.urlImageValide(u)).map(u => ({ url: u, motif: 'adresse-hors-regle' }));
     const index = lireIndex(dossierCache);
-    const afaire = [...new Set(urls)].filter(u => PK.urlImageValide(u) && !['ok', 'absent'].includes(index.images[u]?.statut));
+    const afaire = [...new Set(urls)].filter(u => PK.urlImageValide(u) && !['ok', 'absent'].includes(index.images[u]?.statut) && !fausseAbsenceRecente(index.images[u], now()));
     if (!afaire.length) return { etat: 'rien-a-faire', requetes: 0, plafond: 0, refusees };
     const plafond = Math.min(afaire.length + 1, plafondMax ?? Infinity);     // (`plafondMax` : un garde-fou plus bas, pour le banc ; jamais plus haut que adresses + 1)
     let requetes = 0, dernier = null, cadence = Math.max(cadenceMs, PK.CADENCE_MS);
     const arret = (url, r, motif) => { fs.mkdirSync(dossierCache, { recursive: true }); fs.writeFileSync(fichierArret(dossierCache), JSON.stringify({ le: new Date().toISOString(), url, status: r?.status ?? null, motif, requetes }, null, 1)); return { etat: 'arret-definitif', requetes, plafond, refusees, motif }; };
-    // 🔴 TOUR 2 : un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : le robots.txt réel de l'hôte répond 404 avec la page HTML d'AmazonS3, et un 404/410
-    // est « absent » (robots.txt : aucune règle). Preuves : 403, 429, 3xx, cf-mitigated, Imperva/Incapsula, un marqueur de défi dans le corps (404/410 compris). Pour une IMAGE attendue,
-    // un 200 qui n'est pas un PNG est jugé plus bas (octets) : arrêt aussi.
-    const defi = r => r.status === 403 || r.status === 429 || (r.status >= 300 && r.status < 400) || !!r.cfMitigated || !!r.imperva || (typeof r.texte === 'string' && MARQUEUR_DE_DEFI.test(r.texte.slice(0, 3000)));
+    // 🔴 TOUR 2 : un défi s'écrit par ce qui le PROUVE (liste fermée), jamais par « c'est du HTML » : le robots.txt réel de l'hôte répond 404 avec la page HTML d'AmazonS3, et un 404
+    // est « absent » (robots.txt : aucune règle). REPONSE-HOTE (2026-10-18) : la preuve est celle du module commun (401, 403, 410, 429, cf-mitigated, Imperva avec un corps de défi, marqueurs
+    // techniques dans le corps — 404 compris) ; une IMAGE attendue se CLASSE (image · absente · fausse page introuvable · défi · ambiguë · transitoire · inattendue).
+    const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 3000 })) !== null;
+    const hoteImages = new URL(ROBOTS).hostname;
     const demander = async (url, o) => {
         if (requetes >= plafond) throw Object.assign(new Error('plafond de requêtes atteint'), { plafond: true });
         if (dernier != null) { const attente = dernier + cadence - now(); if (attente > 0) await pause(attente); }
         dernier = now(); requetes++;
         return transport.get(url, o);
     };
+    // 0. une pause persistante de l'hôte tient : AUCUNE requête (pas même robots.txt)
+    try { RH.garderHote(hoteImages, dossierPauses, suivi); } catch (e) { return { etat: 'pause-hote', requetes, plafond, refusees, motif: e.message, pauseHote: { hote: hoteImages, persistante: true, empreinte: e.empreinte ?? null }, reponsesHotes: [] }; }
     // 1. robots.txt, d'abord
     let robots;
     try { robots = await demander(ROBOTS, {}); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
@@ -145,18 +151,22 @@ async function telecharger({ urls, dossierCache, transport = transportFetch, pau
     for (const url of permises) {
         let r;
         try { r = await demander(url, { binaire: true }); } catch (e) { return { etat: 'interrompu', requetes, plafond, refusees, motif: e.message }; }
-        if (defi(r)) return arret(url, r, `HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}${r.imperva ? ', Imperva' : ''}${/html/i.test(r.type || '') ? ', HTML au lieu d\'une image' : ''}`);
-        if (r.status === 404 || r.status === 410) { index.images[url] = { statut: 'absent', status: r.status, le: new Date().toISOString() }; ecrireIndex(dossierCache, index); continue; }
-        if (r.status >= 500) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}` };
-        if (r.status !== 200) return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url} : réponse inattendue, on s'arrête` };
-        if (!Buffer.isBuffer(r.octets) || r.octets.length < 8 || !r.octets.subarray(0, 8).equals(PNG_MAGIE)) return arret(url, r, 'les octets reçus ne sont pas un PNG (page de défi probable)');
+        // LA RÈGLE COMMUNE : une seule décision pour la réponse à une image
+        const x = RH.traiterImage(r, { suivi, hote: hoteImages, url, dossierPauses, connues });
+        const rapportReponses = () => ({ reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) });
+        if (x.action === 'arret-definitif') return { ...arret(url, r, `${x.motif} (HTTP ${r.status})`), ...rapportReponses() };
+        if (x.action === 'pause' || x.action === 'pause-persistante') return { etat: 'pause-hote', requetes, plafond, refusees, motif: x.motif, pauseHote: { hote: hoteImages, issue: x.issue, empreinte: x.empreinte ?? null, persistante: x.action === 'pause-persistante', fichier: x.fichier ?? null }, ...rapportReponses() };
+        if (x.action === 'transitoire') return { etat: 'interrompu', requetes, plafond, refusees, motif: `HTTP ${r.status} sur ${url}`, ...rapportReponses() };
+        if (x.action === 'absente') { index.images[url] = RH.entreeAbsence(index.images[url], x, r.status, now()); ecrireIndex(dossierCache, index); continue; }
+        // M1 : une image valide mais qui n'est pas un PNG est « inattendue » (REPONSE-HOTE) : PAUSE de l'hôte, rien n'entre au cache
+        if (!r.octets.subarray(0, 8).equals(PNG_MAGIE)) { suivi.bloquer(hoteImages, 'image valide mais pas un PNG (réponse inattendue)'); return { etat: 'pause-hote', requetes, plafond, refusees, motif: 'les octets reçus sont une image, mais pas un PNG (réponse inattendue)', pauseHote: { hote: hoteImages, issue: 'inattendue', empreinte: null, persistante: false }, ...rapportReponses() }; }
         const meta = await sharp(r.octets).metadata();
         const fichier = path.join('img', nomFichier(url));
         fs.writeFileSync(path.join(dossierCache, fichier), r.octets);
         index.images[url] = { statut: 'ok', fichier, sha256: sha('sha256', r.octets), octets: r.octets.length, w: meta.width, h: meta.height, le: new Date().toISOString() };
         ecrireIndex(dossierCache, index);
     }
-    return { etat: 'termine', requetes, plafond, refusees };
+    return { etat: 'termine', requetes, plafond, refusees, reponsesHotes: suivi.hotes().map(h => suivi.rapport(h)) };
 }
 
 // ── L'ÉCRITURE, depuis le cache seulement ─────────────────────────────────────────────────────────────────────────────────────
@@ -191,7 +201,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
     if (typeof deposer !== 'function' || typeof vignetter !== 'function') throw new Error('ecrire : deposer et vignetter sont exigés');
     const db = M.Carte.db.db;
     const index = lireIndex(dossierCache);
-    const seuil = largeurMinDe(PK.SOURCE);
+    const seuil = largeurAdmiseDe(PK.SOURCE);        // 200 px (plancher de basse définition, BASSE-DEF) : de 200 à 349 px l'image est admise et MARQUÉE (marqueDe)
     // ---- REMPLACER : liste FERMÉE — chaque idProduct doit figurer dans le motif « entree-refusee-au-numero » du plan, sinon rien n'est écrit ; sans --remplacer, rien ne bouge ----
     const idsRemplaçables = new Set((remplacements || []).flatMap(u => u.produits));
     const inconnus = (remplacer || []).filter(id => !idsRemplaçables.has(id));
@@ -257,14 +267,15 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                     cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                     ...marqueDe({ wOriginal: meta.width }),
-                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, telechargeLe: new Date(), etat: 'ok' }, $unset: { erreur: 1 } }, { upsert: true });
+                    langueSource: 'en', langue: lg.langue, languePreuve: lg.preuve, attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, telechargeLe: new Date(), etat: 'ok',
+                    ...champsTracabilite({ urlOriginal: u.url, collecteLe: index.images[u.url]?.le ?? new Date() }) }, $unset: { erreur: 1 } }, { upsert: true });
                 telecharges++; ecrits.push(_id);
             }
             // ---- JOINTURE ADDITIVE, sous sa garde -----------------------------------------------------------------------------------------------------
             const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
             const avant = await compterEntrees(db, carteIds, slug);
             const images = (await M.Image.find({ source: PK.SOURCE, set: slug, etat: 'ok', lot: PK.LOT }).lean()).filter(im => ecrits.includes(im._id));
-            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, remplacees = 0;
+            let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, remplacees = 0, basseDefRemplacees = 0;
             const retirees = [];                              // les entrées refusées sorties par --remplacer (clé de compterEntrees) : la garde les attend absentes
             try {
                 for (const im of images) {
@@ -275,9 +286,14 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
                     const nous = e => e?.source === PK.SOURCE && e.set === slug && (e.numero ?? null) === (im.numero ?? null);
                     const autres = (c.images || []).filter(e => e && !nous(e));
                     const admises = autres.filter(e => !refCles.has(e.cleR2));        // (sans --remplacer, refCles est vide : toute entrée au numéro sert la fiche)
-                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    const entree = { set: slug, source: PK.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, numero: im.numero ?? null, ...marqueDe(im), attribution: PK.MENTION, mention: PK.MENTION, lot: PK.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
                     await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: PK.SOURCE, numero: im.numero ?? null } } });
-                    if (T.dejaServi({ images: admises }, slug, im.numero ?? null)) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
+                    // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source, même (set, numéro, langue connue), n'est pas « servie » face à une image NON marquée : elle sort
+                    // (la même fonction que artofpkm / Bulbapedia / TCGdex). Une image marquée (245 px…) ne remplace jamais rien et cède.
+                    // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                    const arb = arbitrer(admises, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero ?? null), { documents: await documentsDesEntrees(M, admises) });
+                    if (arb.servie) { dejaParAutre++; continue; }     // une AUTRE source (admise) sert ce numéro : intacte, la nôtre cède
+                    if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                     for (const e of autres.filter(x => refCles.has(x.cleR2))) {
                         await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, cleR2: e.cleR2 } } });
                         await M.Image.updateOne({ source: e.source, set: slug, carteId: im.carteId, cleR2: e.cleR2 }, { $set: { etat: 'remplace', remplaceMotif: `entrée refusée par la règle du site au numéro ${im.numero ?? '∅'}, remplacée sur décision du testeur (--remplacer, lot ${PK.LOT})`, remplaceePar: im._id, remplaceeLe: new Date() } });
@@ -294,7 +310,7 @@ async function ecrire(plan, M, { dossierCache, attendu = null, deposer, vignette
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)`}`);
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, source: PK.SOURCE, mention: PK.MENTION, lot: PK.LOT, unites: unites.length, sansUrlOriginal: compterSansAdresse(images), telecharges, sautes, tropPetits, joints, dejaParAutre, cartesAbsentes, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, remplacees, basseDefRemplacees, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0 && telecharges + sautes + tropPetits === unites.length, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokemoncom: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });

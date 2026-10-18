@@ -4,6 +4,7 @@
 // la liste est la même page réduite à cette fiche (une liste d'une carte : « resultNumber » 1, une page).
 // Ce que le banc garde : la collecte additive (les entrées des autres sources ne bougent pas), la MENTION et le LOT sur chaque visuel, la
 // REPRISE sans requête, un visuel RETIRÉ jamais repris, l'ARRÊT au premier blocage (et plus rien ensuite), la garde de TAILLE.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -80,7 +81,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     const ligneBanc = (site, slug) => { const L = ligneTpc(site, slug); return L && { ...L, cartes: 1 }; };
     const lancer = async (B, tr, o = {}) => {
         const depots = [];
-        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou, ...(o.clientOpts || {}) });
         const r = silencieux();
         try { return { b: await collecterSet(o.unite || uniteDeLaLigne(ligneTpc('tpc-asie', SLUG)), B.M, { verrou, client, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets, ligneDe: o.ligneDe || ligneBanc }), depots }; }
         finally { r(); }
@@ -101,9 +102,42 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     const c1 = B.col('cartes').get(1), c2 = B.col('cartes').get(2);
     verifier('la carte reçoit SON visuel, et garde celui de l\'autre set', c1.images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `tpc-asie:${SLUG}:001`]);
     verifier('   l\'entrée porte la mention, le lot, la langue', [c1.images[1].mention, c1.images[1].lot, c1.images[1].langue, c1.images[1].attribution], ['© Pokémon / The Pokémon Company', 'tpc-2026-10', 'id', '© Pokémon / The Pokémon Company']);
+    verifier('TRAÇABILITÉ (doctrine 2026-10-17) : le document ET l\'entrée portent retirable, urlOriginal, collecteLe', [im.retirable, im.urlOriginal, im.collecteLe instanceof Date, c1.images[1].retirable, c1.images[1].urlOriginal, c1.images[1].collecteLe instanceof Date], [true, 'https://asia.pokemon-card.com/id/card-img/id00007125.png', true, true, 'https://asia.pokemon-card.com/id/card-img/id00007125.png', true]);
     verifier('une carte déjà servie à ce numéro par une autre source : intacte (additif)', c2.images.map(e => `${e.source}:${e.numero}`), ['tcgdex:002']);
     verifier('le bilan du set : 1 prouvé, garde verte', [B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.prouves, B.col('sets').get(SLUG).visuelsTpc?.['tpc-asie']?.garde?.ok], [1, true]);
     verifier('la fiche lue est gardée (`tpc_fiches`)', [...B.col('tpc_fiches').keys()], ['tpc-asie/id/7125']);
+
+    // ── 1 bis. REPONSE-HOTE (2026-10-18) : la règle commune de réponse, vue par le collecteur ──────────────────────────────────────────────────────
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const dp = () => require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'tpc-col-pauses-'));
+        // (a) 200 text/html à la place de l'image : fausse page introuvable → absente, AUCUNE alerte, l'unité n'est pas « verifie » mais n'est pas bloquée
+        const BH1 = fausseBase(); semer(BH1);
+        let trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : normal(url));
+        let RH1 = await lancer(BH1, trH, { clientOpts: { dossierPauses: dp() } });
+        verifier('REPONSE-HOTE : un 200 text/html à la place de l\'image → absente, AUCUNE alerte, aucune écriture de visuel, l\'unité n\'est pas bloquée', [RH1.b.etat !== 'refuse-source-bloquee', BH1.col('collecte_images_etat').get('alerte/source-bloquee/tpc-asie') === undefined, [...BH1.col('images').values()].filter(d => d.etat === 'ok').length, RH1.b.reponsesHotes?.[0]?.fausses, RH1.b.pauseHote ?? null], [true, true, 0, 1, null]);
+        // (b) un défi : arrêt définitif par l'alerte existante
+        const BH2 = fausseBase(); semer(BH2);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<title>Just a moment...</title>' } : normal(url));
+        const RH2 = await lancer(BH2, trH, { clientOpts: { dossierPauses: dp() } });
+        verifier('REPONSE-HOTE : un défi à la place de l\'image → arrêt DÉFINITIF par l\'alerte existante', [RH2.b.etat, [...BH2.col('collecte_images_etat').values()].some(d => d.active === true && /bloqu/i.test(d._id))], ['incomplet', true]);
+        // (c) une PAUSE sans alerte ni arrêt définitif (le plan du banc n'a qu'un fichier : le 21 est prouvé au client ; ici la pause persistante d'une page ambiguë)
+        const BH3 = fausseBase(); semer(BH3);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<nav>Gym Challenge</nav>' } : normal(url));
+        const d3 = dp();
+        const RH3 = await lancer(BH3, trH, { clientOpts: { dossierPauses: d3 } });
+        verifier('REPONSE-HOTE : une page ambiguë à la place de l\'image → PAUSE persistante de l\'hôte, « incomplet », AUCUNE alerte de blocage, le fichier de pause nomme l\'empreinte',
+            [RH3.b.etat, RH3.b.pauseHote?.persistante, BH3.col('collecte_images_etat').get('alerte/source-bloquee/tpc-asie') === undefined, /^[0-9a-f]{64}$/.test(RH.lirePausePersistante(d3, 'asia.pokemon-card.com')?.empreinte || '')], ['incomplet', true, true, true]);
+        const nAvant = trH.appels.length;
+        const RH3b = await lancer(BH3, trH, { clientOpts: { dossierPauses: d3 } });
+        verifier('REPONSE-HOTE : …et la passe suivante, tant que la pause tient, ne fait AUCUNE requête', [RH3b.b.etat, RH3b.b.pauseHote?.persistante, trH.appels.length === nAvant], ['incomplet', true, true]);
+        // (d) la 21e fausse absence d'affilée sur le même collecteur (seuil du banc à 1 : un seul fichier au plan, deux unités successives partagent le client)
+        const BH4 = fausseBase(); semer(BH4);
+        trH = reseau(url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'text/html', texte: '<html>Page introuvable</html>' } : normal(url));
+        const suiviH = RH.suiviHote({ seuil: 1 });
+        await lancer(BH4, trH, { clientOpts: { dossierPauses: dp(), suivi: suiviH } });
+        verifier('REPONSE-HOTE : le compteur de la passe vit au niveau du client (une fausse absence comptée par le collecteur)', suiviH.rapport('asia.pokemon-card.com').fausses, 1);
+    }
 
     // ── 2. la reprise : aucune requête ───────────────────────────────────────────────────────────────────────────────
     tr = reseau(normal);
@@ -123,6 +157,48 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     tr = reseau(normal);
     ({ b, depots } = await lancer(B1, tr));
     verifier('déjà servie avant : 0 dépôt, aucune entrée TPC, l\'entrée existante intacte', [depots.length, B1.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}`), b.trous], [0, ['tcgdex:5', 'tcgdex:001'], 0]);
+
+    // ── 3 ter. ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source (même set, numéro, langue) est REMPLACÉE par une image TPC non marquée ───────────────────────────────
+    {
+        const MARQ = { set: SLUG, source: 'pikaqian', numero: '001', cleR2: 'pikaqian/basse.webp', langue: 'id', w: 300, basseDefinition: true };
+        const monde = (images = [MARQ]) => { const Bx = fausseBase(); semer(Bx); Bx.col('cartes').get(1).images.push(...structuredClone(images));
+            Bx.col('images').set('mq', { _id: 'mq', source: 'pikaqian', set: SLUG, carteId: 1, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: 300 }); return Bx; };
+        const avecImage = octets => url => url.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets } : normal(url);
+        const etroite = await sharp({ create: { width: 300, height: 418, channels: 3, background: { r: 10, g: 10, b: 10 } } }).png().toBuffer();
+        const des = Bx => Bx.col('cartes').get(1).images.filter(e => e.set === SLUG).map(e => `${e.source}:${e.basseDefinition === true}`);
+        { const Bx = monde(); const trX = reseau(avecImage(png)); const r = await lancer(Bx, trX);
+          verifier('REMPLACEMENT : 734 px (non marquée) + une entrée MARQUÉE d\'une autre source au même (set, numéro, langue) → TPC remplace, sans marque ; garde verte', [r.b.etat, des(Bx), r.b.garde?.ok, trX.appels.filter(u => /\.png$/.test(u)).length], ['verifie', ['tpc-asie:false'], true, 1]);
+          verifier('   traçabilité : le document `images` de l\'ancienne RESTE (« remplace », remplacePar, remplaceLe), avec son adresse d\'origine et sa clé R2', [Bx.col('images').get('mq').etat, Bx.col('images').get('mq').remplacePar, !!Bx.col('images').get('mq').remplaceLe, Bx.col('images').get('mq').urlOriginal, Bx.col('images').get('mq').cleR2], ['remplace', { source: 'tpc-asie', cleR2: 'tpc-asie/Scarlet-Violet-Indonesian-Promos/001-1-id.webp' }, true, 'https://hote.example/ancienne.png', 'pikaqian/basse.webp']); }
+        { const Bx = monde(); const r = await lancer(Bx, reseau(avecImage(etroite)));
+          verifier('JAMAIS L\'INVERSE : 300 px (marquée) face à une entrée marquée → TPC CÈDE : l\'entrée marquée reste, son document n\'est pas touché', [r.b.etat, des(Bx), Bx.col('images').get('mq').etat], ['verifie', ['pikaqian:true'], 'ok']); }
+        { const Bx = monde([{ ...MARQ, basseDefinition: undefined, w: 600 }]); const trX = reseau(avecImage(png)); const r = await lancer(Bx, trX);
+          verifier('une entrée NON marquée n\'est jamais remplacée : rien n\'est téléchargé (la fiche est servie), l\'entrée reste', [des(Bx), Bx.col('images').get('mq').etat, trX.appels.filter(u => /\.png$/.test(u)).length], [['pikaqian:false'], 'ok', 0]); }
+        { const Bx = monde([{ ...MARQ, langue: 'th' }]); const trX = reseau(avecImage(png)); await lancer(Bx, trX);
+          verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : rien n\'est téléchargé', [des(Bx), trX.appels.filter(u => /\.png$/.test(u)).length], [['pikaqian:true'], 0]); }
+        { const Bx = monde([{ ...MARQ, source: 'tpc-asie' }]); const trX = reseau(avecImage(png)); await lancer(Bx, trX);
+          verifier('une entrée marquée de TPC lui-même n\'est pas retéléchargée (le même fichier reviendrait)', [trX.appels.filter(u => /\.png$/.test(u)).length], [0]); }
+        { // course : l'entrée marquée est posée PENDANT la collecte (après le plan) ; la jointure arbitre
+          const Bx = fausseBase(); semer(Bx);
+          const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(MARQ)); Bx.col('images').set('mq', { _id: 'mq', source: 'pikaqian', set: SLUG, carteId: 1, cleR2: MARQ.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png' }); } return normal(url); });
+          const r = await lancer(Bx, trX);
+          verifier('JOINTURE : une entrée marquée posée entre le plan et la jointure est remplacée à la jointure (même arbitrage), garde verte', [des(Bx), Bx.col('images').get('mq')?.etat, r.b.garde?.ok], [['tpc-asie:false'], 'remplace', true]); }
+        // ➕ doctrine 2026-10-17 : « nettement plus grande » (1,5 ×) et « empruntée », à la jointure (course : l'entrée est posée après le plan)
+        const course = async (entree, wDoc = 734) => { const Bx = fausseBase(); semer(Bx);
+            const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(entree)); Bx.col('images').set('mq', { _id: 'mq', source: entree.source, set: SLUG, carteId: 1, cleR2: entree.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/ancienne.png', wOriginal: entree.w }); } return normal(url); });
+            const r = await lancer(Bx, trX); return { Bx, r }; };
+        const SAINE = w => ({ set: SLUG, source: 'pikaqian', numero: '001', cleR2: 'pikaqian/saine.webp', langue: 'id', w, wOriginal: w });
+        // ➕ correction 5 : le tampon vit sur le DOCUMENT de l'entrée — un scan tamponné (marque) n'est jamais évincé par une image simple, document introuvable non plus
+        const courseDoc = async (entree, doc) => { const Bx = fausseBase(); semer(Bx);
+            const trX = reseau(url => { if (url.endsWith('/card-img/id00007125.png')) { Bx.col('cartes').get(1).images.push(structuredClone(entree)); if (doc) Bx.col('images').set('mq', { _id: 'mq', source: entree.source, set: SLUG, carteId: 1, cleR2: entree.cleR2, etat: 'ok', urlOriginal: 'https://hote.example/a.png', wOriginal: entree.w, ...doc }); } return normal(url); });
+            await lancer(Bx, trX); return Bx; };
+        { const Bx = await courseDoc({ ...SAINE(480), source: 'pokumon' }, { marque: 'Prize Pack Series 1 : tampon « Play! Pokémon »' }); verifier('RELECTEUR : un scan tamponné (document porteur de `marque`) face à 734 px simples (1,53 ×) → il RESTE', [des(Bx), Bx.col('images').get('mq').etat], [['pokumon:false'], 'ok']); }
+        { const Bx = await courseDoc({ ...SAINE(480), source: 'pokumon' }, null); verifier('   document INTROUVABLE → il RESTE, la nôtre cède', [des(Bx)], [['pokumon:false']]); }
+        { const Bx = await courseDoc({ ...SAINE(480), source: 'pokumon' }, {}); verifier('   même entrée, document SANS tampon → remplacée (le garde-fou ne bloque que ce qu\'il voit)', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
+        { const { Bx } = await course(SAINE(480)); verifier('NETTEMENT PLUS GRANDE : 734 px face à une image saine de 480 px (1,53 ×) → remplacée', [des(Bx), Bx.col('images').get('mq').etat], [['tpc-asie:false'], 'remplace']); }
+        { const { Bx } = await course(SAINE(500)); verifier('   734 px face à 500 px (1,47 ×) → l\'image saine reste (équivalente), la nôtre cède', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
+        { const { Bx } = await course(SAINE(734)); verifier('   JAMAIS une image correcte au-dessus du seuil par une équivalente : 734 face à 734 → rien', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
+        { const { Bx } = await course({ ...SAINE(734), imageEmprunteeTirage: true }); verifier('EMPRUNTÉE (correction 4) : aucun collecteur n\'écrit de marqueur POSITIF de tampon → une image simple ne remplace jamais une entrée empruntée, la nôtre cède', [des(Bx), Bx.col('images').get('mq').etat], [['pikaqian:false'], 'ok']); }
+    }
 
     // ── 4. un visuel RETIRÉ n'est jamais repris ───────────────────────────────────────────────────────────────────────
     const B2 = fausseBase(); semer(B2);

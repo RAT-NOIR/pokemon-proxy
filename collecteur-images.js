@@ -53,6 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { retirerChezLesAutres, preuveDeCorrection, preuveEstUneCorrection } = require('./collecte-cartes/retirer-chez-les-autres');
@@ -66,7 +67,7 @@ const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');  
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
-const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { issueDeLUnite, echecTransitoire, bilanDeLException } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const { estPassive, motifPassif, cloreUnitePassive } = require('./collecte-cartes/source-passive');                 // PikaQian passive depuis le 2026-10-13
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
@@ -195,6 +196,14 @@ async function collecterSet(code, M, dossierRapport) {
         console.error(`❌ ${code} : un collecteur d'images tient déjà ${slug} (pid ${tenuPar.pid} sur ${tenuPar.hote}, battement il y a ${tenuPar.ageS} s).`); return { code, etat: 'refuse-verrou' };
     }
     const liberer = () => verrouSet.rendre();
+    // CORRECTION 2 (I1) : un arrêt DURABLE d'hôte (`bloque`) ou une PAUSE (`pauseHote`) levé par la liste, la mesure ou une page n'est ni un plantage ni un verdict :
+    // l'unité sort en « arret-hote » / « pause-hote » (issue-unite.js : elle revient en attente, le worker s'arrête pour cet hôte) — la file n'est pas touchée.
+    const attraper = async f => { try { return { v: await f() }; } catch (e) { if (e.bloque || e.pauseHote) return { arret: e }; throw e; } };
+    const rendreArret = async (e, comptes = {}) => {
+        console.error(`⛔ ${code} : ${e.message}`);
+        await liberer();
+        return require('./collecte-cartes/reponse-hote').bilanDeLArret(code, e, { ...comptes, reponsesHotes: src.rapportReponses() });
+    };
 
     // 🔴 W-RESIL2 : toute sortie après la prise, retour nommé OU exception (lecture Mongo coupée, réseau), arrête le battement et TENTE le
     // rendu. Sans cela, l'exception remontait au superviseur avec le minuteur armé : après SIGTERM le processus ne sortait pas seul. `rendre`
@@ -217,7 +226,9 @@ async function collecterSet(code, M, dossierRapport) {
     // ---- 1. liste + 2. mesure, par set source ------------------------------------------------
     for (const id of S.ids) {
         if (!entrees[id]?.length) {
-            const liste = await src.listerSet(id);
+            const rl = await attraper(() => src.listerSet(id));
+            if (rl.arret) return await rendreArret(rl.arret);
+            const liste = rl.v;
             // une liste TRONQUÉE (cadre non lu, lot suivant vide ou répété) ne se vérifie pas : elle n'est pas écrite comme liste du set,
             // son relevé l'est — relecture du 2026-10-06 ; la règle est celle du relevé (src.releveComplet), la même que
             // remplir-file-images.js lit en base. Une page vide peut être passagère (anti-robot) : l'unité REVIENT en file, en queue, pas
@@ -257,7 +268,11 @@ async function collecterSet(code, M, dossierRapport) {
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-sous-section-absente', fini: new Date() } });
                 await liberer(); return { code, etat: 'refuse-sous-section-absente' };
             }
-            for (const e of echantillon) m.push({ url: e.original, ...(await src.enTeteImage(e.original)) });
+            for (const e of echantillon) {
+                const rm = await attraper(() => src.enTeteImage(e.original));
+                if (rm.arret) return await rendreArret(rm.arret);
+                m.push({ url: e.original, ...rm.v });
+            }
             mesures[id] = m;
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`mesures.${id}`]: m, phase: 'mesure' } });
         }
@@ -303,6 +318,7 @@ async function collecterSet(code, M, dossierRapport) {
     // largeur : `joindreImages` ne lit que `etat: 'ok'`, donc elle ne joint rien, et le jour où la vue
     // pleine carte existera on saura lesquelles reprendre sans redemander un octet au tiers.
     let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
+    let arretHote = null;          // REPONSE-HOTE : un défi (arrêt définitif de l'hôte) ou une pause de l'hôte arrête la passe de ce set
     // 🔴 CHAQUE ENTRÉE SOUS SON SET SOURCE (relecture du 2026-10-06) : une sous-section de kit est un set à part chez artofpkm
     // (/sets/643/card/1 sous la liste 206). L'id de la LISTE ne désigne pas la carte — sa page, sa clé et son document se prennent sous
     // `e.sourceSetId`. Sur les 27 969 entrées déjà en base, les deux sont égaux : rien ne change pour elles.
@@ -338,7 +354,7 @@ async function collecterSet(code, M, dossierRapport) {
                         source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, cleR2,
                         sha256: img.sha256, octets: img.octets, w: img.w, h: img.h, fmt: img.fmt,
                         numero: faits.numero, total: faits.total, nomEn: faits.nomEn, nomJa: faits.nomJa, illustrateur: faits.illustrateur, rarete: faits.rarete,
-                        setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok',
+                        setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: e.original, collecteLe: new Date() }),
                         langue: LANGUE.langue, languePreuve: LANGUE.preuve,
                         ...(deja?.cleCdn && deja.cleCdn !== e.cleCdn ? { cleCdnPrecedente: deja.cleCdn } : {})
                     }
@@ -346,12 +362,15 @@ async function collecterSet(code, M, dossierRapport) {
                 telecharges++;
                 await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: src.compteRequetes() } });
             } catch (err) {
+                if (err.bloque || err.pauseHote) { arretHote = err; break; }     // REPONSE-HOTE : défi = arrêt définitif de l'hôte ; pause = la passe s'arrête (aucune écriture d'échec : ce n'est pas un verdict sur la carte)
                 echecs++;
                 console.warn(`   ✗ ${_id} : ${err.message}`);
                 await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, etat: 'echec', erreur: err.message } }, { upsert: true });
             }
         }
+        if (arretHote) break;
     }
+    if (arretHote) return await rendreArret(arretHote, { telecharges, sautes, echecs });
     console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${largeurMin} px`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
@@ -601,7 +620,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
             // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
             // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
             // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur
@@ -646,7 +665,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const emplacements = cartes.length > 0 && nEntrees / cartes.length >= 1.5;
     const complet = {
         entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length,
-        rattachements: jointes, clesRefusees, contredites: contredites.length, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
+        rattachements: jointes, sansUrlOriginal: compterSansAdresse(images), clesRefusees, contredites: contredites.length, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
         cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
         // Sur un set à cartes : chaque original joint UNE carte. Sur un set à emplacements : toutes
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
@@ -927,6 +946,11 @@ const principal = async () => {
                 }
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await bulbaImg.collecterSet(suivant._id, M, { mesurerSeulement: false }); }
+                catch (e) {
+                    if (!(e.bloque || e.pauseHote)) throw e;       // CORRECTION 2 : un arrêt durable / une pause d'hôte ne tue pas le worker ; toute autre exception garde son chemin
+                    b = bilanDeLException(suivant._id, e);
+                    console.error(`🔴 ${suivant._id} : ${e.message}`);
+                }
                 finally { await vb.rendre(); }
             } else if (sourceDuSet === 'tcgdex') {
                 // 🔑 TROISIÈME SOURCE, TROISIÈME VERROU (2026-09-23) : api.tcgdex.net n'est ni Bulbagarden ni artofpkm (§17).
@@ -946,7 +970,7 @@ const principal = async () => {
                     // 🔴 relecture du 2026-09-26 (nuit) : une exception (`cartesDuSet` en 503 après son réessai, un GraphQL en erreur)
                     // TUAIT le worker — et le manque réel enfile des sets « jamais lus ». L'unité sort avec une issue : passagère, elle
                     // revient en file (issue-unite.js, 3 passages au plus) ; sinon refusée, la cause ÉCRITE sur l'unité.
-                    b = { code: suivant.code, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant.code, e);          // CORRECTION 2 : un arrêt durable / une pause d'hôte → « arret-hote » / « pause-hote » (attente + arrêt), jamais « erreur »
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte TCGdex — ${e.message}`);
                 }
                 finally { await vt.rendre(); }
@@ -965,7 +989,7 @@ const principal = async () => {
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await tpcImg.collecterSet(suivant, M, { verrou: vp }); }
                 catch (e) {
-                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant._id, e);
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
                 }
                 finally { await vp.rendre(); }
@@ -992,11 +1016,18 @@ const principal = async () => {
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await pkImg.collecterSet(suivant, M, { verrou: vk }); }
                 catch (e) {
-                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    b = bilanDeLException(suivant._id, e);
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
                 }
                 finally { await vk.rendre(); }
-            } else if (sourceDuSet === SOURCE) b = await collecterSet(suivant._id, M, dossierRapport);
+            } else if (sourceDuSet === SOURCE) {
+                try { b = await collecterSet(suivant._id, M, dossierRapport); }
+                catch (e) {
+                    if (!(e.bloque || e.pauseHote)) throw e;       // CORRECTION 2 : un arrêt durable / une pause d'hôte ne tue pas le worker ; toute autre exception garde son chemin
+                    b = bilanDeLException(suivant._id, e);
+                    console.error(`🔴 ${suivant._id} : ${e.message}`);
+                }
+            }
             else {
                 // 🔴 PLAN-POKECARDEX.md §5 (demande du testeur, 2026-09-27) : le `else` final envoyait TOUTE source inconnue chez artofpkm —
                 // une unité d'une source neuve, lue par un worker antérieur, aurait frappé le mauvais serveur sous le mauvais verrou.

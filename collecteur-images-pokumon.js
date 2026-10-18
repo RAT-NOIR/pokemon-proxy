@@ -22,7 +22,9 @@ const path = require('path');
 const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurAdmiseDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { marqueDe, arbitrer, remplacerBasseDefinition, empreinteEntree, documentsDesEntrees, documentsDeLaListe, normaliserTampon } = require('./collecte-cartes/basse-definition');   // BASSE-DEF : la marque (200 à 349 px) et le remplacement d'une entrée marquée par une image non marquée
+const { champsTracabilite, champsDeLEntree, compterSansAdresse } = require('./collecte-cartes/tracabilite');   // doctrine de collecte : retirable, adresse d'origine, date (une seule règle)
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
@@ -129,7 +131,8 @@ async function planifierToutFamilles(db, produitsCm, index, lignes = P.LIGNES_AU
         if (!p || !p.nomCm || !p.slugProduit) { sansNom.push({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, motif: 'sans-nom-catalogue' }); continue; }
         produits.push({ idProduct: l.idProduct, carteId: l.carteId, unite: l.slugSet, nomCm: p.nomCm, slugProduit: p.slugProduit, numero: p.numero, impressions: cartes.get(l.carteId)?.impressions || [] });
     }
-    const r = P.planifierFamilles({ lignes, produits, cartes, index });
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: { $in: slugs } }).toArray());   // correction 5
+    const r = P.planifierFamilles({ lignes, produits, cartes, index, documents });
     return { ...r, restes: [...r.restes, ...sansNom], produits: lp.length, comptes: { ...r.comptes, sansNomCatalogue: sansNom.length } };
 }
 /** Le plan des séries (toutes, pour le témoin) : lecture seule de la base `cartes`. */
@@ -146,7 +149,8 @@ async function planifierTout(db, produitsCm, index) {
         produits.push({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, serie: serieDe.get(l.slugSet), nomCm: p.nomCm, slugProduit: p.slugProduit });
     }
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
-    const r = P.planifierPokumon({ produits, cartes, index });
+    const documents = documentsDeLaListe(await db.collection('images').find({ set: { $in: slugs } }).toArray());   // correction 5
+    const r = P.planifierPokumon({ produits, cartes, index, documents });
     return { ...r, restes: [...r.restes, ...sansNom], produits: lignes.length, comptes: { ...r.comptes, sansNomCatalogue: sansNom.length } };
 }
 
@@ -158,7 +162,7 @@ async function compterEntrees(db, carteIds, slug) {
     const autres = [];
     let siennes = 0;
     for (const c of cs) for (const e of c.images || []) { if (!(e?.source === P.SOURCE && e.lot === P.LOT)) autres.push(`${c._id}|${e?.source}|${e?.set}|${e?.numero ?? ''}|${e?.cleR2 ?? ''}`); else if (e.set === slug) siennes++; }
-    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes };
+    return { autres: autres.sort().join('\n'), nAutres: autres.length, siennes, liste: autres };
 }
 const compterSubstituts = (db, slug) => db.collection('cartes_produits').countDocuments({ slugSet: slug, 'visuelSubstitut.cleR2': { $exists: true } });
 
@@ -167,7 +171,7 @@ const compterSubstituts = (db, slug) => db.collection('cartes_produits').countDo
  */
 function collecterSerie(serie, planSerie, restesSerie, M, o = {}) {
     const slug = P.ligneDe(serie).slug;
-    return collecterUnite({ slug, serie, label: `S${serie}`, marque: p => `Prize Pack Series ${p.serie} : tampon « Play! Pokémon »` }, planSerie, restesSerie, M, o);
+    return collecterUnite({ slug, serie, label: `S${serie}`, marque: p => P.marqueDeSerie(p.serie) }, planSerie, restesSerie, M, o);
 }
 /** Une UNITÉ = un set Cardmarket à écrire (une série de Prize Pack, une année McDonald's, Trick or Trade 2022, Black Star MEP…). `unite.marque(p)` : le texte de marque de l'image `p` du plan. */
 async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client, vignetter = vignetterApresJointure, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, comptesPlan = null, memo = new Map() } = {}) {
@@ -192,7 +196,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'plan' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: slug, etat: 'refuse-verrou' }; }
-    let bloque = null;
+    let bloque = null, pauseHote = null;
     try {
         const motifs = {}; for (const r of restesSerie) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         console.log(`\n══ ${slug} (S${serie}) : ${produits} produits · PROUVÉS ${planSerie.length} · restes ${JSON.stringify(motifs)} ══`.replace(`(S${serie})`, `(${unite.label})`));
@@ -213,7 +217,8 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 if (p.partageeHoloNonHolo && !(deja.partageeHoloNonHolo === true)) await M.Image.updateOne({ _id }, { $set: { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } });
                 sautes++; continue;
             }
-            if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url) { tropPetits++; continue; }
+            // ➕ BASSE-DEF : le seuil est celui de la LIGNE du plan (plancher de 200 px pour les quatre lignes McDonald's nommées, 350 px ailleurs) ; un « trop-petit » jugé sous un seuil plus haut se REJUGE (§23)
+            if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url && !aRejuger(deja, P.SOURCE, p.ligne)) { tropPetits++; continue; }
             try {
                 // une entrée Pokumon commune à deux séries est UN fichier : il se télécharge UNE fois (courtoisie envers la source) et sert les deux fiches
                 let o = memo.get(p.url);
@@ -223,7 +228,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                     else {
                         const meta = await sharp(buffer).metadata();
                         if (!FORMATS.includes(meta.format)) o = { genre: 'format', meta };
-                        else if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) o = { genre: 'trop-petit', meta };
+                        else if (!meta.width || meta.width < largeurAdmiseDe(P.SOURCE, p.ligne)) o = { genre: 'trop-petit', meta };
                         else o = { genre: 'ok', meta, webp: await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true }), sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length };
                     }
                     memo.set(p.url, o);
@@ -232,12 +237,13 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                 if (o.genre === 'format') { mauvaisFormat++; echecs++; console.warn(`   ✗ ${_id} : format « ${o.meta.format} »`); continue; }
                 if (o.genre === 'trop-petit') {
                     tropPetits++;
-                    await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: o.meta.width, hOriginal: o.meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(P.SOURCE), lot: P.LOT } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: p.url, wOriginal: o.meta.width, hOriginal: o.meta.height, etat: 'trop-petit', seuilApplique: largeurAdmiseDe(P.SOURCE, p.ligne), lot: P.LOT } }, { upsert: true });
                     continue;
                 }
                 obtenus.push({ p, _id, meta: o.meta, webp: o.webp, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal });
             } catch (err) {
                 if (err.bloque) { bloque = err; break; }
+                if (err.pauseHote) { pauseHote = err; break; }          // REPONSE-HOTE : pause de l'hôte (plus de 20 fausses absences, page ambiguë, réponse inattendue) — PAS un arrêt définitif, aucune alerte
                 echecs++;
                 if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${p.url}) : ${err.message}`);
@@ -246,7 +252,7 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
             }
         }
         if (bloque) await conclureBloque(E, slug, bloque, client);
-        if (!bloque && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
+        if (!bloque && !pauseHote && (arretDemande || !verrou.tenu)) return { code: slug, etat: 'interrompu', sansJointure: true };
 
         // ---- 4. R2 AVANT la ligne -------------------------------------------------------------------------------------------------------
         let telecharges = 0;
@@ -261,9 +267,11 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
                     ...(p.partageeHoloNonHolo ? { partageeHoloNonHolo: true, produitsPartages: p.produitsPartages } : {}),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
+                    // ➕ BASSE-DEF : la marque d'après la largeur de l'ORIGINAL (200 à 349 px : basseDefinition: true) ; une marque qui ne décrit plus l'image (refournie plus large) s'efface du document
+                    ...marqueDe({ wOriginal: o.meta.width }),
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
-                    attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok'
-                }, $unset: { erreur: 1 }
+                    attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...champsTracabilite({ urlOriginal: p.url, collecteLe: new Date() })
+                }, $unset: { erreur: 1, ...(marqueDe({ wOriginal: o.meta.width }).basseDefinition ? {} : { basseDefinition: 1 }) }
             }, { upsert: true });
             telecharges++;
         }
@@ -272,28 +280,37 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, slug);
         const images = await M.Image.find({ source: P.SOURCE, set: slug, etat: 'ok', lot: P.LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null;
+        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
+        const retirees = [];                              // BASSE-DEF : les entrées marquées sorties par le remplacement (empreintes de compterEntrees) : la garde les attend absentes
         try {
             for (const im of images) {
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(),
+                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date(), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}),
                     // PP-HOLO : le champ explicite suit l'image (une image Prize Packs ordinaire n'a NI l'un NI l'autre)
-                    ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}) };
+                    ...(im.partageeHoloNonHolo === true ? { partageeHoloNonHolo: true, produitsPartages: im.produitsPartages } : {}),
+                    // correction 5 : le TAMPON sur l'entrée (sa `marque` normalisée) — il vit déjà sur le document ; pas pour les McDonald's (une année, pas un tampon)
+                    ...(P.tamponDeLaMarque(im.marque) ? { tampon: P.tamponDeLaMarque(im.marque) } : {}) };
                 // une AUTRE source sert déjà cette fiche (posée entre deux passages) : on ne touche pas à son entrée, et la nôtre lui CÈDE la place
                 // (« cette fiche » = ce numéro : l'image d'un AUTRE numéro de la même carte — MEP012 pour MEP033 — ne sert pas la fiche, la règle du site la compare au numéro de la fiche)
                 const autres = (c.images || []).filter(e => e && e.set === slug && !(e.source === P.SOURCE && e.lot === P.LOT) && e.cleR2 && (P.nImage(e.numero) === null || P.nImage(e.numero) === P.nImage(im.numero)));
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
-                if (autres.length) { dejaParAutre++; continue; }
+                // ➕ BASSE-DEF : une entrée MARQUÉE (basse définition) d'une autre source ne « sert » pas la fiche face à une image NON marquée : elle sort (la même fonction que artofpkm / Bulbapedia / TCGdex)
+                // et la nôtre entre ; une image marquée (200 à 349 px) ne remplace jamais rien et cède
+                // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
+                const arb = arbitrer(autres, entree, restantes => restantes.length > 0, { documents: await documentsDesEntrees(M, autres) });
+                if (arb.servie) { dejaParAutre++; continue; }
+                if (arb.sortantes.length) { await remplacerBasseDefinition(M, im.carteId, entree); for (const e of arb.sortantes) { retirees.push(empreinteEntree(im.carteId, e)); basseDefRemplacees++; } }
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
             }
         } catch (e) { erreurJointure = e.message; console.error(`🔴 ${slug} : jointure interrompue — ${e.message}`); }
         const apres = await compterEntrees(db, carteIds, slug);
         const substitutsApres = await compterSubstituts(db, slug);
-        const garde = avant.autres === apres.autres && apres.siennes === joints && substitutsAvant === substitutsApres;
-        if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes, substituts ${substitutsAvant} → ${substitutsApres}`);
+        const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // les autres sources, MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
+        const garde = attenduesAutres === apres.autres && apres.siennes === joints && substitutsAvant === substitutsApres;
+        if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres} (attendu ${avant.nAutres - retirees.length})${attenduesAutres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes, substituts ${substitutsAvant} → ${substitutsApres}`);
         // ---- 6. LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que les autres collecteurs ----
         const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
         console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.depuisDocument} recopiée(s) · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)${W.vg.interrompu ? ' · interrompu' : ''}`}`);
@@ -301,15 +318,19 @@ async function collecterUnite(unite, planSerie, restesSerie, M, { verrou, client
         const complet = {
             vignettes: W.vg, source: P.SOURCE, mention: P.MENTION, lot: P.LOT, serie, produits, prouves: planSerie.length, restes: motifs, comptesPlan,
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, mauvaisFormat, joints, dejaParAutre, cartesAbsentes,
-            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
+            basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
+            garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, substitutsAvant, substitutsApres, ok: garde },
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,
+            // REPONSE-HOTE : le rapport des réponses de l'hôte d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
+            reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
+            concordance: garde && !erreurJointure && !bloque && !pauseHote && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + absents === planSerie.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { visuelsPokumon: complet } });
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes(), bilan: complet } });
         console.log(`   ${slug} : prouvés ${planSerie.length} · téléchargés ${telecharges} · repris ${sautes} · absents (404) ${absents} · sous le seuil ${tropPetits} · échecs ${echecs} · joints ${joints} · substituts ${substitutsAvant} → ${substitutsApres} · garde ${garde ? '✅' : '❌'} · requêtes ${client.compteRequetes()}`);
         if (bloque) return { code: slug, etat: 'incomplet', erreur: bloque.message, ...complet };
+        if (pauseHote) return { code: slug, etat: 'incomplet', erreur: pauseHote.message, ...complet };
         if (erreurJointure) return { code: slug, etat: 'incomplet', erreur: erreurJointure, ...complet };
         if (!garde) return { code: slug, etat: 'non-concordant', ...complet };
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;
@@ -363,7 +384,7 @@ async function lancerEcriture(series, M, { verrou, client, lireProduits, index =
         resultats.push(r);
         console.log(`SERIE ${serie} (${slug}) → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats, plan };
 }
@@ -405,7 +426,7 @@ async function lancerEcritureFamilles(ids, M, { verrou, client, lireProduits, in
         resultats.push(r);
         console.log(`UNITÉ ${labels} (${slug}) → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
-        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && (client.bloque() || client.pause())) break;
     }
     return { code, resultats, plan };
 }

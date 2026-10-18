@@ -4,6 +4,7 @@
 // Ce que le banc garde : la LECTURE des pages (le parseur lit ce que la page porte), la PREUVE de correspondance (numéro + nom + set ;
 // un doute est un trou), le PLAN (jamais l'illustration d'une autre impression), le CLIENT (verrou, cadence, robots.txt, ARRÊT au
 // premier blocage) et le RETRAIT en un seul lot.
+require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
 const T = require('./collecte-cartes/tpc');
@@ -175,6 +176,51 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : { status: 404, texte: 'non' });
     C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     verifier('404 → null, sans réessai', [await C.page('/id/card-search/detail/9/'), tr.appels.length], [null, 2]);
+    // ── REPONSE-HOTE (2026-10-18) : la règle commune de réponse, pour une IMAGE ─────────────────────────────────────────────
+    {
+        const RH = require('./collecte-cartes/reponse-hote');
+        const PNG_T = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
+        const dp = () => require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tpc-pauses-'));
+        const clientI = (rep, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const t = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep(u)); return { t, c: T.fabriquerClientTpc({ site: 'tpc-asie', transport: t, cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp(), ...o }) }; };
+        const FAUSSE = ok200('<html>Page introuvable</html>');
+        let x = clientI(() => FAUSSE);
+        verifier('REPONSE-HOTE : 200 text/html pour une image = fausse page introuvable → null, ni bloqué ni en pause, comptée', [await x.c.image('/id/card-img/a.png'), !!x.c.bloque(), !!x.c.pause(), x.c.suivi().rapport('asia.pokemon-card.com').fausses], [null, false, false, 1]);
+        x = clientI(() => FAUSSE);
+        let nuls = 0; for (let i = 0; i < 20; i++) if ((await x.c.image(`/id/card-img/a${i}.png`)) === null) nuls++;
+        e = null; try { await x.c.image('/id/card-img/a21.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : 20 fausses absences d\'affilée → on continue ; la 21e → PAUSE (pas un blocage)', [nuls, !!e?.pauseHote, !!e?.bloque, x.c.bloque(), !!x.c.pause()], [20, true, false, null, true]);
+        const av = x.t.appels.length; e = null; try { await x.c.image('/id/card-img/a22.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : …plus aucune requête pendant la pause de la passe', [!!e?.pauseHote, x.t.appels.length === av], [true, true]);
+        x = clientI(u => (/img-ok/.test(u) ? { status: 200, type: 'image/png', octets: PNG_T } : FAUSSE));
+        for (let i = 0; i < 20; i++) await x.c.image(`/id/card-img/a${i}.png`);
+        verifier('REPONSE-HOTE : une image rend ses octets', Buffer.isBuffer(await x.c.image('/id/card-img/img-ok.png')), true);
+        for (let i = 0; i < 20; i++) await x.c.image(`/id/card-img/b${i}.png`);
+        verifier('REPONSE-HOTE : …et remet le compteur à zéro (20 fausses, une image, 20 fausses → pas de pause)', [!!x.c.pause(), x.c.suivi().rapport('asia.pokemon-card.com').consecutives], [false, 20]);
+        x = clientI(u => (/introuvable/.test(u) ? { status: 404, type: 'text/html', texte: 'non' } : FAUSSE));
+        for (let i = 0; i < 20; i++) await x.c.image(`/id/card-img/a${i}.png`);
+        for (let i = 0; i < 5; i++) await x.c.image(`/id/card-img/introuvable${i}.png`);
+        e = null; try { await x.c.image('/id/card-img/z.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : un vrai 404 ne remet pas le compteur à zéro (la 21e fausse met en pause)', [!!e?.pauseHote], [true]);
+        x = clientI(() => ok200('<nav>Gym Challenge</nav>'));
+        e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : « Gym Challenge » seul = ambiguë → pause PERSISTANTE (fichier), pas un blocage', [!!e?.pauseHote, !!e?.pausePersistante, !!e?.bloque, require('fs').existsSync(e?.fichier || '')], [true, true, false, true]);
+        for (const [cas, rep] of [['410', { status: 410, texte: 'gone' }], ['401', { status: 401, texte: 'login' }], ['200 + cf-mitigated', { ...FAUSSE, cfMitigated: 'challenge' }], ['captcha', ok200('<div class="g-recaptcha">')]]) {
+            x = clientI(() => rep);
+            e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+            verifier(`REPONSE-HOTE : ${cas} pour une image = défi → BLOQUÉ`, [!!e?.bloque, !!x.c.bloque()], [true, true]);
+        }
+        x = clientI(() => ({ status: 200, type: 'application/json', texte: '{}' }));
+        e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : 200 JSON pour une image = inattendue → pause', [!!e?.pauseHote, e?.issue], [true, 'inattendue']);
+        x = clientI(() => ({ status: 200, type: 'application/json', texte: '{}' }));
+        e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+        { const x2 = clientI(() => ({ status: 200, type: 'image/png', octets: PNG_T }), { processus: true }); let e2 = null; try { await x2.c.image('/id/card-img/b.png'); } catch (y) { e2 = y; }
+          verifier('I3 tpc : deux unités de suite — la seconde, après la pause de la première, ne fait AUCUNE requête', [!!e?.pauseHote, !!e2?.pauseHote, x2.t.appels.length], [true, true, 0]); }
+        x = clientI(() => ({ status: 200, type: 'image/png', octets: Buffer.from('pas une image') }));
+        e = null; try { await x.c.image('/id/card-img/a.png'); } catch (y) { e = y; }
+        verifier('REPONSE-HOTE : 200 image/png aux octets faux = inattendue → pause', [!!e?.pauseHote, e?.issue], [true, 'inattendue']);
+        RH.reinitialiserSuiviProcessus();      // le registre du processus ne déborde pas sur la suite du banc
+    }
     let n5 = 0;
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : (++n5 === 1 ? { status: 503, texte: '' } : ok200('enfin')));
     C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
