@@ -139,4 +139,7 @@ async function principal() {
     fs.writeFileSync(path.join(sortie, 'bilan.json'), JSON.stringify({ le: new Date().toISOString(), modele: MODELE, plafond, depense: e, bancs: Object.fromEntries(['controle', 'reglage', 'hors-banc'].map(b => [b, bilanDe(rendu.filter(x => x.banc === b))])) }, null, 1));
     await c.close();
 }
-if (require.main === module) principal().catch(e => { console.error('❌', (e && (e.code || e.name)) || 'erreur', String((e && e.message) || '').slice(0, 200)); process.exit(1); });
+// LOT TAMPONS : l'EXÉCUTION de cette mesure est RETIRÉE. Elle lisait la réponse « oui » d'un lecteur STAFF seul ; le lecteur rend désormais des ENSEMBLES de marques (lecture « marques »), et `bilanDe` comptait
+// les « oui » : lancée telle quelle elle aurait compté ZÉRO faux sans avoir rien mesuré (une sonde qui lit autre chose que la production). Les fonctions pures ci-dessus restent (banc test-mesurer-lecture-tampon.js) ;
+// la mesure vit dans mesurer-marques-tampon.js.
+if (require.main === module) { console.error('RETIRÉ : la mesure de la lecture du tampon est v2/mesures/mesurer-marques-tampon.js (lecteur de MARQUES)'); void principal; process.exit(1); }
