@@ -120,7 +120,8 @@ async function principal() {
         try { photo = await st.lire(x.cleR2); } catch { /* photo absente du bucket */ }
         if (!photo) lecture = 'sans-image';
         else {
-            const r = await fournisseur({ image: photo, corps: {}, compteur: { appels: 0 }, signal: undefined });
+            const carte = await require(path.join(RACINE, 'node_modules', 'sharp'))(photo).resize(420, 587, { fit: 'fill' }).jpeg({ quality: 92 }).toBuffer();     // la carte redressée de MODELE-VISUEL-API : JPEG 420 × 587
+            const r = await fournisseur({ image: carte, corps: {}, compteur: { appels: 0 }, signal: undefined });
             lecture = r.sansImage ? 'sans-image' : r.echec ? 'echec' : r.lecture; essais = r.essais;
         }
         rendu.push({ ...x, lecture, essais });
