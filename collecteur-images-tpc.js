@@ -118,6 +118,37 @@ async function lireFiches(db, client, site, L, ids, { compter }) {
     return fiches;
 }
 
+/** Combien de lignes du set portent un `numeroFiche` (le seul chemin de preuve de TPC Asie). */
+async function compterNumerotes(db, slug) {
+    return (await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { numeroFiche: 1 } }).toArray()).filter(l => l.numeroFiche !== null && l.numeroFiche !== undefined && l.numeroFiche !== '').length;
+}
+
+/**
+ * Les listes puis les fiches d'une ligne — UNE fonction, celle de `collecterSet` ET du lanceur dédié (collecter-tpc-set.js). `refus` (texte) quand une liste ne tient pas sa mesure ; les erreurs
+ * de la source (bloque, pauseHote, plafond) remontent à l'appelant.
+ */
+async function lireListesEtFiches(db, client, site, L, idEtat, compter) {
+    // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
+    // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
+    const sources = listesDe(L);
+    const lues = [];
+    for (const S of sources) {
+        const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+        // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
+        // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
+        // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
+        if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
+            return { refus: `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set` };
+        }
+        lues.push({ S, l });
+    }
+    if (!L.listes) { const liste = lues[0].l; return { liste, fiches: await lireFiches(db, client, site, L, liste.ids, { compter }) }; }
+    const fiches = [];
+    for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
+    // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
+    return { liste: { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) }, fiches };
+}
+
 /** 3-4. Les trous du set, et le plan — pur une fois les fiches lues. */
 async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
@@ -126,7 +157,10 @@ async function planifier(db, slug, L, fiches) {
     // la jointure l'image n'entre que si elle sort NON marquée (sinon elle cède). La langue est celle que la règle de langue donnera à l'image écrite.
     const langue = langueDuVisuel({ source: L.site, langueSource: L.langue }).langue;
     const documents = documentsDeLaListe(await db.collection('images').find({ set: slug }).toArray());   // correction 5 : les documents des entrées du set (leur tampon, leur variante)
-    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(sansRemplacables(cartes.get(l.carteId), { set: slug, numero: l.numeroFiche, langue, source: L.site, documents }), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
+    // ➕ LOT TAIWAN (décision du testeur, 2026-10-17) : une ligne `sansRemplacement` ne comble QUE ce qui manque — une entrée existante, quelle qu'elle soit (basse définition, empruntée,
+    // fausse, correcte), SERT le numéro ; rien n'est « remplaçable », donc rien n'est un trou. Écrit par ce qu'il autorise : seul `true` ferme le remplacement.
+    const sansRemplacement = L.sansRemplacement === true;
+    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(sansRemplacement ? cartes.get(l.carteId) : sansRemplacables(cartes.get(l.carteId), { set: slug, numero: l.numeroFiche, langue, source: L.site, documents }), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
     // règle B (pokemon-card.com) : le dictionnaire nomEn -> nomJa de nos cartes À PAGE (_id > 0), pour les fiches simples sans nomJa
     const temoinNomJa = L.site === 'pokemon-card-com' ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
     // LA VOIE SECONDE nomJa + PV (lot PCC-JP) : pokemon-card.com seulement, pour les produits sans numéro ; ses gardes sont dans tpc.js
@@ -150,12 +184,14 @@ async function compterEntrees(db, carteIds, site, slug) {
  * @param {object} o      `verrou` : le verrou global du site, LIÉ au client. Les autres options n'existent que pour le banc
  *                        (test-collecteur-tpc.js) : `client`, `deposer` (R2), `fabriquerVerrouSet`, `stopOctets`.
  */
-async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = ligneTpc } = {}) {
+async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = ligneTpc, sansRemplacement: sansRemplacementOption = false } = {}) {
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
     const G = releve(unite, ligneDe);
     if (!G.ok) { console.error(`❌ ${unite?._id} : ${G.motif}.`); return { code: unite?._id, etat: G.etat, erreur: G.motif, sansJointure: true }; }
-    const { L, langueImage } = G;
+    // ➕ LOT TAIWAN : `sansRemplacement` (la ligne de table, ou l'option du banc/du coordinateur) — le plan ET la jointure ne touchent à aucune entrée existante
+    const L = sansRemplacementOption === true && G.L.sansRemplacement !== true ? { ...G.L, sansRemplacement: true } : G.L, langueImage = G.langueImage;
+    const sansRemplacement = L.sansRemplacement === true;
     const site = L.site, slug = L.slug;
     // la source a-t-elle déjà bloqué ? on ne lui redemande rien (« si une source bloque, on s'arrête »)
     const bloquee = await E.findOne({ _id: idAlerteBloquee(site), active: true });
@@ -175,6 +211,12 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     // rendait sinon un succès parfait sur une population vide, §41)
     const produits = await db.collection('cartes_produits').countDocuments({ slugSet: slug });
     if (!produits) return { code: unite._id, etat: 'refuse-set', erreur: `aucun produit joint au set ${slug} (cartes_produits.slugSet)`, sansJointure: true };
+    // TAIWAN (2026-10-18) : TPC Asie n'a AUCUNE voie sans numéro (la voie nomJa + PV est celle de pokemon-card.com) ; un set dont aucune ligne ne porte de numeroFiche ne peut rien prouver. Le dire
+    // AVANT de lire les listes et les fiches (~455 pages pour la ligne Products) : une garde ne passe pas par défaut — elle autorise ce qui a un numéro à prouver.
+    if (site === 'tpc-asie') {
+        const numerotes = await compterNumerotes(db, slug);
+        if (!numerotes) return { code: unite._id, etat: 'refuse-set', erreur: `aucune des ${produits} lignes de ${slug} ne porte de numeroFiche : TPC Asie ne prouve que par le numéro — rien à demander`, sansJointure: true };
+    }
     const idEtat = `${site}/${slug}`;
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'liste' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
@@ -186,30 +228,13 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     try {
         let liste, fiches;
         try {
-            // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
-            // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
-            const sources = listesDe(L);
-            const lues = [];
-            for (const S of sources) {
-                const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
-                // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
-                // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
-                // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
-                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
-                    const motif = `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set`;
-                    await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
-                    console.error(`❌ ${unite._id} : ${motif}.`);
-                    return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
-                }
-                lues.push({ S, l });
+            const lu = await lireListesEtFiches(db, client, site, L, idEtat, compter);
+            if (lu.refus) {
+                await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif: lu.refus } });
+                console.error(`❌ ${unite._id} : ${lu.refus}.`);
+                return { code: unite._id, etat: 'refuse-liste', erreur: lu.refus, sansJointure: true };
             }
-            if (!L.listes) { liste = lues[0].l; fiches = await lireFiches(db, client, site, L, liste.ids, { compter }); }
-            else {
-                fiches = [];
-                for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
-                // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
-                liste = { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) };
-            }
+            ({ liste, fiches } = lu);
         } catch (e) {
             // REPONSE-HOTE : une pause de l'hôte (persistante, ou tenue par la passe) arrête l'unité AVANT toute requête de plus — pas un arrêt définitif, aucune alerte
             if (e.pauseHote) return { code: unite._id, etat: 'incomplet', erreur: e.message, pauseHote: { hote: e.hote, issue: e.issue ?? null, motif: e.motif ?? e.message, empreinte: e.empreinte ?? null, persistante: !!e.pausePersistante }, sansJointure: true };
@@ -288,15 +313,23 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const carteIds = [...new Set((await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1 } }).toArray()).map(l => l.carteId))];
         const avant = await compterEntrees(db, carteIds, site, slug);
         const images = await M.Image.find({ source: site, set: slug, etat: 'ok', langue: langueImage, lot: T.LOT }).lean();
-        let joints = 0, dejaParAutre = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
+        let joints = 0, dejaParAutre = 0, dejaJointes = 0, cartesAbsentes = 0, erreurJointure = null, basseDefRemplacees = 0;
         const retirees = [];                                // BASSE-DEF : les entrées marquées sorties par le remplacement (empreintes de compterEntrees) : la garde les attend absentes
         try {
             for (const im of images) {
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }            // une image sans sa carte : comptée, elle fait tomber la concordance
-                const autres = (c.images || []).filter(e => !(e.source === site && e.set === slug && e.numero === im.numero));
                 const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
                     numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date(), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}) };
+                if (sansRemplacement) {
+                    // ➕ LOT TAIWAN : aucune entrée existante n'est touchée — ni pull, ni push, ni remplacement. Un numéro DÉJÀ servi (par une autre source, ou par nous à un passage
+                    // précédent) laisse l'entrée en place ; la nôtre, si elle n'est pas déjà jointe, n'entre pas (comptée : `dejaParAutre`).
+                    if (T.dejaServi(c, slug, im.numero)) { if ((c.images || []).some(e => e.source === site && e.set === slug && e.cleR2 === im.cleR2)) dejaJointes++; else dejaParAutre++; continue; }
+                    await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
+                    joints++;
+                    continue;
+                }
+                const autres = (c.images || []).filter(e => !(e.source === site && e.set === slug && e.numero === im.numero));
                 // ➕ BASSE-DEF : une entrée MARQUÉE d'une autre source ne « sert » pas la fiche face à une image NON marquée (la même fonction que artofpkm / Bulbapedia / TCGdex) ; une image marquée cède
                 // correction 5 : l'identité de l'entrée se lit aussi sur son DOCUMENT (le tampon d'un scan Pokumon y vit) ; document introuvable → pas de remplacement
                 const arb = arbitrer(autres, entree, restantes => T.dejaServi({ images: restantes }, slug, im.numero), { documents: await documentsDesEntrees(M, autres) });
@@ -321,20 +354,21 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const apres = await compterEntrees(db, carteIds, site, slug);
         // les entrées des autres sources : les MÊMES, empreinte par empreinte ; les nôtres : celles de ce passage, et rien d'autre
         const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');     // BASSE-DEF : MOINS les seules entrées marquées que ce passage a remplacées (échange 1 pour 1)
-        const garde = attenduesAutres === apres.autres && apres.siennes === joints;
+        // sans remplacement, les entrées TPC déjà là ne sont pas refaites : le set en garde `avant.siennes`, plus les seules jointes de ce passage
+        const garde = attenduesAutres === apres.autres && apres.siennes === (sansRemplacement ? avant.siennes + joints : joints);
         if (!garde) console.error(`🔴 ${unite._id} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres} (attendu ${avant.nAutres - retirees.length})${attenduesAutres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${site} ${apres.siennes} pour ${joints} jointes`);
         const fiches404 = compteurs['fiche-404'] || 0;
         const complet = {
             site, langue: L.langue, code: L.code, mention: T.MENTION, lot: T.LOT,
             liste: { lues: liste.ids.length, total: liste.total, complete: liste.complete }, fiches: fiches.length, fiches404, produits: P.produits, trous: P.trous,
-            prouves: P.plan.length, voies, restes: motifs, telecharges, sautes, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
+            prouves: P.plan.length, voies, restes: motifs, telecharges, sautes, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, dejaJointes, sansRemplacement, cartesAbsentes,
             basseDefRemplacees, sansUrlOriginal: compterSansAdresse(images),
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, tpcApres: apres.siennes, ok: garde }, compteurs,
             requetes: client.compteRequetes(), bloque: bloque ? bloque.message : null, erreurJointure,
             // REPONSE-HOTE : le rapport des réponses de l'hôte d'images — fausses absences, empreintes distinctes, hôte en pause (jamais un arrêt définitif)
             reponsesHotes: client.suivi().hotes().map(h => client.suivi().rapport(h)), pauseHote: pauseHote ? { hote: pauseHote.hote, issue: pauseHote.issue, motif: pauseHote.motif, empreinte: pauseHote.empreinte, persistante: pauseHote.pausePersistante } : null,
             concordance: garde && !erreurJointure && telecharges + sautes + tropPetits + retires === P.plan.length && echecs === 0 && fiches404 === 0 && cartesAbsentes === 0
-                && joints + dejaParAutre === images.length && liste.complete && !bloque && !pauseHote,
+                && joints + dejaParAutre + dejaJointes === images.length && liste.complete && !bloque && !pauseHote,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { [`visuelsTpc.${site}`]: complet } });
@@ -362,7 +396,7 @@ async function conclureBloque(E, unite, site, err, client, { seulementAlerte = f
 }
 
 // `planReel` et `baseLocale` (plus bas) sont des déclarations de fonction : hissées, donc exportables ici, avant la garde de la ligne de commande.
-module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale };
+module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale, lireListesEtFiches, lireFiches, compterNumerotes, conclureBloque };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
@@ -470,7 +504,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
             const P = await planifier(local, slug, L, fiches);
             for (const r of P.restes) if (r.motif === 'absente-de-la-source') { if (nonLues.has(cleNumero(r.numero))) r.motif = 'fiche-non-lue'; }
             const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
-            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
+            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z-]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
             const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
             console.log(JSON.stringify(ligne));
             bilan.push({ ...ligne, exemplesProuves: P.plan.slice(0, 4).map(x => `${x.numero} ${x.nomEn} ← ${x.fiche.nom} (${x.voie})`), exemplesTrous: P.restes.slice(0, 6).map(r => `${r.numero ?? '—'} ${r.nomEn}: ${r.motif}`) });
