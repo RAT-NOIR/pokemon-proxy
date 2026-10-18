@@ -12,7 +12,7 @@ function profils(cfg) {
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/],
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
-          chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/],
+          chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }
     ];
 }

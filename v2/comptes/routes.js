@@ -126,7 +126,7 @@ function routesComptes(router, cfg) {
         try {
             const b = objet(req.body) ? req.body : {};
             const r = await svc.supprimerCompte({ compte: req.v2.porteur.compte, motDePasse: b.motDePasse, renonciation: b.renonciation, cfg });
-            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'CREDITS_ACHETES' ? 'Des crédits achetés subsistent : renonciation requise' : 'Mot de passe incorrect');
+            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'CREDITS_ACHETES' ? 'Des crédits achetés subsistent : renonciation requise' : r.code === 'CONFLIT' ? 'Un abonnement est en cours : résiliez-le avant de supprimer le compte' : 'Mot de passe incorrect', r.detail ? { detail: r.detail } : {});
             res.setHeader('Set-Cookie', S.cookieEffacement(cfg));
             return res.status(200).json({ success: true });
         } catch (e) { console.error(`❌ [v2 suppression] ${nomErreur(e)}`); return indispo(res); }

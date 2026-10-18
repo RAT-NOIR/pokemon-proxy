@@ -252,6 +252,8 @@ async function installationsDuCompte(compteId) {
 async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintenant = new Date() }) {
     if (!(await P.verifier(typeof motDePasse === 'string' ? motDePasse : '', compte.motDePasse))) return { statut: 401, code: 'IDENTIFIANTS' };
     if ((compte.solde && compte.solde.achete > 0) && renonciation !== true) return { statut: 409, code: 'CREDITS_ACHETES' };
+    // STRIPE-V2 : supprimer le compte ne résilie pas l'abonnement chez Stripe — le client continuerait d'être débité sans compte. Tant que V2_ABONNEMENTS est allumé, un abonnement vivant (essai, actif, impayé…) refuse la suppression : on résilie d'abord (portail).
+    if (cfg && cfg.abonnements && cfg.abonnements.actif && compte.abonnement && compte.abonnement.stripe && compte.abonnement.stripe.sid && !compte.abonnement.stripe.resiliation && ['trialing', 'active', 'past_due', 'unpaid', 'paused', 'incomplete'].includes(compte.abonnement.stripe.statut)) return { statut: 409, code: 'CONFLIT', detail: 'abonnement-actif' };
     const id = compte._id, porteurs = [`compte:${id}`, String(id)];
     if (compte.offertesAccordeesLe) await noterAdresse(compte.emailCle, cfg, maintenant);
     await col('sessions').deleteMany({ compteId: id });                               // d'abord : le cookie cesse de valoir tout de suite
