@@ -135,6 +135,12 @@ async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = t
  * plusieurs sets ne se fabrique qu'une fois. Additif : un champ neuf, rien d'autre ne bouge.
  */
 const HAUTEUR_VIGNETTE_SYMBOLE = 64;
+/** La réduction d'un symbole de set : hauteur au plus 64 px, jamais agrandie, WebP. UNE définition, pour le rattrapage (assurerVignettesSymboles) et pour poser-symboles-ptcgio.js. */
+async function fabriquerVignetteSymbole(buffer) {
+    const r = await sharp(buffer).resize({ height: HAUTEUR_VIGNETTE_SYMBOLE, withoutEnlargement: true }).webp({ quality: 85, alphaQuality: 90 }).toBuffer({ resolveWithObject: true });
+    if (!r.info.width || !r.info.height) throw new Error('dimensions nulles');
+    return { buffer: r.data, w: r.info.width, h: r.info.height, octets: r.data.length };
+}
 async function assurerVignettesSymboles(db, { bucket, journal = console, ecrire = true } = {}) {
     const r2 = require('./r2');
     const S = db.collection('sets');
@@ -148,11 +154,11 @@ async function assurerVignettesSymboles(db, { bucket, journal = console, ecrire 
     for (const cle of cles) {
         try {
             const orig = await lireBinaire(bucket, cle);
-            const r = await sharp(orig).resize({ height: HAUTEUR_VIGNETTE_SYMBOLE, withoutEnlargement: true }).webp({ quality: 85, alphaQuality: 90 }).toBuffer({ resolveWithObject: true });
-            if (!r.info.width || !r.info.height) throw new Error('dimensions nulles');
+            const f = await fabriquerVignetteSymbole(orig);
+            const r = { data: f.buffer };
             const cv = cleVignette(cle);
             const w = await r2.deposerBinaire(bucket, cv, r.data, 'image/webp');
-            let dims = { w: r.info.width, h: r.info.height };
+            let dims = { w: f.w, h: f.h };
             if (w.ecrit) B.fabriquees++;
             else {
                 // LA CLÉ EXISTAIT DÉJÀ (relecture du 2026-10-03) : le dépôt est idempotent, il n'écrase rien. On enregistre les dimensions du
@@ -183,4 +189,4 @@ async function assurerVignettesSymboles(db, { bucket, journal = console, ecrire 
     return { ...B, touches: [...B.touches] };
 }
 
-module.exports = { cleVignette, fabriquerVignette, lireBinaire, assurerVignettes, assurerVignettesLogos, assurerVignettesSymboles, LARGEUR_VIGNETTE, LARGEUR_VIGNETTE_LOGO, HAUTEUR_VIGNETTE_SYMBOLE };
+module.exports = { cleVignette, fabriquerVignette, fabriquerVignetteSymbole, lireBinaire, assurerVignettes, assurerVignettesLogos, assurerVignettesSymboles, LARGEUR_VIGNETTE, LARGEUR_VIGNETTE_LOGO, HAUTEUR_VIGNETTE_SYMBOLE };
