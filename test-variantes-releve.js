@@ -121,8 +121,8 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
     // ── B2 : les 18 corrections « vues » (V1 MEP normale -> prerelease), preuve = vignette regardée ──
     const IDS_VUES = [851043, 851045, 851047, 851049, 857390, 857393, 857396, 857400, 877543, 877544, 877545, 884754, 884756, 884758, 894261, 894262, 894263, 894264];
     await essayer('vues : la table fermée de 18', async () => {
-        const t = R.CORRECTIONS_VUES, l = R.listeDesCorrectionsVues();
-        verifier('18 ids exacts (ensemble égal), table gelée', [t.map(x => x.id).sort((a, b) => a - b), Object.isFrozen(t)], [IDS_VUES, true]);
+        const tout = R.CORRECTIONS_VUES, t = tout.filter(x => x.de === 'normale'), l = R.listeDesCorrectionsVues().filter(x => x.de === 'normale');
+        verifier('18 ids exacts (ensemble égal), table gelée', [t.map(x => x.id).sort((a, b) => a - b), Object.isFrozen(tout)], [IDS_VUES, true]);
         verifier('tous normale -> prerelease, set MEP', [t.every(x => x.de === 'normale' && x.vers === 'prerelease' && x.set === 'MEP-Black-Star-Promos'), l.length], [true, 18]);
         verifier('numéros et noms recopiés', [l.find(x => x.idProduct === 894263).numero, l.find(x => x.idProduct === 894263).nom, l.find(x => x.idProduct === 851043).numero, l.find(x => x.idProduct === 877545).nom], ['084', 'Dhelmise', '001', 'Tyrantrum']);
         verifier('forme de listeDesCorrections + set + numero', Object.keys(l[0]).sort(), ['de', 'idProduct', 'nom', 'numero', 'preuve', 'set', 'vers']);
@@ -158,6 +158,23 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         verifier('avant ≠ normale : refus existant', [c.corrections.length, /^correction : valeur-d-avant-inattendue/.test(c.refus[0]?.motif)], [0, true]);
         const d = await planC(fausseBase(monV()), [{ ...cor[0], numero: '1' }]);
         verifier('numéro comparé par cleNumero (001 = 1)', d.corrections.length, 1);
+    });
+    // ── B3 : 8 V2 MEP « staff » -> « staff+prerelease » (STAFF imprimé ET logo de prérelease vus) ──
+    const IDS_V2 = [879303, 879305, 879315, 879312, 903005, 903006, 903007, 903008];
+    await essayer('B3 : les 8 V2, staff -> staff+prerelease', async () => {
+        const tout = R.CORRECTIONS_VUES, v2 = tout.filter(x => x.de === 'staff'), l = R.listeDesCorrectionsVues().filter(x => x.de === 'staff');
+        verifier('staff+prerelease valide', R.varianteValide('staff+prerelease'), true);
+        verifier('8 ids exacts, staff -> staff+prerelease, set MEP', [v2.map(x => x.id).sort((a, b) => a - b), v2.every(x => x.vers === 'staff+prerelease' && x.set === 'MEP-Black-Star-Promos'), tout.length, new Set(tout.map(x => x.id)).size], [[...IDS_V2].sort((a, b) => a - b), true, 26, 26]);
+        verifier('numéros et noms', l.map(x => [x.idProduct, x.numero, x.nom]), [[879303, '064', 'Serperior'], [879305, '065', 'Barbaracle'], [879315, '066', 'Tyrantrum'], [879312, '067', 'Doublade'], [903005, '082', 'Miraidon'], [903006, '083', 'Slowbro'], [903007, '084', 'Dhelmise'], [903008, '085', 'Bastiodon']]);
+        verifier('preuve sans « normale », avec STAFF et le logo', [l.some(x => /normale|V1 = /.test(x.preuve)), /zoom ×5\) : « STAFF » imprimé et logo de prérelease « PERFECT ORDER » visibles ; feu vert du testeur du 2026-10-18 \(« OUI, en staff\+prerelease, sur les seules vignettes où les deux marques sont visibles »\) ; remplace « staff » posée le 2026-10-17$/.test(l[0].preuve), /« PITCH BLACK »/.test(l[4].preuve)], [false, true, true]);
+        const mon = (v) => ({ produits: [LP(879303, 9, 'MEP-Black-Star-Promos', '064', { variante: v, variantePreuve: 'p' })], cartes: [{ _id: 9, images: [ENTREE('MEP-Black-Star-Promos', '064', 'k9', { tamponNonRepresente: 'Staff', partageeTamponNonSepare: false })] }], images: [] });
+        const cor = R.listeDesCorrectionsVues().filter(x => x.idProduct === 879303);
+        const w = fausseBase(mon('staff')), p = await planC(w, cor);
+        verifier('écrit staff+prerelease, entrée non modifiée', [p.corrections.length, R.operations(p).lignes.map(x => x.ecrit.variante), R.operations(p).entrees.length], [1, ['staff+prerelease'], 0]);
+        for (const v of ['normale', 'prerelease', undefined]) { const q = await planC(fausseBase(mon(v)), cor); verifier(`avant « ${v} » : refus`, [q.corrections.length, /^correction : valeur-d-avant-inattendue/.test(q.refus[0]?.motif)], [0, true]); }
+        const t0 = R.CORRECTIONS_VUES.find(x => x.id === 879303);
+        verifier('doublon dans l\'ensemble refusé', /double/.test(await leve(() => R.listeDesCorrectionsVues([t0, t0])) || ''), true);
+        verifier('id des V1 vues repris en V2 refusé', /double/.test(await leve(() => R.listeDesCorrectionsVues([R.CORRECTIONS_VUES[0], { ...t0, id: R.CORRECTIONS_VUES[0].id }])) || ''), true);
     });
     await essayer('Frosmoth : la décision du testeur est dans le conflit', () => {
         const f = R.FICHES.find(x => x.id === 450593);

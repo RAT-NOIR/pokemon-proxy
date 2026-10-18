@@ -132,13 +132,20 @@ function listeDesCorrections(lignesCsv, table = CORRECTIONS) {
  */
 const SET_MEP = 'MEP-Black-Star-Promos';
 const vue = (id, numero, nom, logo, zoomSeul = false) => Object.freeze({ id, de: 'normale', vers: 'prerelease', nom, set: SET_MEP, numero, logo, ...(zoomSeul ? { zoomSeul: true } : {}) });
+const vueV2 = (id, numero, nom, logo) => Object.freeze({ id, de: 'staff', vers: 'staff+prerelease', nom, set: SET_MEP, numero, logo });
 const CORRECTIONS_VUES = Object.freeze([
     vue(851043, '001', 'Meganium', 'MEGA EVOLUTION'), vue(851045, '002', 'Inteleon', 'MEGA EVOLUTION'), vue(851047, '003', 'Alakazam', 'MEGA EVOLUTION'), vue(851049, '004', 'Lunatone', 'MEGA EVOLUTION'),
     vue(857390, '014', 'Ceruledge', 'PHANTASMAL FLAMES'), vue(857393, '015', 'Zacian', 'PHANTASMAL FLAMES'), vue(857396, '016', 'Flygon', 'PHANTASMAL FLAMES'), vue(857400, '017', 'Toxtricity', 'PHANTASMAL FLAMES'),
     vue(877543, '064', 'Serperior', 'PERFECT ORDER'), vue(877544, '065', 'Barbaracle', 'PERFECT ORDER'), vue(877545, '066', 'Tyrantrum', 'PERFECT ORDER'),
     vue(884754, '075', 'Ampharos', 'CHAOS RISING'), vue(884756, '076', 'Crobat', 'CHAOS RISING'), vue(884758, '077', 'Goodra', 'CHAOS RISING'),
-    vue(894261, '082', 'Miraidon', 'PITCH BLACK'), vue(894262, '083', 'Slowbro', 'PITCH BLACK'), vue(894263, '084', 'Dhelmise', 'PITCH BLACK', true), vue(894264, '085', 'Bastiodon', 'PITCH BLACK')
+    vue(894261, '082', 'Miraidon', 'PITCH BLACK'), vue(894262, '083', 'Slowbro', 'PITCH BLACK'), vue(894263, '084', 'Dhelmise', 'PITCH BLACK', true), vue(894264, '085', 'Bastiodon', 'PITCH BLACK'),
+    // B3 : les 8 V2 « staff » dont la vignette montre « STAFF » imprimé ET le logo de prérelease (les 12 autres V2 restent « staff »)
+    vueV2(879303, '064', 'Serperior', 'PERFECT ORDER'), vueV2(879305, '065', 'Barbaracle', 'PERFECT ORDER'), vueV2(879315, '066', 'Tyrantrum', 'PERFECT ORDER'), vueV2(879312, '067', 'Doublade', 'PERFECT ORDER'),
+    vueV2(903005, '082', 'Miraidon', 'PITCH BLACK'), vueV2(903006, '083', 'Slowbro', 'PITCH BLACK'), vueV2(903007, '084', 'Dhelmise', 'PITCH BLACK'), vueV2(903008, '085', 'Bastiodon', 'PITCH BLACK')
 ]);
+const preuveVue = t => t.de === 'staff'
+    ? `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} (zoom ×5) : « STAFF » imprimé et logo de prérelease « ${t.logo} » visibles ; feu vert du testeur du ${DATE_RELEVE} (« OUI, en staff+prerelease, sur les seules vignettes où les deux marques sont visibles ») ; remplace « staff » posée le 2026-10-17`
+    : `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} (zoom ×3) : logo de prérelease « ${t.logo} » visible${t.zoomSeul ? ' ; visible au zoom seulement' : ''} ; feu vert du testeur du ${DATE_RELEVE} (« corrige-les en prerelease, carte par carte, SEULEMENT là où le scan ou la vignette Cardmarket montre bien le logo de prérelease ») ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale`;
 function listeDesCorrectionsVues(table = CORRECTIONS_VUES) {
     const vus = new Set(), communs = new Set(CORRECTIONS.map(c => c.id));
     return table.map(t => {
@@ -149,7 +156,7 @@ function listeDesCorrectionsVues(table = CORRECTIONS_VUES) {
         if (t.numero == null || !String(t.numero).trim()) throw new Error(`correction vue ${t.id} : sans numero — rien n'est écrit`);
         if (!varianteValide(t.vers)) throw new Error(`correction vue ${t.id} : variante « ${t.vers} » hors vocabulaire`);
         return { idProduct: t.id, de: t.de, vers: t.vers, nom: t.nom, set: t.set, numero: t.numero,
-            preuve: `vignette Cardmarket regardée par le coordinateur le ${DATE_RELEVE} (zoom ×3) : logo de prérelease « ${t.logo} » visible${t.zoomSeul ? ' ; visible au zoom seulement' : ''} ; feu vert du testeur du ${DATE_RELEVE} (« corrige-les en prerelease, carte par carte, SEULEMENT là où le scan ou la vignette Cardmarket montre bien le logo de prérelease ») ; remplace « ${t.de} » posée le 2026-10-17 par supposition V1 = normale` };
+            preuve: preuveVue(t) };
     });
 }
 

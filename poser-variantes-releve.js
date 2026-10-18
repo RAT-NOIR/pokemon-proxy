@@ -1,9 +1,9 @@
 // ============================================================
-// TAMPONS-RELEVE B — POSER LES VARIANTES DES 13 V2 TAMPONNÉS DU RELEVÉ DU TESTEUR + 20 CORRECTIONS « normale » -> prerelease (2 du relevé, 18 vues sur vignette) (2026-10-18)
+// TAMPONS-RELEVE B — POSER LES VARIANTES DES 13 V2 TAMPONNÉS DU RELEVÉ DU TESTEUR + 28 CORRECTIONS (2 du relevé, 18 vues « normale » -> prerelease, 8 vues « staff » -> staff+prerelease) (2026-10-18)
 // ============================================================
 //   node poser-variantes-releve.js --plan                                        (ESSAI À BLANC, défaut : prouve chaque fiche, imprime les comptes, le diff « servis », l'annonce ; n'écrit rien)
 //   node poser-variantes-releve.js --plan --rapport=<f>.json --annonce-vers=<f>.json
-//   node lot-additif.js --quoi="TAMPONS-RELEVE B : 13 fiches + 20 corrections" --collections=cartes_produits,cartes,images --annonce=<f> --compte=cartes_produits -- node poser-variantes-releve.js --ecrire --attendu=33
+//   node lot-additif.js --quoi="TAMPONS-RELEVE B : 13 fiches + 28 corrections" --collections=cartes_produits,cartes,images --annonce=<f> --compte=cartes_produits -- node poser-variantes-releve.js --ecrire --attendu=41
 //   node poser-variantes-releve.js --restaurer=<sauvegarde>.json [--ecrire --attendu=<N>]    (remet chaque champ à sa valeur d'avant, s'il porte encore la valeur écrite par ce lot)
 // La SAUVEGARDE des valeurs d'avant est écrite AVANT la première écriture (`--sauvegarde-vers=`, par défaut dans le dossier du lot). Les règles vivent dans collecte-cartes/variantes-releve.js.
 // JAMAIS de requête réseau. Collections écrites : `cartes_produits`, `cartes`, `images`.
