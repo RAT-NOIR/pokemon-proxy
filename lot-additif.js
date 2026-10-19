@@ -40,6 +40,10 @@ const { PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauratio
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
 
+// ➕ 2026-10-19 : la garde rejoue aussi le CONTRAT DE L'API (collecte-cartes/garde-contrat-api.js : sa chaîne importée, jamais recopiée). Active sur la base `cartes` ;
+// sur `test_scratch` seulement avec `--contrat-api` (futur banc), sinon inerte et dite « non vérifiée ».
+const GC = require('./collecte-cartes/garde-contrat-api');
+
 const GARDEES = ['cartes', 'cartes_produits', 'sets'];
 const RESTAURABLES = ['cartes', 'cartes_produits', 'sets', 'restes', 'collecte_etat'];
 // ➕ 2026-09-29 : `visuelsTcgdex` (bilan d'une unité TCGdex d'une autre langue, collecteur-images-tcgdex.js) — écrit par le worker
@@ -49,7 +53,7 @@ const sep = process.argv.indexOf('--');
 const options = sep < 0 ? process.argv.slice(2) : process.argv.slice(2, sep);
 const commande = sep < 0 ? [] : process.argv.slice(sep + 1);
 const AUTORISES = [/^--quoi=.+/, /^--collections=[\w,]+$/, /^--compte=\w+(:\w+=[^\s]+)?$/, /^--annonce=.+\.json$/,
-    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/, /^--estimation-mo=\d+(\.\d+)?$/];
+    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/, /^--estimation-mo=\d+(\.\d+)?$/, /^--contrat-api$/];
 const inconnus = options.filter(a => !AUTORISES.some(r => r.test(a)));
 const val = nom => options.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const quoi = val('quoi'), collections = val('collections'), BASE = val('base') || 'cartes';
@@ -60,6 +64,7 @@ const CONFIRMATION_S = Number(val('confirmation') ?? 20);
 const T = require('./collecte-cartes/garde-taille-atlas');
 const ESTIMATION_MO = val('estimation-mo') !== undefined ? Number(val('estimation-mo')) : 0;
 const GRAPPE = BASE === 'cartes' ? 'cartes' : 'production';
+const CONTRAT_ACTIF = BASE === 'cartes' || options.includes('--contrat-api');
 // 🔴 « idExpansion=6395 » a compté 0 → 0 au premier lot (2026-09-24) : la valeur partait en CHAÎNE, le champ est un
 // NOMBRE. Un filtre qui ne mord sur rien rend un zéro plausible (§41). Une valeur numérique cherche donc les deux types,
 // et chaque compte s'imprime sur le total de sa collection : « 0 sur 64 000 » se voit, « 0 » non.
@@ -138,6 +143,23 @@ async function setsDuWorker(db, depuis) {
     return new Set(docs.map(d => String(d._id).replace(/^[^/]+\//, '')));
 }
 
+// Les trois collections que l'API lit, avec SES projections (la même forme que la sauvegarde projetée : avant et après se comparent à forme égale).
+async function etatContrat(api, db) {
+    const lire = (coll, projection) => db.collection(coll).find({}, { projection }).toArray();
+    const [sets, cartes, cartesProduits] = await Promise.all([lire('sets', api.PROJECTIONS.sets), lire('cartes', api.PROJECTIONS.cartes), lire('cartes_produits', api.PROJECTIONS.cartes_produits)]);
+    return GC.projeterEtat(api, { sets, cartes, cartesProduits });
+}
+// Le verdict du contrat : une exception est un refus de conclure (fautive), jamais un « ✅ ».
+async function jouerContrat(api, avantProjete, db) {
+    try {
+        const v = await GC.verifierContrat({ api, avant: avantProjete, apres: await etatContrat(api, db) });
+        return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, persistants: v.persistants, v };
+    } catch (e) {
+        const raison = String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300);
+        return { ligne: 'contrat API : 🔴 je ne peux pas conclure', fautives: [`contrat API : je ne peux pas conclure (${raison})`], setsFautifs: [], persistants: [], v: null };
+    }
+}
+
 const decrire = b => `${b.cle} ${b.avant}→${b.apres}${b.annonce ? ` (annoncé −${b.annonce})` : ''}`;
 const liste = (l, n = 6) => l.slice(0, n).join(' ; ') + (l.length > n ? ` ; … (+${l.length - n})` : '');
 
@@ -161,11 +183,18 @@ function journaliser(t, dossier, combien, sortie) {
         if (!v.autorise) { console.error(`❌ GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}. Rien n'a été sauvegardé ni écrit.`); process.exit(5); }
         console.log(`   0. GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}${ESTIMATION_MO ? '' : ' — sans --estimation-mo, l\'ajout du lot n\'est pas compté'}`);
     }
+    // 0 bis. CONTRAT DE L'API, AVANT la sauvegarde : l'API est-elle chargeable, sa règle embarquée complète ? « Je ne peux pas conclure » refuse (code 6), rien n'est sauvegardé ni écrit.
+    let api = null;
+    if (CONTRAT_ACTIF) {
+        try { api = await GC.chargerApi(); } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
+        console.log('   0 bis. contrat API : chaîne de l\'API importée (projections, décision, règle du site embarquée, validation d\'entrée)');
+    } else console.log('   0 bis. contrat API : non vérifié (base de banc)');
     console.log(`\n══ LOT : ${quoi}\n   1. sauvegarde ${aSauver.join(',')} → ${dossier} (base ${BASE})`);
     const s = spawnSync(process.execPath, ['backup-collections.js', `--base=${BASE}`, `--collections=${aSauver.join(',')}`, `--dossier=${dossier}`], { stdio: 'inherit', cwd: __dirname });
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
     const docsAvant = { cartes: lireSauvegarde(dossier, 'cartes'), cartesProduits: lireSauvegarde(dossier, 'cartes_produits'), sets: lireSauvegarde(dossier, 'sets') };
     const avant = compterEtat(docsAvant);
+    const avantContrat = api ? GC.projeterEtat(api, docsAvant) : null;          // la sauvegarde, projetée comme l'API lit la base
     let { db, fermer } = await ouvrir();
     const comptesAvant = await compter(db);
     await fermer();
@@ -196,9 +225,18 @@ function journaliser(t, dossier, combien, sortie) {
     const autorisees = cmp.baisses.filter(b => b.autorisee).map(b => `${decrire(b)} [${b.autorisee}]`);
     console.log(`   5. garde : ${cmp.groupes} groupes · hausses : ${hausses} · baisses autorisées : ${autorisees.length ? liste(autorisees) : 'aucune'}`);
     for (const a of cmp.annoncesNonRealisees) console.log(`      ⚠️ annonce non réalisée telle quelle : ${a.cle} annoncé −${a.annonce}, réel −${a.baisse}`);
+    // 5 bis. LE CONTRAT DE L'API (2026-10-19) : la chaîne de l'API rejouée sur les sets touchés, avant (sauvegarde) et après (base). Un refus NOUVEAU, ou une variante perdue, arrête le lot
+    // comme une baisse non annoncée ; une exception de la garde est un refus de conclure (arrête et restaure).
+    const contrat = api ? await jouerContrat(api, avantContrat, db) : null;
+    console.log(`   5 bis. ${contrat ? contrat.ligne : 'contrat API : non vérifié (base de banc)'}`);
+    if (contrat?.v) {
+        for (const p of contrat.persistants.slice(0, 6)) console.log(`      persistant (déjà avant, ne bloque pas) : ${p.idProduct} — ${p.motif}`);
+        if (contrat.persistants.length > 6) console.log(`      … (+${contrat.persistants.length - 6} persistants)`);
+    }
+    const fautivesContrat = contrat ? contrat.fautives : [];
     const legacy = comptes.map((x, i) => `${x.libelle} ${comptesAvant[i]} → ${comptesApres[i]}`).join(' ; ');
 
-    if (!cmp.nonAutorisees.length) {
+    if (!cmp.nonAutorisees.length && !fautivesContrat.length) {
         let revalidation = null;
         if (BASE === 'cartes' && !options.includes('--sans-revalidation')) {
             const touches = setsTouches({ avant: docsAvant, apres: apres.docs });
@@ -218,8 +256,8 @@ function journaliser(t, dossier, combien, sortie) {
                 console.error(`   ${revalidation}`);
             }
         }
-        const combien = [legacy, atlasApres, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`, revalidation].filter(Boolean).join(' ; ');
-        console.log(`   ✅ aucune baisse non annoncée · code de sortie ${c.status}`);
+        const combien = [legacy, atlasApres, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`, contrat ? `${contrat.ligne} ✅` : 'contrat API non vérifié (base de banc)', revalidation].filter(Boolean).join(' ; ');
+        console.log(`   ✅ aucune baisse non annoncée${contrat ? ' · contrat API respecté' : ''} · code de sortie ${c.status}`);
         await fermer();
         journaliser(t, dossier, combien, c.status);
         // Pas de process.exit ici : il coupe une connexion fetch en cours de fermeture et Node plante sous Windows (code 9
@@ -229,9 +267,10 @@ function journaliser(t, dossier, combien, sortie) {
     }
 
     // ── ARRÊT : restauration depuis la sauvegarde
-    const fautives = cmp.nonAutorisees.map(decrire);
-    console.log(`\n   🔴 ARRÊT : ${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S) :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
-    const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
+    const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
+    console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
+    // les sets où le contrat est violé se restaurent comme un set dont les images ont baissé : le tableau `images` y est remis (le champ du worker n'y est pas gardé)
+    const imagesFautives = new Set([...cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')), ...(contrat?.setsFautifs || [])]);
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
         if (coll === 'cartes' && [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set))) return champs.filter(f => f !== 'images');
@@ -269,10 +308,14 @@ function journaliser(t, dossier, combien, sortie) {
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
     if (nonRestaurees.length) console.log(`      ⚠️ NON restaurées (tenues par le worker, ou hors de la garde) : ${nonRestaurees.join(', ')} — la sauvegarde les porte`);
     const relu = comparer(avant, await etatDeLaBase(db), { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
+    // la relecture rejoue aussi le contrat : un refus nouveau qui reste est une restauration incomplète
+    const contratRelu = api ? await jouerContrat(api, avantContrat, db) : null;
     await fermer();
-    const ok = !relu.nonAutorisees.length;
-    console.log(`   7. relu après restauration : ${ok ? '✅ aucune baisse non annoncée' : `🔴 RESTAURATION INCOMPLÈTE : ${liste(relu.nonAutorisees.map(decrire))}`}`);
-    const combien = [legacy, atlasApres, `🔴 ARRÊT : baisses non annoncées ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(relu.nonAutorisees.map(decrire))}`}`].filter(Boolean).join(' ; ');
+    const resteContrat = contratRelu ? contratRelu.fautives : [];
+    const ok = !relu.nonAutorisees.length && !resteContrat.length;
+    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat];
+    console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}`);
+    const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, `🔴 ARRÊT : ${cmp.nonAutorisees.length ? 'baisses non annoncées' : 'refus du contrat API'} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
     journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);
     process.exit(ok ? 3 : 4);
 })().catch(e => { console.error('❌', e.message); process.exit(1); });
