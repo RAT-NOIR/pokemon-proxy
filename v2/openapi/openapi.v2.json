@@ -2034,6 +2034,143 @@
         }
       }
     },
+    "/api/photo": {
+      "post": {
+        "operationId": "envoyerPhotoAvantScan",
+        "tags": [
+          "banc"
+        ],
+        "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+        "summary": "Administrateur seulement : envoie, en octets bruts, une photo de l'annonce AVANT le scan ; le serveur ne téléchargera alors plus rien chez Vinted pour ce scan",
+        "description": "Route réservée à un compte ADMINISTRATEUR (rôle relu en base à chaque requête) ET derrière le drapeau `V2_PHOTOS_MULTIPLES=1` : drapeau éteint, ou porteur qui n'est pas administrateur, la route n'existe pas (le 404 natif d'une route inexistante, corps non JSON, jamais de 429). La phase 2 (tous les porteurs) s'ouvrira par un réglage du serveur, sans changement de contrat. Le corps est BINAIRE (JPEG, PNG ou WebP tels que Vinted les sert), jamais du base64 ni du JSON. Ordre des gardes, tous jugés AVANT de lire un octet du corps : identité (401), rôle (404 natif), plafond horaire par porteur (429 : au moins 600 par heure, `max(600, V2_ETIQUETTE_HEURE)`, sur un compteur à part de `/api/banc/photo`), requête (AUCUN paramètre : `?index=` est toléré et IGNORÉ, tout autre est un 400), `Content-Type` (415), `Content-Length` entier, non nul, ≤ 2 Mio (400 / 413), une place de lecture (4 au total, 1 par porteur : 429 DEBIT avec Retry-After), un délai de lecture de 15 s (connexion coupée). Puis le contenu, validé comme `/api/banc/photo` : les octets doivent être ce que le Content-Type annonce (415), l'image doit se décoder (422 `illisible`), tenir en 12 millions de pixels et 4 096 px de côté (422 `dimensions`), être fixe ; au plus 2 décodages simultanés dans le service (429 DEBIT). La photo est réencodée sans métadonnées (JPEG, 1 600 px au plus ; 800 px au plus pour le modèle). Règle de l'éditeur, mot pour mot : « Une photo reçue avant le scan vit uniquement dans la mémoire du serveur : elle sert une seule fois, à son seul porteur, dans les 30 secondes qui suivent son envoi, et elle est libérée à la fin de l'analyse — 120 secondes au plus en tout. Elle n'est jamais écrite : ni sur disque, ni dans un stockage, ni en base, ni dans un journal. Elle n'est transmise qu'au modèle d'analyse, pour cette analyse. Seule une photo envoyée par le compte administrateur peut être conservée, pour le banc de mesure. » Au plus 8 photos et 8 Mio par porteur : au-delà, la plus ancienne est oubliée. L'index de chaque photo est donné par `photoIds` de `POST /api/identifier`, jamais ici. Le `photoId` rendu est donné à `POST /api/identifier` (`photoIds`) ; il sert une fois. Deux envois d'un même porteur peuvent décoder en parallèle : le sémaphore global (2 décodages) répond 429 DEBIT à l'excédent. Aucun argent. Les corps d'erreur sont l'enveloppe v2 (`ReponseErreur`), hors 404 natif.",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "FACULTATIF et IGNORÉ, quelle que soit sa valeur : l'index de chaque photo vient de `photoIds` (`POST /api/identifier`). Seul paramètre toléré ; tout autre est un `400 champ-inconnu`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "La photo est retenue 120 s en mémoire ; `photoId` (32 hexadécimaux) la désigne.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponsePhotoAvantScan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` : champ-inconnu, content-length).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMAGE (`detail` trop-lourde) : plus de 2 Mio annoncés ou reçus. Rendu avant toute lecture quand `Content-Length` l'annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "IMAGE (`detail` type) : `Content-Type` hors JPEG, PNG, WebP, ou octets qui ne sont pas ce qu'il annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMAGE (`detail` illisible ou dimensions) : image tronquée, corrompue, animée, de plus de 12 millions de pixels ou de 4 096 px de côté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plafond horaire du porteur, une photo déjà en cours d'envoi pour ce porteur, 4 lectures en cours dans le service, ou 2 décodages en cours (avec `reessayerDans`, en-tête `Retry-After` aussi). Rien n'est lu pour les trois premiers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : les routes v2 sont fermées (garde d'index) ou le magasin est injoignable (rien de retenu ; réessayer).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/banc/etiquette": {
       "post": {
         "operationId": "etiqueterBanc",
@@ -5352,6 +5489,22 @@
                   "impression-indeterminee",
                   null
                 ]
+              },
+              "photosRecues": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7
+                },
+                "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+                "description": "AJOUT FACULTATIF (lot PHOTOS-MULTIPLES, 7d) : présent SEULEMENT quand la requête portait `photoIds` (ou l'ancien `photoId`) et que `V2_PHOTOS_MULTIPLES=1`. Les index reçus (ceux de `imageUrls`), en ordre croissant ; `[]` si aucune photo n'a été retrouvée."
+              },
+              "photoRecue": {
+                "type": "boolean",
+                "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+                "description": "AJOUT FACULTATIF, présent avec `photosRecues` : vrai SI ET SEULEMENT SI l'index 0 a été reçu."
               }
             },
             "required": [
@@ -6159,6 +6312,39 @@
             "type": "string",
             "pattern": "^\\d+\\.\\d+\\.\\d+$"
           },
+          "photoIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7,
+                  "description": "La position de la photo dans `imageUrls` (elle doit exister), un seul `photoId` par index."
+                },
+                "photoId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                }
+              },
+              "required": [
+                "index",
+                "photoId"
+              ],
+              "additionalProperties": false
+            },
+            "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+            "description": "Les photos envoyées AVANT le scan par `POST /api/photo` (administrateur, phase 1), de 1 à 8 couples, un par index de `imageUrls`. Drapeau `V2_PHOTOS_MULTIPLES=1` : éteint, le champ est inconnu et ignoré comme aujourd'hui. Un `photoId` bien formé mais absent, expiré, d'un autre porteur ou déjà servi est IGNORÉ sans erreur ; `400 ENTREE` (`detail` `photo-ids`) : `photoId` et `photoIds` ensemble, un doublon d'index, un index absent de `imageUrls` ou hors de 0..7, plus de 8 couples (ou aucun), un `photoId` mal formé (pas 32 hexadécimaux) DANS `photoIds`, ou toute autre forme absurde. Une requête refusée avant l'analyse ne consomme pas ses photos. L'analyse répond `photosRecues` et `photoRecue`. Un `identifier-lot` (plusieurs cartes) accepte `photoIds` avec les index de SES `imageUrls`. Dès qu'au moins une photo est reçue, le serveur ne télécharge AUCUNE image chez Vinted pour ce scan, et le modèle ne reçoit que les photos reçues."
+          },
+          "photoId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+            "description": "L'ancien `photoId` seul : il vaut l'index 0 de `photoIds` (les deux ensemble sont refusés : `photo-ids`). Mal formé : `400 ENTREE` `photo-id`."
+          },
           "empreintes": {
             "type": "array",
             "maxItems": 8,
@@ -6472,6 +6658,29 @@
           "success",
           "etat",
           "photo"
+        ],
+        "additionalProperties": false
+      },
+      "ReponsePhotoAvantScan": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "photoId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "À donner à `POST /api/identifier` (`photoIds`) dans les 30 secondes qui suivent l'envoi. Sert UNE fois, pour ce porteur seulement."
+          },
+          "expireDans": {
+            "const": 30,
+            "description": "Secondes pendant lesquelles la photo peut être servie (120 secondes au plus en mémoire, scan compris)."
+          }
+        },
+        "required": [
+          "success",
+          "photoId",
+          "expireDans"
         ],
         "additionalProperties": false
       },

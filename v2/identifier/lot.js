@@ -21,6 +21,7 @@ const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { natureDuMotif } = require('../argent/nature-du-motif');
 
+const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan (octets) à la place des URLs, quand il y en a
 const { cartesParScanMax } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
 const journal = (ou, e) => console.error(`❌ [v2 lot] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
@@ -41,8 +42,15 @@ function compterLot(cartes, cfg) {
     const n = s => cartes.filter(c => c.statut === s).length;
     return { cartesVues: cartes.length, identifiees: n('identifiee'), aTrancher: n('a-trancher'), introuvables: n('introuvable'), lectureLiveMax: cfg.lot.lectureLiveMax };
 }
-const zoneValide = z => (z && typeof z === 'object' && Number.isInteger(z.photo) && z.photo >= 0 && ['x', 'y', 'w', 'h'].every(k => typeof z[k] === 'number' && z[k] >= 0 && z[k] <= 1)
-    ? { photo: z.photo, x: z.x, y: z.y, w: z.w, h: z.h } : null);
+// `zone.photo` est un index d'`imageUrls`. Quand des photos ont été REÇUES, le lecteur n'a vu que celles-là, en liste compactée (imagesDeLaChaine) : sa `photo` N est sa N-ième image, soit `photosRecues[N].index` dans `imageUrls`.
+// Une `photo` hors de cette liste n'est pas devinée : zone sans photo (null).
+const zoneValide = (z, entree) => {
+    if (!(z && typeof z === 'object' && Number.isInteger(z.photo) && z.photo >= 0 && ['x', 'y', 'w', 'h'].every(k => typeof z[k] === 'number' && z[k] >= 0 && z[k] <= 1))) return null;
+    const recues = entree && Array.isArray(entree.photosRecues) && entree.photosRecues.length ? entree.photosRecues : null;
+    if (!recues) return { photo: z.photo, x: z.x, y: z.y, w: z.w, h: z.h };
+    const p = [...recues].sort((a, b) => a.index - b.index)[z.photo];
+    return p ? { photo: p.index, x: z.x, y: z.y, w: z.w, h: z.h } : null;
+};
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 
 /**
@@ -72,7 +80,7 @@ async function executerLot(p) {
         return { sortie: { resultat: { issue: 'panne', analyse: null, erreur: { code } }, facturation: p.facturationDe('panne', { admin, rendu: r.rendu, question: false, cause: r.cause }), lecture: null, desaccord: null } };
     };
     // 1. la lecture des cartes — APRÈS le débit, sans crédit dans la requête
-    const reqLot = { body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId: p.userId },
+    const reqLot = { body: { imageUrls: imagesDeLaChaine(entree), title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId: p.userId },
                      ip: p.ip, headers: {}, scanIdImpose: scanId };
     let resultats;
     try { resultats = await dansUnScan(async () => deps.identifierLot(reqLot)); }
@@ -117,7 +125,7 @@ async function executerLot(p) {
         motifs[i] = a && typeof a.motif === 'string' ? a.motif : null;
         const c = a && a.issue !== 'panne' && a.analyse && Array.isArray(a.analyse.cartes) ? a.analyse.cartes[0] : null;
         if (!c) { pannes.push(a && a.erreur ? a.erreur.code : 'SERVEUR'); return { index: i, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'panne-lecture', etat: null, prixLive: null, zone: null }; }
-        return { ...c, index: i, zone: zoneValide(corpsDe(r).zone) };
+        return { ...c, index: i, zone: zoneValide(corpsDe(r).zone, entree) };
     });
     const lectures = resultats.map(r => ({ codeLangue: codeLangueDe(corpsDe(r)), reverseStrategie: corpsDe(r).reverse && typeof corpsDe(r).reverse.strategie === 'string' ? corpsDe(r).reverse.strategie : null }));
     // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), la nature du remboursement est `jumeaux`, UNE unité par carte

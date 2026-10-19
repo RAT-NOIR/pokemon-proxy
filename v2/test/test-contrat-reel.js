@@ -20,7 +20,7 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1' });      // RESOUDRE-CARDMARKET : le drapeau est allumé pour les serveurs de ce banc (éteint, la route n'existe pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1', V2_PHOTOS_MULTIPLES: '1' });      // RESOUDRE-CARDMARKET et PHOTOS-MULTIPLES : les drapeaux sont allumés pour les serveurs de ce banc (éteints, ces routes n'existent pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
 const EXT = cfg.origines.extension, SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
@@ -841,6 +841,32 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             await jouer(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, CH, { corps: { url: adresse('30th-Celebration-JP', 'Dark-Tyranitar-m6aTRR-144') }, entetes: extH(xa3.jeton) });
             await raw('catalogue_produits').deleteOne({ idProduct: ID_D }); await raw('numeros_cartes').deleteOne({ idProduct: ID_D });      // le catalogue de ce banc reste celui que les blocs suivants attendent
         }
+        // PHOTOS-MULTIPLES (7d) : une photo de l'annonce AVANT le scan (administrateur, drapeau V2_PHOTOS_MULTIPLES=1 allumé dans `cfg` pour ce banc) puis `photoIds` dans POST /api/identifier ; tous les statuts documentés sont joués par
+        // un état réel (hors 503 : garde d'index). Le 404 du non-administrateur est le 404 NATIF d'une route inexistante (corps non JSON) : consigné hors contrat, comme pour /api/banc/photo, et non documenté dans `responses`.
+        {
+            const R = 'POST /api/photo', CH = '/api/photo';
+            const sharp = require('sharp');
+            const JPG = await sharp(crypto.randomBytes(120 * 160 * 3), { raw: { width: 120, height: 160, channels: 3 } }).jpeg().toBuffer();
+            const adm = await compte({ role: 'administrateur' }), xa = await instLiee(adm);
+            const recue = await jouerBinaire(V, R, 'une photo reçue (200, photoId), sans aucun paramètre', 200, CH, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'paramètre inconnu (400 champ-inconnu ; `?index=` est ignoré)', 400, `${CH}?scanId=x`, JPG, 'image/jpeg', extH(xa.jeton));
+            await jouerBinaire(V, R, 'sans Authorization', 401, `${CH}?index=0`, JPG, 'image/jpeg', extH(null));
+            {   // installation sans compte administrateur : le 404 NATIF d'une route inexistante (corps non JSON) — hors schéma par construction, déclaré comme tel
+                const rn = await jouerBinaireBrut(V, `${CH}?index=0`, JPG, 'image/jpeg', extH(x.jeton));
+                consignerHorsContrat(R, 'installation sans compte administrateur (404 natif d\'une route inexistante, corps non JSON)', rn);
+                if (rn.statut !== 404 || rn.json !== null) mal.push(`${R} [non-administrateur] : statut ${rn.statut}, attendu le 404 natif non JSON`);
+            }
+            await jouerBinaire(V, R, 'plus de 2 Mio (413)', 413, `${CH}?index=1`, JPG, 'image/jpeg', extH(xa.jeton), { longueurAnnoncee: 2 * 1024 * 1024 + 1 });
+            await jouerBinaire(V, R, 'Content-Type hors JPEG/PNG/WebP (415)', 415, `${CH}?index=1`, JPG, 'text/plain', extH(xa.jeton));
+            await jouerBinaire(V, R, 'image tronquée (422)', 422, `${CH}?index=1`, JPG.subarray(0, 60), 'image/jpeg', extH(xa.jeton));
+            const adm3 = await compte({ role: 'administrateur' }), xa3 = await instLiee(adm3);
+            await plafonner('photo-avant-scan', 'compte', adm3.c._id, 600);
+            await jouerBinaire(V, R, 'plafond de 600 par heure atteint (DEBIT, Retry-After)', 429, `${CH}?index=0`, JPG, 'image/jpeg', extH(xa3.jeton));
+            // POST /api/identifier avec la photo reçue (200, réponse conforme) et avec un photoId mal formé (400 ENTREE)
+            mode = 'affirmee';
+            await ident(V, 'POST /api/identifier avec une photo reçue (photoIds)', 200, xa.jeton, corpsId({ photoIds: [{ index: 0, photoId: recue.json.photoId }] }));
+            await ident(V, 'POST /api/identifier avec un photoId mal formé (400 ENTREE photo-id)', 400, xa.jeton, corpsId({ photoId: 'zz' }));
+        }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
@@ -868,6 +894,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
             'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'POST /api/banc/photo': { chemin: `/api/banc/photo?scanId=${fauxId}`, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'POST /api/photo': { chemin: '/api/photo?index=0', entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'POST /api/banc/resoudre-cardmarket': { chemin: '/api/banc/resoudre-cardmarket', corps: { url: 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Banc-Set/Tropius-PBL001' }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
