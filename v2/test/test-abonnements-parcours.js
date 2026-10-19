@@ -24,8 +24,9 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
     // `attendre` du banc : la lecture de la carte pendant l'essai est mise en cache 30 s par le serveur (carte.js) ; le banc n'attend pas pour de vrai, il VIDE donc ce cache à chaque attente
     // `extension` : l'origine et les en-têtes de l'extension, passés au parcours (jamais en dur) ; `origineAcceptee` : celle que le faux serveur admet sur /api/installation (comme le cors() hérité : 403
     // « Origine non autorisée » pour toute autre) ; `retarder`/`apresAttentes` : des événements tenus en arrière (la livraison de Stripe en retard) jusqu'à la N-ième attente ; `attenteAvoirS` : la borne de l'attente de l'avoir.
-    const jouer = async ({ faux, cfgSurcharge = {}, places = 2, accompte = null, rendreCassee = null, seulement = null, roles = ROLES, completer = null, avant = null, extension = { entetes: { origin: EXT_SERVEUR } }, origineAcceptee = EXT_SERVEUR, retarder = null, apresAttentes = 3, attenteAvoirS = 30 } = {}) => {
-        faux = faux || creerFauxStripe({ clientsParHorloge: 3 }); Cl.brancher(faux); A.semerPrix(faux); Carte.vider();       // la limite de Stripe : 3 clients par horloge
+    const jouer = async ({ faux, cfgSurcharge = {}, places = 2, accompte = null, rendreCassee = null, seulement = null, roles = ROLES, completer = null, avant = null, extension = { entetes: { origin: EXT_SERVEUR } }, origineAcceptee = EXT_SERVEUR, retarder = null, apresAttentes = 3, attenteAvoirS = 30, lenteurListeMs = 0, delEchoue = null } = {}) => {
+        // l'horloge du parcours est VIRTUELLE (injectée) : chaque attente l'avance de sa durée, et `lenteurListeMs` fait durer chaque lecture des avoirs chez Stripe (les attentes en temps réel, pas en pas additionnés)
+        let virt = 0;        faux = faux || creerFauxStripe({ clientsParHorloge: 3 }); Cl.brancher(faux); A.semerPrix(faux); Carte.vider();       // la limite de Stripe : 3 clients par horloge
         // un faux Stripe neuf repart de cus_000001 et evt_000001 : les clients des passages précédents ne doivent pas entrer en collision (index unique), ni leurs événements passer pour des doublons du registre (le registre de production, lui, n'est jamais purgé)
         await require('../db').col('comptes').updateMany({}, { $set: { stripeClient: null } }); for (const c of ['abo_evenements', 'abo_places', 'abo_essais', 'abo_primes']) await require('../db').col(c).deleteMany({});
         const srv = await A.serveur(A.cfgAbo({ V2_FONDATEURS_PLACES: '2', ...cfgSurcharge }), [require('../transport/monter'), require('../installations/monter'), require('../comptes/monter'), require('../argent/monter')]);       // + installations et comptes : le scénario de clôture crée et lie une installation
@@ -48,8 +49,9 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
         // à chaque avance d'horloge : combien d'avoirs le client du parrain porte-t-il chez Stripe, et combien de primes sont « appliquées » (c'est ce que le statut du parrain affiche) ?
         const avances = []; const avanceOrig = faux.testHelpers.testClocks.advance, delOrig = faux.testHelpers.testClocks.del;
         faux.testHelpers.testClocks.advance = async (...a) => { const parrain = [...faux.E.customers.values()].find(c => c.email === 'parcours-parrain@exemple.invalid'); avances.push({ avoirs: parrain ? (parrain.transactions || []).filter(t => t.amount < 0).length : null, appliquees: await require('../db').col('abo_primes').countDocuments({ etat: 'applique' }), apresNotes: trace.length }); return avanceOrig.apply(faux.testHelpers.testClocks, a); };
-        faux.testHelpers.testClocks.del = async (...a) => { trace.push('<<horloge supprimée>>'); return delOrig.apply(faux.testHelpers.testClocks, a); };
-        const p = fabrique({ stripe: faux, api, comptes, prix: A.PRIX, attendre: async () => { Carte.vider(); await livre(); }, trace: traces, delaiS: 6, pasS: 3, places, codeFondateurs: A.CODE_FONDATEURS, extension, attenteAvoirS });
+        faux.testHelpers.testClocks.del = async (...a) => { trace.push('<<horloge supprimée>>'); if (delEchoue) throw delEchoue; return delOrig.apply(faux.testHelpers.testClocks, a); };
+        if (lenteurListeMs) { const liste = faux.customers.listBalanceTransactions; faux.customers.listBalanceTransactions = async (...a) => { virt += lenteurListeMs; return liste.apply(faux.customers, a); }; }
+        const p = fabrique({ stripe: faux, api, comptes, prix: A.PRIX, attendre: async ms => { virt += ms || 0; Carte.vider(); await livre(); }, trace: traces, delaiS: 6, pasS: 3, places, codeFondateurs: A.CODE_FONDATEURS, extension, attenteAvoirS, maintenantMs: () => virt });
         if (avant) await avant(comptes);
         if (completer) completer(p);
         let res; try { res = await p.jouer({ seulement }); } finally { await p.nettoyer(); await srv.fermer(); Cl.debrancher(); }
@@ -77,7 +79,19 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
     H.v('   l\'origine vient de l\'ARGUMENT, pas du code : une autre origine passée est celle qui part (et le scénario réussit)', [cloture.res.filter(r => !r.ok).map(r => r.nom), parInstall(cloture.appelsApi).every(a => a.origin === autre)], [[], true]);
     const sansExt = await jouer({ seulement: ['essaiClosInstallation'], roles: ROLES, extension: null });
     H.v('   sans origine d\'extension fournie : le scénario ÉCHOUE en le disant, et n\'appelle jamais la route avec une origine devinée', [sansExt.res.some(r => !r.ok && /extension/.test(r.nom + r.detail)), parInstall(sansExt.appelsApi).length], [true, 0]);
-    H.v('   l\'outil lit l\'origine de l\'extension dans la configuration (par son NOM), pas dans une constante', [extensionDeLaConfig().entetes.origin === EXT_SERVEUR, /^chrome-extension:\/\//.test(extensionDeLaConfig().entetes.origin)], [true, true]);
+    H.v('   l\'outil lit l\'origine de l\'extension dans la configuration réelle (par son NOM)', [extensionDeLaConfig().entetes.origin === EXT_SERVEUR, /^chrome-extension:\/\//.test(extensionDeLaConfig().entetes.origin)], [true, true]);
+    const fabriquee = 'chrome-extension://origineFabriqueeDuBanc';
+    const extFabriquee = extensionDeLaConfig(() => ({ origines: { extension: fabriquee } }));
+    const clFab = await jouer({ seulement: ['essaiClosInstallation'], roles: ROLES, extension: extFabriquee, origineAcceptee: fabriquee });
+    H.v('   la configuration est SUBSTITUÉE par une origine fabriquée : l\'outil la lit, et l\'installation part avec CETTE origine (pas avec une constante)', [extFabriquee.entetes.origin, clFab.res.filter(r => !r.ok).map(r => r.nom), parInstall(clFab.appelsApi).length >= 4 && parInstall(clFab.appelsApi).every(a => a.origin === fabriquee)], [fabriquee, [], true]);
+    let illisible = null; try { extensionDeLaConfig(() => ({ origines: { extension: 'https://rat-market.fr' } })); } catch (e) { illisible = e.message; }
+    H.vrai('   une origine qui n\'est pas celle d\'une extension est refusée', illisible && /illisible/.test(illisible));
+    // la connexion : le fetch est substitué par le banc (statut inattendu, cookie absent, cookie présent)
+    const { connecter } = require('../admin/abonnements/parcours-test');
+    const faireReponse = (status, cookies = []) => async () => ({ status, headers: { getSetCookie: () => cookies, get: () => null } });
+    const essaye = async f => { try { return await connecter('https://essai.exemple', { role: 'parrain', email: 'x@exemple.invalid', motDePasse: 'mdp-du-banc' }, f); } catch (e) { return `ERREUR ${e.message}`; } };
+    H.v('   la connexion de l\'outil : un statut inattendu est refusé en le nommant (rôle et HTTP, ni mot de passe ni cookie), un 200 sans cookie aussi, un 200 avec cookie rend le cookie de session', [await essaye(faireReponse(403)), await essaye(faireReponse(200, [])), await essaye(faireReponse(200, ['rm_session=abcDEF123_-; Path=/; HttpOnly']))],
+        ['ERREUR connexion du compte « parrain » refusée (HTTP 403)', 'ERREUR connexion du compte « parrain » : pas de cookie de session', 'rm_session=abcDEF123_-']);
     H.v('   les en-têtes de l\'outil : ceux que l\'on passe l\'emportent sur ceux du site (l\'origine du site n\'est qu\'un défaut), et sans corps le site n\'est pas annoncé',
         [entetesDeLApi({ cookie: 'rm_session=x', entetes: { origin: autre }, avecCorps: true }).origin, entetesDeLApi({ cookie: 'rm_session=x', entetes: {}, avecCorps: true }).origin, entetesDeLApi({ cookie: 'rm_session=x', entetes: {}, avecCorps: false }).origin],
         [autre, 'https://rat-market.fr', undefined]);
@@ -89,6 +103,16 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
     H.v('   l\'avoir qui n\'arrive JAMAIS : l\'attente est bornée, la raison est imprimée (chez Stripe, dans le statut), et l\'horloge n\'est PAS avancée vers la facture du parrain', [echecAvoir.length, /avoir/.test((echecAvoir[0] || {}).nom + (echecAvoir[0] || {}).detail), /Stripe/.test((echecAvoir[0] || {}).detail || ''), /statut/.test((echecAvoir[0] || {}).detail || ''), jamais.avances.length], [1, true, true, true, 1]);
     const iFin = jamais.trace.findIndex(l => /ÉCHEC/.test(l)), iDel = jamais.trace.indexOf('<<horloge supprimée>>');
     H.vrai('   et l\'horloge n\'est supprimée qu\'APRÈS ses contrôles (le constat d\'échec est écrit avant la suppression)', iFin >= 0 && iDel > iFin);
+    // B-M2 : l'attente de l'avoir se mesure en TEMPS RÉEL (horloge injectée) : chaque lecture chez Stripe dure 5 s, chaque pas 3 s ; 30 s de borne = 4 à 5 lectures, pas 11 (les pas additionnés)
+    const lente = await jouer({ seulement: ['parrainage'], roles: ROLES, retarder: filleulTarde, apresAttentes: -1, attenteAvoirS: 30, lenteurListeMs: 5000 });
+    const lectures = lente.faux.E.appels.filter(a => a.nom === 'customers.listBalanceTransactions').length;
+    H.v('l\'attente de l\'avoir se mesure en temps RÉEL : lectures de 5 s et pas de 3 s, bornées à 30 s (peu de lectures, pas onze pas additionnés), l\'échec est dit', [lectures <= 9, lente.res.filter(r => !r.ok).length], [true, 1]);
+    console.log(`   (lectures des avoirs chez Stripe pendant l'attente : ${lectures})`);
+    // B-M4 : un échec de suppression de l'horloge est NOTÉ (type et code, jamais le message qui pourrait citer une clé)
+    const suppr = await jouer({ seulement: ['essaiSansCarte'], roles: ['sanscarte'], delEchoue: Object.assign(new Error('clé sk_test_SECRETDUBANC refusée'), { type: 'StripeAPIError', code: 'api_error' }) });
+    const noteDel = suppr.res.filter(r => !r.ok);
+    H.v('un échec de suppression de l\'horloge n\'est plus avalé : il est noté avec son type et son code, sans le message ni aucune clé', [noteDel.length, noteDel[0] && /StripeAPIError api_error/.test(noteDel[0].detail), noteDel[0] && /sk_test_|SECRETDUBANC/.test(noteDel[0].nom + noteDel[0].detail + suppr.trace.join(' '))], [1, true, false]);
+    H.vrai('   et la limite du statut est écrite en clair dans le compte rendu du parrainage', tardif.trace.some(l => /statut du parrain ne compte pas encore ce mois offert \(limite connue, notée sans bloquer/.test(l) && /bloquent l'avoir chez Stripe et la facture suivante du parrain à 0/.test(l)));
 
     // ── 1 bis. STRIPE-DECISIONS : les deux scénarios de l'essai sans carte, une horloge par scénario, les préconditions limitées aux rôles joués ──
     for (const mot of ['essai sans carte : Pro pendant l\'essai, aucune carte enregistrée', 'essai sans carte, J+14 : abonnement terminé, retour au quota gratuit', 'essai sans carte, J+14 : aucune facture payée', 'carte ajoutée pendant l\'essai : l\'essai continue',

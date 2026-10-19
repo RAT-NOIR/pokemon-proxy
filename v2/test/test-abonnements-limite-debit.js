@@ -78,6 +78,12 @@ function instrumenter(faux, etat) {
         const e2 = Reessai.envelopper({ customers: ressource }, { dormir: dormirU, delaisMs: [600, 600], budgetMs: 1000 });
         n = 0; dort.length = 0; err = null; try { await e2.customers.toujours(); } catch (e) { err = e; }
         H.v('   le budget est partagé par tout le traitement : le second appel d\'un même traitement trouve le budget entamé', [dort, n], [[600], 2]);
+        // le budget borne aussi la durée RÉELLE : chaque appel dure 400 ms (horloge injectée), le budget est de 1 000 ms — les attentes planifiées seules (100 + 200 + 400 = 700) y tiendraient
+        let horloge = 0; n = 0; dort.length = 0; err = null;
+        const lente = { async toujours() { n++; horloge += 400; throw limite429(); } };
+        const e3 = Reessai.envelopper({ customers: lente }, { dormir: async ms => { dort.push(ms); horloge += ms; }, delaisMs: [100, 200, 400, 800], budgetMs: 1000, maintenantMs: () => horloge });
+        try { await e3.customers.toujours(); } catch (e) { err = e; }
+        H.v('   le budget compte le temps RÉEL des appels : après 400 ms d\'appel + 100 ms d\'attente + 400 ms d\'appel (900), un essai de plus (900 + 200 > 1 000) n\'a pas lieu', [err && err.type, n, dort, horloge <= 1000], ['StripeRateLimitError', 2, [100], true]);
     }
 
     // ── 1. la rafale : dix filleuls du même parrain paient ensemble, la limite est de 6 appels par seconde ──

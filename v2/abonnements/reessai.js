@@ -19,7 +19,10 @@ function estLimite(e) {
  * @param {object} stripe  le client (SDK ou faux de banc)
  * @param {{ dormir?: (ms:number)=>Promise, delaisMs?: number[], budgetMs?: number }} options
  */
-function envelopper(stripe, { dormir = dormirVraiment, delaisMs = DELAIS_MS, budgetMs = BUDGET_MS } = {}) {
+function envelopper(stripe, { dormir = dormirVraiment, delaisMs = DELAIS_MS, budgetMs = BUDGET_MS, maintenantMs = Date.now } = {}) {
+    // le budget borne aussi la durée RÉELLE (relecture A-M1) : les appels eux-mêmes durent (jusqu'à 20 s de délai du SDK), pas seulement les attentes planifiées. L'échéance se compte en temps réel depuis le
+    // début du traitement de l'événement (cet objet est créé à son début) ; une fois passée, plus aucun nouvel essai.
+    const debut = maintenantMs();
     const etat = { attenduMs: 0 };
     const reessayer = (f, cible) => async (...args) => {
         for (let essai = 0; ; essai++) {
@@ -27,6 +30,7 @@ function envelopper(stripe, { dormir = dormirVraiment, delaisMs = DELAIS_MS, bud
             catch (e) {
                 const delai = delaisMs[Math.min(essai, delaisMs.length - 1)];
                 if (!estLimite(e) || essai >= delaisMs.length || etat.attenduMs + delai > budgetMs) throw e;
+                if ((maintenantMs() - debut) + delai > budgetMs) throw e;
                 etat.attenduMs += delai;
                 await dormir(delai);
             }

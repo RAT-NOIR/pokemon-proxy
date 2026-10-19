@@ -30,8 +30,8 @@ function analyserArguments(argv) {
 /** Les rôles dont les scénarios choisis ont besoin (tous les scénarios si aucun n'est choisi) : la table est fermée, un scénario inconnu a déjà été refusé par analyserArguments. */
 function rolesRequis(seulement) { return [...new Set((seulement || SCENARIOS).flatMap(k => ROLES_DES_SCENARIOS[k]))]; }
 /** L'origine de l'extension, lue dans la configuration de l'API par le NOM du champ (`origines.extension`), jamais recopiée ici : c'est la seule que POST /api/installation admet. */
-function extensionDeLaConfig() {
-    const origin = require('../../config').lireConfig({}).origines.extension;
+function extensionDeLaConfig(lire = env => require('../../config').lireConfig(env)) {          // `lire` : substituable par un banc (une configuration fabriquée)
+    const origin = lire({}).origines.extension;
     if (typeof origin !== 'string' || !/^chrome-extension:\/\/\S+$/.test(origin)) throw new Error('origine de l\'extension illisible dans la configuration (origines.extension)');
     return { entetes: { origin } };
 }
@@ -40,8 +40,8 @@ function entetesDeLApi({ cookie = null, entetes = {}, avecCorps = false }) {
     return { ...(cookie ? { cookie } : {}), ...(avecCorps ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}), ...entetes };
 }
 /** Une ouverture de session par compte : le cookie rm_session, jamais affiché. */
-async function connecter(essai, c) {
-    const r = await fetch(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+async function connecter(essai, c, fetchFn = fetch) {          // `fetchFn` : substituable par un banc
+    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
     if (r.status !== 200) throw new Error(`connexion du compte « ${c.role} » refusée (HTTP ${r.status})`);
     const m = (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(';').match(/rm_session=([A-Za-z0-9_-]+)/);
     if (!m) throw new Error(`connexion du compte « ${c.role} » : pas de cookie de session`);
