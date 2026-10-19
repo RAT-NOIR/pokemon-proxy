@@ -133,15 +133,21 @@ async function moisOfferts(parrainId, maintenant = new Date()) {
     return col('abo_primes').countDocuments({ parrainId, etat: 'applique', appliqueLe: { $gt: fenetreDebut(maintenant), $lte: maintenant } });
 }
 /** Reprend TOUTES les primes en attente d'un parrain (appelé quand son abonnement change ou qu'une de ses factures est payée) : les avoirs s'additionnent. */
-async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date() }) {
+// GARDE D'EXPIRATION DE LA TENUE (relecture, M4) : le verrou expire seul après VERROU_MS ; une tenue qui traite plusieurs primes vérifie, AVANT CHAQUE prime, le temps écoulé depuis sa prise. Passé la moitié de VERROU_MS,
+// elle s'arrête : le verrou est rendu proprement (finally de sousVerrou) et les primes restantes restent en attente pour la reprise suivante, avec une lecture des soldes neuve. Jamais de renouvellement silencieux
+// du verrou, jamais une prime traitée sans verrou ni avec une lecture plus vieille que la tenue. `maintenantMs` : l'horloge de la tenue (injectable pour les bancs).
+async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date(), maintenantMs = Date.now }) {
     const lister = () => col('abo_primes').find({ parrainId, etat: { $in: ATTENTES } }).sort({ creeLe: 1 }).toArray();
     if (!(await lister()).length) return { etat: 'ignore', raison: 'rien-en-attente' };            // rien en attente : ni verrou, ni lecture chez Stripe
     // UNE tenue du verrou du parrain pour toutes ses primes en attente : elles partagent UNE lecture des soldes, qui meurt avec la tenue (voir appliquer)
     return sousVerrou(parrainId, async () => {
         const primes = await lister();                                                         // relues SOUS le verrou
-        const tenue = { soldes: new Map() };
+        const tenue = { soldes: new Map() }, priseLe = maintenantMs();
         let faites = 0;
-        for (const p of primes) { const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant, tenue }); if (r.etat === 'applique') faites++; }
+        for (const p of primes) {
+            if (maintenantMs() - priseLe > VERROU_MS / 2) { signaler(`primes : tenue du verrou du parrain ${String(parrainId)} arrêtée à mi-expiration — les primes restantes attendent la reprise suivante`); break; }
+            const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant, tenue }); if (r.etat === 'applique') faites++;
+        }
         return primes.length ? { etat: faites ? 'applique' : 'en-attente', faites } : { etat: 'ignore', raison: 'rien-en-attente' };
     });
 }
