@@ -128,8 +128,26 @@ const TAMPON_78 = 'x'.repeat(78);
     v = await G.verifierContrat({ api, avant: frosmoth(null, VARIANTES, null, false), apres: frosmoth(null, HORS, null, false) });
     verifier('bout en bout : une variante de ligne hors liste fermée (league+bidule), entrée servie = 1 variante perdue NOUVELLE', [v.nouveaux.length, v.nouveaux[0]?.idProduct, /variante/.test(v.nouveaux[0]?.motif || '')], [1, 450608, true]);
     v = await G.verifierContrat({ api, avant: frosmoth('League'), apres: frosmoth('League', HORS) });
-    verifier('bout en bout : la même variante sur une image à partage : decider ÉCARTE l\'entrée (partage incohérent) — ni refus ni variante perdue, mais un produit « sans entrée après » MONTRÉ',
-        [v.nouveaux.length, v.disparus.map(d => d.idProduct), G.ligneContrat(v).includes('sans entrée après')], [0, [450608], true]);
+    verifier('TOUR 1, bout en bout sur la vraie decider : la même variante sur une image à partage — decider ÉCARTE l\'entrée (produit « sans entrée après » montré) MAIS le contrôle par LIGNE la bloque : 1 nouveau',
+        [v.nouveaux.map(n => n.idProduct), /variante « league\+bidule » hors de la liste de l'API \(ligne cartes_produits\)/.test(v.nouveaux[0]?.motif || ''), v.disparus.map(d => d.idProduct), G.ligneContrat(v).includes('sans entrée après')], [[450608], true, [450608], true]);
+    v = await G.verifierContrat({ api, avant: frosmoth('League', HORS), apres: frosmoth('League', HORS, 'Rare') });
+    verifier('TOUR 1 : ligne déjà hors liste avant ET après (le lot touche le set par ailleurs) : persistant, 0 nouveau', [v.nouveaux.length, v.persistants.map(p => p.idProduct)], [0, [450608]]);
+    v = await G.verifierContrat({ api, avant: frosmoth(null, VARIANTES, null, false), apres: frosmoth(null, HORS, null, false) });
+    verifier('TOUR 1 : variante hors liste ET variante perdue pour le même produit : UNE seule entrée dans nouveaux', v.nouveaux.map(n => n.idProduct), [450608]);
+
+    // ── 9 ter. TOUR 1 — le contrôle PAR LIGNE, en isolation (clé : idProduct) ; ce que estVariante dit de chaque forme, lu de l'API
+    const lg = (idProduct, variante) => ({ _id: `l${idProduct}`, carteId: 1, idProduct, variante });
+    const vl = G.violationsParLigne(api, [lg(1, 'staff+bidule'), lg(2, 'normale'), lg(3, 'jumbo'), lg(4, 'league+place-1'), lg(5, null), { _id: 'x', idProduct: 6 }, lg(7, ''), lg(8, ' staff '), lg(9, 'staff-prerelease'), lg(10, 'Staff'), lg(11, 12)]);
+    verifier('par ligne : seules les valeurs que estVariante refuse (après trim) sont des violations', [...vl.keys()].sort((a, b) => a - b), [1, 7, 9, 10, 11]);
+    verifier('par ligne : normale et jumbo ne sont pas traitées à part — estVariante les admet', [api.estVariante('normale'), api.estVariante('jumbo'), vl.has(2), vl.has(3)], [true, true, false, false]);
+    verifier('par ligne : null, absente, et « staff » entouré d\'espaces (trim comme visuels.js) : conformes', [vl.has(5), vl.has(6), vl.has(8)], [false, false, false]);
+    verifier('par ligne : la forme ancienne « staff-prerelease » (admise par decider via normaliserVariante) est une violation selon estVariante — voir le rapport', [vl.has(9), api.estVariante('staff-prerelease')], [true, false]);
+    c = G.comparerContrat(new Map([[1, { ok: true, motif: null, variantePerdue: false }]]), new Map([[1, { ok: true, motif: null, variantePerdue: false, ligneHorsListe: 'staff+bidule', sansEntree: true }]]));
+    verifier('comparerContrat : violation par ligne après seulement, produit sans entrée : 1 nouveau', [c.nouveaux.length, c.nouveaux[0]?.motif, c.disparus.length], [1, 'variante « staff+bidule » hors de la liste de l\'API (ligne cartes_produits)', 1]);
+    c = G.comparerContrat(new Map([[1, { ok: true, variantePerdue: true, ligneHorsListe: 'x+y' }]]), new Map([[1, { ok: true, variantePerdue: true, ligneHorsListe: 'x+y' }]]));
+    verifier('comparerContrat : violation par ligne avant ET après : persistant, 0 nouveau', [c.nouveaux.length, c.persistants.length], [0, 1]);
+    c = G.comparerContrat(new Map(), new Map([[1, { ok: true, variantePerdue: true, ligneHorsListe: 'x+y' }]]));
+    verifier('comparerContrat : variantePerdue ET ligneHorsListe pour le même produit : une seule entrée', c.nouveaux.length, 1);
     v = await G.verifierContrat({ api, avant: frosmoth('League'), apres: frosmoth('League') });
     verifier('bout en bout : rien ne change = aucun set rejoué, aucun refus', [v.slugs.length, v.nouveaux.length, v.entreesApres], [0, 0, 0]);
 

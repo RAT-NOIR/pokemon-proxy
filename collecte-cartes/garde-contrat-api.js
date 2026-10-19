@@ -120,6 +120,19 @@ function jugerEntree(api, e, varianteLigne = null) {
     return { ok: true, motif: perdue ? `variante « ${varianteLigne} » perdue : hors de la liste fermée de l'API (ou sans preuve), l'entrée est servie avec variante null` : null, variantePerdue: perdue, idProduct: e.idProduct };
 }
 
+/** TOUR 1 — le contrôle PAR LIGNE, indépendant de toute entrée. Une ligne cartes_produits viole le contrat si sa `variante` n'est ni null ni absente et que `estVariante` de l'API refuse sa valeur
+ * normalisée comme visuels.js:110 (texte() = trim, chaîne non vide ; un non-texte devient null, donc refusé). Rend Map idProduct → la variante fautive (texte). Clé : idProduct (un produit servi
+ * a UNE variante dans l'archive ; deux lignes d'un même produit, la première violation gagne). normale et jumbo ne sont pas traitées à part : c'est ce que estVariante en dit. */
+function violationsParLigne(api, lignes) {
+    const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
+    const m = new Map();
+    for (const l of lignes) {
+        if (l.variante === null || l.variante === undefined) continue;
+        if (!api.estVariante(texte(l.variante)) && !m.has(l.idProduct)) m.set(l.idProduct, typeof l.variante === 'string' ? l.variante : JSON.stringify(l.variante));
+    }
+    return m;
+}
+
 /** Rejoue la décision de l'API sur les sets nommés, puis lireEntree sur chaque entrée. @returns Map idProduct → { ok, motif, variantePerdue, sets } */
 async function contratDesSets({ api, sets, docs, lignes, slugs }) {
     const resultat = new Map();
@@ -153,6 +166,12 @@ async function contratDesSets({ api, sets, docs, lignes, slugs }) {
         const deja = resultat.get(e.idProduct);
         if (!deja || gravite(j) > gravite(deja)) resultat.set(e.idProduct, j);       // deux entrées pour un produit : la pire l'emporte
     }
+    // TOUR 1 : le contrôle par ligne, qui ne dépend d'aucune entrée (decider peut écarter l'entrée entière). Un produit sans entrée reçoit une ligne `sansEntree`.
+    for (const [id, variante] of violationsParLigne(api, lignesR)) {
+        const j = resultat.get(id);
+        if (j) j.ligneHorsListe = variante;
+        else resultat.set(id, { ok: true, motif: null, variantePerdue: false, ligneHorsListe: variante, sansEntree: true, idProduct: id, sets: [...(setsDe.get(id) || [])].sort() });
+    }
     return resultat;
 }
 
@@ -167,13 +186,18 @@ function comparerContrat(avantMap, apresMap) {
         const refusAvant = Boolean(b) && !b.ok;
         if (!a.ok) { (refusAvant ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets }); continue; }
         if (refusAvant) resolus.push({ idProduct: id, motif: b.motif });
-        if (a.variantePerdue) ((b && b.variantePerdue) ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets });
+        // variante interdite : perdue à travers l'entrée, OU hors liste sur la ligne (TOUR 1). Un seul rang par produit, jamais deux pour la même chose.
+        if (a.variantePerdue || a.ligneHorsListe !== undefined) {
+            const motif = a.ligneHorsListe !== undefined ? `variante « ${a.ligneHorsListe} » hors de la liste de l'API (ligne cartes_produits)` : a.motif;
+            const avant = Boolean(b) && (b.variantePerdue || b.ligneHorsListe !== undefined);
+            (avant ? persistants : nouveaux).push({ idProduct: id, motif, sets: a.sets });
+        }
     }
     for (const [id, b] of avantMap) if (!b.ok && !apresMap.has(id)) resolus.push({ idProduct: id, motif: b.motif });
     // Information, NE BLOQUE PAS : un produit qui avait une entrée admise et n'en a plus après (decider l'écarte : marquage de partage incohérent, repli refusé…). Un retrait voulu entre ici aussi
     // (il est déjà compté par la garde des comptes, qui exige son annonce) ; c'est au lecteur de juger. On le montre pour qu'un visuel perdu ne soit jamais silencieux.
     const disparus = [];
-    for (const [id, b] of avantMap) if (b.ok && !apresMap.has(id)) disparus.push({ idProduct: id, sets: b.sets });
+    for (const [id, b] of avantMap) if (b.ok && !b.sansEntree && (!apresMap.has(id) || apresMap.get(id).sansEntree)) disparus.push({ idProduct: id, sets: b.sets });
     return { nouveaux, persistants, resolus, disparus };
 }
 
@@ -185,11 +209,11 @@ async function verifierContrat({ api, avant, apres }) {
         const [mAvant, mApres] = [await contratDesSets({ api, sets: A.sets, docs: A.cartes, lignes: A.cartesProduits, slugs }), await contratDesSets({ api, sets: B.sets, docs: B.cartes, lignes: B.cartesProduits, slugs })];
         const c = comparerContrat(mAvant, mApres);
         const setsFautifs = [...new Set(c.nouveaux.flatMap(n => n.sets || []))].filter(s => slugs.includes(s)).sort();
-        return { slugs, ...c, setsFautifs, entreesAvant: mAvant.size, entreesApres: mApres.size };
+        return { slugs, ...c, setsFautifs, entreesAvant: [...mAvant.values()].filter(x => !x.sansEntree).length, entreesApres: [...mApres.values()].filter(x => !x.sansEntree).length };
     } catch (e) { throw /^garde contrat API/.test(e.message) ? e : refus(e.stack ? `${e.message}` : e); }
 }
 
 /** La ligne imprimée et journalisée. */
 const ligneContrat = (v) => `contrat API : ${v.slugs.length} set(s) rejoué(s) · refus nouveaux ${v.nouveaux.length} · persistants ${v.persistants.length} · résolus ${v.resolus.length}${v.disparus?.length ? ` · sans entrée après (information, ne bloque pas) ${v.disparus.length} : ${v.disparus.slice(0, 8).map(d => d.idProduct).join(',')}${v.disparus.length > 8 ? ',…' : ''}` : ''}`;
 
-module.exports = { chargerApi, projeter, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, jugerEntree, verifierContrat, ligneContrat, canon };
+module.exports = { chargerApi, projeter, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };
