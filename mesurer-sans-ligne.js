@@ -17,11 +17,10 @@ const path = require('path');
 const J = require('./collecte-cartes/jointure');
 const T = require('./collecte-cartes/table-sets');
 const N = require('./collecte-cartes/cle-nom-attaques');
-const W = require('./collecte-cartes/wikitext');
+const { creerRejeu } = require('./collecte-cartes/rejeu-set');
 const r2 = require('./collecte-cartes/r2');
 const PJ = require('./collecte-cartes/preuves-jointure');
 const MS = require('./collecte-cartes/matiere-speciale');
-const { planSansPage } = require('./collecte-cartes/plan-sans-page');
 const { champSur, apparier } = require('./collecte-cartes/lecture-sure');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
@@ -73,55 +72,18 @@ const L = n => JSON.parse(fs.readFileSync(path.join(CACHE, `${n}.json`), 'utf8')
     const lignesDe = exp => [...T.TABLE_MAIN.map(l => ({ l, t: 'MAIN' })), ...T.TABLE_AUTO.map(l => ({ l, t: 'AUTO' })), ...T.TABLE_SANS_PAGE.map(l => ({ l, t: 'SANS_PAGE' }))].filter(x => x.l.exp === exp);
     const clesEnergie = /^(basic\s+)?(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy|dragon|colorless|rainbow)?\s*energy$/i;
 
-    // ---------------- la Setlist de la ligne, relue sur l'archive R2 ----------------
+    // ---------------- le rejeu de joindre() pour une ligne : UNE copie, collecte-cartes/rejeu-set.js (poser-lignes-rejeu.js la partage) ----------------
     let r2Pret = false;
-    async function setlistDe(l, slug) {
-        const s = setParId.get(slug); const cle = s?.bulba?.cleR2;
-        if (!cle || l.bulba?.sansPage) return null;
-        if (!r2Pret) { await r2.verifierBucket(process.env.R2_BUCKET_BRUT); r2Pret = true; }
-        const contenu = await r2.lireTexte(process.env.R2_BUCKET_BRUT, cle);
-        const lec = W.entreesDeLaSetlist(contenu, l.bulba);
-        const pages = etatPages.get(slug)?.pages || [];
-        const etatDe = new Map(pages.map(p => [p.titre, p]));
-        const noms = [].concat(l.bulba.expansion);
-        const jetons = J.jetonsDeSetlist(lec.entrees, noms);
-        const parNumero = new Map();
-        let sansNumero = 0;
-        for (const e of lec.entrees) {
-            const n = J.numeroDeSetlist(e, jetons, l.bulba.prefixesParJeton || null, l.bulba.prefixesParSection || null);
-            if (n == null) { sansNumero++; continue; }
-            const pg = etatDe.get(e.titre);
-            (parNumero.get(J.cleNumero(n)) || parNumero.set(J.cleNumero(n), []).get(J.cleNumero(n))).push({ titre: e.titre, section: e.section, page: pg ? (pg.etat === 'manquant' ? 'manquant' : (pg.pageid ?? 'lue')) : 'non-visitee' });
-        }
-        const ignorees = {}; for (const sct of lec.sections) for (const brut of sct.ignorees) { const k = W.natureIgnoree(brut); ignorees[k] = (ignorees[k] || 0) + 1; }
-        const numerique = [...parNumero.keys()].map(k => parseInt(String(k).replace(/\D/g, ''), 10)).filter(Number.isFinite);
-        return { maxNumero: numerique.length ? Math.max(...numerique) : null, nNumeros: parNumero.size, revid: setParId.get(slug)?.bulba?.revid ?? null, chemin: lec.chemin, lues: lec.lues, retenues: lec.entrees.length, sansNumero, nManquants: pages.filter(p => p.etat === 'manquant').length, nPages: pages.length, ignorees, parNumero, entrees: lec.entrees, pages };
-    }
-
+    const rejeuDeLaLigne = creerRejeu({ cartes, setParId, etatPages, lireTexte: async cle => { if (!r2Pret) { await r2.verifierBucket(process.env.R2_BUCKET_BRUT); r2Pret = true; } return r2.lireTexte(process.env.R2_BUCKET_BRUT, cle); } });
     // ---------------- REJEU de joindre() à blanc, par ligne vérifiée ----------------
     async function rejeu(exp) {
         const res = { lignes: [], joints: new Map(), setlists: new Map() };
         for (const { l, t } of lignesDe(exp)) {
             if (!l.verifie) continue;
-            const TIRAGE = l.bulba?.tirage || 'jp';
             const slug = l.slugSet || l.code;
+            const TIRAGE = l.bulba?.tirage || 'jp';
             const produits = produitsDe(exp);
-            let Jr, sx = null;
-            if (l.bulba?.sansPage) {
-                const noms = [].concat(l.bulba.expansion);
-                const cartesDuSet = cartes.filter(c => (c.impressions || []).some(i => i.tirage === TIRAGE && noms.includes(i.expansion)));
-                Jr = planSansPage({ cartesDuSet, produitsLus: produits, L: l, slugCardmarket: l.slugSet || null }).J;
-            } else {
-                let cartesDuSet = parSlug.get(slug) || [];
-                sx = await setlistDe(l, slug);
-                if (l.bulba?.numerosDepuisSetlist && sx) {
-                    // exactement collecteur-texte.js l. 359-367 : les impressions VIRTUELLES de la Setlist, sans doublon de celles que la carte porte
-                    const V = J.impressionsDepuisSetlist(sx.entrees, sx.pages, { tirage: TIRAGE, expansionBulba: l.bulba.expansion, prefixesParJeton: l.bulba.prefixesParJeton || null, prefixesParSection: l.bulba.prefixesParSection || null });
-                    const cleImp = i => `${i.tirage}|${i.expansion}|${J.cleNumero(String(i.numero ?? ''))}`;
-                    cartesDuSet = cartesDuSet.map(c => { const v = V.parCarte.get(c._id); if (!v) return c; const deja = new Set((c.impressions || []).map(cleImp)); return { ...c, impressions: [...(c.impressions || []), ...v.filter(i => !deja.has(cleImp(i)))] }; });
-                }
-                Jr = J.joindre(cartesDuSet, produits, { idExpansion: exp, expansionBulba: l.bulba.expansion, deck: l.bulba.deck || null, suffixesParDeck: l.bulba.suffixesParDeck || null, prefixesParDeck: l.bulba.prefixesParDeck || null, prefixesParJeton: l.bulba.prefixesParJeton || null, prefixesParSection: l.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: l.slugSet || null });
-            }
+            const { Jr, sx } = await rejeuDeLaLigne.joindreLigne({ l, exp, produits });
             if (sx) res.setlists.set(l.code, sx);
             // le DIFF que réécrirait un rejeu (collecteur-texte.js --reparser) : ce que le filtre de régénération efface (preuves-jointure.js) contre ce que joindre() refait.
             // Les cartes du set = celles que la collecte relit (sets ∋ slug ; sans page : celles qui déclarent l'expansion).
