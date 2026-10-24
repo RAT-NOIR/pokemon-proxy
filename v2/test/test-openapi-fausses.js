@@ -148,8 +148,8 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
 }
 { // LOT-SANS-PRIX : un lot dont aucune carte n'affiche de prix est rendu en entier ; la fausse le montre, et le schéma REFUSE ce qui sort des listes fermées
     const ls = lire('lot-sans-prix.json'), lt = lire('lot.json');
-    H.v('LOT-SANS-PRIX : 3 cartes identifiées, aucune ne porte de prix (prixGuide null, pas de clé prixRepli), compte du lot cohérent',
-        [ls.analyse.statut, ls.analyse.cartes.map(c => [c.statut, c.carte.prixGuide, 'prixRepli' in c]), ls.analyse.lot], ['lot', [['identifiee', null, false], ['identifiee', null, false], ['identifiee', null, false]], { cartesVues: 3, identifiees: 3, aTrancher: 0, introuvables: 0, lectureLiveMax: 5 }]);
+    H.v('LOT-SANS-PRIX : 3 cartes identifiées, aucune ne porte de prix (prixGuide null, pas de clé prixRepli, prixLive null : langue non lue), compte du lot cohérent',
+        [ls.analyse.statut, ls.analyse.cartes.map(c => [c.statut, c.carte.prixGuide, 'prixRepli' in c, c.prixLive]), ls.analyse.lot], ['lot', [['identifiee', null, false, null], ['identifiee', null, false, null], ['identifiee', null, false, null]], { cartesVues: 3, identifiees: 3, aTrancher: 0, introuvables: 0, lectureLiveMax: 5 }]);
     H.v('LOT-SANS-PRIX : le lot est rendu en entier — { debite 0, rembourse true, motif sans-prix, raisonNonRembourse null, poche jour } et offre.restant remonté', [ls.facturation, ls.offre.restant], [{ debite: 0, reserve: 0, rembourse: true, motif: 'sans-prix', raisonNonRembourse: null, poche: 'jour' }, 10]);
     H.v('contrôle : le lot de 4 cartes AU GUIDE (lot.json) reste compté (motif lot, debite 1, rembourse false)', [lt.facturation.motif, lt.facturation.debite, lt.facturation.rembourse], ['lot', 1, false]);
     H.v('contrôle : la fausse saine est acceptée', valider(ls, ref('ReponseAnalyse'), doc).ok, true);

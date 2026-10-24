@@ -34,6 +34,9 @@ const piege = new Proxy({}, { get() { throw new Error('boum'); } });
 const regle = cs => sur(() => L.lotAfficheUnPrix(cs));
 
 H.v('A1. deux cartes identifiées sans AUCUN guide : aucun prix affiché', regle([idf(null), idf(null)]), false);
+const live = { idProduct: 1, langues: [2], reverseHolo: false, etatVise: null };
+H.v('A11. I1 : une carte sans guide ni repli dont la réponse sert une instruction de prix EN DIRECT (prixLive objet, même à etatVise null) : un prix est possiblement affiché', [regle([idf(null, { prixLive: live }), idf(null)]), regle([idf(null, { prixLive: { ...live, etatVise: 'EX' } })])], [true, true]);
+H.v('A12. I1 : prixLive absent (undefined) ou d\'une forme inconnue : un doute, le lot est compté ; seule la valeur null (langue non lue) vaut « sans instruction »', [regle([idf(null, { prixLive: undefined })]), regle([idf(null, { prixLive: 'x' })]), regle([idf(null, { prixLive: null })])], [true, true, false]);
 H.v('A2. une carte au guide parmi des cartes sans guide : un prix est affiché', regle([idf(null), idf(guide), idf(null)]), true);
 H.v('A3. une carte sans guide mais qui porte un prixRepli servi : un prix est affiché (le repli compte, comme afficheUnPrix)', regle([idf(null, { prixRepli: repli }), idf(null)]), true);
 H.v('A4. un prixGuide ABSENT (ni objet ni null : on ne sait pas) : jamais « sans prix » — une garde écrite par ce qu\'elle autorise', regle([idf(undefined), idf(null)]), true);
@@ -61,7 +64,11 @@ const cand = id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc L
 const aff = id => ({ statutHttp: 200, corps: { success: true, question: null, carte: carteCorps(id, false), etat: ETAT, candidats: [cand(id)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 } });
 const qst = ids => ({ statutHttp: 200, corps: { success: true, question: { etat: 'en-attente', delaiHeures: 24 }, carte: carteCorps(ids[0], true), etat: ETAT, candidats: ids.map(cand), classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 } });
 const introRes = () => ({ statutHttp: 200, corps: { success: false, natureRefus: 'refus-delibere', motifRefus: 'aucun-prix' } });
-const sansN = n => Array.from({ length: n }, (_, i) => aff(SANS[i % SANS.length]));
+// LOT-SANS-PRIX tour 1 (I1) : une carte dont la LANGUE est lue reçoit une instruction de prix en direct (`prixLive` objet, adaptateur.js) : l'extension peut montrer un prix, le lot reste compté. `affNL` : langue NON lue
+// (codeLangue null => prixLive null) ; c'est la seule forme d'une carte « positivement sans prix ». `sansN` = langue non lue (les lots rendus) ; `lueN` = langue lue (les lots comptés).
+const affNL = id => { const r = aff(id); return { ...r, corps: { ...r.corps, codeLangue: null } }; };
+const sansN = n => Array.from({ length: n }, (_, i) => affNL(SANS[i % SANS.length]));
+const lueN = n => Array.from({ length: n }, (_, i) => aff(SANS[i % SANS.length]));
 
 async function inst(o = {}) {
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }), o);
@@ -123,6 +130,16 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const an = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         H.v('   la ligne `analyses` garde la facturation décidée (rendue, motif sans-prix)', [an && an.facturation.rembourse, an && an.facturation.motif], [true, 'sans-prix']);
     }
+    // ── B1 bis (I1). les MÊMES cartes sans guide, mais dont la langue est LUE : la réponse sert une instruction de prix en direct (prixLive), l'extension peut montrer un prix que le serveur ne verra jamais : le lot reste COMPTÉ
+    {
+        const x = await inst(); lot(lueN(3));
+        const r = await poster(sv.url, x.jeton), j = r.json || {};
+        H.v('B1b. I1 : 3 cartes sans guide ni repli, langue lue (prixLive objet) : compté { debite 1, rembourse false, motif lot }, essai 2, aucun remboursement, aucun compteur', [r.statut, j.facturation, await essais(x), (await rendus(x)).length, await compteur(x, 'constate')], [200, FACT({ debite: 1, rembourse: false, motif: 'lot' }), 2, 0, 0]);
+        H.v('   la réponse sert bien l\'instruction en direct sur ces cartes (sans guide, sans repli)', j.analyse.cartes.map(c => [c.carte.prixGuide, 'prixRepli' in c, c.prixLive && typeof c.prixLive.idProduct]), [[null, false, 'number'], [null, false, 'number'], [null, false, 'number']]);
+        const y = await inst(); lot([...sansN(2), lueN(1)[0]]);
+        const r2 = await poster(sv.url, y.jeton);
+        H.v('   UNE seule carte à langue lue parmi des cartes à langue non lue suffit à garder le lot compté', [r2.json.facturation.motif, r2.json.facturation.rembourse, await essais(y)], ['lot', false, 2]);
+    }
     // ── B2. UNE carte au guide : le lot est compté, comme aujourd'hui
     {
         const x = await inst(); lot([...sansN(2), aff(AVEC)]);
@@ -156,7 +173,13 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const r2 = await poster(sv.url, y.jeton), j2 = r2.json || {};
         const q = await raw('questions_v2').findOne({ _id: `${j2.scanId}:2` });
         H.v('   une question dont AUCUN candidat n\'a de guide : le lot est remboursé (motif sans-prix), essai 3, net 0', [r2.statut, j2.facturation, await essais(y), await net(y)], [200, FACT(), 3, 0]);
-        H.v('   la question est tout de même posée (lot: true, en attente) et répondable : répondre par un candidat 200 identifiee, rien n\'est coûté ni rendu de plus', [q && q.etat, q && q.lot, (await repondre(sv.url, y.jeton, { scanId: j2.scanId, carte: 2, choix: (j2.analyse.cartes.find(c => c.index === 2).question.choix[0].id) })).statut, await essais(y), await net(y), (await rendus(y)).length], ['en-attente', true, 200, 3, 0, 1]);
+        const choixOui = { scanId: j2.scanId, carte: 2, choix: (j2.analyse.cartes.find(c => c.index === 2).question.choix[0].id) };
+        const oui = await repondre(sv.url, y.jeton, choixOui);
+        H.v('   la question est tout de même posée (lot: true, en attente) et répondable : répondre par un candidat 200 identifiee, rien n\'est coûté ni rendu de plus', [q && q.etat, q && q.lot, oui.statut, await essais(y), await net(y), (await rendus(y)).length], ['en-attente', true, 200, 3, 0, 1]);
+        // M1 : la facturation servie à cette réponse OUI redit le remboursement déjà fait (rembourse true, même motif sans-prix, rien débité), jamais le « lot » générique d'un lot payé ; le rejeu de la même réponse la redit à l'identique
+        const ouiRejeu = await repondre(sv.url, y.jeton, choixOui);
+        const fRendu = { debite: 0, reserve: 0, rembourse: true, motif: 'sans-prix', raisonNonRembourse: null };
+        H.v('   M1 : la réponse OUI sert { debite 0, rembourse true, motif sans-prix } ; son rejeu aussi ; toujours UN seul tracé, net 0, constats 1, déclarations 0, essai 3', [oui.json.facturation, ouiRejeu.statut, ouiRejeu.json.facturation, (await rendus(y)).length, await net(y), await compteur(y, 'constate'), await compteur(y, 'declare'), await essais(y)], [fRendu, 200, fRendu, 1, 0, 1, 0, 3]);
         // une confirmation à UN candidat sans prix + un introuvable : rien n'affiche de prix => remboursé ; refuser la confirmation ne rend RIEN de plus (la claim du lot est la même)
         const z = await inst(); lot([introRes(), qst([SANS[7]])]);
         const r3 = await poster(sv.url, z.jeton), j3 = r3.json || {};
@@ -230,7 +253,7 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const orig = argentReg.reserverQuestion; const e = console.error; console.error = () => { };
         try {
             argentReg.reserverQuestion = async () => { throw new Error('panne simulée : réservation'); };
-            const x = await inst(); lot([aff(SANS[0]), qst([SANS[1], SANS[2]])]);
+            const x = await inst(); lot([affNL(SANS[0]), qst([SANS[1], SANS[2]])]);
             const r = await poster(sv.url, x.jeton), j = r.json || {};
             H.v('B9. lot sans prix dont la réservation de question échoue : 500 SERVEUR, facturation rendue (rembourse true, pas une raison « deja-rembourse »), essai 3, net 0, UN tracé',
                 [r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await net(x), (await rendus(x)).length], [500, 'SERVEUR', true, null, 3, 0, 1]);
@@ -247,7 +270,7 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const y = await inst(); lot([aff(AVEC), aff(AVEC2)]);
         const r2 = await poster(sv.url, y.jeton);
         H.v('    lot de deux cartes au guide : compté, motif lot', [r2.json.facturation.motif, r2.json.facturation.rembourse, await essais(y)], ['lot', false, 2]);
-        const z = await inst(); lot([introRes(), introRes(), aff(SANS[3])]);
+        const z = await inst(); lot([introRes(), introRes(), affNL(SANS[3])]);
         const r3 = await poster(sv.url, z.jeton);
         H.v('    2 introuvables + 1 identifiée sans prix : rendu, motif sans-prix (une carte lue, mais aucun prix affiché)', [r3.json.facturation.motif, r3.json.facturation.rembourse, await essais(z)], ['sans-prix', true, 3]);
     }

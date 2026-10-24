@@ -4689,7 +4689,7 @@
           "lectureLiveMax"
         ],
         "additionalProperties": false,
-        "description": "Le compte d'un lot. Argent (LOT-SANS-PRIX, 2026-10-24) : un lot dont AUCUNE carte n'affiche de prix (ni `prixGuide`, ni `prixRepli`, aucun candidat de question au `prixGuide`) est remboursé en entier (`facturation { debite 0, rembourse true, motif sans-prix }`), comme un lot entièrement introuvable ; UNE carte qui affiche un prix suffit à le garder compté (`motif lot`). Un prix lu en direct par l'extension sur une carte de lot ne compte pas : le serveur ne le voit pas."
+        "description": "Le compte d'un lot. Argent (LOT-SANS-PRIX, 2026-10-24) : un lot dont AUCUNE carte n'affiche de prix (ni `prixGuide`, ni `prixRepli`, ni instruction de prix en direct `prixLive`, aucun candidat de question au `prixGuide`) est remboursé en entier (`facturation { debite 0, rembourse true, motif sans-prix }`), comme un lot entièrement introuvable ; UNE carte qui affiche un prix suffit à le garder compté (`motif lot`). Une carte à langue lue porte un `prixLive` : l'extension peut lire un prix que le serveur ne verra jamais, le lot reste compté."
       },
       "RegleVerdict": {
         "type": "object",

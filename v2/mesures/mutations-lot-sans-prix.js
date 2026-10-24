@@ -15,7 +15,7 @@ const MUTANTS = [
     ['la branche n\'est jamais prise (un lot sans prix reste compté)', LOT, BRANCHE, "} else if (false) {", BANC],
     ['la branche est toujours prise (un lot qui affiche un prix est rendu)', LOT, BRANCHE, "} else if (true) {", BANC],
     ['les candidats d\'une question ne comptent plus (un candidat au guide ne suffit pas)', LOT, "return !Array.isArray(c.candidats) || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) }));", "return !Array.isArray(c.candidats);", BANC],
-    ['le guide d\'une carte identifiée ne compte plus (seul le repli)', LOT, "afficheUnPrix({ prixRendu: prixServi(c.carte), repli:", "afficheUnPrix({ prixRendu: false, repli:", BANC],
+    ['le guide d\'une carte identifiée ne compte plus (seul le repli)', LOT, "prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli:", "prixRendu: instructionEnDirect(c), repli:", BANC],
     ['le repli servi ne compte plus (seul le guide)', LOT, "repli: avecRepliAnalyse(c).prixRepli ?? null })", "repli: null })", BANC],
     ['un prixGuide absent (undefined) est lu « sans prix »', LOT, "p.prixGuide !== null : true", "p.prixGuide != null : true", BANC],
     ['un introuvable compte pour un prix affiché', LOT, "if (c.statut === 'introuvable') return false;", "if (c.statut === 'introuvable') return true;", BANC],
@@ -29,6 +29,14 @@ const MUTANTS = [
     ['un lot refusé au plafond n\'a plus le motif plafond-jour', LOT, "motif: r.cause === 'plafond-jour' ? 'plafond-jour' : 'sans-prix', raisonNonRembourse:", "motif: 'sans-prix', raisonNonRembourse:", BANC],
     ['l\'administrateur passe après le remboursement (il serait rendu)', LOT, "if (admin) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\n        else {\n            const r = await rendre('sans-prix');", "if (false) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\n        else {\n            const r = await rendre('sans-prix');", BANC],
     ['la réservation de question qui échoue ne sait plus que le lot est rendu', LOT, " || sansPrixRendu);", ");", BANC],
+    // tour 1 (I1) : l'instruction de prix en direct
+    ['I1 : une instruction de prix en direct (langue lue) ne compte plus (le lot est rendu)', LOT, "prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli:", "prixRendu: prixServi(c.carte), repli:", BANC],
+    ['I1 : un prixLive absent (undefined) est lu « aucune instruction »', LOT, "const instructionEnDirect = c => c.prixLive !== null;", "const instructionEnDirect = c => c.prixLive != null;", BANC],
+    // tour 1 (M1) : la facturation d'une réponse sur un lot déjà rendu
+    ['M1 : la décision du lot rendu n\'est plus écrite sur ses questions', LOT, "        if (sansPrixRendu) {\n            try {", "        if (false) {\n            try {", BANC],
+    ['M1 : un lot rendu à l\'analyse ne redit plus son motif (lot générique)', 'argent/questions.js', "motif: r.motif === 'sans-prix' ? 'sans-prix' : 'lot' });", "motif: 'lot' });", BANC],
+    ['M1 : la décision écrite ne porte plus son motif', 'argent/questions.js', "...(i.rendu && i.motif === 'sans-prix' ? { motif: 'sans-prix' } : {}), ", "", BANC],
+    ['M1 : le rejeu d\'un OUI sur un lot rendu à l\'analyse sert la facturation générique', 'argent/questions.js', "if (decide) return habillerLot(corps(l), decisionDeLotIssue(decide.lotIssue));", "if (false) return habillerLot(corps(l), decisionDeLotIssue(decide.lotIssue));", BANC],
 ];
 
 function rejouer({ seulement = null, journal = console.log } = {}) {

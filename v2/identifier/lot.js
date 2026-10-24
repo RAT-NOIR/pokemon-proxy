@@ -57,14 +57,17 @@ const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.
 
 // LOT-SANS-PRIX (décision de l'éditeur, 2026-10-24) : « Un scan qui n'affiche aucun prix ne compte pas dans le quota. » Un lot dont AUCUNE carte n'affiche de prix est rendu en entier ; la règle d'une carte est afficheUnPrix
 // (prix-repli.js, la seule), appelée avec ce que la réponse SERT : un `prixGuide` non nul (prixRendu) ou un `prixRepli` servi (repli, calculé par avecRepliAnalyse, la fonction même que la route applique à cette analyse).
-// 🔑 Écrite par ce qu'elle AUTORISE : « aucun prix » n'est dit que d'une carte POSITIVEMENT sans prix (un introuvable ; une identifiée dont le prixGuide est exactement null et sans repli ; une question dont CHAQUE candidat a un
+// 🔑 Écrite par ce qu'elle AUTORISE : « aucun prix » n'est dit que d'une carte POSITIVEMENT sans prix (un introuvable ; une identifiée dont le prixGuide est exactement null, sans repli, et dont la langue n'est pas lue (prixLive exactement null : aucune lecture en direct dictée) ; une question dont CHAQUE candidat a un
 // prixGuide exactement null). Un champ absent, un statut inconnu, une carte illisible, une lecture qui lève : le doute est « un prix est affiché » — le lot reste compté, jamais rendu sur un doute.
 const prixServi = p => (p && typeof p === 'object' ? p.prixGuide !== null : true);             // prixGuide undefined (on ne sait pas) : servi
+// LOT-SANS-PRIX tour 1 (I1) : une carte dont la réponse sert une instruction de prix EN DIRECT (`prixLive` objet : la langue est lue, adaptateur.js prixLiveDe) peut montrer un prix lu par l'extension sur Cardmarket, que le serveur ne
+// verra jamais (retour-live refuse un lot). C'est un prix POSSIBLEMENT affiché : le lot reste compté. Seule la valeur `null` (langue non lue : rien à lire) vaut « aucune instruction » ; tout le reste est un doute.
+const instructionEnDirect = c => c.prixLive !== null;
 function carteAfficheUnPrix(c) {
     try {
         if (!c || typeof c !== 'object') return true;
         if (c.statut === 'introuvable') return false;                                          // aucune fiche, aucun prix à montrer
-        if (c.statut === 'identifiee') return afficheUnPrix({ prixRendu: prixServi(c.carte), repli: avecRepliAnalyse(c).prixRepli ?? null });
+        if (c.statut === 'identifiee') return afficheUnPrix({ prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli: avecRepliAnalyse(c).prixRepli ?? null });
         // une question : si l'un de ses candidats montre un prix au client, le lot en affiche un (le candidat est montré avec son prixGuide)
         if (c.statut === 'a-trancher') return !Array.isArray(c.candidats) || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) }));
         return true; // statut inconnu : un prix est supposé affiché
@@ -213,6 +216,12 @@ async function executerLot(p) {
                 catch (e) { journal('décision du lot', e); }
             }
             return res;
+        }
+        // LOT-SANS-PRIX tour 1 (M1) : le lot est DÉJÀ rendu et toutes ses questions sont posées : la décision est écrite sur ses lignes (`lotIssue`, comme le fait le lot rendu après coup). Chaque réponse (OUI, NON, rejeu) redit alors
+        // le remboursement fait (`rembourse: true`, motif `sans-prix`), sans rien débiter ni rendre une seconde fois ; le balayage ne rejuge pas un lot qui porte sa décision. Une écriture qui échoue laisse l'état d'avant (jamais une panne).
+        if (sansPrixRendu) {
+            try { await col('questions_v2').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: { rendu: true, raison: 'sans-prix', motif: 'sans-prix', le: new Date() } } }); }
+            catch (e) { journal('décision du lot sans prix', e); }
         }
     }
     const analyse = { statut: 'lot', cartes: ordonnerParValeur(cartes), lot: lotInfo, raison: null };

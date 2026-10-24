@@ -153,7 +153,7 @@ async function ecrireIssue(scanId, issue) {
     await col('questions_v2').updateMany({ scanId, lot: true, lotIssue: { $exists: false } }, { $set: { lotIssue: issue } });
     await col('questions_v2').updateMany({ scanId, lot: true }, { $unset: { lotARendre: '' } });
 }
-const decisionDeLotIssue = i => ({ rendu: Boolean(i.rendu), ...(i.raison === 'plafond-jour' ? { raisonNonRembourse: 'plafond-jour', debite: i.debite || 1 } : {}),
+const decisionDeLotIssue = i => ({ rendu: Boolean(i.rendu), ...(i.rendu && i.motif === 'sans-prix' ? { motif: 'sans-prix' } : {}), ...(i.raison === 'plafond-jour' ? { raisonNonRembourse: 'plafond-jour', debite: i.debite || 1 } : {}),
     ...(Number.isInteger(i.plafondJour) ? { declaration: { rendue: Boolean(i.rendu), raison: i.rendu ? null : 'plafond-declarations', plafondJour: i.plafondJour } } : {}) });      // la décision écrite redit son plafond au rejeu
 // Rend { rendu, raisonNonRembourse?, debite?, aRendre?, attente? }. Appelée quand une question de LOT est réglée, au rejeu d'un NON, et par le balayage.
 async function rendreLotSiConfirmationsRefusees(scanId, porteur, credit, cfg, maintenant) {
@@ -272,7 +272,7 @@ async function reprendreReglementsDeLots(cfg, maintenant, bilan) {
 // La facturation d'un lot JUGÉ (réponse et rejeu) : rendu, ou refusé au plafond ; rien pour le reste (le lot reste payé à juste titre).
 function facturationDuLot(r) {
     if (!r) return null;
-    if (r.rendu) return facturation({ rembourse: 1, motif: 'lot' });
+    if (r.rendu) return facturation({ rembourse: 1, motif: r.motif === 'sans-prix' ? 'sans-prix' : 'lot' });          // LOT-SANS-PRIX (M1) : un lot rendu à l'analyse redit son motif
     if (r.raisonNonRembourse === 'plafond-jour') return facturation({ debite: r.debite || 1, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
     return null;
 }
@@ -327,6 +327,10 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
         if (l.lot && !(l.reponse && l.reponse.aucune === false)) {                                    // un NON de lot : le jugement est IDEMPOTENT, il redit sa décision (ou la prend, s'il n'a pas eu lieu)
             const lot = await rendreLotSiConfirmationsRefusees(l.scanId, porteur, l.credit, cfg, maintenant);
             return habillerLot(corps(l), lot);
+        }
+        if (l.lot) {                                                                                  // LOT-SANS-PRIX (M1) : le rejeu d'un OUI sur un lot rendu à l'analyse redit le remboursement déjà fait (lecture seule, la décision est écrite)
+            const decide = await col('questions_v2').findOne({ scanId: l.scanId, lot: true, 'lotIssue.rendu': true, 'lotIssue.motif': 'sans-prix' });
+            if (decide) return habillerLot(corps(l), decisionDeLotIssue(decide.lotIssue));
         }
         return corps(l);
     }

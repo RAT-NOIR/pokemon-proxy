@@ -49,14 +49,7 @@
           "declare": "Bon état",
           "retenu": "EX"
         },
-        "prixLive": {
-          "idProduct": 9000013,
-          "langues": [
-            7
-          ],
-          "reverseHolo": false,
-          "etatVise": "EX"
-        },
+        "prixLive": null,
         "zone": {
           "photo": 0,
           "x": 0.04,
@@ -109,14 +102,7 @@
           "declare": "Bon état",
           "retenu": "EX"
         },
-        "prixLive": {
-          "idProduct": 9000022,
-          "langues": [
-            7
-          ],
-          "reverseHolo": false,
-          "etatVise": "EX"
-        },
+        "prixLive": null,
         "zone": {
           "photo": 0,
           "x": 0.52,
@@ -169,14 +155,7 @@
           "declare": "Bon état",
           "retenu": "NM"
         },
-        "prixLive": {
-          "idProduct": 9000012,
-          "langues": [
-            7
-          ],
-          "reverseHolo": false,
-          "etatVise": "NM"
-        },
+        "prixLive": null,
         "zone": {
           "photo": 0,
           "x": 0.04,
