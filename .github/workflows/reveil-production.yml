@@ -19,7 +19,8 @@ concurrency:
 
 jobs:
   ping:
-    runs-on: ubuntu-latest
+    # Ubuntu FIXÉ (ubuntu-latest passe à Ubuntu 26 : décision du testeur, 2026-10-24)
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - name: Ping /ping seulement entre 8 h et minuit, heure de Paris
