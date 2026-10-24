@@ -3193,7 +3193,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: motifIA, rembourse: rendu });
             return res.json({ success: false, error: "Analyse IA échouée (voir logs Render pour la cause exacte)" });
         }
-        require('./v2/identifier/etat-photos').fusionner(cardInfo, await etatPromesse);      // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information)
+        require('./v2/identifier/etat-photos').fusionner(cardInfo, await require('./v2/identifier/etat-photos').attendre(etatPromesse));      // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information) ; au plus 2 000 ms d'attente après la lecture
 
         // 1. Cache Mongo (sauté si debug=true, pratique pour retester une carte sans attendre 24h)
         let resultat = debug ? null : await lireCache(cardInfo.name, cardInfo.number, cardInfo.language);
@@ -3790,6 +3790,7 @@ async function gererIdentifier(req, res) {
                 defautsVus: Array.isArray(c.defautsVus) ? c.defautsVus : null,
                 // ETAT-TITRE : l'état que la LECTURE (qui reçoit le titre) a rendu, IGNORÉ — une information journalisée, jamais une entrée ("NM|haute")
                 etatIdentification: c.etatIdentification ? `${c.etatIdentification.etatEstime ?? '?'}|${c.etatIdentification.etatConfiance ?? '?'}` : null,
+                etatCause: typeof c.etatCause === 'string' ? c.etatCause : null,           // pourquoi l'état est nul quand l'appel d'état n'a pas rendu : sans-image, depense, arret, panne, illisible, delai
                 // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
                 // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
                 // devient mesurable maintenant qu'il est journalisé.
@@ -3858,7 +3859,8 @@ async function gererIdentifier(req, res) {
             return res.json({ success: false, ...champsDeRefus(motifIA, rendu), error: "Analyse IA échouée" });
         }
         // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information dans `etatIdentification`) ; sa panne rend un état nul, jamais celui de la lecture
-        require('./v2/identifier/etat-photos').fusionner(cardInfo, await etatPromesse);
+        // Une fois la lecture rendue, l'état attend AU PLUS 2 000 ms de plus (etat-photos.js : attendre) ; au-delà, état nul de cause « delai ». L'appel n'est jamais repris, sa dépense reste comptée.
+        require('./v2/identifier/etat-photos').fusionner(cardInfo, await require('./v2/identifier/etat-photos').attendre(etatPromesse));
         console.log(`   👁️ [identifier] état sur les photos seules : ${cardInfo.etatEstime ?? 'aucun'} (confiance ${cardInfo.etatConfiance ?? '?'}, ${cardInfo.msEtat} ms${cardInfo.etatCause ? ', cause ' + cardInfo.etatCause : ''})`);
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce

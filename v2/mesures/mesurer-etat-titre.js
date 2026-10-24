@@ -121,27 +121,67 @@ async function principal() {
     const variante = arg('variante', null);
     let consigneVariante = null;
     // `--variante=<nom>` : un texte de consigne essayé sur les photos de `--reference=<bilan.json de la mesure>` (mêmes scans, même graine), comparé à l'identification d'AUJOURD'HUI de cette mesure (phase 2).
-    const VARIANTES = {
-        'sans-verso': P => P.replace(', ou verso non visible', '').replace('\nSi aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', ''),
-        'verso-neutre': P => P.replace(', ou verso non visible', '').replace('Si aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', 'Si aucune photo du verso n\'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.'),
-        'verso-neutre-nue': P => VARIANTES['verso-neutre'](P).replace('Dans le doute, sois PESSIMISTE', 'Une carte nue, vue de face sur une photo nette, se juge au moins "moyenne" même sans verso. Dans le doute sur l\'ÉTAT, sois PESSIMISTE'),
-        'verso-neutre-defaut-nue': P => VARIANTES['verso-neutre-nue'](P).replace('N\'invente rien.', 'N\'invente rien. Une photo manquante (verso, gros plan) n\'est pas un défaut de la carte : ne l\'écris pas dans defautsVus.'),
-        'verso-neutre-defaut': P => VARIANTES['verso-neutre'](P).replace('N\'invente rien.', 'N\'invente rien. Une photo manquante (verso, gros plan) n\'est pas un défaut de la carte : ne l\'écris pas dans defautsVus.'),
-    };
+    // TOUR 2 : les variantes partent de la consigne d'ORIGINE (le bloc de l'identification recopié tel quel, avant tout écart) et n'y posent que des écarts sur la CONFIANCE. L'origine se reconstruit en défaisant les ECARTS du module.
+    const origine = E.ECARTS.reduce((p, [avant, apres]) => p.replace(apres, avant), E.PROMPT_ETAT);
+    const E1 = [', ou verso non visible.', '.'];
+    const E3 = ['Si aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', 'Si aucune photo du verso n\'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.'];
+    const E3b = [E3[0], 'Si aucune photo du verso n\'est fournie, cela ne change pas etatConfiance : elle se juge sur la netteté de la photo, les reflets et la visibilité des bords et des coins.'];
+    const EM = ['- "moyenne" si : photo correcte de face mais', '- "moyenne" si : photo correcte de face, même sans photo du verso, mais'];
+    const EH = ['- "haute" UNIQUEMENT si : carte nue, photo nette, bords et coins clairement visibles.', '- "haute" UNIQUEMENT si : carte nue, photo nette, bords et coins clairement visibles (l\'absence de verso n\'entre pas dans ce critère).'];
+    const appliquer = (P, ecarts) => ecarts.reduce((p, [a, b]) => { if (p.split(a).length !== 2) throw new Error(`écart introuvable ou ambigu : ${a.slice(0, 50)}`); return p.replace(a, b); }, P);
+    const VARIANTES = { origine: [], F1: [E1, E3], F2: [E1, E3b], F3: [E1, E3, EM], F4: [E1, E3, EH] };
     if (variante) {
         if (!VARIANTES[variante]) throw new Error(`variante inconnue : ${variante}`);
-        consigneVariante = VARIANTES[variante](E.PROMPT_ETAT);
-        if (consigneVariante === E.PROMPT_ETAT) throw new Error('la variante n\'a rien changé');
+        consigneVariante = appliquer(origine, VARIANTES[variante]);
     }
-    const appelVariante = async images => {
+    const appelVariante = async (images, consigne = consigneVariante) => {
         const t = Date.now();
         try {
-            const r = await poster({ model: MODELE, temperature: 0, messages: [{ role: 'user', content: [{ type: 'text', text: consigneVariante }, ...images.map(url => ({ type: 'image_url', image_url: { url } }))] }] });
+            const r = await poster({ model: MODELE, temperature: 0, messages: [{ role: 'user', content: [{ type: 'text', text: consigne },...images.map(url => ({ type: 'image_url', image_url: { url } }))] }] });
             const contenu = r.data && r.data.choices && r.data.choices[0] && r.data.choices[0].message ? r.data.choices[0].message.content : undefined;
             const e = E.analyserReponse(contenu);
             return e ? { ...e, ms: Date.now() - t, cause: null, cout: r.cout } : { etatEstime: null, etatConfiance: null, defautsVus: null, ms: Date.now() - t, cause: 'illisible', cout: r.cout };
         } catch (e) { return { etatEstime: null, etatConfiance: null, defautsVus: null, ms: Date.now() - t, cause: 'panne', cout: null }; }
     };
+
+    // CONFIRMATION (tour 2) : `--confirmer=<bilan.json du tour 1>` joue les 30 AUTRES photos du tirage (jamais utilisées pour régler), UNE SEULE PASSE, sans rien ajuster ensuite : pour chacune, l'identification
+    // d'aujourd'hui sans titre (la référence), l'appel d'état avec la consigne d'ORIGINE (le sens d'avant les écarts) et l'appel d'état de la production (la formulation finale, le module).
+    if (arg('confirmer', null)) {
+        const tour1 = JSON.parse(fs.readFileSync(arg('confirmer'), 'utf8'));
+        const deja = new Set(tour1.phase2.map(p => p.id));
+        let g0 = graine; const alea0 = () => { g0 = (g0 * 1664525 + 1013904223) % 4294967296; return g0 / 4294967296; };      // le même tirage que le tour 1 (même graine, même ordre des lignes)
+        const autres = lignes.map(l => ({ l, r: alea0() })).sort((x, y) => x.r - y.r).slice(0, N).map(x => x.l).filter(x => !deja.has(x.id));
+        console.log(`CONFIRMATION : ${autres.length} photos du tirage de ${N}, hors les ${deja.size} de réglage · plafond ${plafond} $`);
+        const rows = [];
+        for (const x of autres) {
+            if (!carnet.peutAppeler()) { console.log(`⛔ ARRÊT AVANT DÉPASSEMENT : ${carnet.etat().arret}`); break; }
+            let photo = null; try { photo = await st.lire(x.cleR2); } catch { /* absente */ }
+            if (!photo) { rows.push({ id: x.id, sansImage: true }); continue; }
+            const jpeg = await sharp(photo).rotate().resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+            const url = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+            const ident = await appelIdent([url]);
+            const avant = await appelVariante([url], origine);
+            const apres = await appelEtat([url]);
+            const ligne = { id: x.id, ident: { lu: Boolean(ident.etat), estime: ident.etat && ident.etat.etatEstime, retenu: ident.etat ? retenu(ident.etat.etatEstime, ident.etat.etatConfiance) : null, ms: ident.ms, cout: ident.cout },
+                avant: { estime: avant.etatEstime, confiance: avant.etatConfiance, retenu: retenu(avant.etatEstime, avant.etatConfiance), cause: avant.cause, cout: avant.cout },
+                apres: { estime: apres.etatEstime, confiance: apres.etatConfiance, retenu: retenu(apres.etatEstime, apres.etatConfiance), cause: apres.cause, ms: apres.ms, cout: apres.cout } };
+            rows.push(ligne);
+            fs.appendFileSync(path.join(sortie, 'appels.jsonl'), JSON.stringify(ligne) + '\n');
+        }
+        await c.close();
+        const bon = rows.filter(x => x.ident && x.ident.lu && !x.avant.cause && !x.apres.cause);
+        const d0 = (nom, o) => console.log(`${nom} : ${JSON.stringify(o)}`);
+        console.log(`\n══ CONFIRMATION : ${bon.length} scans lus sur ${autres.length} (écartés : ${rows.length - bon.length})`);
+        for (const [nom, cle] of [['AVANT les écarts (consigne d\'origine)', 'avant'], ['FORMULATION FINALE (le module)', 'apres']]) {
+            d0(`  ${nom} : états ESTIMÉS contre l'identification d'aujourd'hui sans titre`, bilanAccord(bon.map(x => ({ a: x.ident.estime, b: x[cle].estime }))));
+            d0(`  ${nom} : états retenus NULS (identification d'aujourd'hui : ${bon.filter(x => !x.ident.retenu).length})`, [bon.filter(x => !x[cle].retenu).length, 'sur ' + bon.length]);
+        }
+        d0('  durée de l\'appel d\'état final (ms) p50 / p95', [pct(bon.map(x => x.apres.ms), 0.5), pct(bon.map(x => x.apres.ms), 0.95)]);
+        const e1 = carnet.etat();
+        console.log(`DÉPENSE : ${e1.cumulUsd.toFixed(4)} $ sur plafond ${plafond} $ · ${e1.appels} appels${e1.arret ? ' · ARRÊT : ' + e1.arret : ''}`);
+        fs.writeFileSync(path.join(sortie, 'bilan.json'), JSON.stringify({ le: new Date().toISOString(), modele: MODELE, plafond, depense: e1, rows }, null, 1));
+        return;
+    }
 
     // 4. PHASE 1 : l'appel d'état sur la photo, contre l'état journalisé par la production
     const fichierRes = path.join(sortie, 'appels.jsonl');

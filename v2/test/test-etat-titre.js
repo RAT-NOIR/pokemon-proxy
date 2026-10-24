@@ -76,7 +76,9 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
     const brut = JSON.parse(fs.readFileSync(CHARGES, 'utf8'));
     const occ = brut.charges.find(c => c.cellule === 'occidentale');
     const photo = k => `https://images1.vinted.net/t/00_rm-et/f800/lecture-${k}.webp`;
+    const CANARI_DESCRIPTION = 'Description du vendeur DESC-CANARI-ZQ7', CANARI_PRIX = 4321.5;      // TOUR 2 : deux canaris, le texte et le prix du vendeur ne doivent entrer dans AUCUNE requête d'état
     const PHOTO_LENTE = 'https://images1.vinted.net/t/00_rm-et/f800/lent.webp';
+    const PHOTO_BLOQUEE = 'https://images1.vinted.net/t/00_rm-et/f800/etat-bloque.webp';
     const PHOTO_PANNE ='https://images1.vinted.net/t/00_rm-et/f800/panne-etat.webp';
     const PHOTO_DATA = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
     const lect = (nom, etat, conf) => ({ ...occ, cellule: `etat-titre ${nom}`, lecture: { ...occ.lecture, etatEstime: etat, etatConfiance: conf, defautsVus: [] } });
@@ -84,7 +86,8 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         ...LECTURES.map(([nom, etat, conf], k) => ({ ...lect(nom, etat, conf), imageUrl: photo(k) })),
         { ...lect('panne de l\'appel d\'état', 'NM', 'haute'), imageUrl: PHOTO_PANNE },
         { ...lect('photos reçues (data:)', 'GD', 'haute'), imageUrl: PHOTO_DATA },
-        { ...lect('modèle lent', 'GD', 'haute'), imageUrl: PHOTO_LENTE }] };
+        { ...lect('modèle lent', 'GD', 'haute'), imageUrl: PHOTO_LENTE },
+        { ...lect('appel d\'état bloqué', 'GD', 'haute'), imageUrl: PHOTO_BLOQUEE }] };
     const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-et-'));
     const fichierCharges = path.join(dossier, 'charges.json'), fichierReq = path.join(dossier, 'requetes.jsonl');
     fs.writeFileSync(fichierCharges, JSON.stringify(fab));
@@ -97,11 +100,11 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
     const url = `http://127.0.0.1:${srv.port}`;
 
     const v2 = async (img, titre) => {
-        const corps = { contrat: 2, imageUrls: [img], description: null, prixVinted: 5, devise: 'EUR', marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', vintedEtat: VENDEUR, ...(titre === undefined ? { title: null } : { title: titre }) };
+        const corps = { contrat: 2, imageUrls: [img], description: CANARI_DESCRIPTION, prixVinted: CANARI_PRIX, devise: 'EUR', marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', vintedEtat: VENDEUR, ...(titre === undefined ? { title: null } : { title: titre }) };
         return H.appel(url, '/api/identifier', { methode: 'POST', corps, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${await inst()}`, 'idempotency-key': cle() } });
     };
     const heritee = async (img, titre) => {
-        const corps = { userId: `et-${++nCle}`, imageUrls: [img], vintedEtat: VENDEUR, ...(titre === undefined ? {} : { title: titre }) };
+        const corps = { userId: `et-${++nCle}`, imageUrls: [img], vintedEtat: VENDEUR, description: CANARI_DESCRIPTION, prixVinted: CANARI_PRIX, ...(titre === undefined ? {} : { title: titre }) };
         return appeler(srv.port, 'POST', '/api/identifier', corps, 'jeton-verrou');
     };
     const ROUTES = [
@@ -143,6 +146,8 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.v(`2. photo ${k} : la requête d'ÉTAT est OCTET POUR OCTET la même pour les six titres et les deux routes`, new Set(e.map(x => x.corps)).size, 1);
     }
     H.vrai('2. aucune requête d\'état ne contient un des titres, ni le texte du vendeur', etats.length > 0 && etats.every(x => TITRES_REELS.every(t => !x.corps.includes(t)) && !x.corps.includes('ZZ-42')));
+    H.vrai('2. CANARI description : le texte de la description du vendeur n\'est dans aucune requête d\'état', etats.length > 0 && etats.every(x => !x.corps.includes('DESC-CANARI-ZQ7') && !/description/i.test(x.corps)));
+    H.vrai('2. CANARI prix : le prix demandé par le vendeur (4321,5) n\'est dans aucune requête d\'état', etats.length > 0 && etats.every(x => !/4321/.test(x.corps)));
     H.vrai('2. aucune requête d\'état ne contient « Titre de l\'annonce »', etats.length > 0 && etats.every(x => !/Titre de l.annonce/.test(x.corps)));
     for (const [nomT, t] of TITRES.filter(x => x[1])) {
         const n = idents.filter(x => x.corps.includes(t)).length;
@@ -185,6 +190,18 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.vrai(`4 bis. la route répond en un seul délai de modèle (${duree} ms, en file : plus de 1 800 ms)`, duree < 1600);
     }
 
+    // ── 4 ter. C3 : l'appel d'état BLOQUÉ (3 500 ms) ne retient pas une identification terminée : la réponse sort 2 000 ms au plus après la lecture, état nul, cause « delai » au journal
+    {
+        for (const [route, appel, lire, reussi] of ROUTES) {
+            const t0 = Date.now();
+            const r = await appel(PHOTO_BLOQUEE, TITRES[1][1]);
+            const duree = Date.now() - t0, e = lire(r);
+            H.vrai(`4 ter. ${route} · état bloqué : la réponse est un succès (l'identification est intacte)`, reussi(r));
+            H.v(`4 ter. ${route} · état bloqué : état estimé, confiance et retenu nuls`, e && [e.retenu === undefined ? null : e.retenu, e.estimeIA ?? null, e.confianceIA ?? null], [null, null, null]);
+            H.vrai(`4 ter. ${route} · état bloqué : la réponse sort sans attendre les 3 500 ms de l'état (${duree} ms ; au plus 2 000 ms après la lecture)`, duree < 3200);
+        }
+    }
+
     // ── 5. LE JOURNAL : l'état journalisé est celui des photos, l'état lu par l'identification n'est qu'une information
     {
         await new Promise(r => setTimeout(r, 500));
@@ -194,6 +211,8 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.vrai('5. aucune ligne de journal n\'a un état venu d\'un mot du titre (PL, LP, EX avec « abîmé », « usée », « excellent état »)', l.every(x => !(x.defautsVus || []).some(d => ['abîmé', 'usée', 'excellent état', 'neuf'].includes(d))));
         H.vrai('5. l\'état lu par l\'identification est conservé comme information (etatIdentification) sur les lignes où il diffère', l.some(x => typeof x.etatIdentification === 'string' && x.etatIdentification.length > 0));
         H.vrai('5. le temps de l\'appel d\'état est journalisé (msEtat)', l.some(x => Number.isFinite(x.msEtat)));
+        H.vrai('5. la cause d\'un état nul est journalisée : « panne » (appel en panne) et « delai » (état bloqué)', ['panne', 'delai'].every(c => l.some(x => x.etatCause === c)));
+        H.vrai('5. aucune cause sur un état rendu (etatCause null quand l\'appel a répondu)', l.some(x => x.etatEstimeIA && !x.etatCause));
     }
 
     srv.enfant.kill();
@@ -209,12 +228,14 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         // un gabarit de chaîne JS normalise CRLF en LF : le modèle voit des LF. Le bloc de l'identification, SEULS les écarts nommés (ECARTS) appliqués, doit être le texte de la consigne d'état, au mot près.
         let bloc = index.slice(a, b).replace(/\r\n/g, '\n'), ecartsTousPoses = Boolean(ET);
         if (ET) for (const [avant, apres] of ET.ECARTS) { if (bloc.split(avant).length !== 2) ecartsTousPoses = false; bloc = bloc.replace(avant, apres); }
-        H.vrai('6. chacun des ECARTS (4) s\'applique UNE fois au bloc d\'identification', ET && ET.ECARTS.length === 4 && ecartsTousPoses);
-        H.vrai('6. la consigne d\'état recopie MOT POUR MOT le bloc d\'état de la consigne d\'identification, hors les quatre écarts nommés', ET && ET.PROMPT_ETAT.includes(bloc));
+        H.vrai('6. chacun des ECARTS (2) s\'applique UNE fois au bloc d\'identification', ET && ET.ECARTS.length === 2 && ecartsTousPoses);
+        H.vrai('6. la consigne d\'état recopie MOT POUR MOT le bloc d\'état de la consigne d\'identification, hors les deux écarts nommés', ET && ET.PROMPT_ETAT.includes(bloc));
+        // TOUR 2 : les écarts ne portent que sur la CONFIANCE. Un écart qui dit comment juger l'usure, les défauts ou l'état déplace l'ESTIMATION (le tour 1 : 10 cas sur 30 un cran vers le mieux, 0 en sens inverse).
+        H.vrai('6. aucun écart ne parle de l\'usure, des défauts, de la prudence ni d\'un état du barème : chacun ne parle que de verso et de confiance', ET && ET.ECARTS.length > 0 && ET.ECARTS.every(([avant, apres]) => !/usure|usé|défaut|PESSIMISTE|surpayer|abîm|\b(MT|NM|EX|GD|LP|PL|PO)\b|defautsVus/i.test(apres) && /verso|confiance/i.test(avant + apres)));
         H.vrai('6. la consigne d\'état ne fait plus de « verso non visible » une raison de confiance « basse », et garde les définitions des trois niveaux de l\'identification', ET && !/verso non visible|dis-le via etatConfiance/.test(ET.PROMPT_ETAT) && ['sleeve/toploader/blister', 'photo correcte de face mais détails des bords/coins pas nets', 'carte nue, photo nette, bords et coins clairement visibles'].every(m => ET.PROMPT_ETAT.includes(m) && index.includes(m)));
         H.vrai('6. la consigne d\'état ne parle ni du titre, ni du vendeur, ni de prix, ni de la lecture du nom', ET && !/titre|annonce|vendeur|vinted|prix|nomBrut|setCode/i.test(ET.PROMPT_ETAT));
         H.vrai('6. index.js : l\'appel d\'état est lancé AVANT l\'attente de l\'identification, avec les MÊMES photos, sur les deux routes (et le signal d\'arrêt quand il existe)',
-            (index.match(/estimerEtatSurPhotos\(photos/g) || []).length === 2 && /estimerEtatSurPhotos\(photos, req\.signalArret\)/.test(index));
+            (index.match(/estimerEtatSurPhotos\(photos/g) || []).length === 2 && (index.match(/\.attendre\(etatPromesse\)/g) || []).length === 2 && !/await etatPromesse/.test(index) && /estimerEtatSurPhotos\(photos, req\.signalArret\)/.test(index));
     }
 
     H.bilan();

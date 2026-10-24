@@ -75,5 +75,50 @@ const rep = contenu => ({ data: { choices: [{ message: { content: contenu } }] }
         H.v('5. une lecture sans état ne laisse pas d\'« information » inventée', l3.etatIdentification, null);
     }
 
+    // ── C3 : le délai propre de l'attente de l'état, sur une HORLOGE FACTICE (aucun vrai temps ne passe)
+    {
+        const horloge = () => { let t = 0, n = 0; const taches = new Map(); return {
+            programmer: (fn, ms) => { const id = ++n; taches.set(id, { fn, a: t + ms }); return id; },
+            annuler: id => { taches.delete(id); },
+            avancer: ms => { t += ms; for (const [id, x] of [...taches]) if (x.a <= t) { taches.delete(id); x.fn(); } },
+            enAttente: () => taches.size }; };
+        const attente = (promesse, h) => { let fini = null; const p = E.attendre(promesse, { programmer: h.programmer, annuler: h.annuler }).then(r => { fini = r; return r; }); return { p, fini: () => fini }; };
+        const rendre = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };      // laisse passer les micro-tâches
+
+        // 1. l'état rendu à temps (à +500 ms) : il est servi, le minuteur est annulé
+        {
+            const h = horloge(); let resoudre; const etat = new Promise(r => { resoudre = r; });
+            const a = attente(etat, h);
+            h.avancer(500); await rendre(); H.v('7. à temps : l\'attente n\'est pas finie tant que l\'état n\'a pas répondu', a.fini(), null);
+            resoudre({ etatEstime: 'EX', etatConfiance: 'moyenne', defautsVus: [], ms: 500, cause: null });
+            const r = await a.p;
+            H.v('7. à temps : l\'état rendu est servi, sans cause ; le minuteur est annulé (aucun reste)', [r.etatEstime, r.etatConfiance, r.cause, h.enAttente()], ['EX', 'moyenne', null, 0]);
+        }
+        // 2. l'état en retard : l'identification (déjà rendue) sort à +2 000 ms, l'état est nul de cause « delai » ; l'appel n'est ni repris ni annulé (il peut finir plus tard sans rien changer)
+        {
+            const h = horloge(); let resoudre; const etat = new Promise(r => { resoudre = r; });
+            const a = attente(etat, h);
+            h.avancer(1999); await rendre(); H.v('7. en retard : à +1 999 ms l\'attente dure encore', a.fini(), null);
+            h.avancer(1); const r = await a.p;
+            H.v('7. en retard : à +2 000 ms l\'attente sort, état nul, cause « delai »', [r.etatEstime, r.etatConfiance, r.defautsVus, r.cause, r.ms], [null, null, null, 'delai', 2000]);
+            const lecture = { name: 'Tropius', number: '001', etatEstime: 'NM', etatConfiance: 'haute', defautsVus: ['neuf'] };
+            E.fusionner(lecture, r);
+            H.v('7. en retard : l\'état de la lecture n\'est JAMAIS repris ; nom et numéro intacts ; cause gardée', [lecture.etatEstime, lecture.etatConfiance, lecture.name, lecture.number, lecture.etatCause], [null, null, 'Tropius', '001', 'delai']);
+            resoudre({ etatEstime: 'EX', etatConfiance: 'haute', defautsVus: [], ms: 9000, cause: null });
+            await rendre(); H.v('7. en retard : l\'état arrivé après coup ne change pas ce qui a été rendu', [lecture.etatEstime, lecture.etatConfiance], [null, null]);
+        }
+        // 3. l'état en erreur : l'appel d'état ne rejette jamais (état nul de sa cause), l'attente le rend tout de suite, l'identification est intacte
+        {
+            const h = horloge();
+            const etat = E.estimerEtat({ images: ['u'], modele: 'm', journal: muet, appeler: async () => { throw Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }); } });
+            const a = attente(etat, h); const r = await a.p;
+            H.v('7. en erreur : l\'attente rend sans attendre (aucun temps écoulé), état nul de cause « panne », minuteur annulé', [r.etatEstime, r.cause, h.enAttente()], [null, 'panne', 0]);
+            const lecture = { name: 'Tropius', number: '001', etatEstime: 'NM', etatConfiance: 'haute' };
+            E.fusionner(lecture, r);
+            H.v('7. en erreur : l\'identification est inchangée (nom, numéro)', [lecture.name, lecture.number, lecture.etatEstime], ['Tropius', '001', null]);
+        }
+        H.v('7. le délai est de 2 000 ms', E.DELAI_ETAT_MS, 2000);
+    }
+
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

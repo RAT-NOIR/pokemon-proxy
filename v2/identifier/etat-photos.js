@@ -6,7 +6,7 @@
 //   · les images sont celles que la chaîne reçoit (les `data:` des photos reçues, ou les URLs de l'annonce) : AUCUN téléchargement ici, le fournisseur du modèle lit les adresses ;
 //   · la panne de cet appel (fournisseur, plafond de dépense du modèle, arrêt du scan, réponse illisible) rend un état NUL, jamais un état venu d'ailleurs, et ne lève JAMAIS : l'identification continue.
 // Le barème et les règles ci-dessous sont recopiés MOT POUR MOT du bloc « ÉVALUATION DE L'ÉTAT » de la consigne d'identification d'index.js (que ce lot ne modifie pas : le modifier changerait la lecture du code
-// du set, mesurée au lot TEMPS-CHAINE), SAUF les quatre ÉCARTS nommés plus bas (ECARTS : la calibration de la confiance) ; un banc applique ces écarts au bloc d'index.js et compare — deux exemplaires d'une règle divergent toujours.
+// du set, mesurée au lot TEMPS-CHAINE), SAUF les deux ÉCARTS nommés plus bas (ECARTS : la calibration de la confiance) ; un banc applique ces écarts au bloc d'index.js et compare — deux exemplaires d'une règle divergent toujours.
 const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
 const URL_MODELE = 'https://openrouter.ai/api/v1/chat/completions';
@@ -25,7 +25,7 @@ RÈGLES IMPORTANTES pour etatConfiance — sois HONNÊTE sur ce que tu ne peux p
 - "basse" si : la carte est sous sleeve/toploader/blister (reflets qui masquent les défauts), photo floue, angle en biais, éclairage mauvais.
 - "moyenne" si : photo correcte de face mais détails des bords/coins pas nets.
 - "haute" UNIQUEMENT si : carte nue, photo nette, bords et coins clairement visibles.
-Une carte nue, vue de face sur une photo nette, se juge au moins "moyenne" même sans verso. Dans le doute sur l'ÉTAT, sois PESSIMISTE (préfère GD à EX) : surestimer l'état conduit à surpayer.
+Dans le doute, sois PESSIMISTE (préfère GD à EX) : surestimer l'état conduit à surpayer.
 Ne devine pas un état "haute confiance" à partir d'une photo qui ne le permet pas.
 
 PLUSIEURS PHOTOS te sont fournies (recto, verso, gros plans). EXAMINE-LES TOUTES.
@@ -35,17 +35,16 @@ usé n'est PAS NM ni EX — un dos visiblement fatigué signifie GD ou moins.
 Ton etatEstime doit refléter la PIRE face observée, pas la meilleure.
 Si aucune photo du verso n'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.
 
-defautsVus : décris ce que tu OBSERVES réellement (ex: "blanchiment bord gauche", "rayure sur l'illustration", "coin corné"). Tableau vide [] si tu ne vois aucun défaut. N'invente rien. Une photo manquante (verso, gros plan) n'est pas un défaut de la carte : ne l'écris pas dans defautsVus.`;
+defautsVus : décris ce que tu OBSERVES réellement (ex: "blanchiment bord gauche", "rayure sur l'illustration", "coin corné"). Tableau vide [] si tu ne vois aucun défaut. N'invente rien.`;
 
-// LES QUATRE ÉCARTS au bloc de l'identification, et eux seuls (le banc applique ces substitutions au bloc d'index.js et exige le texte ci-dessus). Pourquoi : dans l'appel dédié, dont c'est la seule tâche, le modèle appliquait à la lettre
+// LES DEUX ÉCARTS au bloc de l'identification, et eux seuls, tous deux sur la CONFIANCE (le banc applique ces substitutions au bloc d'index.js et exige le texte ci-dessus). Aucune phrase sur la façon de juger l'usure, les défauts ou l'état : le tour 2 a retiré
+// deux écarts du tour 1 (une phrase « au moins moyenne » collée à la règle de prudence, et une consigne sur defautsVus) qui poussaient l'ESTIMATION d'un cran vers le mieux (10 cas sur 30, 0 en sens inverse, contre l'identification sans titre). Pourquoi ces deux-ci : dans l'appel dédié, dont c'est la seule tâche, le modèle appliquait à la lettre
 // « verso non visible » et rendait la confiance « basse » 60 fois sur 60 sur les photos du banc (une photo par scan) ; l'identification, où l'état n'est qu'un champ parmi vingt, la rend « haute » ou « moyenne » 25 fois sur 30 sur les
 // mêmes photos. Les définitions des niveaux ne changent pas (« basse » : sleeve, flou, biais, éclairage ; « moyenne » ; « haute » UNIQUEMENT si carte nue, photo nette) ; une photo qui ne montre pas le verso n'est plus, à elle seule, une raison de « basse ».
 // Elles ne peuvent pas vivre en UNE définition partagée avec l'identification : la consigne d'identification est lue dans sa source par verrou/empreinte.js et mesurer-temps-ia.js (gabarit évalué avec le seul `title`), et ce lot ne la modifie pas.
 const ECARTS = Object.freeze([
     [', ou verso non visible.', '.'],
-    ['Dans le doute, sois PESSIMISTE', 'Une carte nue, vue de face sur une photo nette, se juge au moins "moyenne" même sans verso. Dans le doute sur l\'ÉTAT, sois PESSIMISTE'],
-    ['Si aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', 'Si aucune photo du verso n\'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.'],
-    ['N\'invente rien.', 'N\'invente rien. Une photo manquante (verso, gros plan) n\'est pas un défaut de la carte : ne l\'écris pas dans defautsVus.']
+    ['Si aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', 'Si aucune photo du verso n\'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.']
 ]);
 
 /** L'état tel que le modèle l'a rendu, normalisé ; ou null si la réponse n'est pas un JSON exploitable. Hors barème ou hors énumération : null champ par champ (jamais une valeur inventée). */
@@ -97,6 +96,17 @@ async function estimerEtat({ images, appeler, modele, signal = null, journal = c
     }
 }
 
+const DELAI_ETAT_MS = 2000;
+/**
+ * C3 : l'attente de l'état, APRÈS que l'identification est rendue, a son délai propre : au plus `delaiMs` (2 000 ms) de plus. Au-delà, un état nul de cause fermée « delai » ; l'appel d'état n'est PAS repris ni annulé
+ * (sa dépense reste comptée par le plafond du modèle). `programmer` / `annuler` sont l'horloge (factice dans le banc). Ne rejette jamais : `promesse` est celle d'`estimerEtat`.
+ */
+async function attendre(promesse, { delaiMs = DELAI_ETAT_MS, programmer = setTimeout, annuler = clearTimeout } = {}) {
+    let h;
+    const echeance = new Promise(resolve => { h = programmer(() => resolve({ ...NUL, ms: delaiMs, cause: 'delai' }), delaiMs); });
+    try { return await Promise.race([promesse, echeance]); } finally { annuler(h); }
+}
+
 /**
  * L'état séparé REMPLACE celui que l'identification a rendu (ignoré, gardé comme information dans `etatIdentification`). Pose aussi `msEtat`. Une identification sans état laisse `etatIdentification` à null.
  * Mutation de cardInfo, comme le reste de la lecture ; rend cardInfo.
@@ -112,4 +122,4 @@ function fusionner(cardInfo, etat) {
     return cardInfo;
 }
 
-module.exports = { PROMPT_ETAT, ECARTS, ETATS, CONFIANCES, URL_MODELE, analyserReponse, estimerEtat, fusionner };
+module.exports = { PROMPT_ETAT, ECARTS, ETATS, CONFIANCES, URL_MODELE, DELAI_ETAT_MS, analyserReponse, estimerEtat, attendre, fusionner };
