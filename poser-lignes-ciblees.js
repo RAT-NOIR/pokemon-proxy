@@ -14,8 +14,9 @@
 // du site (liens.idProduct[0]) ne bouge pas. Aucune impression, aucune image, aucun `sets` (la carte est déjà membre : c'est joindre() qui l'a trouvée dans le set).
 // REFUS : produit non nommé par le catalogue de l'expansion · produit que joindre() ne joint pas (nom/numéro ambigus, témoin du nom, aucune carte) · ligne déjà là.
 const { joindre } = require('./collecte-cartes/jointure');
+const { preverifierLignes, lireInterdits } = require('./collecte-cartes/lignes-detachees');
 
-function planifier({ cartes, produits, optionsJoindre, existants, visees }) {
+function planifier({ cartes, produits, optionsJoindre, existants, visees, interdits = new Set() }) {
     const J = joindre(cartes, produits, optionsJoindre);
     const parId = new Map(), plusieurs = new Set();
     for (const l of J.lignes) { if (parId.has(l.idProduct)) plusieurs.add(l.idProduct); parId.set(l.idProduct, l); }
@@ -27,6 +28,8 @@ function planifier({ cartes, produits, optionsJoindre, existants, visees }) {
         if (plusieurs.has(id)) { refus.push({ idProduct: id, raison: `joindre() rattache le produit ${id} à plusieurs cartes : on ne choisit pas` }); continue; }
         const l = parId.get(id);
         if (!l) { const r = J.restes.find(x => x.idProduct === id || String(x.detail || '').startsWith(String(id))); refus.push({ idProduct: id, raison: `joindre() ne joint pas le produit ${id}${r ? ` (${r.type})` : ''}` }); continue; }
+        // D1 : une ligne DÉTACHÉE (reste « fiche-contredite-par-la-vue ») ne se repose pas, même visée à la main ; le même produit vers une autre carte n'est pas concerné
+        if (interdits.has(l._id)) { refus.push({ idProduct: id, raison: `la ligne ${l._id} est détachée (reste « fiche-contredite-par-la-vue », décision du testeur) : interdite, jamais reposée` }); continue; }
         const e = existants.get(l._id);
         if (e) { deja.push({ _id: l._id, preuve: e.preuve }); continue; }
         lignes.push(l);
@@ -43,6 +46,7 @@ function verifierAttendu(plan, attendu) {
 /** `metaDe` : idProduct -> idMetacard. Rend { lignes, cartes } = ce qui a réellement été modifié. */
 async function ecrireLignes(db, lignes, metaDe) {
     let n = 0, c = 0;
+    await preverifierLignes(db, lignes);        // D1 : une ligne détachée dans le lot fait lever le lot ENTIER, avant la première écriture
     for (const l of lignes) n += (await db.collection('cartes_produits').updateOne({ _id: l._id }, { $setOnInsert: l }, { upsert: true })).upsertedCount;
     const parCarte = new Map();
     for (const l of lignes) { const w = parCarte.get(l.carteId) || parCarte.set(l.carteId, { ids: [], metas: new Set() }).get(l.carteId); w.ids.push(l.idProduct); if (metaDe.get(l.idProduct) != null) w.metas.add(metaDe.get(l.idProduct)); }
@@ -81,7 +85,7 @@ async function executer({ argv, ouvrirConnexions, log = console.log, err = conso
         const produits = await produitsDeLExpansion(prod, L.exp);
         const visees = arg('produits').split(',').map(Number);
         const existants = new Map((await cx.db.collection('cartes_produits').find({ idProduct: { $in: visees } }, { projection: { preuve: 1, idProduct: 1 } }).toArray()).map(l => [l._id, l]));
-        const plan = planifier({ cartes, produits, optionsJoindre: { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: L.slugSet || null }, existants, visees });
+        const plan = planifier({ cartes, produits, optionsJoindre: { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: L.slugSet || null }, existants, visees, interdits: await lireInterdits(cx.db.collection('restes')) });
         log(`   ${L.code} (${slug}) : ${cartes.length} cartes du set · ${produits.length} produits de l'expansion · ${visees.length} visé(s)`);
         for (const l of plan.lignes) log(`   + ${l._id} preuve ${l.preuve} numeroFiche ${l.numeroFiche ?? '—'} · ${String(l.detail || '').slice(0, 110)}`);
         for (const r of plan.refus) log(`   - REFUS ${r.idProduct} : ${r.raison}`);

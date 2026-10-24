@@ -237,6 +237,10 @@ const cleAttaque = a => String(a || '').split(/\s+/).map(normaliserNom).filter(B
  * @returns {{lignes: object[], restes: object[], compte: object}}
  */
 function joindre(cartes, produits, cible) {
+    // D1 (2026-10-24) : `cible.lignesInterdites` — un Set de « carte|produit » que la jointure ne PROPOSE pas (lignes détachées, reste « fiche-contredite-par-la-vue » : collecte-cartes/lignes-detachees.js).
+    // Seule la LIGNE est refusée : le même produit vers une autre carte passe. Un autre type que Set LÈVE (jamais ignoré : une interdiction qu'on croit posée et qui ne l'est pas est pire que pas d'interdiction).
+    if (cible.lignesInterdites !== undefined && !(cible.lignesInterdites instanceof Set)) throw new Error('joindre : cible.lignesInterdites doit être un Set de « carte|produit »');
+    const interdites = cible.lignesInterdites || new Set(), refuseesInterdites = new Map();     // idProduct -> [carte|produit refusées]
     const lignes = [], restes = [];
     const produitsJoints = new Map();     // idProduct -> [carteId]
     const parNumero = new Map(), parNom = new Map();
@@ -252,6 +256,8 @@ function joindre(cartes, produits, cible) {
     const attache = (carte, p, preuve, detail, numeroFiche = null) => {
         // 🔴 LOT METAL (2026-10-17) : un produit de la table fermée ne s'attache à AUCUNE carte (ni par le numéro, ni par le nom) ; il retombe en reste « produit-sans-carte » qui le dit.
         if (estMatiereSpeciale(p.idProduct)) return;
+        // 🔴 D1 : une ligne détachée n'est pas reposée ; le produit retombe en reste « produit-sans-carte » qui nomme l'interdit.
+        if (interdites.has(`${carte._id}|${p.idProduct}`)) { if (!refuseesInterdites.has(p.idProduct)) refuseesInterdites.set(p.idProduct, []); refuseesInterdites.get(p.idProduct).push(`${carte._id}|${p.idProduct}`); return; }
         // `slug` et `slugSet` VOYAGENT AVEC LA LIGNE : ils font l'URL Cardmarket, et le site n'a pas
         // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
         // en texte nu. Ils n'ont jamais été spécifiés — ce n'était pas un rejeu manqué, c'était une
@@ -457,7 +463,7 @@ function joindre(cartes, produits, cible) {
     }
     for (const p of produits) {
         const c = produitsJoints.get(p.idProduct);
-        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}${estMatiereSpeciale(p.idProduct) ? ` — matière spéciale (table fermée) : ${motifMatiere(p.idProduct)}` : ''}${contredits.has(p.idProduct) ? ' — le nom contredit le numéro (fiche-contredite-par-le-nom)' : ''}` });
+        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}${estMatiereSpeciale(p.idProduct) ? ` — matière spéciale (table fermée) : ${motifMatiere(p.idProduct)}` : ''}${contredits.has(p.idProduct) ? ' — le nom contredit le numéro (fiche-contredite-par-le-nom)' : ''}${refuseesInterdites.has(p.idProduct) ? ` — ligne ${refuseesInterdites.get(p.idProduct).join(', ')} interdite (détachée : reste « fiche-contredite-par-la-vue »)` : ''}` });
         else if (c.length > 1) restes.push({ type: 'produit-vers-plusieurs-cartes', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » -> cartes ${c.join(', ')}` });
     }
     return {

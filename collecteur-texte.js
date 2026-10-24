@@ -32,6 +32,7 @@ const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/tabl
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = require('./collecte-cartes/jointure');
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
+const { lireInterdits } = require('./collecte-cartes/lignes-detachees');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
 const { refusDeCollecte } = require('./collecte-cartes/nom-synthetique');
@@ -370,7 +371,9 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const produits = await produitsDeLExpansion(prod, L.exp);
     // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
     // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket });
+    // D1 : les lignes DÉTACHÉES (reste « fiche-contredite-par-la-vue ») ne sont pas proposées ; ecrireJointure les refiltre (défense en profondeur) et le filet de ouvrirConnexions les refuserait.
+    const lignesInterdites = await lireInterdits(M.Reste);
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket, lignesInterdites });
     // L'écriture vit dans `ecrire-jointure.js` : la collecte SANS PAGE écrit exactement la même chose,
     // et deux définitions du même geste divergent toujours (§21 bis).
     await ecrireJointure(M, { slug, J, produits });
@@ -393,7 +396,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         const cartesJumelles = cartesDuSet.filter(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === nomIntl));
         if (!cartesJumelles.length) continue;
         const prodIntl = await produitsDeLExpansion(prod, idExpIntl);
-        const Ji = joindre(cartesJumelles, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
+        const Ji = joindre(cartesJumelles, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl', lignesInterdites });
         for (const l of Ji.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
         const metaIntl = new Map(prodIntl.map(p => [p.idProduct, p.idMetacard]));
         for (const l of Ji.lignes) await M.Carte.updateOne({ _id: l.carteId }, { $addToSet: { 'liens.idProduct': l.idProduct, ...(metaIntl.get(l.idProduct) != null ? { 'liens.idMetacards': metaIntl.get(l.idProduct) } : {}) } });

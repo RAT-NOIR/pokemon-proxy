@@ -15,7 +15,8 @@
 //     par un $unset de ces quatre champs.
 // Une écriture exige `--attendu=N` (le nombre de lignes neuves de la simulation) ; il ne colle plus → rien ne s'écrit.
 const SP = require('./set-partiel');
-const CLES = ['carteId', 'idProduct', 'preuve', 'slug', 'slugSet'];
+const { preverifierLignes } = require('./lignes-detachees');
+const CLES =['carteId', 'idProduct', 'preuve', 'slug', 'slugSet'];
 const memeLigne = (a, b) => CLES.every(k => JSON.stringify(a?.[k] ?? null) === JSON.stringify(b?.[k] ?? null));
 const CHAMPS_PARTIEL = ['prouves', 'total', 'restes', 'contredits', 'dejaJoints', 'horsDenominateur', 'mention', 'tiragePreuve'];
 const CHAMPS_RESOLU = ['resoluLe', 'resoluPar', 'resoluLigne', 'resoluCarteId'];
@@ -63,6 +64,7 @@ function recalculerPartiel({ classement: C, partielAvant: A, posees, nbNeuves, c
 /** Écrit le plan : $setOnInsert (ligne), $addToSet (carte), $set des champs du compteur, $set des 4 champs « résolu » du reste. Rend les comptes ; LÈVE si une ligne annoncée neuve existait déjà. */
 async function appliquerComplement(db, plan, slug, partiel, restesAMarquer, le) {
     let inserees = 0, cartesModifiees = 0, restesMarques = 0;
+    await preverifierLignes(db, plan.neuves.map(n => n.ligne));        // D1 : une ligne détachée dans le lot fait lever le lot ENTIER, avant la première écriture
     for (const n of plan.neuves) {
         const { _id, ...corps } = n.ligne;
         const r = await db.collection('cartes_produits').updateOne({ _id }, { $setOnInsert: corps }, { upsert: true });

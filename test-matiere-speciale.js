@@ -74,7 +74,7 @@ verifier('un produit ordinaire se joint comme avant', J3.lignes.map(l => `${l.ca
 // 4. l'écriture de la jointure : un lot qui contiendrait une ligne de la table est refusé AVANT toute écriture (défense en profondeur, si `joindre` était contourné)
 (async () => {
     const appels = [];
-    const M2 = { CarteProduit: { updateOne: async (...a) => { appels.push(['ligne', a]); } }, Reste: { deleteMany: async () => { appels.push(['deleteMany']); }, insertMany: async () => { appels.push(['insertMany']); } }, Carte: { updateOne: async () => { appels.push(['carte']); } } };
+    const M2 = { CarteProduit: { updateOne: async (...a) => { appels.push(['ligne', a]); } }, Reste: { find: () => ({ lean: async () => [] }) /* D1 : ecrireJointure lit les restes « fiche-contredite-par-la-vue » */, deleteMany: async () => { appels.push(['deleteMany']); }, insertMany: async () => { appels.push(['insertMany']); } }, Carte: { updateOne: async () => { appels.push(['carte']); } } };
     let refus = null;
     try { await ecrireJointure(M2, { slug: 'Celebrations', J: { lignes: [{ _id: '60348|580162', carteId: 60348, idProduct: 580162 }], restes: [] }, produits: [] }); } catch (e) { refus = e.message; }
     verifier('ecrireJointure refuse une ligne de la table', /580162/.test(refus || ''), true);
