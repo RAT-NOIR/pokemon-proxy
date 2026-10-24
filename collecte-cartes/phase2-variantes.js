@@ -37,4 +37,47 @@ function simulerSeparation({ cartes, cartesProduits }, groupes, scenario) {
     };
 }
 
-module.exports = { jetonDe, simulerSeparation };
+// CE QUI A ÉTÉ LU À L'ŒIL sur les planches (lot B et lot C de l'audit S8) : la marque ou la finition qui distingue la cible du produit juste. `marque` : le nom de la marque telle que la liste de l'API l'écrit, ou null si la
+// distinction n'est PAS une marque de la liste (finition, format, tampon d'un autre nom). Le jeton est ensuite VÉRIFIÉ contre la vraie liste (jetonDe), jamais tapé. UNE seule définition (PHASE 3b : elle vivait dans
+// mesure-variantes-phase2.js ; l'outil d'écriture separer-variantes-phase2.js la lit ICI — §21 bis, la mesure et l'écriture ne peuvent pas lire deux tables).
+const LU = Object.freeze(new Map([
+    [752306, { quoi: 'tampon Toys R Us présent chez Cardmarket, absent de notre scan', marque: 'toys-r-us' }],
+    [873081, { quoi: 'tampon Toys R Us, holo', marque: 'toys-r-us' }],
+    [722696, { quoi: 'tampon « Holo 20th Anniversary Stamp Promo »', marque: null }],
+    [362873, { quoi: 'carte Oversized (« Attention: Oversized Card »)', marque: 'jumbo' }],
+    [362872, { quoi: 'carte Oversized', marque: 'jumbo' }],
+    [362871, { quoi: 'carte Oversized', marque: 'jumbo' }],
+    [901316, { quoi: 'version « Non-Holo » (finition)', marque: null }],
+    [901315, { quoi: 'version « Non-Holo » (finition)', marque: null }],
+    [576708, { quoi: 'version « Non-Holo » (finition)', marque: null }],
+    [855023, { quoi: 'version « Non-Holo » (finition, Lava Theme Deck)', marque: null }],
+    [280583, { quoi: 'finition foil du même dessin', marque: null }],
+    [538823, { quoi: 'finition holo, tampon 25e anniversaire des deux côtés', marque: null }],
+    [858713, { quoi: 'finition reverse holo', marque: null }]
+]));
+
+/**
+ * Les GROUPES (une entrée, ses cibles avec leur jeton, ses produits justes) depuis les cibles « emprunt » de la table fermée de la phase 2 et la décision de l'API sur l'état ACTUEL.
+ * LÈVE si les produits servis par une clé ne sont pas EXACTEMENT les cibles et les justes de la table (table périmée ou base changée), ou si une cible n'a pas été lue (`lu`).
+ * @param cibles   P.ECARTES filtrées sur geste 'emprunt' (idProduct, carteId, set, numero, cleR2, partageAvec)
+ * @param servisParCle  Map cleR2 → [idProduct triés] (P.produitsServisParCle(entrees de decider))
+ * @param api      la chaîne importée (estVariante) · @param lu  la table LU (défaut : celle-ci)
+ */
+function construireGroupes({ cibles, servisParCle, api, lu = LU, verifierServis = true }) {
+    const groupes = [];
+    const parCle = {};
+    for (const x of cibles) (parCle[x.cleR2] ||= []).push(x);
+    for (const [cle, xs] of Object.entries(parCle)) {
+        const x0 = xs[0], justes = [...new Set(xs.flatMap(x => x.partageAvec))], servisCle = servisParCle?.get(cle) || [];
+        const attendus = [...justes, ...xs.map(x => x.idProduct)].sort((a, b) => a - b);
+        // `verifierServis: false` : le RETRAIT d'une séparation déjà écrite (l'API ne sert plus les cibles sans jeton) ; l'état se vérifie alors ligne par ligne, pas par ce que l'API sert
+        // l'état FINAL d'une séparation déjà écrite (ou à moitié) est aussi admis : l'API y sert les justes et les cibles À JETON, plus les cibles sans jeton — planifier() décide alors « deja » ligne par ligne
+        const finals = [...justes, ...xs.filter(x => lu.has(x.idProduct) && jetonDe(lu.get(x.idProduct).marque, api)).map(x => x.idProduct)].sort((a, b) => a - b);
+        if (verifierServis && JSON.stringify(servisCle) !== JSON.stringify(attendus) && JSON.stringify(servisCle) !== JSON.stringify(finals)) throw new Error(`l'entrée ${cle} sert ${servisCle.join(',')} et non ${attendus.join(',')} : la table n'est plus celle qui a été mesurée`);
+        for (const x of xs) if (!lu.has(x.idProduct)) throw new Error(`la cible ${x.idProduct} n'a pas été lue à l'oeil (table LU) : rien n'est décidé`);
+        groupes.push({ carteId: x0.carteId, set: x0.set, numero: x0.numero, cleR2: cle, justes, cibles: xs.map(x => ({ idProduct: x.idProduct, jeton: jetonDe(lu.get(x.idProduct).marque, api) })) });
+    }
+    return groupes;
+}
+
+module.exports = { jetonDe, simulerSeparation, LU, construireGroupes };
