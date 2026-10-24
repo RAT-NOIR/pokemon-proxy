@@ -107,7 +107,6 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.strictEqual(r1.etat, 'arret-definitif'); assert.strictEqual(appels.length, 1);
         const r2 = await RC.telecharger({ SRC: TC.SRC, unites, cli: mkCli(transport, tmp(), 50, arrets), fichier: path.join(tmp(), 'i2.json'), hoteImages: TC.HOTE_IMAGES });
         assert.strictEqual(r2.etat, 'arret-definitif'); assert.strictEqual(appels.length, 1, 'le second lancement ne fait AUCUNE requête');
-        assert.ok(!fs.existsSync(path.join(tmp(), 'x')));
     });
 
     // ───────── la ligne de commande ─────────

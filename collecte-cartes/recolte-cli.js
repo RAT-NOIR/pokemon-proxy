@@ -16,6 +16,7 @@
 const path = require('path');
 const fs = require('fs');
 const RC = require('./recolte-commun');
+const RH = require('./reponse-hote');
 const HOTE = require('./recolte-hote');
 const { largeurMinDe } = require('./seuils-images');
 
@@ -76,7 +77,8 @@ async function lancer(def, args = process.argv.slice(2)) {
             // `--limite=N` : un ÉCHANTILLON (déterministe, en tourniquet sur les groupes) pour faire d'abord le chemin complet sur peu de produits ; sans lui, tout le lot
             const toutes = aFaireDe(lirePlan()), aFaire = val('limite') ? RC.choisirEchantillon(toutes, Number(val('limite'))) : toutes, idx = RC.lireJson(F.images, {});
             const m = maximumImages({ F, hoteImages: def.hoteImages, unites: aFaire, indexImages: idx, plafondTotal });
-            console.log(`MAXIMUM de ce lancement : ${m.total} requête(s) (${m.detail}) · cadence ≥ 6 s ⇒ ${m.secondes} s au plus (${Math.round(m.secondes / 60)} min) · plafond total ${m.plafondTotal} (déjà au cache : ${m.dejaAuCache}) · hôte ${def.hoteImages}${m.secondes > 600 ? ` · > 10 min : à lancer en arrière-plan (fichier de progression ${F.progression})` : ''}`);
+            const arret = RH.hoteArrete(RH.hoteRacine(def.hoteImages));
+            console.log(`MAXIMUM de ce lancement : ${arret ? `0 requête (⛔ arrêt durable de l'hôte, ${arret.motif ?? 'illisible'} : rien ne partira ; sans lui : ${m.total})` : `${m.total} requête(s) (${m.detail})`} · cadence ≥ 6 s ⇒ ${arret ? 0 : m.secondes} s au plus · plafond total ${m.plafondTotal} (déjà au cache : ${m.dejaAuCache}) · hôte ${def.hoteImages}${!arret && m.secondes > 600 ? ` · > 10 min : à lancer en arrière-plan (fichier de progression ${F.progression})` : ''}`);
             if (m.total + m.dejaAuCache > plafondTotal) console.log(`⚠️ le maximum dépasse le plafond total : le lancement s'arrêtera au plafond (${plafondTotal}), reprise à la relance`);
             const cli = def.clientDe(F, plafondTotal);
             const r = await RC.telecharger({ SRC, unites: aFaire, cli, fichier: F.images, hoteImages: def.hoteImages, progression: F.progression });
