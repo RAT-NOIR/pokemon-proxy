@@ -14,8 +14,13 @@ t('substitut retiré : le set de la ligne est touché', () => {
 t('substitut changé : le set de la ligne est touché', () => {
     assert.deepStrictEqual(setsTouches({ avant: etat(SUB), apres: etat({ ...SUB, cleR2: 'autre.webp' }) }).sets, ['WCD-2016']);
 });
-t('substitut identique (mention seule changée) : rien de touché', () => {
-    assert.deepStrictEqual(setsTouches({ avant: etat(SUB), apres: etat({ ...SUB, mention: 'z' }) }).sets, []);
+// D1 (2026-10-24) : ce test disait « mention seule changée : rien de touché ». Le site LIT `visuelSubstitut.mention` (lib/lireDonnee.ts, SPEC_PRODUIT : « le scan de la carte d'ORIGINE d'une réimpression, avec sa mention ») :
+// une mention changée est une légende changée sur la page, donc le set de la ligne est touché. Seul un champ que le site ne lit pas (la preuve, la date) ne revalide rien.
+t('substitut dont la seule mention change : le set de la ligne est touché (le site affiche la mention)', () => {
+    assert.deepStrictEqual(setsTouches({ avant: etat(SUB), apres: etat({ ...SUB, mention: 'z' }) }).sets, ['WCD-2016']);
+});
+t('substitut identique (rien ne change) : rien de touché', () => {
+    assert.deepStrictEqual(setsTouches({ avant: etat(SUB), apres: etat({ ...SUB }) }).sets, []);
 });
 t('aucune baisse comptée ni catalogue touché par ce seul détachement', () => {
     const c = comparer(compterEtat(etat(SUB)), compterEtat(etat(null)));

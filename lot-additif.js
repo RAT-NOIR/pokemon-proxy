@@ -35,7 +35,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { SITE_LIT, PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, restaurerImages, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que le site lit, confrontée au gabarit du site IMPORTÉ (étape 0 ter)
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
@@ -120,11 +121,18 @@ async function compter(db) {
 const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(__dirname, dossier, `${coll}.json`), 'utf8'), { relaxed: true });
 
 // Les documents de la base, projetés sur ce que compterEtat lit : le « après » passe par la MÊME fonction que le « avant ».
-// La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
-async function etatDeLaBase(db) {
+// La projection couvre aussi ce que `setsTouches` compare (D1, 2026-10-24 : TOUT champ que le site lit — garde-lot.js SITE_LIT, qui pilote cette projection ET la comparaison —, lignes de jointure, sets entiers).
+// Coût mémoire : l'AVANT est la sauvegarde entière, déjà en mémoire ; l'APRÈS n'ajoute aucun document entier, seulement les champs lus par le site (pas bulba, pas sha256, pas les preuves).
+// D3.5 (2026-10-24) : UNE SEULE lecture de l'état « après », qui sert les compteurs, les sets touchés ET le contrat de l'API. Avec l'API chargée, les projections sont RÉUNIES (celles du site/des compteurs et celles
+// de l'API, sans chemin parent/enfant ensemble) ; la vue de l'API en est dérivée par `projeter`. Avant, une seconde lecture complète (etatContrat) chargeait une troisième copie de la base (≈ 1 073 Mo de tas mesurés)
+// et lisait les collections à un autre instant que les compteurs (le worker écrit entre les deux).
+async function etatDeLaBase(db, api = null) {
+    // la réunion est faite (et validée) par chargerApi, AVANT la sauvegarde : ici plus rien ne peut lever après l'écriture
+    const projectionCartes = api ? { ...api.projectionsEtat.cartes } : { ...PROJECTION_ETAT.cartes };
+    const projectionLignes = api ? { ...api.projectionsEtat.cartesProduits } : { ...PROJECTION_ETAT.cartesProduits };
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ ...PROJECTION_ETAT.cartes }).toArray(),
-        db.collection('cartes_produits').find({}).project({ ...PROJECTION_ETAT.cartesProduits }).toArray(),
+        db.collection('cartes').find({}).project(projectionCartes).toArray(),
+        db.collection('cartes_produits').find({}).project(projectionLignes).toArray(),
         db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])
         if (!l.length) throw new Error(`« ${n} » est VIDE : un compteur sur elle ne mesure rien (§41)`);
@@ -143,17 +151,12 @@ async function setsDuWorker(db, depuis) {
     return new Set(docs.map(d => String(d._id).replace(/^[^/]+\//, '')));
 }
 
-// Les trois collections que l'API lit, avec SES projections (la même forme que la sauvegarde projetée : avant et après se comparent à forme égale).
-async function etatContrat(api, db) {
-    const lire = (coll, projection) => db.collection(coll).find({}, { projection }).toArray();
-    const [sets, cartes, cartesProduits] = await Promise.all([lire('sets', api.PROJECTIONS.sets), lire('cartes', api.PROJECTIONS.cartes), lire('cartes_produits', api.PROJECTIONS.cartes_produits)]);
-    return GC.projeterEtat(api, { sets, cartes, cartesProduits });
-}
-// Le verdict du contrat : une exception est un refus de conclure (fautive), jamais un « ✅ ».
-async function jouerContrat(api, avantProjete, db) {
+// Le verdict du contrat : une exception est un refus de conclure (fautive), jamais un « ✅ ». Il juge les documents DÉJÀ LUS (la sauvegarde entière d'un côté, l'état lu une fois de l'autre) : verifierContrat les
+// projette comme l'API les lit, à forme égale, puis relâche ces copies.
+async function jouerContrat(api, avantDocs, apresDocs) {
     try {
-        const v = await GC.verifierContrat({ api, avant: avantProjete, apres: await etatContrat(api, db) });
-        return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, persistants: v.persistants, v };
+        const v = await GC.verifierContrat({ api, avant: avantDocs, apres: apresDocs });
+        return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, cartesFautives: v.cartesFautives, persistants: v.persistants, v };
     } catch (e) {
         const raison = String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300);
         return { ligne: 'contrat API : 🔴 je ne peux pas conclure', fautives: [`contrat API : je ne peux pas conclure (${raison})`], setsFautifs: [], persistants: [], v: null };
@@ -189,12 +192,19 @@ function journaliser(t, dossier, combien, sortie) {
         try { api = await GC.chargerApi(); } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
         console.log('   0 bis. contrat API : chaîne de l\'API importée (projections, décision, règle du site embarquée, validation d\'entrée)');
     } else console.log('   0 bis. contrat API : non vérifié (base de banc)');
+    // 0 ter. CE QUE LE SITE LIT, AVANT la sauvegarde (tour de correction 1, 2026-10-24) : SITE_LIT (garde-lot.js) décide quels sets un lot fait revalider ; elle est confrontée au gabarit de lecture du site IMPORTÉ
+    // (lib/lireDonnee.ts : SPEC_CARTE, SPEC_PRODUIT, SPEC_SET). Un champ lu par le site et absent de SITE_LIT, un site introuvable, un import qui lève : refus (code 6), rien n'est sauvegardé ni écrit.
+    if (BASE === 'cartes') {
+        try {
+            const vu = await GS.verifierSiteLu({ siteLit: SITE_LIT });
+            console.log(`   0 ter. site lu : SITE_LIT couvre les ${vu.champs} champs que le gabarit de lecture du site (lireDonnee.ts, importé) lit`);
+        } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
+    } else console.log('   0 ter. site lu : non vérifié (base de banc)');
     console.log(`\n══ LOT : ${quoi}\n   1. sauvegarde ${aSauver.join(',')} → ${dossier} (base ${BASE})`);
     const s = spawnSync(process.execPath, ['backup-collections.js', `--base=${BASE}`, `--collections=${aSauver.join(',')}`, `--dossier=${dossier}`], { stdio: 'inherit', cwd: __dirname });
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
     const docsAvant = { cartes: lireSauvegarde(dossier, 'cartes'), cartesProduits: lireSauvegarde(dossier, 'cartes_produits'), sets: lireSauvegarde(dossier, 'sets') };
     const avant = compterEtat(docsAvant);
-    const avantContrat = api ? GC.projeterEtat(api, docsAvant) : null;          // la sauvegarde, projetée comme l'API lit la base
     let { db, fermer } = await ouvrir();
     const comptesAvant = await compter(db);
     await fermer();
@@ -211,13 +221,14 @@ function journaliser(t, dossier, combien, sortie) {
     const mesureApres = await T.mesurerGrappe(client).catch(() => null);
     const atlasApres = T.ligneAtlasApres(mesureApres, GRAPPE);
     console.log(`   ${atlasApres}`);
-    let apres = await etatDeLaBase(db), sw = await setsDuWorker(db, depuis);
+    let apres = await etatDeLaBase(db, api), sw = await setsDuWorker(db, depuis);
     let cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     if (cmp.nonAutorisees.length && CONFIRMATION_S) {
         // Le worker retire puis remet : une baisse vue entre deux de ses écritures n'en est pas une. On relit une fois.
         console.log(`   4. ${cmp.nonAutorisees.length} baisse(s) non autorisée(s) — relecture dans ${CONFIRMATION_S} s pour écarter une écriture du worker en cours`);
         await new Promise(r => setTimeout(r, CONFIRMATION_S * 1000));
-        apres = await etatDeLaBase(db); sw = await setsDuWorker(db, depuis);
+        apres = null;                                                              // relâche l'ancienne lecture avant la nouvelle (une seule copie de l'état « après » en mémoire)
+        apres = await etatDeLaBase(db, api); sw = await setsDuWorker(db, depuis);
         cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     }
     const comptesApres = await compter(db);
@@ -227,7 +238,7 @@ function journaliser(t, dossier, combien, sortie) {
     for (const a of cmp.annoncesNonRealisees) console.log(`      ⚠️ annonce non réalisée telle quelle : ${a.cle} annoncé −${a.annonce}, réel −${a.baisse}`);
     // 5 bis. LE CONTRAT DE L'API (2026-10-19) : la chaîne de l'API rejouée sur les sets touchés, avant (sauvegarde) et après (base). Un refus NOUVEAU, ou une variante perdue, arrête le lot
     // comme une baisse non annoncée ; une exception de la garde est un refus de conclure (arrête et restaure).
-    const contrat = api ? await jouerContrat(api, avantContrat, db) : null;
+    const contrat = api ? await jouerContrat(api, docsAvant, apres.docs) : null;      // la MÊME lecture que les compteurs : ni seconde lecture de la base, ni autre instant
     console.log(`   5 bis. ${contrat ? contrat.ligne : 'contrat API : non vérifié (base de banc)'}`);
     if (contrat?.v) {
         for (const p of contrat.persistants.slice(0, 6)) console.log(`      persistant (déjà avant, ne bloque pas) : ${p.idProduct} — ${p.motif}`);
@@ -269,24 +280,49 @@ function journaliser(t, dossier, combien, sortie) {
     // ── ARRÊT : restauration depuis la sauvegarde
     const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
     console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
-    // les sets où le contrat est violé se restaurent comme un set dont les images ont baissé : le tableau `images` y est remis (le champ du worker n'y est pas gardé)
-    const imagesFautives = new Set([...cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')), ...(contrat?.setsFautifs || [])]);
+    // une baisse d'images (compteur) est une affaire de SET : le tableau `images` des cartes de ce set est remis (le champ du worker n'y est pas gardé).
+    // (tour 2, D1) un refus du contrat se restaure ENTRÉE PAR ENTRÉE (set + cleR2), sur TOUTES les cartes : chaque entrée d'`images` que le LOT a modifiée revient à sa version sauvegardée, ce que le WORKER a écrit pendant la fenêtre
+    // reste (les sets de `collecte_images_etat`, la même règle que la garde des compteurs), et ce qui ne se tranche pas (deux entrées de même clé…) est imprimé et fait sortir en code 4. Remettre le tableau des seules cartes
+    // fautives laissait les écritures du lot sur les autres entrées marquées pendant que les lignes `cartes_produits` revenaient : un état que l'API refuse (lot B du 19/10).
+    const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
+    const entierParCompteur = (d, a) => [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set));   // une baisse d'images (compteur) : tout le tableau, comme avant
+    const swRestauration = fautivesContrat.length ? await setsDuWorker(db, depuis) : new Set();
+    const rapportImages = { cartes: new Set(), restaurees: [], gardees: [], indecidables: [] };
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
-        if (coll === 'cartes' && [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set))) return champs.filter(f => f !== 'images');
+        if (coll === 'cartes' && entierParCompteur(d, a)) return champs.filter(f => f !== 'images');
         return champs;
     };
+    const surchargePour = coll => (coll === 'cartes' && fautivesContrat.length) ? (d, a) => {
+        if (entierParCompteur(d, a)) return {};
+        const r = restaurerImages(d.images, a.images, { setsDuWorker: swRestauration });
+        for (const [liste, cible] of [[r.restaurees, rapportImages.restaurees], [r.gardees, rapportImages.gardees], [r.indecidables, rapportImages.indecidables]]) for (const x of liste) cible.push({ carte: d._id, ...x });
+        if (r.restaurees.length) rapportImages.cartes.add(d._id);
+        return r.restaurees.length ? { images: r.images } : {};      // rien à restaurer ou indécidable : le tableau actuel reste tel quel
+    } : null;
     const faits = [];
     for (const coll of aSauver.filter(x => RESTAURABLES.includes(x))) {
         const sauves = new Map(lireSauvegarde(dossier, coll).map(d => [cleDoc(d._id), d]));
         const actuels = new Map((await db.collection(coll).find({}).toArray()).map(d => [cleDoc(d._id), d]));
-        const plan = planRestauration(sauves, actuels, { garder: garderPour(coll) });
+        const plan = planRestauration(sauves, actuels, { garder: garderPour(coll), surcharge: surchargePour(coll) });
         const ops = [...plan.remplacer.map(d => ({ replaceOne: { filter: { _id: d._id }, replacement: d } })),
             ...plan.inserer.map(d => ({ insertOne: { document: d } })), ...plan.supprimer.map(id => ({ deleteOne: { filter: { _id: id } } }))];
         if (ops.length) await db.collection(coll).bulkWrite(ops, { ordered: false });
         const champs = Object.entries(plan.champs).map(([f, n]) => `${f}×${n}`).join(' ');
         faits.push(`${coll} ${plan.remplacer.length} remplacé(s)${champs ? ` [${champs}]` : ''}, ${plan.inserer.length} réinséré(s), ${plan.supprimer.length} retiré(s)`);
         console.log(`      ${faits.at(-1)}`);
+    }
+    // le rapport des entrées d'images : restaurées (cartes et entrées), gardées comme écrites par le worker, et ce qui ne se tranche pas
+    if (fautivesContrat.length) {
+        const nom = x => `carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`;
+        faits.push(`images entrée par entrée : ${rapportImages.restaurees.length} restaurée(s) sur ${rapportImages.cartes.size} carte(s), ${rapportImages.gardees.length} gardée(s) comme écrite(s) par le worker, ${rapportImages.indecidables.length} indécidable(s)${rapportImages.restaurees.length ? ` — restaurées : ${liste(rapportImages.restaurees.map(nom), 4)}` : ''}${rapportImages.gardees.length ? ` — gardées (worker) : ${liste(rapportImages.gardees.map(nom), 4)}` : ''}${rapportImages.indecidables.length ? ` — INDÉCIDABLES : ${liste(rapportImages.indecidables.map(nom), 4)}` : ''}`);
+        console.log(`      ${faits.at(-1)}`);
+        for (const [titre, l] of [['restaurées', rapportImages.restaurees], ['gardées (worker)', rapportImages.gardees], ['INDÉCIDABLES (le lot sort en code 4)', rapportImages.indecidables]]) {
+            if (!l.length) continue;
+            console.log(`        ${titre} :`);
+            for (const x of l.slice(0, 80)) console.log(`          ${nom(x)}`);
+            if (l.length > 80) console.log(`          … (+${l.length - 80})`);
+        }
     }
     // 🔑 Les vignettes se restaurent CHIRURGICALEMENT (relecture du 2026-10-08) : une baisse de `vignettes-images` ne fait JAMAIS remplacer le
     // tableau `images` (le worker y écrit en même temps : les images neuves de la fenêtre, et celles des autres sets de la carte, seraient
@@ -307,13 +343,19 @@ function journaliser(t, dossier, combien, sortie) {
     }
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
     if (nonRestaurees.length) console.log(`      ⚠️ NON restaurées (tenues par le worker, ou hors de la garde) : ${nonRestaurees.join(', ')} — la sauvegarde les porte`);
-    const relu = comparer(avant, await etatDeLaBase(db), { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
-    // la relecture rejoue aussi le contrat : un refus nouveau qui reste est une restauration incomplète
-    const contratRelu = api ? await jouerContrat(api, avantContrat, db) : null;
+    apres = null;                                                                  // l'état d'avant la restauration n'est plus utile : une seule copie de l'état « après » à la fois
+    const apresRelu = await etatDeLaBase(db, api);
+    const relu = comparer(avant, apresRelu, { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
+    // la relecture rejoue aussi le contrat (sur la même lecture) : un refus nouveau qui reste est une restauration incomplète
+    const contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
     await fermer();
     const resteContrat = contratRelu ? contratRelu.fautives : [];
-    const ok = !relu.nonAutorisees.length && !resteContrat.length;
-    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat];
+    // un indécidable n'est jamais « restauré » en silence : le lot sort en code 4
+    // (tour 3, E1) … et un produit servi dans la SAUVEGARDE et sans entrée dans l'état relu n'a pas été restauré (la perte d'un visuel n'est une « information » qu'avant l'écriture et sans arrêt)
+    const perdus = contratRelu?.v ? GC.produitsPerdus(contratRelu.v) : [];
+    const ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length && !perdus.length;
+    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`),
+        ...perdus.map(p => `produit ${p.idProduct} sans entrée après la restauration (servi dans la sauvegarde${p.sets.length ? `, sets ${p.sets.join(', ')}` : ''})`)];
     console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}`);
     const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, `🔴 ARRÊT : ${cmp.nonAutorisees.length ? 'baisses non annoncées' : 'refus du contrat API'} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
     journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);

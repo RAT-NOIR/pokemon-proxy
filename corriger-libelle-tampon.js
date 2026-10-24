@@ -9,7 +9,8 @@ const fs = require('fs');
 const path = require('path');
 
 // pokemon-proxy-api-v2 v2/identifier/visuels.js:60 — TAMPON_MAX = 40 : l'API refuse tout tamponNonRepresente > 40 caractères après trim().
-const TAMPON_MAX = 40;
+// Une seule copie dans le catalogue (D2, 2026-10-24) : celle de la règle qui compose les libellés.
+const { TAMPON_MAX } = require('./collecte-cartes/variantes-releve');
 const DOSSIER_SAUVEGARDE = 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/FROSMOTH/';
 
 const CORRECTIONS_LIBELLE = Object.freeze([Object.freeze({

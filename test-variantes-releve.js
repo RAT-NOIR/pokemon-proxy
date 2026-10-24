@@ -58,6 +58,22 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         for (const v of ['autre', 'enseigne', 'prerelease+staff', 'staff+staff', 'staff+', '', 'Staff', 'normale+staff', 'place-5', 'staff-prerelease', null]) verifier(`refusée : ${v}`, R.varianteValide(v), false);
     });
     await essayer('libellés', () => verifier('libellés', [R.libelleTampon('staff+prerelease'), R.libelleTampon('league+place-2'), R.libelleTampon('toys-r-us+cosmo'), R.libelleTampon('gamestop')], ['Staff + Prerelease', 'League + 2e place', 'Toys "R" Us + Cosmo', 'GameStop']));
+    // ── D2 (2026-10-24) : le libellé d'une image PARTAGÉE par plusieurs variantes = ce qui est COMMUN à toutes ; jamais plus de 40 caractères (TAMPON_MAX de l'API) ──
+    await essayer('D2 libelleCommun : cas décidés par le testeur', async () => {
+        verifier('Frosmoth, 4 places -> « League » (la place reste dans la variante)', R.libelleCommun(['league+place-1', 'league+place-2', 'league+place-3', 'league+place-4']), 'League');
+        verifier('une variante seule -> son libellé inchangé', [R.libelleCommun(['staff+prerelease']), R.libelleCommun(['league+place-2']), R.libelleCommun(['gamestop'])], ['Staff + Prerelease', 'League + 2e place', 'GameStop']);
+        verifier('staff et staff+prerelease -> « Staff »', R.libelleCommun(['staff', 'staff+prerelease']), 'Staff');
+        verifier('l\'ordre des variantes ne change rien, un doublon non plus', [R.libelleCommun(['league+place-3', 'league+place-1']), R.libelleCommun(['staff', 'staff', 'staff'])], ['League', 'Staff']);
+        verifier('plusieurs jetons communs gardent l\'ordre de la liste fermée et le « + »', R.libelleCommun(['staff+prerelease+place-1', 'staff+prerelease+place-2']), 'Staff + Prerelease');
+        verifier('aucun jeton commun -> lève', /aucun jeton commun/.test(await leve(() => R.libelleCommun(['staff', 'prerelease'])) || ''), true);
+        verifier('aucun commun malgré un jeton partagé deux à deux -> lève', /aucun jeton commun/.test(await leve(() => R.libelleCommun(['staff+prerelease', 'prerelease+league', 'staff+league'])) || ''), true);
+        const long4 = 'staff+prerelease+league+championship';
+        verifier('commun de plus de 40 caractères -> lève', /40 caractères/.test(await leve(() => R.libelleCommun([long4, `${long4}+place-1`])) || ''), true);
+        verifier('une variante seule de plus de 40 caractères -> lève aussi', /40 caractères/.test(await leve(() => R.libelleCommun([long4])) || ''), true);
+        verifier('libelleTampon lève aussi au-delà de 40', /40 caractères/.test(await leve(() => R.libelleTampon(long4)) || ''), true);
+        verifier('exactement 40 caractères passe (limite incluse)', [R.TAMPON_MAX, R.libelleTampon('staff+prerelease+league').length <= R.TAMPON_MAX], [40, true]);
+        verifier('liste vide, variante hors vocabulaire, normale : lèvent', [!!(await leve(() => R.libelleCommun([]))), !!(await leve(() => R.libelleCommun(['autre']))), !!(await leve(() => R.libelleCommun(['normale', 'staff'])))], [true, true, true]);
+    });
     await essayer('libellé d\'une variante non tamponnée', async () => verifier('normale refusée', /pas une variante tamponnée/.test(await leve(() => R.libelleTampon('normale')) || ''), true));
     await essayer('étiquettes lues', () => verifier('motifs', [R.jetonsDeEtiquette('Stamp rerel lease'), R.jetonsDeEtiquette('GameStop Promo'), R.jetonsDeEtiquette('Snowflake Stamp Countdown Calendar Promo'), R.jetonsDeEtiquette('Staff Version'), R.jetonsDeEtiquette('rien'), R.jetonsDeEtiquette('Cosmos holo'), R.jetonsDeEtiquette('Snowflake Cosmos')], [['prerelease'], ['gamestop'], ['snowflake'], ['staff'], [], ['cosmo'], ['snowflake', 'cosmo']]));
     await essayer('snowflake après cosmo', () => verifier('ordre de la liste fermée', [R.JETONS.indexOf('snowflake') - R.JETONS.indexOf('cosmo'), R.varianteValide('cosmo+snowflake'), R.varianteValide('snowflake+cosmo'), R.libelleTampon('snowflake')], [1, true, false, 'Snowflake']));
@@ -238,8 +254,12 @@ const plan = (w, { fiches = [F()], dates = DATES, idsReleve = new Set([100]), et
         const f = F({ variante: 'league+place-1', jetons: ['league', 'place-1'], vignettes: ['1ST PLACE'], conflit: 'le relevé du testeur dit 2e place pour ce produit : signalé',
             freres: [{ id: 101, variante: 'league+place-2', etiquette: '2ND PLACE' }, { id: 102, variante: 'league+place-3', etiquette: '3RD PLACE' }, { id: 103, variante: 'league+place-4', etiquette: '4TH PLACE' }] });
         const p = await plan(fausseBase(w), { fiches: [f] }), i = p.items[0];
-        verifier('V1 + 4 places, entrée et document écrits, libellés distincts joints par « / »', [i.v1?.idProduct, i.freresVus.map(x => [x.idProduct, x.variante]), i.autres, i.entree?.cible, !!i.doc, R.operations(p).lignes.length],
-            [99, [[101, 'league+place-2'], [102, 'league+place-3'], [103, 'league+place-4']], [], 'League + 1re place / League + 2e place / League + 3e place / League + 4e place', true, 5]);
+        verifier('V1 + 4 places, entrée et document écrits, libellé COMMUN aux 4 places (D2), jamais la jointure « / »', [i.v1?.idProduct, i.freresVus.map(x => [x.idProduct, x.variante]), i.autres, i.entree?.cible, !!i.doc, R.operations(p).lignes.length],
+            [99, [[101, 'league+place-2'], [102, 'league+place-3'], [103, 'league+place-4']], [], 'League', true, 5]);
+        verifier('la place de chaque produit reste dans sa variante (lignes)', R.operations(p).lignes.map(l => l.ecrit.variante), ['league+place-1', 'normale', 'league+place-2', 'league+place-3', 'league+place-4']);
+        // un libellé que l'API refuserait (aucun jeton commun, ou > 40) ne s'écrit pas : l'entrée et son document sont refusés, nommés ; les lignes de jointure restent écrites
+        const ga = await plan(fausseBase(w), { fiches: [F({ variante: 'staff', jetons: ['staff'], freres: [{ id: 101, variante: 'prerelease', etiquette: 'x' }, { id: 102, variante: 'league', etiquette: 'y' }, { id: 103, variante: 'championship', etiquette: 'z' }] })] });
+        verifier('aucun jeton commun : pas d\'entrée, pas de document, motif nommé', [ga.items[0].entree, ga.items[0].doc, /^libelle-impossible : .*aucun jeton commun/.test(ga.items[0].entreeMotif)], [null, null, true]);
         verifier('preuves : vignette regardée + conflit signalé', [/1ST PLACE.*signalé/.test(i.v2.preuve), i.freresVus[0].preuve], [true, 'vignette Cardmarket regardée par le coordinateur le 2026-10-18 : « 2ND PLACE »']);
         const w2 = monde({ plus: [LP(101, 1, 'S', '8', { variante: 'staff' }), LP(102, 1, 'S', '8'), LP(103, 1, 'S', '8')] });
         const q = await plan(fausseBase(w2), { fiches: [f] });
