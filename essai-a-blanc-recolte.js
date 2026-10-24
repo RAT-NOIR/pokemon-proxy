@@ -10,11 +10,12 @@ const CLI = require('./collecte-cartes/recolte-cli');
 const { fauxModeles } = require('./faux-modeles-cardtrader');
 
 const args = process.argv.slice(2);
-const code = args.find(a => /^--source=(ppr|tcs)$/.test(a))?.slice(9);
-const inconnus = args.filter(a => !/^--source=(ppr|tcs)$/.test(a) && !/^--dossier=.+$/.test(a));
-if (!code || inconnus.length) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs est obligatoire`); process.exit(2); }
-const SRC = code === 'ppr' ? require('./collecte-cartes/pokipair').SRC : require('./collecte-cartes/tcgcsv').SRC;
-const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\RECOLTE';
+const code = args.find(a => /^--source=(ppr|tcs|scx|pmk)$/.test(a))?.slice(9);
+const inconnus = args.filter(a => !/^--source=(ppr|tcs|scx|pmk)$/.test(a) && !/^--dossier=.+$/.test(a) && a !== '--basse-definition');
+if (!code || inconnus.length) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs|scx|pmk est obligatoire`); process.exit(2); }
+const SRC = { ppr: () => require('./collecte-cartes/pokipair').SRC, tcs: () => require('./collecte-cartes/tcgcsv').SRC, scx: () => require('./collecte-cartes/scrydex').SRC, pmk: () => require('./collecte-cartes/packmagik').SRC }[code]();
+const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? `C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\${code === 'scx' || code === 'pmk' ? 'RECOLTE2' : 'RECOLTE'}`;
+const BASSE = args.includes('--basse-definition');
 
 (async () => {
     process.env.R2_BUCKET_IMAGES = process.env.R2_BUCKET_IMAGES || 'essai-a-blanc-sans-bucket';
@@ -42,12 +43,14 @@ const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Us
         console.log = (...a) => sortie.push(a.join(' ')); console.error = (...a) => sortie.push(`ERR ${a.join(' ')}`);
         let r;
         try {
-            r = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, attendu: aFaire.length, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) });
+            // `--attendu` = le COMPTE de l'écriture (RECOLTE2 : des unités du plan peuvent être trop petites, cédées après la vraie largeur, ou écartées — le plan ne les voit pas encore)
+            const compte = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, compterSeulement: true, basseDefinition: BASSE });
+            r = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, attendu: compte.reel, basseDefinition: BASSE, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) });
         } finally { console.log = l; console.error = e; }
         for (const s of sortie) console.log(`   | ${s}`);
         const apresCartes = cartes.map(c => etat.carte(c._id));
-        const mmeNb = apresCartes.filter(c => c.images.length === avant.get(c._id)).length;
-        const siennes = apresCartes.flatMap(c => c.images.filter(x => x.source === SRC.SOURCE && x.lot === SRC.LOT));
+        const mmeNb = apresCartes.filter(c => (c.images || []).length === avant.get(c._id)).length;        // (une carte sans aucune image n'a pas de champ `images` : RECOLTE2)
+        const siennes = apresCartes.flatMap(c => (c.images || []).filter(x => x.source === SRC.SOURCE && x.lot === SRC.LOT));
         const remplaces = etat.images().filter(d => d.etat === 'remplace' && d.remplacePar?.source === SRC.SOURCE).length;
         console.log(`ESSAI À BLANC : code ${r.code} · attendu ${r.attendu} · réel ${r.reel} · objets R2 « déposés » (simulés) ${deposes.length} (clés distinctes ${new Set(deposes).size}) · entrées du lot posées ${siennes.length} · documents « remplace » ${remplaces} · cartes au même nombre d'entrées qu'avant ${mmeNb}/${cartes.length} · orphelins ${r.orphelins.length}`);
         for (const x of r.resultats) console.log(`   ${x.code} : ${x.etat} · unités ${x.unites} · déposées ${x.deposees} · joints ${x.joints} · cédées ${x.cedees} · remplacées ${x.remplacees} · garde ${x.garde?.ok ? 'ok' : 'ÉCHEC'} · concordance ${x.concordance}`);
@@ -70,5 +73,5 @@ const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Us
         if (cartesDiff || docsDiff || rr.reste || rr.nDocsNonRestaures) { console.error(`🔴 le retrait ne rend pas l'état d'avant : ${cartesDiff} carte(s), ${docsDiff} document(s)`); process.exitCode = 1; return; }
         process.exitCode = r.code === 0 ? 0 : 1;
     } finally { await lecture.fermer(); }
-})().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
+})().catch(e => { console.error('❌', e.message); if (process.env.ESSAI_DEBUG) console.error(e.stack); process.exitCode = 1; });
 void path;

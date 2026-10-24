@@ -80,11 +80,59 @@ const GROUPES = [
         ['copies multiples acceptées (kit)', "if (effectif.get(`${J.normaliserNom(s.nom)}|${s.numero}`) > 1 || s.variante) {", "if (false) {"],
         ['groupe renommé accepté', "if (manque.length) throw", "if (false) throw"],
         ['taille d\'image devinée', "_in_1000x1000.jpg` : null; };", "_in_1000x1000.jpg` : url; };"]
+    ] },
+    // ── RECOLTE2 : « scx » (pages d'extensions) et « pmk » (pages de sets) ──
+    { module: 'collecte-cartes/scrydex.js', bancs: ['test-scx.js', 'test-collecteur-scx.js'], mutants: [
+        ['tuile de la liste (sans identifiant) lue comme une carte', "if (id == null) continue;", ""],
+        ['langue non anglaise acceptée', "if (page.entete.language_code !== 'EN')", "if (false)"],
+        ['total annoncé non comparé aux tuiles lues', "if (page.entete.total !== page.tuiles.length)", "if (false)"],
+        ['identifiant de l\'entête non comparé', "if (page.entete?.id !== m.id)", "if (false)"],
+        ['nom de la tuile non comparé à la fiche', "if (!memeNom(t.nom, nomJoint)) {", "if (false) {"],
+        ['nom du produit (slug) non comparé', "if (nomProduit && !memeNomSlug(t.nom, nomProduit))", "if (false)"],
+        ['variantes (même carte, même numéro) acceptées', "if (effectifs.get(cle(x)) > 1) {", "if (false) {"],
+        ['tuile revendiquée deux fois gardée', "const gardees = unites.filter(u => !doubles.has(u.url));", "const gardees = unites;"],
+        ['deux signaux de moitié qui se contredisent acceptés', "if (parPrefixe.length === 1 && parJeton.length === 1 && parPrefixe[0] !== parJeton[0]) return { motif: 'moitie-contradictoire' };", ""],
+        ['moitié devinée sans signal', "return m ? { moitie: m } : { motif: 'moitie-illisible' };", "return { moitie: m ?? l.moities[0] };"],
+        ['numéro du slug ignoré', "const m = l.numeroSlug?.exec(String(p.slug ?? ''));", "const m = null;"],
+        ['hôte quelconque pour les images', "u.hostname === HOTE_IMAGES &&", "true &&"],
+        ['identifiant d\'extension quelconque dans le chemin des images', "const CHEMIN_IMAGE = new RegExp(`^/pokemon/(?:${IDS.join('|')})", "const CHEMIN_IMAGE = new RegExp(`^/pokemon/(?:[a-z0-9]+)"],
+        ['prix gardés dans la page réduite', "tuiles.push(`<a href=", "tuiles.push(corps + `<a href="],
+        ['adresse hors forme acceptée', "if (!urlImageValide(t.url)) {", "if (false) {"],
+        ['dos de carte jamais reconnu', "refuserOctets: octets => (H.estDosDeCarte(octets) ? 'dos-de-carte' : null)", "refuserOctets: octets => null"],
+        ['exclusion motivée ignorée', "if (exclue) {", "if (false) {"],
+        ['produit vers plusieurs cartes accepté', "if (lignesDuProduit.get(p.idProduct) > 1) {", "if (false) {"],
+        ['accents du slug comptés (Poké Ball)', "const memeNomSlug = (a, b) => memeNom(sansAccents(a), sansAccents(b));", "const memeNomSlug = (a, b) => memeNom(a, b);"]
+    ] },
+    { module: 'collecte-cartes/packmagik.js', bancs: ['test-pmk.js', 'test-collecteur-pmk.js'], mutants: [
+        ['garde de titre (« Happy » et les quatre noms) retirée', "if (!/Happy/.test(entete) || manquants.length)", "if (false)"],
+        ['numéros contigus non vérifiés', "if (!ns.every((n, i) => n === i + 1))", "if (false)"],
+        ['nom de la tuile non comparé à la fiche', "if (!memeNom(t.nom, nomJoint)) {", "if (false) {"],
+        ['nom du produit (slug) non comparé', "if (nomProduit && !memeNomSlug(t.nom, nomProduit))", "if (false)"],
+        ['variantes acceptées', "if (effectifs.get(cle(p)) > 1) {", "if (false) {"],
+        ['tuile revendiquée deux fois gardée', "const gardees = unites.filter(u => !doubles.has(u.url));", "const gardees = unites;"],
+        ['numéro du libellé non comparé à l\'adresse de la carte', "if (numeroTexte !== q[1]) incoherent =", "if (false) incoherent ="],
+        ['nom de l\'image non comparé au libellé', "else if (alt !== nomP) incoherent =", "else if (false) incoherent ="],
+        ['image de la tuile non comparée à son numéro', "else if (src !== `https://${HOTE_IMAGES}/storage/v1/object/public/thumbs/w768/card-images/pokemon/${dossier}/${q[1]}.png.webp`) incoherent =", "else if (false) incoherent ="],
+        ['hôte quelconque pour les images', "u.hostname === HOTE_IMAGES &&", "true &&"],
+        ['dossier d\'images quelconque dans le chemin', "const CHEMIN_IMAGE = new RegExp(`^/storage/v1/object/public/card-images/pokemon/(?:${DOSSIERS})/", "const CHEMIN_IMAGE = new RegExp(`^/storage/v1/object/public/card-images/pokemon/(?:[a-z0-9]+)/"],
+        ['prix gardés dans la page réduite', "lis.push(`<a class=", "lis.push(b + `<a class="],
+        ['adresse hors forme acceptée', "if (!urlImageValide(t.url)) {", "if (false) {"],
+        ['numéro du slug lu sans la forme du code du set', "const m = l.numeroSlug?.exec(String(p.slug ?? ''));", "const m = /(\\d{3})$/.exec(String(p.slug ?? ''));"],
+        ['numéro du slug ignoré', "const m = l.numeroSlug?.exec(String(p.slug ?? ''));", "const m = null;"],
+        ['produit vers plusieurs cartes accepté', "if (lignesDuProduit.get(p.idProduct) > 1) {", "if (false) {"],
+        ['exclusion motivée ignorée', "if (exclue) {", "if (false) {"]
+    ] },
+    { module: 'collecte-cartes/recolte-commun.js', bancs: ['test-collecteur-scx.js'], mutants: [
+        ['RECOLTE2 : le dos de carte jugé comme une image', "if (refus) return { statut: refus };", ""],
+        ['RECOLTE2 : le dos de carte écrit (non écarté)', ", 'illisible', 'dos-de-carte'].includes(st)", ", 'illisible'].includes(st)"]
     ] }
 ];
 let tues = 0, total = 0;
 const survivants = [];
+// `--groupe=<fragment du nom du module>` (répétable) : ne rejoue que les groupes dont le module le contient (sans lui : tous)
+const filtres = process.argv.slice(2).filter(a => a.startsWith('--groupe=')).map(a => a.slice(9));
 for (const G of GROUPES) {
+    if (filtres.length && !filtres.some(f => G.module.includes(f))) continue;
     const fichier = path.join(__dirname, G.module);
     const original = fs.readFileSync(fichier, 'utf8');
     try {

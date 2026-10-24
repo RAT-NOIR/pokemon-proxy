@@ -39,10 +39,11 @@ const cleNum = n => (n == null || String(n).trim() === '' ? 'sn' : String(n).tri
  * Le descripteur d'une source. Écrit par ce qu'il autorise : tout champ manquant LÈVE (un code, un lot ou une langue absents ne se devinent pas), et le code neutre ne contient pas
  * le nom de la source (la liste des noms interdits est donnée par l'appelant : `nomsInterdits`).
  */
-function fabriquerSource({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, nomsInterdits = [], tampon = () => undefined }) {
+function fabriquerSource({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, nomsInterdits = [], tampon = () => undefined, refuserOctets = () => null }) {
+    if (typeof refuserOctets !== 'function') throw new Error('source : « refuserOctets » doit être une fonction (octets -> motif | null)');
     for (const [k, v] of Object.entries({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN })) if (typeof v !== 'string' || !v) throw new Error(`source : « ${k} » absent`);
     for (const n of nomsInterdits) for (const [k, v] of Object.entries({ SOURCE, LOT, LANGUE_PREUVE, CHAMP_BILAN })) if (new RegExp(n, 'i').test(v)) throw new Error(`source : « ${k} » (${v}) nomme la source (${n}) — le nom de la source n'apparaît jamais en public`);
-    return Object.freeze({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, MENTION, tampon,
+    return Object.freeze({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, MENTION, tampon, refuserOctets,
         cleR2: (slug, numero, carteId) => `${SOURCE}/${slug}/${cleNum(numero)}-${carteId}-${LANGUE}.webp`,
         idImage: (slug, carteId, numero) => `${SOURCE}/${slug}/${carteId}/${cleNum(numero)}/${LANGUE}`,
         idEtat: slug => `${SOURCE}/${slug}` });
@@ -57,6 +58,9 @@ function controleLargeur(SRC, largeur) {
 }
 /** Les octets sont-ils une VRAIE image (format décodable, forme de carte) ? -> { statut: 'ok'|'trop-petit'|'forme-inattendue'|'illisible', w, h, format } */
 async function juger(SRC, octets) {
+    // RECOLTE2 : un fichier que la source SAIT être autre chose qu'une carte (le dos d'une carte servi en 200 pour une adresse inconnue) n'est jamais une image, quelle que soit sa forme
+    const refus = SRC.refuserOctets ? SRC.refuserOctets(octets) : null;
+    if (refus) return { statut: refus };
     let meta;
     try { meta = await sharp(octets).metadata(); } catch { return { statut: 'illisible' }; }
     if (!['jpeg', 'png', 'webp'].includes(meta.format) || !meta.width || !meta.height) return { statut: 'illisible', format: meta.format };
@@ -231,7 +235,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
         if (!url || !ix) { horsCache++; continue; }                                  // jamais téléchargée : une erreur, pas un écart
         const st = basseDefinition ? jugementDe(SRC, ix) : ix.statut;
         if (st === 'trop-petit') { tropPetits++; continue; }
-        if (['absent', 'fausse-absente', 'forme-inattendue', 'illisible'].includes(st)) { ecartees++; continue; }
+        if (['absent', 'fausse-absente', 'forme-inattendue', 'illisible', 'dos-de-carte'].includes(st)) { ecartees++; continue; }
         if (st !== (basseDefinition ? 'basse-definition' : 'ok')) { horsCache++; continue; }
         const c = HOTE.lireDuCache(dossierCache, url);
         if (!c) { horsCache++; continue; }
