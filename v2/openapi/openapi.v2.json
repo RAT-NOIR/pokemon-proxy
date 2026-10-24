@@ -3694,10 +3694,11 @@
                 "ecart-non-mesurable",
                 "prix-indicatif-tampons-melanges",
                 "peut-etre-gonfle-par-tampons",
-                "version-tamponnee-prix-sous-estime"
+                "version-tamponnee-prix-sous-estime",
+                "etat-non-estimable"
               ]
             },
-            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). `version-tamponnee-prix-sous-estime` (lot F1-TAMPON, règle 2) : le tampon STAFF a été lu sur la photo, deux fois à l'identique, pour une fiche marquée ; elle est servie À LA PLACE de `peut-etre-gonfle-par-tampons`, jamais avec elle (texte : « version tamponnée : le prix Cardmarket sous-estime sa valeur »). Derrière un interrupteur éteint (V2_LECTURE_TAMPON) : tant qu'il est éteint, ou que l'extension n'envoie pas la carte, elle n'est jamais servie."
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `etat-non-estimable` (lot ETAT-FOURCHETTE, texte de l'éditeur : « état non estimable sur les photos ») n'est JAMAIS porté par le guide d'une fiche : il est posé, en DERNIER, sur le guide d'un `prixRepli` servi avec une `fourchette` (l'état de la carte n'a pas pu être estimé sur les photos) ; ce guide-là n'est alors jamais `fiable`. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). `version-tamponnee-prix-sous-estime` (lot F1-TAMPON, règle 2) : le tampon STAFF a été lu sur la photo, deux fois à l'identique, pour une fiche marquée ; elle est servie À LA PLACE de `peut-etre-gonfle-par-tampons`, jamais avec elle (texte : « version tamponnée : le prix Cardmarket sous-estime sa valeur »). Derrière un interrupteur éteint (V2_LECTURE_TAMPON) : tant qu'il est éteint, ou que l'extension n'envoie pas la carte, elle n'est jamais servie."
           }
         },
         "required": [
@@ -3718,7 +3719,7 @@
             "$ref": "#/components/schemas/PrixRepliEtatProche"
           }
         ],
-        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi."
+        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi. ETAT-FOURCHETTE : quand l'état de la carte n'est pas estimable sur les photos, la forme `tendance` porte en plus `fourchette` (le prix du plus abîmé plausible au meilleur, chaque borne tirée d'une donnée de prix déjà servie ou absente) et son guide porte la réserve `etat-non-estimable` : ce n'est jamais un prix sûr."
       },
       "PrixRepliTendance": {
         "type": "object",
@@ -3735,7 +3736,7 @@
               "lecture-ratee",
               "tendance-seule"
             ],
-            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la LANGUE de la carte : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état estimé a une confiance « basse », il n'est pas retenu) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. `lecture-ratee` (retour-live avec `lectureRatee`, quelle que soit sa cause et sa définitivité : défi, blocage, onglet, grille vide, sans prix, sans offre reverse) et `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) : ce que l'extension a rendu."
+            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la LANGUE de la carte : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état n'est pas estimable sur les photos, aucun état n'est retenu ; ou, au retour en direct, un prix lu alors que l'état retenu est null) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. Dans ce cas la forme porte `fourchette`. `lecture-ratee` (retour-live avec `lectureRatee`, quelle que soit sa cause et sa définitivité : défi, blocage, onglet, grille vide, sans prix, sans offre reverse) et `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) : ce que l'extension a rendu."
           },
           "fiable": {
             "const": false,
@@ -3748,6 +3749,10 @@
           "offre": {
             "type": "null",
             "description": "Toujours null pour la forme `tendance`."
+          },
+          "fourchette": {
+            "$ref": "#/components/schemas/PrixFourchette",
+            "description": "AJOUT FACULTATIF (lot ETAT-FOURCHETTE). Servie SI ET SEULEMENT SI l'état de la carte n'est pas estimable sur les photos (aucun état retenu) : le prix est alors une FOURCHETTE, jamais un prix sûr. Le `guide` de ce repli porte la réserve `etat-non-estimable` (en dernier) et n'est jamais `fiable`. Absente quand l'état est estimé : le repli est celui d'avant, octet pour octet."
           }
         },
         "required": [
@@ -3756,6 +3761,74 @@
           "fiable",
           "guide",
           "offre"
+        ],
+        "additionalProperties": false
+      },
+      "PrixFourchette": {
+        "type": "object",
+        "properties": {
+          "basse": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BornePrix"
+              }
+            ],
+            "description": "Le prix dans l'état le plus abîmé plausible, ou null quand aucune donnée de prix ne le donne (alors `absentes` contient `basse`). Source : le plus bas prix de la grille lue en direct (`grille-directe`, deux états au moins), sinon le « De » du guide (`guide-de`, l'offre la plus basse TOUS ÉTATS et toutes langues)."
+          },
+          "haute": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BornePrix"
+              }
+            ],
+            "description": "Le prix dans le meilleur état, ou null quand aucune donnée de prix ne le donne (alors `absentes` contient `haute`). Seule la grille lue en direct (`grille-directe`, deux états au moins) la donne : le guide n'a AUCUN prix par état, sa tendance et ses moyennes sont des prix TOUS ÉTATS et ne sont jamais présentées comme le prix du meilleur état."
+          },
+          "absentes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "basse",
+                "haute"
+              ]
+            },
+            "description": "Les bornes qu'aucune donnée ne donne, dans l'ordre `basse` puis `haute` : exactement celles qui sont null. Le client n'invente jamais une borne absente."
+          }
+        },
+        "required": [
+          "basse",
+          "haute",
+          "absentes"
+        ],
+        "additionalProperties": false,
+        "description": "Lot ETAT-FOURCHETTE (décision de l'éditeur, 2026-10-24) : le prix d'une carte dont l'état n'est pas estimable sur les photos, du plus abîmé plausible au meilleur. Rien ne s'invente : chaque borne vient d'une donnée de prix que le serveur sert déjà, ou est absente — et la réponse dit laquelle. Aucun verdict ne se fonde dessus."
+      },
+      "BornePrix": {
+        "type": "object",
+        "properties": {
+          "prix": {
+            "type": "number",
+            "minimum": 0.01,
+            "description": "Un prix en euros, strictement positif (un zéro n'est pas un prix ; le plus petit prix Cardmarket est 0,01 €)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "guide-de",
+              "grille-directe"
+            ],
+            "description": "D'où vient la borne. `guide-de` : le « De » du guide du jour (l'offre la plus basse tous états et toutes langues). `grille-directe` : la grille lue en direct par l'extension (un prix par état, envoyée avec le retour en direct), le plus bas ou le plus haut de ses prix."
+          }
+        },
+        "required": [
+          "prix",
+          "source"
         ],
         "additionalProperties": false
       },

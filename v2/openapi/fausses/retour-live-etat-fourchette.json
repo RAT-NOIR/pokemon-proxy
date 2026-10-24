@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "facturation": null,
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  },
+  "prixRepli": {
+    "repli": "tendance",
+    "cause": "etat-non-retenu",
+    "fiable": false,
+    "guide": {
+      "tendance": 1.49,
+      "de": 0.02,
+      "deBase": "tous-etats",
+      "moyenne7": 1.55,
+      "moyenne30": 1.26,
+      "date": "2026-10-12",
+      "fiable": false,
+      "reserves": [
+        "etat-non-estimable"
+      ]
+    },
+    "offre": null,
+    "fourchette": {
+      "basse": {
+        "prix": 0.9,
+        "source": "grille-directe"
+      },
+      "haute": {
+        "prix": 1.4,
+        "source": "grille-directe"
+      },
+      "absentes": []
+    }
+  }
+}

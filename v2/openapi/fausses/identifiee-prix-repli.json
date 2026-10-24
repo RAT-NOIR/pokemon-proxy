@@ -88,10 +88,22 @@
             "moyenne7": 1.55,
             "moyenne30": 1.26,
             "date": "2026-10-12",
-            "fiable": true,
-            "reserves": []
+            "fiable": false,
+            "reserves": [
+              "etat-non-estimable"
+            ]
           },
-          "offre": null
+          "offre": null,
+          "fourchette": {
+            "basse": {
+              "prix": 0.02,
+              "source": "guide-de"
+            },
+            "haute": null,
+            "absentes": [
+              "haute"
+            ]
+          }
         }
       }
     ],
