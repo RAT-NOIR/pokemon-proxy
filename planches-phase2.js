@@ -89,5 +89,26 @@ async function absent(texte) {
         }
     }
     for (const lot of ['A', 'B', 'C']) await planchePartages(lot, lots[lot]);
+
+    // ── PHASE 2 v2 : la planche des 20 LIGNES à détacher — produit, carte jointe, preuve (essai-lot-D.json, écrit par essai-detachement-phase2.js)
+    const fD = path.join(path.dirname(SORTIE), 'essai-lot-D.json');
+    if (fs.existsSync(fD)) {
+        const rangs = JSON.parse(fs.readFileSync(fD, 'utf8')).lignes;
+        const COL = 4, legende = 112, cW = 2 * L + 10 + MARGE, cH = H + legende + MARGE, lignesN = Math.ceil(rangs.length / COL), comps = [];
+        const coupe = (t, n) => { const mots = String(t).split(' '), ls = ['']; for (const m of mots) { if ((ls[ls.length - 1] + ' ' + m).trim().length > n) ls.push(m); else ls[ls.length - 1] = (ls[ls.length - 1] + ' ' + m).trim(); } return ls; };
+        for (let i = 0; i < rangs.length; i++) {
+            const r = rangs[i], col = i % COL, lig = Math.floor(i / COL), X = MARGE + col * cW, Y = MARGE + lig * cH;
+            const n = nous(r.idProduct), c = cm(r.idProduct);
+            comps.push({ input: n ? await vignette(n) : await absent('pas de vignette en cache'), left: X, top: Y }, { input: c ? await vignette(c) : await absent('pas de copie Cardmarket'), left: X + L + 10, top: Y });
+            const vu = coupe(r.vu, 62).slice(0, 3);
+            const svg = ligneTexte(6, 16, `#${i + 1} ${r.idProduct}  DÉTACHER la ligne ${r.ligne}`, { taille: 13, fill: '#f77', gras: true })
+                + ligneTexte(6, 32, `carte jointe : ${r.carteNom} (${r.set} n°${r.numero ?? '-'}, ${r.carteId})`.slice(0, 66), { taille: 12, fill: '#fff' })
+                + ligneTexte(6, 47, `ligne posée par : ${r.preuveLigne} · justes gardés : ${r.justes.join(', ')}`.slice(0, 70), { taille: 11, fill: '#9cf' })
+                + vu.map((t, k) => ligneTexte(6, 63 + k * 14, (k === 0 ? 'VU : ' : '') + t, { taille: 11, fill: '#fc8' })).join('');
+            comps.push({ input: tampon('#111', svg, 2 * L + 10, legende), left: X, top: Y + H });
+        }
+        await sharp({ create: { width: MARGE + COL * cW, height: MARGE + lignesN * cH, channels: 3, background: '#4a4a4a' } }).composite(comps).jpeg({ quality: 86 }).toFile(autoriser(path.join(SORTIE, 'lot-D.jpg'), [SORTIE]));
+        sorties.push('lot-D.jpg'); console.log(`✅ lot-D.jpg : ${rangs.length} lignes à détacher`);
+    }
     console.log(`\n${sorties.length} planches dans ${SORTIE}`);
 })().catch(e => { console.error('❌', e.stack || e.message); process.exitCode = 1; });

@@ -84,6 +84,35 @@ const DECISIONS = {
     // deck BW (Ultra Ball, Rare Candy, Giant Cape, Juniper, Cheren…) — même cause que 2026-10-08c ; les dresseurs n'ont pas d'attaque, preuve « nom ».
     // Les autres : Victini ex SV-P051/052 (visuel Arctibax, Bellibolt), Lance's Charizard V S-P123 (visuel Pikachu VMAX), Tornadus GX SM-P (visuel
     // Zoroark), BREAK Starter Pack Water/Grass/Fire Energy (visuels Krabby, Shellder, Cloyster), Magikarp M-P040 (visuel : l'Énergie Combat 040/M-P).
+    // PHASE 2 v2 (2026-10-24) — DÉCISION DU TESTEUR : « les 20 « autre dessin » : on DÉTACHE la ligne cartes_produits fausse de chacun ; le produit devient « sans ligne », honnête, et la phase 3
+    // lui refera une ligne juste. » Le nom et les attaques du produit sont ceux de la carte jointe (même Pokémon, même texte) : les témoins `nom` et `attaques` ne contredisent RIEN ici. La preuve est
+    // VISUELLE (planches faux-*.jpg et incertains de l'audit S8, regardées par le coordinateur et le testeur) : preuve « vu ». Elle se REJOUE à l'écriture sur ce qui peut l'être — le produit est
+    // toujours celui qui a été regardé (nom Cardmarket du catalogue) et la carte jointe est toujours celle qui a été regardée (nomEn) — et chaque ligne nomme les produits JUSTES qui partagent la même
+    // carte (leur ligne n'est JAMAIS dans la décision, et doit toujours exister sur la même carte). `preuveLigne` : la clé qui avait posé la ligne (« metacarte+freres » = posée parce qu'un frère de
+    // la même métacarte est joint ; « set+nom » = le nom seul) : une clé FAIBLE, c'est la cause. Rien d'autre n'est détaché.
+    '2026-10-24': [
+        ['237806|523095', 'Jirachi GX [Psychic Zone | Star Search | Star Shield GX]', 'Jirachi-GX', [378870], 'metacarte+freres', 'Cardmarket montre la version à illustration PLEINE de Jirachi GX (Unified Minds) ; la ligne le joint au n°79, la version ordinaire (autre illustration), seule servie : juste pour 378870 (V1-UNM79), fausse pour ce produit'],
+        ['221742|321171', 'Garbodor [Trashalanche | Acid Spray]', 'Garbodor', [297513], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration de Garbodor (fond gris et rochers) que celle de Guardians Rising n°51 servie ; produit sans slug, ligne posée par un frère de métacarte'],
+        ['246144|463079', 'Victory Proof', 'Victory Proof', [463074], 'set+nom', 'Cardmarket montre la 3e PLACE (3位, médaille de bronze) ; la carte jointe et son entrée montrent la 2e place (2位) : V1 = 1re, V2 = 2e, V3 = 3e place sont trois cartes jointes à une seule'],
+        ['246144|463069', 'Victory Proof', 'Victory Proof', [463074], 'set+nom', 'Cardmarket montre la 1re PLACE (優勝, couronne dorée) ; la carte jointe et son entrée montrent la 2e place (2位) : trois cartes jointes à une seule'],
+        ['318039|824940', 'Eevee [Boosted Evolution | Reckless Charge]', 'Eevee', [824918], 'metacarte+setlist', 'le slug Cardmarket « Eevee-V2-SV-PTH225 » est le n°225 (Eevee endormi) ; la ligne le joint au n°177 (Eevee debout), seul visuel servi : autre illustration'],
+        ['224087|311404', 'M Sharpedo EX [Torpedo Dive]', 'M Sharpedo-EX', [311398, 363915], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration de M Sharpedo EX que celle de XY200 servie ; produit sans slug, ligne posée par un frère de métacarte'],
+        ['181655|471679', 'Champions Festival [Duckboat]', 'Champions Festival', [468979], 'set+nom', 'Cardmarket montre une autre édition (autre millésime) des Championnats du monde que le visuel servi (WORLD CHAMPIONSHIPS 2017)'],
+        ['181655|471684', 'Champions Festival [Duckboat]', 'Champions Festival', [468979], 'set+nom', 'Cardmarket montre une autre édition (autre millésime) des Championnats du monde que le visuel servi (WORLD CHAMPIONSHIPS 2017)'],
+        ['223952|665136', 'Kirlia [Smack | Magical Shot]', 'Kirlia', [299494], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration de Kirlia (autre pose) que celle de Burning Shadows n°92 servie'],
+        ['220756|449138', 'Choice Band', 'Choice Band', [297573], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration (promotion de championnat, tampon STAFF) que celle de Guardians Rising n°121 servie'],
+        ['221788|450308', 'Rescue Stretcher', 'Rescue Stretcher', [297582], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration (promotion Pokémon League, tampon) que celle de Guardians Rising n°130 servie'],
+        ['192356|554185', 'Pitch\'s Pikachu [Pika Shoot]', 'Pitch\'s Pikachu', [554180], 'set+nom+attaques', 'Cardmarket montre une AUTRE illustration (Pikachu et ballon de football, promotion du film) que la V1 servie (Pikachu debout)'],
+        ['187856|700771', 'Vivillon [Conversion Powder | Colorful Wind]', 'Vivillon', [564498], 'set+numero', 'Cardmarket montre le motif « Japanese Meadow Pattern » de Vivillon ; le visuel servi montre un autre motif (autre produit : V1)'],
+        ['220938|471694', 'Victory Decoration', 'Victory Decoration', [471689], 'set+nom', 'Cardmarket montre la médaille de la 1re PLACE (優勝, or) ; la carte jointe et son entrée montrent la 2e place (2位, argent)'],
+        ['187856|700737', 'Vivillon [Conversion Powder | Colorful Wind]', 'Vivillon', [281354, 700739, 700740, 700742], 'set+numero', 'Cardmarket montre le motif « English High Plains Pattern » ; le visuel servi montre un autre motif (celui de la V1)'],
+        ['224077|311405', 'M Camerupt EX [Magma Eruption]', 'M Camerupt-EX', [311401, 363914], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration de M Camerupt EX (autre lettrage) que celle de XY198 servie ; produit sans slug'],
+        ['148517|371643', 'Ultra Ball', 'Ultra Ball', [302205], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration (balle posée sur une table, logo « League Cup ») que celle de Shining Legends n°68 servie'],
+        ['221577|468924', 'Alolan Vulpix [Beacon | Icy Snow]', 'Alolan Vulpix', [297485, 319255, 886902], 'metacarte+freres', 'Cardmarket montre une AUTRE illustration de Alolan Vulpix (fond enneigé) que celle de Guardians Rising n°21 servie'],
+        ['220938|471699', 'Victory Decoration', 'Victory Decoration', [471689], 'set+nom', 'Cardmarket montre la médaille de la 3e PLACE (3位, bronze) ; la carte jointe et son entrée montrent la 2e place (2位)'],
+        ['187856|700744', 'Vivillon [Conversion Powder | Colorful Wind]', 'Vivillon', [281354, 700739, 700740, 700742], 'tcgdex+pont', 'Cardmarket montre le motif « Russian Icy Snow Pattern » (texte russe) ; le visuel servi montre un autre motif (celui de la V1)']
+    ].map(([id, nomCm, carteNom, justes, preuveLigne, vu]) => ({ id, preuve: 'vu', type: 'fiche-contredite-par-la-vue', nomCm, carteNom, justes, preuveLigne, vu,
+        pourquoi: `PHASE 2 v2 : « ${nomCm} » joint à la carte « ${carteNom} » (ligne posée par ${preuveLigne}) — ${vu}` })),
     '2026-10-17': [
         ['158475|676477', 'Energy Switch', 'Minccino'], ['148517|676478', 'Energy Search', 'Ultra Ball'], ['25165|676479', 'Switch', 'Rare Candy'],
         ['158409|676480', 'Pokédex HANDY910is', 'Giant Cape'], ['120958|676481', 'Poké Ball', 'Professor Juniper'], ['126640|676482', 'Buffer Piece', 'Cheren'],
@@ -123,8 +152,30 @@ function jugerLigne(x, nomProduit, notre, autre) {
         const sur = (notre?.attaques || []).filter(a => att.includes(normaliserNom(a.nom))).length;
         verdict = n && att.length && notre && !sur ? `${n} ; aucune des attaques [${d.attaques.join(' | ')}] sur la carte` : null;
     }
+    else if (x.preuve === 'vu') {
+        // PHASE 2 v2 : la preuve est visuelle, elle ne se rejoue pas par les mots ; ce qui se rejoue, c'est que le produit et la carte sont CEUX QUI ONT ÉTÉ REGARDÉS (écrits dans la décision)
+        verdict = notre && typeof x.nomCm === 'string' && x.nomCm && nomProduit === x.nomCm && typeof x.carteNom === 'string' && notre.nomEn === x.carteNom ? `vu à l'œil (planches de l'audit S8) : ${x.vu}` : null;
+    }
     else verdict = null;
     return { verdict };
+}
+
+/**
+ * L'ÉCRITURE du plan, séparée de main() pour être testée sur un mongod local : supprime les lignes nommées, retire le lien de CE produit à sa carte
+ * (jamais celui d'un autre produit de la même carte), et nomme le trou (un reste) pour tout produit qui n'a plus aucune ligne.
+ * @returns {{supprimees, attendu, encore, restes, complet}} complet = tout est supprimé et plus rien ne reste
+ */
+async function appliquerPlan({ L, C, R }, plan, DECISION) {
+    const r = await L.deleteMany({ _id: { $in: plan.map(p => p.l._id) } });
+    for (const p of plan) await C.updateOne({ _id: p.l.carteId }, { $pull: { 'liens.idProduct': p.l.idProduct } });
+    let restes = 0;
+    for (const p of plan.filter(p => !p.autres)) {
+        restes++;
+        await R.updateOne({ set: p.l.slugSet, type: p.x.type, idProduct: p.l.idProduct, carteId: p.l.carteId },
+            { $set: { detail: `${p.l.idProduct} « ${p.nom} » : joint par ${p.l.preuve} à ${p.l.carteId} — ${p.x.pourquoi} ; ${p.verdict} ; détachée par detacher-lignes-prouvees.js (feu vert du testeur, décision du ${DECISION})`, le: new Date() } }, { upsert: true });
+    }
+    const encore = await L.countDocuments({ _id: { $in: plan.map(p => p.l._id) } });
+    return { supprimees: r.deletedCount, attendu: plan.length, encore, restes, complet: r.deletedCount === plan.length && !encore };
 }
 
 async function main() {
@@ -147,9 +198,14 @@ async function main() {
     const toutes = await L.find({ idProduct: { $in: ids } }).toArray();
     console.log(`\n════ ${LIGNES.length} lignes nommées · ${lignes.length} trouvées en base · ${ids.length} produits · ${toutes.length} lignes de ces produits ════`);
     const fautes = [], plan = [];
+    // les produits JUSTES nommés par la décision (preuve « vu ») : leur ligne doit exister sur la MÊME carte, et elle n'est jamais détachée
+    const nommesJustes = [...new Set(LIGNES.flatMap(x => x.justes || []))];
+    const lignesJustes = nommesJustes.length ? await L.find({ idProduct: { $in: nommesJustes } }).project({ idProduct: 1, carteId: 1 }).toArray() : [];
     for (const x of LIGNES) {
         const l = parId.get(x.id);
         if (!l) { fautes.push(`${x.id} : absente de la base`); continue; }
+        for (const j of x.justes || []) if (!lignesJustes.some(t => t.idProduct === j && t.carteId === l.carteId)) fautes.push(`${x.id} : le produit juste ${j} n'a plus de ligne sur la carte ${l.carteId} — la décision ne tient plus`);
+        if ((x.justes || []).some(j => LIGNES.some(y => y.id.endsWith(`|${j}`)))) fautes.push(`${x.id} : un produit « juste » est aussi dans la décision`);
         const nom = nomCat.get(l.idProduct);
         if (!nom) { fautes.push(`${x.id} : produit ${l.idProduct} absent du catalogue`); continue; }
         const d = decomposerNomCardmarket(nom);
@@ -178,18 +234,10 @@ async function main() {
         console.log(`   annonce écrite : ${annonce}\n   (simulation — rien n'est écrit en base)`);
         await fermer(); return;
     }
-    const r = await L.deleteMany({ _id: { $in: plan.map(p => p.l._id) } });
-    for (const p of plan) await C.updateOne({ _id: p.l.carteId }, { $pull: { 'liens.idProduct': p.l.idProduct } });
-    let restes = 0;
-    for (const p of plan.filter(p => !p.autres)) {
-        restes++;
-        await cx.db.collection('restes').updateOne({ set: p.l.slugSet, type: p.x.type, idProduct: p.l.idProduct, carteId: p.l.carteId },
-            { $set: { detail: `${p.l.idProduct} « ${p.nom} » : joint par ${p.l.preuve} à ${p.l.carteId} — ${p.x.pourquoi} ; ${p.verdict} ; détachée par detacher-lignes-prouvees.js (feu vert du testeur, décision du ${DECISION})`, le: new Date() } }, { upsert: true });
-    }
-    const encore = await L.countDocuments({ _id: { $in: plan.map(p => p.l._id) } });
-    console.log(`\n   ✅ détachées : ${r.deletedCount} (attendu ${plan.length}) · encore présentes : ${encore} · restes écrits : ${restes} (produits restés sans ligne)`);
+    const r = await appliquerPlan({ L, C, R: cx.db.collection('restes') }, plan, DECISION);
+    console.log(`\n   ✅ détachées : ${r.supprimees} (attendu ${r.attendu}) · encore présentes : ${r.encore} · restes écrits : ${r.restes} (produits restés sans ligne)`);
     await fermer();
-    if (r.deletedCount !== plan.length || encore) process.exitCode = 1;
+    if (!r.complet) process.exitCode = 1;
 }
-module.exports = { DECISIONS, jugerLigne, estInterdite };
+module.exports = { DECISIONS, jugerLigne, estInterdite, appliquerPlan };
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });

@@ -157,6 +157,22 @@ function appliquer({ cartes }, lot, table) {
     }) };
 }
 
+/**
+ * PHASE 2 v2 : l'état APRÈS le détachement de lignes `cartes_produits`, en mémoire : la ligne disparaît et le lien `liens.idProduct` de CE produit est retiré de SA carte (les liens des autres produits restent).
+ * LÈVE si une ligne nommée est absente. Ne modifie JAMAIS l'état reçu.
+ */
+function detacherEnMemoire({ cartes, cartesProduits }, idsLignes) {
+    const aRetirer = new Set(idsLignes);
+    const presentes = new Map(cartesProduits.filter(l => aRetirer.has(l._id)).map(l => [l._id, l]));
+    for (const id of aRetirer) if (!presentes.has(id)) throw new Error(`detacherEnMemoire : la ligne ${id} est absente de l'état — table périmée ou ligne déjà détachée`);
+    const liensARetirer = new Map();
+    for (const l of presentes.values()) { if (!liensARetirer.has(l.carteId)) liensARetirer.set(l.carteId, new Set()); liensARetirer.get(l.carteId).add(l.idProduct); }
+    return {
+        cartesProduits: cartesProduits.filter(l => !aRetirer.has(l._id)),
+        cartes: cartes.map(c => { const s = liensARetirer.get(c._id); return !s || !c.liens?.idProduct ? c : { ...c, liens: { ...c.liens, idProduct: c.liens.idProduct.filter(p => !s.has(p)) } }; })
+    };
+}
+
 const signature = e => JSON.stringify([e.visuel, e.grande?.cle, e.vignette?.cle, e.mention, e.variante, e.produitsPartages, e.partageeHoloNonHolo, e.partageeTamponNonSepare, e.tamponNonRepresente, e.basseDefinition]);
 /**
  * Ce que le geste fait à ce que l'API sert : produit par produit, avant / après (sorties de `decider`).
@@ -222,5 +238,5 @@ function motifDArret({ nbRetenues, nbRefus, attendu }) {
     return null;
 }
 
-module.exports = { LOT, MOTIF_RETRAIT, RETRAIT, EMPRUNT, ECARTES, TABLES, verifierTables, produitsServisParCle, planifier, appliquer, compareEntrees, operationsEmprunt, operationsAnnulation,
+module.exports = { LOT, MOTIF_RETRAIT, RETRAIT, EMPRUNT, ECARTES, TABLES, verifierTables, produitsServisParCle, planifier, appliquer, detacherEnMemoire, compareEntrees, operationsEmprunt, operationsAnnulation,
     ecrireEmprunt, annulerEmprunt, commandeRetrait, garderSousLot, motifDArret, cleEntree, num };
