@@ -14,8 +14,19 @@
 //   3. LE FILET : `installerGardeLignes(db)` (collecte-cartes/garde.js::ouvrirConnexions) enveloppe `db.collection('cartes_produits')` — toute CRÉATION (upsert, insert, bulkWrite) d'une ligne interdite LÈVE,
 //      AVANT la moindre écriture du lot : les poser-*, creer-sets-*, completer-*, y compris ceux qu'on n'a pas encore écrits. Écrit par ce qu'il AUTORISE : une création dont l'identifiant ne se détermine pas
 //      LÈVE ; des restes qui ne se lisent pas LÈVENT. Une MISE À JOUR sans upsert (un numéro de fiche) n'est jamais refusée : elle ne crée rien.
-// ⚠️ LA SORTIE DE SECOURS : rétablir une ligne détachée (restaurer un lot depuis sa sauvegarde, une décision nouvelle du testeur) exige `LIGNES_DETACHEES_RETABLIR` = une PHRASE d'au moins 20 caractères
-// (la raison), imprimée quand elle sert. Une variable vide ou courte ne change rien.
+//      Le filet refuse aussi, par construction (tour 1 de correction, 2026-10-24) : les constructeurs `initializeOrderedBulkOp` / `initializeUnorderedBulkOp` de cartes_produits (leurs écritures
+//      s'accumulent hors de sa vue — utiliser `bulkWrite`), et toute `aggregate` — de cartes_produits OU d'une autre collection de la connexion — dont un `$merge` / `$out` vise cartes_produits ou une cible
+//      qui ne se détermine pas.
+// 🔑 LE PRODUIT GELÉ (joindre) : le produit dont la ligne est refusée n'est offert à AUCUNE carte par la passe 2 (repli par le nom) — une autre carte du même nom le prendrait avec une preuve plus faible.
+// ⚠️ LES DEUX SORTIES : (1) la RESTAURATION d'un lot (lot-additif.js) remet l'état EXACT d'avant le lot, y compris une ligne que le lot a lui-même détachée : elle lève le filet par `sansGardeLignes(db, fn)`,
+//      sur SA connexion et pour ses seules écritures de restauration (un compteur sur l'objet `db` — jamais une variable d'environnement, que la commande enfant du lot hériterait) ;
+//      (2) une décision nouvelle du testeur : `LIGNES_DETACHEES_RETABLIR` = une PHRASE d'au moins 20 caractères (la raison), imprimée quand elle sert. Une variable vide ou courte ne change rien. Posée avant
+//      lot-additif.js, elle s'applique AUSSI à la commande enfant du lot : le message de refus le dit.
+// 🕳️ LIMITES NOMMÉES (acceptées par la relecture, 2026-10-24) :
+//   · LE CACHE DES RESTES DURE 30 s (`ttlMs`), par connexion : un reste « fiche-contredite-par-la-vue » posé par un AUTRE processus depuis moins de 30 s peut ne pas être vu par un processus qui vient de lire. Accepté : les
+//     restes ne se posent que par un lot de détachement (une écriture sérialisée, sous lot-additif.js), jamais pendant une collecte ; un nouveau processus relit à sa première création.
+//   · les modèles mongoose créés AVANT l'installation du filet gardent leur collection native non gardée (ouvrirConnexions l'installe avant tout modèle), et `Model.aggregate` n'est pas surveillé ;
+//   · un MongoClient brut, un `mongosh`, l'outil MCP : hors du filet (aucun ne passe par ouvrirConnexions).
 'use strict';
 
 const TYPE_RESTE = 'fiche-contredite-par-la-vue';
@@ -73,6 +84,7 @@ function idsCreesPar(methode, args) {
             }
             return out;
         }
+        case 'initializeOrderedBulkOp': case 'initializeUnorderedBulkOp': return null;     // des écritures que le filet ne verra jamais : « je ne sais pas »
         default: return [];
     }
 }
@@ -81,8 +93,11 @@ function verifierEcriture(methode, args, interdits) {
     const ids = idsCreesPar(methode, args);
     if (ids === null) throw new Error(`lignes détachées : ${methode} crée une ligne dont l'identifiant est indéterminable — je ne sais pas conclure, rien n'est écrit`);
     const hits = ids.filter(i => interdits.has(i));
-    if (hits.length) throw new Error(`lignes détachées : ${methode} créerait ${hits.length} ligne(s) interdite(s) (${hits.slice(0, 6).join(', ')}${hits.length > 6 ? ', …' : ''}) : un reste « ${TYPE_RESTE} » les a détachées (décision du testeur, preuve « vu ») — rien n'est écrit`);
+    if (hits.length) throw new Error(`lignes détachées : ${methode} créerait ${hits.length} ligne(s) interdite(s) (${hits.slice(0, 6).join(', ')}${hits.length > 6 ? ', …' : ''}) : un reste « ${TYPE_RESTE} » les a détachées (décision du testeur, preuve « vu ») — rien n'est écrit. ${SORTIES}`);
 }
+// 🔑 Un refus qui ne nomme pas sa sortie fait chercher (§6). Les DEUX sorties, et le piège de la seconde.
+const SORTIES = 'Pour lever l\'interdit : (1) restaurer un lot depuis sa sauvegarde — lot-additif.js lève le filet tout seul, sur sa connexion, pour ses seules écritures de restauration ; (2) une décision nouvelle du testeur : '
+    + 'poser LIGNES_DETACHEES_RETABLIR = une phrase d\'au moins 20 caractères (la raison, imprimée quand elle sert). ⚠️ Posée AVANT lot-additif.js, cette variable s\'applique aussi à la commande enfant du lot (elle en hérite) : à éviter, la poser sur la seule commande qui rétablit.';
 
 /**
  * Le contrôle commun des outils qui écrivent leurs lignes UNE À UNE (boucle d'upserts) : à appeler AVANT la première écriture, sur la base native. Une ligne interdite dans le lot fait LEVER tout le lot —
@@ -95,18 +110,48 @@ async function preverifierLignes(db, lignes) {
     verifierEcriture('bulkWrite', [lignes.map(l => ({ updateOne: { filter: { _id: idDeLigne(l) }, update: { $setOnInsert: l }, upsert: true } }))], interdits);
 }
 
-const METHODES = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'findOneAndUpdate', 'findOneAndReplace', 'bulkWrite'];
+// Les constructeurs d'opérations en vrac (`initialize*BulkOp`) accumulent des écritures (`find().upsert().updateOne()`, `insert()`) que ce filet ne voit PAS avant `execute()` : ils sont REFUSÉS (utiliser `bulkWrite`,
+// qui est jugé en entier). Écrit par ce qu'il autorise : une méthode d'écriture de cette liste fermée est jugée, ou refusée ; le reste (lecture, suppression, comptage) passe.
+const BULK = ['initializeOrderedBulkOp', 'initializeUnorderedBulkOp'];
+const METHODES = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'findOneAndUpdate', 'findOneAndReplace', 'bulkWrite', ...BULK];
+
+/** La collection qu'une étape `$merge` / `$out` ÉCRIT : un nom, ou `null` si elle ne se détermine pas, ou `undefined` si l'étape n'écrit pas. */
+function cibleDEcriture(etape) {
+    if (!etape || typeof etape !== 'object') return undefined;
+    const cle = ['$merge', '$out'].find(k => k in etape);
+    if (!cle) return undefined;
+    const v = etape[cle], t = cle === '$merge' ? (v && typeof v === 'object' ? v.into : v) : v;
+    if (typeof t === 'string') return t;
+    if (t && typeof t === 'object' && typeof t.coll === 'string') return t.coll;
+    return null;
+}
+/** LÈVE si une agrégation écrirait dans `cartes_produits` (ou dans une cible qui ne se détermine pas) : `$merge` et `$out` créent des lignes sans passer par aucune méthode d'écriture. */
+function verifierAgregation(pipeline) {
+    if (pipeline === undefined) return;
+    if (!Array.isArray(pipeline)) throw new Error(`lignes détachées : aggregate dont le pipeline n'est pas un tableau — je ne sais pas conclure, rien n'est écrit`);
+    for (const etape of pipeline) {
+        const cible = cibleDEcriture(etape);
+        if (cible === null) throw new Error(`lignes détachées : aggregate avec un $merge/$out dont la cible est indéterminable — je ne sais pas conclure, rien n'est écrit. ${SORTIES}`);
+        if (cible === 'cartes_produits') throw new Error(`lignes détachées : aggregate avec $merge/$out vers cartes_produits — il créerait des lignes que le filet ne peut pas juger, rien n'est écrit. ${SORTIES}`);
+    }
+}
 const retablir = () => { const p = process.env.LIGNES_DETACHEES_RETABLIR; return typeof p === 'string' && p.trim().length >= 20 ? p.trim() : null; };
 let dit = false;
 
 /** Enveloppe une collection `cartes_produits` : les écritures qui CRÉENT sont jugées avant d'être faites ; tout le reste passe tel quel. `lire` : async () → Set des lignes interdites. */
-function garderCollectionLignes(coll, lire) {
+function garderCollectionLignes(coll, lire, levee = () => false) {
     return new Proxy(coll, {
         get(cible, p) {
             const v = Reflect.get(cible, p, cible);
             if (typeof v !== 'function') return v;
+            if (p === 'aggregate') return (pipeline, ...r) => { if (!levee() && !retablir()) verifierAgregation(pipeline); return v.apply(cible, [pipeline, ...r]); };
+            if (BULK.includes(p)) return (...args) => {         // synchrone (rend le constructeur) : refusé, sauf restauration d'un lot ou phrase de rétablissement
+                if (!levee() && !retablir()) throw new Error(`lignes détachées : ${p} est refusé sur cartes_produits (les écritures qu'il accumule échappent au filet) — utiliser bulkWrite, rien n'est écrit. ${SORTIES}`);
+                return v.apply(cible, args);
+            };
             if (!METHODES.includes(p)) return v.bind(cible);
             return async (...args) => {
+                if (levee()) return v.apply(cible, args);      // restauration d'un lot : l'état EXACT d'avant le lot, jamais jugé (sansGardeLignes)
                 const ids = idsCreesPar(p, args);
                 const phrase = retablir();
                 if (phrase) { if (!dit) { dit = true; console.warn(`⚠️ LIGNES_DETACHEES_RETABLIR posée (« ${phrase} ») : la garde des lignes détachées est levée pour ce processus`); } }
@@ -121,6 +166,18 @@ function garderCollectionLignes(coll, lire) {
     });
 }
 
+/** Les AUTRES collections de la connexion : seule leur `aggregate` est regardée ($merge/$out vers cartes_produits) ; tout le reste est intact. */
+function garderAgregation(coll, levee) {
+    return new Proxy(coll, {
+        get(cible, p) {
+            const v = Reflect.get(cible, p, cible);
+            if (typeof v !== 'function') return v;
+            if (p === 'aggregate') return (pipeline, ...r) => { if (!levee() && !retablir()) verifierAgregation(pipeline); return v.apply(cible, [pipeline, ...r]); };
+            return v.bind(cible);
+        }
+    });
+}
+
 /**
  * Installe la garde sur un `Db` natif (celui de la connexion mongoose `cartes`) : `db.collection('cartes_produits')` rend la collection enveloppée, et les modèles mongoose créés ensuite
  * (qui prennent leur collection native dans `db`) la partagent. Idempotente. Les restes sont lus à la première création, puis relus au plus toutes les 30 s.
@@ -130,9 +187,22 @@ function installerGardeLignes(db, { ttlMs = 30000 } = {}) {
     const original = db.collection.bind(db);
     let cache = null;
     const lire = async () => { if (!cache || Date.now() - cache.t > ttlMs) cache = { t: Date.now(), v: await lireInterdits(original('restes')) }; return cache.v; };
-    db.collection = (nom, ...a) => (nom === 'cartes_produits' ? garderCollectionLignes(original(nom, ...a), lire) : original(nom, ...a));
     db.__gardeLignes = true;
+    db.__gardeLignesLevee = 0;
+    const levee = () => db.__gardeLignesLevee > 0;
+    db.collection = (nom, ...a) => (nom === 'cartes_produits' ? garderCollectionLignes(original(nom, ...a), lire, levee) : garderAgregation(original(nom, ...a), levee));
     return db;
 }
 
-module.exports = { TYPE_RESTE, idLigne, interditsDe, filtrerLignes, lireInterdits, preverifierLignes, idsCreesPar, verifierEcriture, garderCollectionLignes, installerGardeLignes };
+/**
+ * Exécute `fn` avec le filet LEVÉ sur CETTE connexion seulement (un compteur sur l'objet `db`, jamais une variable d'environnement : une commande enfant ne l'hérite pas ni aucun autre `Db`).
+ * Réservé à la RESTAURATION d'un lot (lot-additif.js) : elle remet l'état exact d'avant le lot, y compris une ligne que le lot lui-même avait détachée. Le filet se remet quoi qu'il arrive (finally).
+ * Sur un `db` sans filet, `fn` s'exécute simplement : il n'y a rien à lever.
+ */
+async function sansGardeLignes(db, fn) {
+    if (!db.__gardeLignes) return fn();
+    db.__gardeLignesLevee++;
+    try { return await fn(); } finally { db.__gardeLignesLevee--; }
+}
+
+module.exports = { TYPE_RESTE, idLigne, interditsDe, filtrerLignes, lireInterdits, preverifierLignes, idsCreesPar, verifierEcriture, garderCollectionLignes, installerGardeLignes, sansGardeLignes, verifierAgregation, METHODES };

@@ -35,6 +35,13 @@ const RESTE = (carteId, idProduct, o = {}) => ({ type: LD.TYPE_RESTE, set: 'Set-
     verifier('verifierEcriture : le même produit vers une AUTRE carte passe', await leve(() => LD.verifierEcriture('updateOne', [{ _id: '3|11' }, { $setOnInsert: {} }, { upsert: true }], I), /./), 'ne lève pas');
     verifier('verifierEcriture : une création dont l\'id est indéterminable LÈVE (fail-closed)', await leve(() => LD.verifierEcriture('updateOne', [{ idProduct: 11 }, { $set: {} }, { upsert: true }], I), /indéterminable|ne sait pas/i), 'lève');
     verifier('verifierEcriture : une méthode inconnue de la liste fermée n\'est pas jugée (pas de création possible)', await leve(() => LD.verifierEcriture('countDocuments', [{}], I), /./), 'ne lève pas');
+    // TOUR 1, POINT 2 : un refus qui ne nomme pas la sortie fait chercher (§6). Le message dit comment lever l'interdit, et le piège de la variable d'environnement.
+    let msgRefus = '';
+    try { LD.verifierEcriture('updateOne', [{ _id: '1|11' }, { $setOnInsert: {} }, { upsert: true }], I); } catch (e) { msgRefus = e.message; }
+    verifier('le refus nomme LIGNES_DETACHEES_RETABLIR (une phrase d\'au moins 20 caractères) comme sortie', /LIGNES_DETACHEES_RETABLIR/.test(msgRefus) && /20 caract/.test(msgRefus), true);
+    verifier('… nomme la RESTAURATION d\'un lot (lot-additif.js) comme l\'autre sortie', /restauration/i.test(msgRefus), true);
+    verifier('… et AVERTIT : posée avant lot-additif.js, la variable s\'applique aussi à la commande enfant du lot (à éviter)', /commande enfant|hérit/i.test(msgRefus) && /évit/i.test(msgRefus), true);
+    verifier('… et garde les faits : la ligne et « rien n\'est écrit »', /1\|11/.test(msgRefus) && /rien n'est écrit/.test(msgRefus), true);
 
     console.log('2. le MÊME produit, la même carte, sous la voie de joindre() : la ligne interdite n\'est pas proposée');
     const E = 'Set A';
@@ -51,6 +58,18 @@ const RESTE = (carteId, idProduct, o = {}) => ({ type: LD.TYPE_RESTE, set: 'Set-
     const J2 = joindre(cartes2, [produit(11, 'Duo', '001')], cible({ lignesInterdites: new Set(['1|11']) }));
     verifier('le produit 11 interdit vers la carte 1 reste libre vers la carte 2 quand la jointure la prouve (une AUTRE carte n\'est pas refusée)', J2.lignes.map(l => l._id).sort(), ['2|11']);
     verifier('un `lignesInterdites` qui n\'est pas un Set : lève (jamais ignoré en silence)', await leve(() => joindre(cartes, produits, cible({ lignesInterdites: ['1|11'] })), /lignesInterdites/), 'lève');
+    // TOUR 1, POINT 3 : « PRODUIT GELÉ ». Le produit refusé en passe 1 (par le numéro, carte 1) ne doit pas être offert à la passe 2 (par le NOM) : la carte 2, sans impression dans le set, le prendrait avec une
+    // preuve plus faible (« setlist+nom+attaques ») — une ligne au même produit que celle qu'on vient de détacher.
+    const carteSansImp = (id, nomEn, attaques) => ({ _id: id, nomEn, attaques: attaques.map(nom => ({ nom })), impressions: [], liens: { idProduct: [], idMetacards: [] } });
+    const produitAtt = (idProduct, nom, numero, attaques) => ({ ...produit(idProduct, nom, numero), attaques });
+    const cartesG = [carte(1, 'Duo', '001'), carteSansImp(2, 'Duo', ['Gnaw'])], produitsG = [produitAtt(11, 'Duo', '001', ['Gnaw'])];
+    const JG0 = joindre(cartesG, produitsG, cible());
+    verifier('SANS interdit : la carte 1 prend le produit 11 par le numéro, la carte 2 ne le prend pas (déjà joint)', JG0.lignes.map(l => l._id), ['1|11']);
+    const JG1 = joindre(cartesG, produitsG, cible({ lignesInterdites: new Set(['1|11']) }));
+    verifier('AVEC « 1|11 » interdit : le produit 11 est GELÉ, la passe 2 (nom + attaques) ne le donne pas à la carte 2', JG1.lignes.map(l => l._id), []);
+    verifier('… et le trou est nommé : reste « produit-sans-carte » qui dit la ligne interdite', JG1.restes.filter(r => r.idProduct === 11).map(r => [r.type, /1\|11/.test(r.detail), /interdite/.test(r.detail)]), [['produit-sans-carte', true, true]]);
+    const JG2 = joindre([carte(1, 'Duo', '001'), carte(2, 'Duo', '002')], [produitAtt(11, 'Duo', '001', ['Gnaw']), produitAtt(12, 'Duo', '002', ['Gnaw'])], cible({ lignesInterdites: new Set(['1|11']) }));
+    verifier('le gel est celui du seul PRODUIT refusé : le produit 12 (carte 2, numéro 002) reste posé', JG2.lignes.map(l => l._id), ['2|12']);
 
     console.log('3. mongod local : la garde du point d\'écriture (collection cartes_produits)');
     const banc = await ouvrirBanc();
@@ -131,6 +150,37 @@ const RESTE = (carteId, idProduct, o = {}) => ({ type: LD.TYPE_RESTE, set: 'Set-
         const M2 = modeles(conn2);
         verifier('voie mongoose `M.CarteProduit.updateOne(… upsert)` (collecteur-texte.js, bonus intl) : la ligne interdite est refusée', await leve(() => M2.CarteProduit.updateOne({ _id: '1|11' }, { $set: { carteId: 1, idProduct: 11 } }, { upsert: true }), /1\|11/), 'lève');
         verifier('… et une ligne permise passe par la même voie', (await M2.CarteProduit.updateOne({ _id: '1|12' }, { $set: { carteId: 1, idProduct: 12 } }, { upsert: true })).upsertedCount, 1);
+
+        console.log('5 bis. TOUR 1, POINT 1 : la RESTAURATION d\'un lot lève le filet sur CETTE connexion seulement (sansGardeLignes), et il se remet quoi qu\'il arrive');
+        const nouv = '1|11', ecrireInterdite = () => dbM2.collection('cartes_produits').updateOne({ _id: nouv }, { $setOnInsert: { carteId: 1, idProduct: 11 } }, { upsert: true });
+        verifier('hors levée : la ligne interdite est refusée', await leve(ecrireInterdite, /1\|11/), 'lève');
+        await LD.sansGardeLignes(dbM2, ecrireInterdite);
+        verifier('dans sansGardeLignes : la ligne interdite s\'écrit (état exact d\'avant le lot)', await dbM2.collection('cartes_produits').countDocuments({ _id: nouv }), 1);
+        await dbM2.collection('cartes_produits').deleteOne({ _id: nouv });
+        verifier('après la levée : le filet est REMIS (refus de nouveau)', await leve(ecrireInterdite, /1\|11/), 'lève');
+        verifier('une exception DANS la levée remet le filet (finally) et se propage', [await leve(() => LD.sansGardeLignes(dbM2, async () => { throw new Error('panne de restauration'); }), /panne de restauration/), await leve(ecrireInterdite, /1\|11/)], ['lève', 'lève']);
+        await LD.sansGardeLignes(dbM2, () => LD.sansGardeLignes(dbM2, async () => { }));
+        verifier('deux levées imbriquées : la sortie de la première ne rétablit pas le filet trop tôt, la sortie de la seconde le rétablit', [await LD.sansGardeLignes(dbM2, async () => { await LD.sansGardeLignes(dbM2, async () => { }); return leve(ecrireInterdite, /1\|11/); }), await leve(ecrireInterdite, /1\|11/)], ['ne lève pas', 'lève']);
+        await dbM2.collection('cartes_produits').deleteOne({ _id: nouv });
+        verifier('sansGardeLignes sur un Db SANS filet : exécute simplement fn', await LD.sansGardeLignes(db, async () => 42), 42);
+
+        console.log('5 ter. TOUR 1, POINT 4 : les constructeurs d\'opérations en vrac et les agrégations qui ÉCRIVENT dans cartes_produits ne passent pas le filet');
+        const CP = dbM2.collection('cartes_produits');
+        verifier('initializeUnorderedBulkOp : REFUSÉ (le constructeur accumule des écritures que le filet ne voit pas — utiliser bulkWrite)', await leve(async () => CP.initializeUnorderedBulkOp(), /bulk|initialize/i), 'lève');
+        verifier('initializeOrderedBulkOp : REFUSÉ', await leve(async () => CP.initializeOrderedBulkOp(), /bulk|initialize/i), 'lève');
+        verifier('aggregate [{ $merge: { into: \'cartes_produits\' } }] depuis une AUTRE collection : REFUSÉ', await leve(async () => dbM2.collection('cartes').aggregate([{ $match: {} }, { $merge: { into: 'cartes_produits' } }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('aggregate [{ $out: \'cartes_produits\' }] : REFUSÉ', await leve(async () => dbM2.collection('cartes').aggregate([{ $out: 'cartes_produits' }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('aggregate [{ $merge: \'cartes_produits\' }] (forme courte) : REFUSÉ', await leve(async () => dbM2.collection('cartes').aggregate([{ $merge: 'cartes_produits' }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('aggregate [{ $out: { db, coll: \'cartes_produits\' } }] : REFUSÉ', await leve(async () => dbM2.collection('cartes').aggregate([{ $out: { db: 'banc_lignes_detachees_m', coll: 'cartes_produits' } }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('aggregate depuis cartes_produits elle-même vers cartes_produits : REFUSÉ', await leve(async () => CP.aggregate([{ $out: 'cartes_produits' }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('un $merge dont la cible ne se détermine pas : REFUSÉ (fail-closed)', await leve(async () => dbM2.collection('cartes').aggregate([{ $merge: { into: { n: 1 } } }]).toArray(), /\$merge|\$out|aggreg/i), 'lève');
+        verifier('aggregate de LECTURE (cartes_produits et autre collection) : passe', [(await CP.aggregate([{ $match: {} }]).toArray()).length >= 0, (await dbM2.collection('cartes').aggregate([{ $match: {} }]).toArray()).length], [true, 1]);
+        await dbM2.collection('cartes').aggregate([{ $match: {} }, { $out: 'sortie_banc' }]).toArray();
+        verifier('un $out vers une AUTRE collection : passe', await dbM2.collection('sortie_banc').countDocuments({}), 1);
+        await LD.sansGardeLignes(dbM2, async () => { await dbM2.collection('cartes').aggregate([{ $match: {} }, { $merge: { into: 'cartes_produits' } }]).toArray(); });
+        verifier('… et la même agrégation passe en LEVÉE (restauration) : le filet ne juge pas l\'état exact d\'avant le lot', await dbM2.collection('cartes_produits').countDocuments({ _id: 1 }), 1);
+        await dbM2.collection('cartes_produits').deleteOne({ _id: 1 });
+        await dbM2.collection('sortie_banc').drop();
     } finally { if (conn2) await conn2.close(); if (conn) await conn.close(); await client.close(); await banc.arreter(); }
 
     console.log('6. COUVERTURE : tout outil qui CRÉE des lignes passe par une connexion gardée, ou nomme pourquoi non (liste fermée)');
@@ -155,6 +205,10 @@ const RESTE = (carteId, idProduct, o = {}) => ({ type: LD.TYPE_RESTE, set: 'Set-
     const ecrJ = fs.readFileSync(path.join(racine, 'collecte-cartes', 'ecrire-jointure.js'), 'utf8');
     verifier('ecrire-jointure.js ne remplace pas ce type (la liste des restes remplacés ne le contient pas)', /deleteMany\(\{ set: slug, type: \{ \$in: \[[^\]]*\] \} \}\)/.test(ecrJ) && !/deleteMany\(\{ set: slug, type: \{ \$in: \[[^\]]*fiche-contredite-par-la-vue/.test(ecrJ), true);
     verifier('la liste des créateurs inclut les voies nommées par la relecture (joindre/collecteur-texte, poser-*, creer-sets-*)', ['collecteur-texte.js', 'poser-lignes-ciblees.js', 'poser-cartes-tcgdex.js', 'poser-par-nom-tcgdex.js', 'creer-sets-par-pages-de-cartes.js', 'collecte-cartes/ecrire-jointure.js'].every(f => creeurs.includes(f)), true);
+    const entete = fs.readFileSync(path.join(racine, 'collecte-cartes', 'lignes-detachees.js'), 'utf8').split('\n').filter(l => l.startsWith('//')).join('\n');
+    verifier('POINT 5 : le cache des restes de 30 s est ACCEPTÉ et documenté dans l\'en-tête du module (limite nommée, pas un oubli)', /CACHE DES RESTES DURE 30 s/.test(entete) && /Accepté/.test(entete), true);
+    verifier('POINT 4 : METHODES contient les deux constructeurs d\'opérations en vrac', ['initializeOrderedBulkOp', 'initializeUnorderedBulkOp'].every(m => LD.METHODES.includes(m)), true);
+    verifier('POINT 4 : verifierEcriture sur un constructeur en vrac LÈVE même hors proxy (fail-closed pur)', await leve(() => LD.verifierEcriture('initializeOrderedBulkOp', [], new Set()), /indéterminable/), 'lève');
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;
 })().catch(e => { console.error(e); process.exitCode = 1; });

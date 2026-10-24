@@ -44,6 +44,7 @@ const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que l
 // ➕ 2026-10-19 : la garde rejoue aussi le CONTRAT DE L'API (collecte-cartes/garde-contrat-api.js : sa chaîne importée, jamais recopiée). Active sur la base `cartes` ;
 // sur `test_scratch` seulement avec `--contrat-api` (futur banc), sinon inerte et dite « non vérifiée ».
 const GC = require('./collecte-cartes/garde-contrat-api');
+const { sansGardeLignes, installerGardeLignes } = require('./collecte-cartes/lignes-detachees');
 
 const GARDEES = ['cartes', 'cartes_produits', 'sets'];
 const RESTAURABLES = ['cartes', 'cartes_produits', 'sets', 'restes', 'collecte_etat'];
@@ -92,7 +93,9 @@ if (BASE === 'test_scratch' && process.env.BANC_ISOLE !== '1') {
 }
 const annonces = val('annonce') ? JSON.parse(fs.readFileSync(path.resolve(val('annonce')), 'utf8')) : {};
 try { validerAnnonces(annonces); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); }
-const aSauver = [...new Set([...collections.split(','), ...GARDEES])];
+// `restes` est TOUJOURS sauvegardé (et restauré) : un lot qui détache une ligne pose le reste qui l'interdit (lignes-detachees.js), et une restauration qui remet la ligne doit retirer ce reste. Sur la base `cartes` il doit
+// exister (sinon refus, code 6) ; sur le banc il est ajouté s'il existe.
+let aSauver = [...new Set([...collections.split(','), ...GARDEES, 'restes'])];
 
 async function ouvrir() {
     if (BASE === 'cartes') {
@@ -105,6 +108,8 @@ async function ouvrir() {
     const mongoose = require('mongoose');
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
     if (cx.db.databaseName !== 'test_scratch') { await cx.close(); throw new Error(`base connectée « ${cx.db.databaseName} » au lieu de test_scratch`); }
+    // le banc a le MÊME filet que la production (garde.js::ouvrirConnexions l'installe sur la connexion `cartes`) : sans lui, le banc de la restauration ne verrait jamais le défaut
+    installerGardeLignes(cx.db);
     return { db: cx.db, client: cx.getClient(), fermer: () => cx.close() };
 }
 
@@ -180,7 +185,14 @@ function journaliser(t, dossier, combien, sortie) {
     // 0. GARDE-ATLAS, AVANT la sauvegarde : la grappe cible est-elle sous 90 % de 512 Mo, estimation du lot comprise ?
     {
         let o = null, v;
-        try { o = await ouvrir(); v = await T.verifierEcriture({ client: o.client, estimationMo: ESTIMATION_MO, sansCache: true }); }
+        try {
+            o = await ouvrir();
+            const presentes = (await o.db.listCollections().toArray()).map(c => c.name);
+            if (!presentes.includes('restes')) {
+                if (BASE === 'cartes') { console.error('❌ la collection « restes » est introuvable sur la base cartes : elle est toujours sauvegardée par un lot (le reste d\'une ligne détachée doit se restaurer). Rien n\'a été sauvegardé ni écrit.'); await o.fermer(); process.exit(6); }
+                if (!collections.split(',').includes('restes')) aSauver = aSauver.filter(x => x !== 'restes');
+            }
+            v = await T.verifierEcriture({ client: o.client, estimationMo: ESTIMATION_MO, sansCache: true }); }
         catch (e) { v = { autorise: false, niveau: 'inconnu', raison: `je ne sais pas mesurer la grappe (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 150)})` }; }
         finally { try { await o?.fermer(); } catch { /* fermeture sans importance */ } }
         if (!v.autorise) { console.error(`❌ GARDE-ATLAS (grappe ${GRAPPE}) : ${v.raison}. Rien n'a été sauvegardé ni écrit.`); process.exit(5); }
@@ -301,7 +313,12 @@ function journaliser(t, dossier, combien, sortie) {
         return r.restaurees.length ? { images: r.images } : {};      // rien à restaurer ou indécidable : le tableau actuel reste tel quel
     } : null;
     const faits = [];
-    for (const coll of aSauver.filter(x => RESTAURABLES.includes(x))) {
+    // 🔑 UNE RESTAURATION REMET L'ÉTAT EXACT D'AVANT LE LOT : le filet des lignes détachées (lignes-detachees.js) ne la juge jamais. Le lot qui détache une ligne pose aussi le reste qui l'interdit ; si la ligne revient
+    // (sauvegarde) pendant que ce reste existe encore, le filet la refuserait et la restauration resterait à moitié faite. Le filet est LEVÉ sur cette connexion seulement (compteur local, pas d'environnement hérité),
+    // pour les seules écritures de restauration ci-dessous, et `restes` est restauré AVANT `cartes_produits` quel que soit l'ordre de `--collections` (l'état d'avant, dans le bon ordre, même sans le filet).
+    console.log('      ⚠️ filet des lignes détachées LEVÉ pour la restauration (état exact d\'avant le lot ; connexion locale, aucune variable d\'environnement ; remis en place ensuite)');
+    await sansGardeLignes(db, async () => {
+    for (const coll of aSauver.filter(x => RESTAURABLES.includes(x)).sort((a, b) => (b === 'restes') - (a === 'restes'))) {
         const sauves = new Map(lireSauvegarde(dossier, coll).map(d => [cleDoc(d._id), d]));
         const actuels = new Map((await db.collection(coll).find({}).toArray()).map(d => [cleDoc(d._id), d]));
         const plan = planRestauration(sauves, actuels, { garder: garderPour(coll), surcharge: surchargePour(coll) });
@@ -341,6 +358,7 @@ function journaliser(t, dossier, combien, sortie) {
         faits.push(`cartes : ${n} vignette(s) remise(s) champ par champ (${aRemettre.length} prévue(s)), tableau images intact`);
         console.log(`      ${faits.at(-1)}`);
     }
+    });
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
     if (nonRestaurees.length) console.log(`      ⚠️ NON restaurées (tenues par le worker, ou hors de la garde) : ${nonRestaurees.join(', ')} — la sauvegarde les porte`);
     apres = null;                                                                  // l'état d'avant la restauration n'est plus utile : une seule copie de l'état « après » à la fois
