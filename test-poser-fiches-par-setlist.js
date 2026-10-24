@@ -54,8 +54,11 @@ const attaquesDe = i => [`Aa${i}`, `Bb${i}`];
 const carte = (i, id = 1000 + i) => ({ _id: id, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), impressions: [], sets: ['SetX'], liens: { idProduct: [] } });
 const nomProduit = i => `Mon${i} [${attaquesDe(i).join(' | ')}]`;
 const L = { code: 'X/ID', slugSet: 'SetX', exp: 1, bulba: { tirage: 'id', expansion: 'X Promo' } };
-function monde({ veriteFausse = false, veriteContredite = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false, numeroPartage = false, impressionZeros = false } = {}) {
+function monde({ veriteFausse = false, veriteContredite = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false, numeroPartage = false, impressionZeros = false, impressionAutreSource = false } = {}) {
     const cartes = [1, 2, 3, 4].map(i => carte(i)); const homonyme = { ...carte(3, 1503) };
+    // impressionAutreSource (PHASE 3b, lot 5b XY-P du 24/10) : les cartes portent DÉJÀ l'impression du set au même numéro, posée par leur page (`source` ABSENTE) :
+    // le plan ne pose AUCUNE impression, et la relecture ne doit pas crier à la fausse alarme
+    if (impressionAutreSource) { cartes[0].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: '1', total: null, deck: null, rarete: null }); cartes[1].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: '2', total: null, deck: null, rarete: null }); }
     // impressionZeros : l'impression « setlist » d'un outil antérieur est écrite « 001 » (zéro-remplissage) — le même numéro que « 1 » (cleNumero)
     if (impressionZeros) cartes[0].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: '001', total: null, deck: null, rarete: null, source: 'setlist' });
     // veriteFausse : la ligne de vérité de P1 pointe la carte 2, dont les attaques SONT celles du produit (le témoin ne la contredit pas) → un vrai faux de l'épreuve A
@@ -161,7 +164,15 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     // ── 2026-10-13 : la relecture compare les numéros par cleNumero (« 001 » = « 1 »), pas à la lettre ──
     w = monde({ impressionZeros: true });
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
-    verifier('relecture : une impression « 001 » d\'un outil antérieur EST le n° 1 -> « écrit et relu », exit 0 (pas de faux négatif)', [r.code, /écrit et relu/.test(r.sorties), /impressions « setlist » 2\/2/.test(r.sorties), w.db.brut('cartes').find(c => c._id === 1001).impressions.length], [0, true, true, 1]);
+    verifier('relecture : une impression « 001 » d\'un outil antérieur EST le n° 1 -> « écrit et relu », exit 0 (pas de faux négatif)', [r.code, /écrit et relu/.test(r.sorties), /impressions planifiées 1\/1 · lignes avec leur impression 2\/2/.test(r.sorties), w.db.brut('cartes').find(c => c._id === 1001).impressions.length], [0, true, true, 1]);
+
+    // ── PHASE 3b (2026-10-24), T1 : la fausse alarme du lot 5b — l'impression est déjà là, d'une autre source ──
+    w = monde({ impressionAutreSource: true });
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('relecture : impressions DÉJÀ présentes (source absente, posées par la page) -> plan sans impression, lignes écrites, exit 0 "écrit et relu" (lot 5b XY-P)',
+        [r.code, /écrit et relu/.test(r.sorties), /0 impressions/.test(r.sorties), lignesPosees(w).length, w.db.brut('cartes').find(c => c._id === 1001).impressions.length], [0, true, true, 2, 1]);
+    verifier('   la relecture IMPRIME ses deux comptes : impressions planifiées 0/0 ET lignes avec leur impression 2/2', [/impressions planifiées 0\/0/.test(r.sorties), /lignes avec leur impression 2\/2/.test(r.sorties)], [true, true]);
+    // (les cas « aucune impression du tout » et « impression planifiée absente » sont couverts au niveau du module pur : test-relecture-impressions.js)
 
     // ── tour 3 : la RELECTURE en base après l'écriture ──
     w = monde(); w.db.stats.perdreDerniereLigne = true;
@@ -169,7 +180,7 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     verifier('relecture : une écriture qui PERD une ligne sans erreur → la relecture en base ne retrouve pas le compte → exit 1 (et le dit)', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /RELECTURE : lignes 1\/2/.test(r.sorties)], [1, true, true]);
     w = monde(); w.db.stats.perdreImpressions = true;
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
-    verifier('relecture : des impressions non posées (sans erreur) → exit 1', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /impressions « setlist » 0\/2/.test(r.sorties)], [1, true, true]);
+    verifier('relecture : des impressions non posées (sans erreur) → exit 1', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /impressions planifiées 0\/2 · lignes avec leur impression 0\/2/.test(r.sorties)], [1, true, true]);
 
     // ── PHASE 3a (2026-10-24) : --sauf, les produits qu'une décision a DÉTACHÉS ne se reposent pas (la phase 2 en a détaché 20, dont l'Eevee SV-P/TH que cet outil aurait reposé) ──
     w = monde(); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);

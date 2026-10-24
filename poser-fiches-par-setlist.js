@@ -19,6 +19,7 @@ const { indexerMetacartes } = require('./collecte-cartes/cle-nom-attaques');
 const { lireSetlistDuSet, planDuSet } = require('./collecte-cartes/cle-setlist-metacarte');
 const { calibrer, verdict, imprimer, chargerExport, MINIMUMS } = require('./collecte-cartes/calibration-setlist-metacarte');
 const R = require('./collecte-cartes/regle-r-fiches');
+const { relireImpressions } = require('./collecte-cartes/relecture-impressions');
 const J = require('./collecte-cartes/jointure');
 const { lireSauf: lireSaufParDefaut } = require('./collecte-cartes/produits-sauf');
 
@@ -125,10 +126,16 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
         const cartes = await db.collection('cartes').find({ _id: { $in: [...parCarte.keys()] } }, { projection: { impressions: 1, sets: 1, liens: 1 } }).toArray();
         const parId = new Map(cartes.map(c => [c._id, c]));
         const liensOk = aEcrire.filter(x => (parId.get(x.d.carte._id)?.liens?.idProduct || []).includes(x.p.idProduct) && (parId.get(x.d.carte._id)?.sets || []).includes(x.L.slugSet)).length;
-        const impAttendues = new Map(aEcrire.map(x => [`${x.d.carte._id}|${x.L.slugSet}|${x.d.numero}`, x]));
-        const impOk = [...impAttendues.values()].filter(x => (parId.get(x.d.carte._id)?.impressions || []).some(i => i.tirage === x.L.bulba.tirage && i.expansion === [].concat(x.L.bulba.expansion)[0] && J.cleNumero(i.numero) === J.cleNumero(x.d.numero) && i.source === 'setlist')).length;
-        log(`\n   RELECTURE : lignes ${lignesOk}/${aEcrire.length} · cartes avec leurs liens et leur set ${liensOk}/${aEcrire.length} · impressions « setlist » ${impOk}/${impAttendues.size}`);
-        if (lignesOk !== aEcrire.length || liensOk !== aEcrire.length || impOk !== impAttendues.size) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
+        // PHASE 3b (lot 5b XY-P, 24/10) : la relecture ne contrôle plus la PROVENANCE (`source === 'setlist'`) mais la PRÉSENCE : (1) chaque impression PLANIFIÉE est en base,
+        // (2) chaque ligne écrite a son impression (tirage, expansion, cleNumero), posée par cet outil OU par la page de la carte (collecte-cartes/relecture-impressions.js)
+        const RI = relireImpressions({
+            cartesParId: parId,
+            lignes: aEcrire.map(x => ({ carteId: x.d.carte._id, tirage: x.L.bulba.tirage, expansion: [].concat(x.L.bulba.expansion)[0], numero: x.d.numero })),
+            planifiees: impressions
+        });
+        log(`\n   RELECTURE : lignes ${lignesOk}/${aEcrire.length} · cartes avec leurs liens et leur set ${liensOk}/${aEcrire.length} · impressions planifiées ${RI.planifieesOk}/${RI.planifieesTotal} · lignes avec leur impression ${RI.lignesOk}/${RI.lignesTotal}`);
+        for (const m of RI.manques) log(`   ✗ ${m}`);
+        if (lignesOk !== aEcrire.length || liensOk !== aEcrire.length || !RI.ok) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
         log('   ✅ écrit et relu');
         return 0;
     } finally { await fermer(); }
