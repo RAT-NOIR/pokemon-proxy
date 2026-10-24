@@ -10,6 +10,7 @@
 //     vérifie ce que Stripe envoie (statut, fin) et que le droit Pro est bien donné ou retiré à la réception ; il ne simule pas le temps réel du serveur.
 // À chaque étape il LIT l'état du compte par la route du statut (GET /api/abonnement), comme le site.
 const JOUR = 86400;
+const FINALISATION_S = 2 * 3600;          // Stripe finalise une facture de renouvellement environ une heure après sa création : on avance de deux heures au-delà du renouvellement
 const AttentePerdue = class extends Error { };
 // LA TABLE FERMÉE scénario → rôles de comptes. Les préconditions (« compte neuf ») ne portent QUE sur les rôles des scénarios JOUÉS : un parcours partiel n'exige pas les comptes des autres.
 // Un scénario absent de cette table est REFUSÉ (il n'est pas joué, et le dit) : on n'invente pas les comptes qu'il consommerait.
@@ -41,9 +42,10 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
     async function lHorloge() { if (!horloge) horloge = await stripe.testHelpers.testClocks.create({ frozen_time: maintenant(), name: 'rat-market-parcours' }); return horloge; }
     // un échec de suppression n'est plus avalé : il est NOTÉ dans le compte rendu (type et code Stripe, jamais le message, qui pourrait citer une clé ou un identifiant) ; l'horloge expire seule chez Stripe
     async function supprimerHorloge() { if (horloge) { const h = horloge; horloge = null; try { await stripe.testHelpers.testClocks.del(h.id); } catch (e) { note('horloge d\'essai : suppression impossible (elle expirera seule chez Stripe)', false, `${(e && (e.type || e.name)) || 'Error'} ${(e && e.code) || ''}`.trim()); } } }
-    async function avancer(jours) {
+    const avancer = async jours => avancerJusqua((await heure()) + jours * JOUR);
+    async function avancerJusqua(temps) {
         const h = await stripe.testHelpers.testClocks.retrieve((await lHorloge()).id);
-        await stripe.testHelpers.testClocks.advance(h.id, { frozen_time: h.frozen_time + jours * JOUR });
+        await stripe.testHelpers.testClocks.advance(h.id, { frozen_time: temps });
         for (let i = 0; i < 60; i++) { const c = await stripe.testHelpers.testClocks.retrieve(h.id); if (c.status === 'ready') { horloge = c; return c.frozen_time; } await attendre(3000); }
         throw new Error('l\'horloge d\'essai n\'est pas revenue à « ready »');
     }
@@ -158,10 +160,27 @@ function fabrique({ stripe, api, comptes, prix, attendre, maintenant = () => Mat
             // DÉCISION (tour de correction 1, B-M1) : le statut est NOTÉ, il ne bloque pas — une prime datée à l'heure d'une horloge d'essai n'y figure pas avant cette date réelle. Ce qui BLOQUE : l'avoir chez Stripe
             // (ci-dessus) ET la facture suivante du parrain à 0 € (ci-dessous). Une régression « moisOfferts à 0 » se garde par les bancs du statut (test-abonnements-decisions.js), pas par le parcours.
             note(moisVus >= 1 ? 'parrainage : le statut du parrain compte ce mois offert' : 'parrainage : le statut du parrain ne compte pas encore ce mois offert (limite connue, notée sans bloquer : la prime est datée à l\'heure de l\'horloge d\'essai, en avance sur le serveur ; bloquent l\'avoir chez Stripe et la facture suivante du parrain à 0 €)', true, `${moisVus} mois offert(s) vu(s) en ${attenteStatutS} s au plus`);
-            await avancer(31);
-            const f = await stripe.invoices.list({ subscription: P.sid, limit: 5 });
-            const derniere = [...f.data].sort((a, b) => (b.created || 0) - (a.created || 0))[0];
-            note('parrainage : la facture suivante du parrain est à 0 € (le mois offert)', Boolean(derniere) && derniere.amount_due === 0, derniere ? `${derniere.amount_due} centimes` : 'aucune facture');
+            // LA FACTURE À JUGER : la première du parrain créée à partir de l'avoir. Stripe finalise une facture de renouvellement environ une heure après sa création, et c'est là qu'il lui applique le solde du
+            // client : un renouvellement créé pile à la fin de l'avance précédente (mois de 31 jours) reçoit donc l'avoir APRÈS coup, et le renouvellement suivant — la facture la plus récente — vaut 499. On ne juge
+            // jamais « la plus récente » : on avance l'horloge juste au-delà du prochain renouvellement du parrain (`current_period_end` lu sur son abonnement, pas un nombre de jours fixe) plus la finalisation
+            // (2 heures), puis on prend la première facture dont la date de création est égale ou postérieure à celle de l'avoir (à l'égalité sous l'horloge d'essai, la facture est celle qui attendait l'avoir).
+            const avoirCree = apres[0].created || 0;
+            const abo = await stripe.subscriptions.retrieve(P.sid);
+            const item = (abo.items && abo.items.data && abo.items.data[0]) || {};
+            const finPeriode = item.current_period_end || abo.current_period_end || 0;
+            const maintenantH = await heure();
+            await avancerJusqua(Math.max(finPeriode, maintenantH) + FINALISATION_S);
+            const f = await stripe.invoices.list({ subscription: P.sid, limit: 10 });
+            const factures = [...f.data].sort((a, b) => (a.created || 0) - (b.created || 0));
+            const jugee = factures.find(i => (i.created || 0) >= avoirCree);
+            const ok = Boolean(jugee) && jugee.amount_due === 0 && jugee.starting_balance === -499 && jugee.billing_reason === 'subscription_cycle';
+            note('parrainage : la facture suivante du parrain est à 0 € (le mois offert)', ok, jugee ? `amount_due ${jugee.amount_due}, starting_balance ${jugee.starting_balance}, billing_reason ${jugee.billing_reason}` : 'aucune facture du parrain créée après l\'avoir');
+            if (!ok) {                                          // le diagnostic du rejeu réel, imprimé AVANT la suppression de l'horloge : ni clé, ni adresse
+                const iso = s => (s ? new Date(s * 1000).toISOString() : 'date inconnue');
+                trace(`   diagnostic : avoir créé ${iso(avoirCree)} ; fin de période du parrain ${iso(finPeriode)} ; horloge ${iso(await heure())} ; solde du client du parrain ${(await stripe.customers.retrieve(P.customer)).balance ?? 0} centimes`);
+                for (const i of factures) trace(`   diagnostic : facture ${iso(i.created)} — ${i.billing_reason}, total ${i.total}, starting_balance ${i.starting_balance}, amount_due ${i.amount_due}, statut ${i.status}${jugee && i.id === jugee.id ? '  <= jugée' : ''}`);
+                if (!factures.length) trace('   diagnostic : aucune facture pour l\'abonnement du parrain');
+            }
         },
         async fondateurs() {
             const code = codeFondateurs;

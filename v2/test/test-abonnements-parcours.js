@@ -108,6 +108,35 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
     const lectures = lente.faux.E.appels.filter(a => a.nom === 'customers.listBalanceTransactions').length;
     H.v('l\'attente de l\'avoir se mesure en temps RÉEL : lectures de 5 s et pas de 3 s, bornées à 30 s (peu de lectures, pas onze pas additionnés), l\'échec est dit', [lectures <= 9, lente.res.filter(r => !r.ok).length], [true, 1]);
     console.log(`   (lectures des avoirs chez Stripe pendant l'attente : ${lectures})`);
+    // PARCOURS-FACTURE : le calendrier du VRAI Stripe — mois de 31 jours (octobre à novembre) et factures de renouvellement finalisées une heure après leur création (c'est là que l'avoir est appliqué).
+    // Le parrain renouvelle alors à t0 + 31 jours, pile à la fin de la première avance d'horloge : sa facture naît en brouillon, l'avoir du filleul arrive, et c'est CETTE facture qui le consomme —
+    // la plus récente (le renouvellement suivant) vaut 499. L'outil doit juger la première facture créée après l'avoir, pas la plus récente.
+    const { JOUR } = require('./_faux-stripe');
+    const calendrierReel = () => creerFauxStripe({ clientsParHorloge: 3, moisS: 31 * JOUR, finalisationS: 3600 });
+    const reel = await jouer({ faux: calendrierReel(), seulement: ['parrainage'], roles: ROLES });
+    const judgee = reel.res.find(r => /la facture suivante du parrain est à 0/.test(r.nom));
+    H.v('parrainage au calendrier de Stripe (mois de 31 jours, finalisation différée) : aucun échec, la facture jugée porte 0 € dû, un solde de départ de -499 et un renouvellement', [reel.res.filter(r => !r.ok).map(r => `${r.nom} — ${r.detail}`), judgee && judgee.ok, judgee && judgee.detail], [[], true, 'amount_due 0, starting_balance -499, billing_reason subscription_cycle']);
+    // la preuve de l'hypothèse sur le faux Stripe : au calendrier réel, l'avoir est consommé par la PREMIÈRE facture de renouvellement du parrain, et la plus récente vaut 499 (l'ancien outil jugeait celle-là)
+    const parrainSub = [...reel.faux.E.subs.values()].find(s => !s.trialStart && !s.metadata.parrain);       // l'abonnement du parrain : sans essai, sans parrain (ses clients sont supprimés avec l'horloge)
+    H.vrai('   (l\'abonnement du parrain est bien retrouvé)', Boolean(parrainSub));
+    const sesFactures = (await reel.faux.invoices.list({ subscription: parrainSub.id })).data.sort((a, b) => a.created - b.created);
+    H.v('   au calendrier réel : le parrain a au moins 3 factures (création, renouvellement qui reçoit l\'avoir, renouvellement suivant) ; seul le premier renouvellement est à 0 € et la plus récente vaut 499',
+        [sesFactures.length >= 3, sesFactures.filter(i => i.billing_reason === 'subscription_cycle').map(i => i.amount_due).slice(0, 2), sesFactures.at(-1).amount_due, sesFactures.at(-1).status], [true, [0, 499], 499, 'paid']);
+    // il SAIT échouer : un Stripe qui n'applique pas l'avoir ; l'échec est dit AVEC ses trois valeurs et le diagnostic (liste des factures du parrain, solde du client), écrit avant la suppression de l'horloge
+    const sansSolde = await jouer({ faux: creerFauxStripe({ clientsParHorloge: 3, moisS: 31 * JOUR, finalisationS: 3600, ignorerSolde: true }), seulement: ['parrainage'], roles: ROLES });
+    const koSolde = sansSolde.res.filter(r => !r.ok);
+    const iDiag = sansSolde.trace.findIndex(l => /diagnostic : avoir créé/.test(l)), iSuppr = sansSolde.trace.indexOf('<<horloge supprimée>>');
+    H.v('un Stripe qui n\'applique pas l\'avoir : le parcours ÉCHOUE en imprimant les trois valeurs (amount_due 499, starting_balance -499, billing_reason), puis le diagnostic AVANT la suppression de l\'horloge',
+        [koSolde.length, koSolde[0] && koSolde[0].detail, iDiag >= 0 && iSuppr > iDiag], [1, 'amount_due 499, starting_balance -499, billing_reason subscription_cycle', true]);
+    const lignesDiag = sansSolde.trace.filter(l => /diagnostic : facture/.test(l));
+    H.v('   le diagnostic liste chaque facture du parrain (date, motif, total, solde de départ, dû, statut), marque la jugée, donne le solde du client — et ne porte ni clé ni adresse',
+        [lignesDiag.length >= 3, lignesDiag.filter(l => /<= jugée/.test(l)).length, lignesDiag.every(l => /starting_balance/.test(l) && /amount_due/.test(l) && /statut/.test(l)), sansSolde.trace.some(l => /solde du client du parrain -499 centimes/.test(l)), sansSolde.trace.some(l => /sk_test_|whsec_|@|https?:/.test(l.replace(/exemple\.invalid/g, '')) && /diagnostic/.test(l))],
+        [true, 1, true, true, false]);
+    // une facture du parrain créée après l'avoir qui n'existe pas : l'échec le dit
+    const fauxVide = calendrierReel(); const listeOrig = fauxVide.invoices.list; fauxVide.invoices.list = async (p = {}) => ({ data: (await listeOrig(p)).data.filter(i => i.billing_reason !== 'subscription_cycle') });      // Stripe ne rend aucun renouvellement
+    const aucune = await jouer({ faux: fauxVide, seulement: ['parrainage'], roles: ROLES });
+    const koAucune = aucune.res.filter(r => !r.ok);
+    H.v('   si aucune facture du parrain n\'existe après l\'avoir : l\'échec le dit, et le diagnostic le dit aussi', [koAucune.length, koAucune[0] && /aucune facture du parrain créée après l'avoir/.test(koAucune[0].detail), aucune.trace.some(l => /diagnostic : avoir créé/.test(l))], [1, true, true]);
     // B-M4 : un échec de suppression de l'horloge est NOTÉ (type et code, jamais le message qui pourrait citer une clé).
     // Le leurre de clé est fabriqué par morceaux : la garde d'avant push ne doit voir aucune forme de clé dans le dépôt.
     const suppr = await jouer({ seulement: ['essaiSansCarte'], roles: ['sanscarte'], delEchoue: Object.assign(new Error('clé ' + ['sk', 'test', 'SECRETDUBANC'].join('_') + ' refusée'), { type: 'StripeAPIError', code: 'api_error' }) });

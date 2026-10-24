@@ -7,7 +7,11 @@ const Stripe = require('../../node_modules/stripe');
 const JOUR = 86400, MOIS = 30 * JOUR, AN = 365 * JOUR;
 const erreur = (code, message) => Object.assign(new Error(message || code), { type: 'StripeInvalidRequestError', code, raw: { code } });
 // `clientsParHorloge` : la limite de Stripe est de 3 clients par horloge d'essai ; les bancs qui la tiennent la passent (parcours, décisions), les plus anciens, écrits avec une horloge commune, ne la posent pas.
-function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), formeRecente = true, clientsParHorloge = Infinity } = {}) {
+// `moisS` : la durée d'un mois d'abonnement (30 jours par défaut ; Stripe compte en mois de calendrier, donc 31 jours d'octobre à novembre).
+// `finalisationS` : si fourni, les factures de RENOUVELLEMENT naissent en brouillon et ne sont finalisées (solde du client appliqué, paiement tenté) que `finalisationS` secondes plus tard, quand l'horloge
+// d'essai passe ce seuil — comme Stripe, qui finalise une facture d'abonnement environ une heure après sa création (3600). Sans cette option, tout est immédiat (comportement historique des bancs).
+// `ignorerSolde` : un Stripe fautif qui n'applique jamais l'avoir du client à une facture (pour prouver que le parcours sait échouer là-dessus).
+function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), formeRecente = true, clientsParHorloge = Infinity, moisS = MOIS, finalisationS = null, ignorerSolde = false } = {}) {
     const E = { customers: new Map(), subs: new Map(), coupons: new Map(), sessions: new Map(), invoices: [], produits: [], prix: [], endpoints: [], configs: [], clocks: new Map(), idem: new Map(), appels: [], evenements: [] };
     let n = 0; const nid = pre => `${pre}_${String(++n).padStart(6, '0')}`;
     const note = (nom, params, opts) => E.appels.push({ nom, params: params === undefined ? undefined : JSON.parse(JSON.stringify(params)), opts: opts ? JSON.parse(JSON.stringify(opts)) : undefined });
@@ -32,24 +36,45 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
         return o;
     }
     const emit = (type, objet, created) => { const evt = { id: nid('evt'), object: 'event', type, created, livemode: f.modeLive, data: { object: objet }, api_version: Stripe.API_VERSION }; E.evenements.push(evt); if (f.surEvenement) f.surEvenement(evt); return evt; };
+    // comme Stripe : `total` (après remise), `starting_balance` (solde du client avant la facture, négatif = avoir), `ending_balance`, et `amount_due` = max(0, total + solde de départ)
     const factureVue = (inv) => ({ id: inv.id, object: 'invoice', created: inv.t, customer: inv.customer, amount_paid: inv.amount_paid, amount_due: inv.amount_due, status: inv.status, billing_reason: inv.raison, attempt_count: inv.essais || 1,
+        total: inv.total, subtotal: inv.total, starting_balance: inv.starting_balance, ending_balance: inv.ending_balance,
         ...(formeRecente ? { parent: { type: 'subscription_details', subscription_details: { subscription: inv.sub } } } : { subscription: inv.sub }) });
 
     // ── cycle de vie (horloges d'essai) ──
-    function facturer(s, t, raison) {
+    // règle une facture : le total (remise consommée), puis l'avoir du client (solde négatif) qui le réduit, jamais plus que lui
+    function regler(s, inv) {
         const c = E.customers.get(s.customer), prix = prixDe(s.prixId);
-        let montant = prix.unit_amount || 0;
-        if ((c.balance || 0) < 0 && montant > 0) { const utilise = Math.min(montant, -c.balance); montant -= utilise; c.balance += utilise; }       // l'avoir du client (solde négatif) réduit la facture, jamais plus qu'elle
-        if (s.discounts.length) { const d = s.discounts[0]; const cp = E.coupons.get(d.coupon); if (cp && !d.consomme) { montant = Math.round(montant * (100 - cp.percent_off) / 100); d.consomme = true; } }
+        let total = prix.unit_amount || 0;
+        if (s.discounts.length) { const d = s.discounts[0]; const cp = E.coupons.get(d.coupon); if (cp && !d.consomme) { total = Math.round(total * (100 - cp.percent_off) / 100); d.consomme = true; } }
         s.discounts = s.discounts.filter(d => !d.consomme);
-        const inv = { id: nid('in'), customer: s.customer, sub: s.id, amount_due: montant, amount_paid: 0, status: 'open', raison, essais: 1, t };
-        E.invoices.push(inv);
-        const ok = montant === 0 || (c.pm !== 'pm_card_chargeCustomerFail' && c.pm);
-        const dur = (prix.recurring && prix.recurring.interval === 'year') ? AN : MOIS;
-        s.debut = t; s.fin = t + dur;
-        if (ok) { inv.amount_paid = montant; inv.status = 'paid'; s.status = 'active'; s.impayeDepuis = null; emit('invoice.paid', factureVue(inv), t); }
+        inv.total = total; inv.starting_balance = c.balance || 0;
+        const utilise = !ignorerSolde && total > 0 && inv.starting_balance < 0 ?Math.min(total, -inv.starting_balance) : 0;
+        c.balance = inv.starting_balance + utilise; inv.ending_balance = c.balance; inv.amount_due = total - utilise;
+    }
+    // tente le paiement d'une facture réglée, puis dit l'abonnement
+    function encaisser(s, inv, t) {
+        const c = E.customers.get(s.customer);
+        const ok = inv.amount_due === 0 || (c.pm !== 'pm_card_chargeCustomerFail' && c.pm);
+        if (ok) { inv.amount_paid = inv.amount_due; inv.status = 'paid'; s.status = 'active'; s.impayeDepuis = null; emit('invoice.paid', factureVue(inv), t); }
         else { inv.status = 'open'; s.status = 'past_due'; s.impayeDepuis = t; emit('invoice.payment_failed', factureVue(inv), t); }
         emit('customer.subscription.updated', vue(s), t);
+    }
+    // une facture en brouillon (renouvellement) se finalise `finalisationS` après sa création : c'est là que l'avoir du client lui est appliqué
+    function finaliser(inv) { const s = E.subs.get(inv.sub); inv.status = 'open'; regler(s, inv); encaisser(s, inv, inv.finaliseA); }
+    function facturer(s, t, raison) {
+        const c = E.customers.get(s.customer), prix = prixDe(s.prixId);
+        const inv = { id: nid('in'), customer: s.customer, sub: s.id, amount_due: 0, amount_paid: 0, status: 'open', raison, essais: 1, t };
+        E.invoices.push(inv);
+        const dur = (prix.recurring && prix.recurring.interval === 'year') ? AN : moisS;
+        s.debut = t; s.fin = t + dur;
+        if (finalisationS !== null && raison !== 'subscription_create') {
+            inv.status = 'draft'; inv.finaliseA = t + finalisationS; inv.total = prix.unit_amount || 0; inv.amount_due = inv.total; inv.starting_balance = c.balance || 0; inv.ending_balance = c.balance || 0;
+            if (s.status === 'trialing') s.status = 'active';          // la fin de l'essai passe l'abonnement à « active » dès la facture créée, comme Stripe
+            emit('customer.subscription.updated', vue(s), t);
+            return;
+        }
+        regler(s, inv); encaisser(s, inv, t);
     }
     function avancerSub(s, cible) {
         for (let garde = 0; garde < 50; garde++) {
@@ -107,7 +132,7 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
             return avecCle(o, () => {
                 const c = E.customers.get(p.customer); if (!c) throw erreur('resource_missing');
                 const prixId = p.items[0].price, t = horloge(p.customer), jours = p.trial_period_days || 0, id = nid('sub');
-                const prix = prixDe(prixId), dur = (prix.recurring && prix.recurring.interval === 'year') ? AN : MOIS;
+                const prix = prixDe(prixId), dur = (prix.recurring && prix.recurring.interval === 'year') ? AN : moisS;
                 if (p.default_payment_method) c.pm = p.default_payment_method;
                 const finSansCarte = p.trial_settings && p.trial_settings.end_behavior ? p.trial_settings.end_behavior.missing_payment_method : null;
                 const s = { id, customer: p.customer, prixId, defaultPm: p.default_payment_method || null, finSansCarte, status: jours ? 'trialing' : 'incomplete', created: t, trialStart: jours ? t : null, trialEnd: jours ? t + jours * JOUR : null, debut: t, fin: jours ? t + jours * JOUR : t + dur,
@@ -154,10 +179,12 @@ function creerFauxStripe({ maintenant = () => Math.floor(Date.now() / 1000), for
             const subs = [...E.subs.values()].filter(s => (E.customers.get(s.customer) || {}).test_clock === id);
             // jalon par jalon, dans l'ordre du temps : la date de l'horloge suit le jalon que l'on joue
             for (let garde = 0; garde < 200; garde++) {
-                const jalons = subs.map(s => (s.status === 'trialing' ? s.trialEnd : s.status === 'active' ? s.fin : s.status === 'past_due' ? s.impayeDepuis + 14 * JOUR : Infinity)).filter(t => t <= p.frozen_time);
+                const brouillons = E.invoices.filter(i => i.status === 'draft' && subs.some(s => s.id === i.sub));       // les finalisations en attente sont des jalons comme les autres
+                const jalons = [...subs.map(s => (s.status === 'trialing' ? s.trialEnd : s.status === 'active' ? s.fin : s.status === 'past_due' ? s.impayeDepuis + 14 * JOUR : Infinity)), ...brouillons.map(i => i.finaliseA)].filter(t => t <= p.frozen_time);
                 if (!jalons.length) break;
                 const t = Math.min(...jalons); c.frozen_time = Math.max(c.frozen_time, t);
                 for (const s of subs) avancerSub(s, t);
+                for (const i of brouillons.filter(i => i.finaliseA <= t)) finaliser(i);
             }
             c.frozen_time = p.frozen_time; return { ...c };
         },
