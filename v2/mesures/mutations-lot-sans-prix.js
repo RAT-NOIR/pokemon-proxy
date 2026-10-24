@@ -8,13 +8,18 @@ const V = path.join(__dirname, '..');
 const BANCS = 'test';
 const LOT = 'identifier/lot.js';
 const BANC = 'test-lot-sans-prix.js';
-const BRANCHE = "} else if (!lotAfficheUnPrix(cartes)) {";
+const BRANCHE = "} else if (!lotAfficheUnPrix(cartes, lectures)) {";
 
 // [nom, fichier (relatif à v2/), ancre, remplacement, banc, équivalent? (raison)]
 const MUTANTS = [
     ['la branche n\'est jamais prise (un lot sans prix reste compté)', LOT, BRANCHE, "} else if (false) {", BANC],
     ['la branche est toujours prise (un lot qui affiche un prix est rendu)', LOT, BRANCHE, "} else if (true) {", BANC],
-    ['les candidats d\'une question ne comptent plus (un candidat au guide ne suffit pas)', LOT, "return !Array.isArray(c.candidats) || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) }));", "return !Array.isArray(c.candidats);", BANC],
+    ['les candidats d\'une question ne comptent plus (un candidat au guide ne suffit pas)', LOT, "c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) || !langueNonLue(c, lectures) }));", "c.candidats.some(k => afficheUnPrix({ prixRendu: !langueNonLue(c, lectures) }));", BANC],
+    // tour 2 (I2, M2)
+    ['I2 : la langue lue d\'une question ne compte plus (seuls les guides des candidats)', LOT, "prixRendu: prixServi(k) || !langueNonLue(c, lectures) }", "prixRendu: prixServi(k) }", BANC],
+    ['I2 : une langue de lecture inconnue (lecture absente) est lue « langue non lue »', LOT, "return Boolean(l) && typeof l === 'object' && l.codeLangue === null;", "return !l || typeof l !== 'object' || l.codeLangue == null;", BANC],
+    ['I2 : le lot ne transmet plus ses lectures à la règle', LOT, "} else if (!lotAfficheUnPrix(cartes, lectures)) {", "} else if (!lotAfficheUnPrix(cartes)) {", BANC],
+    ['M2 : une question sans candidat est lue « sans prix »', LOT, "|| c.candidats.length === 0 ||", "||", BANC],
     ['le guide d\'une carte identifiée ne compte plus (seul le repli)', LOT, "prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli:", "prixRendu: instructionEnDirect(c), repli:", BANC],
     ['le repli servi ne compte plus (seul le guide)', LOT, "repli: avecRepliAnalyse(c).prixRepli ?? null })", "repli: null })", BANC],
     ['un prixGuide absent (undefined) est lu « sans prix »', LOT, "p.prixGuide !== null : true", "p.prixGuide != null : true", BANC],

@@ -31,7 +31,9 @@ const qs = (...guides) => ({ index: 0, statut: 'a-trancher', carte: null, candid
 const intro = () => ({ index: 0, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'photo-illisible', prixLive: null });
 const repli = { repli: 'tendance', cause: 'langue-non-lue', fiable: false, guide, offre: null };
 const piege = new Proxy({}, { get() { throw new Error('boum'); } });
-const regle = cs => sur(() => L.lotAfficheUnPrix(cs));
+// tour 2 (I2) : la règle reçoit aussi les LECTURES du lot (lectures[i].codeLangue, ce que l'adaptateur a lu pour la carte d'entrée i) ; chaque carte reçoit son index d'entrée (sa position)
+const NL = { codeLangue: null }, LU = { codeLangue: 2 };
+const regle = (cs, lectures) => sur(() => L.lotAfficheUnPrix(Array.isArray(cs) ? cs.map((c, i) => (c && typeof c === 'object' ? { ...c, index: i } : c)) : cs, lectures));
 
 H.v('A1. deux cartes identifiées sans AUCUN guide : aucun prix affiché', regle([idf(null), idf(null)]), false);
 const live = { idProduct: 1, langues: [2], reverseHolo: false, etatVise: null };
@@ -40,7 +42,10 @@ H.v('A12. I1 : prixLive absent (undefined) ou d\'une forme inconnue : un doute, 
 H.v('A2. une carte au guide parmi des cartes sans guide : un prix est affiché', regle([idf(null), idf(guide), idf(null)]), true);
 H.v('A3. une carte sans guide mais qui porte un prixRepli servi : un prix est affiché (le repli compte, comme afficheUnPrix)', regle([idf(null, { prixRepli: repli }), idf(null)]), true);
 H.v('A4. un prixGuide ABSENT (ni objet ni null : on ne sait pas) : jamais « sans prix » — une garde écrite par ce qu\'elle autorise', regle([idf(undefined), idf(null)]), true);
-H.v('A5. une question dont AUCUN candidat n\'a de guide : aucun prix affiché ; dont UN candidat en a : un prix est affiché', [regle([qs(null, null, null), idf(null)]), regle([qs(null, guide), idf(null)])], [false, true]);
+H.v('A5. une question dont AUCUN candidat n\'a de guide : aucun prix affiché ; dont UN candidat en a : un prix est affiché', [regle([qs(null, null, null), idf(null)], [NL, NL]), regle([qs(null, guide), idf(null)], [NL, NL])], [false, true]);
+H.v('A13. I2 : une question sans guide dont la LANGUE est lue (lectures[i].codeLangue non null) recevra une instruction de prix en direct après un OUI : prix possiblement affiché, le lot reste compté', [regle([qs(null, null), idf(null)], [LU, NL]), regle([qs(null, null), idf(null)], [{ codeLangue: 5 }, NL])], [true, true]);
+H.v('A14. I2 : lectures absentes, trop courtes ou d\'une forme inconnue : un doute (lot compté) ; seule la valeur codeLangue null de CETTE carte vaut « langue non lue »', [regle([qs(null, null), idf(null)]), regle([qs(null, null), idf(null)], []), regle([qs(null, null), idf(null)], [{}, NL]), regle([qs(null, null), idf(null)], [{ codeLangue: undefined }, NL]), regle([qs(null, null), idf(null)], [NL, NL])], [true, true, true, true, false]);
+H.v('A15. M2 : une question SANS candidat (candidats vide) est un doute, jamais « sans prix » : le lot reste compté', [regle([qs(), idf(null)], [NL, NL]), regle([qs()], [NL])], [true, true]);
 H.v('A6. introuvables seules ou avec des cartes sans prix : aucun prix ; un introuvable ne rend pas son voisin sans prix payant', [regle([intro(), intro()]), regle([intro(), idf(null)])], [false, false]);
 H.v('A7. un statut inconnu, une carte non objet, une carte identifiée sans fiche : un prix est supposé affiché (jamais un remboursement sur un doute)', [regle([{ statut: 'inconnu' }, idf(null)]), regle([null, idf(null)]), regle([{ statut: 'identifiee', carte: null }, idf(null)])], [true, true, true]);
 H.v('A8. une carte dont la lecture du prix LÈVE : supposée affichée (la règle ne lève jamais, et ne rembourse pas sur un doute)', regle([idf(piege), idf(null)]), true);
@@ -69,6 +74,8 @@ const introRes = () => ({ statutHttp: 200, corps: { success: false, natureRefus:
 const affNL = id => { const r = aff(id); return { ...r, corps: { ...r.corps, codeLangue: null } }; };
 const sansN = n => Array.from({ length: n }, (_, i) => affNL(SANS[i % SANS.length]));
 const lueN = n => Array.from({ length: n }, (_, i) => aff(SANS[i % SANS.length]));
+// tour 2 (I2) : une QUESTION à langue lue recevra un `prixLive` après un OUI (routes.js, prixLiveDe) : prix possiblement affiché ; `qstNL` : langue non lue (la seule question « positivement sans prix » quand ses candidats n'ont pas de guide)
+const qstNL = ids => { const r = qst(ids); return { ...r, corps: { ...r.corps, codeLangue: null } }; };
 
 async function inst(o = {}) {
     const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }), o);
@@ -169,7 +176,7 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const x = await inst(); lot([...sansN(2), qst([SANS[5], AVEC])]);
         const r = await poster(sv.url, x.jeton), j = r.json || {};
         H.v('B4. 2 cartes sans guide + une question dont UN candidat a un guide : compté { debite 1, motif lot }, essai 2', [r.statut, j.facturation, await essais(x), (await rendus(x)).length], [200, FACT({ debite: 1, rembourse: false, motif: 'lot' }), 2, 0]);
-        const y = await inst(); lot([...sansN(2), qst([SANS[5], SANS[6]])]);
+        const y = await inst(); lot([...sansN(2), qstNL([SANS[5], SANS[6]])]);
         const r2 = await poster(sv.url, y.jeton), j2 = r2.json || {};
         const q = await raw('questions_v2').findOne({ _id: `${j2.scanId}:2` });
         H.v('   une question dont AUCUN candidat n\'a de guide : le lot est remboursé (motif sans-prix), essai 3, net 0', [r2.statut, j2.facturation, await essais(y), await net(y)], [200, FACT(), 3, 0]);
@@ -181,7 +188,11 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const fRendu = { debite: 0, reserve: 0, rembourse: true, motif: 'sans-prix', raisonNonRembourse: null };
         H.v('   M1 : la réponse OUI sert { debite 0, rembourse true, motif sans-prix } ; son rejeu aussi ; toujours UN seul tracé, net 0, constats 1, déclarations 0, essai 3', [oui.json.facturation, ouiRejeu.statut, ouiRejeu.json.facturation, (await rendus(y)).length, await net(y), await compteur(y, 'constate'), await compteur(y, 'declare'), await essais(y)], [fRendu, 200, fRendu, 1, 0, 1, 0, 3]);
         // une confirmation à UN candidat sans prix + un introuvable : rien n'affiche de prix => remboursé ; refuser la confirmation ne rend RIEN de plus (la claim du lot est la même)
-        const z = await inst(); lot([introRes(), qst([SANS[7]])]);
+        // I2 : la MÊME question dont les candidats n'ont pas de guide mais dont la langue est LUE : compté (un OUI servira un prixLive), la question est posée
+        const w = await inst(); lot([...sansN(2), qst([SANS[5], SANS[6]])]);
+        const rw = await poster(sv.url, w.jeton);
+        H.v('   I2 : 2 cartes à langue non lue + une question sans guide à langue LUE : compté { debite 1, motif lot }, essai 2, aucun remboursement, question posée', [rw.statut, rw.json.facturation, await essais(w), (await rendus(w)).length, await raw('questions_v2').countDocuments({ scanId: new mongoose.Types.ObjectId(rw.json.scanId), etat: 'en-attente' })], [200, FACT({ debite: 1, rembourse: false, motif: 'lot' }), 2, 0, 1]);
+        const z = await inst(); lot([introRes(), qstNL([SANS[7]])]);
         const r3 = await poster(sv.url, z.jeton), j3 = r3.json || {};
         H.v('   1 introuvable + 1 confirmation sans prix : remboursé (rien n\'affiche de prix), essai 3', [r3.statut, j3.analyse && j3.analyse.statut, j3.facturation && j3.facturation.rembourse, await essais(z)], [200, 'lot', true, 3]);
         const non = await repondre(sv.url, z.jeton, { scanId: j3.scanId, carte: 1, choix: 'aucune' });
@@ -253,7 +264,7 @@ const poserCompteur = (x, type, count) => raw('plafonds').insertOne({ porteur: x
         const orig = argentReg.reserverQuestion; const e = console.error; console.error = () => { };
         try {
             argentReg.reserverQuestion = async () => { throw new Error('panne simulée : réservation'); };
-            const x = await inst(); lot([affNL(SANS[0]), qst([SANS[1], SANS[2]])]);
+            const x = await inst(); lot([affNL(SANS[0]), qstNL([SANS[1], SANS[2]])]);
             const r = await poster(sv.url, x.jeton), j = r.json || {};
             H.v('B9. lot sans prix dont la réservation de question échoue : 500 SERVEUR, facturation rendue (rembourse true, pas une raison « deja-rembourse »), essai 3, net 0, UN tracé',
                 [r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.raisonNonRembourse, await essais(x), await net(x), (await rendus(x)).length], [500, 'SERVEUR', true, null, 3, 0, 1]);
