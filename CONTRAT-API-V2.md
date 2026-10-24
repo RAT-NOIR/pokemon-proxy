@@ -1051,15 +1051,21 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 
 | jeton | sens : présent seulement si… |
 |---|---|
-| `langue-impression` | `impressions[].langue` est servi (le code fermé de la langue de l'impression, `null` si elle n'est pas prouvée) |
-| `marques` | `Produit.marques` et `Impression.marques` sont servis |
+| `langue-impression` | `impressions[].langue` est servi (le code fermé de la langue de l'impression, `null` si elle n'est pas prouvée). **Condition : l'archive des visuels est chargée** en mémoire **et** porte la colonne des jumeaux (sans archive, `impressions` est vide ; avec une archive d'avant la colonne, `langue` vaut `null` partout) |
+| `marques` | `Produit.marques` et `Impression.marques` sont servis. **Condition : l'archive des visuels est chargée** en mémoire (sans archive, `Produit.marques` vaut `null` et `impressions` est vide) |
 | `prix-incertains` | `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge` et `regleVerdict.ecartTendanceMax` sont servis |
 | `prix-repli` | `carte.prixRepli` est servi **et** la règle REPLI-QUOTA est en place : un scan dont la réponse sert un repli compte dans le quota (`raisonNonRembourse: "prix-repli"`) |
 | `achete-avant-jour` | `facturation.poche` est servi : les analyses achetées sont débitées avant le quota du jour |
 
+**Les deux jetons de l'archive suivent l'état du service, à chaque appel.** L'archive des visuels vit en mémoire du processus : un service qui se réveille à froid, ou dont les clés de lecture de l'archive sont fermées, ne la porte pas, et `/ping` ne dit alors ni `langue-impression` ni `marques` ; ils reviennent à l'appel qui suit son chargement, et retombent si elle disparaît. `/ping` lit cet état en mémoire (jamais la base) : une fonction pure de ce qui est chargé. Un client lit donc `capacites` à chaque sondage et ne garde pas un jeton annoncé il y a une heure.
+
+**`prix-repli` dit que la RÈGLE est en place, pas que chaque carte a un repli.** `prixRepli` reste absent sur une carte dont la fiche n'a aucune donnée de prix (et sur une carte à trancher) : le jeton ne promet pas un repli par carte. L'extension qui ouvre la page sans état visé et ne déclare pas de lecture ratée doit exiger le `prixRepli` de CETTE carte, pas seulement le jeton : sans repli sur la carte, un scan débité sans prix affiché n'est pas remboursé.
+
+**Les jetons décrivent le code et l'état chargé ; un `503` reste une panne.** Un jeton annoncé n'empêche pas une route de répondre `503 INDISPONIBLE` (index manquants, base injoignable) : le client traite ce `503` comme une panne passagère.
+
 **Ce que fait le client.** Un jeton inconnu est **ignoré**. Un champ `capacites` **absent, ou qui n'est pas un tableau, vaut « on s'en tient aux champs servis »** : la présence des champs dans les réponses reste l'annonce, leur absence l'affichage d'avant. Un jeton absent d'un tableau présent = cette partie n'est pas servie par ce serveur (par exemple un serveur d'avant REPLI-QUOTA ne dit pas `prix-repli`). `capacites` ne remplace pas `versionMinExtension` : l'un dit « la v2 est là et quelle version il faut », l'autre « ce qu'elle sert ».
 
-**Comment le serveur décide.** Une fonction **pure** de la configuration (aucune lecture en base, aucune exception possible) : un jeton sort si et seulement s'il est dans la liste fermée **et** si sa condition rend exactement `true` ; une condition absente, qui lève ou qui rend autre chose que le booléen vrai fait tomber le jeton. Aucun des cinq jetons ne dépend d'un drapeau de configuration aujourd'hui : chaque partie est servie sans condition par ce code (preuve ligne à ligne en tête de `v2/capacites.js`, rejouée par `v2/test/test-capacites-ping.js`). Le jour où une partie sera derrière un drapeau, le jeton suivra ce drapeau, lu dans la même configuration que la route.
+**Comment le serveur décide.** Une fonction **pure** de la configuration et de l'état chargé en mémoire (aucune lecture en base, aucune exception possible : une archive illisible fait tomber le jeton) : un jeton sort si et seulement s'il est dans la liste fermée **et** si sa condition rend exactement `true` ; une condition absente, qui lève ou qui rend autre chose que le booléen vrai fait tomber le jeton. Aucun des cinq jetons ne dépend d'un drapeau de configuration aujourd'hui (le banc balaie toutes les variables `V2_*` que la configuration lit). Trois sont servis par le code seul ; deux (`langue-impression`, `marques`) dépendent de l'archive des visuels chargée en mémoire, lue par un lecteur injecté (preuve ligne à ligne en tête de `v2/capacites.js`, rejouée par `v2/test/test-capacites-ping.js`). Le jour où une partie sera derrière un drapeau, le jeton suivra ce drapeau, lu dans la même configuration que la route.
 
 ---
 
@@ -1687,7 +1693,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 | prix lu | `retour-live`, `retour-live-sans-prix`, `retour-live-repli-non-rembourse` (REPLI-QUOTA : lecture ratée, repli servi, non remboursée) |
 | solde de chaque porteur | `solde-installation-non-liee`, `solde-installation-liee`, `solde-compte-non-verifie`, `solde-abonnement` |
 | comptes | `installation-creee`, `lier`, `code-liaison`, `compte`, `compte-non-verifie` |
-| santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète — CAPACITES-PING) |
+| santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète, archive des visuels chargée — CAPACITES-PING) |
 
 ---
 

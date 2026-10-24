@@ -219,7 +219,7 @@
     "route": "GET /ping",
     "statut": 200,
     "schema": "ReponsePing",
-    "description": "CAPACITES-PING : /ping d'un serveur dont la v2 est configurée — `versionMinExtension` et `capacites` (la liste fermée complète : ce code sert les cinq parties)."
+    "description": "CAPACITES-PING : /ping d'un serveur dont la v2 est configurée — `versionMinExtension` et `capacites` (la liste fermée complète : ce code sert les cinq parties, l'archive des visuels étant chargée en mémoire ; un service à froid ne dirait ni `langue-impression` ni `marques`)."
   },
   "version.json": {
     "route": "POST /api/identifier",
