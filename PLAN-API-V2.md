@@ -81,7 +81,7 @@ Toute tâche les respecte implicitement. **Une valeur se lit dans `v2/config.js`
   Abonnement : quota MENSUEL (mois civil UTC), non reportable, valeur en configuration (`V2_ABO_MENSUEL`, défaut 100, §5 Q3). Packs achetés : **20, 50, 100, 200** (ceux de `index.js:6751`), sans expiration.
 - **Toutes les valeurs ci-dessus viennent de la configuration** (`V2_ESSAIS`, `V2_ACCUEIL`, `V2_HEBDO`, `V2_ABO_MENSUEL`) : elles pourront baisser.
 - Ordre de débit par défaut (configurable, `V2_ORDRE_POCHES`) : `essai → accueil → hebdo → abonnement → achete`. Une installation non liée : `essai` seul.
-- Lot : `max(1, ceil(cartesVues / 10))`, questions comprises ; `cartesVues` compte les introuvables. Un lot entièrement introuvable est remboursé (`introuvable`) ; aucun prix lisible : `sans-prix`.
+- Lot : `max(1, ceil(cartesVues / 10))`, questions comprises ; `cartesVues` compte les introuvables. Un lot entièrement introuvable est remboursé (`introuvable`) ; un lot n'est jamais remboursé au motif d'un prix manquant ni d'un repli (`sans-prix` ne vaut que pour une carte seule ; sur une carte de lot, `POST /api/retour-live` répond `409` `carte-non-identifiee` — REPLI-QUOTA, contrat aligné sur le code).
 - Question : crédit RÉSERVÉ à l'émission (`debite: 0, reserve: 1`), débité à la réponse par un candidat, rendu pour « aucune », « ne-sait-pas » ou sans réponse sous **24 h**.
 - Plafonds de remboursement par porteur (compte, ou installation non liée) et par jour UTC : **pannes 5**, **questions + sans-prix 30** (un seul compteur de 30).
 - Motifs (liste fermée, `facturation.motif`) : `affirmee` · `question` · `lot` · `introuvable` · `sans-prix` · `panne` · `plafond-jour` · `administrateur`. **`code-maitre` disparaît.**

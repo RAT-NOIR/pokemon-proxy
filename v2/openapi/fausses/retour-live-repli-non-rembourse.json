@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "sans-prix",
+    "raisonNonRembourse": "prix-repli"
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 8,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  },
+  "prixRepli": {
+    "repli": "tendance",
+    "cause": "lecture-ratee",
+    "fiable": false,
+    "guide": {
+      "tendance": 1.49,
+      "de": 0.02,
+      "deBase": "tous-etats",
+      "moyenne7": 1.55,
+      "moyenne30": 1.26,
+      "date": "2026-10-12",
+      "fiable": true,
+      "reserves": []
+    },
+    "offre": null
+  }
+}

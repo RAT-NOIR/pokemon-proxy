@@ -35,6 +35,12 @@
     "schema": "ReponseRetourLive",
     "description": "Le repli honnête du prix, côté retour de l'extension : prixLive d'origine tendance (Arcanin [G] Lv.60, Supreme Victors 15/147, ni état ni offre) => prixRepli (repli tendance, cause tendance-seule, fiable false) avec le guide du jour, dont l'écart de la tendance aux moyennes dépasse 30 %."
   },
+  "retour-live-repli-non-rembourse.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "Lecture ratée DÉFINITIVE, repli servi, NON remboursée (lot REPLI-QUOTA) : un prix est affiché (le repli), donc le scan compte — facturation { debite 1, rembourse false, motif sans-prix, raisonNonRembourse prix-repli }, ni declaration (le plafond des déclarations n'est pas consommé), offre.restant ne remonte pas. Les chiffres sont ceux du guide réel de Tauros (Jungle 47/64) au 2026-10-12."
+  },
   "identifiee-tampon-staff.json": {
     "route": "POST /api/identifier",
     "statut": 200,

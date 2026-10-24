@@ -453,6 +453,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         // contrôle : la garde n'est pas fermée partout — une carte seule, identifiée, est remboursée
         const y = await inst(); const r1 = await poster(svSimple.url, y.jeton); const s1 = new mongoose.Types.ObjectId(r1.json.scanId);
         await raw('journal_scans').insertOne({ _id: s1, userId: `v2:installation:${y.i._id}` });
+        await raw('analyses').updateOne({ _id: s1 }, { $set: { 'produits.$[].prixGuide': null } });        // REPLI-QUOTA : le remboursement n'a lieu que si aucun repli n'est servi ; ici la fiche n'a aucune donnée de prix
         const c = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: r1.json.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${y.jeton}` } });
         H.v('   contrôle : le même appel sur une carte seule identifiée est remboursé (200, rembourse true, essai 3)', [c.statut, c.json.facturation && c.json.facturation.rembourse, await essais(y)], [200, true, 3]);
     }
@@ -491,6 +492,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
             const s = await inst(); lot([aff(P5)]);
             const rs = await poster(sv.url, s.jeton); const sid = new mongoose.Types.ObjectId(rs.json.scanId);
             await raw('journal_scans').insertOne({ _id: sid, userId: `v2:installation:${s.i._id}` });
+            await raw('analyses').updateOne({ _id: sid }, { $set: { 'produits.$[].prixGuide': null } });        // REPLI-QUOTA : le remboursement n'a lieu que si aucun repli n'est servi ; ici la fiche n'a aucune donnée de prix
             const sp = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: rs.json.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${s.jeton}` } });
             H.v('U5. sans-prix sur le résultat unique : remboursé comme une carte seule (200, rembourse, essai 3)', [sp.statut, sp.json.facturation && sp.json.facturation.rembourse, await essais(s)], [200, true, 3]);
         } finally { RG.decisionRegleG = orig; await svG.fermer(); }
