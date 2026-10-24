@@ -1,7 +1,9 @@
 'use strict';
 // COTES-VISUELS, tours 1-2 — le SCRIPT AUTONOME qui précalcule l'archive des visuels et du lien fiche → produits, HORS de l'API (destiné au worker de l'agent catalogue : l'API, sur une offre gratuite qui
 // se met en veille ~11 fois par jour, ne recalcule pas 380 s de lecture à chaque réveil — elle lit l'objet R2 et le charge en ~0,1 s).
-//   node v2/migrations/construire-fichier-visuels.js --deposer [--vers=<archive.rmv>] [--catalogue=<products_singles_6.json>] [--ignorer-precedente]
+//   node v2/migrations/construire-fichier-visuels.js --deposer [--vers=<archive.rmv>] [--catalogue=<products_singles_6.json>] [--ignorer-precedente] [--exclure=<liste.json>]
+//   --exclure : ARCHIVE-EXCLUSIONS — une liste NOMMÉE d'idProduct exclus de l'identification (4 motifs fermés ; forme jugée par v2/chargeur/exclusions.js, toute autre forme refuse la construction, code 1). Un produit exclu n'a
+//   aucune entrée de visuel dans l'archive (il reste servi pour l'affichage, ses fiches liées et ses jumeaux ne bougent pas) ; l'exclusion s'applique dans v2/chargeur/calcul.js, à UN seul endroit. Sans --exclure, la sortie est celle d'avant.
 // ENTRÉES (variables, des NOMS ici, jamais une valeur) :
 //   lecture de `cartes`   MONGODB_CARTES_LECTURE_URI (+ MONGODB_CARTES_URI seulement pour refuser une lecture qui serait l'écriture) — la garde de l'API : variables, privilèges, façade à trois collections ;
 //   catalogue             --catalogue=<export Cardmarket local> OU MONGODB_LECTURE_URI (base `test`, privilèges jugés par la même garde) ;
@@ -20,6 +22,15 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     const vers = arg('vers'), catalogueJson = arg('catalogue'), deposer = argv.includes('--deposer'), ignorer = argv.includes('--ignorer-precedente');
     const stop = m => { console.error(`❌ ARRÊT : ${m}`); return 1; };
     if (!vers && !deposer) return stop('--deposer ou --vers=<archive> est requis (rien à produire sinon)');
+    // ARCHIVE-EXCLUSIONS : la liste est lue et jugée AVANT toute lecture de source, de catalogue ou de variable ; une liste invalide (ou un --exclure mal formé : sans « = », ou sans fichier) refuse la construction
+    let exclure = null;
+    if (argv.some(x => x === '--exclure' || (x.startsWith('--exclure') && !x.startsWith('--exclure=')))) return stop('--exclure : la forme est --exclure=<fichier.json> (un fichier est requis)');
+    const nomExclure = arg('exclure');
+    if (nomExclure !== null) {
+        const lecture = require('../chargeur/exclusions').lireFichierExclusions(nomExclure);
+        if (!lecture.ok) return stop(`--exclure : liste refusée, aucune construction : ${lecture.raison}`);
+        exclure = lecture;
+    }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
     let ecriture = null;
@@ -42,10 +53,16 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         } finally { await cx.close(); }
     }
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC }); }
+    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null }); }
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+    // ARCHIVE-EXCLUSIONS : ce qui a été retiré, par motif, et ce que la liste nomme sans que l'archive l'ait servi (une liste périmée se dit, elle ne passe pas en silence)
+    if (exclure) {
+        console.log(`   exclusions (${exclure.decision} · du ${exclure.le} · ${exclure.produits.length} produit(s) nommé(s)) : ${c.exclus} produit(s) exclu(s) retiré(s) de l'archive (${Object.entries(c.exclusParMotif).map(([k, n]) => `${k} ${n}`).join(' · ')})`);
+        if (c.exclusSansVisuel.length) console.log(`   exclusions : ${c.exclusSansVisuel.length} produit(s) de la liste étaient déjà sans visuel dans l'archive (liste périmée ou produit hors jeu) : ${c.exclusSansVisuel.map(x => `${x.idProduct} [${x.motif} : ${x.raison}]`).join(' ; ')}`);
+        else console.log('   exclusions : tous les produits de la liste avaient un visuel dans l\'archive (aucun déjà sans visuel)');
+    }
     // m1 : les compteurs du lot REPLI-REIMPRESSIONS, lisibles dans la sortie (jamais seulement dans un banc)
     if (c.repliRefuse) console.log('   repli : produits sans image d\'un autre tirage ' + c.repliRefuse.total + ' (' + Object.entries(c.repliRefuse.parFamille).map(([k, n]) => k + ' ' + n).join(' · ') + ') · basse définition exclue ' + (c.basseDefinitionExclue || 0)
         + ' · partage incohérent écarté ' + (c.partageIncoherent || 0) + ' · variante sans preuve ' + (c.varianteSansPreuve || 0) + ' · marquages ' + JSON.stringify(c.marquees || null)

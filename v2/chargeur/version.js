@@ -10,6 +10,7 @@
 const { lireEntree } = require('../identifier/visuels');
 const PV = require('../identifier/partage-variante');                              // PARTAGES-VARIANTE : la paire séparée par la variante, une seule définition
 const { separeeParVariante } = PV;
+const { verifierComptes: verifierComptesExclusions } = require('./exclusions');         // ARCHIVE-EXCLUSIONS : UNE définition des compteurs d'exclusion, pour l'écriture et la lecture
 
 const COLS = ['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 'rar', 'tot', 'variante', 'set', 'lien'];
 
@@ -239,7 +240,14 @@ function creerConstructeur({ marquages = false } = {}) {
     const VISUEL = [1, 2, 3, 4, 5, 6].map(i => COLS[i]);                             // vig, vw, vh, gra, gw, gh : ce qui est AFFICHÉ (le reste de l'entrée n'est pas un visuel)
     const jumeaux = new Map();                                                       // idProduct → { meta, exp, num, tir } (-1 = inconnu) : UNE ligne par produit du catalogue
     const melanges = new Set();                                                      // LOT TAMPONS (B) : les idProduct marqués prixMelangeTampon (indépendants de tout visuel)
+    let exclusions = null;                                                           // ARCHIVE-EXCLUSIONS : { exclus, exclusParMotif } posés par calculer ; null = aucune liste (aucun champ dans les comptes)
     return {
+        /** ARCHIVE-EXCLUSIONS : les compteurs de l'exclusion, écrits dans les comptes de la version. Jugés ici par la définition du format (exclusions.js) : des compteurs incohérents ne s'écrivent pas. */
+        exclusions(x) {
+            const refus = verifierComptesExclusions(x);
+            if (refus || !x || x.exclus === undefined) throw new Error(refus || 'exclusions : compteurs absents');
+            exclusions = { exclus: x.exclus, exclusParMotif: { ...x.exclusParMotif } };
+        },
         /** LOT TAMPONS (B) : un produit que cartes_produits marque `prixMelangeTampon`, avec ou sans entrée d'archive. Seulement avec la colonne des marquages (format 2). */
         melange(idProduct) {
             if (!marquages) throw new Error('constructeur sans colonne de marquages : un prix mélangé ne peut pas être écrit (jamais perdu en silence)');
@@ -334,7 +342,7 @@ function creerConstructeur({ marquages = false } = {}) {
             }
             // la colonne des prix mélangés : la liste triée des idProduct marqués (écrite avec la colonne des marquages, même vide : « aucun » est une réponse)
             const mel = marquages ? { produits: Int32Array.from([...melanges].sort((a, b) => a - b)) } : undefined;
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}) });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif } : {}) });
             // la colonne des jumeaux : paires (métacarte, produit) triées, plus la permutation triée par produit (recherche d'un produit seul)
             let jum;
             if (jumeaux.size) {
@@ -419,6 +427,8 @@ function verifierStructure(d) {
         for (let i = 0; i < x.produits.length; i++) if (x.produits[i] <= 0 || (i > 0 && x.produits[i] <= x.produits[i - 1])) refuser('prix mélangés : identifiants non strictement croissants ou non positifs');
         if (!d.comptes || d.comptes.melange !== x.produits.length) refuser('prix mélangés : compte de l\'en-tête différent de celui de la colonne');
     } else if (d.comptes && d.comptes.melange !== undefined) refuser('prix mélangés : un compte sans colonne');
+    const refusExclusions = verifierComptesExclusions(d.comptes);               // ARCHIVE-EXCLUSIONS : les compteurs d'exclusion, absents ou cohérents (la définition est celle d'exclusions.js)
+    if (refusExclusions) refuser(refusExclusions);
     const c = d.comptes;
     if (!c || typeof c !== 'object' || c.visuels !== n || c.fichesLiees !== m || c.produitsLies !== d.fiches.produits.length) refuser('comptes de l\'en-tête différents de ceux des colonnes');
     if (typeof d.liens.prefixe !== 'string' || d.liens.prefixe.length > 300) refuser('préfixe de lien illisible');
