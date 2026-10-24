@@ -322,5 +322,83 @@ for (const [nom, f] of [
 }
 // (tour de correction 1) la confrontation de SITE_LIT au gabarit du site se fait par IMPORT, dans test-garde-site-lu.js (et par lot-additif.js à chaque lot) : plus de regex sur le texte du site ici.
 
+// ══ TOUR 2 (2026-10-24) ══
+// ── D2 : `liens` ne s'explique qu'AU PLUS JUSTE — les idProduct AJOUTÉS ou RETIRÉS que portent des lignes changées (qui ont un slugSet) ; liens.idMetacard ne s'explique jamais
+{
+    const base = () => modif(e => { e.cartes[1].liens = { idProduct: [101, 200], idMetacard: 5 }; e.cartesProduits[3].slugSet = 'Set-B'; });   // la ligne p3 (carte 2, produit 200) vit dans Set-B
+    const LIGNE = { _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 2, slugSet: 'Set-C' };
+    const apres = (f) => { const e = base(); f(e); return e; };
+    verifier('D2 : l\'idProduct ajouté à liens est celui de la ligne ajoutée : expliqué, Set-C seulement', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct.push(300); e.cartesProduits.push(LIGNE); }) }).sets, ['Set-C']);
+    verifier('D2 : liens.idMetacard change avec une ligne changée : JAMAIS expliqué -> tous les sets de la carte + celui de la ligne', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct.push(300); e.cartes[1].liens.idMetacard = 6; e.cartesProduits.push(LIGNE); }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('D2 : un idProduct RETIRÉ de liens que la ligne changée ne porte pas (101 retiré, la ligne changée est celle du 300) -> tous les sets de la carte', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct = [200]; e.cartesProduits.push(LIGNE); }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('D2 : l\'ajout de 300 ET le retrait de 101, une seule ligne (300) changée -> le retrait du 101 n\'est pas expliqué -> tous les sets', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct = [200, 300]; e.cartesProduits.push(LIGNE); }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('D2 : la ligne changée n\'a PAS de slugSet : elle n\'explique rien -> tous les sets de la carte', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct.push(300); e.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 2 }); }) }).sets, ['Set-A', 'Set-B']);
+    verifier('D2 : deux lignes portent deux idProduct ajoutés : les deux sont expliqués', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct.push(300, 301); e.cartesProduits.push(LIGNE, { _id: 'p10', idProduct: 301, idExpansion: 12, carteId: 2, slugSet: 'Set-D' }); }) }).sets, ['Set-C', 'Set-D']);
+    verifier('D2 : les idProduct sont les mêmes mais dans un AUTRE ordre (le site lit le premier) : non expliqué -> tous les sets', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct = [200, 101]; e.cartesProduits.push(LIGNE); }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('D2 : une ligne changée d\'une AUTRE carte ne l\'explique pas', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct.push(300); e.cartesProduits.push({ ...LIGNE, carteId: 1 }); }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('D2 : le retrait de 200 avec la ligne p3 (produit 200) retirée : expliqué, Set-B seulement', setsTouches({ avant: base(), apres: apres(e => { e.cartes[1].liens.idProduct = [101]; e.cartesProduits.splice(3, 1); }) }).sets, ['Set-B']);
+}
+
+// ── D3 : une forme figée (vignette, symbolesIdentification, dateSortieMois) a ses sous-champs déclarés ; une entrée pointée de SITE_LIT.sets sans forme refuse
+{
+    const { SITE_LIT, entreesSetsSansForme } = require('./collecte-cartes/garde-lot');
+    verifier('D3 : SITE_LIT.formes déclare les sous-champs lus des trois objets à forme figée, et est gelée', [Object.isFrozen(SITE_LIT.formes), SITE_LIT.formes?.['images.vignette'], SITE_LIT.formes?.dateSortieMois, SITE_LIT.formes?.symbolesIdentification],
+        [true, ['cleR2', 'w', 'h'], ['iso', 'texte'], ['cleR2', 'w', 'h', 'fichier', 'source']]);
+    verifier('D3 : aucune entrée pointée de SITE_LIT.sets n\'est sans forme (rien ne compare null pour toujours)', entreesSetsSansForme(SITE_LIT), []);
+    verifier('D3 : une entrée pointée NOUVELLE de SITE_LIT.sets (absente de SETS_A_FORME) est nommée', entreesSetsSansForme({ ...SITE_LIT, sets: [...SITE_LIT.sets, 'periodeDistribution.fin', 'bulba.revid'] }), ['periodeDistribution.fin', 'bulba.revid']);
+    verifier('D3 : une entrée simple (sans point) n\'a pas besoin de forme', entreesSetsSansForme({ ...SITE_LIT, sets: [...SITE_LIT.sets, 'nouveauChamp'] }), []);
+    // la comparaison lit les sous-champs DÉCLARÉS : un sous-champ non déclaré de la vignette ne revalide rien (c'est la confrontation qui le refuse), un déclaré le fait
+    const eV = (v) => modif(e => { e.cartes[0].images[0].vignette = v; });
+    verifier('D3 : la vignette se compare sur cleR2, w, h (la forme déclarée) : un sous-champ hors forme ne touche rien, w touche le set',
+        [setsTouches({ avant: eV({ cleR2: 'v', w: 1, h: 2 }), apres: eV({ cleR2: 'v', w: 1, h: 2, sha: 'x' }) }).sets, setsTouches({ avant: eV({ cleR2: 'v', w: 1, h: 2 }), apres: eV({ cleR2: 'v', w: 9, h: 2 }) }).sets], [[], ['Set-A']]);
+}
+
+// ── D1 : la restauration d'`images` ENTRÉE PAR ENTRÉE (set + cleR2) sur la projection SITE_LIT ; le worker (ses sets de la fenêtre) garde ce qu'il a écrit ; l'indécidable bloque
+{
+    const { restaurerImages, planRestauration: plan } = require('./collecte-cartes/garde-lot');
+    const E = (set, cleR2, extra = {}) => ({ set, cleR2, numero: '1', w: 600, h: 840, source: 'tcgdex', vignette: { cleR2: `v/${cleR2}`, w: 200, h: 280 }, jointeLe: new Date('2026-10-01'), ...extra });
+    const W = new Set(['Set-W']);
+    const cles = r => r.images.map(m => `${m.set}|${m.cleR2}`);
+    let r = restaurerImages([E('S1', 'a')], [E('S1', 'a', { jointeLe: new Date('2026-10-24'), sha256: 'zz' })], { setsDuWorker: W });
+    verifier('D1 : rien d\'écrit sur ce que le site lit (jointeLe et sha256 hors projection) : l\'entrée actuelle est gardée telle quelle, aucun rapport', [r.images[0].sha256, r.restaurees.length, r.gardees.length, r.indecidables.length], ['zz', 0, 0, 0]);
+    r = restaurerImages([E('S1', 'a')], [E('S1', 'a', { partageeTamponNonSepare: false, tamponNonRepresente: 'Staff' })], { setsDuWorker: W });
+    verifier('D1 : un marquage écrit par le lot dans un set sans worker : l\'entrée revient à sa version sauvegardée (le marquage disparaît)', [r.images.length, 'partageeTamponNonSepare' in r.images[0], 'tamponNonRepresente' in r.images[0], r.restaurees.map(x => x.set + '|' + x.cleR2)], [1, false, false, ['S1|a']]);
+    r = restaurerImages([E('S1', 'a')], [E('S1', 'a'), E('S1', 'b')], { setsDuWorker: W });
+    verifier('D1 : une entrée AJOUTÉE par le lot (set sans worker) est retirée', [cles(r), r.restaurees.length], [['S1|a'], 1]);
+    r = restaurerImages([E('S1', 'a')], [E('S1', 'a'), E('Set-W', 'n')], { setsDuWorker: W });
+    verifier('D1 : une entrée AJOUTÉE dans un set du worker est gardée, et dite gardée', [cles(r), r.gardees.map(x => x.set + '|' + x.cleR2), r.restaurees.length], [['S1|a', 'Set-W|n'], ['Set-W|n'], 0]);
+    r = restaurerImages([E('S1', 'a'), E('S1', 'b')], [E('S1', 'a')], { setsDuWorker: W });
+    verifier('D1 : une entrée RETIRÉE par le lot est réinsérée, à sa place', [cles(r), r.restaurees.length], [['S1|a', 'S1|b'], 1]);
+    r = restaurerImages([E('S1', 'a'), E('Set-W', 'b')], [E('S1', 'a')], { setsDuWorker: W });
+    verifier('D1 : une entrée retirée dans un set du worker (« il retire puis remet ») reste retirée, et dite gardée', [cles(r), r.gardees.length, r.restaurees.length], [['S1|a'], 1, 0]);
+    r = restaurerImages([E('Set-W', 'a')], [E('Set-W', 'a', { vignette: { cleR2: 'v/neuve', w: 200, h: 280 } })], { setsDuWorker: W });
+    verifier('D1 : dans un set du worker, un champ qu\'il écrit (la vignette) change : l\'entrée du worker reste', [r.images[0].vignette.cleR2, r.gardees.length, r.restaurees.length], ['v/neuve', 1, 0]);
+    r = restaurerImages([E('Set-W', 'a')], [E('Set-W', 'a', { vignette: { cleR2: 'v/neuve', w: 200, h: 280 }, partageeTamponNonSepare: false, tamponNonRepresente: 'Staff' })], { setsDuWorker: W });
+    verifier('D1 : dans un set du worker, le worker a écrit la vignette ET le lot le marquage : le marquage (que le worker n\'écrit jamais) revient, la vignette du worker reste',
+        [r.images[0].vignette.cleR2, 'partageeTamponNonSepare' in r.images[0], 'tamponNonRepresente' in r.images[0], r.restaurees.length, r.gardees.length], ['v/neuve', false, false, 1, 1]);
+    // la carte d'une entrée n'est jamais jugée sur ses autres entrées
+    r = restaurerImages([E('S1', 'a'), E('S2', 'b')], [E('S1', 'a', { tamponNonRepresente: 'x' }), E('S2', 'b', { tamponNonRepresente: 'y' })], { setsDuWorker: W });
+    verifier('D1 : plusieurs entrées modifiées par le lot sur la même carte : toutes reviennent', [r.images.some(m => 'tamponNonRepresente' in m), r.restaurees.length], [false, 2]);
+    // indécidable : clé en double, entrée sans clé -> l'actuel est gardé, le cas est NOMMÉ
+    r = restaurerImages([E('S1', 'a'), E('S1', 'a', { numero: '2' })], [E('S1', 'a', { tamponNonRepresente: 'x' }), E('S1', 'a', { numero: '2' })], { setsDuWorker: W });
+    verifier('D1 : deux entrées de même (set, cleR2) : indécidable, rien n\'est touché, le cas est nommé', [r.images.length, r.images.some(m => m.tamponNonRepresente), r.indecidables.length, r.restaurees.length], [2, true, 2, 0]);   // un cas nommé par côté (sauvegarde, état actuel)
+    r = restaurerImages([E('S1', 'a')], [E('S1', 'a'), { set: 'S1', w: 1, h: 1 }], { setsDuWorker: W });
+    verifier('D1 : une entrée sans cleR2 : indécidable (jamais retirée en silence)', [r.images.length, r.indecidables.length], [2, 1]);
+    // la fonction ne mute pas ses entrées
+    const s0 = [E('S1', 'a')], a0 = [E('S1', 'a', { tamponNonRepresente: 'x' })], a0avant = JSON.stringify(a0), s0avant = JSON.stringify(s0);
+    restaurerImages(s0, a0, { setsDuWorker: W });
+    verifier('D1 : restaurerImages ne modifie ni la sauvegarde ni l\'état actuel', [JSON.stringify(a0) === a0avant, JSON.stringify(s0) === s0avant], [true, true]);
+    // le cas « Lot B » : douze cartes, une entrée marquée par le lot sur chacune, une seule fautive — TOUTES reviennent (et pas seulement la fautive)
+    const sauvegarde = Array.from({ length: 12 }, (_, i) => ({ _id: 1000 + i, nomEn: `C${i}`, sets: [`S${i}`], images: [E(`S${i}`, `i${i}`)] }));
+    const lot = structuredClone(sauvegarde).map((c, i) => { Object.assign(c.images[0], { partageeTamponNonSepare: false, tamponNonRepresente: i === 3 ? 'x'.repeat(78) : 'Staff' }); return c; });
+    const sv = new Map(sauvegarde.map(d => [cleDoc(d._id), d])), ac = new Map(lot.map(d => [cleDoc(d._id), d]));
+    const p = plan(sv, ac, { garder: () => ['images'], surcharge: (d, a) => ({ images: restaurerImages(d.images, a.images, { setsDuWorker: W }).images }) });
+    verifier('D1 « Lot B » (pur) : les 12 cartes sont remplacées, chacune revient à ses images sauvegardées', [p.remplacer.length, p.remplacer.every(c => !('tamponNonRepresente' in c.images[0]))], [12, true]);
+    const p2 = plan(sv, ac, { garder: () => ['images'] });
+    verifier('D1 « Lot B » (pur, l\'ancienne règle : le tableau actuel gardé pour les cartes non fautives) : rien ne revient — c\'est le défaut corrigé', p2.remplacer.length, 0);
+    // planRestauration : la surcharge s'applique APRÈS ce qui est gardé, et elle est optionnelle
+    verifier('D1 : planRestauration sans surcharge se comporte comme avant', plan(sv, ac, { garder: () => [] }).remplacer.length, 12);
+}
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

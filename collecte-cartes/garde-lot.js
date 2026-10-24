@@ -167,13 +167,15 @@ const cleDoc = id => canon(id);
  * Ce qu'il faut écrire pour ramener `actuels` à `sauves`, sauf les champs `garder(doc)` (ceux du worker), laissés tels
  * qu'ils sont maintenant. @param {Map} sauves @param {Map} actuels — clé : cleDoc(_id)
  */
-function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
+function planRestauration(sauves, actuels, { garder = () => [], surcharge = null } = {}) {
     const plan = { inserer: [], supprimer: [], remplacer: [], champs: {} };
     for (const [k, d] of sauves) {
         const a = actuels.get(k);
         if (!a) { plan.inserer.push(d); continue; }
         const cible = { ...d };
         for (const f of garder(d, a)) { if (f in a) cible[f] = a[f]; else delete cible[f]; }
+        // (tour 2) `surcharge(d, a)` : des champs calculés (le tableau `images` restauré entrée par entrée) posés APRÈS ce qui est gardé
+        if (surcharge) Object.assign(cible, surcharge(d, a));
         const differents = [...new Set([...Object.keys(cible), ...Object.keys(a)])].filter(f => canon(cible[f]) !== canon(a[f]));
         if (!differents.length) continue;
         for (const f of differents) plan.champs[f] = (plan.champs[f] || 0) + 1;
@@ -181,6 +183,63 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
     }
     for (const [k, a] of actuels) if (!sauves.has(k)) plan.supprimer.push(a._id);
     return plan;
+}
+
+// ── (tour 2, D1) LA RESTAURATION DU TABLEAU `images` ENTRÉE PAR ENTRÉE. Sur un arrêt dû au contrat de l'API, remettre le tableau d'UNE carte fautive laissait les écritures du lot sur les 11 autres entrées marquées
+// (lot B du 19/10 : 12 entrées marquées, une seule fautive) pendant que les lignes `cartes_produits` revenaient : un état que l'API refuse. Chaque entrée que le LOT a modifiée revient donc à sa version sauvegardée,
+// sur TOUTES les cartes, et ce que le WORKER a écrit pendant la fenêtre reste.
+// QUI A ÉCRIT ? Une seule règle, celle de garde-lot : les sets où le worker a travaillé pendant la fenêtre (`setsDuWorker`, prouvé par `collecte_images_etat` dans lot-additif.js). Dans un set sans worker, tout
+// changement est le fait du lot. Dans un set du worker, on regarde le CHAMP : les marquages ci-dessous sont posés par les scripts du catalogue, JAMAIS par le worker (garde-lot l'écrit déjà : « Jamais dispensé par le
+// worker ») ; ils reviennent, le reste (vignette, taille, source…) est au worker.
+// UNE ENTRÉE = (set, cleR2), comparée sur la projection SITE_LIT.images. Ce qui n'est pas décidable (deux entrées de même clé, une entrée sans set ou sans cleR2) est NOMMÉ dans `indecidables` et l'état actuel
+// est gardé tel quel : l'appelant sort en code d'échec, jamais « RESTAURÉ » en silence.
+const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'mention', 'noteVariante', 'basseDefinition', 'imageEmprunteeTirage']);
+const cleEntree = m => (m && typeof m.set === 'string' && m.set && typeof m.cleR2 === 'string' && m.cleR2 ? `${m.set}|${m.cleR2}` : null);
+// un champ d'entrée d'image tel que la comparaison le lit : la vignette sur sa forme figée (SITE_LIT.formes), le reste tel quel
+const champEntree = (m, k) => (k === 'vignette' ? SITE_LIT.formes['images.vignette'].map(f => valeur(m, `vignette.${f}`)) : valeur(m, k));
+/** @returns {{images: object[], restaurees: object[], gardees: object[], indecidables: object[]}} — pure : ne modifie ni `sauvees` ni `actuelles` */
+function restaurerImages(sauvees, actuelles, { setsDuWorker = new Set() } = {}) {
+    const S = (sauvees || []).filter(Boolean), A = (actuelles || []).filter(Boolean);
+    const rapport = { images: A, restaurees: [], gardees: [], indecidables: [] };
+    const note = (liste, m, raison) => liste.push({ set: m?.set ?? null, cleR2: m?.cleR2 ?? null, raison });
+    // 1. l'indécidable d'abord : une clé absente ou en double, d'un côté ou de l'autre
+    const vuS = new Map(), vuA = new Map();
+    for (const [liste, vu, cote] of [[S, vuS, 'sauvegarde'], [A, vuA, 'état actuel']]) for (const m of liste) {
+        const k = cleEntree(m);
+        if (!k) { note(rapport.indecidables, m, `entrée sans set ou sans cleR2 (${cote})`); continue; }
+        if (vu.has(k)) note(rapport.indecidables, m, `deux entrées de même (set, cleR2) (${cote})`);
+        vu.set(k, (vu.get(k) || 0) + 1);
+    }
+    if (rapport.indecidables.length) return rapport;
+    const mapA = new Map(A.map(m => [cleEntree(m), m])), dedans = new Set(S.map(cleEntree));
+    const champsSite = SITE_LIT.images.filter(k => k !== 'set' && k !== 'cleR2');
+    const images = [];
+    for (const s of S) {
+        const k = cleEntree(s), a = mapA.get(k), duWorker = setsDuWorker.has(s.set);
+        if (!a) {
+            if (duWorker) note(rapport.gardees, s, 'retirée pendant la fenêtre du worker : il retire puis remet, elle reste retirée');
+            else { images.push(structuredClone(s)); note(rapport.restaurees, s, 'retirée par le lot : réinsérée'); }
+            continue;
+        }
+        const diff = champsSite.filter(f => signature(champEntree(s, f)) !== signature(champEntree(a, f)));
+        if (!diff.length) { images.push(a); continue; }
+        if (!duWorker) { images.push(structuredClone(s)); note(rapport.restaurees, s, `modifiée par le lot (${diff.join(', ')}) : version sauvegardée`); continue; }
+        const marq = diff.filter(f => MARQUAGES_DU_LOT.includes(f)), autres = diff.filter(f => !MARQUAGES_DU_LOT.includes(f));
+        if (!marq.length) { images.push(a); note(rapport.gardees, s, `écrite par le worker (${autres.join(', ')})`); continue; }
+        const fusion = { ...a };
+        for (const f of marq) { if (f in s) fusion[f] = structuredClone(s[f]); else delete fusion[f]; }
+        images.push(fusion);
+        note(rapport.restaurees, s, `marquage du lot (${marq.join(', ')}) remis, set du worker`);
+        if (autres.length) note(rapport.gardees, s, `écrite par le worker (${autres.join(', ')})`);
+    }
+    for (const a of A) {
+        const k = cleEntree(a);
+        if (dedans.has(k)) continue;
+        if (setsDuWorker.has(a.set)) { images.push(a); note(rapport.gardees, a, 'ajoutée par le worker'); }
+        else note(rapport.restaurees, a, 'ajoutée par le lot : retirée');
+    }
+    rapport.images = images;
+    return rapport;
 }
 
 /**
@@ -230,7 +289,15 @@ const SITE_LIT = Object.freeze({
     lignes: Object.freeze(['carteId', 'idProduct', 'idExpansion', 'tirage', 'slug', 'slugSet', 'numeroFiche', 'variante', 'preuve', 'visuelSubstitut.cleR2', 'visuelSubstitut.w', 'visuelSubstitut.h', 'visuelSubstitut.mention']),
     // (tour de correction 1) les champs d'un document `sets` que le site lit (SPEC_SET de lireDonnee.ts), chemins pointés ; un chemin couvre ses sous-champs (`logo` : cleR2, w, h, set, region, langue, preuve, logoGenerique, sha1, vignette).
     sets: Object.freeze(['code', 'nomJa', 'nomAffichage', 'nomFr', 'nomFrSource', 'nomFrPreuve', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn', 'periodeDistribution', 'dateSortieMois', 'totalImprime', 'idExpansion',
-        'bulba.expansion', 'bulba.titre', 'bulba.pageid', 'deck', 'logo', 'logoFr', 'logoCompose', 'symbole', 'symbolesIdentification', 'serie'])
+        'bulba.expansion', 'bulba.titre', 'bulba.pageid', 'deck', 'logo', 'logoFr', 'logoCompose', 'symbole', 'symbolesIdentification', 'serie']),
+    // (tour 2, D3) Les objets que la comparaison lit à FORME FIGÉE : leurs sous-champs sont énumérés ici, et ce sont EXACTEMENT ceux que PROJECTION_CARTES / PROJECTION_SET comparent (elles lisent cette liste, pas une
+    // copie). La confrontation au site (garde-site-lu.js) n'accepte sous ces chemins que ces sous-champs : un sous-champ que le site se met à lire REFUSE l'étape 0 ter, au lieu d'être « couvert » par l'ancêtre
+    // alors que la comparaison ne le voit pas. (Les autres ancêtres déclarés — `logo`, `attaques`, `periodeDistribution`… — sont comparés EN ENTIER, moins la date `le` : un sous-champ nouveau y est vu.)
+    formes: Object.freeze({
+        'images.vignette': Object.freeze(['cleR2', 'w', 'h']),
+        dateSortieMois: Object.freeze(['iso', 'texte']),
+        symbolesIdentification: Object.freeze(['cleR2', 'w', 'h', 'fichier', 'source'])
+    })
 });
 const valeur = (o, chemin) => chemin.split('.').reduce((x, k) => (x === null || x === undefined ? undefined : x[k]), o) ?? null;
 // (2026-10-07, nuit) `categorie` : le site la lit (page de la carte, listes d'espèces) — elle se compare comme le nom
@@ -242,7 +309,7 @@ const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nom
     impressions: (c.impressions || []).filter(Boolean).map(i => SITE_LIT.impressions.map(k => (k === 'illustrateur' ? ('illustrateur' in i ? i.illustrateur : '∅') : valeur(i, k)))),
     // (2026-10-17, BS-STAFF) le site affiche la mention « tampon non représenté » depuis ces champs ; (D1) le libellé seul (drapeau `false`), la variante de l'image, sa langue… se comparent aussi.
     // Le SET reste en tête de chaque tuple : `setsTouches` l'attribue (m[0]).
-    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, ...SITE_LIT.images.filter(k => k !== 'set').map(k => (k === 'vignette' ? [valeur(m, 'vignette.cleR2'), valeur(m, 'vignette.w'), valeur(m, 'vignette.h')] : valeur(m, k)))]),
+    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, ...SITE_LIT.images.filter(k => k !== 'set').map(k => (champEntree(m, k)))]),
     autres: CHAMPS_AUTRES.map(k => valeur(c, k)), liens: CHAMPS_LIENS.map(k => valeur(c, k)) });
 const PROJECTION_LIGNES = l => SITE_LIT.lignes.map(k => valeur(l, k));   // VIGN-SUITE : le substitut sert une image au site ; projection de CHANGEMENT seulement, aucun groupe compté
 // 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
@@ -255,6 +322,13 @@ const PROJECTION_LIGNES = l => SITE_LIT.lignes.map(k => valeur(l, k));   // VIGN
 // (D1, 2026-10-24) `deck` : lu par le site depuis le 2026-10-12 (PROJECTION_SET de lib/cartes.ts, lib/impressionDuSet.ts) — un lot qui le posait ne revalidait rien
 const SETS_A_FORME = new Set(['bulba.expansion', 'bulba.titre', 'bulba.pageid', 'dateSortieMois', 'logo', 'logoFr', 'logoCompose', 'symbolesIdentification']);
 const CHAMPS_SET_LUS = SITE_LIT.sets.filter(k => !SETS_A_FORME.has(k));
+// (tour 2, D3) une entrée POINTÉE de SITE_LIT.sets (« a.b ») qui n'a pas de forme à elle (SETS_A_FORME) serait lue par `s['a.b']` : null pour toujours, une comparaison qui ne voit rien. Elle REFUSE : au chargement
+// du module, et dans la confrontation au site (garde-site-lu.js). Une entrée simple (sans point) se lit telle quelle et n'a pas besoin de forme.
+const entreesSetsSansForme = (siteLit = SITE_LIT) => siteLit.sets.filter(k => k.includes('.') && !SETS_A_FORME.has(k));
+{
+    const sansForme = entreesSetsSansForme(SITE_LIT);
+    if (sansForme.length) throw new Error(`garde-lot : SITE_LIT.sets porte ${sansForme.join(', ')} sans forme dans SETS_A_FORME — une comparaison qui lirait null pour toujours ne revalide rien`);
+}
 // (2026-10-07) le site lit TROIS logos, dans cet ordre : logoCompose, logoFr, logo (lib/visuelSet.ts, CHAMPS_LOGO) — la projection ne
 // regardait que `logo` : un logoCompose posé ou retiré seul ne revalidait rien.
 // (tour de correction 1, 2026-10-24) seule la date d'écriture `le` est du bruit : la `preuve` d'un logo EST lue par le site (IMAGE_SET : cleR2, w, h, set, region, langue, preuve…), et `dateSortieMois`
@@ -262,9 +336,10 @@ const CHAMPS_SET_LUS = SITE_LIT.sets.filter(k => !SETS_A_FORME.has(k));
 const sansDate = l => l ? Object.fromEntries(Object.entries(l).filter(([k]) => k !== 'le')) : null;
 const PROJECTION_SET = s => !s ? null : {
     ...Object.fromEntries(CHAMPS_SET_LUS.map(k => [k, s[k] ?? null])),
-    dateSortieMois: s.dateSortieMois ? { iso: s.dateSortieMois.iso ?? null, texte: s.dateSortieMois.texte ?? null } : null,
-    symbolesIdentification: (s.symbolesIdentification || []).map(x => ({ cleR2: x?.cleR2 ?? null, w: x?.w ?? null, h: x?.h ?? null, fichier: x?.fichier ?? null, source: x?.source ?? null })),
-    bulba: { expansion: s.bulba?.expansion ?? null, titre: s.bulba?.titre ?? null, pageid: s.bulba?.pageid ?? null },
+    // les formes figées viennent de SITE_LIT.formes / SITE_LIT.sets : la comparaison lit EXACTEMENT ce que la confrontation au site a vérifié
+    dateSortieMois: s.dateSortieMois ? Object.fromEntries(SITE_LIT.formes.dateSortieMois.map(f => [f, s.dateSortieMois[f] ?? null])) : null,
+    symbolesIdentification: (s.symbolesIdentification || []).map(x => Object.fromEntries(SITE_LIT.formes.symbolesIdentification.map(f => [f, x?.[f] ?? null]))),
+    bulba: Object.fromEntries(SITE_LIT.sets.filter(k => k.startsWith('bulba.')).map(k => [k.slice(6), valeur(s, k)])),
     logo: sansDate(s.logo), logoFr: sansDate(s.logoFr), logoCompose: sansDate(s.logoCompose)
 };
 
@@ -278,15 +353,30 @@ function setsTouches({ avant, apres }) {
     let catalogue = false, especes = false;
     const parId = l => new Map((l || []).map(d => [cleDoc(d._id), d]));
     // (tour de correction 1) les LIGNES d'abord : une carte dont une ligne change dans ce lot (ajoutée, retirée, modifiée) a le changement de ses `liens` expliqué par cette ligne, dont le slugSet est touché
-    const cartesAvecLigne = new Set();
+    // (tour 2, D2) … AU PLUS JUSTE : une ligne changée n'explique que le(s) idProduct qu'elle PORTE, et seulement si elle a un slugSet (c'est lui qui est touché). Carte → ensemble des idProduct portés.
+    const portes = new Map();
     const [lA, lB] = [parId(avant.cartesProduits), parId(apres.cartesProduits)];
     for (const k of new Set([...lA.keys(), ...lB.keys()])) {
         const a = lA.get(k), b = lB.get(k);
         if (a && b && signature(PROJECTION_LIGNES(a)) === signature(PROJECTION_LIGNES(b))) continue;
         for (const s of [a?.slugSet, b?.slugSet]) if (s) touches.add(s);
-        for (const l of [a, b]) if (l && l.carteId !== undefined && l.carteId !== null) cartesAvecLigne.add(cleDoc(l.carteId));
+        for (const l of [a, b]) if (l && l.slugSet && l.carteId !== undefined && l.carteId !== null && l.idProduct !== undefined && l.idProduct !== null) {
+            const c = cleDoc(l.carteId);
+            if (!portes.has(c)) portes.set(c, new Set());
+            portes.get(c).add(String(l.idProduct));
+        }
         if (!a || !b) catalogue = true;   // une fiche de plus ou de moins : un compte du catalogue
     }
+    // le changement de `liens` d'une carte est expliqué ssi : tout ce qui n'est pas `liens.idProduct` est identique (liens.idMetacard ne s'explique JAMAIS), et, une fois retirés les idProduct portés par une ligne changée
+    // de cette carte, les deux listes d'idProduct sont identiques (donc dans le même ORDRE : le site lit le premier)
+    const IDX_ID = CHAMPS_LIENS.indexOf('liens.idProduct');
+    const liensExpliques = (pa, pb, k) => {
+        const ids = portes.get(k);
+        if (!ids || !ids.size || IDX_ID < 0) return false;
+        if (signature(pa.liens.filter((_, i) => i !== IDX_ID)) !== signature(pb.liens.filter((_, i) => i !== IDX_ID))) return false;
+        const sans = v => (Array.isArray(v) ? v : []).filter(x => !ids.has(String(x)));
+        return signature(sans(pa.liens[IDX_ID])) === signature(sans(pb.liens[IDX_ID]));
+    };
     const [cA, cB] = [parId(avant.cartes), parId(apres.cartes)];
     for (const k of new Set([...cA.keys(), ...cB.keys()])) {
         const a = cA.get(k), b = cB.get(k);
@@ -299,7 +389,7 @@ function setsTouches({ avant, apres }) {
         const tous = [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])];
         // (D1) un autre champ que le site lit sur la carte (pv, type, attaques, nomFr, liens…) : la fiche de la carte change dans tous ses sets
         // `liens` : sans ligne changée pour CETTE carte, rien n'explique le changement -> tous ses sets ; avec une ligne changée, le slugSet de la ligne (déjà touché) suffit
-        const liensInexpliques = pa && pb && signature(pa.liens) !== signature(pb.liens) && !cartesAvecLigne.has(k);
+        const liensInexpliques = pa && pb && signature(pa.liens) !== signature(pb.liens) && !liensExpliques(pa, pb, k);
         if (!pa || !pb || pa.nomEn !== pb.nomEn || pa.categorie !== pb.categorie || signature(pa.impressions) !== signature(pb.impressions) || signature(pa.autres) !== signature(pb.autres) || liensInexpliques) { for (const s of tous) if (s) touches.add(s); }
         else {
             // Ce que CETTE carte attribue — pas la taille de l'ensemble, qu'une autre carte a pu remplir avant elle (le premier
@@ -339,4 +429,4 @@ const PROJECTION_ETAT = Object.freeze({
     cartesProduits: Object.freeze(Object.fromEntries(SITE_LIT.lignes.map(c => [c, 1]))),
 });
 
-module.exports = { SITE_LIT, PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+module.exports = { SITE_LIT, entreesSetsSansForme, MARQUAGES_DU_LOT, restaurerImages, PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };

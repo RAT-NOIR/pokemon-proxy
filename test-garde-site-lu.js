@@ -42,6 +42,27 @@ const liste = (el) => ({ t: 'liste', el });
     verifier('confronter : l\'inverse (la liste a un champ de PLUS que le site) ne refuse pas — prudence permise', S.confronter(specs(), lit({ cartes: ['nomEn', 'attaques', 'liens.idProduct', 'champEnPlus'] })), []);
     verifier('confronter : une SPEC sans aucun champ LÈVE (un vide parfait ne prouve rien)', !!(await leve(() => S.confronter({ ...specs(), SPEC_SET: objet({ _id: TEXTE }) }, lit()))), true);
 
+    // ── TOUR 2, D3 : sous un objet à FORME FIGÉE, le sous-champ doit être l'un de ceux que la comparaison connaît (l'ancêtre déclaré ne le couvre plus)
+    const formes = { 'images.vignette': ['cleR2', 'w', 'h'], dateSortieMois: ['iso', 'texte'], symbolesIdentification: ['cleR2', 'w', 'h', 'fichier', 'source'] };
+    const litF = (o = {}) => lit({ formes, sets: ['code', 'logo', 'dateSortieMois', 'symbolesIdentification'], ...o });
+    const specsF = (o = {}) => specs({ set: { dateSortieMois: objet({ iso: TEXTE, texte: TEXTE }), symbolesIdentification: liste(objet({ cleR2: TEXTE, w: NOMBRE, h: NOMBRE, fichier: TEXTE, source: TEXTE })) }, ...o });
+    verifier('D3 : les sous-champs connus des formes figées (vignette cleR2/w, dateSortieMois, symbolesIdentification) sont couverts', S.confronter(specsF(), litF()), []);
+    verifier('D3 : un sous-champ NOUVEAU de la vignette (images.vignette.sha) que le site lit : nommé — l\'ancêtre déclaré ne le couvre plus', S.confronter(specsF({ carte: { images: liste(objet({ set: TEXTE, vignette: objet({ cleR2: TEXTE, w: NOMBRE, sha: TEXTE }) })) } }), litF()), [{ collection: 'cartes', chemin: 'images.vignette.sha' }]);
+    verifier('D3 : un sous-champ NOUVEAU de dateSortieMois (precision) : nommé', S.confronter(specsF({ set: { dateSortieMois: objet({ iso: TEXTE, texte: TEXTE, precision: TEXTE }), symbolesIdentification: liste(objet({ cleR2: TEXTE })) } }), litF()), [{ collection: 'sets', chemin: 'dateSortieMois.precision' }]);
+    verifier('D3 : un sous-champ NOUVEAU de symbolesIdentification (octets) : nommé', S.confronter(specsF({ set: { dateSortieMois: objet({ iso: TEXTE }), symbolesIdentification: liste(objet({ cleR2: TEXTE, octets: NOMBRE })) } }), litF()), [{ collection: 'sets', chemin: 'symbolesIdentification.octets' }]);
+    verifier('D3 : un sous-champ imbriqué plus profond sous une forme figée (vignette.a.b) : nommé', S.confronter(specsF({ carte: { images: liste(objet({ set: TEXTE, vignette: objet({ cleR2: TEXTE, a: objet({ b: TEXTE }) }) })) } }), litF()).map(m => m.chemin), ['images.vignette.a.b']);
+    verifier('D3 (l\'autre sens) : un ancêtre NON figé (logo) couvre toujours ses sous-champs, nouveaux compris — la comparaison porte sur l\'objet entier', S.confronter(specsF({ set: { logo: objet({ cleR2: TEXTE, nouveau: TEXTE }), dateSortieMois: objet({ iso: TEXTE }), symbolesIdentification: liste(objet({ cleR2: TEXTE })) } }), litF()), []);
+    verifier('D3 : sans `formes` dans la liste, la confrontation reste celle d\'avant (compatibilité des listes fabriquées)', S.confronter(specsF(), lit({ sets: ['code', 'logo', 'dateSortieMois', 'symbolesIdentification'] })), []);
+    {
+        const r = await leve(() => S.verifierSiteLu({ siteLit: { ...SITE_LIT, sets: [...SITE_LIT.sets, 'bulba.revid'] } }));
+        verifier('D3 (latent) : une entrée pointée de SITE_LIT.sets sans forme (bulba.revid) REFUSE l\'étape 0 ter et se nomme', [/garde site lu/.test(r || ''), /bulba\.revid/.test(r || ''), /sans forme/.test(r || '')], [true, true, true]);
+    }
+    const site0 = await S.chargerSite();
+    verifier('D3 : SITE_LIT.formes est confrontée au site RÉEL : la vignette, dateSortieMois et symbolesIdentification du site n\'ont aucun sous-champ inconnu', S.confronter(site0, SITE_LIT), []);
+    verifier('D3 : sur le site réel, une forme amputée (vignette sans « h ») : images.vignette.h nommé', S.confronter(site0, { ...SITE_LIT, formes: { ...SITE_LIT.formes, 'images.vignette': ['cleR2', 'w'] } }).map(m => m.chemin), ['images.vignette.h']);
+    // D4 (accepté, écrit) : une phrase dans l'en-tête
+    verifier('D4 : l\'en-tête dit que l\'étape 0 ter lit le dossier de travail du site (une branche locale peut refuser à tort, échec fermé)', /dossier de travail du site[^]{0,200}échoue fermé/.test(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-site-lu.js'), 'utf8')), true);
+
     // ── 3. LE SITE RÉEL, importé : la liste est complète, sous-champs compris
     let site;
     try { site = await S.chargerSite(); } catch (e) { console.log(`❌ chargerSite : ${e.message}`); process.exit(1); }
