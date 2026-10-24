@@ -159,6 +159,7 @@ const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
+const { avecRepliAnalyse, analyseAvecRepli } = require('./prix-repli');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -649,7 +650,9 @@ function traiterIdentifier(cfg, deps = {}) {
         // PHOTOS-MULTIPLES (7d, C4) : quand `photoIds` (ou l'ancien `photoId`) est envoyé, l'analyse dit quelles photos ont été REÇUES : `photosRecues`, les index reçus en ordre croissant (tableau vide si aucune), et `photoRecue`, vrai
         // SI ET SEULEMENT SI l'index 0 est reçu. Rien n'est ajouté sans `photoIds` (ni drapeau éteint : `entree.photoIds` n'existe alors pas) : la réponse est celle d'avant, octet pour octet.
         const photosDites = Array.isArray(entree.photoIds) && entree.photoIds.length ? (() => { const idx = (entree.photosRecues || []).map(p => p.index).sort((a, b) => a - b); return { photosRecues: idx, photoRecue: idx.includes(0) }; })() : null;
-        const analyse = { ...resultat.analyse, regleVerdict: regle, ...(photosDites || {}) };
+        // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
+        // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
+        const analyse = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
         // 9. les écritures annexes : sans effet sur la réponse
         try {
             const maintenant = new Date();
@@ -782,7 +785,8 @@ function traiterReponse(cfg, deps = {}) {
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
-        const resolue = carteRepondue(an, entree, carte, choix, idProduct);
+        const resolueBrute = carteRepondue(an, entree, carte, choix, idProduct);
+        const resolue = resolueBrute && avecRepliAnalyse(resolueBrute);      // PRIX-LISIBLE : le repli honnête d'une carte tranchée dont l'analyse n'a rien dicté à lire (null reste null)
         if (!resolue) { console.error(`🔴 [v2 reponse] scan ${scanId} : la carte ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); return repondreErreur(res, 'SERVEUR'); }
         // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }

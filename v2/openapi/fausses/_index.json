@@ -23,6 +23,18 @@
     "schema": "ReponseAnalyse",
     "description": "Prix qui ne sont pas présentés comme sûrs (lot F4-PRIX) : écart de la tendance aux moyennes (ecart-tendance), prix mélangé avec une version tamponnée (deux mentions fermées), le « De » dit tous états (deBase), deux impressions du même set et du même numéro séparées par leur version (V1, V2), badge du set par son nom quand le code se confond avec une série, ecartTendanceMax dans regleVerdict."
   },
+  "identifiee-prix-repli.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Le repli honnête du prix (lot PRIX-LISIBLE) : l'état estimé a une confiance basse, il n'est pas retenu (prixLive.etatVise null) ; la fiche a pourtant un guide — prixRepli (repli tendance, cause etat-non-retenu, fiable false) le sert, sans verdict. Les chiffres sont ceux du guide réel de Tauros (Jungle 47/64) au 2026-10-12 ; l'idProduct est fictif."
+  },
+  "retour-live-prix-repli.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "Le repli honnête du prix, côté retour de l'extension : prixLive d'origine tendance (Arcanin [G] Lv.60, Supreme Victors 15/147, ni état ni offre) => prixRepli (repli tendance, cause tendance-seule, fiable false) avec le guide du jour, dont l'écart de la tendance aux moyennes dépasse 30 %."
+  },
   "identifiee-tampon-staff.json": {
     "route": "POST /api/identifier",
     "statut": 200,
