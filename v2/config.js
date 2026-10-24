@@ -85,15 +85,16 @@ function lireConfig(env = process.env) {
     const empreinteVoulue = booleen('V2_EMPREINTE_EXTENSION', env.V2_EMPREINTE_EXTENSION, false);
     let modeleEmpreinte = null, empreinteExtension = empreinteVoulue, variableFautive = '';
     try {
-        const id = env.V2_MODELE_EMPREINTE_ID, sha = env.V2_MODELE_EMPREINTE_SHA256, objet = env.V2_EMPREINTES_R2_OBJET, octets = env.V2_MODELE_EMPREINTE_OCTETS;
+        const id = env.V2_MODELE_EMPREINTE_ID, sha = env.V2_MODELE_EMPREINTE_SHA256, objet = env.V2_EMPREINTES_R2_OBJET, octets = env.V2_MODELE_EMPREINTE_OCTETS, objetModele = env.V2_MODELE_EMPREINTE_OBJET;
         if (id !== undefined && id !== '' && !/^[A-Za-z0-9._-]{1,60}$/.test(id)) { variableFautive = 'V2_MODELE_EMPREINTE_ID (1 à 60 caractères : lettres, chiffres, point, tiret, souligné)'; throw new Error('forme'); };
         if (sha !== undefined && sha !== '' && !/^[0-9a-f]{64}$/.test(sha)) { variableFautive = 'V2_MODELE_EMPREINTE_SHA256 (64 chiffres hexadécimaux minuscules)'; throw new Error('forme'); };
         if (objet !== undefined && objet !== '' && !/^[A-Za-z0-9._/-]{1,200}$/.test(objet)) { variableFautive = 'V2_EMPREINTES_R2_OBJET'; throw new Error('forme'); };
+        if (objetModele !== undefined && objetModele !== '' && !/^[A-Za-z0-9._/-]{1,200}$/.test(objetModele)) { variableFautive = 'V2_MODELE_EMPREINTE_OBJET'; throw new Error('forme'); };
         variableFautive = 'V2_MODELE_EMPREINTE_URL ou V2_MODELE_EMPREINTE_OCTETS';
-        modeleEmpreinte = { id: id || null, sha256: sha || null, url: url('V2_MODELE_EMPREINTE_URL', env.V2_MODELE_EMPREINTE_URL, null), octets: entier('V2_MODELE_EMPREINTE_OCTETS', octets, null, 1), objet: objet || null,
+        modeleEmpreinte = { id: id || null, sha256: sha || null, url: url('V2_MODELE_EMPREINTE_URL', env.V2_MODELE_EMPREINTE_URL, null), octets: entier('V2_MODELE_EMPREINTE_OCTETS', octets, null, 1), objet: objet || null, objetModele: objetModele || null,
                             fichierBanc: banc ? (env.V2_EMPREINTES_BANC_FICHIER || null) : null };
     } catch (e) {
-        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, fichierBanc: null };
+        modeleEmpreinte = { id: null, sha256: null, url: null, octets: null, objet: null, objetModele: null, fichierBanc: null };
         const raison = variableFautive || 'configuration du modèle';
         if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
         else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
@@ -143,6 +144,7 @@ function lireConfig(env = process.env) {
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),
                    connexionIpHeure: entier('V2_CONNEXION_IP_HEURE', env.V2_CONNEXION_IP_HEURE, 30, 1), suppressionParCompteHeure: entier('V2_SUPPRESSION_COMPTE_HEURE', env.V2_SUPPRESSION_COMPTE_HEURE, 10, 1),
                    renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1),
+                   modeleEmpreinteIpHeure: entier('V2_MODELE_EMPREINTE_IP_HEURE', env.V2_MODELE_EMPREINTE_IP_HEURE, 10, 1),
                    collectionEcrituresParCompteHeure: 1000,
                    // MOYENS-B1 (O4) : un plafond horaire PAR PORTEUR (compte ou installation) sur quatre routes qui n'en avaient pas. Valeurs posées SANS mesure d'usage réelle ;
                    // coût si elles sont fausses : des 429 à un client très actif, et une valeur à relever (variable d'environnement).

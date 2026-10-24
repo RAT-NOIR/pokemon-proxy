@@ -52,7 +52,11 @@ async function avoirsPoses(stripe, clientId) {
     return poses;
 }
 /** Pose l'avoir de la prime d'un filleul au solde du client du parrain, si c'est possible MAINTENANT. `heure` : l'heure de la décision (injectable pour les bancs ; l'horloge par défaut). */
-async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), heure = new Date() }) {
+// `tenue` (facultatif, posé par `reprendre` SEULEMENT) : { soldes: Map client → avoirs posés }, créé par l'appelant qui TIENT le verrou du parrain. UNE LECTURE DES SOLDES NE SERT QUE PENDANT UNE MÊME TENUE DE CE VERROU
+// (relecture A-M2) : un avoir n'est posé que sous le verrou, donc personne d'autre n'en pose pendant la tenue ; mais entre deux tenues un autre processus a pu en poser un (mort avant d'écrire sa marque en base), que
+// seule une relecture compte dans le plafond. La lecture ne survit donc ni à la libération du verrou, ni à une nouvelle prise, ni à une nouvelle reprise. Avec `tenue`, l'appelant tient déjà le verrou : appliquer ne le reprend pas.
+async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), heure = new Date(), tenue = null }) {
+    const soldes = tenue ? tenue.soldes : null;
     const prime = await col('abo_primes').findOne({ _id: filleulId });
     if (!prime || !ATTENTES.includes(prime.etat)) return { etat: 'ignore', raison: prime ? prime.etat : 'absente' };
     const parrain = await col('comptes').findOne({ _id: prime.parrainId });
@@ -73,7 +77,7 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), h
     // « Compter puis écrire » n'est pas atomique : deux primes du même parrain appliquées en même temps verraient toutes deux 11 mois et passeraient (13 crédits). La décision et l'écriture se font
     // donc SOUS UN VERROU PAR PARRAIN (document à _id unique, expirant seul) ; la prime est relue sous le verrou. Une prime hors plafond est REFUSÉE (état terminal, raison « plafond-annuel ») :
     // le parrain n'est pas crédité. Le verrou introuvable pendant ~10 s fait ÉCHOUER l'événement (Stripe le rejoue) : jamais un crédit hors plafond.
-    return sousVerrou(parrain._id, async () => {
+    return (tenue ? (_, f) => f() : sousVerrou)(parrain._id, async () => {
         const fraiche = await col('abo_primes').findOne({ _id: filleulId });
         if (!fraiche || !ATTENTES.includes(fraiche.etat)) return { etat: 'ignore', raison: fraiche ? fraiche.etat : 'absente' };
         // L'HEURE DE LA DÉCISION, pas la date de l'événement : un événement en retard (reprise de Stripe après un 500) porte une date ancienne, mais il est décidé MAINTENANT ; les avoirs déjà appliqués
@@ -84,7 +88,7 @@ async function appliquer({ stripe, cfgAbo, filleulId, maintenant = new Date(), h
         // reprise franchirait 12. Si Stripe ne répond pas, ces voisines comptent COMME consommées : une décision ne s'appuie jamais sur un « je ne sais pas » pour franchir 12 (la prime reste en attente, la reprise rejouera).
         const voisines = await col('abo_primes').find({ parrainId: parrain._id, _id: { $ne: filleulId }, etat: { $in: ATTENTES } }).toArray();
         let poses = null;
-        try { poses = await avoirsPoses(stripe, parrain.stripeClient); } catch (e) { signaler(`primes : lecture des avoirs chez Stripe impossible (${(e && (e.code || e.type || e.name)) || 'erreur'}) — parrain ${String(parrain._id)}`); }
+        try { poses = soldes && soldes.has(parrain.stripeClient) ? soldes.get(parrain.stripeClient) : await avoirsPoses(stripe, parrain.stripeClient); if (soldes) soldes.set(parrain.stripeClient, poses); } catch (e) { signaler(`primes : lecture des avoirs chez Stripe impossible (${(e && (e.code || e.type || e.name)) || 'erreur'}) — parrain ${String(parrain._id)}`); }
         if (!poses) {
             if ((await moisDansLaFenetre(parrain._id, filleulId, decision)) + voisines.length + 1 > O.PLAFOND_PARRAINAGE_MOIS) return { etat: 'ignore', raison: 'lecture-stripe-impossible' };
             throw Object.assign(new Error('primes : lecture des avoirs impossible'), { code: 'LECTURE_AVOIRS' });         // sous le plafond mais impossible de savoir si l'avoir existe : l'événement échoue, Stripe le rejoue
@@ -129,10 +133,22 @@ async function moisOfferts(parrainId, maintenant = new Date()) {
     return col('abo_primes').countDocuments({ parrainId, etat: 'applique', appliqueLe: { $gt: fenetreDebut(maintenant), $lte: maintenant } });
 }
 /** Reprend TOUTES les primes en attente d'un parrain (appelé quand son abonnement change ou qu'une de ses factures est payée) : les avoirs s'additionnent. */
-async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date() }) {
-    const primes = await col('abo_primes').find({ parrainId, etat: { $in: ATTENTES } }).sort({ creeLe: 1 }).toArray();
-    let faites = 0;
-    for (const p of primes) { const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant }); if (r.etat === 'applique') faites++; }
-    return primes.length ? { etat: faites ? 'applique' : 'en-attente', faites } : { etat: 'ignore', raison: 'rien-en-attente' };
+// GARDE D'EXPIRATION DE LA TENUE (relecture, M4) : le verrou expire seul après VERROU_MS ; une tenue qui traite plusieurs primes vérifie, AVANT CHAQUE prime, le temps écoulé depuis sa prise. Passé la moitié de VERROU_MS,
+// elle s'arrête : le verrou est rendu proprement (finally de sousVerrou) et les primes restantes restent en attente pour la reprise suivante, avec une lecture des soldes neuve. Jamais de renouvellement silencieux
+// du verrou, jamais une prime traitée sans verrou ni avec une lecture plus vieille que la tenue. `maintenantMs` : l'horloge de la tenue (injectable pour les bancs).
+async function reprendre({ stripe, cfgAbo, parrainId, maintenant = new Date(), maintenantMs = Date.now }) {
+    const lister = () => col('abo_primes').find({ parrainId, etat: { $in: ATTENTES } }).sort({ creeLe: 1 }).toArray();
+    if (!(await lister()).length) return { etat: 'ignore', raison: 'rien-en-attente' };            // rien en attente : ni verrou, ni lecture chez Stripe
+    // UNE tenue du verrou du parrain pour toutes ses primes en attente : elles partagent UNE lecture des soldes, qui meurt avec la tenue (voir appliquer)
+    return sousVerrou(parrainId, async () => {
+        const primes = await lister();                                                         // relues SOUS le verrou
+        const tenue = { soldes: new Map() }, priseLe = maintenantMs();
+        let faites = 0;
+        for (const p of primes) {
+            if (maintenantMs() - priseLe > VERROU_MS / 2) { signaler(`primes : tenue du verrou du parrain ${String(parrainId)} arrêtée à mi-expiration — les primes restantes attendent la reprise suivante`); break; }
+            const r = await appliquer({ stripe, cfgAbo, filleulId: p._id, maintenant, tenue }); if (r.etat === 'applique') faites++;
+        }
+        return primes.length ? { etat: faites ? 'applique' : 'en-attente', faites } : { etat: 'ignore', raison: 'rien-en-attente' };
+    });
 }
 module.exports = { ouvrir, appliquer, reprendre, raisonDeRefus, moisOfferts, moisDansLaFenetre, sousVerrou, VERROUS, VIVANTS, ATTENTES };

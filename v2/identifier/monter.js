@@ -113,6 +113,10 @@ module.exports = {
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }
             return res.status(200).json({ success: true, solde, offre });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
         });
+        // INDEX-EMPREINTES : le fichier du modèle d'empreinte (≈ 113 Mo) pour l'extension, SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : la route n'existe pas, 404). Publique (le sha256 de l'adresse est la seule clé et il est public),
+        // donc bornée : un limiteur par IP (V2_MODELE_EMPREINTE_IP_HEURE, défaut 10/h) AVANT le gestionnaire, qui borne aussi les envois simultanés.
+        if (cfg.empreinteExtension === true) router.get('/api/modele-empreinte/:sha256', L.limiteur({ nom: 'modele-empreinte', max: cfg.limites.modeleEmpreinteIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) }),
+            require('./modele-empreinte').creerRoute(cfg, deps && deps.modeleEmpreinte && typeof deps.modeleEmpreinte === 'object' ? deps.modeleEmpreinte : {}));
         // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7>, derrière V2_PHOTOS_MULTIPLES=1. Drapeau éteint : la route N'EXISTE PAS (404 natif pour tous, administrateur compris). Phase 1 : MÊME garde de rôle que
         // /api/banc/photo (exigerAdministrateurPhoto : 404 natif sans lire le corps), AVANT le limiteur (le plafond horaire de /api/banc/photo, compteur à part) ; aucune idempotence (corps binaire), aucun argent.
         if (cfg.photosMultiples === true) {

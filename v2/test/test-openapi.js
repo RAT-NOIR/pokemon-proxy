@@ -135,6 +135,15 @@ H.vrai('Impression.variante est nullable', nullable('Impression.properties.varia
     for (const [nom, champ] of [['PrixGuide', ['deBase', 'moyenne7', 'fiable', 'reserves']], ['SetProduit', ['badge', 'badgeSource']], ['Produit', ['version']], ['Impression', ['version']]])
         H.v(`${nom} : ${champ.join(', ')} sont des AJOUTS FACULTATIFS (jamais requis : un client d'avant le lot F4-PRIX reste valide)`, champ.filter(c => (aller(S, `${nom}.required`) || []).includes(c)), []);
 }
+// CAPACITES-PING : la liste fermée des capacités a UNE source (v2/capacites.js), le schéma la reprend ensemble pour ensemble, dans le même ordre ; les deux champs ajoutés à /ping sont facultatifs
+{
+    const { CAPACITES } = require('../capacites');
+    H.v('ReponsePing.capacites : schéma = CAPACITES (v2/capacites.js), même ordre', aller(S, 'ReponsePing.properties.capacites.items.enum'), [...CAPACITES]);
+    H.v('ReponsePing.capacites : un tableau de chaînes', [aller(S, 'ReponsePing.properties.capacites.type'), aller(S, 'ReponsePing.properties.capacites.items.type')], ['array', 'string']);
+    H.v('ReponsePing : capacites et versionMinExtension sont facultatifs (un serveur d\'avant, ou une v2 non configurée, ne les sert pas)', ['capacites', 'versionMinExtension'].filter(c => (aller(S, 'ReponsePing.required') || []).includes(c)), []);
+    H.v('ReponsePing : capacites est conditionnelle comme versionMinExtension (x-conditionnel identique)', aller(S, 'ReponsePing.properties.capacites.x-conditionnel'), aller(S, 'ReponsePing.properties.versionMinExtension.x-conditionnel'));
+    H.vrai('ReponsePing : x-conditionnel est posé (v2 configurée)', typeof aller(S, 'ReponsePing.properties.capacites.x-conditionnel') === 'string');
+}
 // B7b.1 tour 1 (M6) : la liste des causes de non-remboursement a UNE source (sources.js), le schéma la reprend ensemble pour ensemble
 const { RAISONS_NON_REMBOURSE } = require('../../sources');
 H.v('Facturation.raisonNonRembourse : schéma = RAISONS_NON_REMBOURSE (sources.js)', diff(liste('Facturation.properties.raisonNonRembourse'), [...RAISONS_NON_REMBOURSE]), { enTrop: [], manquants: [] });
@@ -149,6 +158,14 @@ H.v('états Cardmarket MT NM EX GD LP PL PO', diff(liste('EtatCarte.properties.e
 H.v('EtatCarte.retenu : mêmes états', liste('EtatCarte.properties.retenu'), liste('EtatCarte.properties.estime'));
 H.v('PrixLive.etatVise : mêmes états', liste('PrixLive.properties.etatVise'), liste('EtatCarte.properties.estime'));
 H.v('RequeteRetourLive.prixLiveEtat : mêmes états', liste('RequeteRetourLive.properties.prixLiveEtat'), liste('EtatCarte.properties.estime'));
+// BANC-EXTENSION : `grilleLive` (la grille des prix par état lue par l'extension) est lue par retour-live (CHAMPS_PRIX) puis par index.js::gererRetourLive ; le schéma la publie telle quelle
+{
+    const G = aller(S, 'RequeteRetourLive.properties.grilleLive');
+    H.v('RequeteRetourLive.grilleLive : un objet de nombres (une valeur par état), facultatif', [G && G.type, G && G.additionalProperties, aller(S, 'RequeteRetourLive.required').includes('grilleLive')], ['object', { type: 'number' }, false]);
+    H.vrai('   la description nomme les sept états Cardmarket, la casse tolérée et l\'abandon silencieux d\'une entrée invalide', G && PLAN.etats.every(e => String(G.description).includes(e)) && /majuscule|casse/i.test(String(G.description)) && /ignor|écart/i.test(String(G.description)));
+    const CH = require('../identifier/retour-live').CHAMPS_PRIX;
+    H.vrai('   le champ est bien l\'un de ceux que retour-live transmet à la chaîne héritée', CH.includes('grilleLive'));
+}
 H.v('confiance de l\'état (une chaîne de liste fermée, jamais un score)', diff(liste('EtatCarte.properties.confiance'), PLAN.confiance), { enTrop: [], manquants: [] });
 // valeurs de config : la liste du code
 H.v('devises : schéma = cfg.devises', diff(aller(S, 'RequeteIdentifier.properties.devise.enum'), cfg.devises), { enTrop: [], manquants: [] });

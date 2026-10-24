@@ -111,10 +111,10 @@ async function aUnePlace(compteId, evtDate) {
 }
 /**
  * Applique un objet Subscription au compte. `version` : la date de l'événement (secondes Stripe). `siAbsent` : n'écrire que si cet abonnement est INCONNU du compte
- * (le chemin « checkout.session.completed », dont l'objet est relu et ne doit jamais écraser un événement plus récent).
+ * (le chemin « checkout.session.completed », dont l'objet est relu et ne doit jamais écraser un événement plus récent). `stripe` : le client du traitement en cours (le webhook y a mis son réessai sur la limite de débit) ; à défaut, le client de la configuration.
  * @returns {{ etat: 'applique'|'ignore'|'rejete', raison?: string, compte?: object, signaux?: string[] }}
  */
-async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, compteIdIndique = null }) {
+async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, compteIdIndique = null, stripe = null }) {
     const s = lireSubscription(sub, cfgAbo);
     if (!s.sid || !STATUTS.includes(s.statut)) return { etat: 'rejete', raison: 'abonnement-illisible' };
     if (compteIdIndique && s.compteMeta && String(compteIdIndique) !== String(s.compteMeta)) return { etat: 'rejete', raison: 'reference-divergente' };
@@ -158,7 +158,7 @@ async function appliquer(sub, { cfgAbo, version, evtDate, siAbsent = false, comp
             // webhook) est CLOS tout de suite : fin de l'essai maintenant — résiliation s'il n'y a pas de carte (missing_payment_method=cancel), premier paiement s'il y en a une. Un échec de Stripe fait rejouer l'événement.
             if (s.aEuEssai) {
                 const g = await Essai.confirmer(compte, evtDate);
-                if (g.clore && s.statut === 'trialing') { await Cl.obtenir(cfgAbo).subscriptions.update(s.sid, { trial_end: 'now' }); signaux.push(`essai-clos:${g.detail}`); }
+                if (g.clore && s.statut === 'trialing') { await (stripe || Cl.obtenir(cfgAbo)).subscriptions.update(s.sid, { trial_end: 'now' }); signaux.push(`essai-clos:${g.detail}`); }
             }
             // La place Fondateurs : réservée pendant l'ESSAI (elle compte contre le plafond, jusqu'à la fin de l'essai + marge), CONFIRMÉE à la première facture payée (webhook invoice.paid, ou ici un
             // abonnement déjà `active` : il a payé), RENDUE si l'abonnement meurt avant tout paiement (une place prise ne se rend jamais).

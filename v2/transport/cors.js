@@ -3,11 +3,15 @@
 // ne reçoit aucun en-tête CORS (le cors() hérité décide alors, comme aujourd'hui). Jamais '*'.
 // Monté AVANT toute route, limiteur ou gestionnaire d'erreur : les en-têtes figurent donc aussi sur les 4xx/5xx/429.
 const EXPOSE = 'Retry-After, Idempotency-Replayed';
+// INDEX-EMPREINTES : le fichier du modèle (GET /api/modele-empreinte/<sha256>, SEULEMENT si V2_EMPREINTE_EXTENSION=1) a son propre profil (la route répond 302 vers R2 : seul Retry-After des refus est lisible ; Range est autorisé en entrée).
+// Les profils existants ne changent pas d'un octet.
+
 
 function profils(cfg) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
     return [
+        ...(cfg.empreinteExtension === true ? [{ nom: 'extension-modele', origines: new Set(ext), credentials: false, chemins: [/^\/api\/modele-empreinte\/[0-9a-f]{64}$/], methodes: 'GET, HEAD', entetes: 'Range, If-None-Match', expose: 'Retry-After' }] : []),
         { nom: 'extension', origines: new Set(ext), credentials: false,
           // PHOTOS-MULTIPLES (7d) : /api/photo n'a de profil CORS que si la route existe (drapeau allumé) ; éteint, aucun en-tête propre à v2 pour ce chemin
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/, ...(cfg.photosMultiples === true ? [/^\/api\/photo(\/.+)?$/] : [])],      // le sous-arbre entier, comme /api/banc/.+ : un chemin voisin inexistant porte les mêmes en-têtes que la route (le 404 natif d'un non-administrateur ne se distingue pas)
@@ -30,7 +34,7 @@ function middlewareV2(cfg) {
         req.origineV2 = true;
         res.setHeader('Access-Control-Allow-Origin', origine);               // l'origine exacte, jamais '*'
         if (p.credentials) res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Expose-Headers', EXPOSE);
+        res.setHeader('Access-Control-Expose-Headers', p.expose || EXPOSE);
         if (req.method === 'OPTIONS') {
             // L'effacement par jeton est un DROIT : son préflight doit autoriser DELETE (il ne doit pas échouer en silence). Pour ce SEUL chemin de l'extension,
             // (le plan §1 lui donne GET, POST partout ailleurs) ; le sous-chemin ou tout autre chemin garde GET, POST.

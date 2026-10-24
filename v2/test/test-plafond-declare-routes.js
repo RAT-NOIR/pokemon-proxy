@@ -50,7 +50,9 @@ const compteur = async (cle_, type) => { const d = await raw('plafonds').findOne
     const sv = await H.serveur(app);
     const scanIdentifie = async (x) => {
         const r = await poster(sv.url, x.jeton); if (r.statut !== 200) throw new Error(`scan refusé ${r.statut}`);
-        await raw('journal_scans').insertOne({ _id: new mongoose.Types.ObjectId(r.json.scanId), userId: `v2:compte:${x.c._id}` }); return r.json.scanId;
+        await raw('journal_scans').insertOne({ _id: new mongoose.Types.ObjectId(r.json.scanId), userId: `v2:compte:${x.c._id}` });
+        await Q.sansDonneeDePrix(r.json.scanId);      // REPLI-QUOTA : ce banc juge le REMBOURSEMENT et son plafond, qui ne valent que sans repli servi (avec un repli le scan compte : test-repli-quota.js)
+        return r.json.scanId;
     };
     // gratuit : 3 rendus puis le 4e refusé, par le chemin RÉEL de retour-live
     {

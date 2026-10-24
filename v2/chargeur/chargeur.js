@@ -82,7 +82,9 @@ function executerDepuisFichier({ lireFichier, secret, nonScelleBanc = false }) {
             if (!rejuge.ok) return { ok: false, raison: `fichier refusé : ${rejuge.refusees} entrée(s) rejetée(s) par la validation d'entrée (${Object.entries(rejuge.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` };
         } catch (e) { return { ok: false, raison: e && e.name === 'FormatInvalide' ? `fichier refusé : ${e.motif}` : `fichier illisible (${nom(e)})` }; }
         return { ok: true, version: v, comptes: { sets: ent.sets ?? 0, cartes: ent.cartes ?? 0, produits: ent.produits ?? 0, catalogue: ent.catalogue ?? 0, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs, doublons: v.comptes.doublons ?? 0, doublonsContradictoires: v.comptes.doublonsContradictoires ?? 0,
-            fichesLiees: v.comptes.fichesLiees, setsAvecLiens: v.comptes.setsAvecLiens, produitsLies: v.comptes.produitsLies, ...(ent.repli && typeof ent.repli === 'object' ? ent.repli : {}) } };
+            fichesLiees: v.comptes.fichesLiees, setsAvecLiens: v.comptes.setsAvecLiens, produitsLies: v.comptes.produitsLies,
+            // ARCHIVE-EXCLUSIONS : les compteurs de l'exclusion, seulement quand l'archive en porte (une archive d'avant n'en a pas : aucun champ inventé)
+            ...(v.comptes.exclus !== undefined ? { exclus: v.comptes.exclus, exclusParMotif: v.comptes.exclusParMotif, partagesPerdus: v.comptes.partagesPerdus } : {}), ...(ent.repli && typeof ent.repli === 'object' ? ent.repli : {}) } };
     };
 }
 
@@ -114,6 +116,7 @@ function creerChargeur(opts = {}) {
             if (v && v.comptes && v.comptes.marquees) repli.push(`marquages ${Object.entries(v.comptes.marquees).map(([k, n]) => `${k} ${n}`).join(' ')}`);
             if (v && v.comptes && v.comptes.melange !== undefined) repli.push(`prix mélangés : produits marqués dans cartes_produits : ${comptes.melangeProduits ?? v.comptes.melange} · dans la colonne : ${v.comptes.melange}`);
             if (comptes.repliRefuse) repli.push(`sans image d'un autre tirage ${comptes.repliRefuse.total} (${Object.entries(comptes.repliRefuse.parFamille).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucune'})`);
+            if (comptes.exclus !== undefined) repli.push(`exclus de l'identification ${comptes.exclus} (${Object.entries(comptes.exclusParMotif || {}).map(([k, n]) => `${k} ${n}`).join(', ')}) · partages perdus ${comptes.partagesPerdus}`);
             if (Array.isArray(comptes.familleHorsListe) && comptes.familleHorsListe.length) repli.push(`FAMILLES HORS LISTE FERMÉE ${comptes.familleHorsListe.join(', ')}`);
             for (const [k, nom] of [['basseDefinitionExclue', 'basse définition exclue'], ['partageIncoherent', 'partage incohérent écarté'], ['varianteSansPreuve', 'variante sans preuve'], ['varianteHorsListe', 'variante hors liste']]) if (comptes[k]) repli.push(`${nom} ${comptes[k]}`);
             if (repli.length) journal(`ℹ️ [v2 chargeur] repli : ${repli.join(' · ')}`);

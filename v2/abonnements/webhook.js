@@ -8,7 +8,7 @@
 // Les sept événements : checkout.session.completed · checkout.session.expired · customer.subscription.created|updated|deleted · invoice.paid · invoice.payment_failed. Tout autre type : enregistré, ignoré, acquitté.
 const express = require('express');
 const { col } = require('../db');
-const Cl = require('./client'); const Et = require('./etat'); const Pr = require('./primes'); const Fo = require('./fondateurs');
+const Cl = require('./client'); const Et = require('./etat'); const Pr = require('./primes'); const Fo = require('./fondateurs'); const Reessai = require('./reessai');
 const { idDe, objetId, dateDe } = Et;
 const dupliquee = e => Boolean(e) && e.code === 11000;
 const SIGNATURE_TOLERANCE_S = 300;
@@ -41,7 +41,7 @@ const GESTIONNAIRES = {
         if (!sid) return { etat: 'ignore', raison: 'sans-abonnement' };
         if (!compteId) return { etat: 'rejete', raison: 'reference-compte-illisible', signal: true };
         const sub = await ctx.stripe.subscriptions.retrieve(sid);                       // relu : l'objet de la session ne porte pas l'abonnement
-        const res = await Et.appliquer(sub, { cfgAbo: ctx.cfgAbo, version: evt.created, evtDate: ctx.evtDate, siAbsent: true, compteIdIndique: compteId });
+        const res = await Et.appliquer(sub, { cfgAbo: ctx.cfgAbo, version: evt.created, evtDate: ctx.evtDate, siAbsent: true, compteIdIndique: compteId, stripe: ctx.stripe });
         if (s.consent && s.consent.terms_of_service === 'accepted' && res.compte) await col('comptes').updateOne({ _id: res.compte._id, 'abonnement.stripe.cgvAccepteesLe': null }, { $set: { 'abonnement.stripe.cgvAccepteesLe': ctx.evtDate } });
         await apresApplication(res, ctx);
         return { ...res, compteId: res.compte && res.compte._id };
@@ -49,7 +49,7 @@ const GESTIONNAIRES = {
     async abonnement(evt, ctx) {
         const brut = evt.data.object;
         const sub = evt.type === 'customer.subscription.deleted' ? { ...brut, status: 'canceled' } : brut;       // un « deleted » est une fin, quoi que dise le statut recopié
-        const res = await Et.appliquer(sub, { cfgAbo: ctx.cfgAbo, version: evt.created, evtDate: ctx.evtDate });
+        const res = await Et.appliquer(sub, { cfgAbo: ctx.cfgAbo, version: evt.created, evtDate: ctx.evtDate, stripe: ctx.stripe });
         if (res.etat === 'rejete' && res.raison === 'compte-inconnu') await resilierOrphelin(sub, ctx, evt);
         await apresApplication(res, ctx);
         return { ...res, compteId: res.compte && res.compte._id };
@@ -65,19 +65,22 @@ const GESTIONNAIRES = {
         const inv = evt.data.object, client = idDe(inv && inv.customer);
         const compte = client ? await col('comptes').findOne({ stripeClient: client }) : null;
         if (!compte) return { etat: 'rejete', raison: 'compte-inconnu', signal: true };
+        // l'abonnement de la facture n'est lu chez Stripe qu'UNE fois par traitement (l'offre pour la place Fondateurs, puis le parrain), jamais deux (moins d'appels dans une rafale)
+        const luesChezStripe = new Map();
+        const lireSub = async sid => { if (!luesChezStripe.has(sid)) luesChezStripe.set(sid, await ctx.stripe.subscriptions.retrieve(sid)); return luesChezStripe.get(sid); };
         await marquerFacture(compte._id, 'dernierPaiementLe', ctx.evtDate);
         // I3 : la place Fondateurs se CONFIRME à la première facture PAYÉE (montant > 0) ; pendant l'essai elle n'est que réservée
         if (typeof inv.amount_paid === 'number' && inv.amount_paid > 0) {
             const sid0 = sidDeFacture(inv), entree = sid0 && Et.subsDe(compte.abonnement && compte.abonnement.stripe)[sid0];
             let offre = entree ? entree.offre : null;
-            if (!entree && sid0) offre = Et.lireSubscription(await ctx.stripe.subscriptions.retrieve(sid0), ctx.cfgAbo).offre;
+            if (!entree && sid0) offre = Et.lireSubscription(await lireSub(sid0), ctx.cfgAbo).offre;
             if (offre === 'fondateurs') await Fo.confirmer(compte._id, ctx.cfgAbo.fondateurs.places, ctx.evtDate);
         }
         let parrainId = compte.abonnement && compte.abonnement.stripe ? compte.abonnement.stripe.parrain : null;
         const montant = typeof inv.amount_paid === 'number' ? inv.amount_paid : 0;
         if (montant > 0) {
             const sid = sidDeFacture(inv);
-            if (!parrainId && sid) { const sub = await ctx.stripe.subscriptions.retrieve(sid); parrainId = Et.lireSubscription(sub, ctx.cfgAbo).parrain; }
+            if (!parrainId && sid) { const sub = await lireSub(sid); parrainId = Et.lireSubscription(sub, ctx.cfgAbo).parrain; }
             if (parrainId) {
                 const r = await Pr.ouvrir({ stripe: ctx.stripe, cfgAbo: ctx.cfgAbo, filleul: compte, parrainId, factureId: idDe(inv), maintenant: ctx.evtDate });
                 if (r.signal) signaler(r.signal, evt);
@@ -122,7 +125,8 @@ async function reclamer(evt, maintenant) {
     const r = await col('abo_evenements').updateOne({ _id: evt.id, etat: doc.etat, recuLe: doc.recuLe }, { $set: { etat: 'en-cours', recuLe: maintenant }, $inc: { tentatives: 1 } });
     return r.matchedCount === 1 ? { nouveau: true } : { occupe: true };
 }
-async function traiterEvenement(evt, cfgAbo, maintenant = new Date()) {
+/** `options.reessai` : { dormir, delaisMs, budgetMs } du réessai sur la limite de débit (reessai.js) — les bancs y mettent une attente virtuelle. */
+async function traiterEvenement(evt, cfgAbo, maintenant = new Date(), options = {}) {
     const r = await reclamer(evt, maintenant);
     if (r.fait) return { statut: 200, corps: { recu: true, doublon: true } };
     if (r.occupe) return { statut: 409, corps: { recu: false, raison: 'en-cours' } };
@@ -132,7 +136,8 @@ async function traiterEvenement(evt, cfgAbo, maintenant = new Date()) {
         if ((cfgAbo.mode === 'live') !== (evt.livemode === true)) resultat = { etat: 'rejete', raison: 'mode-different', signal: true };
         else if (!TYPES.includes(evt.type) || !GESTIONNAIRES[evt.type]) resultat = { etat: 'ignore', raison: 'type-non-gere' };
         else if (!evt.data || !evt.data.object) resultat = { etat: 'rejete', raison: 'objet-absent', signal: true };
-        else resultat = await GESTIONNAIRES[evt.type](evt, { stripe: Cl.obtenir(cfgAbo), cfgAbo, evtDate });
+        // le client Stripe de CE traitement : une limite de débit (429) est réessayée ici, avec une attente croissante et un budget d'attente qui est celui de l'événement (reessai.js)
+        else resultat = await GESTIONNAIRES[evt.type](evt, { stripe: Reessai.envelopper(Cl.obtenir(cfgAbo), options.reessai), cfgAbo, evtDate });
     } catch (e) {
         await col('abo_evenements').updateOne({ _id: evt.id }, { $set: { etat: 'erreur', erreur: String(nomErreur(e)).slice(0, 60), majLe: new Date() } });
         console.error(`❌ [v2 abonnements] échec de traitement (${nomErreur(e)}) — événement ${evt.id} (${evt.type}), rejouable`);

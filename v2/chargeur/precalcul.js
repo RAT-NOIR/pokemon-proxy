@@ -10,12 +10,12 @@ const { sceller } = require('./scellement');
 const echec = motif => Object.assign(new Error('archive refusée'), { motif });
 
 /** Calcule, sérialise, vérifie par aller-retour, scelle. @returns {{ brut, gz, scelle, comptes, entree, dureeMs }} — n'écrit rien : l'appelant dépose le fichier. */
-async function fabriquerFichier({ source, catalogue, regle = () => require('./regle-site').regleEmbarquee(), decider, secret = null }) {
+async function fabriquerFichier({ source, catalogue, regle = () => require('./regle-site').regleEmbarquee(), decider, secret = null, exclusions = null }) {
     const t0 = Date.now();
     const src = await source();
     if (!src.ok) throw echec(src.raison);
     let r;
-    try { r = await calculer({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: catalogue, regle: await regle(), decider }); } finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
+    try { r = await calculer({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: catalogue, regle: await regle(), decider, exclusions }); } finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
     if (!r.version) throw echec('0 visuel sur une base non vide : aucun fichier écrit');
     if (r.comptes.fichesLiees === 0) throw echec('0 lien fiche → produits : aucun fichier écrit');
     if (!r.version.colonneJumeaux) throw echec('JUMEAU-V2 : la version calculée n\'a pas la colonne des jumeaux (la route n\'affirmerait aucun produit) : aucun fichier écrit');
@@ -33,6 +33,8 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     if (relu.comptes.visuels !== r.comptes.visuels || relu.comptes.fichesLiees !== r.comptes.fichesLiees) throw echec('aller-retour : les comptes relus diffèrent des comptes calculés : aucun fichier écrit');
     if (!relu.colonneJumeaux || relu.comptes.jumeaux !== r.version.comptes.jumeaux) throw echec('aller-retour : la colonne des jumeaux relue diffère de celle calculée : aucun fichier écrit');
     if (!relu.colonneMarquages || JSON.stringify(relu.comptes.marquees) !== JSON.stringify(r.version.comptes.marquees)) throw echec('aller-retour : la colonne des marquages relue diffère de celle calculée : aucun fichier écrit');
+    // ARCHIVE-EXCLUSIONS : les compteurs relus sont ceux qui ont été calculés (et sans liste, aucun compteur d'exclusion n'a le droit d'exister)
+    if (relu.comptes.exclus !== (exclusions ? r.comptes.exclus : undefined) || JSON.stringify(relu.comptes.exclusParMotif) !== JSON.stringify(exclusions ? r.comptes.exclusParMotif : undefined) || relu.comptes.partagesPerdus !== (exclusions ? 0 : undefined)) throw echec('aller-retour : les compteurs d\'exclusion relus diffèrent de ceux calculés : aucun fichier écrit');
     return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, entree, dureeMs: Date.now() - t0 };
 }
 module.exports = { fabriquerFichier };

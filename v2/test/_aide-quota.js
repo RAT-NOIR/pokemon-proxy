@@ -24,4 +24,11 @@ async function eviterMinuit(margeMs = 240e3) {
     await new Promise(r => setTimeout(r, reste + 2000));
     return reste + 2000;
 }
-module.exports = { GRAND, jourCourant, cfgGrand, poserRestant, prisAujourdhui, restantDe, eviterMinuit };
+/** REPLI-QUOTA : la fiche du scan n'a AUCUNE donnée de prix (`prixGuide` null sur chaque produit de la ligne `analyses`) : aucun `prixRepli` ne peut être servi, donc le remboursement « prix illisible »
+ *  d'avant s'applique (un scan qui AFFICHE un repli compte, voir prix-repli.js::afficheUnPrix). Les bancs qui éprouvent le REMBOURSEMENT d'une lecture ratée définitive posent cet état avant d'envoyer. */
+async function sansDonneeDePrix(scanId) {
+    const _id = typeof scanId === 'string' ? new (require('mongoose').Types.ObjectId)(scanId) : scanId;
+    const r = await db.col('analyses').updateOne({ _id }, { $set: { 'produits.$[].prixGuide': null } });
+    if (!r || r.matchedCount !== 1) throw new Error('sansDonneeDePrix : ligne analyses introuvable');
+}
+module.exports = { GRAND, jourCourant, cfgGrand, poserRestant, prisAujourdhui, restantDe, eviterMinuit, sansDonneeDePrix };

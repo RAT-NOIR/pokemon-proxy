@@ -29,15 +29,25 @@ function analyserArguments(argv) {
 }
 /** Les rôles dont les scénarios choisis ont besoin (tous les scénarios si aucun n'est choisi) : la table est fermée, un scénario inconnu a déjà été refusé par analyserArguments. */
 function rolesRequis(seulement) { return [...new Set((seulement || SCENARIOS).flatMap(k => ROLES_DES_SCENARIOS[k]))]; }
+/** L'origine de l'extension, lue dans la configuration de l'API par le NOM du champ (`origines.extension`), jamais recopiée ici : c'est la seule que POST /api/installation admet. */
+function extensionDeLaConfig(lire = env => require('../../config').lireConfig(env)) {          // `lire` : substituable par un banc (une configuration fabriquée)
+    const origin = lire({}).origines.extension;
+    if (typeof origin !== 'string' || !/^chrome-extension:\/\/\S+$/.test(origin)) throw new Error('origine de l\'extension illisible dans la configuration (origines.extension)');
+    return { entetes: { origin } };
+}
+/** Les en-têtes d'une requête de l'outil. Par défaut ceux du SITE (origine et X-Rat-Market, seulement quand il y a un corps) ; les en-têtes PASSÉS l'emportent (une route de l'extension y met sa propre origine). */
+function entetesDeLApi({ cookie = null, entetes = {}, avecCorps = false }) {
+    return { ...(cookie ? { cookie } : {}), ...(avecCorps ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}), ...entetes };
+}
 /** Une ouverture de session par compte : le cookie rm_session, jamais affiché. */
-async function connecter(essai, c) {
-    const r = await fetch(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+async function connecter(essai, c, fetchFn = fetch) {          // `fetchFn` : substituable par un banc
+    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
     if (r.status !== 200) throw new Error(`connexion du compte « ${c.role} » refusée (HTTP ${r.status})`);
     const m = (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(';').match(/rm_session=([A-Za-z0-9_-]+)/);
     if (!m) throw new Error(`connexion du compte « ${c.role} » : pas de cookie de session`);
     return `rm_session=${m[1]}`;
 }
-module.exports = { analyserArguments, connecter, rolesRequis, ROLES, SCENARIOS };
+module.exports = { analyserArguments, connecter, rolesRequis, extensionDeLaConfig, entetesDeLApi, ROLES, SCENARIOS };
 
 if (require.main === module) (async () => {
     let a; try { a = analyserArguments(process.argv.slice(2)); } catch (e) { console.error(`ARRÊT : ${e.message}`); process.exit(1); }
@@ -63,12 +73,12 @@ if (require.main === module) (async () => {
     for (const c of liste.filter(c => requis.includes(c.role))) cookies[c.role] = await connecter(a.essai, c);
     // `role` null : aucun cookie (les routes de l'extension, par jeton d'installation passé en `entetes`)
     const api = async (role, methode, chemin, corps, entetes = {}) => {
-        const r = await fetch(a.essai + chemin, { method: methode, headers: { ...(role ? { cookie: cookies[role] } : {}), ...entetes, ...(corps !== undefined ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}) }, body: corps !== undefined ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(90000) });
+        const r = await fetch(a.essai + chemin, { method: methode, headers: entetesDeLApi({ cookie: role ? cookies[role] : null, entetes, avecCorps: corps !== undefined }), body: corps !== undefined ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(90000) });
         let json = null; try { json = await r.json(); } catch { /* corps non JSON */ }
         return { statut: r.status, json };
     };
     const { fabrique } = require('./parcours-lib');
-    const p = fabrique({ stripe, api, comptes, prix: ids, attendre: ms => new Promise(r => setTimeout(r, ms)), trace: m => console.log(m), places: a.places, codeFondateurs: ENV.V2_FONDATEURS_CODE || null });
+    const p = fabrique({ stripe, api, comptes, prix: ids, attendre: ms => new Promise(r => setTimeout(r, ms)), trace: m => console.log(m), places: a.places, codeFondateurs: ENV.V2_FONDATEURS_CODE || null, extension: extensionDeLaConfig() });
     let res = []; try { res = await p.jouer({ seulement: a.seulement }); } finally { await p.nettoyer(); }
     const ko = res.filter(r => !r.ok);
     console.log(`\nBilan : ${res.length - ko.length} OK, ${ko.length} échec(s)`);

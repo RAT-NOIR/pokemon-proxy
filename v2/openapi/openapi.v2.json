@@ -481,7 +481,7 @@
         },
         "responses": {
           "200": {
-            "description": "Prix enregistré ; remboursement `sans-prix` si la lecture ratée est définitive.",
+            "description": "Prix enregistré ; remboursement `sans-prix` si la lecture ratée est définitive ET qu'aucun `prixRepli` n'est servi (avec un repli, le scan compte : `raisonNonRembourse: \"prix-repli\"`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3006,6 +3006,36 @@
         }
       }
     },
+    "/api/modele-empreinte/{sha256}": {
+      "get": {
+        "operationId": "modeleEmpreinte",
+        "x-conditionnel": "V2_EMPREINTE_EXTENSION=1",
+        "tags": ["identification"],
+        "summary": "Le fichier du modèle d'empreinte : redirection vers une adresse R2 présignée (lot INDEX-EMPREINTES, derrière V2_EMPREINTE_EXTENSION)",
+        "description": "Sans `Authorization`. Le modèle (118 202 501 octets) ne transite JAMAIS par l'API : la réponse est une redirection 302 vers une adresse R2 présignée (lecture seule, valable 600 s au plus ; un nouvel appel en donne une autre). `Range` et la revalidation sont servis par R2. Le client vérifie le sha256 du fichier reçu. Drapeau éteint : la route n'existe pas (404).",
+        "security": [],
+        "parameters": [
+          { "name": "sha256", "in": "path", "required": true, "description": "Le sha256 du FICHIER du modèle (64 chiffres hexadécimaux minuscules), celui de `regleVerdict.modeleEmpreinte.sha256`.", "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+        ],
+        "responses": {
+          "302": {
+            "description": "L'adresse présignée de l'objet (en-tête `Location`), `Cache-Control: no-store`, aucun corps.",
+            "headers": {
+              "Location": { "schema": { "type": "string" } },
+              "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } }
+            }
+          },
+          "404": { "description": "Le sha256 n'est pas celui du modèle publié, ou le serveur n'a pas le drapeau.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreurPlate" } } } },
+          "429": {
+            "description": "DEBIT : plus de 10 requêtes par heure par IP (plafond `V2_MODELE_EMPREINTE_IP_HEURE`), avec `Retry-After`.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
+            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
+          },
+          "502": { "description": "L'objet ne porte pas le sha256 ni la taille de la configuration : rien n'est signé.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreurPlate" } } } },
+          "503": { "description": "R2 indisponible ou route non configurée (avec `Retry-After`).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreurPlate" } } }, "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } } }
+        }
+      }
+    },
     "/api/abonnement": {
       "get": {
         "operationId": "lireAbonnement",
@@ -3460,7 +3490,7 @@
           "sante"
         ],
         "x-heritee": true,
-        "summary": "Santé du serveur ; v2 allumée : ajoute `versionMinExtension`",
+        "summary": "Santé du serveur ; v2 allumée : ajoute `versionMinExtension` et `capacites`",
         "security": [],
         "responses": {
           "200": {
@@ -3548,6 +3578,7 @@
       }
     },
     "schemas": {
+      "ReponseErreurPlate": { "type": "object", "required": ["success", "error"], "properties": { "success": { "type": "boolean", "enum": [false] }, "error": { "type": "string" } }, "additionalProperties": false },
       "Image": {
         "type": "object",
         "properties": {
@@ -3677,6 +3708,119 @@
         ],
         "additionalProperties": false,
         "description": "Le guide quotidien de Cardmarket (trend, low, avg7, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
+      },
+      "PrixRepli": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PrixRepliTendance"
+          },
+          {
+            "$ref": "#/components/schemas/PrixRepliEtatProche"
+          }
+        ],
+        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi."
+      },
+      "PrixRepliTendance": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "tendance",
+            "description": "La mention fermée : la tendance et les moyennes du guide du jour (`guide`), TOUS ÉTATS."
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "langue-non-lue",
+              "etat-non-retenu",
+              "lecture-ratee",
+              "tendance-seule"
+            ],
+            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la LANGUE de la carte : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état estimé a une confiance « basse », il n'est pas retenu) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. `lecture-ratee` (retour-live avec `lectureRatee`, quelle que soit sa cause et sa définitivité : défi, blocage, onglet, grille vide, sans prix, sans offre reverse) et `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) : ce que l'extension a rendu."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr, quel que soit `guide.fiable`. Aucun verdict de bonne affaire ne se fonde dessus."
+          },
+          "guide": {
+            "$ref": "#/components/schemas/PrixGuide",
+            "description": "Le guide du jour de la fiche, tel que `carte.prixGuide` (avec ses `reserves`, à afficher avec le repli). JAMAIS null pour la forme `tendance`."
+          },
+          "offre": {
+            "type": "null",
+            "description": "Toujours null pour la forme `tendance`."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
+      "PrixRepliEtatProche": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "etat-proche",
+            "description": "La mention fermée : l'offre lue par l'extension dans un état PIRE que l'état retenu (`offre`), avec le guide s'il existe."
+          },
+          "cause": {
+            "const": "offre-autre-etat",
+            "description": "Retour-live avec une offre `grille` lue dans un état pire que le retenu : la seule cause de cette forme."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr. Aucun verdict de bonne affaire ne se fonde dessus."
+          },
+          "guide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrixGuide"
+              }
+            ],
+            "description": "Le guide du jour de la fiche s'il existe, null sinon (l'offre suffit alors à faire une donnée de prix)."
+          },
+          "offre": {
+            "type": "object",
+            "properties": {
+              "etat": {
+                "type": "string",
+                "enum": [
+                  "MT",
+                  "NM",
+                  "EX",
+                  "GD",
+                  "LP",
+                  "PL",
+                  "PO"
+                ]
+              },
+              "prix": {
+                "type": "number",
+                "minimum": 0.01
+              }
+            },
+            "required": [
+              "etat",
+              "prix"
+            ],
+            "additionalProperties": false,
+            "description": "L'offre la moins chère que l'extension a lue, dans un état pire que l'état retenu (son état et son prix, en euros). JAMAIS null pour la forme `etat-proche`."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre"
+        ],
+        "additionalProperties": false
       },
       "SetProduit": {
         "type": "object",
@@ -4363,6 +4507,9 @@
                 "$ref": "#/components/schemas/Zone"
               }
             ]
+          },
+          "prixRepli": {
+            "$ref": "#/components/schemas/PrixRepli"
           }
         },
         "required": [
@@ -4742,10 +4889,11 @@
               "accueil-au-plafond",
               "hebdo-semaine-changee",
               "poche-introuvable",
+              "prix-repli",
               "erreur",
               null
             ],
-            "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js."
+            "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js. `prix-repli` (REPLI-QUOTA) : une lecture ratée DÉFINITIVE dont la réponse sert un `prixRepli` n'est PAS remboursée (un prix est affiché, le scan compte : `debite: 1`, motif `sans-prix`) ; aucun remboursement n'est tenté, le plafond des déclarations du jour n'est pas consommé."
           },
           "poche": {
             "type": "string",
@@ -6211,6 +6359,9 @@
           },
           "offre": {
             "$ref": "#/components/schemas/Offre"
+          },
+          "prixRepli": {
+            "$ref": "#/components/schemas/PrixRepli"
           }
         },
         "required": [
@@ -6218,7 +6369,7 @@
           "offre"
         ],
         "additionalProperties": false,
-        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true sous le plafond des déclarations du jour ; au-delà `plafond-jour`), `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
+        "description": "Le champ additif `prixRepli` (lot PRIX-LISIBLE) est servi quand l'extension a envoyé une lecture ratée, une tendance seule ou une offre dans un état pire que l'état retenu ET que la fiche a une donnée de prix ; absent sinon. Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`) : SANS `prixRepli` dans la réponse, rembourse: true sous le plafond des déclarations du jour (au-delà `plafond-jour`), avec `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan ; AVEC `prixRepli` (REPLI-QUOTA : un prix est affiché), PAS de remboursement : `debite: 1`, `rembourse: false`, `raisonNonRembourse: \"prix-repli\"`, ni `declaration` (le plafond des déclarations n'est pas consommé), et l'`offre` relue ne remonte pas."
       },
       "ReponsePing": {
         "type": "object",
@@ -6231,7 +6382,24 @@
             "type": "string"
           },
           "versionMinExtension": {
-            "type": "string"
+            "type": "string",
+            "x-conditionnel": "RM_API_V2=1",
+            "description": "Présent SEULEMENT quand la v2 est allumée ET que sa configuration est valide ; absent sinon (un `/ping` 200 sans ce champ = v2 non annoncée)."
+          },
+          "capacites": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "langue-impression",
+                "marques",
+                "prix-incertains",
+                "prix-repli",
+                "achete-avant-jour"
+              ]
+            },
+            "x-conditionnel": "RM_API_V2=1",
+            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens et condition : `langue-impression` = `impressions[].langue`, annoncé seulement si l'archive des visuels est chargée en mémoire ET porte la colonne des jumeaux ; `marques` = `Produit.marques` et `Impression.marques`, annoncé seulement si l'archive des visuels est chargée en mémoire ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) — la règle est en place, mais `prixRepli` peut manquer sur une carte dont la fiche n'a aucun prix ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour. Les deux jetons de l'archive tombent à chaque réveil à froid du service, tant que l'archive n'est pas rechargée."
           }
         },
         "required": [
@@ -6441,6 +6609,13 @@
               null
             ]
           },
+          "grilleLive": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Facultatif : la grille des prix lue sur la page, UN prix par état (clés `MT`, `NM`, `EX`, `GD`, `LP`, `PL`, `PO`, valeur strictement positive en euros). Le serveur met les clés en majuscules ; une entrée dont la clé n'est pas un des sept états, ou dont la valeur n'est pas un nombre strictement positif, est écartée sans refuser la requête, et une grille sans aucune entrée valide revient à l'absence de grille. Le nombre d'états et le nombre de valeurs distinctes se déduisent de cette grille."
+          },
           "verdictAffiche": {
             "type": "string",
             "enum": [
@@ -6478,7 +6653,7 @@
         "required": [
           "scanId"
         ],
-        "description": "Une lecture ratée `definitive: true` rembourse une fois par scan (`sans-prix`) ; `definitive: false` (défi Cloudflare) ne rembourse rien."
+        "description": "Une lecture ratée `definitive: true` rembourse une fois par scan (`sans-prix`), SAUF quand la réponse sert un `prixRepli` (REPLI-QUOTA : un prix est affiché, le scan compte, `raisonNonRembourse: \"prix-repli\"`) ; `definitive: false` (défi Cloudflare) ne rembourse rien."
       },
       "RequeteInstallation": {
         "type": "object",
