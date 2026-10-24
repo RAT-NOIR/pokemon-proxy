@@ -49,7 +49,7 @@ const DECISION = '2026-10-24';
         const idp = Number(x.id.split('|')[1]), l = lignes.get(x.id);
         if (!l) { fautes.push(`${x.id} : absente de la base`); continue; }
         const autres = etat.cartesProduits.filter(t => t.idProduct === idp && t._id !== x.id).length;
-        const verdict = DL.jugerLigne(x, noms.get(idp), cartes.get(l.carteId), null).verdict;
+        const verdict = DL.jugerLigne(x, noms.get(idp), cartes.get(l.carteId), null, { autres }).verdict;
         const justes = x.justes.map(j => ({ j, ligne: etat.cartesProduits.some(t => t.idProduct === j && t.carteId === l.carteId) }));
         const sansLigneJuste = justes.filter(j => !j.ligne);
         if (!verdict) fautes.push(`${x.id} « ${noms.get(idp)} » : la preuve ne tient plus (produit ou carte différents de ceux regardés)`);
