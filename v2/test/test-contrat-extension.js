@@ -23,15 +23,13 @@ const norm = c => c.replace(/\[\d+\]/g, '[]').replace(/\$\.fausse-[a-z]+-\d+/, '
 const E = (r, route, statut, chemins) => chemins.map(c => [`${route} ${statut} ${c}`, r]);
 const CLASSES = new Map([
     // E1 (clés de `solde`) retiré : les vecteurs n'ont plus de `solde` du tout (DEMANDE-SERVEUR-EXTENSION §B5) ; le manque se classe sous E3.
-    ...E('E11', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.set.slug']),
+    // E11 (`set.slug`) et E5 (`impressions`, `prixGuide.moyenne30`, `prixGuide.date` des impressions) retirés : l'extension a fermé ces écarts (son lot H, afbbe58) ; une clé qui reviendrait serait NOUVELLE et ferait échouer le banc.
     ...E('E12', 'POST /api/identifier', 200, ['$.analyse.cartes[].etat.declare']),      // §B7 : l'extension ne lit plus l'état déclaré
     ...E('E13', 'POST /api/identifier', 200, ['$.offre']),                               // OFFRE-QUOTA : l'objet `offre` (nom, restant, remiseAZero), absent des vecteurs de l'extension
     ...E('E2', 'POST /api/identifier', 200, ['$.facturation']),                          // §B5 : plus de `facturation` (sauf motif administrateur)
     ...E('E2', 'POST /api/identifier/reponse', 200, ['$.<scanId>[].<choix>.facturation']),
     ...E('E3', 'POST /api/identifier', 200, ['$.solde']),
     ...E('E4', 'POST /api/identifier', 200, ['$.question']),
-    ...E('E5', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.impressions', '$.analyse.cartes[].candidats[].impressions', '$.analyse.cartes[].carte.prixGuide.moyenne30',
-        '$.analyse.cartes[].candidats[].prixGuide.moyenne30', '$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30', '$.analyse.cartes[].carte.impressions[].prixGuide.date']),
     ...E('E6', 'POST /api/identifier', 200, ['$.analyse.cartes[].etat']),
     ...E('E7', 'POST /api/identifier', 429, ['$.facturation']),
     ...E('E8', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.visuel.url', '$.analyse.cartes[].carte.visuel.grande', '$.analyse.cartes[].candidats[].visuel.url'])
