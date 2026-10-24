@@ -38,7 +38,7 @@ async function carteIdentifiee(porteur, scanId, carte) {
     const e = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
     if (!e) return false;
     // B1b.8 (ruling 4) : la garde reste FERMÉE sur un lot, pour une carte identifiée comme pour une question. Un crédit de lot couvre jusqu'à 10 cartes : un prix manquant
-    // sur l'une n'annule pas la lecture des autres, et rembourser ferait de chaque lot un levier borné par le seul plafond du jour. Seul un lot entièrement introuvable est rendu (lot.js).
+    // sur l'une n'annule pas la lecture des autres, et rembourser ferait de chaque lot un levier borné par le seul plafond du jour. Un lot se juge UNE fois, à l'analyse (lot.js) : rendu s'il est entièrement introuvable, ou si AUCUNE de ses cartes n'affiche de prix (LOT-SANS-PRIX) ; jamais carte par carte ici.
     // Écrite par ce qu'elle AUTORISE : seules les analyses à UNE carte (`identifiee`, `a-trancher`) passent ; `lot` et tout statut inconnu bloquent.
     if (!['identifiee', 'a-trancher'].includes(an.statut)) return false;
     if (e.statut === 'identifiee') return true;

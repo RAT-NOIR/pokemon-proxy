@@ -9,8 +9,9 @@
 //     le débitent jamais deux fois : (1) la route est derrière `idempotente('identifier')` (claim Mongo par porteur|route|clé), le jumeau répond DEBIT « en cours » ;
 //     (2) même sans ce claim, la clé du DÉBIT INITIAL est unique : seul le gagnant de ce débit atteint le supplément, le perdant reçoit `rejoue` et sort avant tout lot ;
 //   · un crochet qui rend UN seul résultat ne fait pas un lot : c'est la branche une-carte (`{ unique }`), avec la règle G, la question réservée et le sans-prix ;
-//   · tout débit finit livré ou remboursé ; un lot ENTIÈREMENT introuvable est remboursé, un lot dont une seule carte est lue ne l'est jamais (un crédit de lot couvre
-//     jusqu'à 10 cartes : un prix manquant sur l'une n'annule pas la lecture des autres — c'est aussi pourquoi `sans-prix` ne rembourse rien sur un lot, retour-live.js).
+//   · tout débit finit livré ou remboursé ; un lot ENTIÈREMENT introuvable est remboursé ; un lot dont AUCUNE carte n'affiche de prix l'est aussi (LOT-SANS-PRIX, 2026-10-24 : lotAfficheUnPrix, qui appelle
+//     afficheUnPrix) ; un lot dont UNE carte affiche un prix (guide, repli, ou un candidat de question) reste compté (un crédit de lot couvre jusqu'à 10 cartes : un prix manquant sur l'une n'annule pas
+//     la lecture des autres — c'est aussi pourquoi `POST /api/retour-live` `sans-prix` ne rembourse rien sur une carte de lot, retour-live.js : le lot se juge ICI, une fois, sur l'ensemble).
 const { dansUnScan } = require('../../sources');
 const { adapter, codeLangueDe } = require('./adaptateur');
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
@@ -20,6 +21,7 @@ const etatChargeur = require('../chargeur/etat');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { natureDuMotif } = require('../argent/nature-du-motif');
+const { afficheUnPrix, avecRepliAnalyse } = require('./prix-repli');       // LOT-SANS-PRIX : la SEULE règle « ce scan affiche-t-il un prix ? » (REPLI-QUOTA), appelée telle quelle
 
 const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan (octets) à la place des URLs, quand il y en a
 const { cartesParScanMax } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
@@ -52,6 +54,27 @@ const zoneValide = (z, entree) => {
     return p ? { photo: p.index, x: z.x, y: z.y, w: z.w, h: z.h } : null;
 };
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
+
+// LOT-SANS-PRIX (décision de l'éditeur, 2026-10-24) : « Un scan qui n'affiche aucun prix ne compte pas dans le quota. » Un lot dont AUCUNE carte n'affiche de prix est rendu en entier ; la règle d'une carte est afficheUnPrix
+// (prix-repli.js, la seule), appelée avec ce que la réponse SERT : un `prixGuide` non nul (prixRendu) ou un `prixRepli` servi (repli, calculé par avecRepliAnalyse, la fonction même que la route applique à cette analyse).
+// 🔑 Écrite par ce qu'elle AUTORISE : « aucun prix » n'est dit que d'une carte POSITIVEMENT sans prix (un introuvable ; une identifiée dont le prixGuide est exactement null et sans repli ; une question dont CHAQUE candidat a un
+// prixGuide exactement null). Un champ absent, un statut inconnu, une carte illisible, une lecture qui lève : le doute est « un prix est affiché » — le lot reste compté, jamais rendu sur un doute.
+const prixServi = p => (p && typeof p === 'object' ? p.prixGuide !== null : true);             // prixGuide undefined (on ne sait pas) : servi
+function carteAfficheUnPrix(c) {
+    try {
+        if (!c || typeof c !== 'object') return true;
+        if (c.statut === 'introuvable') return false;                                          // aucune fiche, aucun prix à montrer
+        if (c.statut === 'identifiee') return afficheUnPrix({ prixRendu: prixServi(c.carte), repli: avecRepliAnalyse(c).prixRepli ?? null });
+        // une question : si l'un de ses candidats montre un prix au client, le lot en affiche un (le candidat est montré avec son prixGuide)
+        if (c.statut === 'a-trancher') return !Array.isArray(c.candidats) || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) }));
+        return true; // statut inconnu : un prix est supposé affiché
+    } catch (_) { return true; } // on ne peut pas conclure : un prix est supposé affiché
+}
+/** Vrai quand AU MOINS UNE carte du lot affiche un prix (ou qu'on ne peut pas le dire) ; faux seulement si TOUTES sont positivement sans prix. Ne lève jamais. */
+function lotAfficheUnPrix(cartes) {
+    if (!Array.isArray(cartes) || cartes.length === 0) return true;
+    return cartes.some(carteAfficheUnPrix);
+}
 
 /**
  * Tout ce qui suit le premier débit, pour un lot. Rend { erreur: { code, detail?, facturation } } (réponse d'erreur) ou { sortie } (forme de traiterIdentifier).
@@ -151,12 +174,23 @@ async function executerLot(p) {
             return { erreur: { code, detail: undefined, facturation } };
         }
     }
-    // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un seul identifié ou une seule question et il ne l'est jamais
-    let facturation;
+    // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un lot dont AUCUNE carte n'affiche de prix l'est aussi (LOT-SANS-PRIX) ; une seule carte qui affiche un prix et il reste compté
+    let facturation, sansPrixRendu = false;
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
         const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : une unité par carte ; constaté par le serveur, rendu sans plafond (PLAFOND-DECLARE)
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
         if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
+    } else if (!lotAfficheUnPrix(cartes)) {
+        // LOT-SANS-PRIX : des cartes lues (ou à trancher), mais AUCUN prix affiché par aucune (ni guide, ni repli, ni candidat) : le lot est rendu en entier, par le MÊME chemin que le lot introuvable (`rendre` :
+        // la claim `rb|scanId` — une fois par scan —, UN seul passage au plafond, chaque unité à SA poche). Le serveur seul constate qu'aucun prix n'est servi (le client n'a rien déclaré) : le compteur est celui des
+        // CONSTATS, celui de `natureDuMotif('sans-prix')` comme pour un lot introuvable, jamais celui des déclarations. Motif de la liste fermée : `sans-prix` (l'unité n'est pas un « introuvable » : les cartes sont lues).
+        if (admin) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });
+        else {
+            const r = await rendre('sans-prix');
+            sansPrixRendu = r.rendu;
+            facturation = r.rendu ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' })
+                : fabriquerFacturation({ debite: cout, rembourse: false, motif: r.cause === 'plafond-jour' ? 'plafond-jour' : 'sans-prix', raisonNonRembourse: r.cause ?? 'erreur' });          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
+        }
     } else facturation = admin ? fabriquerFacturation({ motif: 'administrateur', rembourse: false }) : fabriquerFacturation({ debite: cout, motif: 'lot' });
     // 6. les questions : une par carte à trancher, `lot: true` (répondre ne coûte rien et ne rend rien), index = position d'entrée
     if (lotInfo.aTrancher > 0 && !admin && credit) {
@@ -171,7 +205,7 @@ async function executerLot(p) {
             // une question qui n'existe pas n'est répondable par personne : tout le lot devient une panne (jamais un a-trancher sans question)
             try { await col('questions_v2').updateMany({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, lot: true, etat: 'en-attente' },
                 { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'lot', regleeLe: new Date() } }); } catch (e) { journal('annulation des questions', e); }
-            const res = await panne('SERVEUR', Boolean(r && r.etat === 'remboursee'));
+            const res = await panne('SERVEUR', Boolean(r && r.etat === 'remboursee') || sansPrixRendu);       // LOT-SANS-PRIX : un lot déjà rendu l'est (jamais « deja-rembourse » servi à un client rendu)
             // UN-CANDIDAT-2 : une fois le client RENDU, les lignes posées finissent dans un état terminal (lotIssue) : sans lui le balayage les rejugeait « analyse-absente » pour toujours (aucune ligne `analyses` n'existe).
             // Si le remboursement n'a PAS eu lieu, aucune décision n'est écrite : le lot reste visible de la réconciliation.
             if (res && res.sortie && res.sortie.facturation && res.sortie.facturation.rembourse) {
@@ -185,4 +219,4 @@ async function executerLot(p) {
     return { sortie: { resultat: { issue: 'lot', analyse, erreur: null }, facturation, lecture: null, lectures, cartesEntree: cartes, motifs, desaccord: null } };
 }
 
-module.exports = { executerLot, ordonnerParValeur, compterLot, valeurDe };
+module.exports = { executerLot, ordonnerParValeur, compterLot, valeurDe, lotAfficheUnPrix };

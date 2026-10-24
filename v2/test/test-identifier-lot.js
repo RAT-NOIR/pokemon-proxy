@@ -213,7 +213,7 @@ const soldeCompte = async x => ({ accueil: 0, achete: await Q.restantDe({ type: 
         const rg = await poster(sv.url, g.jeton), jg = rg.json || {};
         H.v('   (5 ter) compte gratuit à 9 prises sur 10 : lot de 25 refusé lot-trop-grand, offre gratuit restant 1 (jamais 0), compteur à 9', [rg.statut, jg.erreur && jg.erreur.detail, jg.offre && [jg.offre.nom, jg.offre.restant], await (async () => Q.GRAND - await Q.prisAujourdhui(`compte:${g.c._id}`))()], [429, 'lot-trop-grand', ['gratuit', 1], 1]);
     }
-    // ── (6) lot entièrement introuvable : remboursé ; un seul identifié : jamais remboursé (ruling 4)
+    // ── (6) lot entièrement introuvable : remboursé ; un seul identifié (au guide) : jamais remboursé (ruling 4) — LOT-SANS-PRIX : un lot dont aucune carte n'a de prix est rendu, voir test-lot-sans-prix.js
     {
         const x = await inst(); lot(nIntro(5));
         const r = await poster(sv.url, x.jeton); const j = r.json || {};
