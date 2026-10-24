@@ -1672,17 +1672,17 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | E2 | fausses : `facturation` sans `reserve` (et, dans `reponses.json`, sans `raisonNonRembourse`) | les cinq clés sont **toujours** présentes |
 | E3 | fausses : `solde: null` (a-trancher, lot, introuvable) | `solde` est **toujours** présent après une analyse |
 | E4 | fausses a-trancher : une clé `question: { etat, delaiHeures }` à la racine | **non servie** ; le délai est de 24 h, fixe |
-| E5 | fausses : `Produit` sans `impressions` ; `prixGuide` sans `moyenne30` ; impressions : `prixGuide: { de, tendance }` | `impressions` toujours présent ; `prixGuide` toujours `{ tendance, de, moyenne30, date }` (null pour une valeur absente), y compris dans les impressions |
+| E5 (fermé le 24/10, lot H de l'extension) | fausses : `Produit` sans `impressions` ; `prixGuide` sans `moyenne30` ; impressions : `prixGuide: { de, tendance }` | `impressions` toujours présent ; `prixGuide` toujours `{ tendance, de, moyenne30, date }` (null pour une valeur absente), y compris dans les impressions |
 | E6 | fausse introuvable : `etat` rempli de `null` | `etat: null` pour un introuvable |
 | E7 | fausse quota : `facturation` avec `motif: null` | `facturation: null` (aucune analyse) ; un `motif` n'est jamais `null` |
 | E8 | fausses : images `https://pub-fictif.r2.dev/…` | l'hôte exact du bucket public (`pub-7d992e666c3d4a2b870b680a920045b6.r2.dev`) ou `rat-market.fr` |
 | E9 | fausses : `variante: "normale"` partout, `liens.cardmarket` rempli sans numéro, ou menant à une recherche | `variante: null` et `liens.cardmarket: null` dans ces cas (A9, A10) |
 | E10 | `CODES_ERREUR` de l'extension : 10 codes du serveur + `RESEAU` + `EXTENSION` | 20 codes serveur ; `RESEAU` et `EXTENSION` restent côté client |
-| E11 | `reels.js` : `set.slug: null` | `set.slug` est une chaîne (jamais `null`) |
+| E11 (fermé le 24/10, lot H de l'extension) | `reels.js` : `set.slug: null` | `set.slug` est une chaîne (jamais `null`) |
 
 #### 7.3 bis — Les écarts de forme MESURÉS (B7b.1, `v2/test/test-contrat-extension.js`)
 
-Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse et les quatre de `reels.js` — module de données pur, lu en texte — contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chacune des 16 réponses de `reponses.json` RECONSTRUITE en entier — carte, facturation, solde — et jugée contre `ReponseQuestion`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart.
+Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse et les quatre de `reels.js` — module de données pur, lu en texte — contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chacune des 16 réponses de `reponses.json` RECONSTRUITE en entier — carte, facturation, solde — et jugée contre `ReponseQuestion`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart. **Fermés par l'extension le 24/10 (son lot H, `afbbe58`) et retirés d'ici** : E5 (`impressions` du `Produit` et des candidats, `prixGuide.moyenne30` de la carte, des candidats et des impressions, `prixGuide.date` des impressions) et E11 (`set.slug`) ; les fausses de l'extension portent aussi `version`, `marques`, `set.badge`, `set.badgeSource`, `langue` des impressions et les cinq clés de prix des candidats, que `test-identifier-adaptateur.js` compare désormais comme toutes les autres clés (sauf `marques` du `Produit` de `identifiee.json`, épinglé dans les deux sens).
 
 | réf. | route et statut | chemin JSON | l'extension attend (fausse) | le serveur rend (schéma) | fichiers | qui doit changer |
 |---|---|---|---|---|---|---|
@@ -1691,19 +1691,12 @@ Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre l
 | E3 | `POST /api/identifier` 200 | `$.solde` | absent (l'extension ne lit plus que `compte` et `offre` : §B5) | objet, **toujours** présent après une analyse | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels | l'extension |
 | E12 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat.declare` | absent (l'état d'une carte ne vient jamais du vendeur : §B7) | clé requise (`null` ou l'état déclaré) ; le serveur la sert toujours | identifiee, identifiee-impressions, a-trancher, lot, reels | l'extension |
 | E4 | `POST /api/identifier` 200 | `$.question` | `{ etat, delaiHeures }` à la racine | clé **non servie** (le délai est de 24 h, fixe) | a-trancher | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions` | absent | clé requise (`[]` par défaut) | identifiee, lot | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].impressions` | absent | clé requise | a-trancher, lot | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.prixGuide.moyenne30` | absent | clé requise (nombre ou `null`) | identifiee, lot | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].prixGuide.moyenne30` | absent | clé requise | a-trancher, lot | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30` | absent | clé requise | identifiee-impressions | l'extension |
-| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.date` | absent (`{ de, tendance }`) | clé requise (date du guide) | identifiee-impressions | l'extension |
 | E6 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat` | objet rempli de `null` (introuvable) | `null` pour un introuvable | introuvable | l'extension |
 | E7 | `POST /api/identifier` 429 | `$.facturation` | absent (plus de `facturation` dans la fausse quota : §B5) | `null` (aucune analyse) : clé requise, valeur `null` | quota | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
 | E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
 | E13 | `POST /api/identifier` 200 | `$.offre` | absent | clé requise : `{ nom, restant, remiseAZero }` (OFFRE-QUOTA, §1.5) | identifiee, identifiee-impressions, a-trancher, lot, introuvable, reels.js | l'extension (B5 de sa `DEMANDE-SERVEUR-EXTENSION.md`) |
-| E11 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.set.slug` | `null` (set sans slug) | chaîne : le slug du set est toujours connu | reels.js | l'extension |
 
 Non mesuré par cette lecture de forme (aucune faute de FORME, la faute est de sens) : E9 (`variante` et `liens.cardmarket` remplis alors que le serveur rend `null` quand l'édition ou le numéro est inconnu — les valeurs `normale` / une adresse sont de forme valide), E10 (codes d'erreur : le fichier `quota.json` n'en porte qu'un). `lectures.json` n'est pas une réponse du serveur (les grilles de la lecture live simulée ne sont jamais envoyées : le serveur ne reçoit que `prixLive` et `prixLiveEtat`) ; ses états `MT`…`PO` et ses prix (`null` ou > 0) tiennent la liste fermée du contrat.
 
