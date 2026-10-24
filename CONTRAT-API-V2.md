@@ -48,6 +48,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/scanner/analyses/{id}/reponse` *(conditionnelle, lot B9)* | site | cookie | non | `RequeteReponse` → `ReponseQuestion` |
 | `GET /api/collection` | site | cookie | non | rien → `ReponseMesSets` (§1.8) |
 | `GET /api/collection/sets/{slug}` | site | cookie | non | rien → `ReponseCollectionSet` (§1.8) |
+| `GET /api/modele-empreinte/{sha256}` | extension | aucune, derrière `V2_EMPREINTE_EXTENSION=1` | non | rien → `302` vers une adresse R2 présignée (§1.2 ter) |
 | `PUT /api/collection/sets/{slug}/fiches/{cle}` | site | cookie, **compte vérifié** | non (idempotent par nature) | `RequeteCocher` → `ReponseCocher` (§1.8) |
 | `GET /ping` | les deux | aucune | non | santé ; v2 allumée, ajoute `versionMinExtension` |
 
@@ -512,6 +513,9 @@ Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candida
 - **Ce que le vecteur peut changer** : une affirmation de la chaîne qui contredit la règle visuelle devient une **question** (jamais tranchée en silence) ; une **question** de la chaîne peut devenir une **affirmation** si la règle visuelle affirme et que la garde sur le produit désigné (`garde-contradiction`) laisse passer ; l'**introuvable** de la chaîne n'est jamais promu (le crédit est déjà rendu). Une promotion est facturée comme une affirmation (`debite: 1`), le crédit réservé par la question est réglé comme une réponse.
 - **Isolement entre utilisateurs** : un résultat que le vecteur a changé n'entre jamais dans une donnée partagée (banc réel, statistiques) sans une lecture concordante ; il est marqué dans la ligne `analyses` (`empreinteExtension`, interne, jamais servi). Un vecteur forgé ne change le résultat d'aucun autre utilisateur (`v2/test/test-empreinte-isolement.js`).
 
+### 1.2 ter Le fichier du modèle d'empreinte (lot INDEX-EMPREINTES, tour de correction 1 ; ÉTEINT avec `V2_EMPREINTE_EXTENSION`)
+
+`GET /api/modele-empreinte/<sha256>` — sans `Authorization` — répond `302` avec `Location` : une adresse R2 PRÉSIGNÉE (lecture seule, **valable 600 s au plus** ; un nouvel appel en donne une autre) de l'objet du modèle (ONNX poids 8 bits, 118 202 501 octets). **Le modèle ne transite jamais par l'API** (Render n'inclut que 5 Go de bande passante par mois) et il n'existe aucun repli en flux. Le `<sha256>` est exactement celui de `V2_MODELE_EMPREINTE_SHA256` (le sha256 du fichier), sinon `404` ; drapeau éteint : la route n'existe pas (`404`). Avant de signer, l'API fait un `HEAD` de l'objet : métadonnée `sha256` et taille différentes de la configuration ⇒ `502`, rien n'est signé. La réponse `302` porte `Cache-Control: no-store` et aucun corps. Autres refus : `429` (plafond par IP `V2_MODELE_EMPREINTE_IP_HEURE`, `Retry-After`), `503` (R2 indisponible ou route non configurée, `Retry-After`). `Range` et la revalidation se font auprès de R2, pas de l'API. L'intégrité du fichier reçu se vérifie côté extension (`CONTRAT-EMPREINTE-EXTENSION.md` §0.1). Bancs : `test-modele-empreinte.js` ; OpenAPI `modeleEmpreinte`.
 ### 1.3 Répondre à une question
 
 `choix` est l'`id` d'un choix (`a`, `b` ou `c`), `aucune` ou `ne-sait-pas`. Sur une question de confirmation (un seul candidat, §3.3), `a` est OUI et `aucune` est NON.
@@ -1597,6 +1601,11 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 | X5 | `POST /api/compte/mot-de-passe-oublie` · `400` | documenté, jamais rendu : un corps illisible vaut une adresse absente, 202 neutre (l.71-77) | idem |
 | X7 | `POST /api/identifier` · `403` | **documenté, plus atteignable (O3)** : un compte non confirmé n'est plus un porteur (`v2/porteur.js` : sa session est refusée, une installation qui lui serait liée redevient une installation seule). Le `403` `VERIFICATION` reste documenté (garde en profondeur de la chaîne, du scanner et de la collection) mais aucune requête ne l'atteint plus. | laisser documenté (inoffensif) ou retirer ; les clients traitent `VERIFICATION` comme avant |
 | X8 | `POST /api/identifier` · `413` | documenté, non joué par ce banc : le `413` est rendu par l'analyseur de corps de `index.js`, en amont de l'API v2 que ce banc monte seule ; il est joué sur le vrai `index.js` (serveurs enfants) par `test-corps-identifier-empreinte.js` | rien |
+| X9 | `GET /api/modele-empreinte/{sha256}` · `302` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
+| X9 | `GET /api/modele-empreinte/{sha256}` · `404` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
+| X9 | `GET /api/modele-empreinte/{sha256}` · `429` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
+| X9 | `GET /api/modele-empreinte/{sha256}` · `502` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
+| X9 | `GET /api/modele-empreinte/{sha256}` · `503` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
 | X6 | code `EN_RECONCILIATION` | n'est produit que sur une clé de débit rejouée dont la ligne attend la réconciliation (état fabriqué par `test-argent-tour4.js`) ; le banc de contrat le déclare non produit et échoue si un état courant le produit | rien |
 
 ---
