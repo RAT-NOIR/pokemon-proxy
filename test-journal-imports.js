@@ -91,6 +91,67 @@ const alerte = (nom, extra = {}) => ({ _id: `alerte/import-${nom}`, active: true
         const l = J.ligneImport({ ...imp('guide', '2026-10-24T07:00:00Z'), enCours: true, source: 'ci' }, d('2026-10-24T09:00:00Z'));
         assert.match(l, /interrompu/);
     });
+    // ---- tour de correction 1 ----
+    await t('A-1 verdict : journal de la CI illisible + rien n\'écrit -> JAMAIS « FILE À L\'ARRÊT » : état inconnu, sortie 2, et le message le dit', async () => {
+        const v = J.verdictFile({ bouge: false, erreurProd: 'lecture refusée', fraisMin: 3, verrouGlobal: false });
+        assert.equal(v.etat, 'inconnu');
+        assert.equal(v.code, 2);
+        assert.ok(!/✅/.test(v.message) && !/À L'ARRÊT/.test(v.message), v.message);
+        assert.match(v.message, /INCONNU/);
+        assert.match(v.message, /lecture refusée/);
+    });
+    await t('A-1 verdict : journal lu + rien n\'écrit -> à l\'arrêt, sortie 0 (le cas normal reste vert)', async () => {
+        const v = J.verdictFile({ bouge: false, erreurProd: null, fraisMin: 3, verrouGlobal: true });
+        assert.equal(v.etat, 'arret'); assert.equal(v.code, 0);
+        assert.match(v.message, /FILE À L'ARRÊT/); assert.match(v.message, /verrou global/);
+    });
+    await t('A-1 verdict : quelque chose écrit -> « LA FILE ÉCRIT », sortie 1, journal lu ou non (écrire est un fait connu)', async () => {
+        for (const erreurProd of [null, 'x']) {
+            const v = J.verdictFile({ bouge: true, erreurProd, fraisMin: 3, verrouGlobal: false });
+            assert.equal(v.etat, 'ecrit'); assert.equal(v.code, 1); assert.match(v.message, /LA FILE ÉCRIT/);
+        }
+    });
+    await t('A-2 alerte : la levée (resolueLe) plus tardive que la constatation l\'emporte, même si le côté qui la porte garde un constateLe ancien', async () => {
+        const cartes = baseFactice({ collecte_images_etat: [alerte('guide', { constateLe: d('2026-10-20T05:00:00Z'), depuis: d('2026-10-20T05:00:00Z') })] });
+        const prod = baseFactice({ imports_ci_etat: [alerte('guide', { active: false, constateLe: d('2026-10-19T05:00:00Z'), depuis: d('2026-10-19T05:00:00Z'), resolueLe: d('2026-10-24T09:00:00Z') })] });
+        assert.equal((await J.lireJournauxImports({ cartes, prod })).alertes.length, 0);
+    });
+    await t('A-2 alerte : une alerte levée puis RÉOUVERTE (constateLe plus tardif que resolueLe) reste active', async () => {
+        const cartes = baseFactice({});
+        const prod = baseFactice({ imports_ci_etat: [alerte('guide', { active: true, resolueLe: d('2026-10-22T09:00:00Z'), constateLe: d('2026-10-24T05:00:00Z') })] });
+        assert.equal((await J.lireJournauxImports({ cartes, prod })).alertes.length, 1);
+    });
+    await t('A-3 égalité de dernierEssai entre les deux journaux : la CI l\'emporte (échoue si l\'ordre des sources est inversé)', async () => {
+        const cartes = baseFactice({ collecte_images_etat: [imp('guide', '2026-10-24T08:30:24Z', { dernierResultat: 'depuis-worker' })] });
+        const prod = baseFactice({ imports_ci_etat: [imp('guide', '2026-10-24T08:30:24Z', { dernierResultat: 'depuis-ci' })] });
+        const r = await J.lireJournauxImports({ cartes, prod });
+        assert.equal(r.imports.length, 1);
+        assert.equal(r.imports[0].source, 'ci');
+        assert.equal(r.imports[0].dernierResultat, 'depuis-ci');
+    });
+    await t('A-4 erreurProd est masquée comme le fait imports-cardmarket-ci (une fin d\'URI sans préfixe ne fuit pas)', async () => {
+        const prod = baseFactice({}, { casse: false });
+        prod.collection = () => ({ find: () => ({ toArray: async () => { throw new Error('échec sur u:MOTDEPASSE-SECRET@cluster0.abcde.mongodb.net/test'); } }) });
+        const r = await J.lireJournauxImports({ cartes: baseFactice({}), prod });
+        assert.ok(r.erreurProd && !/MOTDEPASSE-SECRET/.test(r.erreurProd), r.erreurProd);
+    });
+    await t('A-4 le module réutilise masquerSecrets de imports-cardmarket-ci.js (pas de copie)', async () => {
+        const src = require('fs').readFileSync(require('path').join(__dirname, 'collecte-cartes', 'journal-imports.js'), 'utf8');
+        assert.match(src, /require\('\.\.\/imports-cardmarket-ci'\)/);
+        assert.ok(!/function masquerSecrets/.test(src));
+    });
+    const srcOutil = () => require('fs').readFileSync(require('path').join(__dirname, 'file-a-l-arret.js'), 'utf8');
+    await t('A-5 file-a-l-arret.js s\'ouvre en lectureSeule (la garde d\'écriture ne doit pas bloquer un outil qui n\'écrit pas) ET n\'écrit nulle part', async () => {
+        const s = srcOutil();
+        assert.match(s, /ouvrirConnexions\(\{[^}]*lectureSeule:\s*true[^}]*\}\)/);
+        assert.ok(!/\.(insertOne|insertMany|updateOne|updateMany|replaceOne|deleteOne|deleteMany|bulkWrite|findOneAndUpdate|findOneAndDelete|drop)\(|\$out|\$merge/.test(s), 'une écriture est apparue dans l\'outil');
+    });
+    await t('A-1 file-a-l-arret.js décide par verdictFile et masque son .catch final', async () => {
+        const s = srcOutil();
+        assert.match(s, /verdictFile\(/);
+        assert.match(s, /masquerSecrets/);
+        assert.ok(!/console\.error\(e\)/.test(s), 'le .catch final imprime encore l\'erreur brute');
+    });
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

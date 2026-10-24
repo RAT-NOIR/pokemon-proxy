@@ -18,7 +18,8 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minutes
 
 (async () => {
-    const { cartes: cx, prod, fermer } = await ouvrirConnexions();
+    // lectureSeule : cet outil n'écrit RIEN ; sans ce drapeau la GARDE-ATLAS d'écriture (garde.js:77) pourrait le bloquer à 90 % de la grappe. Mêmes connexions (cartes + production).
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ lectureSeule: true });
     const db = cx.db;
     // ⚠️ ON ÉNUMÈRE L'ÉTAT ACTIF, PAS LES ÉTATS TERMINAUX. Écrit d'abord en `$nin: [attente, fini,
     // refuse]`, ce contrôle a crié sur 26 unités `fait` — un état terminal que la liste ignorait.
@@ -71,9 +72,9 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
 
     const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS) || importEnCours;
     if (importEnCours) console.log('🔴 un import quotidien est EN COURS (catalogue ou guide des prix) : la base de production écrit');
-    console.log(bouge
-        ? `\n🔴 LA FILE ÉCRIT. Toute mesure sur \`cartes\`, \`cartes_produits\` ou \`images\` prise maintenant est un INSTANTANÉ, pas un dénominateur. Attendre, ou dire dans le rapport que la file tournait.`
-        : `\n✅ FILE À L'ARRÊT (rien en cours, aucun verrou de set frais, aucune écriture depuis plus de ${FRAIS_MS / 60000} min${frais.length ? ' ; un collecteur vivant dort sur son verrou global' : ''}). La mesure vaut, et le rapport doit le DIRE.`);
+    // Une garde qui ne peut pas conclure BLOQUE : journal de la CI illisible => « ÉTAT INCONNU » (sortie 2), jamais « à l'arrêt » (journal-imports.js, verdictFile).
+    const verdict = J.verdictFile({ bouge, erreurProd, fraisMin: FRAIS_MS / 60000, verrouGlobal: frais.length > 0 });
+    console.log(verdict.message);
     await fermer();
-    process.exit(bouge ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(2); });
+    process.exit(verdict.code);
+})().catch(e => { console.error(require('./imports-cardmarket-ci').masquerSecrets((e && e.stack) || e)); process.exit(2); });
