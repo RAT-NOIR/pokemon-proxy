@@ -14,6 +14,7 @@
 const { decomposerNomCardmarket } = require('./collecte-cartes/jointure');
 const { prouver } = require('./collecte-cartes/fiches-prouvees');
 const R = require('./collecte-cartes/regle-r-fiches');
+const { preverifierLignes } = require('./collecte-cartes/lignes-detachees');
 
 const ROUTE = 'CAND-FICHES-2026-10-17';
 const DECISIONS = {
@@ -69,6 +70,7 @@ function verifierAttendu(plan, attendu) {
  */
 async function ecrireFiches(db, lignes, metaDe, ajoutsSets = new Map()) {
     let n = 0;
+    await preverifierLignes(db, lignes);        // D1 : une ligne détachée dans le lot fait lever le lot ENTIER, avant la première écriture
     for (const l of lignes) n += (await db.collection('cartes_produits').updateOne({ _id: l._id }, { $setOnInsert: l }, { upsert: true })).upsertedCount;
     const parCarte = new Map();
     for (const l of lignes) {

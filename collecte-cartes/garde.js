@@ -80,6 +80,9 @@ async function ouvrirConnexions(options = {}) {
         if (!v.autorise) { await cartes.close(); arret(`GARDE-ATLAS (grappe cartes) — ${v.raison}.`); }
         if (v.niveau === 'alerte') console.log(`⚠️  GARDE-ATLAS : ${v.raison}`);
     }
+    // D1 (relecture v2, 2026-10-24) : TOUT outil qui écrit passe par cette connexion ; une ligne `cartes_produits` détachée (reste « fiche-contredite-par-la-vue ») ne se REPOSE jamais, par aucune voie
+    // (collecte-cartes/lignes-detachees.js : le filet vit ici, au point d'ouverture, pour couvrir aussi les outils qu'on n'a pas encore écrits).
+    require('./lignes-detachees').installerGardeLignes(cartes.db);
     const prod = options.production === false ? null : await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE_PRODUCTION }).asPromise();
     console.log(`🗄️  cible : "${reelle}" sur ${cartes.host} (écriture)${prod ? `  ·  production : "${prod.db.databaseName}" sur ${prod.host} (LECTURE SEULE)` : ''}`);
     return {
