@@ -107,15 +107,25 @@ function sortieSure(dossier, nomRelatif, racines) {
 }
 const deux = n => String(n).padStart(2, '0');
 const jourLocal = d => `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
-/** Écrit abc-AAAA-MM-JJ-HHMM.json (heure locale) et AJOUTE une ligne à historique.jsonl. */
-function ecrireSorties({ dossier = DOSSIER_COMPTEURS, resultat, maintenant = new Date() }) {
-    const nom = `abc-${jourLocal(maintenant)}-${deux(maintenant.getHours())}${deux(maintenant.getMinutes())}.json`;
+/**
+ * La liste LÉGÈRE des produits : une entrée par produit, avec les classes de l'audit. Même forme que `audit-produits.json` pour les outils de la phase 3a (mesurer-sans-ligne.js lit
+ * idProduct, idExpansion, classeFiche) — le même état, au même instant que les compteurs, jamais une liste vieillie.
+ */
+function listeLegere(produits) {
+    return produits.map(p => ({ idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, classeFiche: p.fiche.classe, motifsFiche: p.fiche.motifs, classeVisuel: p.visuel.classe, motifsVisuel: p.visuel.motifs }));
+}
+/** Écrit abc-AAAA-MM-JJ-HHMM.json (heure locale) et AJOUTE une ligne à historique.jsonl ; avec `produitsLegers`, écrit aussi etat-abc-AAAA-MM-JJ-HHMM.json. */
+function ecrireSorties({ dossier = DOSSIER_COMPTEURS, resultat, maintenant = new Date(), produitsLegers = null }) {
+    const stamp = `${jourLocal(maintenant)}-${deux(maintenant.getHours())}${deux(maintenant.getMinutes())}`;
+    const nom = `abc-${stamp}.json`;
     const fichier = sortieSure(dossier, nom), hist = sortieSure(dossier, 'historique.jsonl');
+    const produits = produitsLegers ? sortieSure(dossier, `etat-abc-${stamp}.json`) : null;
     fs.mkdirSync(path.dirname(fichier), { recursive: true });
     fs.writeFileSync(fichier, JSON.stringify(resultat, null, 1));
+    if (produits) fs.writeFileSync(produits, JSON.stringify(produitsLegers));
     const ligne = { le: resultat.le, jour: resultat.jour, denominateur: resultat.denominateur, resume: resultat.resume, fichier: nom };
     fs.appendFileSync(hist, JSON.stringify(ligne) + '\n');
-    return { fichier, historique: hist };
+    return { fichier, historique: hist, produits };
 }
 const lireHistoriqueFichier = (dossier = DOSSIER_COMPTEURS) => {
     const p = path.join(dossier, 'historique.jsonl');
@@ -148,6 +158,30 @@ function expliquerEcartSansLigne({ matin, produits, detaches = [] }) {
         bilan: { matin: matinN, sortis: sortis.length, disparus: disparus.length, entres, maintenant } };
 }
 
+/**
+ * Les TRANSITIONS par produit contre un état antérieur (l'audit du matin) : écrire des lignes fait aussi bouger B et C, et un compteur qui monte (les fiches douteuses : 3 037 → 3 250 le soir
+ * du 24/10) demande d'où viennent ses entrées avant d'être lu comme une régression ou un progrès. `matin` : [{ idProduct, fiche: { classe, motifs }, visuel: { classe } }] (état-produits.json de S8\AUDIT).
+ */
+function transitions({ matin, produits }) {
+    const avant = new Map(matin.map(m => [m.idProduct, m]));
+    const trier = o => Object.fromEntries(Object.entries(o).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+    const fiche = {}, visuel = {}, depuis = {}, motifs = {};
+    let nouveaux = 0;
+    const vus = new Set();
+    for (const p of produits) {
+        const m = avant.get(p.idProduct);
+        if (!m) { nouveaux++; continue; }
+        vus.add(p.idProduct);
+        const kf = `${m.fiche.classe}→${p.fiche.classe}`, kv = `${m.visuel.classe}→${p.visuel.classe}`;
+        fiche[kf] = (fiche[kf] || 0) + 1; visuel[kv] = (visuel[kv] || 0) + 1;
+        if (p.fiche.classe === 'FICHE_DOUTEUSE' && m.fiche.classe !== 'FICHE_DOUTEUSE') {
+            depuis[m.fiche.classe] = (depuis[m.fiche.classe] || 0) + 1;
+            for (const x of p.fiche.motifs) motifs[x] = (motifs[x] || 0) + 1;
+        }
+    }
+    return { fiche: trier(fiche), visuel: trier(visuel), nouveaux, disparus: matin.filter(m => !vus.has(m.idProduct)).length, entreesDouteuses: { depuis: trier(depuis), motifs: trier(motifs) } };
+}
+
 // ── LA SORTIE IMPRIMÉE ──
 const pct = (n, N) => `${(100 * n / N).toFixed(1)} %`;
 const signe = n => (n > 0 ? `+${n}` : String(n));
@@ -177,13 +211,13 @@ function formater(R, E) {
     return out.join('\n');
 }
 
-module.exports = { calculerCompteurs, lireHistorique, lireHistoriqueFichier, ecartHistorique, ecrireSorties, sortieSure, expliquerEcartSansLigne, formater, jourLocal, DOSSIER_COMPTEURS, CLASSES_FICHE, CLASSES_VISUEL, CLES_RESUME, MOTIF_EMPRUNT_REFUSE };
+module.exports = { calculerCompteurs, listeLegere, transitions, lireHistorique, lireHistoriqueFichier, ecartHistorique, ecrireSorties, sortieSure, expliquerEcartSansLigne, formater, jourLocal, DOSSIER_COMPTEURS, CLASSES_FICHE, CLASSES_VISUEL, CLES_RESUME, MOTIF_EMPRUNT_REFUSE };
 
 // ── LANCEMENT : node audit-catalogue/compteurs-abc.js [--sans-ecrire] [--ecart-audit] [--rang=20]
 if (require.main === module) {
     (async () => {
         const args = process.argv.slice(2);
-        const inconnu = args.filter(a => !['--sans-ecrire', '--ecart-audit'].includes(a) && !/^--rang=\d+$/.test(a));
+        const inconnu = args.filter(a => !['--sans-ecrire', '--ecart-audit'].includes(a) && !/^--rang=\d+$/.test(a) && !/^--note=.+$/.test(a));
         if (inconnu.length) throw new Error(`argument inconnu : ${inconnu.join(' ')} (une ligne de commande est une garde : on n'ouvre rien sur un drapeau non reconnu)`);
         const rang = Number((args.find(a => a.startsWith('--rang=')) || '--rang=20').split('=')[1]);
         const { ouvrirLecture, chargerDonnees, rejouerApi, assembler, mesurerSets, controlerTemoin, chargerApi } = require('./etat-api');
@@ -204,13 +238,20 @@ if (require.main === module) {
         const ctl = controlerTemoin({ donnees, produits });
         const maintenant = new Date();
         const R = calculerCompteurs({ produits, lignesSet: sets.lignesSet, denominateur: { catalogue: donnees.catalogue.length, cartesCode: horsPerimetre.length }, rang, controleTemoin: ctl });
+        // `--note=` : ce qui est vrai de l'instant de la mesure (file d'images à l'arrêt ou non) — écrit dans le JSON, jamais sous-entendu
+        R.note = (args.find(a => a.startsWith('--note=')) || '').slice(7) || null;
         R.le = maintenant.toISOString(); R.jour = jourLocal(maintenant); R.api = api.dossier; R.duree = Math.round((Date.now() - t0) / 1000);
         const E = ecartHistorique(R, lireHistoriqueFichier());
         R.ecart = E;
         console.log('\n' + formater(R, E));
+        if (R.note) console.log(`\n   NOTE DE LA MESURE : ${R.note}`);
         if (args.includes('--ecart-audit')) {
             const { DOSSIER_AUDIT } = require('./ecrire');
-            const matin = JSON.parse(fs.readFileSync(path.join(DOSSIER_AUDIT, 'etat-produits.json'), 'utf8')).map(p => ({ idProduct: p.idProduct, classe: p.fiche.classe }));
+            const matinComplet = JSON.parse(fs.readFileSync(path.join(DOSSIER_AUDIT, 'etat-produits.json'), 'utf8')).map(p => ({ idProduct: p.idProduct, fiche: { classe: p.fiche.classe, motifs: p.fiche.motifs }, visuel: { classe: p.visuel.classe } }));
+            const matin = matinComplet.map(p => ({ idProduct: p.idProduct, classe: p.fiche.classe }));
+            const TR = transitions({ matin: matinComplet, produits });
+            R.transitionsAudit = TR;
+            console.log(`\nTRANSITIONS contre l'audit du matin (dénominateur ${matinComplet.length}) : nouveaux ${TR.nouveaux} · disparus ${TR.disparus}\n   fiche : ${JSON.stringify(TR.fiche)}\n   visuel : ${JSON.stringify(TR.visuel)}\n   entrées en FICHE_DOUTEUSE : depuis ${JSON.stringify(TR.entreesDouteuses.depuis)} · motifs ${JSON.stringify(TR.entreesDouteuses.motifs)}`);
             const resumeMatin = JSON.parse(fs.readFileSync(path.join(DOSSIER_AUDIT, 'resume-etat.json'), 'utf8'));
             const detaches = JSON.parse(fs.readFileSync('C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE3A\\produits-detaches-phase2.json', 'utf8'));
             const X = expliquerEcartSansLigne({ matin, produits, detaches });
@@ -218,7 +259,7 @@ if (require.main === module) {
             console.log(`\nÉCART AVEC L'AUDIT DU MATIN (${resumeMatin.le}, dénominateur ${JSON.stringify(resumeMatin.denominateur)}) : sans ligne ${X.bilan.matin} → ${X.bilan.maintenant}\n   sortis (une ligne écrite depuis) ${X.sortis.length} · restés ${X.restes} · disparus du catalogue ${X.disparusDuCatalogue}\n   entrés : détachés (phase 2) ${X.entresDetaches} · nouveaux au catalogue ${X.nouveauxAuCatalogue} · AUTRES (à ouvrir) ${X.entresAutres.length} ${JSON.stringify(X.entresAutres.slice(0, 30))}`);
         }
         if (args.includes('--sans-ecrire')) { console.log('\n(--sans-ecrire : rien n\'est écrit)'); return; }
-        const s = ecrireSorties({ resultat: R, maintenant });
-        console.log(`\n✅ écrit : ${s.fichier} · ligne ajoutée à ${s.historique} · ${R.duree} s`);
+        const s = ecrireSorties({ resultat: R, maintenant, produitsLegers: listeLegere(produits) });
+        console.log(`\n✅ écrit : ${s.fichier} · liste des produits ${s.produits} · ligne ajoutée à ${s.historique} · ${R.duree} s`);
     })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });
 }

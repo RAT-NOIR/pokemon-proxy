@@ -90,6 +90,12 @@ verifier('aucune mesure ce jour-là : la première du jour n\'existe pas, la pr�
 leve('historique : une ligne illisible lève', () => K.lireHistorique('{"jour":"2026-10-24"}\n{pas du json\n'), /ligne 2/);
 verifier('historique : lignes vides ignorées, ordre conservé', K.lireHistorique('{"a":1}\n\n{"a":2}\n').map(x => x.a), [1, 2]);
 
+// ── la liste légère des produits (même forme que audit-produits.json pour les outils de la phase 3a : idProduct, idExpansion, classeFiche…)
+const L = K.listeLegere(produits);
+verifier('liste légère : une entrée par produit, classes de fiche et de visuel', { n: L.length, p1: L[0], p5: L[4] },
+    { n: 10, p1: { idProduct: 1, idExpansion: 10, name: 'p1', classeFiche: 'SANS_LIGNE', motifsFiche: [], classeVisuel: 'MANQUANT', motifsVisuel: ['sans-ligne'] },
+        p5: { idProduct: 5, idExpansion: 20, name: 'p5', classeFiche: 'FICHE_DOUTEUSE', motifsFiche: ['sans-numero'], classeVisuel: 'BASSE_DEFINITION', motifsVisuel: ['basse-definition'] } });
+
 // ── l'écriture : un dossier temporaire, la garde sur la racine, l'ajout à l'historique
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'compteurs-abc-'));
 try {
@@ -98,9 +104,12 @@ try {
     const r1 = K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now });
     verifier('le fichier porte la date et l\'heure locales', path.basename(r1.fichier), 'abc-2026-10-24-1405.json');
     verifier('le JSON écrit se relit', JSON.parse(fs.readFileSync(r1.fichier, 'utf8')).resume.sansLigne, 3);
+    verifier('la liste légère n\'est écrite que si on la donne', r1.produits, null);
+    const r3 = K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now, produitsLegers: L });
+    verifier('la liste légère s\'écrit à côté, même horodatage', [path.basename(r3.produits), JSON.parse(fs.readFileSync(r3.produits, 'utf8')).length], ['etat-abc-2026-10-24-1405.json', 10]);
     K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: new Date(2026, 9, 24, 15, 0) });
     const lignes = K.lireHistorique(fs.readFileSync(path.join(dossier, 'historique.jsonl'), 'utf8'));
-    verifier('l\'historique AJOUTE (deux lignes après deux écritures)', lignes.length, 2);
+    verifier('l\'historique AJOUTE (trois lignes après trois écritures)', lignes.length, 3);
     verifier('la ligne d\'historique nomme le fichier, le jour, le dénominateur et le résumé', Object.keys(lignes[0]), ['le', 'jour', 'denominateur', 'resume', 'fichier']);
     leve('la garde refuse tout chemin hors de la racine (un nom qui remonte)', () => K.sortieSure(dossier, '..\\ailleurs.json'), /hors des racines/);
     leve('la garde refuse un dossier d\'audit : la racine est COMPTEURS seul', () => K.sortieSure(path.join(tmp, 'AUDIT'), 'x.json', [dossier]), /hors des racines/);
@@ -115,5 +124,18 @@ verifier('écart : sortis (une ligne écrite), restés, entrés par détachement
     { sortis: X.sortis.length, restes: X.restes, entresDetaches: X.entresDetaches, entresAutres: X.entresAutres.length, nouveaux: X.nouveauxAuCatalogue, disparus: X.disparusDuCatalogue },
     { sortis: 1, restes: 1, entresDetaches: 1, entresAutres: 1, nouveaux: 1, disparus: 1 });
 verifier('écart : le compte retombe — avant − sortis + entrés = maintenant', X.bilan, { matin: 3, sortis: 1, disparus: 1, entres: 3, maintenant: 4 });
+// ── les transitions par produit contre l'audit du matin : B et C bougent aussi quand on écrit des lignes
+const matin2 = [
+    { idProduct: 1, fiche: { classe: 'SANS_LIGNE', motifs: [] }, visuel: { classe: 'MANQUANT' } },
+    { idProduct: 3, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER' } },
+    { idProduct: 4, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'EMPRUNTE' } },
+    { idProduct: 5, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'BASSE_DEFINITION' } },
+    { idProduct: 99, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER' } },
+];
+const T = K.transitions({ matin: matin2, produits });
+verifier('transitions de fiche : de la classe du matin à celle d\'aujourd\'hui', T.fiche, { 'FICHE_OK→FICHE_DOUTEUSE': 1, 'FICHE_OK→FICHE_OK': 1, 'FICHE_OK→LIGNE_SANS_FICHE': 1, 'SANS_LIGNE→SANS_LIGNE': 1 });
+verifier('transitions de visuel', T.visuel, { 'A_COMPARER→A_COMPARER': 1, 'BASSE_DEFINITION→BASSE_DEFINITION': 1, 'EMPRUNTE→MANQUANT': 1, 'MANQUANT→MANQUANT': 1 });
+verifier('les produits d\'aujourd\'hui absents du matin sont comptés à part (nouveaux), ceux du matin absents d\'aujourd\'hui aussi (disparus)', { nouveaux: T.nouveaux, disparus: T.disparus }, { nouveaux: 6, disparus: 1 });
+verifier('entrées en FICHE_DOUTEUSE : d\'où elles viennent et pour quel motif', T.entreesDouteuses, { depuis: { 'FICHE_OK': 1 }, motifs: { 'sans-numero': 1 } });
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
