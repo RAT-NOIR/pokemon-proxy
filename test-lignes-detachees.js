@@ -150,6 +150,10 @@ const RESTE = (carteId, idProduct, o = {}) => ({ type: LD.TYPE_RESTE, set: 'Set-
     const sansGarde = creeurs.filter(f => !HORS_CONNEXION[f] && !/ouvrirConnexions|require\(['"]\.\/(collecte-cartes\/)?garde['"]\)/.test(fs.readFileSync(path.join(racine, f), 'utf8')));
     console.log(`     ${creeurs.length} fichiers créent des lignes ; sans connexion gardée : ${sansGarde.length ? sansGarde.join(', ') : 'aucun'}`);
     verifier('aucun outil qui crée des lignes n\'échappe à ouvrirConnexions (donc à la garde) sans être nommé dans la liste fermée', sansGarde, []);
+    const retirerSet = fs.readFileSync(path.join(racine, 'retirer-collecte-set.js'), 'utf8');
+    verifier('les voies qui SUPPRIMENT des restes en bloc ne purgent pas le reste interdit : retirer-collecte-set.js exclut son type (sinon retirer la collecte d\'un set rendrait ses lignes détachées reposables)', /collection\('restes'\)\.deleteMany\(\{ set: slug, type: \{ \$ne: TYPE_RESTE \} \}\)/.test(retirerSet), true);
+    const ecrJ = fs.readFileSync(path.join(racine, 'collecte-cartes', 'ecrire-jointure.js'), 'utf8');
+    verifier('ecrire-jointure.js ne remplace pas ce type (la liste des restes remplacés ne le contient pas)', /deleteMany\(\{ set: slug, type: \{ \$in: \[[^\]]*\] \} \}\)/.test(ecrJ) && !/deleteMany\(\{ set: slug, type: \{ \$in: \[[^\]]*fiche-contredite-par-la-vue/.test(ecrJ), true);
     verifier('la liste des créateurs inclut les voies nommées par la relecture (joindre/collecteur-texte, poser-*, creer-sets-*)', ['collecteur-texte.js', 'poser-lignes-ciblees.js', 'poser-cartes-tcgdex.js', 'poser-par-nom-tcgdex.js', 'creer-sets-par-pages-de-cartes.js', 'collecte-cartes/ecrire-jointure.js'].every(f => creeurs.includes(f)), true);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;

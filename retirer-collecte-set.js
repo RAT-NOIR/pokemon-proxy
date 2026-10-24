@@ -34,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { ligne: ligneDeTable } = require('./collecte-cartes/table-sets');
+const { TYPE_RESTE } = require('./collecte-cartes/lignes-detachees');
 
 (async () => {
     const AUTORISES = [/^--set=[^\s]+$/, /^--ecrire$/, /^--page-fausse$/];
@@ -84,7 +85,9 @@ const { ligne: ligneDeTable } = require('./collecte-cartes/table-sets');
 
     const d = await CP.deleteMany({ slugSet: L.slugSet });
     const p = await cx.db.collection('cartes').updateMany({ _id: { $in: [...cartes] } }, { $pull: { 'liens.idProduct': { $in: [...produits] } } });
-    const r = await cx.db.collection('restes').deleteMany({ set: slug });
+    // D1 (2026-10-24) : le reste « fiche-contredite-par-la-vue » est une DÉCISION du testeur sur une ligne, pas un compte de la collecte du set : retirer la collecte ne le purge pas
+    // (sinon la recollecte reposerait les lignes détachées). `restes` du set sauvegardés plus haut, ce reste compris.
+    const r = await cx.db.collection('restes').deleteMany({ set: slug, type: { $ne: TYPE_RESTE } });
     const e = await cx.db.collection('collecte_etat').deleteOne({ _id: slug });
     console.log(`   RETIRÉ : ${d.deletedCount} lignes · ${p.modifiedCount} cartes dépointées · ${r.deletedCount} restes · ${e.deletedCount} état`);
     if (pageFausse) {
