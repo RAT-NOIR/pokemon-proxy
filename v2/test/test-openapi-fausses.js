@@ -166,6 +166,20 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuseRq('une carte qui n\'est pas du base64', c => { c.empreintes[0].carte = 'pas du base64 !'; });
     refuseRq('une carte qui n\'est pas une chaîne', c => { c.empreintes[0].carte = 42; });
 }
+{ // CAPACITES-PING : la fausse publiée de /ping porte la liste fermée de CE serveur, et le schéma REFUSE ce qui en sort
+    const pg = lire('ping.json'), { CAPACITES } = require('../capacites');
+    H.v('CAPACITES-PING : la fausse porte versionMinExtension et la liste fermée complète, dans l\'ordre de la liste', [pg.versionMinExtension, pg.capacites], ['2.0.0', [...CAPACITES]]);
+    H.v('contrôle : la fausse saine est acceptée', valider(pg, ref('ReponsePing'), doc).ok, true);
+    const sans = clone(pg); delete sans.capacites; delete sans.versionMinExtension;
+    H.v('contrôle : un /ping sans capacites ni versionMinExtension (v2 non annoncée, serveur d\'avant) est accepté — les deux sont facultatifs', valider(sans, ref('ReponsePing'), doc).ok, true);
+    H.v('contrôle : une liste vide (rien n\'est servi) est acceptée', valider({ ...clone(pg), capacites: [] }, ref('ReponsePing'), doc).ok, true);
+    refuse('un jeton hors liste (prix-demain)', c => { c.capacites.push('prix-demain'); }, 'ReponsePing', pg);
+    refuse('un jeton en majuscules', c => { c.capacites[0] = 'MARQUES'; }, 'ReponsePing', pg);
+    refuse('capacites qui n\'est pas un tableau (une chaîne)', c => { c.capacites = 'marques'; }, 'ReponsePing', pg);
+    refuse('capacites nul', c => { c.capacites = null; }, 'ReponsePing', pg);
+    refuse('un jeton qui n\'est pas une chaîne', c => { c.capacites[1] = 3; }, 'ReponsePing', pg);
+    refuse('un champ en trop dans /ping', c => { c.score = 1; }, 'ReponsePing', pg);
+}
 const er = lire('quota-compte.json');
 H.v('contrôle : une erreur saine est acceptée', valider(er, ref('ReponseErreur'), doc).ok, true);
 refuse('un code d\'erreur inconnu', c => { c.erreur.code = 'INCONNU'; }, 'ReponseErreur', er);
@@ -208,7 +222,8 @@ const listes = {
     'raisons de non-remboursement (REPLI-QUOTA)': S.Facturation.properties.raisonNonRembourse.enum.filter(x => x !== null),
     'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
     'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
-    'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null)
+    'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null),
+    'capacités annoncées par /ping (CAPACITES-PING)': S.ReponsePing.properties.capacites.items.enum
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);
 for (const mot of ['code-maitre', 'administrateur', 'Idempotency-Key', 'X-Rat-Market', 'rm_session', 'ce que les clients doivent aligner', '90 jours', '24 mois'])

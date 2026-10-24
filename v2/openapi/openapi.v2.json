@@ -3490,7 +3490,7 @@
           "sante"
         ],
         "x-heritee": true,
-        "summary": "Santé du serveur ; v2 allumée : ajoute `versionMinExtension`",
+        "summary": "Santé du serveur ; v2 allumée : ajoute `versionMinExtension` et `capacites`",
         "security": [],
         "responses": {
           "200": {
@@ -6382,7 +6382,24 @@
             "type": "string"
           },
           "versionMinExtension": {
-            "type": "string"
+            "type": "string",
+            "x-conditionnel": "RM_API_V2=1",
+            "description": "Présent SEULEMENT quand la v2 est allumée ET que sa configuration est valide ; absent sinon (un `/ping` 200 sans ce champ = v2 non annoncée)."
+          },
+          "capacites": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "langue-impression",
+                "marques",
+                "prix-incertains",
+                "prix-repli",
+                "achete-avant-jour"
+              ]
+            },
+            "x-conditionnel": "RM_API_V2=1",
+            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens : `langue-impression` = `impressions[].langue` ; `marques` = `Produit.marques` et `Impression.marques` ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour."
           }
         },
         "required": [

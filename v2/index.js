@@ -5,6 +5,7 @@ const { verifierIndex } = require('./modeles');
 const pret = require('./pret');
 const { CHEMINS_HERITES, aiguilleur, estAiguilleur } = require('./heritage');
 const { repondreErreur } = require('./erreurs');
+const { capacitesServies } = require('./capacites');
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
@@ -135,5 +136,6 @@ function assembler(lots, cfgLots, deps = {}) {
 }
 // FREIN-CONSTATES : l'appel au modèle de la chaîne héritée, SOUS le plafond global de dépense. Sans configuration valide (v2 fermée), l'appel part tel quel : la production reste inchangée.
 const depenseModele = { appeler: (post, url, corps, config) => (cfg ? require('./argent/depense-modele').pourConfig(cfg).appeler(post, url, corps, config) : post(url, corps, config)) };
-// /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
+// /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine). CAPACITES-PING : `capacites` (la liste fermée de capacites.js) s'ajoute à `versionMinExtension` sous la MÊME condition
+// (v2 configurée) ; une fonction pure de la configuration, synchrone, qui ne lève jamais : /ping reste un keep-alive.
+module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension, capacites: capacitesServies(cfg) } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };

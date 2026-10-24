@@ -50,7 +50,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `GET /api/collection/sets/{slug}` | site | cookie | non | rien → `ReponseCollectionSet` (§1.8) |
 | `GET /api/modele-empreinte/{sha256}` | extension | aucune, derrière `V2_EMPREINTE_EXTENSION=1` | non | rien → `302` vers une adresse R2 présignée (§1.2 ter) |
 | `PUT /api/collection/sets/{slug}/fiches/{cle}` | site | cookie, **compte vérifié** | non (idempotent par nature) | `RequeteCocher` → `ReponseCocher` (§1.8) |
-| `GET /ping` | les deux | aucune | non | santé ; v2 allumée, ajoute `versionMinExtension` |
+| `GET /ping` | les deux | aucune | non | santé → `ReponsePing` ; v2 allumée, ajoute `versionMinExtension` et `capacites` (§1.9) |
 
 **Sans `contrat: 2` dans le corps, `POST /api/identifier` répond comme aujourd'hui** (la 1.0.x continue de marcher). De même `POST /api/solde` et `POST /api/retour-live` sans `Authorization: Bearer` gardent leur forme d'aujourd'hui.
 Les deux routes du scanner sont **conditionnelles** : elles ne seront livrées que si l'éditeur le confirme (lot B9). Le schéma les promet, marquées `x-conditionnel: B9`.
@@ -1038,6 +1038,29 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 
 **Écarts avec la forme proposée par le site** (le site s'alignera) : (1) l'écriture exige un **compte vérifié** (`403 VERIFICATION`) — la demande ne le disait pas ; (2) les **bornes** (`409 CONFLIT`) et le **limiteur** (`429 DEBIT`) sont des refus que le faux serveur du site ne connaît pas ; (3) la **forme** de la clé et du slug est contrôlée (`400 ENTREE`, detail `slug` / `cle` / `possedee` / `quantite`) ; le faux serveur renvoyait `400 SERVEUR` pour un corps invalide ; (4) `possedees` de la liste est ≥ 1 (un set vidé disparaît) ; (5) `cotes` porte la cote du guide de chaque fiche du set (`{}` avant le premier chargement) ; (6) le site doit envoyer un slug encodé (`encodeURIComponent`, ce qu'il fait déjà) et traiter `409` sans réessayer ; **(7) COLLECTION-COMPACTE : la quantité facultative des doubles** — `PUT` accepte `{ "possedee": true, "quantite": n }` (n de 1 à 99, 99 posé sans mesure d'usage réel) et `GET` d'un set ajoute `quantites: { cle: n }` pour les seules clés à n ≥ 2, **champ absent quand il n'y en a aucune** ; **(8) le detail `borne-set` disparaît** (plus de borne par set) et `borne-hors` apparaît ; **(9) les clés de fiche simple** (`idInterne` négatif) sont admises, voir plus haut ; **(11) `PUT` rend `503 INDISPONIBLE`, detail `catalogue` (avec `reessayerDans`), quand aucun catalogue n'est chargé et que la clé n'est pas déjà au registre** — rien n'est écrit, le site réessaie ; **(12) `409 CONFLIT`, detail `borne-quantites`** (10 000 fiches à plusieurs exemplaires par compte) ; **(13) `quantite` absente sur une clé déjà cochée laisse la quantité inchangée** ; **(14)** les plafonds deviennent 100 000 fiches et 6 000 hors catalogue ; **(10)** `GET /api/collection/sets/{slug}` n'est plus borné à 2 000 clés : il rend les clés cochées du set, au plus celles du set (le plus gros du catalogue en compte 766) plus les clés hors registre du compte pour ce set.
 
+### 1.9 `GET /ping` : la santé du serveur, et ce que la v2 sert (lot CAPACITES-PING)
+
+`GET /ping` est un sondage de santé (keep-alive) : sans authentification, sans lecture en base de plus, le même temps de réponse. La route est héritée ; la v2 n'y ajoute que deux champs, **sous la même condition** : la v2 est allumée **et** sa configuration est valide. Sinon (serveur d'avant, v2 éteinte, configuration invalide), `/ping` rend ses trois clés d'aujourd'hui et rien d'autre.
+
+```json schema=ReponsePing
+{ "ok": true, "mongo": true, "version": "fictif-0.0.0", "versionMinExtension": "2.0.0", "capacites": ["langue-impression", "marques", "prix-incertains", "prix-repli", "achete-avant-jour"] }
+```
+
+- **`versionMinExtension`** (chaîne) : la plus ancienne version de l'extension que le serveur prend en charge (sinon `426 VERSION`). Un `/ping` 200 avec ce champ = v2 annoncée ; sans, v2 non annoncée.
+- **`capacites`** (tableau de chaînes, **liste fermée**, dans l'ordre ci-dessous, sans doublon) : les parties du contrat que **ce serveur sert, et dont tout ce qui les rend vraies est allumé**. Un jeton est vrai seulement si le code du serveur le sert ; il n'est jamais annoncé « pour plus tard ». La liste vit en un seul endroit du code (`v2/capacites.js`), le schéma `ReponsePing` la reprend (le banc compare les deux).
+
+| jeton | sens : présent seulement si… |
+|---|---|
+| `langue-impression` | `impressions[].langue` est servi (le code fermé de la langue de l'impression, `null` si elle n'est pas prouvée) |
+| `marques` | `Produit.marques` et `Impression.marques` sont servis |
+| `prix-incertains` | `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge` et `regleVerdict.ecartTendanceMax` sont servis |
+| `prix-repli` | `carte.prixRepli` est servi **et** la règle REPLI-QUOTA est en place : un scan dont la réponse sert un repli compte dans le quota (`raisonNonRembourse: "prix-repli"`) |
+| `achete-avant-jour` | `facturation.poche` est servi : les analyses achetées sont débitées avant le quota du jour |
+
+**Ce que fait le client.** Un jeton inconnu est **ignoré**. Un champ `capacites` **absent, ou qui n'est pas un tableau, vaut « on s'en tient aux champs servis »** : la présence des champs dans les réponses reste l'annonce, leur absence l'affichage d'avant. Un jeton absent d'un tableau présent = cette partie n'est pas servie par ce serveur (par exemple un serveur d'avant REPLI-QUOTA ne dit pas `prix-repli`). `capacites` ne remplace pas `versionMinExtension` : l'un dit « la v2 est là et quelle version il faut », l'autre « ce qu'elle sert ».
+
+**Comment le serveur décide.** Une fonction **pure** de la configuration (aucune lecture en base, aucune exception possible) : un jeton sort si et seulement s'il est dans la liste fermée **et** si sa condition rend exactement `true` ; une condition absente, qui lève ou qui rend autre chose que le booléen vrai fait tomber le jeton. Aucun des cinq jetons ne dépend d'un drapeau de configuration aujourd'hui : chaque partie est servie sans condition par ce code (preuve ligne à ligne en tête de `v2/capacites.js`, rejouée par `v2/test/test-capacites-ping.js`). Le jour où une partie sera derrière un drapeau, le jeton suivra ce drapeau, lu dans la même configuration que la route.
+
 ---
 
 ## 2. Les règles du contrat
@@ -1664,6 +1687,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 | prix lu | `retour-live`, `retour-live-sans-prix`, `retour-live-repli-non-rembourse` (REPLI-QUOTA : lecture ratée, repli servi, non remboursée) |
 | solde de chaque porteur | `solde-installation-non-liee`, `solde-installation-liee`, `solde-compte-non-verifie`, `solde-abonnement` |
 | comptes | `installation-creee`, `lier`, `code-liaison`, `compte`, `compte-non-verifie` |
+| santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète — CAPACITES-PING) |
 
 ---
 
