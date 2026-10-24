@@ -90,11 +90,20 @@ const CLIENT = `
   document.getElementById('enreg').onclick = function () {
     var reponses = {};
     D.forEach(function (d) { if (rep[d.idProduct]) reponses[String(d.idProduct)] = rep[d.idProduct]; });
-    var exp = { page: PAGE, exporteLe: new Date().toISOString(), reponses: reponses };
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(exp, null, 1)], { type: 'application/json' }));
-    a.download = 'incertains-53.json'; document.body.appendChild(a); a.click(); a.remove();
-    document.getElementById('msg').textContent = Object.keys(reponses).length + ' réponses enregistrées (dossier Téléchargements)';
+    var exp = { page: 'incertains-53', exporteLe: new Date().toISOString(), reponses: reponses };
+    var texte = JSON.stringify(exp, null, 1), msg = document.getElementById('msg');
+    // secours toujours visible : si le navigateur bloque le téléchargement depuis un fichier local, le JSON se copie d'ici
+    var zt = document.getElementById('secours');
+    if (!zt) { zt = document.createElement('textarea'); zt.id = 'secours'; zt.readOnly = true; zt.style.cssText = 'display:block;width:100%;height:9em;margin-top:6px;font:12px monospace'; document.querySelector('header.haut').appendChild(zt); }
+    zt.value = texte;
+    try {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([texte], { type: 'application/json' }));
+      a.download = 'incertains-53-reponses.json'; document.body.appendChild(a); a.click(); a.remove();
+      msg.textContent = Object.keys(reponses).length + ' réponses : fichier « incertains-53-reponses.json » dans Téléchargements (sinon, copie le texte ci-dessous)';
+    } catch (e) { msg.textContent = 'téléchargement refusé par le navigateur : copie le texte ci-dessous (' + Object.keys(reponses).length + ' réponses)'; }
+    try { if (navigator.clipboard) navigator.clipboard.writeText(texte).then(function () { msg.textContent += ' · copié dans le presse-papiers'; }, function () {}); } catch (e) {}
+    zt.focus(); zt.select();
   };
   var premier = D.findIndex(function (d) { return !rep[d.idProduct]; });
   cur = premier < 0 ? 0 : premier; rendre(); if (N) aller(cur);
