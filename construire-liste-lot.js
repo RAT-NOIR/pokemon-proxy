@@ -9,11 +9,11 @@ const fs = require('fs');
 const path = require('path');
 const { autoriser } = require('./collecte-cartes/garde-ecriture');
 const { estMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
-const { construire } = require('./collecte-cartes/lot-seulement');
+const { construire, filtrerParCodes } = require('./collecte-cartes/lot-seulement');
 const { lireSauf } = require('./collecte-cartes/produits-sauf');
 
 const RACINE_SORTIES = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE3A-SUITE';
-const AUTORISES = [/^--confirmation=.+\.json$/, /^--plan=[\w.-]+$/, /^--sauf=.+\.json$/, /^--sortie=.+\.json$/];
+const AUTORISES = [/^--confirmation=.+\.json$/, /^--plan=[\w.-]+$/, /^--sauf=.+\.json$/, /^--sortie=.+\.json$/, /^--codes=[\w.,/-]+$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
@@ -22,7 +22,8 @@ if (!CONF || !PLAN || !SAUF || !SORTIE) { console.error('usage : --confirmation=
 try {
     const conf = JSON.parse(fs.readFileSync(CONF, 'utf8'));
     if (!conf[PLAN]) throw new Error(`le plan « ${PLAN} » n'est pas dans la confirmation (${Object.keys(conf).join(', ')})`);
-    const detail = conf[PLAN].detail;
+    const codes = (arg('codes') || '').split(',').filter(Boolean);
+    const detail = codes.length ? filtrerParCodes(conf[PLAN].detail, codes) : conf[PLAN].detail;
     const sauf = lireSauf(SAUF);
     const { ids, refuses } = construire({ detail, sauf, estMatiere: estMatiereSpeciale });
     const sortie = autoriser(SORTIE, [RACINE_SORTIES]);
