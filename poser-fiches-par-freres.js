@@ -29,8 +29,10 @@ const Cal = require('./collecte-cartes/calibration-freres-metacarte');
 const { planDuSet, simulerSet } = require('./collecte-cartes/plan-freres-metacarte');
 const R = require('./collecte-cartes/regle-r-fiches');
 
+const { lireSauf: lireSaufParDefaut } = require('./collecte-cartes/produits-sauf');
+
 const PREUVE = K.PREUVE;
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--tcgdex=.+$/, /^--attendu=[\w.:,/-]+$/, /^--avec-numero=[\w.:,/-]+$/, /^--ecrire$/];
+const AUTORISES = [/^--plan=.+\.json$/, /^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--tcgdex=.+$/, /^--attendu=[\w.:,/-]+$/, /^--avec-numero=[\w.:,/-]+$/, /^--sauf=.+\.json$/, /^--ecrire$/];
 const compte = lst => { const o = {}; for (const x of lst) o[x] = (o[x] || 0) + 1; return o; };
 
 /**
@@ -41,7 +43,7 @@ const compte = lst => { const o = {}; for (const x of lst) o[x] = (o[x] || 0) + 
  * @param {()=>Promise<object>} o.chargerSite  { regle, fichesDesProduits, refusDuVisuel, imageDeLImpression } — la règle du site, importée
  * @returns {Promise<number>} le code de sortie
  */
-async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.MINIMUMS, log = console.log, err = console.error }) {
+async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.MINIMUMS, lireSauf = lireSaufParDefaut, log = console.log, err = console.error }) {
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) { err(`❌ argument inconnu : ${inconnus.join(' ')}`); return 2; }
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -61,6 +63,9 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
         const manquants = CODES.filter(c => !Number.isInteger(ATTENDUS[c]) || !Number.isInteger(NUMEROTES[c]));
         if (manquants.length) { err(`❌ --ecrire exige --attendu=CODE:N ET --avec-numero=CODE:M pour chaque code (manque : ${manquants.join(', ')}) — rien n'est écrit`); return 2; }
     }
+    // (PHASE 3a) `--sauf=<fichier>.json` : les produits qu'une DÉCISION a détachés (phase 2 : « autre dessin ») ne se reposent pas par la clé qui les avait posés ; lu AVANT d'ouvrir la base, LÈVE s'il est vide ou illisible
+    let SAUF = new Set();
+    if (arg('sauf')) { try { SAUF = lireSauf(arg('sauf')); } catch (e) { err(`❌ ${e.message} — rien n'est écrit`); return 2; } }
     const clone = lireClone(TCGDEX);                       // LÈVE sur un clone vide (§41)
     log(`   clone TCGdex : ${clone.nSets} sets, ${clone.nCartes} cartes, ${clone.parProduit.size} idProduct Cardmarket nommés`);
 
@@ -102,6 +107,12 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
             const docs = parSet.get(Li.slugSet) || [];
             const produits = [...exp].filter(([id, e]) => Li.exps.includes(e.idExpansion) && !estCarteCode(e.name)).map(([id, e]) => ({ idProduct: id, name: e.name, ...decomposerNomCardmarket(e.name), idMetacard: e.idMetacard, idExpansion: e.idExpansion }));
             const P = planDuSet({ produits, jointsIds, ctx: { freres, set: K.preparerSet(docs, { slugSet: Li.slugSet }) }, clone, tirage: Li.doc.tirage ?? Li.doc.region, expansions: [].concat(Li.doc.bulba?.expansion ?? []) });
+            const detaches = P.retenus.filter(x => SAUF.has(x.p.idProduct));
+            if (detaches.length) {
+                log(`   ⛔ --sauf : ${detaches.length} produit(s) détaché(s) non reposé(s) : ${detaches.map(x => x.p.idProduct).join(', ')}`);
+                for (const x of detaches) P.refus.push({ p: x.p, niveau: 4, raison: 'produit détaché par décision (--sauf) : la ligne ne se repose pas par une clé mécanique' });
+                P.retenus = P.retenus.filter(x => !SAUF.has(x.p.idProduct));
+            }
             // ── la simulation du SITE ──
             const site = await chargerSite();
             const ids = new Set(docs.map(d => d._id));
@@ -142,6 +153,8 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, minimums = Cal.M
         const ctl = R.controlerRepere(cartes, parCarte);
         log(`   REPÈRES D'ADRESSE : ${ctl.cartes} cartes touchées · ${ctl.avecRepere} ont un liens.idProduct · repère ET ordre conservés ${ctl.repereConserve}/${ctl.avecRepere} · déplacés ${ctl.deplaces.length} · liens.idProduct vide ${ctl.sansRepere.length}`);
         if (ctl.deplaces.length || ctl.sansRepere.length) { err(`❌ le repère d'adresse de ${ctl.deplaces.length + ctl.sansRepere.length} carte(s) bougerait (${[...ctl.deplaces, ...ctl.sansRepere].slice(0, 5).join(', ')}) — rien n'est écrit`); if (ecrire) return 1; }
+        // (PHASE 3a) `--plan=<fichier>.json` : les lignes que ce lancement poserait, en LOCAL (simulation de l'API, planche) ; rien n'est écrit en base
+        if (arg('plan')) fs.writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-fiches-par-freres', lignes: aEcrire.map(x => ({ _id: `${x.d.carte._id}|${x.p.idProduct}`, carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.p.idExpansion, tirage: 'intl', preuve: PREUVE, slug: null, slugSet: x.Li.slugSet, numeroFiche: x.num.numeroFiche, code: x.Li.code, nomProduit: x.p.name })), cartesSets: aEcrire.map(x => ({ carteId: x.d.carte._id, set: x.Li.slugSet })), parCode: Object.fromEntries([...new Set(aEcrire.map(x => x.Li.code))].map(c => [c, { lignes: aEcrire.filter(x => x.Li.code === c).length, avecNumero: aEcrire.filter(x => x.Li.code === c && x.num.numeroFiche != null).length }])) }));
         // 🔴 LOT METAL : les « frères de métacarte » sont exactement le chemin qui donnerait la fiche de la carte normale à un produit en matière spéciale (table fermée) : refus, même à blanc
         try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-fiches-par-freres'); } catch (e) { err(e.message); return 1; }
         if (!ecrire || !aEcrire.length) return 0;
@@ -181,7 +194,7 @@ if (require.main === module) {
         const chargerSite = async () => {
             const lire = f => import(pathToFileURL(path.join(SITE_LIB, f)).href);
             const [L, I] = await Promise.all([lire('langueDuVisuel.ts'), lire('imageDeLImpression.ts')]);
-            const site = { regle: await exporteur.regleDuSite(), fichesDesProduits: exporteur.fichesDesProduits, refusDuVisuel: L.refusDuVisuel, imageDeLImpression: I.imageDeLImpression };
+            const site = { regle: await exporteur.regleDuSite(process.env.RACINE_SITE || __dirname), fichesDesProduits: exporteur.fichesDesProduits, refusDuVisuel: L.refusDuVisuel, imageDeLImpression: I.imageDeLImpression };
             for (const [k, f] of Object.entries(site)) if (k !== 'regle' && typeof f !== 'function') throw new Error(`${k} absent de ${SITE_LIB}`);
             return site;
         };

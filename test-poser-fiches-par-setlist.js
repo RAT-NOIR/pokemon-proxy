@@ -9,6 +9,7 @@ const DIR = process.env.TOOL_DIR || __dirname;
 const { executer } = require(path.join(DIR, 'poser-fiches-par-setlist.js'));
 const { decomposerNomCardmarket } = require(path.join(DIR, 'collecte-cartes', 'jointure'));
 const { verdict, MINIMUMS } = require(path.join(DIR, 'collecte-cartes', 'calibration-setlist-metacarte'));
+const { lireSauf: lireSaufReel } = require(path.join(DIR, 'collecte-cartes', 'produits-sauf'));
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
@@ -76,9 +77,11 @@ function monde({ veriteFausse = false, veriteContredite = false, impressionSansN
     return { db: fakeDb({ cartes_produits: lignes, cartes: [...cartes, homonyme] }), entrees, chemin, liste };
 }
 const MIN = { A: 1, D_A: 1, D_C: 1 };
-async function lancer(w, argv, { minimums = MIN, avantOuvrir = null } = {}) {
+async function lancer(w, argv, { minimums = MIN, avantOuvrir = null, sauf = null } = {}) {
     const sorties = [], erreurs = []; let ouvertures = 0;
-    const code = await executer({ argv: [...argv, `--export=${w.chemin}`], table: [L], minimums, log: s => sorties.push(s), err: s => erreurs.push(s),
+    // `sauf` : le contenu du fichier --sauf (un tableau d'idProduct), lu par la VRAIE validation du module (produits-sauf.js) ; `sauf` en chaîne = le texte brut du fichier
+    const lireSauf = sauf === null ? undefined : (chemin) => lireSaufReel(chemin, () => (typeof sauf === 'string' ? sauf : JSON.stringify(sauf)));
+    const code = await executer({ argv: [...argv, `--export=${w.chemin}`], table: [L], minimums, ...(lireSauf ? { lireSauf } : {}), log: s => sorties.push(s), err: s => erreurs.push(s),
         ouvrir: async () => { ouvertures++; if (avantOuvrir) avantOuvrir(); return { db: w.db, fermer: async () => { } }; },
         lireSetlist: async () => ({ entrees: w.entrees }), produitsDe: async () => w.liste }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
     return { code, sorties: sorties.join('\n'), erreurs: erreurs.join('\n'), ouvertures };
@@ -167,6 +170,24 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     w = monde(); w.db.stats.perdreImpressions = true;
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
     verifier('relecture : des impressions non posées (sans erreur) → exit 1', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /impressions « setlist » 0\/2/.test(r.sorties)], [1, true, true]);
+
+    // ── PHASE 3a (2026-10-24) : --sauf, les produits qu'une décision a DÉTACHÉS ne se reposent pas (la phase 2 en a détaché 20, dont l'Eevee SV-P/TH que cet outil aurait reposé) ──
+    w = monde(); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
+    r = await lancer(w, ['--codes=X/ID', '--sauf=detaches.json'], { sauf: [301] });
+    verifier('--sauf (simulation) : le produit 301, détaché par décision, est RETIRÉ du plan et NOMMÉ ; 1 fiche, 1 impression ; rien d\'écrit', [r.code, /1 fiches, 1 impressions/.test(r.sorties), /--sauf : 1 produit\(s\) détaché\(s\) non reposé\(s\) : 301/.test(r.sorties), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [0, true, true, true]);
+    w = monde();
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--sauf=detaches.json', '--ecrire'], { sauf: [301] });
+    verifier('--sauf : --attendu 2 (le plan d\'avant) est REFUSÉ, le compte attendu est celui du plan GARDÉ ; rien d\'écrit', [r.code, /rend 1, attendu 2/.test(r.erreurs), lignesPosees(w).length], [1, true, 0]);
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:1', '--sauf=detaches.json', '--ecrire'], { sauf: [301] });
+    verifier('--sauf : --attendu 1 écrit la seule ligne 302 ; AUCUNE impression ni lien sur la carte de 301 (la carte 1001 reste intacte)', [r.code, lignesPosees(w).map(l => l.idProduct), w.db.brut('cartes').find(c => c._id === 1001).impressions.length, w.db.brut('cartes').find(c => c._id === 1001).liens.idProduct.includes(301), /écrit et relu/.test(r.sorties)], [0, [302], 0, false, true]);
+    w = monde();
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--sauf=detaches.json', '--ecrire'], { sauf: '[]' });
+    verifier('--sauf : un fichier VIDE ne protège rien → REFUSÉ (exit 2), la base n\'est pas ouverte, rien d\'écrit', [r.code, /NON VIDE/.test(r.erreurs), r.ouvertures, lignesPosees(w).length], [2, true, 0, 0]);
+    r = await lancer(w, ['--codes=X/ID', '--sauf=detaches.json'], { sauf: '{"301":1}' });
+    verifier('--sauf : un fichier qui n\'est pas un tableau d\'entiers → exit 2', [r.code, r.ouvertures], [2, 0]);
+    r = await lancer(w, ['--codes=X/ID', '--sauf=detaches.json'], { sauf: 'pas du json' });
+    verifier('--sauf : un fichier illisible → exit 2 (il LÈVE, il ne se replie pas sur « rien à exclure »)', [r.code, /illisible/.test(r.erreurs), r.ouvertures], [2, true, 0]);
+    verifier('module produits-sauf : un tableau d\'entiers est lu, 1.5 et "301" sont refusés', [[...lireSaufReel('f', () => '[301,302]')], (() => { try { lireSaufReel('f', () => '[1.5]'); return 'passe'; } catch { return 'leve'; } })(), (() => { try { lireSaufReel('f', () => '["301"]'); return 'passe'; } catch { return 'leve'; } })()], [[301, 302], 'leve', 'leve']);
 
     // ── tour 3 : le verdict, sur des états FABRIQUÉS en mémoire ──
     const sain = () => ({ total: { A: { fauxCarte: 0, fauxNumero: 0, formes: 0, atteints: 200 }, B: { fauxCarte: 0, atteints: 0 }, C: { fauxCarte: 0, atteints: 9 } }, danger: { A: { fauxCarte: 0, fauxNumero: 0, atteints: 200 }, C: { fauxCarte: 0, atteints: 47 } } });

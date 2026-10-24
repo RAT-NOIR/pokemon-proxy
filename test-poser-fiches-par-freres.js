@@ -8,6 +8,7 @@ const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 const { executer, PREUVE } = require(path.join(DIR, 'poser-fiches-par-freres.js'));
 const Cal = require(path.join(DIR, 'collecte-cartes', 'calibration-freres-metacarte'));
+const { lireSauf: lireSaufReel } = require(path.join(DIR, 'collecte-cartes', 'produits-sauf'));
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
@@ -72,9 +73,11 @@ const siteFake = ({ perdre = false, unSeulVisuel = false } = {}) => ({ regle: {}
     fichesDesProduits: (r, set, docs, lignes) => { const fiche = new Map(); for (const l of lignes) fiche.set(l.idProduct, { carteId: l.carteId, numero: l.numeroFiche ?? null }); if (perdre && lignes.length > 12) fiche.delete(101); return { fiche, doubles: 0 }; },
     imageDeLImpression: (entrees, numero) => numero == null ? (unSeulVisuel && entrees.length === 1 ? entrees[0] : null) : (entrees.find(e => String(e.numero) === String(numero)) ?? null) });
 const MIN = { A: 1, D_NOM: 0, D_FRERES: 0 };
-async function lancer(w, argv, { minimums = MIN, clone = cloneFake(), site = siteFake(), sansTcgdex = false } = {}) {
+async function lancer(w, argv, { minimums = MIN, clone = cloneFake(), site = siteFake(), sansTcgdex = false, sauf = null } = {}) {
     const sorties = [], erreurs = []; let ouvertures = 0;
-    const code = await executer({ argv: [...argv, `--export=${w.chemin}`, ...(sansTcgdex ? [] : ['--tcgdex=/clone/data'])], minimums, log: s => sorties.push(s), err: s => erreurs.push(s),
+    // `sauf` : le contenu du fichier --sauf, lu par la VRAIE validation du module (produits-sauf.js) ; en chaîne = le texte brut du fichier
+    const lireSauf = sauf === null ? undefined : (chemin) => lireSaufReel(chemin, () => (typeof sauf === 'string' ? sauf : JSON.stringify(sauf)));
+    const code = await executer({ argv: [...argv, `--export=${w.chemin}`, ...(sansTcgdex ? [] : ['--tcgdex=/clone/data'])], minimums, ...(lireSauf ? { lireSauf } : {}), log: s => sorties.push(s), err: s => erreurs.push(s),
         lireClone: () => { if (!clone) throw new Error('clone vide : 0 set'); return clone; }, chargerSite: async () => site,
         ouvrir: async () => { ouvertures++; return { db: w.db, fermer: async () => { } }; } }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
     return { code, sorties: sorties.join('\n'), erreurs: erreurs.join('\n'), ouvertures };
@@ -163,6 +166,21 @@ const A = ['--codes=X'], ECR = ['--codes=X', '--attendu=X:3', '--avec-numero=X:1
     }
     w = monde(); r = await lancer(w, ['--codes=X', '--ecrire'], { sansTcgdex: true });
     verifier('refus : sans --tcgdex → exit 2', [r.code, r.ouvertures], [2, 0]);
+
+    // ── PHASE 3a (2026-10-24) : --sauf, une ligne que la phase 2 a DÉTACHÉE (« autre dessin ») ne se repose pas par la clé qui l'avait posée (8 lignes reposées sans lui) ──
+    w = monde(); avant = instantane(w);
+    r = await lancer(w, [...A, '--sauf=detaches.json'], { sauf: [502] });
+    verifier('--sauf (simulation) : 502, détaché par décision, est RETIRÉ du plan et NOMMÉ — 2 lignes restent (501, 504), 2 refusés ; rien d\'écrit', [r.code, /2 lignes · 2 cartes · avec numeroFiche 1 · sans 1 · 2 refusés/.test(r.sorties), /--sauf : 1 produit\(s\) détaché\(s\) non reposé\(s\) : 502/.test(r.sorties), instantane(w) === avant], [0, true, true, true]);
+    w = monde();
+    r = await lancer(w, [...ECR, '--sauf=detaches.json'], { sauf: [502] });
+    verifier('--sauf : --attendu 3 (le plan d\'avant) est REFUSÉ, le compte attendu est celui du plan GARDÉ ; rien d\'écrit', [r.code, /rend 2 lignes, attendu 3/.test(r.erreurs), posees(w).length], [1, true, 0]);
+    r = await lancer(w, ['--codes=X', '--attendu=X:2', '--avec-numero=X:1', '--sauf=detaches.json', '--ecrire'], { sauf: [502] });
+    verifier('--sauf : --attendu 2 écrit 501 et 504 seulement ; 502 n\'a pas de ligne et la carte 1002 garde son liens.idProduct', [r.code, posees(w).map(l => l.idProduct).sort(), w.db.brut('cartes').find(c => c._id === 1002).liens.idProduct.includes(502), /écrit et relu/.test(r.sorties)], [0, [501, 504], false, true]);
+    w = monde();
+    r = await lancer(w, [...ECR, '--sauf=detaches.json'], { sauf: '[]' });
+    verifier('--sauf : un fichier VIDE ne protège rien → exit 2, la base n\'est pas ouverte, rien d\'écrit', [r.code, /NON VIDE/.test(r.erreurs), r.ouvertures, posees(w).length], [2, true, 0, 0]);
+    r = await lancer(w, [...ECR, '--sauf=detaches.json'], { sauf: 'pas du json' });
+    verifier('--sauf : un fichier illisible LÈVE (exit 2), il ne se replie pas sur « rien à exclure »', [r.code, /illisible/.test(r.erreurs), r.ouvertures], [2, true, 0]);
 
     // ── reprise après un arrêt ──
     w = monde(); w.db.stats.panneAvantCartes = true;

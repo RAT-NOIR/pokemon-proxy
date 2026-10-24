@@ -41,7 +41,8 @@ const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nom
 // --regle-r (2026-10-08, feu vert NOMMÉ du testeur, DOUBLONS-FICHES.md §4) : après R0 (désignation croisée + --sans-fiche-melangee), une fiche ne
 // s'écrit que si la règle R l'autorise (collecte-cartes/regle-r-fiches.js : R1 rattachement, R2 lien rouge de la Setlist lue ; tout le reste bloque
 // et dit sa cause). `--attendu=CODE:N` compte alors les AUTORISÉES. `--rapport=<fichier>.json` écrit, en LOCAL, la décision de chaque produit et sa cause.
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/, /^--attendu-total=\d+$/, /^--exclure=\d+(,\d+)*$/];
+// (PHASE 3a) `--plan=<fichier>.json` : écrit, en LOCAL, les lignes et les appartenances de carte que ce lancement poserait (pour la simulation de l'API) ; n'écrit rien en base.
+const AUTORISES = [/^--plan=.+\.json$/, /^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/, /^--attendu-total=\d+$/, /^--exclure=\d+(,\d+)*$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -142,6 +143,7 @@ function grouperParCarte(aEcrire, metaDe) {
     }
     // 🔴 LOT METAL : un produit en matière spéciale (table fermée) ne reçoit jamais la fiche de sa carte normale — la désignation par métacarte est exactement le chemin qui la lui donnerait
     try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-par-metacarte'); } catch (e) { console.error(e.message); await fermer(); process.exit(1); }
+    if (arg('plan')) fs.writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-par-metacarte', lignes: aEcrire.map(x => ({ _id: `${x.d.carte._id}|${x.p.idProduct}`, carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.L.exp, tirage: x.L.bulba.tirage, preuve: 'metacarte+nom+attaques', slug: x.p.slug ?? null, slugSet: x.p.slugSet ?? x.L.slugSet, numeroFiche: null, nomProduit: x.p.name, numeroProduit: x.p.numero ?? null })), cartesSets: aEcrire.map(x => ({ carteId: x.d.carte._id, set: x.L.slugSet })), sets: [] }));
     if (!ecrire || !aEcrire.length) { await fermer(); return; }
 
     const le = new Date();

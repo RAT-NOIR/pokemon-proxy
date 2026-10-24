@@ -64,6 +64,8 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
         else if (attendu !== causes.resolu.length) console.log(`   🔴 ${causes.resolu.length} résolus contre ${attendu} attendus : RIEN ne s'écrit pour ${CODE}`);
         else aEcrire.push(...causes.resolu.map(x => ({ ...x, route: CODE })));
     }
+    // (PHASE 3a) `--plan=<fichier>.json` : les lignes que ce lancement poserait, en LOCAL (simulation de l'API, planche) ; rien n'est écrit en base
+    if (arg('plan')) require('fs').writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-reimpressions', lignes: aEcrire.map(x => ({ _id: `${x.carteId}|${x.idProduct}`, carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: 'reimpression+origine+numero', slug: x.slug, slugSet: x.slugSet, numeroFiche: null, code: x.route, nomProduit: cat.get(x.idProduct)?.name ?? null })), cartesSets: [] }));
     if (!ecrire || !aEcrire.length) { console.log(`\n   ${aEcrire.length} fiches à poser${ecrire ? '' : ' — (mesure seule)'}`); await fermer(); return; }
     const PREUVE = 'reimpression+origine+numero';
     const r = await cx.db.collection('cartes_produits').bulkWrite(aEcrire.map(x => ({ updateOne: { filter: { _id: `${x.carteId}|${x.idProduct}` }, update: { $set: {

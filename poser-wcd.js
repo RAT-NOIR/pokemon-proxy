@@ -163,6 +163,9 @@ const pad = (v, n) => String(v).padStart(n);
     // (PHASE 3a) `--ids=<fichier.json>` : la LISTE des idProduct que la clé retient après le témoin du nom (écriture d'un fichier local, jamais en base)
     const fichierIds = (process.argv.find(a => a.startsWith('--ids=')) || '').slice(6);
     if (fichierIds) require('fs').writeFileSync(fichierIds, JSON.stringify(causes.resolu.map(x => x.idProduct)));
+    // `--plan=<fichier>.json` : les LIGNES que ce lancement poserait (simulation de l'API, planche) ; local, rien n'est écrit en base
+    const fichierPlan = (process.argv.find(a => a.startsWith('--plan=')) || '').slice(7);
+    if (fichierPlan) require('fs').writeFileSync(fichierPlan, JSON.stringify({ outil: 'poser-wcd', lignes: causes.resolu.map(x => ({ _id: `${x.carteId}|${x.idProduct}`, carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: PREUVE, slug: x.slug, slugSet: x.slugSet, numeroFiche: null, nomProduit: x.slug, code: x.code, numeroOrigine: x.num })), cartesSets: [] }));
     if (!ecrire) { console.log(`\n   (mesure seule — relancer avec --ecrire)`); await fermer(); return; }
 
     const avant = await cx.db.collection('cartes_produits').countDocuments({ preuve: PREUVE });
@@ -200,9 +203,11 @@ const pad = (v, n) => String(v).padStart(n);
         { $group: { _id: '$idProduct', cartes: { $addToSet: '$carteId' } } },
         { $match: { 'cartes.1': { $exists: true } } }, { $count: 'n' }
     ]).toArray();
-    console.log(`\n   ✅ cartes_produits : ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · lignes « ${PREUVE} » ${avant} → ${apres} (attendu ${avant} → ${causes.resolu.length})`);
+    // (PHASE 3a) le compte attendu se rebase sur ce qui existait : `--sonde=<n>` ne vaut plus quand des lignes « ${PREUVE} » existent déjà (1 679 le 2026-09-23) — l'attendu est avant + insérées, et chaque ligne du plan est insérée ou retrouvée
+    const attenduApres = avant + r.upsertedCount;
+    console.log(`\n   ✅ cartes_produits : ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · lignes « ${PREUVE} » ${avant} → ${apres} (attendu ${avant} → ${attenduApres})`);
     console.log(`   ✅ cartes : ${rc.matchedCount} cartes touchées, ${rc.modifiedCount} modifiées (liens.idProduct)`);
     console.log(`   ⚖️ produits WCD rattachés à plusieurs cartes : ${multi[0]?.n || 0}`);
-    if (apres !== causes.resolu.length) console.log(`   🔴 LE COMPTE RÉEL (${apres}) NE COLLE PAS AUX ${causes.resolu.length} POSÉES — à ouvrir avant toute autre écriture.`);
+    if (apres !== attenduApres || r.upsertedCount + r.matchedCount !== causes.resolu.length) console.log(`   🔴 LE COMPTE RÉEL (${apres}, attendu ${attenduApres} ; ${r.upsertedCount} insérées + ${r.matchedCount} retrouvées pour ${causes.resolu.length} posées) NE COLLE PAS — à ouvrir avant toute autre écriture.`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });

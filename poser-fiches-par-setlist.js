@@ -20,9 +20,10 @@ const { lireSetlistDuSet, planDuSet } = require('./collecte-cartes/cle-setlist-m
 const { calibrer, verdict, imprimer, chargerExport, MINIMUMS } = require('./collecte-cartes/calibration-setlist-metacarte');
 const R = require('./collecte-cartes/regle-r-fiches');
 const J = require('./collecte-cartes/jointure');
+const { lireSauf: lireSaufParDefaut } = require('./collecte-cartes/produits-sauf');
 
 const PREUVE = 'metacarte+setlist';
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/];
+const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--attendu=[\w.:,/-]+$/, /^--plan=.+\.json$/, /^--sauf=.+\.json$/, /^--ecrire$/];
 
 /**
  * @param {object} o
@@ -33,7 +34,7 @@ const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--export=.+\.json$/, /^--attendu=[\w
  * @param {(L:object)=>Promise<object[]>} o.produitsDe  les produits décomposés de l'expansion d'une ligne
  * @returns {Promise<number>} le code de sortie
  */
-async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums = MINIMUMS, log = console.log, err = console.error }) {
+async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums = MINIMUMS, lireSauf = lireSaufParDefaut, log = console.log, err = console.error }) {
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) { err(`❌ argument inconnu : ${inconnus.join(' ')}`); return 2; }
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -52,6 +53,9 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
         const manquants = CODES.filter(c => !Number.isInteger(ATTENDUS[c]));
         if (manquants.length) { err(`❌ --ecrire exige --attendu=CODE:N pour chaque code (manque : ${manquants.join(', ')}) — rien n'est écrit`); return 2; }
     }
+    // (PHASE 3a) `--sauf=<fichier>.json` : les produits qu'une DÉCISION a détachés (phase 2) ne se reposent pas par cette clé ; le fichier est lu AVANT d'ouvrir la base et LÈVE s'il est vide ou illisible
+    let SAUF = new Set();
+    if (arg('sauf')) { try { SAUF = lireSauf(arg('sauf')); } catch (e) { err(`❌ ${e.message} — rien n'est écrit`); return 2; } }
     const lignesEcrites = CODES.map(ligne);
     const parSlug = new Map(); for (const l of table) if (l.code && l.slugSet && l.bulba && !parSlug.has(l.slugSet)) parSlug.set(l.slugSet, l);
 
@@ -80,6 +84,14 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
             const produits = await produitsDe(L);
             const expansion = [].concat(L.bulba.expansion)[0];
             const P = planDuSet({ base, entrees: S.entrees, produits, lignesDuSet: lignes.filter(l => l.slugSet === L.slugSet), jointsIds, tirage: L.bulba.tirage, expansion, entreesSansPage: S.entreesSansPage || [] });
+            const detaches = P.retenus.filter(x => SAUF.has(x.p.idProduct));
+            if (detaches.length) {
+                log(`   ⛔ --sauf : ${detaches.length} produit(s) détaché(s) non reposé(s) : ${detaches.map(x => x.p.idProduct).join(', ')}`);
+                P.retenus = P.retenus.filter(x => !SAUF.has(x.p.idProduct));
+                // l'impression d'une carte n'est posée que si une ligne retenue la porte encore (carte, numéro)
+                const gardees = new Set(P.retenus.map(x => `${x.d.carte._id}|${J.cleNumero(x.d.numero)}`));
+                P.impressions = new Map([...P.impressions].filter(([k]) => gardees.has(k)));
+            }
             log(`\n■ ${L.code} (${L.slugSet}) · ${P.retenus.length} lignes · ${new Set(P.retenus.map(x => x.d.carte._id)).size} cartes · ${P.impressions.size} impressions · ${P.ecartes.length} écartés · ${P.refus.length} refusés`);
             for (const x of P.refus.filter(r => r.garde === 'numero-partage')) log(`   ✗ numéro partagé · ${x.p.idProduct} « ${x.p.name} » : ${x.raison}`);
             if (ecrire && ATTENDUS[L.code] !== P.retenus.length) { err(`❌ ARRÊT : ${L.code} rend ${P.retenus.length}, attendu ${ATTENDUS[L.code] ?? 'non donné'} — rien n'est écrit`); return 1; }
@@ -87,6 +99,9 @@ async function executer({ argv, table, ouvrir, lireSetlist, produitsDe, minimums
             for (const x of P.impressions.values()) impressions.push({ carteId: x.d.carte._id, imp: { tirage: L.bulba.tirage, expansion, numero: x.d.numero, total: null, deck: null, rarete: null, source: 'setlist' } });
         }
         log(`\n   ${aEcrire.length} fiches, ${impressions.length} impressions${ecrire ? '' : ' — (simulation)'}`);
+        // (PHASE 3a) `--plan=<fichier>.json` : les lignes, les liens/sets et les impressions que ce lancement poserait, en LOCAL (simulation de l'API, planche) ; rien n'est écrit en base
+        const fichierPlan = arg('plan');
+        if (fichierPlan) require('fs').writeFileSync(fichierPlan, JSON.stringify({ outil: 'poser-fiches-par-setlist', lignes: aEcrire.map(x => ({ _id: `${x.d.carte._id}|${x.p.idProduct}`, carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.L.exp, tirage: x.L.bulba.tirage, preuve: PREUVE, slug: x.p.slug ?? null, slugSet: x.p.slugSet ?? x.L.slugSet, numeroFiche: x.d.numero, code: x.CODE, nomProduit: x.p.name, nomCarte: x.d.carte.nomEn })), cartesSets: aEcrire.map(x => ({ carteId: x.d.carte._id, set: x.L.slugSet })), impressions }));
         // 🔴 LOT METAL : un produit en matière spéciale (table fermée) ne reçoit jamais la fiche de sa carte normale : refus, même à blanc
         try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-fiches-par-setlist'); } catch (e) { err(e.message); return 1; }
         if (!ecrire || !aEcrire.length) return 0;
