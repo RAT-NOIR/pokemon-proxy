@@ -193,7 +193,10 @@ function planRestauration(sauves, actuels, { garder = () => [], surcharge = null
 // worker ») ; ils reviennent, le reste (vignette, taille, source…) est au worker.
 // UNE ENTRÉE = (set, cleR2), comparée sur la projection SITE_LIT.images. Ce qui n'est pas décidable (deux entrées de même clé, une entrée sans set ou sans cleR2) est NOMMÉ dans `indecidables` et l'état actuel
 // est gardé tel quel : l'appelant sort en code d'échec, jamais « RESTAURÉ » en silence.
-const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'mention', 'noteVariante', 'basseDefinition', 'imageEmprunteeTirage']);
+// (tour 3, E3) `basseDefinition` n'en fait PAS partie : le worker l'écrit aussi (marqueDe / remplacerBasseDefinition des collecteurs tcgdex et bulba). Dans un set du worker, une entrée de même clé dont ce champ diffère ne se tranche
+// pas (AMBIGUS_WORKER) : indécidable nommé, jamais deviné. Hors de ces sets, il revient comme n'importe quelle écriture du lot (l'entrée entière).
+const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'mention', 'noteVariante', 'imageEmprunteeTirage']);
+const AMBIGUS_WORKER = Object.freeze(['basseDefinition']);
 const cleEntree = m => (m && typeof m.set === 'string' && m.set && typeof m.cleR2 === 'string' && m.cleR2 ? `${m.set}|${m.cleR2}` : null);
 // un champ d'entrée d'image tel que la comparaison le lit : la vignette sur sa forme figée (SITE_LIT.formes), le reste tel quel
 const champEntree = (m, k) => (k === 'vignette' ? SITE_LIT.formes['images.vignette'].map(f => valeur(m, `vignette.${f}`)) : valeur(m, k));
@@ -202,6 +205,11 @@ function restaurerImages(sauvees, actuelles, { setsDuWorker = new Set() } = {}) 
     const S = (sauvees || []).filter(Boolean), A = (actuelles || []).filter(Boolean);
     const rapport = { images: A, restaurees: [], gardees: [], indecidables: [] };
     const note = (liste, m, raison) => liste.push({ set: m?.set ?? null, cleR2: m?.cleR2 ?? null, raison });
+    const champsSite = SITE_LIT.images.filter(k => k !== 'set' && k !== 'cleR2');
+    // 0. (tour 3, E2) une carte dont `images` NE DIFFÈRE PAS (sur ce que le site lit) entre la sauvegarde et l'état actuel n'a rien à restaurer : un doublon de clé ou une entrée sans clé sur une carte que le lot n'a pas touchée
+    // n'est pas un indécidable (sinon tout arrêt dû au contrat sortait en code 4 à cause d'une carte sans rapport)
+    const proj = L => L.map(m => [m.set ?? null, m.cleR2 ?? null, ...champsSite.map(k => champEntree(m, k))]);
+    if (signature(proj(S)) === signature(proj(A))) return rapport;
     // 1. l'indécidable d'abord : une clé absente ou en double, d'un côté ou de l'autre
     const vuS = new Map(), vuA = new Map();
     for (const [liste, vu, cote] of [[S, vuS, 'sauvegarde'], [A, vuA, 'état actuel']]) for (const m of liste) {
@@ -212,7 +220,6 @@ function restaurerImages(sauvees, actuelles, { setsDuWorker = new Set() } = {}) 
     }
     if (rapport.indecidables.length) return rapport;
     const mapA = new Map(A.map(m => [cleEntree(m), m])), dedans = new Set(S.map(cleEntree));
-    const champsSite = SITE_LIT.images.filter(k => k !== 'set' && k !== 'cleR2');
     const images = [];
     for (const s of S) {
         const k = cleEntree(s), a = mapA.get(k), duWorker = setsDuWorker.has(s.set);
@@ -224,6 +231,8 @@ function restaurerImages(sauvees, actuelles, { setsDuWorker = new Set() } = {}) 
         const diff = champsSite.filter(f => signature(champEntree(s, f)) !== signature(champEntree(a, f)));
         if (!diff.length) { images.push(a); continue; }
         if (!duWorker) { images.push(structuredClone(s)); note(rapport.restaurees, s, `modifiée par le lot (${diff.join(', ')}) : version sauvegardée`); continue; }
+        const ambigus = diff.filter(f => AMBIGUS_WORKER.includes(f));
+        if (ambigus.length) { images.push(a); note(rapport.indecidables, s, `${ambigus.join(', ')} diffère dans un set où le worker a écrit : le lot et le worker l'écrivent tous les deux, rien n'est deviné`); continue; }
         const marq = diff.filter(f => MARQUAGES_DU_LOT.includes(f)), autres = diff.filter(f => !MARQUAGES_DU_LOT.includes(f));
         if (!marq.length) { images.push(a); note(rapport.gardees, s, `écrite par le worker (${autres.join(', ')})`); continue; }
         const fusion = { ...a };

@@ -403,6 +403,32 @@ for (const [nom, f] of [
     verifier('D1 « Lot B » (pur, l\'ancienne règle : le tableau actuel gardé pour les cartes non fautives) : rien ne revient — c\'est le défaut corrigé', p2.remplacer.length, 0);
     // planRestauration : la surcharge s'applique APRÈS ce qui est gardé, et elle est optionnelle
     verifier('D1 : planRestauration sans surcharge se comporte comme avant', plan(sv, ac, { garder: () => [] }).remplacer.length, 12);
+
+    // ── TOUR 3, E3 : `basseDefinition` est ÉCRIT PAR LE WORKER aussi (marqueDe / remplacerBasseDefinition des collecteurs tcgdex et bulba). Dans un set du worker, un basseDefinition différent sur une entrée de même clé
+    // ne se tranche pas : INDÉCIDABLE nommé, l'entrée reste telle quelle. Hors de ces sets, il revient comme un autre marquage du lot.
+    r = restaurerImages([E('Set-W', 'a')], [E('Set-W', 'a', { basseDefinition: true })], { setsDuWorker: W });
+    verifier('E3 : set du worker, basseDefinition différent : un indécidable NOMMÉ (basseDefinition), l\'entrée actuelle gardée, rien de « restauré »',
+        [r.indecidables.length, /basseDefinition/.test(r.indecidables[0]?.raison || ''), r.indecidables[0]?.set, r.images[0].basseDefinition, r.restaurees.length], [1, true, 'Set-W', true, 0]);
+    r = restaurerImages([E('Set-W', 'a', { basseDefinition: false })], [E('Set-W', 'a', { basseDefinition: true, partageeTamponNonSepare: false, tamponNonRepresente: 'Staff' })], { setsDuWorker: W });
+    verifier('E3 : set du worker, basseDefinition ET un marquage du lot : l\'entrée entière reste (aucune devinette), un indécidable', [r.indecidables.length, r.images[0].basseDefinition, r.images[0].tamponNonRepresente, r.restaurees.length], [1, true, 'Staff', 0]);
+    r = restaurerImages([E('S1', 'a')], [E('S1', 'a', { basseDefinition: true })], { setsDuWorker: W });
+    verifier('E3 : hors des sets du worker, basseDefinition revient comme un autre marquage du lot', [r.indecidables.length, 'basseDefinition' in r.images[0], r.restaurees.length], [0, false, 1]);
+    r = restaurerImages([E('Set-W', 'a', { basseDefinition: true })], [E('Set-W', 'a', { basseDefinition: true })], { setsDuWorker: W });
+    verifier('E3 : set du worker, basseDefinition identique : rien à trancher', [r.indecidables.length, r.gardees.length, r.restaurees.length], [0, 0, 0]);
+    verifier('E3 : basseDefinition n\'est plus rangé parmi les marquages du lot', require('./collecte-cartes/garde-lot').MARQUAGES_DU_LOT.includes('basseDefinition'), false);
+
+    // ── TOUR 3, E2 : on ne signale un indécidable que si `images` DIFFÈRE (projection SITE_LIT) entre la sauvegarde et l'état actuel de CETTE carte
+    const doublon = [E('S1', 'a'), E('S1', 'a', { numero: '2' })];
+    r = restaurerImages(doublon, structuredClone(doublon), { setsDuWorker: W });
+    verifier('E2 : un doublon de clé sur une carte NON touchée (sauvegarde = état actuel) : aucun indécidable, rien à restaurer', [r.indecidables.length, r.restaurees.length, r.gardees.length, r.images.length], [0, 0, 0, 2]);
+    r = restaurerImages([E('S1', 'a'), { set: 'S1', w: 1, h: 1 }], [E('S1', 'a'), { set: 'S1', w: 1, h: 1 }], { setsDuWorker: W });
+    verifier('E2 : une entrée sans cleR2 sur une carte non touchée : aucun indécidable', r.indecidables.length, 0);
+    r = restaurerImages(doublon, [E('S1', 'a', { tamponNonRepresente: 'x' }), E('S1', 'a', { numero: '2' })], { setsDuWorker: W });
+    verifier('E2 : le même doublon sur une carte que le lot a TOUCHÉE (un marquage de plus) : indécidable', [r.indecidables.length > 0, r.restaurees.length], [true, 0]);
+    r = restaurerImages(doublon, doublon.map(m => ({ ...m, jointeLe: new Date('2026-10-24'), sha256: 'zz' })), { setsDuWorker: W });
+    verifier('E2 : le doublon, et seuls des champs que le site ne lit pas (jointeLe, sha256) diffèrent : rien ne demande à être restauré, aucun indécidable', r.indecidables.length, 0);
+    r = restaurerImages(doublon, [doublon[0]], { setsDuWorker: W });
+    verifier('E2 : le doublon, et le lot a retiré une entrée (le nombre d\'entrées diffère) : indécidable', r.indecidables.length > 0, true);
 }
 
 console.log(`\n${ok} passés, ${ko} en échec`);
