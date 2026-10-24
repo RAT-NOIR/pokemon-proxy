@@ -164,7 +164,8 @@ async function compterEntrees(db, carteIds, slug) {
 const candidatDe = (u, entree) => ({ set: u.slugSet, numero: u.numero, langue: 'en', source: CT.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(entree.tampon ? { tampon: entree.tampon } : {}) });
 
 /** La décision de chaque unité sur l'état de la base (lecture seule). `M` : modèles de la base `cartes`. */
-async function decider(unites, M, { cleR2 = CT.cleR2, largeurDe = null } = {}) {
+// (option `cleR2` gardée ; la variable locale porte un autre nom : test-chargement.js lit un appel nu `cleR2(` comme un import manquant)
+async function decider(unites, M, { cleR2: cleR2De = CT.cleR2, largeurDe = null } = {}) {
     const ids = [...new Set(unites.map(u => u.carteId))];
     const cartes = new Map((await M.Carte.find({ _id: { $in: ids } }).select('images').lean()).map(c => [c._id, c]));
     const docs = await M.Image.find({ carteId: { $in: ids } }).lean();
@@ -172,7 +173,7 @@ async function decider(unites, M, { cleR2 = CT.cleR2, largeurDe = null } = {}) {
     return unites.map(u => {
         const c = cartes.get(u.carteId);
         if (!c) return { ...u, decision: { action: 'cede', raison: 'carte introuvable en base', remplace: [] } };
-        const cle = cleR2(u.slugSet, u.numero, u.carteId);
+        const cle = cleR2De(u.slugSet, u.numero, u.carteId);
         // `largeurDe` (mode basse définition) : la VRAIE largeur de l'original ; la candidate est alors marquée (marqueDe) et la règle commune la fait céder devant toute entrée existante. Sans lui : 500 nominal (comme avant)
         const w = largeurDe ? largeurDe(u) : null, wOriginal = w ?? 500;
         return { ...u, cleR2: cle, decision: CT.decisionEcriture(c.images || [], candidatDe(u, { cleR2: cle, wOriginal, ...marqueDe({ wOriginal }), tampon: CT.tamponDeLaFamille(u.slugSet) }), { documents }) };
