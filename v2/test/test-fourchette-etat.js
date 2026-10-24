@@ -51,14 +51,25 @@ v('reservesDe ne produit JAMAIS la mention (elle dépend de l\'état de la photo
     v('guide seul (Tauros 0,02 / 1,49) : basse = le « De » du guide, haute ABSENTE (le guide n\'a aucun prix par état)', f, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] });
     v('  ni la tendance ni les moyennes ne deviennent la borne haute (ce sont des prix tous états)', f.haute, null);
     const gr = FE.fourchetteDe({ guide: g, grille: { NM: 1.4, EX: 1.1, GD: 0.5 } });
-    v('grille lue en direct (3 états) : basse = le moins cher, haute = le plus cher de la grille, source grille-directe', gr, { basse: { prix: 0.5, source: 'grille-directe' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [] });
-    v('  la grille PRIME sur le « De » du guide (il couvre toutes langues)', gr.basse.source, 'grille-directe');
+    // TOUR 4 CORRECTION 1 (I1) : l'état est NON estimable, donc tous les états jusqu'au plus abîmé sont plausibles ; une grille qui ne contient pas le bas ne fixe pas la borne basse seule.
+    // La borne basse est le MINIMUM de tout ce qui est connu (la grille, même partielle, ET le « De » du guide), avec la source de ce minimum.
+    v('grille (3 états) et « De » du guide à 0,02 : basse = le minimum des deux (le « De »), haute = le plus cher de la grille', gr, { basse: { prix: 0.02, source: 'guide-de' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [] });
+    const garde = de => ({ ...g, de });
+    v('I1. grille { NM 5, EX 4 } et « De » à 2 : basse = 2 (guide-de) — la grille ne contient pas le bas, elle ne fixe pas la basse', FE.fourchetteDe({ guide: garde(2), grille: { NM: 5, EX: 4 } }), { basse: { prix: 2, source: 'guide-de' }, haute: { prix: 5, source: 'grille-directe' }, absentes: [] });
+    v('I1. grille { NM 5, EX 4 } et « De » à 4,5 : la grille descend plus bas, basse = 4 (grille-directe), la source le dit', FE.fourchetteDe({ guide: garde(4.5), grille: { NM: 5, EX: 4 } }).basse, { prix: 4, source: 'grille-directe' });
+    v('I1. égalité grille / « De » : la source nommée est la grille (elle a lu ce prix en direct)', FE.fourchetteDe({ guide: garde(4), grille: { NM: 5, EX: 4 } }).basse, { prix: 4, source: 'grille-directe' });
+    v('I1. la borne basse n\'est jamais au-dessus d\'un prix connu', [{ NM: 5, EX: 4 }, { PO: 0.5, NM: 9 }, { EX: 3 }].every(gl => { const f = FE.fourchetteDe({ guide: garde(2), grille: gl }); return Object.values(gl).every(p => f.basse.prix <= p); }), true);
     v('grille sans guide : les deux bornes viennent de la grille', FE.fourchetteDe({ guide: null, grille: { NM: 3, PL: 1 } }), { basse: { prix: 1, source: 'grille-directe' }, haute: { prix: 3, source: 'grille-directe' }, absentes: [] });
-    v('grille à UN seul état : ne borne rien (on ne sait pas si d\'autres états sont moins ou plus chers) -> le guide, haute absente', FE.fourchetteDe({ guide: g, grille: { EX: 1.1 } }), { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] });
-    v('grille à un seul état et pas de guide : aucune borne, les deux sont dites absentes', FE.fourchetteDe({ guide: null, grille: { EX: 1.1 } }), { basse: null, haute: null, absentes: ['basse', 'haute'] });
+    v('grille à UN seul état : elle ne borne pas le HAUT (on ne sait pas si un meilleur état coûte plus) ; son prix compte pour le BAS, le minimum des connus', [FE.fourchetteDe({ guide: g, grille: { EX: 1.1 } }), FE.fourchetteDe({ guide: garde(3), grille: { EX: 2 } })], [{ basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] }, { basse: { prix: 2, source: 'grille-directe' }, haute: null, absentes: ['haute'] }]);
+    v('grille à un seul état et pas de guide : la basse est ce prix lu, la haute est absente et dite absente', FE.fourchetteDe({ guide: null, grille: { EX: 1.1 } }), { basse: { prix: 1.1, source: 'grille-directe' }, haute: null, absentes: ['haute'] });
     v('clés en minuscules : normalisées', FE.fourchetteDe({ guide: null, grille: { nm: 2, ex: 1 } }).basse, { prix: 1, source: 'grille-directe' });
     v('états hors liste, prix nuls/négatifs/texte/NaN : écartés (deux états valides restent)', FE.fourchetteDe({ guide: null, grille: { NM: 2, EX: 1, MINT: 0.1, GD: 0, LP: -1, PL: '0,5', PO: NaN } }), { basse: { prix: 1, source: 'grille-directe' }, haute: { prix: 2, source: 'grille-directe' }, absentes: [] });
-    v('deux clés pour le même état (NM et nm, valeurs différentes) : l\'état est ambigu, il est écarté', FE.fourchetteDe({ guide: null, grille: { NM: 5, nm: 2, EX: 1 } }), { basse: null, haute: null, absentes: ['basse', 'haute'] });
+    v('deux clés pour le même état (NM et nm, valeurs différentes) : l\'état est ambigu, il est écarté ; il ne reste qu\'EX', FE.fourchetteDe({ guide: null, grille: { NM: 5, nm: 2, EX: 1 } }), { basse: { prix: 1, source: 'grille-directe' }, haute: null, absentes: ['haute'] });
+    // TOUR 4 CORRECTION 1 (M2) : le serveur ne sert jamais une borne hors de son propre schéma (BornePrix.prix >= 0,01)
+    v('M2. un prix sous 0,01 (0,004, 0,003) est une valeur invalide de la grille : écarté, comme un zéro', FE.fourchetteDe({ guide: null, grille: { NM: 0.004, EX: 0.003 } }), { basse: null, haute: null, absentes: ['basse', 'haute'] });
+    v('M2. une grille dont un seul prix est sous 0,01 : il est écarté, les autres restent', FE.fourchetteDe({ guide: null, grille: { NM: 3, EX: 2, GD: 0.009 } }), { basse: { prix: 2, source: 'grille-directe' }, haute: { prix: 3, source: 'grille-directe' }, absentes: [] });
+    v('M2. 0,01 exactement est un prix (le plus petit de Cardmarket) ; un « De » sous 0,01 est écarté', [FE.fourchetteDe({ guide: null, grille: { NM: 0.01, EX: 0.02 } }).basse, FE.fourchetteDe({ guide: garde(0.005) }).basse], [{ prix: 0.01, source: 'grille-directe' }, null]);
+    v('M2. toute borne servie tient dans le schéma BornePrix (minimum 0,01)', [{ NM: 0.004 }, { NM: 0.01, PO: 0.02 }, { NM: 7, EX: 0.0099 }].every(gl => { const f = FE.fourchetteDe({ guide: garde(0.003), grille: gl }); return [f.basse, f.haute].every(b => b === null || valider(JSON.parse(JSON.stringify(b)), ref('BornePrix'), doc).ok); }), true);
     v('une grille qui n\'est pas un objet (tableau, texte, null) : ignorée', [[1, 2], 'NM', null, undefined, 3].map(x => FE.fourchetteDe({ guide: g, grille: x }).basse.source), ['guide-de', 'guide-de', 'guide-de', 'guide-de', 'guide-de']);
     v('guide sans « De » (null) et sans grille : rien ne donne de borne, les deux sont dites absentes', FE.fourchetteDe({ guide: { ...g, de: null } }), { basse: null, haute: null, absentes: ['basse', 'haute'] });
     v('un « De » à zéro n\'est pas un prix', FE.fourchetteDe({ guide: { ...g, de: 0 } }).basse, null);
@@ -91,7 +102,25 @@ v('reservesDe ne produit JAMAIS la mention (elle dépend de l\'état de la photo
     v('retenu null, langue lue : repli tendance / etat-non-retenu / fiable false', [e.prixRepli.repli, e.prixRepli.cause, e.prixRepli.fiable], ['tendance', 'etat-non-retenu', false]);
     v('  la fourchette : basse = 0,02 (le « De »), haute absente, et la réponse DIT laquelle', e.prixRepli.fourchette, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] });
     v('  le guide du repli porte la mention et n\'est pas fiable (même quand le guide de la fiche l\'est)', [e.prixRepli.guide.fiable, e.prixRepli.guide.reserves, c.carte.prixGuide.fiable], [false, [MENTION], true]);
-    v('  la carte, elle, garde son verdict d\'identification et sa fiche (statut identifiee, prixGuide d\'origine)', [e.statut, e.carte === c.carte, c.prixRepli], ['identifiee', true, undefined]);
+    // TOUR 4 CORRECTION 1 (M1) : « jamais un prix sûr » vaut pour TOUT prix servi d'un scan à état nul : le prixGuide de la carte (et des impressions, et des candidats) porte la même mention, sur la même règle
+    v('M1. la carte garde son verdict d\'identification et sa fiche, mais son prixGuide n\'est plus fiable et porte la mention (comme celui du repli)', [e.statut, e.carte.idProduct, e.carte.prixGuide.fiable, e.carte.prixGuide.reserves, e.carte.prixGuide], [ 'identifiee', c.carte.idProduct, false, [MENTION], e.prixRepli.guide ]);
+    v('M1. la carte d\'origine n\'est pas mutée (le prixGuide de la fiche source reste fiable)', [c.carte.prixGuide.fiable, c.carte.prixGuide.reserves, c.carte === e.carte], [true, [], false]);
+    v('M1. le reste de la carte est intact (même nom, même set, mêmes liens)', [e.carte.nom, e.carte.set, e.carte.liens, e.carte.numero], [c.carte.nom, c.carte.set, c.carte.liens, c.carte.numero]);
+    {
+        const gI = { ...REEL.tauros.guide, guideDu: new Date(REEL.tauros.guide.guideDu) };
+        const avecImp = produit('tauros', { impressions: [{ idProduct: 273844, numero: '47', langue: 'en', set: { nom: 'Jungle' }, prixGuide: gI }, { idProduct: 273845, numero: '47', langue: 'fr', set: { nom: 'Jungle' } }] });
+        const ci = R.avecRepliAnalyse(carteNulle({ carte: avecImp }));
+        v('M1. les impressions servies portent la même mention ; une impression sans prix reste sans prix', [ci.carte.impressions.map(i => i.prixGuide && i.prixGuide.fiable), ci.carte.impressions[0].prixGuide.reserves, ci.carte.impressions[1].prixGuide], [[false, null].map(x => x === null ? null : x), [MENTION], null]);
+        const cand = R.avecRepliAnalyse({ index: 0, statut: 'a-trancher', carte: null, candidats: [produit('tauros'), produit('arcanin')], question: { code: 'x' }, raison: null, etat: { estime: 'EX', confiance: 'basse', defauts: [], declare: null, retenu: null }, prixLive: null, zone: null });
+        v('M1. une question à trancher dont l\'état est nul : le prixGuide de chaque candidat est sous la mention (jamais fiable), sans repli', [cand.candidats.map(x => x.prixGuide.fiable), cand.candidats.map(x => x.prixGuide.reserves), 'prixRepli' in cand], [[false, false], [[MENTION], ['ecart-tendance', MENTION]], false]);
+        const candOk = { index: 0, statut: 'a-trancher', carte: null, candidats: [produit('tauros')], question: { code: 'x' }, raison: null, etat: { estime: 'EX', confiance: 'haute', defauts: [], declare: null, retenu: 'EX' }, prixLive: null, zone: null };
+        v('M1. témoin : une question dont l\'état est retenu est rendue telle quelle (la même référence)', R.avecRepliAnalyse(candOk) === candOk, true);
+        const intro = { index: 0, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'photo-illisible', etat: null, prixLive: null, zone: null };
+        v('M1. une carte introuvable (aucun prix servi) est rendue telle quelle', R.avecRepliAnalyse(intro) === intro, true);
+        v('M1. idempotent : une carte déjà sous la mention n\'est pas modifiée par un second passage', JSON.stringify(R.avecRepliAnalyse({ ...e, prixRepli: undefined }).carte.prixGuide.reserves), JSON.stringify([MENTION]));
+        const sansPrix = R.avecRepliAnalyse(carteNulle({ carte: produit('tauros', { prixGuide: { trend: 0, low: 0, avg7: null, avg30: undefined, guideDu: new Date('2026-10-12') } }) }));
+        v('M1. une fiche sans aucun prix (prixGuide null) reste rendue telle quelle : rien à marquer, A15 inchangé', [sansPrix.carte.prixGuide, 'prixRepli' in sansPrix], [null, false]);
+    }
     v('  aucun verdict, aucune offre, aucun champ de prix inventé', [e.prixRepli.offre, 'verdict' in e.prixRepli, Object.keys(e.prixRepli)], [null, false, ['repli', 'cause', 'fiable', 'guide', 'offre', 'fourchette']]);
     vrai('  le quota : un scan à fourchette AFFICHE un prix (la même règle afficheUnPrix, REPLI-QUOTA inchangée)', R.afficheUnPrix({ repli: e.prixRepli }));
     const l = R.avecRepliAnalyse(carteNulle({ prixLive: null }));
@@ -118,7 +147,7 @@ v('reservesDe ne produit JAMAIS la mention (elle dépend de l\'état de la photo
     const q = carteNulle({ statut: 'a-trancher', carte: null });
     v('une carte à trancher : jamais de repli', R.avecRepliAnalyse(q) === q, true);
     // le guide de la fiche n'est PAS muté par le repli (la carte sert toujours son prixGuide d'origine)
-    v('la fiche garde son guide d\'origine après le repli', [c.carte.prixGuide.fiable, c.carte.prixGuide.reserves, Object.isFrozen(c.carte.prixGuide)], [true, [], true]);
+    v('la fiche SOURCE garde son guide d\'origine après le repli (la réponse sert une copie sous la mention)', [c.carte.prixGuide.fiable, c.carte.prixGuide.reserves, Object.isFrozen(c.carte.prixGuide)], [true, [], true]);
     // l'analyse entière
     const ana = R.analyseAvecRepli({ statut: 'identifiee', cartes: [c], lot: null, raison: null, regleVerdict: null });
     v('analyse entière : la carte à état nul porte la fourchette', [ana.cartes[0].prixRepli.fourchette.basse.prix, ana.statut], [0.02, 'identifiee']);
@@ -135,7 +164,18 @@ v('reservesDe ne produit JAMAIS la mention (elle dépend de l\'état de la photo
     v('tendance seule, retenu null : tendance-seule + fourchette', [t.cause, t.fourchette.absentes, t.guide.fiable], ['tendance-seule', ['haute'], false]);
     // une OFFRE lue en direct alors que l'état est nul : jamais « un prix dans l'état »
     const o = R.repliRetourLive({ ...base, originePrix: 'grille', prixLive: 0.9, prixLiveEtat: 'GD', grilleLive: { NM: 1.4, EX: 1.1, GD: 0.9 } });
-    v('offre de la grille lue alors que l\'état est nul : repli tendance / etat-non-retenu, bornes = la grille lue (0,9 .. 1,4)', [o.repli, o.cause, o.fiable, o.fourchette], ['tendance', 'etat-non-retenu', false, { basse: { prix: 0.9, source: 'grille-directe' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [] }]);
+    v('offre de la grille lue alors que l\'état est nul : repli tendance / etat-non-retenu, haute = le plus cher de la grille (1,4), basse = le minimum de la grille (0,9) et du « De » du guide (0,02)', [o.repli, o.cause, o.fiable, o.fourchette], ['tendance', 'etat-non-retenu', false, { basse: { prix: 0.02, source: 'guide-de' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [] }]);
+    const dessous = R.repliRetourLive({ ...base, prixGuide: guideDe('arcanin'), originePrix: 'grille', prixLive: 0.9, prixLiveEtat: 'GD', grilleLive: { NM: 6, GD: 0.9 } });
+    v('I1. au retour en direct aussi : grille { NM 6, GD 0,9 } sous le « De » d\'Arcanin (1) : basse = 0,9 (grille-directe), haute 6', dessous.fourchette, { basse: { prix: 0.9, source: 'grille-directe' }, haute: { prix: 6, source: 'grille-directe' }, absentes: [] });
+    // TOUR 4 CORRECTION 1 (M3) : état nul, un prix lu SANS originePrix (extensions anciennes) : jamais le prix d'un seul état sans la mention ni fiable:false. Forme la plus simple qui tienne la règle :
+    // la MÊME règle que pour une grille, ouverte à toute origine — dès qu'un prix valide est lu et que l'état est nul, le repli à fourchette est servi (cause etat-non-retenu, sans grille : seuls guide-de et le prix lu bornent).
+    for (const origine of [null, undefined, '', 'inconnue']) {
+        const m = R.repliRetourLive({ ...base, originePrix: origine, prixLive: 0.9, prixLiveEtat: 'GD' });
+        v(`M3. état nul, prix lu 0,9 en GD, originePrix ${JSON.stringify(origine)} : repli à fourchette, mention, fiable false`, [m && m.repli, m && m.cause, m && m.fiable, m && m.guide.fiable, m && m.guide.reserves, m && m.offre], ['tendance', 'etat-non-retenu', false, false, [MENTION], null]);
+    }
+    v('M3. sans originePrix, un prix non valide (0, NaN, absent) et pas de lecture ratée : rien à servir', [0, NaN, null, undefined, '0,9'].map(p => R.repliRetourLive({ ...base, originePrix: null, prixLive: p })), [null, null, null, null, null]);
+    v('M3. sans originePrix mais avec un état retenu : comme avant (aucun repli)', R.repliRetourLive({ prixGuide: g, retenu: 'EX', originePrix: null, prixLive: 0.9, prixLiveEtat: 'GD' }), null);
+    v('M3. sans originePrix, état nul, fiche sans guide : rien à servir', R.repliRetourLive({ ...base, prixGuide: null, originePrix: null, prixLive: 0.9 }), null);
     v('  l\'offre d\'UN état n\'est pas servie comme un prix sûr : le repli n\'a pas d\'offre, il porte la fourchette', [o.offre, 'verdict' in o], [null, false]);
     const seule = R.repliRetourLive({ ...base, originePrix: 'grille', prixLive: 0.9, prixLiveEtat: 'GD' });
     v('offre sans grille envoyée, retenu null : repli sur le guide (basse = « De », haute absente)', [seule.cause, seule.fourchette], ['etat-non-retenu', { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] }]);

@@ -61,18 +61,27 @@ function depuisOffre(prixGuide, retenu, etatLu, prix) {
  * Au bord de la route : la carte d'une ANALYSE, ou de la réponse à une question. Une carte identifiée dont l'analyse n'a rien dicté à lire (prixLive null, ou état non estimable) reçoit `prixRepli`
  * si sa fiche a une donnée de prix. Toute autre carte est rendue TELLE QUELLE (la même référence : une réponse sans repli est celle d'avant, octet pour octet).
  * ETAT-FOURCHETTE : l'état est jugé par fourchette-etat.js::etatNonEstimable sur TOUT ce que la carte porte (l'état retenu de `etat` et l'état visé de `prixLive`) ; non estimable, le repli est la fourchette.
+ * M1 (tour 4, correction 1) : sur une carte dont l'état est non estimable, TOUT prix servi passe sous la même mention (« jamais un prix sûr ») : le `prixGuide` de la carte et de ses impressions, et celui des candidats d'une
+ * question à trancher (FE.produitSousFourchette). Une carte à trancher ne reçoit jamais de repli.
  */
 function avecRepliAnalyse(c) {
-    if (!c || typeof c !== 'object' || c.statut !== 'identifiee' || !c.carte || typeof c.carte !== 'object') return c;
+    if (!c || typeof c !== 'object' || (c.statut !== 'identifiee' && c.statut !== 'a-trancher')) return c;
     const etats = [];
     if (c.etat && typeof c.etat === 'object') etats.push(c.etat.retenu);
     if (c.prixLive && typeof c.prixLive === 'object') etats.push(c.prixLive.etatVise);
     const nonEstimable = FE.etatNonEstimable(...etats);
+    const marque = nonEstimable ? FE.produitSousFourchette : x => x;
+    if (c.statut === 'a-trancher') {
+        const candidats = Array.isArray(c.candidats) ? c.candidats.map(marque) : c.candidats;
+        return Array.isArray(candidats) && candidats.some((x, i) => x !== c.candidats[i]) ? { ...c, candidats } : c;
+    }
+    if (!c.carte || typeof c.carte !== 'object') return c;
+    const carte = marque(c.carte);
     const sansLecture = c.prixLive === null || c.prixLive === undefined;
     const cause = sansLecture ? 'langue-non-lue' : (c.prixLive && typeof c.prixLive === 'object' && nonEstimable) ? 'etat-non-retenu' : null;
-    if (cause === null) return c;
-    const repli = depuisGuide(c.carte.prixGuide, cause, { etatNonEstimable: nonEstimable });
-    return repli ? { ...c, prixRepli: repli } : c;
+    const repli = cause === null ? null : depuisGuide(c.carte.prixGuide, cause, { etatNonEstimable: nonEstimable });
+    if (carte === c.carte && !repli) return c;
+    return { ...c, carte, ...(repli ? { prixRepli: repli } : {}) };
 }
 
 /** L'analyse entière (une ou plusieurs cartes) : chaque carte reçoit son repli s'il y a lieu. La MÊME référence quand aucune carte n'en reçoit (octet pour octet). */
@@ -93,8 +102,10 @@ function repliRetourLive(o = {}) {
     const opts = { etatNonEstimable: FE.etatNonEstimable(o.retenu) };
     if (o.lectureRatee) return depuisGuide(o.prixGuide, 'lecture-ratee', opts);
     if (o.originePrix === 'tendance') return depuisGuide(o.prixGuide, 'tendance-seule', opts);
-    if (opts.etatNonEstimable && (o.originePrix === 'grille' || o.originePrix === 'plancher-toutes-langues'))
-        return depuisGuide(o.prixGuide, 'etat-non-retenu', { ...opts, grille: o.originePrix === 'grille' ? o.grilleLive : null });     // la grille d'un plancher « toutes langues » n'est pas celle de la langue visée : elle ne borne rien
+    // M3 (tour 4, correction 1) : état nul et un prix valide lu, QUELLE QUE SOIT l'origine (grille, plancher toutes langues, origine absente ou inconnue des extensions anciennes) : le prix d'un seul état n'est jamais servi sans la mention
+    // ni `fiable: false`. Forme la plus simple qui tienne la règle : le même repli à fourchette, cause `etat-non-retenu`. Seule l'origine `grille` apporte sa grille (celle d'un plancher « toutes langues » n'est pas celle de la langue visée).
+    if (opts.etatNonEstimable && (o.originePrix === 'grille' || o.originePrix === 'plancher-toutes-langues' || prixDe(o.prixLive) !== null))
+        return depuisGuide(o.prixGuide, 'etat-non-retenu', { ...opts, grille: o.originePrix === 'grille' ? o.grilleLive : null });
     if (o.originePrix === 'grille') return depuisOffre(o.prixGuide, o.retenu, o.prixLiveEtat, o.prixLive);
     return null;
 }

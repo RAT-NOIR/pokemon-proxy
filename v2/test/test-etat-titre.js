@@ -83,7 +83,11 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         ['hésitation NM / LP : le plus abîmé', 'NM', 'haute', 'LP', 'LP'],
         ['hésitation EX / GD (moyenne) : le plus abîmé', 'EX', 'moyenne', 'GD', 'GD'],
         ['aucune hésitation : l\'état unique', 'NM', 'haute', null, 'NM'],
-        ['second HORS LISTE (MINT) : refusé, l\'état unique', 'NM', 'haute', 'MINT', 'NM'],
+        // TOUR 4 CORRECTION 1 (I2) : un second REFUSÉ est une hésitation exprimée que le serveur ne sait pas lire : « dans le doute, le plus abîmé » ne peut pas être appliqué, et l'état principal serait un état plus beau que le doute.
+        // Ruling de l'éditeur : un second refusé => état retenu NUL (donc la fourchette), journalisé (etatSecondRefuse). Si c'est faux, une fourchette de plus, jamais un prix d'un meilleur état.
+        ['second HORS LISTE (MINT) : refusé, état retenu nul', 'NM', 'haute', 'MINT', null],
+        ['second « LP/PL » (deux états collés) : refusé, état retenu nul', 'GD', 'moyenne', 'LP/PL', null],
+        ['second « EX+ » : refusé, état retenu nul', 'EX', 'haute', 'EX+', null],
         ['second MEILLEUR (NM) : ne relève jamais l\'état', 'EX', 'haute', 'NM', 'EX'],
         ['confiance basse malgré l\'hésitation : null', 'EX', 'basse', 'PL', null],
     ];
@@ -173,7 +177,9 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.vrai(`3. ${route} · panne de l'état : la réponse est un succès (l'identification est intacte)`, reussi(panne));
         const e = lire(panne);
         H.v(`3. ${route} · panne de l'état : état retenu null, estimé null, confiance null`, e && [e.retenu === undefined ? null : e.retenu, e.estimeIA ?? null, e.confianceIA ?? null], [null, null, null]);
-        const hors = r => { const t = nettoyer(r.json); if (t && t.etat) delete t.etat; if (t && t.analyse && t.analyse.cartes) for (const c of t.analyse.cartes) { delete c.etat; delete c.prixLive; } return JSON.stringify(t); };
+        // TOUR 4 CORRECTION 1 (M1) : un état nul pose la mention `etat-non-estimable` (et fiable false) sur TOUT prixGuide servi ; ces deux champs sont donc la différence ATTENDUE avec la même lecture sans panne, les chiffres restent identiques
+        const sansMention = g => { if (g && typeof g === 'object') { delete g.fiable; delete g.reserves; } };
+        const hors = r => { const t = nettoyer(r.json); if (t && t.etat) delete t.etat; if (t && t.analyse && t.analyse.cartes) for (const c of t.analyse.cartes) { delete c.etat; delete c.prixLive; delete c.prixRepli; for (const p of [c.carte, ...(c.candidats || [])]) if (p) { sansMention(p.prixGuide); for (const i of p.impressions || []) sansMention(i.prixGuide); } } return JSON.stringify(t); };
         H.vrai(`3. ${route} · panne de l'état : tout le reste de la réponse (carte, candidats, classement, verdict) est celui de la même lecture sans panne`, hors(panne) === hors(sain));
     }
 
@@ -235,6 +241,10 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.vrai('5. le temps de l\'appel d\'état est journalisé (msEtat)', l.some(x => Number.isFinite(x.msEtat)));
         H.vrai('5. la cause d\'un état nul est journalisée : « panne » (appel en panne) et « delai » (état bloqué)', ['panne', 'delai'].every(c => l.some(x => x.etatCause === c)));
         H.vrai('5. aucune cause sur un état rendu (etatCause null quand l\'appel a répondu)', l.some(x => x.etatEstimeIA && !x.etatCause));
+        // TOUR 4 CORRECTION 1 (I2) : le refus d'un second état est journalisé (etatSecondRefuse), et c'est lui qui rend l'état retenu nul
+        const refuses = l.filter(x => x.etatSecondRefuse === true);
+        H.v('5. etatSecondRefuse : journalisé sur les scans au second refusé (MINT, LP/PL, EX+ ; deux routes), état retenu nul sur chacun', [refuses.length >= 6, refuses.every(x => x.etatRetenu === null && x.etatSecond === null)], [true, true]);
+        H.vrai('5. etatSecondRefuse ne marque que les refus : un second valide ou l\'absence de second ne le posent pas', l.filter(x => x.etatSecond).every(x => x.etatSecondRefuse !== true) && l.filter(x => x.etatSecondRefuse !== true).length > 0);
     }
 
     srv.enfant.kill();

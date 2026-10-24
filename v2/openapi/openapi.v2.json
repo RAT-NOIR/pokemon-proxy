@@ -3698,7 +3698,7 @@
                 "etat-non-estimable"
               ]
             },
-            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `etat-non-estimable` (lot ETAT-FOURCHETTE, texte de l'éditeur : « état non estimable sur les photos ») n'est JAMAIS porté par le guide d'une fiche : il est posé, en DERNIER, sur le guide d'un `prixRepli` servi avec une `fourchette` (l'état de la carte n'a pas pu être estimé sur les photos) ; ce guide-là n'est alors jamais `fiable`. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). `version-tamponnee-prix-sous-estime` (lot F1-TAMPON, règle 2) : le tampon STAFF a été lu sur la photo, deux fois à l'identique, pour une fiche marquée ; elle est servie À LA PLACE de `peut-etre-gonfle-par-tampons`, jamais avec elle (texte : « version tamponnée : le prix Cardmarket sous-estime sa valeur »). Derrière un interrupteur éteint (V2_LECTURE_TAMPON) : tant qu'il est éteint, ou que l'extension n'envoie pas la carte, elle n'est jamais servie."
+            "description": "AJOUT FACULTATIF (lot F4-PRIX), toujours servi : les codes fermés des réserves, dans cet ordre. `etat-non-estimable` (lot ETAT-FOURCHETTE, texte de l'éditeur : « état non estimable sur les photos ») n'est JAMAIS porté par le guide d'une fiche au catalogue : il est posé, en DERNIER, sur les `prixGuide` servis d'un scan dont l'état n'a pas pu être estimé sur les photos (celui de la carte, de ses impressions, de ses candidats, et celui d'un `prixRepli` servi avec une `fourchette`) ; ces guides-là ne sont alors jamais `fiable`. `ecart-tendance` : la tendance s'écarte de plus de `regleVerdict.ecartTendanceMax` (30 %) de `moyenne7` ou de `moyenne30`. `ecart-non-mesurable` : aucun écart n'a pu être mesuré (tendance absente, aucune moyenne valide) ou la ligne du produit ou de l'impression n'a pas été lue (absente de numeros_cartes, lecture en panne) : « je ne peux pas conclure » n'est jamais « fiable ». `prix-indicatif-tampons-melanges` et `peut-etre-gonfle-par-tampons` : la fiche Cardmarket mélange la version normale et une version tamponnée (les deux ensemble, tant qu'aucun tampon n'est lu sur la photo ; le texte à afficher est dans CONTRAT-API-V2.md). `version-tamponnee-prix-sous-estime` (lot F1-TAMPON, règle 2) : le tampon STAFF a été lu sur la photo, deux fois à l'identique, pour une fiche marquée ; elle est servie À LA PLACE de `peut-etre-gonfle-par-tampons`, jamais avec elle (texte : « version tamponnée : le prix Cardmarket sous-estime sa valeur »). Derrière un interrupteur éteint (V2_LECTURE_TAMPON) : tant qu'il est éteint, ou que l'extension n'envoie pas la carte, elle n'est jamais servie."
           }
         },
         "required": [
@@ -3776,7 +3776,7 @@
                 "$ref": "#/components/schemas/BornePrix"
               }
             ],
-            "description": "Le prix dans l'état le plus abîmé plausible, ou null quand aucune donnée de prix ne le donne (alors `absentes` contient `basse`). Source : le plus bas prix de la grille lue en direct (`grille-directe`, deux états au moins), sinon le « De » du guide (`guide-de`, l'offre la plus basse TOUS ÉTATS et toutes langues)."
+            "description": "Le prix dans l'état le plus abîmé plausible, ou null quand aucune donnée de prix ne le donne (alors `absentes` contient `basse`). Le MINIMUM de tout ce qui est connu : les prix valides de la grille lue en direct (même un seul état) ET le « De » du guide (l'offre la plus basse TOUS ÉTATS et toutes langues) ; `source` nomme celui des deux qui donne ce minimum (`grille-directe` à égalité). L'état n'étant pas estimable, une grille qui ne contient pas le bas ne fixe pas la borne basse seule. Un prix sous 0,01 est écarté."
           },
           "haute": {
             "oneOf": [
@@ -3823,7 +3823,7 @@
               "guide-de",
               "grille-directe"
             ],
-            "description": "D'où vient la borne. `guide-de` : le « De » du guide du jour (l'offre la plus basse tous états et toutes langues). `grille-directe` : la grille lue en direct par l'extension (un prix par état, envoyée avec le retour en direct), le plus bas ou le plus haut de ses prix."
+            "description": "D'où vient la borne. `guide-de` : le « De » du guide du jour (l'offre la plus basse tous états et toutes langues), seulement pour la borne basse, quand il est le minimum des prix connus. `grille-directe` : la grille lue en direct par l'extension (un prix par état, envoyée avec le retour en direct), le plus bas ou le plus haut de ses prix."
           }
         },
         "required": [

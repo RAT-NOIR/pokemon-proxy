@@ -657,7 +657,9 @@ function traiterIdentifier(cfg, deps = {}) {
         try {
             const maintenant = new Date();
             // B1b.8 : pour un lot, la ligne `analyses` range les cartes dans l'ordre d'ENTRÉE (cartes[carte] = la carte `index` de /reponse), la réponse dans l'ordre des valeurs
-            const cartes = sortie.cartesEntree || analyse.cartes;
+            // ETAT-FOURCHETTE (M1) : la ligne `analyses` range les produits TELS QUE LE CATALOGUE LES A RENDUS (resultat.analyse, avant le repli et la mention d'état non estimable) : la mention est une décision de CE scan,
+            // elle se recalcule à la demande (retour en direct, réponse à une question) depuis l'état retenu de la ligne, jamais depuis un guide déjà marqué.
+            const cartes = sortie.cartesEntree || resultat.analyse.cartes;
             await col('analyses').insertOne({
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue

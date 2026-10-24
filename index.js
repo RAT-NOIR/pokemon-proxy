@@ -3053,6 +3053,9 @@ function etatRetenuDuModele(cardInfo) {
     if (c.etatConfiance !== 'haute' && c.etatConfiance !== 'moyenne') return null;
     const e = String(c.etatEstime || '').toUpperCase();
     if (!ORDRE_ETATS.includes(e)) return null;
+    // ETAT-FOURCHETTE (tour 4, correction 1, I2 ; ruling de l'éditeur) : un second état REFUSÉ (« LP/PL », « EX+ », « MINT »…) est une hésitation que le serveur ne sait pas lire. « Dans le doute, le plus abîmé » ne peut pas s'appliquer :
+    // retomber sur l'état principal servirait un état plus beau que le doute. L'état retenu est donc NUL (donc la fourchette) et le refus est journalisé (`etatSecondRefuse`). Si c'est faux : une fourchette de plus, jamais un prix d'un meilleur état.
+    if (c.etatSecondRefuse === true) return null;
     // ETAT-TITRE (règle de l'éditeur, tour 2) : si le modèle a nommé un second état plausible (champ fermé, facultatif), on retient le PLUS ABÎMÉ des deux ; sans hésitation, l'état unique. Le second n'est jamais retenu seul.
     return require('./v2/identifier/etat-photos').retenirEtat(e, c.etatSecond);
 }
@@ -3794,6 +3797,7 @@ async function gererIdentifier(req, res) {
                 etatIdentification: c.etatIdentification ? `${c.etatIdentification.etatEstime ?? '?'}|${c.etatIdentification.etatConfiance ?? '?'}` : null,
                 etatCause: typeof c.etatCause === 'string' ? c.etatCause : null,           // pourquoi l'état est nul quand l'appel d'état n'a pas rendu : sans-image, depense, arret, panne, illisible, delai
                 etatSecond: typeof c.etatSecond === 'string' ? c.etatSecond : null,           // le second état plausible nommé par le modèle quand il hésite (information : l'état retenu est le plus abîmé des deux)
+                etatSecondRefuse: c.etatSecondRefuse === true,                                // I2 : le modèle a nommé un second état HORS LISTE (« LP/PL », « EX+ »…) : refusé, l'état retenu est nul (etatRetenuDuModele)
                 // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
                 // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
                 // devient mesurable maintenant qu'il est journalisé.

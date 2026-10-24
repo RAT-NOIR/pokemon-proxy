@@ -48,7 +48,8 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
     v('  la fiche, elle, garde son guide d\'origine (le repli ne la modifie pas)', [c.carte.prixGuide.fiable, c.carte.prixGuide.reserves], [true, []]);
     v('  aucune offre inventée, aucun verdict', [e.prixRepli.offre, 'verdict' in e.prixRepli, 'verdict' in e], [null, false, false]);
     v('  ETAT-FOURCHETTE : l\'état est nul, donc le repli porte la fourchette (le détail est dans test-fourchette-etat.js)', e.prixRepli.fourchette, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] });
-    v('  la carte d\'origine est intacte (immuable : même prixLive, même carte)', [e.prixLive, e.carte === c.carte, c.prixRepli], [c.prixLive, true, undefined]);
+    // M1 : la carte servie est une copie dont le seul changement est son prixGuide sous la mention (« jamais un prix sûr ») ; l'originale n'est pas touchée
+    v('  la carte d\'origine est intacte (immuable : même prixLive) ; la carte servie ne diffère que par son prixGuide (sous la mention)', [e.prixLive, e.carte !== c.carte, JSON.stringify({ ...e.carte, prixGuide: null }) === JSON.stringify({ ...c.carte, prixGuide: null }), e.carte.prixGuide.reserves, c.prixRepli], [c.prixLive, true, true, ['etat-non-estimable'], undefined]);
     v('  l\'ordre des clés : celles d\'avant, puis prixRepli', cle(e), cle({ ...c, prixRepli: 1 }));
     // l'analyse ENTIÈRE (ce que la route sert) : la carte de Tauros reçoit son repli, rien d'autre ne bouge ; sans repli à poser, la MÊME référence
     const ana = { ...r.analyse, regleVerdict: null };
@@ -67,7 +68,7 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
     vrai('câblage : identifier/retour-live.js joint le repli à la réponse', /\.\.\.avecRepli\(repli\)/.test(src('identifier/retour-live.js')));
     // le scanner ne sert jamais le repli (il n'a aucune lecture live) : sansRepli le retire, et rend la MÊME référence quand il n'y en a pas
     const s = R.sansRepli(e);
-    v('scanner : sansRepli retire la clé, le reste est la carte d\'avant', [JSON.stringify(s) === JSON.stringify(c), 'prixRepli' in s], [true, false]);
+    v('scanner : sansRepli retire la clé, le reste est la carte servie (le prixGuide sous la mention : le scanner montre le guide, jamais comme un prix sûr)', [JSON.stringify(s) === JSON.stringify({ ...c, carte: e.carte }), 'prixRepli' in s], [true, false]);
     v('scanner : sans repli, la même référence (octet pour octet)', [R.sansRepli(c) === c, R.sansRepli(null), R.sansRepli('x')], [true, null, 'x']);
 }
 

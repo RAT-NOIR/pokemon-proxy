@@ -66,6 +66,7 @@ function analyserReponse(contenu) {
 /**
  * L'état RETENU quand le modèle hésite (règle de l'éditeur : l'erreur ne va JAMAIS vers « moins abîmé que la réalité ») : le PLUS ABÎMÉ des deux états ; sans second état valide, l'état unique ; sans état valide, null.
  * La porte de confiance (haute ou moyenne, sinon null) s'applique AVANT, dans index.js (etatRetenuDuModele). Le second n'est jamais retenu seul, et un second meilleur que le premier ne le relève jamais.
+ * Un second REFUSÉ (hors liste) n'arrive jamais ici : analyserReponse le rend null avec `etatSecondRefuse`, et etatRetenuDuModele rend alors un état retenu NUL (tour 4, correction 1, I2) au lieu de retomber sur l'état principal.
  */
 function retenirEtat(estime, second) {
     const e = ETATS.indexOf(String(estime ?? '').toUpperCase());

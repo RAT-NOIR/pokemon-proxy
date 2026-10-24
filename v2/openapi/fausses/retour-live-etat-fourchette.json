@@ -11,14 +11,15 @@
     "cause": "etat-non-retenu",
     "fiable": false,
     "guide": {
-      "tendance": 1.49,
-      "de": 0.02,
+      "tendance": 10.18,
+      "de": 1,
       "deBase": "tous-etats",
-      "moyenne7": 1.55,
-      "moyenne30": 1.26,
+      "moyenne7": 14.59,
+      "moyenne30": 13.15,
       "date": "2026-10-12",
       "fiable": false,
       "reserves": [
+        "ecart-tendance",
         "etat-non-estimable"
       ]
     },
@@ -29,7 +30,7 @@
         "source": "grille-directe"
       },
       "haute": {
-        "prix": 1.4,
+        "prix": 6,
         "source": "grille-directe"
       },
       "absentes": []

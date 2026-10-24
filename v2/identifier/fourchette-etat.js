@@ -18,7 +18,9 @@ const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);       /
 const SOURCES = Object.freeze(['guide-de', 'grille-directe']);
 const BORNES = Object.freeze(['basse', 'haute']);
 
-const prixDe = x => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);          // un zéro n'est pas un prix ; un texte non plus (jamais « 0,5 » deviné)
+// Le plus petit prix d'une borne : 0,01 € (le minimum du schéma `BornePrix`, le plus petit prix Cardmarket). Un prix en dessous est une valeur invalide, écartée comme un zéro : le serveur ne sert jamais une borne hors de son propre contrat.
+const PRIX_MIN = 0.01;
+const prixDe = x => (typeof x === 'number' && Number.isFinite(x) && x >= PRIX_MIN ? x : null);          // un zéro n'est pas un prix ; un texte non plus (jamais « 0,5 » deviné)
 const etatDe = x => { const e = typeof x === 'string' ? x.trim().toUpperCase() : null; return e !== null && ETATS.includes(e) ? e : null; };
 
 /**
@@ -46,22 +48,22 @@ function grilleDe(g) {
 
 /**
  * Les bornes de la fourchette.
- * @param o.guide   le prixGuide servi de la fiche (ou null) : son « De » (offre la plus basse TOUS ÉTATS et toutes langues) est la borne basse quand aucune grille ne la donne ;
- * @param o.grille  la grille lue en direct { ETAT: prix } (ou rien) : DEUX états valides au moins, sinon elle ne borne rien (avec un seul, on ne sait pas si d'autres états sont moins ou plus chers) ;
- *                  alors basse = le prix le plus bas de la grille, haute = le plus haut (un état meilleur qui coûterait moins resterait couvert).
+ * L'état n'étant pas estimable, TOUS les états jusqu'au plus abîmé sont plausibles : une grille lue en direct, qui ne contient pas forcément le bas, ne fixe pas la borne basse seule.
+ * @param o.guide   le prixGuide servi de la fiche (ou null) : son « De » (offre la plus basse TOUS ÉTATS et toutes langues) est un candidat de la borne basse ;
+ * @param o.grille  la grille lue en direct { ETAT: prix } (ou rien) : ses prix valides (même un seul état) sont des candidats de la borne basse ; avec DEUX états valides au moins, son prix le plus haut est la borne haute
+ *                  (avec un seul état on ne sait pas si un meilleur état coûte plus : la haute reste absente).
+ *                  BASSE = le MINIMUM de tous les candidats, avec la source de ce minimum (à égalité : `grille-directe`, lue en direct). Un prix sous 0,01 n'est le candidat de rien.
  * @returns {{ basse: {prix, source}|null, haute: {prix, source}|null, absentes: string[] }}  `absentes` dit exactement les bornes nulles, basse puis haute.
  */
 function fourchetteDe(o) {
     const { guide = null, grille = null } = o !== null && typeof o === 'object' ? o : {};
     const gr = grilleDe(grille), prix = Object.values(gr);
+    const de = guide !== null && typeof guide === 'object' ? prixDe(guide.de) : null;
+    const minGrille = prix.length ? Math.min(...prix) : null;
     let basse = null, haute = null;
-    if (prix.length >= 2) {
-        basse = Object.freeze({ prix: Math.min(...prix), source: 'grille-directe' });
-        haute = Object.freeze({ prix: Math.max(...prix), source: 'grille-directe' });
-    } else {
-        const de = guide !== null && typeof guide === 'object' ? prixDe(guide.de) : null;
-        if (de !== null) basse = Object.freeze({ prix: de, source: 'guide-de' });
-    }
+    if (minGrille !== null && (de === null || minGrille <= de)) basse = Object.freeze({ prix: minGrille, source: 'grille-directe' });
+    else if (de !== null) basse = Object.freeze({ prix: de, source: 'guide-de' });
+    if (prix.length >= 2) haute = Object.freeze({ prix: Math.max(...prix), source: 'grille-directe' });
     const f = { basse, haute };
     return Object.freeze({ basse, haute, absentes: Object.freeze(BORNES.filter(b => f[b] === null)) });
 }
@@ -72,4 +74,20 @@ function guideSousFourchette(guide) {
     return Object.freeze({ ...guide, fiable: false, reserves: Object.freeze([...reserves, ETAT_NON_ESTIMABLE]) });
 }
 
-module.exports = { ETATS, SOURCES, BORNES, etatNonEstimable, grilleDe, fourchetteDe, guideSousFourchette };
+/**
+ * M1 (tour 4, correction 1) — « jamais un prix sûr » vaut pour TOUT prix servi d'un scan dont l'état n'est pas estimable : le `prixGuide` du produit et celui de ses impressions (appliqué à chaque candidat, celui des candidats
+ * d'une question) passent SOUS la mention, par la même `guideSousFourchette`. Rend un objet NEUF (le produit servi est gelé, l'original n'est pas touché) ; la MÊME référence quand rien n'est à marquer (aucun prix servi, ou
+ * déjà marqué). Écrit par ce qu'il AUTORISE : seul un guide objet est marqué, tout le reste (null, absent) est laissé tel quel.
+ */
+function produitSousFourchette(p) {
+    if (p === null || typeof p !== 'object' || Array.isArray(p)) return p;
+    const marque = g => (g !== null && typeof g === 'object' && !Array.isArray(g) ? guideSousFourchette(g) : g);
+    const memes = (a, b) => a === b || (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && JSON.stringify(a) === JSON.stringify(b));
+    const prixGuide = marque(p.prixGuide);
+    const impressions = Array.isArray(p.impressions) ? p.impressions.map(i => (i !== null && typeof i === 'object' ? { ...i, ...('prixGuide' in i ? { prixGuide: marque(i.prixGuide) } : {}) } : i)) : null;
+    const inchange = memes(prixGuide, p.prixGuide) && (impressions === null || impressions.every((i, k) => i === p.impressions[k] || memes(i.prixGuide, p.impressions[k].prixGuide)));
+    if (inchange) return p;
+    return Object.freeze({ ...p, ...('prixGuide' in p ? { prixGuide } : {}), ...(impressions ? { impressions: Object.freeze(impressions.map(i => (i !== null && typeof i === 'object' ? Object.freeze(i) : i))) } : {}) });
+}
+
+module.exports = { ETATS, SOURCES, BORNES, PRIX_MIN, etatNonEstimable, grilleDe, fourchetteDe, guideSousFourchette, produitSousFourchette };
