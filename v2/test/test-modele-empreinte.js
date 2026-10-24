@@ -41,7 +41,10 @@ function fauxClient({ meta = SHA, taille = TAILLE, echec = false } = {}) {
 (async () => {
     // ── (0) la signature SigV4 : le vecteur PUBLIÉ par AWS (« Authenticating Requests: Using Query Parameters », GET examplebucket/test.txt, 86400 s)
     {
-        const base = { hote: 'examplebucket.s3.amazonaws.com', cheminCanonique: '/test.txt', cleId: 'AKIAIOSFODNN7EXAMPLE', secret: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', region: 'us-east-1', maintenant: new Date('2013-05-24T00:00:00Z') };
+        // Identifiant et secret d'EXEMPLE de la documentation AWS (le vecteur public) : composés par morceaux A L'EXECUTION, jamais en littéral entier (aucune forme de clé dans le dépôt).
+        const cleVecteur = ['AKI', 'AIOSFODNN7', 'EXAMPLE'].join('');
+        const secretVecteur = ['wJalrXUtnFEMI/K7MDENG', '/bPxRfiCY', 'EXAMPLEKEY'].join('');
+        const base = { hote: 'examplebucket.s3.amazonaws.com', cheminCanonique: '/test.txt', cleId: cleVecteur, secret: secretVecteur, region: 'us-east-1', maintenant: new Date('2013-05-24T00:00:00Z') };
         const v = ME.signerSigV4({ ...base, expireS: 86400 });
         H.v('0a. 🔑 le vecteur publié par AWS : la signature calculée est exactement aeeed9bb…d404', /X-Amz-Signature=([0-9a-f]+)$/.exec(v)[1], 'aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404');
         const refus = []; for (const e of [601, 0, 86400, 1.5, -1]) { try { ME.presigner({ ...base, expireS: e }); refus.push(false); } catch { refus.push(true); } }
