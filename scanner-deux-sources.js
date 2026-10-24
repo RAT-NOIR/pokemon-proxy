@@ -34,15 +34,36 @@ if (!clone.cartes.length) throw new Error('clone vide');
 // --- index des relevés
 const parSetNum = new Map();   // `${set}|${numero}` -> relevés
 const ajouter = (set, numero, r) => { if (!set || numero == null || String(numero).trim() === '') return; const k = `${set}|${cleNumero(String(numero))}`; (parSetNum.get(k) || parSetNum.set(k, []).get(k)).push({ ...r, set, numero }); };
-const SOURCE_IMAGES = { artofpkm: 'artofpkm', pikaqian: 'pikaqian', 'tpc-asie': 'tpc-asie', 'pokemon-card-com': 'pokemon-card-com', pokumon: 'pokumon', 'pokemontcg.io': 'pokemontcg.io', tcgdex: 'tcgdex', ctr: 'ctr', pkc: 'pkc', pdt: 'pdt', pokellector: 'pokellector' };
+// (PikaQian n'est PAS lu ici : ses images ont été jointes à nos produits par NOTRE chaîne, leur numéro n'est pas indépendant ; ses TUILES sont lues plus bas, calibrées par set)
+const SOURCE_IMAGES = { artofpkm: 'artofpkm', 'tpc-asie': 'tpc-asie', 'pokemon-card-com': 'pokemon-card-com', pokumon: 'pokumon', 'pokemontcg.io': 'pokemontcg.io', tcgdex: 'tcgdex', ctr: 'ctr', pkc: 'pkc', pdt: 'pdt', pokellector: 'pokellector' };
 for (const im of images) {
     const s = SOURCE_IMAGES[im.source]; if (!s) continue;
     ajouter(im.set, im.numero, { source: s, nom: im.nomEn ?? (im.titre ? String(im.titre).split(',')[0] : null), ref: `images ${im._id}` });
 }
-// TPC : la ligne TPC du set désigne (site, langue, code imprimé)
-for (const f of tpc) {
+// PikaQian : les TUILES des pages passives et des fiches apprises (nom, numéro), rattachées à nos sets par la table du dépôt, puis CALIBRÉES par set sur les produits déjà joints :
+// un set n'est lu que s'il est prouvé (0 conflit, >= 20 accords). Les produits « joints » = ceux qui ont une ligne dans cartes_produits (copie locale).
+const { TABLE_PIKAQIAN } = require('./collecte-cartes/pikaqian-sets');
+const { relevesPikaqian, calibrer } = require('./collecte-cartes/releves-locaux');
+const CATALOGUE = arg('catalogue') || 'C:/Users/Yung/rat-market-travail/catalogue';
+const pqR = relevesPikaqian(CATALOGUE, TABLE_PIKAQIAN);
+const lignesDe = new Set(L('cartes_produits').map(l => l.idProduct));
+const joints = [];
+for (const [id, n] of nc) if (lignesDe.has(id) && n.slugSet && n.numero != null && String(n.numero).trim() !== '' && cat.get(id)) joints.push({ idProduct: id, set: n.slugSet, numero: String(n.numero), nom: decomposerNomCardmarket(cat.get(id).name).nom });
+const calPq = calibrer(pqR.releves, joints);
+console.log(`PIKAQIAN : ${pqR.releves.length} tuiles lues (${pqR.pages} pages ; sans set dans la table : ${pqR.pagesSansSet.join(', ') || 'aucune'}) · produits joints de comparaison ${joints.length} · sets CALIBRÉS ${calPq.calibres.length} / ${Object.keys(calPq.parSet).length} comparés`);
+for (const s of ['Scarlet-Violet-Simplified-Chinese-Promos']) console.log(`   ${s} : ${JSON.stringify(calPq.parSet[s] || 'aucun produit joint comparé')}`);
+for (const r of pqR.releves) if (calPq.calibres.includes(r.set)) ajouter(r.set, r.numero, { source: 'pikaqian', nom: r.nom, ref: r.ref });
+// TPC : la ligne TPC du set désigne (site, langue, code imprimé). Une fiche JAPONAISE (pokemon-card.com) se lit en anglais par la table « nom japonais → nom anglais » de NOS cartes (exporter-nomja.js),
+// à condition qu'elle ne désigne qu'UN nom anglais ; sinon le nom reste japonais (il ne concordera pas : un trou, jamais une devinette).
+const NOMJA = arg('nomja') ? JSON.parse(fs.readFileSync(arg('nomja'), 'utf8')) : {};
+const { nomCompare } = require('./collecte-cartes/tpc');
+const nomEnDe = (site, nom) => { if (site === 'tpc-asie' || !nom) return nom; const v = NOMJA[nomCompare(nom)]; return Array.isArray(v) && v.length === 1 ? v[0] : nom; };
+const fichesTpc = tpc.map(f => ({ site: f.site, langue: f.langue, idFiche: f.idFiche, url: f.url, fiche: f.fiche }));
+// les fiches lues EN LIGNE le 2026-10-24 (releve-tpc-en-ligne.js) : celles qui ne sont pas déjà dans le cache s'ajoutent
+if (arg('pcc')) { const J = JSON.parse(fs.readFileSync(arg('pcc'), 'utf8')); const deja = new Set(tpc.map(f => `${f.site}/${f.langue}/${f.idFiche}`)); for (const f of J.fiches) if (!deja.has(`${J.site}/${J.langue}/${f.idFiche}`)) fichesTpc.push({ site: J.site, langue: J.langue, idFiche: f.idFiche, url: f.url, fiche: f }); console.log(`   pokemon-card.com lu en ligne : ${J.fiches.filter(f => !f.cache).length} fiche(s) nouvelle(s) ajoutée(s) au cache local (${J.requetes} requêtes)`); }
+for (const f of fichesTpc) {
     const lignes = TABLE_TPC.filter(l => l.site === (f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com') && l.langue === f.langue && (f.fiche?.denominateur ?? null) != null && String(l.code) === String(f.fiche.denominateur));
-    for (const l of lignes) ajouter(l.slug, f.fiche.numero, { source: f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com', nom: f.fiche.nom, dex: f.fiche.dex ? [].concat(f.fiche.dex) : null, ref: f.url ?? `${f.site}/${f.langue}/${f.idFiche}` });
+    for (const l of lignes) ajouter(l.slug, f.fiche.numero, { source: f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com', nom: nomEnDe(f.site, f.fiche.nom), dex: f.fiche.dex ? [].concat(f.fiche.dex) : null, ref: f.url ?? `${f.site}/${f.langue}/${f.idFiche}` });
 }
 // TCGdex (clone) : par idProduct, sinon par (expansion Cardmarket du set TCGdex, numéro local)
 const parId = new Map(); for (const c of clone.cartes) for (const id of c.ids) (parId.get(id) || parId.set(id, []).get(id)).push(c);
@@ -50,17 +71,22 @@ const expDuDossier = new Map([...clone.sets].map(([d, s]) => [d, s.exp]));
 const parExpNum = new Map(); for (const c of clone.cartes) { const e = expDuDossier.get(c.dossier); if (e) (parExpNum.get(`${e}|${cleNumero(c.localId)}`) || parExpNum.set(`${e}|${cleNumero(c.localId)}`, []).get(`${e}|${cleNumero(c.localId)}`)).push(c); }
 const releveApi = API ? JSON.parse(fs.readFileSync(API, 'utf8')) : {};
 
+// UNE fonction pour réunir ce que les relevés indépendants disent d'un produit à (set, numéro) : la boucle des 3 263 produits ET l'évaluation des lignes d'un plan s'en servent (§21 bis)
+function relevesDe(idProduct, set, numero) {
+    const rel = [...(set && numero != null ? parSetNum.get(`${set}|${cleNumero(String(numero))}`) || [] : [])];
+    const expP = cat.get(idProduct)?.idExpansion;
+    for (const c of parId.get(idProduct) || []) rel.push({ source: 'tcgdex', set: expDuDossier.get(c.dossier) === expP ? set : `exp ${expDuDossier.get(c.dossier)}`, numero: c.localId, nom: c.en, dex: c.dex, ref: c.tcgdexId });
+    if (!(parId.get(idProduct) || []).length && numero != null) for (const c of parExpNum.get(`${expP}|${cleNumero(String(numero))}`) || []) rel.push({ source: 'tcgdex', set, numero: c.localId, nom: c.en, dex: c.dex, ref: c.tcgdexId });
+    for (const r of releveApi[idProduct] || []) rel.push({ ...r, set: r.set ?? set });
+    return rel;
+}
 const res = {}; const parSource = {}; let n = 0, ok = 0, okNeufs = 0, neufs = 0;
 for (const e of diag) for (const p of e.produits) {
     n++;
     const N = nc.get(p.idProduct); const set = N?.slugSet ?? null;
     const dn = decomposerNomCardmarket(p.name);
     const produit = { set, numero: N?.numero ?? null, nom: dn.nom };
-    const rel = [...(set && produit.numero != null ? parSetNum.get(`${set}|${cleNumero(String(produit.numero))}`) || [] : [])];
-    const expP = cat.get(p.idProduct)?.idExpansion;
-    for (const c of parId.get(p.idProduct) || []) rel.push({ source: 'tcgdex', set: expDuDossier.get(c.dossier) === expP ? set : `exp ${expDuDossier.get(c.dossier)}`, numero: c.localId, nom: c.en, dex: c.dex, ref: c.tcgdexId });
-    if (!(parId.get(p.idProduct) || []).length && produit.numero != null) for (const c of parExpNum.get(`${expP}|${cleNumero(String(produit.numero))}`) || []) rel.push({ source: 'tcgdex', set, numero: c.localId, nom: c.en, dex: c.dex, ref: c.tcgdexId });
-    for (const r of releveApi[p.idProduct] || []) rel.push({ ...r, set: r.set ?? set });
+    const rel = relevesDe(p.idProduct, set, produit.numero);
     const dexProduit = DEX[cleDex(dn.nom)] ?? null;
     const j = juger(produit, rel, { dexProduit });
     res[p.idProduct] = { exp: e.exp, set, numero: produit.numero, nom: produit.nom, neuf: !!p.nouveau, ...j };
@@ -68,4 +94,29 @@ for (const e of diag) for (const p of e.produits) {
     if (j.ok) { ok++; if (p.nouveau) okNeufs++; for (const s of j.sources.filter(x => x !== 'cardmarket')) parSource[s] = (parSource[s] || 0) + 1; }
 }
 console.log(`PASSENT la règle des deux sources : ${ok} / ${n} (dont neufs ≥ 917000 : ${okNeufs} / ${neufs}) · par source indépendante : ${JSON.stringify(parSource)}`);
+// ── LES LIGNES D'UN PLAN (lots 3 et 5 : des données tirées de Bulbapedia) : chaque ligne doit être confirmée par DEUX sources non-Bulbapedia sur (set, numéro de la FICHE, nom).
+// Le numéro jugé est celui que la ligne écrirait (`numeroFiche`, sinon le numéro Cardmarket). Cardmarket compte comme une source SEULEMENT si son numéro est ce numéro-là ; sinon il ne
+// confirme rien, et il faut deux sources indépendantes. Le plan se passe par `--plans=a.json,b.json` ; le résultat est écrit à côté de SORTIE.
+const PLANS = arg('plans') ? arg('plans').split(',') : [];
+const planRes = {};
+for (const f of PLANS) {
+    const P = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const nom = path.basename(f).replace(/\.json$/, '');
+    const lignes = P.lignes.map(l => {
+        const N = nc.get(l.idProduct); const dn = decomposerNomCardmarket(cat.get(l.idProduct)?.name ?? l.nomProduit ?? '');
+        const set = l.slugSet ?? N?.slugSet ?? null;
+        const numero = l.numeroFiche ?? N?.numero ?? null;
+        const rel = relevesDe(l.idProduct, set, numero);
+        const j = juger({ set, numero, nom: dn.nom }, rel, { dexProduit: DEX[cleDex(dn.nom)] ?? null });
+        const indep = [...new Set(j.concordantes.map(c => c.source))];
+        const cmConfirme = Boolean(N && N.numero != null && numero != null && N.slugSet === set && cleNumero(String(N.numero)) === cleNumero(String(numero)));
+        const sources = [...(cmConfirme ? ['cardmarket'] : []), ...indep];
+        return { idProduct: l.idProduct, code: l.code ?? null, set, numeroFiche: numero, nom: dn.nom, sources, ok: sources.length >= 2 && indep.length >= 1, concordantes: j.concordantes.map(c => `${c.source}:${c.ref ?? ''}`).slice(0, 3), cardmarketNumero: N?.numero ?? null, cmConfirme };
+    });
+    const parCode = {}; for (const l of lignes) { const k = (parCode[l.code ?? '?'] ||= { lignes: 0, ok: 0, sources: {} }); k.lignes++; if (l.ok) { k.ok++; for (const s of l.sources) k.sources[s] = (k.sources[s] || 0) + 1; } }
+    planRes[nom] = { lignes: lignes.length, ok: lignes.filter(l => l.ok).length, parCode, detail: lignes };
+    console.log(`PLAN ${nom} : ${planRes[nom].ok} / ${lignes.length} lignes confirmées par deux sources non-Bulbapedia · ${JSON.stringify(parCode)}`);
+}
+if (PLANS.length) fs.writeFileSync(SORTIE.replace(/\.json$/, '-plans.json'), JSON.stringify(planRes));
 fs.writeFileSync(SORTIE, JSON.stringify(res));
+fs.writeFileSync(SORTIE.replace(/\.json$/, '-calibration-pikaqian.json'), JSON.stringify(calPq));

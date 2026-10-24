@@ -19,7 +19,7 @@ const J = require('./collecte-cartes/jointure');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
-const AUTORISES = [/^--nom=[\w-]+$/, /^--plans=.+\.json(,.+\.json)*$/, /^--sortie=.+$/, /^--api=.+$/];
+const AUTORISES = [/^--nom=[\w-]+$/, /^--plans=.+\.json(,.+\.json)*$/, /^--sortie=.+$/, /^--api=.+$/, /^--confirmation=.+\.json$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 
@@ -29,6 +29,9 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
     const NOM = arg('nom'), PLANS = arg('plans').split(','), SORTIE = arg('sortie');
     if (!NOM || !PLANS[0] || !SORTIE) { console.error('❌ --nom, --plans et --sortie obligatoires'); process.exit(2); }
     const plans = PLANS.map(f => ({ f, ...JSON.parse(fs.readFileSync(f, 'utf8')) }));
+    // `--confirmation=` : la sortie de `scanner-deux-sources.js --plans=` (par plan, par produit : les sources qui concordent) — une colonne de la planche, jamais un filtre
+    const CONF = arg('confirmation') ? JSON.parse(fs.readFileSync(arg('confirmation'), 'utf8')) : null;
+    const confDe = (f, idProduct) => CONF?.[path.basename(f).replace(/\.json$/, '')]?.detail?.find(d => d.idProduct === idProduct) ?? null;
     for (const p of plans) if (!Array.isArray(p.lignes) || !p.lignes.length) { console.error(`❌ plan vide ou illisible : ${p.f} — une comparaison sur du vide ne mesure rien`); process.exit(1); }
     const api = await GC.chargerApi({ dossier: arg('api') || undefined });
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true });
@@ -48,6 +51,8 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
         const cartesApres = cartes.slice(), idxCarte = new Map(cartes.map((c, i) => [c._id, i]));
         const copier = id => { const i = idxCarte.get(id); if (i === undefined) return null; const c = cartesApres[i]; if (!c.__copie) cartesApres[i] = { ...c, sets: [...(c.sets || [])], impressions: [...(c.impressions || [])], __copie: true }; return cartesApres[i]; };
         let carteAbsente = 0;
+        // les CARTES que le plan créerait (fiches simples) entrent d'abord, pour que leurs lignes les trouvent ; une carte déjà en base n'est pas touchée
+        for (const p of plans) for (const c of p.cartes || []) if (!idxCarte.has(c._id)) { idxCarte.set(c._id, cartesApres.length); cartesApres.push({ _id: c._id, nomEn: c.nomEn, sets: [...(c.sets || [])], impressions: (c.impressions || []).map(i => ({ tirage: i.tirage, expansion: i.expansion, numero: i.numero, total: i.total ?? null, deck: i.deck ?? null, rarete: i.rarete ?? null })), images: [] }); }
         for (const p of plans) {
             for (const l of p.lignes) {
                 if (!idxCarte.has(l.carteId)) carteAbsente++;
@@ -99,6 +104,7 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
         const nc = new Map((await lireMongo(prod.db.collection('numeros_cartes'), { idProduct: { $in: ids } }, { nom: 'numeros_cartes (plan)', projection: { idProduct: 1, numero: 1, slugSet: 1 } })).map(p => [p.idProduct, p]));
         const idsCartes = [...new Set(plans.flatMap(p => p.lignes.map(l => l.carteId)))];
         const cartesPlan = new Map((await cx.db.collection('cartes').find({ _id: { $in: idsCartes } }).project({ nomEn: 1, niveau: 1, attaques: 1, sets: 1, impressions: 1, images: 1 }).toArray()).map(c => [c._id, c]));
+        for (const p of plans) for (const c of p.cartes || []) if (!cartesPlan.has(c._id)) cartesPlan.set(c._id, c);       // les fiches simples du plan : leur nom est celui du produit (le témoin du nom est alors une tautologie — la vraie garde est l'absence d'une carte de ce nom dans le set, dans l'outil)
         const setsParExp = new Map(); for (const s of sets) for (const x of [].concat(s.idExpansion ?? [])) (setsParExp.get(x) || setsParExp.set(x, []).get(x)).push(s);
         const setsDeLigne = l => { const u = new Map(); for (const s of setsParExp.get(l.idExpansion) || []) u.set(s._id, s); if (l.slugSet && !u.has(l.slugSet)) { const s = sets.find(z => z._id === l.slugSet); if (s) u.set(s._id, s); } return [...u.values()]; };
         const lesSlugs = [...new Set(plans.flatMap(p => p.lignes.flatMap(l => setsDeLigne(l).map(s => s._id))))];
@@ -131,7 +137,8 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
             const ent = mB.get(l.idProduct);
             const nat = eB.get(l.idProduct)?.visuel ?? null;           // du-set | substitut | autre-tirage (choisirVisuel, la fonction partagée avec le site)
             const visuel = nat ? `${nat}${img ? ` (${img.set}, ${img.source ?? '?'}, ${img.w}×${img.h})` : ` — la carte n'a pas d'image à ce set (images : ${[...new Set((c?.images || []).map(m => m.set))].slice(0, 3).join(', ') || 'aucune'})`}` : (img ? `image au set mais pas d'entrée (${img.set})` : '—');
-            rangs.push({ nouvelle: idsAjoutees.has(String(l._id)), idProduct: l.idProduct, nomProduit: prodNom, numCm: nc.get(l.idProduct)?.numero ?? null, carteId: l.carteId, nomCarte: c?.nomEn ?? null, numFiche, set: slug, code: l.code ?? p.outil, preuve: l.preuve, temoin: etat, visuel, entreeApi: Boolean(ent && !ent.sansEntree && ent.ok) });
+            const cf = confDe(p.f, l.idProduct);
+            rangs.push({ deuxSources: cf ? (cf.ok ? `${cf.sources.join(' + ')} (${cf.concordantes.join(' ; ') || 'n° Cardmarket'})` : 'NON CONFIRMÉE') : null, nouvelle: idsAjoutees.has(String(l._id)), idProduct: l.idProduct, nomProduit: prodNom, numCm: nc.get(l.idProduct)?.numero ?? null, carteId: l.carteId, nomCarte: c?.nomEn ?? null, numFiche, set: slug, code: l.code ?? p.outil, preuve: l.preuve, temoin: etat, visuel, entreeApi: Boolean(ent && !ent.sansEntree && ent.ok) });
         }
         sortie.temoinDuNom = { ...temoin, total: rangs.length, contredits, formes };
         const natures = {}; for (const r of rangs) { const k = r.visuel.split(' ')[0]; natures[k] = (natures[k] || 0) + 1; }
@@ -150,8 +157,9 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
             `- nature du visuel des entrées gagnées (\`decider\`) : ${Object.entries(sortie.entreesGagneesParNature).map(([k, n]) => `${k} ${n}`).join(' · ') || 'aucune'}`,
             `- refus **nouveaux ${v.nouveaux.length}** · produits perdus (sans entrée après) **${v.disparus.length}** · refus de \`lireEntree\` dans le plan ${refusPlan.length}`,
             `- **témoin du nom** (\`temoinDuNom\` de la production) : concorde ${temoin.concorde} · forme, témoin muet ${temoin.formeSilencieux} · **CONTREDIT ${temoin.contredit}** · carte sans nom ${temoin.carteSansNom} (sur ${rangs.length})`, '',
-            '| idProduct | nom Cardmarket | n° CM | → carte | nom de la fiche | n° fiche | set | preuve | témoin | visuel |', '|---|---|---|---|---|---|---|---|---|---|');
-        for (const r of rangs) md.push(`| ${r.idProduct} | ${cellule(r.nomProduit)} | ${cellule(r.numCm)} | ${r.carteId} | ${cellule(r.nomCarte)} | ${cellule(r.numFiche)} | ${cellule(r.set)} | ${cellule(r.preuve)} | ${cellule(r.temoin)} | ${cellule(r.visuel)} |`);
+            ...(CONF ? ['- **règle des deux sources** : colonne « deux sources » = les sources NON-Bulbapedia qui concordent sur (set, n° de la fiche, nom) ; Cardmarket n\'y compte que si son numéro est celui de la fiche.', ''] : []),
+            `| idProduct | nom Cardmarket | n° CM | → carte | nom de la fiche | n° fiche | set | preuve | témoin | visuel |${CONF ? ' deux sources |' : ''}`, `|---|---|---|---|---|---|---|---|---|---|${CONF ? '---|' : ''}`);
+        for (const r of rangs) md.push(`| ${r.idProduct} | ${cellule(r.nomProduit)} | ${cellule(r.numCm)} | ${r.carteId} | ${cellule(r.nomCarte)} | ${cellule(r.numFiche)} | ${cellule(r.set)} | ${cellule(r.preuve)} | ${cellule(r.temoin)} | ${cellule(r.visuel)} |${CONF ? ` ${cellule(r.deuxSources)} |` : ''}`);
         fs.writeFileSync(path.join(SORTIE, `planche-${NOM}.md`), md.join('\n') + '\n');
         console.log(`   témoin du nom : concorde ${temoin.concorde} · forme ${temoin.formeSilencieux} · CONTREDIT ${temoin.contredit} · sans nom ${temoin.carteSansNom} (sur ${rangs.length})`);
         console.log(`   écrits : simulation-${NOM}.json, planche-${NOM}.md dans ${SORTIE}`);

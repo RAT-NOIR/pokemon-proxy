@@ -10,7 +10,9 @@
 const { clesNom, cleNumero } = require('./jointure');
 
 /** Les sources indépendantes de Cardmarket ET de Bulbapedia, admises. Une source absente d'ici ne compte pas. */
-const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api']);
+// (2026-10-24, décision du testeur) la liste LOCALE : dépôts et JSON clonés (type-null, TCGdex, pokemontcg.io), relevés pokedata (pdt), CardTrader (ctr), Pokéllector, pkmncards (pkc), pokemon.com,
+// pokemon-card.com, TPC Asie, Pokumon, PikaQian ; plus artofpkm (en cache) et l'API TCGdex (≤ 50 requêtes). Bulbapedia reste exclue par son nom.
+const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com']);
 /** Les sources EXCLUES, énumérées pour que le refus se nomme : Bulbapedia sous toutes ses formes. */
 const SOURCES_EXCLUES = Object.freeze(['bulbapedia', 'bulbapedia-r2', 'setlist', 'wikitext', 'carte-bulbapedia']);
 
