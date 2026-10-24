@@ -1,10 +1,10 @@
 {
-  "extraitLe": "2026-10-12T06:56:52.341Z",
+  "extraitLe": "2026-10-24T10:13:52.222Z",
   "extraitDe": "test",
-  "lignesAuJournal": 280,
+  "lignesAuJournal": 285,
   "lignesEligibles": {
-    "avecPhoto": 231,
-    "abouties": 181
+    "avecPhoto": 236,
+    "abouties": 183
   },
   "jeuPhotos": {
     "n": 80,
@@ -12,7 +12,7 @@
   },
   "cellulesVoulues": 8,
   "cellulesManquantes": [
-    "départage par l'image — aucune ligne du JEU DE PHOTOS FIXE n'emprunte le chemin (39 lignes à vivier ont leur photo hors du jeu ; le verrou ne contacte jamais Vinted)"
+    "départage par l'image — PRÉ-PASSE IMPOSSIBLE : aucun vecteur lisible en base \"test\" — la pré-passe ne mesurerait rien"
   ],
   "cartesDistinctes": 7,
   "empreintePrompt": {
@@ -64,20 +64,20 @@
       "pourquoi": "le chemin exact du plantage memeCodeParConventionX du 4 août",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a9fcd6fe019222f81e4a4d6",
-        "le": "2026-09-08T08:55:11.874Z",
-        "version": "93c19645143d",
-        "idProduct": 669979
+        "_id": "6ad4f0d01ad397368c4c6c7c",
+        "le": "2026-10-18T16:16:16.517Z",
+        "version": "8f8a456eacab",
+        "idProduct": 821947
       },
-      "imageUrl": "https://images1.vinted.net/t/06_016b8_GQ4R23cTrEgW6yyZKt3JcnLG/f800/9aaa0972.webp?s=bf93772dd4225a4e470e16f1f380d0b198714a83",
+      "imageUrl": "https://images1.vinted.net/t/06_01bd6_NAefeP3naetW2AZqsBbPLLiA/f800/6f093297.webp?s=76376e5ea4cb390cf68ca03a4b43c34873f4a8f6",
       "lecture": {
-        "name": "Pokémon Reversal",
-        "number": "065",
-        "total": "070",
-        "setCode": "L1",
-        "language": "JP",
-        "rarete": "normale",
-        "nomBrut": "ポケモンリバース",
+        "name": "Regirock ex",
+        "number": "115",
+        "total": "098",
+        "setCode": "sv10",
+        "language": "KR",
+        "rarete": "SR",
+        "nomBrut": "레지락 ex",
         "nomConfiance": "haute",
         "symboleSet": "illisible",
         "motif": null,
@@ -172,22 +172,22 @@
       "pourquoi": "toutes les gardes du chantier sont conditionnées à LANGUES_ASIATIQUES : sans elle, une régression occidentale est invisible",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a9fd0f2205b2fd829b454e9",
-        "le": "2026-09-08T09:10:10.782Z",
-        "version": "317e0d88d0a6",
-        "idProduct": 895789
+        "_id": "6ad4f0051ad397368c4c6c35",
+        "le": "2026-10-18T16:12:53.896Z",
+        "version": "8f8a456eacab",
+        "idProduct": 606726
       },
-      "imageUrl": "https://images1.vinted.net/t/04_02211_jaYvzuYTd1dsioYGHLz16CT6/f800/1788720474.webp?s=894d98493fe00e61822b731b1e543f13c872b84f",
+      "imageUrl": "https://images1.vinted.net/t/02_025a4_PVjLJheuVXgoxYtALoqU5N86/f800/3f78233e.webp?s=6aaca3f8189236835e92763144743661e8167157",
       "lecture": {
-        "name": "Tropius",
-        "number": "001",
-        "total": "064",
-        "setCode": "PBL",
-        "language": "FR",
+        "name": "Blissey",
+        "number": "2",
+        "total": "64",
+        "setCode": null,
+        "language": "EN",
         "rarete": "normale",
-        "nomBrut": "Tropius",
+        "nomBrut": "Blissey",
         "nomConfiance": "haute",
-        "symboleSet": "illisible",
+        "symboleSet": "couronne",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
