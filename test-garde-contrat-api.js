@@ -320,8 +320,11 @@ const TAMPON_78 = 'x'.repeat(78);
         const v8 = await G.verifierContrat({ api, avant: deuxCartes(false), apres: deuxCartes(true) });
         verifier('T1.8 : le verdict nomme les CARTES fautives (la carte 500), pas celles qui partagent ses sets (la carte 600)', [v8.nouveaux.map(n => n.idProduct), v8.cartesFautives], [[777], [500]]);
         const srcLot8 = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
-        verifier('T1.8 : lot-additif.js garde le tableau `images` des cartes qui ne sont pas fautives (restauration par carte), le contrat ne passe plus par les sets',
-            [/cartesFautives\.has\(d\._id\)/.test(srcLot8), /cartesFautives = new Set\(contrat\?\.cartesFautives/.test(srcLot8), /\.\.\.\(contrat\?\.setsFautifs/.test(srcLot8)], [true, true, false]);
+        // (tour 2, D1) … le tableau `images` ne se remet plus par carte fautive mais ENTRÉE PAR ENTRÉE, sur toutes les cartes (restaurerImages, garde-lot.js) : le verdict continue de NOMMER les cartes fautives (rapport)
+        verifier('T2.1 : lot-additif.js restaure les images entrée par entrée (restaurerImages, surcharge de planRestauration), plus par carte fautive ni par set du contrat',
+            [/restaurerImages\(d\.images, a\.images, \{ setsDuWorker: swRestauration \}\)/.test(srcLot8), /surcharge: surchargePour\(coll\)/.test(srcLot8), /cartesFautives\.has\(d\._id\)/.test(srcLot8), /\.\.\.\(contrat\?\.setsFautifs/.test(srcLot8)], [true, true, false, false]);
+        verifier('T2.1 : un indécidable fait sortir en code 4 (ok exige 0 indécidable) et le journal liste restaurées / gardées / indécidables',
+            [/!rapportImages\.indecidables\.length/.test(srcLot8), /gardée\(s\) comme écrite\(s\) par le worker/.test(srcLot8), /INDÉCIDABLES/.test(srcLot8)], [true, true, true]);
     }
 
     // ── point 9 : nouveaux dédoublonnés par idProduct + motif
@@ -330,6 +333,38 @@ const TAMPON_78 = 'x'.repeat(78);
         verifier('T1.9 : dedoublonner garde un exemplaire par (idProduct, motif), dans l\'ordre', G.dedoublonner(l), [{ idProduct: 1, motif: 'a' }, { idProduct: 1, motif: 'b' }, { idProduct: 2, motif: 'a' }]);
         const srcApi9 = require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8');
         verifier('T1.9 : comparerContrat rend ses listes dédoublonnées', /nouveaux: dedoublonner\(nouveaux\), persistants: dedoublonner\(persistants\)/.test(srcApi9), true);
+    }
+
+    // ══ TOUR 2 (2026-10-24) ══
+    // ── D5 : la persistance d'un produit à plusieurs entrées refusées se juge sur l'ENSEMBLE des couples (motif, valeur), pas sur la « pire » (la première à égalité)
+    {
+        const J = (motif, valeur) => ({ motif, valeur });
+        const R = (...couples) => ({ ok: false, motif: couples[0].motif, valeur: couples[0].valeur, refus: couples, sets: ['S'], cartes: [1] });
+        c = G.comparerContrat(new Map([[1, R(J('M2', 'v2'), J('M1', 'v1'))]]), new Map([[1, R(J('M1', 'v1'), J('M2', 'v2'))]]));
+        verifier('T2.5 : les mêmes deux refus dans un AUTRE ordre (la « pire » change de tête) : persistant, pas un faux nouveau', [c.nouveaux.length, c.persistants.length], [0, 1]);
+        c = G.comparerContrat(new Map([[1, R(J('M1', 'v1'), J('M2', 'v2'))]]), new Map([[1, R(J('M1', 'v1'), J('M3', 'v3'))]]));
+        verifier('T2.5 : un couple (motif, valeur) NOUVEAU parmi les refus : nouveau, même si le premier couple est inchangé', [c.nouveaux.length, c.persistants.length], [1, 0]);
+        c = G.comparerContrat(new Map([[1, R(J('M1', 'v1'), J('M2', 'v2'))]]), new Map([[1, R(J('M2', 'v2'))]]));
+        verifier('T2.5 : un refus de MOINS (le lot en a réparé un) : persistant, rien de nouveau', [c.nouveaux.length, c.persistants.length], [0, 1]);
+        c = G.comparerContrat(new Map([[1, R(J('M1', 'v1'))]]), new Map([[1, R(J('M1', 'v1b'))]]));
+        verifier('T2.5 : même motif, valeur fautive différente : nouveau (comme au tour 1)', [c.nouveaux.length, c.persistants.length], [1, 0]);
+        c = G.comparerContrat(new Map([[1, { ok: true, motif: null }]]), new Map([[1, R(J('M1', 'v1'))]]));
+        verifier('T2.5 : un produit sain avant, refusé après : nouveau', [c.nouveaux.length], [1]);
+        // de bout en bout : un produit joint à deux cartes de deux sets, les DEUX images fautives (textes différents) -> deux couples dans le jugement
+        const fautif = (set, cle, texte) => IMG(set, cle, { vignette: { cleR2: `v/${cle}`, w: 200, h: 280 }, partageeTamponNonSepare: false, produitsPartages: [777, 778], tamponNonRepresente: texte });
+        const doublement = (tx, tw) => { const e = deuxSets(true); e.cartes[0].images = [fautif('X-Set', 'x/img.webp', tx)]; e.cartes[1].images = [fautif('W-Set', 'w/img.webp', tw)]; return e; };
+        const jd = await G.contratDesSets({ api, ...(e => ({ sets: e.sets, docs: e.cartes, lignes: e.cartesProduits }))(doublement('x'.repeat(78), 'y'.repeat(78))), slugs: ['W-Set', 'X-Set'] });
+        verifier('T2.5 : contratDesSets garde TOUS les couples refusés du produit (deux images fautives, deux textes)', [jd.get(777)?.ok, jd.get(777)?.refus?.length, new Set(jd.get(777)?.refus?.map(x => x.valeur)).size], [false, 2, 2]);
+        const vd = await G.verifierContrat({ api, avant: doublement('x'.repeat(78), 'y'.repeat(78)), apres: (e => { e.cartes[0].nomEn = 'Testmon ex'; return e; })(doublement('x'.repeat(78), 'y'.repeat(78))) });
+        verifier('T2.5 : le même produit à deux refus, le lot touche le set sans y rien écrire : persistant (un seul produit, deux couples)', [vd.nouveaux.length, vd.persistants.map(p => p.idProduct)], [0, [777]]);
+    }
+
+    // ── D1 (point 4 du cahier) : les cartes fautives comprennent toute carte dont une entrée est LUE pour décider le produit refusé (le substitut, `vignetteDuFichier`)
+    {
+        const jsub = await jugee(substitut(), ['X-Set']);
+        verifier('T2.1 : le produit servi par un substitut dont le fichier est porté par la carte 501 : ses cartes sont [500, 501] (la carte qui porte le fichier lu est de la partie)', jsub.get(777)?.cartes, [500, 501]);
+        const j0b = await jugee(autreTirage(), ['X-Set']);
+        verifier('T2.1 (l\'autre sens) : sans substitut, ses cartes sont celles de ses lignes seulement', j0b.get(777)?.cartes, [500]);
     }
 
     // ── 10. LE CHARGEMENT ÉCHOUE FERMÉ

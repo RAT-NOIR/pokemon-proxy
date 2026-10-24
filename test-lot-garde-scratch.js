@@ -52,6 +52,18 @@ const semerContrat = async db => {
         { _id: '600-888', carteId: 600, idProduct: 888, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002', slugSet: 'X-Set' }]);
 };
 
+// ── LE MONDE DU « LOT B » (tour 2, D1) : quatre cartes, chacune dans son set, chacune avec deux produits (V1, V2) qui partagent l'image du set. Le lot écrit la `variante` des 8 lignes ET un marquage sur les 4 entrées d'image
+// (« paire séparée par la variante ») ; UNE seule entrée (la carte 703) est fautive : son libellé fait 78 caractères. Restaurer le seul tableau de la carte fautive laissait les trois autres marquages en place pendant que
+// les lignes redevenaient sans variante. `doublon` : la carte 703 porte deux entrées de même (set, cleR2) dans la sauvegarde — l'indécidable.
+const semerLotB = async (db, { doublon = false } = {}) => {
+    const n = 4;
+    // (le visuel d'un set occidental doit porter sa langue, sinon la règle du site ne l'admet pas pour le set et le produit n'est pas servi : `langue: 'en'`)
+    await db.collection('sets').insertMany([...Array.from({ length: n }, (_, i) => SET(`B${i}-Set`, 7000 + i, 'intl', `B${i}`)), SET('W-Set', 7100, 'intl', 'W')]);
+    await db.collection('cartes').insertMany(Array.from({ length: n }, (_, i) => ({ _id: 700 + i, nomEn: `Pairemon${i}`, sets: [`B${i}-Set`], impressions: [{ tirage: 'intl', expansion: `B${i}-Set Expansion`, numero: '001', total: '10', rarete: 'C' }],
+        images: [IMG(`B${i}-Set`, `b${i}/img.webp`, { langue: 'en', vignette: { cleR2: `v/b${i}.webp`, w: 200, h: 280 } }), ...(doublon && i === 3 ? [IMG('B3-Set', 'b3/img.webp', { langue: 'en', numero: '002', vignette: { cleR2: 'v/b3.webp', w: 200, h: 280 } })] : [])] })));
+    await db.collection('cartes_produits').insertMany(Array.from({ length: n }, (_, i) => [1, 2].map(v => ({ _id: `${700 + i}-${7000 + 10 * i + v}`, carteId: 700 + i, idProduct: 7000 + 10 * i + v, idExpansion: 7000 + i, numeroFiche: '001', slug: `Pairemon${i}-V${v}`, slugSet: `B${i}-Set` }))).flat());
+};
+
 // ── LA COMMANDE DU LOT : ce que le lot (et le worker, en même temps) écrivent
 async function jouer(cas) {
     const cx = await ouvrir(), db = cx.db;
@@ -76,6 +88,14 @@ async function jouer(cas) {
         await C.updateOne({ _id: 500 }, { $set: { 'images.$[e].partageeTamponNonSepare': false, 'images.$[e].produitsPartages': [777, 778], 'images.$[e].tamponNonRepresente': 'x'.repeat(78) } }, { arrayFilters: [{ 'e.set': 'Zeta-Set' }] });
         await C.updateOne({ _id: 600 }, { $push: { images: { set: 'Y-Set', numero: '9', cleR2: 'y/9', jointeLe: new Date() } } });
         await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/Y-Set' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
+    } else if (cas === 'lot-b' || cas === 'lot-b-indecidable') {   // I/J : le lot B du 19/10 — la variante de 8 lignes, un marquage sur 4 entrées d'image dont UNE fautive (78 caractères) ; le worker joint une image à la carte 700
+        for (let i = 0; i < 4; i++) {
+            await P.updateOne({ _id: `${700 + i}-${7000 + 10 * i + 1}` }, { $set: { variante: 'normale', variantePreuve: 'releve du testeur' } });
+            await P.updateOne({ _id: `${700 + i}-${7000 + 10 * i + 2}` }, { $set: { variante: 'staff', variantePreuve: 'releve du testeur' } });
+            await C.updateOne({ _id: 700 + i }, { $set: { 'images.$[e].partageeTamponNonSepare': false, 'images.$[e].tamponNonRepresente': i === 3 ? 'x'.repeat(78) : 'Staff' } }, { arrayFilters: [{ 'e.set': `B${i}-Set`, 'e.numero': '001' }] });
+        }
+        await C.updateOne({ _id: 700 }, { $push: { images: { set: 'W-Set', numero: '1', cleR2: 'w/0', w: 600, h: 840, source: 'tcgdex', langue: 'en', vignette: { cleR2: 'v/w0.webp', w: 200, h: 280 }, jointeLe: new Date() } } });
+        await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/W-Set' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
     } else if (cas === 'contrat-propre') {                 // H : le lot change le pv d'une carte (rien que l'API lise) et ajoute une ligne neuve pour la carte 600
         await C.updateOne({ _id: 600 }, { $set: { pv: 60 } });
         await P.insertOne({ _id: '600-889', carteId: 600, idProduct: 889, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002-V2', slugSet: 'X-Set' });
@@ -164,6 +184,28 @@ async function main() {
         verifier('G. le journal nomme le refus du contrat sur le produit 777 et l\'arrêt', [/contrat API 777/.test(r.ligne), /ARRÊT/.test(r.ligne), /refus du contrat API/.test(r.ligne)], [true, true, true]);
         verifier('G. la sortie dit les étapes du contrat : chaîne importée, et un refus nouveau', [/0 bis\. contrat API : chaîne de l'API importée/.test(r.sortie), /refus nouveaux 1/.test(r.sortie)], [true, true]);
         if (r.code !== 3) console.log(r.sortie);
+
+        // ── I. LE LOT B DU 19/10 (tour 2, D1) : TOUTES les entrées que le lot a marquées reviennent (pas seulement celle de la carte fautive), les lignes aussi : l'état restauré passe le contrat (code 3, pas 4).
+        // Ce que le worker a joint à la carte 700 pendant le lot (set W-Set) reste.
+        await remettre(semerLotB);
+        r = lot('lot-b', ['--contrat-api']);
+        const cartesB = await db.collection('cartes').find({ _id: { $in: [700, 701, 702, 703] } }).sort({ _id: 1 }).toArray();
+        const lignesB = await db.collection('cartes_produits').find({ carteId: { $gte: 700 } }).toArray();
+        verifier('I. lot B : le lot s\'arrête sur le libellé de 78 caractères et la restauration est COMPLÈTE (code 3, et non 4)', r.code, 3);
+        verifier('I. lot B : les QUATRE entrées marquées par le lot reviennent à leur version sauvegardée (aucun marquage ne reste, y compris sur les 3 cartes non fautives)',
+            cartesB.map(c => c.images.filter(i => i.set.startsWith('B')).some(i => 'tamponNonRepresente' in i || 'partageeTamponNonSepare' in i)), [false, false, false, false]);
+        verifier('I. lot B : les 8 lignes sont revenues sans variante', lignesB.some(l => 'variante' in l || 'variantePreuve' in l), false);
+        verifier('I. lot B : l\'image que le worker a jointe à la carte 700 (W-Set) reste', cartesB[0].images.map(i => i.cleR2), ['b0/img.webp', 'w/0']);
+        verifier('I. lot B : le journal dit les entrées restaurées par carte et celles gardées comme écrites par le worker',
+            [/images entrée par entrée : 4 restaurée\(s\) sur 4 carte\(s\), 1 gardée\(s\) comme écrite\(s\) par le worker, 0 indécidable\(s\)/.test(r.ligne), /carte 703 B3-Set\|b3\/img\.webp/.test(r.sortie), /gardées \(worker\)/.test(r.sortie)], [true, true, true]);
+        verifier('I. lot B : la relecture dit le contrat respecté ET aucun produit n\'a perdu son visuel (avant la correction : « sans entrée après » sur 6 produits, en information, et le lot sortait en code 3 « restauré »)', [/relu ✅ aucune baisse/.test(r.ligne), /sans entrée après/.test(r.sortie)], [true, false]);
+        if (r.code !== 3) console.log(r.sortie);
+
+        // ── J. l'INDÉCIDABLE bloque : la carte 703 porte deux entrées de même (set, cleR2) ; son état n'est pas touché, le lot sort en code 4 et le dit
+        await remettre(d => semerLotB(d, { doublon: true }));
+        r = lot('lot-b-indecidable', ['--contrat-api']);
+        verifier('J. deux entrées de même clé : le lot sort en code 4 (RESTAURATION INCOMPLÈTE), jamais « restauré » en silence', [r.code, /RESTAURATION INCOMPLÈTE/.test(r.sortie), /INDÉCIDABLES/.test(r.sortie), /indécidable : carte 703/.test(r.sortie)], [4, true, true, true]);
+        if (r.code !== 4) console.log(r.sortie);
 
         // ── H. un lot propre avec le contrat : il passe, et le contrat est dit respecté
         await remettre(semerContrat);

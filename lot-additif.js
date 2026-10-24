@@ -35,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { SITE_LIT, PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { SITE_LIT, PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, restaurerImages, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
 const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que le site lit, confrontée au gabarit du site IMPORTÉ (étape 0 ter)
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
@@ -281,25 +281,48 @@ function journaliser(t, dossier, combien, sortie) {
     const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
     console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
     // une baisse d'images (compteur) est une affaire de SET : le tableau `images` des cartes de ce set est remis (le champ du worker n'y est pas gardé).
-    // (tour de correction 1, point 8) un refus du contrat est une affaire de CARTE : seul le tableau `images` des cartes fautives est remis ; celui des autres cartes de leurs sets garde ce que le worker y a écrit
+    // (tour 2, D1) un refus du contrat se restaure ENTRÉE PAR ENTRÉE (set + cleR2), sur TOUTES les cartes : chaque entrée d'`images` que le LOT a modifiée revient à sa version sauvegardée, ce que le WORKER a écrit pendant la fenêtre
+    // reste (les sets de `collecte_images_etat`, la même règle que la garde des compteurs), et ce qui ne se tranche pas (deux entrées de même clé…) est imprimé et fait sortir en code 4. Remettre le tableau des seules cartes
+    // fautives laissait les écritures du lot sur les autres entrées marquées pendant que les lignes `cartes_produits` revenaient : un état que l'API refuse (lot B du 19/10).
     const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
-    const cartesFautives = new Set(contrat?.cartesFautives || []);
+    const entierParCompteur = (d, a) => [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set));   // une baisse d'images (compteur) : tout le tableau, comme avant
+    const swRestauration = fautivesContrat.length ? await setsDuWorker(db, depuis) : new Set();
+    const rapportImages = { cartes: new Set(), restaurees: [], gardees: [], indecidables: [] };
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
-        if (coll === 'cartes' && (cartesFautives.has(d._id) || [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set)))) return champs.filter(f => f !== 'images');
+        if (coll === 'cartes' && entierParCompteur(d, a)) return champs.filter(f => f !== 'images');
         return champs;
     };
+    const surchargePour = coll => (coll === 'cartes' && fautivesContrat.length) ? (d, a) => {
+        if (entierParCompteur(d, a)) return {};
+        const r = restaurerImages(d.images, a.images, { setsDuWorker: swRestauration });
+        for (const [liste, cible] of [[r.restaurees, rapportImages.restaurees], [r.gardees, rapportImages.gardees], [r.indecidables, rapportImages.indecidables]]) for (const x of liste) cible.push({ carte: d._id, ...x });
+        if (r.restaurees.length) rapportImages.cartes.add(d._id);
+        return r.restaurees.length ? { images: r.images } : {};      // rien à restaurer ou indécidable : le tableau actuel reste tel quel
+    } : null;
     const faits = [];
     for (const coll of aSauver.filter(x => RESTAURABLES.includes(x))) {
         const sauves = new Map(lireSauvegarde(dossier, coll).map(d => [cleDoc(d._id), d]));
         const actuels = new Map((await db.collection(coll).find({}).toArray()).map(d => [cleDoc(d._id), d]));
-        const plan = planRestauration(sauves, actuels, { garder: garderPour(coll) });
+        const plan = planRestauration(sauves, actuels, { garder: garderPour(coll), surcharge: surchargePour(coll) });
         const ops = [...plan.remplacer.map(d => ({ replaceOne: { filter: { _id: d._id }, replacement: d } })),
             ...plan.inserer.map(d => ({ insertOne: { document: d } })), ...plan.supprimer.map(id => ({ deleteOne: { filter: { _id: id } } }))];
         if (ops.length) await db.collection(coll).bulkWrite(ops, { ordered: false });
         const champs = Object.entries(plan.champs).map(([f, n]) => `${f}×${n}`).join(' ');
         faits.push(`${coll} ${plan.remplacer.length} remplacé(s)${champs ? ` [${champs}]` : ''}, ${plan.inserer.length} réinséré(s), ${plan.supprimer.length} retiré(s)`);
         console.log(`      ${faits.at(-1)}`);
+    }
+    // le rapport des entrées d'images : restaurées (cartes et entrées), gardées comme écrites par le worker, et ce qui ne se tranche pas
+    if (fautivesContrat.length) {
+        const nom = x => `carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`;
+        faits.push(`images entrée par entrée : ${rapportImages.restaurees.length} restaurée(s) sur ${rapportImages.cartes.size} carte(s), ${rapportImages.gardees.length} gardée(s) comme écrite(s) par le worker, ${rapportImages.indecidables.length} indécidable(s)${rapportImages.restaurees.length ? ` — restaurées : ${liste(rapportImages.restaurees.map(nom), 4)}` : ''}${rapportImages.gardees.length ? ` — gardées (worker) : ${liste(rapportImages.gardees.map(nom), 4)}` : ''}${rapportImages.indecidables.length ? ` — INDÉCIDABLES : ${liste(rapportImages.indecidables.map(nom), 4)}` : ''}`);
+        console.log(`      ${faits.at(-1)}`);
+        for (const [titre, l] of [['restaurées', rapportImages.restaurees], ['gardées (worker)', rapportImages.gardees], ['INDÉCIDABLES (le lot sort en code 4)', rapportImages.indecidables]]) {
+            if (!l.length) continue;
+            console.log(`        ${titre} :`);
+            for (const x of l.slice(0, 80)) console.log(`          ${nom(x)}`);
+            if (l.length > 80) console.log(`          … (+${l.length - 80})`);
+        }
     }
     // 🔑 Les vignettes se restaurent CHIRURGICALEMENT (relecture du 2026-10-08) : une baisse de `vignettes-images` ne fait JAMAIS remplacer le
     // tableau `images` (le worker y écrit en même temps : les images neuves de la fenêtre, et celles des autres sets de la carte, seraient
@@ -327,8 +350,9 @@ function journaliser(t, dossier, combien, sortie) {
     const contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
     await fermer();
     const resteContrat = contratRelu ? contratRelu.fautives : [];
-    const ok = !relu.nonAutorisees.length && !resteContrat.length;
-    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat];
+    // un indécidable n'est jamais « restauré » en silence : le lot sort en code 4
+    const ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length;
+    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`)];
     console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}`);
     const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, `🔴 ARRÊT : ${cmp.nonAutorisees.length ? 'baisses non annoncées' : 'refus du contrat API'} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
     journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);

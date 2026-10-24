@@ -239,17 +239,23 @@ async function contratDesSets({ api, sets, docs, lignes, slugs }) {
         for (const x of candidats(l)) setsDe.get(l.idProduct).add(x);
         if (!cartesDe.has(l.idProduct)) cartesDe.set(l.idProduct, new Set());
         cartesDe.get(l.idProduct).add(l.carteId);
+        // (tour 2, D1) … et toute carte dont une entrée d'image est LUE pour décider ce produit : celle qui porte le fichier de son substitut (`vignetteDuFichier` de decider)
+        const f = l.visuelSubstitut?.cleR2;
+        if (f) for (const d of cartesDuFichier.get(f) || []) cartesDe.get(l.idProduct).add(d._id);
     }
     const cartesTriees = id => [...(cartesDe.get(id) || [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const gravite = j => (j.ok ? (j.variantePerdue ? 1 : 0) : 2);
-    const entreesDe = new Map();
+    const entreesDe = new Map(), refusDe = new Map();
     for (const e of r.entrees) {
         const j = { ...jugerEntree(api, e, varianteDe.get(e.idProduct) ?? null), sets: [...(setsDe.get(e.idProduct) || [])].sort(), cartes: cartesTriees(e.idProduct) };
         const deja = resultat.get(e.idProduct);
         if (!deja || gravite(j) > gravite(deja)) resultat.set(e.idProduct, j);       // deux entrées pour un produit : la pire l'emporte
         if (!entreesDe.has(e.idProduct)) entreesDe.set(e.idProduct, []);
         entreesDe.get(e.idProduct).push(e);
+        // (tour 2, D5) TOUS les couples (motif, valeur) refusés du produit : « la pire l'emporte » ne garde qu'une entrée, et à égalité la première — l'ordre des entrées ne doit pas décider de la persistance
+        if (!j.ok) { if (!refusDe.has(e.idProduct)) refusDe.set(e.idProduct, new Map()); refusDe.get(e.idProduct).set(`${j.motif}\u0000${j.valeur}`, { motif: j.motif, valeur: j.valeur }); }
     }
+    for (const [id, m] of refusDe) resultat.get(id).refus = [...m.values()];
     // D3.3a — LE PRODUIT « CONTRADICTOIRE » : deux entrées aux visuels DIFFÉRENTS perdent TOUT visuel dans l'archive (v2/chargeur/version.js, le constructeur : « un visuel absent est honnête, celui d'un autre tirage
     // ne l'est pas »), sans refus ni `disparus`. La règle n'est pas recopiée : les entrées du produit sont passées au VRAI constructeur de l'archive, qui compte ses contradictions.
     for (const [id, es] of entreesDe) {
@@ -282,7 +288,9 @@ function comparerContrat(avantMap, apresMap) {
         // D3.3b : « persistant » = le MÊME défaut avant et après. Un produit refusé avant pour un motif A et après pour un motif B est NOUVEAU (le lot a fabriqué un autre défaut : le masquer derrière l'ancien
         // laisserait passer ce que le lot vient d'écrire).
         // (tour de correction 1, point 7) … et la MÊME valeur fautive : un autre texte tout aussi fautif est un défaut que le lot vient d'écrire
-        if (!a.ok) { (refusAvant && b.motif === a.motif && b.valeur === a.valeur ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets, cartes: a.cartes }); continue; }
+        // (tour 2, D5) … jugée sur l'ENSEMBLE des couples du produit : persistant ssi aucun couple d'après n'est nouveau (un refus de moins n'est pas un défaut de plus)
+        const couples = j => (j.refus || [{ motif: j.motif, valeur: j.valeur }]).map(x => `${x.motif}\u0000${x.valeur}`);
+        if (!a.ok) { (refusAvant && couples(a).every(x => couples(b).includes(x)) ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets, cartes: a.cartes }); continue; }
         if (refusAvant) resolus.push({ idProduct: id, motif: b.motif });
         // D3.3a : deux entrées aux visuels différents -> le produit perd tout visuel dans l'archive. Nouveau après le lot = bloquant ; déjà contradictoire avant = persistant.
         if (a.contradictoire === true) (Boolean(b) && b.contradictoire === true ? persistants : nouveaux).push({ idProduct: id, motif: MOTIF_CONTRADICTOIRE, sets: a.sets, cartes: a.cartes });
