@@ -23,9 +23,23 @@ const SETS_BATTLE_ACADEMY = Object.freeze(['Battle-Academy-2020', 'Battle-Academ
 const SETS_TRICK_OR_TRADE = Object.freeze(['Trick-or-Trade-2024']);
 const PERIMETRE = Object.freeze([...SETS_PRIZE_PACK, ...SETS_BATTLE_ACADEMY, ...SETS_TRICK_OR_TRADE]);
 
+// PHASE 3b (T4, 2026-10-24, accordé par le testeur) : DES PRODUITS d'un set, jamais le set. Les 3 réimpressions Southeast-Asia-Promos écrites au lot 2b (901074 Glass Trumpet, 901104 Budew, 901109 Fan Rotom,
+// preuve `reimpression+origine+numero`) n'ont pas de visuel propre : l'API leur sert le visuel d'un AUTRE tirage (`autre-tirage`). Ordre : « comme image empruntée (imageEmprunteeTirage), affichée avec la mention
+// et exclue de l'identification. Elle sera remplacée dès qu'un vrai scan existe. » L'origine se lit sur la ligne de réimpression, comme pour Trick or Trade 2024 (set et numéro d'origine → entrée de la même carte).
+// LISTE FERMÉE DE PRODUITS : les 81 autres lignes du set (et tout 4e produit) restent HORS PÉRIMÈTRE — comptées (`horsListe`), jamais écrites. Le set n'entre PAS dans PERIMETRE (son banc : 9 sets, inchangé).
+const SETS_BORNES = Object.freeze({ 'Southeast-Asia-Promos': Object.freeze([901074, 901104, 901109]) });
+const setBorne = s => Object.prototype.hasOwnProperty.call(SETS_BORNES, s);
+const estBorne = (s, idProduct) => setBorne(s) && SETS_BORNES[s].includes(idProduct);
+/** Tout ce que l'outil LIT (le périmètre entier + les sets dont une liste de produits est admise). */
+const SETS_LUS = Object.freeze([...PERIMETRE, ...Object.keys(SETS_BORNES)]);
+
 /** WCD : toute clé de set qui COMMENCE par « WCD » (casse et espaces ignorés) — refusée, jamais écrite. */
 const estWCD = s => /^wcd/i.test(String(s ?? '').trim());
 const dansLePerimetre = s => !estWCD(s) && PERIMETRE.includes(s);
+/** Une ligne est-elle dans le champ d'écriture ? Un set du périmètre (tous ses produits), ou UN des produits d'une liste fermée. WCD : jamais. */
+const dansLeChamp = (s, idProduct) => !estWCD(s) && (dansLePerimetre(s) || estBorne(s, idProduct));
+/** Le substitut d'une ligne sans `visuelSubstitut` se DÉRIVE de son origine (Trick or Trade 2024, et les produits des listes fermées). */
+const derivableDeLOrigine = (s, idProduct) => !estWCD(s) && (SETS_TRICK_OR_TRADE.includes(s) || estBorne(s, idProduct));
 /** Le tampon que l'image NE montre PAS : « Play! Pokémon » pour les Prize Packs seulement (rien pour Battle Academy et Trick or Trade). */
 const tamponDuSet = s => (SETS_PRIZE_PACK.includes(s) ? TAMPON_PRIZE_PACK : null);
 
@@ -35,6 +49,22 @@ function verifierPerimetre(idsDeSets) {
     if (!ids.size) throw new Error('périmètre : aucun set lu — base introuvable ou sonde cassée');
     const absents = PERIMETRE.filter(s => !ids.has(s));
     if (absents.length) throw new Error(`périmètre : set(s) introuvable(s) en base : ${absents.join(', ')}`);
+}
+
+/** Les sets à liste fermée doivent exister en base (un slug absent est une liste périmée, pas un set vide). */
+function verifierBornes(idsDeSets) {
+    const ids = new Set(idsDeSets || []);
+    const absents = Object.keys(SETS_BORNES).filter(s => !ids.has(s));
+    if (absents.length) throw new Error(`sets à liste fermée : introuvable(s) en base : ${absents.join(', ')}`);
+}
+
+/** Une sélection de sets (`--sets=`) : une liste NON VIDE, sans doublon, de slugs du champ de lecture. LÈVE sinon (jamais « tout » par défaut). */
+function verifierSelection(sets) {
+    if (!Array.isArray(sets) || !sets.length) throw new Error('sélection de sets vide : rien à planifier (omettre --sets pour tout le périmètre)');
+    const doublons = sets.filter((s, i) => sets.indexOf(s) !== i);
+    if (doublons.length) throw new Error(`sélection de sets en doublon : ${[...new Set(doublons)].join(', ')}`);
+    const inconnus = sets.filter(s => !SETS_LUS.includes(s));
+    if (inconnus.length) throw new Error(`sélection de sets hors du champ de lecture : ${inconnus.join(', ')}`);
 }
 
 const entier = x => typeof x === 'number' && Number.isFinite(x) && x > 0;
@@ -106,21 +136,24 @@ const compteurs = () => ({ lignes: 0, cibles: 0, ajouts: 0, deja: 0, sansSubstit
  * @param {{lignes: object[], cartes: Map<number, {_id, images}>}} etat   lignes de cartes_produits (périmètre + WCD), cartes du set avec leurs images
  * @returns {{ajouts, deja, sansSubstitut, sansCarte, refus, refusWCD, horsPerimetre, parSet}}
  */
-function planifier(etat, { maintenant = new Date() } = {}) {
-    const plan = { ajouts: [], deja: [], sansSubstitut: [], sansCarte: [], refus: [], refusWCD: [], horsPerimetre: 0, parSet: {} };
+function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
+    const plan = { ajouts: [], deja: [], sansSubstitut: [], sansCarte: [], refus: [], refusWCD: [], horsPerimetre: 0, horsListe: 0, horsSelection: 0, parSet: {} };
+    // PHASE 3b : `sets` = une SÉLECTION (liste de slugs du champ de lecture) ; les lignes des autres sets ne sont ni planifiées ni écrites, seulement comptées (`horsSelection`). Sans sélection : comportement d'origine.
+    if (sets !== null) verifierSelection(sets);
     const groupes = new Map();
     const bucket = s => (plan.parSet[s] ||= compteurs());
     for (const l of etat.lignes || []) {
         const set = l.slugSet;
         if (estWCD(set)) { const b = (plan.parSet.WCD ||= { lignes: 0, refusWCD: 0 }); b.lignes++; b.refusWCD++; plan.refusWCD.push({ idProduct: l.idProduct, slugSet: set }); continue; }
-        if (!dansLePerimetre(set)) { plan.horsPerimetre++; continue; }
+        if (sets !== null && !sets.includes(set)) { plan.horsSelection++; continue; }
+        if (!dansLeChamp(set, l.idProduct)) { if (setBorne(set)) plan.horsListe++; else plan.horsPerimetre++; continue; }
         const b = bucket(set); b.lignes++;
         const idProduct = l.idProduct;
         if (!entier(l.carteId)) { plan.sansCarte.push({ idProduct, slugSet: set }); b.sansCarte++; continue; }
         let sub = l.visuelSubstitut;
         const aSubstitut = !!sub && typeof sub.cleR2 === 'string' && !!sub.cleR2;
         // Trick or Trade 2024 n'a pas de visuelSubstitut : son image est l'entrée de la même carte dans le set d'ORIGINE (liste fermée : ce set seulement)
-        const depuisOrigine = !aSubstitut && SETS_TRICK_OR_TRADE.includes(set);
+        const depuisOrigine = !aSubstitut && derivableDeLOrigine(set, idProduct);
         if (!aSubstitut && !depuisOrigine) { plan.sansSubstitut.push({ idProduct, slugSet: set }); b.sansSubstitut++; continue; }
         const refus = raison => { plan.refus.push({ carteId: l.carteId, set, numero: numeroDeLigne(l), produits: [idProduct], raison }); b.refus++; };
         const c = etat.cartes.get(l.carteId);
@@ -136,6 +169,12 @@ function planifier(etat, { maintenant = new Date() } = {}) {
     }
     for (const g of groupes.values()) {
         const b = bucket(g.set);
+        // PHASE 3b : une entrée est par (carte, SET), pas par produit — dans un set à liste fermée, elle servirait AUSSI les autres produits de la même carte dans ce set (essai du 24/10 : les 3 produits ordonnés ont 4 frères,
+        // V1/V2 de la même carte, qui perdraient leur service d'API et recevraient l'image sans que personne ne l'ait accordé). Écrit par ce qu'il autorise : la liste doit COUVRIR tous les produits de la carte dans ce set.
+        if (setBorne(g.set)) {
+            const freres = [...new Set((etat.lignes || []).filter(l => l.carteId === g.carteId && l.slugSet === g.set && !estBorne(g.set, l.idProduct)).map(l => l.idProduct))].sort((x, y) => x - y);
+            if (freres.length) { plan.refus.push({ carteId: g.carteId, set: g.set, numero: g.numero, produits: g.produits, freres, raison: `l'entrée (carte, set) serait partagée avec ${freres.length} produit(s) du même set HORS de la liste fermée : ${freres.join(', ')} — un emprunt sert TOUS les produits de la carte dans ce set : rien posé (étendre la liste demande l'accord du testeur)` }); b.refus += g.produits.length; continue; }
+        }
         if (g.diverge) { plan.refus.push({ carteId: g.carteId, set: g.set, numero: g.numero, produits: g.produits, raison: 'les substituts des produits de ce set divergent (plusieurs images possibles) : rien posé' }); b.refus += g.produits.length; continue; }
         const origine = (g.carte.images || []).find(e => e && e.cleR2 === g.sub.cleR2 && e.vignette && typeof e.vignette === 'object');
         const entree = { set: g.set, numero: g.numero, cleR2: g.sub.cleR2, w: g.sub.w, h: g.sub.h };
@@ -148,6 +187,26 @@ function planifier(etat, { maintenant = new Date() } = {}) {
         b.cibles += g.produits.length; b.ajouts++;
     }
     return plan;
+}
+
+/** Les produits du plan qui ne sont PAS dans le champ d'écriture (jamais attendu : planifier() ne retient que le champ) — le script s'arrête s'il en voit un. */
+function produitsHorsChamp(plan) {
+    return (plan.ajouts || []).flatMap(a => (a.produits || []).filter(id => !dansLeChamp(a.set, id)).map(id => `${a.set}:${id}`));
+}
+
+/**
+ * Ce que la décision de l'API a le droit de faire à ce lot (PHASE 3b) : une image empruntée n'est jamais servie à l'identification, donc les produits du plan qui étaient servis SORTENT — et c'est tout.
+ * @param cmp  P.compareEntrees(avant.entrees, apres.entrees, idsPlan) · @param idsPlan les produits du plan · @param contratNouveaux le nombre de refus nouveaux du contrat de l'API
+ * @returns {{ok: boolean, raisons: string[]}}  ok = AUCUN autre produit perdu, changé ou gagné, et zéro refus nouveau
+ */
+function verdictApi({ cmp, idsPlan, contratNouveaux }) {
+    const raisons = [];
+    const horsPlan = cmp.perdus.filter(id => !idsPlan.includes(id));
+    if (horsPlan.length || cmp.autresPerdus.length) raisons.push(`produits perdus HORS du plan : ${[...new Set([...horsPlan, ...cmp.autresPerdus])].join(',')}`);
+    if (cmp.changes.length) raisons.push(`produits changés : ${cmp.changes.join(',')}`);
+    if (cmp.gagnes.length) raisons.push(`produits gagnés : ${cmp.gagnes.join(',')}`);
+    if (contratNouveaux > 0) raisons.push(`${contratNouveaux} refus nouveau(x) du contrat de l'API`);
+    return { ok: !raisons.length, raisons };
 }
 
 /** L'état après le plan (copie : l'entrée n'est pas modifiée). */
@@ -207,4 +266,5 @@ function garderSousLot(env, ppid) {
 }
 
 module.exports = { origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
+    SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };

@@ -14,21 +14,22 @@ const E = require('./collecte-cartes/images-empruntees');
 
 const DEFAUT_SORTIE = 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/TAMPONNEES';
 const DEFAUT_SITE_LIB = 'C:/Users/Yung/Desktop/rat-market-site/lib';
-const AUTORISES = [/^--ecrire$/, /^--retirer$/, /^--attendu=\d+$/, /^--sortie=.+$/, /^--site-lib=.+$/];
+const AUTORISES = [/^--ecrire$/, /^--retirer$/, /^--attendu=\d+$/, /^--sortie=.+$/, /^--site-lib=.+$/, /^--sets=[\w,.-]+$/];
 const val = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
 
 async function lireEtat(dbCartes) {
-    const sets = await dbCartes.collection('sets').find({ _id: { $in: [...E.PERIMETRE] } }, { projection: { complet: 0, denominateurs: 0, entreesSetlist: 0 } }).toArray();
-    E.verifierPerimetre(sets.map(s => s._id));
+    // PHASE 3b : les sets à liste fermée de produits (Southeast-Asia-Promos : 3 produits) sont LUS avec le périmètre ; seuls leurs produits listés sont jamais écrits (collecte-cartes/images-empruntees.js)
+    const sets = await dbCartes.collection('sets').find({ _id: { $in: [...E.SETS_LUS] } }, { projection: { complet: 0, denominateurs: 0, entreesSetlist: 0 } }).toArray();
+    E.verifierPerimetre(sets.map(s => s._id)); E.verifierBornes(sets.map(s => s._id));
     const exps = [...new Set(sets.flatMap(s => [].concat(s.idExpansion ?? [])))];
     const proj = { idProduct: 1, carteId: 1, slugSet: 1, idExpansion: 1, numeroFiche: 1, slug: 1, detail: 1, visuelSubstitut: 1 };
     const lignes = await dbCartes.collection('cartes_produits').find({ $or: [{ idExpansion: { $in: exps } }, { slugSet: /^wcd/i }] }, { projection: { ...proj, preuve: 1, origine: 1 } }).toArray();
-    const cartesDocs = await dbCartes.collection('cartes').find({ sets: { $in: [...E.PERIMETRE] } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray();
+    const cartesDocs = await dbCartes.collection('cartes').find({ sets: { $in: [...E.SETS_LUS] } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray();
     // les cartes des substituts (la même carte porte l'image d'origine) : déjà dans cartesDocs quand elle est du périmètre ; sinon lues à part
     const manque = [...new Set(lignes.filter(l => E.dansLePerimetre(l.slugSet) && l.carteId > 0 && l.visuelSubstitut?.cleR2).map(l => l.carteId))].filter(id => !cartesDocs.some(c => c._id === id));
     if (manque.length) cartesDocs.push(...await dbCartes.collection('cartes').find({ _id: { $in: manque } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray());
     // Trick or Trade 2024 : le set d'origine se lit sur la ligne du premier produit d'origine cité, ou sur le nom de set entre parenthèses (égalité exacte avec nomAffichage / nomEn)
-    const idsOrigine = [...new Set(lignes.filter(l => E.SETS_TRICK_OR_TRADE.includes(l.slugSet) && !l.visuelSubstitut?.cleR2).map(l => E.origineDeLaLigne(l).idProduct).filter(x => Number.isInteger(x)))];
+    const idsOrigine = [...new Set(lignes.filter(l => E.derivableDeLOrigine(l.slugSet, l.idProduct) && !l.visuelSubstitut?.cleR2).map(l => E.origineDeLaLigne(l).idProduct).filter(x => Number.isInteger(x)))];
     const produits = new Map((await dbCartes.collection('cartes_produits').find({ idProduct: { $in: idsOrigine } }, { projection: { idProduct: 1, slugSet: 1 } }).toArray()).map(p => [p.idProduct, { slugSet: p.slugSet }]));
     const setsParNom = new Map(), setsParNomAffichage = new Map();
     const range = (m, nom, id) => { if (!m.has(nom)) m.set(nom, []); m.get(nom).push(id); };
@@ -59,6 +60,9 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
     const ATTENDU = Number(val('attendu'));
     if (ECRIRE && !ATTENDU) { console.error('❌ --ecrire exige --attendu=<N> (le nombre que la simulation a rendu)'); process.exit(2); }
     if (ECRIRE) { try { E.garderSousLot(process.env, process.ppid); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); } }
+    // PHASE 3b : `--sets=<slug>[,…]` restreint le PLAN (et donc l'écriture) à ces sets ; sans lui, tout le périmètre comme avant. Vérifié avant toute connexion.
+    const SELECTION = val('sets') === null ? null : val('sets').split(',');
+    if (SELECTION !== null) { try { E.verifierSelection(SELECTION); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); } }
     const SORTIE = val('sortie') || DEFAUT_SORTIE, SITE_LIB = val('site-lib') || DEFAUT_SITE_LIB;
     fs.mkdirSync(SORTIE, { recursive: true });
     const fichier = n => path.join(SORTIE, n);
@@ -68,7 +72,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
     else cx = await ouvrirLecture();
     try {
         const etat = await lireEtat(cx.dbCartes);
-        console.log(`DÉNOMINATEUR : périmètre ${E.PERIMETRE.length} sets, tous présents en base (${etat.sets.map(s => s._id).join(', ')}) · ${etat.lignes.length} lignes cartes_produits (expansions du périmètre + WCD) · ${etat.cartesDocs.length} cartes`);
+        console.log(`DÉNOMINATEUR : périmètre ${E.PERIMETRE.length} sets + ${Object.keys(E.SETS_BORNES).length} set à liste fermée (${Object.entries(E.SETS_BORNES).map(([s, l]) => `${s} : ${l.join(', ')}`).join(' ; ')}), tous présents en base (${etat.sets.map(s => s._id).join(', ')}) · ${etat.lignes.length} lignes cartes_produits (expansions lues + WCD) · ${etat.cartesDocs.length} cartes`);
         if (!etat.lignes.length || !etat.cartesDocs.length) throw new Error('population de lecture vide : sonde cassée');
 
         // ── le retrait exact
@@ -93,13 +97,15 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
             return;
         }
 
-        const plan = E.planifier(etat);
+        const plan = E.planifier(etat, { sets: SELECTION });
         const ops = E.operationsVersMongo(plan);
+        if (SELECTION) console.log(`SÉLECTION --sets=${SELECTION.join(',')} : ${plan.horsSelection} ligne(s) des autres sets lues et NON planifiées`);
         const manifeste = E.manifeste(plan);
-        console.log(`PLAN : ${plan.ajouts.length} entrées à poser (${plan.ajouts.reduce((s, a) => s + a.produits.length, 0)} produits) · déjà ${plan.deja.length} · sans substitut ${plan.sansSubstitut.length} · sans carte ${plan.sansCarte.length} · refus ${plan.refus.length} · WCD refusés ${plan.refusWCD.length} · hors périmètre ${plan.horsPerimetre} · ÉCRITURES ${ops.length}`);
+        console.log(`PLAN : ${plan.ajouts.length} entrées à poser (${plan.ajouts.reduce((s, a) => s + a.produits.length, 0)} produits) · déjà ${plan.deja.length} · sans substitut ${plan.sansSubstitut.length} · sans carte ${plan.sansCarte.length} · refus ${plan.refus.length} · WCD refusés ${plan.refusWCD.length} · hors périmètre ${plan.horsPerimetre} · hors liste fermée ${plan.horsListe} · ÉCRITURES ${ops.length}`);
         console.log('PAR SET :');
         for (const [s, c] of Object.entries(plan.parSet).sort()) console.log(`   ${s} : ${JSON.stringify(c)}`);
         for (const r of plan.refus) console.log(`   ✗ REFUS carte ${r.carteId} ${r.set} n°${r.numero ?? '∅'} (produits ${r.produits.join(',')}) : ${r.raison}`);
+        if (plan.refus.length && !ECRIRE) process.exitCode = 1;   // PHASE 3b : une simulation qui porte un refus ne rend pas 0 (--ecrire s'arrête de toute façon : motifDArret)
 
         const apres = E.appliquer(etat, plan);
         const cartesApres = etat.cartesDocs.map(c => apres.cartes.get(c._id) || c);
@@ -123,7 +129,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const parSetSite = {};
         const compte = (o, m) => { const c = m ?? '(aucune)'; o[c] = (o[c] || 0) + 1; };
         for (const [k, b] of ap) {
-            if (!E.dansLePerimetre(b.set)) continue;
+            if (!E.dansLePerimetre(b.set) && !E.setBorne(b.set)) continue;
             const s = (parSetSite[b.set] ||= { produits: 0, avecFiche: 0, visuelAvant: 0, visuelApres: 0, empruntes: 0 });
             const a = av.get(k);
             s.produits++; if (b.fiche) s.avecFiche++; if (a?.cleR2) s.visuelAvant++; if (b.cleR2) s.visuelApres++;
@@ -143,6 +149,33 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         console.log(`MENTIONS de l'entrée posée (mentionDuVisuelEmprunte sur l'entrée) : ${JSON.stringify(mentions)}`);
         console.log(`MENTIONS RÉELLEMENT SERVIES (imageServieDe du site, sans le set) : ${JSON.stringify(mentionsReelles)}`);
         console.log(`MENTIONS SI le site cherchait d'abord dans le set : ${JSON.stringify(mentionsSiCorrectif)}`);
+
+        // ── PHASE 3b : la décision de l'API (chaîne importée, jamais recopiée) AVANT / APRÈS, sur la base entière. Une image empruntée n'est JAMAIS servie à l'identification (decision.js : refusDeRepli
+        // « image-empruntee ») : les produits du plan qui étaient servis par un AUTRE tirage sortent de l'archive, et c'est l'ordre du testeur. Tout autre produit qui bouge ARRÊTE.
+        const horsChamp = E.produitsHorsChamp(plan);
+        if (horsChamp.length) { console.error(`🔴 ARRÊT : le plan touche des produits hors du champ (${horsChamp.join(', ')}) — rien n'est écrit.`); process.exitCode = 1; return; }
+        if (!ECRIRE && plan.ajouts.length) {
+            const GC = require('./collecte-cartes/garde-contrat-api'), PV = require('./collecte-cartes/phase2-visuels');
+            const api = await GC.chargerApi();
+            const { jugerLecture } = require('./collecte-cartes/base-banc');
+            const jl = jugerLecture(process.env, 'cartes'); if (!jl.ok) throw new Error(jl.raison);
+            const eApi = await require('./collecte-cartes/phase2-lecture').lireEtat({ uri: jl.uri, dbName: 'cartes', projectionsCartes: api.projectionsEtat.cartes, projectionsLignes: api.projectionsEtat.cartesProduits });
+            const decider = async s => { const I = api.interneur(); return api.decider({ sets: s.sets.map(x => api.compacterSet(x, I)), docs: s.cartes.map(d => api.compacterCarte(d, I)), lignes: s.cartesProduits.map(l => api.compacterLigne(l, I)), metacarte: new Map([[-1, 1]]), regle: api.regle, cederLaMain: false }); };
+            const avantApi = await decider(eApi);
+            const ap2 = E.appliquer({ cartes: new Map(eApi.cartes.map(c => [c._id, c])) }, plan);
+            const etatApresApi = { ...eApi, cartes: eApi.cartes.map(c => ap2.cartes.get(c._id) || c) };
+            const apresApi = await decider(etatApresApi);
+            const idsPlan = plan.ajouts.flatMap(a => a.produits);
+            const cmpApi = PV.compareEntrees(avantApi.entrees, apresApi.entrees, idsPlan);
+            const nature = (r, id) => r.entrees.find(x => x.idProduct === id)?.visuel ?? 'non servi';
+            console.log(`API (decider, base entière) : produits servis ${new Set(avantApi.entrees.map(x => x.idProduct)).size} → ${new Set(apresApi.entrees.map(x => x.idProduct)).size} · refus « image-empruntee » ${avantApi.denominateurs.repliRefuse.parFamille['image-empruntee']} → ${apresApi.denominateurs.repliRefuse.parFamille['image-empruntee']} · produits du plan ${idsPlan.length}`);
+            for (const id of idsPlan.slice(0, 30)) console.log(`   ${id} : ${nature(avantApi, id)} → ${nature(apresApi, id)}`);
+            console.log(`API : perdus ${cmpApi.perdus.length} (tous du plan : ${cmpApi.perdus.every(i => idsPlan.includes(i))}) · AUTRES produits perdus ${cmpApi.autresPerdus.length} · produits changés ${cmpApi.changes.length} · gagnés ${cmpApi.gagnes.length}`);
+            const ctApi = await GC.verifierContrat({ api, avant: { sets: eApi.sets, cartes: eApi.cartes, cartesProduits: eApi.cartesProduits }, apres: { sets: etatApresApi.sets, cartes: etatApresApi.cartes, cartesProduits: etatApresApi.cartesProduits } });
+            console.log(`${GC.ligneContrat(ctApi)} · CONTRAT : ${ctApi.nouveaux.length ? `🔴 ${ctApi.nouveaux.length} refus nouveau(x)` : '✅ zéro refus nouveau'}`);
+            const vApi = E.verdictApi({ cmp: cmpApi, idsPlan, contratNouveaux: ctApi.nouveaux.length });
+            if (!vApi.ok) { console.error(`🔴 ARRÊT : l'API perd ou change un produit HORS du plan, ou le contrat refuse une entrée (${vApi.raisons.join(' ; ')}) — rien n'est écrit.`); process.exitCode = 1; return; }
+        }
 
         // ── la garde de lot sur l'état simulé
         const garde = require('./collecte-cartes/garde-lot');
@@ -181,7 +214,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         fs.copyFileSync(fichier('manifeste.json'), fichier(`manifeste-ecrit-${new Date().toISOString().replace(/[:.]/g, '-')}.json`));   // figé avant la première écriture : `--retirer` le préfère
         let touches = 0;
         for (const o of ops) touches += (await cx.dbCartes.collection(o.coll).updateOne(o.filter, o.update, o.options || {})).modifiedCount;
-        const relu = E.planifier(await lireEtat(cx.dbCartes));
+        const relu = E.planifier(await lireEtat(cx.dbCartes), { sets: SELECTION });
         console.log(`${touches === ops.length && relu.ajouts.length === 0 ? '✅' : '🔴'} écrites ${touches}/${ops.length} · relu : plan restant ${relu.ajouts.length} (0 attendu)`);
         if (touches !== ops.length || relu.ajouts.length) process.exitCode = 1;
     } finally { await cx.fermer(); }
