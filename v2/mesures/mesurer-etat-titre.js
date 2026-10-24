@@ -133,7 +133,11 @@ async function principal() {
     const EM = ['- "moyenne" si : photo correcte de face mais', '- "moyenne" si : photo correcte de face, même sans photo du verso, mais'];
     const EH = ['- "haute" UNIQUEMENT si : carte nue, photo nette, bords et coins clairement visibles.', '- "haute" UNIQUEMENT si : carte nue, photo nette, bords et coins clairement visibles (l\'absence de verso n\'entre pas dans ce critère).'];
     const appliquer = (P, ecarts) => ecarts.reduce((p, [a, b]) => { if (p.split(a).length !== 2) throw new Error(`écart introuvable ou ambigu : ${a.slice(0, 50)}`); return p.replace(a, b); }, P);
-    const VARIANTES = { origine: [], F1: [E1, E3], F2: [E1, E3b], F3: [E1, E3, EM], F4: [E1, E3, EH] };
+    // TOUR 3 : T2 = la consigne du tour 2 (celle du module avant le tour 3) ; T3 = LA reformulation du second état (nommé seulement si l'hésitation est vraie, entre deux états VOISINS, sans exemple)
+    const ES2 = 'etatSecond : UNIQUEMENT si tu hésites entre deux états, le second état plausible (de la même liste) ; si tu n\'hésites pas, null.';
+    const ES3 = 'etatSecond : null dans la grande majorité des cas. Ne le renseigne que si tu hésites VRAIMENT entre deux états voisins, au point de pouvoir justifier l\'un comme l\'autre ; sinon null.';
+    const R3 = [ES2, ES3];
+    const VARIANTES = { origine: [], F1: [E1, E3], F2: [E1, E3b], F3: [E1, E3, EM], F4: [E1, E3, EH], T2: [E1, E3], T3: [E1, E3, R3] };
     if (variante) {
         if (!VARIANTES[variante]) throw new Error(`variante inconnue : ${variante}`);
         consigneVariante = appliquer(origine, VARIANTES[variante]);
@@ -238,7 +242,7 @@ async function principal() {
         const comp = ok1.filter(x => refIdent.get(x.id) && refIdent.get(x.id).lu);
         d('  COMPARÉ À L\'IDENTIFICATION D\'AUJOURD\'HUI (même photo, sans titre) : état ESTIMÉ', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.estime }))));
         d('  idem, état RETENU', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).retenu, b: x.separe.retenu }))));
-        if (!variante) { d('  AVEC LE SECOND ÉTAT : états EFFICACES (plus abîmé des deux) contre l\'identification sans titre', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  AVEC LE SECOND ÉTAT : sens (moins / plus / biais)', sens(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  seconds états nommés / refusés', [comp.filter(x => x.separe.second).length, comp.filter(x => x.separe.secondRefuse).length, 'sur ' + comp.length]); }
+        { d('  AVEC LE SECOND ÉTAT : états EFFICACES (plus abîmé des deux) contre l\'identification sans titre', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  AVEC LE SECOND ÉTAT : sens (moins / plus / biais)', sens(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  seconds états nommés / refusés', [comp.filter(x => x.separe.second).length, comp.filter(x => x.separe.secondRefuse).length, 'sur ' + comp.length]); }
         d('  états retenus NULS : appel séparé / identification d\'aujourd\'hui', [comp.filter(x => !x.separe.retenu).length, comp.filter(x => !refIdent.get(x.id).retenu).length, 'sur ' + comp.length]);
     }
     if (variante || phase2.length === 0) {

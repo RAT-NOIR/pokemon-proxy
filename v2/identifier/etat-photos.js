@@ -13,7 +13,7 @@ const URL_MODELE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const PROMPT_ETAT = `Estime l'ÉTAT PHYSIQUE (l'usure) de la carte Pokémon visible sur ces photos, et rien d'autre. Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
 {"etatEstime": "NM/EX/GD/LP/PL/PO", "etatSecond": "NM/EX/GD/LP/PL/PO, ou null", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
-etatSecond : UNIQUEMENT si tu hésites entre deux états, le second état plausible (de la même liste) ; si tu n'hésites pas, null.
+etatSecond : null dans la grande majorité des cas. Ne le renseigne que si tu hésites VRAIMENT entre deux états voisins, au point de pouvoir justifier l'un comme l'autre ; sinon null.
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
