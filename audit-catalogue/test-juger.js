@@ -27,5 +27,15 @@ verifier('notre vignette carrée : format inattendu', juger({ ...base, dimNous: 
 const nc = juger({ ...base, copieLocale: false, fpCm: null, dimCm: null });
 verifier('une paire incomparable ne porte AUCUNE distance (ni 0, ni NaN : null)', [nc.distance, nc.ncc, nc.couleur], [null, null, null]);
 
+// L3 : on CLASSE avant d'arrondir — 0,5499996 s'arrondit à 0,55 (INCERTAIN) alors qu'il est sous le seuil (CONFORME)
+const { enregistrer } = require('./lancer-comparaison');
+const rb = d => ({ comparable: true, motif: null, distance: d, ncc: 1 - d, dx: 0, dy: 0, couleur: 0.123456789 });
+const eb = enregistrer({ idProduct: 5, classe: 'A_COMPARER', motifsClasse: [], nom: 'Pikachu', r: rb(0.5499996) });
+verifier('0,5499996 : classé CONFORME sur la valeur NON arrondie', eb.classeComparaison, 'CONFORME');
+verifier('la distance écrite est la valeur brute (jamais arrondie avant classement : relue, elle classe pareil)', eb.distance, 0.5499996);
+verifier('0,6499999 : INCERTAIN sur la valeur brute', enregistrer({ idProduct: 6, classe: 'A_COMPARER', motifsClasse: [], nom: 'Pikachu', r: rb(0.6499999) }).classeComparaison, 'INCERTAIN');
+verifier('ncc et couleur restent arrondies (ce ne sont pas des seuils)', [eb.couleur], [0.12346]);
+verifier('un produit incomparable : classe INVÉRIFIABLE avec son motif, distance null', (() => { const e = enregistrer({ idProduct: 7, classe: 'A_COMPARER', motifsClasse: [], nom: 'Pikachu', r: nc }); return [e.classeComparaison, e.distance]; })(), ['INVERIFIABLE', null]);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

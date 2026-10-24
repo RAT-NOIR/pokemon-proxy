@@ -30,6 +30,15 @@ function juger({ classe, copieLocale, fpNous, dimNous, fpCm, dimCm }) {
         couleur: comp.comparable ? E.couleur(fpNous, fpCm) : null };
 }
 
+/**
+ * L'enregistrement d'une paire (L3) : on CLASSE sur la distance BRUTE, puis on écrit la distance BRUTE (relue, elle classe pareil : 0,5499996 arrondi à 0,55 aurait basculé en INCERTAIN).
+ * Seuls `ncc` et `couleur` sont arrondis (ce ne sont pas des seuils).
+ */
+function enregistrer({ idProduct, classe, motifsClasse, nom, r }) {
+    const cc = C.classerComparaison({ comparaison: { comparable: r.comparable, motif: r.motif }, distance: r.distance, nom });
+    return { idProduct, classe, motifsClasse, ...r, classeComparaison: cc.classe, ncc: r.ncc === null ? null : +r.ncc.toFixed(5), couleur: r.couleur === null ? null : +r.couleur.toFixed(5) };
+}
+
 if (require.main === module) {
     const t0 = Date.now();
     const produits = lireJson('etat-produits.json');
@@ -43,7 +52,7 @@ if (require.main === module) {
         const r = p.copieLocale && iCm !== undefined && iN !== undefined
             ? (() => { const a = process.hrtime.bigint(); const j = juger({ classe: p.visuel.classe, copieLocale: true, fpNous: nous.empreinte(iN), dimNous: nous.meta.infos[iN], fpCm: cm.empreinte(iCm), dimCm: cm.meta.infos[iCm] }); tCalc += Number(process.hrtime.bigint() - a); return j; })()
             : { comparable: false, motif: p.copieLocale ? 'empreinte-absente' : 'pas-de-copie-locale', distance: null, ncc: null, dx: null, dy: null, couleur: null };
-        const e = { idProduct: p.idProduct, classe: p.visuel.classe, motifsClasse: p.visuel.motifs, ...r, distance: r.distance === null ? null : +r.distance.toFixed(5), ncc: r.ncc === null ? null : +r.ncc.toFixed(5), couleur: r.couleur === null ? null : +r.couleur.toFixed(5) };
+        const e = enregistrer({ idProduct: p.idProduct, classe: p.visuel.classe, motifsClasse: p.visuel.motifs, nom: p.name, r });
         sortieJ.push(e);
         const k = e.comparable ? 'comparable' : e.motif; motifs[k] = (motifs[k] || 0) + 1;
         const c = (parClasse[e.classe] ||= { servis: 0, comparables: 0 }); c.servis++; if (e.comparable) c.comparables++;
@@ -56,4 +65,4 @@ if (require.main === module) {
     console.log(JSON.stringify(resume, null, 1));
 }
 
-module.exports = { juger, lireJeu };
+module.exports = { juger, lireJeu, enregistrer };

@@ -86,8 +86,9 @@ async function rejouerApi({ api, sets, docs, lignes, catalogue }) {
 const STADE = { 'sans-fiche-du-site': 0, 'aucun-visuel': 1, 'repli-refuse': 2, 'partage-incoherent': 3, 'entree-refusee': 4 };
 
 /** Le motif de MANQUANT d'un produit sans entrée servie : le stade le plus avancé atteint par l'une de ses lignes (decider écarte, dans l'ordre : sans fiche, sans visuel, repli, partage). */
-function motifManquant({ lignes, traces, carteExiste, entreeRefusee }) {
+function motifManquant({ lignes, traces, carteExiste, entreeRefusee, contradictoire = false }) {
     if (!lignes.length) return 'sans-ligne';
+    if (contradictoire) return 'contradictoire';
     if (entreeRefusee) return `entree-refusee:${entreeRefusee}`;
     let meilleur = null, rang = -1;
     const consider = (motif, r) => { if (r > rang) { rang = r; meilleur = motif; } };
@@ -124,6 +125,7 @@ function assembler({ api, donnees, rejeu }) {
     for (const e of entrees) (entreesDe.get(e.idProduct) || entreesDe.set(e.idProduct, []).get(e.idProduct)).push(e);
     const setANumeros = new Map([...fichesParSet].map(([id, m]) => [id, [...m.values()].some(f => f.numero !== null && f.numero !== undefined)]));
     const produits = [], horsPerimetre = [];
+    let entreesDuPerimetre = 0;
     for (const p of catalogue) {
         if (estCarteCode(p.name)) { horsPerimetre.push(p.idProduct); continue; }
         const ls = lignesDe.get(p.idProduct) || [];
@@ -147,12 +149,13 @@ function assembler({ api, donnees, rejeu }) {
             // le numéro du produit est CONNU : numeros_cartes.numero, ou le numeroFiche d'une de ses lignes (seuils.md : `sans-numero` resserrée)
             numeroConnu: nonVide(numeroDeProduit.get(p.idProduct)) || ls.some(l => nonVide(l.numeroFiche)) });
         // ── le visuel que l'API construirait : decider PUIS lireEntree
-        let servi = null, entreeRefusee = null, plusieursEntrees = (entreesDe.get(p.idProduct) || []).length > 1, entree = null;
-        for (const e of entreesDe.get(p.idProduct) || []) {
-            const j = api.lireEntree(e);
-            if (j.ok) { servi = e; break; }
-            entreeRefusee = entreeRefusee || j.motif;
-        }
+        // UN produit, UNE entrée (M4, comme version.js:276-283) : deux entrées valides aux visuels identiques ⇒ une ; différents ⇒ MANQUANT `contradictoire`
+        const brutes = entreesDe.get(p.idProduct) || [];
+        entreesDuPerimetre += brutes.length;
+        let entreeRefusee = null, plusieursEntrees = brutes.length > 1, entree = null;
+        const valides = [];
+        for (const e of brutes) { const j = api.lireEntree(e); if (j.ok) valides.push(e); else entreeRefusee = entreeRefusee || j.motif; }
+        const dep = C.departagerEntrees(valides), servi = dep.servi;
         if (servi) {
             const t = ts.find(x => x.im && x.im.cleR2 && x.im.cleR2 === servi.grande?.cleR2) || null;
             entree = { visuel: servi.visuel, mention: servi.mention ?? null, numero: servi.numero ?? null, setNom: servi.setNom ?? null, vignette: servi.vignette ?? null, grande: servi.grande ?? null,
@@ -161,7 +164,7 @@ function assembler({ api, donnees, rejeu }) {
         // ce que l'API a REFUSÉ de servir (repli-réimpressions) : la NATURE du visuel écarté — emprunté (substitut, autre tirage) ou non, pour que « manquant » ne cache pas un emprunt
         // (sous-motif `emprunt-refuse-par-api`, seuils.md : il reste MANQUANT, puisque c'est ce que l'API sert)
         const refuse = !servi ? ts.filter(t => t.refus).map(t => ({ famille: t.refus, nature: t.im?.imageEmprunteeTirage === true ? 'image-empruntee-tirage' : t.visuel })) : [];
-        const v = C.classerVisuel({ servi: entree, motifManquant: servi ? undefined : motifManquant({ lignes: ls, traces: ts, carteExiste, entreeRefusee }), refuse: refuse[0] });
+        const v = C.classerVisuel({ servi: entree, motifManquant: servi ? undefined : motifManquant({ lignes: ls, traces: ts, carteExiste, entreeRefusee: valides.length ? null : entreeRefusee, contradictoire: dep.contradictoire }), refuse: refuse[0] });
         const setId = (ficheSite?.setId) || ts[0]?.setId || ls.find(l => l.slugSet && setDe.has(l.slugSet))?.slugSet || null;
         // ce que l'empreinte ne voit pas : la finition et le tampon, lus dans ce qu'on a déjà (seuils.md) ; le slug est celui de la ligne
         const finition = entree ? C.finitionOuTampon({ nom: p.name, slug: ls.find(l => l.slug)?.slug, variante: entree.variante, tamponNonRepresente: entree.tamponNonRepresente, partageeHoloNonHolo: entree.partageeHoloNonHolo,
@@ -170,7 +173,7 @@ function assembler({ api, donnees, rejeu }) {
             fiche: { ...f, setId: ficheSite?.setId ?? null, carteId: ficheSite?.carteId ?? null, numero: ficheSite?.numero ?? null, autreCarte: autreCarte || undefined, temoinMuet: temoinMuet || undefined },
             visuel: { ...v, entree, finition, plusieursEntrees: plusieursEntrees || undefined } });
     }
-    return { produits, horsPerimetre };
+    return { produits, horsPerimetre, entreesDuPerimetre };
 }
 
 /**

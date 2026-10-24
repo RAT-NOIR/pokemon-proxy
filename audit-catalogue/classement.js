@@ -122,13 +122,39 @@ function classerFiche({ lignes, ficheSite, temoinContredit = false, setANumeros 
     const duneFiche = lignes.filter(l => l.carteId === ficheSite.carteId);
     const preuves = duneFiche.map(l => l.preuve).filter(Boolean);
     if (preuves.length && preuves.every(p => PREUVES_NOM_SEUL.includes(p))) motifs.push('preuve-nom-seul');
-    // SECOND PASSAGE : `sans-numero` RESSERRÉE — la fiche n'a pas de numéro ALORS QUE le numéro du produit est connu (numeros_cartes.numero, ou numeroFiche de la ligne). Une fiche « n° ? » que le
-    // site veut (vieux sets japonais) n'est plus douteuse. L'ANCIENNE définition (le set a des fiches numérotées) reste comptée à part, en INFORMATION : elle ne change ni la classe ni les motifs.
+    // `sans-numero` RESSERRÉE, décision du coordinateur après la relecture indépendante (M1) : la CONJONCTION « le set a au moins une fiche numérotée » ET « le numéro du produit est connu »
+    // (numeros_cartes.numero, ou numeroFiche de la ligne). Sans la première moitié, ~1 216 fiches « n° ? » de sets sans aucune fiche numérotée (Gem Packs, Half Decks) entraient — exactement ce que
+    // seuils.md voulait exclure. L'ANCIENNE définition (le set a des fiches numérotées, sans le numéro du produit) reste comptée à part, en INFORMATION : elle ne change ni la classe ni les motifs.
     const sansNumero = ficheSite.numero === null || ficheSite.numero === undefined;
-    if (sansNumero && numeroConnu === true) motifs.push('sans-numero');
+    if (sansNumero && setANumeros === true && numeroConnu === true) motifs.push('sans-numero');
     if (temoinContredit) motifs.push('contredite-par-le-nom');
     return { classe: motifs.length ? 'FICHE_DOUTEUSE' : 'FICHE_OK', motifs, infos: sansNumero && setANumeros ? ['sans-numero-set-numerote'] : [] };
 }
 
-module.exports = { classerVisuel, etatComparaison, classerComparaison, classerFinal, classerFiche, finitionOuTampon, formatConcerne, SEUILS, PREUVES_NOM_SEUL, MOTIFS_FICHE,
+// ── ENTRÉES D'UN MÊME PRODUIT (M4) : comme version.js:276-283 — UN produit, UNE entrée. Deux entrées VALIDES aux visuels identiques ⇒ une seule (la dernière, pour le reste) ; aux visuels
+// DIFFÉRENTS ⇒ AUCUN visuel servi (« un visuel absent est honnête, celui d'un autre tirage ne l'est pas »). Le visuel = vignette, grande (clé, largeur, hauteur) : ce qui est AFFICHÉ.
+const visuelDe = e => JSON.stringify([e.vignette?.cle ?? null, e.vignette?.w ?? null, e.vignette?.h ?? null, e.grande?.cle ?? null, e.grande?.w ?? null, e.grande?.h ?? null]);
+/** @param {object[]} valides les entrées de `decider` que `lireEntree` a admises, pour UN produit. @returns {{ servi: object|null, contradictoire: boolean, doublons: number }} */
+function departagerEntrees(valides) {
+    if (!valides.length) return { servi: null, contradictoire: false, doublons: 0 };
+    if (new Set(valides.map(visuelDe)).size > 1) return { servi: null, contradictoire: true, doublons: 0 };
+    return { servi: valides[valides.length - 1], contradictoire: false, doublons: valides.length - 1 };
+}
+
+/**
+ * Les motifs FINAUX d'un produit (une seule définition, testée) : les motifs de la classe, `format` DÈS QUE le nom correspond (L1 : y compris sur un MANQUANT, servi ou non), le motif de
+ * comparaison d'un INVÉRIFIABLE, et `finition-ou-tampon-non-verifie` quand la comparaison est CONFORME et que la finition ou le tampon ne se lit pas.
+ * @param {{ motifs: string[], nom: string, comparaison: null | {classe: string, motif: string|null}, classeVisuel: string, finition: null | {concerne: boolean, raisons: string[]} }} e
+ * @returns {{ motifs: string[], finitionRaisons: string[] }}
+ */
+function motifsFinaux({ motifs, nom, comparaison, classeVisuel, finition }) {
+    const m = [...motifs];
+    if (formatConcerne(nom) && !m.includes('format')) m.push('format');
+    if (classeVisuel === 'INVERIFIABLE' && comparaison?.motif && !m.includes(comparaison.motif)) m.push(comparaison.motif);
+    const finitionRaisons = comparaison?.classe === 'CONFORME' && finition?.concerne ? finition.raisons : [];
+    if (finitionRaisons.length) m.push(MOTIF_FINITION_OU_TAMPON);
+    return { motifs: m, finitionRaisons };
+}
+
+module.exports = { classerVisuel, etatComparaison, classerComparaison, classerFinal, classerFiche, finitionOuTampon, formatConcerne, departagerEntrees, motifsFinaux, SEUILS, PREUVES_NOM_SEUL, MOTIFS_FICHE,
     MOTIF_EMPRUNT_REFUSE, FAMILLES_EMPRUNT_REFUSE, MOTIF_FINITION_OU_TAMPON };

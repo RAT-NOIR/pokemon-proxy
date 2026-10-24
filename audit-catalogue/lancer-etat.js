@@ -3,6 +3,7 @@
 //   NODE_PATH = node_modules du dépôt principal (aucune jonction). Écrit dans S8\AUDIT\ : etat-produits.json, mesure-sets.json, resume-etat.json.
 const { ouvrirLecture, chargerDonnees, rejouerApi, assembler, mesurerSets, controlerTemoin, chargerApi } = require('./etat-api');
 const { ecrireJson } = require('./ecrire');
+const { rapprocher } = require('./rapprochement');
 const { indexerDisque } = require('../collecte-cartes/staff-detect-io');
 
 const compter = (xs, cle) => { const m = new Map(); for (const x of xs) for (const k of [].concat(cle(x))) m.set(k, (m.get(k) || 0) + 1); return Object.fromEntries([...m].sort((a, b) => b[1] - a[1])); };
@@ -15,7 +16,11 @@ const compter = (xs, cle) => { const m = new Map(); for (const x of xs) for (con
     let donnees;
     try { donnees = await chargerDonnees(base, api); } finally { await base.fermer(); }
     const rejeu = await rejouerApi({ api, sets: donnees.sets, docs: donnees.docs, lignes: donnees.lignes, catalogue: donnees.catalogue });
-    const { produits, horsPerimetre } = assembler({ api, donnees, rejeu });
+    // M3 : les comptes de decider et ce que l'audit lit dans ses traces doivent CONCORDER — sinon on LÈVE (jamais un motif posé par élimination sur une API qui a changé)
+    const rap = rapprocher({ d: rejeu.denominateurs, traces: [...rejeu.traces.values()].flat(), nLignes: donnees.lignes.length, nEntrees: rejeu.entrees.length });
+    console.log(`RAPPROCHEMENT decider ✅ ${JSON.stringify(rap.comptes)}`);
+    const { produits, horsPerimetre, entreesDuPerimetre } = assembler({ api, donnees, rejeu });
+    if (entreesDuPerimetre !== rejeu.entrees.length) throw new Error(`${rejeu.entrees.length - entreesDuPerimetre} entrées de decider portent sur des produits hors du périmètre (cartes-code ?) : le rapprochement des produits servis ne tient plus`);
     const N = produits.length;
     console.log(`\nDÉNOMINATEUR : catalogue ${donnees.catalogue.length} − cartes-code ${horsPerimetre.length} = ${N} produits`);
 

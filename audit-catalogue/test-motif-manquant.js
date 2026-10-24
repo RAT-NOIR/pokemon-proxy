@@ -21,6 +21,7 @@ verifier('un visuel qui passe le repli mais pas la cohérence du partage : parta
 verifier('lireEntree a refusé l\'entrée : le motif de lireEntree, préfixé', motifManquant({ lignes: [L()], traces: [T()], carteExiste, entreeRefusee: 'champ "rarete" absent' }), 'entree-refusee:champ "rarete" absent');
 verifier('deux lignes (sans fiche, puis aucun visuel) : le stade le plus avancé gagne', motifManquant({ lignes: [L(1), L(2)], traces: [T({ carteId: 1, sansFiche: true, im: null }), T({ carteId: 2, im: null })], carteExiste }), 'aucun-visuel');
 verifier('deux lignes (aucun visuel, puis repli refusé) : le repli gagne', motifManquant({ lignes: [L(1), L(2)], traces: [T({ carteId: 1, im: null }), T({ carteId: 2, refus: 'prize-packs' })], carteExiste }), 'repli-refuse:prize-packs');
+verifier('deux entrées valides aux visuels différents : contradictoire (passe avant tout, version.js:276-283)', motifManquant({ lignes: [L()], traces: [T()], carteExiste, contradictoire: true }), 'contradictoire');
 verifier('une trace d\'une AUTRE carte ne compte pas pour la ligne', motifManquant({ lignes: [L(1)], traces: [T({ carteId: 2, im: null })], carteExiste }), 'aucun-set-candidat');
 
 console.log(`\n${ok} passés, ${ko} en échec`);
