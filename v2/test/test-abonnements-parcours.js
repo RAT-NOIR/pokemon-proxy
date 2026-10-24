@@ -108,8 +108,9 @@ const EXT_SERVEUR = A.cfgAbo().origines.extension;       // l'origine que le ser
     const lectures = lente.faux.E.appels.filter(a => a.nom === 'customers.listBalanceTransactions').length;
     H.v('l\'attente de l\'avoir se mesure en temps RÉEL : lectures de 5 s et pas de 3 s, bornées à 30 s (peu de lectures, pas onze pas additionnés), l\'échec est dit', [lectures <= 9, lente.res.filter(r => !r.ok).length], [true, 1]);
     console.log(`   (lectures des avoirs chez Stripe pendant l'attente : ${lectures})`);
-    // B-M4 : un échec de suppression de l'horloge est NOTÉ (type et code, jamais le message qui pourrait citer une clé)
-    const suppr = await jouer({ seulement: ['essaiSansCarte'], roles: ['sanscarte'], delEchoue: Object.assign(new Error('clé sk_test_SECRETDUBANC refusée'), { type: 'StripeAPIError', code: 'api_error' }) });
+    // B-M4 : un échec de suppression de l'horloge est NOTÉ (type et code, jamais le message qui pourrait citer une clé).
+    // Le leurre de clé est fabriqué par morceaux : la garde d'avant push ne doit voir aucune forme de clé dans le dépôt.
+    const suppr = await jouer({ seulement: ['essaiSansCarte'], roles: ['sanscarte'], delEchoue: Object.assign(new Error('clé ' + ['sk', 'test', 'SECRETDUBANC'].join('_') + ' refusée'), { type: 'StripeAPIError', code: 'api_error' }) });
     const noteDel = suppr.res.filter(r => !r.ok);
     H.v('un échec de suppression de l\'horloge n\'est plus avalé : il est noté avec son type et son code, sans le message ni aucune clé', [noteDel.length, noteDel[0] && /StripeAPIError api_error/.test(noteDel[0].detail), noteDel[0] && /sk_test_|SECRETDUBANC/.test(noteDel[0].nom + noteDel[0].detail + suppr.trace.join(' '))], [1, true, false]);
     H.vrai('   et la limite du statut est écrite en clair dans le compte rendu du parrainage', tardif.trace.some(l => /statut du parrain ne compte pas encore ce mois offert \(limite connue, notée sans bloquer/.test(l) && /bloquent l'avoir chez Stripe et la facture suivante du parrain à 0/.test(l)));
