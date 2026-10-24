@@ -11,8 +11,9 @@
 //   · la taille de la mémoire WASM : constante après la chauffe (100 appels) ;
 //   · le RSS après ramasse-miettes : la chauffe (OpenCV, caches bornés, cache de sharp) le monte une fois, en une cinquantaine d'appels ; entre le 200e appel et le dernier il ne doit pas grandir de plus de BORNE_RSS_MO.
 //     BORNE_RSS_MO = 40 : sur le code corrigé, 1 000 appels, les relevés du 200e au 1 000e vont de 544 à 566 Mo (amplitude 22 Mo : le RSS fluctue de ±12 Mo d'un relevé à l'autre, pages rendues ou non à
-//     l'OS), donc 40 Mo = l'amplitude vue + une marge de moitié. Elle attrape une fuite de plus de 50 Ko par appel ; elle n'attrape PAS celle d'inliers() (≈ 12 Ko par appel, 10 Mo en 800 appels, noyée dans
-//     le bruit) : le garde EXACT est le compte des objets C++ ci-dessus, qui monte de 150 par appel sur l'ancien code.
+//     l'OS), donc 40 Mo = l'amplitude vue + une marge de moitié (50 Ko par appel sur 800 appels). Sur l'ANCIEN code (inliers() libérait mal), les mêmes 1 000 appels rendent 1 529 Mo au dernier relevé contre
+//     752 Mo au 200e (+777 Mo, ≈ 1 Mo par appel), la mémoire WASM passe de 128 à 1 024 Mo (le plafond), 212 appels sur 1 000 deviennent muets faute de mémoire, et les objets C++ vivants montent de 150 par
+//     appel (113 543 au lieu de 96) : les trois bornes tombent. Le garde le plus fin reste le compte des objets, exact là où le RSS fluctue.
 const path = require('path'), fs = require('fs'), crypto = require('crypto'), { spawnSync } = require('child_process');
 const arg = (n, d) => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : d; };
 const DONNEES = process.env.RM_MEMOIRE_G_DONNEES, SCANS = process.env.RM_MEMOIRE_G_SCANS, HMAC = process.env.V2_VISUELS_HMAC;
