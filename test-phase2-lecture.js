@@ -31,6 +31,16 @@ const verifier = (nom, obtenu, attendu) => {
         verifier('… et rien pour une clé absente de la base (un vide n\'est pas deviné)', (await e.imagesRetirees(['g/zzz.webp'])).length, 0);
         const sans = await lireEtat({ ...o }).then(x => x.imagesRetirees(['g/a.webp']).then(() => 'rendu', er => er.message), er => er.message);
         verifier('une clé qu\'on n\'a pas annoncée à la lecture : refus NOMMÉ (jamais une erreur de pilote)', /annoncée|clesImages/.test(sans), true);
+        // L1 : la marque de lot du lot B (`images[].imageEmprunteeLot`) n'est PAS dans la projection de l'API (ni du site) : sans elle la relecture d'un `--annuler` (ou d'un lot B) ne peut pas la voir
+        await db.collection('cartes').insertOne({ _id: 2, nomEn: 'B', sets: ['Set-A'], images: [{ set: 'Set-A', numero: '5', cleR2: 'g/m.webp', imageEmprunteeTirage: true, imageEmprunteeLot: 'phase2-2026-10-24' }] });
+        await db.collection('cartes_produits').insertOne({ _id: '2|20', carteId: 2, idProduct: 20, idExpansion: 1 });
+        const projApi = { nomEn: 1, sets: 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.imageEmprunteeTirage': 1 };   // la forme de l'union API + site : sans la marque
+        const e2 = await lireEtat({ ...o, projectionsCartes: projApi });
+        const m = e2.cartes.find(c => c._id === 2).images[0];
+        verifier('L1 : la relecture lit la marque de lot, même quand la projection de l\'API ne la contient pas', [m.imageEmprunteeTirage, m.imageEmprunteeLot], [true, 'phase2-2026-10-24']);
+        verifier('… et elle ne rend PAS d\'autre champ que ceux de la projection + la marque (le reste de l\'entrée n\'est pas lu)', Object.keys(m).sort(), ['cleR2', 'imageEmprunteeLot', 'imageEmprunteeTirage', 'numero', 'set']);
+        const E = require('./collecte-cartes/phase2-lecture');
+        verifier('avecMarqueDeLot : une projection qui porte déjà « images » entier n\'est pas touchée (Mongo refuse un chemin et son parent)', [E.avecMarqueDeLot({ images: 1, nomEn: 1 }), E.avecMarqueDeLot({ 'images.set': 1 })], [{ images: 1, nomEn: 1 }, { 'images.set': 1, 'images.imageEmprunteeLot': 1 }]);
         verifier('une base sans cartes : lève (base fausse)', await lireEtat({ ...o, dbName: 'banc_vide' }).then(() => 'ne lève pas', er => /VIDE/.test(er.message) ? 'lève' : er.message), 'lève');
     } finally { await client.close(); await banc.arreter(); }
     console.log(`\n${ok} passés, ${ko} en échec`);

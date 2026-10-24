@@ -185,7 +185,7 @@ async function main() {
     const cmpReel = P.compareEntrees(avant.entrees, apresReel.entrees, retenues.map(x => x.idProduct));
     const entreesRelues = relu.cartes.filter(c => retenues.some(x => x.carteId === c._id)).flatMap(c => c.images || []);
     const etatVise = LOT === 'A' ? retenues.every(x => !relu.cartes.find(c => c._id === x.carteId)?.images?.some(m => m.cleR2 === x.cleR2))
-        : retenues.every(x => entreesRelues.some(m => m.cleR2 === x.cleR2 && m.set === x.set && m.imageEmprunteeTirage === true));
+        : retenues.every(x => entreesRelues.some(m => m.cleR2 === x.cleR2 && m.set === x.set && m.imageEmprunteeTirage === true && m.imageEmprunteeLot === P.LOT));   // L1 : la marque de lot est lue par phase2-lecture.js (elle n'est dans aucune projection de l'API)
     let docsOk = true;
     if (LOT === 'A') { const docs = await relu.imagesRetirees(retenues.map(x => x.cleR2)); docsOk = docs.length === retenues.length && docs.every(d => d.etat === 'retire'); console.log(`   documents images à l'état « retire » : ${docs.filter(d => d.etat === 'retire').length}/${retenues.length}`); }
     console.log(`RELECTURE : ${etatVise && docsOk ? '✅' : '🔴'} cibles dans l'état visé · API : perdus ${cmpReel.perdus.join(',') || 'aucun'} · autres perdus ${cmpReel.autresPerdus.length} · changés ${cmpReel.changes.length} · gagnés ${cmpReel.gagnes.length}`);
