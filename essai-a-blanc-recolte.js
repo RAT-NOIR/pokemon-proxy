@@ -52,6 +52,22 @@ const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Us
         console.log(`ESSAI À BLANC : code ${r.code} · attendu ${r.attendu} · réel ${r.reel} · objets R2 « déposés » (simulés) ${deposes.length} (clés distinctes ${new Set(deposes).size}) · entrées du lot posées ${siennes.length} · documents « remplace » ${remplaces} · cartes au même nombre d'entrées qu'avant ${mmeNb}/${cartes.length} · orphelins ${r.orphelins.length}`);
         for (const x of r.resultats) console.log(`   ${x.code} : ${x.etat} · unités ${x.unites} · déposées ${x.deposees} · joints ${x.joints} · cédées ${x.cedees} · remplacées ${x.remplacees} · garde ${x.garde?.ok ? 'ok' : 'ÉCHEC'} · concordance ${x.concordance}`);
         console.log(`   écritures simulées : ${journal.filter(j => j[0] === 'carte').length} sur cartes, ${journal.filter(j => j[0] === 'image').length} sur images, ${journal.filter(j => j[0] === 'set').length} sur sets (EN MÉMOIRE — rien en base)`);
+        // ALLER-RETOUR sur les données réelles : le RETRAIT du lot, rejoué (en mémoire) sur l'état que l'écriture vient de produire, doit rendre l'état d'AVANT l'écriture
+        const { fauxDbNatif } = require('./faux-db-natif');
+        const RET = require('./retirer-visuels-recolte');
+        const norm = o => JSON.parse(JSON.stringify(o));
+        const triees = c => [...(c.images || [])].sort((a, b) => `${a.source}|${a.set}|${a.cleR2}`.localeCompare(`${b.source}|${b.set}|${b.cleR2}`));
+        const nat = fauxDbNatif({ cartes: apresCartes, images: etat.images(), sets: sets.map(s => etat.set(s._id)) });
+        const aBlanc = await RET.retirerLot(nat.db, SRC, { ecrire: false });
+        const rr = await RET.retirerLot(nat.db, SRC, { ecrire: true });
+        const apresRetrait = nat.etat.cartes(), dAvant = new Map(norm(images).map(d => [d._id, d]));
+        const cartesIdentiques = cartes.filter(c => JSON.stringify(norm(triees(c))) === JSON.stringify(norm(triees(apresRetrait.find(x => x._id === c._id))))).length;
+        const docsAvant = nat.etat.images().filter(d => dAvant.has(d._id)), docsIdentiques = docsAvant.filter(d => JSON.stringify(Object.entries(norm(d)).sort()) === JSON.stringify(Object.entries(dAvant.get(d._id)).sort())).length;
+        const docsDuLot = nat.etat.images().filter(d => d.source === SRC.SOURCE && d.lot === SRC.LOT);
+        console.log(`ALLER-RETOUR (le retrait rejoué sur l'état écrit) : à blanc, ${aBlanc.aRemettre} entrées à remettre · remises ${rr.nRemises} · documents rendus à leur état d'avant ${rr.nDocsRestaures} (sans état d'avant ${rr.nDocsNonRestaures}) · entrées du lot restantes ${rr.reste}`);
+        console.log(`   cartes identiques à l'état d'AVANT : ${cartesIdentiques}/${cartes.length} · documents d'avant identiques : ${docsIdentiques}/${docsAvant.length} · documents du lot « retire » : ${docsDuLot.filter(d => d.etat === 'retire').length}/${docsDuLot.length}`);
+        const cartesDiff = cartes.length - cartesIdentiques, docsDiff = docsAvant.length - docsIdentiques;
+        if (cartesDiff || docsDiff || rr.reste || rr.nDocsNonRestaures) { console.error(`🔴 le retrait ne rend pas l'état d'avant : ${cartesDiff} carte(s), ${docsDiff} document(s)`); process.exitCode = 1; return; }
         process.exitCode = r.code === 0 ? 0 : 1;
     } finally { await lecture.fermer(); }
 })().catch(e => { console.error('❌', e.message); process.exitCode = 1; });

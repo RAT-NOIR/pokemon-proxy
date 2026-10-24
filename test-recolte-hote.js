@@ -180,6 +180,68 @@ const robotsOk = { status: 200, type: 'text/plain', texte: 'User-agent: *\nDisal
         assert.strictEqual(H.plafondRestant(dossier, 1), 0);
         void cli;
     });
+    // ───────── TOUR 1 : D2 (robots.txt périmé) et D3 (un seul flux par hôte, entre processus) ─────────
+    const HEURE = 3600 * 1000;
+    await test('D2 : un robots.txt au cache de moins de 24 h est repris (0 requête) ; de plus de 24 h il est REDEMANDÉ avant toute autre requête', async () => {
+        const dossier = tmp(); let t = Date.parse('2026-10-24T10:00:00Z'), appels = 0;
+        const transport = { async get() { appels++; return robotsOk; } };
+        const mk = () => H.fabriquerClient(base({ dossierCache: dossier, transport, now: () => t }));
+        let c = mk(); await c.initialiserRobots('www.exemple.test'); c.liberer(); assert.strictEqual(appels, 1);
+        t += 23 * HEURE; c = mk(); const r = await c.initialiserRobots('www.exemple.test'); c.liberer();
+        assert.strictEqual(appels, 1); assert.strictEqual(r.cache, true);
+        t += 2 * HEURE; c = mk(); const r2 = await c.initialiserRobots('www.exemple.test'); c.liberer();
+        assert.strictEqual(appels, 2, 'robots.txt vu il y a 25 h : redemandé'); assert.strictEqual(r2.cache, false);
+        assert.ok(H.robotsFrais(dossier, 'www.exemple.test', t) && !H.robotsFrais(dossier, 'www.exemple.test', t + 25 * HEURE));
+    });
+    await test('D2 : un processus qui dure plus de 24 h ne se sert plus d\'un robots.txt périmé : refus nommé, aucune requête', async () => {
+        let t = Date.parse('2026-10-24T10:00:00Z'), appels = 0;
+        const cli = H.fabriquerClient(base({ transport: { async get(u) { appels++; return /robots/.test(u) ? robotsOk : html('x'); } }, now: () => t, pause: async ms => { t += ms; } }));
+        await cli.initialiserRobots('www.exemple.test'); await cli.lire('https://www.exemple.test/sets/a');
+        t += 25 * HEURE;
+        await assert.rejects(() => cli.lire('https://www.exemple.test/sets/b'), /périmé/);
+        assert.strictEqual(appels, 2); cli.liberer();
+    });
+    await test('D3 : un second client sur le même hôte et le même dossier REFUSE (jamais deux flux) ; l\'autre hôte n\'est pas touché ; libéré, il passe', async () => {
+        const dossier = tmp(); let appels = 0;
+        const transport = { async get(u) { appels++; return /robots/.test(u) ? robotsOk : html('x'); } };
+        const a = H.fabriquerClient(base({ dossierCache: dossier, transport })), b = H.fabriquerClient(base({ dossierCache: dossier, transport }));
+        await a.initialiserRobots('www.exemple.test');                           // une requête : le verrou est pris
+        await b.initialiserRobots('www.exemple.test');                           // robots.txt au cache (frais) : aucune requête, aucun verrou
+        await assert.rejects(() => b.lire('https://www.exemple.test/sets/z'), /verrou/);
+        assert.strictEqual(appels, 1);
+        await b.initialiserRobots('media.exemple.test');                         // hôte différent : un autre verrou, qui passe
+        assert.strictEqual(appels, 2);
+        a.liberer();
+        await b.lire('https://www.exemple.test/sets/z').catch(e => assert.fail(`après libération : ${e.message}`));
+        assert.strictEqual(appels, 3);
+        b.liberer();
+    });
+    await test('D3 : le verrou d\'un processus MORT se reconnaît (pid absent) et se reprend, sans tuer personne ; un battement trop ancien aussi ; un fichier illisible REFUSE', async () => {
+        const dossier = tmp(), f = path.join(dossier, 'VERROU-www.exemple.test.json');
+        const transport = { async get() { return robotsOk; } };
+        const t = Date.parse('2026-10-24T10:00:00Z');
+        const mk = () => H.fabriquerClient(base({ dossierCache: dossier, transport, now: () => t }));
+        let k = 0; const requeter = async c => { await c.initialiserRobots('www.exemple.test'); return c.lire(`https://www.exemple.test/sets/p${k++}`); };
+        fs.writeFileSync(f, JSON.stringify({ pid: 2147483000, hote: 'x', depuis: new Date(t).toISOString() }));       // pid mort, battement frais
+        let c = mk(); await requeter(c); c.liberer();
+        fs.writeFileSync(f, JSON.stringify({ pid: process.pid, hote: 'x', depuis: new Date(t).toISOString() }));       // pid VIVANT, battement frais : refus
+        const refuse = mk(); await assert.rejects(() => requeter(refuse), /verrou/);
+        fs.writeFileSync(f, JSON.stringify({ pid: process.pid, hote: 'x', depuis: new Date(t - 4 * 60000).toISOString() }));       // battement de 4 min : trois manqués, repris
+        c = mk(); await requeter(c); c.liberer();
+        fs.writeFileSync(f, '{pas du json');                                                                              // illisible : je ne touche à rien
+        await assert.rejects(() => requeter(mk()), /illisible/);
+        assert.strictEqual(fs.readFileSync(f, 'utf8'), '{pas du json');
+    });
+    await test('D3 : le battement est rafraîchi à chaque requête, et le verrou est rendu à la libération (le fichier disparaît)', async () => {
+        const dossier = tmp(); let t = Date.parse('2026-10-24T10:00:00Z');
+        const cli = H.fabriquerClient(base({ dossierCache: dossier, transport: { async get(u) { return /robots/.test(u) ? robotsOk : html('x'); } }, now: () => t, pause: async ms => { t += ms; } }));
+        const f = path.join(dossier, 'VERROU-www.exemple.test.json');
+        await cli.initialiserRobots('www.exemple.test');
+        const d1 = JSON.parse(fs.readFileSync(f, 'utf8')); assert.strictEqual(d1.pid, process.pid);
+        await cli.lire('https://www.exemple.test/sets/a');
+        const d2 = JSON.parse(fs.readFileSync(f, 'utf8')); assert.ok(Date.parse(d2.depuis) > Date.parse(d1.depuis), 'battement avancé');
+        cli.liberer(); assert.ok(!fs.existsSync(f));
+    });
     console.log(`${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;
 })();

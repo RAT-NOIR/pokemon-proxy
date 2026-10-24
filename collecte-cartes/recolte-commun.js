@@ -109,6 +109,7 @@ async function telecharger({ SRC, unites, cli, fichier, hoteImages, progression 
     } catch (e) { etat = arretDe(e); motif = e.message; }
     ecrireJson(fichier, idx);
     ecrireProgression(etat);
+    cli.liberer?.();                      // D3 : le verrou de l'hôte est rendu
     const par = {};
     for (const v of Object.values(idx)) par[v.statut] = (par[v.statut] || 0) + 1;
     return { etat, motif, transitoires, requetes: cli.requetes(), adresses: urls.length, parStatut: par, restantes: urls.filter(u => !idx[u]).length, tropPetits: Object.entries(idx).filter(([, v]) => v.statut === 'trop-petit').map(([u, v]) => ({ url: u, largeur: v.w })) };
@@ -187,18 +188,19 @@ async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
 }
 
 /** L'entrée `cartes.images` d'une unité. `meta` : { wOriginal, cleR2, sha256, w, h, fmt }. LÈVE sans adresse d'origine (traçabilité commune). */
-function entreeDeCarte(SRC, u, meta, le = new Date()) {
+// D4 : `collecteLe` (et `telechargeLe` du document) est la date du TÉLÉCHARGEMENT, lue au cache (`meta.le`) ; `jointeLe` est la date de l'écriture. Sans date de téléchargement : la date d'écriture (tracabilite.js).
+function entreeDeCarte(SRC, u, meta, le = new Date(), collecteLe = le) {
     const tampon = SRC.tampon(u.slugSet);
     return { set: u.slugSet, source: SRC.SOURCE, lot: SRC.LOT, cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, numero: u.numero ?? null, wOriginal: meta.wOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
-        attribution: SRC.MENTION, mention: SRC.MENTION, langue: SRC.LANGUE, languePreuve: SRC.LANGUE_PREUVE, ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe: le }) };
+        attribution: SRC.MENTION, mention: SRC.MENTION, langue: SRC.LANGUE, languePreuve: SRC.LANGUE_PREUVE, ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
 }
 /** Le document `images` d'une unité. */
-function documentImage(SRC, u, meta, le = new Date()) {
+function documentImage(SRC, u, meta, le = new Date(), collecteLe = le) {
     const tampon = SRC.tampon(u.slugSet);
     return { _id: SRC.idImage(u.slugSet, u.carteId, u.numero), source: SRC.SOURCE, lot: SRC.LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, idSource: u.idSource ?? null,
         cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, wOriginal: meta.wOriginal, hOriginal: meta.hOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
         langueSource: SRC.LANGUE, langue: SRC.LANGUE, languePreuve: SRC.LANGUE_PREUVE, attribution: SRC.MENTION, mention: SRC.MENTION, ...(tampon ? { tampon } : {}),
-        ...(u.preuveNeutre ? { preuve: u.preuveNeutre } : {}), telechargeLe: new Date(le), etat: 'ok', ...champsTracabilite({ urlOriginal: u.url, collecteLe: le }) };
+        ...(u.preuveNeutre ? { preuve: u.preuveNeutre } : {}), telechargeLe: new Date(collecteLe), etat: 'ok', ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
 }
 
 async function compterEntrees(db, carteIds, slug, SRC) {
@@ -237,7 +239,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
         const _id = SRC.idImage(u.slugSet, u.carteId, u.numero);
         const deja = await lect.document(_id);
         if (deja?.etat === 'retire') { retires++; continue; }
-        prets.push({ u, _id, octets: c.octets, ix });
+        prets.push({ u, _id, octets: c.octets, ix, collecteLe: c.meta?.le ?? null });
     }
     const reel = prets.length;
     // `--attendu` = le nombre d'UNITÉS à ajouter dont l'image est `ok` : imprimé AVANT tout refus
@@ -262,7 +264,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
         const verrouSet = fabriquerVerrouSet ? fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat }) : null;
         if (verrouSet) { const tenu = await verrouSet.prendre(); if (tenu) { resultats.push({ code: slug, etat: 'refuse-verrou' }); continue; } }
         try {
-            let deposees = 0, sautees = 0, joints = 0, cedeesDuSet = 0, remplacees = 0, cartesAbsentes = 0, erreurJointure = null;
+            let deposees = 0, sautees = 0, joints = 0, cedeesDuSet = 0, dejaPoseesDuSet = 0, remplacees = 0, cartesAbsentes = 0, erreurJointure = null;
             const carteIds = [...new Set(unitesDuSet.map(p => p.u.carteId))];
             const avant = await compterEntrees(db, carteIds, slug, SRC);
             const retirees = [];
@@ -272,14 +274,14 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
                 for (const p of unitesDuSet) {
                     enCours = null;
                     const { u, _id, octets, ix } = p;
-                    const le = new Date();
+                    const le = new Date(), collecteLe = p.collecteLe ? new Date(p.collecteLe) : le;          // D4 : la date du téléchargement, lue au cache
                     const webp = await sharp(octets).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                     const cle = SRC.cleR2(slug, u.numero, u.carteId);
                     const meta = { cleR2: cle, sha256: sha('sha256', webp.data), w: webp.info.width, h: webp.info.height, fmt: 'webp', wOriginal: ix.w, hOriginal: ix.h };
                     const dejaDoc = await M.Image.findById(_id).select('sha256 etat').lean();
                     if (dejaDoc?.etat === 'ok' && dejaDoc.sha256 === meta.sha256) sautees++;
                     else { await deposer(bucket, cle, webp.data, 'image/webp'); deposees++; enCours = cle; }
-                    const doc = documentImage(SRC, u, meta, le);
+                    const doc = documentImage(SRC, u, meta, le, collecteLe);
                     const { _id: _omis, ...champs } = doc;
                     await M.Image.updateOne({ _id }, { $set: champs }, { upsert: true });
                     ecrits.push(_id);
@@ -287,12 +289,14 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
                     const c = await M.Carte.findById(u.carteId).select('images').lean();
                     if (!c) { cartesAbsentes++; continue; }
                     const documents = await documentsDesEntrees(M, c.images);
-                    const entree = entreeDeCarte(SRC, u, meta, le);
+                    const entree = entreeDeCarte(SRC, u, meta, le, collecteLe);
                     const cand = candidatDe(SRC, u, entree);
                     const d = CT.decisionEcriture(c.images || [], cand, { documents });
                     if (d.action === 'cede') { cedeesDuSet++; if (enCours) { orphelinsDuSet.push(enCours); orphelins.push(enCours); } enCours = null; continue; }      // déposé puis cédé (course avec un autre écrivain) : l'objet est orphelin, listé
-                    if (d.action === 'deja-posee') { joints++; continue; }
+                    if (d.action === 'deja-posee') { dejaPoseesDuSet++; continue; }       // D5 : une entrée déjà là n'est pas une jointure de CE passage
                     if (d.remplace.length) {
+                        // D1 : ce que le lot remplace est GARDÉ tel quel sur son document (les entrées, vignette comprise, et l'état de leurs documents) AVANT de sortir de la carte : c'est ce que le retrait remet
+                        await M.Image.updateOne({ _id }, { $set: { remplaceEntrees: d.remplace, remplaceDocuments: d.remplace.map(e => { const dd = documents.get(cleDocument(e)); return { source: e.source, set: e.set, cleR2: e.cleR2, etat: dd?.etat ?? null, remplacePar: dd?.remplacePar ?? null, remplaceLe: dd?.remplaceLe ?? null }; }) } });
                         for (const e of d.remplace) retirees.push(cleEntree(u.carteId, e));
                         remplacees += await remplacerBasseDefinition(M, u.carteId, cand, { documents });
                     }
@@ -308,10 +312,11 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
             const apres = await compterEntrees(db, carteIds, slug, SRC);
             const attenduesAutres = avant.liste.filter(k => !retirees.includes(k)).sort().join('\n');
             // (mode basse définition : les entrées de la source déjà posées par le lot des `ok` sur ces cartes restent ; on compare l'AJOUT de ce passage)
-            const garde = attenduesAutres === apres.autres && apres.siennes === (basseDefinition ? avant.siennes : 0) + joints;
+            // D5 : les entrées du lot déjà posées sur ces cartes (reprise d'un lot partiel, carte à deux numéros du même set) comptent « avant » dans les DEUX modes
+            const garde = attenduesAutres === apres.autres && apres.siennes === avant.siennes + joints;
             const W = await vignetter(db, slug, { bucket, arreter: () => false });
             const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
-            const complet = { vignettes: W.vg, lot: SRC.LOT, unites: unitesDuSet.length, deposees, sautees, joints, cedees: cedeesDuSet, remplacees, cartesAbsentes, orphelins: orphelinsDuSet, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, ok: garde }, erreurJointure,
+            const complet = { vignettes: W.vg, lot: SRC.LOT, unites: unitesDuSet.length, deposees, sautees, joints, cedees: cedeesDuSet, dejaPosees: dejaPoseesDuSet, remplacees, cartesAbsentes, orphelins: orphelinsDuSet, garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: attenduesAutres === apres.autres, siennesApres: apres.siennes, ok: garde }, erreurJointure,
                 concordance: garde && !erreurJointure && vignettesOk && cartesAbsentes === 0, verifieLe: new Date() };
             await M.Set.updateOne({ _id: slug }, { $set: { [basseDefinition ? `${SRC.CHAMP_BILAN}Basse` : SRC.CHAMP_BILAN]: complet } });
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), bilan: complet } }, { upsert: true });

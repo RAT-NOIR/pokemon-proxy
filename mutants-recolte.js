@@ -38,13 +38,21 @@ const GROUPES = [
         ['source qui nomme la source acceptée', "if (new RegExp(n, 'i').test(v)) throw", "if (false) throw"],
         ['hôte des images facultatif', "if (typeof hoteImages !== 'string' || !hoteImages) throw", "if (false) throw"],
         ['remplacement de la basse définition retiré', "remplacees += await remplacerBasseDefinition(M, u.carteId, cand, { documents });", ""],
+        ['D1 : la note des entrées remplacées retirée', "await M.Image.updateOne({ _id }, { $set: { remplaceEntrees: d.remplace,", "await M.Image.updateOne({ _id }, { $set: { zzNote: d.remplace,"],
+        ['D4 : date d\'écriture au lieu de celle du téléchargement', "collecteLe = p.collecteLe ? new Date(p.collecteLe) : le;", "collecteLe = le;"],
+        ['D5 : garde de reprise d\'avant', "apres.siennes === avant.siennes + joints;", "apres.siennes === (basseDefinition ? avant.siennes : 0) + joints;"],
         ['fausse absence définitive au premier coup', "if (connu && !(connu.statut === 'fausse-absente' && !RH.fausseAbsenceRecente(connu, now()))) continue;", "if (connu) continue;"]
     ] },
     { module: 'collecte-cartes/recolte-hote.js', bancs: ['test-recolte-hote.js'], mutants: [
         ['robots.txt jamais lu accepté', "if (!r) throw new Error(`robots.txt de ${u.hostname} pas encore lu", "if (!r) return; if (!r) throw new Error(`robots.txt de ${u.hostname} pas encore lu"],
         ['cadence libre', "const cadence = Math.max(cadenceMs, CADENCE_MIN_MS);", "const cadence = cadenceMs;"],
         ['défi sans arrêt', "if (defi) throw arreter(u, url, defi, r.status);", ""],
-        ['cache ignoré', "if (fs.existsSync(f)) return { ...JSON.parse(fs.readFileSync(f, 'utf8')), cache: true };", ""],
+        ['cache ignoré', "if (!(robotsTxt && !(now() - Date.parse(c.le) <= ROBOTS_MAX_MS))) return { ...c, cache: true };", ""],
+        ['D2 : robots.txt de plus de 24 h repris du cache', "if (!(robotsTxt && !(now() - Date.parse(c.le) <= ROBOTS_MAX_MS))) return", "if (true) return"],
+        ['D2 : robots.txt périmé en cours de processus accepté', "if (!(now() - r.luLe <= ROBOTS_MAX_MS)) throw", "if (false) throw"],
+        ['D3 : verrou tenu par un autre flux ignoré', "if (!r.ok) throw Object.assign(new Error(`verrou de l'hôte", "if (false) throw Object.assign(new Error(`verrou de l'hôte"],
+        ['D3 : verrou jamais rendu', "for (const f of verrous.values()) { VP.rendre(f);", "for (const f of verrous.values()) { "],
+        ['D3 : battement jamais rafraîchi', "fs.writeFileSync(f, JSON.stringify({ pid: process.pid, hote: os.hostname(), depuis: maintenant.toISOString() }));\n    }", "}"],
         ['plafond ignoré', "if (n >= plafond) throw", "if (false) throw"],
         ['chemin hors liste accepté', "if (!h.chemin.test(u.pathname)) throw", "if (false) throw"],
         ['http accepté', "if (u.protocol !== 'https:') throw", "if (false) throw"],
@@ -52,6 +60,12 @@ const GROUPES = [
         ['Crawl-delay ignoré', "if (d && d * 1000 > cadence) throw", "if (false) throw"],
         // (le garde-fou « arrêt déjà écrit » de `garde()` est doublé par celui de `requete()` — défense en profondeur : retirer l'un ne change rien, retirer les DEUX est testé)
         ['arrêt déjà écrit ignoré (les deux gardes)', "RH.garderHote(racineDe(u.hostname), dossierPauses, suivi);\n        if (robotsTxt) return;", "if (robotsTxt) return;", ["RH.garderHote(racineDe(u.hostname), dossierPauses, suivi);       // un arrêt écrit PENDANT l'attente (autre client) bloque aussi", ""]]
+    ] },
+    { module: 'retirer-visuels-recolte.js', bancs: ['test-collecteur-pokipair.js'], mutants: [
+        ['D1 : aucune entrée remise', "nRemises += (await C.updateOne(", "nRemises += 0 * (await C.updateOne("],
+        ['D1 : document rendu « ok » par défaut', "const set = { etat: r.avant.etat }, unset = {};", "const set = { etat: 'ok' }, unset = {};"],
+        ['D1 : l\'entrée déjà présente est doublée', "images: { $not: { $elemMatch: { source: e.source, set: e.set, cleR2: e.cleR2 } } } }, { $push", "}, { $push"],
+        ['D1 : les remises oubliées de l\'annonce (fausses baisses)', "const ajout = remises.filter(", "const ajout = [].filter("]
     ] },
     { module: 'collecte-cartes/tcgcsv.js', bancs: ['test-tcgcsv.js'], mutants: [
         ['/prices accepté', "tcgplayer\\/3\\/\\d{1,6}\\/products)$/;", "tcgplayer\\/3\\/\\d{1,6}\\/(products|prices))$/;"],

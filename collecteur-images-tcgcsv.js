@@ -29,7 +29,7 @@ const arretDe = e => (e.plafond ? 'plafond' : e.arretDefinitif || e.bloque ? 'ar
 // ── 0. LE MAXIMUM du relevé (§38) : robots.txt + la liste des groupes + un fichier par groupe de la table ──────────────────────
 function maximumReleve({ F, releves = {}, plafondTotal }) {
     const enCache = url => fs.existsSync(path.join(F.cache, HOTE.nomCache(url)));
-    const robots = enCache(`https://${TC.HOTE_DONNEES}/robots.txt`) ? 0 : 1;
+    const robots = HOTE.robotsFrais(F.cache, TC.HOTE_DONNEES) ? 0 : 1;           // D2 : un robots.txt de plus de 24 h se redemande
     const groupes = enCache(TC.urlGroupes(3)) ? 0 : 1;
     const produits = TC.GROUPES.filter(g => !releves[g.groupId] && !enCache(TC.urlProduits(3, g.groupId))).length;
     const total = robots + groupes + produits;
@@ -67,7 +67,8 @@ async function releve({ cli, fichier }) {
         }
     } catch (e) { etat = arretDe(e); motif = e.message; }
     RC.ecrireJson(fichier, rel);
-    const lus = TC.GROUPES.filter(g => rel[g.groupId]?.produits);
+    cli.liberer?.();                      // D3 : le verrou de l'hôte est rendu
+    const lus =TC.GROUPES.filter(g => rel[g.groupId]?.produits);
     return { etat, motif, transitoires, requetes: cli.requetes(), requetesParHote: cli.requetesParHote(), codes: cli.codes(), lues,
         resume: `groupes lus ${lus.length}/${TC.GROUPES.length} (${lus.map(g => `${g.code} ${rel[g.groupId].produits.length} produits`).join(', ')}) · liste des groupes ${rel.groupes ? 'lue' : 'non lue'}` };
 }

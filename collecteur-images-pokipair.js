@@ -35,7 +35,7 @@ const arretDe = e => (e.plafond ? 'plafond' : e.arretDefinitif || e.bloque ? 'ar
 function maximumReleve({ F, releves = {}, plafondTotal }) {
     const enCache = url => fs.existsSync(path.join(F.cache, HOTE.nomCache(url)));
     const pages = P.TABLE.filter(l => !releves[l.code] && !enCache(P.urlPage(l.page)));
-    const robots = enCache(`https://${P.HOTE_PAGES}/robots.txt`) ? 0 : 1;
+    const robots = HOTE.robotsFrais(F.cache, P.HOTE_PAGES) ? 0 : 1;           // D2 : un robots.txt de plus de 24 h se redemande
     const total = robots + pages.length;
     return { total, detail: `robots.txt ${robots} + pages de listes ${pages.length}`, secondes: total * 6, plafondTotal, dejaAuCache: HOTE.nbCache(F.cache) };
 }
@@ -65,6 +65,7 @@ async function releve({ cli, fichier, lignes = P.TABLE }) {
         }
     } catch (e) { etat = arretDe(e); motif = e.message; }
     RC.ecrireJson(fichier, rel);
+    cli.liberer?.();                      // D3 : le verrou de l'hôte est rendu
     const v = lignes.map(l => rel[l.code]);
     const refusees = v.filter(x => x && x.verdict && !x.verdict.ok).length, absentes = v.filter(x => x?.absente).length, tuiles = v.filter(Boolean).reduce((n, x) => n + (x.tuiles?.length ?? 0), 0);
     return { etat, motif, transitoires, requetes: cli.requetes(), requetesParHote: cli.requetesParHote(), codes: cli.codes(), pages: lignes.length, relevees: v.filter(Boolean).length, lues, refusees, absentes, tuiles, restantes: lignes.filter(l => !rel[l.code]).length,

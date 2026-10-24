@@ -46,7 +46,7 @@ const fichiersDe = (CODE, dossier, cache) => ({ cache: RC.verifierChemin(cache ?
 function maximumImages({ F, hoteImages, unites, indexImages, plafondTotal }) {
     const enCache = url => fs.existsSync(path.join(F.cache, HOTE.nomCache(url)));
     const urls = [...new Set(unites.map(u => u.url))].filter(u => !indexImages[u] && !enCache(u));
-    const robots = enCache(`https://${hoteImages}/robots.txt`) ? 0 : 1;
+    const robots = HOTE.robotsFrais(F.cache, hoteImages) ? 0 : 1;           // D2 : un robots.txt de plus de 24 h se redemande
     const total = robots + urls.length;
     return { total, detail: `robots.txt ${robots} + originaux ${urls.length}`, secondes: total * 6, plafondTotal, dejaAuCache: HOTE.nbCache(F.cache) };
 }

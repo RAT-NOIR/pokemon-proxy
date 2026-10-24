@@ -358,6 +358,96 @@ const lignes4 = ['CSV9C', 'CSV10C', '30thC', 'CBB6C'].map(c => P.ligneDe(c));
         assert.deepStrictEqual(cartes[0].images.map(e => e.source), ['autre']); assert.strictEqual(docs[0].etat, 'retire'); assert.strictEqual(sets[0].bilanLotPpr, undefined);
     });
 
+    // ───────── TOUR 1 : D1 (le retrait remet ce que le lot a remplacé), D4 (date du téléchargement), D5 (garde de reprise) ─────────
+    const { fauxDbNatif } = require('./faux-db-natif');
+    const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+    const HOTE = require('./collecte-cartes/recolte-hote');
+    const pkEntree = (id, num) => ({ set: SLUG, numero: num, langue: 'zh-hans', source: 'pikaqian', cleR2: `pikaqian/${SLUG}/${num}-${id}-zh-hans.webp`, w: 300, wOriginal: 300, basseDefinition: true, sha256: `${id}`.padStart(64, 'a'), urlOriginal: `https://exemple.test/pk/${id}`, vignette: { cleR2: `vignettes/pikaqian/${SLUG}/${num}-${id}.webp`, w: 200, h: 275 }, jointeLe: '2026-10-11T00:00:00.000Z' });
+    const pkDoc = (id, num) => ({ _id: `pikaqian/${SLUG}/${id}/${num}/zh-hans`, source: 'pikaqian', set: SLUG, cleR2: pkEntree(id, num).cleR2, carteId: id, numero: num, etat: 'ok', urlOriginal: `https://exemple.test/pk/${id}`, wOriginal: 300, basseDefinition: true });
+    const autreSet = id => ({ set: 'Autre-Set', numero: '009', langue: 'en', source: 'tcgdex', cleR2: `tcgdex/Autre-Set/009-${id}.webp`, w: 600, wOriginal: 600 });
+    const triees = c => [...(c.images || [])].sort((a, b) => String(a.cleR2).localeCompare(String(b.cleR2)));
+    await test('D1 ALLER-RETOUR : écriture (remplacements ET ajout pur) puis retrait = l\'état d\'AVANT (cartes, entrées avec leur vignette, documents « ok » sans remplacePar, bilan du set)', async () => {
+        const p = await preparer(3);
+        const cartes0 = [{ _id: 100, images: [pkEntree(100, '001'), autreSet(100)] }, { _id: 101, images: [pkEntree(101, '002')] }, { _id: 102, images: [autreSet(102)] }];
+        const docs0 = [pkDoc(100, '001'), pkDoc(101, '002')], sets0 = [{ _id: SLUG, tirage: 'zh-hans' }];
+        const { M, etat } = fauxModeles({ cartes: cartes0, images: docs0, sets: sets0 });
+        const [r] = await SILENCE(() => lancer(p, M, { attendu: 3 }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.resultats[0].remplacees, 2);
+        // l'écriture a GARDÉ ce qu'elle a remplacé, sur le document du lot
+        const doc100 = etat.image(`ppr/${SLUG}/100/001/zh-hans`);
+        assert.strictEqual(doc100.remplaceEntrees.length, 1); assert.deepStrictEqual(doc100.remplaceEntrees[0], pkEntree(100, '001'));
+        assert.strictEqual(etat.image(`ppr/${SLUG}/102/003/zh-hans`).remplaceEntrees, undefined, 'un ajout pur ne remplace rien');
+        assert.strictEqual(etat.image(pkDoc(100, '001')._id).etat, 'remplace');
+        // le retrait, à blanc d'abord : il annonce ce qu'il remet
+        const apresEcriture = { cartes: [100, 101, 102].map(i => etat.carte(i)), images: etat.images(), sets: [etat.set(SLUG)] };
+        const { db, etat: etatDb } = fauxDbNatif(apresEcriture);
+        const aBlanc = await RETIRER.retirerLot(db, P.SRC, { ecrire: false });
+        assert.strictEqual(aBlanc.aRemettre, 2); assert.strictEqual(aBlanc.entrees, 3);
+        const plan = await RETIRER.planLu(db, P.SRC);
+        const prevu = RETIRER.cartesApresRetrait(plan.cartesLues, plan.documentsLus, P.SRC);
+        const annonce = comparer(compterEtat({ cartes: plan.cartesLues }), compterEtat({ cartes: prevu })).baisses;
+        assert.ok(annonce.length >= 1 && annonce.every(b => b.baisse === 1), `la seule vraie baisse est celle de l'ajout pur : ${JSON.stringify(annonce)}`);
+        const rr = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
+        assert.deepStrictEqual([rr.nRemises, rr.nDocsRestaures, rr.nDocsNonRestaures, rr.reste], [2, 2, 0, 0]);
+        // l'état d'après le retrait = l'état d'avant l'écriture
+        const apres = etatDb.cartes();
+        for (const i of [100, 101, 102]) assert.deepStrictEqual(triees(apres.find(c => c._id === i)), triees(cartes0.find(c => c._id === i)), `carte ${i}`);
+        for (const d0 of docs0) assert.deepStrictEqual(etatDb.images().find(d => d._id === d0._id), d0, `document ${d0._id}`);
+        assert.ok(etatDb.images().filter(d => d.source === 'ppr').every(d => d.etat === 'retire'));
+        assert.strictEqual(etatDb.sets()[0].bilanLotPpr, undefined);
+        // rejoué : rien ne se remet une seconde fois
+        const encore = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
+        assert.strictEqual(encore.nRemises, 0); assert.deepStrictEqual(triees(etatDb.cartes().find(c => c._id === 100)), triees(cartes0[0]));
+    });
+    await test('D1 : un document dont l\'état d\'avant n\'était pas « ok » est rendu EXACTEMENT à cet état (jamais « ok » par défaut) ; sans état d\'avant écrit, il n\'est pas touché', async () => {
+        const entree = pkEntree(100, '001'), lot = { _id: `ppr/${SLUG}/100/001/zh-hans`, source: 'ppr', lot: 'ppr-2026-10', set: SLUG, carteId: 100, cleR2: `ppr/${SLUG}/001-100-zh-hans.webp`, etat: 'ok', remplaceEntrees: [entree],
+            remplaceDocuments: [{ source: 'pikaqian', set: SLUG, cleR2: entree.cleR2, etat: 'a-reverifier', remplacePar: { source: 'ancien', cleR2: 'x' }, remplaceLe: '2026-01-01T00:00:00.000Z' }] };
+        const docRemplace = { _id: 'd', source: 'pikaqian', set: SLUG, cleR2: entree.cleR2, etat: 'remplace', remplacePar: { source: 'ppr', cleR2: lot.cleR2 }, remplaceLe: '2026-10-25T00:00:00.000Z' };
+        const { db, etat } = fauxDbNatif({ cartes: [{ _id: 100, images: [{ source: 'ppr', lot: 'ppr-2026-10', set: SLUG, cleR2: lot.cleR2 }] }], images: [lot, docRemplace], sets: [] });
+        const r = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
+        assert.strictEqual(r.nRemises, 1);
+        assert.deepStrictEqual(etat.images().find(d => d._id === 'd'), { _id: 'd', source: 'pikaqian', set: SLUG, cleR2: entree.cleR2, etat: 'a-reverifier', remplacePar: { source: 'ancien', cleR2: 'x' }, remplaceLe: '2026-01-01T00:00:00.000Z' });
+        const sans = { ...lot, remplaceDocuments: [] }, { db: db2, etat: e2 } = fauxDbNatif({ cartes: [{ _id: 100, images: [{ source: 'ppr', lot: 'ppr-2026-10', set: SLUG, cleR2: lot.cleR2 }] }], images: [sans, docRemplace], sets: [] });
+        const r2 = await RETIRER.retirerLot(db2, P.SRC, { ecrire: true });
+        assert.deepStrictEqual([r2.nRemises, r2.nDocsNonRestaures], [1, 1]); assert.strictEqual(e2.images().find(d => d._id === 'd').etat, 'remplace');
+    });
+    await test('D1 : une écriture REPRISE n\'efface pas ce qu\'elle a déjà noté ; une écriture interrompue entre la note et la sortie ne remet rien de faux (l\'entrée présente n\'est pas doublée)', async () => {
+        const p = await preparer(1), cartes0 = [{ _id: 100, images: [pkEntree(100, '001')] }];
+        const { M, etat } = fauxModeles({ cartes: cartes0, images: [pkDoc(100, '001')], sets: [{ _id: SLUG, tirage: 'zh-hans' }] });
+        await SILENCE(() => lancer(p, M, { attendu: 1 }));
+        await SILENCE(() => lancer(p, M, { attendu: 0 }));
+        assert.strictEqual(etat.image(`ppr/${SLUG}/100/001/zh-hans`).remplaceEntrees.length, 1);
+        // la note existe mais l'entrée n'était pas sortie (crash avant) : le retrait la trouve déjà là
+        const { db, etat: e2 } = fauxDbNatif({ cartes: [{ _id: 100, images: [pkEntree(100, '001'), etat.carte(100).images.find(e => e.source === 'ppr')] }], images: etat.images(), sets: [] });
+        const r = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
+        assert.strictEqual(r.nRemises, 0); assert.strictEqual(e2.cartes()[0].images.filter(e => e.source === 'pikaqian').length, 1);
+    });
+    await test('D4 : collecteLe et telechargeLe sont la date du TÉLÉCHARGEMENT lue au cache ; jointeLe, celle de l\'écriture', async () => {
+        const p = await preparer(1), url = p.us[0].url, f = path.join(p.dossier, HOTE.nomCache(url));
+        const meta = JSON.parse(fs.readFileSync(f, 'utf8')); meta.le = '2026-10-20T08:00:00.000Z'; fs.writeFileSync(f, JSON.stringify(meta));
+        const { M, etat } = fauxModeles({ cartes: cartesVides(1), sets: [{ _id: SLUG, tirage: 'zh-hans' }] });
+        const avant = Date.now();
+        await SILENCE(() => lancer(p, M, { attendu: 1 }));
+        const e = etat.carte(100).images[0], d = etat.image(`ppr/${SLUG}/100/001/zh-hans`);
+        assert.strictEqual(new Date(e.collecteLe).toISOString(), '2026-10-20T08:00:00.000Z'); assert.strictEqual(new Date(d.collecteLe).toISOString(), '2026-10-20T08:00:00.000Z'); assert.strictEqual(new Date(d.telechargeLe).toISOString(), '2026-10-20T08:00:00.000Z');
+        assert.ok(new Date(e.jointeLe).getTime() >= avant, 'jointeLe = l\'écriture');
+    });
+    await test('D5 : une REPRISE sur une carte à deux numéros du même set (l\'un déjà posé) est « verifie », sans faux ❌ ; un VRAI manque (l\'entrée jamais posée) crie encore', async () => {
+        const p = await preparer(2);
+        p.us[1] = { ...p.us[1], carteId: 100 };                          // la carte 100 porte les numéros 001 et 002 du même set
+        const posee = { set: SLUG, source: 'ppr', lot: 'ppr-2026-10', cleR2: P.SRC.cleR2(SLUG, '001', 100), numero: '001', langue: 'zh-hans', w: 350, wOriginal: 350 };
+        const { M, etat } = fauxModeles({ cartes: [{ _id: 100, images: [posee] }], images: [{ _id: P.SRC.idImage(SLUG, 100, '001'), source: 'ppr', lot: 'ppr-2026-10', set: SLUG, cleR2: posee.cleR2, carteId: 100, etat: 'ok' }], sets: [{ _id: SLUG, tirage: 'zh-hans' }] });
+        const [r] = await SILENCE(() => lancer(p, M, { attendu: 1 }));
+        assert.strictEqual(r.code, 0); assert.strictEqual(r.resultats[0].etat, 'verifie'); assert.strictEqual(r.resultats[0].garde.ok, true);
+        assert.strictEqual(etat.carte(100).images.filter(e => e.source === 'ppr').length, 2);
+        // un vrai manque : la jointure déclare joindre, la base ne reçoit rien
+        const p2 = await preparer(2), f2 = fauxModeles({ cartes: cartesVides(2), sets: [{ _id: SLUG, tirage: 'zh-hans' }] });
+        const orig = f2.M.Carte.updateOne;
+        f2.M.Carte.updateOne = async (f, u) => (u.$push && f._id === 101 ? { modifiedCount: 1 } : orig(f, u));
+        const [r2] = await SILENCE(() => lancer(p2, f2.M, { attendu: 2 }));
+        assert.strictEqual(r2.resultats[0].etat, 'non-concordant'); assert.strictEqual(r2.resultats[0].garde.ok, false); assert.strictEqual(r2.code, 1);
+    });
+
     // ───────── la ligne de commande ─────────
     await test('ligne de commande : argument inconnu, mode manquant ou double, plafond manquant, --ecrire sans --attendu : refus (code 2) sans connexion', () => {
         const lance = (...a) => spawnSync(process.execPath, [COLL_FILE, ...a], { encoding: 'utf8', timeout: 20000 });
