@@ -68,7 +68,10 @@ async function principal() {
         .map(a => ({ id: String(a._id), cleR2: a.photoBanc.cle, courant: { estime: a.cartes[0].etat.estime ?? null, confiance: a.cartes[0].etat.confiance ?? null, retenu: a.cartes[0].etat.retenu ?? null } }));
     console.log(`analyses du banc avec photo : ${A.length} · un seul résultat et un état journalisé : ${lignes.length} (dont état estimé non nul : ${lignes.filter(l => l.courant.estime).length})`);
     let g = graine; const alea = () => { g = (g * 1664525 + 1013904223) % 4294967296; return g / 4294967296; };
-    const tirage = lignes.map(l => ({ l, r: alea() })).sort((x, y) => x.r - y.r).slice(0, pilote || N).map(x => x.l);
+    const reference = arg('reference', null) ? JSON.parse(fs.readFileSync(arg('reference'), 'utf8')) : null;
+    const refIdent = new Map(reference ? reference.phase2.map(p => [p.id, p.ident]) : []);
+    let tirage = lignes.map(l => ({ l, r: alea() })).sort((x, y) => x.r - y.r).slice(0, pilote || N).map(x => x.l);
+    if (reference) tirage = tirage.filter(x => refIdent.has(x.id));
 
     // 2. les photos (bucket PRIVÉ du banc, lecture seule)
     if (process.env.R2_ESSAI_BANC_LECTURE_CLE_ID && process.env.R2_ESSAI_BANC_LECTURE_SECRET) {
@@ -117,11 +120,18 @@ async function principal() {
     // La banc ne garde qu'UNE photo par scan : la consigne d'état, qui est la seule tâche de l'appel, applique la règle du verso à la lettre et rend « basse » ; la variante dit si c'est cette règle qui la fait rendre.
     const variante = arg('variante', null);
     let consigneVariante = null;
+    // `--variante=<nom>` : un texte de consigne essayé sur les photos de `--reference=<bilan.json de la mesure>` (mêmes scans, même graine), comparé à l'identification d'AUJOURD'HUI de cette mesure (phase 2).
+    const VARIANTES = {
+        'sans-verso': P => P.replace(', ou verso non visible', '').replace('\nSi aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', ''),
+        'verso-neutre': P => P.replace(', ou verso non visible', '').replace('Si aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', 'Si aucune photo du verso n\'est fournie, ne baisse pas la confiance pour cela : elle se juge sur la netteté de ce que tu vois.'),
+        'verso-neutre-nue': P => VARIANTES['verso-neutre'](P).replace('Dans le doute, sois PESSIMISTE', 'Une carte nue, vue de face sur une photo nette, se juge au moins "moyenne" même sans verso. Dans le doute sur l\'ÉTAT, sois PESSIMISTE'),
+        'verso-neutre-defaut-nue': P => VARIANTES['verso-neutre-nue'](P).replace('N\'invente rien.', 'N\'invente rien. Une photo manquante (verso, gros plan) n\'est pas un défaut de la carte : ne l\'écris pas dans defautsVus.'),
+        'verso-neutre-defaut': P => VARIANTES['verso-neutre'](P).replace('N\'invente rien.', 'N\'invente rien. Une photo manquante (verso, gros plan) n\'est pas un défaut de la carte : ne l\'écris pas dans defautsVus.'),
+    };
     if (variante) {
-        if (variante !== 'sans-verso') throw new Error(`variante inconnue : ${variante}`);
-        const sans = E.PROMPT_ETAT.replace(', ou verso non visible', '').replace('\nSi aucune photo du verso n\'est fournie, dis-le via etatConfiance "basse".', '');
-        if (sans === E.PROMPT_ETAT || /verso non visible|Si aucune photo du verso/.test(sans)) throw new Error('la variante sans-verso n\'a pas retiré les deux phrases');
-        consigneVariante = sans;
+        if (!VARIANTES[variante]) throw new Error(`variante inconnue : ${variante}`);
+        consigneVariante = VARIANTES[variante](E.PROMPT_ETAT);
+        if (consigneVariante === E.PROMPT_ETAT) throw new Error('la variante n\'a rien changé');
     }
     const appelVariante = async images => {
         const t = Date.now();
@@ -143,7 +153,7 @@ async function principal() {
         const jpeg = await sharp(photo).rotate().resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
         x.url = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
         const r = variante ? await appelVariante([x.url]) : await appelEtat([x.url]);
-        const ligne = { ...x, url: undefined, separe: { estime: r.etatEstime, confiance: r.etatConfiance, retenu: retenu(r.etatEstime, r.etatConfiance), cause: r.cause, ms: r.ms, cout: r.cout } };
+        const ligne = { ...x, url: undefined, separe: { estime: r.etatEstime, confiance: r.etatConfiance, retenu: retenu(r.etatEstime, r.etatConfiance), defauts: r.defautsVus, cause: r.cause, ms: r.ms, cout: r.cout } };
         phase1.push({ ...ligne, url: x.url });
         fs.appendFileSync(fichierRes, JSON.stringify({ phase: 1, ...ligne }) + '\n');
     }
@@ -173,6 +183,12 @@ async function principal() {
     d('  confiances de l\'appel séparé', ['haute', 'moyenne', 'basse', null].map(k => [k, ok1.filter(x => x.separe.confiance === k).length]));
     d('  durée de l\'appel d\'état (ms) p50 / p95 / moyenne', [pct(ok1.map(x => x.separe.ms), 0.5), pct(ok1.map(x => x.separe.ms), 0.95), Math.round(moy(ok1.map(x => x.separe.ms)))]);
     d('  coût de l\'appel d\'état ($) moyenne / max / lus', [+moy(ok1.map(x => x.separe.cout)).toFixed(5), Math.max(...ok1.map(x => x.separe.cout ?? 0)), ok1.filter(x => Number.isFinite(x.separe.cout)).length]);
+    if (reference) {
+        const comp = ok1.filter(x => refIdent.get(x.id) && refIdent.get(x.id).lu);
+        d('  COMPARÉ À L\'IDENTIFICATION D\'AUJOURD\'HUI (même photo, sans titre) : état ESTIMÉ', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.estime }))));
+        d('  idem, état RETENU', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).retenu, b: x.separe.retenu }))));
+        d('  états retenus NULS : appel séparé / identification d\'aujourd\'hui', [comp.filter(x => !x.separe.retenu).length, comp.filter(x => !refIdent.get(x.id).retenu).length, 'sur ' + comp.length]);
+    }
     if (variante || phase2.length === 0) {
         console.log(`\nVARIANTE « ${variante || 'aucune'} » : phase 2 non jouée.`);
         const e0 = carnet.etat();

@@ -206,7 +206,12 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         const index = fs.readFileSync(path.join(R, 'index.js'), 'utf8');
         const a = index.indexOf("ÉVALUATION DE L'ÉTAT (etatEstime)"), b = index.indexOf("N'invente rien.", a) + "N'invente rien.".length;
         H.vrai('6. la consigne d\'identification porte toujours le bloc d\'état (borne de la comparaison)', a > 0 && b > a);
-        H.vrai('6. la consigne d\'état recopie MOT POUR MOT le bloc d\'état de la consigne d\'identification', ET && ET.PROMPT_ETAT.includes(index.slice(a, b).replace(/\r\n/g, '\n')));         // un gabarit de chaîne JS normalise CRLF en LF : le modèle voit des LF
+        // un gabarit de chaîne JS normalise CRLF en LF : le modèle voit des LF. Le bloc de l'identification, SEULS les écarts nommés (ECARTS) appliqués, doit être le texte de la consigne d'état, au mot près.
+        let bloc = index.slice(a, b).replace(/\r\n/g, '\n'), ecartsTousPoses = Boolean(ET);
+        if (ET) for (const [avant, apres] of ET.ECARTS) { if (bloc.split(avant).length !== 2) ecartsTousPoses = false; bloc = bloc.replace(avant, apres); }
+        H.vrai('6. chacun des ECARTS (4) s\'applique UNE fois au bloc d\'identification', ET && ET.ECARTS.length === 4 && ecartsTousPoses);
+        H.vrai('6. la consigne d\'état recopie MOT POUR MOT le bloc d\'état de la consigne d\'identification, hors les quatre écarts nommés', ET && ET.PROMPT_ETAT.includes(bloc));
+        H.vrai('6. la consigne d\'état ne fait plus de « verso non visible » une raison de confiance « basse », et garde les définitions des trois niveaux de l\'identification', ET && !/verso non visible|dis-le via etatConfiance/.test(ET.PROMPT_ETAT) && ['sleeve/toploader/blister', 'photo correcte de face mais détails des bords/coins pas nets', 'carte nue, photo nette, bords et coins clairement visibles'].every(m => ET.PROMPT_ETAT.includes(m) && index.includes(m)));
         H.vrai('6. la consigne d\'état ne parle ni du titre, ni du vendeur, ni de prix, ni de la lecture du nom', ET && !/titre|annonce|vendeur|vinted|prix|nomBrut|setCode/i.test(ET.PROMPT_ETAT));
         H.vrai('6. index.js : l\'appel d\'état est lancé AVANT l\'attente de l\'identification, avec les MÊMES photos, sur les deux routes (et le signal d\'arrêt quand il existe)',
             (index.match(/estimerEtatSurPhotos\(photos/g) || []).length === 2 && /estimerEtatSurPhotos\(photos, req\.signalArret\)/.test(index));
