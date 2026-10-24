@@ -18,7 +18,7 @@ const CLASSES_FICHE = Object.freeze(['FICHE_OK', 'FICHE_DOUTEUSE', 'LIGNE_SANS_F
 // les classes du visuel SANS seuil (classement.js::classerVisuel) : A_COMPARER = un vrai scan servi, ni emprunté ni en basse définition
 const CLASSES_VISUEL = Object.freeze(['A_COMPARER', 'BASSE_DEFINITION', 'EMPRUNTE', 'MANQUANT']);
 const MOTIF_EMPRUNT_REFUSE = 'emprunt-refuse-par-api';   // même valeur que classement.js::MOTIF_EMPRUNT_REFUSE (importée ci-dessous, vérifiée à l'exécution)
-const CLES_RESUME = Object.freeze(['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel']);
+const CLES_RESUME = Object.freeze(['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel', 'empruntNonServi', 'rienNExiste']);
 
 const compter = (xs, cle) => { const m = new Map(); for (const x of xs) for (const k of [].concat(cle(x))) m.set(k, (m.get(k) || 0) + 1); return Object.fromEntries([...m].sort((a, b) => b[1] - a[1])); };
 const nonVide = x => typeof x === 'string' && x.trim() !== '';
@@ -70,10 +70,13 @@ function calculerCompteurs({ produits, lignesSet, denominateur, rang = 20, contr
         empruntesParNature: compter(emp, p => p.visuel.motifs.filter(m => m !== 'basse-definition')),
         aucunVisuelSansLigne: manq.filter(p => p.fiche.classe === 'SANS_LIGNE').length, aucunVisuelAvecLigne: manq.filter(p => p.fiche.classe !== 'SANS_LIGNE').length,
         empruntRefuseParApi: manq.filter(p => p.visuel.motifs.includes(MOTIF_EMPRUNT_REFUSE)).length,
+        rienNExiste: 0,
         motifsAucun: compter(manq, p => p.visuel.motifs) };
+    // ucun visuel mele trois choses : les sans-ligne (deja en A), un emprunt qui EXISTE mais que l'API refuse de servir, et RIEN. Le vrai trou de C est la derniere.
+    C.rienNExiste = C.aucunVisuelAvecLigne - C.empruntRefuseParApi;
     const controles = { sommeFiches: A.sansLigne + A.ligneSansFiche + B.douteuses + de('FICHE_OK').length, sommeVisuels: C.vraiScan + C.emprunte + C.basseDefinition + C.aucunVisuel };
     if (controles.sommeFiches !== N || controles.sommeVisuels !== N) throw new Error(`calculerCompteurs : les classes ne somment pas au dénominateur ${N} ${JSON.stringify(controles)}`);
-    const resume = { produits: N, sansLigne: A.sansLigne, ligneSansFiche: A.ligneSansFiche, douteuses: B.douteuses, vraiScan: C.vraiScan, emprunte: C.emprunte, basseDefinition: C.basseDefinition, aucunVisuel: C.aucunVisuel };
+    const resume = { produits: N, sansLigne: A.sansLigne, ligneSansFiche: A.ligneSansFiche, douteuses: B.douteuses, vraiScan: C.vraiScan, emprunte: C.emprunte, basseDefinition: C.basseDefinition, aucunVisuel: C.aucunVisuel, empruntNonServi: C.empruntRefuseParApi, rienNExiste: C.rienNExiste };
     return { denominateur: { catalogue: denominateur.catalogue, cartesCode: denominateur.cartesCode, produits: N }, A, B, C, controles, resume };
 }
 
@@ -90,7 +93,7 @@ function lireHistorique(texte) {
 const memeDen = (a, b) => !!a && !!b && a.catalogue === b.catalogue && a.cartesCode === b.cartesCode && a.produits === b.produits;
 function ecartAvec(courant, ref) {
     const ecarts = {};
-    for (const k of CLES_RESUME) ecarts[k] = courant.resume[k] - ref.resume[k];
+    for (const k of CLES_RESUME) ecarts[k] = ref.resume[k] === undefined || ref.resume[k] === null ? null : courant.resume[k] - ref.resume[k];   // un compteur absent d'une ligne d'historique plus ancienne : écart NUL (inconnu), jamais 0 ni NaN
     return { fichier: ref.fichier ?? null, le: ref.le ?? null, denominateur: ref.denominateur, memeDenominateur: memeDen(courant.denominateur, ref.denominateur), reference: ref.resume, ecarts };
 }
 /** L'écart contre la première mesure du JOUR et contre la précédente. Un dénominateur qui a changé est dit : un écart n'est un progrès que sous le même dénominateur. */
@@ -121,11 +124,11 @@ function listeLegere(produits, lignesSet) {
     });
 }
 /** Écrit abc-AAAA-MM-JJ-HHMM.json (heure locale) et AJOUTE une ligne à historique.jsonl ; avec `produitsLegers`, écrit aussi etat-abc-AAAA-MM-JJ-HHMM.json. */
-function ecrireSorties({ dossier = DOSSIER_COMPTEURS, resultat, maintenant = new Date(), produitsLegers = null }) {
+function ecrireSorties({ dossier = DOSSIER_COMPTEURS, racines = [DOSSIER_COMPTEURS], resultat, maintenant = new Date(), produitsLegers = null }) {
     const stamp = `${jourLocal(maintenant)}-${deux(maintenant.getHours())}${deux(maintenant.getMinutes())}`;
     const nom = `abc-${stamp}.json`;
-    const fichier = sortieSure(dossier, nom), hist = sortieSure(dossier, 'historique.jsonl');
-    const produits = produitsLegers ? sortieSure(dossier, `etat-abc-${stamp}.json`) : null;
+    const fichier = sortieSure(dossier, nom, racines), hist = sortieSure(dossier, 'historique.jsonl', racines);
+    const produits = produitsLegers ? sortieSure(dossier, `etat-abc-${stamp}.json`, racines) : null;
     fs.mkdirSync(path.dirname(fichier), { recursive: true });
     fs.writeFileSync(fichier, JSON.stringify(resultat, null, 1));
     if (produits) fs.writeFileSync(produits, JSON.stringify(produitsLegers));
@@ -222,11 +225,11 @@ function refusDuLot(effetsDeBord) {
 
 // ── LA SORTIE IMPRIMÉE ──
 const pct = (n, N) => `${(100 * n / N).toFixed(1)} %`;
-const signe = n => (n > 0 ? `+${n}` : String(n));
+const signe = n => (n === null || n === undefined ? "?" : n > 0 ? `+${n}` : String(n));
 function ligneEcart(nom, e) {
     if (!e) return `   écart contre ${nom} : aucune mesure à comparer`;
     const k = e.ecarts;
-    return `   écart contre ${nom} (${e.fichier ?? '?'}${e.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT : ' + JSON.stringify(e.denominateur) + ', un écart n\'est pas un progrès'}) : sans ligne ${signe(k.sansLigne)} · ligne sans fiche ${signe(k.ligneSansFiche)} · douteuses ${signe(k.douteuses)} · vrai scan ${signe(k.vraiScan)} · emprunté ${signe(k.emprunte)} · basse déf. ${signe(k.basseDefinition)} · aucun visuel ${signe(k.aucunVisuel)}`;
+    return `   écart contre ${nom} (${e.fichier ?? '?'}${e.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT : ' + JSON.stringify(e.denominateur) + ', un écart n\'est pas un progrès'}) : sans ligne ${signe(k.sansLigne)} · ligne sans fiche ${signe(k.ligneSansFiche)} · douteuses ${signe(k.douteuses)} · vrai scan ${signe(k.vraiScan)} · emprunté ${signe(k.emprunte)} · basse déf. ${signe(k.basseDefinition)} · aucun visuel ${signe(k.aucunVisuel)} (emprunt non servi ${signe(k.empruntNonServi)} · rien n'existe ${signe(k.rienNExiste)})`;
 }
 function formater(R, E) {
     const N = R.denominateur.produits, out = [];
@@ -242,7 +245,7 @@ function formater(R, E) {
     if (R.B.controleTemoin) out.push(`   témoin du nom : sur ${R.B.controleTemoin.essais} fiches fabriquées fausses il en contredit ${R.B.controleTemoin.contredits} ; sur ${R.B.controleTemoin.vraiesTestees} vraies il se tait ${R.B.controleTemoin.silenceSurLaVraie} fois · témoin muet sur ${R.B.temoinMuet} produits (zéro « contredite » n'est une mesure que si le témoin SAIT refuser)`);
     out.push(`\n══ C — VISUELS (dénominateur ${N}) : vrai scan servi ${R.C.vraiScan} (${pct(R.C.vraiScan, N)}) · emprunté ${R.C.emprunte} (${pct(R.C.emprunte, N)}) · basse définition ${R.C.basseDefinition} (${pct(R.C.basseDefinition, N)}) · AUCUN visuel ${R.C.aucunVisuel} (${pct(R.C.aucunVisuel, N)})`);
     out.push(`   emprunté : avec mention ${R.C.empruntesAvecMention} · SANS mention ${R.C.empruntesSansMention} · par nature ${JSON.stringify(R.C.empruntesParNature)}`);
-    out.push(`   aucun visuel : sans ligne (déjà en A) ${R.C.aucunVisuelSansLigne} · avec ligne ${R.C.aucunVisuelAvecLigne} · dont un emprunt que l'API REFUSE de servir (un visuel existe) ${R.C.empruntRefuseParApi}`);
+    out.push(`   « aucun visuel » ${R.C.aucunVisuel} se SÉPARE en trois : (1) SANS LIGNE, déjà compté en A : ${R.C.aucunVisuelSansLigne} · (2) EMPRUNT EXISTANT que l'API refuse de servir (un visuel existe, ce n'est pas un trou de collecte) : ${R.C.empruntRefuseParApi} · (3) RIEN N'EXISTE, le vrai trou de C : ${R.C.rienNExiste}`);
     out.push(`   motifs de l'aucun visuel : ${JSON.stringify(R.C.motifsAucun)}`);
     out.push(`\n   contrôles : fiches ${R.controles.sommeFiches}/${N} · visuels ${R.controles.sommeVisuels}/${N}`);
     if (E) { out.push(ligneEcart('la PREMIÈRE mesure du jour', E.premiereDuJour)); out.push(ligneEcart('la PRÉCÉDENTE', E.precedente)); }

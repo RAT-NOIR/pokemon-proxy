@@ -56,7 +56,7 @@ verifier('C : l\'aucun visuel se partage entre sans ligne (compté en A) et avec
 verifier('C : l\'emprunt que l\'API refuse de servir se compte à part (un visuel existe)', R.C.empruntRefuseParApi, 1);
 verifier('C : motifs de l\'aucun visuel', tri(R.C.motifsAucun), { 'aucun-visuel': 1, 'emprunt-refuse-par-api': 1, 'repli-refuse:wcd': 1, 'sans-fiche-du-site': 1, 'sans-ligne': 3 });
 verifier('contrôle : les classes de fiche et de visuel somment au dénominateur', R.controles, { sommeFiches: 10, sommeVisuels: 10 });
-verifier('résumé plat pour l\'historique', R.resume, { produits: 10, sansLigne: 3, ligneSansFiche: 1, douteuses: 2, vraiScan: 1, emprunte: 2, basseDefinition: 1, aucunVisuel: 6 });
+verifier('résumé plat pour l\'historique', R.resume, { produits: 10, sansLigne: 3, ligneSansFiche: 1, douteuses: 2, vraiScan: 1, emprunte: 2, basseDefinition: 1, aucunVisuel: 6, empruntNonServi: 1, rienNExiste: 2 });
 
 // ── le rang : les N premières seulement
 const beaucoup = [];
@@ -79,7 +79,8 @@ const H = [ligne('2026-10-23', '09:00', { sansLigne: 9 }), ligne('2026-10-24', '
 const E = K.ecartHistorique({ jour: '2026-10-24', denominateur: { catalogue: 12, cartesCode: 2, produits: 10 }, resume: R.resume }, H);
 verifier('écart contre la première mesure du JOUR (pas celle de la veille)', { f: E.premiereDuJour.fichier, a: E.premiereDuJour.ecarts.sansLigne }, { f: 'f', a: -4 });
 verifier('écart contre la précédente (la dernière de l\'historique)', E.precedente.ecarts.sansLigne, -2);
-verifier('un écart porte sur chaque compteur du résumé', Object.keys(E.precedente.ecarts), ['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel']);
+verifier('un écart porte sur chaque compteur du résumé', Object.keys(E.precedente.ecarts), ['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel', 'empruntNonServi', 'rienNExiste']);
+verifier('un compteur absent de la ligne d\'historique (écrite avant son existence) a un écart NULL, jamais NaN ni 0', [E.precedente.ecarts.empruntNonServi, E.precedente.ecarts.rienNExiste], [null, null]);
 verifier('même dénominateur : aucun avertissement', E.precedente.memeDenominateur, true);
 const E2 = K.ecartHistorique({ jour: '2026-10-24', denominateur: { catalogue: 13, cartesCode: 2, produits: 11 }, resume: { ...R.resume, produits: 11 } }, H);
 verifier('dénominateur différent : dit, jamais un écart présenté comme un progrès', E2.precedente.memeDenominateur, false);
@@ -103,19 +104,20 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'compteurs-abc-'));
 try {
     const dossier = path.join(tmp, 'COMPTEURS');
     const now = new Date(2026, 9, 24, 14, 5);   // local : 24/10/2026 14:05
-    const r1 = K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now });
+    const r1 = K.ecrireSorties({ dossier, racines: [dossier], resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now });
     verifier('le fichier porte la date et l\'heure locales', path.basename(r1.fichier), 'abc-2026-10-24-1405.json');
     verifier('le JSON écrit se relit', JSON.parse(fs.readFileSync(r1.fichier, 'utf8')).resume.sansLigne, 3);
     verifier('la liste légère n\'est écrite que si on la donne', r1.produits, null);
-    const r3 = K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now, produitsLegers: L });
+    const r3 = K.ecrireSorties({ dossier, racines: [dossier], resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: now, produitsLegers: L });
     verifier('la liste légère s\'écrit à côté, même horodatage', [path.basename(r3.produits), JSON.parse(fs.readFileSync(r3.produits, 'utf8')).length], ['etat-abc-2026-10-24-1405.json', 10]);
-    K.ecrireSorties({ dossier, resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: new Date(2026, 9, 24, 15, 0) });
+    K.ecrireSorties({ dossier, racines: [dossier], resultat: { ...R, jour: '2026-10-24', le: now.toISOString() }, maintenant: new Date(2026, 9, 24, 15, 0) });
     const lignes = K.lireHistorique(fs.readFileSync(path.join(dossier, 'historique.jsonl'), 'utf8'));
     verifier('l\'historique AJOUTE (trois lignes après trois écritures)', lignes.length, 3);
     verifier('la ligne d\'historique nomme le fichier, le jour, le dénominateur et le résumé', Object.keys(lignes[0]), ['le', 'jour', 'denominateur', 'resume', 'fichier']);
     leve('la garde refuse tout chemin hors de la racine (un nom qui remonte)', () => K.sortieSure(dossier, '..\\ailleurs.json'), /hors des racines/);
     leve('la garde refuse un dossier d\'audit : la racine est COMPTEURS seul', () => K.sortieSure(path.join(tmp, 'AUDIT'), 'x.json', [dossier]), /hors des racines/);
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+leve('la racine de l\'écriture est ANCRÉE sur COMPTEURS : un autre dossier, sans racine donnée, est refusé', () => K.ecrireSorties({ dossier: path.join(tmp, 'AUDIT'), resultat: { ...R, jour: '2026-10-24', le: 'x' } }), /hors des racines/);
 verifier('le dossier par défaut est COMPTEURS, jamais AUDIT', /S8\\COMPTEURS$/.test(K.DOSSIER_COMPTEURS) && !/AUDIT/.test(K.DOSSIER_COMPTEURS), true);
 
 // ── l'explication de l'écart avec l'audit du matin : par produit
