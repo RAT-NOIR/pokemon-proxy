@@ -146,7 +146,9 @@ async function semer() {
 
     // ── D. la lecture ratée définitive rembourse (sans-prix) UNE fois par scan, sous son compteur PROPRE « sans-prix » (5 par jour et par porteur ; le compteur des questions n'en voit plus rien)
     {
-        const s = await scanRepondu();
+        // REPLI-QUOTA : ce bloc éprouve le REMBOURSEMENT « prix illisible » — qui n'a lieu que si AUCUN repli n'est servi (un repli affiché est un prix affiché : le scan compte, voir test-repli-quota.js).
+        // Les fiches semées ont un guide, donc un repli serait servi : chaque scan remboursé ici reçoit d'abord l'état « fiche sans aucune donnée de prix ».
+        const s = await scanRepondu(); await Q.sansDonneeDePrix(s.scanId);
         H.v('D0. avant : scan répondu « a » = débité (essais 2)', await essais(s.i._id), 2);
         const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }), j = r.json || {};
         H.v('D3. definitive:true : 200, facturation { debite:0, rembourse:true, motif:sans-prix }, solde.essai 3', [r.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, j.solde && j.solde.essai, await essais(s.i._id)], [200, 0, true, 'sans-prix', 3, 3]);
@@ -156,14 +158,14 @@ async function semer() {
         const r2 = await rl(s.jeton, { scanId: s.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), j2 = r2.json || {};
         H.v('    rejeu : AUCUN second crédit — deja-rembourse', [r2.statut, j2.facturation && j2.facturation.rembourse, j2.facturation && j2.facturation.raisonNonRembourse, await essais(s.i._id), await rembNet(s.i._id)], [200, false, 'deja-rembourse', 3, 1]);
         // definitive:false (un défi Cloudflare) : rien rendu
-        const t = await scanRepondu();
+        const t = await scanRepondu(); await Q.sansDonneeDePrix(t.scanId);
         const rf = await rl(t.jeton, { scanId: t.scanId, lectureRatee: { cause: 'defi', definitive: false } }), jf = rf.json || {};
         H.v('D3b. definitive:false (défi) : 200 success, aucun remboursement, essais 2', [rf.statut, jf.success, jf.facturation, await rembNet(t.i._id), await essais(t.i._id)], [200, true, null, 0, 2]);
         // ... et la même lecture, plus tard, définitive : rembourse bien
         const rd = await rl(t.jeton, { scanId: t.scanId, lectureRatee: { cause: 'blocage', definitive: true } });
         H.v('    puis définitive sur le même scan : remboursée (la non-définitive n\'a rien consommé)', [rd.json.facturation && rd.json.facturation.rembourse, await essais(t.i._id)], [true, 3]);
         // 4. plafond atteint
-        const u = await scanRepondu();
+        const u = await scanRepondu(); await Q.sansDonneeDePrix(u.scanId);
         await raw('plafonds').insertOne({ porteur: `installation:${u.i._id}`, jour: Q.jourCourant(), type: 'declare', count: cfg.plafonds.declares.sansCompte, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const rp = await rl(u.jeton, { scanId: u.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), jp = rp.json || {};
         H.v('D4. plafond des déclarations atteint (sans compte : 1) : motif plafond-jour, rembourse:false, debite 1, essais 2, et declaration dit le refus', [rp.statut, jp.facturation && jp.facturation.motif, jp.facturation && jp.facturation.rembourse, jp.facturation && jp.facturation.debite, jp.facturation && jp.facturation.raisonNonRembourse, await essais(u.i._id), jp.declaration], [200, 'plafond-jour', false, 1, 'plafond-jour', 2, { rendue: false, raison: 'plafond-declarations', plafondJour: 1 }]);
@@ -197,7 +199,7 @@ async function semer() {
             const q = await raw('questions_v2').findOne({ _id: `${scanId}:0` });
             H.v('    crédit et question inchangés : essais 2, question en-attente, aucun mouvement de plus, aucun plafond consommé', [await essais(x.i._id), q.etat, (await mouv(x.i._id)).length - m0, await raw('plafonds').countDocuments({ porteur: `installation:${x.i._id}` })], [2, 'en-attente', 0, 0]);
             // la question répondue ensuite redevient remboursable : la garde suit l'état, pas une marque posée une fois
-            await repondre(x.jeton, scanId, 'a');
+            await repondre(x.jeton, scanId, 'a'); await Q.sansDonneeDePrix(scanId);       // REPLI-QUOTA : sans donnée de prix, aucun repli ne s'oppose au remboursement
             const r2 = await rl(x.jeton, LR(scanId));
             H.v('    la même carte, une fois la question RÉPONDUE : le remboursement est permis', [r2.statut, r2.json.facturation && r2.json.facturation.rembourse, await essais(x.i._id)], [200, true, 3]);
         }

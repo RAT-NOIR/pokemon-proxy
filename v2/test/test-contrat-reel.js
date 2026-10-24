@@ -257,7 +257,11 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const a = await scanRepondu();
         await retour(U, 'prix lu valide', 200, a.jeton, { scanId: a.scanId, carte: 0, prixLive: 24.13, prixLiveEtat: 'ex', prixLiveCodeLangue: 2, originePrix: 'grille', verdictAffiche: 'correct' });
         await retour(U, 'second retour pour le même scan', 409, a.jeton, { scanId: a.scanId, prixLive: 99 });
+        // REPLI-QUOTA : un repli servi (la fiche a un guide) n'est PAS remboursé (raisonNonRembourse prix-repli) ; le remboursement « prix illisible » est celui d'une fiche SANS donnée de prix
+        const b0 = await scanRepondu();
+        await retour(U, 'lecture ratée définitive, repli servi (NON remboursée : prix-repli, le scan compte)', 200, b0.jeton, { scanId: b0.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
         const b = await scanRepondu();
+        await raw('analyses').updateOne({ _id: new mongoose.Types.ObjectId(b.scanId) }, { $set: { 'produits.$[].prixGuide': null } });
         await retour(U, 'lecture ratée définitive (remboursée sans-prix)', 200, b.jeton, { scanId: b.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
         await retour(U, 'lecture ratée définitive REJOUÉE (deja-rembourse : rien de rendu une seconde fois)', 200, b.jeton, { scanId: b.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
         const c = await scanRepondu();

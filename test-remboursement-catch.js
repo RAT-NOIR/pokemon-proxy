@@ -176,7 +176,7 @@ const v = (nom, obtenu, attendu) => {
             noterNonRemboursement('une-valeur-inventee');
             v('une valeur hors énumération est REFUSÉE', raisonNonRemboursement(), null);
         });
-        v('l\'énumération compte 9 causes', RAISONS_NON_REMBOURSE.length, 9);
+        v('l\'énumération compte 10 causes (REPLI-QUOTA : prix-repli, un repli affiché, le scan compte)', RAISONS_NON_REMBOURSE.length, 10);
     }
 
     // ── 5. `res` ABSENT -> ON NE SUPPOSE PAS QU'UNE RÉPONSE EST PARTIE ──

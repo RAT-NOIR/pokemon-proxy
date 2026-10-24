@@ -481,7 +481,7 @@
         },
         "responses": {
           "200": {
-            "description": "Prix enregistré ; remboursement `sans-prix` si la lecture ratée est définitive.",
+            "description": "Prix enregistré ; remboursement `sans-prix` si la lecture ratée est définitive ET qu'aucun `prixRepli` n'est servi (avec un repli, le scan compte : `raisonNonRembourse: \"prix-repli\"`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4858,10 +4858,11 @@
               "accueil-au-plafond",
               "hebdo-semaine-changee",
               "poche-introuvable",
+              "prix-repli",
               "erreur",
               null
             ],
-            "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js."
+            "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js. `prix-repli` (REPLI-QUOTA) : une lecture ratée DÉFINITIVE dont la réponse sert un `prixRepli` n'est PAS remboursée (un prix est affiché, le scan compte : `debite: 1`, motif `sans-prix`) ; aucun remboursement n'est tenté, le plafond des déclarations du jour n'est pas consommé."
           },
           "poche": {
             "type": "string",
@@ -6337,7 +6338,7 @@
           "offre"
         ],
         "additionalProperties": false,
-        "description": "Le champ additif `prixRepli` (lot PRIX-LISIBLE) est servi quand l'extension a envoyé une lecture ratée, une tendance seule ou une offre dans un état pire que l'état retenu ET que la fiche a une donnée de prix ; absent sinon. Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true sous le plafond des déclarations du jour ; au-delà `plafond-jour`), `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
+        "description": "Le champ additif `prixRepli` (lot PRIX-LISIBLE) est servi quand l'extension a envoyé une lecture ratée, une tendance seule ou une offre dans un état pire que l'état retenu ET que la fiche a une donnée de prix ; absent sinon. Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`) : SANS `prixRepli` dans la réponse, rembourse: true sous le plafond des déclarations du jour (au-delà `plafond-jour`), avec `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan ; AVEC `prixRepli` (REPLI-QUOTA : un prix est affiché), PAS de remboursement : `debite: 1`, `rembourse: false`, `raisonNonRembourse: \"prix-repli\"`, ni `declaration` (le plafond des déclarations n'est pas consommé), et l'`offre` relue ne remonte pas."
       },
       "ReponsePing": {
         "type": "object",
@@ -6597,7 +6598,7 @@
         "required": [
           "scanId"
         ],
-        "description": "Une lecture ratée `definitive: true` rembourse une fois par scan (`sans-prix`) ; `definitive: false` (défi Cloudflare) ne rembourse rien."
+        "description": "Une lecture ratée `definitive: true` rembourse une fois par scan (`sans-prix`), SAUF quand la réponse sert un `prixRepli` (REPLI-QUOTA : un prix est affiché, le scan compte, `raisonNonRembourse: \"prix-repli\"`) ; `definitive: false` (défi Cloudflare) ne rembourse rien."
       },
       "RequeteInstallation": {
         "type": "object",
