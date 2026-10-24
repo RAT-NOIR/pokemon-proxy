@@ -1,0 +1,135 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-prix-repli-0011",
+  "analyse": {
+    "statut": "identifiee",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000001,
+          "nom": "Tauros",
+          "nomCardmarket": "Tauros [Stomp | Rampage]",
+          "set": {
+            "slug": "Jungle",
+            "nom": "Jungle",
+            "code": "JU",
+            "tirage": null,
+            "annee": null,
+            "symbole": null,
+            "badge": "JU",
+            "badgeSource": "code"
+          },
+          "numero": "47",
+          "total": "64",
+          "langue": "EN",
+          "variante": null,
+          "marques": null,
+          "version": null,
+          "rarete": "Uncommon",
+          "visuel": {
+            "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000001.webp",
+            "w": 255,
+            "h": 356,
+            "grande": {
+              "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/grandes/9000001.webp",
+              "w": 600,
+              "h": 825
+            }
+          },
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 1.49,
+            "de": 0.02,
+            "deBase": "tous-etats",
+            "moyenne7": 1.55,
+            "moyenne30": 1.26,
+            "date": "2026-10-12",
+            "fiable": true,
+            "reserves": []
+          },
+          "liens": {
+            "cardmarket": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000001",
+            "fiche": null
+          },
+          "impressions": []
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "EX",
+          "confiance": "basse",
+          "defauts": [
+            "légères marques sur les bords"
+          ],
+          "declare": null,
+          "retenu": null
+        },
+        "prixLive": {
+          "idProduct": 9000001,
+          "langues": [
+            1
+          ],
+          "reverseHolo": false,
+          "etatVise": null
+        },
+        "zone": null,
+        "prixRepli": {
+          "repli": "tendance",
+          "cause": "etat-non-retenu",
+          "fiable": false,
+          "guide": {
+            "tendance": 1.49,
+            "de": 0.02,
+            "deBase": "tous-etats",
+            "moyenne7": 1.55,
+            "moyenne30": 1.26,
+            "date": "2026-10-12",
+            "fiable": true,
+            "reserves": []
+          },
+          "offre": null
+        }
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "versEUR": 1,
+      "tauxDate": "2026-10-07"
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "affirmee",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  },
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  }
+}

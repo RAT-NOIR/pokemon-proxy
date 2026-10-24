@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "facturation": null,
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  },
+  "prixRepli": {
+    "repli": "tendance",
+    "cause": "tendance-seule",
+    "fiable": false,
+    "guide": {
+      "tendance": 10.18,
+      "de": 1,
+      "deBase": "tous-etats",
+      "moyenne7": 14.59,
+      "moyenne30": 13.15,
+      "date": "2026-10-12",
+      "fiable": false,
+      "reserves": [
+        "ecart-tendance"
+      ]
+    },
+    "offre": null
+  }
+}

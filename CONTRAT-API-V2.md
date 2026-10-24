@@ -1059,7 +1059,7 @@ Règle du projet : « tout ce qui donne un chiffre au client se compte dans les 
 **(a) « Prix illisible » n'est permis que si AUCUNE offre n'est reçue.** Écrite par ce qu'elle autorise :
 - l'extension peut dire « prix illisible » (`lectureRatee`, ou un prix `originePrix: "tendance"` sans verdict) **seulement** si la page Cardmarket, une fois chargée, ne porte **aucune** ligne d'offre ; si elle en porte et qu'aucune ne se lit, c'est un **échec de lecture** (`lectureRatee { cause: "grille-vide", definitive: false }`, jamais remboursé, à retenter), **pas** un « prix illisible » ;
 - une tendance (`originePrix: "tendance"`) n'est **jamais** un prix d'offre et ne porte **jamais** de verdict (elle ne l'a jamais fait : `src/commun/prix.js`) ;
-- le serveur ne fait **aucune** requête Cardmarket : il ne voit des offres que si l'extension les lui envoie (`prixLive`, `prixLiveEtat`, `originePrix: "grille"`). Le cas Arcanin [G] Lv.60 (Supreme Victors 15/147, scan `6ad3eaf22fdf39af3f1a8b24`) : le serveur a reçu `prixLive: 7,67`, `originePrix: "tendance"`, ni `prixLiveEtat`, ni `prixLiveNM`, ni grille. **Il n'a reçu aucune offre** ; elles se perdent dans la lecture de la page par l'extension (voir `REPONSE-API-EXTENSION-F4.md`).
+- le serveur ne fait **aucune** requête Cardmarket : il ne voit des offres que si l'extension les lui envoie (`prixLive`, `prixLiveEtat`, `originePrix: "grille"`). Le cas Arcanin [G] Lv.60 (Supreme Victors 15/147, scan `6ad3eaf22fdf39af3f1a8b24`) : le serveur a reçu `prixLive: 7,67`, `originePrix: "tendance"`, ni `prixLiveEtat`, ni `prixLiveNM`, ni grille. **Il n'a reçu aucune offre** ; elles se perdent dans la lecture de la page par l'extension (voir `REPONSE-API-EXTENSION-F4.md`). **Depuis le lot PRIX-LISIBLE, une aucune-offre n'est plus non plus un « prix illisible » quand la fiche a une donnée de prix : voir (f), le champ `prixRepli`.**
 
 **(b) Le « De » est l'offre la plus basse, TOUS ÉTATS.** `prixGuide.de` (et le « ≈ 1,00 € » d'une impression) est l'offre la plus basse de la fiche, tous états et toutes langues confondus : une carte Poor suffit. Le guide ne porte **aucun prix par état** : seul `prixLive`, lu en direct par l'extension dans `etat.retenu`, donne un prix dans l'état. Le champ fermé `prixGuide.deBase` le dit : `tous-etats` (la seule valeur servie). **Le « De » n'est jamais présenté comme le prix de l'état de l'annonce**, et n'entre dans aucun verdict.
 
@@ -1081,6 +1081,47 @@ Règle du projet : « tout ce qui donne un chiffre au client se compte dans les 
   "moyenne7": 14.59,
   "fiable": false,
   "reserves": ["ecart-tendance"]
+}
+```
+
+**(f) Le repli honnête : `prixRepli` (lot PRIX-LISIBLE, 2026-10-24).** Règle de l'éditeur : **jamais « prix illisible » quand la fiche a une donnée de prix.** **Phrase que l'extension doit suivre : jamais « prix illisible » quand `prixRepli` est servi** (ni « Aucune offre dans l'état de la carte » : ce texte dit qu'une page a été lue et qu'elle n'a pas d'offre, ce que le repli contredit). AJOUT FACULTATIF du schéma (`PrixRepli`), sur trois réponses :
+- la **carte identifiée** de l'analyse (`POST /api/identifier`) et de la réponse à une question (`POST /api/identifier/reponse`), quand l'analyse n'a **rien dicté à lire** : `prixLive` null (`langue-non-lue`, la langue n'a pas été lue) ou `prixLive.etatVise` null (`etat-non-retenu`, l'état estimé a une confiance « basse » : la porte de confiance de l'état le met de côté). Dans ces deux cas l'extension n'a **aucune page à ouvrir** : elle ne lit rien, donc elle ne peut pas dire « aucune offre » ;
+- la **réponse de `POST /api/retour-live`**, quand l'extension a envoyé une lecture ratée (`lecture-ratee`, définitive ou non), un prix d'origine `tendance` (`tendance-seule`), ou une offre `grille` lue dans un état **pire** que l'état retenu (`offre-autre-etat`, avec `prixLiveEtat`).
+
+La mention `repli` est fermée : **`tendance`** (la tendance et les moyennes du guide du jour, `guide`, qui est le `prixGuide` de la fiche, tous états) ou **`etat-proche`** (l'offre que l'extension a lue dans l'état pire le plus proche : `offre { etat, prix }`, avec le guide s'il existe). **`fiable` vaut toujours `false`** (un repli n'est jamais un prix sûr, même si `guide.fiable` vaut `true`), et **le serveur ne sert aucun verdict** : le client n'en calcule aucun sur un repli (ni bonne affaire, ni cher). Une offre lue dans l'état retenu ou dans un meilleur état est un prix dans l'état : **aucun repli**, la réponse est celle d'avant, octet pour octet. **Sans AUCUNE donnée de prix** (aucun guide servi et aucune offre), la clé est **absente** (jamais `null`) : alors seulement « prix illisible » est vrai. Le scanner du site ne sert jamais ce champ.
+
+| code | `repli` | texte proposé (à valider par l'éditeur) |
+|---|---|---|
+| `langue-non-lue`, `etat-non-retenu` | `tendance` | « État de la carte non estimé avec assez de certitude : voici la tendance et les moyennes Cardmarket du jour (tous états), à titre indicatif. » |
+| `lecture-ratee`, `tendance-seule` | `tendance` | « Aucune offre lisible dans l'état : voici la tendance et les moyennes Cardmarket du jour (tous états), pas un prix d'offre. » |
+| `offre-autre-etat` | `etat-proche` | « Aucune offre dans l'état estimé : la moins chère lue est en {offre.etat} ({offre.prix} €). » |
+
+```json schema=PrixRepli
+{
+  "repli": "tendance",
+  "cause": "etat-non-retenu",
+  "fiable": false,
+  "guide": {
+    "tendance": 1.49,
+    "de": 0.02,
+    "deBase": "tous-etats",
+    "moyenne7": 1.55,
+    "moyenne30": 1.26,
+    "date": "2026-10-12",
+    "fiable": true,
+    "reserves": []
+  },
+  "offre": null
+}
+```
+
+```json schema=PrixRepli
+{
+  "repli": "etat-proche",
+  "cause": "offre-autre-etat",
+  "fiable": false,
+  "guide": null,
+  "offre": { "etat": "GD", "prix": 0.9 }
 }
 ```
 
