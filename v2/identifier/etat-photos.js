@@ -12,7 +12,8 @@ const CONFIANCES = Object.freeze(['haute', 'moyenne', 'basse']);
 const URL_MODELE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const PROMPT_ETAT = `Estime l'ÉTAT PHYSIQUE (l'usure) de la carte Pokémon visible sur ces photos, et rien d'autre. Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"etatEstime": "NM/EX/GD/LP/PL/PO", "etatSecond": "NM/EX/GD/LP/PL/PO, ou null", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+etatSecond : UNIQUEMENT si tu hésites entre deux états, le second état plausible (de la même liste) ; si tu n'hésites pas, null.
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
@@ -55,10 +56,25 @@ function analyserReponse(contenu) {
     if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
     const e = String(o.etatEstime ?? '').trim().toUpperCase(), c = String(o.etatConfiance ?? '').trim().toLowerCase();
     const d = Array.isArray(o.defautsVus) ? o.defautsVus.filter(x => typeof x === 'string' && x.trim()).slice(0, 10).map(x => x.trim().slice(0, 200)) : null;
-    return { etatEstime: ETATS.includes(e) ? e : null, etatConfiance: CONFIANCES.includes(c) ? c : null, defautsVus: d };
+    // LE SECOND ÉTAT (règle de l'éditeur, tour 2) : champ FACULTATIF et FERMÉ (la même liste). Une valeur hors liste est REFUSÉE (null, `etatSecondRefuse` vrai) et ne devient jamais l'état ; un second égal au premier n'est pas une hésitation.
+    const brutSecond = typeof o.etatSecond === 'string' ? o.etatSecond.trim() : '', s = brutSecond.toUpperCase();
+    const secondLu = ETATS.includes(s) && s !== e ? s : null;
+    const refuse = brutSecond !== '' && !/^(null|none|aucun)$/i.test(brutSecond) && !ETATS.includes(s);
+    return { etatEstime: ETATS.includes(e) ? e : null, etatSecond: secondLu, etatSecondRefuse: refuse, etatConfiance: CONFIANCES.includes(c) ? c : null, defautsVus: d };
 }
 
-const NUL = Object.freeze({ etatEstime: null, etatConfiance: null, defautsVus: null });
+/**
+ * L'état RETENU quand le modèle hésite (règle de l'éditeur : l'erreur ne va JAMAIS vers « moins abîmé que la réalité ») : le PLUS ABÎMÉ des deux états ; sans second état valide, l'état unique ; sans état valide, null.
+ * La porte de confiance (haute ou moyenne, sinon null) s'applique AVANT, dans index.js (etatRetenuDuModele). Le second n'est jamais retenu seul, et un second meilleur que le premier ne le relève jamais.
+ */
+function retenirEtat(estime, second) {
+    const e = ETATS.indexOf(String(estime ?? '').toUpperCase());
+    if (e < 0) return null;
+    const s = ETATS.indexOf(String(second ?? '').toUpperCase());
+    return ETATS[s > e ? s : e];
+}
+
+const NUL = Object.freeze({ etatEstime: null, etatSecond: null, etatSecondRefuse: false, etatConfiance: null, defautsVus: null });
 
 /**
  * L'appel d'état. NE LÈVE JAMAIS : toute panne rend un état nul avec sa cause.
@@ -115,6 +131,8 @@ function fusionner(cardInfo, etat) {
     const lu = cardInfo.etatEstime != null || cardInfo.etatConfiance != null;
     cardInfo.etatIdentification = lu ? { etatEstime: cardInfo.etatEstime ?? null, etatConfiance: cardInfo.etatConfiance ?? null } : null;
     cardInfo.etatEstime = etat.etatEstime;
+    cardInfo.etatSecond = etat.etatSecond ?? null;
+    cardInfo.etatSecondRefuse = etat.etatSecondRefuse === true;
     cardInfo.etatConfiance = etat.etatConfiance;
     cardInfo.defautsVus = etat.defautsVus;
     cardInfo.msEtat = Number.isFinite(etat.ms) ? etat.ms : null;
@@ -122,4 +140,4 @@ function fusionner(cardInfo, etat) {
     return cardInfo;
 }
 
-module.exports = { PROMPT_ETAT, ECARTS, ETATS, CONFIANCES, URL_MODELE, DELAI_ETAT_MS, analyserReponse, estimerEtat, attendre, fusionner };
+module.exports = { PROMPT_ETAT, ECARTS, ETATS, CONFIANCES, URL_MODELE, DELAI_ETAT_MS, analyserReponse, retenirEtat, estimerEtat, attendre, fusionner };

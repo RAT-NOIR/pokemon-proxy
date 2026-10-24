@@ -8,13 +8,34 @@ const rep = contenu => ({ data: { choices: [{ message: { content: contenu } }] }
 
 (async () => {
     // ── la lecture de la réponse : jamais une valeur inventée
-    H.v('1. une réponse propre', E.analyserReponse('{"etatEstime":"EX","etatConfiance":"haute","defautsVus":["blanchiment bord gauche"]}'), { etatEstime: 'EX', etatConfiance: 'haute', defautsVus: ['blanchiment bord gauche'] });
-    H.v('1. des clôtures markdown et des majuscules/minuscules inversées sont lues', E.analyserReponse('```json\n{"etatEstime":"gd","etatConfiance":"MOYENNE","defautsVus":[]}\n```'), { etatEstime: 'GD', etatConfiance: 'moyenne', defautsVus: [] });
-    H.v('1. un état hors barème (« Mint », « MT » est au barème) et une confiance hors énumération deviennent null, champ par champ', E.analyserReponse('{"etatEstime":"Mint","etatConfiance":"certaine","defautsVus":[]}'), { etatEstime: null, etatConfiance: null, defautsVus: [] });
+    H.v('1. une réponse propre', E.analyserReponse('{"etatEstime":"EX","etatConfiance":"haute","defautsVus":["blanchiment bord gauche"]}'), { etatEstime: 'EX', etatSecond: null, etatSecondRefuse: false, etatConfiance: 'haute', defautsVus: ['blanchiment bord gauche'] });
+    H.v('1. des clôtures markdown et des majuscules/minuscules inversées sont lues', E.analyserReponse('```json\n{"etatEstime":"gd","etatConfiance":"MOYENNE","defautsVus":[]}\n```'), { etatEstime: 'GD', etatSecond: null, etatSecondRefuse: false, etatConfiance: 'moyenne', defautsVus: [] });
+    H.v('1. un état hors barème (« Mint », « MT » est au barème) et une confiance hors énumération deviennent null, champ par champ', E.analyserReponse('{"etatEstime":"Mint","etatConfiance":"certaine","defautsVus":[]}'), { etatEstime: null, etatSecond: null, etatSecondRefuse: false, etatConfiance: null, defautsVus: [] });
     H.v('1. « MT » est un état du barème', E.analyserReponse('{"etatEstime":"MT","etatConfiance":"haute","defautsVus":[]}').etatEstime, 'MT');
     H.v('1. des défauts qui ne sont pas une liste de chaînes : null (jamais [] qui dirait « aucun défaut vu »)', E.analyserReponse('{"etatEstime":"NM","etatConfiance":"haute","defautsVus":"rien"}').defautsVus, null);
     H.v('1. les défauts sont bornés (10 défauts, 200 caractères) et vidés des chaînes vides', E.analyserReponse(JSON.stringify({ etatEstime: 'NM', etatConfiance: 'haute', defautsVus: [...Array(15).fill('x'.repeat(300)), '  ', 4] })).defautsVus.map(x => x.length), Array(10).fill(200));
     for (const [nom, x] of [['pas du JSON', 'bonjour'], ['un tableau', '[1]'], ['null', 'null'], ['pas une chaîne', undefined], ['un nombre', 5]]) H.v(`1. ${nom} : null`, E.analyserReponse(x), null);
+
+    // ── LE SECOND ÉTAT (règle de l'éditeur, tour 2) : l'erreur ne va JAMAIS vers « moins abîmé que la réalité »
+    {
+        const lire = (e, s) => E.analyserReponse(JSON.stringify({ etatEstime: e, ...(s === undefined ? {} : { etatSecond: s }), etatConfiance: 'haute', defautsVus: [] }));
+        H.v('8. hésitation : un second état de la liste est lu', [lire('NM', 'LP').etatSecond, lire('NM', 'LP').etatSecondRefuse], ['LP', false]);
+        H.v('8. absence d\'hésitation : champ absent, null, « null », vide → aucun second état, rien de refusé', ['x', null, 'null', '', 'aucun'].slice(1).map(s => { const r = lire('NM', s); return [r.etatSecond, r.etatSecondRefuse]; }).concat([[lire('NM').etatSecond, lire('NM').etatSecondRefuse]]), [[null, false], [null, false], [null, false], [null, false], [null, false]]);
+        H.v('8. second état HORS LISTE (« MINT », « Poor », 7, « EX+ ») : REFUSÉ (null, signalé), jamais retenu', ['MINT', 'Poor', 'EX+', 'LP/PL'].map(s => { const r = lire('NM', s); return [r.etatSecond, r.etatSecondRefuse]; }), Array(4).fill([null, true]));
+        H.v('8. un second état qui n\'est pas une chaîne (nombre, tableau, objet) : ignoré, sans second état', [7, ['LP'], { a: 1 }].map(s => lire('NM', s).etatSecond), [null, null, null]);
+        H.v('8. un second égal au premier n\'est pas une hésitation', [lire('NM', 'nm').etatSecond, lire('NM', 'nm').etatSecondRefuse], [null, false]);
+        // retenirEtat : le PLUS ABÎMÉ des deux, jamais un état meilleur
+        H.v('8. retenirEtat : hésitation NM/LP → LP ; EX/GD → GD ; GD/EX → GD (l\'ordre dit-il quel est le premier : peu importe)', [E.retenirEtat('NM', 'LP'), E.retenirEtat('EX', 'GD'), E.retenirEtat('GD', 'EX')], ['LP', 'GD', 'GD']);
+        H.v('8. retenirEtat : sans second état → l\'état unique ; second hors liste ou null → l\'état unique', [E.retenirEtat('EX', null), E.retenirEtat('EX', undefined), E.retenirEtat('EX', 'MINT'), E.retenirEtat('EX', '')], ['EX', 'EX', 'EX', 'EX']);
+        H.v('8. retenirEtat : un second MEILLEUR (NM, MT) ne relève jamais l\'état', [E.retenirEtat('EX', 'NM'), E.retenirEtat('GD', 'MT')], ['EX', 'GD']);
+        H.v('8. retenirEtat : sans état valide → null, le second n\'est jamais retenu seul', [E.retenirEtat(null, 'LP'), E.retenirEtat('Mint', 'LP'), E.retenirEtat('', 'PL')], [null, null, null]);
+        H.v('8. retenirEtat sur tout le barème : le résultat n\'est jamais plus beau que l\'état d\'origine', ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'].every(e => ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO', 'x', null].every(s => ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'].indexOf(E.retenirEtat(e, s)) >= ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'].indexOf(e))), true);
+        H.vrai('8. la consigne propose le champ facultatif etatSecond, fermé (même liste), « UNIQUEMENT si tu hésites »', /"etatSecond": "NM\/EX\/GD\/LP\/PL\/PO, ou null"/.test(E.PROMPT_ETAT) && /etatSecond : UNIQUEMENT si tu hésites/.test(E.PROMPT_ETAT));
+        const l = { name: 'X', etatEstime: 'NM' };
+        E.fusionner(l, { etatEstime: 'EX', etatSecond: 'GD', etatSecondRefuse: false, etatConfiance: 'haute', defautsVus: [], ms: 1, cause: null });
+        H.v('8. fusionner pose le second état (information) ; un état en panne le remet à null', [l.etatSecond, E.fusionner({ etatEstime: 'NM' }, { ...nulSeconds(), ms: 1, cause: 'panne' }).etatSecond], ['GD', null]);
+        function nulSeconds() { return { etatEstime: null, etatSecond: null, etatSecondRefuse: false, etatConfiance: null, defautsVus: null }; }
+    }
 
     // ── la consigne : ni titre, ni vendeur
     H.vrai('2. la consigne ne contient aucune variable d\'annonce (pas de ${…} non résolu, pas de « (non fourni) »)', !/\$\{|non fourni/.test(E.PROMPT_ETAT));

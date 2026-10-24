@@ -3052,7 +3052,9 @@ function etatRetenuDuModele(cardInfo) {
     const c = cardInfo || {};
     if (c.etatConfiance !== 'haute' && c.etatConfiance !== 'moyenne') return null;
     const e = String(c.etatEstime || '').toUpperCase();
-    return ORDRE_ETATS.includes(e) ? e : null;
+    if (!ORDRE_ETATS.includes(e)) return null;
+    // ETAT-TITRE (règle de l'éditeur, tour 2) : si le modèle a nommé un second état plausible (champ fermé, facultatif), on retient le PLUS ABÎMÉ des deux ; sans hésitation, l'état unique. Le second n'est jamais retenu seul.
+    return require('./v2/identifier/etat-photos').retenirEtat(e, c.etatSecond);
 }
 
 // Retrouve les idExpansion Cardmarket correspondant à un set TCGdex.
@@ -3791,6 +3793,7 @@ async function gererIdentifier(req, res) {
                 // ETAT-TITRE : l'état que la LECTURE (qui reçoit le titre) a rendu, IGNORÉ — une information journalisée, jamais une entrée ("NM|haute")
                 etatIdentification: c.etatIdentification ? `${c.etatIdentification.etatEstime ?? '?'}|${c.etatIdentification.etatConfiance ?? '?'}` : null,
                 etatCause: typeof c.etatCause === 'string' ? c.etatCause : null,           // pourquoi l'état est nul quand l'appel d'état n'a pas rendu : sans-image, depense, arret, panne, illisible, delai
+                etatSecond: typeof c.etatSecond === 'string' ? c.etatSecond : null,           // le second état plausible nommé par le modèle quand il hésite (information : l'état retenu est le plus abîmé des deux)
                 // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
                 // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
                 // devient mesurable maintenant qu'il est journalisé.

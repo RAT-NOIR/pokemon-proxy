@@ -233,6 +233,7 @@ const journalScanSchema = new mongoose.Schema({
     // ne pas mêler les deux périodes dans une mesure. `etatIdentification` garde, comme INFORMATION, l'état que la lecture (avec le titre) a rendu et que la chaîne ignore ("NM|haute") ; `msEtat` est la durée de l'appel d'état.
     etatIdentification: String,
     msEtat: Number,
+    etatSecond: String,        // le second état plausible nommé par le modèle quand il hésite (information ; l'état retenu est alors le plus abîmé des deux)
     etatCause: String,         // pourquoi l'appel d'état n'a pas rendu d'état : sans-image | depense | arret | panne | illisible | delai (null = il a rendu)
 
     // La grille de prix par état, et LE NOMBRE D'OFFRES qui porte chaque prix.
@@ -1065,6 +1066,7 @@ function enregistrerScan(d = {}) {
             etatIdentification: typeof d.etatIdentification === 'string' && d.etatIdentification ? d.etatIdentification.slice(0, 40) : null,
             msEtat: Number.isFinite(d.msEtat) ? Math.round(d.msEtat) : null,
             etatCause: ['sans-image', 'depense', 'arret', 'panne', 'illisible', 'delai'].includes(d.etatCause) ? d.etatCause : null,
+            etatSecond: ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'].includes(d.etatSecond) ? d.etatSecond : null,
             // Tableau ou null — jamais `[]`, qui ferait lire « l'IA n'a vu aucun défaut »
             // là où elle n'a rien rendu du tout. Premier principe.
             defautsVus: Array.isArray(d.defautsVus) && d.defautsVus.length ? d.defautsVus.map(String).slice(0, 12) : null,
@@ -1265,7 +1267,7 @@ function enregistrerEchec({ _id, route, userId, cardInfo, motifEchec, rembourse,
     // ⚠️ ILS ARRIVENT GROUPÉS, tels que `champsEtat()` les rend, comme `champsImage` :
     // un seul point de construction, partagé avec la RÉPONSE HTTP, donc impossible de
     // mesurer autre chose que ce qui est affiché.
-    etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus, etatIdentification, msEtat, etatCause,
+    etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus, etatIdentification, msEtat, etatCause, etatSecond,
     prixParEtat, nbOffresParEtat,
     // ⚠️ LES TROIS ENTIERS SUR LES REFUS AUSSI, ET C'EST LÀ QU'ILS COMPTENT LE PLUS :
     // un scan refusé a DÉJÀ payé son appel IA. Sans `msIA` et `nbPhotos` sur ces lignes,
@@ -1320,7 +1322,7 @@ function enregistrerEchec({ _id, route, userId, cardInfo, motifEchec, rembourse,
         // pas mesurer là où il compte.
         illustrateur: c.illustrateur ?? null,
         illustrateurConfiance: c.illustrateurConfiance ?? null,
-        etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus, etatIdentification, msEtat, etatCause,
+        etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus, etatIdentification, msEtat, etatCause, etatSecond,
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,
         exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,

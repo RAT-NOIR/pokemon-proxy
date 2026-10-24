@@ -41,8 +41,12 @@ function bilanAccord(paires) {
 const pct = (v, p) => { const s = v.filter(Number.isFinite).sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.max(0, Math.ceil(p * s.length) - 1))] : null; };
 const moy = v => { const s = v.filter(Number.isFinite); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : null; };
 /** L'état retenu de la production : la porte de confiance (haute ou moyenne), sinon null — la même règle que index.js (etatRetenuDuModele). */
-const retenu = (estime, confiance) => (confiance === 'haute' || confiance === 'moyenne') && ORDRE.includes(String(estime ?? '').toUpperCase()) ? String(estime).toUpperCase() : null;
-module.exports = { ecart, bilanAccord, pct, moy, retenu, ORDRE, MODELE };
+// (tour 2) avec le second état éventuel : le PLUS ABÎMÉ des deux, par la fonction de la production (retenirEtat), jamais une copie.
+const efficace = (estime, second) => require('../identifier/etat-photos').retenirEtat(estime, second);
+const retenu = (estime, confiance, second = null) => (confiance === 'haute' || confiance === 'moyenne') && ORDRE.includes(String(estime ?? '').toUpperCase()) ? efficace(estime, second) : null;
+/** Le sens des écarts à une référence : { moins: la carte est jugée MOINS abîmée que la référence, plus: PLUS abîmée, biais: moins − plus }. a : la référence, b : l'appel d'état. */
+const sens = paires => { const r = bilanAccord(paires); return { moins: r.dessus, plus: r.dessous, biais: r.dessus - r.dessous }; };
+module.exports = { ecart, bilanAccord, pct, moy, retenu, efficace, sens, ORDRE, MODELE };
 
 // ── l'exécution
 function arg(nom, defaut) { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : defaut; }
@@ -152,6 +156,7 @@ async function principal() {
         let g0 = graine; const alea0 = () => { g0 = (g0 * 1664525 + 1013904223) % 4294967296; return g0 / 4294967296; };      // le même tirage que le tour 1 (même graine, même ordre des lignes)
         const autres = lignes.map(l => ({ l, r: alea0() })).sort((x, y) => x.r - y.r).slice(0, N).map(x => x.l).filter(x => !deja.has(x.id));
         console.log(`CONFIRMATION : ${autres.length} photos du tirage de ${N}, hors les ${deja.size} de réglage · plafond ${plafond} $`);
+        const reutilise = new Map(arg('reutiliser', null) ? JSON.parse(fs.readFileSync(arg('reutiliser'), 'utf8')).rows.filter(r => r.ident && r.avant).map(r => [r.id, r]) : []);
         const rows = [];
         for (const x of autres) {
             if (!carnet.peutAppeler()) { console.log(`⛔ ARRÊT AVANT DÉPASSEMENT : ${carnet.etat().arret}`); break; }
@@ -159,12 +164,14 @@ async function principal() {
             if (!photo) { rows.push({ id: x.id, sansImage: true }); continue; }
             const jpeg = await sharp(photo).rotate().resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
             const url = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
-            const ident = await appelIdent([url]);
-            const avant = await appelVariante([url], origine);
+            // `--reutiliser=<bilan.json d'une confirmation précédente>` : la référence (identification sans titre) et le sens d'AVANT les écarts de ces mêmes photos ne sont pas redemandés au modèle (seul l'appel d'état final est rejoué)
+            const ancien = reutilise.get(x.id);
+            const ident = ancien ? null : await appelIdent([url]);
+            const avant = ancien ? null : await appelVariante([url], origine);
             const apres = await appelEtat([url]);
-            const ligne = { id: x.id, ident: { lu: Boolean(ident.etat), estime: ident.etat && ident.etat.etatEstime, retenu: ident.etat ? retenu(ident.etat.etatEstime, ident.etat.etatConfiance) : null, ms: ident.ms, cout: ident.cout },
-                avant: { estime: avant.etatEstime, confiance: avant.etatConfiance, retenu: retenu(avant.etatEstime, avant.etatConfiance), cause: avant.cause, cout: avant.cout },
-                apres: { estime: apres.etatEstime, confiance: apres.etatConfiance, retenu: retenu(apres.etatEstime, apres.etatConfiance), cause: apres.cause, ms: apres.ms, cout: apres.cout } };
+            const ligne = { id: x.id, ident: ancien ? ancien.ident : { lu: Boolean(ident.etat), estime: ident.etat && ident.etat.etatEstime, retenu: ident.etat ? retenu(ident.etat.etatEstime, ident.etat.etatConfiance) : null, ms: ident.ms, cout: ident.cout },
+                avant: ancien ? ancien.avant : { estime: avant.etatEstime, confiance: avant.etatConfiance, retenu: retenu(avant.etatEstime, avant.etatConfiance), cause: avant.cause, cout: avant.cout },
+                apres: { estime: apres.etatEstime, second: apres.etatSecond ?? null, secondRefuse: apres.etatSecondRefuse === true, efficace: efficace(apres.etatEstime, apres.etatSecond), confiance: apres.etatConfiance, retenu: retenu(apres.etatEstime, apres.etatConfiance, apres.etatSecond), cause: apres.cause, ms: apres.ms, cout: apres.cout } };
             rows.push(ligne);
             fs.appendFileSync(path.join(sortie, 'appels.jsonl'), JSON.stringify(ligne) + '\n');
         }
@@ -176,6 +183,10 @@ async function principal() {
             d0(`  ${nom} : états ESTIMÉS contre l'identification d'aujourd'hui sans titre`, bilanAccord(bon.map(x => ({ a: x.ident.estime, b: x[cle].estime }))));
             d0(`  ${nom} : états retenus NULS (identification d'aujourd'hui : ${bon.filter(x => !x.ident.retenu).length})`, [bon.filter(x => !x[cle].retenu).length, 'sur ' + bon.length]);
         }
+        // LA RÈGLE DE L'ÉDITEUR (tour 2) : l'état EFFICACE (le plus abîmé de l'avis et du second état, avant la porte de confiance) contre l'identification sans titre : AUCUN biais vers le mieux (moins ≤ plus) et au plus 8 null
+        d0('  FINALE avec le second état : états EFFICACES (plus abîmé des deux) contre l\'identification sans titre', bilanAccord(bon.map(x => ({ a: x.ident.estime, b: x.apres.efficace }))));
+        d0('  FINALE avec le second état : sens (moins abîmée / plus abîmée / biais = moins − plus)', sens(bon.map(x => ({ a: x.ident.estime, b: x.apres.efficace }))));
+        d0('  FINALE : seconds états nommés / refusés (hors liste) / états retenus nuls', [bon.filter(x => x.apres.second).length, bon.filter(x => x.apres.secondRefuse).length, bon.filter(x => !x.apres.retenu).length, 'sur ' + bon.length]);
         d0('  durée de l\'appel d\'état final (ms) p50 / p95', [pct(bon.map(x => x.apres.ms), 0.5), pct(bon.map(x => x.apres.ms), 0.95)]);
         const e1 = carnet.etat();
         console.log(`DÉPENSE : ${e1.cumulUsd.toFixed(4)} $ sur plafond ${plafond} $ · ${e1.appels} appels${e1.arret ? ' · ARRÊT : ' + e1.arret : ''}`);
@@ -193,7 +204,7 @@ async function principal() {
         const jpeg = await sharp(photo).rotate().resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
         x.url = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
         const r = variante ? await appelVariante([x.url]) : await appelEtat([x.url]);
-        const ligne = { ...x, url: undefined, separe: { estime: r.etatEstime, confiance: r.etatConfiance, retenu: retenu(r.etatEstime, r.etatConfiance), defauts: r.defautsVus, cause: r.cause, ms: r.ms, cout: r.cout } };
+        const ligne = { ...x, url: undefined, separe: { estime: r.etatEstime, confiance: r.etatConfiance, retenu: retenu(r.etatEstime, r.etatConfiance, r.etatSecond), second: r.etatSecond ?? null, secondRefuse: r.etatSecondRefuse === true, efficace: efficace(r.etatEstime, r.etatSecond), defauts: r.defautsVus, cause: r.cause, ms: r.ms, cout: r.cout } };
         phase1.push({ ...ligne, url: x.url });
         fs.appendFileSync(fichierRes, JSON.stringify({ phase: 1, ...ligne }) + '\n');
     }
@@ -227,6 +238,7 @@ async function principal() {
         const comp = ok1.filter(x => refIdent.get(x.id) && refIdent.get(x.id).lu);
         d('  COMPARÉ À L\'IDENTIFICATION D\'AUJOURD\'HUI (même photo, sans titre) : état ESTIMÉ', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.estime }))));
         d('  idem, état RETENU', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).retenu, b: x.separe.retenu }))));
+        if (!variante) { d('  AVEC LE SECOND ÉTAT : états EFFICACES (plus abîmé des deux) contre l\'identification sans titre', bilanAccord(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  AVEC LE SECOND ÉTAT : sens (moins / plus / biais)', sens(comp.map(x => ({ a: refIdent.get(x.id).estime, b: x.separe.efficace })))); d('  seconds états nommés / refusés', [comp.filter(x => x.separe.second).length, comp.filter(x => x.separe.secondRefuse).length, 'sur ' + comp.length]); }
         d('  états retenus NULS : appel séparé / identification d\'aujourd\'hui', [comp.filter(x => !x.separe.retenu).length, comp.filter(x => !refIdent.get(x.id).retenu).length, 'sur ' + comp.length]);
     }
     if (variante || phase2.length === 0) {

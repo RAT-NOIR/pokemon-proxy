@@ -78,7 +78,17 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
     const photo = k => `https://images1.vinted.net/t/00_rm-et/f800/lecture-${k}.webp`;
     const CANARI_DESCRIPTION = 'Description du vendeur DESC-CANARI-ZQ7', CANARI_PRIX = 4321.5;      // TOUR 2 : deux canaris, le texte et le prix du vendeur ne doivent entrer dans AUCUNE requête d'état
     const PHOTO_LENTE = 'https://images1.vinted.net/t/00_rm-et/f800/lent.webp';
-    const PHOTO_BLOQUEE = 'https://images1.vinted.net/t/00_rm-et/f800/etat-bloque.webp';
+    // LE SECOND ÉTAT (règle de l'éditeur, tour 2) : [nom, état, confiance, second état rendu par le modèle, état retenu attendu]
+    const SECONDS = [
+        ['hésitation NM / LP : le plus abîmé', 'NM', 'haute', 'LP', 'LP'],
+        ['hésitation EX / GD (moyenne) : le plus abîmé', 'EX', 'moyenne', 'GD', 'GD'],
+        ['aucune hésitation : l\'état unique', 'NM', 'haute', null, 'NM'],
+        ['second HORS LISTE (MINT) : refusé, l\'état unique', 'NM', 'haute', 'MINT', 'NM'],
+        ['second MEILLEUR (NM) : ne relève jamais l\'état', 'EX', 'haute', 'NM', 'EX'],
+        ['confiance basse malgré l\'hésitation : null', 'EX', 'basse', 'PL', null],
+    ];
+    const photoSecond = k => `https://images1.vinted.net/t/00_rm-et/f800/second-${k}.webp`;
+    const PHOTO_BLOQUEE ='https://images1.vinted.net/t/00_rm-et/f800/etat-bloque.webp';
     const PHOTO_PANNE ='https://images1.vinted.net/t/00_rm-et/f800/panne-etat.webp';
     const PHOTO_DATA = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
     const lect = (nom, etat, conf) => ({ ...occ, cellule: `etat-titre ${nom}`, lecture: { ...occ.lecture, etatEstime: etat, etatConfiance: conf, defautsVus: [] } });
@@ -87,7 +97,8 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         { ...lect('panne de l\'appel d\'état', 'NM', 'haute'), imageUrl: PHOTO_PANNE },
         { ...lect('photos reçues (data:)', 'GD', 'haute'), imageUrl: PHOTO_DATA },
         { ...lect('modèle lent', 'GD', 'haute'), imageUrl: PHOTO_LENTE },
-        { ...lect('appel d\'état bloqué', 'GD', 'haute'), imageUrl: PHOTO_BLOQUEE }] };
+        { ...lect('appel d\'état bloqué', 'GD', 'haute'), imageUrl: PHOTO_BLOQUEE },
+        ...SECONDS.map(([nom, etat, conf, second], k) => ({ ...lect(`second état ${nom}`, etat, conf), lecture: { ...lect(nom, etat, conf).lecture, etatSecond: second }, imageUrl: photoSecond(k) }))] };
     const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-et-'));
     const fichierCharges = path.join(dossier, 'charges.json'), fichierReq = path.join(dossier, 'requetes.jsonl');
     fs.writeFileSync(fichierCharges, JSON.stringify(fab));
@@ -199,6 +210,17 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
             H.vrai(`4 ter. ${route} · état bloqué : la réponse est un succès (l'identification est intacte)`, reussi(r));
             H.v(`4 ter. ${route} · état bloqué : état estimé, confiance et retenu nuls`, e && [e.retenu === undefined ? null : e.retenu, e.estimeIA ?? null, e.confianceIA ?? null], [null, null, null]);
             H.vrai(`4 ter. ${route} · état bloqué : la réponse sort sans attendre les 3 500 ms de l'état (${duree} ms ; au plus 2 000 ms après la lecture)`, duree < 3200);
+        }
+    }
+
+    // ── 4 quater. LE SECOND ÉTAT : quand le modèle hésite entre deux états, le serveur retient le PLUS ABÎMÉ ; sans hésitation l'état unique ; un second hors liste est refusé et ne devient jamais l'état
+    for (const [route, appel, lire, reussi] of ROUTES) {
+        for (let k = 0; k < SECONDS.length; k++) {
+            const [nom, etat, , second, attendu] = SECONDS[k];
+            const r = await appel(photoSecond(k), TITRES[5][1]), e = lire(r);
+            H.vrai(`4 quater. ${route} · ${nom} : la réponse est un succès`, reussi(r));
+            H.v(`4 quater. ${route} · ${nom} : état retenu`, e && (e.retenu === undefined ? null : e.retenu), attendu);
+            H.v(`4 quater. ${route} · ${nom} : l'état ESTIMÉ reste celui du modèle (${etat}), le second n'est jamais servi comme estimation`, e && (e.estimeIA ?? e.estime ?? null), etat);
         }
     }
 

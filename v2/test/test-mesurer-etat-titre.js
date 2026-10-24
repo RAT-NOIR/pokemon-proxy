@@ -21,6 +21,10 @@ H.v('2. bilanAccord : vide', M.bilanAccord([]), { paires: 0, lusTousDeux: 0, mem
 
 H.v('3. retenu : la porte de confiance de la production (haute ou moyenne), sinon null ; un état hors barème : null', [M.retenu('NM', 'haute'), M.retenu('ex', 'moyenne'), M.retenu('EX', 'basse'), M.retenu('EX', null), M.retenu('Mint', 'haute'), M.retenu(null, 'haute')], ['NM', 'EX', null, null, null, null]);
 
+H.v('5. efficace : le plus abîmé des deux, jamais plus beau ; sans second, l\'état unique', [M.efficace('NM', 'LP'), M.efficace('EX', 'NM'), M.efficace('EX', null), M.efficace('EX', 'MINT')], ['LP', 'EX', 'EX', 'EX']);
+H.v('5. retenu avec second état : la porte de confiance d\'abord (basse → null), puis le plus abîmé', [M.retenu('NM', 'haute', 'LP'), M.retenu('NM', 'basse', 'LP'), M.retenu('EX', 'moyenne', 'NM')], ['LP', null, 'EX']);
+H.v('5. sens : moins abîmée (l\'appel juge MEILLEUR que la référence), plus abîmée, biais = moins − plus', M.sens([{ a: 'GD', b: 'EX' }, { a: 'GD', b: 'NM' }, { a: 'EX', b: 'GD' }, { a: 'EX', b: 'EX' }]), { moins: 2, plus: 1, biais: 1 });
+
 const v = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 H.v('4. centiles : p50 = 50, p95 = 100, les valeurs non finies sont ignorées, vide = null', [M.pct(v, 0.5), M.pct(v, 0.95), M.pct([null, NaN, 5], 0.5), M.pct([], 0.5)], [50, 100, 5, null]);
 H.v('4. moyenne : les valeurs non finies sont ignorées, vide = null', [M.moy([1, 2, null, 3]), M.moy([])], [2, null]);
