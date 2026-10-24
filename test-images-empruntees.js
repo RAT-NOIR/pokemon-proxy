@@ -253,7 +253,7 @@ t('chaîne de la mention : la vraie sélection par suffixe de cleR2 sans le set 
     const p = plan(etatToT([ligneToT(20)])); const cartes = E.appliquer(etatToT([ligneToT(20)]), p).cartes;
     const imgs = cartes.get(1).images;
     const r = E.mentionServie({ images: imgs, cleR2: p.ajouts[0].entree.cleR2, set: TOT, imageServieDe, mentionDuVisuelEmprunte: mention });
-    assert.deepStrictEqual(r, { reelle: null, siCorrectif: 'tampon non représenté' });
+    assert.deepStrictEqual(r, { reelle: null, sansSet: null, siCorrectif: 'tampon non représenté' });   // (ce faux `imageServieDe` est l'ANCIEN : il ignore le set ; le site actuel le prend, voir D4.1 plus bas)
 });
 
 // ── Correction 1 : une empruntée SANS document `images` est remplaçable par un vrai scan tamponné (règle de basse-definition.js)
@@ -322,6 +322,177 @@ t('--ecrire refuse de tourner hors de lot-additif.js (pid du lot = pid du parent
     assert.throws(() => E.garderSousLot(undefined, 4242));
     assert.doesNotThrow(() => E.garderSousLot({ LOT_ADDITIF_PID: '4242' }, 4242));
 });
+// ── PHASE 3b (T4, 2026-10-24) : Southeast-Asia-Promos, BORNÉ à 3 produits (901074 Glass Trumpet, 901104 Budew, 901109 Fan Rotom) — l'origine se lit sur la ligne de réimpression
+const SEA = 'Southeast-Asia-Promos', LES_TROIS = [901074, 901104, 901109], SEPT = [901074, 901104, 901109, 850142, 833720, 855687, 819263];
+const oriSCR = (o = {}) => ({ set: 'Stellar-Crown', source: 'tcgdex', cleR2: 'tcgdex/Stellar-Crown/135-1.webp', numero: '135', langue: 'en', w: 600, h: 825, vignette: { cleR2: 'vignettes/tcgdex/Stellar-Crown/135-1.webp', w: 200, h: 275 }, ...o });
+const ligneSEA = (idProduct, o = {}) => ({ _id: `1|${idProduct}`, carteId: 1, idProduct, slugSet: SEA, preuve: 'reimpression+origine+numero', origine: { code: 'SCR', numero: '135' }, numeroFiche: null,
+    detail: 'slug Glass-Trumpet-V2-SEASCR-135 → tirage d\'origine SCR n°135 → produit(s) 785989 → une seule carte', ...o });
+const etatSEA = (lignes, images = [oriSCR(), { set: 'Ascended-Heroes', source: 'tcgdex', cleR2: 'tcgdex/Ascended-Heroes/189-1.webp', numero: '189', langue: 'en', w: 600, h: 825 }], o = {}) =>
+    ({ ...etat(lignes, [carte(images)]), produits: new Map([[785989, { slugSet: 'Stellar-Crown' }]]), ...o });
+t('SEA borné : la liste fermée est exactement les 3 produits ; le set n\'entre PAS dans le périmètre (9 sets, inchangé) mais dans ce que l\'outil lit', () => {
+    assert.deepStrictEqual([...E.SETS_BORNES[SEA]], SEPT);   // décision du testeur du 24/10 : les 3 produits ET leurs 4 frères
+    assert.deepStrictEqual(Object.keys(E.SETS_BORNES), [SEA]);
+    assert.strictEqual(E.PERIMETRE.length, 9); assert(!E.PERIMETRE.includes(SEA)); assert.strictEqual(E.dansLePerimetre(SEA), false);
+    assert.deepStrictEqual([...E.SETS_LUS], [...E.PERIMETRE, SEA]);
+    assert.throws(() => E.SETS_BORNES[SEA].push(1)); assert.throws(() => { 'use strict'; E.SETS_BORNES.autre = []; });
+    for (const id of SEPT) { assert.strictEqual(E.estBorne(SEA, id), true); assert.strictEqual(E.dansLeChamp(SEA, id), true); assert.strictEqual(E.derivableDeLOrigine(SEA, id), true); }
+    assert.strictEqual(E.estBorne(SEA, 901075), false); assert.strictEqual(E.dansLeChamp(SEA, 901075), false);
+    assert.strictEqual(E.estBorne('WCD-2009', 901074), false); assert.strictEqual(E.dansLeChamp('WCD-2009', 901074), false);
+});
+t('verifierBornes : un set à liste fermée absent de la base lève et le nomme ; verifierPerimetre reste celui des 9 sets', () => {
+    assert.doesNotThrow(() => E.verifierBornes([...E.PERIMETRE, SEA])); assert.throws(() => E.verifierBornes(E.PERIMETRE), /Southeast-Asia-Promos/); assert.throws(() => E.verifierBornes([]), /introuvable/);
+    assert.doesNotThrow(() => E.verifierPerimetre(E.PERIMETRE));
+});
+t('SEA : les 3 produits de la liste reçoivent une entrée dérivée de leur origine (set d\'origine, numéro d\'origine, « en »), imageEmprunteeTirage, SANS tamponNonRepresente, SANS champ nouveau', () => {
+    const p = plan(etatSEA(LES_TROIS.map(id => ligneSEA(id))));
+    assert.strictEqual(p.ajouts.length, 1); assert.deepStrictEqual([...p.ajouts[0].produits].sort(), LES_TROIS);   // même carte, même origine : UNE entrée pour les trois lignes
+    assert.strictEqual(p.refus.length, 0); assert.strictEqual(p.horsListe, 0); assert.strictEqual(p.sansSubstitut.length, 0);
+    const e = p.ajouts[0].entree;
+    assert.strictEqual(e.set, SEA); assert.strictEqual(e.numero, null); assert.strictEqual(e.cleR2, 'tcgdex/Stellar-Crown/135-1.webp'); assert.strictEqual(e.w, 600); assert.strictEqual(e.h, 825);
+    assert.strictEqual(e.imageEmprunteeTirage, true); assert.strictEqual(e.source, 'emprunt'); assert.strictEqual(e.lot, 'emprunt-2026-10'); assert.strictEqual(e.langue, 'en'); assert(!('tamponNonRepresente' in e));
+    assert.deepStrictEqual(e.vignette, oriSCR().vignette);
+    // les clés sont EXACTEMENT celles des entrées Trick or Trade : aucun champ inventé
+    assert.deepStrictEqual(Object.keys(e).sort(), Object.keys(plan(etatToT([ligneToT(20)])).ajouts[0].entree).sort());
+    assert.strictEqual(p.parSet[SEA].ajouts, 1); assert.strictEqual(p.parSet[SEA].cibles, 3);
+    assert.strictEqual(E.operationsVersMongo(p).length, 1);
+});
+t('SEA : un 4e produit du set HORS liste (ou un autre produit réimprimé) → RIEN : ni entrée, ni refus, compté « hors liste »', () => {
+    const p = plan(etatSEA([ligneSEA(901075), ligneSEA(901111, { _id: '1|901111' }), ligneSEA(1)]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 0); assert.strictEqual(p.horsListe, 3); assert.strictEqual(p.horsPerimetre, 0); assert.strictEqual(E.operationsVersMongo(p).length, 0);
+    const mix = plan(etatSEA([ligneSEA(901074), ligneSEA(901075, { carteId: 2, _id: '2|901075' })]));   // le 4e produit est sur UNE AUTRE carte : il ne partage pas l'entrée
+    assert.strictEqual(mix.ajouts.length, 1); assert.deepStrictEqual(mix.ajouts[0].produits, [901074]); assert.strictEqual(mix.horsListe, 1); assert.strictEqual(mix.refus.length, 0);
+});
+t('SEA : un FRÈRE hors liste sur la même carte et le même set (l\'entrée est par carte et par set) → REFUS nommé, rien posé — le piège mesuré le 24/10 (4 frères V1/V2 des 3 produits)', () => {
+    const p = plan(etatSEA([ligneSEA(901074), ligneSEA(901075, { _id: '1|901075' })]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 1); assert.deepStrictEqual(p.refus[0].freres, [901075]); assert(/HORS de la liste fermée : 901075/.test(p.refus[0].raison), p.refus[0].raison);
+    assert.deepStrictEqual(p.refus[0].produits, [901074]); assert.strictEqual(E.operationsVersMongo(p).length, 0);
+    // deux cartes, chacune avec un frère hors liste : deux refus, aucune entrée
+    const trois = plan({ ...etat([ligneSEA(901074), ligneSEA(901075, { _id: '1|901075' }), ligneSEA(901104, { carteId: 2, _id: '2|901104' }), ligneSEA(901111, { carteId: 2, _id: '2|901111' })], [carte([oriSCR()], 1), carte([oriSCR()], 2)]), produits: new Map([[785989, { slugSet: 'Stellar-Crown' }]]) });
+    assert.strictEqual(trois.ajouts.length, 0); assert.strictEqual(trois.refus.length, 2);
+    // si la liste COUVRE tous les produits de la carte dans le set, la même carte passe (preuve que le refus est celui du frère, pas de la carte)
+    const couvert = plan(etatSEA([ligneSEA(901074), ligneSEA(901104, { _id: '1|901104' }), ligneSEA(901109, { _id: '1|901109' })]));
+    assert.strictEqual(couvert.ajouts.length, 1); assert.strictEqual(couvert.refus.length, 0);
+    // un frère d'un AUTRE set de la même carte ne compte pas
+    assert.strictEqual(plan(etatSEA([ligneSEA(901074), ligneSEA(901075, { _id: '1|901075', slugSet: PP })])).ajouts.length, 1);
+});
+t('SEA : une cible de la liste sans origine lisible, ou dont l\'origine n\'a pas UNE entrée « en » → refus nommé, aucune entrée', () => {
+    for (const [lignes, images, o] of [[[ligneSEA(901074, { detail: 'rien', origine: undefined })], undefined, {}], [[ligneSEA(901074)], [], {}], [[ligneSEA(901074)], [oriSCR(), oriSCR({ cleR2: 'tcgdex/Stellar-Crown/135b-1.webp' })], {}], [[ligneSEA(901074)], [oriSCR({ langue: 'ja' })], {}], [[ligneSEA(901074)], undefined, { produits: new Map() }]]) {
+        const p = plan(etatSEA(lignes, images, o));
+        assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 1); assert(/Trick|origine|entrée|image/.test(p.refus[0].raison), p.refus[0].raison);
+    }
+});
+t('SEA : une entrée déjà posée dans le set (empruntée ou vrai scan) couvre la ligne → « déjà », rien à réécrire', () => {
+    const p = plan(etatSEA([ligneSEA(901074)], [oriSCR(), { set: SEA, source: 'pokumon', cleR2: 'v.webp', numero: null }]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.deja.length, 1);
+    const apres = E.appliquer(etatSEA(LES_TROIS.map(id => ligneSEA(id))), plan(etatSEA(LES_TROIS.map(id => ligneSEA(id)))));
+    assert.strictEqual(E.planifier({ ...etatSEA(LES_TROIS.map(id => ligneSEA(id))), cartes: apres.cartes }).ajouts.length, 0);   // idempotent : le plan relu est vide
+});
+t('--sets : la sélection restreint le plan (aucune ligne des autres sets n\'est planifiée), les autres lignes sont COMPTÉES ; sans sélection : comportement d\'origine', () => {
+    const lignes = [ligne(10, PP), ...LES_TROIS.map(id => ligneSEA(id, { _id: `1|${id}` }))];
+    const tout = plan(etatSEA(lignes, [oriSCR(), origine]));
+    assert.strictEqual(tout.ajouts.length, 2); assert.strictEqual(tout.horsSelection, 0);
+    const seul = E.planifier(etatSEA(lignes, [oriSCR(), origine]), { maintenant: NOW, sets: [SEA] });
+    assert.deepStrictEqual(seul.ajouts.map(a => a.set), [SEA]); assert.strictEqual(seul.horsSelection, 1); assert.strictEqual(E.operationsVersMongo(seul).length, 1); assert(!(PP in seul.parSet));
+    const pp = E.planifier(etatSEA(lignes, [oriSCR(), origine]), { maintenant: NOW, sets: [PP] });
+    assert.deepStrictEqual(pp.ajouts.map(a => a.set), [PP]); assert.strictEqual(pp.horsSelection, 3);
+    // WCD : refusé et compté même hors sélection (jamais écrit)
+    assert.strictEqual(E.planifier(etatSEA([ligneSEA(901074, { slugSet: 'WCD-2024' })]), { sets: [SEA] }).refusWCD.length, 1);
+});
+t('verifierSelection : vide, doublon ou set hors du champ de lecture → LÈVE (jamais « tout » par défaut)', () => {
+    assert.doesNotThrow(() => E.verifierSelection([SEA])); assert.doesNotThrow(() => E.verifierSelection([SEA, PP]));
+    assert.throws(() => E.verifierSelection([]), /vide/); assert.throws(() => E.verifierSelection([SEA, SEA]), /doublon/); assert.throws(() => E.verifierSelection(['Scarlet-Violet']), /hors du champ/); assert.throws(() => E.verifierSelection(['WCD-2009']), /hors du champ/);
+    assert.throws(() => E.planifier(etatSEA([]), { sets: [] }), /vide/);
+});
+t('script : --sets est validé avant toute connexion (set hors champ → exit 2) et passé au plan ET à la relecture', () => {
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), '--sets=WCD-2009'], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000 });
+    assert.strictEqual(r.status, 2); assert(/hors du champ/.test(r.stderr));
+    const r2 = spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), '--sets='], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000 });
+    assert.strictEqual(r2.status, 2);
+    const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
+    assert.strictEqual((src.match(/E\.planifier\(.*\{ sets: SELECTION \}\)/g) || []).length, 2);
+});
+t('SEA : WCD reste refusé, et un set homonyme (« Southeast-Asia-Promos-2 ») n\'est pas dans le champ', () => {
+    assert.strictEqual(plan(etatSEA([ligneSEA(901074, { slugSet: 'WCD-2024' })])).refusWCD.length, 1);
+    const p = plan(etatSEA([ligneSEA(901074, { slugSet: 'Southeast-Asia-Promos-2' })])); assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.horsPerimetre, 1);
+});
+t('SEA : manifeste et retrait EXACTS — le retrait ne retire que l\'entrée posée par ce lot (même set, clé, source, lot, numéro)', () => {
+    const e = etatSEA(LES_TROIS.map(id => ligneSEA(id))), p = plan(e), m = E.manifeste(p);
+    assert.deepStrictEqual(m, { marque: 'emprunt-2026-10', sets: null, entrees: [{ carteId: 1, set: SEA, numero: null, cleR2: 'tcgdex/Stellar-Crown/135-1.webp', produits: LES_TROIS }] });
+    const ap = E.appliquer(e, p); const c = ap.cartes.get(1);
+    c.images.push({ set: SEA, source: 'pokumon', cleR2: 'tcgdex/Stellar-Crown/135-1.webp', numero: null }, { set: SEA, source: 'emprunt', lot: 'autre-lot', cleR2: 'tcgdex/Stellar-Crown/135-1.webp', numero: null, imageEmprunteeTirage: true });
+    const r = E.retirer({ cartes: ap.cartes }, m).cartes.get(1);
+    assert.strictEqual(r.images.length, 4); assert(!r.images.some(x => x.lot === 'emprunt-2026-10'));   // les 2 d'origine + les 2 autres du set : rien d'autre n'est retiré
+    assert.deepStrictEqual(E.operationsDeRetrait(m)[0].update.$pull.images, { set: SEA, cleR2: 'tcgdex/Stellar-Crown/135-1.webp', source: 'emprunt', lot: 'emprunt-2026-10', imageEmprunteeTirage: true, numero: null });
+});
+t('produitsHorsChamp : un plan qui contiendrait un produit hors liste (ou un WCD) est nommé ; le plan réel de planifier() n\'en contient jamais', () => {
+    assert.deepStrictEqual(E.produitsHorsChamp({ ajouts: [{ set: SEA, produits: [901074, 901075] }, { set: 'WCD-2009', produits: [1] }, { set: PP, produits: [2] }] }), [`${SEA}:901075`, 'WCD-2009:1']);
+    assert.deepStrictEqual(E.produitsHorsChamp(plan(etatSEA([...LES_TROIS, 901075].map(id => ligneSEA(id))))), []);
+    assert.deepStrictEqual(E.produitsHorsChamp({ ajouts: [] }), []);
+});
+t('verdictApi : les produits du plan peuvent sortir de l\'API (image empruntée = jamais servie à l\'identification), RIEN d\'autre', () => {
+    const PV = require('./collecte-cartes/phase2-visuels');
+    const sig = (id, o = {}) => ({ idProduct: id, visuel: 'autre-tirage', grande: { cle: `g/${id}` }, vignette: { cle: `v/${id}` }, ...o });
+    const avant = [sig(1), sig(2), sig(3)], plan3 = [1, 2];
+    const juge = (apres, contratNouveaux = 0) => E.verdictApi({ cmp: PV.compareEntrees(avant, apres, plan3), idsPlan: plan3, contratNouveaux });
+    assert.strictEqual(juge([sig(3)]).ok, true);                                  // 1 et 2 sortent, 3 inchangé
+    assert.strictEqual(juge([sig(2), sig(3)]).ok, true);                          // un seul du plan sort : permis
+    assert.strictEqual(juge([sig(1), sig(2), sig(3)]).ok, true);                  // rien ne sort (déjà non servis) : permis
+    assert(/HORS du plan : 3/.test(juge([]).raisons.join()));                     // 3 perdu : refusé
+    assert(/changés : 3/.test(juge([sig(3, { visuel: 'du-set' })]).raisons.join()));
+    assert(/gagnés : 9/.test(juge([sig(3), sig(9)]).raisons.join()));
+    assert(/refus nouveau/.test(juge([sig(3)], 2).raisons.join()));
+    assert.strictEqual(juge([sig(3)], 0).ok, true);
+});
+t('le script lit les sets à liste fermée et dérive de l\'origine ces seuls produits (aucune lecture ni écriture hors liste)', () => {
+    const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
+    assert(/collection\('sets'\)\.find\(\{ _id: \{ \$in: \[\.\.\.E\.SETS_LUS\] \}/.test(src) && /collection\('cartes'\)\.find\(\{ sets: \{ \$in: \[\.\.\.E\.SETS_LUS\] \}/.test(src) && /E\.verifierBornes\(/.test(src) && /E\.derivableDeLOrigine\(/.test(src));
+    assert(/if \(!vApi\.ok\) \{[^\n]*process\.exitCode = 1; return;/.test(src) && /E\.verdictApi\(/.test(src));   // le verdict de l'API arrête avant toute écriture
+    assert(/if \(horsChamp\.length\) \{[^\n]*process\.exitCode = 1; return;/.test(src));
+});
+// ── TOUR 1 (24/10) : D4.1 la mention SERVIE, D4.2 --ecrire exige --sets
+const imageServieDeSite = (images, url, setSlug) => {   // la règle du site (lib/tamponNonRepresente.ts, avec le set de la fiche) : la plus longue clé, puis l'entrée du set de la fiche
+    let cands = [], l = 0;
+    for (const i of images || []) { const k = i?.cleR2; if (typeof k !== 'string' || !k || !url.endsWith(`/${k}`)) continue; if (k.length > l) { cands = [i]; l = k.length; } else if (k.length === l) cands.push(i); }
+    return (setSlug && cands.find(i => i.set === setSlug)) || cands[0] || null;
+};
+const mentionSite = v => (v && v.imageEmprunteeTirage === true ? 'tampon non représenté' : null);
+t('D4.1 mentionServie : la fiche du set de la réimpression sert l\'entrée EMPRUNTÉE (même clé que l\'origine, qui la précède) -> mention ; sans le set (ancienne chaîne) -> aucune ; l\'origine garde la sienne SANS mention', () => {
+    const e = etatSEA(SEPT.map(id => ligneSEA(id, { _id: `1|${id}` }))); const p = plan(e); const imgs = E.appliquer(e, p).cartes.get(1).images;
+    const cle = p.ajouts[0].entree.cleR2;
+    const r = E.mentionServie({ images: imgs, cleR2: cle, set: SEA, imageServieDe: imageServieDeSite, mentionDuVisuelEmprunte: mentionSite });
+    assert.strictEqual(r.reelle, 'tampon non représenté'); assert.strictEqual(r.siCorrectif, 'tampon non représenté'); assert.strictEqual(r.sansSet, null);
+    const origineFiche = E.mentionServie({ images: imgs, cleR2: cle, set: 'Stellar-Crown', imageServieDe: imageServieDeSite, mentionDuVisuelEmprunte: mentionSite });
+    assert.strictEqual(origineFiche.reelle, null);   // la vraie fiche Stellar Crown ne reçoit JAMAIS la mention
+});
+t('D4.1 produitsSansMention : un produit du plan dont la fiche ne sert pas l\'image avec sa mention est NOMMÉ ; tous servis avec mention -> liste vide', () => {
+    const p = { ajouts: [{ carteId: 1, set: SEA, produits: [901074, 901104] }, { carteId: 2, set: SEA, produits: [901109] }] };
+    assert.deepStrictEqual(E.produitsSansMention(p, () => 'tampon non représenté'), []);
+    assert.deepStrictEqual(E.produitsSansMention(p, (c, s, id) => (id === 901104 ? null : 'x')), [901104]);
+    assert.deepStrictEqual(E.produitsSansMention(p, () => undefined), [901074, 901104, 901109]);   // « ne sait pas » = pas de mention : fail-closed
+    assert.deepStrictEqual(E.produitsSansMention({ ajouts: [] }, () => null), []);
+});
+t('D4.2 manifeste : porte la sélection ; memeSelection compare sans l\'ordre, refuse un manifeste sans sélection ou une autre', () => {
+    const p = plan(etatSEA(SEPT.map(id => ligneSEA(id, { _id: `1|${id}` }))));
+    assert.deepStrictEqual(E.manifeste(p, { sets: [SEA] }).sets, [SEA]); assert.strictEqual(E.manifeste(p).sets, null);
+    assert.strictEqual(E.memeSelection(E.manifeste(p, { sets: [SEA, PP] }), [PP, SEA]), true);
+    assert.strictEqual(E.memeSelection(E.manifeste(p, { sets: [SEA] }), [PP]), false);
+    assert.strictEqual(E.memeSelection(E.manifeste(p), [SEA]), false);          // simulée sans sélection, écrite avec : refusé
+    assert.strictEqual(E.memeSelection(E.manifeste(p, { sets: [SEA] }), null), false);
+    assert.strictEqual(E.memeSelection(null, [SEA]), false);
+});
+t('D4.2 script : --ecrire sans --sets explicite -> exit 2 « exige --sets » AVANT toute connexion (sous lot-additif) ; --retirer --ecrire aussi', () => {
+    const sousLot = { PATH: process.env.PATH, LOT_ADDITIF_PID: String(process.pid) };
+    const runLot = (...a) => spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), ...a], { encoding: 'utf8', env: sousLot, timeout: 30000 });
+    let r = runLot('--ecrire', '--attendu=3'); assert.strictEqual(r.status, 2, r.stderr); assert(/exige --sets/.test(r.stderr), r.stderr);
+    r = runLot('--retirer', '--ecrire', '--attendu=3'); assert.strictEqual(r.status, 2, r.stderr); assert(/exige --sets/.test(r.stderr), r.stderr);
+    const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
+    assert(/E\.memeSelection\(/.test(src) && /E\.produitsSansMention\(/.test(src));
+    assert(/if \(simule !== null && !E\.memeSelection\(JSON\.parse\(simule\), SELECTION\)\) \{[^\n]*process\.exitCode = 1; return;/.test(src));   // l'écriture compare la sélection du manifeste à celle du jour
+    assert(/if \(ECRIRE && !E\.memeSelection\(m, SELECTION\)\) \{[^\n]*process\.exitCode = 1; return;/.test(src));   // le retrait aussi
+    assert(/if \(sansMention\.length\) \{[^\n]*process\.exitCode = 1; return;/.test(src));                            // un produit sans mention arrête
+    assert(/cleR2: b\.cleR2, set, imageServieDe: T\.imageServieDe, mentionDuVisuelEmprunte: T\.mentionDuVisuelEmprunte \}\)\.reelle/.test(src));   // la mention se rejoue AVEC le set de la fiche
+});
+
 t('le script ne contient aucun vrai chemin du testeur dans ce banc et n\'ouvre aucun réseau', () => {
     const fs = require('fs');
     const src = fs.readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8') + fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'images-empruntees.js'), 'utf8');
