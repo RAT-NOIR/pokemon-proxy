@@ -96,6 +96,13 @@ async function jouer(cas) {
         }
         await C.updateOne({ _id: 700 }, { $push: { images: { set: 'W-Set', numero: '1', cleR2: 'w/0', w: 600, h: 840, source: 'tcgdex', langue: 'en', vignette: { cleR2: 'v/w0.webp', w: 200, h: 280 }, jointeLe: new Date() } } });
         await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/W-Set' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
+    } else if (cas === 'lot-b-perte') {                    // K : la faute (78 caractères, carte 703) arrête le lot ; en plus le lot RETIRE l'image de la carte 701 dans un set où le worker travaille aussi (« il retire puis remet ») :
+        // la restauration ne peut pas attribuer ce retrait au lot, il reste, et les produits 7011 et 7012 n'ont plus de visuel
+        await P.updateOne({ _id: '703-7031' }, { $set: { variante: 'normale', variantePreuve: 'releve du testeur' } });
+        await P.updateOne({ _id: '703-7032' }, { $set: { variante: 'staff', variantePreuve: 'releve du testeur' } });
+        await C.updateOne({ _id: 703 }, { $set: { 'images.$[e].partageeTamponNonSepare': false, 'images.$[e].tamponNonRepresente': 'x'.repeat(78) } }, { arrayFilters: [{ 'e.set': 'B3-Set', 'e.numero': '001' }] });
+        await C.updateOne({ _id: 701 }, { $pull: { images: { set: 'B1-Set' } } });
+        await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/B1-Set' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
     } else if (cas === 'contrat-propre') {                 // H : le lot change le pv d'une carte (rien que l'API lise) et ajoute une ligne neuve pour la carte 600
         await C.updateOne({ _id: 600 }, { $set: { pv: 60 } });
         await P.insertOne({ _id: '600-889', carteId: 600, idProduct: 889, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002-V2', slugSet: 'X-Set' });
@@ -205,6 +212,15 @@ async function main() {
         await remettre(d => semerLotB(d, { doublon: true }));
         r = lot('lot-b-indecidable', ['--contrat-api']);
         verifier('J. deux entrées de même clé : le lot sort en code 4 (RESTAURATION INCOMPLÈTE), jamais « restauré » en silence', [r.code, /RESTAURATION INCOMPLÈTE/.test(r.sortie), /INDÉCIDABLES/.test(r.sortie), /indécidable : carte 703/.test(r.sortie)], [4, true, true, true]);
+        if (r.code !== 4) console.log(r.sortie);
+
+        // ── K. TOUR 3, E1 : APRÈS une restauration, un produit servi dans la sauvegarde et sans entrée dans l'état relu est un échec : code 4, produits nommés (avant : « information », code 3 « restauré »)
+        await remettre(semerLotB);
+        r = lot('lot-b-perte', ['--contrat-api']);
+        const c701 = await db.collection('cartes').findOne({ _id: 701 });
+        verifier('K. le lot retire l\'image d\'une carte dans un set du worker : la restauration la laisse retirée (indécidable lot/worker, gardée), le lot sort en code 4', [r.code, c701.images.length], [4, 0]);
+        verifier('K. la sortie nomme les produits perdus (7011, 7012) et dit RESTAURATION INCOMPLÈTE', [/RESTAURATION INCOMPLÈTE/.test(r.sortie), /produit 7011 sans entrée après la restauration/.test(r.sortie), /produit 7012 sans entrée après la restauration/.test(r.sortie)], [true, true, true]);
+        verifier('K. la carte fautive (703) est bien restaurée malgré tout', (await db.collection('cartes').findOne({ _id: 703 })).images.some(i => 'tamponNonRepresente' in i), false);
         if (r.code !== 4) console.log(r.sortie);
 
         // ── H. un lot propre avec le contrat : il passe, et le contrat est dit respecté

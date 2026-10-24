@@ -367,6 +367,21 @@ const TAMPON_78 = 'x'.repeat(78);
         verifier('T2.1 (l\'autre sens) : sans substitut, ses cartes sont celles de ses lignes seulement', j0b.get(777)?.cartes, [500]);
     }
 
+    // ══ TOUR 3 ══
+    // ── E1 : APRÈS une restauration, un produit servi dans la SAUVEGARDE et non servi dans l'état relu est un échec de restauration (avant l'écriture et sans arrêt, `disparus` reste une information)
+    {
+        const sansImages = () => { const e = autreTirage(); e.cartes[0].images = []; return e; };
+        const vp = await G.verifierContrat({ api, avant: autreTirage(), apres: sansImages() });
+        verifier('E1 : le produit servi avant et sans entrée après est dans `disparus` (information), pas dans les nouveaux : le contrat seul ne bloque pas', [vp.disparus.map(d => d.idProduct), vp.nouveaux.length], [[777], 0]);
+        verifier('E1 : produitsPerdus (la relecture qui suit une restauration) en fait un échec, produit nommé', [G.produitsPerdus(vp).map(p => p.idProduct), G.produitsPerdus(vp)[0]?.sets], [[777], ['X-Set']]);
+        const vq = await G.verifierContrat({ api, avant: autreTirage(), apres: autreTirage() });
+        verifier('E1 (l\'autre sens) : un état relu identique à la sauvegarde ne perd aucun produit', G.produitsPerdus(vq), []);
+        verifier('E1 : sans verdict (pas de contrat, base de banc) : rien à perdre ; un verdict sans `disparus` : rien', [G.produitsPerdus(null), G.produitsPerdus({}), G.produitsPerdus({ disparus: [] })], [[], [], []]);
+        const srcE1 = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
+        verifier('E1 : lot-additif.js compte les produits perdus de la relecture APRÈS restauration dans `incomplet` et dans `ok` (code 4), et rien de tel avant l\'écriture',
+            [/const perdus = contratRelu\?\.v \? GC\.produitsPerdus\(contratRelu\.v\) : \[\]/.test(srcE1), /&& !perdus\.length/.test(srcE1), (srcE1.match(/produitsPerdus\(/g) || []).length], [true, true, 1]);
+    }
+
     // ── 10. LE CHARGEMENT ÉCHOUE FERMÉ
     let leve = null;
     try { await G.chargerApi({ dossier: path.join(os.tmpdir(), `api-inexistante-${process.pid}-${Date.now()}`) }); } catch (e) { leve = e.message; }

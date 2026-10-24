@@ -314,6 +314,12 @@ function dedoublonner(liste) {
     return liste.filter(x => { const k = `${canon(x.idProduct)}|${x.motif}`; if (vus.has(k)) return false; vus.add(k); return true; });
 }
 
+/**
+ * (tour 3, E1) Les produits PERDUS par une restauration : servis dans la sauvegarde (état « avant » du verdict) et sans entrée dans l'état relu. Avant l'écriture et sans arrêt, ils restent une INFORMATION (`disparus` : un retrait
+ * voulu entre ici, et la garde des comptes exige alors son annonce). APRÈS une restauration, la sauvegarde est la vérité : un produit qui n'y est plus servi n'a pas été restauré. Pure : lit `v.disparus` d'un verdict.
+ */
+const produitsPerdus = (v) => (Array.isArray(v?.disparus) ? v.disparus.map(d => ({ idProduct: d.idProduct, sets: d.sets || [] })) : []);
+
 /** Le verdict. @param avant,apres { sets, cartes, cartesProduits } (documents projetés ou bruts : on projette, idempotent). Toute exception est un refus de conclure. */
 async function verifierContrat({ api, avant, apres }) {
     try {
@@ -339,4 +345,4 @@ async function verifierContrat({ api, avant, apres }) {
 /** La ligne imprimée et journalisée. */
 const ligneContrat = (v) => `contrat API : ${v.slugs.length} set(s) rejoué(s) · refus nouveaux ${v.nouveaux.length} · persistants ${v.persistants.length} · résolus ${v.resolus.length}${v.disparus?.length ? ` · sans entrée après (information, ne bloque pas) ${v.disparus.length} : ${v.disparus.slice(0, 8).map(d => d.idProduct).join(',')}${v.disparus.length > 8 ? ',…' : ''}` : ''}`;
 
-module.exports = { chargerApi, projeter, unionProjections, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, dedoublonner, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };
+module.exports = { chargerApi, projeter, unionProjections, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, dedoublonner, produitsPerdus, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };

@@ -351,8 +351,11 @@ function journaliser(t, dossier, combien, sortie) {
     await fermer();
     const resteContrat = contratRelu ? contratRelu.fautives : [];
     // un indécidable n'est jamais « restauré » en silence : le lot sort en code 4
-    const ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length;
-    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`)];
+    // (tour 3, E1) … et un produit servi dans la SAUVEGARDE et sans entrée dans l'état relu n'a pas été restauré (la perte d'un visuel n'est une « information » qu'avant l'écriture et sans arrêt)
+    const perdus = contratRelu?.v ? GC.produitsPerdus(contratRelu.v) : [];
+    const ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length && !perdus.length;
+    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`),
+        ...perdus.map(p => `produit ${p.idProduct} sans entrée après la restauration (servi dans la sauvegarde${p.sets.length ? `, sets ${p.sets.join(', ')}` : ''})`)];
     console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}`);
     const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, `🔴 ARRÊT : ${cmp.nonAutorisees.length ? 'baisses non annoncées' : 'refus du contrat API'} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
     journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);
