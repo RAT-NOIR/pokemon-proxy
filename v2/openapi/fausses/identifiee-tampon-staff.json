@@ -26,6 +26,9 @@
           "total": null,
           "langue": null,
           "variante": "tampon",
+          "marques": [
+            "staff"
+          ],
           "version": "V2",
           "rarete": "Promo",
           "visuel": null,
