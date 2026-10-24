@@ -37,8 +37,22 @@ const MOTIF = /WCD(\d{2})([A-Za-z0-9]*)-([0-9A-Za-z]+)$/;
 const PREUVE = 'wcd+origine+numero';
 // Le compte mesuré le 2026-09-21 par la sonde (§49). Si l'outil ne le retrouve pas, c'est lui ou la
 // base qui a bougé : on ARRÊTE et on l'écrit, on ne contourne pas.
-const ATTENDU_SONDE = 1684;
+// (PHASE 3a, 2026-10-24) `--sonde=<n>` : la garde ci-dessous comparait le nombre de produits résolus à celui du 2026-09-21, avant la pose des 1 679 lignes.
+// Une fois posées, les produits résolus restants sont ceux que la sonde ne voyait pas : la garde, inchangée par défaut, se rebase sur un nombre ÉNONCÉ.
+const ATTENDU_SONDE = Number((process.argv.find(a => a.startsWith('--sonde=')) || '').slice(8)) || 1684;
 const pad = (v, n) => String(v).padStart(n);
+
+// ── (PHASE 3a, D1 du 2026-10-24) LA LIGNE DE COMMANDE s'écrit par ce qu'elle AUTORISE ; `--attendu=N` est le NOMBRE FINAL de lignes écrites (asserté avant la première écriture) ;
+// `--seulement=<f>.json` est la liste des SEULS idProduct à écrire (ceux que la règle des deux sources a confirmés) : tout le reste du plan reste non écrit.
+const AUTORISES = [/^--sonde=\d+$/, /^--ids=.+\.json$/, /^--plan=.+\.json$/, /^--seulement=.+\.json$/, /^--attendu=\d+$/, /^--ecrire$/];
+const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — rien n'est écrit`); process.exit(2); }
+const argVal = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
+const ATTENDU = argVal('attendu') == null ? null : Number(argVal('attendu'));
+if (process.argv.includes('--ecrire') && ATTENDU == null) { console.error('❌ --ecrire exige --attendu=<lignes> (le nombre final de lignes écrites) — rien n\'est écrit'); process.exit(2); }
+let SEULEMENT = null;
+if (argVal('seulement')) { try { SEULEMENT = require('./collecte-cartes/produits-sauf').lireSauf(argVal('seulement'), undefined, '--seulement'); } catch (e) { console.error(`❌ ${e.message} — rien n'est écrit`); process.exit(2); } }
+const { verifierPose } = require('./collecte-cartes/verif-pose-lot');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -145,6 +159,15 @@ const pad = (v, n) => String(v).padStart(n);
     console.log(`\n   🔴 ${pad(causes.nomDiscordant.length, 5)} REFUSÉS par le témoin du nom (le slug ne nomme pas la carte que son numéro désigne) :`);
     for (const x of causes.nomDiscordant) console.log(`        ${x.slug} → carte ${x.carteId} « ${x.nomCarte} »`);
     console.log(`   ✅ ${pad(causes.resolu.length, 5)} fiches à poser`);
+    if (SEULEMENT) {
+        const dansLePlan = new Set(causes.resolu.map(x => x.idProduct));
+        const horsPlan = [...SEULEMENT].filter(id => !dansLePlan.has(id));
+        if (horsPlan.length) throw new Error(`ARRÊT : ${horsPlan.length} idProduct de --seulement ne sont pas dans le plan (${horsPlan.slice(0, 8).join(', ')}) — le fichier ne correspond pas à l'état de la base, rien n'est écrit`);
+        const ecartees = causes.resolu.filter(x => !SEULEMENT.has(x.idProduct));
+        causes.resolu = causes.resolu.filter(x => SEULEMENT.has(x.idProduct));
+        console.log(`   --seulement : ${ecartees.length} fiche(s) du plan NON écrites (hors de la liste confirmée) · ${causes.resolu.length} retenues`);
+    }
+    if (ATTENDU != null && ATTENDU !== causes.resolu.length) throw new Error(`ARRÊT : le plan rend ${causes.resolu.length} fiches, --attendu=${ATTENDU} — rien n'est écrit`);
 
     // une carte, UNE ligne par produit WCD : la clé _id le garantit ; on contrôle quand même qu'aucun
     // produit n'apparaît deux fois dans ce qu'on va écrire (§34 : on compte, on ne met pas en Set).
@@ -158,6 +181,12 @@ const pad = (v, n) => String(v).padStart(n);
     console.log(`   par expansion : ${[...parExp].sort().map(([k, v]) => `${k} ${v}`).join(' · ')}`);
     for (const x of causes.resolu.slice(0, 5)) console.log(`   ex. ${x.slug} → ${x.code} n°${x.num} → produit(s) ${x.cands.join('/')} → carte ${x.carteId}`);
 
+    // (PHASE 3a) `--ids=<fichier.json>` : la LISTE des idProduct que la clé retient après le témoin du nom (écriture d'un fichier local, jamais en base)
+    const fichierIds = (process.argv.find(a => a.startsWith('--ids=')) || '').slice(6);
+    if (fichierIds) require('fs').writeFileSync(fichierIds, JSON.stringify(causes.resolu.map(x => x.idProduct)));
+    // `--plan=<fichier>.json` : les LIGNES que ce lancement poserait (simulation de l'API, planche) ; local, rien n'est écrit en base
+    const fichierPlan = (process.argv.find(a => a.startsWith('--plan=')) || '').slice(7);
+    if (fichierPlan) require('fs').writeFileSync(fichierPlan, JSON.stringify({ outil: 'poser-wcd', lignes: causes.resolu.map(x => ({ _id: `${x.carteId}|${x.idProduct}`, carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: PREUVE, slug: x.slug, slugSet: x.slugSet, numeroFiche: null, nomProduit: x.slug, code: x.code, numeroOrigine: x.num, origine: { code: x.code, numero: x.num } })), cartesSets: [] }));
     if (!ecrire) { console.log(`\n   (mesure seule — relancer avec --ecrire)`); await fermer(); return; }
 
     const avant = await cx.db.collection('cartes_produits').countDocuments({ preuve: PREUVE });
@@ -195,9 +224,14 @@ const pad = (v, n) => String(v).padStart(n);
         { $group: { _id: '$idProduct', cartes: { $addToSet: '$carteId' } } },
         { $match: { 'cartes.1': { $exists: true } } }, { $count: 'n' }
     ]).toArray();
-    console.log(`\n   ✅ cartes_produits : ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · lignes « ${PREUVE} » ${avant} → ${apres} (attendu ${avant} → ${causes.resolu.length})`);
+    // (PHASE 3a) le compte attendu se rebase sur ce qui existait : `--sonde=<n>` ne vaut plus quand des lignes « ${PREUVE} » existent déjà (1 679 le 2026-09-23) — l'attendu est avant + insérées, et chaque ligne du plan est insérée ou retrouvée
+    const attenduApres = avant + r.upsertedCount;
+    console.log(`\n   ✅ cartes_produits : ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · lignes « ${PREUVE} » ${avant} → ${apres} (attendu ${avant} → ${attenduApres})`);
     console.log(`   ✅ cartes : ${rc.matchedCount} cartes touchées, ${rc.modifiedCount} modifiées (liens.idProduct)`);
     console.log(`   ⚖️ produits WCD rattachés à plusieurs cartes : ${multi[0]?.n || 0}`);
-    if (apres !== causes.resolu.length) console.log(`   🔴 LE COMPTE RÉEL (${apres}) NE COLLE PAS AUX ${causes.resolu.length} POSÉES — à ouvrir avant toute autre écriture.`);
+    // (D1) la garde rouge SORT en code 1 (lot-additif.js lit le code de sortie) ; elle est pure et partagée (collecte-cartes/verif-pose-lot.js)
+    const verdict = verifierPose({ avant, apres, inserees: r.upsertedCount, retrouvees: r.matchedCount, posees: causes.resolu.length, cartesAttendues: parCarte.size, cartesRetrouvees: rc.matchedCount });
+    if (!verdict.ok) { console.error(`   🔴 LE COMPTE RÉEL NE COLLE PAS — ${verdict.problemes.join(' ; ')} — à ouvrir avant toute autre écriture.`); process.exitCode = 1; }
+    else console.log(`   ✅ relu : ${causes.resolu.length} lignes posées, ${parCarte.size} cartes à jour`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });
