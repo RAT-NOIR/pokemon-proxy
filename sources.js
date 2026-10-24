@@ -73,6 +73,7 @@ const RAISONS_NON_REMBOURSE = Object.freeze([
     'accueil-au-plafond',     // poche accueil déjà à sa dotation initiale
     'hebdo-semaine-changee',  // quota hebdo, mais la semaine ISO a tourné
     'poche-introuvable',      // l'écriture n'a modifié aucun document
+    'prix-repli',             // REPLI-QUOTA : le scan a AFFICHÉ un prix (un repli avec mention) ; il compte, aucun remboursement n'a été tenté
     'erreur'                  // exception pendant le remboursement
 ]);
 

@@ -222,6 +222,7 @@ const listes = {
     'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum,
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
     'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
+    'raisons de non-remboursement (REPLI-QUOTA)': S.Facturation.properties.raisonNonRembourse.enum.filter(x => x !== null),
     'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
     'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
     'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null)

@@ -7,6 +7,8 @@
 //   · une lecture ratée DÉFINITIVE rembourse (motif `sans-prix`), UNE fois par scan (le ledger refuse le second : `deja-rembourse`), sous le compteur des DÉCLARATIONS du client (PLAFOND-DECLARE :
 //     un seul compteur par porteur et par jour de Paris avec « aucune », « ne-sait-pas » et l'abandon ; sans compte 1, gratuit 3, Pro 30) ; la réponse porte `declaration` (rendue, ou refusée par
 //     `plafond-declarations`) ; une non définitive (un défi Cloudflare) ne rembourse rien ;
+//   · REPLI-QUOTA : SAUF si cette même réponse sert un `prixRepli` — un prix est alors AFFICHÉ (prix-repli.js::afficheUnPrix, la seule règle) : le scan reste compté (`debite: 1`, `raisonNonRembourse: "prix-repli"`),
+//     aucun remboursement n'est tenté, le plafond des déclarations n'est pas consommé ;
 //   · un prix lu plus de 100 fois sous le guide du même produit est écrit `douteux: true` dans le journal : l'extension de la 1.0.5 renvoyait 1,18 € pour 1 180 €.
 // Le scan d'un autre porteur n'existe pas : 404 (la route héritée dit 403, qui révélerait son existence).
 const mongoose = require('mongoose');
@@ -18,7 +20,7 @@ const { colLue } = require('./catalogue');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { cartesParScanMax } = require('./cartes-par-scan');
 const { offreSur, avecOffre } = require('../argent/offre-sur');
-const { repliRetourLive, idConfirme, avec: avecRepli } = require('./prix-repli');
+const { repliRetourLive, idConfirme, afficheUnPrix, avec: avecRepli } = require('./prix-repli');
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -97,6 +99,18 @@ function traiterRetourLive(cfg, deps = {}) {
         if (ligne.prixLive != null) return repondreErreur(res, 'CONFLIT', 'Un prix live a déjà été renvoyé pour ce scan');
 
         let facturation = null, declaration = null;
+        // PRIX-LISIBLE : le repli honnête (tendance et moyennes du guide, ou l'offre dans l'état le plus proche), SEULEMENT si la fiche a une donnée de prix ; sa panne ne casse jamais la réponse.
+        // REPLI-QUOTA : calculé UNE SEULE FOIS par requête, et c'est CE repli qui décide du remboursement ET qui part dans la réponse (ce que le client voit et ce que le serveur facture ne peuvent pas diverger).
+        let repli = null, repliCalcule = false;
+        // `strict` (la DÉCISION d'une lecture ratée définitive) : un repli qu'on n'a pas pu calculer n'est pas « aucun repli » — on ne sait pas si un prix est affiché, donc l'erreur remonte (INDISPONIBLE, avant tout
+        // remboursement). Sans `strict` (la réponse d'un prix lu, ou d'une lecture non définitive), l'échec reste une absence de repli : aucune décision d'argent n'en dépend.
+        const calculerRepli = async ({ strict = false } = {}) => {
+            if (repliCalcule) return repli;
+            try { repli = await repliDuRetour(porteur, scanId, carte, b, lr); }
+            catch (e) { journalErreur('repli', e); if (strict) throw e; repli = null; }
+            repliCalcule = true;
+            return repli;
+        };
         if (aPrix) {
             // 1. le chemin hérité, inchangé : il valide, normalise et écrit (écriture conditionnelle : un second retour est refusé)
             const corps = { userId, scanId: b.scanId };
@@ -132,7 +146,15 @@ function traiterRetourLive(cfg, deps = {}) {
             try { await col('journal_scans').updateOne({ _id: scanId, userId, prixLive: null }, { $set: { lectureRatee: { cause: lr.cause, definitive: lr.definitive, le: new Date() } } }); }
             catch (e) { journalErreur('lecture ratée', e); }
             if (lr.definitive) {
+                // I1 (relecture REPLI-QUOTA) : « je ne peux pas savoir si un prix est affiché » ne rembourse PAS et ne facture rien de plus : INDISPONIBLE, avant toute écriture de remboursement.
+                // L'écriture `lectureRatee` ci-dessus est conditionnée par `prixLive: null` : un nouvel envoi après la panne rend la décision normale, une seule fois. (L'administrateur ne paie rien : pas de calcul.)
+                let repliDecide = null;
+                if (!porteur.administrateur) { try { repliDecide = await calculerRepli({ strict: true }); } catch (e) { return repondreErreur(res, 'INDISPONIBLE'); } }
                 if (porteur.administrateur) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });
+                // REPLI-QUOTA (décision de l'éditeur, 2026-10-24) : « Un scan qui AFFICHE un prix (même un repli avec mention) est une analyse rendue, donc il COMPTE dans le quota. Seuls les scans sans aucun
+                // prix affiché gardent le remboursement « prix illisible ». » Ici la page n'a rien rendu ; si le serveur sert un repli dans CETTE réponse, un prix est affiché : le scan reste compté, aucun
+                // remboursement n'est tenté — donc le plafond des déclarations du jour n'est PAS consommé (il ne l'est que par un remboursement jugé). La règle est afficheUnPrix (prix-repli.js), la même pour tous.
+                else if (afficheUnPrix({ repli: repliDecide })) facturation = fabriquerFacturation({ debite: 1, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });
                 else {
                     let r;
                     // `credit` n'est lu que pour sa présence : le ledger juge sur les DÉBITS enregistrés de ce scan et de ce porteur, jamais sur l'objet présenté
@@ -146,9 +168,7 @@ function traiterRetourLive(cfg, deps = {}) {
             }
         }
         const solde = await soldeSur(), offre = await offreSur(porteur, argent);      // OFFRE-QUOTA : relue APRÈS le remboursement `sans-prix` : l'unité rendue se voit
-        // PRIX-LISIBLE : le repli honnête (tendance et moyennes du guide, ou l'offre dans l'état le plus proche), SEULEMENT si la fiche a une donnée de prix ; sa panne ne casse jamais la réponse
-        let repli = null;
-        try { repli = await repliDuRetour(porteur, scanId, carte, b, lr); } catch (e) { journalErreur('repli', e); }
+        await calculerRepli();      // PRIX-LISIBLE : déjà calculé pour une lecture ratée définitive (REPLI-QUOTA) ; sinon calculé ici, une fois
         return res.status(200).json({ success: true, facturation, ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre), ...avecRepli(repli) });
     };
 }

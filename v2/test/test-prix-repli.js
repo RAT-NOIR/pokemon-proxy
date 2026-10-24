@@ -183,4 +183,22 @@ for (const [nom, e] of [['question en attente', { statut: 'a-trancher', idProduc
     const arc = R.repliRetourLive({ prixGuide: guideDe('arcanin'), retenu: 'NM', originePrix: 'tendance', prixLive: 7.67, lectureRatee: null });
     v('Arcanin : le repli porte guide.reserves (ecart-tendance)', arc.guide.reserves, ['ecart-tendance']);
 }
+
+// ── 8. REPLI-QUOTA : LA règle « ce scan affiche un prix », en un seul endroit — (a) la page a rendu un prix, ou (b) un prixRepli non nul est servi
+{
+    const repliTauros = R.repliRetourLive({ prixGuide: guideDe('tauros'), retenu: null, lectureRatee: { cause: 'sans-prix', definitive: true } });
+    v('8a. un repli réel (Tauros, lecture ratée) : le scan AFFICHE un prix', R.afficheUnPrix({ repli: repliTauros }), true);
+    v('8b. la page a rendu un prix : le scan affiche un prix', R.afficheUnPrix({ prixRendu: true }), true);
+    v('8c. ni prix rendu ni repli : n\'affiche rien (le remboursement d\'avant reste dû)', [R.afficheUnPrix({}), R.afficheUnPrix(), R.afficheUnPrix({ prixRendu: false, repli: null })], [false, false, false]);
+    // la fiche sans aucune donnée de prix n'a pas de repli => n'affiche rien (A15 : une carte identifiée sans prixGuide)
+    const sansGuide = R.repliRetourLive({ prixGuide: null, retenu: 'EX', lectureRatee: { cause: 'sans-prix', definitive: true } });
+    v('8d. A15 : la fiche sans prixGuide n\'a aucun repli, donc n\'affiche aucun prix', [sansGuide, R.afficheUnPrix({ repli: sansGuide })], [null, false]);
+    v('8e. l\'analyse d\'une carte sans prixGuide ne reçoit jamais de repli (la même référence rendue)', (() => { const c = { index: 0, statut: 'identifiee', carte: { ...produit('tauros'), prixGuide: null }, prixLive: null }; return R.avecRepliAnalyse(c) === c; })(), true);
+    // écrit par ce qu'elle AUTORISE : seul un booléen vrai ou un objet compte
+    v('8f. toute autre valeur n\'affiche rien : 1, « oui », [], undefined, 0, {prixRendu: 1}', [R.afficheUnPrix({ prixRendu: 1 }), R.afficheUnPrix({ prixRendu: 'oui' }), R.afficheUnPrix({ repli: [] }), R.afficheUnPrix({ repli: undefined }), R.afficheUnPrix({ repli: 0 }), R.afficheUnPrix({ repli: 'repli' })], [false, false, false, false, false, false]);
+    // la raison de non-remboursement est dans la liste fermée de sources.js, donc la facturation l'accepte
+    const F = require('../argent/facturation');
+    v('8g. « prix-repli » est dans la liste fermée (sources.js) et la facturation l\'accepte', [require('../../sources').RAISONS_NON_REMBOURSE.includes('prix-repli'), F.raisonPublique('prix-repli'), F.facturation({ debite: 1, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' }).raisonNonRembourse], [true, 'prix-repli', 'prix-repli']);
+    v('    la fausse publiée de la réponse non remboursée valide contre ReponseRetourLive', valider(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi', 'fausses', 'retour-live-repli-non-rembourse.json'), 'utf8')), { $ref: '#/components/schemas/ReponseRetourLive' }, doc).ok, true);
+}
 bilan();

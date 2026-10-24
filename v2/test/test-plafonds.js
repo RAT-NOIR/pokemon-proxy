@@ -114,6 +114,7 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         const r = await poster(svSimple.url, x.jeton);
         if (r.statut !== 200) throw new Error(`scan refusé ${r.statut}`);
         await raw('journal_scans').insertOne({ _id: new mongoose.Types.ObjectId(r.json.scanId), userId: porteurUserId });
+        await Q.sansDonneeDePrix(r.json.scanId);      // REPLI-QUOTA : ce banc juge le REMBOURSEMENT et ses plafonds, qui ne valent que sans repli servi (avec un repli le scan compte : test-repli-quota.js)
         return r.json.scanId;
     };
 

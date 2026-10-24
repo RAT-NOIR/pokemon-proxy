@@ -80,6 +80,16 @@ function repliRetourLive(o = {}) {
     if (o.originePrix === 'grille') return depuisOffre(o.prixGuide, o.retenu, o.prixLiveEtat, o.prixLive);
     return null;
 }
+/**
+ * REPLI-QUOTA (décision de l'éditeur, 2026-10-24) — LA règle « ce scan AFFICHE un prix », en UN SEUL endroit (§21 bis : deux exemplaires d'une règle divergent toujours).
+ * « Un scan qui AFFICHE un prix (même un repli avec mention) est une analyse rendue, donc il COMPTE dans le quota. Seuls les scans sans aucun prix affiché gardent le remboursement. »
+ * Un scan affiche un prix quand (a) la page a rendu un prix (`prixRendu: true`) OU (b) le serveur sert, pour CE scan, un `prixRepli` non nul (`repli`).
+ * Écrit par ce qu'il AUTORISE : seul un booléen vrai ou un objet de repli compte ; toute autre valeur (undefined, null, 1, une chaîne) n'affiche RIEN, donc le remboursement d'avant reste dû.
+ * Le repli à passer est CELUI qui part dans la réponse (jamais un second calcul) : la décision d'argent et ce que le client voit ne peuvent pas diverger.
+ */
+function afficheUnPrix({ prixRendu = false, repli = null } = {}) {
+    return prixRendu === true || (repli !== null && typeof repli === 'object' && !Array.isArray(repli));
+}
 /** `{ prixRepli }` ou `{}` : pour étaler dans une réponse sans jamais écrire une clé nulle. */
 const avec = repli => (repli ? { prixRepli: repli } : {});
 /** La carte SANS son repli (le scanner ne le sert jamais : il n'a aucune lecture live) ; la même référence quand il n'y en a pas. */
@@ -89,4 +99,4 @@ function sansRepli(c) {
     return reste;
 }
 
-module.exports = { REPLIS, CAUSES, ETATS, idConfirme, depuisGuide, depuisOffre, avecRepliAnalyse, analyseAvecRepli, repliRetourLive, avec, sansRepli };
+module.exports = { REPLIS, CAUSES, ETATS, idConfirme, depuisGuide, depuisOffre, avecRepliAnalyse, analyseAvecRepli, repliRetourLive, afficheUnPrix, avec, sansRepli };

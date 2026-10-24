@@ -132,7 +132,7 @@ async function semer() {
         const s = await repondu('a', null);
         const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } });
         H.v('B1. lecture ratée définitive : 200, repli tendance / lecture-ratee / fiable false, guide réel de Tauros', [r.statut, r.json.prixRepli && r.json.prixRepli.repli, r.json.prixRepli && r.json.prixRepli.cause, r.json.prixRepli && r.json.prixRepli.fiable, r.json.prixRepli && r.json.prixRepli.guide.tendance, r.json.prixRepli && r.json.prixRepli.guide.moyenne30], [200, 'tendance', 'lecture-ratee', false, 1.49, 1.26]);
-        H.v('    le remboursement sans-prix est inchangé (facturation rembourse true)', r.json.facturation && r.json.facturation.rembourse, true);
+        H.v('    REPLI-QUOTA : le repli est un prix affiché, le scan n\'est PAS remboursé (debite 1, rembourse false, raisonNonRembourse prix-repli) — le détail est dans test-repli-quota.js', [r.json.facturation && r.json.facturation.debite, r.json.facturation && r.json.facturation.rembourse, r.json.facturation && r.json.facturation.raisonNonRembourse], [1, false, 'prix-repli']);
         const t = await repondu('a', 'EX');
         const rn = await rl(t.jeton, { scanId: t.scanId, carte: 0, lectureRatee: { cause: 'defi', definitive: false } });
         H.v('B2. lecture ratée non définitive (défi) : le repli est servi aussi (le client ne dit pas « illisible »), rien n\'est remboursé', [rn.statut, rn.json.prixRepli && rn.json.prixRepli.cause, rn.json.facturation], [200, 'lecture-ratee', null]);
