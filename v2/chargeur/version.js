@@ -246,7 +246,23 @@ function creerConstructeur({ marquages = false } = {}) {
         exclusions(x) {
             const refus = verifierComptesExclusions(x);
             if (refus || !x || x.exclus === undefined) throw new Error(refus || 'exclusions : compteurs absents');
-            exclusions = { exclus: x.exclus, exclusParMotif: { ...x.exclusParMotif } };
+            exclusions = { exclus: x.exclus, exclusParMotif: { ...x.exclusParMotif }, partagesPerdus: x.partagesPerdus };
+        },
+        /**
+         * ARCHIVE-EXCLUSIONS (tour 1, C1) : « une exclusion retire un VISUEL, jamais une marque qui empêche d'affirmer un AUTRE produit ». Le partenaire de partage `idX` d'un produit `idN` (calculé sur l'ensemble
+         * COMPLET) vient d'être exclu : il n'a plus d'entrée, donc la paire séparée par la variante (reconstruite depuis les ENTRÉES des deux produits) ne le nomme plus. `idN` le garde en l'inscrivant dans sa propre
+         * liste de partage (forme déjà valide : 2 à 6 identifiants, contient le produit) : `partagesDe(idN)` le retrouve par la voie des listes. Possible seulement si l'entrée de `idN` porte déjà un marquage de
+         * partage (la structure refuse une liste sans drapeau) et si la liste tient dans la borne ; sinon FAUX, et la comparaison des marques (exclusions.js) le comptera : la construction refuse.
+         */
+        partageAvec(idN, idX) {
+            if (!marquages) throw new Error('constructeur sans colonne de marquages : un partage ne peut pas être conservé (jamais perdu en silence)');
+            const r = rang.get(idN);            if (r === undefined || contradictoires.has(idN) || !Number.isInteger(idX) || idX <= 0 || idX === idN) return false;
+            const m = marques[r];
+            if (!(m.holo === true || m.tampon !== null)) return false;
+            const liste = [...new Set([...(m.liste || [idN]), idX])].sort((a, b) => a - b);
+            if (liste.length > PARTAGES_MAX) return false;
+            marques[r] = { ...m, liste };
+            return true;
         },
         /** LOT TAMPONS (B) : un produit que cartes_produits marque `prixMelangeTampon`, avec ou sans entrée d'archive. Seulement avec la colonne des marquages (format 2). */
         melange(idProduct) {
@@ -342,7 +358,7 @@ function creerConstructeur({ marquages = false } = {}) {
             }
             // la colonne des prix mélangés : la liste triée des idProduct marqués (écrite avec la colonne des marquages, même vide : « aucun » est une réponse)
             const mel = marquages ? { produits: Int32Array.from([...melanges].sort((a, b) => a - b)) } : undefined;
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif } : {}) });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif, partagesPerdus: exclusions.partagesPerdus } : {}) });
             // la colonne des jumeaux : paires (métacarte, produit) triées, plus la permutation triée par produit (recherche d'un produit seul)
             let jum;
             if (jumeaux.size) {

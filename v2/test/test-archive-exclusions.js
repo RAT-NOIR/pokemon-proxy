@@ -3,8 +3,11 @@
 // L'exclusion est PAR PRODUIT (idProduct), jamais par entrée d'image : un produit exclu n'a aucune entrée dans l'archive (comme un produit du catalogue sans visuel), son voisin juste sur la même entrée
 // garde la sienne, les fiches liées et les jumeaux ne bougent pas. Rien n'est écrit en base. Aucun réseau, aucune base : source factice, catalogue factice, faux magasin R2 ; les listes sont FABRIQUÉES ici
 // (dans le dossier temporaire), jamais la liste réelle du testeur.
-const fs = require('fs'); const os = require('os'); const path = require('path');
+// TOUR 1 (C1) : « une exclusion retire un VISUEL, jamais une marque qui empêche d'affirmer un AUTRE produit » — la section 10 construit une PAIRE de variantes (normale + Staff, même visuel, même fiche), exclut l'un
+// puis l'autre, et vérifie que l'autre garde ses partages et que la garde de la route répond « question », jamais « affirmer ».
+const fs = require('fs'); const os = require('os'); const path = require('path'); const crypto = require('crypto');
 const H = require('./_harnais');
+const J = require('../identifier/jumeaux');
 const E = require('../chargeur/etat'); const F = require('../chargeur/format'); const S = require('../chargeur/scellement');
 const I = require('../chargeur');
 const X = require('../chargeur/exclusions');
@@ -127,6 +130,19 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     H.v('3a. sans --exclure : code 0, aucune mention d\'exclusion à l\'écran, aucun champ d\'exclusion dans l\'en-tête ni dans les comptes', [p0.code, /exclus de l'identification|produit\(s\) exclu/.test(p0.texte), /"exclus/.test(entete0), 'exclus' in f0.comptes, 'exclus' in v0.comptes], [0, false, false, false, false]);
     const f0b = await fabriquerFichier({ source: source(jeu()), catalogue: catalogue(), secret: SECRET });
     H.v('3b. sans --exclure : deux constructions du même jeu (date d\'en-tête fixée) donnent les MÊMES octets', fixe(f0.brut).equals(fixe(f0b.brut)), true);
+    // 3c (tour 1, I2) : l'identité avec le code d'AVANT le lot. L'empreinte ci-dessous est celle du contenu brut (en-tête à la date fixée 2020-01-01) du jeu fixe ci-dessous, construit sans exclusion par le code de
+    // 1a1ab447 (le dernier commit AVANT ce lot) ; calculée une fois sous N24 et N22, identique. Si un autre lot change légitimement le format ou la décision, elle se recalcule sur ce commit-là, sciemment.
+    const EMPREINTE_AVANT_LE_LOT = '2fc1ae9860caf77628fecc6ed77e6fc7ad8853cac4ff537ed552b5a357d6ca39';
+    const fige = () => {
+        const docs = [], lignes = [];
+        for (let i = 1; i <= 30; i++) { const num = String(i).padStart(3, '0'); docs.push({ _id: i, nomEn: `Carte ${i}`, sets: ['Set-A'], impressions: [imp(num)], images: [im('Set-A', num, `c${i}`)] }); lignes.push({ idProduct: 1000 + i, carteId: i, idExpansion: 100, numeroFiche: num, slug: `P${i}-SA${i}`, slugSet: 'Set-A' }); }
+        docs.push({ _id: 900, nomEn: 'Carte 900', sets: ['Set-B'], impressions: [imp('001', 'Set B')], images: [im('Set-B', '001', 'c900')] });
+        lignes.push({ idProduct: 3001, carteId: 900, idExpansion: 200, numeroFiche: '001', slug: 'P9-SB1', slugSet: 'Set-B' });
+        return { d: { sets: SETS, docs, lignes }, cat: new Map([...Array.from({ length: 30 }, (_, i) => [1001 + i, 5000 + (i % 4)]), [3001, 5000]]) };
+    };
+    const fg = fige();
+    const ff = await fabriquerFichier({ source: source(fg.d), catalogue: fg.cat, secret: SECRET });
+    H.v('3c. sans --exclure : le contenu brut du jeu fixe a l\'empreinte SHA-256 du code d\'AVANT le lot (1a1ab447)', [crypto.createHash('sha256').update(fixe(ff.brut)).digest('hex'), ff.comptes.visuels], [EMPREINTE_AVANT_LE_LOT, 31]);
 
     // ── 4. AVEC la liste : l'effet, produit par produit
     const versX = path.join(dossier, 'avec-exclusion.rmv');
@@ -135,7 +151,10 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     const vX = await lireArchive(versX);
     H.v('4a. construction réussie (code 0, archive écrite et relue par le consommateur)', [pX.code, fs.existsSync(versX), vX.comptes.visuels], [0, true, 8]);
     H.v('4b. les produits exclus et PRÉSENTS n\'ont AUCUNE entrée (1005, 2001, 3001), comme un produit sans visuel (1006)', [vX.entree(1005), vX.entree(2001), vX.entree(3001), vX.entree(1006)], [null, null, null, null]);
-    H.v('4c. le produit JUSTE qui partageait l\'entrée d\'image de 2001 (1001) garde la sienne, identique à la construction sans exclusion', [JSON.stringify(vX.entree(1001)) === JSON.stringify(v0.entree(1001)), vX.entree(1001) && vX.entree(1001).vignette.cle], [true, 'vignettes/c1.webp']);
+    H.v('4c. le produit JUSTE qui partageait l\'entrée d\'image de 2001 (1001) garde la sienne ET ses marques (partages, jumeaux), identiques à la construction sans exclusion',
+        [JSON.stringify(vX.entree(1001)) === JSON.stringify(v0.entree(1001)), vX.entree(1001) && vX.entree(1001).vignette.cle, JSON.stringify(vX.partagesDe(1001)) === JSON.stringify(v0.partagesDe(1001)), JSON.stringify(vX.jumeauxDe(1001)) === JSON.stringify(v0.jumeauxDe(1001))], [true, 'vignettes/c1.webp', true, true]);
+    H.v('4c bis. les partages de TOUS les produits non exclus sont ceux de la construction sans exclusion',
+        [1001, 1002, 1003, 1004, 1007, 1008, 1009, 1010].every(id => JSON.stringify(vX.partagesDe(id)) === JSON.stringify(v0.partagesDe(id))), true);
     const intacts = [1001, 1002, 1003, 1004, 1007, 1008, 1009, 1010].filter(id => JSON.stringify(vX.entree(id)) === JSON.stringify(v0.entree(id)));
     H.v('4d. tous les autres produits ont une entrée identique (8 sur 8)', intacts.length, 8);
     H.v('4e. les fiches liées ne changent PAS : mêmes fiches dans les deux sets, mêmes produits (les exclus y restent), mêmes comptes',
@@ -151,7 +170,8 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
         JSON.stringify(F.lireEntete(f0.brut).entree));
 
     // ── 5. les COMPTEURS : exacts, dans l'archive (comptes), à l'écran, et lus par le consommateur
-    H.v('5a. comptes de l\'archive : 3 retirés, par motif (la somme y est)', [vX.comptes.exclus, vX.comptes.exclusParMotif], [3, { 'visuel-faux': 1, 'en-attente': 0, 'entree-partagee-autre-dessin': 1, 'entree-partagee-autre-impression': 1 }]);
+    H.v('5a. comptes de l\'archive : 3 retirés, par motif (la somme y est), 0 partage perdu', [vX.comptes.exclus, vX.comptes.exclusParMotif, vX.comptes.partagesPerdus], [3, { 'visuel-faux': 1, 'en-attente': 0, 'entree-partagee-autre-dessin': 1, 'entree-partagee-autre-impression': 1 }, 0]);
+    H.v('5a bis. à l\'écran : les partages perdus sont imprimés (0)', /partages perdus 0/.test(pX.texte), true);
     H.v('5b. à l\'écran : le nombre retiré, le détail par motif, et LES DÉJÀ SANS VISUEL listés par idProduct (une liste périmée se dit)',
         [/3 produit\(s\) exclu\(s\) retiré\(s\)/.test(pX.texte), /visuel-faux 1/.test(pX.texte), /en-attente 0/.test(pX.texte), /entree-partagee-autre-dessin 1/.test(pX.texte), /entree-partagee-autre-impression 1/.test(pX.texte),
             /déjà sans visuel[^\n]*1006/.test(pX.texte), /déjà sans visuel[^\n]*9999/.test(pX.texte), /déjà sans visuel[^\n]*1005/.test(pX.texte)], [true, true, true, true, true, true, true, false]);
@@ -172,6 +192,8 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     const brutX = zlibGunzip(S.ouvrir(fs.readFileSync(versX), SECRET));
     const mentir = changement => { const e = F.lireEntete(brutX); return F.reecrireEntete(brutX, { ...e, comptes: { ...e.comptes, ...changement } }); };
     const refus = brut => { try { F.deserialiser(brut); return null; } catch (e) { return e && e.name === 'FormatInvalide' ? e.motif : 'autre'; } };
+    H.v('5g bis. des partages perdus non nuls, ou un compteur qui manque, sont refusés par le format (l\'archive elle-même ne peut pas déclarer de partage perdu)',
+        [/partagesPerdus/.test(refus(mentir({ partagesPerdus: 2 })) || ''), /partagesPerdus/.test(refus(mentir({ partagesPerdus: undefined })) || '')], [true, true]);
     H.v('5g. des compteurs d\'exclusion incohérents sont refusés par le format : la somme par motif ≠ le total · un motif inconnu · un total négatif',
         [/exclu/.test(refus(mentir({ exclus: 4 })) || ''), /exclu/.test(refus(mentir({ exclusParMotif: { 'visuel-faux': 1, 'en-attente': 0, 'entree-partagee-autre-dessin': 1, 'entree-partagee-autre-impression': 1, 'inconnu': 0 } })) || ''), /exclu/.test(refus(mentir({ exclus: -3, exclusParMotif: { 'visuel-faux': -3, 'en-attente': 0, 'entree-partagee-autre-dessin': 0, 'entree-partagee-autre-impression': 0 } })) || '')], [true, true, true]);
 
@@ -206,6 +228,61 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     const mag9 = magasin(); const versD = path.join(dossier, 'les-deux.rmv');
     const q9 = await lancer([`--vers=${versD}`, '--deposer', `--exclure=${chemin1}`], ENV_ECR, { source: source(jeu()), catalogue: catalogue(), client: mag9 });
     H.v('9. --vers + --deposer + --exclure : le fichier local et l\'objet déposé sont identiques et portent les compteurs', [q9.code, fs.readFileSync(versD).equals(mag9.objet), (await lireArchive(versD)).comptes.exclus], [0, true, 3]);
+
+    // ── 10. tour 1 (C1, I1) : la PAIRE de variantes. 1001 (normale) et 2001 (Staff) : même carte, même fiche, même visuel, image « séparée par l'étiquette » (partageeTamponNonSepare false, aucune liste), variantes
+    //        PROUVÉES. Sans exclusion, chacune est le partenaire de l'autre (`partagesDe`) : la route en fait une QUESTION. Exclure l'une ne doit pas ouvrir l'affirmation de l'autre.
+    const paire = () => {
+        const d = jeu();
+        d.docs[0].images = [{ ...im('Set-A', '001', 'c1'), partageeTamponNonSepare: false }];
+        const l1 = d.lignes.find(l => l.idProduct === 1001), l2 = d.lignes.find(l => l.idProduct === 2001);
+        Object.assign(l1, { variante: 'normale', variantePreuve: 'libellé Cardmarket' }); Object.assign(l2, { variante: 'staff', variantePreuve: 'libellé Cardmarket' });
+        d.docs = d.docs.filter(x => x._id !== 900); d.lignes = d.lignes.filter(l => l.idProduct !== 3001);          // pas de jumeau d'un autre créneau : seule la paire peut bloquer 1001 et 2001
+        return d;
+    };
+    const cat10 = (sans = []) => { const m = catalogue(); m.delete(3001); for (const id of sans) m.delete(id); return m; };
+    const construire = async (d, ex, cat = cat10()) => { const f = await fabriquerFichier({ source: source(d), catalogue: cat, secret: SECRET, exclusions: ex ? new Map(ex) : null }); return { f, v: F.deserialiser(await F.decompresser(S.ouvrir(f.scelle, SECRET))) }; };
+    const decision = (v, id, autre) => { const four = J.fournisseurDe(v); const r = J.garde({ jumeaux: four, produits: new Map([[id, {}], [autre, {}]]) }, id); return r.action + (r.ids ? ` ${r.ids.join(',')}` : ''); };
+    const base10 = await construire(paire(), null);
+    H.v('10a. (garde du banc) sans exclusion, la paire existe : chacun est le partenaire de l\'autre, et la garde en fait une QUESTION', [base10.v.partagesDe(1001), base10.v.partagesDe(2001), decision(base10.v, 1001, 2001), decision(base10.v, 2001, 1001)], [[2001], [1001], 'question 1001,2001', 'question 2001,1001']);
+    const sansStaff = await construire(paire(), [[2001, 'entree-partagee-autre-impression']]);
+    H.v('10b. le Staff exclu n\'a plus de visuel ; la normale GARDE le sien, identique', [sansStaff.v.entree(2001), JSON.stringify(sansStaff.v.entree(1001).vignette) === JSON.stringify(base10.v.entree(1001).vignette), sansStaff.v.entree(1001).grande.cle], [null, true, 'cartes/c1.webp']);
+    H.v('10c. la normale garde ses PARTAGES, identiques à la construction sans exclusion (le Staff y reste nommé, sans visuel)', [sansStaff.v.partagesDe(1001), JSON.stringify(sansStaff.v.partagesDe(1001)) === JSON.stringify(base10.v.partagesDe(1001)), sansStaff.v.jumeauxDe(1001)], [[2001], true, []]);
+    H.v('10d. la garde de la normale ne répond PAS « affirmer » : question avec le Staff', decision(sansStaff.v, 1001, 2001), 'question 1001,2001');
+    H.v('10e. partagesPerdus vaut 0, publié dans les comptes, et le marquage de la normale est celui d\'avant (tampon non séparé false, variante normale)', [sansStaff.f.comptes.partagesPerdus, sansStaff.v.comptes.partagesPerdus, sansStaff.v.entree(1001).partageeTamponNonSepare, sansStaff.v.entree(1001).variante], [0, 0, false, 'normale']);
+    const sansNormale = await construire(paire(), [[1001, 'visuel-faux']]);
+    H.v('10f. à l\'inverse (la normale exclue, le Staff gardé) : le Staff garde son visuel et son partage, et la garde répond « question », jamais « affirmer »',
+        [sansNormale.v.entree(1001), sansNormale.v.entree(2001) && sansNormale.v.entree(2001).vignette.cle, sansNormale.v.partagesDe(2001), decision(sansNormale.v, 2001, 1001), sansNormale.f.comptes.partagesPerdus], [null, 'vignettes/c1.webp', [1001], 'question 2001,1001', 0]);
+    const lesDeux = await construire(paire(), [[1001, 'visuel-faux'], [2001, 'visuel-faux']]);
+    H.v('10g. les deux exclus : plus aucun des deux n\'a de visuel, les autres produits sont intacts, 0 partage perdu', [lesDeux.v.entree(1001), lesDeux.v.entree(2001), lesDeux.v.entree(1002) !== null, lesDeux.f.comptes.exclus, lesDeux.f.comptes.partagesPerdus], [null, null, true, 2, 0]);
+    // le garde-fou du banc : SANS la conservation du partage, la garde AFFIRMERAIT (c'est le défaut de f670be39) — la comparaison des marques le verrait
+    const X10 = require('../chargeur/exclusions');
+    {
+        const brutes = await construire(paire(), null);
+        const sansConservation = (await (async () => {
+            // la même construction mais SANS inscrire le partenaire exclu dans la liste du voisin : on retire l'entrée du Staff d'une construction ordinaire de la même paire
+            const d = paire(); d.lignes = d.lignes.filter(l => l.idProduct !== 2001);
+            return construire(d, null, cat10([2001]));
+        })());
+        const cmp = X10.comparerMarques(brutes.v, sansConservation.v, new Map([[2001, 'visuel-faux']]));
+        H.v('10h. la comparaison des marques CRIE sur un état fabriqué où le voisin a perdu son partenaire (partagesPerdus ≥ 1, la normale est nommée), et la garde de cet état affirmerait',
+            [cmp.perdus >= 1, cmp.ids.includes(1001), decision(sansConservation.v, 1001, 2001).startsWith('affirmer')], [true, true, true]);
+    }
+    // 10i : l'état où la conservation est IMPOSSIBLE (la normale n'a aucun marquage ; seul le Staff, exclu, portait la liste) : la construction est REFUSÉE, code 1, partagesPerdus nommé, rien d'écrit
+    const deciderPassif = async ({ sink }) => {
+        const base = { visuel: 'du-set', mention: null, idMetacard: 7000, numero: '001', rarete: 'Rare', total: '100', variante: null, setNom: 'Set A', lien: null, grande: null, vignette: { cle: 'vignettes/p.webp', w: 200, h: 279 } };
+        sink.entree({ ...base, idProduct: 2001, partageeHoloNonHolo: true, partageeTamponNonSepare: null, produitsPartages: [2001, 1001] });
+        sink.entree({ ...base, idProduct: 1001 });
+        sink.lien('Set-A', '1|001', [1001, 2001]);
+        for (const id of [1001, 2001]) sink.jumeau({ idProduct: id, idMetacard: 7000, idExpansion: 100, numero: '001', tirage: 'intl' });
+        return { denominateurs: { setsAvecLiens: 1, produitsLies: 2 } };
+    };
+    let m10 = null; try { await fabriquerFichier({ source: source(jeu()), catalogue: catalogue(), secret: SECRET, decider: deciderPassif, exclusions: new Map([[2001, 'visuel-faux']]) }); } catch (e) { m10 = e.motif || e.message; }
+    H.v('10i. un état où le voisin ne peut pas garder le partage (aucun marquage de son côté) : la construction est REFUSÉE, partagesPerdus nommé', [/partagesPerdus 1/.test(m10 || ''), /1001/.test(m10 || ''), /aucune construction/.test(m10 || '')], [true, true, true]);
+    const vPassifOk = (await fabriquerFichier({ source: source(jeu()), catalogue: catalogue(), secret: SECRET, decider: deciderPassif, exclusions: new Map([[1001, 'visuel-faux']]) }));
+    H.v('10j. le même état avec l\'AUTRE produit exclu (le Staff garde sa liste [2001, 1001]) : rien n\'est perdu, la construction passe (cas « liste », vert)', [vPassifOk.comptes.partagesPerdus, vPassifOk.comptes.exclus], [0, 1]);
+    const jamais = path.join(dossier, 'jamais.rmv');
+    const refusCli = await lancer([`--vers=${jamais}`, `--exclure=${ecrire(liste([{ idProduct: 2001, motif: 'visuel-faux' }]))}`], { V2_VISUELS_HMAC: SECRET }, { source: source(jeu()), catalogue: catalogue(), decider: deciderPassif });
+    H.v('10k. par la ligne de commande : code 1, partagesPerdus nommé à l\'écran, AUCUN fichier écrit', [refusCli.code, /partagesPerdus 1/.test(refusCli.texte), fs.existsSync(jamais)], [1, true, false]);
 
     for (const nom of fs.readdirSync(dossier)) fs.unlinkSync(path.join(dossier, nom));         // le dossier du banc ne contient que des fichiers : aucune suppression récursive
     fs.rmdirSync(dossier);

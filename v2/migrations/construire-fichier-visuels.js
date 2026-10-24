@@ -53,13 +53,13 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         } finally { await cx.close(); }
     }
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null }); }
+    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
     // ARCHIVE-EXCLUSIONS : ce qui a été retiré, par motif, et ce que la liste nomme sans que l'archive l'ait servi (une liste périmée se dit, elle ne passe pas en silence)
     if (exclure) {
-        console.log(`   exclusions (${exclure.decision} · du ${exclure.le} · ${exclure.produits.length} produit(s) nommé(s)) : ${c.exclus} produit(s) exclu(s) retiré(s) de l'archive (${Object.entries(c.exclusParMotif).map(([k, n]) => `${k} ${n}`).join(' · ')})`);
+        console.log(`   exclusions (${exclure.decision} · du ${exclure.le} · ${exclure.produits.length} produit(s) nommé(s)) : ${c.exclus} produit(s) exclu(s) retiré(s) de l'archive (${Object.entries(c.exclusParMotif).map(([k, n]) => `${k} ${n}`).join(' · ')}) · partages perdus ${c.partagesPerdus} (marques des produits non exclus comparées à la construction sans exclusion)`);
         if (c.exclusSansVisuel.length) console.log(`   exclusions : ${c.exclusSansVisuel.length} produit(s) de la liste étaient déjà sans visuel dans l'archive (liste périmée ou produit hors jeu) : ${c.exclusSansVisuel.map(x => `${x.idProduct} [${x.motif} : ${x.raison}]`).join(' ; ')}`);
         else console.log('   exclusions : tous les produits de la liste avaient un visuel dans l\'archive (aucun déjà sans visuel)');
     }

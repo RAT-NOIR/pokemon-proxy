@@ -54,8 +54,10 @@ function lireFichierExclusions(chemin) {
 /** Les compteurs d'exclusion d'une archive reçue : absents ensemble, ou présents ensemble et COHÉRENTS (entiers, quatre motifs exactement, somme = total). @returns {string|null} le refus, ou null */
 function verifierComptes(c) {
     if (!c || typeof c !== 'object') return null;
-    if (c.exclus === undefined && c.exclusParMotif === undefined) return null;
-    if (c.exclus === undefined || c.exclusParMotif === undefined) return 'exclusions : `exclus` et `exclusParMotif` vont ensemble';
+    if (c.exclus === undefined && c.exclusParMotif === undefined && c.partagesPerdus === undefined) return null;
+    if (c.exclus === undefined || c.exclusParMotif === undefined || c.partagesPerdus === undefined) return 'exclusions : `exclus`, `exclusParMotif` et `partagesPerdus` vont ensemble';
+    // tour 1 (C1) : un partage perdu est un produit non exclu dont une marque (partage, jumeau, prix mélangé…) diffère de celle sans exclusion. Il ne peut pas y en avoir : une archive qui en déclare est REFUSÉE
+    if (c.partagesPerdus !== 0) return 'exclusions : `partagesPerdus` doit valoir 0 (une exclusion ne retire jamais une marque qui empêche d\'affirmer un autre produit)';
     if (!Number.isInteger(c.exclus) || c.exclus < 0) return 'exclusions : `exclus` doit être un entier ≥ 0';
     const p = c.exclusParMotif;
     if (!objetSimple(p)) return 'exclusions : `exclusParMotif` illisible';
@@ -103,4 +105,19 @@ function suivre(exclusions) {
     };
 }
 
-module.exports = { MOTIFS, lireFichierExclusions, verifierComptes, suivre };
+/**
+ * tour 1 (C1) — la PREUVE que l'exclusion n'a retiré aucune marque : `complete` est la version construite sur l'ensemble COMPLET des entrées, `exclue` celle construite sans les exclus (avec leurs partages conservés).
+ * Pour chaque produit de `exclue` (donc non exclu), on compare ce qui permet — ou empêche — d'AFFIRMER : l'entrée entière hors `produitsPartages` (comparée sans les exclus, null si elle ne nomme plus personne),
+ * `partagesDe` (les exclus y restent : un partenaire sans visuel bloque quand même), `jumeauxDe`, `prixMelange`. @returns {{ perdus: number, ids: number[] }} (`ids` : les 20 premiers)
+ */
+function comparerMarques(complete, exclue, exclus) {
+    const sans = (l, ids) => { const r = Array.isArray(l) ? l.filter(x => !ids.has(x)) : null; return r && r.length > 1 ? r : null; };
+    const norme = (v, id) => { const e = v.entree(id); if (!e) return null; const { produitsPartages, ...reste } = e; return JSON.stringify([reste, sans(produitsPartages, exclus), v.partagesDe(id), v.jumeauxDe(id), v.prixMelange(id)]); };
+    let perdus = 0; const ids = [];
+    for (const id of exclue.identifiants()) {
+        if (norme(complete, id) !== norme(exclue, id)) { perdus++; if (ids.length < 20) ids.push(id); }
+    }
+    return { perdus, ids };
+}
+
+module.exports = { MOTIFS, lireFichierExclusions, verifierComptes, suivre, comparerMarques };
