@@ -21,7 +21,7 @@ const ventiler = (cle) => {
 const sortie = { le: new Date().toISOString(), denominateur: produits.length, parLangue: ventiler(s => s.langue), parFamille: ventiler(s => s.famille), parType: ventiler(s => s.type || 'non-type'), parTamponnee: ventiler(s => (s.tamponnee ? `tamponnee:${s.tamponnee}` : 'ordinaire')) };
 // les sets qui portent chaque motif de fiche douteuse
 const parSet = (motif) => { const m = new Map(); for (const p of produits) if (p.fiche.motifs.includes(motif)) m.set(p.setId, (m.get(p.setId) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]).slice(0, 12); };
-sortie.setsParMotif = { 'sans-numero-set-numerote': parSet('sans-numero-set-numerote'), 'preuve-nom-seul': parSet('preuve-nom-seul') };
+sortie.setsParMotif = { 'sans-numero': parSet('sans-numero'), 'preuve-nom-seul': parSet('preuve-nom-seul') };
 const parClasse = (classe, motif) => { const m = new Map(); for (const p of produits) if (p.visuel.classe === classe && (!motif || p.visuel.motifs.includes(motif))) m.set(p.setId || `exp:${p.idExpansion}`, (m.get(p.setId || `exp:${p.idExpansion}`) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]).slice(0, 12); };
 sortie.setsParClasseVisuel = { 'MANQUANT/aucun-visuel': parClasse('MANQUANT', 'aucun-visuel'), 'EMPRUNTE': parClasse('EMPRUNTE'), 'BASSE_DEFINITION': parClasse('BASSE_DEFINITION') };
 ecrireJson('resume-ventile.json', sortie, { indent: 1 });

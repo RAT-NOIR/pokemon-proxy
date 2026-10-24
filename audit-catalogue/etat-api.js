@@ -25,7 +25,7 @@ async function chargerDonnees({ prod, cartes }, api) {
     const catalogue = await lireMongo(prod.collection('catalogue_produits'), {}, { nom: 'catalogue_produits', projection: { _id: 0, idProduct: 1, name: 1, idExpansion: 1, idMetacard: 1, dateAdded: 1 } });
     champSur(catalogue, 'name', { collection: 'catalogue_produits' }); champSur(catalogue, 'idExpansion', { collection: 'catalogue_produits' });
     const codes = await lireMongo(prod.collection('codes_set'), {}, { nom: 'codes_set', projection: { _id: 0, codeSet: 1, region: 1, idExpansion: 1 } });
-    const nc = await lireMongo(prod.collection('numeros_cartes'), {}, { nom: 'numeros_cartes', projection: { _id: 0, idProduct: 1, codeSet: 1, slugSet: 1, idExpansion: 1 } });
+    const nc = await lireMongo(prod.collection('numeros_cartes'), {}, { nom: 'numeros_cartes', projection: { _id: 0, idProduct: 1, codeSet: 1, slugSet: 1, idExpansion: 1, numero: 1 } });
     const P = api.PROJECTIONS;
     const setsBruts = await lireMongo(cartes.collection('sets'), {}, { nom: 'sets', projection: { ...P.sets, type: 1, reimpressions: 1, nomEn: 1, nomCardmarket: 1 } });
     const cartesBrutes = await lireMongo(cartes.collection('cartes'), {}, { nom: 'cartes', projection: { ...P.cartes, niveau: 1, 'attaques.nom': 1 } });
@@ -78,7 +78,8 @@ async function rejouerApi({ api, sets, docs, lignes, catalogue }) {
         const r = await api.decider({ sets, docs, lignes, metacarte, regle: api.regle, cederLaMain: false });
         console.log(`decider : ${r.entrees.length} entrées · ${appelsFiches} sets à fiches · ${appelsChoisir} choix de visuel · ${Math.round((Date.now() - t0) / 1000)} s`);
         if (!appelsChoisir || !appelsFiches) throw new Error('l\'enveloppe n\'a rien lu (0 appel) : decider n\'appelle plus les fonctions enveloppées — je ne conclus pas');
-        return { entrees: r.entrees, denominateurs: r.denominateurs, traces, fichesParSet };
+        if (typeof Lg.tamponProbable !== 'function') throw new Error('exporter-donnees-logos-site.js : tamponProbable absent — le prédicat de tampon ne se recopie pas');
+        return { entrees: r.entrees, denominateurs: r.denominateurs, traces, fichesParSet, tamponProbable: Lg.tamponProbable };
     } finally { Lg.choisirVisuel = choisir0; Lg.fichesDesProduits = fiches0; }
 }
 
@@ -105,8 +106,10 @@ function motifManquant({ lignes, traces, carteExiste, entreeRefusee }) {
 
 /** Assemble, produit par produit (hors cartes-code), la fiche et le visuel. Rend { produits, horsPerimetre }. */
 function assembler({ api, donnees, rejeu }) {
-    const { catalogue, setsBruts, docs, lignes, temoinCartes, preuveDe } = donnees;
-    const { entrees, traces, fichesParSet } = rejeu;
+    const { catalogue, setsBruts, docs, lignes, temoinCartes, preuveDe, nc } = donnees;
+    const { entrees, traces, fichesParSet, tamponProbable } = rejeu;
+    const numeroDeProduit = new Map(nc.map(n => [n.idProduct, n.numero]));
+    const nonVide = x => x !== null && x !== undefined && String(x).trim() !== '';
     const setDe = new Map(setsBruts.map(s => [s._id, s]));
     const carteExiste = id => carteSet.has(id);
     const carteSet = new Set(docs.map(d => d._id));
@@ -140,7 +143,9 @@ function assembler({ api, donnees, rejeu }) {
             if (autres) temoinContredit = true;
         }
         const f = C.classerFiche({ lignes: ls.map(l => ({ carteId: l.carteId, preuve: preuveDe.get(`${l.carteId}|${l.idProduct}`) ?? undefined })), ficheSite,
-            temoinContredit, setANumeros: ficheSite ? setANumeros.get(ficheSite.setId) === true : false });
+            temoinContredit, setANumeros: ficheSite ? setANumeros.get(ficheSite.setId) === true : false,
+            // le numéro du produit est CONNU : numeros_cartes.numero, ou le numeroFiche d'une de ses lignes (seuils.md : `sans-numero` resserrée)
+            numeroConnu: nonVide(numeroDeProduit.get(p.idProduct)) || ls.some(l => nonVide(l.numeroFiche)) });
         // ── le visuel que l'API construirait : decider PUIS lireEntree
         let servi = null, entreeRefusee = null, plusieursEntrees = (entreesDe.get(p.idProduct) || []).length > 1, entree = null;
         for (const e of entreesDe.get(p.idProduct) || []) {
@@ -151,16 +156,19 @@ function assembler({ api, donnees, rejeu }) {
         if (servi) {
             const t = ts.find(x => x.im && x.im.cleR2 && x.im.cleR2 === servi.grande?.cleR2) || null;
             entree = { visuel: servi.visuel, mention: servi.mention ?? null, numero: servi.numero ?? null, setNom: servi.setNom ?? null, vignette: servi.vignette ?? null, grande: servi.grande ?? null,
-                basseDefinition: servi.basseDefinition ?? null, imageEmprunteeTirage: t?.im?.imageEmprunteeTirage ?? null, source: t?.im?.source ?? null, langueVisuel: t?.im?.langue ?? null, setVisuel: t?.im?.set ?? null };
+                basseDefinition: servi.basseDefinition ?? null, variante: servi.variante ?? null, tamponNonRepresente: servi.tamponNonRepresente ?? null, partageeHoloNonHolo: servi.partageeHoloNonHolo ?? null, imageEmprunteeTirage: t?.im?.imageEmprunteeTirage ?? null, source: t?.im?.source ?? null, langueVisuel: t?.im?.langue ?? null, setVisuel: t?.im?.set ?? null };
         }
-        const v = C.classerVisuel({ servi: entree, motifManquant: servi ? undefined : motifManquant({ lignes: ls, traces: ts, carteExiste, entreeRefusee }) });
         // ce que l'API a REFUSÉ de servir (repli-réimpressions) : la NATURE du visuel écarté — emprunté (substitut, autre tirage) ou non, pour que « manquant » ne cache pas un emprunt
+        // (sous-motif `emprunt-refuse-par-api`, seuils.md : il reste MANQUANT, puisque c'est ce que l'API sert)
         const refuse = !servi ? ts.filter(t => t.refus).map(t => ({ famille: t.refus, nature: t.im?.imageEmprunteeTirage === true ? 'image-empruntee-tirage' : t.visuel })) : [];
-        if (refuse.length) v.refuse = refuse[0];
+        const v = C.classerVisuel({ servi: entree, motifManquant: servi ? undefined : motifManquant({ lignes: ls, traces: ts, carteExiste, entreeRefusee }), refuse: refuse[0] });
         const setId = (ficheSite?.setId) || ts[0]?.setId || ls.find(l => l.slugSet && setDe.has(l.slugSet))?.slugSet || null;
+        // ce que l'empreinte ne voit pas : la finition et le tampon, lus dans ce qu'on a déjà (seuils.md) ; le slug est celui de la ligne
+        const finition = entree ? C.finitionOuTampon({ nom: p.name, slug: ls.find(l => l.slug)?.slug, variante: entree.variante, tamponNonRepresente: entree.tamponNonRepresente, partageeHoloNonHolo: entree.partageeHoloNonHolo,
+            setTamponnee: setDe.get(setId)?.reimpressions ?? null, tamponProbable }) : null;
         produits.push({ idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, setId, nLignes: ls.length, preuves: [...new Set(ls.map(l => preuveDe.get(`${l.carteId}|${l.idProduct}`)).filter(Boolean))],
             fiche: { ...f, setId: ficheSite?.setId ?? null, carteId: ficheSite?.carteId ?? null, numero: ficheSite?.numero ?? null, autreCarte: autreCarte || undefined, temoinMuet: temoinMuet || undefined },
-            visuel: { ...v, entree, plusieursEntrees: plusieursEntrees || undefined } });
+            visuel: { ...v, entree, finition, plusieursEntrees: plusieursEntrees || undefined } });
     }
     return { produits, horsPerimetre };
 }

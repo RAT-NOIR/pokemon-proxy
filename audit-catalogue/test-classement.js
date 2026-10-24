@@ -29,39 +29,31 @@ verifier('empreinte Cardmarket sans contraste : ne peut pas conclure', C.etatCom
 verifier('distance non finie : ne peut pas conclure', C.etatComparaison({ ...bon, distance: NaN }), { comparable: false, motif: 'distance-non-finie' });
 verifier('l\'ordre des motifs : la copie absente passe avant tout', C.etatComparaison({ copieLocale: false, placeholderCm: true, empreinteNous: false, empreinteCm: false, distance: NaN }), { comparable: false, motif: 'pas-de-copie-locale' });
 
-// ── DEUXIÈME PASSAGE (après les seuils du coordinateur) : la zone entre les deux seuils ne conclut pas
-const S = { conforme: 0.2, faux: 0.5 };
-verifier('distance sous le seuil conforme : CONFORME', C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.1, seuils: S }), 'CONFORME');
-verifier('distance au seuil conforme (inclus) : CONFORME', C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.2, seuils: S }), 'CONFORME');
-verifier('distance au seuil faux (inclus) : PROBABLEMENT FAUX', C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.5, seuils: S }), 'PROBABLEMENT_FAUX');
-verifier('entre les deux : INVÉRIFIABLE, l\'empreinte ne conclut pas', C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.3, seuils: S }), 'INVERIFIABLE');
-verifier('non comparable : INVÉRIFIABLE', C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: false, motif: 'pas-de-copie-locale' }, distance: null, seuils: S }), 'INVERIFIABLE');
-verifier('la classe principale EMPRUNTÉ ne change pas (la comparaison s\'affiche à côté)', C.classerFinal({ classe: 'EMPRUNTE', comparaison: { comparable: true }, distance: 0.9, seuils: S }), 'EMPRUNTE');
-verifier('MANQUANT reste MANQUANT', C.classerFinal({ classe: 'MANQUANT', comparaison: { comparable: false }, distance: null, seuils: S }), 'MANQUANT');
-let leve = null; try { C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.1, seuils: { conforme: 0.6, faux: 0.5 } }); } catch (e) { leve = /seuils/.test(e.message); }
-verifier('des seuils incohérents (conforme > faux) LÈVENT', leve, true);
-leve = null; try { C.classerFinal({ classe: 'A_COMPARER', comparaison: { comparable: true }, distance: 0.1 }); } catch (e) { leve = /seuils/.test(e.message); }
-verifier('sans seuils, rien ne se classe : LÈVE (les seuils ne se règlent pas à la main)', leve, true);
+// (les seuils, l'INCERTAIN, le format et la finition : test-second-passage.js — le premier passage posait 0,2/0,5 en paramètre, remplacé par les constantes SEUILS du coordinateur)
+verifier('classerFinal : MANQUANT reste MANQUANT', C.classerFinal({ classe: 'MANQUANT', comparaison: { comparable: false }, distance: null }), 'MANQUANT');
+verifier('classerFinal : BASSE DÉFINITION reste BASSE DÉFINITION', C.classerFinal({ classe: 'BASSE_DEFINITION', comparaison: { comparable: true }, distance: 0.9 }), 'BASSE_DEFINITION');
 
-// ── FICHE
+// ── FICHE (les `infos` et `sans-numero` : test-second-passage.js ; ici classe et motifs)
+const brut = C.classerFiche;
+const CF = a => { const r = brut(a); return { classe: r.classe, motifs: r.motifs }; };
 const f = (o = {}) => ({ lignes: [{ carteId: 1, preuve: 'set+numero', numeroFiche: '12' }], ficheSite: { carteId: 1, numero: '12' }, temoinContredit: false, setANumeros: true, ...o });
-verifier('aucune ligne : SANS_LIGNE', C.classerFiche({ lignes: [], ficheSite: null }), { classe: 'SANS_LIGNE', motifs: [] });
-verifier('une ligne, pas de fiche du site : LIGNE_SANS_FICHE', C.classerFiche(f({ ficheSite: null })), { classe: 'LIGNE_SANS_FICHE', motifs: [] });
+verifier('aucune ligne : SANS_LIGNE', CF({ lignes: [], ficheSite: null }), { classe: 'SANS_LIGNE', motifs: [] });
+verifier('une ligne, pas de fiche du site : LIGNE_SANS_FICHE', CF(f({ ficheSite: null })), { classe: 'LIGNE_SANS_FICHE', motifs: [] });
 verifier('deux lignes sur deux cartes ET aucune fiche du site (la règle ne sert pas un produit à deux fiches) : LIGNE_SANS_FICHE, mais « plusieurs-cartes » reste écrit',
-    C.classerFiche(f({ ficheSite: null, lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 2, preuve: 'set+numero' }] })), { classe: 'LIGNE_SANS_FICHE', motifs: ['plusieurs-cartes'] });
-verifier('une ligne par le numéro, fiche du site : FICHE_OK', C.classerFiche(f()), { classe: 'FICHE_OK', motifs: [] });
-verifier('deux cartes distinctes pour un produit : douteuse', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 2, preuve: 'set+numero' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes'] });
-verifier('deux lignes de la MÊME carte : pas « plusieurs cartes »', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 1, preuve: 'setlist+numero' }] })), { classe: 'FICHE_OK', motifs: [] });
-verifier('preuve par le nom seul (set+nom) : douteuse', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'] });
-verifier('preuve par le nom seul (setlist+nom) : douteuse', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'setlist+nom' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'] });
-verifier('nom + attaques : PAS un nom seul', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+nom+attaques' }] })), { classe: 'FICHE_OK', motifs: [] });
-verifier('un nom seul ET une preuve par le numéro sur la même carte : la meilleure preuve compte', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }, { carteId: 1, preuve: 'set+numero' }] })), { classe: 'FICHE_OK', motifs: [] });
-verifier('fiche sans numéro dans un set qui en a : douteuse', C.classerFiche(f({ ficheSite: { carteId: 1, numero: null } })), { classe: 'FICHE_DOUTEUSE', motifs: ['sans-numero-set-numerote'] });
-verifier('fiche sans numéro dans un set qui n\'en a aucun : pas douteuse', C.classerFiche(f({ ficheSite: { carteId: 1, numero: null }, setANumeros: false })), { classe: 'FICHE_OK', motifs: [] });
-verifier('contredite par le témoin du nom : douteuse', C.classerFiche(f({ temoinContredit: true })), { classe: 'FICHE_DOUTEUSE', motifs: ['contredite-par-le-nom'] });
-verifier('les motifs se cumulent, dans l\'ordre fixe', C.classerFiche(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }, { carteId: 2, preuve: 'set+nom' }], ficheSite: { carteId: 1, numero: null }, temoinContredit: true })),
-    { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes', 'preuve-nom-seul', 'sans-numero-set-numerote', 'contredite-par-le-nom'] });
-verifier('une ligne sans preuve écrite : la preuve est INCONNUE, pas un nom seul', C.classerFiche(f({ lignes: [{ carteId: 1 }] })), { classe: 'FICHE_OK', motifs: [] });
+    CF(f({ ficheSite: null, lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 2, preuve: 'set+numero' }] })), { classe: 'LIGNE_SANS_FICHE', motifs: ['plusieurs-cartes'] });
+verifier('une ligne par le numéro, fiche du site : FICHE_OK', CF(f()), { classe: 'FICHE_OK', motifs: [] });
+verifier('deux cartes distinctes pour un produit : douteuse', CF(f({ lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 2, preuve: 'set+numero' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes'] });
+verifier('deux lignes de la MÊME carte : pas « plusieurs cartes »', CF(f({ lignes: [{ carteId: 1, preuve: 'set+numero' }, { carteId: 1, preuve: 'setlist+numero' }] })), { classe: 'FICHE_OK', motifs: [] });
+verifier('preuve par le nom seul (set+nom) : douteuse', CF(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'] });
+verifier('preuve par le nom seul (setlist+nom) : douteuse', CF(f({ lignes: [{ carteId: 1, preuve: 'setlist+nom' }] })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'] });
+verifier('nom + attaques : PAS un nom seul', CF(f({ lignes: [{ carteId: 1, preuve: 'set+nom+attaques' }] })), { classe: 'FICHE_OK', motifs: [] });
+verifier('un nom seul ET une preuve par le numéro sur la même carte : la meilleure preuve compte', CF(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }, { carteId: 1, preuve: 'set+numero' }] })), { classe: 'FICHE_OK', motifs: [] });
+verifier('fiche sans numéro dont le numéro du produit est connu : douteuse', CF(f({ ficheSite: { carteId: 1, numero: null }, numeroConnu: true })), { classe: 'FICHE_DOUTEUSE', motifs: ['sans-numero'] });
+verifier('fiche sans numéro, numéro du produit inconnu : pas douteuse (la fiche « n° ? » du site)', CF(f({ ficheSite: { carteId: 1, numero: null }, setANumeros: false })), { classe: 'FICHE_OK', motifs: [] });
+verifier('contredite par le témoin du nom : douteuse', CF(f({ temoinContredit: true })), { classe: 'FICHE_DOUTEUSE', motifs: ['contredite-par-le-nom'] });
+verifier('les motifs se cumulent, dans l\'ordre fixe', CF(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }, { carteId: 2, preuve: 'set+nom' }], ficheSite: { carteId: 1, numero: null }, temoinContredit: true, numeroConnu: true })),
+    { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes', 'preuve-nom-seul', 'sans-numero', 'contredite-par-le-nom'] });
+verifier('une ligne sans preuve écrite : la preuve est INCONNUE, pas un nom seul', CF(f({ lignes: [{ carteId: 1 }] })), { classe: 'FICHE_OK', motifs: [] });
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
