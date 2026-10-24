@@ -257,6 +257,8 @@ function joindre(cartes, produits, cible) {
         // 🔴 LOT METAL (2026-10-17) : un produit de la table fermée ne s'attache à AUCUNE carte (ni par le numéro, ni par le nom) ; il retombe en reste « produit-sans-carte » qui le dit.
         if (estMatiereSpeciale(p.idProduct)) return;
         // 🔴 D1 : une ligne détachée n'est pas reposée ; le produit retombe en reste « produit-sans-carte » qui nomme l'interdit.
+        // 🔑 PRODUIT GELÉ (tour 1, point 3) : le produit refusé est retenu dans `refuseesInterdites`, et la passe 2 (repli par NOM) ne l'offre à personne (`jointsParNumero`) : une autre carte du même nom
+        // l'aurait pris avec une preuve plus faible (« setlist+nom+attaques »), une ligne de plus vers le produit dont on vient de détacher la bonne. Les cartes de la passe 1 (par le NUMÉRO) restent libres de le prendre.
         if (interdites.has(`${carte._id}|${p.idProduct}`)) { if (!refuseesInterdites.has(p.idProduct)) refuseesInterdites.set(p.idProduct, []); refuseesInterdites.get(p.idProduct).push(`${carte._id}|${p.idProduct}`); return; }
         // `slug` et `slugSet` VOYAGENT AVEC LA LIGNE : ils font l'URL Cardmarket, et le site n'a pas
         // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
@@ -387,7 +389,7 @@ function joindre(cartes, produits, cible) {
         restes.push({ type: 'fiche-contredite-par-le-nom', carteId: x.carte._id, idProduct: x.p.idProduct, detail: `${x.p.idProduct} « ${x.p.name} » : le numéro désigne « ${x.carte.nomEn} » (${x.carte._id}, ${x.detail}), le nom est celui de ${x.autres.map(c => `« ${c.nomEn} » (${c._id})`).join(', ')} — aucune fiche` });
     }
     // PASSE 2 — le repli par NOM, sur les produits qu'aucun NUMÉRO n'a pris.
-    const jointsParNumero = new Set([...produitsJoints.keys(), ...contredits]);
+    const jointsParNumero = new Set([...produitsJoints.keys(), ...contredits, ...refuseesInterdites.keys()]);
     const candidatsParProduit = new Map();
     for (const carte of cartes) {
         const { imp, imps, source, numeros, joint } = etatDeCarte.get(carte);
