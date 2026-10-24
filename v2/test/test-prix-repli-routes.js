@@ -186,6 +186,30 @@ async function semer() {
         const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille' });
         H.v('B11. analyses absente : 200 sans repli (le prix est écrit, la route ne casse pas)', [r.statut, r.json.success, 'prixRepli' in r.json], [200, true, false]);
     }
+    {
+        // B12. TOUR 1, M-1 — un repli n'est servi QUE pour une carte IDENTIFIÉE (l'idProduct confirmé de l'analyse) : jamais pour une question en attente, abandonnée ou un candidat.
+        // La ligne du journal porte pourtant l'idProduct du gagnant de la chaîne (38 cartes à question de rm_essai) : sans la garde, le repli retombait sur le guide d'un candidat NON confirmé.
+        const sansConfirmation = async (nom, preparer, corps) => {
+            const s = await scanQuestion(null);
+            await preparer(s);
+            await raw('journal_scans').updateOne({ _id: oid(s.scanId) }, { $set: { idProduct: ID_A } });
+            const l = await raw('journal_scans').findOne({ _id: oid(s.scanId) }), an = await raw('analyses').findOne({ _id: oid(s.scanId) });
+            H.v(`B12 (${nom}) : l'état fabriqué est bien celui du risque — journal.idProduct entier, analyses.cartes[0].idProduct null, le candidat est dans analyses.produits avec un guide`, [Number.isInteger(l.idProduct), an.cartes[0].idProduct, an.cartes[0].statut, an.produits.some(p => p.idProduct === ID_A && p.prixGuide !== null)], [true, null, 'a-trancher', true]);
+            const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, ...corps });
+            H.v(`B12 (${nom}) : AUCUN repli (le guide d'un candidat non confirmé n'est pas celui de la carte)`, [r.statut, 'prixRepli' in (r.json || {})], [200, false]);
+        };
+        await sansConfirmation('question en attente, lecture ratée non définitive', async () => { }, { lectureRatee: { cause: 'defi', definitive: false } });
+        await sansConfirmation('question en attente, tendance seule', async () => { }, { prixLive: 7.67, originePrix: 'tendance' });
+        await sansConfirmation('question en attente, offre en GD', async s => { await poserEtat(s.scanId, 'EX'); }, { prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille' });
+        await sansConfirmation('question abandonnée (ne-sait-pas)', async s => { await repondre(s.jeton, s.scanId, 'ne-sait-pas'); }, { lectureRatee: { cause: 'defi', definitive: false } });
+        await sansConfirmation('question répondue « aucune »', async s => { await repondre(s.jeton, s.scanId, 'aucune'); }, { lectureRatee: { cause: 'defi', definitive: false } });
+        // témoin positif : une carte AFFIRMÉE à l'analyse (statut identifiee, idProduct confirmé) reçoit son repli — la garde n'a pas tout fermé
+        const s = await scanQuestion('EX'); const src = await raw('analyses').findOne({ _id: oid(s.scanId) }); const sid = new mongoose.Types.ObjectId();
+        await raw('analyses').insertOne({ ...src, _id: sid, cartes: [{ ...src.cartes[0], statut: 'identifiee', idProduct: ID_A, question: null }] });
+        await raw('journal_scans').insertOne({ _id: sid, userId: `v2:installation:${s.i._id}`, route: 'identifier' });
+        const ra = await rl(s.jeton, { scanId: String(sid), carte: 0, lectureRatee: { cause: 'defi', definitive: false } });
+        H.v('B12 (témoin) : carte affirmée à l\'analyse (idProduct confirmé, journal sans idProduct) : le repli est servi', [ra.statut, ra.json.prixRepli && ra.json.prixRepli.cause, ra.json.prixRepli && ra.json.prixRepli.guide.tendance], [200, 'lecture-ratee', 1.49]);
+    }
     H.v(`contrat : ${validees} réponses validées contre leur schéma (ReponseQuestion, ReponseRetourLive, ReponseAnalyse), écarts`, [ecarts, validees > 0], [0, true]);
 
     srv.enfant.kill();

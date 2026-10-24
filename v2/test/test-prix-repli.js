@@ -144,6 +144,43 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
         refuse('une offre à état hors liste', c => { c.offre = { etat: 'MINT', prix: 1 }; });
         refuse('une offre à prix nul', c => { c.offre = { etat: 'GD', prix: 0 }; });
         for (const k of ['CarteIdentifiee', 'ReponseRetourLive']) vrai(`${k} déclare prixRepli (facultatif, jamais requis)`, Boolean(S[k].properties.prixRepli) && !S[k].required.includes('prixRepli'));
+        // TOUR 1 (M-3) : le schéma DIT les couples que le module produit — et refuse les autres
+        refuse('tendance avec un guide nul', c => { c.guide = null; });
+        refuse('tendance avec une offre', c => { c.offre = { etat: 'GD', prix: 0.9 }; });
+        refuse('tendance avec la cause offre-autre-etat', c => { c.cause = 'offre-autre-etat'; });
+        const proche = () => JSON.parse(JSON.stringify(ofre));
+        const refuseP = (nom, abimer) => { const c = proche(); abimer(c); v(`schéma : refusé — ${nom}`, valider(c, ref('PrixRepli'), doc).ok, false); };
+        refuseP('etat-proche avec une offre nulle', c => { c.offre = null; });
+        refuseP('etat-proche avec la cause lecture-ratee', c => { c.cause = 'lecture-ratee'; });
+        refuseP('etat-proche avec la cause langue-non-lue', c => { c.cause = 'langue-non-lue'; });
+        refuseP('etat-proche qui se dit fiable', c => { c.fiable = true; });
+        // toutes les sorties possibles du module valident (chaque cause, avec et sans guide pour l'offre)
+        const sorties = [
+            ...['langue-non-lue', 'etat-non-retenu'].map(cause => R.depuisGuide(g, cause)),
+            R.repliRetourLive({ prixGuide: g, retenu: null, originePrix: null, prixLive: null, lectureRatee: { cause: 'defi', definitive: false } }),
+            R.repliRetourLive({ prixGuide: g, retenu: 'NM', originePrix: 'tendance', prixLive: 7.67, lectureRatee: null }),
+            R.repliRetourLive({ prixGuide: g, retenu: 'EX', originePrix: 'grille', prixLive: 0.9, prixLiveEtat: 'PO', lectureRatee: null }),
+            R.repliRetourLive({ prixGuide: null, retenu: 'EX', originePrix: 'grille', prixLive: 0.9, prixLiveEtat: 'GD', lectureRatee: null })
+        ];
+        v('le module produit 6 formes, toutes valides contre le schéma à deux formes', [sorties.length, sorties.every(x => x && valider(JSON.parse(JSON.stringify(x)), ref('PrixRepli'), doc).ok)], [6, true]);
     }
+}
+
+// ── 6. TOUR 1 (M-1) : l'idProduct CONFIRMÉ par l'analyse, jamais un candidat ni le gagnant du journal
+v('idConfirme : une carte identifiée', R.idConfirme({ statut: 'identifiee', idProduct: 273844 }), 273844);
+v('idConfirme : une question répondue par un candidat (reponse.idProduct)', R.idConfirme({ statut: 'a-trancher', idProduct: null, reponse: { choix: 'a', idProduct: 273844 } }), 273844);
+for (const [nom, e] of [['question en attente', { statut: 'a-trancher', idProduct: null }], ['question abandonnée (ne-sait-pas)', { statut: 'a-trancher', idProduct: null, reponse: { choix: 'ne-sait-pas', idProduct: null } }],
+    ['question « aucune »', { statut: 'a-trancher', reponse: { choix: 'aucune', idProduct: null } }], ['introuvable', { statut: 'introuvable', idProduct: null }],
+    ['identifiée SANS idProduct entier', { statut: 'identifiee', idProduct: '273844' }], ['réponse sur une carte introuvable', { statut: 'introuvable', reponse: { idProduct: 1 } }],
+    ['réponse à idProduct en texte', { statut: 'a-trancher', reponse: { idProduct: '273844' } }], ['null', null], ['pas un objet', 'x']])
+    v(`idConfirme : ${nom} => null (aucun produit confirmé, aucun repli)`, R.idConfirme(e), null);
+
+// ── 7. TOUR 1 (M-5) : les réserves du guide voyagent avec le repli (une fiche marquée ne se présente jamais sans elles)
+{
+    const marque = construireProduit(ligne('tauros', { prixMelangeTampon: true }), { langueInterface: 'fr', cfg });
+    const rep = R.avecRepliAnalyse({ index: 0, statut: 'identifiee', carte: marque, candidats: [], question: null, raison: null, etat: null, prixLive: { idProduct: 273844, langues: [1], reverseHolo: false, etatVise: null }, zone: null }).prixRepli;
+    v('fiche marquée (prix mélangé) : le repli porte guide.reserves, avec les deux mentions fermées', [rep.guide.fiable, rep.guide.reserves], [false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']]);
+    const arc = R.repliRetourLive({ prixGuide: guideDe('arcanin'), retenu: 'NM', originePrix: 'tendance', prixLive: 7.67, lectureRatee: null });
+    v('Arcanin : le repli porte guide.reserves (ecart-tendance)', arc.guide.reserves, ['ecart-tendance']);
 }
 bilan();

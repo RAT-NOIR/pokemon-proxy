@@ -133,6 +133,14 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('un repli sur une carte à trancher', c => { Object.assign(c.analyse.cartes[0], lire('a-trancher-2.json').analyse.cartes[0], { prixRepli: pr.analyse.cartes[0].prixRepli }); }, 'ReponseAnalyse', pr);
     refuse('un retour-live avec une cause de repli hors liste', c => { c.prixRepli.cause = 'au-pif'; }, 'ReponseRetourLive', rl);
     refuse('un retour-live avec un repli sans guide ni offre (clés requises)', c => { delete c.prixRepli.guide; }, 'ReponseRetourLive', rl);
+    // TOUR 1 (M-3) : les COUPLES repli / cause / guide / offre sont dits par le schéma (deux formes exclusives)
+    refuse('repli tendance avec un guide NUL', c => { c.prixRepli.guide = null; }, 'ReponseRetourLive', rl);
+    refuse('repli tendance avec une offre', c => { c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rl);
+    refuse('repli tendance avec la cause de l\'autre forme (offre-autre-etat)', c => { c.prixRepli.cause = 'offre-autre-etat'; }, 'ReponseRetourLive', rl);
+    refuse('repli etat-proche avec une offre NULLE', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'offre-autre-etat'; c.prixRepli.offre = null; }, 'ReponseRetourLive', rl);
+    refuse('repli etat-proche avec la cause langue-non-lue', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'langue-non-lue'; c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rl);
+    { const ok = clone(rl); ok.prixRepli = { repli: 'etat-proche', cause: 'offre-autre-etat', fiable: false, guide: null, offre: { etat: 'GD', prix: 0.9 } };
+      H.v('contrôle : un etat-proche à offre non nulle (guide nul permis) est accepté', valider(ok, ref('ReponseRetourLive'), doc).ok, true); }
 }
 { // MODELE-VISUEL-API : la fausse de l'empreinte de l'extension, et ce que le schéma REFUSE
     const em = lire('identifiee-empreinte.json');
@@ -197,7 +205,8 @@ const listes = {
     'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum,
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
     'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
-    'mentions du repli du prix (PRIX-LISIBLE)': S.PrixRepli.properties.repli.enum, 'causes du repli du prix (PRIX-LISIBLE)': S.PrixRepli.properties.cause.enum,
+    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
+    'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
     'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null)
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);

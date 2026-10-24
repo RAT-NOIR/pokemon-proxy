@@ -18,7 +18,7 @@ const { colLue } = require('./catalogue');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { cartesParScanMax } = require('./cartes-par-scan');
 const { offreSur, avecOffre } = require('../argent/offre-sur');
-const { repliRetourLive, avec: avecRepli } = require('./prix-repli');
+const { repliRetourLive, idConfirme, avec: avecRepli } = require('./prix-repli');
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -57,11 +57,12 @@ function facturationDeLecture(r) {
 }
 
 // PRIX-LISIBLE : le repli du retour de l'extension. La fiche (son `prixGuide`, tel que l'analyse l'a servi) et l'état retenu viennent de la ligne `analyses` de CE porteur ; la décision est celle de prix-repli.js.
-async function repliDuRetour(porteur, scanId, carte, ligne, b, lr) {
+// TOUR 1 (M-1) : le produit est CELUI QUE L'ANALYSE A CONFIRMÉ (prix-repli.js::idConfirme : carte identifiée, ou question répondue par un candidat) ; jamais le gagnant du journal ni un candidat : une carte à trancher n'a pas de repli.
+async function repliDuRetour(porteur, scanId, carte, b, lr) {
     const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1, produits: 1 } });
     const e = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
-    if (!e) return null;
-    const idProduct = (e.reponse && e.reponse.idProduct) ?? e.idProduct ?? ligne.idProduct;
+    const idProduct = idConfirme(e);
+    if (idProduct === null) return null;
     const produit = Number.isInteger(idProduct) && Array.isArray(an.produits) ? an.produits.find(p => p && p.idProduct === idProduct) : null;
     return repliRetourLive({ prixGuide: produit ? produit.prixGuide : null, retenu: e.etat ? e.etat.retenu : null, lectureRatee: lr || null,
         originePrix: typeof b.originePrix === 'string' ? b.originePrix.trim().toLowerCase() : null, prixLive: Number(b.prixLive), prixLiveEtat: b.prixLiveEtat });
@@ -147,7 +148,7 @@ function traiterRetourLive(cfg, deps = {}) {
         const solde = await soldeSur(), offre = await offreSur(porteur, argent);      // OFFRE-QUOTA : relue APRÈS le remboursement `sans-prix` : l'unité rendue se voit
         // PRIX-LISIBLE : le repli honnête (tendance et moyennes du guide, ou l'offre dans l'état le plus proche), SEULEMENT si la fiche a une donnée de prix ; sa panne ne casse jamais la réponse
         let repli = null;
-        try { repli = await repliDuRetour(porteur, scanId, carte, ligne, b, lr); } catch (e) { journalErreur('repli', e); }
+        try { repli = await repliDuRetour(porteur, scanId, carte, b, lr); } catch (e) { journalErreur('repli', e); }
         return res.status(200).json({ success: true, facturation, ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre), ...avecRepli(repli) });
     };
 }

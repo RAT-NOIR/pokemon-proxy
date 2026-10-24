@@ -18,6 +18,18 @@ const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);        
 const etatDe = x => { const e = typeof x === 'string' ? x.trim().toUpperCase() : null; return ETATS.includes(e) ? e : null; };
 const prixDe = x => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);
 
+/**
+ * TOUR 1 (M-1) — l'idProduct que l'ANALYSE a confirmé pour cette carte, ou null. Écrit par ce qu'il AUTORISE : une carte `identifiee` (son idProduct), ou une question `a-trancher` RÉPONDUE par un candidat
+ * (`reponse.idProduct`, écrit par /api/identifier/reponse). Tout le reste — question en attente ou abandonnée (« aucune », « ne-sait-pas »), introuvable, ligne illisible — n'a pas de produit confirmé : jamais le gagnant
+ * du journal ni un candidat (le guide d'un candidat non confirmé serait le prix d'une autre carte).
+ */
+function idConfirme(e) {
+    if (!e || typeof e !== 'object') return null;
+    if (e.statut === 'identifiee') return Number.isInteger(e.idProduct) ? e.idProduct : null;
+    if (e.statut === 'a-trancher' && e.reponse && typeof e.reponse === 'object' && Number.isInteger(e.reponse.idProduct)) return e.reponse.idProduct;
+    return null;
+}
+
 /** Le guide d'une fiche est servable seulement s'il porte une date ET un prix (la même règle que produit.js::prixGuideDe, qui rend null sinon). */
 function guideServable(g) {
     if (!g || typeof g !== 'object' || Array.isArray(g) || typeof g.date !== 'string') return null;
@@ -77,4 +89,4 @@ function sansRepli(c) {
     return reste;
 }
 
-module.exports = { REPLIS, CAUSES, ETATS, depuisGuide, depuisOffre, avecRepliAnalyse, analyseAvecRepli, repliRetourLive, avec, sansRepli };
+module.exports = { REPLIS, CAUSES, ETATS, idConfirme, depuisGuide, depuisOffre, avecRepliAnalyse, analyseAvecRepli, repliRetourLive, avec, sansRepli };

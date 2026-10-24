@@ -3679,15 +3679,22 @@
         "description": "Le guide quotidien de Cardmarket (trend, low, avg7, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
       },
       "PrixRepli": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PrixRepliTendance"
+          },
+          {
+            "$ref": "#/components/schemas/PrixRepliEtatProche"
+          }
+        ],
+        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi."
+      },
+      "PrixRepliTendance": {
         "type": "object",
         "properties": {
           "repli": {
-            "type": "string",
-            "enum": [
-              "tendance",
-              "etat-proche"
-            ],
-            "description": "La mention fermée. `tendance` : la tendance et les moyennes du guide du jour (`guide`), TOUS ÉTATS ; `etat-proche` : l'offre lue par l'extension dans un état PIRE que l'état retenu (`offre`), avec le guide s'il existe."
+            "const": "tendance",
+            "description": "La mention fermée : la tendance et les moyennes du guide du jour (`guide`), TOUS ÉTATS."
           },
           "cause": {
             "type": "string",
@@ -3695,14 +3702,46 @@
               "langue-non-lue",
               "etat-non-retenu",
               "lecture-ratee",
-              "tendance-seule",
-              "offre-autre-etat"
+              "tendance-seule"
             ],
-            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la langue : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état estimé a une confiance « basse », il n'est pas retenu) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. `lecture-ratee` (retour-live avec `lectureRatee`), `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) et `offre-autre-etat` (retour-live avec une offre `grille` dans un état pire que le retenu) : ce que l'extension a rendu."
+            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la LANGUE de la carte : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état estimé a une confiance « basse », il n'est pas retenu) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. `lecture-ratee` (retour-live avec `lectureRatee`, quelle que soit sa cause et sa définitivité : défi, blocage, onglet, grille vide, sans prix, sans offre reverse) et `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) : ce que l'extension a rendu."
           },
           "fiable": {
             "const": false,
             "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr, quel que soit `guide.fiable`. Aucun verdict de bonne affaire ne se fonde dessus."
+          },
+          "guide": {
+            "$ref": "#/components/schemas/PrixGuide",
+            "description": "Le guide du jour de la fiche, tel que `carte.prixGuide` (avec ses `reserves`, à afficher avec le repli). JAMAIS null pour la forme `tendance`."
+          },
+          "offre": {
+            "type": "null",
+            "description": "Toujours null pour la forme `tendance`."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
+      "PrixRepliEtatProche": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "etat-proche",
+            "description": "La mention fermée : l'offre lue par l'extension dans un état PIRE que l'état retenu (`offre`), avec le guide s'il existe."
+          },
+          "cause": {
+            "const": "offre-autre-etat",
+            "description": "Retour-live avec une offre `grille` lue dans un état pire que le retenu : la seule cause de cette forme."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr. Aucun verdict de bonne affaire ne se fonde dessus."
           },
           "guide": {
             "oneOf": [
@@ -3713,41 +3752,34 @@
                 "$ref": "#/components/schemas/PrixGuide"
               }
             ],
-            "description": "Le guide du jour de la fiche, tel que `carte.prixGuide`. Jamais null pour `tendance` ; null pour `etat-proche` quand la fiche n'a aucune donnée de guide."
+            "description": "Le guide du jour de la fiche s'il existe, null sinon (l'offre suffit alors à faire une donnée de prix)."
           },
           "offre": {
-            "oneOf": [
-              {
-                "type": "null"
+            "type": "object",
+            "properties": {
+              "etat": {
+                "type": "string",
+                "enum": [
+                  "MT",
+                  "NM",
+                  "EX",
+                  "GD",
+                  "LP",
+                  "PL",
+                  "PO"
+                ]
               },
-              {
-                "type": "object",
-                "properties": {
-                  "etat": {
-                    "type": "string",
-                    "enum": [
-                      "MT",
-                      "NM",
-                      "EX",
-                      "GD",
-                      "LP",
-                      "PL",
-                      "PO"
-                    ]
-                  },
-                  "prix": {
-                    "type": "number",
-                    "minimum": 0.01
-                  }
-                },
-                "required": [
-                  "etat",
-                  "prix"
-                ],
-                "additionalProperties": false
+              "prix": {
+                "type": "number",
+                "minimum": 0.01
               }
+            },
+            "required": [
+              "etat",
+              "prix"
             ],
-            "description": "`etat-proche` seulement : l'offre la moins chère que l'extension a lue, dans un état pire que l'état retenu (son état et son prix, en euros). null pour `tendance`."
+            "additionalProperties": false,
+            "description": "L'offre la moins chère que l'extension a lue, dans un état pire que l'état retenu (son état et son prix, en euros). JAMAIS null pour la forme `etat-proche`."
           }
         },
         "required": [
@@ -3757,8 +3789,7 @@
           "guide",
           "offre"
         ],
-        "additionalProperties": false,
-        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Règle du client : jamais « prix illisible » quand ce champ est servi."
+        "additionalProperties": false
       },
       "SetProduit": {
         "type": "object",
