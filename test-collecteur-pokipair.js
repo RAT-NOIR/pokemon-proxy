@@ -399,6 +399,22 @@ const lignes4 = ['CSV9C', 'CSV10C', '30thC', 'CBB6C'].map(c => P.ligneDe(c));
         const encore = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
         assert.strictEqual(encore.nRemises, 0); assert.deepStrictEqual(triees(etatDb.cartes().find(c => c._id === 100)), triees(cartes0[0]));
     });
+    await test('TOUR 2 — ÉCRITURE : un document remplacé dont l\'état d\'avant n\'est pas « ok » est NOTÉ TEL QUEL sur le document du lot (jamais « ok » par défaut), un document « ok » reste noté « ok » ; puis le retrait le rend identique', async () => {
+        const p = await preparer(2);
+        const doc100 = { ...pkDoc(100, '001'), etat: 'a-reverifier', remplacePar: { source: 'ancien', cleR2: 'x' }, remplaceLe: '2026-01-01T00:00:00.000Z' };
+        const cartes0 = [{ _id: 100, images: [pkEntree(100, '001')] }, { _id: 101, images: [pkEntree(101, '002')] }];
+        const { M, etat } = fauxModeles({ cartes: cartes0, images: [doc100, pkDoc(101, '002')], sets: [{ _id: SLUG, tirage: 'zh-hans' }] });   // 101 : état « ok » ordinaire, pour le contraste
+        const [r] = await SILENCE(() => lancer(p, M, { attendu: 2 }));
+        assert.strictEqual(r.code, 0, JSON.stringify(r)); assert.strictEqual(r.resultats[0].remplacees, 2);
+        const n100 = etat.image(`ppr/${SLUG}/100/001/zh-hans`).remplaceDocuments, n101 = etat.image(`ppr/${SLUG}/101/002/zh-hans`).remplaceDocuments;
+        assert.deepStrictEqual(n100, [{ source: 'pikaqian', set: SLUG, cleR2: pkEntree(100, '001').cleR2, etat: 'a-reverifier', remplacePar: { source: 'ancien', cleR2: 'x' }, remplaceLe: '2026-01-01T00:00:00.000Z' }]);
+        assert.strictEqual(n101[0].etat, 'ok'); assert.strictEqual(n101[0].remplacePar, null);
+        const { db, etat: e2 } = fauxDbNatif({ cartes: [100, 101].map(i => etat.carte(i)), images: etat.images(), sets: [etat.set(SLUG)] });
+        const rr = await RETIRER.retirerLot(db, P.SRC, { ecrire: true });
+        assert.strictEqual(rr.nRemises, 2);
+        const d = e2.images().find(x => x._id === doc100._id);
+        assert.deepStrictEqual([d.etat, d.remplacePar, d.remplaceLe], ['a-reverifier', { source: 'ancien', cleR2: 'x' }, '2026-01-01T00:00:00.000Z']);
+    });
     await test('D1 : un document dont l\'état d\'avant n\'était pas « ok » est rendu EXACTEMENT à cet état (jamais « ok » par défaut) ; sans état d\'avant écrit, il n\'est pas touché', async () => {
         const entree = pkEntree(100, '001'), lot = { _id: `ppr/${SLUG}/100/001/zh-hans`, source: 'ppr', lot: 'ppr-2026-10', set: SLUG, carteId: 100, cleR2: `ppr/${SLUG}/001-100-zh-hans.webp`, etat: 'ok', remplaceEntrees: [entree],
             remplaceDocuments: [{ source: 'pikaqian', set: SLUG, cleR2: entree.cleR2, etat: 'a-reverifier', remplacePar: { source: 'ancien', cleR2: 'x' }, remplaceLe: '2026-01-01T00:00:00.000Z' }] };

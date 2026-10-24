@@ -22,7 +22,9 @@ const GROUPES = [
         ['hôte quelconque pour les images', "u.hostname === HOTE_IMAGES &&", "true &&"],
         ['page hors table acceptée', "if (!TABLE.some(l => l.page === page))", "if (false)"],
         ['produit vers plusieurs cartes accepté', "if (lignesDuProduit.get(p.idProduct) > 1) {", "if (false) {"],
-        ['numéro comparé sans la clé de la jointure', "const b = baseDe.get(J.cleNumero(p.numeroFiche));", "const b = baseDe.get(String(p.numeroFiche));"]
+        ['numéro comparé sans la clé de la jointure', "const b = baseDe.get(J.cleNumero(p.numeroFiche));", "const b = baseDe.get(String(p.numeroFiche));"],
+        ['D7 : exclusion motivée ignorée', "if (exclue) {", "if (false) {"],
+        ['D7 : exclusion par la carte seule (la tuile ne compte plus)', "String(x.idSource) === String(t.id) &&", ""]
     ] },
     { module: 'collecte-cartes/recolte-commun.js', bancs: ['test-collecteur-pokipair.js', 'test-pokipair.js', 'test-tcgcsv.js'], mutants: [
         ['--attendu faux accepté', "if (attendu != null && attendu !== reel) {", "if (false) {"],
@@ -40,6 +42,7 @@ const GROUPES = [
         ['remplacement de la basse définition retiré', "remplacees += await remplacerBasseDefinition(M, u.carteId, cand, { documents });", ""],
         ['D1 : la note des entrées remplacées retirée', "await M.Image.updateOne({ _id }, { $set: { remplaceEntrees: d.remplace,", "await M.Image.updateOne({ _id }, { $set: { zzNote: d.remplace,"],
         ['D4 : date d\'écriture au lieu de celle du téléchargement', "collecteLe = p.collecteLe ? new Date(p.collecteLe) : le;", "collecteLe = le;"],
+        ['Tour 2 : état d\'avant d\'un document remplacé rendu « ok » par défaut', "etat: dd?.etat ?? null,", "etat: 'ok',"],
         ['D5 : garde de reprise d\'avant', "apres.siennes === avant.siennes + joints;", "apres.siennes === (basseDefinition ? avant.siennes : 0) + joints;"],
         ['fausse absence définitive au premier coup', "if (connu && !(connu.statut === 'fausse-absente' && !RH.fausseAbsenceRecente(connu, now()))) continue;", "if (connu) continue;"]
     ] },

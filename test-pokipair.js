@@ -135,6 +135,27 @@ test('plan : une tuile illisible (légende contredite) n\'est jamais la carte, m
     const r = P.planifier({ ligne: L9, tuiles, produits: [prod(1, 901, '001', 'Exeggcute', 'Exeggcute-CSV9C001')] });
     assert.strictEqual(r.unites.length, 0); assert.strictEqual(r.parMotif['aucune-tuile-visible'], 1); assert.strictEqual(r.base.illisibles, 1);
 });
+test('D7 : la liste fermée des exclusions motivées est bien formée (carte, tuile, code, nom, motif, date) et porte le Greninja BREAK n° 157', () => {
+    assert.ok(P.EXCLUSIONS.length >= 1 && Object.isFrozen(P.EXCLUSIONS));
+    for (const x of P.EXCLUSIONS) {
+        assert.ok(Number.isInteger(x.carteId) && typeof x.idSource === 'string' && x.idSource && P.ligneDe(x.code), JSON.stringify(x));
+        assert.ok(x.motif.length > 30 && x.nom && /^\d{4}-\d{2}-\d{2}$/.test(x.le), JSON.stringify(x));
+    }
+    assert.ok(P.EXCLUSIONS.some(x => x.carteId === 208222 && x.idSource === '30881' && x.code === '30thC'));
+});
+test('D7 : une unité exclue ne sort PLUS du plan (la carte ET la tuile doivent concorder) ; le motif est écrit', () => {
+    const excl = [{ carteId: 1, idSource: '25504', code: 'CSV9C', nom: 'x', le: '2026-10-24', motif: 'image déformée' }];
+    const pr = [prod(1, 901, '001', 'Exeggcute', 'Exeggcute-CSV9C001')];
+    const r = P.planifier({ ligne: L9, tuiles: csv9.tuiles, produits: pr, exclusions: excl });
+    assert.strictEqual(r.unites.length, 0); assert.strictEqual(r.parMotif['exclusion-motivee'], 1); assert.match(r.restes[0].detail, /image déformée/);
+    assert.strictEqual(P.planifier({ ligne: L9, tuiles: csv9.tuiles, produits: pr, exclusions: [{ ...excl[0], idSource: '1' }] }).unites.length, 1, 'une autre tuile de la même carte n\'est pas exclue');
+    assert.strictEqual(P.planifier({ ligne: L9, tuiles: csv9.tuiles, produits: [prod(2, 902, '001', 'Exeggcute', 'Exeggcute-CSV9C001')], exclusions: excl }).unites.length, 1, 'une autre carte sur la même tuile n\'est pas exclue');
+    assert.strictEqual(P.planifier({ ligne: L9, tuiles: csv9.tuiles, produits: pr, exclusions: [] }).unites.length, 1);
+    // la liste RÉELLE (par défaut) : le Greninja BREAK 157 de 30thC (tuile 30881) sort du plan, sa voisine non
+    const tuiles = t30.tuiles.map(t => (t.numero === '001/103' ? { ...t, id: '30881' } : t));
+    const reel = P.planifier({ ligne: L30, tuiles, produits: [prod(208222, 908335, '1', 'Exeggcute', 'Exeggcute-30thC001'), prod(5, 908336, '2', 'Alolan Exeggutor', 'Alolan-Exeggutor-30thC002')] });
+    assert.ok(!reel.unites.some(u => u.carteId === 208222)); assert.strictEqual(reel.parMotif['exclusion-motivee'], 1);
+});
 test('plan : le dénominateur — tuiles, numéros, ambiguïtés de tuiles — est imprimé avec le plan', () => {
     const r = plan9([]);
     assert.deepStrictEqual([r.base.tuiles, r.base.numeros, r.base.illisibles], [14, 7, 0]);

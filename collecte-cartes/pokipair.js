@@ -145,11 +145,21 @@ function nomDuProduit(slug, code) {
 const memeNom = (a, b) => { const ka = J.clesNom(a), kb = J.clesNom(b); return ka.some(k => kb.includes(k)); };
 
 /**
+ * LES EXCLUSIONS MOTIVÉES (tour 2, relecture D7) : une liste FERMÉE, écrite à la main, de couples (carte, tuile) qu'aucune preuve de nom ni de numéro ne protège d'une image DÉFORMÉE — la tuile est la bonne carte,
+ * mais son original est mal cadré. Chaque ligne porte la carte, l'identifiant de la tuile (`idSource`), le motif (une phrase) et la date de la décision ; les DEUX identifiants doivent concorder pour que
+ * l'exclusion vaille (une autre tuile de la même carte n'est pas exclue). Remplacer un scan correct par une image déformée est une dégradation.
+ */
+const EXCLUSIONS = Object.freeze([
+    Object.freeze({ carteId: 208222, idSource: '30881', code: '30thC', nom: 'Greninja BREAK n° 157', le: '2026-10-24',
+        motif: 'carte BREAK (horizontale) : l\'original 350×482 est la carte étirée d\'environ 1,9 en hauteur dans un cadre portrait (le badge rond « 30 » devient ovale) ; l\'ancien scan, couché, garde les bonnes proportions (relecture 2026-10-24, D7)' })
+]);
+
+/**
  * @param {{ligne: object, tuiles: object[], produits: Array<{carteId:number, idProduct:number, numeroFiche:string|null, slug:string|null, carteNom:string|null, carte?:object}>, temoin?: Function}} o
  *   `produits` : les produits JOINTS du set (cartes_produits) — la source ne crée aucune fiche. `temoin` : `temoinDuNom(cartesDuSet)` (jointure.js), pour NOMMER un désaccord de nom.
  * @returns {{unites: object[], restes: object[], parMotif: object, base: object}}
  */
-function planifier({ ligne, tuiles, produits, temoin = null }) {
+function planifier({ ligne, tuiles, produits, temoin = null, exclusions = EXCLUSIONS }) {
     const restes = [], unites = [];
     const reste = (p, motif, detail) => restes.push({ carteId: p.carteId, idProduct: p.idProduct, numero: p.numeroFiche ?? null, motif, ...(detail ? { detail } : {}) });
     const parNumero = new Map();
@@ -189,6 +199,8 @@ function planifier({ ligne, tuiles, produits, temoin = null }) {
         if (nomProduit && !memeNom(t.nom, nomProduit)) { reste(p, 'nom-produit-different', `« ${t.nom} » à la source, « ${nomProduit} » sur le produit`); continue; }
         if (!urlImageValide(t.url)) { reste(p, 'adresse-hors-forme', t.url); continue; }
         if (t.miniature !== miniatureDe(t.url)) { reste(p, 'image-incoherente', `miniature ${t.miniature} pour l'original ${t.url}`); continue; }
+        const exclue = exclusions.find(x => x.carteId === p.carteId && String(x.idSource) === String(t.id) && (!x.code || x.code === ligne.code));
+        if (exclue) { reste(p, 'exclusion-motivee', `${exclue.nom} (${exclue.le}) : ${exclue.motif}`); continue; }
         const u = { carteId: p.carteId, slugSet: ligne.slug, numero: String(p.numeroFiche).trim(), produits: [p.idProduct], slugProduit: p.slug ?? null, url: t.url, idSource: t.id, variante: t.variante, groupe: ligne.code, famille: LANGUE,
             carteNom: p.carteNom, nomSource: t.nom, numeroSource: t.numero, rarete: t.rarete, nomProduit,
             preuve: `liste du set ${ligne.code} : n° ${t.numero} = fiche ${p.numeroFiche}, nom « ${t.nom} » = fiche « ${p.carteNom} »${nomProduit ? ` = produit « ${nomProduit} »` : ' (nom du produit non lisible sur son slug)'}, tuile visible unique (${t.variante})`,
@@ -205,5 +217,5 @@ function planifier({ ligne, tuiles, produits, temoin = null }) {
     return { unites: gardees, restes, parMotif, base };
 }
 
-module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, RACINE, HOTE_PAGES, HOTE_IMAGES, SRC, TABLE, VARIANTES_BASE, ligneDe, ligneDuSet, urlPage, urlImageValide, miniatureDe, CHEMIN_IMAGE, hotes, fabriquerClient,
+module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, RACINE, HOTE_PAGES, HOTE_IMAGES, SRC, TABLE, VARIANTES_BASE, EXCLUSIONS, ligneDe, ligneDuSet, urlPage, urlImageValide, miniatureDe, CHEMIN_IMAGE, hotes, fabriquerClient,
     lireTuiles, lirePage, reduirePage, verdictDePage, nomDuProduit, memeNom, planifier };
