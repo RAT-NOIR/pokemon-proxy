@@ -227,8 +227,8 @@ function commandeRetrait(table) {
 }
 
 /** `--ecrire` ne tourne que SOUS lot-additif.js (sauvegarde, garde avant/après, contrat de l'API, restauration) : il pose LOT_ADDITIF_PID = son pid, et la commande en est l'enfant direct. */
-function garderSousLot(env, ppid) {
-    if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="PHASE 2 lot X" --collections=… --annonce=<annonce.json> -- node corriger-visuels-phase2.js --lot=X --ecrire --attendu=N (rien n\'est écrit)');
+function garderSousLot(env, ppid, commande = 'node lot-additif.js --quoi="PHASE 2 lot X" --collections=… --annonce=<annonce.json> -- node corriger-visuels-phase2.js --lot=X --ecrire --attendu=N') {
+    if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error(`--ecrire refusé hors de lot-additif.js : ${commande} (rien n'est écrit)`);
 }
 /** Avant la première écriture : exactement le lot simulé. Rend le message d'arrêt, ou null. */
 function motifDArret({ nbRetenues, nbRefus, attendu }) {

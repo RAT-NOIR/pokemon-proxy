@@ -130,7 +130,8 @@ const INTERDITS = [481749]; // Eldegoss V (V-Starter-Decks) — « on n'y touche
 const estInterdite = id => INTERDITS.includes(Number(String(id).split('|')[1]));
 
 // Le rejeu d'une preuve, PUR (testable sans base). Rend { verdict } : une phrase si le témoin contredit encore la ligne, sinon null.
-function jugerLigne(x, nomProduit, notre, autre) {
+// `contexte.autres` (D2, relecture v2) : le nombre d'AUTRES lignes du même produit, que la preuve « vu » exige à 0 (sinon le produit ne deviendrait pas « sans ligne » : la ligne restante le servirait).
+function jugerLigne(x, nomProduit, notre, autre, contexte = {}) {
     if (estInterdite(x.id)) return { verdict: null };
     const d = decomposerNomCardmarket(nomProduit);
     const parAttaques = () => {
@@ -154,7 +155,10 @@ function jugerLigne(x, nomProduit, notre, autre) {
     }
     else if (x.preuve === 'vu') {
         // PHASE 2 v2 : la preuve est visuelle, elle ne se rejoue pas par les mots ; ce qui se rejoue, c'est que le produit et la carte sont CEUX QUI ONT ÉTÉ REGARDÉS (écrits dans la décision)
-        verdict = notre && typeof x.nomCm === 'string' && x.nomCm && nomProduit === x.nomCm && typeof x.carteNom === 'string' && notre.nomEn === x.carteNom ? `vu à l'œil (planches de l'audit S8) : ${x.vu}` : null;
+        // D2 : le produit n'a AUCUNE autre ligne (`contexte.autres` = 0, jamais « inconnu »), et la décision nomme AU MOINS UN produit juste qui garde sa ligne sur la même carte
+        const sansAutreLigne = contexte.autres === 0;
+        const aDesJustes = Array.isArray(x.justes) && x.justes.length >= 1;
+        verdict = notre && sansAutreLigne && aDesJustes && typeof x.nomCm === 'string' && x.nomCm && nomProduit === x.nomCm && typeof x.carteNom === 'string' && notre.nomEn === x.carteNom ? `vu à l'œil (planches de l'audit S8) : ${x.vu}` : null;
     }
     else verdict = null;
     return { verdict };
@@ -187,6 +191,8 @@ async function main() {
     const LIGNES = DECISIONS[DECISION];
     if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${DECISION && !LIGNES ? `décision inconnue : ${DECISION} — ` : ''}usage : --decision=<${Object.keys(DECISIONS).join('|')}> --annonce=<fichier.json> (simulation) | --decision=<…> --ecrire`); process.exit(2); }
 
+    // D3 (relecture v2) : `--ecrire` ne tourne QUE sous lot-additif.js (sauvegarde, garde avant/après, contrat de l'API, restauration) — avant toute lecture, comme corriger-visuels-phase2.js
+    if (ecrire) { try { require('./collecte-cartes/phase2-visuels').garderSousLot(process.env, process.ppid, `node lot-additif.js --quoi="…" --collections=restes --annonce=<annonce.json> -- node detacher-lignes-prouvees.js --decision=${DECISION} --ecrire`); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); } }
     const interdites = LIGNES.filter(x => estInterdite(x.id));
     if (interdites.length) { console.error(`❌ ligne(s) interdite(s) (preuve non apportée) : ${interdites.map(x => x.id).join(' ')} — rien n'est lu ni écrit`); process.exit(2); }
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
@@ -214,7 +220,9 @@ async function main() {
         if (autreId === 'aquapolis') autreId = toutes.find(t => t.idProduct === l.idProduct && t.slugSet === 'Aquapolis')?.carteId;
         const autres = toutes.filter(t => t.idProduct === l.idProduct && t._id !== l._id);
         const autre = x.preuve !== 'nom' && autreId != null ? await C.findOne({ _id: autreId }, { projection: { nomEn: 1, attaques: 1 } }) : null;
-        const { verdict } = jugerLigne({ ...x, autre: autreId }, nom, notre, autre);
+        if (x.preuve === 'vu' && autres.length) fautes.push(`${x.id} : le produit garde ${autres.length} AUTRE(S) ligne(s) (${autres.map(t => t._id).join(', ')}) : il ne deviendrait pas « sans ligne » — la décision ne tient plus`);
+        if (x.preuve === 'vu' && !(Array.isArray(x.justes) && x.justes.length >= 1)) fautes.push(`${x.id} : aucun produit juste nommé (justes vide) — la décision n'est pas écrivable`);
+        const { verdict } = jugerLigne({ ...x, autre: autreId }, nom, notre, autre, { autres: autres.length });
         if (!verdict) fautes.push(`${x.id} « ${nom} » : le(s) témoin(s) ${x.preuve} ne contredi(sen)t plus la ligne (carte jointe « ${notre?.nomEn} », autre ${autreId ?? '—'})`);
         if (verdict) plan.push({ x, l, nom, verdict, autres: autres.length });
         console.log(`   ${verdict ? '✅' : '🔴'} ${x.id} « ${nom} » exp ${l.idExpansion} ${l.slugSet ?? 'slugSet null'} (${l.preuve}) → ${verdict ?? 'NON CONTREDITE'} · le produit garde ${autres.length} autre(s) ligne(s)`);

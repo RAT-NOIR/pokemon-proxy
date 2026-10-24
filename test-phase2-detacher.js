@@ -32,11 +32,32 @@ const tri = l => [...l].sort((a, b) => a - b);
     console.log('2. le rejeu de la preuve à l\'écriture (pur) : rien ne s\'écrit si ce qui a été regardé n\'est plus ce qui est en base');
     const x = D && D.find(l => l.id === '246144|463079');
     const carte = { nomEn: 'Victory Proof', attaques: [] };
-    verifier('le produit et la carte sont ceux qui ont été regardés : la ligne est jugée fausse (verdict écrit)', !!DL.jugerLigne(x, 'Victory Proof', carte, null).verdict, true);
-    verifier('le nom Cardmarket du produit a changé depuis : REFUS', DL.jugerLigne(x, 'Victory Proof 2', carte, null).verdict, null);
-    verifier('la carte jointe n\'est plus celle regardée : REFUS', DL.jugerLigne(x, 'Victory Proof', { nomEn: 'Autre', attaques: [] }, null).verdict, null);
-    verifier('carte absente : REFUS', DL.jugerLigne(x, 'Victory Proof', null, null).verdict, null);
+    verifier('le produit et la carte sont ceux qui ont été regardés : la ligne est jugée fausse (verdict écrit)', !!DL.jugerLigne(x, 'Victory Proof', carte, null, { autres: 0 }).verdict, true);
+    verifier('le nombre d\'autres lignes n\'est pas fourni (« inconnu ») : REFUS — jamais « tout va bien » (D2, fail-closed)', DL.jugerLigne(x, 'Victory Proof', carte, null).verdict, null);
+    verifier('le nom Cardmarket du produit a changé depuis : REFUS', DL.jugerLigne(x, 'Victory Proof 2', carte, null, { autres: 0 }).verdict, null);
+    verifier('la carte jointe n\'est plus celle regardée : REFUS', DL.jugerLigne(x, 'Victory Proof', { nomEn: 'Autre', attaques: [] }, null, { autres: 0 }).verdict, null);
+    verifier('carte absente : REFUS', DL.jugerLigne(x, 'Victory Proof', null, null, { autres: 0 }).verdict, null);
     verifier('une preuve « vu » ne se rejoue jamais sur une ligne d\'une autre décision (preuve inconnue : REFUS)', DL.jugerLigne({ ...x, preuve: 'zzz' }, 'Victory Proof', carte, null).verdict, null);
+
+    console.log('2 bis. D2 : le produit garde une AUTRE ligne, ou n\'a aucun juste nommé : la preuve « vu » REFUSE');
+    verifier('autres lignes = 0 : la ligne est jugée (verdict écrit)', !!DL.jugerLigne(x, 'Victory Proof', carte, null, { autres: 0 }).verdict, true);
+    verifier('le produit a une AUTRE ligne (autres = 1) : REFUS (il ne serait pas « sans ligne »)', DL.jugerLigne(x, 'Victory Proof', carte, null, { autres: 1 }).verdict, null);
+    verifier('aucun produit juste nommé (justes = []) : REFUS', DL.jugerLigne({ ...x, justes: [] }, 'Victory Proof', carte, null, { autres: 0 }).verdict, null);
+    verifier('justes absent : REFUS', DL.jugerLigne({ ...x, justes: undefined }, 'Victory Proof', carte, null, { autres: 0 }).verdict, null);
+    verifier('les 20 lignes de la décision nomment toutes au moins un juste', D.every(l => l.justes.length >= 1), true);
+
+    console.log('2 ter. D3 : « --ecrire » ne tourne que SOUS lot-additif.js (LOT_ADDITIF_PID), comme corriger-visuels-phase2.js — vérifié sur le vrai processus, avant toute connexion');
+    const { spawnSync } = require('child_process');
+    const sansUri = e => { const c = { ...e }; for (const k of Object.keys(c)) if (/^MONGODB_|^R2_|^LOT_ADDITIF_PID$/.test(k)) delete c[k]; return c; };
+    const lancer = (args, env) => spawnSync(process.execPath, ['detacher-lignes-prouvees.js', ...args], { cwd: __dirname, env, encoding: 'utf8', timeout: 60000 });
+    let r = lancer(['--decision=2026-10-24', '--ecrire'], sansUri(process.env));
+    verifier('--ecrire sans LOT_ADDITIF_PID : code 2, message « lot-additif », rien lu ni écrit', [r.status, /lot-additif/.test(r.stderr), /VARIABLE|variable/.test(r.stderr)], [2, true, false]);
+    r = lancer(['--decision=2026-10-24', '--ecrire'], { ...sansUri(process.env), LOT_ADDITIF_PID: '1' });
+    verifier('--ecrire avec le pid d\'un AUTRE processus : refusé de même', [r.status, /lot-additif/.test(r.stderr)], [2, true]);
+    r = lancer(['--decision=2026-10-24', '--annonce=ne-sera-pas-ecrite.json'], sansUri(process.env));
+    verifier('la SIMULATION (--annonce) ne demande pas le lot : elle va jusqu\'à la connexion (et échoue ici sur les variables absentes, pas sur lot-additif)', [/lot-additif/.test(r.stderr), r.status !== 0], [false, true]);
+    r = lancer(['--decision=2026-10-24', '--ecrire', '--annonce=x.json'], sansUri(process.env));
+    verifier('l\'usage inchangé : --ecrire avec --annonce reste refusé (code 2)', r.status, 2);
 
     console.log('3. le détachement en mémoire, jugé par la VRAIE décision de l\'API');
     const api = await G.chargerApi();
