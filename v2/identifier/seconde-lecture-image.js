@@ -43,15 +43,17 @@ async function redresser(photo, geo, { largeur = 1000 } = {}) {
     let q = geo.quad.map(p => ({ x: p.x * ech, y: p.y * ech }));
     if (geo.paysage) q = [q[3], q[0], q[1], q[2]];
     const hauteur = Math.round(largeur * 88 / 63);
-    const src = new cv.Mat(info.height, info.width, cv.CV_8UC3); src.data.set(data);
-    const s = cv.matFromArray(4, 1, cv.CV_32FC2, q.flatMap(p => [p.x, p.y]));
-    const d = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, largeur, 0, largeur, hauteur, 0, hauteur]);
-    const M = cv.getPerspectiveTransform(s, d);
-    const out = new cv.Mat();
+    // MEMOIRE-G : chaque Mat est créé DANS le try — une création qui échoue (la transformation de perspective, par exemple) ne laisse pas les précédentes vivantes
+    let src = null, s = null, d = null, M = null, out = null;
     try {
+        src = new cv.Mat(info.height, info.width, cv.CV_8UC3); src.data.set(data);
+        s = cv.matFromArray(4, 1, cv.CV_32FC2, q.flatMap(p => [p.x, p.y]));
+        d = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, largeur, 0, largeur, hauteur, 0, hauteur]);
+        M = cv.getPerspectiveTransform(s, d);
+        out = new cv.Mat();
         cv.warpPerspective(src, out, M, new cv.Size(largeur, hauteur), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
         return await sharp(Buffer.from(out.data), { raw: { width: largeur, height: hauteur, channels: 3 } }).png().toBuffer();
-    } finally { [src, s, d, M, out].forEach(m => m.delete()); }
+    } finally { [src, s, d, M, out].forEach(m => { try { if (m && !m.isDeleted()) m.delete(); } catch (_) { /* déjà libéré */ } }); }
 }
 
 /** Les trois bandes (JPEG, 1600 px de large) du bas d'une carte redressée. Lève sur une image illisible. */

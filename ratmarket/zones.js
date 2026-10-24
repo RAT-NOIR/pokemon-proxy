@@ -16,7 +16,9 @@
 //   · ORB 1 500 points, appariement Hamming croisé, les 300 meilleurs (tri STABLE par distance, comme `sorted`), homographie RANSAC 6 px ;
 //   · gradients : flou gaussien 3 × 3, Sobel en float32, norme ; corrélation normalisée ; percentile 97 interpolé comme numpy.
 // Le banc ratmarket/test-zones.js mesure l'écart à garde_zones.py sur les appels réels des bancs, et la décision qui en sort.
-// ⚠️ OpenCV.js ne libère rien tout seul (la fuite d'inliers(), PLAN-API.md §1.2) : chaque Mat et chaque vecteur est libéré ici.
+// ⚠️ OpenCV.js ne libère rien tout seul (la fuite d'inliers(), PLAN-API.md §1.2) : chaque Mat et chaque vecteur est libéré ici — et sur CHAQUE chemin, l'erreur comprise (MEMOIRE-G) :
+// une fonction qui crée un objet C++ le libère dans un `finally` (ou le REND à son appelant, qui en devient responsable). Le banc v2/test/test-memoire-g.js fait échouer chaque appel OpenCV l'un
+// après l'autre et compte les objets restés vivants : rien ne doit rester.
 'use strict';
 const fs = require('fs');
 
@@ -33,6 +35,8 @@ const ALIGNEMENT = process.env.RM_ALIGNEMENT === 'v1' ? 'v1' : 'stable';
 // labo en gardait 3 000 et 5 000 — ~10 Go, sur un serveur de 512 Mo. Ici 32 de chaque (~80 Mo au plus), le moins récemment servi part.
 const CACHE_SCANS = 32, CACHE_PAIRES = 32;
 const servir = (m, k) => { const v = m.get(k); m.delete(k); m.set(k, v); return v; };
+/** Libère chaque objet C++ donné (Mat, vecteur, ORB…). Sûr sur null et sur un objet déjà libéré : un `finally` peut l'appeler sur tout ce qu'il a pu créer. */
+function liberer(...objets) { for (const o of objets) { try { if (o && !o.isDeleted()) o.delete(); } catch (_) { /* déjà libéré */ } } }
 
 let _cv = null, _sharp = null;
 async function outils() {
@@ -109,14 +113,17 @@ function redimPillow(src, w, h, ow, oh) {
 
 /** Les points ORB et leurs descripteurs dans l'ordre CANONIQUE (y, x, niveau, taille) — `_canonique` du labo. Libère `kp` et `d`. */
 function canonique(cv, kp, d) {
-    const n = kp.size(), p = new Array(n);
-    for (let i = 0; i < n; i++) { const k = kp.get(i); p[i] = { i, x: k.pt.x, y: k.pt.y, o: k.octave, s: k.size }; }
-    if (ALIGNEMENT === 'stable') p.sort((a, b) => a.y - b.y || a.x - b.x || a.o - b.o || a.s - b.s);
-    const c = d.cols, src = d.data, dst = new Uint8Array(n * c);
-    for (let j = 0; j < n; j++) dst.set(src.subarray(p[j].i * c, p[j].i * c + c), j * c);
-    const D = n ? cv.matFromArray(n, c, cv.CV_8U, dst) : new cv.Mat();
-    kp.delete(); d.delete();
-    return { pts: p.map(x => ({ x: x.x, y: x.y })), d: D };
+    let D = null;
+    try {
+        const n = kp.size(), p = new Array(n);
+        for (let i = 0; i < n; i++) { const k = kp.get(i); p[i] = { i, x: k.pt.x, y: k.pt.y, o: k.octave, s: k.size }; }
+        if (ALIGNEMENT === 'stable') p.sort((a, b) => a.y - b.y || a.x - b.x || a.o - b.o || a.s - b.s);
+        const c = d.cols, src = d.data, dst = new Uint8Array(n * c);
+        for (let j = 0; j < n; j++) dst.set(src.subarray(p[j].i * c, p[j].i * c + c), j * c);
+        D = n ? cv.matFromArray(n, c, cv.CV_8U, dst) : new cv.Mat();
+        return { pts: p.map(x => ({ x: x.x, y: x.y })), d: D };
+    } catch (e) { liberer(D); throw e; }                  // D n'est rendue qu'au succès
+    finally { liberer(kp, d); }                           // kp et d appartiennent à cette fonction dès l'appel, succès ou échec
 }
 
 // ── les scans : gris Pillow 420 × 586, points ORB (ordre canonique), gradient — gardés en mémoire, CACHE_SCANS au plus
@@ -128,48 +135,61 @@ async function scan(source) {
     const { data, info } = await sharp(tampon).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
     if (info.channels !== 3) throw new Error(`scan ${source.cle} : ${info.channels} canaux après conversion`);
     const g = redimPillow(grisPillow(data, info.width * info.height), info.width, info.height, L, H);
-    const mat = cv.matFromArray(H, L, cv.CV_8UC1, g);
-    const kp = new cv.KeyPointVector(), d = new cv.Mat(), vide = new cv.Mat();
-    const orb = new cv.ORB(1500);
-    orb.detectAndCompute(mat, vide, kp, d);
-    orb.delete(); vide.delete();
-    const c = canonique(cv, kp, d);
-    const s = { mat, pts: c.pts, d: c.d, grad: gradient(cv, mat) };
-    _scans.set(source.cle, s);
-    // le moins récemment servi part (un scan en cours d'usage vient d'être servi : il n'est jamais le premier à partir)
-    while (_scans.size > CACHE_SCANS) { const [k0, v0] = _scans.entries().next().value; _scans.delete(k0); liberer(v0); }
-    return s;
+    // tout ce que cette fonction crée est libéré si elle échoue ; au succès, `mat`, `d` et `grad` passent au scan en cache (libérés par l'éviction)
+    let mat = null, kp = null, d = null, vide = null, orb = null, c = null, grad = null;
+    try {
+        mat = cv.matFromArray(H, L, cv.CV_8UC1, g);
+        kp = new cv.KeyPointVector(); d = new cv.Mat(); vide = new cv.Mat();
+        orb = new cv.ORB(1500);
+        orb.detectAndCompute(mat, vide, kp, d);
+        liberer(orb, vide);
+        c = canonique(cv, kp, d);                                         // libère kp et d, succès ou échec
+        grad = gradient(cv, mat);
+        const s = { mat, pts: c.pts, d: c.d, grad };
+        mat = grad = c = null;                                            // désormais au scan
+        _scans.set(source.cle, s);
+        // le moins récemment servi part (un scan en cours d'usage vient d'être servi : il n'est jamais le premier à partir)
+        while (_scans.size > CACHE_SCANS) { const [k0, v0] = _scans.entries().next().value; _scans.delete(k0); libererScan(v0); }
+        return s;
+    } finally { liberer(mat, kp, d, vide, orb, grad, c && c.d); }
 }
-function liberer(s) { for (const k of ['mat', 'd', 'grad']) try { s[k].delete(); } catch (_) {} }
+function libererScan(s) { liberer(s.mat, s.d, s.grad); }
 
 function gradient(cv, gris) {
-    const f = new cv.Mat(); gris.convertTo(f, cv.CV_32F);
-    const b = new cv.Mat(); cv.GaussianBlur(f, b, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-    const gx = new cv.Mat(), gy = new cv.Mat(), m = new cv.Mat();
-    cv.Sobel(b, gx, cv.CV_32F, 1, 0); cv.Sobel(b, gy, cv.CV_32F, 0, 1); cv.magnitude(gx, gy, m);
-    f.delete(); b.delete(); gx.delete(); gy.delete();
-    return m;
+    let f = null, b = null, gx = null, gy = null, m = null;
+    try {
+        f = new cv.Mat(); gris.convertTo(f, cv.CV_32F);
+        b = new cv.Mat(); cv.GaussianBlur(f, b, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+        gx = new cv.Mat(); gy = new cv.Mat(); m = new cv.Mat();
+        cv.Sobel(b, gx, cv.CV_32F, 1, 0); cv.Sobel(b, gy, cv.CV_32F, 0, 1); cv.magnitude(gx, gy, m);
+        const rendu = m; m = null;                                        // `m` est rendue : l'appelant en est responsable
+        return rendu;
+    } finally { liberer(f, b, gx, gy, m); }
 }
 
-/** La photo redressée (RGB, w × h) en gris OpenCV 420 × 586, comme garde_zones.scores_zones la prépare. */
+/** La photo redressée (RGB, w × h) en gris OpenCV 420 × 586, comme garde_zones.scores_zones la prépare. Le Mat rendu est à libérer par l'appelant. */
 async function photoGrise(rgb, w, h) {
     const { cv } = await outils();
-    const src = cv.matFromArray(h, w, cv.CV_8UC3, rgb), g = new cv.Mat();
-    cv.cvtColor(src, g, cv.COLOR_RGB2GRAY); src.delete();
-    if (w !== L || h !== H) { const r = new cv.Mat(); cv.resize(g, r, new cv.Size(L, H), 0, 0, cv.INTER_LINEAR); g.delete(); return r; }
-    return g;
+    let src = null, g = null, r = null;
+    try {
+        src = cv.matFromArray(h, w, cv.CV_8UC3, rgb); g = new cv.Mat();
+        cv.cvtColor(src, g, cv.COLOR_RGB2GRAY); liberer(src); src = null;
+        if (w !== L || h !== H) { r = new cv.Mat(); cv.resize(g, r, new cv.Size(L, H), 0, 0, cv.INTER_LINEAR); const rendu = r; r = null; return rendu; }
+        const rendu = g; g = null; return rendu;
+    } finally { liberer(src, g, r); }
 }
 
 /** Le point (x, y) par l'homographie H (9 nombres, ligne par ligne). */
 const projeter = (Hh, x, y) => { const w = Hh[6] * x + Hh[7] * y + Hh[8]; return [(Hh[0] * x + Hh[1] * y + Hh[2]) / w, (Hh[3] * x + Hh[4] * y + Hh[5]) / w]; };
 /** findHomography sur des tableaux plats [x0, y0, x1, y1…] : 9 nombres, ou null ; `masque` (Uint8Array) rempli pour RANSAC. */
 function homographie(cv, P1, P2, methode, seuil = 6.0) {
-    const n = P1.length / 2, s1 = cv.matFromArray(n, 1, cv.CV_32FC2, P1), s2 = cv.matFromArray(n, 1, cv.CV_32FC2, P2), m = new cv.Mat();
-    const Hm = methode === 'ransac' ? cv.findHomography(s1, s2, cv.RANSAC, seuil, m) : cv.findHomography(s1, s2, 0);
-    s1.delete(); s2.delete();
-    const r = Hm.empty() ? null : { H: Array.from(Hm.data64F), masque: m.rows ? Uint8Array.from(m.data) : null };
-    Hm.delete(); m.delete();
-    return r;
+    const n = P1.length / 2;
+    let s1 = null, s2 = null, m = null, Hm = null;
+    try {
+        s1 = cv.matFromArray(n, 1, cv.CV_32FC2, P1); s2 = cv.matFromArray(n, 1, cv.CV_32FC2, P2); m = new cv.Mat();
+        Hm = methode === 'ransac' ? cv.findHomography(s1, s2, cv.RANSAC, seuil, m) : cv.findHomography(s1, s2, 0);
+        return Hm.empty() ? null : { H: Array.from(Hm.data64F), masque: m.rows ? Uint8Array.from(m.data) : null };
+    } finally { liberer(s1, s2, m, Hm); }
 }
 /** `_homographie` du labo : RANSAC 6 px, puis moindres carrés sur les points d'appui, recomptés à 6 px, jusqu'à ce qu'ils ne bougent plus. */
 function homographieStable(cv, P1, P2, seuil = 6.0, tours = 5) {
@@ -194,37 +214,42 @@ function homographieStable(cv, P1, P2, seuil = 6.0, tours = 5) {
 /** aligner(gris, scan) → { mat (à libérer), inliers } : la photo ramenée dans le repère du scan. */
 async function aligner(gris, sc) {
     const { cv } = await outils();
-    const orb = new cv.ORB(1500), kp1 = new cv.KeyPointVector(), d1 = new cv.Mat(), vide = new cv.Mat();
-    orb.detectAndCompute(gris, vide, kp1, d1); orb.delete(); vide.delete();
+    // tout ce qui est créé ici est libéré dans le `finally`, sauf le Mat RENDU (`mat`), dont l'appelant devient responsable
+    let orb = null, kp1 = null, d1 = null, vide = null, D1 = null, bf = null, mv = null, al = null, Hm = null;
     const copie = () => { const c = new cv.Mat(); gris.copyTo(c); return c; };
-    if (d1.rows === 0 || sc.d.rows === 0 || kp1.size() < 8 || sc.pts.length < 8) { kp1.delete(); d1.delete(); return { mat: copie(), inliers: 0 }; }
-    const { pts: pts1, d: D1 } = canonique(cv, kp1, d1);
-    const bf = new cv.BFMatcher(cv.NORM_HAMMING, true), mv = new cv.DMatchVector();
-    bf.match(D1, sc.d, mv);
-    const m = [];
-    for (let i = 0; i < mv.size(); i++) { const x = mv.get(i); m.push({ q: x.queryIdx, t: x.trainIdx, d: x.distance, i }); }
-    mv.delete(); bf.delete(); D1.delete();
-    if (ALIGNEMENT === 'stable') m.sort((a, b) => a.d - b.d || a.q - b.q || a.t - b.t);   // (distance, requête, cible)
-    else m.sort((a, b) => a.d - b.d || a.i - b.i);                                         // v1 : `sorted(..., key=distance)`, stable
-    const pris = m.slice(0, 300);
-    if (pris.length < 8) return { mat: copie(), inliers: 0 };
-    const p1 = [], p2 = [];
-    for (const x of pris) { const a = pts1[x.q], b = sc.pts[x.t]; p1.push(a.x, a.y); p2.push(b.x, b.y); }
-    let Hh, inl;
-    if (ALIGNEMENT === 'stable') ({ H: Hh, inliers: inl } = homographieStable(cv, p1, p2));
-    else { const r = homographie(cv, p1, p2, 'ransac', 6.0); Hh = r?.H ?? null; inl = r ? r.masque.reduce((s, x) => s + (x ? 1 : 0), 0) : 0; }
-    if (!Hh) return { mat: copie(), inliers: 0, H: null };
-    // une homographie aberrante (écrasement, retournement) est pire que pas d'alignement — l'aire du quadrilatère des coins (contourArea)
-    const c = [[0, 0], [L, 0], [L, H], [0, H]].map(([x, y]) => projeter(Hh, x, y));
-    const aire = Math.abs(c.reduce((s, [x, y], i) => { const [x2, y2] = c[(i + 1) % 4]; return s + x * y2 - x2 * y; }, 0)) / 2;
-    // (2026-10-07) une homographie ABERRANTE n'aligne rien : ses points ne comptent pas (garde_zones.py, même règle) — sinon deux scans non
-    // alignés passaient pour alignés (≥ 12) et la carte des différences était fausse. v1 : l'ancien compte, pour rejouer le 2026-10-06.
-    if (inl < 12) return { mat: copie(), inliers: inl, H: Hh };
-    if (!(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: ALIGNEMENT === 'v1' ? inl : 0, H: Hh };
-    const al = new cv.Mat(), Hm = cv.matFromArray(3, 3, cv.CV_64F, Hh);
-    cv.warpPerspective(gris, al, Hm, new cv.Size(L, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
-    Hm.delete();
-    return { mat: al, inliers: inl, H: Hh };
+    try {
+        orb = new cv.ORB(1500); kp1 = new cv.KeyPointVector(); d1 = new cv.Mat(); vide = new cv.Mat();
+        orb.detectAndCompute(gris, vide, kp1, d1); liberer(orb, vide);
+        if (d1.rows === 0 || sc.d.rows === 0 || kp1.size() < 8 || sc.pts.length < 8) return { mat: copie(), inliers: 0 };       // kp1 et d1 : libérés par le finally
+        const c1 = canonique(cv, kp1, d1);                                                   // libère kp1 et d1, succès ou échec
+        const pts1 = c1.pts; D1 = c1.d;
+        bf = new cv.BFMatcher(cv.NORM_HAMMING, true); mv = new cv.DMatchVector();
+        bf.match(D1, sc.d, mv);
+        const m = [];
+        for (let i = 0; i < mv.size(); i++) { const x = mv.get(i); m.push({ q: x.queryIdx, t: x.trainIdx, d: x.distance, i }); }
+        liberer(mv, bf, D1);
+        if (ALIGNEMENT === 'stable') m.sort((a, b) => a.d - b.d || a.q - b.q || a.t - b.t);   // (distance, requête, cible)
+        else m.sort((a, b) => a.d - b.d || a.i - b.i);                                         // v1 : `sorted(..., key=distance)`, stable
+        const pris = m.slice(0, 300);
+        if (pris.length < 8) return { mat: copie(), inliers: 0 };
+        const p1 = [], p2 = [];
+        for (const x of pris) { const a = pts1[x.q], b = sc.pts[x.t]; p1.push(a.x, a.y); p2.push(b.x, b.y); }
+        let Hh, inl;
+        if (ALIGNEMENT === 'stable') ({ H: Hh, inliers: inl } = homographieStable(cv, p1, p2));
+        else { const r = homographie(cv, p1, p2, 'ransac', 6.0); Hh = r?.H ?? null; inl = r ? r.masque.reduce((s, x) => s + (x ? 1 : 0), 0) : 0; }
+        if (!Hh) return { mat: copie(), inliers: 0, H: null };
+        // une homographie aberrante (écrasement, retournement) est pire que pas d'alignement — l'aire du quadrilatère des coins (contourArea)
+        const c = [[0, 0], [L, 0], [L, H], [0, H]].map(([x, y]) => projeter(Hh, x, y));
+        const aire = Math.abs(c.reduce((s, [x, y], i) => { const [x2, y2] = c[(i + 1) % 4]; return s + x * y2 - x2 * y; }, 0)) / 2;
+        // (2026-10-07) une homographie ABERRANTE n'aligne rien : ses points ne comptent pas (garde_zones.py, même règle) — sinon deux scans non
+        // alignés passaient pour alignés (≥ 12) et la carte des différences était fausse. v1 : l'ancien compte, pour rejouer le 2026-10-06.
+        if (inl < 12) return { mat: copie(), inliers: inl, H: Hh };
+        if (!(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: ALIGNEMENT === 'v1' ? inl : 0, H: Hh };
+        al = new cv.Mat(); Hm = cv.matFromArray(3, 3, cv.CV_64F, Hh);
+        cv.warpPerspective(gris, al, Hm, new cv.Size(L, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+        const rendu = al; al = null;                                                         // rendu : à l'appelant
+        return { mat: rendu, inliers: inl, H: Hh };
+    } finally { liberer(orb, vide, kp1, d1, D1, bf, mv, al, Hm); }
 }
 
 // (2026-10-07, accordée par le testeur) DEUX SCANS se ramènent l'un sur l'autre par une homographie PROCHE DE L'IDENTITÉ : la règle et
@@ -261,13 +286,15 @@ function bande(grad, y0, y1, m = 8) {
 async function scoresZones(photo, source) {
     const { cv } = await outils();
     const sc = await scan(source);
-    const { mat: al, inliers } = await aligner(photo, sc);
-    const ga = gradient(cv, al); al.delete();
-    const out = {};
-    for (const [z, [y0, y1]] of Object.entries(ZONES)) out[z] = ncc(bande(ga, y0, y1), bande(sc.grad, y0, y1));
-    ga.delete();
-    out.inliers = inliers;
-    return out;
+    let al = null, ga = null;
+    try {
+        const r = await aligner(photo, sc); al = r.mat;
+        ga = gradient(cv, al); liberer(al); al = null;
+        const out = {};
+        for (const [z, [y0, y1]] of Object.entries(ZONES)) out[z] = ncc(bande(ga, y0, y1), bande(sc.grad, y0, y1));
+        out.inliers = r.inliers;
+        return out;
+    } finally { liberer(al, ga); }
 }
 
 // la carte des différences d'une PAIRE de scans : (masque, gradient de b aligné) ou null — gardée, comme au labo (5 000 au plus)
@@ -275,25 +302,28 @@ const _paires = new Map();
 async function cartePaire(sa, sb, cle) {
     if (_paires.has(cle)) return servir(_paires, cle);
     const { cv } = await outils();
-    const { mat: al, inliers, H: Hh } = await aligner(sb.mat, sa);
-    let P = null;
-    if (inliers >= 12 && (IDENTITE_MAX === 0 || (Hh && deplacementCoins(Hh) <= IDENTITE_MAX))) {
-        const gb = gradient(cv, al);
-        const A = sa.grad.data32F, B = gb.data32F, n = L * H, d = new Float32Array(n);
-        for (let i = 0; i < n; i++) d[i] = Math.abs(A[i] - B[i]);
-        const seuil = Math.max(25.0, percentile97(d));
-        const brut = new cv.Mat(H, L, cv.CV_8UC1);
-        for (let i = 0; i < n; i++) brut.data[i] = d[i] > seuil ? 1 : 0;
-        const noyau = cv.Mat.ones(5, 5, cv.CV_8U), dil = new cv.Mat();
-        cv.dilate(brut, dil, noyau); brut.delete(); noyau.delete();
-        const masque = new Uint8Array(dil.data); dil.delete();
-        for (let y = 0; y < H; y++) for (let x = 0; x < L; x++) if (y < 8 || y >= H - 8 || x < 8 || x >= L - 8) masque[y * L + x] = 0;
-        P = { masque, gb: new Float32Array(gb.data32F) }; gb.delete();
-    }
-    al.delete();
-    _paires.set(cle, P);
-    while (_paires.size > CACHE_PAIRES) _paires.delete(_paires.keys().next().value);
-    return P;
+    const { mat: aligne, inliers, H: Hh } = await aligner(sb.mat, sa);
+    let al = aligne, gb = null, brut = null, noyau = null, dil = null;
+    try {
+        let P = null;
+        if (inliers >= 12 && (IDENTITE_MAX === 0 || (Hh && deplacementCoins(Hh) <= IDENTITE_MAX))) {
+            gb = gradient(cv, al);
+            const A = sa.grad.data32F, B = gb.data32F, n = L * H, d = new Float32Array(n);
+            for (let i = 0; i < n; i++) d[i] = Math.abs(A[i] - B[i]);
+            const seuil = Math.max(25.0, percentile97(d));
+            brut = new cv.Mat(H, L, cv.CV_8UC1);
+            for (let i = 0; i < n; i++) brut.data[i] = d[i] > seuil ? 1 : 0;
+            noyau = cv.Mat.ones(5, 5, cv.CV_8U); dil = new cv.Mat();
+            cv.dilate(brut, dil, noyau); liberer(brut, noyau); brut = noyau = null;
+            const masque = new Uint8Array(dil.data); liberer(dil); dil = null;
+            for (let y = 0; y < H; y++) for (let x = 0; x < L; x++) if (y < 8 || y >= H - 8 || x < 8 || x >= L - 8) masque[y * L + x] = 0;
+            P = { masque, gb: new Float32Array(gb.data32F) }; liberer(gb); gb = null;
+        }
+        liberer(al); al = null;
+        _paires.set(cle, P);
+        while (_paires.size > CACHE_PAIRES) _paires.delete(_paires.keys().next().value);
+        return P;
+    } finally { liberer(al, gb, brut, noyau, dil); }
 }
 function percentile97(d) {
     const s = Float32Array.from(d).sort(), pos = 0.97 * (s.length - 1), i = Math.floor(pos), f = pos - i;
@@ -309,14 +339,16 @@ async function comparerPaire(photo, sourceA, sourceB) {
     let nm = 0; for (let i = 0; i < P.masque.length; i++) nm += P.masque[i];
     if (nm < 200) return [0, 0];
     const couv = nm / P.masque.length;
-    const { mat: al, inliers } = await aligner(photo, sa);
-    if (inliers < 12) { al.delete(); return [0, couv]; }
-    const gq = gradient(cv, al); al.delete();
-    const Q = gq.data32F, A = sa.grad.data32F;
-    const q = new Float32Array(nm), a = new Float32Array(nm), b = new Float32Array(nm);
-    for (let i = 0, k = 0; i < P.masque.length; i++) if (P.masque[i]) { q[k] = Q[i]; a[k] = A[i]; b[k] = P.gb[i]; k++; }
-    gq.delete();
-    return [ncc(q, a) - ncc(q, b), couv];
+    let al = null, gq = null;
+    try {
+        const r = await aligner(photo, sa); al = r.mat;
+        if (r.inliers < 12) return [0, couv];
+        gq = gradient(cv, al); liberer(al); al = null;
+        const Q = gq.data32F, A = sa.grad.data32F;
+        const q = new Float32Array(nm), a = new Float32Array(nm), b = new Float32Array(nm);
+        for (let i = 0, k = 0; i < P.masque.length; i++) if (P.masque[i]) { q[k] = Q[i]; a[k] = A[i]; b[k] = P.gb[i]; k++; }
+        return [ncc(q, a) - ncc(q, b), couv];
+    } finally { liberer(al, gq); }
 }
 
 // (relecture, 2026-10-07) LES APPELS PUBLICS PASSENT UN PAR UN. Sous des requêtes concurrentes, une E/S de sharp au milieu de comparerPaire

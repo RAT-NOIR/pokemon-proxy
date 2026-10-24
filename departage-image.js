@@ -332,21 +332,24 @@ async function decrire(buffer) {
     const { cv, sharp } = await outils();
     const { data, info } = await sharp(buffer).resize({ width: LARGEUR, fit: 'inside' })
         .greyscale().raw().toBuffer({ resolveWithObject: true });
-    const m = new cv.Mat(info.height, info.width, cv.CV_8UC1);
-    m.data.set(data);
-    const orb = new cv.ORB(N_POINTS);
-    const kp = new cv.KeyPointVector(), des = new cv.Mat();
-    orb.detectAndCompute(m, new cv.Mat(), kp, des);
-    const n = des.rows;
-    const desc = Buffer.from(des.data.slice(0, n * (des.cols || 32)));
-    const xy = Buffer.alloc(n * 4);
-    for (let i = 0; i < n; i++) {
-        const p = kp.get(i).pt;
-        xy.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(p.x))), i * 4);
-        xy.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(p.y))), i * 4 + 2);
-    }
-    kp.delete(); des.delete(); m.delete(); orb.delete && orb.delete();
-    return { n, desc, xy };
+    // MEMOIRE-G : chaque objet C++ est libéré dans le `finally`, l'erreur comprise — dont le masque vide (`new cv.Mat()`) que detectAndCompute demande et que personne ne libérait
+    let m = null, orb = null, kp = null, des = null, masque = null;
+    try {
+        m = new cv.Mat(info.height, info.width, cv.CV_8UC1);
+        m.data.set(data);
+        orb = new cv.ORB(N_POINTS);
+        kp = new cv.KeyPointVector(); des = new cv.Mat(); masque = new cv.Mat();
+        orb.detectAndCompute(m, masque, kp, des);
+        const n = des.rows;
+        const desc = Buffer.from(des.data.slice(0, n * (des.cols || 32)));
+        const xy = Buffer.alloc(n * 4);
+        for (let i = 0; i < n; i++) {
+            const p = kp.get(i).pt;
+            xy.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(p.x))), i * 4);
+            xy.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(p.y))), i * 4 + 2);
+        }
+        return { n, desc, xy };
+    } finally { for (const o of [kp, des, m, orb, masque]) { try { if (o && !o.isDeleted()) o.delete(); } catch (_) { /* déjà libéré */ } } }
 }
 
 // Un appariement + vérification géométrique. Rend le nombre d'inliers — le score.
@@ -355,37 +358,41 @@ async function decrire(buffer) {
 // mémoire d'un plan gratuit, et lentement — donc invisible jusqu'au redémarrage.
 function inliers(cv, req, ref) {
     if (!req?.n || !ref?.n || req.n < 2 || ref.n < 2) return 0;
-    const A = new cv.Mat(req.n, 32, cv.CV_8UC1), B = new cv.Mat(ref.n, 32, cv.CV_8UC1);
-    A.data.set(req.desc); B.data.set(ref.desc);
-    const bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
-    const mm = new cv.DMatchVectorVector();
+    // MEMOIRE-G : `mm.get(i)` rend un NOUVEAU DMatchVector (un objet C++ copié) à chaque tour — jamais libéré, c'était la fuite (≈ 150 objets par appel, la piste de PLAN-API §1.2). Tout ce qui est
+    // créé ici est libéré dans un `finally`, y compris les matrices du RANSAC (une erreur avant leur libération les laissait vivantes).
+    const liberer = (...objets) => { for (const o of objets) { try { if (o && !o.isDeleted()) o.delete(); } catch (_) { /* déjà libéré */ } } };
+    let A = null, B = null, bf = null, mm = null, ms = null, md = null, masque = null, H = null;
     let compte = 0;
     try {
+        A = new cv.Mat(req.n, 32, cv.CV_8UC1); B = new cv.Mat(ref.n, 32, cv.CV_8UC1);
+        A.data.set(req.desc); B.data.set(ref.desc);
+        bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
+        mm = new cv.DMatchVectorVector();
         bf.knnMatch(A, B, mm, 2);
         const src = [], dst = [];
         for (let i = 0; i < mm.size(); i++) {
             const m = mm.get(i);
-            if (m.size() < 2) continue;
-            const m0 = m.get(0), m1 = m.get(1);
-            if (m0.distance < RATIO_LOWE * m1.distance) {
-                src.push(req.xy.readUInt16LE(m0.queryIdx * 4), req.xy.readUInt16LE(m0.queryIdx * 4 + 2));
-                dst.push(ref.xy.readUInt16LE(m0.trainIdx * 4), ref.xy.readUInt16LE(m0.trainIdx * 4 + 2));
-            }
+            try {
+                if (m.size() < 2) continue;
+                const m0 = m.get(0), m1 = m.get(1);
+                if (m0.distance < RATIO_LOWE * m1.distance) {
+                    src.push(req.xy.readUInt16LE(m0.queryIdx * 4), req.xy.readUInt16LE(m0.queryIdx * 4 + 2));
+                    dst.push(ref.xy.readUInt16LE(m0.trainIdx * 4), ref.xy.readUInt16LE(m0.trainIdx * 4 + 2));
+                }
+            } finally { liberer(m); }
         }
         const n = src.length / 2;
         if (n >= 4) {
-            const ms = cv.matFromArray(n, 1, cv.CV_32FC2, src);
-            const md = cv.matFromArray(n, 1, cv.CV_32FC2, dst);
-            const masque = new cv.Mat();
+            ms = cv.matFromArray(n, 1, cv.CV_32FC2, src);
+            md = cv.matFromArray(n, 1, cv.CV_32FC2, dst);
+            masque = new cv.Mat();
             try {
-                const H = cv.findHomography(ms, md, cv.RANSAC, SEUIL_RANSAC, masque);
+                H = cv.findHomography(ms, md, cv.RANSAC, SEUIL_RANSAC, masque);
                 if (!H.empty()) for (let i = 0; i < masque.rows; i++) compte += masque.data[i] ? 1 : 0;
-                H.delete();
             } catch (_) { /* homographie dégénérée : 0 inlier, ce n'est pas une panne */ }
-            ms.delete(); md.delete(); masque.delete();
         }
     } finally {
-        mm.delete(); bf.delete && bf.delete(); A.delete(); B.delete();
+        liberer(H, masque, md, ms, mm, bf, A, B);
     }
     return compte;
 }
