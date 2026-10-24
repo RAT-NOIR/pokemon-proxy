@@ -206,6 +206,23 @@ const entreeDe = (B, c, cle) => B.col('cartes').get(c).images.find(e => e.cleR2 
         verifier('plan : rien n\'est écrit par le plan (aucun updateOne)', [m.B.writes.length, m.PR.writes.length], [0, 0]);
     });
 
+    // ── 2 bis. MARQUE DE CONSERVATION (18/10) : une paire séparée par la variante, dont produitsPartages a été retiré, n'est JAMAIS remarquée « tampon non séparable » ──
+    await essayer('paire séparée', async () => {
+        const base = monde();
+        const p0 = await plan(base);
+        const cible = p0.paires.find(x => x.carteId === 300001);
+        // l'état d'après le lot du 17/10 + le retrait du 18/10 : variante posée, partageeTamponNonSepare false, plus de produitsPartages
+        const apres = () => { const mm = monde(); const e = entreeDe(mm.B, 300001, cible.entree.cleR2); e.partageeTamponNonSepare = false; e.tamponNonRepresente = 'Staff'; return mm; };
+        const mm = apres();
+        const p = await plan(mm);
+        verifier('paire dont l\'entrée dit partageeTamponNonSepare:false (produitsPartages retiré) : jamais remarquée, motif nommé', [p.paires.some(x => x.carteId === 300001), p.refus.find(x => x.carteId === 300001)?.motif], [false, 'deja-separee-par-la-variante']);
+        const m2 = monde();
+        for (const id of cible.produits) m2.B.col('cartes_produits').get(`300001|${id}`).variante = id === cible.produits[0] ? 'normale' : 'staff';
+        const p2 = await plan(m2);
+        verifier('paire dont les lignes cartes_produits portent une variante : jamais remarquée, motif nommé', [p2.paires.some(x => x.carteId === 300001), p2.refus.find(x => x.carteId === 300001)?.motif], [false, 'variante-deja-posee']);
+        verifier('les autres paires restent prouvées (la garde ne mord que sur les paires séparées)', p.paires.map(x => x.carteId).sort(), [278879, 300004, 300010]);
+    });
+
     // ── 3. L'ÉCRITURE ──
     m = monde();
     await essayer('ecriture', async () => {

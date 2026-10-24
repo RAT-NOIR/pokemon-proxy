@@ -68,8 +68,8 @@ async function lireMonde({ cartesDb, prodDb, regle, site, slugs }) {
     const produits = [];
     for (const s of sets) {
         const exps = [].concat(s.idExpansion ?? []);
-        const parSlug = await cartesDb.collection('cartes_produits').find({ slugSet: s._id }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1 } }).toArray();
-        const parExp = exps.length ? await cartesDb.collection('cartes_produits').find({ idExpansion: { $in: exps } }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1 } }).toArray() : [];
+        const parSlug = await cartesDb.collection('cartes_produits').find({ slugSet: s._id }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray();
+        const parExp = exps.length ? await cartesDb.collection('cartes_produits').find({ idExpansion: { $in: exps } }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray() : [];
         const lignes = [...new Map([...parSlug, ...parExp].map(l => [l._id ?? `${l.carteId}|${l.idProduct}`, l])).values()];
         const docs = (await cartesDb.collection('cartes').find({ sets: s._id }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray()).filter(d => typeof d.nomEn === 'string' && d.nomEn);
         const ids = new Set(docs.map(d => d._id));
@@ -83,7 +83,7 @@ async function lireMonde({ cartesDb, prodDb, regle, site, slugs }) {
             const f = ficheDe.get(x.idProduct), d = parDoc.get(x.carteId), c = catP.get(x.idProduct);
             let propre = null;
             if (f) { const imgs = (d.images || []).filter(m => m && m.set === s._id && m.cleR2).filter(m => site.visuelAdmisPourLaRegion(m, tir)); propre = site.imageDeLImpression(imgs, f.numero ?? null); }
-            produits.push({ idProduct: x.idProduct, carteId: x.carteId, slugSet: s._id, nomCm: c?.name ?? null, slugProduit: n.slug, numero: n.numero ?? null, variante: n.variante ?? null, dateAdded: c?.dateAdded ?? null,
+            produits.push({ idProduct: x.idProduct, carteId: x.carteId, slugSet: s._id, nomCm: c?.name ?? null, slugProduit: n.slug, numero: n.numero ?? null, variante: n.variante ?? null, varianteLigne: x.variante ?? null, dateAdded: c?.dateAdded ?? null,
                 fiche: f ? { carteId: f.carteId, numero: f.numero ?? null } : null, propre, carte: d });
         }
     }
@@ -133,6 +133,11 @@ async function construirePlan({ cartesDb, prodDb, regle, site, index, lignes = P
         const e = a.propre, memeCle = (a.carte.images || []).filter(x => x && x.set === e.set && x.cleR2 === e.cleR2);
         if (memeCle.length !== 1) { non('entree-ambigue'); continue; }
         if (e.partageeHoloNonHolo === true) { non('deja-partagee-holo'); continue; }
+        // 🔑 MARQUE DE CONSERVATION (18/10, PARTAGES-SEPARES) : une paire SÉPARÉE par la variante (lignes `variante` staff|jumbo + normale, entrée `partageeTamponNonSepare: false`) n'est plus « non séparable ».
+        // Le lot retire `produitsPartages` de ces entrées : sans cette garde, ce marquage les y remettrait avec `partageeTamponNonSepare: true`. Écrite par ce qu'elle refuse ICI parce que le marquage ne
+        // pose que la valeur `true` : toute trace de séparation (ligne ou entrée) l'arrête.
+        if (a.varianteLigne || b.varianteLigne) { non('variante-deja-posee'); continue; }
+        if (e.partageeTamponNonSepare === false) { non('deja-separee-par-la-variante'); continue; }
         if (e.produitsPartages !== undefined && e.partageeTamponNonSepare !== true) { non('produitsPartages-deja-pose-hors-tampon'); continue; }
         const produitsPartages = [v1.idProduct, v2.idProduct];
         candidates.push({ ...base, produits: produitsPartages, numero: a.fiche.numero, tampon: couple.tampon, mot: couple.mot, entree: { set: e.set, cleR2: e.cleR2, numero: e.numero ?? null },
