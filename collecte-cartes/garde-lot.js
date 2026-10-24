@@ -374,6 +374,9 @@ function setsTouches({ avant, apres }) {
         const ids = portes.get(k);
         if (!ids || !ids.size || IDX_ID < 0) return false;
         if (signature(pa.liens.filter((_, i) => i !== IDX_ID)) !== signature(pb.liens.filter((_, i) => i !== IDX_ID))) return false;
+        // (tour 3, E4) le site lit le PREMIER idProduct de la liste : s'il change (un id porté par une ligne changée placé en tête, un premier retiré, un premier lien posé sur une carte sans lien), rien ne l'explique
+        const tete = v => (Array.isArray(v) && v.length ? v[0] : null);
+        if (signature(tete(pa.liens[IDX_ID])) !== signature(tete(pb.liens[IDX_ID]))) return false;
         const sans = v => (Array.isArray(v) ? v : []).filter(x => !ids.has(String(x)));
         return signature(sans(pa.liens[IDX_ID])) === signature(sans(pb.liens[IDX_ID]));
     };
