@@ -234,7 +234,8 @@ verifier('BS-STAFF (setsTouches) : le retrait du marquage touche aussi le set', 
 // (correction 2 du lot METAL : la projection est la constante partagée PROJECTION_ETAT, lue par lot-additif.js)
 { const src = require('fs').readFileSync(require('path').join(__dirname, 'lot-additif.js'), 'utf8');
   const proj = require('./collecte-cartes/garde-lot').PROJECTION_ETAT.cartes;
-  verifier('lot-additif.js lit les cartes par la projection partagée', /\.project\(\{ \.\.\.PROJECTION_ETAT\.cartes \}\)/.test(src), true);
+  // (D3.5, 2026-10-24) la projection de l'état « après » est la constante partagée, réunie à celle de l'API quand elle est chargée (une seule lecture) : `projectionCartes` en dérive, jamais une liste recopiée
+  verifier('lot-additif.js lit les cartes par la projection partagée', [/\.project\(projectionCartes\)/.test(src), /projectionCartes = api \? GC\.unionProjections\(PROJECTION_ETAT\.cartes, api\.PROJECTIONS\.cartes\) : \{ \.\.\.PROJECTION_ETAT\.cartes \}/.test(src)], [true, true]);
   verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj[c] === 1), [true, true, true]); }
 
 // ── D1 (2026-10-24) : le calcul des sets à revalider voit TOUT champ que le site peut lire, dans les trois collections.

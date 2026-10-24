@@ -14,6 +14,15 @@
 // 🔑 ÉCRITE PAR CE QU'ELLE AUTORISE : tout ce qui empêche de conclure (API introuvable, règle absente, exception, collection vide) LÈVE
 // « garde contrat API : je ne peux pas conclure (…) » — jamais un « tout va bien ».
 //
+// 🔑 COÛT, MESURÉ (2026-10-19, par le coordinateur, sur des SAUVEGARDES RÉELLES de la base `cartes`) : le verdict se rend en 2,1 s ; le tas monte à ≈ 1 073 Mo avec trois états chargés (la sauvegarde entière,
+// l'état « après » relu pour les compteurs, et l'état « après » relu une seconde fois avec les projections de l'API). Le lot ne tourne pas sur Render (512 Mo) mais en local.
+// D3.5 (2026-10-24) : la troisième copie était inutile — l'état « après » est maintenant lu UNE seule fois, avec les projections RÉUNIES du site et de l'API (`unionProjections`), et la vue de l'API en est
+// dérivée par `projeter` ; l'état « avant » n'est plus gardé en double (la sauvegarde est projetée à chaque verdict, puis relâchée). Les chiffres ci-dessus sont ceux d'AVANT ce retrait.
+// Simulation du 2026-10-24 sur la sauvegarde réelle du 2026-10-19 (tas JS, « après » simulé par un nouveau parse puis la projection : ce n'est pas une lecture de la base) : ancien câblage 491 Mo, nouveau 297 Mo ;
+// verdict sans changement 1,7 s. À remesurer sur un vrai lot.
+// D3.2 (même jour) : la fermeture des sets rejoués s'est élargie. Mesure sur la même sauvegarde, pour un seul set touché : toujours UN set rejoué en entier (ses lignes : 90 à 414), plus 210 à 490 sets en documents seulement
+// (les sets des images de ses cartes : leurs lignes ne sont pas jugées) ; verdict de 130 à 250 ms. Rejouer AUSSI les lignes de ces sets portait la fermeture à 200-500 sets et 38 000 lignes : refusé.
+//
 // ⚠️ metacarte : `decider` exige un catalogue non vide (« catalogue_produits vide : base fausse »). On ne lit pas la production : la Map
 // porte UN seul couple sentinelle (idProduct -1), identique avant et après, qui ne correspond à aucune ligne : `idMetacard` vaut alors
 // `null` pour tous les produits, ce que `lireEntree` admet. Le contrat testé ne dépend pas de la métacarte.
@@ -24,21 +33,23 @@ const DOSSIER_API_PAR_DEFAUT = 'C:/Users/Yung/Desktop/pokemon-proxy-api-v2';
 const METACARTE_SENTINELLE = () => new Map([[-1, 1]]);
 const refus = (raison) => new Error(`garde contrat API : je ne peux pas conclure (${String(raison).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300)})`);
 
-/** Charge la chaîne de l'API. Rend { dossier, PROJECTIONS, decider, lireEntree, estVariante, regle, compacterSet, compacterCarte, compacterLigne, interneur }. LÈVE si quoi que ce soit manque. */
+/** Charge la chaîne de l'API. Rend { dossier, PROJECTIONS, decider, lireEntree, estVariante, normaliserVariante, creerConstructeur, regle, compacterSet, compacterCarte, compacterLigne, interneur }. LÈVE si quoi que ce soit manque. */
 async function chargerApi({ dossier } = {}) {
     const dir = path.resolve(dossier || process.env.API_V2_DIR || DOSSIER_API_PAR_DEFAUT);
     try {
-        for (const f of ['v2/chargeur/source.js', 'v2/chargeur/decision.js', 'v2/chargeur/regle-site/index.js', 'v2/identifier/visuels.js', 'v2/identifier/marques-tampon.js'])
+        for (const f of ['v2/chargeur/source.js', 'v2/chargeur/decision.js', 'v2/chargeur/version.js', 'v2/chargeur/regle-site/index.js', 'v2/identifier/visuels.js', 'v2/identifier/marques-tampon.js'])
             if (!fs.existsSync(path.join(dir, f))) throw new Error(`${f} introuvable dans le dossier de l'API`);
         const R = f => require(path.join(dir, f));
         const source = R('v2/chargeur/source.js'), decision = R('v2/chargeur/decision.js'), site = R('v2/chargeur/regle-site/index.js');
-        const visuels = R('v2/identifier/visuels.js'), marques = R('v2/identifier/marques-tampon.js');
+        const visuels = R('v2/identifier/visuels.js'), marques = R('v2/identifier/marques-tampon.js'), version = R('v2/chargeur/version.js');
         R('exporter-donnees-logos-site.js');                      // decider le charge à l'appel (L()) : qu'il manque, et on ne conclut pas, avant le lot
         const regle = await site.regleEmbarquee();
         decision.verifierRegle(regle);
-        const api = { dossier: dir, PROJECTIONS: source.PROJECTIONS, decider: decision.decider, lireEntree: visuels.lireEntree, estVariante: marques.estVariante, regle,
+        // `normaliserVariante` : ce que decider fait de la variante d'une ligne (decision.js : varianteProuvee, varianteHorsListe) ; `creerConstructeur` : le constructeur de l'archive, dont la règle des produits
+        // « contradictoires » (version.js) est appliquée telle quelle, jamais recopiée.
+        const api = { dossier: dir, PROJECTIONS: source.PROJECTIONS, decider: decision.decider, lireEntree: visuels.lireEntree, estVariante: marques.estVariante, normaliserVariante: marques.normaliserVariante, creerConstructeur: version.creerConstructeur, regle,
             compacterSet: source.compacterSet, compacterCarte: source.compacterCarte, compacterLigne: source.compacterLigne, interneur: source.interneur };
-        for (const k of ['decider', 'lireEntree', 'estVariante', 'compacterSet', 'compacterCarte', 'compacterLigne', 'interneur']) if (typeof api[k] !== 'function') throw new Error(`${k} absent de l'API`);
+        for (const k of ['decider', 'lireEntree', 'estVariante', 'normaliserVariante', 'creerConstructeur', 'compacterSet', 'compacterCarte', 'compacterLigne', 'interneur']) if (typeof api[k] !== 'function') throw new Error(`${k} absent de l'API`);
         for (const k of ['sets', 'cartes', 'cartes_produits']) if (!api.PROJECTIONS?.[k] || !Object.keys(api.PROJECTIONS[k]).length) throw new Error(`PROJECTIONS.${k} absente de l'API`);
         return api;
     } catch (e) { throw refus(e.message); }
@@ -66,6 +77,19 @@ function projeterValeur(v, t) {
 function projeter(docs, projection) {
     const t = arbre(projection);
     return docs.map(d => ({ _id: d._id, ...projeterValeur(d, t) }));
+}
+/**
+ * D3.5 — La RÉUNION de projections d'inclusion : une seule lecture de la base qui sert à la fois les compteurs/sets touchés (garde-lot.js : PROJECTION_ETAT) et le contrat de l'API (ses PROJECTIONS). Mongo refuse
+ * un chemin et son parent ensemble (« a » et « a.b » : collision) : un chemin couvert par un ancêtre présent est retiré (l'ancêtre le contient). Une exclusion (0) ne se réunit pas : elle LÈVE.
+ */
+function unionProjections(...projections) {
+    const chemins = new Set();
+    for (const p of projections) for (const [k, v] of Object.entries(p)) {
+        if (v !== 1) throw refus(`projection : « ${k}: ${JSON.stringify(v)} » — seules les inclusions (1) se réunissent`);
+        chemins.add(k);
+    }
+    const couvert = k => { const parts = k.split('.'); for (let i = 1; i < parts.length; i++) if (chemins.has(parts.slice(0, i).join('.'))) return true; return false; };
+    return Object.fromEntries([...chemins].filter(k => !couvert(k)).sort().map(k => [k, 1]));
 }
 function projeterEtat(api, { sets, cartes, cartesProduits }) {
     return { sets: projeter(sets, api.PROJECTIONS.sets), cartes: projeter(cartes, api.PROJECTIONS.cartes), cartesProduits: projeter(cartesProduits, api.PROJECTIONS.cartes_produits) };
@@ -120,15 +144,16 @@ function jugerEntree(api, e, varianteLigne = null) {
     return { ok: true, motif: perdue ? `variante « ${varianteLigne} » perdue : hors de la liste fermée de l'API (ou sans preuve), l'entrée est servie avec variante null` : null, variantePerdue: perdue, idProduct: e.idProduct };
 }
 
-/** TOUR 1 — le contrôle PAR LIGNE, indépendant de toute entrée. Une ligne cartes_produits viole le contrat si sa `variante` n'est ni null ni absente et que `estVariante` de l'API refuse sa valeur
- * normalisée comme visuels.js:110 (texte() = trim, chaîne non vide ; un non-texte devient null, donc refusé). Rend Map idProduct → la variante fautive (texte). Clé : idProduct (un produit servi
- * a UNE variante dans l'archive ; deux lignes d'un même produit, la première violation gagne). normale et jumbo ne sont pas traitées à part : c'est ce que estVariante en dit. */
+/** TOUR 1 — le contrôle PAR LIGNE, indépendant de toute entrée. Une ligne cartes_produits viole le contrat si sa `variante` n'est ni null ni absente et que decider NE SAIT PAS la lire.
+ * D3.1 (2026-10-24) : « ne sait pas la lire » = EXACTEMENT ce que decision.js fait (varianteProuvee, varianteHorsListe) : `normaliserVariante(l.variante) === null`, sur la valeur BRUTE de la ligne — pas
+ * de trim (decider n'en applique aucun avant de normaliser : « ' staff ' » est perdue), et la forme ancienne « staff-prerelease » est LUE « staff+prerelease » (rien n'est perdu : pas une violation).
+ * L'ancien contrôle testait `estVariante` sur la valeur trimmée : il bloquait à tort la forme ancienne et laissait passer la valeur entourée d'espaces. Rend Map idProduct → la variante fautive (texte).
+ * Clé : idProduct (un produit servi a UNE variante dans l'archive ; deux lignes d'un même produit, la première violation gagne). */
 function violationsParLigne(api, lignes) {
-    const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
     const m = new Map();
     for (const l of lignes) {
         if (l.variante === null || l.variante === undefined) continue;
-        if (!api.estVariante(texte(l.variante)) && !m.has(l.idProduct)) m.set(l.idProduct, typeof l.variante === 'string' ? l.variante : JSON.stringify(l.variante));
+        if (api.normaliserVariante(l.variante) === null && !m.has(l.idProduct)) m.set(l.idProduct, typeof l.variante === 'string' ? l.variante : JSON.stringify(l.variante));
     }
     return m;
 }
@@ -148,29 +173,65 @@ async function contratDesSets({ api, sets, docs, lignes, slugs }) {
     const retenues = L.filter(l => [...candidats(l)].some(x => cible.has(x)));
     const setsR = new Set(cible);
     for (const l of retenues) for (const x of candidats(l)) setsR.add(x);
+    // D3.2 / D3.3 (2026-10-24) — LA FERMETURE, pour que decider juge ce que la production juge. Trois choses que la restriction par les seuls sets touchés laissait dehors :
+    //  · les sets des IMAGES de la carte d'un produit retenu : un set sans visuel propre se sert de l'image d'un autre set (« autre-tirage »), et choisirVisuel classe ces images par le tirage et la région de LEUR set
+    //    (setsBase) — sans ces sets, le classement est celui d'un monde amputé et désigne une autre image que la production. Seul leur DOCUMENT entre (`setsEnPlus`) : leurs lignes ne sont pas jugées, elles n'ont rien
+    //    changé (mesuré sur la sauvegarde du 2026-10-19 : rejouer aussi leurs lignes portait la fermeture de 1 set à 200-500 sets et de 239 à 38 000 lignes pour un seul set) ;
+    //  · les cartes qui portent le FICHIER d'un substitut (la vignette d'un substitut est celle de l'entrée d'une autre carte au même fichier : vignetteDuFichier), leur set d'image et le set du substitut (documents seulement) ;
+    //  · les AUTRES lignes du même produit, et leurs sets AVEC leurs lignes : un produit joint à deux cartes émet deux entrées, et deux entrées aux visuels différents le rendent « contradictoire » (version.js) ;
+    //    la fiche d'un set se calcule sur toutes ses lignes, donc ce set-là entre en entier.
+    const carteDe = new Map(D.map(d => [d._id, d]));
+    const lignesDuProduit = new Map();
+    for (const l of L) { if (!lignesDuProduit.has(l.idProduct)) lignesDuProduit.set(l.idProduct, []); lignesDuProduit.get(l.idProduct).push(l); }
+    const cartesDuFichier = new Map();
+    for (const d of D) for (const m of d.images || []) if (m?.cleR2) { if (!cartesDuFichier.has(m.cleR2)) cartesDuFichier.set(m.cleR2, []); cartesDuFichier.get(m.cleR2).push(d); }
+    const cartesEnPlus = new Set(), setsEnPlus = new Set();
+    for (const l of retenues) {
+        for (const autre of lignesDuProduit.get(l.idProduct) || []) for (const x of candidats(autre)) setsR.add(x);
+        for (const m of carteDe.get(l.carteId)?.images || []) if (m && typeof m.set === 'string') setsEnPlus.add(m.set);
+        const f = l.visuelSubstitut?.cleR2;
+        if (f) {
+            if (typeof l.visuelSubstitut.set === 'string') setsEnPlus.add(l.visuelSubstitut.set);
+            for (const d of cartesDuFichier.get(f) || []) { cartesEnPlus.add(d._id); for (const m of d.images || []) if (m?.cleR2 === f && typeof m.set === 'string') setsEnPlus.add(m.set); }
+        }
+    }
     const lignesR = L.filter(l => [...candidats(l)].some(x => setsR.has(x)));
     const cartesLignes = new Set(lignesR.map(l => l.carteId));
-    const docsR = D.filter(d => cartesLignes.has(d._id) || (d.sets || []).some(x => setsR.has(x)));
-    const setsRL = S.filter(s => setsR.has(s._id));
+    const docsR = D.filter(d => cartesLignes.has(d._id) || cartesEnPlus.has(d._id) || (d.sets || []).some(x => setsR.has(x)));
+    const setsRL = S.filter(s => setsR.has(s._id) || setsEnPlus.has(s._id));
     if (!setsRL.length || !docsR.length || !lignesR.length) return resultat;
     const r = await api.decider({ sets: setsRL, docs: docsR, lignes: lignesR, metacarte: METACARTE_SENTINELLE(), regle: api.regle, cederLaMain: false });
-    const varianteDe = new Map(), setsDe = new Map();
+    const varianteDe = new Map(), setsDe = new Map(), cartesDe = new Map();
     for (const l of lignesR) {
         if (l.variante !== null && l.variante !== undefined && !varianteDe.has(l.idProduct)) varianteDe.set(l.idProduct, l.variante);
         if (!setsDe.has(l.idProduct)) setsDe.set(l.idProduct, new Set());
         for (const x of candidats(l)) setsDe.get(l.idProduct).add(x);
+        if (!cartesDe.has(l.idProduct)) cartesDe.set(l.idProduct, new Set());
+        cartesDe.get(l.idProduct).add(l.carteId);
     }
+    const cartesTriees = id => [...(cartesDe.get(id) || [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const gravite = j => (j.ok ? (j.variantePerdue ? 1 : 0) : 2);
+    const entreesDe = new Map();
     for (const e of r.entrees) {
-        const j = { ...jugerEntree(api, e, varianteDe.get(e.idProduct) ?? null), sets: [...(setsDe.get(e.idProduct) || [])].sort() };
+        const j = { ...jugerEntree(api, e, varianteDe.get(e.idProduct) ?? null), sets: [...(setsDe.get(e.idProduct) || [])].sort(), cartes: cartesTriees(e.idProduct) };
         const deja = resultat.get(e.idProduct);
         if (!deja || gravite(j) > gravite(deja)) resultat.set(e.idProduct, j);       // deux entrées pour un produit : la pire l'emporte
+        if (!entreesDe.has(e.idProduct)) entreesDe.set(e.idProduct, []);
+        entreesDe.get(e.idProduct).push(e);
+    }
+    // D3.3a — LE PRODUIT « CONTRADICTOIRE » : deux entrées aux visuels DIFFÉRENTS perdent TOUT visuel dans l'archive (v2/chargeur/version.js, le constructeur : « un visuel absent est honnête, celui d'un autre tirage
+    // ne l'est pas »), sans refus ni `disparus`. La règle n'est pas recopiée : les entrées du produit sont passées au VRAI constructeur de l'archive, qui compte ses contradictions.
+    for (const [id, es] of entreesDe) {
+        if (es.length < 2) continue;
+        const b = api.creerConstructeur({ marquages: true });
+        for (const e of es) b.entree(e);
+        if (b.etat().doublonsContradictoires > 0) resultat.get(id).contradictoire = true;
     }
     // TOUR 1 : le contrôle par ligne, qui ne dépend d'aucune entrée (decider peut écarter l'entrée entière). Un produit sans entrée reçoit une ligne `sansEntree`.
     for (const [id, variante] of violationsParLigne(api, lignesR)) {
         const j = resultat.get(id);
         if (j) j.ligneHorsListe = variante;
-        else resultat.set(id, { ok: true, motif: null, variantePerdue: false, ligneHorsListe: variante, sansEntree: true, idProduct: id, sets: [...(setsDe.get(id) || [])].sort() });
+        else resultat.set(id, { ok: true, motif: null, variantePerdue: false, ligneHorsListe: variante, sansEntree: true, idProduct: id, sets: [...(setsDe.get(id) || [])].sort(), cartes: cartesTriees(id) });
     }
     return resultat;
 }
@@ -179,18 +240,25 @@ async function contratDesSets({ api, sets, docs, lignes, slugs }) {
  *  nouveaux : refusés après sans l'être avant, ou variante perdue après sans l'être avant (BLOQUENT) ·
  *  persistants : refusés avant ET après, ou variante perdue avant ET après (ne bloquent pas, s'impriment) ·
  *  resolus : refusés avant, plus refusés après. */
+const MOTIF_CONTRADICTOIRE = 'deux entrées aux visuels différents : aucun visuel n\'est servi pour ce produit (v2/chargeur/version.js)';
+/** Le défaut de variante d'un produit, comme une clé : la valeur de la ligne hors liste, ou le motif de la variante perdue ; null si rien. Deux défauts « identiques » ont la même clé. */
+const cleVariante = j => (!j ? null : j.ligneHorsListe !== undefined ? `ligne:${j.ligneHorsListe}` : j.variantePerdue ? `perdue:${j.motif}` : null);
 function comparerContrat(avantMap, apresMap) {
     const nouveaux = [], persistants = [], resolus = [];
     for (const [id, a] of apresMap) {
         const b = avantMap.get(id);
         const refusAvant = Boolean(b) && !b.ok;
-        if (!a.ok) { (refusAvant ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets }); continue; }
+        // D3.3b : « persistant » = le MÊME défaut avant et après. Un produit refusé avant pour un motif A et après pour un motif B est NOUVEAU (le lot a fabriqué un autre défaut : le masquer derrière l'ancien
+        // laisserait passer ce que le lot vient d'écrire).
+        if (!a.ok) { (refusAvant && b.motif === a.motif ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets, cartes: a.cartes }); continue; }
         if (refusAvant) resolus.push({ idProduct: id, motif: b.motif });
-        // variante interdite : perdue à travers l'entrée, OU hors liste sur la ligne (TOUR 1). Un seul rang par produit, jamais deux pour la même chose.
+        // D3.3a : deux entrées aux visuels différents -> le produit perd tout visuel dans l'archive. Nouveau après le lot = bloquant ; déjà contradictoire avant = persistant.
+        if (a.contradictoire === true) (Boolean(b) && b.contradictoire === true ? persistants : nouveaux).push({ idProduct: id, motif: MOTIF_CONTRADICTOIRE, sets: a.sets, cartes: a.cartes });
+        // variante interdite : perdue à travers l'entrée, OU hors liste sur la ligne (TOUR 1). Un seul rang par produit, jamais deux pour la même chose ; persistante seulement si c'est la MÊME valeur (D3.3b).
         if (a.variantePerdue || a.ligneHorsListe !== undefined) {
             const motif = a.ligneHorsListe !== undefined ? `variante « ${a.ligneHorsListe} » hors de la liste de l'API (ligne cartes_produits)` : a.motif;
-            const avant = Boolean(b) && (b.variantePerdue || b.ligneHorsListe !== undefined);
-            (avant ? persistants : nouveaux).push({ idProduct: id, motif, sets: a.sets });
+            const avant = cleVariante(b) !== null && cleVariante(b) === cleVariante(a);
+            (avant ? persistants : nouveaux).push({ idProduct: id, motif, sets: a.sets, cartes: a.cartes });
         }
     }
     for (const [id, b] of avantMap) if (!b.ok && !apresMap.has(id)) resolus.push({ idProduct: id, motif: b.motif });
@@ -208,7 +276,15 @@ async function verifierContrat({ api, avant, apres }) {
         const slugs = setsTouchesContrat({ avant: A, apres: B });
         const [mAvant, mApres] = [await contratDesSets({ api, sets: A.sets, docs: A.cartes, lignes: A.cartesProduits, slugs }), await contratDesSets({ api, sets: B.sets, docs: B.cartes, lignes: B.cartesProduits, slugs })];
         const c = comparerContrat(mAvant, mApres);
-        const setsFautifs = [...new Set(c.nouveaux.flatMap(n => n.sets || []))].filter(s => slugs.includes(s)).sort();
+        // D3.4 : les sets fautifs sont TOUS les sets touchés des cartes fautives — ceux des lignes du produit (où il est candidat), mais aussi les sets de la carte et de ses images : le visuel fautif peut vivre dans un
+        // AUTRE set (autre tirage, substitut). Sans lui, la restauration ne remet pas le tableau `images` de la carte, le refus reste, la relecture crie. Un set non touché n'est jamais fautif (le lot n'y a rien écrit).
+        const setsDeCarte = new Map();
+        for (const d of [...A.cartes, ...B.cartes]) {
+            if (!setsDeCarte.has(d._id)) setsDeCarte.set(d._id, new Set());
+            for (const x of d.sets || []) setsDeCarte.get(d._id).add(x);
+            for (const m of d.images || []) if (m?.set) setsDeCarte.get(d._id).add(m.set);
+        }
+        const setsFautifs = [...new Set(c.nouveaux.flatMap(n => [...(n.sets || []), ...(n.cartes || []).flatMap(id => [...(setsDeCarte.get(id) || [])])]))].filter(s => slugs.includes(s)).sort();
         return { slugs, ...c, setsFautifs, entreesAvant: [...mAvant.values()].filter(x => !x.sansEntree).length, entreesApres: [...mApres.values()].filter(x => !x.sansEntree).length };
     } catch (e) { throw /^garde contrat API/.test(e.message) ? e : refus(e.stack ? `${e.message}` : e); }
 }
@@ -216,4 +292,4 @@ async function verifierContrat({ api, avant, apres }) {
 /** La ligne imprimée et journalisée. */
 const ligneContrat = (v) => `contrat API : ${v.slugs.length} set(s) rejoué(s) · refus nouveaux ${v.nouveaux.length} · persistants ${v.persistants.length} · résolus ${v.resolus.length}${v.disparus?.length ? ` · sans entrée après (information, ne bloque pas) ${v.disparus.length} : ${v.disparus.slice(0, 8).map(d => d.idProduct).join(',')}${v.disparus.length > 8 ? ',…' : ''}` : ''}`;
 
-module.exports = { chargerApi, projeter, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };
+module.exports = { chargerApi, projeter, unionProjections, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };

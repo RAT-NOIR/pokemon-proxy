@@ -138,10 +138,24 @@ const TAMPON_78 = 'x'.repeat(78);
     // ── 9 ter. TOUR 1 — le contrôle PAR LIGNE, en isolation (clé : idProduct) ; ce que estVariante dit de chaque forme, lu de l'API
     const lg = (idProduct, variante) => ({ _id: `l${idProduct}`, carteId: 1, idProduct, variante });
     const vl = G.violationsParLigne(api, [lg(1, 'staff+bidule'), lg(2, 'normale'), lg(3, 'jumbo'), lg(4, 'league+place-1'), lg(5, null), { _id: 'x', idProduct: 6 }, lg(7, ''), lg(8, ' staff '), lg(9, 'staff-prerelease'), lg(10, 'Staff'), lg(11, 12)]);
-    verifier('par ligne : seules les valeurs que estVariante refuse (après trim) sont des violations', [...vl.keys()].sort((a, b) => a - b), [1, 7, 9, 10, 11]);
-    verifier('par ligne : normale et jumbo ne sont pas traitées à part — estVariante les admet', [api.estVariante('normale'), api.estVariante('jumbo'), vl.has(2), vl.has(3)], [true, true, false, false]);
-    verifier('par ligne : null, absente, et « staff » entouré d\'espaces (trim comme visuels.js) : conformes', [vl.has(5), vl.has(6), vl.has(8)], [false, false, false]);
-    verifier('par ligne : la forme ancienne « staff-prerelease » (admise par decider via normaliserVariante) est une violation selon estVariante — voir le rapport', [vl.has(9), api.estVariante('staff-prerelease')], [true, false]);
+    // D3.1 (2026-10-24) : le contrôle par ligne applique EXACTEMENT ce que decider fait de la variante d'une ligne — normaliserVariante (marques-tampon.js ; decision.js : varianteProuvee, varianteHorsListe), sans trim :
+    // la forme ancienne « staff-prerelease » est LUE « staff+prerelease » (rien n'est perdu : pas une violation) ; « ' staff ' » n'est PAS lu (decider ne la trimme pas : elle est perdue — une violation). L'ancien contrôle
+    // faisait l'inverse des deux (estVariante brute après un trim que decider n'applique qu'APRÈS la normalisation, jamais avant).
+    verifier('par ligne : seules les valeurs que decider ne sait pas LIRE (normaliserVariante null, sans trim) sont des violations', [...vl.keys()].sort((a, b) => a - b), [1, 7, 8, 10, 11]);
+    verifier('par ligne : normale et jumbo ne sont pas traitées à part — normaliserVariante les lit', [api.normaliserVariante('normale'), api.normaliserVariante('jumbo'), vl.has(2), vl.has(3)], ['normale', 'jumbo', false, false]);
+    verifier('par ligne : null et absente : conformes', [vl.has(5), vl.has(6)], [false, false]);
+    verifier('par ligne : « staff » entouré d\'espaces : VIOLATION (decider la perd, il ne trimme pas avant de normaliser)', [vl.has(8), api.normaliserVariante(' staff ')], [true, null]);
+    verifier('par ligne : la forme ancienne « staff-prerelease » (lue par decider via normaliserVariante) N\'EST PAS une violation', [vl.has(9), api.estVariante('staff-prerelease'), api.normaliserVariante('staff-prerelease')], [false, false, 'staff+prerelease']);
+    // le même fait, de bout en bout sur la VRAIE decider : une ligne à l'ancienne forme, avec sa preuve, est servie en `staff+prerelease` ; sans preuve, elle est perdue (variantePerdue, déjà comptée par l'entrée)
+    {
+        const avecForme = (variante, preuve = 'preuve') => { const e = frosmoth('League'); e.cartesProduits[1].variante = variante; if (preuve) e.cartesProduits[1].variantePreuve = preuve; else delete e.cartesProduits[1].variantePreuve; return e; };
+        let w = await G.verifierContrat({ api, avant: frosmoth('League'), apres: avecForme('staff-prerelease') });
+        verifier('D3.1 bout en bout : ligne `staff-prerelease` AVEC preuve : decider la lit, 0 nouveau (le lot n\'est pas bloqué à tort)', [w.nouveaux.length, w.persistants.length], [0, 0]);
+        w = await G.verifierContrat({ api, avant: frosmoth('League'), apres: avecForme('staff-prerelease', null) });
+        verifier('D3.1 bout en bout : la même ligne SANS preuve : decider écarte l\'entrée (variante non prouvée sur une image qui partage) — ce n\'est pas une violation de LIGNE, le visuel perdu est montré en information (disparus)', [w.nouveaux.length, w.disparus.map(d => d.idProduct)], [0, [450593]]);
+        w = await G.verifierContrat({ api, avant: frosmoth('League'), apres: avecForme(' staff ') });
+        verifier('D3.1 bout en bout : ligne `\' staff \'` avec preuve : hors liste pour decider — 1 nouveau, motif de ligne', [w.nouveaux.length, /hors de la liste de l'API \(ligne cartes_produits\)/.test(w.nouveaux[0]?.motif || '')], [1, true]);
+    }
     c = G.comparerContrat(new Map([[1, { ok: true, motif: null, variantePerdue: false }]]), new Map([[1, { ok: true, motif: null, variantePerdue: false, ligneHorsListe: 'staff+bidule', sansEntree: true }]]));
     verifier('comparerContrat : violation par ligne après seulement, produit sans entrée : 1 nouveau', [c.nouveaux.length, c.nouveaux[0]?.motif, c.disparus.length], [1, 'variante « staff+bidule » hors de la liste de l\'API (ligne cartes_produits)', 1]);
     c = G.comparerContrat(new Map([[1, { ok: true, variantePerdue: true, ligneHorsListe: 'x+y' }]]), new Map([[1, { ok: true, variantePerdue: true, ligneHorsListe: 'x+y' }]]));
@@ -150,6 +164,100 @@ const TAMPON_78 = 'x'.repeat(78);
     verifier('comparerContrat : variantePerdue ET ligneHorsListe pour le même produit : une seule entrée', c.nouveaux.length, 1);
     v = await G.verifierContrat({ api, avant: frosmoth('League'), apres: frosmoth('League') });
     verifier('bout en bout : rien ne change = aucun set rejoué, aucun refus', [v.slugs.length, v.nouveaux.length, v.entreesApres], [0, 0, 0]);
+
+    // ── 9 quater. D3.2 — LA FERMETURE DES SETS REJOUÉS : les sets d'où viennent les visuels « autre-tirage » et « substitut » des produits touchés
+    // Un produit d'un set sans visuel propre se sert de l'image d'un AUTRE set de sa carte ; choisirVisuel classe ces images par le tirage et la région de leur set (setsBase) : sans ces sets, le classement
+    // est celui d'un monde amputé et la décision peut désigner une AUTRE image que la production (avec un défaut qu'elle n'a pas, ou sans celui qu'elle a). Banc dans les DEUX sens.
+    const SET = (id, exp, tirage, code) => ({ _id: id, idExpansion: exp, nomAffichage: id, tirage, region: tirage, code, bulba: { expansion: `${id} Expansion` } });
+    const IMG = (set, cle, extra = {}) => ({ set, cleR2: cle, w: 600, h: 840, numero: '001', source: 'tcgdex', ...extra });
+    const autreTirage = (surcharge = {}) => ({
+        sets: [SET('X-Set', 6100, 'jp', 'XJP'), SET('Zeta-Set', 6101, 'jp', 'ZJP'), SET('Alpha-Set', 6102, 'intl', 'AEN')],
+        // X n'a AUCUN visuel : le produit se sert d'un autre set de sa carte. Zeta est du MÊME tirage que X (rang 0), Alpha non : avec les deux sets connus, Zeta gagne ; sans eux, l'ordre alphabétique désigne Alpha.
+        // L'image d'Alpha n'a pas de vignette (un défaut) ; celle de Zeta est saine.
+        cartes: [{ _id: 500, nomEn: 'Testmon', sets: ['X-Set'], impressions: [{ tirage: 'jp', expansion: 'X-Set Expansion', numero: '001', total: '10', rarete: 'C' }],
+            images: [IMG('Zeta-Set', 'z/img.webp', { vignette: { cleR2: 'v/z.webp', w: 200, h: 280 }, ...(surcharge.zeta || {}) }), IMG('Alpha-Set', 'a/img.webp', surcharge.alpha || {})] }],
+        cartesProduits: [{ _id: 'l500', carteId: 500, idProduct: 777, idExpansion: 6100, numeroFiche: '001', slug: 'Testmon-X001', slugSet: 'X-Set' }]
+    });
+    const jugee = async (etat, slugs) => G.contratDesSets({ api, sets: etat.sets, docs: etat.cartes, lignes: etat.cartesProduits, slugs });
+    const j0 = await jugee(autreTirage(), ['X-Set']);
+    verifier('D3.2 : le produit d\'un set sans visuel est jugé sur l\'image que la PRODUCTION lui donne (Zeta, du même tirage), pas sur celle qu\'un monde amputé désignerait (Alpha, sans vignette)',
+        [j0.has(777), j0.get(777)?.ok, j0.get(777)?.sansEntree ?? false], [true, true, false]);
+    verifier('D3.2 : … les sets d\'où vient le visuel sont REJOUÉS mais ne deviennent pas des sets du produit (il garde ceux de ses lignes : X)', j0.get(777)?.sets, ['X-Set']);
+    // l'autre sens : le défaut est dans l'image que la production DÉSIGNE (Zeta : tampon de 78 caractères) — il doit être vu même quand seul le set X est « touché »
+    const zetaFautive = { partageeTamponNonSepare: false, produitsPartages: [777, 778], tamponNonRepresente: TAMPON_78 };
+    const j1 = await jugee(autreTirage({ zeta: zetaFautive }), ['X-Set']);
+    verifier('D3.2 (l\'autre sens) : le défaut de l\'image désignée par la production (Zeta) est jugé : refus, motif de la vraie lireEntree', [j1.get(777)?.ok, /tamponNonRepresente/.test(j1.get(777)?.motif || '')], [false, true]);
+    // les substituts : la vignette d'un substitut est celle de l'entrée d'une AUTRE carte qui porte le même fichier ; cette carte doit être dans les documents rejoués
+    const substitut = () => {
+        const e = autreTirage();
+        e.cartes[0].images = [];                                                          // aucune image propre : le produit n'a que son substitut
+        e.cartesProduits[0].visuelSubstitut = { cleR2: 'origine/img.webp', w: 600, h: 840, mention: 'Carte d\'origine' };
+        // la carte d'origine n'est membre d'AUCUN des sets rejoués (`sets` ne contient pas le set de son image) : seule la recherche par FICHIER la rapporte
+        e.cartes.push({ _id: 501, nomEn: 'Origine', sets: ['Autre-Set'], impressions: [], images: [IMG('Zeta-Set', 'origine/img.webp', { vignette: { cleR2: 'v/origine.webp', w: 200, h: 280 } })] });
+        return e;
+    };
+    const js = await jugee(substitut(), ['X-Set']);
+    verifier('D3.2 : un substitut dont l\'image est portée par une AUTRE carte : cette carte est rejouée, la vignette est trouvée — le produit est admis (pas de faux refus « vignette absente »)',
+        [js.get(777)?.ok, js.get(777)?.motif ?? null], [true, null]);
+
+    // ── 9 quinquies. D3.3 — (a) le produit « contradictoire » : deux entrées aux visuels DIFFÉRENTS perdent tout visuel dans l'archive (v2/chargeur/version.js)
+    const deuxSets = (avecSecondeLigne, memeImage = false) => ({
+        sets: [SET('X-Set', 6100, 'jp', 'XJP'), SET('W-Set', 6103, 'jp', 'WJP')],
+        cartes: [{ _id: 500, nomEn: 'Testmon', sets: ['X-Set'], impressions: [{ tirage: 'jp', expansion: 'X-Set Expansion', numero: '001', total: '10', rarete: 'C' }], images: [IMG('X-Set', 'x/img.webp', { vignette: { cleR2: 'v/x.webp', w: 200, h: 280 } })] },
+            { _id: 501, nomEn: 'Testmon', sets: ['W-Set'], impressions: [{ tirage: 'jp', expansion: 'W-Set Expansion', numero: '001', total: '10', rarete: 'C' }], images: [memeImage ? IMG('W-Set', 'x/img.webp', { vignette: { cleR2: 'v/x.webp', w: 200, h: 280 } }) : IMG('W-Set', 'w/img.webp', { vignette: { cleR2: 'v/w.webp', w: 200, h: 280 } })] }],
+        cartesProduits: [{ _id: 'l500', carteId: 500, idProduct: 777, idExpansion: 6100, numeroFiche: '001', slug: 'Testmon-X001', slugSet: 'X-Set' },
+            ...(avecSecondeLigne ? [{ _id: 'l501', carteId: 501, idProduct: 777, idExpansion: 6103, numeroFiche: '001', slug: 'Testmon-W001', slugSet: 'W-Set' }] : []),
+            { _id: 'l502', carteId: 501, idProduct: 888, idExpansion: 6103, numeroFiche: '001', slug: 'Autre-W001', slugSet: 'W-Set' }]
+    });
+    const jc = await G.contratDesSets({ api, ...(e => ({ sets: e.sets, docs: e.cartes, lignes: e.cartesProduits }))(deuxSets(true)), slugs: ['W-Set'] });
+    verifier('D3.3a : un produit joint à deux cartes de deux sets, aux visuels différents : jugé CONTRADICTOIRE (même règle que le chargeur : version.js), AVEC ses deux sets (le set non touché est rejoué)',
+        [jc.get(777)?.contradictoire === true, jc.get(777)?.sets], [true, ['W-Set', 'X-Set']]);
+    const jm = await G.contratDesSets({ api, ...(e => ({ sets: e.sets, docs: e.cartes, lignes: e.cartesProduits }))(deuxSets(true, true)), slugs: ['W-Set'] });
+    verifier('D3.3a (l\'autre sens) : les deux entrées portent le MÊME visuel : doublon admis par le chargeur, pas contradictoire', [jm.get(777)?.contradictoire === true, jm.get(777)?.ok], [false, true]);
+    let vc = await G.verifierContrat({ api, avant: deuxSets(false), apres: deuxSets(true) });
+    verifier('D3.3a : la seconde ligne apparaît dans le lot (visuels différents) : 1 NOUVEAU, motif nommé, aucune autre chose ne bouge', [vc.nouveaux.map(n => n.idProduct), /deux entrées aux visuels différents/.test(vc.nouveaux[0]?.motif || ''), vc.persistants.length], [[777], true, 0]);
+    verifier('D3.3a : … seul W est touché par le lot (X est rejoué, pas écrit) : W est fautif, X ne l\'est pas', [vc.slugs, vc.setsFautifs], [['W-Set'], ['W-Set']]);
+    vc = await G.verifierContrat({ api, avant: deuxSets(true), apres: (e => { e.cartes[0].nomEn = 'Testmon ex'; return e; })(deuxSets(true)) });
+    verifier('D3.3a : déjà contradictoire AVANT le lot : persistant, ne bloque pas', [vc.nouveaux.length, vc.persistants.map(p => p.idProduct)], [0, [777]]);
+    vc = await G.verifierContrat({ api, avant: deuxSets(true), apres: deuxSets(true, true) });
+    verifier('D3.3a : le lot unifie les deux visuels : plus contradictoire, rien de nouveau', [vc.nouveaux.length, vc.persistants.length], [0, 0]);
+
+    // ── D3.3 (b) un refus de motif A avant et de motif B après est NOUVEAU
+    c = G.comparerContrat(new Map([[1, { ok: false, motif: 'motif A', sets: ['S'] }]]), new Map([[1, { ok: false, motif: 'motif B', sets: ['S'] }]]));
+    verifier('D3.3b : refusé avant (A) et après (B) : NOUVEAU (le lot a fabriqué un autre défaut), pas persistant', [c.nouveaux.map(n => n.motif), c.persistants.length], [['motif B'], 0]);
+    c = G.comparerContrat(new Map([[1, { ok: false, motif: 'motif A', sets: ['S'] }]]), new Map([[1, { ok: false, motif: 'motif A', sets: ['S'] }]]));
+    verifier('D3.3b (l\'autre sens) : le MÊME motif avant et après : persistant, ne bloque pas', [c.nouveaux.length, c.persistants.length], [0, 1]);
+    c = G.comparerContrat(new Map([[1, { ok: true, variantePerdue: false, ligneHorsListe: 'x+y' }]]), new Map([[1, { ok: true, variantePerdue: false, ligneHorsListe: 'z+t' }]]));
+    verifier('D3.3b : une variante de ligne hors liste qui devient une AUTRE valeur hors liste : nouveau (le lot l\'a réécrite)', [c.nouveaux.length, c.persistants.length], [1, 0]);
+
+    // ── 9 sexies. D3.4 — la restauration remet le tableau `images` de TOUS les sets touchés des cartes fautives, pas seulement ceux des lignes du produit
+    const vf = await G.verifierContrat({ api, avant: autreTirage(), apres: autreTirage({ zeta: zetaFautive }) });
+    verifier('D3.4 : l\'image fautive vit dans le set Zeta (autre tirage), le produit est dans X : la carte est fautive, ses sets TOUCHÉS (X, Zeta, Alpha) sont fautifs — le tableau `images` sera remis',
+        [vf.nouveaux.map(n => n.idProduct), vf.setsFautifs], [[777], ['Alpha-Set', 'X-Set', 'Zeta-Set']]);
+    verifier('D3.4 : … les cartes fautives sont portées par le verdict (la restauration les lit)', vf.nouveaux[0]?.cartes, [500]);
+    const vg = await G.verifierContrat({ api, avant: deuxSets(false), apres: deuxSets(true) });
+    verifier('D3.4 (l\'autre sens) : un set non touché n\'est jamais fautif (le lot n\'y a rien écrit : pas de restauration à y faire)', vg.setsFautifs.every(s => vg.slugs.includes(s)), true);
+
+    // ── D3.5. le coût : UNE seule lecture de l'état « après » (les projections réunies), plus une troisième copie de la base
+    verifier('D3.5 : unionProjections réunit les chemins sans collision parent/enfant (Mongo refuse « a » et « a.b » ensemble) et sans perdre un champ',
+        [G.unionProjections({ a: 1, 'b.c': 1 }, { 'a.x': 1, 'b.d': 1, e: 1 }), G.unionProjections({ 'a.x': 1 }, { a: 1 })], [{ a: 1, 'b.c': 1, 'b.d': 1, e: 1 }, { a: 1 }]);
+    verifier('D3.5 : unionProjections refuse une projection d\'exclusion (0) : la réunion d\'inclusions seulement', (() => { try { G.unionProjections({ a: 1 }, { b: 0 }); return 'passé'; } catch { return 'levé'; } })(), 'levé');
+    {
+        // chaque chemin de l'API et du site est COUVERT par la projection réunie : lui-même, ou un ancêtre (« images.vignette » couvre « images.vignette.cleR2 »)
+        const couvert = (u, k) => k.split('.').some((_, i, a) => u[a.slice(0, i + 1).join('.')] === 1);
+        const site = require('./collecte-cartes/garde-lot').PROJECTION_ETAT;
+        const uc = G.unionProjections(site.cartes, api.PROJECTIONS.cartes), up = G.unionProjections(site.cartesProduits, api.PROJECTIONS.cartes_produits);
+        verifier('D3.5 : chaque champ de l\'API ET du site est couvert par la projection réunie (cartes et cartes_produits) — rien ne se perd, aucun chemin parent/enfant ensemble',
+            [[...Object.keys(site.cartes), ...Object.keys(api.PROJECTIONS.cartes)].every(k => couvert(uc, k)), [...Object.keys(site.cartesProduits), ...Object.keys(api.PROJECTIONS.cartes_produits)].every(k => couvert(up, k)),
+                Object.keys(uc).every(k => !Object.keys(uc).some(p => p !== k && k.startsWith(`${p}.`))), Object.keys(up).every(k => !Object.keys(up).some(p => p !== k && k.startsWith(`${p}.`)))], [true, true, true, true]);
+    }
+    {
+        const srcLot = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
+        verifier('D3.5 : lot-additif.js ne relit plus la base une seconde fois pour le contrat (plus de etatContrat), l\'état « après » est lu UNE fois avec les projections réunies',
+            [/async function etatContrat/.test(srcLot), /GC\.unionProjections\(/.test(srcLot), /async function jouerContrat\(api, avantDocs, apresDocs\)/.test(srcLot)], [false, true, true]);
+        verifier('D3.5 : la restauration relit l\'état UNE fois (comparaison des comptes ET contrat sur la même lecture)', [/const apresRelu = await etatDeLaBase\(db, api\)/.test(srcLot), /jouerContrat\(api, docsAvant, apresRelu\.docs\)/.test(srcLot)], [true, true]);
+        verifier('D3.5 : l\'en-tête de garde-contrat-api.js porte les chiffres mesurés et leur date', [/2,1 s/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8')), /1 073 Mo/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8')), /2026-10-19/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8'))], [true, true, true]);
+    }
 
     // ── 10. LE CHARGEMENT ÉCHOUE FERMÉ
     let leve = null;

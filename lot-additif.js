@@ -122,10 +122,15 @@ const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(
 // Les documents de la base, projetés sur ce que compterEtat lit : le « après » passe par la MÊME fonction que le « avant ».
 // La projection couvre aussi ce que `setsTouches` compare (D1, 2026-10-24 : TOUT champ que le site lit — garde-lot.js SITE_LIT, qui pilote cette projection ET la comparaison —, lignes de jointure, sets entiers).
 // Coût mémoire : l'AVANT est la sauvegarde entière, déjà en mémoire ; l'APRÈS n'ajoute aucun document entier, seulement les champs lus par le site (pas bulba, pas sha256, pas les preuves).
-async function etatDeLaBase(db) {
+// D3.5 (2026-10-24) : UNE SEULE lecture de l'état « après », qui sert les compteurs, les sets touchés ET le contrat de l'API. Avec l'API chargée, les projections sont RÉUNIES (celles du site/des compteurs et celles
+// de l'API, sans chemin parent/enfant ensemble) ; la vue de l'API en est dérivée par `projeter`. Avant, une seconde lecture complète (etatContrat) chargeait une troisième copie de la base (≈ 1 073 Mo de tas mesurés)
+// et lisait les collections à un autre instant que les compteurs (le worker écrit entre les deux).
+async function etatDeLaBase(db, api = null) {
+    const projectionCartes = api ? GC.unionProjections(PROJECTION_ETAT.cartes, api.PROJECTIONS.cartes) : { ...PROJECTION_ETAT.cartes };
+    const projectionLignes = api ? GC.unionProjections(PROJECTION_ETAT.cartesProduits, api.PROJECTIONS.cartes_produits) : { ...PROJECTION_ETAT.cartesProduits };
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ ...PROJECTION_ETAT.cartes }).toArray(),
-        db.collection('cartes_produits').find({}).project({ ...PROJECTION_ETAT.cartesProduits }).toArray(),
+        db.collection('cartes').find({}).project(projectionCartes).toArray(),
+        db.collection('cartes_produits').find({}).project(projectionLignes).toArray(),
         db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])
         if (!l.length) throw new Error(`« ${n} » est VIDE : un compteur sur elle ne mesure rien (§41)`);
@@ -144,16 +149,11 @@ async function setsDuWorker(db, depuis) {
     return new Set(docs.map(d => String(d._id).replace(/^[^/]+\//, '')));
 }
 
-// Les trois collections que l'API lit, avec SES projections (la même forme que la sauvegarde projetée : avant et après se comparent à forme égale).
-async function etatContrat(api, db) {
-    const lire = (coll, projection) => db.collection(coll).find({}, { projection }).toArray();
-    const [sets, cartes, cartesProduits] = await Promise.all([lire('sets', api.PROJECTIONS.sets), lire('cartes', api.PROJECTIONS.cartes), lire('cartes_produits', api.PROJECTIONS.cartes_produits)]);
-    return GC.projeterEtat(api, { sets, cartes, cartesProduits });
-}
-// Le verdict du contrat : une exception est un refus de conclure (fautive), jamais un « ✅ ».
-async function jouerContrat(api, avantProjete, db) {
+// Le verdict du contrat : une exception est un refus de conclure (fautive), jamais un « ✅ ». Il juge les documents DÉJÀ LUS (la sauvegarde entière d'un côté, l'état lu une fois de l'autre) : verifierContrat les
+// projette comme l'API les lit, à forme égale, puis relâche ces copies.
+async function jouerContrat(api, avantDocs, apresDocs) {
     try {
-        const v = await GC.verifierContrat({ api, avant: avantProjete, apres: await etatContrat(api, db) });
+        const v = await GC.verifierContrat({ api, avant: avantDocs, apres: apresDocs });
         return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, persistants: v.persistants, v };
     } catch (e) {
         const raison = String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300);
@@ -195,7 +195,6 @@ function journaliser(t, dossier, combien, sortie) {
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
     const docsAvant = { cartes: lireSauvegarde(dossier, 'cartes'), cartesProduits: lireSauvegarde(dossier, 'cartes_produits'), sets: lireSauvegarde(dossier, 'sets') };
     const avant = compterEtat(docsAvant);
-    const avantContrat = api ? GC.projeterEtat(api, docsAvant) : null;          // la sauvegarde, projetée comme l'API lit la base
     let { db, fermer } = await ouvrir();
     const comptesAvant = await compter(db);
     await fermer();
@@ -212,13 +211,14 @@ function journaliser(t, dossier, combien, sortie) {
     const mesureApres = await T.mesurerGrappe(client).catch(() => null);
     const atlasApres = T.ligneAtlasApres(mesureApres, GRAPPE);
     console.log(`   ${atlasApres}`);
-    let apres = await etatDeLaBase(db), sw = await setsDuWorker(db, depuis);
+    let apres = await etatDeLaBase(db, api), sw = await setsDuWorker(db, depuis);
     let cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     if (cmp.nonAutorisees.length && CONFIRMATION_S) {
         // Le worker retire puis remet : une baisse vue entre deux de ses écritures n'en est pas une. On relit une fois.
         console.log(`   4. ${cmp.nonAutorisees.length} baisse(s) non autorisée(s) — relecture dans ${CONFIRMATION_S} s pour écarter une écriture du worker en cours`);
         await new Promise(r => setTimeout(r, CONFIRMATION_S * 1000));
-        apres = await etatDeLaBase(db); sw = await setsDuWorker(db, depuis);
+        apres = null;                                                              // relâche l'ancienne lecture avant la nouvelle (une seule copie de l'état « après » en mémoire)
+        apres = await etatDeLaBase(db, api); sw = await setsDuWorker(db, depuis);
         cmp = comparer(avant, apres, { annonces, setsDuWorker: sw });
     }
     const comptesApres = await compter(db);
@@ -228,7 +228,7 @@ function journaliser(t, dossier, combien, sortie) {
     for (const a of cmp.annoncesNonRealisees) console.log(`      ⚠️ annonce non réalisée telle quelle : ${a.cle} annoncé −${a.annonce}, réel −${a.baisse}`);
     // 5 bis. LE CONTRAT DE L'API (2026-10-19) : la chaîne de l'API rejouée sur les sets touchés, avant (sauvegarde) et après (base). Un refus NOUVEAU, ou une variante perdue, arrête le lot
     // comme une baisse non annoncée ; une exception de la garde est un refus de conclure (arrête et restaure).
-    const contrat = api ? await jouerContrat(api, avantContrat, db) : null;
+    const contrat = api ? await jouerContrat(api, docsAvant, apres.docs) : null;      // la MÊME lecture que les compteurs : ni seconde lecture de la base, ni autre instant
     console.log(`   5 bis. ${contrat ? contrat.ligne : 'contrat API : non vérifié (base de banc)'}`);
     if (contrat?.v) {
         for (const p of contrat.persistants.slice(0, 6)) console.log(`      persistant (déjà avant, ne bloque pas) : ${p.idProduct} — ${p.motif}`);
@@ -308,9 +308,11 @@ function journaliser(t, dossier, combien, sortie) {
     }
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
     if (nonRestaurees.length) console.log(`      ⚠️ NON restaurées (tenues par le worker, ou hors de la garde) : ${nonRestaurees.join(', ')} — la sauvegarde les porte`);
-    const relu = comparer(avant, await etatDeLaBase(db), { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
-    // la relecture rejoue aussi le contrat : un refus nouveau qui reste est une restauration incomplète
-    const contratRelu = api ? await jouerContrat(api, avantContrat, db) : null;
+    apres = null;                                                                  // l'état d'avant la restauration n'est plus utile : une seule copie de l'état « après » à la fois
+    const apresRelu = await etatDeLaBase(db, api);
+    const relu = comparer(avant, apresRelu, { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
+    // la relecture rejoue aussi le contrat (sur la même lecture) : un refus nouveau qui reste est une restauration incomplète
+    const contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
     await fermer();
     const resteContrat = contratRelu ? contratRelu.fautives : [];
     const ok = !relu.nonAutorisees.length && !resteContrat.length;
