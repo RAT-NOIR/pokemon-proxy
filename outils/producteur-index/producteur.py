@@ -404,7 +404,7 @@ def cmd_manifeste(a):
 def cmd_tout(a):
     os.makedirs(a.travail, exist_ok=True)
     node = os.environ.get('VOISINS_NODE', 'node')
-    exp = os.path.join(RACINE_SERVICE, 'producteur', 'exporter-archive.js')
+    exp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exporter-archive.js')     # a cote de ce fichier (banc : v2/test/test-producteur-chemins.js)
     r = subprocess.run([node, exp, a.archive, a.travail])
     if r.returncode != 0:
         raise SystemExit('l\'export de l\'archive a echoue : arret')
