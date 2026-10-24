@@ -115,8 +115,10 @@ for (const e of d) {
         causes: c, routes: r, cles: ex
     });
 }
-console.log(`CLASSÉS : ${tot.n} produits (attendu 3263) dans ${lignes.length} expansions`);
-if (tot.n !== 3263) throw new Error('concordance fausse');
+// (PHASE 3a-SUITE) l'attendu est le nombre de produits SANS LIGNE de la liste lue, plus le 3 263 de l'audit du matin : les lots écrits le font baisser
+const ATTENDU = d.reduce((t, e) => t + e.sansLigne, 0);
+console.log(`CLASSÉS : ${tot.n} produits (attendu ${ATTENDU}) dans ${lignes.length} expansions`);
+if (tot.n !== ATTENDU || !ATTENDU) throw new Error('concordance fausse');
 const nv = d.flatMap(e => e.produits.filter(p => p.nouveau).map(p => ({ exp: e.exp, p })));
 fs.mkdirSync(SORTIE, { recursive: true });
 fs.writeFileSync(path.join(SORTIE, 'causes.json'), JSON.stringify({

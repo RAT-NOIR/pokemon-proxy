@@ -17,7 +17,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { garderMatiereSpeciale, estMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
-const { decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+const { decomposerNomCardmarket, clesNom, nomJointDe, cleNumero } = require('./collecte-cartes/jointure');
 const { rejouer } = require('./collecte-cartes/deux-sources');
 
 const AUTORISES = [/^--liste=.+\.json$/, /^--exp=\d+(,\d+)*$/, /^--neufs$/, /^--attendu=\d+$/, /^--plan=.+\.json$/, /^--ecrire$/];
@@ -65,6 +65,14 @@ async function executer({ argv, ouvrir, catalogue, lireListe = f => JSON.parse(f
         const sets = new Map((await db.collection('sets').find({ _id: { $in: [...new Set(candidats.map(e => e.set))] } }).toArray()).map(s => [s._id, s]));
         const cartesDuSet = new Map();
         for (const slug of sets.keys()) cartesDuSet.set(slug, await db.collection('cartes').find({ sets: slug }).toArray());
+        // (PHASE 3a-SUITE) les cartes qui DÉCLARENT l'impression du set (tirage + expansion) sans être (encore) dans `cartes.sets` : un set « sans page » (smG…) ne rattache ses cartes qu'APRÈS la jointure.
+        // « cartes.sets ∋ slug » ne les voyait pas — 29 fiches simples du lot F1 auraient doublé leur vraie carte (vu par la simulation du lot, banc : déclarante).
+        const declarantesDuSet = new Map();
+        for (const [slug, s] of sets) {
+            const exps = [].concat(s.bulba?.expansion ?? []), tir = s.tirage ?? s.region;
+            const lues = exps.length ? await db.collection('cartes').find({ 'impressions.tirage': tir, 'impressions.expansion': { $in: exps } }).toArray() : [];
+            declarantesDuSet.set(slug, lues.filter(c => !c.ficheSimple && (c.impressions || []).some(i => i && i.tirage === tir && exps.includes(i.expansion))));
+        }
         const groupes = new Map();
         for (const e of candidats) {
             const s = sets.get(e.set);
@@ -81,8 +89,16 @@ async function executer({ argv, ouvrir, catalogue, lireListe = f => JSON.parse(f
             if (e.nom !== nomCatalogue) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `le nom de la liste (« ${e.nom} ») n'est pas celui du catalogue (« ${nomCatalogue} ») : la liste ne décrit pas ce produit` }); continue; }
             const rej = rejouer({ set: e.set, numero: e.numero, nom: nomCatalogue }, e.concordantes);
             if (!rej.ok) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `confirmation non rejouée : ${rej.motifs.join(' ; ')}` }); continue; }
-            const memeNom = (cartesDuSet.get(e.set) || []).filter(x => !x.ficheSimple && nuNom(x.nomEn) === nuNom(e.nom));
+            // (PHASE 3a-SUITE) le MÊME nom sous deux écritures est le même nom : « Lightning Energy » (Cardmarket) = « Basic Lightning Energy » (Bulbapedia), la clé de la jointure (clesNom) — l'égalité de la forme
+            // normalisée seule laissait 12 énergies de BW-Promos recevoir une fiche simple en DOUBLON de leur vraie carte (vu par la simulation du lot, banc : énergie)
+            const clesProduit = clesNom(e.nom);
+            const memeNom = (cartesDuSet.get(e.set) || []).filter(x => !x.ficheSimple && (nuNom(x.nomEn) === nuNom(e.nom) || clesNom(nomJointDe(x)).some(k => clesProduit.includes(k))));
             if (memeNom.length) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `une vraie carte de ce nom est déjà dans le set (${memeNom.slice(0, 3).map(x => x._id).join(', ')}) : c'est une jointure qui manque, pas une fiche à poser` }); continue; }
+            // le NUMÉRO départage : un set de promos réimprime le même nom à plusieurs numéros ; une déclarante à un AUTRE numéro est une autre impression, pas un doublon. Sans numéro lisible, on ne peut pas le dire : doublon.
+            const sets_ = sets.get(e.set), expsSet = [].concat(sets_.bulba?.expansion ?? []), tirSet = sets_.tirage ?? sets_.region;
+            const memeImpression = x => { const nums = (x.impressions || []).filter(i => i && i.tirage === tirSet && expsSet.includes(i.expansion)).map(i => i.numero); return !nums.length || nums.some(n => n == null || String(n).trim() === '' || cleNumero(String(n).split('/')[0]) === cleNumero(e.numero)); };
+            const declarantes = (declarantesDuSet.get(e.set) || []).filter(x => (nuNom(x.nomEn) === nuNom(e.nom) || clesNom(nomJointDe(x)).some(k => clesProduit.includes(k))) && memeImpression(x));
+            if (declarantes.length) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `une vraie carte de ce nom déclare déjà l'impression de ce set (${declarantes.slice(0, 3).map(x => x._id).join(', ')}) sans y être rattachée : c'est une jointure qui manque, pas une fiche à poser` }); continue; }
             const k = `${e.set}|${nuNom(e.nom)}|${nuNum(e.numero)}`;
             const g = groupes.get(k) || groupes.set(k, { slug: e.set, set: s, exp: e.exp, tirage: s.tirage ?? s.region, nomExp, nom: e.nom, numero: String(e.numero), attaques: decomposerNomCardmarket(c.name).attaques, produits: [], metas: new Set(), sources: new Map() }).get(k);
             g.produits.push({ idProduct: e.idProduct, name: c.name, numero: e.numero });

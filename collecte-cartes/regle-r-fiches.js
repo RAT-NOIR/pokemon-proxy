@@ -26,7 +26,9 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { clesNom, nomJointDe, jetonsDeSetlist } = require('./jointure');
 
-const SITE_LIB = path.join(__dirname, '..', '..', 'rat-market-site', 'lib');
+// (PHASE 3a-SUITE) le dossier du site : par défaut le voisin du dépôt principal ; une COPIE de travail (worktree sous rat-market-travail\catalogue, sans jonction) passe `RAT_MARKET_SITE_LIB=<dossier>`.
+const siteLib = (env = process.env, dirname = __dirname) => (env.RAT_MARKET_SITE_LIB && String(env.RAT_MARKET_SITE_LIB).trim()) || path.join(dirname, '..', '..', 'rat-market-site', 'lib');
+const SITE_LIB = siteLib();
 
 /** Les trois fonctions du site dont la règle a besoin ; l'une d'elles manque → LÈVE (jamais un repli). */
 async function chargerSite() {
@@ -219,4 +221,4 @@ function controlerRepere(cartes, parCarte) {
     return r;
 }
 
-module.exports = { exclureProduits, controlerRepere, chargerSite, lireBases, construireContexte, jugerRegleR, refuserCollisionsDuLot, operationsCartes, garderEcritureSite, cartesSansRepere, CAUSES };
+module.exports = { siteLib, exclureProduits, controlerRepere, chargerSite, lireBases, construireContexte, jugerRegleR, refuserCollisionsDuLot, operationsCartes, garderEcritureSite, cartesSansRepere, CAUSES };

@@ -42,7 +42,9 @@ const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nom
 // s'écrit que si la règle R l'autorise (collecte-cartes/regle-r-fiches.js : R1 rattachement, R2 lien rouge de la Setlist lue ; tout le reste bloque
 // et dit sa cause). `--attendu=CODE:N` compte alors les AUTORISÉES. `--rapport=<fichier>.json` écrit, en LOCAL, la décision de chaque produit et sa cause.
 // (PHASE 3a) `--plan=<fichier>.json` : écrit, en LOCAL, les lignes et les appartenances de carte que ce lancement poserait (pour la simulation de l'API) ; n'écrit rien en base.
-const AUTORISES = [/^--plan=.+\.json$/, /^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/, /^--attendu-total=\d+$/, /^--exclure=\d+(,\d+)*$/];
+// (PHASE 3a-SUITE) `--seulement=<f>.json` : la liste des SEULS idProduct à écrire (ceux que la règle des deux sources a confirmés, scanner-deux-sources.js) ; le reste du plan reste non écrit,
+// `--attendu` compte le plan RETENU, et un idProduct de la liste qu'aucun code n'a proposé refuse tout (collecte-cartes/lot-seulement.js, banc test-lot-seulement.js).
+const AUTORISES = [/^--plan=.+\.json$/, /^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/, /^--attendu-total=\d+$/, /^--exclure=\d+(,\d+)*$/, /^--seulement=.+\.json$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -57,6 +59,9 @@ const ATTENDU_TOTAL = arg('attendu-total') === undefined ? null : Number(arg('at
 const EXCLUS = (arg('exclure') || '').split(',').filter(Boolean).map(Number), exclusUtilises = new Set();
 if (EXCLUS.length && !REGLE_R) { console.error('❌ --exclure exige --regle-r'); process.exit(2); }
 if (!CODES.length) { console.error('❌ --codes=<CODE>[,…] obligatoire'); process.exit(2); }
+const LOT_SEULEMENT = require('./collecte-cartes/lot-seulement');
+let SEULEMENT = null; const vusDansLePlan = new Set();
+if (arg('seulement')) { try { SEULEMENT = LOT_SEULEMENT.lireFichier('--seulement', arg('seulement')); } catch (e) { console.error(`❌ ${e.message} — rien n'est écrit`); process.exit(2); } }
 if (REGLE_R && !SANS_MELANGE) { console.error('❌ --regle-r exige --sans-fiche-melangee (R0 : la désignation croisée ET la fiche non mélangée)'); process.exit(2); }
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 
@@ -114,6 +119,13 @@ function grouperParCarte(aEcrire, metaDe) {
             for (const r of jugees) if (!r.j.autorise) { const k = `refusé par la règle R · ${r.j.cause}`; raisons[k] = (raisons[k] || 0) + 1; }
             passent = jugees.filter(r => r.j.autorise).map(r => r.x);
         }
+        if (SEULEMENT) {
+            // la règle des deux sources : seuls les produits CONFIRMÉS s'écrivent ; les autres restent au plan, non écrits, et sont comptés
+            for (const x of passent) vusDansLePlan.add(x.p.idProduct);
+            const rs = LOT_SEULEMENT.restreindre(passent, SEULEMENT, x => x.p.idProduct);
+            if (rs.ecartes.length) raisons['écarté (--seulement) : non confirmé par la règle des deux sources'] = rs.ecartes.length;
+            passent = rs.retenus;
+        }
         for (const x of res) if (!x.d.carte) { const k = x.d.raison.replace(/\(.*\)/, '(…)').replace(/n°\S+/, 'n°#').replace(/\d+ cartes/, '# cartes'); raisons[k] = (raisons[k] || 0) + 1; }
         console.log(`\n■ ${CODE} (exp ${L.exp}, ${L.slugSet}, tirage ${L.bulba.tirage}) · DÉNOMINATEUR : ${produits.length} produits non joints · PASSENT ${passent.length} · cartes distinctes ${new Set(passent.map(x => x.d.carte._id)).size}`);
         for (const [k, v] of Object.entries(raisons).sort((a, b) => b[1] - a[1])) console.log(`   ${String(v).padStart(4)} · ${k}`);
@@ -125,6 +137,8 @@ function grouperParCarte(aEcrire, metaDe) {
         if (passent.length) sets.push(L);
     }
     console.log(`\n   ${aEcrire.length} fiches à poser sur ${sets.length} sets${ecrire ? '' : ' — (mesure seule)'}`);
+    const horsPlan = LOT_SEULEMENT.horsPlan(SEULEMENT, vusDansLePlan);
+    if (horsPlan.length) { console.error(`❌ ARRÊT : ${horsPlan.length} idProduct de --seulement ne sont dans le plan d'aucun code (${horsPlan.slice(0, 8).join(', ')}) — le fichier ne correspond pas à l'état de la base, rien n'est écrit`); await fermer(); process.exit(1); }
     const inutilises = EXCLUS.filter(id => !exclusUtilises.has(id));
     if (inutilises.length) { console.error(`❌ ARRÊT : --exclure ${inutilises.join(', ')} ne désigne aucun produit jugé de ces sets — rien n'est écrit`); await fermer(); process.exit(1); }
     if (ATTENDU_TOTAL !== null) {
@@ -143,7 +157,7 @@ function grouperParCarte(aEcrire, metaDe) {
     }
     // 🔴 LOT METAL : un produit en matière spéciale (table fermée) ne reçoit jamais la fiche de sa carte normale — la désignation par métacarte est exactement le chemin qui la lui donnerait
     try { garderMatiereSpeciale(aEcrire.map(x => x.p.idProduct), 'poser-par-metacarte'); } catch (e) { console.error(e.message); await fermer(); process.exit(1); }
-    if (arg('plan')) fs.writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-par-metacarte', lignes: aEcrire.map(x => ({ _id: `${x.d.carte._id}|${x.p.idProduct}`, carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.L.exp, tirage: x.L.bulba.tirage, preuve: 'metacarte+nom+attaques', slug: x.p.slug ?? null, slugSet: x.p.slugSet ?? x.L.slugSet, numeroFiche: null, nomProduit: x.p.name, numeroProduit: x.p.numero ?? null })), cartesSets: aEcrire.map(x => ({ carteId: x.d.carte._id, set: x.L.slugSet })), sets: [] }));
+    if (arg('plan')) fs.writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-par-metacarte', lignes: aEcrire.map(x => ({ _id: `${x.d.carte._id}|${x.p.idProduct}`, carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.L.exp, tirage: x.L.bulba.tirage, preuve: 'metacarte+nom+attaques', slug: x.p.slug ?? null, slugSet: x.p.slugSet ?? x.L.slugSet, numeroFiche: null, code: x.CODE, nomProduit: x.p.name, numeroProduit: x.p.numero ?? null })), cartesSets: aEcrire.map(x => ({ carteId: x.d.carte._id, set: x.L.slugSet })), sets: [] }));
     if (!ecrire || !aEcrire.length) { await fermer(); return; }
 
     const le = new Date();

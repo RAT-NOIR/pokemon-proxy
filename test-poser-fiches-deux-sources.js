@@ -12,12 +12,14 @@ function fakeDb(init) {
     const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, structuredClone(d)]))]));
     const stats = { upserts: 0, perdreLigne: false };
     const get = (o, p) => p.split('.').reduce((x, k) => x?.[k], o);
+    // un chemin pointé qui traverse un tableau de sous-documents (« impressions.expansion ») donne toutes les valeurs, comme Mongo
+    const valeurs = (o, p) => p.split('.').reduce((xs, k) => xs.flatMap(x => (Array.isArray(x) ? x.map(y => y?.[k]) : [x?.[k]])), [o]).flat();
     const set = (o, p, v) => { const ks = p.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] ??= {}; x[ks.at(-1)] = v; };
     const correspond = (d, f) => Object.entries(f).every(([k, v]) => {
-        const x = get(d, k);
-        if (v && typeof v === 'object' && v.$in) return v.$in.includes(x) || (Array.isArray(x) && x.some(y => v.$in.includes(y)));
-        if (v && typeof v === 'object' && '$exists' in v) return (x !== undefined) === v.$exists;
-        return Array.isArray(x) ? x.includes(v) : x === v;
+        const xs = valeurs(d, k);
+        if (v && typeof v === 'object' && v.$in) return xs.some(y => v.$in.includes(y));
+        if (v && typeof v === 'object' && '$exists' in v) return xs.some(y => y !== undefined) === v.$exists;
+        return xs.some(y => y === v);
     });
     const appliquer = (d, u, cree) => {
         if (u.$setOnInsert && cree) for (const [k, v] of Object.entries(u.$setOnInsert)) set(d, k, structuredClone(v));
@@ -41,8 +43,8 @@ const CATALOGUE = new Map([[901, { name: 'Alpha [Coup A | Coup B]', idMetacard: 
     [905, { name: 'Delta', idMetacard: 75 }], [906, { name: 'Alpha [Coup A | Coup B]', idMetacard: 71 }]]);
 const p = (idProduct, nom, numero, extra = {}) => ({ [idProduct]: { exp: 7, set: 'SetX', numero, nom, neuf: true, ok: true, concordantes: [{ source: 'pikaqian', ref: `pikaqian/csv/${idProduct}`, set: 'SetX', numero, nom, par: 'nom' }], refusees: [], sources: ['cardmarket', 'pikaqian'], raison: null, ...extra } });
 const LISTE = () => Object.assign({}, p(901, 'Alpha', '010'), p(902, 'Beta', '011', { ok: false, concordantes: [], sources: ['cardmarket'], raison: 'aucune seconde source ne porte ce produit' }), p(903, 'Mon1', '012'), p(904, 'Gamma', '013'), p(905, 'Delta', '014', { exp: 8 }));
-function monde({ lignesExistantes = [{ _id: '1001|904', carteId: 1001, idProduct: 904, preuve: 'set+numero' }], sets = [SET] } = {}) {
-    return { db: fakeDb({ sets, cartes: CARTES, cartes_produits: lignesExistantes }), liste: LISTE() };
+function monde({ lignesExistantes = [{ _id: '1001|904', carteId: 1001, idProduct: 904, preuve: 'set+numero' }], sets = [SET], cartes = CARTES } = {}) {
+    return { db: fakeDb({ sets, cartes, cartes_produits: lignesExistantes }), liste: LISTE() };
 }
 async function lancer(w, argv, { liste = w.liste, catalogue = async ids => new Map(ids.filter(i => CATALOGUE.has(i)).map(i => [i, CATALOGUE.get(i)])) } = {}) {
     const sorties = [], erreurs = []; let ouvertures = 0;
@@ -130,6 +132,45 @@ const BASE = ['--liste=l.json', '--exp=7'];
     w = monde(); avant = instantane(w);
     r = await lancer(w, BASE, { liste: Object.assign(LISTE(), p(720951, 'Mew ex', '205')) });
     verifier('matière spéciale (Mew ex 720951, table fermée) : exit 1, rien d\'écrit, le motif est dit', [r.code, /720951/.test(r.erreurs), instantane(w) === avant], [1, true, true]);
+
+    // ── 🔴 (PHASE 3a-SUITE, simulation des lots F) le MÊME nom sous deux écritures : « Zeta Energy » chez Cardmarket est « Basic Zeta Energy » chez Bulbapedia — c'est la vraie carte du set.
+    // L'égalité de la forme normalisée ne le voyait pas : 12 énergies de BW-Promos auraient reçu une fiche simple en DOUBLON de la vraie carte. La clé est celle de la jointure (jointure.js::clesNom).
+    {
+        const cartesE = [...CARTES, { _id: 1002, nomEn: 'Basic Zeta Energy', sets: ['SetX'], impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '1' }] }];
+        CATALOGUE.set(908, { name: 'Zeta Energy', idMetacard: 78 });
+        const wE = monde({ cartes: cartesE }); const avE = instantane(wE);
+        const rE = await lancer(wE, BASE, { liste: Object.assign(LISTE(), p(908, 'Zeta Energy', '016')) });
+        verifier('énergie : « Zeta Energy » est la vraie carte « Basic Zeta Energy » du set → REFUSÉE (doublon), le plan garde Alpha seul, rien d\'écrit', [rE.code, /1 lignes sur 1 fiches simples · refusés 4/.test(rE.sorties), instantane(wE) === avE], [0, true, true]);
+        const rE2 = await lancer(monde(), BASE, { liste: Object.assign(LISTE(), p(908, 'Zeta Energy', '016')) });
+        verifier('   sans la vraie carte dans le set, « Zeta Energy » reçoit sa fiche simple (le refus vient bien de la vraie carte)', [/2 lignes sur 2 fiches simples/.test(rE2.sorties)], [true]);
+    }
+
+    // ── 🔴 (PHASE 3a-SUITE, simulation des lots F) une vraie carte qui DÉCLARE l'impression du set sans être (encore) dans `cartes.sets` : les sets « sans page » (smG : 23 produits, plus 6 autres
+    // dans le lot F1) ne rattachent leurs cartes au set qu'APRÈS la jointure. « cartes.sets ∋ slug » ne les voyait pas : 29 fiches simples auraient doublé leur vraie carte.
+    {
+        const declarante = { _id: 1003, nomEn: 'Eta', sets: [], impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '9' }] };
+        CATALOGUE.set(909, { name: 'Eta', idMetacard: 79 });
+        const wD = monde({ cartes: [...CARTES, declarante] }); const avD = instantane(wD);
+        const rD = await lancer(wD, BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('déclarante : « Eta » est déclarée par une vraie carte (tirage + expansion du set) bien qu\'elle ne soit pas dans cartes.sets → REFUSÉE (doublon), nommée, rien d\'écrit',
+            [rD.code, /1 lignes sur 1 fiches simples · refusés 4/.test(rD.sorties), /déclare déjà l'impression de ce set/.test(rD.sorties), instantane(wD) === avD], [0, true, true, true]);
+        // le NUMÉRO départage : un set de promos réimprime le même nom à plusieurs numéros (Pikachu n°1, n°77…) ; la fiche simple d'une AUTRE impression n'est pas un doublon. « 009/009 » est le numéro 9.
+        const autreNumero = { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '77' }] };
+        const rN = await lancer(monde({ cartes: [...CARTES, autreNumero] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('   déclarée sous un AUTRE numéro (77 contre 009) : une autre impression du même nom, pas un doublon → la fiche simple est posée au plan', [/2 lignes sur 2 fiches simples/.test(rN.sorties)], [true]);
+        const formeSlash = { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '009/009' }] };
+        const rS = await lancer(monde({ cartes: [...CARTES, formeSlash] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('   « 009/009 » est le numéro 009 → doublon, REFUSÉE', [/1 lignes sur 1 fiches simples · refusés 4/.test(rS.sorties)], [true]);
+        const sansNumero = { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'X Promo' }] };
+        const rZ = await lancer(monde({ cartes: [...CARTES, sansNumero] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('   déclarée SANS numéro : on ne peut pas dire que c\'est une autre impression → REFUSÉE', [/1 lignes sur 1 fiches simples · refusés 4/.test(rZ.sorties)], [true]);
+        const autre = { ...declarante, impressions: [{ tirage: 'jp', expansion: 'X Promo', numero: '9' }] };
+        const rD2 = await lancer(monde({ cartes: [...CARTES, autre] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('   la même carte déclarée dans un AUTRE tirage (jp) ne bloque pas : elle n\'est pas la carte de ce set', [/2 lignes sur 2 fiches simples/.test(rD2.sorties)], [true]);
+        const autreExp = { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'Autre Expansion', numero: '9' }] };
+        const rD3 = await lancer(monde({ cartes: [...CARTES, autreExp] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
+        verifier('   déclarée dans une AUTRE expansion : ne bloque pas non plus', [/2 lignes sur 2 fiches simples/.test(rD3.sorties)], [true]);
+    }
 
     // ── regroupement : deux produits du même (nom, numéro) font UNE fiche, au plus petit idProduct ──
     w = monde();
