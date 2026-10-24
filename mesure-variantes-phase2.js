@@ -10,23 +10,8 @@ require('dotenv').config({ quiet: true });
 if (!process.env.MONGODB_CARTES_LECTURE_URI) require('dotenv').config({ path: 'C:/Users/Yung/Desktop/pokemon-proxy/.env', quiet: true });
 const sans = u => String(u ?? '').replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>');
 
-// CE QUI A ÉTÉ LU À L'ŒIL sur les planches (lot B et lot C) : la marque ou la finition qui distingue la cible du produit juste. `marque` : le nom de la marque telle que la liste de l'API l'écrit, ou null si la
-// distinction n'est PAS une marque de la liste (finition, format, tampon d'un autre nom). Le jeton est ensuite VÉRIFIÉ contre la vraie liste (jetonDe), jamais tapé.
-const LU = new Map([
-    [752306, { quoi: 'tampon Toys R Us présent chez Cardmarket, absent de notre scan', marque: 'toys-r-us' }],
-    [873081, { quoi: 'tampon Toys R Us, holo', marque: 'toys-r-us' }],
-    [722696, { quoi: 'tampon « Holo 20th Anniversary Stamp Promo »', marque: null }],
-    [362873, { quoi: 'carte Oversized (« Attention: Oversized Card »)', marque: 'jumbo' }],
-    [362872, { quoi: 'carte Oversized', marque: 'jumbo' }],
-    [362871, { quoi: 'carte Oversized', marque: 'jumbo' }],
-    [901316, { quoi: 'version « Non-Holo » (finition)', marque: null }],
-    [901315, { quoi: 'version « Non-Holo » (finition)', marque: null }],
-    [576708, { quoi: 'version « Non-Holo » (finition)', marque: null }],
-    [855023, { quoi: 'version « Non-Holo » (finition, Lava Theme Deck)', marque: null }],
-    [280583, { quoi: 'finition foil du même dessin', marque: null }],
-    [538823, { quoi: 'finition holo, tampon 25e anniversaire des deux côtés', marque: null }],
-    [858713, { quoi: 'finition reverse holo', marque: null }]
-]);
+// CE QUI A ÉTÉ LU À L'ŒIL (lot B et lot C) : la table LU vit dans collecte-cartes/phase2-variantes.js (PHASE 3b : l'outil d'écriture separer-variantes-phase2.js la lit au même endroit).
+const LU = V.LU;
 
 (async () => {
     const api = await GC.chargerApi();
@@ -43,13 +28,7 @@ const LU = new Map([
     if (cibles13.length !== 13) throw new Error(`${cibles13.length} cibles « emprunt » au lieu de 13`);
 
     // les groupes : une entrée, ses cibles, ses justes ; les produits servis par la clé doivent être EXACTEMENT les cibles et les justes
-    const parCle = P.produitsServisParCle(avant.entrees), groupes = [];
-    for (const [cle, xs] of Object.entries(Object.groupBy(cibles13, x => x.cleR2))) {
-        const x0 = xs[0], justes = [...new Set(xs.flatMap(x => x.partageAvec))], servisCle = parCle.get(cle) || [];
-        const attendus = [...justes, ...xs.map(x => x.idProduct)].sort((a, b) => a - b);
-        if (JSON.stringify(servisCle) !== JSON.stringify(attendus)) throw new Error(`l'entrée ${cle} sert ${servisCle.join(',')} et non ${attendus.join(',')} : la table n'est plus celle qui a été mesurée`);
-        groupes.push({ carteId: x0.carteId, set: x0.set, numero: x0.numero, cleR2: cle, justes, cibles: xs.map(x => ({ idProduct: x.idProduct, jeton: V.jetonDe(LU.get(x.idProduct).marque, api) })) });
-    }
+    const groupes = V.construireGroupes({ cibles: cibles13, servisParCle: P.produitsServisParCle(avant.entrees), api });   // la MÊME fonction que l'outil d'écriture (PHASE 3b)
     console.log(`\n${groupes.length} entrées, ${cibles13.length} cibles, ${groupes.flatMap(g => g.justes).length} produits justes à garder.`);
 
     console.log('\nLE JETON, PRODUIT PAR PRODUIT (lu à l\'œil, vérifié contre la liste de l\'API) :');

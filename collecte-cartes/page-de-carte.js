@@ -10,6 +10,7 @@
 // ne coûte aucune carte réelle.) Les gabarits d'homonymie sont énumérés en plus pour que le MOTIF écrit soit le bon.
 const { epurer, faitsDeCarte, gabarits } = require('./wikitext');
 const { reporterChampsPoses } = require('./impressions-posees');
+const { rareteDeLaCarte } = require('./champs-du-rejeu');
 
 const GABARITS_HOMONYMIE = new Set(['disambig', 'tcgdisambig']);
 
@@ -62,11 +63,13 @@ async function ecrirePageDeCarte({ M, r2, bucket, pg, slug, lot, redirigeDepuisT
     const { champsNuls, ...champs } = faits;
     // 🔴 une page déjà en base porte des illustrateurs POSÉS APRÈS le parseur : le `$set` du tableau les effaçait
     // (2 179 perdus le 2026-09-24, recollectes de xASC et HSP). Ils se reportent par la clé de l'impression.
-    const P = reporterChampsPoses((await M.Carte.findById(pg.pageid).select('impressions').lean())?.impressions, champs.impressions);
+    // 🔴 PHASE 3b : la rareté en base ne s'écrase pas par null non plus (collecte-cartes/champs-du-rejeu.js : la page la remplace si elle en donne une)
+    const enBase = await M.Carte.findById(pg.pageid).select('impressions rarete').lean();
+    const P = reporterChampsPoses(enBase?.impressions, champs.impressions);
     champs.impressions = P.impressions; D.posesReportes = (D.posesReportes || 0) + P.reportes; D.posesPerdus = (D.posesPerdus || 0) + P.perdus;
     await M.Carte.updateOne({ _id: pg.pageid }, {
         $set: {
-            ...champs, rarete: impCible?.rarete ?? null, champsNuls,
+            ...champs, rarete: rareteDeLaCarte(impCible, enBase?.rarete), champsNuls,
             bulba: { titre: pg.title, pageid: pg.pageid, revid: pg.revid, redirigeDepuis: redirigeDepuisTout.get(pg.title) || [], cleR2: cle },
             collecteLe: new Date()
         },
