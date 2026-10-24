@@ -6592,6 +6592,13 @@
               null
             ]
           },
+          "grilleLive": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Facultatif : la grille des prix lue sur la page, UN prix par état (clés `MT`, `NM`, `EX`, `GD`, `LP`, `PL`, `PO`, valeur strictement positive en euros). Le serveur met les clés en majuscules ; une entrée dont la clé n'est pas un des sept états, ou dont la valeur n'est pas un nombre strictement positif, est écartée sans refuser la requête, et une grille sans aucune entrée valide revient à l'absence de grille. Le nombre d'états et le nombre de valeurs distinctes se déduisent de cette grille."
+          },
           "verdictAffiche": {
             "type": "string",
             "enum": [

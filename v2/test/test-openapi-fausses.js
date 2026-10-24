@@ -18,6 +18,10 @@ const fichiers = fs.readdirSync(DOSSIER).filter(f => f.endsWith('.json') && f !=
 H.v('chaque fausse est dans _index.json et réciproquement', { horsIndex: fichiers.filter(f => !index[f]), sansFichier: Object.keys(index).filter(f => !fichiers.includes(f)) }, { horsIndex: [], sansFichier: [] });
 console.log(`   ${fichiers.length} fausses réponses publiées`);
 H.vrai('au moins 40 fausses (une par état)', fichiers.length >= 40);
+{ // BANC-EXTENSION : le contrat nomme `grilleLive` (la forme de la requête du prix lu) dans la section du retour de l'extension
+    const t = fs.readFileSync(path.join(RACINE, 'CONTRAT-API-V2.md'), 'utf8'), debut = t.indexOf('### 1.4 Le retour du prix lu'), fin = t.indexOf('\n### ', debut + 10);
+    H.vrai('CONTRAT-API-V2.md §1.4 décrit `grilleLive` (nom, états, valeur strictement positive)', debut > 0 && /`grilleLive`/.test(t.slice(debut, fin)) && /strictement positi/i.test(t.slice(debut, fin)));
+}
 
 // ── 2. chacune valide contre SON schéma ET contre le schéma que le chemin documente pour ce statut ──
 function schemaDuChemin(route, statut) {
@@ -141,6 +145,19 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('repli etat-proche avec la cause langue-non-lue', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'langue-non-lue'; c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rl);
     { const ok = clone(rl); ok.prixRepli = { repli: 'etat-proche', cause: 'offre-autre-etat', fiable: false, guide: null, offre: { etat: 'GD', prix: 0.9 } };
       H.v('contrôle : un etat-proche à offre non nulle (guide nul permis) est accepté', valider(ok, ref('ReponseRetourLive'), doc).ok, true); }
+}
+{ // BANC-EXTENSION : `marques` dans la fausse du produit Staff (ce que le serveur sert, toujours), et `grilleLive` dans la requête du retour de l'extension
+    const ts = lire('identifiee-tampon-staff.json'), c0 = ts.analyse.cartes[0].carte;
+    H.v('TAMPONS : la fausse du produit Staff porte `marques` (liste fermée) = [staff], avec sa variante tampon', [c0.marques, c0.variante], [['staff'], 'tampon']);
+    H.v('contrôle : la fausse saine est acceptée', valider(ts, ref('ReponseAnalyse'), doc).ok, true);
+    refuse('une marque hors liste fermée (le nom de l\'enseigne en clair)', c => { c.analyse.cartes[0].carte.marques = ['Staff']; }, 'ReponseAnalyse', ts);
+    refuse('`marques` en texte (un tableau, jamais une chaîne)', c => { c.analyse.cartes[0].carte.marques = 'staff'; }, 'ReponseAnalyse', ts);
+    const rq = { scanId: 'fausse-identifiee-0001', carte: 0, prixLive: 11.9, prixLiveEtat: 'EX', prixLiveCodeLangue: 1, originePrix: 'grille', grilleLive: { NM: 14.2, EX: 11.9, GD: 9.5 }, verdictAffiche: 'correct' };
+    H.v('RequeteRetourLive : une requête avec `grilleLive` (un nombre par état) est acceptée', valider(rq, ref('RequeteRetourLive'), doc).ok, true);
+    const refuseRq = (nom, abimer) => { const c = clone(rq); abimer(c); H.vrai(`requête retour-live refusée : ${nom}`, !valider(c, ref('RequeteRetourLive'), doc).ok); };
+    refuseRq('une grille en tableau', c => { c.grilleLive = [14.2, 11.9]; });
+    refuseRq('un prix de grille en texte', c => { c.grilleLive.NM = '14,2'; });
+    refuseRq('une grille nulle', c => { c.grilleLive = null; });
 }
 { // MODELE-VISUEL-API : la fausse de l'empreinte de l'extension, et ce que le schéma REFUSE
     const em = lire('identifiee-empreinte.json');

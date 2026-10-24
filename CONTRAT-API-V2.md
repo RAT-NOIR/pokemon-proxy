@@ -625,6 +625,12 @@ Les autres états sont publiés dans `v2/openapi/fausses/` (§9) : trois candida
 { "scanId": "fausse-identifiee-0001", "carte": 0, "prixLive": 11.9, "prixLiveEtat": "EX", "prixLiveCodeLangue": 1, "originePrix": "grille", "verdictAffiche": "correct" }
 ```
 
+`grilleLive` (facultatif) est la grille des prix lue sur la page, un prix par état : un objet `{ "NM": 14.2, "EX": 11.9 }` dont les clés sont les états de la liste (`MT`, `NM`, `EX`, `GD`, `LP`, `PL`, `PO`) et les valeurs des nombres strictement positifs, en euros. Le serveur met les clés en majuscules ; une entrée dont la clé n'est pas un des sept états, ou dont la valeur n'est pas strictement positive, est écartée sans refuser la requête. Le nombre d'états et le nombre de valeurs distinctes se déduisent de la grille.
+
+```json schema=RequeteRetourLive
+{ "scanId": "fausse-identifiee-0001", "carte": 0, "prixLive": 11.9, "prixLiveEtat": "EX", "prixLiveCodeLangue": 1, "originePrix": "grille", "grilleLive": { "NM": 14.2, "EX": 11.9, "GD": 9.5 }, "verdictAffiche": "correct" }
+```
+
 Une lecture ratée **définitive** dont la réponse **ne sert aucun `prixRepli`** (aucun prix n'est affiché) est remboursée une fois par scan, motif `sans-prix`, **dans la limite des déclarations du jour** (REPLI-QUOTA : avec un `prixRepli` servi, le scan n'est PAS remboursé, voir §2 bis (f) ; `facturation { debite: 1, rembourse: false, motif: "sans-prix", raisonNonRembourse: "prix-repli" }`, sans `declaration`) (sans compte 1, gratuit 3, Pro 30 ; compteur COMMUN avec `aucune`, `ne-sait-pas` et l'abandon, voir §3.1) ; au-delà, **aucun remboursement** : la réponse reste `200`, avec `facturation { debite: 1, rembourse: false, motif: "plafond-jour", raisonNonRembourse: "plafond-jour" }` ET `declaration { rendue: false, raison: "plafond-declarations", plafondJour }`. Une lecture ratée non définitive (défi Cloudflare) ne rembourse rien :
 
 ```json schema=RequeteRetourLive
