@@ -1,5 +1,5 @@
 {
-  "enregistreLe": "2026-10-24T10:13:55.942Z",
+  "enregistreLe": "2026-10-24T12:40:04.199Z",
   "nb": 33,
   "chargesCouvertes": [
     "6a9fcde7e019222f81e4a59c",
@@ -97,7 +97,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T19:57:35.249Z",
+                "updated": "2026-10-23T17:48:08.906Z",
                 "unit": "EUR",
                 "idProduct": 550496,
                 "avg": null,
@@ -163,7 +163,7 @@
         "updated": "2026-09-25T23:45:16.431Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-23T19:57:35.249Z",
+            "updated": "2026-10-23T17:48:08.906Z",
             "unit": "EUR",
             "idProduct": 550496,
             "avg": null,
@@ -260,7 +260,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T17:48:08.916Z",
+                "updated": "2026-10-23T17:48:08.906Z",
                 "unit": "EUR",
                 "idProduct": 719450,
                 "avg": 0.12,
@@ -289,7 +289,7 @@
             "variantId": "3739bbtj3i910y5ynn9xc6ryf",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T17:48:08.916Z",
+                "updated": "2026-10-23T17:48:08.906Z",
                 "unit": "EUR",
                 "idProduct": 837240,
                 "avg": null,
@@ -318,7 +318,7 @@
             "variantId": "2asus05yghmpd1ud1sdmlq3as4e",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T17:48:08.916Z",
+                "updated": "2026-10-23T17:48:08.906Z",
                 "unit": "EUR",
                 "idProduct": 837241,
                 "avg": null,
@@ -381,7 +381,7 @@
         "updated": "2026-09-25T23:45:19.162Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-23T17:48:08.916Z",
+            "updated": "2026-10-23T17:48:08.906Z",
             "unit": "EUR",
             "idProduct": 719450,
             "avg": 0.12,
@@ -4108,7 +4108,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T19:57:35.317Z",
+                "updated": "2026-10-23T19:57:35.278Z",
                 "unit": "EUR",
                 "idProduct": 680849,
                 "avg": 4,
@@ -4166,7 +4166,7 @@
         "updated": "2026-09-25T23:45:34.855Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-23T19:57:35.317Z",
+            "updated": "2026-10-23T19:57:35.278Z",
             "unit": "EUR",
             "idProduct": 680849,
             "avg": 4,
@@ -6756,7 +6756,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T19:57:35.317Z",
+                "updated": "2026-10-23T19:57:35.249Z",
                 "unit": "EUR",
                 "idProduct": 274588,
                 "avg": 51.64,
@@ -6788,7 +6788,7 @@
             "variantId": "3a83wf50ts0izj268xwv3crwi",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T19:57:35.317Z",
+                "updated": "2026-10-23T19:57:35.249Z",
                 "unit": "EUR",
                 "idProduct": 274588,
                 "avg": 51.64,
@@ -6858,7 +6858,7 @@
         "updated": "2026-08-13T21:07:12+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-23T19:57:35.317Z",
+            "updated": "2026-10-23T19:57:35.249Z",
             "unit": "EUR",
             "idProduct": 274588,
             "avg": 51.64,
@@ -6989,7 +6989,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-23T19:57:35.289Z",
+                "updated": "2026-10-23T19:57:35.278Z",
                 "unit": "EUR",
                 "idProduct": 773766,
                 "avg": 0.05,
@@ -7051,7 +7051,7 @@
         "updated": "2026-09-25T23:45:19.954Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-23T19:57:35.289Z",
+            "updated": "2026-10-23T19:57:35.278Z",
             "unit": "EUR",
             "idProduct": 773766,
             "avg": 0.05,
