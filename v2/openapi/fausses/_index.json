@@ -95,6 +95,12 @@
     "schema": "ReponseAnalyse",
     "description": "Un lot de 4 cartes : 1 crédit (ceil(4/10)), questions comprises."
   },
+  "lot-sans-prix.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Un lot de 3 cartes identifiées dont AUCUNE n'affiche de prix (prixGuide null, aucun prixRepli ; lot LOT-SANS-PRIX) : le lot est rendu en entier — facturation { debite 0, rembourse true, motif sans-prix, poche jour }, offre.restant remonté. Le même lot avec UNE carte au guide reste compté (fausse lot.json, motif lot)."
+  },
   "introuvable-photo-illisible.json": {
     "route": "POST /api/identifier",
     "statut": 200,

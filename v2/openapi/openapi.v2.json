@@ -4688,7 +4688,8 @@
           "introuvables",
           "lectureLiveMax"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Le compte d'un lot. Argent (LOT-SANS-PRIX, 2026-10-24) : un lot dont AUCUNE carte n'affiche de prix (ni `prixGuide`, ni `prixRepli`, aucun candidat de question au `prixGuide`) est remboursé en entier (`facturation { debite 0, rembourse true, motif sans-prix }`), comme un lot entièrement introuvable ; UNE carte qui affiche un prix suffit à le garder compté (`motif lot`). Un prix lu en direct par l'extension sur une carte de lot ne compte pas : le serveur ne le voit pas."
       },
       "RegleVerdict": {
         "type": "object",
@@ -4912,7 +4913,7 @@
           "raisonNonRembourse"
         ],
         "additionalProperties": false,
-        "description": "Ce que CETTE requête a coûté, et pourquoi."
+        "description": "Ce que CETTE requête a coûté, et pourquoi. Un lot dont aucune carte n'affiche de prix est rendu en entier : `debite 0`, `rembourse true`, `motif sans-prix` (LOT-SANS-PRIX) ; refusé par le plafond des constats du jour, il est facturé en entier (`debite` = le coût du lot, `motif plafond-jour`, `raisonNonRembourse plafond-jour`), comme un lot introuvable."
       },
       "Abonnement": {
         "type": "object",
