@@ -31,7 +31,35 @@ function varianteValide(v) {
     return t.every((x, i) => i === 0 || JETONS.indexOf(t[i - 1]) < JETONS.indexOf(x));
 }
 /** Le libellé de `tamponNonRepresente` pour une variante (RULING PROPOSÉ au testeur) : les marques en clair jointes par « + » ; plusieurs tampons distincts sur une même entrée : « / ». */
-const libelleTampon = v => { if (!varianteValide(v) || SEULS.includes(v)) throw new Error(`libellé : « ${v} » n'est pas une variante tamponnée`); return v.split('+').map(x => AFFICHAGE[x]).join(' + '); };
+const libelleTampon = v => { if (!varianteValide(v) || SEULS.includes(v)) throw new Error(`libellé : « ${v} » n'est pas une variante tamponnée`); return borneLibelle(v.split('+').map(x => AFFICHAGE[x]).join(' + '), v); };
+
+/**
+ * D2 (2026-10-24) — LA LONGUEUR D'UN LIBELLÉ DE TAMPON. L'API refuse tout `tamponNonRepresente` de plus de 40 caractères après trim()
+ * (pokemon-proxy-api-v2 v2/identifier/visuels.js:60, `TAMPON_MAX`) : la jointure « / » des variantes d'une entrée partagée en a produit 78 pour Frosmoth. Cette constante est LA copie du catalogue
+ * (corriger-libelle-tampon.js l'importe d'ici) ; la garde du contrat (garde-contrat-api.js) lit, elle, la limite DANS l'API et arrête le lot de toute façon.
+ * La règle ne doit pourtant pas pouvoir PRODUIRE un libellé que l'API refuserait : elle lève.
+ */
+const TAMPON_MAX = 40;
+function borneLibelle(texte, de) {
+    const t = String(texte).trim();
+    if (!t) throw new Error(`libellé : vide pour « ${de} »`);
+    if (t.length > TAMPON_MAX) throw new Error(`libellé : « ${t} » fait ${t.length} caractères, plus que ${TAMPON_MAX} caractères (limite de l'API) — pour « ${de} »`);
+    return t;
+}
+/**
+ * Le libellé d'une image PARTAGÉE par plusieurs variantes (décision du testeur, 2026-10-19) : ce qui est COMMUN à toutes — les jetons présents dans chaque variante, dans l'ordre de la liste fermée —, sans les
+ * `place-N` qui diffèrent (Frosmoth league+place-1…4 -> « League »). La place de chaque produit reste dans sa `variante`. Une variante seule : son libellé, inchangé. PURE.
+ * LÈVE si une variante n'est pas tamponnée, si aucun jeton n'est commun, ou si le résultat dépasse 40 caractères : on n'écrit pas un libellé que l'API refuserait.
+ */
+function libelleCommun(variantes) {
+    if (!Array.isArray(variantes) || !variantes.length) throw new Error('libellé commun : aucune variante');
+    const uniques = [...new Set(variantes)];
+    for (const v of uniques) libelleTampon(v);   // lève sur une variante non tamponnée / hors vocabulaire
+    if (uniques.length === 1) return libelleTampon(uniques[0]);
+    const communs = JETONS.filter(j => uniques.every(v => v.split('+').includes(j)));
+    if (!communs.length) throw new Error(`libellé commun : aucun jeton commun à ${uniques.join(' | ')} — un libellé ne se devine pas`);
+    return borneLibelle(communs.map(x => AFFICHAGE[x]).join(' + '), uniques.join(' | '));
+}
 
 /** La colonne `stamp` du relevé -> jetons, pour les colonnes qui nomment une marque de la liste. « Autre » ne nomme rien : seul le titre ou l'étiquette peut. */
 const COLONNES = Object.freeze({ 'Staff': ['staff'], 'Prerelease': ['prerelease'], 'Staff + Prerelease': ['staff', 'prerelease'], 'League': ['league'], 'Championship': ['championship'], 'Staff + Championship': ['staff', 'championship'], 'Autre': [] });
@@ -225,9 +253,12 @@ async function construirePlan({ cartesDb, fiches, dates, idsReleve, etiquettes, 
             const es = (c?.images || []).filter(e => e && e.set === L2.slugSet && e.numero != null && cleNumero(e.numero) === nf(L2));
             if (es.length !== 1) item.entreeMotif = es.length ? 'entree-ambigue' : 'entree-introuvable';
             else {
-                // plusieurs tampons DISTINCTS sur la même entrée (Frosmoth : 4 places) : leurs libellés joints par « / » (ruling proposé)
-                const e = es[0], cible = [...new Set([f.variante, ...item.freresVus.map(x => x.variante)])].map(libelleTampon).join(' / ');
-                if (e.partageeTamponNonSepare === true || e.produitsPartages !== undefined || e.partageeHoloNonHolo === true) item.entreeMotif = 'entree-deja-marquee';
+                // plusieurs variantes sur la même entrée (Frosmoth : 4 places) : le libellé COMMUN à toutes (D2, décision du testeur du 2026-10-19), jamais plus de 40 caractères ; s'il ne peut pas se composer, refus nommé
+                const e = es[0];
+                let cible = null;
+                try { cible = libelleCommun([f.variante, ...item.freresVus.map(x => x.variante)]); } catch (err) { item.entreeMotif = `libelle-impossible : ${err.message}`; }
+                if (cible === null) { /* refus déjà nommé ci-dessus */ }
+                else if (e.partageeTamponNonSepare === true || e.produitsPartages !== undefined || e.partageeHoloNonHolo === true) item.entreeMotif = 'entree-deja-marquee';
                 else if (e.tamponNonRepresente !== undefined && e.tamponNonRepresente !== cible) item.entreeMotif = `tampon-inattendu : ${e.tamponNonRepresente}`;
                 else item.entree = { carteId: c._id, set: e.set, cleR2: e.cleR2, avant: { partageeTamponNonSepare: e.partageeTamponNonSepare ?? null, tamponNonRepresente: e.tamponNonRepresente ?? null }, cible, deja: e.partageeTamponNonSepare === false && e.tamponNonRepresente === cible };
             }
@@ -353,4 +384,4 @@ async function restaurer(cartesDb, sauvegarde, { ecrire = false, attendu } = {})
     return r;
 }
 
-module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, NORMALES_VUES, PREUVE_NORMALE, dateReelle, CORRECTIONS, listeDesCorrections, CORRECTIONS_VUES, listeDesCorrectionsVues, varianteValide, libelleTampon, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };
+module.exports = { JETONS, SEULS, AFFICHAGE, COLONNES, FICHES, DATE_RELEVE, lireCsv, NORMALES_VUES, PREUVE_NORMALE, dateReelle, CORRECTIONS, listeDesCorrections, CORRECTIONS_VUES, listeDesCorrectionsVues, varianteValide, libelleTampon, libelleCommun, TAMPON_MAX, jetonsDeEtiquette, listeDesFiches, construirePlan, operations, appliquer, restaurer };
