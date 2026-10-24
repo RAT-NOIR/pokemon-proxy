@@ -91,10 +91,12 @@ leve('historique : une ligne illisible lève', () => K.lireHistorique('{"jour":"
 verifier('historique : lignes vides ignorées, ordre conservé', K.lireHistorique('{"a":1}\n\n{"a":2}\n').map(x => x.a), [1, 2]);
 
 // ── la liste légère des produits (même forme que audit-produits.json pour les outils de la phase 3a : idProduct, idExpansion, classeFiche…)
-const L = K.listeLegere(produits);
-verifier('liste légère : une entrée par produit, classes de fiche et de visuel', { n: L.length, p1: L[0], p5: L[4] },
-    { n: 10, p1: { idProduct: 1, idExpansion: 10, name: 'p1', classeFiche: 'SANS_LIGNE', motifsFiche: [], classeVisuel: 'MANQUANT', motifsVisuel: ['sans-ligne'] },
-        p5: { idProduct: 5, idExpansion: 20, name: 'p5', classeFiche: 'FICHE_DOUTEUSE', motifsFiche: ['sans-numero'], classeVisuel: 'BASSE_DEFINITION', motifsVisuel: ['basse-definition'] } });
+const lsLangue = lignesSet.map(l => ({ ...l, langue: l.famille === 'japonais' ? 'jp' : 'intl', type: 'extension', tamponnee: l.idExpansion === 30 ? 'metacarte' : null }));
+const L = K.listeLegere(produits, lsLangue);
+verifier('liste légère : une entrée par produit, classes de fiche et de visuel, famille et langue de l\'expansion', { n: L.length, p1: L[0], p5: L[4] },
+    { n: 10, p1: { idProduct: 1, idExpansion: 10, name: 'p1', famille: 'occidental', langue: 'intl', type: 'extension', tamponnee: null, classeFiche: 'SANS_LIGNE', motifsFiche: [], classeVisuel: 'MANQUANT', motifsVisuel: ['sans-ligne'] },
+        p5: { idProduct: 5, idExpansion: 20, name: 'p5', famille: 'japonais', langue: 'jp', type: 'extension', tamponnee: null, classeFiche: 'FICHE_DOUTEUSE', motifsFiche: ['sans-numero'], classeVisuel: 'BASSE_DEFINITION', motifsVisuel: ['basse-definition'] } });
+leve('liste légère : une expansion absente de la mesure des sets lève', () => K.listeLegere([P(1, 99, OK, VRAI)], lsLangue), /expansion/);
 
 // ── l'écriture : un dossier temporaire, la garde sur la racine, l'ajout à l'historique
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'compteurs-abc-'));
@@ -137,5 +139,28 @@ verifier('transitions de fiche : de la classe du matin à celle d\'aujourd\'hui'
 verifier('transitions de visuel', T.visuel, { 'A_COMPARER→A_COMPARER': 1, 'BASSE_DEFINITION→BASSE_DEFINITION': 1, 'EMPRUNTE→MANQUANT': 1, 'MANQUANT→MANQUANT': 1 });
 verifier('les produits d\'aujourd\'hui absents du matin sont comptés à part (nouveaux), ceux du matin absents d\'aujourd\'hui aussi (disparus)', { nouveaux: T.nouveaux, disparus: T.disparus }, { nouveaux: 6, disparus: 1 });
 verifier('entrées en FICHE_DOUTEUSE : d\'où elles viennent et pour quel motif', T.entreesDouteuses, { depuis: { 'FICHE_OK': 1 }, motifs: { 'sans-numero': 1 } });
+// ── comparer deux états (avant/après un lot SIMULÉ) : ce que le lot change pour ses produits, et ce qu'il change AILLEURS (effets de bord)
+const av = [
+    { idProduct: 1, fiche: { classe: 'SANS_LIGNE', motifs: [] }, visuel: { classe: 'MANQUANT', motifs: ['sans-ligne'] } },
+    { idProduct: 2, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] } },
+    { idProduct: 3, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] } },
+    { idProduct: 4, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] } }];
+const ap = [
+    { idProduct: 1, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'MANQUANT', motifs: ['aucun-visuel'] } },
+    { idProduct: 2, fiche: { classe: 'FICHE_DOUTEUSE', motifs: ['sans-numero'] }, visuel: { classe: 'A_COMPARER', motifs: [] } },
+    { idProduct: 3, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] } },
+    { idProduct: 4, fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'BASSE_DEFINITION', motifs: ['basse-definition'] } }];
+const CE = K.comparerEtats({ avant: av, apres: ap, idsDuPlan: new Set([1]) });
+verifier('comparer : les produits DU PLAN changent de classe (A) — le gain du lot', CE.duPlan.fiche, { 'SANS_LIGNE→FICHE_OK': 1 });
+verifier('comparer : les effets de bord sont les produits HORS PLAN dont une classe a changé, nommés', CE.effetsDeBord, [{ idProduct: 2, fiche: 'FICHE_OK→FICHE_DOUTEUSE', visuel: null, motifsFiche: ['sans-numero'] }, { idProduct: 4, fiche: null, visuel: 'A_COMPARER→BASSE_DEFINITION', motifsFiche: [] }]);
+verifier('comparer : le produit hors plan inchangé n\'est pas un effet de bord', CE.effetsDeBord.some(e => e.idProduct === 3), false);
+leve('comparer : un produit du plan absent des états lève (le plan ne correspond pas à l\'état)', () => K.comparerEtats({ avant: av, apres: ap, idsDuPlan: new Set([99]) }), /plan/);
+leve('comparer : deux états de populations différentes lèvent', () => K.comparerEtats({ avant: av, apres: ap.slice(1), idsDuPlan: new Set([2]) }), /population/);
+// ── un lot qui rend FAUSSE une fiche existante est refusé : le témoin du nom contredit un produit HORS plan après le lot (ex. la moitié droite d'une carte coupée en deux reçoit une fiche simple
+// au nom voisin, et la moitié gauche, déjà jointe à la vraie carte, est contredite). Les fiches « sans numéro » qui deviennent douteuses sont un effet de DÉFINITION, signalé mais pas refusé.
+verifier('refus du lot : seuls les effets « contredite-par-le-nom » le refusent', K.refusDuLot([{ idProduct: 1, fiche: 'FICHE_OK→FICHE_DOUTEUSE', visuel: null, motifsFiche: ['sans-numero'] }, { idProduct: 2, fiche: 'FICHE_OK→FICHE_DOUTEUSE', visuel: null, motifsFiche: ['contredite-par-le-nom'] }]), [2]);
+verifier('refus du lot : aucun effet → aucun refus', K.refusDuLot([]), []);
+verifier('refus du lot : une fiche qui devient « plusieurs-cartes » refuse aussi (un produit joint à deux cartes n\'a plus de fiche)', K.refusDuLot([{ idProduct: 3, fiche: 'FICHE_OK→LIGNE_SANS_FICHE', visuel: null, motifsFiche: ['plusieurs-cartes'] }]), [3]);
+verifier('refus du lot : un produit qui perd sa fiche (→ LIGNE_SANS_FICHE ou → SANS_LIGNE) refuse, quel que soit le motif', K.refusDuLot([{ idProduct: 4, fiche: 'FICHE_OK→LIGNE_SANS_FICHE', visuel: null, motifsFiche: [] }, { idProduct: 5, fiche: 'FICHE_DOUTEUSE→SANS_LIGNE', visuel: null, motifsFiche: [] }]), [4, 5]);
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

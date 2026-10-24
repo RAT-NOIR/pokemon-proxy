@@ -20,7 +20,7 @@ const TIRAGE_FAMILLE = Object.freeze({ intl: 'occidental', jp: 'japonais', 'zh-h
 const REGION_CODES = Object.freeze({ occidental: 'intl', japonais: 'jp' });   // codes_set.region → tirage (table-maitresse.mjs:184)
 
 /** Lit tout ce qu'il faut. Chaque lecture passe par lireMongo (un vide sur une population non vide LÈVE). */
-async function chargerDonnees({ prod, cartes }, api) {
+async function chargerDonnees({ prod, cartes }, api, { injecter = null } = {}) {
     const t0 = Date.now();
     const catalogue = await lireMongo(prod.collection('catalogue_produits'), {}, { nom: 'catalogue_produits', projection: { _id: 0, idProduct: 1, name: 1, idExpansion: 1, idMetacard: 1, dateAdded: 1 } });
     champSur(catalogue, 'name', { collection: 'catalogue_produits' }); champSur(catalogue, 'idExpansion', { collection: 'catalogue_produits' });
@@ -28,8 +28,11 @@ async function chargerDonnees({ prod, cartes }, api) {
     const nc = await lireMongo(prod.collection('numeros_cartes'), {}, { nom: 'numeros_cartes', projection: { _id: 0, idProduct: 1, codeSet: 1, slugSet: 1, idExpansion: 1, numero: 1 } });
     const P = api.PROJECTIONS;
     const setsBruts = await lireMongo(cartes.collection('sets'), {}, { nom: 'sets', projection: { ...P.sets, type: 1, reimpressions: 1, nomEn: 1, nomCardmarket: 1 } });
-    const cartesBrutes = await lireMongo(cartes.collection('cartes'), {}, { nom: 'cartes', projection: { ...P.cartes, niveau: 1, 'attaques.nom': 1 } });
-    const lignesBrutes = await lireMongo(cartes.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { ...P.cartes_produits, preuve: 1 } });
+    let cartesBrutes = await lireMongo(cartes.collection('cartes'), {}, { nom: 'cartes', projection: { ...P.cartes, niveau: 1, 'attaques.nom': 1 } });
+    let lignesBrutes = await lireMongo(cartes.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { ...P.cartes_produits, preuve: 1 } });
+    // (PHASE 3a-SUITE) `injecter` : l'état d'un lot SIMULÉ — reçoit les documents lus ({ cartes, cartesProduits }) et rend l'état « après » (collecte-cartes/appliquer-plan.js), AVANT la compaction que fait l'API.
+    // Rien n'est écrit : c'est le même code de mesure sur un autre état (simuler-abc.js).
+    if (injecter) { const apres = injecter({ cartes: cartesBrutes, cartesProduits: lignesBrutes }); cartesBrutes = apres.cartes; lignesBrutes = apres.cartesProduits; }
     const I = api.interneur();
     // le témoin du nom lit nomEn, niveau et attaques (les cartes du set, TOUTES) ; `decider` lit les documents COMPACTÉS comme le chargeur de l'API
     const temoinCartes = cartesBrutes.map(d => ({ _id: d._id, nomEn: d.nomEn, niveau: d.niveau, attaques: d.attaques || [], sets: d.sets || [] }));

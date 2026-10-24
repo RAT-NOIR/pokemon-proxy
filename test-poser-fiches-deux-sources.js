@@ -41,8 +41,8 @@ const CATALOGUE = new Map([[901, { name: 'Alpha [Coup A | Coup B]', idMetacard: 
     [905, { name: 'Delta', idMetacard: 75 }], [906, { name: 'Alpha [Coup A | Coup B]', idMetacard: 71 }]]);
 const p = (idProduct, nom, numero, extra = {}) => ({ [idProduct]: { exp: 7, set: 'SetX', numero, nom, neuf: true, ok: true, concordantes: [{ source: 'pikaqian', ref: `pikaqian/csv/${idProduct}`, set: 'SetX', numero, nom, par: 'nom' }], refusees: [], sources: ['cardmarket', 'pikaqian'], raison: null, ...extra } });
 const LISTE = () => Object.assign({}, p(901, 'Alpha', '010'), p(902, 'Beta', '011', { ok: false, concordantes: [], sources: ['cardmarket'], raison: 'aucune seconde source ne porte ce produit' }), p(903, 'Mon1', '012'), p(904, 'Gamma', '013'), p(905, 'Delta', '014', { exp: 8 }));
-function monde({ lignesExistantes = [{ _id: '1001|904', carteId: 1001, idProduct: 904, preuve: 'set+numero' }], sets = [SET] } = {}) {
-    return { db: fakeDb({ sets, cartes: CARTES, cartes_produits: lignesExistantes }), liste: LISTE() };
+function monde({ lignesExistantes = [{ _id: '1001|904', carteId: 1001, idProduct: 904, preuve: 'set+numero' }], sets = [SET], cartes = CARTES } = {}) {
+    return { db: fakeDb({ sets, cartes, cartes_produits: lignesExistantes }), liste: LISTE() };
 }
 async function lancer(w, argv, { liste = w.liste, catalogue = async ids => new Map(ids.filter(i => CATALOGUE.has(i)).map(i => [i, CATALOGUE.get(i)])) } = {}) {
     const sorties = [], erreurs = []; let ouvertures = 0;
@@ -130,6 +130,18 @@ const BASE = ['--liste=l.json', '--exp=7'];
     w = monde(); avant = instantane(w);
     r = await lancer(w, BASE, { liste: Object.assign(LISTE(), p(720951, 'Mew ex', '205')) });
     verifier('matière spéciale (Mew ex 720951, table fermée) : exit 1, rien d\'écrit, le motif est dit', [r.code, /720951/.test(r.erreurs), instantane(w) === avant], [1, true, true]);
+
+    // ── 🔴 (PHASE 3a-SUITE, simulation des lots F) le MÊME nom sous deux écritures : « Zeta Energy » chez Cardmarket est « Basic Zeta Energy » chez Bulbapedia — c'est la vraie carte du set.
+    // L'égalité de la forme normalisée ne le voyait pas : 12 énergies de BW-Promos auraient reçu une fiche simple en DOUBLON de la vraie carte. La clé est celle de la jointure (jointure.js::clesNom).
+    {
+        const cartesE = [...CARTES, { _id: 1002, nomEn: 'Basic Zeta Energy', sets: ['SetX'], impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '1' }] }];
+        CATALOGUE.set(908, { name: 'Zeta Energy', idMetacard: 78 });
+        const wE = monde({ cartes: cartesE }); const avE = instantane(wE);
+        const rE = await lancer(wE, BASE, { liste: Object.assign(LISTE(), p(908, 'Zeta Energy', '016')) });
+        verifier('énergie : « Zeta Energy » est la vraie carte « Basic Zeta Energy » du set → REFUSÉE (doublon), le plan garde Alpha seul, rien d\'écrit', [rE.code, /1 lignes sur 1 fiches simples · refusés 4/.test(rE.sorties), instantane(wE) === avE], [0, true, true]);
+        const rE2 = await lancer(monde(), BASE, { liste: Object.assign(LISTE(), p(908, 'Zeta Energy', '016')) });
+        verifier('   sans la vraie carte dans le set, « Zeta Energy » reçoit sa fiche simple (le refus vient bien de la vraie carte)', [/2 lignes sur 2 fiches simples/.test(rE2.sorties)], [true]);
+    }
 
     // ── regroupement : deux produits du même (nom, numéro) font UNE fiche, au plus petit idProduct ──
     w = monde();

@@ -17,7 +17,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { garderMatiereSpeciale, estMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
-const { decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+const { decomposerNomCardmarket, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { rejouer } = require('./collecte-cartes/deux-sources');
 
 const AUTORISES = [/^--liste=.+\.json$/, /^--exp=\d+(,\d+)*$/, /^--neufs$/, /^--attendu=\d+$/, /^--plan=.+\.json$/, /^--ecrire$/];
@@ -81,7 +81,10 @@ async function executer({ argv, ouvrir, catalogue, lireListe = f => JSON.parse(f
             if (e.nom !== nomCatalogue) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `le nom de la liste (« ${e.nom} ») n'est pas celui du catalogue (« ${nomCatalogue} ») : la liste ne décrit pas ce produit` }); continue; }
             const rej = rejouer({ set: e.set, numero: e.numero, nom: nomCatalogue }, e.concordantes);
             if (!rej.ok) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `confirmation non rejouée : ${rej.motifs.join(' ; ')}` }); continue; }
-            const memeNom = (cartesDuSet.get(e.set) || []).filter(x => !x.ficheSimple && nuNom(x.nomEn) === nuNom(e.nom));
+            // (PHASE 3a-SUITE) le MÊME nom sous deux écritures est le même nom : « Lightning Energy » (Cardmarket) = « Basic Lightning Energy » (Bulbapedia), la clé de la jointure (clesNom) — l'égalité de la forme
+            // normalisée seule laissait 12 énergies de BW-Promos recevoir une fiche simple en DOUBLON de leur vraie carte (vu par la simulation du lot, banc : énergie)
+            const clesProduit = clesNom(e.nom);
+            const memeNom = (cartesDuSet.get(e.set) || []).filter(x => !x.ficheSimple && (nuNom(x.nomEn) === nuNom(e.nom) || clesNom(nomJointDe(x)).some(k => clesProduit.includes(k))));
             if (memeNom.length) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `une vraie carte de ce nom est déjà dans le set (${memeNom.slice(0, 3).map(x => x._id).join(', ')}) : c'est une jointure qui manque, pas une fiche à poser` }); continue; }
             const k = `${e.set}|${nuNom(e.nom)}|${nuNum(e.numero)}`;
             const g = groupes.get(k) || groupes.set(k, { slug: e.set, set: s, exp: e.exp, tirage: s.tirage ?? s.region, nomExp, nom: e.nom, numero: String(e.numero), attaques: decomposerNomCardmarket(c.name).attaques, produits: [], metas: new Set(), sources: new Map() }).get(k);

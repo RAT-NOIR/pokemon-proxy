@@ -111,8 +111,14 @@ const jourLocal = d => `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.ge
  * La liste LÉGÈRE des produits : une entrée par produit, avec les classes de l'audit. Même forme que `audit-produits.json` pour les outils de la phase 3a (mesurer-sans-ligne.js lit
  * idProduct, idExpansion, classeFiche) — le même état, au même instant que les compteurs, jamais une liste vieillie.
  */
-function listeLegere(produits) {
-    return produits.map(p => ({ idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, classeFiche: p.fiche.classe, motifsFiche: p.fiche.motifs, classeVisuel: p.visuel.classe, motifsVisuel: p.visuel.motifs }));
+function listeLegere(produits, lignesSet) {
+    const exp = new Map(lignesSet.map(l => [l.idExpansion, l]));
+    return produits.map(p => {
+        const l = exp.get(p.idExpansion);
+        if (!l) throw new Error(`listeLegere : expansion ${p.idExpansion} (produit ${p.idProduct}) absente de la mesure des sets`);
+        return { idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, famille: l.famille ?? null, langue: l.langue ?? null, type: l.type ?? null, tamponnee: l.tamponnee ?? null,
+            classeFiche: p.fiche.classe, motifsFiche: p.fiche.motifs, classeVisuel: p.visuel.classe, motifsVisuel: p.visuel.motifs };
+    });
 }
 /** Écrit abc-AAAA-MM-JJ-HHMM.json (heure locale) et AJOUTE une ligne à historique.jsonl ; avec `produitsLegers`, écrit aussi etat-abc-AAAA-MM-JJ-HHMM.json. */
 function ecrireSorties({ dossier = DOSSIER_COMPTEURS, resultat, maintenant = new Date(), produitsLegers = null }) {
@@ -182,6 +188,38 @@ function transitions({ matin, produits }) {
     return { fiche: trier(fiche), visuel: trier(visuel), nouveaux, disparus: matin.filter(m => !vus.has(m.idProduct)).length, entreesDouteuses: { depuis: trier(depuis), motifs: trier(motifs) } };
 }
 
+/**
+ * Deux états de la MÊME population (avant / après un lot SIMULÉ) : ce que le lot change pour ses produits (`duPlan`, le gain) et ce qu'il change AILLEURS (`effetsDeBord` : un produit hors plan dont la classe
+ * de fiche ou de visuel a bougé — ex. le set reçoit sa première fiche numérotée et les fiches sans numéro de ce set deviennent douteuses). Un effet de bord est nommé, jamais noyé dans un total.
+ */
+function comparerEtats({ avant, apres, idsDuPlan }) {
+    const A = new Map(avant.map(p => [p.idProduct, p])), B = new Map(apres.map(p => [p.idProduct, p]));
+    if (A.size !== B.size || [...A.keys()].some(id => !B.has(id))) throw new Error(`comparerEtats : deux états de populations différentes (${A.size} / ${B.size} produits) — une comparaison sur deux dénominateurs ne mesure rien`);
+    const absents = [...idsDuPlan].filter(id => !A.has(id));
+    if (absents.length) throw new Error(`comparerEtats : ${absents.length} produit(s) du plan absents de l'état (${absents.slice(0, 6).join(', ')}) — le plan ne correspond pas à l'état lu`);
+    const trier = o => Object.fromEntries(Object.entries(o).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+    const duPlan = { fiche: {}, visuel: {} }, effetsDeBord = [];
+    for (const [id, a] of [...A].sort((x, y) => x[0] - y[0])) {
+        const b = B.get(id);
+        const kf = a.fiche.classe !== b.fiche.classe ? `${a.fiche.classe}→${b.fiche.classe}` : null;
+        const kv = a.visuel.classe !== b.visuel.classe ? `${a.visuel.classe}→${b.visuel.classe}` : null;
+        if (idsDuPlan.has(id)) {
+            const f = `${a.fiche.classe}→${b.fiche.classe}`, v = `${a.visuel.classe}→${b.visuel.classe}`;
+            duPlan.fiche[f] = (duPlan.fiche[f] || 0) + 1; duPlan.visuel[v] = (duPlan.visuel[v] || 0) + 1;
+        } else if (kf || kv) effetsDeBord.push({ idProduct: id, fiche: kf, visuel: kv, motifsFiche: kf ? b.fiche.motifs : [] });
+    }
+    return { duPlan: { fiche: trier(duPlan.fiche), visuel: trier(duPlan.visuel) }, effetsDeBord };
+}
+
+/**
+ * Les produits HORS plan qu'un lot RENDRAIT FAUX : le témoin du nom contredit leur fiche (`contredite-par-le-nom`), ou ils perdent leur fiche (→ LIGNE_SANS_FICHE, → SANS_LIGNE). Écrit par ce qu'il
+ * REFUSE de laisser passer : tout le reste (une fiche « sans numéro » devenue douteuse par la définition, un visuel qui change de classe) est signalé par `comparerEtats`, pas refusé.
+ * @returns {number[]} les idProduct fautifs — non vide, le lot est refusé
+ */
+function refusDuLot(effetsDeBord) {
+    return effetsDeBord.filter(e => e.motifsFiche.includes('contredite-par-le-nom') || e.motifsFiche.includes('plusieurs-cartes') || /→(LIGNE_SANS_FICHE|SANS_LIGNE)$/.test(e.fiche || '')).map(e => e.idProduct);
+}
+
 // ── LA SORTIE IMPRIMÉE ──
 const pct = (n, N) => `${(100 * n / N).toFixed(1)} %`;
 const signe = n => (n > 0 ? `+${n}` : String(n));
@@ -211,7 +249,30 @@ function formater(R, E) {
     return out.join('\n');
 }
 
-module.exports = { calculerCompteurs, listeLegere, transitions, lireHistorique, lireHistoriqueFichier, ecartHistorique, ecrireSorties, sortieSure, expliquerEcartSansLigne, formater, jourLocal, DOSSIER_COMPTEURS, CLASSES_FICHE, CLASSES_VISUEL, CLES_RESUME, MOTIF_EMPRUNT_REFUSE };
+/**
+ * LA MESURE, de bout en bout (lecture seule) : lit l'état, rejoue la chaîne de l'API, assemble les produits, compte A, B, C. `injecter` (facultatif) change l'état LU en mémoire avant la compaction
+ * — l'état d'un lot simulé (collecte-cartes/appliquer-plan.js) ; la mesure est la même fonction sur un autre état, jamais une seconde définition (simuler-abc.js).
+ */
+async function mesurer({ api, injecter = null, rang = 20, avecTemoin = true, log = console.log }) {
+    const { ouvrirLecture, chargerDonnees, rejouerApi, assembler, mesurerSets, controlerTemoin } = require('./etat-api');
+    const { rapprocher } = require('./rapprochement');
+    const C0 = require('./classement');
+    if (C0.MOTIF_EMPRUNT_REFUSE !== MOTIF_EMPRUNT_REFUSE) throw new Error('classement.js::MOTIF_EMPRUNT_REFUSE a changé : le compte « emprunt refusé par l\'API » ne lit plus le bon motif');
+    const base = await ouvrirLecture();
+    let donnees;
+    try { donnees = await chargerDonnees(base, api, { injecter }); } finally { await base.fermer(); }
+    const rejeu = await rejouerApi({ api, sets: donnees.sets, docs: donnees.docs, lignes: donnees.lignes, catalogue: donnees.catalogue });
+    const rap = rapprocher({ d: rejeu.denominateurs, traces: [...rejeu.traces.values()].flat(), nLignes: donnees.lignes.length, nEntrees: rejeu.entrees.length });
+    log(`RAPPROCHEMENT decider ✅ ${JSON.stringify(rap.comptes)}`);
+    const { produits, horsPerimetre, entreesDuPerimetre } = assembler({ api, donnees, rejeu });
+    if (entreesDuPerimetre !== rejeu.entrees.length) throw new Error(`${rejeu.entrees.length - entreesDuPerimetre} entrées de decider portent sur des produits hors du périmètre : le rapprochement ne tient plus`);
+    const sets = mesurerSets({ donnees, produits, horsPerimetre });
+    const ctl = avecTemoin ? controlerTemoin({ donnees, produits }) : null;
+    const R = calculerCompteurs({ produits, lignesSet: sets.lignesSet, denominateur: { catalogue: donnees.catalogue.length, cartesCode: horsPerimetre.length }, rang, controleTemoin: ctl });
+    return { R, produits, sets, donnees };
+}
+
+module.exports = { calculerCompteurs, mesurer, comparerEtats, refusDuLot, listeLegere, transitions, lireHistorique, lireHistoriqueFichier, ecartHistorique, ecrireSorties, sortieSure, expliquerEcartSansLigne, formater, jourLocal, DOSSIER_COMPTEURS, CLASSES_FICHE, CLASSES_VISUEL, CLES_RESUME, MOTIF_EMPRUNT_REFUSE };
 
 // ── LANCEMENT : node audit-catalogue/compteurs-abc.js [--sans-ecrire] [--ecart-audit] [--rang=20]
 if (require.main === module) {
@@ -220,24 +281,11 @@ if (require.main === module) {
         const inconnu = args.filter(a => !['--sans-ecrire', '--ecart-audit'].includes(a) && !/^--rang=\d+$/.test(a) && !/^--note=.+$/.test(a));
         if (inconnu.length) throw new Error(`argument inconnu : ${inconnu.join(' ')} (une ligne de commande est une garde : on n'ouvre rien sur un drapeau non reconnu)`);
         const rang = Number((args.find(a => a.startsWith('--rang=')) || '--rang=20').split('=')[1]);
-        const { ouvrirLecture, chargerDonnees, rejouerApi, assembler, mesurerSets, controlerTemoin, chargerApi } = require('./etat-api');
-        const { rapprocher } = require('./rapprochement');
-        const C0 = require('./classement');
-        if (C0.MOTIF_EMPRUNT_REFUSE !== MOTIF_EMPRUNT_REFUSE) throw new Error('classement.js::MOTIF_EMPRUNT_REFUSE a changé : le compte « emprunt refusé par l\'API » ne lit plus le bon motif');
+        const { chargerApi } = require('./etat-api');
         const t0 = Date.now();
         const api = await chargerApi();
-        const base = await ouvrirLecture();
-        let donnees;
-        try { donnees = await chargerDonnees(base, api); } finally { await base.fermer(); }
-        const rejeu = await rejouerApi({ api, sets: donnees.sets, docs: donnees.docs, lignes: donnees.lignes, catalogue: donnees.catalogue });
-        const rap = rapprocher({ d: rejeu.denominateurs, traces: [...rejeu.traces.values()].flat(), nLignes: donnees.lignes.length, nEntrees: rejeu.entrees.length });
-        console.log(`RAPPROCHEMENT decider ✅ ${JSON.stringify(rap.comptes)}`);
-        const { produits, horsPerimetre, entreesDuPerimetre } = assembler({ api, donnees, rejeu });
-        if (entreesDuPerimetre !== rejeu.entrees.length) throw new Error(`${rejeu.entrees.length - entreesDuPerimetre} entrées de decider portent sur des produits hors du périmètre : le rapprochement ne tient plus`);
-        const sets = mesurerSets({ donnees, produits, horsPerimetre });
-        const ctl = controlerTemoin({ donnees, produits });
+        const { R, produits, sets } = await mesurer({ api, rang });
         const maintenant = new Date();
-        const R = calculerCompteurs({ produits, lignesSet: sets.lignesSet, denominateur: { catalogue: donnees.catalogue.length, cartesCode: horsPerimetre.length }, rang, controleTemoin: ctl });
         // `--note=` : ce qui est vrai de l'instant de la mesure (file d'images à l'arrêt ou non) — écrit dans le JSON, jamais sous-entendu
         R.note = (args.find(a => a.startsWith('--note=')) || '').slice(7) || null;
         R.le = maintenant.toISOString(); R.jour = jourLocal(maintenant); R.api = api.dossier; R.duree = Math.round((Date.now() - t0) / 1000);
@@ -259,7 +307,7 @@ if (require.main === module) {
             console.log(`\nÉCART AVEC L'AUDIT DU MATIN (${resumeMatin.le}, dénominateur ${JSON.stringify(resumeMatin.denominateur)}) : sans ligne ${X.bilan.matin} → ${X.bilan.maintenant}\n   sortis (une ligne écrite depuis) ${X.sortis.length} · restés ${X.restes} · disparus du catalogue ${X.disparusDuCatalogue}\n   entrés : détachés (phase 2) ${X.entresDetaches} · nouveaux au catalogue ${X.nouveauxAuCatalogue} · AUTRES (à ouvrir) ${X.entresAutres.length} ${JSON.stringify(X.entresAutres.slice(0, 30))}`);
         }
         if (args.includes('--sans-ecrire')) { console.log('\n(--sans-ecrire : rien n\'est écrit)'); return; }
-        const s = ecrireSorties({ resultat: R, maintenant, produitsLegers: listeLegere(produits) });
+        const s = ecrireSorties({ resultat: R, maintenant, produitsLegers: listeLegere(produits, sets.lignesSet) });
         console.log(`\n✅ écrit : ${s.fichier} · liste des produits ${s.produits} · ligne ajoutée à ${s.historique} · ${R.duree} s`);
     })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });
 }
