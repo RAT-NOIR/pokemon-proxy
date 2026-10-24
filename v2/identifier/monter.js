@@ -98,6 +98,7 @@ module.exports = {
         router.post('/api/identifier',
             aiguilleur(req => Boolean(req.body && typeof req.body === 'object' && req.body.contrat === 2)),
             resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
+        // (PHOTOS-MULTIPLES, 7d : les photos reçues avant le scan sortent du magasin DANS traiterIdentifier, une fois la requête acceptée — routes.js::rattacherPhotos ; la pile de cette route est celle d'avant le lot)
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
@@ -116,6 +117,14 @@ module.exports = {
         // donc bornée : un limiteur par IP (V2_MODELE_EMPREINTE_IP_HEURE, défaut 10/h) AVANT le gestionnaire, qui borne aussi les envois simultanés.
         if (cfg.empreinteExtension === true) router.get('/api/modele-empreinte/:sha256', L.limiteur({ nom: 'modele-empreinte', max: cfg.limites.modeleEmpreinteIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) }),
             require('./modele-empreinte').creerRoute(cfg, deps && deps.modeleEmpreinte && typeof deps.modeleEmpreinte === 'object' ? deps.modeleEmpreinte : {}));
+        // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7>, derrière V2_PHOTOS_MULTIPLES=1. Drapeau éteint : la route N'EXISTE PAS (404 natif pour tous, administrateur compris). Phase 1 : MÊME garde de rôle que
+        // /api/banc/photo (exigerAdministrateurPhoto : 404 natif sans lire le corps), AVANT le limiteur (le plafond horaire de /api/banc/photo, compteur à part) ; aucune idempotence (corps binaire), aucun argent.
+        if (cfg.photosMultiples === true) {
+            const { exigerAdministrateurPhoto } = require('../banc/photo');
+            const { traiterPhotoAvantScan } = require('./photo-avant-scan');
+            const parPorteurPhoto = parPorteurDe('photo-avant-scan', Math.max(600, cfg.limites.etiquetteParPorteurHeure));      // (B) au moins 600 par porteur (75 scans de 8 photos), même si le réglage des routes du banc est plus bas
+            router.post('/api/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhotoAvantScan(cfg, deps));
+        }
         demarrerBalayage();
         demarrerPurge();
         // O5 : la passe de rattrapage des scans dont la réponse n'est jamais partie — une passe différée au démarrage, puis toutes les 5 min (≤ le seuil de 15 min). `deps.rattrapage` ne règle que

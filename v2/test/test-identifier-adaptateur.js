@@ -215,7 +215,8 @@ for (const [nom, r, code] of pannes) {
         // écarts DOCUMENTÉS (CONTRAT-2 fait foi) : moyenne30 et impressions absents des fausses réponses de l'extension
         // F4-PRIX : `version` (Produit) et `badge`/`badgeSource` (Produit.set) sont des AJOUTS FACULTATIFS que les fausses réponses de l'extension ne portent pas encore (message REPONSE-API-EXTENSION-F4.md) :
         // écart DOCUMENTÉ, épinglé dans les deux sens plus bas (le serveur les sert toujours ; le jour où l'extension les ajoute, l'écart tombe et ce banc le dit).
-        const ECART_PRODUIT = ['impressions', 'version'];
+        // LOT TAMPONS : `marques` (Produit) est un AJOUT FACULTATIF de plus que les fausses réponses de l'extension ne portent pas encore : même écart DOCUMENTÉ que `version`, épinglé dans les deux sens.
+        const ECART_PRODUIT = ['impressions', 'version', 'marques'];
         const ECART_SET = ['badge', 'badgeSource'];
         const ECART_ETAT = ['declare'];
         const compare = (nom, mien, leur, ecarts = []) => {
@@ -233,8 +234,8 @@ for (const [nom, r, code] of pannes) {
             if (fausse.carte && mienne.carte) {
                 compare(`${nom} Produit`, mienne.carte, fausse.carte, ECART_PRODUIT);
                 compare(`${nom} Produit.set`, mienne.carte.set, fausse.carte.set, ECART_SET);
-                v(`vecteur ${nom} : le serveur sert version, set.badge et set.badgeSource (F4-PRIX) ; le vecteur de l'extension ne les a pas encore`,
-                    [['version'].every(k => k in mienne.carte), ECART_SET.every(k => k in mienne.carte.set), ['version'].some(k => k in fausse.carte), ECART_SET.some(k => k in fausse.carte.set)], [true, true, false, false]);
+                v(`vecteur ${nom} : le serveur sert version, marques (LOT TAMPONS), set.badge et set.badgeSource (F4-PRIX) ; le vecteur de l'extension ne les a pas encore`,
+                    [['version', 'marques'].every(k => k in mienne.carte), ECART_SET.every(k => k in mienne.carte.set), ['version', 'marques'].some(k => k in fausse.carte), ECART_SET.some(k => k in fausse.carte.set)], [true, true, false, false]);
                 compare(`${nom} Produit.liens`, mienne.carte.liens, fausse.carte.liens);
             }
             if (fausse.candidats.length) {

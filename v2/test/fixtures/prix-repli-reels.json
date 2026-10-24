@@ -1,0 +1,124 @@
+{
+  "_source": "rm_essai (lecture seule), analyses + journal_scans + guide_prix, extrait le 2026-10-24",
+  "cas": {
+    "tauros": {
+      "scanId": "6ad5b0263d0515c82d540768",
+      "idProduct": 273844,
+      "carteStatut": "identifiee",
+      "etat": {
+        "estime": "EX",
+        "confiance": "basse",
+        "defauts": [
+          "légères marques sur les bords",
+          "carte sous sleeve limitant la visibilité des micro-rayures"
+        ],
+        "declare": null,
+        "retenu": null
+      },
+      "lecture": {
+        "codeLangue": 1,
+        "reverseStrategie": null
+      },
+      "produit": {
+        "nomCardmarket": "Tauros [Stomp | Rampage]",
+        "nom": "Tauros",
+        "set": {
+          "slug": "Jungle",
+          "nom": "Jungle",
+          "code": "JU",
+          "tirage": null,
+          "annee": null
+        },
+        "numero": "47",
+        "total": "64",
+        "langue": null,
+        "rarete": "Uncommon",
+        "variante": null
+      },
+      "prixGuideServi": {
+        "tendance": 1.49,
+        "de": 0.02,
+        "deBase": "tous-etats",
+        "moyenne7": 1.55,
+        "moyenne30": 1.26,
+        "date": "2026-10-12",
+        "fiable": true,
+        "reserves": []
+      },
+      "guide": {
+        "trend": 1.49,
+        "low": 0.02,
+        "avg7": 1.55,
+        "avg30": 1.26,
+        "guideDu": "2026-10-12T00:47:30.000Z"
+      },
+      "journal": {
+        "prixLive": null,
+        "prixLiveEtat": null,
+        "originePrix": null,
+        "lectureRatee": {
+          "cause": "sans-prix",
+          "definitive": true,
+          "le": "2026-10-19T05:52:41.999Z"
+        },
+        "etatEstimeIA": "EX",
+        "etatConfianceIA": "basse",
+        "etatRetenu": null
+      }
+    },
+    "arcanin": {
+      "scanId": "6ad3eaf22fdf39af3f1a8b24",
+      "idProduct": 371545,
+      "carteStatut": "identifiee",
+      "etat": {
+        "estime": "NM",
+        "confiance": "haute",
+        "defauts": [],
+        "declare": null,
+        "retenu": "NM"
+      },
+      "lecture": {
+        "codeLangue": 1,
+        "reverseStrategie": "produit-distinct"
+      },
+      "produit": {
+        "nomCardmarket": "Arcanine [G] Lv.60 [Extreme Speed | Overrun]",
+        "nom": "Arcanin [G] Lv.60",
+        "set": {
+          "slug": "Supreme-Victors",
+          "nom": "Supreme Victors",
+          "code": "SV",
+          "tirage": null,
+          "annee": null
+        },
+        "numero": "15",
+        "total": "147",
+        "langue": null,
+        "rarete": "Rare",
+        "variante": null
+      },
+      "prixGuideServi": {
+        "tendance": 10.18,
+        "de": 1,
+        "moyenne30": 13.15,
+        "date": "2026-10-12"
+      },
+      "guide": {
+        "trend": 10.18,
+        "low": 1,
+        "avg7": 14.59,
+        "avg30": 13.15,
+        "guideDu": "2026-10-12T00:47:30.000Z"
+      },
+      "journal": {
+        "prixLive": 7.67,
+        "prixLiveEtat": null,
+        "originePrix": "tendance",
+        "lectureRatee": null,
+        "etatEstimeIA": "NM",
+        "etatConfianceIA": "haute",
+        "etatRetenu": "NM"
+      }
+    }
+  }
+}

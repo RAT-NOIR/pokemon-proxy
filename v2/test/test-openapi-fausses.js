@@ -121,6 +121,27 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('un champ interne qui fuit dans le prix (prixMelangeTampon)', c => { c.analyse.cartes[0].carte.prixGuide.prixMelangeTampon = true; }, 'ReponseAnalyse', pi);
     refuse('un champ interne qui fuit sur le Produit (tamponsConnus)', c => { c.analyse.cartes[0].carte.tamponsConnus = ['staff']; }, 'ReponseAnalyse', pi);
 }
+{ // PRIX-LISIBLE : le repli honnête — les fausses publiées le montrent (analyse et retour-live), et le schéma REFUSE ce qui sort de la liste
+    const pr = lire('identifiee-prix-repli.json'), c0 = pr.analyse.cartes[0], rl = lire('retour-live-prix-repli.json');
+    H.v('PRIX-LISIBLE : l\'analyse porte etatVise null ET le repli tendance / etat-non-retenu / fiable false, sans offre', [c0.prixLive.etatVise, c0.prixRepli.repli, c0.prixRepli.cause, c0.prixRepli.fiable, c0.prixRepli.offre], [null, 'tendance', 'etat-non-retenu', false, null]);
+    H.v('PRIX-LISIBLE : le retour-live porte le repli tendance / tendance-seule, et le guide non fiable (ecart-tendance)', [rl.prixRepli.repli, rl.prixRepli.cause, rl.prixRepli.fiable, rl.prixRepli.guide.reserves], ['tendance', 'tendance-seule', false, ['ecart-tendance']]);
+    H.v('contrôle : les deux fausses saines sont acceptées', [valider(pr, ref('ReponseAnalyse'), doc).ok, valider(rl, ref('ReponseRetourLive'), doc).ok], [true, true]);
+    refuse('un repli qui se dit fiable', c => { c.analyse.cartes[0].prixRepli.fiable = true; }, 'ReponseAnalyse', pr);
+    refuse('une mention de repli hors liste', c => { c.analyse.cartes[0].prixRepli.repli = 'moyenne'; }, 'ReponseAnalyse', pr);
+    refuse('un verdict dans le repli', c => { c.analyse.cartes[0].prixRepli.verdict = 'bonne-affaire'; }, 'ReponseAnalyse', pr);
+    refuse('un repli nul (la clé est absente, jamais nulle)', c => { c.analyse.cartes[0].prixRepli = null; }, 'ReponseAnalyse', pr);
+    refuse('un repli sur une carte à trancher', c => { Object.assign(c.analyse.cartes[0], lire('a-trancher-2.json').analyse.cartes[0], { prixRepli: pr.analyse.cartes[0].prixRepli }); }, 'ReponseAnalyse', pr);
+    refuse('un retour-live avec une cause de repli hors liste', c => { c.prixRepli.cause = 'au-pif'; }, 'ReponseRetourLive', rl);
+    refuse('un retour-live avec un repli sans guide ni offre (clés requises)', c => { delete c.prixRepli.guide; }, 'ReponseRetourLive', rl);
+    // TOUR 1 (M-3) : les COUPLES repli / cause / guide / offre sont dits par le schéma (deux formes exclusives)
+    refuse('repli tendance avec un guide NUL', c => { c.prixRepli.guide = null; }, 'ReponseRetourLive', rl);
+    refuse('repli tendance avec une offre', c => { c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rl);
+    refuse('repli tendance avec la cause de l\'autre forme (offre-autre-etat)', c => { c.prixRepli.cause = 'offre-autre-etat'; }, 'ReponseRetourLive', rl);
+    refuse('repli etat-proche avec une offre NULLE', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'offre-autre-etat'; c.prixRepli.offre = null; }, 'ReponseRetourLive', rl);
+    refuse('repli etat-proche avec la cause langue-non-lue', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'langue-non-lue'; c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rl);
+    { const ok = clone(rl); ok.prixRepli = { repli: 'etat-proche', cause: 'offre-autre-etat', fiable: false, guide: null, offre: { etat: 'GD', prix: 0.9 } };
+      H.v('contrôle : un etat-proche à offre non nulle (guide nul permis) est accepté', valider(ok, ref('ReponseRetourLive'), doc).ok, true); }
+}
 { // MODELE-VISUEL-API : la fausse de l'empreinte de l'extension, et ce que le schéma REFUSE
     const em = lire('identifiee-empreinte.json');
     H.v('MVA : la fausse porte `empreinte` et `regleVerdict.modeleEmpreinte`', [em.empreinte, em.analyse.regleVerdict.modeleEmpreinte.id, em.analyse.regleVerdict.modeleEmpreinte.url], [{ utilisee: true, code: null }, 'p8000-poids8s-1', null]);
@@ -184,6 +205,8 @@ const listes = {
     'statuts': S.ReponseAnalyse.properties.analyse.properties.statut.enum,
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
     'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
+    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
+    'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
     'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null)
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);

@@ -9,6 +9,7 @@ const L = () => require('../../exporter-donnees-logos-site');      // paresseux 
 const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
 
 const { lienServi } = require('../identifier/lien-cardmarket');       // LIEN-CARDMARKET : la garde unique, partagée avec la relecture (visuels.js) et le Produit
+const { separeeParVariante } = require('../identifier/partage-variante');   // PARTAGES-VARIANTE : la forme « paire séparée par la variante », UNE définition (décision, validation d'entrée, structure, F1)
 const entier = x => Number.isInteger(x) && x > 0;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const fichierDe = (cle, w, h) => (typeof cle === 'string' && cle ? { cle, w, h } : null);
@@ -41,7 +42,9 @@ const JETON_TAMPON_NOM = /(^|-)(Staff|Prerelease|Pre-Release)(-|$)/i;
 // Les familles qui RESSEMBLENT à une liste sans y figurer (un 31e set 30th, un WCD-2026, une Prize Pack Series Ten) : elles ne sont pas refusées (la liste est fermée), elles sont SIGNALÉES (d.familleHorsListe).
 const RESSEMBLANCES = Object.freeze([/^30th-/, /^WCD-\d{4}$/, /^Play-Pokemon-Prize-Pack-Series-/]);
 const NOMS_REFUS = Object.freeze([...Object.keys(FAMILLES_SANS_REPLI), 'staff-prerelease', 'image-empruntee']);
-const VARIANTES_ARCHIVE = Object.freeze(['staff', 'jumbo', 'normale']);
+// LOT TAMPONS : la variante d'une ligne est un jeton de la liste FERMÉE du catalogue (identifier/marques-tampon.js : une marque, un ensemble de marques joint par « + », jumbo, normale), avec sa
+// `variantePreuve`. La forme ancienne `staff-prerelease` se lit `staff+prerelease`. Une valeur hors de la liste est null ET comptée (varianteHorsListe) : jamais devinée, jamais perdue en silence.
+const MT = require('../identifier/marques-tampon');
 // basseDefinition (original sous 350 px) : le coordinateur MESURE puis tranche. false = les entrées sont GARDÉES (et portent le champ) ; true = une entrée basseDefinition n'est pas servie à l'identification
 // (compteur d.basseDefinitionExclue). Le site, lui, continue d'afficher ces images ; le choix ne concerne que l'archive.
 const EXCLURE_BASSE_DEFINITION = false;
@@ -59,26 +62,41 @@ function refusDeRepli({ ligne, set, im, visuel }) {
     if (f) return f;
     return JETON_TAMPON_NOM.test(String(ligne.slug ?? '')) ? 'staff-prerelease' : null;
 }
-/** Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés (la basse définition suit l'image). */
-function marquagesDe(im, idProduct) {
-    const concerne = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+/**
+ * Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés, OU si l'image est servie à une paire SÉPARÉE PAR LA VARIANTE
+ * (PARTAGES-VARIANTE : false, aucune liste, `variante` prouvée du produit servi — partage-variante.js) ; la basse définition suit l'image.
+ */
+function marquagesDe(im, idProduct, variante = null) {
+    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+    const paire = separeeParVariante(im, variante);
+    const concerne = liste || paire;
     const bool = x => (typeof x === 'boolean' ? x : null);
     return { partageeHoloNonHolo: concerne ? bool(im.partageeHoloNonHolo) : null, partageeTamponNonSepare: concerne ? bool(im.partageeTamponNonSepare) : null,
-        produitsPartages: concerne ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
+        produitsPartages: liste ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
 }
 
-/** m2 : l'image porte un marquage de partage (ou une liste) qui ne tient pas pour CE produit : fail-closed. */
-function partageIncoherent(im, idProduct) {
+/**
+ * m2 : l'image porte un marquage de partage (ou une liste) qui ne tient pas pour CE produit : fail-closed. `variante` : la variante PROUVÉE du produit servi (varianteProuvee), ou null.
+ * La seule exception à « un marquage de partage exige une liste qui contient le produit » : la paire séparée par la variante (false, aucune liste, staff|jumbo|normale prouvée).
+ */
+function partageIncoherent(im, idProduct, variante = null) {
     const partage = im.partageeHoloNonHolo === true || typeof im.partageeTamponNonSepare === 'boolean';
     const liste = Array.isArray(im.produitsPartages);
     if (!partage && !liste) return false;
+    if (separeeParVariante(im, variante)) return false;
     return !(partage && liste && im.produitsPartages.includes(idProduct));
 }
-/** m3 : la variante (staff / jumbo / normale) n'est portée QUE si la ligne a sa preuve (variantePreuve non vide) ; sinon null, compté. */
+/** La variante d'une ligne SI elle a sa preuve, sans compter (varianteAvecPreuve compte, et ne passe qu'une fois par produit servi). */
+const varianteProuvee = l => { const v = MT.normaliserVariante(l.variante); return v !== null && texte(l.variantePreuve) ? v : null; };
+/** Une variante PRÉSENTE qui n'est pas dans la liste fermée (ni sa forme ancienne) : une valeur inconnue, à compter. */
+const varianteHorsListe = l => l.variante !== undefined && l.variante !== null && MT.normaliserVariante(l.variante) === null;
+/** m3 : la variante (une marque, un ensemble, jumbo, normale) n'est portée QUE si la ligne a sa preuve (variantePreuve non vide) ; sinon null, compté. Hors liste : null, comptée à part. */
 function varianteAvecPreuve(l, d) {
-    if (!VARIANTES_ARCHIVE.includes(l.variante)) return null;
+    if (l.variante === undefined || l.variante === null) return null;
+    const v = MT.normaliserVariante(l.variante);
+    if (v === null) { d.varianteHorsListe = (d.varianteHorsListe || 0) + 1; return null; }
     if (!texte(l.variantePreuve)) { d.varianteSansPreuve++; return null; }
-    return l.variante;
+    return v;
 }
 
 function verifierRegle(regle) {
@@ -154,12 +172,12 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         aucunDetail: { 'carte absente': 0, 'aucun set candidat': 0, 'aucun visuel': 0 }, ecrites: 0, sansFicheDuSite: 0, rareteContredite: 0, idMetacardAbsent: 0, plusieursSets: 0,
         setsAvecLiens: compte.sets, fichesLiees: compte.fiches, produitsLies: compte.produits,
         // REPLI-REIMPRESSIONS : les produits dont le visuel d'un autre tirage (ou emprunté) n'est PAS servi, par famille — somme à part : avecLigne = ecrites + aucun + sansFicheDuSite + repliRefuse.total (+ doublons de lignes)
-        basseDefinitionExclue: 0, partageIncoherent: 0, varianteSansPreuve: 0,
+        basseDefinitionExclue: 0, partageIncoherent: 0, varianteSansPreuve: 0, varianteHorsListe: 0,
         repliRefuse: { total: 0, parFamille: Object.fromEntries(NOMS_REFUS.map(n => [n, 0])) },
         // les sets qui RESSEMBLENT à une famille sans figurer dans sa liste fermée : servis comme avant, mais nommés (une liste fermée qui vieillit ne doit pas vieillir en silence)
         familleHorsListe: sets.map(s => s._id).filter(id => RESSEMBLANCES.some(re => re.test(id)) && familleDuSet(id) === null).sort(),
         // les marquages portés par les entrées écrites
-        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 } };
+        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 }, melangeProduits: 0 };
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
@@ -167,7 +185,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     // JUMEAU-V2 : le créneau (expansion, numéro de fiche) et la langue de tirage de CHAQUE produit du catalogue, avec sa métacarte — le producteur de la colonne que la route lit pour ne jamais
     // affirmer un produit qui a un jumeau. Émis AVANT les écartements ci-dessous (un produit sans visuel ou sans fiche du site a quand même des jumeaux). Un produit du catalogue sans ligne :
     // créneau et langue INCONNUS (jamais devinés) ; un champ inconnu reste un jumeau côté route. Sans `sink`, la liste est rendue (les bancs).
-    const jumeaux = [], emis = new Set();
+    const jumeaux = [], emis = new Set(), melanges = new Set();
     const emettre = j => { if (sink) { if (typeof sink.jumeau === 'function') sink.jumeau(j); } else jumeaux.push(j); };
     const metaDe = id => (entier(metacarte.get(id)) ? metacarte.get(id) : null);
     n = 0;
@@ -175,6 +193,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (++n % 2000 === 0) await pause();
         const { s, f, plusieurs } = choisir(l), c = carteDe.get(l.carteId);
         emis.add(l.idProduct);
+        // LOT TAMPONS (B, tour 1) : le prix de la fiche mélange-t-il la version normale et une version tamponnée ? Vient de la LIGNE (cartes_produits), === true seulement, et se pose pour CHAQUE ligne marquée,
+        // ICI, avant tout écartement : la marque ne dépend d'AUCUN visuel (un produit sans entrée d'archive la porte aussi). Dénominateur : d.melangeProduits (les distincts de cartes_produits).
+        if (l.prixMelangeTampon === true && entier(l.idProduct)) { melanges.add(l.idProduct); if (sink) { if (typeof sink.melange === 'function') sink.melange(l.idProduct); } }
         emettre({ idProduct: l.idProduct, idMetacard: metaDe(l.idProduct), idExpansion: entier(l.idExpansion) ? l.idExpansion : null,
             numero: l.numeroFiche == null ? null : texte(regle.normaliserNumero(l.numeroFiche)), tirage: s ? texte(s.tirage ?? s.region) : null });
         if (plusieurs) d.plusieursSets++;
@@ -193,7 +214,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
         if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
         // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
-        if (partageIncoherent(im, l.idProduct)) { d.partageIncoherent++; continue; }
+        if (partageIncoherent(im, l.idProduct, varianteProuvee(l))) { d.partageIncoherent++; if (varianteHorsListe(l)) d.varianteHorsListe++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
 
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
@@ -211,7 +232,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
             // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
             lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
-        Object.assign(e, marquagesDe(im, l.idProduct));
+        Object.assign(e, marquagesDe(im, l.idProduct, e.variante));
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
@@ -224,7 +245,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     }
     for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);
-    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux }) };
+    d.melangeProduits = melanges.size;
+    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b) }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION, partageIncoherent };
+module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };

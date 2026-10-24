@@ -218,18 +218,16 @@ const journalScanSchema = new mongoose.Schema({
     // 0 ligne sur 212. La réponse et le journal sont deux puits distincts.
     //
     // CE QU'ILS PERMETTENT DE MESURER, et qui était IMPOSSIBLE à tout volume :
-    // `etatRetenu` = pireEtat(avis IA si confiance ≥ moyenne, état déclaré par le vendeur).
-    // L'IA ne peut donc que DÉGRADER la base, jamais la relever, et c'est le texte du
-    // vendeur qui plafonne le prix de référence. Sur un cas réel — IA « NM » confiance
-    // haute, vendeur « Très bon état » -> EX — la base tombe de 4,75 € à 1,50 € et le
-    // verdict passe de « bonne affaire » à « 167 % au-dessus ». LE VERDICT S'INVERSE.
-    // Avec ces champs, on pourra compter sur combien de lignes ça arrive au lieu d'en
-    // discuter sur un exemple.
-    etatVinted: String,        // le texte BRUT du vendeur ('Très bon état'), tel que reçu
-    etatMin: String,           // sa transposition Cardmarket, ou null si le texte est inconnu
+    // ⚠️ DEPUIS LE 2026-10-18 (décision de l'utilisateur : « l'état d'une carte ne vient JAMAIS du vendeur »),
+    // `etatRetenu` = l'avis du modèle si sa confiance est haute ou moyenne, sinon null. Le texte du vendeur
+    // (`etatVinted`) et sa transposition (`etatMin`) restent journalisés comme une INFORMATION : ils n'entrent plus
+    // dans l'état retenu, ni dans le prix, ni dans le verdict. Les lignes d'AVANT cette date portent l'ancienne règle
+    // (`etatRetenu` = le PIRE de l'avis du modèle et du texte du vendeur) : ne pas les mélanger dans une mesure.
+    etatVinted: String,        // le texte BRUT du vendeur ('Très bon état'), tel que reçu — information, jamais une entrée
+    etatMin: String,           // sa transposition Cardmarket, ou null si le texte est inconnu — information, jamais une entrée
     etatEstimeIA: String,      // MT|NM|EX|GD|LP|PL|PO — ce que l'IA a vu de l'usure
     etatConfianceIA: String,   // 'haute'|'moyenne'|'basse' — une PORTE, pas un poids
-    etatRetenu: String,        // la sortie : celui qui plafonne réellement le prix
+    etatRetenu: String,        // la sortie : l'avis du modèle (porte de confiance), ou null
     defautsVus: [String],      // ce que l'IA dit avoir vu — la justification de son avis
 
     // La grille de prix par état, et LE NOMBRE D'OFFRES qui porte chaque prix.

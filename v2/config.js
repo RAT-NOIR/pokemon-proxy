@@ -206,7 +206,7 @@ function lireConfig(env = process.env) {
         // SECONDE-LECTURE (§72) : une seconde lecture du bas de la carte (code et numéro) qui peut CONFIRMER l'affirmation que la garde des jumeaux refuse. ÉTEINTE par défaut (0) : la chaîne est alors
         // identique octet pour octet. Elle coûte des appels au modèle (une bande ≈ 0,0008 $) : n'agit que si un fournisseur est branché (deps.secondeLecture) ET que le cas visé se présente.
         secondeLecture: booleen('V2_SECONDE_LECTURE', env.V2_SECONDE_LECTURE, false),
-        // F1-TAMPON : lire le tampon STAFF sur la carte redressée de l'extension pour trancher une paire SÉPARÉE staff / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet.
+        // F1-TAMPON puis LOT TAMPONS : lire les MARQUES (liste fermée : Staff, Prerelease, League, enseignes…) sur la carte redressée de l'extension pour trancher une paire SÉPARÉE marque(s) / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. À la mesure du lot TAMPONS : un faux positif réel (rapport) — il le reste.
         // N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (la carte vient de `empreintes[i].carte`), qu'un fournisseur est branché (montage : OPENROUTER_API_KEY) ET que la question est exactement une paire séparée.
         lectureTampon: booleen('V2_LECTURE_TAMPON', env.V2_LECTURE_TAMPON, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
@@ -215,6 +215,14 @@ function lireConfig(env = process.env) {
         // RESOUDRE-CARDMARKET : POST /api/banc/resoudre-cardmarket (adresse Cardmarket collée → idProduct, administrateur seulement). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) SANS rendre la configuration invalide : un drapeau mal écrit ne doit jamais coûter un 503 au service.
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
+        // PHOTOS-MULTIPLES (7d) : POST /api/photo (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
+        // éteint la route (elle n'existe pas) et laisse /api/identifier tel qu'il est aujourd'hui, SANS rendre la configuration invalide. Phase 1 : administrateur seulement.
+        photosMultiples: env.V2_PHOTOS_MULTIPLES === '1',
+        // PHOTOS-MULTIPLES, second état (la PHASE 2 : tous les porteurs). LU et RIEN D'AUTRE : aucune ligne du code ne le consulte, la route reste réservée à l'administrateur même allumé. Il ne vaut que si le premier l'est.
+        // Le jour où la phase 2 s'ouvre, c'est ici que se pose la lecture, et un lot dédié (limites, mémoire globale) la câble.
+        photosMultiplesTous: env.V2_PHOTOS_MULTIPLES === '1' && env.V2_PHOTOS_MULTIPLES_TOUS === '1',
+        // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
+        abonnements: require('./abonnements/config').lireAbonnements(env),
         turnstile,
         cookieSecure
     });

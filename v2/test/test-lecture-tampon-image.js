@@ -1,50 +1,56 @@
 'use strict';
-// F1-TAMPON — les pièces qui touchent l'image et le modèle, SANS réseau ni appel payant : le lecteur du tampon (le client HTTP est INJECTÉ), la préparation de l'image (sharp, sur une image FABRIQUÉE),
-// et le détecteur « aucun client réseau » qui vaut pour tous les modules de la lecture (comme test-seconde-lecture-image.js §5).
+// F1-TAMPON puis LOT TAMPONS — les pièces qui touchent l'image et le modèle, SANS réseau ni appel payant : le lecteur des MARQUES (le client HTTP est INJECTÉ), la préparation de l'image (sharp, sur une image
+// FABRIQUÉE), et le détecteur « aucun client réseau » qui vaut pour tous les modules de la lecture (comme test-seconde-lecture-image.js §5).
 const H = require('./_harnais');
 const sharp = require('sharp');
 const path = require('path'), fs = require('fs');
 const I = require('../identifier/seconde-lecture-image');
+const MT = require('../identifier/marques-tampon');
 
 (async () => {
     const requetes = [];
     const postDe = (contenu, extra = {}) => async (url, corps, config) => { requetes.push({ url, corps, config }); return { data: { choices: [{ message: { content: contenu } }], ...extra } }; };
     const bande = Buffer.from([1, 2, 3]);
+    const REP = (stamps, other = false, unclear = false) => JSON.stringify({ stamps, other, unclear });
 
-    // ── 1. le LECTEUR du tampon : UNE question, sur la carte
+    // ── 1. le LECTEUR des marques : UNE question, sur la carte, dans une liste fermée
     {
         requetes.length = 0;
-        const lecteur = I.creerLecteurTampon({ post: postDe('{"staff":"yes"}'), modele: 'modele-factice', cle: 'CLE-SECRETE-FACTICE' });
+        const lecteur = I.creerLecteurTampon({ post: postDe(REP(['staff', 'prerelease'])), modele: 'modele-factice', cle: 'CLE-SECRETE-FACTICE' });
         const r = await lecteur(bande);
         const q = requetes[0], texte = q.corps.messages[0].content[0].text;
-        H.v('1a. une réponse JSON : { staff } rendu', r, { staff: 'yes' });
+        H.v('1a. une réponse JSON : { marques, autre, incertain } rendu', r, { marques: ['staff', 'prerelease'], autre: false, incertain: false });
         H.v('   la requête : température 0, consigne + image JPEG base64, clé en en-tête, délai borné, PAS de `usage` demandé par défaut', [q.corps.model, q.corps.temperature, q.corps.messages[0].content.map(c => c.type), q.corps.messages[0].content[1].image_url.url.startsWith('data:image/jpeg;base64,'), q.config.headers.Authorization, 'usage' in q.corps, q.config.timeout > 0 && q.config.timeout <= 60000],
             ['modele-factice', 0, ['text', 'image_url'], true, 'Bearer CLE-SECRETE-FACTICE', false, true]);
-        H.v('   la consigne ne pose QUE la question du mot STAFF (pas de nom, de numéro ni de code), et exige la certitude', [/STAFF/.test(texte), /yes.*no.*uncertain/s.test(texte), /SET CODE|CARD NUMBER|NAME/i.test(texte)], [true, true, false]);
+        H.v('   la consigne nomme CHAQUE marque de la liste fermée (et elle seule), exige la certitude, donne l\'issue « other » et « unclear », et ne pose ni nom, ni numéro, ni code de set', [MT.MARQUES.filter(m => !texte.includes(`"${m}"`)), /closed list/i.test(texte), /Never guess/.test(texte), /"other"/.test(texte), /"unclear"/.test(texte), /SET CODE|CARD NUMBER/i.test(texte)], [[], true, true, true, true, false]);
+        H.v('   … et la consigne ne cite aucun id hors de la liste (toute chaîne entre guillemets doublés sur une ligne « - "id" » est une marque)', [...texte.matchAll(/^- "([^"]+)"/gm)].map(m => m[1]).filter(x => !MT.estMarque(x)), []);
     }
-    H.v('1b. une réponse entourée de ```json, une valeur inconnue, du texte libre : lue, ou { illisible: true } — jamais un « yes » inventé',
-        [await I.creerLecteurTampon({ post: postDe('```json\n{"staff":"no"}\n```'), modele: 'm', cle: 'k' })(bande), (await I.creerLecteurTampon({ post: postDe('{"staff":"maybe"}'), modele: 'm', cle: 'k' })(bande)).illisible, (await I.creerLecteurTampon({ post: postDe('Yes, it says STAFF'), modele: 'm', cle: 'k' })(bande)).illisible, (await I.creerLecteurTampon({ post: postDe('{"staff":true}'), modele: 'm', cle: 'k' })(bande)).illisible],
-        [{ staff: 'no' }, true, true, true]);
+    const lire = async contenu => I.creerLecteurTampon({ post: postDe(contenu), modele: 'm', cle: 'k' })(bande);
+    H.v('1b. une réponse entourée de ```json, aucune marque, `other`, `unclear` : lues telles quelles', [await lire('```json\n' + REP([]) + '\n```'), await lire(REP([], true)), await lire(REP([], false, true))],
+        [{ marques: [], autre: false, incertain: false }, { marques: [], autre: true, incertain: false }, { marques: [], autre: false, incertain: true }]);
+    H.v('1c. du texte libre, une forme fausse (stamps pas un tableau, élément pas une chaîne, other/unclear absent ou pas un booléen, trop de marques) : { illisible: true } — jamais une marque inventée',
+        (await Promise.all(['Yes, it says STAFF', '{"staff":"yes"}', '{"stamps":"staff","other":false,"unclear":false}', '{"stamps":[1],"other":false,"unclear":false}', '{"stamps":["staff"],"other":"no","unclear":false}', '{"stamps":["staff"],"unclear":false}', '{"stamps":["staff"],"other":false}',
+            REP(Array(13).fill('staff')), '[]', 'null'].map(lire))).map(x => x.illisible), Array(10).fill(true));
     {
         const e = await I.creerLecteurTampon({ post: async () => { throw Object.assign(new Error('401 Bearer CLE-SECRETE-FACTICE'), { code: 'ERR_BAD_REQUEST' }); }, modele: 'm', cle: 'CLE-SECRETE-FACTICE' })(bande).then(() => null, x => x);
-        H.v('1c. le client tombe : l\'erreur est levée SANS la clé (un code seulement)', [Boolean(e), e && String(e.message).includes('CLE-SECRETE-FACTICE'), e && e.code], [true, false, 'ERR_BAD_REQUEST']);
+        H.v('1d. le client tombe : l\'erreur est levée SANS la clé (un code seulement)', [Boolean(e), e && String(e.message).includes('CLE-SECRETE-FACTICE'), e && e.code], [true, false, 'ERR_BAD_REQUEST']);
     }
-    H.v('1d. sans clé, sans modèle ou sans client : refuse de se construire', [() => I.creerLecteurTampon({ post: postDe('{}'), modele: 'm' }), () => I.creerLecteurTampon({ post: postDe('{}'), cle: 'k' }), () => I.creerLecteurTampon({ modele: 'm', cle: 'k' })].map(f => { try { f(); return 'ok'; } catch { return 'refuse'; } }), ['refuse', 'refuse', 'refuse']);
+    H.v('1e. sans clé, sans modèle ou sans client : refuse de se construire', [() => I.creerLecteurTampon({ post: postDe('{}'), modele: 'm' }), () => I.creerLecteurTampon({ post: postDe('{}'), cle: 'k' }), () => I.creerLecteurTampon({ modele: 'm', cle: 'k' })].map(f => { try { f(); return 'ok'; } catch { return 'refuse'; } }), ['refuse', 'refuse', 'refuse']);
     {
         const ctl = new AbortController(); requetes.length = 0;
-        await I.creerLecteurTampon({ post: postDe('{"staff":"no"}'), modele: 'm', cle: 'k' })(bande, { signal: ctl.signal });
-        H.v('1e. le signal d\'abandon arrive au client HTTP', requetes[0].config.signal === ctl.signal, true);
+        await I.creerLecteurTampon({ post: postDe(REP([])), modele: 'm', cle: 'k' })(bande, { signal: ctl.signal });
+        H.v('1f. le signal d\'abandon arrive au client HTTP', requetes[0].config.signal === ctl.signal, true);
         const vus = []; requetes.length = 0;
-        await I.creerLecteurTampon({ post: postDe('{"staff":"no"}', { usage: { cost: 0.0009 } }), modele: 'm', cle: 'k', surUsage: u => vus.push(u) })(bande);
-        H.v('1f. avec `surUsage` (la mesure) : le coût réel est demandé (usage.include) et rendu à l\'appelant ; sans, la requête est inchangée', [requetes[0].corps.usage, vus], [{ include: true }, [{ cost: 0.0009 }]]);
-        const e = await I.creerLecteurTampon({ post: postDe('{"staff":"no"}', { usage: { cost: 0.001 } }), modele: 'm', cle: 'k', surUsage: () => { throw new Error('boum'); } })(bande).then(() => 'ok', () => 'lève');
+        await I.creerLecteurTampon({ post: postDe(REP([]), { usage: { cost: 0.0009 } }), modele: 'm', cle: 'k', surUsage: u => vus.push(u) })(bande);
+        H.v('1g. avec `surUsage` (la mesure) : le coût réel est demandé (usage.include) et rendu à l\'appelant ; sans, la requête est inchangée', [requetes[0].corps.usage, vus], [{ include: true }, [{ cost: 0.0009 }]]);
+        const e = await I.creerLecteurTampon({ post: postDe(REP([]), { usage: { cost: 0.001 } }), modele: 'm', cle: 'k', surUsage: () => { throw new Error('boum'); } })(bande).then(() => 'ok', () => 'lève');
         H.v('   un `surUsage` qui lève n\'empêche pas la lecture', e, 'ok');
     }
     {
         // le lecteur de la seconde lecture est INCHANGÉ par le partage du client : mêmes champs, même requête
         requetes.length = 0;
         const r = await I.creerLecteur({ post: postDe('{"setCode":"PRE","number":"162","total":"131"}'), modele: 'm', cle: 'k' })(bande);
-        H.v('1g. creerLecteur (seconde lecture) : même lecture, sa propre consigne, pas de `usage`', [r, /SET CODE/.test(requetes[0].corps.messages[0].content[0].text), 'usage' in requetes[0].corps], [{ setCode: 'PRE', number: '162', total: '131' }, true, false]);
+        H.v('1h. creerLecteur (seconde lecture) : même lecture, sa propre consigne, pas de `usage`', [r, /SET CODE/.test(requetes[0].corps.messages[0].content[0].text), 'usage' in requetes[0].corps], [{ setCode: 'PRE', number: '162', total: '131' }, true, false]);
     }
 
     // ── 2. la PRÉPARATION de l'image : deux images distinctes de la carte entière
@@ -69,12 +75,12 @@ const I = require('../identifier/seconde-lecture-image');
     // ── 3. aucun module de la lecture du tampon n'importe ni n'appelle de client réseau (sauf le `post` INJECTÉ du lecteur)
     {
         const dir = path.join(__dirname, '..', 'identifier');
-        const MODULES = ['lecture-tampon.js', 'lecture-tampon-route.js', 'seconde-lecture-image.js', 'fournisseur-tampon.js'];
+        const MODULES = ['lecture-tampon.js', 'lecture-tampon-route.js', 'seconde-lecture-image.js', 'fournisseur-tampon.js', 'marques-tampon.js'];
         const requis = f => [...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
-        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction', './carte-redressee', './seconde-lecture-image']);
-        H.v('3a. les modules n\'importent que sharp, opencv-js, scoring et leurs voisins de la lecture (ni http, https, net, axios, undici, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], [], [], []]);
+        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './lecture-tampon', './garde-contradiction', './carte-redressee', './seconde-lecture-image', './partage-variante', './marques-tampon']);       // partage-variante, marques-tampon : modules PURS, ni base ni réseau
+        H.v('3a. les modules n\'importent que sharp, opencv-js, scoring et leurs voisins de la lecture (ni http, https, net, axios, undici, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], [], [], [], []]);
         const code = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
-        H.v('3b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios`, `import(` dans le code (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], [], [], []]);
+        H.v('3b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios`, `import(` dans le code (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], [], [], [], []]);
     }
     H.bilan();
 })().catch(e => { console.error(e); process.exitCode = 1; });

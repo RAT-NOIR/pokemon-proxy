@@ -35,6 +35,9 @@
       "name": "collection"
     },
     {
+      "name": "abonnements"
+    },
+    {
       "name": "sante"
     }
   ],
@@ -2031,6 +2034,143 @@
         }
       }
     },
+    "/api/photo": {
+      "post": {
+        "operationId": "envoyerPhotoAvantScan",
+        "tags": [
+          "banc"
+        ],
+        "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+        "summary": "Administrateur seulement : envoie, en octets bruts, une photo de l'annonce AVANT le scan ; le serveur ne téléchargera alors plus rien chez Vinted pour ce scan",
+        "description": "Route réservée à un compte ADMINISTRATEUR (rôle relu en base à chaque requête) ET derrière le drapeau `V2_PHOTOS_MULTIPLES=1` : drapeau éteint, ou porteur qui n'est pas administrateur, la route n'existe pas (le 404 natif d'une route inexistante, corps non JSON, jamais de 429). La phase 2 (tous les porteurs) s'ouvrira par un réglage du serveur, sans changement de contrat. Le corps est BINAIRE (JPEG, PNG ou WebP tels que Vinted les sert), jamais du base64 ni du JSON. Ordre des gardes, tous jugés AVANT de lire un octet du corps : identité (401), rôle (404 natif), plafond horaire par porteur (429 : au moins 600 par heure, `max(600, V2_ETIQUETTE_HEURE)`, sur un compteur à part de `/api/banc/photo`), requête (AUCUN paramètre : `?index=` est toléré et IGNORÉ, tout autre est un 400), `Content-Type` (415), `Content-Length` entier, non nul, ≤ 2 Mio (400 / 413), une place de lecture (4 au total, 1 par porteur : 429 DEBIT avec Retry-After), un délai de lecture de 15 s (connexion coupée). Puis le contenu, validé comme `/api/banc/photo` : les octets doivent être ce que le Content-Type annonce (415), l'image doit se décoder (422 `illisible`), tenir en 12 millions de pixels et 4 096 px de côté (422 `dimensions`), être fixe ; au plus 2 décodages simultanés dans le service (429 DEBIT). La photo est réencodée sans métadonnées (JPEG, 1 600 px au plus ; 800 px au plus pour le modèle). Règle de l'éditeur, mot pour mot : « Une photo reçue avant le scan vit uniquement dans la mémoire du serveur : elle sert une seule fois, à son seul porteur, dans les 30 secondes qui suivent son envoi, et elle est libérée à la fin de l'analyse — 120 secondes au plus en tout. Elle n'est jamais écrite : ni sur disque, ni dans un stockage, ni en base, ni dans un journal. Elle n'est transmise qu'au modèle d'analyse, pour cette analyse. Seule une photo envoyée par le compte administrateur peut être conservée, pour le banc de mesure. » Au plus 8 photos et 8 Mio par porteur : au-delà, la plus ancienne est oubliée. L'index de chaque photo est donné par `photoIds` de `POST /api/identifier`, jamais ici. Le `photoId` rendu est donné à `POST /api/identifier` (`photoIds`) ; il sert une fois. Deux envois d'un même porteur peuvent décoder en parallèle : le sémaphore global (2 décodages) répond 429 DEBIT à l'excédent. Aucun argent. Les corps d'erreur sont l'enveloppe v2 (`ReponseErreur`), hors 404 natif.",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "FACULTATIF et IGNORÉ, quelle que soit sa valeur : l'index de chaque photo vient de `photoIds` (`POST /api/identifier`). Seul paramètre toléré ; tout autre est un `400 champ-inconnu`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "La photo est retenue 120 s en mémoire ; `photoId` (32 hexadécimaux) la désigne.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponsePhotoAvantScan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` : champ-inconnu, content-length).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMAGE (`detail` trop-lourde) : plus de 2 Mio annoncés ou reçus. Rendu avant toute lecture quand `Content-Length` l'annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "IMAGE (`detail` type) : `Content-Type` hors JPEG, PNG, WebP, ou octets qui ne sont pas ce qu'il annonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMAGE (`detail` illisible ou dimensions) : image tronquée, corrompue, animée, de plus de 12 millions de pixels ou de 4 096 px de côté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plafond horaire du porteur, une photo déjà en cours d'envoi pour ce porteur, 4 lectures en cours dans le service, ou 2 décodages en cours (avec `reessayerDans`, en-tête `Retry-After` aussi). Rien n'est lu pour les trois premiers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : les routes v2 sont fermées (garde d'index) ou le magasin est injoignable (rien de retenu ; réessayer).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/banc/etiquette": {
       "post": {
         "operationId": "etiqueterBanc",
@@ -2896,6 +3036,453 @@
         }
       }
     },
+    "/api/abonnement": {
+      "get": {
+        "operationId": "lireAbonnement",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "L'abonnement du compte : plan, période, fin, essai, résiliation prévue, quota réel, code de parrainage",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "Des ÉTATS seulement, jamais un identifiant Stripe. Crée le code de parrainage du compte à la première lecture. `404` natif si les abonnements sont éteints (V2_ABONNEMENTS).",
+        "responses": {
+          "200": {
+            "description": "L'état de l'abonnement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseAbonnement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (plafond par heure).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/checkout": {
+      "post": {
+        "operationId": "creerSessionCheckout",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "Ouvre une session Checkout (abonnement Pro ou Fondateurs) et rend son adresse",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "mode `subscription`, CGV TOUJOURS exigées, un seul client Stripe par compte, `client_reference_id` = le compte. Essai de 14 jours SANS CARTE (`payment_method_collection: if_required` ; sans moyen de paiement à la fin de l'essai l'abonnement est RÉSILIÉ, aucun prélèvement), UNE fois par compte et sous la garde de l'essai (compte neuf, domaine non jetable, une boîte, une installation de l'extension) : un refus de l'essai ne refuse pas l'abonnement, la session part sans essai donc avec la carte (`essai.disponible: false` au statut). 30 jours avec un code de parrainage valide (Pro) ; `code` est le code Fondateurs pour `offre: fondateurs`, un code de parrainage pour `offre: pro`. Voir CONTRAT-STRIPE-V2.md.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteCheckout"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'adresse de la page de paiement Stripe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseUrlPaiement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : offre, période, champ ou retour inconnu (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : `abonnement-actif` (le compte a déjà un abonnement vivant : le site renvoie vers le portail), `places-epuisees`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE : `code-invalide`, `parrainage-non-eligible` (soi-même, client non neuf, parrain Fondateurs, parrainage réciproque).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (20 sessions par heure et par compte, 10 essais de code par heure).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : abonnements non configurés ou Stripe injoignable (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/fondateurs": {
+      "post": {
+        "operationId": "lireOffreFondateurs",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "L'offre Fondateurs, rendue à qui présente un code valide (page réservée, jamais publique)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "description": "La page réservée du site (noindex, hors sitemap) appelle cette route avec le code de son adresse. Un code VALIDE reçoit l'offre (prix mensuel et annuel en centimes, places restantes) ; un mauvais code et une offre fermée reçoivent la MÊME réponse (`422 code-invalide`). Même limite d'essais que le Checkout : 10 par heure et par compte, compteur partagé, compté avant la lecture du code. Le code voyage dans le corps, jamais dans une adresse. Aucune autre route ne donne ce prix.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteFondateurs"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'offre Fondateurs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseOffreFondateurs"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "noindex, nofollow"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : corps ou champ inconnu (`detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE : `code-invalide` (mauvais code, code absent, ou offre fermée : indiscernables).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT (10 essais de code par heure et par compte, partagés avec le Checkout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/abonnement/portail": {
+      "post": {
+        "operationId": "creerSessionPortail",
+        "tags": [
+          "abonnements"
+        ],
+        "x-conditionnel": "V2_ABONNEMENTS",
+        "summary": "Ouvre le portail client Stripe (résiliation en fin de période, mensuel ↔ annuel, carte, factures)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'adresse du portail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseUrlPaiement"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (SESSION).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : `aucun-abonnement` (le compte n'a pas de client Stripe).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ping": {
       "get": {
         "operationId": "ping",
@@ -3122,6 +3709,119 @@
         "additionalProperties": false,
         "description": "Le guide quotidien de Cardmarket (trend, low, avg7, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
       },
+      "PrixRepli": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PrixRepliTendance"
+          },
+          {
+            "$ref": "#/components/schemas/PrixRepliEtatProche"
+          }
+        ],
+        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi."
+      },
+      "PrixRepliTendance": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "tendance",
+            "description": "La mention fermée : la tendance et les moyennes du guide du jour (`guide`), TOUS ÉTATS."
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "langue-non-lue",
+              "etat-non-retenu",
+              "lecture-ratee",
+              "tendance-seule"
+            ],
+            "description": "Pourquoi le prix dans l'état n'est pas présenté. `langue-non-lue` (l'analyse n'a pas lu la LANGUE de la carte : `prixLive` null) et `etat-non-retenu` (`prixLive.etatVise` null : l'état estimé a une confiance « basse », il n'est pas retenu) : l'analyse n'a rien dicté à lire, l'extension n'ouvre aucune page. `lecture-ratee` (retour-live avec `lectureRatee`, quelle que soit sa cause et sa définitivité : défi, blocage, onglet, grille vide, sans prix, sans offre reverse) et `tendance-seule` (retour-live avec `originePrix: \"tendance\"`) : ce que l'extension a rendu."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr, quel que soit `guide.fiable`. Aucun verdict de bonne affaire ne se fonde dessus."
+          },
+          "guide": {
+            "$ref": "#/components/schemas/PrixGuide",
+            "description": "Le guide du jour de la fiche, tel que `carte.prixGuide` (avec ses `reserves`, à afficher avec le repli). JAMAIS null pour la forme `tendance`."
+          },
+          "offre": {
+            "type": "null",
+            "description": "Toujours null pour la forme `tendance`."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
+      "PrixRepliEtatProche": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "etat-proche",
+            "description": "La mention fermée : l'offre lue par l'extension dans un état PIRE que l'état retenu (`offre`), avec le guide s'il existe."
+          },
+          "cause": {
+            "const": "offre-autre-etat",
+            "description": "Retour-live avec une offre `grille` lue dans un état pire que le retenu : la seule cause de cette forme."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false` : un repli n'est JAMAIS un prix sûr. Aucun verdict de bonne affaire ne se fonde dessus."
+          },
+          "guide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrixGuide"
+              }
+            ],
+            "description": "Le guide du jour de la fiche s'il existe, null sinon (l'offre suffit alors à faire une donnée de prix)."
+          },
+          "offre": {
+            "type": "object",
+            "properties": {
+              "etat": {
+                "type": "string",
+                "enum": [
+                  "MT",
+                  "NM",
+                  "EX",
+                  "GD",
+                  "LP",
+                  "PL",
+                  "PO"
+                ]
+              },
+              "prix": {
+                "type": "number",
+                "minimum": 0.01
+              }
+            },
+            "required": [
+              "etat",
+              "prix"
+            ],
+            "additionalProperties": false,
+            "description": "L'offre la moins chère que l'extension a lue, dans un état pire que l'état retenu (son état et son prix, en euros). JAMAIS null pour la forme `etat-proche`."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
       "SetProduit": {
         "type": "object",
         "properties": {
@@ -3262,6 +3962,34 @@
             ],
             "description": "AJOUT FACULTATIF (lot LANGUE-DECISIVE, contrat 7a) : la langue de CETTE impression, en code fermé minuscule (les quinze langues de Cardmarket), ou null quand elle n'est pas connue — jamais devinée (un tirage international regroupe plusieurs langues : null). `Produit.langue` ne change pas."
           },
+          "marques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "prerelease",
+                "league",
+                "championship",
+                "toys-r-us",
+                "gamestop",
+                "kfc",
+                "indomilk",
+                "professor",
+                "cosmo",
+                "snowflake",
+                "play-pokemon",
+                "place-1",
+                "place-2",
+                "place-3",
+                "place-4"
+              ]
+            },
+            "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques de CETTE impression, d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`) ; `[]` = prouvée sans tampon de la liste ; null = on ne sait pas. `variante` ne change pas."
+          },
           "set": {
             "type": "object",
             "properties": {
@@ -3353,6 +4081,34 @@
               null
             ],
             "description": "null = on ne sait pas (jamais « normale » deviné)."
+          },
+          "marques": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "prerelease",
+                "league",
+                "championship",
+                "toys-r-us",
+                "gamestop",
+                "kfc",
+                "indomilk",
+                "professor",
+                "cosmo",
+                "snowflake",
+                "play-pokemon",
+                "place-1",
+                "place-2",
+                "place-3",
+                "place-4"
+              ]
+            },
+            "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques du produit (tampons, logos d'événement ou d'enseigne), d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`, `[\"league\",\"place-2\"]`) ; `[]` = prouvé sans tampon de la liste (variante `normale` prouvée) ; null = on ne sait pas. `variante` ne change PAS (son énumération est lue par l'extension et le site) : lire `marques` pour les tampons."
           },
           "version": {
             "type": [
@@ -3636,7 +4392,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Écho du texte d'état déclaré par le vendeur, tel que reçu. Il est reçu et ignoré : il n'entre ni dans l'état retenu, ni dans le prix, ni dans le verdict. À ne pas afficher comme l'état de la carte."
           },
           "retenu": {
             "type": [
@@ -3750,6 +4507,9 @@
                 "$ref": "#/components/schemas/Zone"
               }
             ]
+          },
+          "prixRepli": {
+            "$ref": "#/components/schemas/PrixRepli"
           }
         },
         "required": [
@@ -4176,6 +4936,486 @@
         ],
         "additionalProperties": false
       },
+      "RequeteCheckout": {
+        "type": "object",
+        "properties": {
+          "offre": {
+            "type": "string",
+            "enum": [
+              "pro",
+              "fondateurs"
+            ]
+          },
+          "periode": {
+            "type": "string",
+            "enum": [
+              "mois",
+              "an"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Code Fondateurs (offre `fondateurs`) ou code de parrainage (offre `pro`). Casse et espaces ignorés."
+          },
+          "retour": {
+            "type": "string",
+            "pattern": "^/fr(?:/[a-z0-9_-]{1,40}){0,3}$",
+            "description": "Chemin du site où revenir (`?abonnement=succes` ou `?abonnement=annule` est ajouté). Défaut : `/fr/compte` (succès), `/fr/tarifs` (abandon)."
+          }
+        },
+        "required": [
+          "offre",
+          "periode"
+        ],
+        "additionalProperties": false
+      },
+      "RequeteFondateurs": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Le code Fondateurs de l'adresse réservée. Casse et espaces ignorés."
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseOffreFondateurs": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "offre": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "const": "fondateurs"
+              },
+              "devise": {
+                "const": "EUR"
+              },
+              "prix": {
+                "type": "object",
+                "properties": {
+                  "mois": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "an": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "mois",
+                  "an"
+                ],
+                "additionalProperties": false,
+                "description": "En centimes."
+              },
+              "places": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "restantes": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "total",
+                  "restantes"
+                ],
+                "additionalProperties": false
+              },
+              "essaiJours": {
+                "type": "integer",
+                "const": 14
+              }
+            },
+            "required": [
+              "nom",
+              "devise",
+              "prix",
+              "places",
+              "essaiJours"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "offre"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseUrlPaiement": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          }
+        },
+        "required": [
+          "success",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "AbonnementStatut": {
+        "type": "object",
+        "properties": {
+          "actif": {
+            "type": "boolean",
+            "description": "Vrai si le compte est Pro MAINTENANT (essai, actif, ou impayé encore dans sa grâce de 3 jours)."
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pro",
+              "fondateurs",
+              null
+            ]
+          },
+          "periode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "mois",
+              "an",
+              null
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "aucun",
+              "en-attente",
+              "essai",
+              "actif",
+              "impaye",
+              "suspendu",
+              "termine"
+            ]
+          },
+          "finPeriode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ANCIEN NOM de `finDePeriode`, gardé pendant la transition (retrait : voir CONTRAT-STRIPE-V2.md). ISO 8601 UTC."
+          },
+          "finDePeriode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de la période payée, ou de l'essai. C'est le prochain renouvellement, ou la fin si `resiliationPrevue`."
+          },
+          "resiliationPrevue": {
+            "type": "boolean",
+            "description": "Une fin est prévue : résiliation demandée (effet à la fin de la période), OU essai en cours dont la carte est connue comme absente (`essai.carteEnregistree: false`) — il prend fin tout seul, sans prélèvement."
+          },
+          "finPrevueLe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : « prend fin le… » — la fin d'une résiliation prévue, ou la fin d'un essai sans carte. `null` sinon (y compris quand on ne sait pas si une carte est enregistrée)."
+          },
+          "prochaineEcheance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : « se renouvelle le… » — seulement quand un prélèvement est sûr (abonnement actif non résilié, ou essai AVEC carte). `null` pour un essai sans carte, un essai dont la carte est inconnue, une résiliation prévue, un impayé."
+          },
+          "essaiFinLe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de l'essai EN COURS (le nom du site) ; `null` hors essai."
+          },
+          "debutEssai": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : le début de l'essai de ce compte, aussi après sa fin (courriels) ; `null` si le compte n'a jamais eu d'essai."
+          },
+          "finEssai": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de l'essai de ce compte, aussi après sa fin (courriels) ; `null` si le compte n'a jamais eu d'essai."
+          },
+          "maintienJusqua": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 UTC : la fin de la grâce d'un impayé (Pro maintenu jusque-là). `null` hors impayé."
+          },
+          "essai": {
+            "type": "object",
+            "properties": {
+              "enCours": {
+                "type": "boolean"
+              },
+              "debutLe": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ISO 8601 UTC ; `null` hors essai en cours."
+              },
+              "finLe": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ISO 8601 UTC ; `null` hors essai en cours (ancien nom de `essaiFinLe`, gardé pendant la transition)."
+              },
+              "carteEnregistree": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Pendant l'essai : une carte sera-t-elle prélevée à la fin ? `true`, `false`, ou `null` quand on ne sait pas (Stripe injoignable) — JAMAIS une affirmation fausse. `null` hors essai."
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Vrai si un essai peut être accordé à ce compte (la garde de l'essai : compte neuf, domaine non jetable, une boîte, une installation). Un refus ne refuse pas l'abonnement : le Checkout part sans essai, avec la carte."
+              },
+              "refus": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "essai-deja-utilise",
+                  "domaine-jetable",
+                  "boite-deja-utilisee",
+                  "installation-deja-utilisee",
+                  null
+                ],
+                "description": "Pourquoi l'essai n'est pas disponible. `null` quand il l'est (ou si la garde n'a pas pu conclure)."
+              }
+            },
+            "required": [
+              "enCours",
+              "debutLe",
+              "finLe",
+              "carteEnregistree",
+              "disponible",
+              "refus"
+            ],
+            "additionalProperties": false
+          },
+          "paiementEchoue": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actif",
+          "plan",
+          "periode",
+          "statut",
+          "finPeriode",
+          "finDePeriode",
+          "resiliationPrevue",
+          "finPrevueLe",
+          "prochaineEcheance",
+          "essaiFinLe",
+          "debutEssai",
+          "finEssai",
+          "maintienJusqua",
+          "essai",
+          "paiementEchoue"
+        ],
+        "additionalProperties": false
+      },
+      "QuotaAbonnement": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ],
+            "description": "ANCIEN NOM de `offre`, gardé pendant la transition."
+          },
+          "offre": {
+            "type": "string",
+            "enum": [
+              "sans-compte",
+              "gratuit",
+              "pro"
+            ],
+            "description": "L'offre du porteur (le nom du site)."
+          },
+          "limite": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Analyses autorisées par jour (jour de Paris). `null` pour Pro : usage raisonnable, aucun plafond affiché."
+          },
+          "utilisees": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Analyses prises aujourd'hui (jour de Paris)."
+          },
+          "restant": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "remiseAZero": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T00:00:00[+-]\\d{2}:\\d{2}$"
+          }
+        },
+        "required": [
+          "nom",
+          "offre",
+          "limite",
+          "utilisees",
+          "restant",
+          "remiseAZero"
+        ],
+        "additionalProperties": false,
+        "description": "L'objet `Offre` commun (nom, restant, remiseAZero) PLUS les noms du site : offre, limite, utilisees."
+      },
+      "ReponseAbonnement": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "abonnement": {
+            "$ref": "#/components/schemas/AbonnementStatut"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/QuotaAbonnement"
+          },
+          "parrainage": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-HJKMNP-Z2-9]{8}$"
+              },
+              "essaiFilleulJours": {
+                "type": "integer",
+                "const": 30
+              },
+              "moisOfferts": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Les mois offerts à ce parrain sur les `fenetreJours` derniers jours (comptés à la date d'application de chaque prime)."
+              },
+              "plafondMois": {
+                "type": "integer",
+                "const": 12,
+                "description": "Au plus 12 mois offerts par parrain sur 365 jours glissants ; au-delà, la prime est refusée (`plafond-annuel`)."
+              },
+              "fenetreJours": {
+                "type": "integer",
+                "const": 365
+              }
+            },
+            "required": [
+              "code",
+              "essaiFilleulJours",
+              "moisOfferts",
+              "plafondMois",
+              "fenetreJours"
+            ],
+            "additionalProperties": false
+          },
+          "offres": {
+            "type": "object",
+            "properties": {
+              "pro": {
+                "type": "object",
+                "properties": {
+                  "mois": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "an": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "mois",
+                  "an"
+                ],
+                "additionalProperties": false
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "stripe",
+                  "constantes"
+                ],
+                "description": "D'où viennent les montants : lus chez Stripe (cache de 10 minutes) ou, si la lecture échoue, les constantes de repli."
+              },
+              "devise": {
+                "const": "EUR"
+              },
+              "essaiJours": {
+                "type": "integer",
+                "const": 14
+              }
+            },
+            "required": [
+              "pro",
+              "source",
+              "devise",
+              "essaiJours"
+            ],
+            "additionalProperties": false,
+            "description": "Montants en centimes, relus des PRIX Stripe. L'offre Fondateurs (sur code) n'est jamais annoncée."
+          }
+        },
+        "required": [
+          "success",
+          "abonnement",
+          "quota",
+          "parrainage",
+          "offres"
+        ],
+        "additionalProperties": false
+      },
       "Offre": {
         "type": "object",
         "properties": {
@@ -4396,6 +5636,22 @@
                   "impression-indeterminee",
                   null
                 ]
+              },
+              "photosRecues": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7
+                },
+                "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+                "description": "AJOUT FACULTATIF (lot PHOTOS-MULTIPLES, 7d) : présent SEULEMENT quand la requête portait `photoIds` (ou l'ancien `photoId`) et que `V2_PHOTOS_MULTIPLES=1`. Les index reçus (ceux de `imageUrls`), en ordre croissant ; `[]` si aucune photo n'a été retrouvée."
+              },
+              "photoRecue": {
+                "type": "boolean",
+                "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+                "description": "AJOUT FACULTATIF, présent avec `photosRecues` : vrai SI ET SEULEMENT SI l'index 0 a été reçu."
               }
             },
             "required": [
@@ -5102,6 +6358,9 @@
           },
           "offre": {
             "$ref": "#/components/schemas/Offre"
+          },
+          "prixRepli": {
+            "$ref": "#/components/schemas/PrixRepli"
           }
         },
         "required": [
@@ -5109,7 +6368,7 @@
           "offre"
         ],
         "additionalProperties": false,
-        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true sous le plafond des déclarations du jour ; au-delà `plafond-jour`), `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
+        "description": "Le champ additif `prixRepli` (lot PRIX-LISIBLE) est servi quand l'extension a envoyé une lecture ratée, une tendance seule ou une offre dans un état pire que l'état retenu ET que la fiche a une donnée de prix ; absent sinon. Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true sous le plafond des déclarations du jour ; au-delà `plafond-jour`), `declaration` (le jugement du plafond), `solde` et `offre` (relue après le remboursement : l'unité rendue se voit), une fois par scan."
       },
       "ReponsePing": {
         "type": "object",
@@ -5182,7 +6441,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "L'état déclaré par le vendeur sur l'annonce. Reçu et ignoré : il n'entre ni dans l'état retenu, ni dans le prix, ni dans le verdict. L'état d'une carte ne vient jamais du vendeur."
           },
           "vintedUrl": {
             "type": [
@@ -5201,6 +6461,39 @@
           "versionExtension": {
             "type": "string",
             "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "photoIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7,
+                  "description": "La position de la photo dans `imageUrls` (elle doit exister), un seul `photoId` par index."
+                },
+                "photoId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                }
+              },
+              "required": [
+                "index",
+                "photoId"
+              ],
+              "additionalProperties": false
+            },
+            "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+            "description": "Les photos envoyées AVANT le scan par `POST /api/photo` (administrateur, phase 1), de 1 à 8 couples, un par index de `imageUrls`. Drapeau `V2_PHOTOS_MULTIPLES=1` : éteint, le champ est inconnu et ignoré comme aujourd'hui. Un `photoId` bien formé mais absent, expiré, d'un autre porteur ou déjà servi est IGNORÉ sans erreur ; `400 ENTREE` (`detail` `photo-ids`) : `photoId` et `photoIds` ensemble, un doublon d'index, un index absent de `imageUrls` ou hors de 0..7, plus de 8 couples (ou aucun), un `photoId` mal formé (pas 32 hexadécimaux) DANS `photoIds`, ou toute autre forme absurde. Une requête refusée avant l'analyse ne consomme pas ses photos. L'analyse répond `photosRecues` et `photoRecue`. Un `identifier-lot` (plusieurs cartes) accepte `photoIds` avec les index de SES `imageUrls`. Dès qu'au moins une photo est reçue, le serveur ne télécharge AUCUNE image chez Vinted pour ce scan, et le modèle ne reçoit que les photos reçues."
+          },
+          "photoId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "x-conditionnel": "V2_PHOTOS_MULTIPLES",
+            "description": "L'ancien `photoId` seul : il vaut l'index 0 de `photoIds` (les deux ensemble sont refusés : `photo-ids`). Mal formé : `400 ENTREE` `photo-id`."
           },
           "empreintes": {
             "type": "array",
@@ -5515,6 +6808,29 @@
           "success",
           "etat",
           "photo"
+        ],
+        "additionalProperties": false
+      },
+      "ReponsePhotoAvantScan": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "photoId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "À donner à `POST /api/identifier` (`photoIds`) dans les 30 secondes qui suivent l'envoi. Sert UNE fois, pour ce porteur seulement."
+          },
+          "expireDans": {
+            "const": 30,
+            "description": "Secondes pendant lesquelles la photo peut être servie (120 secondes au plus en mémoire, scan compris)."
+          }
+        },
+        "required": [
+          "success",
+          "photoId",
+          "expireDans"
         ],
         "additionalProperties": false
       },

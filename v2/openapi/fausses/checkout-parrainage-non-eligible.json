@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "Requête invalide",
+    "detail": "parrainage-non-eligible"
+  },
+  "facturation": null
+}

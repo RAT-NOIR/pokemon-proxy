@@ -14,6 +14,10 @@ const registre = require('../registre');
 
 const journal = (ou, e) => console.error(`❌ [v2 banc-photo-admin] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : il peut citer une URL
 const OCTETS_MAX = 5 * 1024 * 1024, DELAI_MS = 8000;
+// N-1 : des photos ont été REÇUES pour ce scan, mais la référence prise avant tout `await` n'est plus là (le client a abandonné, la borne du scan est atteinte : les octets sont libérés). L'étape ne retombe JAMAIS sur l'adresse de
+// l'annonce : le banc ne reçoit rien pour ce scan, c'est COMPTÉ ici et journalisé (un code, ni octet ni empreinte).
+const compte = { sansReference: 0 };
+const compteurs = () => ({ ...compte });
 
 /** Réglages effectifs : ceux de la production, sauf ce qu'un banc injecte explicitement. */
 function reglages(deps) {
@@ -54,6 +58,23 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
         let banc; try { banc = registre.obtenir('banc'); } catch { return 'ignore'; }
         if (!banc || typeof banc.conserverPhoto !== 'function') return 'ignore';
         const reg = reglages(deps);
+        // PHOTOS-MULTIPLES (7d) : des photos ont été REÇUES pour ce scan (POST /api/photo, avant le scan) — AUCUN téléchargement, quoi qu'il arrive. L'index 0 reçu devient la photo du banc (le chemin du téléchargement,
+        // sans le GET) ; sans index 0 reçu, il n'y a pas de photo du banc : rien n'est téléchargé pour la remplacer. Le rôle est relu en base, comme plus bas.
+        const recues = req && req.entree && Array.isArray(req.entree.photosRecues) ? req.entree.photosRecues : [];
+        if (recues.length) {
+            const p0 = recues.find(p => p.index === 0);
+            if (!p0 || !Buffer.isBuffer(p0.octets)) return 'ignore';
+            const octets0 = p0.octets;          // I-2 : SA référence, prise AVANT le premier await — la réponse libère les octets de req.entree (libererPhotos) ; la photo de l'ADMINISTRATEUR (le banc) est la seule exception nommée
+            let n0; try { n0 = await db.col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' }); } catch (e) { journal('rôle', e); return 'echec'; }
+            if (!(n0 > 0)) return 'ignore';
+            const r0 = await banc.conserverPhoto({ scanId: String(scanId), buffer: octets0 });
+            return r0 === 'ecrit' || r0 === 'deja' ? 'ecrit' : 'echec';
+        }
+        if (req && req.entree && req.entree.photosRecuesPourCeScan === true) {
+            compte.sansReference++;
+            console.warn('📷 [v2 banc-photo-admin] photo reçue libérée avant l\'étape du banc : rien pour ce scan (aucun téléchargement)');
+            return 'ignore';
+        }
         const urls = req && req.entree && Array.isArray(req.entree.imageUrls) ? req.entree.imageUrls : [];
         if (!urls.length || !urlAutorisee(urls[0], reg)) return 'ignore';
         const ms = ((cfg && cfg.photoAdmin && cfg.photoAdmin.delaiS) || 0) * 1000;
@@ -72,4 +93,4 @@ async function apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }) {
     } catch (e) { journal('photo non conservée', e); return 'echec'; }
 }
 
-module.exports = { apresIdentifierAdmin, urlAutorisee, telechargerParDefaut };
+module.exports = { apresIdentifierAdmin, urlAutorisee, telechargerParDefaut, compteurs };

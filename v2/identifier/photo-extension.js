@@ -9,7 +9,15 @@ const { typeDesOctets } = require('../scanner/multipart');
 // JPEG progressif coûtait +180 Mo de mémoire et 1,4 s de CPU au décodage (mesuré par la relecture 1) : la mémoire est proportionnelle aux pixels, et l'en-tête est jugé AVANT le décodage.
 // Au plus 2 décodages simultanés (DECODAGES_MAX) : le suivant est refusé tout de suite (cause « occupe »), jamais une attente qui retiendrait la requête. Une seule page : pas d'image animée.
 const PIXELS_MAX = 12e6, COTE_MAX = 4096, DECODAGES_MAX = 2;
-let decodages = 0;
+let decodages = 0, pic = 0;
+/** LE SÉMAPHORE des décodages d'images hostiles (DECODAGES_MAX, 2 au plus dans le processus) : la validation ET le réencodage qui la suit (photo-avant-scan.js::epurer) passent par lui. La place est prise de façon synchrone
+ *  (aucun await entre le test et l'incrément) et rendue quoi qu'il arrive. Plein : { occupe: true } tout de suite, jamais une attente. */
+async function sousSemaphore(f) {
+    if (decodages >= DECODAGES_MAX) return { occupe: true };
+    decodages++; if (decodages > pic) pic = decodages;
+    try { return { valeur: await f() }; }
+    finally { decodages--; }
+}
 const FORMATS = Object.freeze({ 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp' });
 const TYPES = Object.freeze(Object.keys(FORMATS));
 
@@ -22,12 +30,9 @@ async function evaluerOctets(octets, { octetsMax, typeAnnonce }) {
         if (!type || !FORMATS[type]) return { cause: 'format' };
         if (typeAnnonce !== undefined && typeAnnonce !== type) return { cause: 'format' };      // le Content-Type annoncé doit être ce que les octets sont
         const { analyserImage } = require('../scanner/routes');                                // chargé à l'appel : routes.js du scanner requiert l'identifier (pas de cycle au chargement)
-        if (decodages >= DECODAGES_MAX) return { cause: 'occupe' };
-        decodages++;                                                                           // la place est prise de façon synchrone (aucun await entre le test et l'incrément) et rendue quoi qu'il arrive
-        let c;
-        try { c = await analyserImage(octets, { formats: [FORMATS[type]], pixelsMax: PIXELS_MAX, coteMax: COTE_MAX, pagesMax: 1 }); }
-        finally { decodages--; }
-        return c === null ? { octets } : { cause: c };
+        const r = await sousSemaphore(() => analyserImage(octets, { formats: [FORMATS[type]], pixelsMax: PIXELS_MAX, coteMax: COTE_MAX, pagesMax: 1 }));
+        if (r.occupe) return { cause: 'occupe' };
+        return r.valeur === null ? { octets } : { cause: r.valeur };
     } catch { return { cause: 'erreur' }; }
 }
 
@@ -36,4 +41,4 @@ const noter = (cause) => { compte[cause] = (compte[cause] || 0) + 1; };
 const compteurs = () => ({ ...compte });
 const reinitialiser = () => { compte = {}; };
 
-module.exports = { evaluerOctets, noter, compteurs, reinitialiser, PIXELS_MAX, COTE_MAX, DECODAGES_MAX, TYPES };
+module.exports = { sousSemaphore, decodagesEnCours: () => decodages, picDecodages: () => pic, evaluerOctets, noter, compteurs, reinitialiser, PIXELS_MAX, COTE_MAX, DECODAGES_MAX, TYPES };

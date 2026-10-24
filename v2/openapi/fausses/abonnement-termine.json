@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "abonnement": {
+    "actif": false,
+    "plan": "pro",
+    "periode": "mois",
+    "statut": "termine",
+    "finPeriode": "2026-10-10T10:00:00.000Z",
+    "finDePeriode": "2026-10-10T10:00:00.000Z",
+    "resiliationPrevue": false,
+    "finPrevueLe": null,
+    "prochaineEcheance": null,
+    "essaiFinLe": null,
+    "debutEssai": "2026-09-26T10:00:00.000Z",
+    "finEssai": "2026-10-10T10:00:00.000Z",
+    "maintienJusqua": null,
+    "essai": {
+      "enCours": false,
+      "debutLe": null,
+      "finLe": null,
+      "carteEnregistree": null,
+      "disponible": false,
+      "refus": "essai-deja-utilise"
+    },
+    "paiementEchoue": false
+  },
+  "quota": {
+    "nom": "gratuit",
+    "offre": "gratuit",
+    "limite": 10,
+    "utilisees": 0,
+    "restant": 10,
+    "remiseAZero": "2026-10-19T00:00:00+02:00"
+  },
+  "parrainage": {
+    "code": "K7M2QX9P",
+    "essaiFilleulJours": 30,
+    "moisOfferts": 0,
+    "plafondMois": 12,
+    "fenetreJours": 365
+  },
+  "offres": {
+    "pro": {
+      "mois": 499,
+      "an": 3900
+    },
+    "source": "stripe",
+    "devise": "EUR",
+    "essaiJours": 14
+  }
+}

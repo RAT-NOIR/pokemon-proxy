@@ -15,6 +15,7 @@ const db = require('../db');
 const { repondreErreur } = require('../erreurs');
 const PE = require('../identifier/photo-extension');
 const { exigerAdministrateur } = require('./etiquette');
+const { lireCorpsBorne } = require('./lecture-corps');
 
 const FORME_ID = /^[0-9a-f]{24}$/i;
 const PLACES_MAX = 4, DELAI_LECTURE_MS = 15000;
@@ -82,16 +83,7 @@ function traiterPhoto(cfg, deps = {}) {
         // 9. le corps, borné par la longueur annoncée et par un délai
         let octets;
         try {
-            octets = await new Promise((resolve, reject) => {
-                const morceaux = []; let total = 0, fini = false;
-                const clore = (f, v) => { if (fini) return; fini = true; clearTimeout(minute); req.removeListener('data', surDonnee); req.removeListener('end', surFin); req.removeListener('error', surErreur); req.removeListener('aborted', surErreur); f(v); };
-                const surDonnee = c => { total += c.length; if (total > longueur) { req.pause(); clore(reject, Object.assign(new Error('trop'), { code: 'TROP' })); return; } morceaux.push(c); };
-                const surFin = () => (total === longueur ? clore(resolve, Buffer.concat(morceaux, total)) : clore(reject, Object.assign(new Error('court'), { code: 'COURT' })));
-                const surErreur = () => clore(reject, Object.assign(new Error('coupe'), { code: 'COUPE' }));
-                const minute = setTimeout(() => { if (fini) return; try { req.socket.destroy(); } catch { /* déjà fermée */ } clore(reject, Object.assign(new Error('lent'), { code: 'LENT' })); }, delaiMs);
-                minute.unref();
-                req.on('data', surDonnee); req.on('end', surFin); req.on('error', surErreur); req.on('aborted', surErreur);
-            });
+            octets = await lireCorpsBorne(req, longueur, delaiMs);        // la lecture bornée (octets annoncés, délai) est PARTAGÉE avec POST /api/photo : banc/lecture-corps.js
         } catch (e) {
             liberer();
             if (e && (e.code === 'LENT' || e.code === 'COUPE')) { console.warn(`⚠️ [v2 banc-photo] lecture interrompue (${e.code})`); return; }       // plus personne à qui répondre

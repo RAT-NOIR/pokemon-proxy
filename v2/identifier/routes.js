@@ -30,6 +30,54 @@ const urlAmbigue = (u) => {
     try { const p = new URL(u); return p.username !== '' || p.password !== '' || p.port !== ''; } catch { return true; }
 };
 
+// PHOTOS-MULTIPLES (7d) : `photoIds: [{ index, photoId }]` (au plus 8, un par index, l'index existe dans imageUrls et va de 0 à 7) ou l'ancien `photoId` seul (= l'index 0). Pure ; ne lit PAS le magasin.
+// (C2, C3) Le `photoId` SEUL, mal formé, est `photo-id` ; DANS `photoIds` (de 1 à 8 couples), un `photoId` mal formé comme toute autre forme absurde est `photo-ids`. Bien formé mais inconnu, expiré, d'un autre porteur ou servi : jugé PLUS TARD (rattacherPhotos), ignoré.
+const FORME_PHOTO_ID = /^[0-9a-f]{32}$/;
+const PHOTO_INDEX_MAX = 7;
+function lirePhotoIds(corps, nUrls) {
+    const a = k => Object.prototype.hasOwnProperty.call(corps, k);
+    if (a('photoId') && a('photoIds')) return { erreur: 'photo-ids' };
+    if (a('photoId')) return typeof corps.photoId === 'string' && FORME_PHOTO_ID.test(corps.photoId) ? { photoIds: [{ index: 0, photoId: corps.photoId }] } : { erreur: 'photo-id' };
+    if (!a('photoIds')) return { photoIds: [] };
+    const l = corps.photoIds;
+    if (!Array.isArray(l) || l.length < 1 || l.length > PHOTO_INDEX_MAX + 1) return { erreur: 'photo-ids' };
+    const vus = new Set(), sortie = [];
+    for (const e of l) {
+        if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some(k => k !== 'index' && k !== 'photoId')) return { erreur: 'photo-ids' };
+        if (!Number.isInteger(e.index) || e.index < 0 || e.index > PHOTO_INDEX_MAX || e.index >= nUrls) return { erreur: 'photo-ids' };
+        if (typeof e.photoId !== 'string' || !FORME_PHOTO_ID.test(e.photoId)) return { erreur: 'photo-ids' };
+        if (vus.has(e.index)) return { erreur: 'photo-ids' };
+        vus.add(e.index); sortie.push({ index: e.index, photoId: e.photoId });
+    }
+    return { photoIds: sortie };
+}
+
+// PHOTOS-MULTIPLES (7d) : appelée par traiterIdentifier une fois la requête ACCEPTÉE (après la validation du corps, les plafonds, la prise de la clé d'idempotence, le débit ou le passage de l'administrateur, et le frein de dépense du modèle),
+// JUSTE AVANT la chaîne : les photos reçues pour ce scan sortent alors du magasin (UNE FOIS chacune) et rejoignent `req.entree` : `photosRecues` ([{ index, octets, modele }], l'index DÉCLARÉ ici) et `imageOctets` (celle d'index le plus bas,
+// 1 600 px : la seconde lecture lit une carte). Une requête refusée avant cet endroit laisse ses photos au magasin pour son rejeu (120 s). Absente, expirée, d'un autre porteur, déjà servie : ignorée, sans erreur. Ne lève jamais.
+// I-2 : à la FIN de la réponse (`close`, après `finish` ou une coupure), les octets sont libérés (photos-recues.js::libererPhotos) : 30 s de service + un scan de 90 s au plus = 120 s au plus en mémoire.
+function rattacherPhotos(req, deps = {}, res = null) {
+    try {
+        const entree = req && req.entree;
+        const demandees = entree && Array.isArray(entree.photoIds) ? entree.photoIds : [];
+        const p = req.v2 && req.v2.porteur;
+        if (!demandees.length || !p || entree.photosRecues) return;
+        const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
+        let depotMin = Infinity;
+        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) { recues.push({ index: d.index, octets: x.octets, modele: x.modele }); if (Number.isFinite(x.depotA) && x.depotA < depotMin) depotMin = x.depotA; } }
+        if (recues.length) {
+            const PR = require('./photos-recues');
+            recues.sort((a, b) => a.index - b.index); entree.photosRecues = recues; entree.imageOctets = recues[0].octets;
+            entree.photosRecuesPourCeScan = true;          // N-1 : des photos ont été reçues pour CE scan ; plus aucune étape ne retombe sur les URLs de l'annonce (imagesDeLaChaine, photo-admin), même une fois les octets libérés
+            // I-2 : LE SERVEUR tient la borne de 90 s (au plus tôt de : dépôt de la plus ancienne + 120 s, début de l'analyse + 90 s). À l'arrêt : le signal part vers les appels en cours, l'analyse finit par le chemin d'échec existant
+            // (le crédit pris est rendu) et les octets sont libérés. La fin de la réponse retire le minuteur et libère les octets.
+            const borne = PR.poserBorne(entree, m, Number.isFinite(depotMin) ? depotMin : (typeof m.maintenant === 'function' ? m.maintenant() : Date.now()));
+            entree.arret = borne;
+            if (res && typeof res.once === 'function') res.once('close', () => { borne.annuler(); PR.libererPhotos(entree); });
+        }
+    } catch (e) { console.error(`❌ [v2 photos-recues] rattachement (${(e && (e.code || e.name)) || 'erreur'})`); }
+}
+
 // Fonction pure : { entree } ou { erreur: { code, message, detail? } }. Ordre : forme, version, marché, champs, images.
 function verifierEntree(corps, cfg) {
     if (!corps || typeof corps !== 'object' || Array.isArray(corps)) return refus('ENTREE', 'corps de requête invalide');
@@ -61,13 +109,21 @@ function verifierEntree(corps, cfg) {
         if (urlAmbigue(u)) return refus('ENTREE', 'imageUrls : URL ambiguë (identifiant, port, barre inverse ou espace)', 'image-url');
     }
     if (!urls || !urls.length) return refus('IMAGE', 'aucune image à analyser', 'aucune-image');
+    // PHOTOS-MULTIPLES (7d) : SEULEMENT drapeau allumé. Éteint, `photoIds` et `photoId` sont des champs inconnus comme aujourd'hui (ignorés, jamais une erreur) et `entree` n'a pas une clé de plus.
+    let photoIds = null;
+    if (cfg.photosMultiples === true) {
+        const p = lirePhotoIds(corps, urls.length);
+        if (p.erreur) return refus('ENTREE', 'photoIds invalide', p.erreur);
+        photoIds = p.photoIds;
+    }
     // MODELE-VISUEL-API : `empreintes` / `modeleEmpreinte` ne sont LUS que si V2_EMPREINTE_EXTENSION=1 (éteint : la requête est jugée comme avant, octet pour octet). Une enveloppe fautive ne refuse JAMAIS la requête :
     // l'empreinte est un plus, jamais un passage obligé ; le défaut est dit dans la réponse (`empreinte`, code « invalide »).
     const empreintes = cfg.empreinteExtension === true ? lireEnveloppe(corps, urls.length) : null;
     return { entree: {
+        ...(photoIds ? { photoIds } : {}),
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
-        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // CONTRAT-2.md l. 24 : passé à la chaîne héritée (B1b.3) ; borné (mineur reporté de B1b.1)
+        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // REÇU et JOURNALISÉ, jamais utilisé (ETAT-VENDEUR, 2026-10-18) : passé à la chaîne héritée, qui le journalise et ne le lit pour aucune décision ; borné (mineur reporté de B1b.1)
         langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim(),
         ...(empreintes ? { empreintes } : {})
     } };
@@ -103,6 +159,7 @@ const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
+const { avecRepliAnalyse, analyseAvecRepli } = require('./prix-repli');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -122,6 +179,7 @@ const PS = require('../argent/poche-servie');      // ACHETE-AVANT-JOUR : factur
 // FREIN-CONSTATES : la garde de dépense du modèle de cette configuration (un banc en injecte une par deps.depenseModele ; sinon celle du processus)
 const depenseDe = (cfg, deps) => (deps && deps.depenseModele && typeof deps.depenseModele.autorise === 'function' ? deps.depenseModele : DEPENSE.pourConfig(cfg));
 const { cartesParScanMax } = require('./cartes-par-scan');
+const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les images que la chaîne reçoit (les octets des photos reçues, ou les URLs de l'annonce)
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
@@ -203,6 +261,7 @@ async function consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, co
     let appels = 0;
     const compteur = { get appels() { return appels; }, set appels(v) { if (Number.isInteger(v) && v > appels) { SL.noter('appels', v - appels); appels = v; } } };
     const abandon = new AbortController();
+    if (entree && entree.arret && entree.arret.signal) { if (entree.arret.signal.aborted) abandon.abort(); else entree.arret.signal.addEventListener('abort', () => abandon.abort(), { once: true }); }      // I-2 : la borne du scan annule aussi la seconde lecture
     let lu = null, issue = null, raison = null;
     try {
         const ms = Number.isFinite(deps.delaiSecondeMs) && deps.delaiSecondeMs > 0 ? deps.delaiSecondeMs : DELAI_SECONDE_MS;
@@ -238,7 +297,7 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
     let d;
     try {
         const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
-        const v = await avecBorne(() => deps.voisins({ imageUrls: entree.imageUrls, scanId: String(scanId) }), ms);
+        const v = await avecBorne(() => deps.voisins({ imageUrls: imagesDeLaChaine(entree), scanId: String(scanId) }), ms);
         if (!v) return null;
         d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils);
     } catch (e) { journalErreur('règle G', e); return null; }
@@ -418,6 +477,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 });
                 reqH = null;
             }
+            // PHOTOS-MULTIPLES (7d) : la requête est ACCEPTÉE (corps validé, plafonds passés, clé d'idempotence prise, débit fait, dépense du modèle permise) : c'est ICI, et pas avant, que les photos sortent du magasin.
+            if (!sortie) rattacherPhotos(req, deps, res);
             if (modeLot && !sortie) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
                 if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
@@ -426,7 +487,7 @@ function traiterIdentifier(cfg, deps = {}) {
             // comme réponse de la chaîne — sans la rappeler (un seul appel de lecture).
             if (!sortie && !erreurLot) {
             reqH = {
-                body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
+                body: { imageUrls: imagesDeLaChaine(entree), title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
                 ip: req.ip, headers: {}, scanIdImpose: scanId,
                 credit: argent.creditPourReq(porteur, credit, { scanId })
             };
@@ -441,7 +502,8 @@ function traiterIdentifier(cfg, deps = {}) {
             sortie = await dansUnScan(async () => {
                 const fr = fauxRes();
                 let exception = null;
-                try { await (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                if (entree.arret) reqH.signalArret = entree.arret.signal;           // I-2 : la chaîne reçoit le signal d'arrêt de la borne du scan (annule l'appel au modèle en cours)
+                try { await require('./photos-recues').avecArret(entree.arret && entree.arret.signal, (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr)); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
                 let resultat, produits = null;
                 if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 else {
@@ -467,7 +529,7 @@ function traiterIdentifier(cfg, deps = {}) {
                         try { sl = await consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer }); } catch (e) { journalErreur('seconde lecture', e); }
                         if (sl) { traceSeconde = sl.trace; if (sl.resultat) resultat = sl.resultat; }
                     }
-                    // F1-TAMPON : lire le tampon STAFF (ou le titre jumbo) pour trancher une paire séparée ; ou la mention de la règle 2 des prix. Derrière son interrupteur ; la réponse d'avant reste si la preuve n'est pas faite.
+                    // F1-TAMPON puis LOT TAMPONS : lire les marques (liste fermée) pour trancher une paire séparée ; ou la mention de la règle 2 des prix. Derrière son interrupteur ; la réponse d'avant reste si la preuve n'est pas faite.
                     if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
                         try {
                             const lt = await consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
@@ -539,6 +601,8 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
+                if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}) };
             });
             }
@@ -583,7 +647,12 @@ function traiterIdentifier(cfg, deps = {}) {
         // contrat, et que /ping reste un sondage de santé sans configuration. Éteint, ou version non configurée : le champ n'existe pas (la réponse est celle d'avant, octet pour octet).
         const me = cfg.empreinteExtension === true && regle && cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? cfg.modeleEmpreinte : null;
         if (me) regle = { ...regle, modeleEmpreinte: { id: me.id, sha256: me.sha256, url: me.url ?? null, octets: me.octets ?? null } };
-        const analyse = { ...resultat.analyse, regleVerdict: regle };
+        // PHOTOS-MULTIPLES (7d, C4) : quand `photoIds` (ou l'ancien `photoId`) est envoyé, l'analyse dit quelles photos ont été REÇUES : `photosRecues`, les index reçus en ordre croissant (tableau vide si aucune), et `photoRecue`, vrai
+        // SI ET SEULEMENT SI l'index 0 est reçu. Rien n'est ajouté sans `photoIds` (ni drapeau éteint : `entree.photoIds` n'existe alors pas) : la réponse est celle d'avant, octet pour octet.
+        const photosDites = Array.isArray(entree.photoIds) && entree.photoIds.length ? (() => { const idx = (entree.photosRecues || []).map(p => p.index).sort((a, b) => a - b); return { photosRecues: idx, photoRecue: idx.includes(0) }; })() : null;
+        // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
+        // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
+        const analyse = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
         // 9. les écritures annexes : sans effet sur la réponse
         try {
             const maintenant = new Date();
@@ -716,7 +785,8 @@ function traiterReponse(cfg, deps = {}) {
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
-        const resolue = carteRepondue(an, entree, carte, choix, idProduct);
+        const resolueBrute = carteRepondue(an, entree, carte, choix, idProduct);
+        const resolue = resolueBrute && avecRepliAnalyse(resolueBrute);      // PRIX-LISIBLE : le repli honnête d'une carte tranchée dont l'analyse n'a rien dicté à lire (null reste null)
         if (!resolue) { console.error(`🔴 [v2 reponse] scan ${scanId} : la carte ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); return repondreErreur(res, 'SERVEUR'); }
         // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
@@ -728,4 +798,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, rattacherPhotos, lirePhotoIds, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };

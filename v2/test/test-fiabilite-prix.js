@@ -50,11 +50,12 @@ v('ligne non lue + prix mélangé : non-mesurable puis les deux mentions', R({ t
 v('prixMelangeTampon === true : les deux mentions', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 v('prixMelangeTampon + écart : l\'écart d\'abord, puis les deux mentions', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`prixMelangeTampon ${JSON.stringify(x)} (≠ true) : aucune mention`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: x }), []);
-// F1-TAMPON, règle 2 : STAFF lu deux fois sur la photo d'une fiche à produit unique marquée => la mention « version tamponnée : le prix sous-estime sa valeur » REMPLACE la règle 3 (jamais en plus)
-v('règle 2 : prix mélangé + STAFF lu : la règle 1 puis la mention de la règle 2, plus « peut être gonflé »', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: true }), ['prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
-v('règle 2 : tamponStaffLu sans fiche marquée : rien (le tampon lu ne marque pas une fiche)', R({ tendance: 10, moyenne7: 10, moyenne30: 10, tamponStaffLu: true }), []);
-for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`règle 2 : tamponStaffLu ${JSON.stringify(x)} (≠ true) : la règle 3 reste`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: x }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
-v('règle 2 + écart : l\'écart d\'abord', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
+// F1-TAMPON puis LOT TAMPONS, règle 2 : une MARQUE de la liste fermée lue deux fois sur la photo d'une fiche à produit unique marquée => la mention « version tamponnée : le prix sous-estime sa valeur » REMPLACE la règle 3 (jamais en plus)
+v('règle 2 : prix mélangé + tampon lu : la règle 1 puis la mention de la règle 2, plus « peut être gonflé »', R({ tendance: 10, moyenne7: 10, moyenne30: 10, prixMelangeTampon: true, tamponLu: true }), ['prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
+v('règle 2 : tamponLu sans fiche marquée : rien (le tampon lu ne marque pas une fiche)', R({ tendance: 10, moyenne7: 10, moyenne30: 10, tamponLu: true }), []);
+for (const x of [false, null, undefined, 'true', 1, 'oui']) v(`règle 2 : tamponLu ${JSON.stringify(x)} (≠ true) : la règle 3 reste`, R({ tendance: 10, moyenne30: 10, prixMelangeTampon: true, tamponLu: x }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
+v('règle 2 + écart : l\'écart d\'abord', R({ tendance: 5, moyenne30: 10, prixMelangeTampon: true, tamponLu: true }), ['ecart-tendance', 'prix-indicatif-tampons-melanges', 'version-tamponnee-prix-sous-estime']);
+v('l\'ancien nom du champ (tamponStaffLu) ne marque plus rien : un champ renommé ne survit pas par accident', R({ tendance: 10, moyenne30: 10, prixMelangeTampon: true, tamponStaffLu: true }), ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']);
 v('le résultat est gelé', Object.isFrozen(R({ tendance: 5, moyenne30: 10 })), true);
 v('aucun argument : sans lever, et rien n\'a été mesuré -> ecart-non-mesurable', F.reservesDe(), ['ecart-non-mesurable']);
 

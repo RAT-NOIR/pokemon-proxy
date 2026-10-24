@@ -77,8 +77,8 @@ const I = require('../identifier/seconde-lecture-image');
         const fs = require('fs'); const dir = path.join(__dirname, '..', 'identifier');
         const MODULES = ['seconde-lecture.js', 'seconde-lecture-image.js'];
         const requis = f => [...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
-        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring']);
-        H.v('5a. les modules n\'importent que sharp, opencv-js et scoring (ni http, https, net, dns, tls, axios, undici, node-fetch, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], []]);
+        const AUTORISES = new Set(['sharp', '@techstark/opencv-js', '../../scoring', './marques-tampon']);       // LOT TAMPONS : marques-tampon.js est un module PUR (la liste fermée), ni base ni réseau
+        H.v('5a. les modules n\'importent que sharp, opencv-js, scoring et la liste fermée des marques (ni http, https, net, dns, tls, axios, undici, node-fetch, ni departage-image qui télécharge)', MODULES.map(f => requis(f).filter(r => !AUTORISES.has(r))), [[], []]);
         const code = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n');
         H.v('5b. aucun appel `fetch(`, `XMLHttpRequest`, `http.request`, `https.get`, `axios` dans le code des modules (hors commentaires)', MODULES.map(f => (code(f).match(/\bfetch\s*\(|XMLHttpRequest|https?\.(get|request)|axios|new WebSocket|import\s*\(/g) || [])), [[], []]);
         const routes = fs.readFileSync(path.join(dir, 'routes.js'), 'utf8');

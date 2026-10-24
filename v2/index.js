@@ -29,7 +29,7 @@ function monter(app, deps = {}, env = process.env) {
             app.use(chemin, (req, res) => res.status(503).json({ success: false, erreur: { code: 'INDISPONIBLE', message: 'Service momentanément indisponible' }, facturation: null }));
         return;
     }
-    pret.armer(verifierIndex);
+    pret.armer(() => verifierIndex(Boolean(cfg.abonnements && cfg.abonnements.actif)));   // STRIPE-V2 : les index des abonnements ne sont exigés que s'ils sont allumés
     app.use(assembler(LOTS, cfg, deps));
 }
 // Le limiteur hérité (index.js) ne saute que ce que la v2 traite elle-même : voir limiteur-heritage.js. Pas de drapeau « monté » en plus de `cfg` : `cfg` n'est posé valide que par lire(),

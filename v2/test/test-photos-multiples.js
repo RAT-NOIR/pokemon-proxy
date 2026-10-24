@@ -1,0 +1,677 @@
+'use strict';
+// PHOTOS-MULTIPLES (7d) — POST /api/photo?index=<0..7> (les octets d'une photo de l'annonce, AVANT le scan, administrateur, derrière V2_PHOTOS_MULTIPLES=1) et POST /api/identifier { photoIds: [{ index, photoId }] }.
+// Base EN MÉMOIRE, stockage MÉMOIRE, images SYNTHÉTIQUES (sharp). 🔑 Aucune requête hors de la boucle locale : un espion compte tout appel sortant (fetch, https) et le TÉLÉCHARGEUR de la photo du banc est un compteur.
+// La preuve d'un refus « avant la lecture » est un COMPTEUR D'OCTETS LUS : `socket.bytesRead` au moment où la réponse part (comme test-banc-photo.js).
+const H = require('./_harnais');
+const http = require('http'), https = require('https');
+const crypto = require('crypto');
+const express = require('express');
+const sharp = require('sharp');
+const mongoose = require('mongoose');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const P = require('../comptes/mots-de-passe');
+const { lireConfig } = require('../config');
+const monterBanc = require('../banc/monter');
+const { creerBanc } = require('../banc/routes');
+const S = require('../banc/stockage');
+const registre = require('../registre');
+const { creerPhotosRecues } = require('../identifier/photos-recues');
+
+const BASE = { MONGODB_BASE: 'test_scratch', V2_PHOTO_ADMIN_INTERVALLE_S: '0', V2_PHOTO_ADMIN_MAX_JOUR: '100000', V2_PHOTO_ADMIN_DELAI_S: '0' };
+const cfgOn = lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1' });
+const cfgOff = lireConfig({ ...BASE });
+const cfgPlafond = lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_ETIQUETTE_HEURE: '3' });
+const oid = () => new mongoose.Types.ObjectId();
+const ENV = { V2_BANC_BUCKET: 'bucket-banc-test', V2_BANC_SEL: 'sel-photos-multiples' };
+const MIO = 1024 * 1024;
+const attendre = ms => new Promise(r => setTimeout(r, ms));
+const jusque = async (cond, ms = 4000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await cond()) return true; await attendre(20); } return false; };
+const bruit = (w = 400, h = 560) => sharp(crypto.randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 80 }).toBuffer();
+const lus = new Map();
+let nEssai = 0, nIp = 0, nCle = 0;
+const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (exception)`, String(e && (e.stack || e.message)), 'aucune'); } };
+const FORME_ID = /^[0-9a-f]{32}$/;
+const code = r => r.json && r.json.erreur && r.json.erreur.code;
+const detail = r => r.json && r.json.erreur && r.json.erreur.detail;
+
+// ── l'ESPION des sorties : tout appel sortant hors de la boucle locale est noté. Un banc de « zéro téléchargement » dont l'instrument ne sait rien voir ne prouve rien : le cas témoin plus bas le fait compter.
+const sorties = [];
+{
+    const local = h => /^(127\.0\.0\.1|localhost|::1|\[::1\])$/.test(String(h || ''));
+    const f0 = globalThis.fetch;
+    globalThis.fetch = function (u, ...r) { try { const h = new URL(typeof u === 'string' ? u : (u && u.url) || String(u)).hostname; if (!local(h)) sorties.push(`fetch ${h}`); } catch { /* URL illisible */ } return f0.call(this, u, ...r); };
+    const hoteDe = a => { try { if (typeof a === 'string') return new URL(a).hostname; if (a instanceof URL) return a.hostname; return (a && (a.hostname || a.host)) || ''; } catch { return '?'; } };
+    // m-3 : https ET http (un hôte non TLS sort tout autant) ; un appel vers la boucle locale n'est pas une sortie
+    for (const [nom, mod] of [['https', https], ['http', http]]) for (const k of ['request', 'get']) { const o = mod[k]; mod[k] = function (...a) { const h = hoteDe(a[0]); if (!local(h)) sorties.push(`${nom}.${k} ${h}`); return o.apply(this, a); }; }
+}
+// ── l'ESPION des journaux : tout ce que le processus écrit sur la console pendant le banc
+const journaux = [];
+for (const k of ['log', 'warn', 'error', 'info']) { const o = console[k]; console[k] = (...a) => { journaux.push(a.map(x => (typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })())).join(' ')); return o.apply(console, a); }; }
+
+function envoyer(base, { chemin = '/api/photo', query, jeton, type = 'image/jpeg', corps = Buffer.alloc(0), contentLength, partiel = null, attente = 8000 } = {}) {
+    const essai = `e${++nEssai}`, url = new URL(base + chemin + (query === undefined ? '' : `?${query}`));
+    const h = { 'x-essai': essai, 'x-forwarded-for': `10.30.${Math.floor(++nIp / 250)}.${nIp % 250 + 1}` };
+    if (type) h['content-type'] = type; if (jeton) h.authorization = `Bearer ${jeton}`;
+    if (contentLength !== null) h['content-length'] = String(contentLength !== undefined ? contentLength : corps.length);
+    let ferme = false, repondu = null, fin; const fini = new Promise(r => { fin = r; });
+    const req = http.request({ host: url.hostname, port: url.port, path: url.pathname + url.search, method: 'POST', headers: h, agent: false }, res => {
+        const m = []; res.on('data', c => m.push(c));
+        res.on('end', () => { const t = Buffer.concat(m).toString('utf8'); let j = null; try { j = JSON.parse(t); } catch { /* non JSON */ } repondu = { statut: res.statusCode, entetes: res.headers, json: j, texte: t }; fin(repondu); });
+    });
+    req.on('error', () => { ferme = true; setTimeout(() => fin(repondu || { statut: null, erreur: true }), 300); });
+    req.on('close', () => { ferme = true; setTimeout(() => fin(repondu || { statut: null, ferme: true }), 300); });
+    const garde = setTimeout(() => { if (!repondu) { fin({ statut: 'EXPIRE-sans-reponse' }); try { req.destroy(); } catch { /* déjà fermée */ } } }, attente); garde.unref();
+    if (partiel !== null) req.write(corps.subarray(0, partiel));
+    else if (contentLength === null) { req.write(corps.subarray(0, 100)); req.end(corps.subarray(100)); }
+    else req.end(corps);
+    return { essai, req, fini, estFerme: () => ferme, lus: () => lus.get(essai) };
+}
+
+setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(1); }, 170000).unref();
+(async () => {
+    { const FEN = 3600e3, reste = FEN - (Date.now() % FEN); if (reste < 60e3) { await attendre(reste + 2000); } }
+
+    // ═══ 0. la configuration : « 1 » exactement allume ; tout le reste éteint SANS invalider ; le second état (phase 2) est lu, éteint, et ne branche rien ═══
+    H.v('0. config : drapeau absent ⇒ éteint', cfgOff.photosMultiples, false);
+    H.v('0. config : V2_PHOTOS_MULTIPLES=1 ⇒ allumé', cfgOn.photosMultiples, true);
+    for (const autre of ['0', 'true', 'oui', ' 1', '2', '1 ', '']) H.v(`0. config : V2_PHOTOS_MULTIPLES="${autre}" ⇒ éteint (et la configuration reste valide)`, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: autre }).photosMultiples, false);
+    H.v('0. config : le second état (tous les porteurs) est ÉTEINT par défaut, allumé par « 1 » exactement, et jamais sans le premier', [cfgOn.photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: '1' }).photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES_TOUS: '1' }).photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: 'oui' }).photosMultiplesTous], [false, true, false, false]);
+
+    await H.ouvrirBac('test-photos-multiples.js'); await M.creerIndex();
+    const mem = S.creerStockageMemoire();
+    const stockage = { async verifierBucket() { }, ecrire: (c, b) => mem.ecrire(c, b), supprimer: c => mem.supprimer(c), lire: c => mem.lire(c), lister: () => mem.lister(), cles: () => mem.cles() };
+    const banc = creerBanc({ cfg: cfgOn, env: ENV, stockage });
+    registre.fournir('banc', banc);
+    const mdp = await P.hacher('mot-de-passe-du-banc');
+    async function acteur({ role = null, lie = true } = {}) {
+        const email = `a${oid()}@exemple.fr`;
+        const c = Object.assign(M.nouveauCompte({ email, emailCle: email, motDePasse: mdp }), { verifie: true }, role ? { role } : {});
+        await db.col('comptes').insertOne(c);
+        const jeton = J.genererJeton();
+        await db.col('installations').insertOne({ ...M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }), ...(lie ? { compteId: c._id, generation: 0 } : {}) });
+        return { c, jeton, porteur: `compte:${c._id}` };
+    }
+    const ADM = await acteur({ role: 'administrateur' }), ADM2 = await acteur({ role: 'administrateur' }), ADM3 = await acteur({ role: 'administrateur' }), ADM4 = await acteur({ role: 'administrateur' }), ADM5 = await acteur({ role: 'administrateur' });
+    const USR = await acteur({}), SEUL = await acteur({ lie: false });
+
+    const pret = require('../pret'), { dansUnScan } = require('../../sources'), { assembler } = require('../index');
+    const horloge = { t: Date.now() };
+    const stockPhotos = creerPhotosRecues({ horloge: () => horloge.t });
+    let chaineAppels = 0, tel = 0, vusParLaChaine = [];
+    const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+    let signauxVus = [];                          // tour 3 : les signaux d'arrêt (AbortSignal) que la chaîne a reçus dans sa requête
+    let retardChaine = null, reqsVues = [];       // retardChaine : une promesse que la chaîne attend (un scan LONG) ; reqsVues : les requêtes Express vues par le banc (pour regarder `req.entree` après la réponse)
+    const chaine = async (req, res) => { chaineAppels++; vusParLaChaine.push([...(req.body.imageUrls || [])]); if (req.signalArret) signauxVus.push(req.signalArret); if (retardChaine) await retardChaine; res.json({ success: true, carte: { idProduct: 4242, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '58', total: '102', setCode: 'BS', rarete: null, langue: 'FR', ambigu: false }, etat: ETAT, candidats: [], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2, scanId: String(req.scanIdImpose) }); };
+    for (const [id, nom] of [[4242, 'Pikachu']]) { await db.col('catalogue_produits').insertOne({ idProduct: id, name: nom, idMetacard: id }); await db.col('numeros_cartes').insertOne({ idProduct: id, slugSet: 'Base-Set', numero: String(id % 100) }); }
+    const monter = async (cfg, reglage = { placesMax: 2, delaiLectureMs: 1200 }, photos = stockPhotos, extra = {}) => {
+        const app = express(); app.set('trust proxy', true);
+        app.use((q, s, n) => { reqsVues.push(q); if (reqsVues.length > 200) reqsVues.shift(); n(); });      // le banc regarde `req.entree` APRÈS la réponse (I-2 : plus aucune référence aux octets)
+        for (const l of require('../index').LOTS) l.enTete(app, cfg);       // les en-têtes de sécurité et le CORS de v2, comme en production (le 404 natif d'une route absente se compare AVEC eux)
+        app.use((q, s, n) => { const wh = s.writeHead; s.writeHead = function (...a) { lus.set(q.headers['x-essai'], q.socket.bytesRead); return wh.apply(this, a); }; n(); });
+        app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        pret.armer(M.verifierIndex);
+        const purgeStub = { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) };
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: purgeStub, photoRoute: reglage, photoAvantScan: reglage, photosRecues: photos, telechargerPhoto: async () => { tel++; return bruit(); }, ...extra }));
+        return H.serveur(app);
+    };
+    const sv = await monter(cfgOn), svOff = await monter(cfgOff), svPlafond = await monter(cfgPlafond);
+    const url = sv.url;
+    const jpg = await bruit();
+    const pasLu = c => (c.lus() ?? 1e9) < 100 * 1024;
+    const refus = async (nom, opts, statut, det) => {
+        const avant = stockPhotos.taille(opts.porteur || '').photos;
+        const c = envoyer(url, { partiel: 16, corps: jpg, attente: 2500, ...opts }); const r = await c.fini;      // une réponse DOIT partir sans le corps
+        H.v(`${nom} : ${statut}${det ? ` (${det})` : ''}, corps NON lu (moins de 100 ko lus), rien retenu`, [r.statut, det === undefined ? undefined : detail(r), pasLu(c), stockPhotos.taille(opts.porteur || '').photos - avant], [statut, det, true, 0]);
+        return r;
+    };
+    const IMG = i => `https://images1.vinted.net/t/01_00000_abcdef/f800/17000000${i}.jpeg`;
+    const corpsId = (extra = {}, n = 1) => ({ contrat: 2, imageUrls: Array.from({ length: n }, (_, i) => IMG(i)), title: 'Pikachu 58/102', description: '', prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...extra });
+    const identifier = (srv, a, corps) => fetch(srv.url + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${a.jeton}`, 'idempotency-key': `photos-${++nCle}-${Date.now()}-abcdefgh` }, body: JSON.stringify(corps) }).then(async r => { const texte = await r.text(); let json = null; try { json = JSON.parse(texte); } catch { /* */ } return { statut: r.status, json, texte }; });
+    const poster = async (a, index, corps = jpg, type = 'image/jpeg') => envoyer(url, { jeton: a.jeton, corps, type }).fini;      // A (C1) : aucun paramètre ; `index` (l'argument) n'est que l'intention du banc, il part dans photoIds
+    const dataVersOctets = u => Buffer.from(String(u).split(',')[1], 'base64');
+    const lireAn = id => db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(id) });
+
+    // ═══ 1. le drapeau ÉTEINT : la route n'existe pour personne ; /api/identifier est celui d'aujourd'hui, octet pour octet ═══
+    await essayer('1', async () => {
+        const brut = async (srv, jeton, chemin) => { const x = await fetch(srv.url + chemin, { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${jeton}` }, body: jpg }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte: texte.split(chemin.split('?')[0]).join('<CHEMIN>'), h }; };
+        // M-1 : la référence est un chemin SANS RAPPORT avec tout préfixe v2 (jamais un voisin de /api/photo, qui partagerait son préfixe : l'égalité serait vraie par construction)
+        const vraie = await brut(svOff, ADM.jeton, '/zz-route-inexistante');
+        H.vrai('1. instrument : une route inexistante rend un 404 non JSON qui cite le chemin', vraie.statut === 404 && vraie.texte.includes('<CHEMIN>'));
+        H.vrai('1. instrument : les en-têtes de sécurité v2 sont montés dans ce banc (un chemin v2 les porte, la référence non)', (await brut(svOff, ADM.jeton, '/api/banc/route-inexistante')).h['cache-control'] === 'no-store' && vraie.h['cache-control'] === undefined);
+        H.v('1. drapeau éteint : MÊME un administrateur reçoit EXACTEMENT la réponse d\'une route inexistante (statut, corps, en-têtes)', await brut(svOff, ADM.jeton, '/api/photo?index=0'), vraie);
+        H.v('1. drapeau éteint, sans jeton : 404 aussi (la route n\'existe pas), pas 401', (await envoyer(svOff.url, { query: 'index=0', corps: jpg }).fini).statut, 404);
+        // /api/identifier : un champ inconnu aujourd'hui, avec ou sans le drapeau éteint — la même réponse, octet pour octet (à l'identifiant du scan près)
+        const norm = r => r.texte.replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"X"');
+        const sans = await identifier(svOff, ADM, corpsId());
+        const avec = await identifier(svOff, ADM, corpsId({ photoIds: [{ index: 0, photoId: 'a'.repeat(32) }] }));
+        const mal = await identifier(svOff, ADM, corpsId({ photoId: 'pas-un-photo-id', photoIds: 'x' }));
+        H.v('1. drapeau éteint : `photoIds` est un champ inconnu comme aujourd\'hui — mêmes statut et corps, octet pour octet', [avec.statut, norm(avec)], [sans.statut, norm(sans)]);
+        H.v('1. drapeau éteint : `photoId` mal formé et `photoIds` absurde — AUCUN 400 (champs inconnus, ignorés), même corps que sans', [mal.statut, norm(mal)], [sans.statut, norm(sans)]);
+        H.vrai('1. drapeau éteint : la chaîne a reçu les URLs https, jamais des octets', vusParLaChaine.slice(-3).every(u => u.every(x => /^https:\/\/images1\.vinted\.net\//.test(x))));
+        const avantSrc = require('fs').readFileSync(require.resolve('../identifier/routes.js'), 'utf8');
+        H.vrai('1. le drapeau est lu depuis cfg (jamais process.env) dans la validation', !/process\.env/.test(avantSrc));
+    });
+
+    // ═══ 2. qui entre, et l'ordre des gardes : tous AVANT la lecture ═══
+    await essayer('2', async () => {
+        await refus('2. sans Authorization', { query: 'index=0' }, 401);
+        await refus('2. jeton inconnu', { query: 'index=0', jeton: J.genererJeton() }, 401);
+        const brut = async (jeton, chemin) => { const x = await fetch(url + chemin, { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${jeton}` }, body: jpg }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte: texte.split(chemin.split('?')[0]).join('<CHEMIN>'), h }; };
+        const vraie = await brut(USR.jeton, '/api/photo/inexistante');
+        for (const [nom, a] of [['compte non administrateur', USR], ['installation seule', SEUL]]) H.v(`2. ${nom} : EXACTEMENT la réponse d'une route inexistante (404 natif, mêmes corps et en-têtes)`, await brut(a.jeton, '/api/photo?index=0'), vraie);
+        await refus('2. non-administrateur : 404, corps non lu', { query: 'index=0', jeton: USR.jeton }, 404);
+        // le rôle est RELU en base : un administrateur rétrogradé n'a plus la route
+        const D = await acteur({ role: 'administrateur' });
+        H.v('2. un administrateur passe', (await poster(D, 0)).statut, 200);
+        await db.col('comptes').updateOne({ _id: D.c._id }, { $unset: { role: '' } });
+        await refus('2. rôle retiré en base depuis : 404 (relu à chaque requête)', { query: 'index=0', jeton: D.jeton }, 404);
+        // le second état du drapeau ne branche rien : même allumé, la phase 2 n'ouvre pas la route aux autres porteurs
+        const svTous = await monter(lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: '1' }));
+        H.v('2. V2_PHOTOS_MULTIPLES_TOUS=1 est LU et ne change rien : un non-administrateur reçoit toujours le 404 natif', (await envoyer(svTous.url, { query: 'index=0', jeton: USR.jeton, corps: jpg }).fini).statut, 404);
+        await svTous.fermer();
+    });
+
+    // ═══ 3. la requête : `index` seul, 0 à 7 ═══
+    await essayer('3', async () => {
+        const P1 = ADM.porteur;
+        // A (C1) : POST /api/photo SANS paramètre ; `index` est facultatif et IGNORÉ (l'index vient de `photoIds`, qui fait foi)
+        for (const q of [undefined, 'index=0', 'index=8', 'index=-1', 'index=zz', 'index=', 'index=1&index=2']) { const r = await envoyer(url, { query: q, jeton: ADM2.jeton, corps: jpg }).fini; H.v(`3. A : ${q === undefined ? 'sans aucun paramètre' : '?' + q} : accepté (200), l'index est ignoré`, [r.statut, r.json && FORME_ID.test(r.json.photoId)], [200, true]); }
+        await refus('3. un paramètre de plus (scanId)', { query: `index=0&scanId=${oid()}`, jeton: ADM.jeton, porteur: P1 }, 400, 'champ-inconnu');
+        await refus('3. un autre paramètre seul', { query: 'photo=0', jeton: ADM.jeton, porteur: P1 }, 400, 'champ-inconnu');
+        for (const type of ['text/plain', 'image/gif', 'image/svg+xml', 'image/heic', null]) await refus(`3. Content-Type ${type}`, { query: 'index=0', jeton: ADM.jeton, type, porteur: P1 }, 415, 'type');
+        await refus('3. sans Content-Length (chunked)', { query: 'index=0', jeton: ADM.jeton, contentLength: null, porteur: P1 }, 400, 'content-length');
+        await refus('3. Content-Length 0', { query: 'index=0', jeton: ADM.jeton, contentLength: 0, corps: Buffer.alloc(0), partiel: null, porteur: P1 }, 400, 'content-length');
+        await refus('3. Content-Length au-delà de 2 Mio', { query: 'index=0', jeton: ADM.jeton, contentLength: 2 * MIO + 1, porteur: P1 }, 413, 'trop-lourde');
+        const src = require('fs').readFileSync(require.resolve('../identifier/photo-avant-scan.js'), 'utf8');
+        H.vrai('3. la validation est celle de photo-extension.js::evaluerOctets, jamais recopiée', /evaluerOctets/.test(src) && !/typeDesOctets|analyserImage|PIXELS_MAX\s*=/.test(src));
+    });
+
+    // ═══ 4. le contenu : validé par la validation de photo-extension.js ═══
+    await essayer('4', async () => {
+        const essai = async (corps, type = 'image/jpeg') => { const r = await envoyer(url, { query: 'index=2', jeton: ADM3.jeton, type, corps }).fini; return [r.statut, detail(r)]; };
+        const png = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#123456' } }).png().toBuffer();
+        H.v('4. octets au hasard annoncés JPEG : 415 (format)', await essai(crypto.randomBytes(2000)), [415, 'type']);
+        H.v('4. un PNG annoncé `image/jpeg` : 415', await essai(png), [415, 'type']);
+        H.v('4. JPEG tronqué : 422 (illisible)', await essai(jpg.subarray(0, jpg.length >> 2)), [422, 'illisible']);
+        const large = await sharp({ create: { width: 4097, height: 1, channels: 3, background: '#000' } }).png().toBuffer();
+        H.v('4. côté de 4 097 px : 422 (dimensions)', await essai(large, 'image/png'), [422, 'dimensions']);
+        const progressif = await sharp({ create: { width: 7000, height: 7000, channels: 3, background: { r: 3, g: 4, b: 5 } } }).jpeg({ progressive: true }).toBuffer();
+        H.v('4. JPEG progressif de 49 Mpx : 422 (dimensions)', await essai(progressif), [422, 'dimensions']);
+        const anime = await sharp(crypto.randomBytes(64 * 64 * 3 * 3), { raw: { width: 64, height: 192, channels: 3, pageHeight: 64 } }).webp({ loop: 0, delay: [100, 100, 100] }).toBuffer();
+        H.v('4. WebP animé : 422 (illisible)', await essai(anime, 'image/webp'), [422, 'illisible']);
+        const grosse = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#445566' } }).png().toBuffer();
+        H.v('4. 4000 × 3000 (12 Mpx) : accepté', (await essai(grosse, 'image/png'))[0], 200);
+        for (const [nom, f] of [['PNG', 'png'], ['WebP', 'webp']]) H.v(`4. ${nom} accepté`, (await essai(await sharp({ create: { width: 300, height: 420, channels: 3, background: { r: 9, g: 8, b: 7 } } })[f]().toBuffer(), `image/${f}`))[0], 200);
+    });
+
+    // ═══ 5. la réponse : { photoId, expireDans: 120 } ; rien d'écrit, rien débité ═══
+    await essayer('5', async () => {
+        const tables = async () => { const noms = (await mongoose.connection.db.listCollections().toArray()).map(c => c.name).filter(n => n.includes('mouvements') || n.includes('analyses') || n.includes('banc')); const o = {}; for (const n of noms) o[n] = await mongoose.connection.db.collection(n).countDocuments({}); return o; };
+        const avant = await tables(), clesAvant = mem.cles().length;
+        const r1 = await poster(ADM4, 1), r2 = await poster(ADM4, 1);
+        H.v('5. 200 { success, photoId (32 hexadécimaux), expireDans: 30 } (I-2 : servie dans les 30 s) — et rien d\'autre', [r1.statut, r1.json.success, FORME_ID.test(r1.json.photoId), r1.json.expireDans, Object.keys(r1.json).sort()], [200, true, true, 30, ['expireDans', 'photoId', 'success']]);
+        H.vrai('5. deux photos, deux identifiants différents (tirés au hasard)', r1.json.photoId !== r2.json.photoId && FORME_ID.test(r2.json.photoId));
+        H.v('5. aucun argent, aucune ligne : mouvements, analyses, banc inchangés ; aucun objet au bucket', [await tables(), mem.cles().length - clesAvant], [avant, 0]);
+        const src = require('fs').readFileSync(require.resolve('../identifier/photo-avant-scan.js'), 'utf8');
+        H.vrai('5. les identifiants viennent de crypto.randomBytes (le magasin)', /randomBytes\(16\)/.test(require('fs').readFileSync(require.resolve('../identifier/photos-recues.js'), 'utf8')));
+        H.vrai('5. la route ne débite rien : aucun appel à l\'argent', !/argent|debiter|rembourser/.test(src.replace(/\/\/.*$/gm, '')));
+    });
+
+    // ═══ 6. places de lecture, délai de lecture, plafond horaire (ceux de /api/banc/photo) ═══
+    await essayer('6', async () => {
+        const lent = a => envoyer(url, { query: 'index=0', jeton: a.jeton, corps: jpg, partiel: 100 });
+        const A = lent(ADM); await attendre(300);
+        const A2 = await refus('6. le MÊME porteur, une deuxième lecture pendant la première', { query: 'index=1', jeton: ADM.jeton }, 429, undefined);
+        H.v('6. 429 `DEBIT` avec Retry-After', [code(A2), Boolean(A2.entetes['retry-after'])], ['DEBIT', true]);
+        const B = lent(ADM2); await attendre(300);
+        await refus('6. plafond GLOBAL (2 ici) : un troisième porteur', { query: 'index=0', jeton: ADM3.jeton }, 429, undefined);
+        A.req.destroy(); B.req.destroy(); await attendre(400);
+        H.v('6. un client qui coupe libère sa place', (await poster(ADM, 0)).statut, 200);
+        const t0 = Date.now(); const L = lent(ADM2); const coupee = await jusque(() => L.estFerme(), 3000);
+        H.v('6. un client qui envoie 100 octets puis se tait : connexion COUPÉE après le délai (1,2 s ici)', [coupee, Date.now() - t0 < 3000], [true, true]);
+        H.v('6. la place est rendue', (await poster(ADM2, 0)).statut, 200);
+        const R = require('../identifier/photo-avant-scan');
+        H.v('6. les défauts de production sont ceux de /api/banc/photo : 4 places, délai de 15 s', [R.PLACES_MAX, R.DELAI_LECTURE_MS], [4, 15000]);
+        // B : le plafond horaire de /api/photo est d'AU MOINS 600 par porteur, même si V2_ETIQUETTE_HEURE est réglé plus bas (3 ici : 75 scans de 8 photos ne doivent pas être étouffés par le réglage du banc)
+        const sp = svPlafond.url;
+        const e4 = []; for (let i = 0; i < 4; i++) e4.push((await envoyer(sp, { jeton: ADM5.jeton, corps: jpg }).fini).statut);
+        H.v('6. B : V2_ETIQUETTE_HEURE=3 ne plafonne PAS /api/photo à 3 : quatre envois passent (plancher de 600)', e4, [200, 200, 200, 200]);
+        const debut = Math.floor(Date.now() / 3600e3) * 3600e3, cleL = `photo-avant-scan:compte:${ADM5.c._id}|${debut}`;
+        await db.col('limites').updateOne({ cle: cleL }, { $set: { n: 600, expireLe: new Date(debut + 7200e3) } }, { upsert: true });
+        const c4 = envoyer(sp, { jeton: ADM5.jeton, corps: jpg, partiel: 16 }); const r4 = await c4.fini;
+        H.v('6. B : 600 envois dans l\'heure : le suivant est 429 DEBIT + Retry-After, corps non lu', [r4.statut, code(r4), Boolean(r4.entetes['retry-after']), pasLu(c4)], [429, 'DEBIT', true, true]);
+        const src6 = require('fs').readFileSync(require.resolve('../identifier/monter.js'), 'utf8');
+        H.vrai('6. B : le plancher de 600 est écrit dans le montage (Math.max)', /Math\.max\(\s*600/.test(src6));
+    });
+
+    // ═══ 7. le MAGASIN : 120 s, un par service, bornes par porteur (8 photos, 8 Mio) ═══
+    await essayer('7', async () => {
+        const T = () => horloge.t, mk = n => Buffer.alloc(n, 7);
+        const m = creerPhotosRecues({ horloge: T });
+        const id1 = m.deposer('p', 0, mk(10));
+        H.v('7. le magasin rend un identifiant de 32 hexadécimaux', FORME_ID.test(id1), true);
+        H.v('7. prendre : l\'index et les octets, UNE fois (consommé)', [m.prendre('p', id1) && m.prendre('p', id1) === null, m.taille('p')], [true, { photos: 0, octets: 0 }]);
+        const id2 = m.deposer('p', 3, mk(10));
+        H.v('7. d\'un AUTRE porteur : absent, et la photo n\'est PAS consommée par cette tentative', [m.prendre('q', id2), m.prendre('p', id2) !== null], [null, true]);
+        const id3 = m.deposer('p', 0, mk(10)); horloge.t += 29999;
+        H.v('7. I-2 : à 29,999 s : encore servie', m.prendre('p', id3) !== null, true);
+        const id4 = m.deposer('p', 0, mk(10)); horloge.t += 30e3;
+        H.v('7. I-2 : à 30 s EXACTES : absente (ignorée), et plus retenue (mémoire rendue)', [m.prendre('p', id4), m.taille('p')], [null, { photos: 0, octets: 0 }]);
+        // 8 photos au plus : la 9e fait oublier la plus ancienne
+        const ids = []; for (let i = 0; i < 9; i++) { ids.push(m.deposer('p', i % 8, mk(100))); horloge.t += 10; }
+        H.v('7. 9e photo : 8 retenues, la PLUS ANCIENNE oubliée, les 8 autres intactes', [m.taille('p').photos, m.prendre('p', ids[0]), ids.slice(1).every(i => m.prendre('p', i) !== null)], [8, null, true]);
+        // 8 Mio au plus au total : on oublie les plus anciennes jusqu'à tenir
+        const g = []; for (let i = 0; i < 5; i++) { g.push(m.deposer('p', i, mk(Math.floor(1.9 * MIO)))); horloge.t += 10; }
+        const t = m.taille('p');
+        H.v('7. 5 photos de 1,9 Mio (9,5 Mio) : au plus 8 Mio retenus, la plus ancienne oubliée, les 4 suivantes intactes', [t.octets <= 8 * MIO, t.photos, m.prendre('p', g[0]), g.slice(1).every(i => m.prendre('p', i) !== null)], [true, 4, null, true]);
+        H.v('7. les bornes sont PAR PORTEUR : un porteur qui dépose beaucoup n\'oublie rien chez un autre', (() => { const a = m.deposer('a', 0, mk(5)); for (let i = 0; i < 20; i++) m.deposer('b', i % 8, mk(5)); return m.prendre('a', a) !== null; })(), true);
+        // au-delà de 2 Mio, une photo n'entre pas (jamais retenue) : le magasin refuse
+        let leve = null; try { m.deposer('p', 0, mk(2 * MIO + 1)); } catch (e) { leve = e.code || e.message; }
+        H.vrai('7. une photo de plus de 2 Mio n\'entre pas dans le magasin', leve);
+        H.v('7. I-2 : service 30 s, scan 90 s, vie 120 s, 8 photos, 8 Mio (valeurs du contrat)', [creerPhotosRecues.SERVICE_S, creerPhotosRecues.SCAN_MAX_S, creerPhotosRecues.VIE_MAX_S, creerPhotosRecues.PHOTOS_MAX, creerPhotosRecues.OCTETS_MAX], [30, 90, 120, 8, 8 * MIO]);
+        const ts = require('fs').readFileSync(require.resolve('../identifier/photos-recues.js'), 'utf8');
+        H.vrai('7. le magasin ne touche ni la base, ni le disque, ni le réseau', !/require\('(fs|http|https|mongoose|\.\.\/db)'\)|col\(|writeFile/.test(ts));
+    });
+
+    // ═══ 8. POST /api/identifier : la validation de photoIds / photoId ═══
+    await essayer('8', async () => {
+        const nuls = async (nom, corps, det) => {
+            const c0 = chaineAppels, mv = await db.col('mouvements').countDocuments({}), an = await db.col('analyses').countDocuments({});
+            const r = await identifier(sv, USR, corps);
+            H.v(`8. ${nom} : 400 ENTREE ${det}, la chaîne n'est pas appelée, rien débité ni écrit`, [r.statut, code(r), detail(r), chaineAppels - c0, (await db.col('mouvements').countDocuments({})) - mv, (await db.col('analyses').countDocuments({})) - an], [400, 'ENTREE', det, 0, 0, 0]);
+        };
+        const bon = 'b'.repeat(32);
+        await nuls('photoId mal formé (trop court)', corpsId({ photoId: 'abc' }), 'photo-id');
+        await nuls('photoId mal formé (majuscules)', corpsId({ photoId: 'B'.repeat(32) }), 'photo-id');
+        await nuls('photoId mal formé (33 caractères)', corpsId({ photoId: 'b'.repeat(33) }), 'photo-id');
+        await nuls('photoId qui n\'est pas une chaîne', corpsId({ photoId: 12 }), 'photo-id');
+        await nuls('photoId null', corpsId({ photoId: null }), 'photo-id');
+        await nuls('C : photoIds : un photoId mal formé DANS photoIds', corpsId({ photoIds: [{ index: 0, photoId: 'zz' }] }), 'photo-ids');
+        await nuls('C : photoIds : photoId absent', corpsId({ photoIds: [{ index: 0 }] }), 'photo-ids');
+        await nuls('C : photoIds vide (de 1 à 8 couples)', corpsId({ photoIds: [] }), 'photo-ids');
+        await nuls('photoIds : pas un tableau', corpsId({ photoIds: 'x' }), 'photo-ids');
+        await nuls('photoIds : un objet', corpsId({ photoIds: { index: 0, photoId: bon } }), 'photo-ids');
+        await nuls('photoIds : un élément qui n\'est pas un objet', corpsId({ photoIds: [bon] }), 'photo-ids');
+        await nuls('photoIds : une clé de plus dans un élément', corpsId({ photoIds: [{ index: 0, photoId: bon, x: 1 }] }), 'photo-ids');
+        await nuls('photoIds : neuf entrées', corpsId({ photoIds: Array.from({ length: 9 }, (_, i) => ({ index: i, photoId: bon })) }, 9), 'photo-ids');
+        await nuls('photoIds : deux entrées au même index', corpsId({ photoIds: [{ index: 0, photoId: bon }, { index: 0, photoId: 'c'.repeat(32) }] }), 'photo-ids');
+        await nuls('photoIds : un index absent de imageUrls', corpsId({ photoIds: [{ index: 1, photoId: bon }] }, 1), 'photo-ids');
+        await nuls('photoIds : un index négatif', corpsId({ photoIds: [{ index: -1, photoId: bon }] }), 'photo-ids');
+        await nuls('photoIds : un index qui n\'est pas entier', corpsId({ photoIds: [{ index: 0.5, photoId: bon }] }), 'photo-ids');
+        await nuls('photoIds : un index en chaîne', corpsId({ photoIds: [{ index: '0', photoId: bon }] }), 'photo-ids');
+        await nuls('photoIds : index 8 (au-delà de 0..7) même si imageUrls en a 9', corpsId({ photoIds: [{ index: 8, photoId: bon }] }, 9), 'photo-ids');
+        await nuls('photoId ET photoIds ensemble', corpsId({ photoId: bon, photoIds: [{ index: 0, photoId: 'c'.repeat(32) }] }), 'photo-ids');
+        // le corps de /api/identifier garde sa limite de 100 ko : les octets ne passent JAMAIS par lui
+        const gros = await fetch(url + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${USR.jeton}`, 'idempotency-key': `photos-${++nCle}-${Date.now()}-abcdefgh` }, body: JSON.stringify(corpsId({ title: 'a'.repeat(3 * MIO) })) });
+        H.v('8. le corps de /api/identifier garde sa limite (3 Mio : 413)', gros.status, 413);
+        // les entrées valides absentes du magasin : ignorées, sans erreur
+        const c0 = chaineAppels;
+        const ign = await identifier(sv, USR, corpsId({ photoIds: [{ index: 0, photoId: 'd'.repeat(32) }] }));
+        H.v('8. un photoId bien formé mais inconnu : IGNORÉ, scan normal (200), la chaîne reçoit les URLs https', [ign.statut, ign.json && ign.json.success, chaineAppels - c0, vusParLaChaine[vusParLaChaine.length - 1].every(x => x.startsWith('https://'))], [200, true, 1, true]);
+        const src = require('fs').readFileSync(require.resolve('../identifier/routes.js'), 'utf8').replace(/\/\/.*$/gm, '');
+        H.vrai('8. la validation est pure et ne lit le magasin que pour les identifiants déjà jugés bien formés (le magasin est consulté après validerEntree)', /rattacherPhotos/.test(src));
+    });
+
+    // ═══ 9. le scan AVEC photos : les octets vont au modèle, JAMAIS une URL ; ZÉRO téléchargement ═══
+    await essayer('9', async () => {
+        // le cas TÉMOIN d'abord : sans photo reçue, le téléchargement de la photo du banc part bel et bien (l'instrument sait compter)
+        tel = 0; const s0 = sorties.length, mv0 = await db.col('mouvements').countDocuments({});
+        const T0 = await identifier(sv, ADM, corpsId());
+        await jusque(() => tel > 0, 3000); await attendre(400);
+        const deltaTemoin = (await db.col('mouvements').countDocuments({})) - mv0;      // ce qu'un scan d'administrateur écrit dans `mouvements` sans photo reçue (la ligne « administrateur », zéro crédit)
+        H.v('9. TÉMOIN : sans photo reçue, l\'administrateur voit le repli télécharger la photo du banc (1 appel) et la chaîne reçoit l\'URL', [T0.statut, tel, vusParLaChaine[vusParLaChaine.length - 1]], [200, 1, [IMG(0)]]);
+        // 3 photos, indices 0, 1 et 3 sur 4 URLs
+        const avecExif = await sharp(await bruit(300, 420)).withMetadata({ exif: { IFD0: { Copyright: 'secret-copyright-a-retirer' } } }).jpeg().toBuffer();
+        H.vrai('9. instrument : la photo de départ porte bien l\'EXIF', avecExif.includes(Buffer.from('secret-copyright-a-retirer')));
+        const p0 = await poster(ADM, 0, avecExif), p1 = await poster(ADM, 1, await bruit(300, 420)), p3 = await poster(ADM, 3, await bruit(300, 420, 'x'));
+        const ids = [p0, p1, p3].map(r => r.json.photoId);
+        tel = 0; const s1 = sorties.length, mv = await db.col('mouvements').countDocuments({}), cles0 = mem.cles().length, j0 = journaux.length;
+        const R = await identifier(sv, ADM, corpsId({ photoIds: [{ index: 3, photoId: ids[2] }, { index: 0, photoId: ids[0] }, { index: 1, photoId: ids[1] }] }, 4));
+        const vue = vusParLaChaine[vusParLaChaine.length - 1];
+        H.v('9. 200, et la chaîne reçoit 3 images en `data:` (dans l\'ordre des index), AUCUNE URL https', [R.statut, vue.length, vue.every(u => /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(u))], [200, 3, true]);
+        const octets = vue.map(dataVersOctets);
+        const meta0 = await sharp(octets[0]).metadata();
+        H.v('9. métadonnées retirées : ni EXIF dans l\'image transmise, ni le texte du copyright dans ses octets', [meta0.exif === undefined, octets[0].includes(Buffer.from('secret-copyright-a-retirer'))], [true, false]);
+        await attendre(300);
+        H.v('9. ZÉRO téléchargement : le téléchargeur de la photo du banc n\'est pas appelé', tel, 0);
+        H.v('9. ZÉRO appel sortant (fetch, https) pendant tout le scan', sorties.slice(s1), []);
+        // la photo d'index 0 devient la photo du banc de l'administrateur (phase 1)
+        const okBanc = await jusque(async () => (await lireAn(R.json.scanId)).photoBanc);
+        const an = await lireAn(R.json.scanId);
+        H.v('9. l\'index 0 devient la photo du banc : photoBanc écrit (sha256), UN objet au bucket', [okBanc && /^[0-9a-f]{64}$/.test(an.photoBanc.sha256), mem.cles().length - cles0], [true, 1]);
+        H.v('9. /api/photo ne débite rien, et /api/identifier facture comme aujourd\'hui : les mêmes lignes `mouvements` qu\'un scan sans photo', (await db.col('mouvements').countDocuments({})) - mv, deltaTemoin);        // un photoId SERT UNE FOIS
+        const c0 = chaineAppels, deuxieme = await identifier(sv, ADM, corpsId({ photoIds: [{ index: 0, photoId: ids[0] }] }));
+        H.v('9. le même photoId une seconde fois : ignoré (déjà servi) — la chaîne reçoit l\'URL https', [deuxieme.statut, chaineAppels - c0, vusParLaChaine[vusParLaChaine.length - 1]], [200, 1, [IMG(0)]]);
+        await jusque(() => tel > 0, 3000); await attendre(500);      // ce scan-là n'a reçu aucune photo : le repli télécharge, en arrière-plan ; on le laisse finir avant de compter la suite
+        // aucun octet ni journalisé ni écrit : ni la base, ni les journaux de la console
+        const b64 = vue.map(u => u.split(',')[1]);
+        let trouvees = []; for (const c of await mongoose.connection.db.listCollections().toArray()) { const t = JSON.stringify(await mongoose.connection.db.collection(c.name).find({}).toArray()); for (const [i, b] of b64.entries()) if (t.includes(b.slice(0, 120)) || t.includes(b.slice(-120))) trouvees.push(`${c.name}:${i}`); }
+        H.v('9. aucun octet de photo dans AUCUNE collection de la base', trouvees, []);
+        H.v('9. aucun octet de photo dans les journaux de la console', journaux.slice(j0).filter(l => b64.some(b => l.includes(b.slice(0, 60)))).length, 0);
+        H.vrai('9. aucun journal du magasin ni de la route ne cite d\'URL ni d\'octets', !/console\.(log|warn|error)\([^)]*(octets|buffer|base64)/i.test(require('fs').readFileSync(require.resolve('../identifier/photos-recues.js'), 'utf8') + require('fs').readFileSync(require.resolve('../identifier/photo-avant-scan.js'), 'utf8')));
+    });
+
+    // ═══ 10. les trois écarts : seule l'index 3 reçue (pas d'index 0) ; l'ancien `photoId` seul vaut l'index 0 ; expiré ; d'un autre porteur ═══
+    await essayer('10', async () => {
+        // pas d'index 0 : la chaîne reçoit la photo reçue ; AUCUN téléchargement (la photo du banc est sautée aussi) ; pas de photo du banc
+        const p3 = await poster(ADM2, 3);
+        tel = 0; const s = sorties.length, c0 = mem.cles().length;
+        const R = await identifier(sv, ADM2, corpsId({ photoIds: [{ index: 3, photoId: p3.json.photoId }] }, 4));
+        await attendre(500);
+        const vue = vusParLaChaine[vusParLaChaine.length - 1];
+        H.v('10. seule l\'index 3 reçue : la chaîne reçoit UNE image en `data:` (pas les trois URLs https non reçues)', [R.statut, vue.length, /^data:image\/jpeg;base64,/.test(vue[0])], [200, 1, true]);
+        H.v('10. et rien n\'est téléchargé : ni la photo du banc (index 0 non reçu), ni aucune image', [tel, sorties.slice(s), (await lireAn(R.json.scanId)).photoBanc === undefined, mem.cles().length - c0], [0, [], true, 0]);
+        // l'ancien `photoId` seul : index 0
+        const q0 = await poster(ADM2, 0);
+        const R2 = await identifier(sv, ADM2, corpsId({ photoId: q0.json.photoId }));
+        H.v('10. l\'ancien `photoId` seul vaut l\'index 0 : image en `data:`, photo du banc écrite', [R2.statut, vusParLaChaine[vusParLaChaine.length - 1].length, /^data:/.test(vusParLaChaine[vusParLaChaine.length - 1][0]), Boolean(await jusque(async () => (await lireAn(R2.json.scanId)).photoBanc))], [200, 1, true, true]);
+        // d'un autre porteur : ignoré, et la photo de son porteur n'est PAS consommée par cette tentative
+        const a = await poster(ADM3, 0);
+        const volee = await identifier(sv, ADM4, corpsId({ photoIds: [{ index: 0, photoId: a.json.photoId }] }));
+        H.v('10. le photoId d\'un AUTRE porteur : ignoré (la chaîne reçoit l\'URL https)', [volee.statut, vusParLaChaine[vusParLaChaine.length - 1]], [200, [IMG(0)]]);
+        const sien = await identifier(sv, ADM3, corpsId({ photoIds: [{ index: 0, photoId: a.json.photoId }] }));
+        H.v('10. … et son vrai porteur peut encore s\'en servir (non consommé par le voleur)', [sien.statut, /^data:/.test(vusParLaChaine[vusParLaChaine.length - 1][0])], [200, true]);
+        // expiré : 120 s plus tard
+        const e = await poster(ADM3, 0);
+        horloge.t += 31e3;
+        const exp = await identifier(sv, ADM3, corpsId({ photoIds: [{ index: 0, photoId: e.json.photoId }] }));
+        H.v('10. un photoId expiré (121 s) : ignoré, scan normal, la chaîne reçoit l\'URL https', [exp.statut, vusParLaChaine[vusParLaChaine.length - 1]], [200, [IMG(0)]]);
+        // un utilisateur NON administrateur qui présente un photoId qu'il ne peut pas avoir : ignoré (la route n'existe pas pour lui)
+        const user = await identifier(sv, USR, corpsId({ photoIds: [{ index: 0, photoId: a.json.photoId }] }));
+        H.v('10. un non-administrateur avec un photoId : ignoré, 200, URL https', [user.statut, vusParLaChaine[vusParLaChaine.length - 1]], [200, [IMG(0)]]);
+    });
+
+    // ═══ 11. 9 photos au niveau de la route : la plus ancienne est oubliée ═══
+    await essayer('11', async () => {
+        const D = await acteur({ role: 'administrateur' });
+        const ids = []; for (let i = 0; i < 9; i++) ids.push((await poster(D, i % 8, await bruit(120, 160))).json.photoId);
+        H.v('11. après 9 photos, la 1re est oubliée : retenues 8', stockPhotos.taille(D.porteur).photos, 8);
+        const R = await identifier(sv, D, corpsId({ photoIds: ids.slice(1).map((photoId, k) => ({ index: (k + 1) % 8, photoId })) }, 8));
+        const vue = vusParLaChaine[vusParLaChaine.length - 1];
+        H.v('11. les 8 dernières servent (8 images en `data:`)', [R.statut, vue.length, vue.every(u => u.startsWith('data:'))], [200, 8, true]);
+        const old = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: ids[0] }] }));
+        H.v('11. la première (oubliée) est ignorée sans erreur', [old.statut, vusParLaChaine[vusParLaChaine.length - 1]], [200, [IMG(0)]]);
+    });
+
+    // ═══ 12. CORS : la pré-requête de POST /api/photo (Content-Type et Authorization, origine de l'extension) ═══
+    await essayer('12', async () => {
+        const { middlewareV2 } = require('../transport/cors');
+        const prefl = async cfg => { const app = express(); app.use(middlewareV2(cfg)); app.use((q, s) => s.status(404).end()); const srv = await H.serveur(app); try { const r = await fetch(srv.url + '/api/photo', { method: 'OPTIONS', headers: { origin: cfg.origines.extension, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type, authorization' } }); return { statut: r.status, methodes: r.headers.get('access-control-allow-methods'), entetes: r.headers.get('access-control-allow-headers'), origine: r.headers.get('access-control-allow-origin') }; } finally { await srv.fermer(); } };
+        const on = await prefl(cfgOn), off = await prefl(cfgOff);
+        H.v('12. drapeau allumé : 204, POST, Authorization et Content-Type autorisés pour l\'origine exacte de l\'extension', [on.statut, /POST/.test(on.methodes), /Authorization/.test(on.entetes), /Content-Type/.test(on.entetes), on.origine], [204, true, true, true, cfgOn.origines.extension]);
+        H.v('12. drapeau éteint : aucun en-tête CORS propre à v2 pour ce chemin (la route n\'existe pas)', [off.statut, off.origine], [404, null]);
+        const { cheminV2 } = require('../transport/entetes');
+        H.v('12. /api/photo est un chemin v2 (en-têtes de sécurité) SEULEMENT drapeau allumé, pour que le 404 natif d\'un non-administrateur ne se distingue pas ; éteint, un chemin comme un autre', [cheminV2('/api/photo', cfgOn), cheminV2('/api/photo', cfgOff), cheminV2('/api/photo')], [true, false, false]);
+    });
+
+    // ═══ 13. les chemins qui téléchargent : chacun est coupé quand une photo est reçue (preuve par le code) ═══
+    await essayer('13', async () => {
+        const lire = f => require('fs').readFileSync(require.resolve(f), 'utf8').replace(/\/\/.*$/gm, '');
+        const routes = lire('../identifier/routes.js'), lot = lire('../identifier/lot.js'), crochet = lire('../banc/crochet.js'), admin = lire('../banc/photo-admin.js');
+        H.vrai('13. routes.js : la chaîne héritée, le lot, la règle G et la seconde lecture reçoivent les images par `imagesDeLaChaine` / `imageOctets`, jamais `entree.imageUrls` brut', !/imageUrls: entree\.imageUrls/.test(routes) && /imagesDeLaChaine\(entree\)/.test(routes) && /entree\.imageOctets/.test(routes));
+        H.vrai('13. lot.js : le lot reçoit les images par `imagesDeLaChaine`', !/imageUrls: entree\.imageUrls/.test(lot) && /imagesDeLaChaine/.test(lot));
+        H.vrai('13. crochet.js : la détection reçoit les images par `imagesDeLaChaine`', !/req\.entree\.imageUrls/.test(crochet) && /imagesDeLaChaine/.test(crochet));
+        H.vrai('13. photo-admin.js : le repli ne télécharge pas quand des photos sont reçues', /photosRecues/.test(admin));
+        const { imagesDeLaChaine } = require('../identifier/photos-recues');
+        H.v('13. imagesDeLaChaine : sans photo reçue, les URLs ; avec, des `data:` dans l\'ordre des index', [imagesDeLaChaine({ imageUrls: ['https://a'] }), imagesDeLaChaine({ imageUrls: ['https://a', 'https://b'], photosRecues: [{ index: 1, octets: Buffer.from('xy') }] })], [['https://a'], ['data:image/jpeg;base64,eHk=']]);
+        // aucune des URLs transmises à la chaîne ne peut être téléchargée par le départage par l'image (liste blanche d'hôtes : un `data:` n'a pas d'hôte)
+        const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');
+        const u = imagesDeLaChaine({ imageUrls: ['https://images1.vinted.net/a.jpeg'], photosRecues: [{ index: 0, octets: Buffer.from('xy') }] })[0];
+        H.v('13. une image `data:` n\'a pas d\'hôte : le départage par l\'image (qui télécharge photos[0]) s\'abstient avant tout appel', [new URL(u).hostname, HOTES_PHOTO_AUTORISES.some(re => re.test(new URL(u).hostname))], ['', false]);
+    });
+
+    // ═══ 14. TOUR 1 : ce qui part au modèle est à 800 px au plus ; le base64 une fois ; une photo n'est consommée qu'une fois la requête ACCEPTÉE ; le second décodage est sous le sémaphore ═══
+    await essayer('14', async () => {
+        const dims = async u => { const m = await sharp(dataVersOctets(u)).metadata(); return [m.width, m.height]; };
+        const grande = await sharp({ create: { width: 1500, height: 2100, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+        const petite = await sharp({ create: { width: 300, height: 420, channels: 3, background: { r: 20, g: 120, b: 240 } } }).jpeg().toBuffer();
+        const D = await acteur({ role: 'administrateur' });
+        const g = await poster(D, 0, grande), pt = await poster(D, 1, petite);
+        const R = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: g.json.photoId }, { index: 1, photoId: pt.json.photoId }] }, 2));
+        const vue = vusParLaChaine[vusParLaChaine.length - 1];
+        H.v('14. 1500 × 2100 envoyée : le modèle reçoit 571 × 800 (grand côté 800, proportions gardées) ; 300 × 420 : jamais agrandie', [R.statut, await dims(vue[0]), await dims(vue[1])], [200, [571, 800], [300, 420]]);
+        const an = await jusque(async () => (await lireAn(R.json.scanId)).photoBanc, 4000) && await lireAn(R.json.scanId);
+        const mb = an && await sharp(await mem.lire(an.photoBanc.cle)).metadata();
+        H.v('14. la photo du BANC garde le traitement existant : WebP sans EXIF, 1 600 px de grand côté (pas 800)', [mb && mb.format, mb && Math.max(mb.width, mb.height), mb && mb.exif === undefined], ['webp', 1600, true]);
+        // base64 UNE fois par scan : la 2e demande ne ré-encode pas (la chaîne, le lot, la règle G et la détection appellent tous imagesDeLaChaine)
+        {
+            const { imagesDeLaChaine } = require('../identifier/photos-recues');
+            let n = 0; const modele = Buffer.from('mod'); const vraiToString = modele.toString.bind(modele); modele.toString = (...a) => { n++; return vraiToString(...a); };
+            const e = { imageUrls: ['https://a'], photosRecues: [{ index: 0, octets: Buffer.from('gros'), modele }] };
+            const a = imagesDeLaChaine(e), b = imagesDeLaChaine(e), c = imagesDeLaChaine(e);
+            H.v('14. imagesDeLaChaine : UN seul encodage base64 pour trois appels, même résultat, et c\'est la version réduite qui est encodée', [n, a[0] === b[0] && b[0] === c[0], a[0]], [1, true, 'data:image/jpeg;base64,bW9k']);
+        }
+        // une photo n'est consommée qu'APRÈS l'acceptation : un refus la laisse à son rejeu (dans les 120 s)
+        const E = await acteur({ role: 'administrateur' });
+        const pe = await poster(E, 0);
+        const photoIds = [{ index: 0, photoId: pe.json.photoId }];
+        const refusee = async (nom, r, statut, det) => H.v(`14. ${nom} : refusé (${statut}${det ? ' ' + det : ''}), la photo est TOUJOURS au magasin`, [r.statut, det === undefined ? undefined : detail(r), stockPhotos.taille(E.porteur).photos], [statut, det, 1]);
+        const mauvais = await identifier(sv, E, { ...corpsId({ photoIds }), imageUrls: ['http://pas-https.example/x.jpg'] });
+        await refusee('imageUrls invalide', mauvais, 400, 'image-url');
+        const debut = Math.floor(Date.now() / 3600e3) * 3600e3, cleLimite = `identifier:compte:${E.c._id}|${debut}`;
+        await db.col('limites').updateOne({ cle: cleLimite }, { $set: { n: 100000, expireLe: new Date(debut + 7200e3) } }, { upsert: true });      // le compteur existe déjà (la photo a passé par le limiteur du porteur) : on le pose à son plafond
+        const plafonnee = await identifier(sv, E, corpsId({ photoIds }));
+        await refusee('plafond horaire de /api/identifier fabriqué', plafonnee, 429, undefined);
+        await db.col('limites').deleteOne({ cle: cleLimite });
+        tel = 0; const s2 = sorties.length;
+        const rejeu = await identifier(sv, E, corpsId({ photoIds }));
+        await attendre(500);
+        H.v('14. le rejeu valide utilise la photo (data:), AUCUN téléchargement (téléchargeur et appels sortants), et le magasin est vidé', [rejeu.statut, /^data:/.test(vusParLaChaine[vusParLaChaine.length - 1][0]), tel, sorties.slice(s2), stockPhotos.taille(E.porteur).photos], [200, true, 0, [], 0]);
+        // le second décodage : sous le sémaphore des décodages (2 au plus), plein => `occupe` tout de suite
+        const PEx = require('../identifier/photo-extension'), { epurer } = require('../identifier/photo-avant-scan');
+        let lib1, lib2;
+        const p1 = PEx.sousSemaphore(() => new Promise(r => { lib1 = r; })), p2 = PEx.sousSemaphore(() => new Promise(r => { lib2 = r; }));
+        let leve = null; try { await epurer(grande, 2 * MIO); } catch (e) { leve = e.code; }
+        H.v('14. deux places prises : le réencodage (epurer) est refusé tout de suite (`occupe`) au lieu de décoder hors sémaphore', [PEx.decodagesEnCours(), leve], [2, 'occupe']);
+        lib1(); lib2(); await p1; await p2;
+        const ok = await epurer(petite, 2 * MIO);
+        H.v('14. places rendues : le réencodage passe, la place est rendue ensuite', [Boolean(ok && ok.octets && ok.modele), PEx.decodagesEnCours()], [true, 0]);
+        // trois dépôts simultanés de 12 Mpx : jamais plus de 2 décodages vivants (validation + réencodage)
+        const svD = await monter(cfgOn, { placesMax: 4, delaiLectureMs: 5000 });
+        const douze = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#445566' } }).png().toBuffer();
+        const trio = [await acteur({ role: 'administrateur' }), await acteur({ role: 'administrateur' }), await acteur({ role: 'administrateur' })];
+        const rs = await Promise.all(trio.map(a => envoyer(svD.url, { query: 'index=0', jeton: a.jeton, type: 'image/png', corps: douze }).fini));
+        H.v('14. trois photos de 12 Mpx en même temps : au plus 2 décodages vivants à la fois, les autres reçoivent 429 DEBIT', [PEx.picDecodages() <= PEx.DECODAGES_MAX, rs.every(r => r.statut === 200 || (r.statut === 429 && code(r) === 'DEBIT')), rs.filter(r => r.statut === 200).length >= 1], [true, true, true]);
+        await svD.fermer();
+    });
+
+    // ═══ 15. REPRISE : analyse.photosRecues / photoRecue (D), identifier-lot avec photoIds (F), un scan = UNE analyse (G) ═══
+    await essayer('15', async () => {
+        const D = await acteur({ role: 'administrateur' });
+        const p0 = await poster(D, 0), p3 = await poster(D, 3);
+        const R = await identifier(sv, D, corpsId({ photoIds: [{ index: 3, photoId: p3.json.photoId }, { index: 0, photoId: p0.json.photoId }] }, 4));
+        H.v('15. D : index 0 et 3 reçus : analyse.photosRecues = [0, 3] (croissant), photoRecue vrai', [R.statut, R.json.analyse.photosRecues, R.json.analyse.photoRecue], [200, [0, 3], true]);
+        const q3 = await poster(D, 3);
+        const R3 = await identifier(sv, D, corpsId({ photoIds: [{ index: 3, photoId: q3.json.photoId }] }, 4));
+        H.v('15. D : seul l\'index 3 reçu : photosRecues = [3], photoRecue FAUX (vrai si et seulement si l\'index 0 est reçu)', [R3.json.analyse.photosRecues, R3.json.analyse.photoRecue], [[3], false]);
+        const Ri = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: 'e'.repeat(32) }] }));
+        H.v('15. D : photoIds envoyé mais rien de reçu (inconnu) : photosRecues = [] présent, photoRecue faux', [Ri.statut, Ri.json.analyse.photosRecues, Ri.json.analyse.photoRecue], [200, [], false]);
+        const o0 = await poster(D, 0);
+        const Ro = await identifier(sv, D, corpsId({ photoId: o0.json.photoId }));
+        H.v('15. D : l\'ancien `photoId` seul (index 0) reçu : photoRecue vrai (son sens est gardé), photosRecues = [0]', [Ro.json.analyse.photoRecue, Ro.json.analyse.photosRecues], [true, [0]]);
+        const Rn = await identifier(sv, D, corpsId());
+        H.v('15. D : sans photoIds ni photoId, AUCUN des deux champs dans l\'analyse (réponse d\'aujourd\'hui)', ['photosRecues' in Rn.json.analyse, 'photoRecue' in Rn.json.analyse], [false, false]);
+        const Roff = await identifier(svOff, D, corpsId({ photoIds: [{ index: 0, photoId: 'e'.repeat(32) }] }));
+        H.v('15. D : drapeau éteint, photoIds envoyé : AUCUN des deux champs (champ inconnu ignoré)', ['photosRecues' in Roff.json.analyse, 'photoRecue' in Roff.json.analyse], [false, false]);
+        // G : un scan reste UNE analyse, quel que soit le nombre de photos ; le corps JSON reste minuscule (les octets ne passent pas par lui)
+        const huit = []; for (let i = 0; i < 8; i++) huit.push((await poster(D, i, await bruit(120, 160))).json.photoId);
+        const corps8 = corpsId({ photoIds: huit.map((photoId, index) => ({ index, photoId })) }, 8);
+        const an0 = await db.col('analyses').countDocuments({}), mv0 = await db.col('mouvements').countDocuments({});
+        const R8 = await identifier(sv, D, corps8);
+        const mvBase = await (async () => { const a = await db.col('mouvements').countDocuments({}); await identifier(sv, D, corpsId()); await attendre(300); return (await db.col('mouvements').countDocuments({})) - a; })();
+        H.v('15. G : 8 photos = UNE analyse, les mêmes lignes `mouvements` qu\'un scan sans photo, corps JSON de moins de 2 ko', [R8.statut, R8.json.analyse.photosRecues, (await db.col('analyses').countDocuments({})) - an0 >= 1, JSON.stringify(corps8).length < 2000, (await db.col('mouvements').countDocuments({})) - mv0 - mvBase === mvBase], [200, [0, 1, 2, 3, 4, 5, 6, 7], true, true, true]);
+        H.v('15. G : chacune des 8 images part au modèle en 800 px au plus', await (async () => { const v = vusParLaChaine[vusParLaChaine.length - 2]; const d = await Promise.all(v.map(async u => { const m = await sharp(dataVersOctets(u)).metadata(); return Math.max(m.width, m.height) <= 800; })); return [v.length, d.every(Boolean)]; })(), [8, true]);
+        // F : identifier-lot (le crochet deps.identifierLot) reçoit les photos reçues avec photoIds, par la vraie route
+        const vusLot = []; let corpsUn = null;
+        await chaine({ body: { imageUrls: [] }, scanIdImpose: oid() }, { json: c => { corpsUn = c; } });
+        const svLot = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, stockPhotos, { identifierLot: async reqLot => { vusLot.push([...reqLot.body.imageUrls]); return [0, 1, 2].map(() => ({ statutHttp: 200, corps: corpsUn })); } });
+        const l0 = await (await fetch(svLot.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: jpg })).json();
+        const l2 = await (await fetch(svLot.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: await bruit(130, 170) })).json();
+        tel = 0; const sL = sorties.length;
+        const RL = await identifier(svLot, D, corpsId({ photoIds: [{ index: 2, photoId: l2.photoId }, { index: 0, photoId: l0.photoId }] }, 3));
+        await attendre(400);
+        H.v('15. F : un lot avec photoIds (index de SES imageUrls) : 200, le crochet du lot reçoit les 2 photos en `data:` (ordre des index), aucune URL, rien téléchargé', [RL.statut, vusLot.length, vusLot[0] && vusLot[0].length, vusLot[0] && vusLot[0].every(u => u.startsWith('data:')), tel, sorties.slice(sL)], [200, 1, 2, true, 0, []]);
+        H.v('15. F : et l\'analyse du lot dit les index reçus', [RL.json.analyse.photosRecues, RL.json.analyse.photoRecue], [[0, 2], true]);
+        const mauvaisL = await identifier(svLot, D, corpsId({ photoIds: [{ index: 3, photoId: l0.photoId }] }, 3));
+        H.v('15. F : un index hors des imageUrls du lot : 400 photo-ids', [mauvaisL.statut, detail(mauvaisL)], [400, 'photo-ids']);
+        await svLot.fermer();
+    });
+
+    // ═══ 16. TOUR 2 / I-2 : la photo vit 120 s AU PLUS en mémoire (30 s avant d'être servie + 90 s de scan), puis plus aucune référence ═══
+    await essayer('16', async () => {
+        const MP = require('../identifier/photos-recues');
+        H.vrai('16. (d) SERVICE_S + SCAN_MAX_S <= VIE_MAX_S = 120 : allonger l\'un sans l\'autre fait échouer ce banc', MP.creerPhotosRecues.SERVICE_S + MP.creerPhotosRecues.SCAN_MAX_S <= MP.creerPhotosRecues.VIE_MAX_S && MP.creerPhotosRecues.VIE_MAX_S === 120);
+        // (a) non servie : absente à 30 s, par l'horloge injectée ; ET retirée par SON PROPRE minuteur (aucun accès au magasin entre-temps), jamais « entre 120 et 150 s »
+        const h = { t: 1e6 }; const m = MP.creerPhotosRecues({ horloge: () => h.t });
+        const a = m.deposer('p', 0, Buffer.alloc(10, 1)); h.t += 29999;
+        H.v('16. (a) non servie : encore là à 29,999 s, absente à 30 s exactes', [m.compter('p'), (h.t += 1, m.prendre('p', a)), m.compter('p')], [1, null, 0]);
+        const reel = MP.creerPhotosRecues({ serviceMs: 150 }); reel.deposer('p', 0, Buffer.alloc(10, 2)); reel.deposer('q', 1, Buffer.alloc(10, 3));
+        const avant = reel.compter('p') + reel.compter('q'); await attendre(450);
+        H.v('16. (a) un minuteur par photo (unref) la retire à l\'échéance, sans qu\'aucune requête passe : 0 photo retenue (comptage brut, sans purge à l\'accès)', [avant, reel.compter('p') + reel.compter('q')], [2, 0]);
+        reel.arreter();
+        // (b) servie : aucune référence aux octets après la réponse
+        const D = await acteur({ role: 'administrateur' });
+        const p0 = await poster(D, 0, await bruit(200, 280)), p1 = await poster(D, 1, await bruit(200, 280));
+        let pris = [];
+        const prendre0 = stockPhotos.prendre; stockPhotos.prendre = (c, i) => { const r = prendre0(c, i); if (r) pris.push(r); return r; };
+        const R = await identifier(sv, D, corpsId({ photoIds: [{ index: 0, photoId: p0.json.photoId }, { index: 1, photoId: p1.json.photoId }] }, 2));
+        stockPhotos.prendre = prendre0;
+        await attendre(300);
+        const req = reqsVues[reqsVues.length - 1];
+        const e = req && req.entree;
+        H.v('16. (b) servie (200) : après la réponse, `photosRecues` est vide, `imageOctets` nul, et le Buffer, la version réduite et le dataUrl mémorisé de chaque photo sont libérés', [R.statut, e && e.photosRecues, e && e.imageOctets, e && Object.keys(e).includes('photosRecues')], [200, [], null, true]);
+        // le magasin ne garde rien non plus (consommée)
+        H.v('16. (b) et le magasin n\'a plus rien pour ce porteur', stockPhotos.taille(D.porteur).photos, 0);
+        // (c) servie à 29 s puis scan long (80 s) : libérée à la fin, 29 + 80 <= 120
+        const D2 = await acteur({ role: 'administrateur' });
+        const c0 = await poster(D2, 0, await bruit(200, 280));
+        horloge.t += 29e3;
+        let fin; retardChaine = new Promise(r => { fin = r; });
+        const enCours = identifier(sv, D2, corpsId({ photoIds: [{ index: 0, photoId: c0.json.photoId }] }));
+        await attendre(250); horloge.t += 80e3;
+        const reqLong = reqsVues[reqsVues.length - 1];
+        const tenue = reqLong.entree && reqLong.entree.photosRecues && reqLong.entree.photosRecues.length === 1 && Buffer.isBuffer(reqLong.entree.photosRecues[0].octets);
+        fin(); retardChaine = null; const RL = await enCours; await attendre(300);
+        H.v('16. (c) servie à 29 s, scan de 80 s (109 s en tout) : tenue pendant le scan, libérée avant 120 s', [RL.statut, tenue, reqLong.entree.photosRecues, reqLong.entree.imageOctets], [200, true, [], null]);
+        // aucune tâche après réponse ne garde les octets d'un utilisateur ORDINAIRE : la détection du banc (consentement) n'en reçoit que pour l'administrateur (l'exception, nommée)
+        const crochet = require('fs').readFileSync(require.resolve('../banc/crochet.js'), 'utf8').replace(/\/\/.*$/gm, '');
+        H.vrai('16. le crochet de détection ne reçoit les octets d\'une photo reçue que pour un administrateur (sinon : rien, aucune tâche ne les garde)', /photosRecues/.test(crochet) && /administrateur/.test(crochet));
+        const admin = require('fs').readFileSync(require.resolve('../banc/photo-admin.js'), 'utf8').replace(/\/\/.*$/gm, '');
+        H.vrai('16. la photo du banc de l\'administrateur (l\'exception) prend SA référence avant toute attente (avant le premier await de la tâche)', /const octets0 = p0\.octets/.test(admin) && admin.indexOf('const octets0 = p0.octets') < admin.indexOf('await db.col'));
+    });
+
+    // ═══ 17. TOUR 2 / I-1 : la zone d'une carte de lot est un index d'`imageUrls`, pas de la liste compactée envoyée au lecteur ═══
+    await essayer('17', async () => {
+        const D = await acteur({ role: 'administrateur' });
+        let corpsUn = null; await chaine({ body: { imageUrls: [] }, scanIdImpose: oid() }, { json: c => { corpsUn = c; } });
+        const zone = photo => ({ photo, x: 0.1, y: 0.1, w: 0.5, h: 0.5 });
+        const svZ = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, stockPhotos, { identifierLot: async () => [{ statutHttp: 200, corps: { ...corpsUn, zone: zone(1) } }, { statutHttp: 200, corps: { ...corpsUn, zone: zone(0) } }, { statutHttp: 200, corps: { ...corpsUn, zone: zone(5) } }] });
+        const a = await (await fetch(svZ.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: jpg })).json();
+        const b = await (await fetch(svZ.url + '/api/photo', { method: 'POST', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${D.jeton}` }, body: await bruit(130, 170) })).json();
+        const R = await identifier(svZ, D, corpsId({ photoIds: [{ index: 0, photoId: a.photoId }, { index: 2, photoId: b.photoId }] }, 3));
+        const z = i => { const c = R.json.analyse.cartes.find(x => x.index === i); return c && c.zone && c.zone.photo; };
+        H.v('17. reçues [0, 2] : la zone `photo: 1` du lecteur (sa 2e image) est l\'index d\'imageUrls 2 ; `photo: 0` reste 0 ; `photo: 5` (hors liste) : zone sans photo (null), jamais un index deviné', [R.statut, R.json.analyse.photosRecues, z(0), z(1), R.json.analyse.cartes.find(x => x.index === 2).zone], [200, [0, 2], 2, 0, null]);
+        // sans photo reçue, la zone est inchangée (index d'imageUrls tel quel)
+        const R0 = await identifier(svZ, D, corpsId({}, 3));
+        H.v('17. sans photo reçue : la zone passe telle quelle (`photo: 1` reste 1)', R0.json.analyse.cartes.find(x => x.index === 0).zone.photo, 1);
+        await svZ.fermer();
+    });
+
+    // ═══ 18. TOUR 2 / m-3 : « jamais journalisé » avec le VRAI journal (base en mémoire) ; le témoin de l'espion ═══
+    await essayer('18', async () => {
+        const { enregistrerScan, enregistrerEchec, JournalScan } = require('../../journal-scans');
+        const sentinelle = crypto.randomBytes(48).toString('base64');
+        const donnee = `data:image/jpeg;base64,${sentinelle}`;
+        const idS = enregistrerScan({ route: 'identifier', userId: 'v2:compte:banc', imageUrl: donnee, vintedUrl: null, versionExtension: '2.0.0', nom: 'Pikachu' });
+        const idE = oid(); enregistrerEchec({ _id: idE, route: 'identifier', userId: 'v2:compte:banc', imageUrl: donnee, motifEchec: 'ia-echec', rembourse: true });
+        await jusque(async () => (await JournalScan.countDocuments({ _id: { $in: [idS, idE].filter(Boolean) } })) === 2, 4000);
+        const lignes = await JournalScan.find({ _id: { $in: [idS, idE].filter(Boolean) } }).lean();
+        H.v('18. enregistrerScan ET enregistrerEchec réels, entrée en `data:` : 2 lignes, `imageUrl: null`, aucun octet de la photo dans le document', [lignes.length, lignes.map(l => l.imageUrl), JSON.stringify(lignes).includes(sentinelle)], [2, [null, null], false]);
+        const https0 = sorties.length;
+        // le témoin de l'espion : un appel volontaire est ATTRAPÉ (fetch, https, http), puis retiré du compte
+        await fetch('https://temoin-fetch.invalid/').catch(() => { });
+        https.get('https://temoin-https.invalid/').on('error', () => { }).destroy();
+        http.get('http://temoin-http.invalid/').on('error', () => { }).destroy();
+        const vues = sorties.splice(https0);
+        H.v('18. l\'espion « zéro appel sortant » attrape fetch, https ET http (cas témoin)', vues.map(s => s.split(' ').slice(-1)[0]).sort(), ['temoin-fetch.invalid', 'temoin-http.invalid', 'temoin-https.invalid']);
+    });
+
+    // ═══ 19. TOUR 2 / m-6 : le journal d'erreur du modèle n'écrit jamais le corps de la réponse du fournisseur ═══
+    await essayer('19', async () => {
+        const { resumeErreurFournisseur } = require('../identifier/erreur-fournisseur');
+        const piege = `data:image/jpeg;base64,${crypto.randomBytes(30).toString('base64')}`;
+        const e = Object.assign(new Error(`Request failed ${piege}`), { response: { status: 400, data: { error: { code: 400, message: `bad image ${piege}` } } } });
+        const s = resumeErreurFournisseur(e), s2 = resumeErreurFournisseur(Object.assign(new Error('x'), { code: 'ECONNABORTED' })), s3 = resumeErreurFournisseur({ response: { status: 502, data: piege } });
+        H.v('19. un corps d\'erreur qui cite la requête : seul le statut et un code court sortent', [s.includes('data:'), s.includes('400'), s2, s3.includes('data:'), s3.includes('502')], [false, true, 'statut=- code=ECONNABORTED', false, true]);
+        const index = require('fs').readFileSync(require.resolve('../../index.js'), 'utf8');
+        H.vrai('19. index.js n\'écrit plus e.response?.data du fournisseur et passe par le résumé', !/e\.response\?\.data \|\| e\.message/.test(index) && /resumeErreurFournisseur\(e\)/.test(index));
+    });
+
+    // ═══ 20. TOUR 3 : la borne de 90 s est tenue par le SERVEUR (min de dépôt + 120 s et début + 90 s) ; l'abandon du client ne fait jamais télécharger ═══
+    await essayer('20', async () => {
+        const MP = require('../identifier/photos-recues');
+        const U = await acteur({});          // un utilisateur ORDINAIRE (quota, crédit) : le magasin lui reçoit des photos par dépôt direct (la route /api/photo est réservée à l'administrateur en phase 1)
+        const cible = (porteur, store) => store.deposer(porteur, 0, jpg, jpg);
+        // (a) une chaîne qui dure plus que la borne : coupée à la borne, signal levé, échec rendu (crédit rendu), octets libérés
+        {
+            const store = MP.creerPhotosRecues({ scanMs: 300, vieMs: 5000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const id = cible(U.porteur, store); signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const t0 = Date.now(); const R = await identifier(svB, U, corpsId({ photoIds: [{ index: 0, photoId: id }] })); const dt = Date.now() - t0;
+            const req = reqsVues[reqsVues.length - 1];
+            H.v('20.1 chaîne bloquée, borne de 300 ms : coupée à la borne (réponse avant 2 s), échec SERVEUR, ce qui a été pris est RENDU', [R.statut, code(R), R.json && R.json.facturation && R.json.facturation.rembourse, dt < 2000], [500, 'SERVEUR', true, true]);
+            H.v('20.1 le signal d\'arrêt a été levé et donné à la chaîne ; les octets sont libérés (photosRecues vide, imageOctets nul)', [signauxVus.length, signauxVus[0] && signauxVus[0].aborted, req.entree.photosRecues, req.entree.imageOctets], [1, true, [], null]);
+            rendre(); retardChaine = null; await attendre(100); await svB.fermer(); store.arreter();
+        }
+        // (b) la borne se compte depuis le DÉPÔT : horloge injectée, dépôt à 560 ms de 600 ms de vie ⇒ coupure à ~40 ms, bien avant la borne de scan (5 s)
+        {
+            const h = { t: 1e6 }; const store = MP.creerPhotosRecues({ horloge: () => h.t, scanMs: 5000, vieMs: 600, serviceMs: 4000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const U2 = await acteur({}); const id = cible(U2.porteur, store); h.t += 560; signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const t0 = Date.now(); const R = await identifier(svB, U2, corpsId({ photoIds: [{ index: 0, photoId: id }] })); const dt = Date.now() - t0;
+            H.v('20.2 dépôt + 120 s plus tôt que début + 90 s : coupure au plus tôt des deux (≈ 40 ms, jamais les 5 s de la borne de scan)', [R.statut, dt < 1500, signauxVus[0] && signauxVus[0].aborted], [500, true, true]);
+            rendre(); retardChaine = null; await attendre(100); await svB.fermer(); store.arreter();
+        }
+        // (c) une chaîne dans la borne n'est pas touchée
+        {
+            const store = MP.creerPhotosRecues({ scanMs: 3000, vieMs: 5000 }); const svB = await monter(cfgOn, { placesMax: 2, delaiLectureMs: 1200 }, store);
+            const U3 = await acteur({}); const id = cible(U3.porteur, store); signauxVus = []; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const enCours = identifier(svB, U3, corpsId({ photoIds: [{ index: 0, photoId: id }] })); await attendre(200); rendre(); retardChaine = null;
+            const R = await enCours; await attendre(150);
+            const req = reqsVues[reqsVues.length - 1];
+            H.v('20.3 chaîne de 200 ms dans la borne de 3 s : 200, signal NON levé, photo servie puis libérée à la fin de la réponse', [R.statut, signauxVus[0] && signauxVus[0].aborted, req.entree.photosRecues], [200, false, []]);
+            await svB.fermer(); store.arreter();
+        }
+        H.vrai('20.4 le banc des constantes (30 + 90 <= 120) reste, et les bornes du serveur viennent des MÊMES constantes', MP.creerPhotosRecues.SERVICE_S + MP.creerPhotosRecues.SCAN_MAX_S <= MP.creerPhotosRecues.VIE_MAX_S && /SCAN_MAX_S \* 1000/.test(require('fs').readFileSync(require.resolve('../identifier/photos-recues.js'), 'utf8')));
+        // N-1 : le client coupe à 30 ms, la chaîne est lente ⇒ l'étape du banc de l'administrateur ne télécharge JAMAIS
+        {
+            const D = await acteur({ role: 'administrateur' }); const p0 = await poster(D, 0);
+            tel = 0; const sN = sorties.length; let rendre; retardChaine = new Promise(r => { rendre = r; });
+            const CP = require('../banc/photo-admin'); const compte0 = () => (CP.compteurs ? CP.compteurs().sansReference : -1); const avantC = compte0();
+            await new Promise(fin => {
+                const corps = JSON.stringify(corpsId({ photoIds: [{ index: 0, photoId: p0.json.photoId }] }));
+                const rq = http.request(sv.url + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${D.jeton}`, 'idempotency-key': `photos-${++nCle}-${Date.now()}-abcdefgh`, 'content-length': Buffer.byteLength(corps) } }, () => { });
+                rq.on('error', () => { }); rq.end(corps);
+                setTimeout(() => { rq.destroy(); fin(); }, 30);
+            });
+            await attendre(150); rendre(); retardChaine = null; await attendre(900);
+            H.v('N-1 : le client abandonne à 30 ms, chaîne lente : AUCUN téléchargement (téléchargeur, appels sortants), et le banc a compté « rien reçu pour ce scan »', [tel, sorties.slice(sN), compte0() - avantC], [0, [], 1]);
+            const imgs = MP.imagesDeLaChaine({ imageUrls: ['https://a'], photosRecues: [], photosRecuesPourCeScan: true });
+            H.v('N-1 : une photo reçue puis libérée ne ramène JAMAIS aux URLs (imagesDeLaChaine rend [])', imgs, []);
+        }
+        // la détection du banc (deps.detection) ne reçoit JAMAIS les octets d'un utilisateur ordinaire ; l'administrateur est l'exception nommée
+        {
+            const communP = require.resolve('../banc/commun'), crochetP = require.resolve('../banc/crochet');
+            const sauveC = require.cache[communP], sauveK = require.cache[crochetP];
+            require.cache[communP] = { id: communP, filename: communP, loaded: true, children: [], paths: [], exports: { ...require(communP), consentementAutorise: async () => true } }; delete require.cache[crochetP];
+            try {
+                const K = require('../banc/crochet'); const appels = [];
+                const analyse = { statut: 'identifiee', cartes: [{ statut: 'identifiee', carte: { idProduct: 4242 } }] };
+                const lancer = async (admin, photos) => { const n = appels.length; K.apresIdentifier({ cfg: cfgOn, deps: { detection: async a => { appels.push(a); return null; } }, req: { v2: { porteur: { surface: 'extension', administrateur: admin } }, body: {}, entree: { imageUrls: ['https://images1.vinted.net/a.jpeg'], ...(photos ? { photosRecues: [{ index: 0, octets: Buffer.from('xy') }], photosRecuesPourCeScan: true } : {}) } }, scanId: oid(), analyse }); await attendre(120); return appels.slice(n); };
+                const ordinaire = await lancer(false, true), admin = await lancer(true, true), temoin = await lancer(false, false);
+                H.v('20.5 la détection du banc : un ordinaire AVEC photo reçue ne l\'appelle pas ; l\'administrateur oui (data:) ; un ordinaire SANS photo reçue oui (cas témoin, URLs)', [ordinaire.length, admin.length && admin[0].imageUrls.every(u => u.startsWith('data:')), temoin.length && temoin[0].imageUrls[0].startsWith('https://')], [0, true, true]);
+            } finally { if (sauveC) require.cache[communP] = sauveC; else delete require.cache[communP]; if (sauveK) require.cache[crochetP] = sauveK; else delete require.cache[crochetP]; }
+        }
+    });
+
+    await sv.fermer(); await svOff.fermer(); await svPlafond.fermer(); monterBanc.arreterPurge();
+    H.bilan();
+    await H.fermerBac();
+})().catch(e => { console.error(e); process.exit(1); });

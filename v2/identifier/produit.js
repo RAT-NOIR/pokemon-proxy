@@ -4,6 +4,7 @@
 const { lireConfig } = require('../config');
 const { lienServi } = require('./lien-cardmarket');
 const { reservesDe, fiable, BASE_DE, badgeDe, versionDe } = require('./fiabilite-prix');
+const MT = require('./marques-tampon');
 
 const VARIANTES = Object.freeze(['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo']);
 let CFG_DEFAUT = null;
@@ -39,17 +40,25 @@ function dateDuGuide(d) {
  * F4-PRIX : `deBase` dit ce qu'est le « De » (l'offre la plus basse TOUS ÉTATS, jamais le prix de l'état retenu) ; `fiable`/`reserves` disent si le prix peut être présenté comme sûr
  * (écart de la tendance aux moyennes > 30 %, prix mélangé avec une version tamponnée : fiabilite-prix.js). `melange` = le `prixMelangeTampon` de la ligne du produit (catalogue), vrai seulement si === true.
  */
-function prixGuideDe(g, melange = false, nonLu = false, tamponStaffLu = false) {
+function prixGuideDe(g, melange = false, nonLu = false, tamponLu = false) {
     if (!g || typeof g !== 'object') return null;
     const date = dateDuGuide(g.guideDu);
     const tendance = prix(g.trend), de = prix(g.low), moyenne7 = prix(g.avg7), moyenne30 = prix(g.avg30);
     if (!date || (tendance === null && de === null && moyenne30 === null)) return null;
-    const reserves = reservesDe({ tendance, moyenne7, moyenne30, prixMelangeTampon: melange, nonLu: nonLu === true, tamponStaffLu: tamponStaffLu === true });
+    const reserves = reservesDe({ tendance, moyenne7, moyenne30, prixMelangeTampon: melange, nonLu: nonLu === true, tamponLu: tamponLu === true });
     return Object.freeze({ tendance, de, deBase: BASE_DE, moyenne7, moyenne30, date, fiable: fiable(reserves), reserves });
 }
 // LIEN-CARDMARKET : un lien dès que le NUMÉRO est connu (la rareté n'est plus exigée), vers la page EXACTE du produit — la garde vit dans lien-cardmarket.js (un seul exemplaire).
 const lienCardmarket = (u, numero) => lienServi(u, numero);
 const varianteDe = x => (VARIANTES.includes(x) ? x : null);                            // jamais 'normale' deviné (CLAUDE.md §7)
+// LOT TAMPONS : le champ ADDITIF `marques` (un tableau de jetons de la liste fermée de marques-tampon.js) ; `variante` et son enum ne bougent pas. [] = prouvé sans tampon (variante `normale` prouvée) ;
+// null = on ne sait pas. Servi SEULEMENT s'il est exactement un ensemble canonique de la liste (une marque hors liste, un doublon, un autre ordre, un élément qui n'est pas une chaîne : null, jamais corrigé).
+const marquesDe = x => {
+    if (!Array.isArray(x)) return null;
+    if (x.length === 0) return Object.freeze([]);
+    const e = MT.ensembleDe(x);
+    return e !== null && e.length === x.length && e.every((m, i) => m === x[i]) ? Object.freeze(e) : null;
+};
 function mention(m, langue) {
     if (m && typeof m === 'object') return texte(langue === 'fr' ? m.fr : m.en);
     return texte(m);
@@ -63,10 +72,11 @@ function impression(i, ctx) {
     const numero = chaineOuNull(i.numero), rarete = texte(i.rarete);
     return Object.freeze({
         idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
+        marques: marquesDe(i.marques),                                                  // LOT TAMPONS (ajout additif) : les marques prouvées de CETTE impression, ou null
         version: versionDe(i.version),                                                 // F4 (c) : V1, V2… — ce qui sépare deux produits au même set et au même numéro chez Cardmarket ; null = rien ne les sépare dans nos données
         langue: langueFermee(i.langue),   // CONTRAT 7a (ajout) : le code fermé de la langue de CETTE impression, ou null (jamais devinée)
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
-        lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide, i.prixMelangeTampon === true, i.nonLu === true, i.tamponStaffLu === true)
+        lien: lienCardmarket(i.lien, numero), prixGuide: prixGuideDe(i.prixGuide, i.prixMelangeTampon === true, i.nonLu === true, i.tamponLu === true)
     });
 }
 
@@ -90,10 +100,10 @@ function construireProduit(source, ctx = {}) {
         set: Object.freeze({ slug: s.slug, nom: s.nom, code: texte(s.code), tirage: texte(s.tirage), annee: Number.isInteger(s.annee) ? s.annee : null,
                              symbole: image(source.symbole, hotes, false), ...badgeDe(s) }),     // F4 (d) : badge + badgeSource (le code, sauf s'il se confond avec une série : alors le nom)
         numero, total: chaineOuNull(source.total), langue: texte(source.langue),
-        variante: varianteDe(source.variante), version: versionDe(source.version), rarete,
+        variante: varianteDe(source.variante), marques: marquesDe(source.marques), version: versionDe(source.version), rarete,
         visuel: visuel && Object.freeze(visuel),
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
-        prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true, source.tamponStaffLu === true),     // F1-TAMPON règle 2 : posé par la route SEULEMENT quand STAFF est lu deux fois
+        prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true, source.tamponLu === true),     // F1-TAMPON règle 2 : posé par la route SEULEMENT quand une marque de la liste est lue deux fois à l'identique
         // `source.lienCardmarket` = le lien de la FICHE PRODUIT (ligne de catalogue) ; `lien` d'une impression (i.lien, plus haut) = le lien de CETTE impression.
         liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero),
                                fiche: ctx.ficheServie ? `https://rat-market.fr/fr/p/${source.idProduct}` : null }),
