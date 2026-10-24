@@ -192,7 +192,8 @@ async function semer(mode) {                                  // 'double' | 'sim
         await attendre(500);
         const ok = rs.filter(r => r.statut === 200 && r.json && r.json.success === true).length, quota = rs.filter(r => r.statut === 429 && r.json && r.json.erreur && r.json.erreur.code === 'QUOTA').length;
         H.v('8. 30 requêtes / 30 clés / 3 essais : 3 success:true, 27 QUOTA (dénominateur 30)', [ok, quota, rs.length], [3, 27, 30]);
-        H.v('   appels IA = 3 (aucun appel à la chaîne héritée pour les 27 refus), 3 débits écrits', [appelsIA(srvOn) - ia0, await nMouv() - m0], [3, 3]);
+        // ETAT-TITRE : chaque scan fait DEUX appels au modèle (l'identification, qui reçoit le titre, et l'estimation de l'état, sur les photos seules) : 3 scans = 6 appels, et toujours aucun pour les 27 refus
+        H.v('   appels IA = 6 (3 scans × identification + état ; aucun appel à la chaîne héritée pour les 27 refus), 3 débits écrits', [appelsIA(srvOn) - ia0, await nMouv() - m0], [6, 3]);
         const q = rs.find(r => r.statut === 429).json;
         H.vrai('   un QUOTA porte l\'offre (sans-compte, restant 0, minuit de Paris), facturation:null, et plus d\'adresse de recharge (OFFRE-QUOTA : la vente est arrêtée)', q.facturation === null && q.offre && q.offre.nom === 'sans-compte' && q.offre.restant === 0 && /T00:00:00\+0[12]:00$/.test(q.offre.remiseAZero) && q.achat === undefined);
         H.v('   essais à 0', (await solde(i._id)).essais, 0);
