@@ -63,6 +63,8 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
     // PHASE 3b : `--sets=<slug>[,…]` restreint le PLAN (et donc l'écriture) à ces sets ; sans lui, tout le périmètre comme avant. Vérifié avant toute connexion.
     const SELECTION = val('sets') === null ? null : val('sets').split(',');
     if (SELECTION !== null) { try { E.verifierSelection(SELECTION); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); } }
+    // TOUR 1 (D4.2) : l'ÉCRITURE ne part jamais sur « tout le périmètre » par défaut : la sélection se nomme, comme à la simulation (le manifeste la porte, l'écriture la compare)
+    if (ECRIRE && SELECTION === null) { console.error('❌ --ecrire exige --sets=<slug>[,…] explicite (la même sélection que la simulation) — rien n\'est écrit'); process.exit(2); }
     const SORTIE = val('sortie') || DEFAUT_SORTIE, SITE_LIB = val('site-lib') || DEFAUT_SITE_LIB;
     fs.mkdirSync(SORTIE, { recursive: true });
     const fichier = n => path.join(SORTIE, n);
@@ -79,6 +81,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         if (RETIRER) {
             const figes = fs.readdirSync(SORTIE).filter(f => /^manifeste-ecrit-.+\.json$/.test(f)).sort();   // le manifeste figé à l'écriture prime
             const m = JSON.parse(fs.readFileSync(fichier(figes.length ? figes[figes.length - 1] : 'manifeste.json'), 'utf8'));
+            if (ECRIRE && !E.memeSelection(m, SELECTION)) { console.error(`❌ ARRÊT : la sélection du manifeste (${JSON.stringify(m.sets ?? null)}) n'est pas celle du jour (${SELECTION.join(',')}) — rien n'est retiré`); process.exitCode = 1; return; }
             const ops = E.operationsDeRetrait(m);
             const apres = E.retirer({ cartes: etat.cartes }, m);
             const garde = require('./collecte-cartes/garde-lot');
@@ -100,7 +103,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const plan = E.planifier(etat, { sets: SELECTION });
         const ops = E.operationsVersMongo(plan);
         if (SELECTION) console.log(`SÉLECTION --sets=${SELECTION.join(',')} : ${plan.horsSelection} ligne(s) des autres sets lues et NON planifiées`);
-        const manifeste = E.manifeste(plan);
+        const manifeste = E.manifeste(plan, { sets: SELECTION });
         console.log(`PLAN : ${plan.ajouts.length} entrées à poser (${plan.ajouts.reduce((s, a) => s + a.produits.length, 0)} produits) · déjà ${plan.deja.length} · sans substitut ${plan.sansSubstitut.length} · sans carte ${plan.sansCarte.length} · refus ${plan.refus.length} · WCD refusés ${plan.refusWCD.length} · hors périmètre ${plan.horsPerimetre} · hors liste fermée ${plan.horsListe} · ÉCRITURES ${ops.length}`);
         console.log('PAR SET :');
         for (const [s, c] of Object.entries(plan.parSet).sort()) console.log(`   ${s} : ${JSON.stringify(c)}`);
@@ -147,8 +150,16 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         console.log('SITE PAR SET (produits avec fiche / visuel avant → après / servis par une emprunt) :');
         for (const [s, c] of Object.entries(parSetSite).sort()) console.log(`   ${s} : ${JSON.stringify(c)}`);
         console.log(`MENTIONS de l'entrée posée (mentionDuVisuelEmprunte sur l'entrée) : ${JSON.stringify(mentions)}`);
-        console.log(`MENTIONS RÉELLEMENT SERVIES (imageServieDe du site, sans le set) : ${JSON.stringify(mentionsReelles)}`);
+        console.log(`MENTIONS RÉELLEMENT SERVIES (imageServieDe du site AVEC le set de la fiche, comme lib/cartes.ts) : ${JSON.stringify(mentionsReelles)}`);
         console.log(`MENTIONS SI le site cherchait d'abord dans le set : ${JSON.stringify(mentionsSiCorrectif)}`);
+        // TOUR 1 (D4.1) : l'ordre est « affichée avec la mention » — chaque produit du plan doit être servi PAR SA FICHE avec la mention, mesuré par la règle du site rejouée ; sinon ARRÊT
+        const apParProduit = new Map();
+        for (const [k, b] of ap) { const m = /\|(\d+)\|(\d+)$/.exec(k); if (m) apParProduit.set(`${m[2]}|${m[1]}`, b); }
+        const mentionDe = (carteId, set, id) => { const b = apParProduit.get(`${carteId}|${id}`); if (!b || !b.cleR2) return null; return E.mentionServie({ images: cartesApresMap.get(carteId)?.images, cleR2: b.cleR2, set, imageServieDe: T.imageServieDe, mentionDuVisuelEmprunte: T.mentionDuVisuelEmprunte }).reelle; };
+        const sansMention = E.produitsSansMention(plan, mentionDe);
+        const nPlan = plan.ajouts.reduce((s, a) => s + a.produits.length, 0);
+        console.log(`MENTION SERVIE PAR LA FICHE, produits du plan : ${nPlan - sansMention.length}/${nPlan}${sansMention.length ? ` — SANS mention : ${sansMention.join(', ')}` : ''}`);
+        if (sansMention.length) { console.error('🔴 ARRÊT : des produits du plan seraient servis SANS la mention (« affichée avec la mention ») — rien n\'est écrit.'); process.exitCode = 1; return; }
 
         // ── PHASE 3b : la décision de l'API (chaîne importée, jamais recopiée) AVANT / APRÈS, sur la base entière. Une image empruntée n'est JAMAIS servie à l'identification (decision.js : refusDeRepli
         // « image-empruntee ») : les produits du plan qui étaient servis par un AUTRE tirage sortent de l'archive, et c'est l'ordre du testeur. Tout autre produit qui bouge ARRÊTE.
@@ -191,6 +202,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
 
         if (ECRIRE) {
             const simule = fs.existsSync(fichier('manifeste.json')) ? fs.readFileSync(fichier('manifeste.json'), 'utf8') : null;
+            if (simule !== null && !E.memeSelection(JSON.parse(simule), SELECTION)) { console.error(`❌ ARRÊT : la sélection de la simulation (${JSON.stringify(JSON.parse(simule).sets ?? null)}) n'est pas celle du jour (${SELECTION.join(',')}) — relancer la simulation avec les mêmes --sets — rien n'est écrit`); process.exitCode = 1; return; }
             if (simule === null || JSON.stringify(JSON.parse(simule)) !== JSON.stringify(manifeste)) { console.error('❌ ARRÊT : le lot d\'aujourd\'hui n\'est pas celui de la simulation (manifeste.json) : relancer la simulation et relire son diff — rien n\'est écrit'); process.exitCode = 1; return; }
         } else {
             const existant = fs.existsSync(fichier('manifeste.json')) ? JSON.parse(fs.readFileSync(fichier('manifeste.json'), 'utf8')) : null;
@@ -206,7 +218,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         }
 
         if (perdus.length || visuelChange.length || fichesChangees.length) { console.error('🔴 ARRÊT : le lot perd un produit, change une image déjà servie, ou change une fiche.'); process.exitCode = 1; return; }
-        if (!ECRIRE) { console.log(`(simulation — fichiers dans ${SORTIE} ; écriture : lot-additif.js … -- node poser-images-empruntees.js --attendu=${ops.length} --ecrire)`); return; }
+        if (!ECRIRE) { console.log(`(simulation — fichiers dans ${SORTIE} ; écriture : lot-additif.js … -- node poser-images-empruntees.js ${SELECTION ? `--sets=${SELECTION.join(',')} ` : '--sets=<obligatoire> '}--sortie=${SORTIE} --attendu=${ops.length} --ecrire)`); return; }
 
         // ── l'écriture : exactement le lot simulé
         const arret = E.motifDArret({ nbOperations: ops.length, nbRefus: plan.refus.length, attendu: ATTENDU });

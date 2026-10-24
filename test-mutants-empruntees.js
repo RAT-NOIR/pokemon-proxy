@@ -43,7 +43,19 @@ const MUTANTS = [
     // ── PHASE 3b (T4) : Southeast-Asia-Promos borné à 3 produits
     { nom: 'SEA : la liste fermée admet tout produit du set', fichier: M, de: 'setBorne(s) && SETS_BORNES[s].includes(idProduct);', vers: 'setBorne(s);' },
     { nom: 'SEA : le set entier entre dans le périmètre', fichier: M, de: '...SETS_TRICK_OR_TRADE]);\n\n// PHASE 3b', vers: "...SETS_TRICK_OR_TRADE, 'Southeast-Asia-Promos']);\n\n// PHASE 3b" },
-    { nom: 'SEA : la liste fermée porte un 4e produit', fichier: M, de: '[901074, 901104, 901109]', vers: '[901074, 901104, 901109, 901075]' },
+    { nom: 'SEA : la liste fermée porte un 8e produit', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687, 819263, 901075])' },
+    { nom: 'SEA : la liste fermée perd un frère', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687])' },
+    // ── TOUR 1 (24/10) : D4.1 la mention SERVIE, D4.2 --ecrire exige --sets
+    { nom: 'D4.1 : la mention « réelle » rejoue l\'ancien appel (sans le set de la fiche)', fichier: M, de: 'reelle: mentionDuVisuelEmprunte(imageServieDe(images, url, set))', vers: 'reelle: mentionDuVisuelEmprunte(imageServieDe(images, url))' },
+    { nom: 'D4.1 : un produit sans mention n\'est plus nommé', fichier: M, de: 'filter(id => !mentionDe(a.carteId, a.set, id))', vers: 'filter(id => false)' },
+    { nom: 'D4.1 : le script n\'arrête plus sur un produit sans mention', fichier: S, de: 'if (sansMention.length) { console.error', vers: 'if (false) { console.error' },
+    { nom: 'D4.1 : le script rejoue la mention sans le set', fichier: S, de: "set, imageServieDe: T.imageServieDe, mentionDuVisuelEmprunte: T.mentionDuVisuelEmprunte }).reelle; };", vers: "set: null, imageServieDe: T.imageServieDe, mentionDuVisuelEmprunte: T.mentionDuVisuelEmprunte }).reelle; };" },
+    { nom: 'D4.2 : --ecrire accepté sans --sets', fichier: S, de: 'if (ECRIRE && SELECTION === null) {', vers: 'if (false) {' },
+    { nom: 'D4.2 : le manifeste ne porte plus la sélection', fichier: M, de: "sets: sets === null ? null : [...sets],", vers: 'sets: null,' },
+    { nom: 'D4.2 : memeSelection accepte une sélection différente', fichier: M, de: "return JSON.stringify([...manifestePose.sets].sort()) === JSON.stringify([...sets].sort());", vers: 'return true;' },
+    { nom: 'D4.2 : memeSelection accepte un manifeste sans sélection', fichier: M, de: 'if (!manifestePose || !Array.isArray(manifestePose.sets) || !Array.isArray(sets)) return false;', vers: 'if (!manifestePose || !Array.isArray(sets)) return false; if (!Array.isArray(manifestePose.sets)) return true;' },
+    { nom: 'D4.2 : l\'écriture ne compare plus la sélection du manifeste', fichier: S, de: 'if (simule !== null && !E.memeSelection(JSON.parse(simule), SELECTION)) {', vers: 'if (false) {' },
+    { nom: 'D4.2 : le retrait ne compare plus la sélection du manifeste', fichier: S, de: 'if (ECRIRE && !E.memeSelection(m, SELECTION)) {', vers: 'if (false) {' },
     // (mutant ÉQUIVALENT écarté : `dansLeChamp` sans `!estWCD` — un slug WCD n'est ni dans PERIMETRE ni dans SETS_BORNES ; la garde nommée est une ceinture de plus, testée par estWCD / refusWCD plus haut)
     { nom: 'SEA : une ligne hors liste est comptée hors périmètre au lieu de hors liste', fichier: M, de: 'if (setBorne(set)) plan.horsListe++; else plan.horsPerimetre++;', vers: 'plan.horsPerimetre++;' },
     { nom: 'SEA : la dérivation depuis l\'origine ne vaut plus pour la liste fermée', fichier: M, de: '(SETS_TRICK_OR_TRADE.includes(s) || estBorne(s, idProduct));', vers: 'SETS_TRICK_OR_TRADE.includes(s);' },

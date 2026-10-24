@@ -26,8 +26,10 @@ const PERIMETRE = Object.freeze([...SETS_PRIZE_PACK, ...SETS_BATTLE_ACADEMY, ...
 // PHASE 3b (T4, 2026-10-24, accordé par le testeur) : DES PRODUITS d'un set, jamais le set. Les 3 réimpressions Southeast-Asia-Promos écrites au lot 2b (901074 Glass Trumpet, 901104 Budew, 901109 Fan Rotom,
 // preuve `reimpression+origine+numero`) n'ont pas de visuel propre : l'API leur sert le visuel d'un AUTRE tirage (`autre-tirage`). Ordre : « comme image empruntée (imageEmprunteeTirage), affichée avec la mention
 // et exclue de l'identification. Elle sera remplacée dès qu'un vrai scan existe. » L'origine se lit sur la ligne de réimpression, comme pour Trick or Trade 2024 (set et numéro d'origine → entrée de la même carte).
-// LISTE FERMÉE DE PRODUITS : les 81 autres lignes du set (et tout 4e produit) restent HORS PÉRIMÈTRE — comptées (`horsListe`), jamais écrites. Le set n'entre PAS dans PERIMETRE (son banc : 9 sets, inchangé).
-const SETS_BORNES = Object.freeze({ 'Southeast-Asia-Promos': Object.freeze([901074, 901104, 901109]) });
+// TOUR 1 (décision du testeur, 24/10) : la liste est de 7 produits — les 3 ordonnés ET leurs 4 frères de la même carte dans le set (850142 Glass Trumpet, 833720 + 855687 Budew V1/V2, 819263 Fan Rotom), qu'une entrée
+// par (carte, set) servirait de toute façon ; même origine que leur produit (SCR 135 / PRE 004 / SCR 118).
+// LISTE FERMÉE DE PRODUITS : les 77 autres lignes du set (et tout 8e produit) restent HORS PÉRIMÈTRE — comptées (`horsListe`), jamais écrites. Le set n'entre PAS dans PERIMETRE (son banc : 9 sets, inchangé).
+const SETS_BORNES = Object.freeze({ 'Southeast-Asia-Promos': Object.freeze([901074, 901104, 901109, 850142, 833720, 855687, 819263]) });
 const setBorne = s => Object.prototype.hasOwnProperty.call(SETS_BORNES, s);
 const estBorne = (s, idProduct) => setBorne(s) && SETS_BORNES[s].includes(idProduct);
 /** Tout ce que l'outil LIT (le périmètre entier + les sets dont une liste de produits est admise). */
@@ -127,7 +129,20 @@ function substitutDepuisOrigine(l, carte, etat) {
  */
 function mentionServie({ images, cleR2, set, imageServieDe, mentionDuVisuelEmprunte }) {
     const url = `https://exemple.invalide/${cleR2}`;
-    return { reelle: mentionDuVisuelEmprunte(imageServieDe(images, url)), siCorrectif: mentionDuVisuelEmprunte(imageServieDe((images || []).filter(e => e && e.set === set), url)) };
+    // TOUR 1 (D4.1) : le site passe désormais le set de la fiche à `imageServieDe` (lib/cartes.ts : imageServieDe(doc.images, entree.imageUrl, setSlug)) ; `reelle` rejoue CET appel. `sansSet` garde l'ancienne chaîne (la première
+    // entrée de la clé = l'origine, sans mention) pour que l'écart reste visible si le site régressait.
+    return { reelle: mentionDuVisuelEmprunte(imageServieDe(images, url, set)), sansSet: mentionDuVisuelEmprunte(imageServieDe(images, url)), siCorrectif: mentionDuVisuelEmprunte(imageServieDe((images || []).filter(e => e && e.set === set), url)) };
+}
+
+/** Les produits du plan dont la fiche NE sert PAS l'image avec sa mention (`mentionDe(carteId, set, idProduct)` rend le texte ou rien ; « ne sait pas » = pas de mention). Un lot dont l'ordre est « affichée avec la mention » s'arrête sur cette liste. */
+function produitsSansMention(plan, mentionDe) {
+    return (plan.ajouts || []).flatMap(a => (a.produits || []).filter(id => !mentionDe(a.carteId, a.set, id)));
+}
+
+/** La sélection du manifeste (simulée) est-elle celle d'aujourd'hui ? Sans ordre ; un manifeste sans sélection, ou une exécution sans sélection, ne correspondent à rien. */
+function memeSelection(manifestePose, sets) {
+    if (!manifestePose || !Array.isArray(manifestePose.sets) || !Array.isArray(sets)) return false;
+    return JSON.stringify([...manifestePose.sets].sort()) === JSON.stringify([...sets].sort());
 }
 
 const compteurs = () => ({ lignes: 0, cibles: 0, ajouts: 0, deja: 0, sansSubstitut: 0, sansCarte: 0, refus: 0 });
@@ -217,8 +232,9 @@ function appliquer(etat, plan) {
 }
 
 /** Ce que le lot a posé, pour le retirer exactement. Sans date : le manifeste du lot écrit est celui du lot simulé. */
-const manifeste = plan => ({
+const manifeste = (plan, { sets = null } = {}) => ({
     marque: MARQUE,
+    sets: sets === null ? null : [...sets],   // TOUR 1 (D4.2) : la sélection de la simulation ; l'écriture la compare à celle du jour
     entrees: plan.ajouts.map(a => ({ carteId: a.carteId, set: a.set, numero: a.numero, cleR2: a.entree.cleR2, produits: [...a.produits].sort((x, y) => x - y) }))
         .sort((x, y) => x.carteId - y.carteId || String(x.set).localeCompare(String(y.set)) || String(x.numero).localeCompare(String(y.numero))),
 });
@@ -266,5 +282,5 @@ function garderSousLot(env, ppid) {
 }
 
 module.exports = { origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
-    SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi,
+    SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi, produitsSansMention, memeSelection,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };
