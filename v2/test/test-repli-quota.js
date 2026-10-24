@@ -7,7 +7,7 @@
 //   · un second envoi rend la même décision ; un lot n'est jamais remboursé au motif d'un prix manquant ; l'administrateur ne paie rien.
 // Les fiches semées portent les champs RÉELS du guide de Tauros et d'Arcanin (fixtures/prix-repli-reels.json) : aucune valeur inventée.
 const H = require('./_harnais');
-const path = require('path'), fs = require('fs');
+const path = require('path'), fs = require('fs'), os = require('os');
 const mongoose = require('mongoose');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
 const VB = require('./_visuels-banc'); const VIS = new Map(); const Q = require('./_aide-quota');
@@ -54,8 +54,13 @@ async function semer() {
     await M.creerIndex();
     const { demarrer } = require('../../verrou/serveur');
     await semer();
-    const FAUX = path.join(__dirname, 'faux-reseau-v2.js');
-    const base = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', V2_VISUELS_BANC_FICHIER: VB.fichier([...VIS.values()]) };
+    // le serveur enfant porte une panne CIBLÉE de la lecture d'appui du repli (faux-reseau-panne-repli.js), pilotée par un fichier du dossier temporaire
+    const FAUX = path.join(__dirname, 'faux-reseau-panne-repli.js');
+    const PANNE = path.join(os.tmpdir(), `rm-panne-repli-${process.pid}-${Date.now().toString(36)}.json`);
+    const poserPanne = (o = {}) => fs.writeFileSync(PANNE, JSON.stringify({ appels: 0, saut: 0, echecs: 0, ...o }));
+    const lecturesDuRepli = () => JSON.parse(fs.readFileSync(PANNE, 'utf8')).appels;
+    poserPanne();
+    const base = { RM_PANNE_REPLI_FICHIER: PANNE, VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', V2_VISUELS_BANC_FICHIER: VB.fichier([...VIS.values()]) };
     const srv = await demarrer(FAUX, { ...base, RM_API_V2: '1' });
     if (!await srv.attendreMongo()) throw new Error('Mongo non connecté');
     const url = `http://127.0.0.1:${srv.port}`;
@@ -168,8 +173,43 @@ async function semer() {
         H.v('R8. lot dont une carte a un repli et l\'autre non : lecture ratée définitive refusée (409 carte-non-identifiee) sur les DEUX, rien rendu, rien consommé',
             [r0.statut, r0.json.erreur && r0.json.erreur.detail, r1.statut, r1.json.erreur && r1.json.erreur.detail, await essais(s.i._id) - e0, await rembNet(s.i._id), await declares(s.i._id)], [409, 'carte-non-identifiee', 409, 'carte-non-identifiee', 0, 0, null]);
     }
+    // ── R9. I1 (relecture) : on ne peut pas savoir si un prix est affiché => on ne rembourse PAS, on ne facture rien de plus : 503 INDISPONIBLE, AVANT toute écriture de remboursement
+    {
+        const s = await scanRepondu();
+        poserPanne({ saut: 0, echecs: 1 });              // la lecture d'appui du repli LÈVE une fois (la garde carteIdentifiee, elle, vient de réussir)
+        const r = await rl(s.jeton, LR(s.scanId)), j = r.json || {};
+        H.v('R9. lecture ratée définitive, le calcul du repli ÉCHOUE : 503 INDISPONIBLE, aucune facturation, aucun solde servi', [r.statut, j.erreur && j.erreur.code, j.success === true, 'facturation' in j && j.facturation !== null], [503, 'INDISPONIBLE', false, false]);
+        H.v('    aucun remboursement n\'est écrit : essais 2, aucun mouvement de remboursement, aucun compteur des déclarations', [await essais(s.i._id), await rembNet(s.i._id), await declares(s.i._id)], [2, 0, null]);
+        const r2 = await rl(s.jeton, LR(s.scanId)), f2 = (r2.json || {}).facturation || {};
+        H.v('    le nouvel envoi, l\'appui revenu : la décision normale, UNE seule fois — prix-repli, repli servi, pas de remboursement', [r2.statut, f2.debite, f2.rembourse, f2.raisonNonRembourse, r2.json.prixRepli && r2.json.prixRepli.cause, await essais(s.i._id), await rembNet(s.i._id), await declares(s.i._id)], [200, 1, false, 'prix-repli', 'lecture-ratee', 2, 0, null]);
+        // la même panne sur une fiche SANS repli possible : le remboursement n'a lieu qu'au second envoi, une fois
+        const u = await scanRepondu(); await sansDonneeDePrix(u.scanId);
+        poserPanne({ saut: 0, echecs: 1 });
+        const ru = await rl(u.jeton, LR(u.scanId));
+        const ru2 = await rl(u.jeton, LR(u.scanId)), ru3 = await rl(u.jeton, LR(u.scanId));
+        H.v('    fiche sans donnée de prix : panne => 503 sans remboursement ; l\'envoi suivant rembourse UNE fois ; le troisième dit deja-rembourse', [ru.statut, ru2.json.facturation.rembourse, ru3.json.facturation.raisonNonRembourse, await essais(u.i._id), await rembNet(u.i._id)], [503, true, 'deja-rembourse', 3, 1]);
+        // une lecture ratée NON définitive : l'échec du repli ne change rien à ce qu'elle fait (aucune facturation, aucun repli servi, pas d'erreur)
+        const w = await scanRepondu();
+        poserPanne({ saut: 0, echecs: 1 });
+        const rw = await rl(w.jeton, { scanId: w.scanId, carte: 0, lectureRatee: { cause: 'defi', definitive: false } });
+        H.v('R9b. lecture ratée NON définitive, le calcul du repli échoue : 200, facturation null, aucun prixRepli, rien rendu', [rw.statut, rw.json.success, rw.json.facturation, 'prixRepli' in rw.json, await essais(w.i._id), await rembNet(w.i._id)], [200, true, null, false, 2, 0]);
+    }
+
+    // ── R10. LE REPLI EST CALCULÉ UNE SEULE FOIS PAR REQUÊTE : la décision de remboursement et la réponse viennent du MÊME calcul
+    {
+        const s = await scanRepondu();
+        poserPanne({ saut: 1, echecs: 5 });              // la PREMIÈRE lecture passe, toute lecture suivante lèverait
+        const r = await rl(s.jeton, LR(s.scanId)), f = (r.json || {}).facturation || {};
+        H.v('R10. lecture ratée définitive : UNE seule lecture d\'appui du repli, et la réponse porte le repli qui a décidé (pas de « prix-repli » sans prixRepli)', [r.statut, lecturesDuRepli(), f.raisonNonRembourse, r.json.prixRepli && r.json.prixRepli.cause], [200, 1, 'prix-repli', 'lecture-ratee']);
+        const t = await scanRepondu();
+        poserPanne({ saut: 1, echecs: 5 });
+        const rt = await rl(t.jeton, { scanId: t.scanId, carte: 0, prixLive: 7.67, originePrix: 'tendance', prixLiveCodeLangue: 1 });
+        H.v('    un prix lu (tendance seule) : UNE lecture du repli, servi', [rt.statut, lecturesDuRepli(), rt.json.prixRepli && rt.json.prixRepli.cause], [200, 1, 'tendance-seule']);
+        poserPanne();
+    }
     H.v(`contrat : ${validees} réponses retour-live validées contre ReponseRetourLive, écarts`, [ecarts, validees > 0], [0, true]);
 
+    try { fs.rmSync(PANNE, { force: true }); } catch (_) { /* dossier temporaire : sans conséquence */ }
     srv.enfant.kill();
     await mongoose.disconnect();
     await H.arreterBanc();

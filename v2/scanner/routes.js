@@ -194,8 +194,8 @@ function routesScanner(router, cfg, deps = {}) {
     // Carte identifiée SANS prix au guide => remboursée (`sans-prix`), une fois par scan (le ledger refuse le second) — CONTRAT-2 §6, « à confirmer par l'éditeur ».
     // UNE fonction pour les deux chemins : la carte identifiée d'emblée (facturation `affirmee`) et la question répondue par un candidat (facturation `question`, débit confirmé).
     // REPLI-QUOTA : « la carte affiche-t-elle un prix ? » est la règle de prix-repli.js::afficheUnPrix, la même qu'à /api/retour-live (le scanner montre le guide : un `prixGuide` non nul est un prix affiché ;
-    // il ne sert jamais de repli, donc `repli` y est toujours absent — A15 reste remboursée : une carte identifiée sans `prixGuide` n'affiche rien).
-    const sansPrixIdentifiee = (k, f, motif) => Boolean(k && k.statut === 'identifiee' && k.carte && !afficheUnPrix({ prixRendu: k.carte.prixGuide !== null, repli: k.prixRepli }) && f && f.motif === motif && f.debite === 1 && f.rembourse === false);
+    // il ne sert jamais de repli (`sansLive` le retire AVANT cette décision : `habiller` applique le transformeur d'abord), donc aucun argument `repli` ici, il serait toujours absent — A15 reste remboursée : une carte identifiée sans `prixGuide` n'affiche rien).
+    const sansPrixIdentifiee = (k, f, motif) => Boolean(k && k.statut === 'identifiee' && k.carte && !afficheUnPrix({ prixRendu: k.carte.prixGuide !== null }) && f && f.motif === motif && f.debite === 1 && f.rembourse === false);
     const aRembourserAnalyse = c => Boolean(c && c.success === true && c.contrat === 2 && c.analyse && c.analyse.statut === 'identifiee' && Array.isArray(c.analyse.cartes) && c.analyse.cartes.length === 1
         && sansPrixIdentifiee(c.analyse.cartes[0], c.facturation, 'affirmee') && /^[0-9a-f]{24}$/i.test(String(c.scanId)));
     const aRembourserReponse = c => Boolean(c && c.success === true && sansPrixIdentifiee(c.carte, c.facturation, 'question'));

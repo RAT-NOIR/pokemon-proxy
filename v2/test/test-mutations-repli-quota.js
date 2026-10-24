@@ -7,5 +7,5 @@ const { MUTANTS, ancresCassees } = require('../mesures/mutations-repli-quota');
 v('chaque ancre du jeu de mutations existe exactement une fois dans le code actuel', ancresCassees(), []);
 v('chaque banc nommé par le jeu existe', [...new Set(MUTANTS.map(m => m[4]))].filter(b => !fs.existsSync(path.join(__dirname, b))), []);
 vrai('le jeu porte au moins 12 mutants, chacun avec un nom unique', MUTANTS.length >= 12 && new Set(MUTANTS.map(m => m[0])).size === MUTANTS.length);
-vrai('un équivalent déclaré dit sa raison', MUTANTS.every(m => m[5] === undefined || (typeof m[5] === 'string' && m[5].length > 20)));
+v('le jeu ne déclare AUCUN équivalent (chaque mutant doit être tué par un banc)', MUTANTS.filter(m => m[5] !== undefined).map(m => m[0]), []);
 bilan();

@@ -7,26 +7,29 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const V = path.join(__dirname, '..');
 const BANCS = 'test';
 const RL = 'identifier/retour-live.js', PR = 'identifier/prix-repli.js', SC = 'scanner/routes.js';
-const DECISION = "else if (afficheUnPrix({ repli: await calculerRepli() })) facturation = fabriquerFacturation({ debite: 1, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });";
+const DECISION = "else if (afficheUnPrix({ repli: repliDecide })) facturation = fabriquerFacturation({ debite: 1, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });";
 
 // [nom, fichier (relatif à v2/), ancre, remplacement, banc, équivalent? (raison)]
 const MUTANTS = [
-    ['un repli servi est quand même remboursé (la décision ne consulte plus le repli)', RL, DECISION, DECISION.replace('afficheUnPrix({ repli: await calculerRepli() })', 'false'), 'test-repli-quota.js'],
-    ['un scan SANS repli n\'est plus remboursé (la décision l\'affiche toujours)', RL, DECISION, DECISION.replace('afficheUnPrix({ repli: await calculerRepli() })', 'true'), 'test-repli-quota.js'],
-    ['la décision se prend sur un repli jamais calculé (null)', RL, 'afficheUnPrix({ repli: await calculerRepli() })', 'afficheUnPrix({ repli: null })', 'test-repli-quota.js'],
+    ['un repli servi est quand même remboursé (la décision ne consulte plus le repli)', RL, DECISION, DECISION.replace('afficheUnPrix({ repli: repliDecide })', 'false'), 'test-repli-quota.js'],
+    ['un scan SANS repli n\'est plus remboursé (la décision l\'affiche toujours)', RL, DECISION, DECISION.replace('afficheUnPrix({ repli: repliDecide })', 'true'), 'test-repli-quota.js'],
+    ['la décision se prend sur un repli jamais calculé (null)', RL, 'afficheUnPrix({ repli: repliDecide })', 'afficheUnPrix({ repli: null })', 'test-repli-quota.js'],
     ['la raison du non-remboursement est plafond-jour', RL, "motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });", "motif: 'sans-prix', raisonNonRembourse: 'plafond-jour' });", 'test-repli-quota.js'],
     ['le scan non remboursé n\'est plus débité (debite 0)', RL, "facturation = fabriquerFacturation({ debite: 1, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });", "facturation = fabriquerFacturation({ debite: 0, rembourse: false, motif: 'sans-prix', raisonNonRembourse: 'prix-repli' });", 'test-repli-quota.js'],
-    ['le repli consomme quand même le plafond des déclarations (un remboursement est tenté)', RL, "else if (afficheUnPrix({ repli: await calculerRepli() })) facturation = ", "else if (afficheUnPrix({ repli: await calculerRepli() })) facturation = (await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' }), null) || ", 'test-repli-quota.js'],
+    ['le repli consomme quand même le plafond des déclarations (un remboursement est tenté)', RL, "else if (afficheUnPrix({ repli: repliDecide })) facturation = ", "else if (afficheUnPrix({ repli: repliDecide })) facturation = (await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' }), null) || ", 'test-repli-quota.js'],
     ['l\'administrateur passe après le repli (il serait compté)', RL, "if (porteur.administrateur) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\r\n                // REPLI-QUOTA", "if (false) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\r\n                // REPLI-QUOTA", 'test-repli-quota.js'],
     ['le repli servi dans la réponse n\'est plus celui qui décide (second calcul sans la lecture ratée)', RL, "try { repli = await repliDuRetour(porteur, scanId, carte, b, lr); }", "try { repli = await repliDuRetour(porteur, scanId, carte, b, null); }", 'test-repli-quota.js'],
     ['la règle ignore le repli (seule la page compte)', PR, "return prixRendu === true || (repli !== null && typeof repli === 'object' && !Array.isArray(repli));", "return prixRendu === true;", 'test-prix-repli.js'],
     ['la règle affiche toujours un prix', PR, "return prixRendu === true || (repli !== null && typeof repli === 'object' && !Array.isArray(repli));", "return true;", 'test-prix-repli.js'],
     ['la règle accepte n\'importe quelle valeur vraie (1, « oui »)', PR, "return prixRendu === true || (repli !== null && typeof repli === 'object' && !Array.isArray(repli));", "return Boolean(prixRendu) || Boolean(repli);", 'test-prix-repli.js'],
     ['la valeur « prix-repli » sort de la liste fermée', '../sources.js', "    'prix-repli',             // REPLI-QUOTA", "    // REPLI-QUOTA", 'test-prix-repli.js'],
-    ['A15 : le scanner ne rembourse plus une carte identifiée sans prixGuide', SC, "!afficheUnPrix({ prixRendu: k.carte.prixGuide !== null, repli: k.prixRepli })", "!afficheUnPrix({ prixRendu: true, repli: k.prixRepli })", 'test-scanner-routes.js'],
-    ['A15 : le scanner rembourse une carte qui a un prixGuide', SC, "!afficheUnPrix({ prixRendu: k.carte.prixGuide !== null, repli: k.prixRepli })", "!afficheUnPrix({ prixRendu: false, repli: k.prixRepli })", 'test-scanner-routes.js'],
+    ['A15 : le scanner ne rembourse plus une carte identifiée sans prixGuide', SC, "!afficheUnPrix({ prixRendu: k.carte.prixGuide !== null })", "!afficheUnPrix({ prixRendu: true })", 'test-scanner-routes.js'],
+    ['A15 : le scanner rembourse une carte qui a un prixGuide', SC, "!afficheUnPrix({ prixRendu: k.carte.prixGuide !== null })", "!afficheUnPrix({ prixRendu: false })", 'test-scanner-routes.js'],
     ['un lot : la garde de retour-live accepte le statut « lot » (une carte de lot serait remboursée)', RL, "if (!['identifiee', 'a-trancher'].includes(an.statut)) return false;", "if (!['identifiee', 'a-trancher', 'lot'].includes(an.statut)) return false;", 'test-repli-quota.js'],
-    ['le calcul du repli n\'est plus mémorisé (relu une seconde fois)', RL, "if (repliCalcule) return repli;", "", 'test-repli-quota.js', 'optimisation : le repli relu est identique (même ligne analyses, même corps) ; aucune différence observable'],
+    ['le calcul du repli n\'est plus mémorisé (relu une seconde fois)', RL, "if (repliCalcule) return repli;", "", 'test-repli-quota.js'],        // plus d'équivalent déclaré : R10 compte les lectures d'appui du repli (une seule par requête) et fait échouer toute lecture suivante
+    ['I1 : l\'échec du calcul du repli est avalé (le scan est remboursé comme sans prix)', RL, "if (strict) throw e; repli = null;", "repli = null;", 'test-repli-quota.js'],
+    ['I1 : l\'échec du calcul du repli ne répond plus INDISPONIBLE (le scan est remboursé)', RL, "catch (e) { return repondreErreur(res, 'INDISPONIBLE'); } }\r\n                if (porteur.administrateur) facturation", "catch (e) { repliDecide = null; } }\r\n                if (porteur.administrateur) facturation", 'test-repli-quota.js'],
+    ['I1 : la décision ne passe plus par le calcul strict', RL, "repliDecide = await calculerRepli({ strict: true });", "repliDecide = await calculerRepli();", 'test-repli-quota.js'],
 ];
 
 function rejouer({ seulement = null, journal = console.log } = {}) {
