@@ -59,6 +59,12 @@ function langueDuVisuel(im) {
     if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'
         ? { langue: 'zh-hans', preuve: 'pikaqian.com : scan de la carte chinoise imprimée (sinogrammes simplifiés lisibles sur 3 images ouvertes à l\'œil le 2026-10-10), sous un set au tirage zh-hans' }
         : { langue: null, preuve: `pikaqian, langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-24 (RECOLTE) — source « ppr » (listes de sets chinois) : la langue est celle du TIRAGE de la page, déclarée par `langueSource: 'zh-hans'` (le collecteur ne lit que les pages de sets au tirage zh-hans,
+    // table fermée de collecte-cartes/pokipair.js). La preuve est PUBLIQUE : elle vit dans ce module-là (une seule phrase, §21 bis, require paresseux : pas de cycle) et ne nomme ni la source ni l'hôte.
+    if (im.source === 'ppr') return im.langueSource === 'zh-hans' ? { langue: 'zh-hans', preuve: require('./pokipair').LANGUE_PREUVE } : { langue: null, preuve: `source « ppr », langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-24 (RECOLTE) — source « tcs » (miroir de catalogue de marché : Prize Packs et kits Dresseur, sets du tirage occidental) : la langue vient de `langueSource: 'en'`, posée par le seul collecteur, sous un set
+    // `intl` ; même règle : la preuve vit dans le module de la source, publique, sans nom de source ni d'hôte.
+    if (im.source === 'tcs') return im.langueSource === 'en' ? { langue: 'en', preuve: require('./tcgcsv').LANGUE_PREUVE } : { langue: null, preuve: `source « tcs », langue source « ${im.langueSource} » sans règle` };
     // ➕ 2026-10-17 — pokumon.com (lot PK-PP, Prize Packs S1-S4) : la langue est DÉCLARÉE par la taxonomie « language » de l'entrée (English, id 1260), que le collecteur ne lit qu'en la
     // portant sur `langueSource: 'en'` ; 17 images ouvertes à l'œil le 2026-10-17, toutes en anglais (S7/PK-PP/img). Par ce qu'elle autorise : toute autre valeur n'a pas de règle (null).
     if (im.source === 'pokumon') return im.langueSource === 'en'
