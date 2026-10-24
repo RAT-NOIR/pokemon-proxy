@@ -159,6 +159,14 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('une fourchette qui se dit fiable', c => { c.prixRepli.fiable = true; }, 'ReponseRetourLive', rf);
     refuse('une fourchette dans la forme etat-proche', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'offre-autre-etat'; c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rf);
     refuse('une fourchette sur une analyse dont la réserve n\'est pas de la liste', c => { c.analyse.cartes[0].prixRepli.guide.reserves = ['etat-inconnu']; }, 'ReponseAnalyse', pr);
+    // tour de correction 2 (N1, N3) : la forme « fourchette » sans guide, et plancherInconnu
+    const sg = lire('retour-live-fourchette-sans-guide.json');
+    H.v('N3 : la fausse sans guide porte repli fourchette, guide et offre nuls, la mention dans reserves, plancherInconnu dit', [sg.prixRepli.repli, sg.prixRepli.guide, sg.prixRepli.offre, sg.prixRepli.reserves, sg.prixRepli.fourchette.plancherInconnu, sg.prixRepli.fourchette.absentes], ['fourchette', null, null, ['etat-non-estimable'], true, ['haute']]);
+    H.v('contrôle : la fausse sans guide est acceptée', valider(sg, ref('ReponseRetourLive'), doc).ok, true);
+    refuse('une fourchette sans guide qui se dit fiable', c => { c.prixRepli.fiable = true; }, 'ReponseRetourLive', sg);
+    refuse('une fourchette sans guide, sans la mention', c => { c.prixRepli.reserves = []; }, 'ReponseRetourLive', sg);
+    refuse('une fourchette sans guide avec un guide', c => { c.prixRepli.guide = { tendance: 1, de: 1, moyenne30: 1, date: '2026-10-12' }; }, 'ReponseRetourLive', sg);
+    refuse('plancherInconnu à false', c => { c.prixRepli.fourchette.plancherInconnu = false; }, 'ReponseRetourLive', sg);
 }
 { // BANC-EXTENSION : `marques` dans la fausse du produit Staff (ce que le serveur sert, toujours), et `grilleLive` dans la requête du retour de l'extension
     const ts = lire('identifiee-tampon-staff.json'), c0 = ts.analyse.cartes[0].carte;
@@ -251,7 +259,7 @@ const listes = {
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
     'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
     'raisons de non-remboursement (REPLI-QUOTA)': S.Facturation.properties.raisonNonRembourse.enum.filter(x => x !== null),
-    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
+    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const, S.PrixRepliFourchette.properties.repli.const],
     'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
     'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null),
     'capacités annoncées par /ping (CAPACITES-PING)': S.ReponsePing.properties.capacites.items.enum,

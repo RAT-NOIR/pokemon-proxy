@@ -3717,9 +3717,12 @@
           },
           {
             "$ref": "#/components/schemas/PrixRepliEtatProche"
+          },
+          {
+            "$ref": "#/components/schemas/PrixRepliFourchette"
           }
         ],
-        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Deux formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule) et `etat-proche` (offre non nulle ; seule cause offre-autre-etat). Règle du client : jamais « prix illisible » quand ce champ est servi. ETAT-FOURCHETTE : quand l'état de la carte n'est pas estimable sur les photos, la forme `tendance` porte en plus `fourchette` (le prix du plus abîmé plausible au meilleur, chaque borne tirée d'une donnée de prix déjà servie ou absente) et son guide porte la réserve `etat-non-estimable` : ce n'est jamais un prix sûr."
+        "description": "AJOUT FACULTATIF (lot PRIX-LISIBLE). Le repli honnête : servi SEULEMENT quand le prix dans l'état ne peut pas être présenté ET que la fiche a une donnée de prix ; la clé est ABSENTE sinon (jamais null). Sur une carte identifiée (jamais une question ni un candidat) de l'analyse ou de la réponse à une question, et dans la réponse de POST /api/retour-live. Trois formes exclusives, dont le schéma dit les couples admis : `tendance` (guide non nul, offre nulle ; causes langue-non-lue, etat-non-retenu, lecture-ratee, tendance-seule), `etat-proche` (offre non nulle ; seule cause offre-autre-etat) et `fourchette` (tour 4, correction 2 : guide ET offre nuls, `fourchette` et `reserves` requis ; seule cause etat-non-retenu ; état non estimable, fiche sans guide servable, prix lu en direct). Règle du client : jamais « prix illisible » quand ce champ est servi. ETAT-FOURCHETTE : quand l'état de la carte n'est pas estimable sur les photos, la forme `tendance` porte en plus `fourchette` (le prix du plus abîmé plausible au meilleur, chaque borne tirée d'une donnée de prix déjà servie ou absente) et son guide porte la réserve `etat-non-estimable` : ce n'est jamais un prix sûr."
       },
       "PrixRepliTendance": {
         "type": "object",
@@ -3799,6 +3802,10 @@
               ]
             },
             "description": "Les bornes qu'aucune donnée ne donne, dans l'ordre `basse` puis `haute` : exactement celles qui sont null. Le client n'invente jamais une borne absente."
+          },
+          "plancherInconnu": {
+            "const": true,
+            "description": "AJOUT FACULTATIF (tour 4, correction 2), ABSENT sauf quand il vaut `true` (la seule valeur). La borne `basse` vient d'une lecture directe (`grille-directe`) qui ne contient pas l'état le plus abîmé (PO) et le guide n'a pas de « De » : ce n'est PAS le prix du plus abîmé plausible, seulement le plus bas prix lu ; le plancher réel est inconnu. Le client l'affiche comme « à partir de » le prix lu, jamais comme le prix du plus abîmé. Le prix n'est pas refusé."
           }
         },
         "required": [
@@ -3829,6 +3836,50 @@
         "required": [
           "prix",
           "source"
+        ],
+        "additionalProperties": false
+      },
+      "PrixRepliFourchette": {
+        "type": "object",
+        "properties": {
+          "repli": {
+            "const": "fourchette",
+            "description": "La mention fermée (tour 4, correction 2) : l'état n'est pas estimable, la fiche n'a AUCUN guide servable, et le client a lu un prix en direct : ce prix est servi comme les bornes d'une fourchette (`fourchette`), avec la mention, jamais comme un prix sûr."
+          },
+          "cause": {
+            "const": "etat-non-retenu",
+            "description": "La seule cause de cette forme : l'état retenu est null et un prix a été lu."
+          },
+          "fiable": {
+            "const": false,
+            "description": "Toujours `false`."
+          },
+          "guide": {
+            "type": "null",
+            "description": "Toujours null : c'est la définition de cette forme (aucun guide servable). La mention d'état ne pouvant pas voyager sur un guide, elle est dans `reserves`."
+          },
+          "offre": {
+            "type": "null",
+            "description": "Toujours null pour la forme `fourchette`."
+          },
+          "fourchette": {
+            "$ref": "#/components/schemas/PrixFourchette"
+          },
+          "reserves": {
+            "const": [
+              "etat-non-estimable"
+            ],
+            "description": "Toujours la seule mention `etat-non-estimable` (« état non estimable sur les photos »), à afficher avec la fourchette."
+          }
+        },
+        "required": [
+          "repli",
+          "cause",
+          "fiable",
+          "guide",
+          "offre",
+          "fourchette",
+          "reserves"
         ],
         "additionalProperties": false
       },

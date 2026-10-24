@@ -57,9 +57,11 @@ function analyserReponse(contenu) {
     const e = String(o.etatEstime ?? '').trim().toUpperCase(), c = String(o.etatConfiance ?? '').trim().toLowerCase();
     const d = Array.isArray(o.defautsVus) ? o.defautsVus.filter(x => typeof x === 'string' && x.trim()).slice(0, 10).map(x => x.trim().slice(0, 200)) : null;
     // LE SECOND ÉTAT (règle de l'éditeur, tour 2) : champ FACULTATIF et FERMÉ (la même liste). Une valeur hors liste est REFUSÉE (null, `etatSecondRefuse` vrai) et ne devient jamais l'état ; un second égal au premier n'est pas une hésitation.
+    // Tour 4 correction 2 (N2) : un second PRÉSENT mais qui n'est pas une chaîne (tableau, nombre, objet, booléen) est une hésitation illisible : REFUSÉ comme un hors-liste. Seuls l'absence, `null`, la chaîne vide et « null / none / aucun » disent « pas de second état ».
+    const present = o.etatSecond !== undefined && o.etatSecond !== null;
     const brutSecond = typeof o.etatSecond === 'string' ? o.etatSecond.trim() : '', s = brutSecond.toUpperCase();
     const secondLu = ETATS.includes(s) && s !== e ? s : null;
-    const refuse = brutSecond !== '' && !/^(null|none|aucun)$/i.test(brutSecond) && !ETATS.includes(s);
+    const refuse = present && (typeof o.etatSecond !== 'string' || (brutSecond !== '' && !/^(null|none|aucun)$/i.test(brutSecond) && !ETATS.includes(s)));
     return { etatEstime: ETATS.includes(e) ? e : null, etatSecond: secondLu, etatSecondRefuse: refuse, etatConfiance: CONFIANCES.includes(c) ? c : null, defautsVus: d };
 }
 

@@ -88,6 +88,9 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         ['second HORS LISTE (MINT) : refusé, état retenu nul', 'NM', 'haute', 'MINT', null],
         ['second « LP/PL » (deux états collés) : refusé, état retenu nul', 'GD', 'moyenne', 'LP/PL', null],
         ['second « EX+ » : refusé, état retenu nul', 'EX', 'haute', 'EX+', null],
+        // TOUR 4 CORRECTION 2 (N2) : un second PRÉSENT mais qui n'est pas une chaîne (tableau, nombre) est une hésitation illisible : refusé aussi
+        ['second TABLEAU [LP, PL] : refusé, état retenu nul', 'GD', 'moyenne', ['LP', 'PL'], null],
+        ['second NOMBRE (7) : refusé, état retenu nul', 'EX', 'haute', 7, null],
         ['second MEILLEUR (NM) : ne relève jamais l\'état', 'EX', 'haute', 'NM', 'EX'],
         ['confiance basse malgré l\'hésitation : null', 'EX', 'basse', 'PL', null],
     ];
@@ -243,7 +246,7 @@ const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '').split('\
         H.vrai('5. aucune cause sur un état rendu (etatCause null quand l\'appel a répondu)', l.some(x => x.etatEstimeIA && !x.etatCause));
         // TOUR 4 CORRECTION 1 (I2) : le refus d'un second état est journalisé (etatSecondRefuse), et c'est lui qui rend l'état retenu nul
         const refuses = l.filter(x => x.etatSecondRefuse === true);
-        H.v('5. etatSecondRefuse : journalisé sur les scans au second refusé (MINT, LP/PL, EX+ ; deux routes), état retenu nul sur chacun', [refuses.length >= 6, refuses.every(x => x.etatRetenu === null && x.etatSecond === null)], [true, true]);
+        H.v('5. etatSecondRefuse : journalisé sur les scans au second refusé (MINT, LP/PL, EX+ ; deux routes), état retenu nul sur chacun', [refuses.length >= 10, refuses.every(x => x.etatRetenu === null && x.etatSecond === null)], [true, true]);
         H.vrai('5. etatSecondRefuse ne marque que les refus : un second valide ou l\'absence de second ne le posent pas', l.filter(x => x.etatSecond).every(x => x.etatSecondRefuse !== true) && l.filter(x => x.etatSecondRefuse !== true).length > 0);
     }
 

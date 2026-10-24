@@ -9,7 +9,7 @@
 //
 // 🔑 Écrit par ce qu'il AUTORISE : un repli ne naît que des cas listés ci-dessous ; tout ce qui n'y est pas (donnée illisible, état hors liste, prix non fini) ne donne rien.
 
-const REPLIS = Object.freeze(['tendance', 'etat-proche']);
+const REPLIS = Object.freeze(['tendance', 'etat-proche', 'fourchette']);
 // langue-non-lue / etat-non-retenu : l'ANALYSE n'a rien dicté à lire (adaptateur.js prixLiveDe : codeLangue absent, ou etat.retenu null — la porte de confiance de l'état) ;
 // lecture-ratee / tendance-seule / offre-autre-etat : le retour de l'extension (POST /api/retour-live).
 const CAUSES = Object.freeze(['langue-non-lue', 'etat-non-retenu', 'lecture-ratee', 'tendance-seule', 'offre-autre-etat']);
@@ -46,8 +46,19 @@ function depuisGuide(prixGuide, cause, o = {}) {
     if (!CAUSES.includes(cause)) throw new Error(`prix-repli : cause hors liste : ${cause}`);
     const guide = guideServable(prixGuide);
     if (!guide) return null;
-    if (o && o.etatNonEstimable === true) return Object.freeze({ repli: 'tendance', cause, fiable: false, guide: FE.guideSousFourchette(guide), offre: null, fourchette: FE.fourchetteDe({ guide, grille: o.grille }) });
+    if (o && o.etatNonEstimable === true) return Object.freeze({ repli: 'tendance', cause, fiable: false, guide: FE.guideSousFourchette(guide), offre: null, fourchette: FE.fourchetteDe({ guide, grille: o.grille, lus: o.lus }) });
     return Object.freeze({ repli: 'tendance', cause, fiable: false, guide, offre: null });
+}
+
+/**
+ * N3 (tour 4, correction 2) — état non estimable, retour en direct, fiche SANS guide servable, un prix valide lu : le prix lu est servi AVEC la mention `etat-non-estimable`, jamais fiable. Aucune forme existante ne tient la règle
+ * (« tendance » exige un guide ; « etat-proche » dit « offre dans un état pire »), donc la forme « fourchette » : guide null, offre null, cause `etat-non-retenu`, la fourchette (bornée par le prix lu et la grille), et `reserves`
+ * qui porte la mention (elle ne peut pas voyager sur un guide absent). Aucune borne (prix sous 0,01, rien de lisible) : null, rien à servir.
+ */
+function fourchetteSansGuide(o = {}) {
+    const f = FE.fourchetteDe({ guide: null, grille: o.grille, lus: o.lus });
+    if (f.basse === null && f.haute === null) return null;
+    return Object.freeze({ repli: 'fourchette', cause: 'etat-non-retenu', fiable: false, guide: null, offre: null, fourchette: f, reserves: Object.freeze([FE.ETAT_NON_ESTIMABLE]) });
 }
 
 /** Le repli « etat-proche » : l'offre lue dans un état PIRE que l'état retenu. null si l'état retenu est inconnu, si l'état lu n'est pas pire, ou si l'offre n'est pas un prix. */
@@ -104,8 +115,12 @@ function repliRetourLive(o = {}) {
     if (o.originePrix === 'tendance') return depuisGuide(o.prixGuide, 'tendance-seule', opts);
     // M3 (tour 4, correction 1) : état nul et un prix valide lu, QUELLE QUE SOIT l'origine (grille, plancher toutes langues, origine absente ou inconnue des extensions anciennes) : le prix d'un seul état n'est jamais servi sans la mention
     // ni `fiable: false`. Forme la plus simple qui tienne la règle : le même repli à fourchette, cause `etat-non-retenu`. Seule l'origine `grille` apporte sa grille (celle d'un plancher « toutes langues » n'est pas celle de la langue visée).
-    if (opts.etatNonEstimable && (o.originePrix === 'grille' || o.originePrix === 'plancher-toutes-langues' || prixDe(o.prixLive) !== null))
-        return depuisGuide(o.prixGuide, 'etat-non-retenu', { ...opts, grille: o.originePrix === 'grille' ? o.grilleLive : null });
+    if (opts.etatNonEstimable && (o.originePrix === 'grille' || o.originePrix === 'plancher-toutes-langues' || prixDe(o.prixLive) !== null)) {
+        // N3 (tour 4, correction 2) : le prix LU est un point de la fourchette (avec son état s'il est connu) ; sans guide servable, le repli prend la forme « fourchette » (voir fourchetteSansGuide)
+        const lus = prixDe(o.prixLive) !== null ? [{ prix: o.prixLive, etat: o.prixLiveEtat }] : [];
+        const sous = { ...opts, grille: o.originePrix === 'grille' ? o.grilleLive : null, lus };
+        return depuisGuide(o.prixGuide, 'etat-non-retenu', sous) || fourchetteSansGuide(sous);
+    }
     if (o.originePrix === 'grille') return depuisOffre(o.prixGuide, o.retenu, o.prixLiveEtat, o.prixLive);
     return null;
 }

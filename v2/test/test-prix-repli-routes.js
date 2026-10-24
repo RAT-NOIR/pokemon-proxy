@@ -237,7 +237,9 @@ async function semer() {
         const x = await repondu('a', null);
         await raw('analyses').updateOne({ _id: oid(x.scanId) }, { $set: { 'produits.$[].prixGuide': null } });
         const rx = await rl(x.jeton, { scanId: x.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', grilleLive: { NM: 1.4, GD: 0.9 } });
-        H.v('B13e. retenu null, fiche SANS guide : rien à servir (le prix lu reste celui du client), aucun repli, jamais une panne', [rx.statut, rx.json.success, 'prixRepli' in rx.json], [200, true, false]);
+        // TOUR 4 CORRECTION 2 (N3) : état nul, fiche sans guide servable, prix lu : le prix lu est servi AVEC la mention (forme « fourchette », guide null), jamais fiable ; validé contre le schéma par `rl`
+        const px = rx.json.prixRepli;
+        H.v('B13e. retenu null, fiche SANS guide : repli « fourchette » (guide null, sans offre, fiable false, reserves [etat-non-estimable]), bornes = la grille lue, plancher inconnu dit', [rx.statut, px && px.repli, px && px.cause, px && px.fiable, px && px.guide, px && px.offre, px && px.reserves, px && px.fourchette], [200, 'fourchette', 'etat-non-retenu', false, null, null, ['etat-non-estimable'], { basse: { prix: 0.9, source: 'grille-directe' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [], plancherInconnu: true }]);
         const y = await repondu('a', 'EX');
         const ry = await rl(y.jeton, { scanId: y.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', grilleLive: { NM: 1.4, GD: 0.9 } });
         H.v('B13f. témoin : retenu EX, la même offre en GD => etat-proche comme avant, SANS fourchette ni mention', [ry.statut, ry.json.prixRepli.repli, 'fourchette' in ry.json.prixRepli, ry.json.prixRepli.guide.reserves], [200, 'etat-proche', false, []]);

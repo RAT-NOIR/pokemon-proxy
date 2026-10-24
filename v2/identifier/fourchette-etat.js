@@ -53,19 +53,28 @@ function grilleDe(g) {
  * @param o.grille  la grille lue en direct { ETAT: prix } (ou rien) : ses prix valides (même un seul état) sont des candidats de la borne basse ; avec DEUX états valides au moins, son prix le plus haut est la borne haute
  *                  (avec un seul état on ne sait pas si un meilleur état coûte plus : la haute reste absente).
  *                  BASSE = le MINIMUM de tous les candidats, avec la source de ce minimum (à égalité : `grille-directe`, lue en direct). Un prix sous 0,01 n'est le candidat de rien.
- * @returns {{ basse: {prix, source}|null, haute: {prix, source}|null, absentes: string[] }}  `absentes` dit exactement les bornes nulles, basse puis haute.
+ * @param o.lus     (tour 4, correction 2, N3) les prix LUS en direct hors grille : [{ prix, etat }] (`etat` de la liste ou null s'il n'est pas connu) ; chacun est un point de plus, comme un état de la grille.
+ * @returns {{ basse: {prix, source}|null, haute: {prix, source}|null, absentes: string[], plancherInconnu?: true }}  `absentes` dit exactement les bornes nulles, basse puis haute.
+ *          `plancherInconnu: true` (N1, champ fermé, ABSENT sinon) : la basse vient d'une lecture directe qui ne contient pas l'état le plus abîmé (PO) et le guide n'a pas de « De » : ce n'est pas le prix du plus abîmé
+ *          plausible, c'est le plus bas prix LU ; le prix n'est pas refusé, la fourchette dit seulement que son plancher est inconnu.
  */
 function fourchetteDe(o) {
-    const { guide = null, grille = null } = o !== null && typeof o === 'object' ? o : {};
-    const gr = grilleDe(grille), prix = Object.values(gr);
+    const { guide = null, grille = null, lus = null } = o !== null && typeof o === 'object' ? o : {};
+    const points = Object.entries(grilleDe(grille)).map(([etat, prix]) => ({ etat, prix }));
+    for (const l of Array.isArray(lus) ? lus : []) {
+        const prix = l !== null && typeof l === 'object' ? prixDe(l.prix) : null;
+        if (prix !== null) points.push({ etat: l !== null && typeof l === 'object' ? etatDe(l.etat) : null, prix });
+    }
+    const prix = points.map(p => p.prix), etats = new Set(points.map(p => p.etat).filter(e => e !== null));
     const de = guide !== null && typeof guide === 'object' ? prixDe(guide.de) : null;
-    const minGrille = prix.length ? Math.min(...prix) : null;
+    const minLu = prix.length ? Math.min(...prix) : null;
     let basse = null, haute = null;
-    if (minGrille !== null && (de === null || minGrille <= de)) basse = Object.freeze({ prix: minGrille, source: 'grille-directe' });
+    if (minLu !== null && (de === null || minLu <= de)) basse = Object.freeze({ prix: minLu, source: 'grille-directe' });
     else if (de !== null) basse = Object.freeze({ prix: de, source: 'guide-de' });
-    if (prix.length >= 2) haute = Object.freeze({ prix: Math.max(...prix), source: 'grille-directe' });
+    if (etats.size >= 2) haute = Object.freeze({ prix: Math.max(...prix), source: 'grille-directe' });
     const f = { basse, haute };
-    return Object.freeze({ basse, haute, absentes: Object.freeze(BORNES.filter(b => f[b] === null)) });
+    const plancherInconnu = basse !== null && basse.source === 'grille-directe' && de === null && !etats.has('PO');
+    return Object.freeze({ basse, haute, absentes: Object.freeze(BORNES.filter(b => f[b] === null)), ...(plancherInconnu ? { plancherInconnu: true } : {}) });
 }
 
 /** Le guide d'un repli « sous fourchette » : les chiffres de la fiche, JAMAIS fiable, la mention après les réserves du produit. L'original n'est pas touché (la fiche garde son guide). */
@@ -90,4 +99,4 @@ function produitSousFourchette(p) {
     return Object.freeze({ ...p, ...('prixGuide' in p ? { prixGuide } : {}), ...(impressions ? { impressions: Object.freeze(impressions.map(i => (i !== null && typeof i === 'object' ? Object.freeze(i) : i))) } : {}) });
 }
 
-module.exports = { ETATS, SOURCES, BORNES, PRIX_MIN, etatNonEstimable, grilleDe, fourchetteDe, guideSousFourchette, produitSousFourchette };
+module.exports = { ETATS, SOURCES, BORNES, PRIX_MIN, ETAT_NON_ESTIMABLE, etatNonEstimable, grilleDe, fourchetteDe, guideSousFourchette, produitSousFourchette };
