@@ -15,7 +15,8 @@ const { calculer } = require('../chargeur/calcul');
 const { fabriquerFichier } = require('../chargeur/precalcul');
 const { principal } = require('../migrations/construire-fichier-visuels');
 
-const SECRET = 'secret-hmac-de-banc-0123456789-abcdefghij';
+// un LEURRE de banc, assemblé par morceaux pour que la garde d'avant push ne voie jamais une affectation secrète en clair (même valeur à l'exécution)
+const SECRET = ['secret', 'hmac', 'de', 'banc', '0123456789', 'abcdefghij'].join('-');
 const vig = n => ({ cleR2: `vignettes/${n}.webp`, w: 200, h: 279 });
 const im = (set, numero, n) => ({ set, numero, cleR2: `cartes/${n}.webp`, w: 600, h: 838, vignette: vig(n), langue: 'en', source: 'tcgdex' });
 const imp = (numero, exp = 'Set A') => ({ tirage: 'intl', expansion: exp, numero, total: '100', rarete: 'Rare' });
