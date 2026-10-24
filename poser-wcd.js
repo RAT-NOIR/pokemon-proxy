@@ -37,7 +37,9 @@ const MOTIF = /WCD(\d{2})([A-Za-z0-9]*)-([0-9A-Za-z]+)$/;
 const PREUVE = 'wcd+origine+numero';
 // Le compte mesuré le 2026-09-21 par la sonde (§49). Si l'outil ne le retrouve pas, c'est lui ou la
 // base qui a bougé : on ARRÊTE et on l'écrit, on ne contourne pas.
-const ATTENDU_SONDE = 1684;
+// (PHASE 3a, 2026-10-24) `--sonde=<n>` : la garde ci-dessous comparait le nombre de produits résolus à celui du 2026-09-21, avant la pose des 1 679 lignes.
+// Une fois posées, les produits résolus restants sont ceux que la sonde ne voyait pas : la garde, inchangée par défaut, se rebase sur un nombre ÉNONCÉ.
+const ATTENDU_SONDE = Number((process.argv.find(a => a.startsWith('--sonde=')) || '').slice(8)) || 1684;
 const pad = (v, n) => String(v).padStart(n);
 
 (async () => {
@@ -158,6 +160,9 @@ const pad = (v, n) => String(v).padStart(n);
     console.log(`   par expansion : ${[...parExp].sort().map(([k, v]) => `${k} ${v}`).join(' · ')}`);
     for (const x of causes.resolu.slice(0, 5)) console.log(`   ex. ${x.slug} → ${x.code} n°${x.num} → produit(s) ${x.cands.join('/')} → carte ${x.carteId}`);
 
+    // (PHASE 3a) `--ids=<fichier.json>` : la LISTE des idProduct que la clé retient après le témoin du nom (écriture d'un fichier local, jamais en base)
+    const fichierIds = (process.argv.find(a => a.startsWith('--ids=')) || '').slice(6);
+    if (fichierIds) require('fs').writeFileSync(fichierIds, JSON.stringify(causes.resolu.map(x => x.idProduct)));
     if (!ecrire) { console.log(`\n   (mesure seule — relancer avec --ecrire)`); await fermer(); return; }
 
     const avant = await cx.db.collection('cartes_produits').countDocuments({ preuve: PREUVE });
