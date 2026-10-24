@@ -70,12 +70,12 @@ const lignes4 = ['CSV9C', 'CSV10C', '30thC', 'CBB6C'].map(c => P.ligneDe(c));
     });
     await test('maximum : compté AVANT la première requête (robots + pages, ou robots + originaux), 6 s chacune ; ce qui est au cache ne compte pas', () => {
         const dossier = tmp(), F2 = K.fichiersDe(dossier, path.join(dossier, 'c'));
-        let m = K.maximum({ F: F2, mode: 'releve', releves: {}, plafondTotal: 600 });
+        let m = K.maximumReleve({ F: F2, releves: {}, plafondTotal: 600 });
         assert.strictEqual(m.total, 1 + P.TABLE.length); assert.strictEqual(m.secondes, (1 + P.TABLE.length) * 6);
-        m = K.maximum({ F: F2, mode: 'releve', releves: { CSV9C: { le: 'x' } }, plafondTotal: 600 });
+        m = K.maximumReleve({ F: F2, releves: { CSV9C: { le: 'x' } }, plafondTotal: 600 });
         assert.strictEqual(m.total, P.TABLE.length);
         const unites = [{ url: 'https://media.pokipair.com/2026/08/10103101/a.png' }, { url: 'https://media.pokipair.com/2026/08/10103101/b.png' }, { url: 'https://media.pokipair.com/2026/08/10103101/b.png' }];
-        m = K.maximum({ F: F2, mode: 'telecharger', unites, indexImages: { 'https://media.pokipair.com/2026/08/10103101/a.png': { statut: 'ok' } }, plafondTotal: 600 });
+        m = K.maximumImages({ F: F2, hoteImages: P.HOTE_IMAGES, unites, indexImages: { 'https://media.pokipair.com/2026/08/10103101/a.png': { statut: 'ok' } }, plafondTotal: 600 });
         assert.strictEqual(m.total, 2); assert.match(m.detail, /originaux 1/);
     });
 
@@ -166,6 +166,18 @@ const lignes4 = ['CSV9C', 'CSV10C', '30thC', 'CBB6C'].map(c => P.ligneDe(c));
         const r = await RC.telecharger({ SRC: P.SRC, unites: UNITES, cli, fichier: path.join(tmp(), 'i.json'), hoteImages: P.HOTE_IMAGES });
         assert.strictEqual(r.etat, 'arret-definitif'); assert.deepStrictEqual(appels, ['https://media.pokipair.com/robots.txt']);
         assert.ok(fs.readdirSync(pauses).some(f => /^ARRET-HOTE-pokipair\.com/.test(f)));
+    });
+    await test('téléchargement : une fausse absence n\'est redemandée qu\'APRÈS 24 h (seconde preuve) ; avant, elle tient ; une seconde fausse absence devient « absent »', async () => {
+        const url = UNITES[0].url, maintenant = Date.parse('2026-10-25T12:00:00Z');
+        let n = 0;
+        const html = { async get(u) { if (u.endsWith('robots.txt')) return { status: 404, type: 'text/html', texte: 'nf' }; n++; return { status: 200, type: 'text/html', texte: '<html>introuvable</html>' }; } };
+        const fichier = path.join(tmp(), 'f.json');
+        fs.writeFileSync(fichier, JSON.stringify({ [url]: { statut: 'fausse-absente', le: '2026-10-25T11:00:00.000Z' } }));
+        await RC.telecharger({ SRC: P.SRC, unites: UNITES.slice(0, 1), cli: mkCli(html, tmp()), fichier, hoteImages: P.HOTE_IMAGES, now: () => maintenant });
+        assert.strictEqual(n, 0, 'vue il y a 1 h : on ne redemande pas');
+        fs.writeFileSync(fichier, JSON.stringify({ [url]: { statut: 'fausse-absente', le: '2026-10-24T10:00:00.000Z' } }));
+        await RC.telecharger({ SRC: P.SRC, unites: UNITES.slice(0, 1), cli: mkCli(html, tmp()), fichier, hoteImages: P.HOTE_IMAGES, now: () => maintenant });
+        assert.strictEqual(n, 1, 'vue il y a 26 h : on la redemande une fois');
     });
     await test('téléchargement : l\'hôte des images est obligatoire (sinon aucune image ne partirait sans robots.txt lu)', async () => {
         await assert.rejects(() => RC.telecharger({ SRC: P.SRC, unites: UNITES, cli: mkCli(transportImages({}), tmp()), fichier: path.join(tmp(), 'i.json') }), /hôte des images/);

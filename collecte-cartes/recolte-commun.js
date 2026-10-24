@@ -331,7 +331,7 @@ const LS = require('./lecture-sure');
  * il porte des produits joints, et chaque carte jointe est lue (`lecture-sure` : un zéro sur une population non vide est une clé fausse, pas une absence).
  * @returns {{refus: string}|{set: object, lignes: object[], cartes: Map<number, object>}}
  */
-async function lireSet(db, slug, { tirage, code = null } = {}) {
+async function lireSet(db, slug, { tirage, code = null, impressions = false } = {}) {
     const set = await db.collection('sets').findOne({ _id: slug }, { projection: { tirage: 1, region: 1, code: 1, nomAffichage: 1 } });
     if (!set) return { refus: `set ${slug} absent de la base` };
     if ((set.tirage ?? set.region) !== tirage) return { refus: `tirage ${set.tirage ?? set.region} en base, ${tirage} attendu` };
@@ -340,14 +340,14 @@ async function lireSet(db, slug, { tirage, code = null } = {}) {
     try { lignes = await LS.lireMongo(db.collection('cartes_produits'), { slugSet: slug }, { nom: 'cartes_produits', projection: { carteId: 1, idProduct: 1, numeroFiche: 1, slug: 1, preuve: 1 } }); }
     catch (e) { return { refus: `aucun produit joint au set ${slug} (${e.message.split('\n')[0]})` }; }
     const ids = [...new Set(lignes.map(l => l.carteId))];
-    const docs = await db.collection('cartes').find({ _id: { $in: ids } }).project({ nomEn: 1, niveau: 1, attaques: 1, images: 1, categorie: 1 }).toArray();
+    const docs = await db.collection('cartes').find({ _id: { $in: ids } }).project({ nomEn: 1, niveau: 1, attaques: 1, images: 1, categorie: 1, ...(impressions ? { impressions: 1 } : {}) }).toArray();
     LS.apparier(ids, docs.map(c => c._id), { gauche: 'cartes_produits.carteId', droite: 'cartes._id', cle: '_id' });
     LS.champSur(docs, 'nomEn', { collection: `cartes du set ${slug}`, videAutorise: 'les cartes sans nom (Énergies) existent ; le plan les range en « sans-nom »' });
     return { set, lignes, cartes: new Map(docs.map(c => [c._id, c])) };
 }
 /** Les produits d'un set tels que le plan les lit : une ligne = un produit joint à une carte. Un produit joint à PLUSIEURS cartes n'en désigne aucune. */
 function produitsDuSet({ lignes, cartes }) {
-    return lignes.map(l => { const c = cartes.get(l.carteId); return { carteId: l.carteId, idProduct: l.idProduct, numeroFiche: l.numeroFiche ?? null, slug: l.slug ?? null, carteNom: c?.nomEn ?? null, carte: c ? { _id: c._id, nomEn: c.nomEn, niveau: c.niveau, attaques: c.attaques } : null }; });
+    return lignes.map(l => { const c = cartes.get(l.carteId); return { carteId: l.carteId, idProduct: l.idProduct, numeroFiche: l.numeroFiche ?? null, slug: l.slug ?? null, carteNom: c?.nomEn ?? null, carte: c ? { _id: c._id, nomEn: c.nomEn, niveau: c.niveau, attaques: c.attaques, ...(c.impressions ? { impressions: c.impressions } : {}) } : null }; });
 }
 
 module.exports = { lireSet, produitsDuSet, fabriquerSource, controleLargeur, juger, jugementDe, telecharger, planches, choisirEchantillon, decider, lecteurNatif, lecteurModeles, entreeDeCarte, documentImage, candidatDe, ecrire, compterEntrees,
