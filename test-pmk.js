@@ -79,12 +79,19 @@ test('plan : un nom différent est un TROU ; un nom qui désigne une autre carte
     assert.strictEqual(plan([prod(1, 901, '1', 'Shroomish', null)]).unites.length, 1);
 });
 test('plan : numéro hors de la page (liste tronquée à 48), sans numéro, sans nom, variantes, produit vers plusieurs cartes, tuile revendiquée deux fois : chacun son motif', () => {
-    const r = plan([prod(1, 901, '60', 'Whatever', 'Whatever-CSVH1C060'), prod(2, 902, null, 'Breloom', 'Breloom-CSVH1C002'), prod(3, 903, '3', null, 'x'),
+    const r = plan([prod(1, 901, '60', 'Whatever', 'Whatever-CSVH1C060'), prod(2, 902, null, 'Breloom', 'Breloom'), prod(3, 903, '3', null, 'x'),
         prod(4, 904, '4', 'Grotle', 'Grotle-CSVH1C004'), prod(4, 914, '4', 'Grotle', 'Grotle-V2-CSVH1C004'),
         prod(5, 905, '5', 'Torterra', 'Torterra-CSVH1C005'), prod(5, 905, '6', 'Zarude', 'Torterra-CSVH1C005'),
         prod(7, 907, '7', 'Empoleon', 'Empoleon-CSVH1C007'), prod(8, 908, '7', 'Empoleon', 'Empoleon-CSVH1C007b')]);
     assert.strictEqual(r.unites.length, 0);
     assert.deepStrictEqual(r.parMotif, { 'absente-de-la-source': 1, 'sans-numero': 1, 'sans-nom': 1, variantes: 2, 'produit-vers-plusieurs-cartes': 2, 'tuile-revendiquee-deux-fois': 2 });
+});
+test('plan : un produit SANS numéro de fiche prend celui de son slug (code du set + 3 chiffres), jamais autre chose ; un doublon fiche/slug est une variante', () => {
+    const r = plan([prod(2, 902, null, 'Breloom', 'Breloom-CSVH1C002'), prod(3, 903, '', 'Turtwig', 'Turtwig-CSVH1C003'), prod(4, 904, null, 'Grotle', 'Grotle-CSVH1Ca004'), prod(5, 905, null, 'Torterra', 'Torterra-CSVH2C005')]);
+    assert.deepStrictEqual(r.unites.map(u => [u.numero, u.sourceNumero]).sort(), [['2', 'slug'], ['3', 'slug']]);
+    assert.strictEqual(r.parMotif['sans-numero'], 2, 'un slug sans le code de CE set, ou avec une lettre entre le code et le numéro, ne donne rien');
+    const dbl = plan([prod(2, 902, '2', 'Breloom', 'Breloom-CSVH1C002'), prod(2, 912, null, 'Breloom', 'Breloom-V2-CSVH1C002')]);
+    assert.strictEqual(dbl.unites.length, 0); assert.strictEqual(dbl.parMotif.variantes, 2);
 });
 test('plan : le numéro compare par la clé de la jointure (« 007 » = « 7 »)', () => {
     assert.strictEqual(plan([prod(7, 907, '007', 'Empoleon', 'Empoleon-CSVH1C007')]).unites.length, 1);

@@ -31,7 +31,8 @@ const HOTE_PAGES = 'www.packmagik.com';
 const HOTE_IMAGES = 'cxjurdeoweovcukmmplp.supabase.co';
 const SRC = RC.fabriquerSource({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE: 'zh-hans', CHAMP_BILAN: 'bilanLotPmk', nomsInterdits: ['packmagik', 'pack magik', 'magik', 'supabase'] });
 
-const ligne = o => Object.freeze({ ...o });
+// `numeroSlug` : la forme du numéro dans le slug d'un produit SANS numéro de fiche (« Dartrix-CSVH4C002 » -> 2), dérivée du code du set ; une lettre entre le code et le numéro (« …C4a001 ») n'en est pas un
+const ligne = o => Object.freeze({ ...o, numeroSlug: new RegExp(`-${o.code}(\\d{3})$`) });
 /** LA TABLE FERMÉE des pages de sets : une ligne par set de notre base. `titre` est une garde de LECTURE : une page qui ne dit pas ce qu'on attend n'est pas lue. */
 const TABLE = Object.freeze([
     // `noms` : les quatre Pokémon qui nomment le set chez nous (la source l'appelle « Happy Set » ou « Happy Deck » selon le volume, et range les noms dans un autre ordre pour le volume 5) : tous doivent figurer dans le titre
@@ -168,7 +169,15 @@ function planifier({ ligne: l, page, produits, temoin = null, exclusions = EXCLU
     const parNumero = new Map();
     for (const t of page?.tuiles || []) { if (t.illisible || t.n == null) continue; (parNumero.get(t.n) || parNumero.set(t.n, []).get(t.n)).push(t); }
     const base = { tuiles: (page?.tuiles || []).length, illisibles: (page?.tuiles || []).filter(t => t.illisible).length, numeros: parNumero.size, tuilesAutresSets: page?.horsSet ?? 0 };
-    const cle = p => `${p.carteId}|${p.numeroFiche == null ? '' : J.cleNumero(p.numeroFiche)}`;
+    // le numéro d'un produit : celui de sa fiche ; à défaut (« metacarte+nom+attaques » : pas de numéro de fiche), celui de son SLUG si la ligne en donne la forme (code du set + 3 chiffres) — jamais autre chose
+    const numeroDe = p => {
+        const f = String(p.numeroFiche ?? '').trim();
+        if (f) return { label: f, source: 'fiche' };
+        const m = l.numeroSlug?.exec(String(p.slug ?? ''));
+        return m ? { label: String(Number(m[1])), source: 'slug' } : null;
+    };
+    const num = new Map((produits || []).map(p => [p, numeroDe(p)]));
+    const cle = p => `${p.carteId}|${num.get(p) ? J.cleNumero(num.get(p).label) : ''}`;
     const effectifs = new Map();
     for (const p of produits || []) effectifs.set(cle(p), (effectifs.get(cle(p)) || 0) + 1);
     const lignesDuProduit = new Map();
@@ -176,12 +185,13 @@ function planifier({ ligne: l, page, produits, temoin = null, exclusions = EXCLU
     const revendiquees = new Map();
     for (const p of produits || []) {
         if (lignesDuProduit.get(p.idProduct) > 1) { reste(p, 'produit-vers-plusieurs-cartes'); continue; }          // un produit joint à plusieurs cartes n'en désigne aucune
-        if (p.numeroFiche == null || String(p.numeroFiche).trim() === '') { reste(p, 'sans-numero'); continue; }
+        const n = num.get(p);
+        if (!n) { reste(p, 'sans-numero'); continue; }
         if (!p.carteNom) { reste(p, 'sans-nom'); continue; }
         if (effectifs.get(cle(p)) > 1) { reste(p, 'variantes', `${effectifs.get(cle(p))} produits au même numéro de la même carte`); continue; }
         if (!page) { reste(p, 'page-absente'); continue; }
-        const tuiles = parNumero.get(J.cleNumero(p.numeroFiche));
-        if (!tuiles) { reste(p, 'absente-de-la-source', /^\d+$/.test(String(p.numeroFiche).trim()) ? `n° ${p.numeroFiche} : la page ne liste que ${base.numeros} cartes (les suivantes, au nom chinois, ne sont pas lues)` : `n° « ${p.numeroFiche} » : hors de la numérotation de la page`); continue; }
+        const tuiles = parNumero.get(J.cleNumero(n.label));
+        if (!tuiles) { reste(p, 'absente-de-la-source', /^\d+$/.test(n.label) ? `n° ${n.label} : la page ne liste que ${base.numeros} cartes (les suivantes, au nom chinois, ne sont pas lues)` : `n° « ${n.label} » : hors de la numérotation de la page`); continue; }
         if (tuiles.length !== 1) { reste(p, 'tuile-ambigue', `${tuiles.length} tuiles au numéro`); continue; }
         const t = tuiles[0];
         const nomJoint = p.carte ? J.nomJointDe(p.carte) : p.carteNom;
@@ -195,10 +205,10 @@ function planifier({ ligne: l, page, produits, temoin = null, exclusions = EXCLU
         if (!urlImageValide(t.url)) { reste(p, 'adresse-hors-forme', t.url); continue; }
         const exclue = exclusions.find(e => e.carteId === p.carteId && String(e.idSource) === String(t.id) && (!e.code || e.code === l.code));
         if (exclue) { reste(p, 'exclusion-motivee', `${exclue.nom} (${exclue.le}) : ${exclue.motif}`); continue; }
-        const u = { carteId: p.carteId, slugSet: l.slug, numero: String(p.numeroFiche).trim(), produits: [p.idProduct], slugProduit: p.slug ?? null, url: t.url, idSource: t.id, variante: null, groupe: l.code, famille: LANGUE,
+        const u = { carteId: p.carteId, slugSet: l.slug, numero: n.label, sourceNumero: n.source, produits: [p.idProduct], slugProduit: p.slug ?? null, url: t.url, idSource: t.id, variante: null, groupe: l.code, famille: LANGUE,
             carteNom: p.carteNom, nomSource: t.nom, numeroSource: t.numeroTexte, rarete: null, nomProduit,
-            preuve: `page du set ${l.code} : n° ${t.numeroTexte} = fiche ${p.numeroFiche}, nom « ${t.nom} » = fiche « ${p.carteNom} »${nomProduit ? ` = produit « ${nomProduit} »` : ' (nom du produit non lisible sur son slug)'}, tuile unique`,
-            preuveNeutre: `set ${l.code}, n° ${t.numeroTexte} = fiche ${p.numeroFiche}, nom « ${t.nom} » = fiche « ${p.carteNom} »${nomProduit ? ` = produit « ${nomProduit} »` : ''}, tuile unique` };
+            preuve: `page du set ${l.code} : n° ${t.numeroTexte} = fiche ${n.label}${n.source === 'slug' ? ' (numéro lu sur le slug du produit)' : ''}, nom « ${t.nom} » = fiche « ${p.carteNom} »${nomProduit ? ` = produit « ${nomProduit} »` : ' (nom du produit non lisible sur son slug)'}, tuile unique`,
+            preuveNeutre: `set ${l.code}, n° ${t.numeroTexte} = fiche ${n.label}, nom « ${t.nom} » = fiche « ${p.carteNom} »${nomProduit ? ` = produit « ${nomProduit} »` : ''}, tuile unique` };
         (revendiquees.get(t.url) || revendiquees.set(t.url, []).get(t.url)).push(u);
         unites.push(u);
     }

@@ -117,7 +117,8 @@ const GROUPES = [
         ['dossier d\'images quelconque dans le chemin', "const CHEMIN_IMAGE = new RegExp(`^/storage/v1/object/public/card-images/pokemon/(?:${DOSSIERS})/", "const CHEMIN_IMAGE = new RegExp(`^/storage/v1/object/public/card-images/pokemon/(?:[a-z0-9]+)/"],
         ['prix gardés dans la page réduite', "lis.push(`<a class=", "lis.push(b + `<a class="],
         ['adresse hors forme acceptée', "if (!urlImageValide(t.url)) {", "if (false) {"],
-        ['numéro de produit absent accepté', "if (p.numeroFiche == null || String(p.numeroFiche).trim() === '') {", "if (false) {"],
+        ['numéro du slug lu sans la forme du code du set', "const m = l.numeroSlug?.exec(String(p.slug ?? ''));", "const m = /(\\d{3})$/.exec(String(p.slug ?? ''));"],
+        ['numéro du slug ignoré', "const m = l.numeroSlug?.exec(String(p.slug ?? ''));", "const m = null;"],
         ['produit vers plusieurs cartes accepté', "if (lignesDuProduit.get(p.idProduct) > 1) {", "if (false) {"],
         ['exclusion motivée ignorée', "if (exclue) {", "if (false) {"]
     ] },
