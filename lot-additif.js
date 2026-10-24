@@ -120,7 +120,8 @@ async function compter(db) {
 const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(__dirname, dossier, `${coll}.json`), 'utf8'), { relaxed: true });
 
 // Les documents de la base, projetés sur ce que compterEtat lit : le « après » passe par la MÊME fonction que le « avant ».
-// La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
+// La projection couvre aussi ce que `setsTouches` compare (D1, 2026-10-24 : TOUT champ que le site lit — garde-lot.js SITE_LIT, qui pilote cette projection ET la comparaison —, lignes de jointure, sets entiers).
+// Coût mémoire : l'AVANT est la sauvegarde entière, déjà en mémoire ; l'APRÈS n'ajoute aucun document entier, seulement les champs lus par le site (pas bulba, pas sha256, pas les preuves).
 async function etatDeLaBase(db) {
     const [cartes, cartesProduits, sets] = await Promise.all([
         db.collection('cartes').find({}).project({ ...PROJECTION_ETAT.cartes }).toArray(),

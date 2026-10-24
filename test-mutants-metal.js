@@ -30,7 +30,7 @@ const MUTANTS = [
     { nom: 'retrait : --ecrire accepté hors lot-additif', fichier: 'retirer-scan-faux-metal.js', de: 'if (!ecrire) return;\n    if (!env ||', vers: 'if (true) return;\n    if (!env ||', banc: 'test-retirer-scan-faux-metal.js' },
     { nom: 'lot-additif : ne pose plus LOT_ADDITIF_PID', fichier: 'lot-additif.js', de: 'LOT_ADDITIF_PID: String(process.pid)', vers: 'LOT_X: String(process.pid)', banc: 'test-retirer-scan-faux-metal.js' },
     // correction 2
-    { nom: 'projection partagée : liens.idProduct retiré (garde des liens aveugle en production)', fichier: 'collecte-cartes/garde-lot.js', de: "categorie: 1, 'liens.idProduct': 1, 'impressions.tirage'", vers: "categorie: 1, 'impressions.tirage'", banc: 'test-garde-matiere-speciale.js' },
+    { nom: 'projection partagée : liens.idProduct retiré (garde des liens aveugle en production)', fichier: 'collecte-cartes/garde-lot.js', de: "'attaques', 'liens.idProduct', 'liens.idMetacard'", vers: "'attaques', 'liens.idMetacard'", banc: 'test-garde-matiere-speciale.js' },
     { nom: 'lot-additif : projection recopiée sans liens (constante partagée abandonnée)', fichier: 'lot-additif.js', de: '.project({ ...PROJECTION_ETAT.cartes })', vers: ".project({ sets: 1, nomEn: 1, categorie: 1 })", banc: 'test-garde-matiere-speciale.js' },
     { nom: 'garde-lot : compte par produit et non par ligne (remplacement 1 → 1 non vu)', fichier: 'collecte-cartes/garde-lot.js', de: 'ligne:${l._id ?? `${l.carteId}|${l.idProduct}`}', vers: 'ligne', banc: 'test-garde-matiere-speciale.js' },
     { nom: 'garde-lot : liens comptés par produit et non par couple carte/produit', fichier: 'collecte-cartes/garde-lot.js', de: 'lien:${c._id}', vers: 'lien', banc: 'test-garde-matiere-speciale.js' },

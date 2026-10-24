@@ -237,5 +237,83 @@ verifier('BS-STAFF (setsTouches) : le retrait du marquage touche aussi le set', 
   verifier('lot-additif.js lit les cartes par la projection partagée', /\.project\(\{ \.\.\.PROJECTION_ETAT\.cartes \}\)/.test(src), true);
   verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj[c] === 1), [true, true, true]); }
 
+// ── D1 (2026-10-24) : le calcul des sets à revalider voit TOUT champ que le site peut lire, dans les trois collections.
+// Constat du 19/10 : deux lots ont modifié des champs existants (la `variante` de 58 lignes, `tamponNonRepresente` de 12 entrées d'image, un champ d'une entrée de Frosmoth) ;
+// « 6. sets touchés : 0 », rien n'a été revalidé, il a fallu le faire à la main. La projection comparée ne portait qu'une partie de ce que le site lit.
+// ⚠️ un banc qui ne ferait que « voir plus » ne prouverait rien : chaque cas ci-dessous a son contraire (un champ que le site NE lit PAS ne revalide rien — le quota Vercel, §63).
+const touches = (a, b) => setsTouches({ avant: a, apres: b });
+const modif = (f) => { const e = copie(etat0); f(e); return e; };
+const etatTampon = modif(e => Object.assign(e.cartes[1].images[0], { partageeTamponNonSepare: false, tamponNonRepresente: 'Staff' }));
+verifier('D1 : SEUL tamponNonRepresente change dans une entrée existante (le drapeau reste false) : le set de l\'entrée est touché',
+    touches(etatTampon, modif(e => Object.assign(e.cartes[1].images[0], { partageeTamponNonSepare: false, tamponNonRepresente: 'League' }))).sets, ['Set-B']);
+verifier('D1 : tamponNonRepresente POSÉ sur une entrée qui n\'en avait pas (drapeau false) : le set est touché',
+    touches(docs0, modif(e => Object.assign(e.cartes[1].images[0], { partageeTamponNonSepare: false, tamponNonRepresente: 'League' }))).sets, ['Set-B']);
+verifier('D1 : la seule `variante` d\'une ligne de jointure (posée) : son slugSet est touché, ni catalogue ni espèces',
+    (r => [r.sets, r.catalogue, r.especes])(touches(modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].variante = 'prerelease'; }))), [['Set-B'], false, false]);
+verifier('D1 : la seule `variante` d\'une ligne changée (staff -> staff+prerelease) : son slugSet',
+    touches(modif(e => { Object.assign(e.cartesProduits[3], { slugSet: 'Set-B', variante: 'staff' }); }), modif(e => { Object.assign(e.cartesProduits[3], { slugSet: 'Set-B', variante: 'staff+prerelease' }); })).sets, ['Set-B']);
+for (const [champ, v] of [['mention', 'x'], ['noteVariante', 'n'], ['langue', 'ja'], ['languePreuve', 'p'], ['basseDefinition', true], ['imageEmprunteeTirage', true], ['w', 480], ['h', 670], ['source', 'tcgdex'], ['partageeHoloNonHolo', true], ['produitsPartages', [100, 101]]])
+    verifier(`D1 : un champ d'entrée d'image que le site lit (${champ}) : le set de l'entrée seulement`, touches(docs0, modif(e => { e.cartes[1].images[0][champ] = v; })).sets, ['Set-B']);
+verifier('D1 : la vignette (w, h) d\'une entrée : le set de l\'entrée', touches(modif(e => { e.cartes[0].images[0].vignette = { cleR2: 'v/a', w: 200, h: 280 }; }), modif(e => { e.cartes[0].images[0].vignette = { cleR2: 'v/a', w: 200, h: 281 }; })).sets, ['Set-A']);
+for (const [champ, v] of [['pv', 60], ['type', 'Eau'], ['stade', 'Base'], ['faiblesse', 'Plante'], ['resistance', 'Combat'], ['retraite', 2], ['ndex', 25], ['nomJa', 'ピカチュウ'], ['nomFr', 'Pikachu'], ['illustrateur', 'X'], ['attaques', [{ nom: 'Éclair', degats: '30' }]], ['liens', { idProduct: [101] }]])
+    verifier(`D1 : un autre champ de carte que le site lit (${champ}) : TOUS les sets de la carte`, touches(docs0, modif(e => { e.cartes[1][champ] = v; })).sets, ['Set-A', 'Set-B']);
+verifier('D1 : une impression — rareté ou total (champs que le site lit) : tous les sets de la carte', [touches(docs0, modif(e => { e.cartes[1].impressions[0].rarete = 'Rare'; })).sets, touches(docs0, modif(e => { e.cartes[1].impressions[0].total = '102'; })).sets], [['Set-A', 'Set-B'], ['Set-A', 'Set-B']]);
+verifier('D1 : une ligne — slug, tirage, idExpansion, substitut (cleR2, w, h, mention) : son slugSet', [['slug', 's-1'], ['tirage', 'jp'], ['idExpansion', 99]].map(([k, v]) => touches(modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3][k] = v; })).sets)
+    .concat(['cleR2', 'w', 'h', 'mention'].map(k => touches(modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', w: 200, h: 280, mention: 'm' }; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', w: 200, h: 280, mention: 'm', [k]: k === 'cleR2' || k === 'mention' ? 'autre' : 999 }; })).sets)), Array(7).fill(['Set-B']));
+verifier('D1 : un document `sets` — le champ `deck` (le site le lit) : ce set, et sets-info', (r => [r.sets, r.setsInfo])(touches(docs0, modif(e => { e.sets[0].deck = 'Pikachu Libre'; }))), [['Set-A'], true]);
+// le contraire : ce que le site NE lit PAS ne revalide rien (sinon le quota Vercel paie des pages inchangées)
+for (const [nom, f] of [
+    ['sha256 d\'une entrée d\'image', e => { e.cartes[1].images[0].sha256 = 'ab'; }], ['urlOriginal d\'une entrée', e => { e.cartes[1].images[0].urlOriginal = 'https://x/y'; }], ['preuve d\'une entrée', e => { e.cartes[1].images[0].preuve = 'p'; }],
+    ['jointeLe (date d\'audit) d\'une entrée', e => { e.cartes[1].images[0].jointeLe = new Date('2026-10-24'); }], ['collecteLe de la carte', e => { e.cartes[1].collecteLe = new Date(); }], ['version de la carte', e => { e.cartes[1].version = 2; }],
+    ['bulba.revid de la carte', e => { e.cartes[1].bulba = { titre: 't', pageid: 5, revid: 123 }; }], ['champsNuls de la carte', e => { e.cartes[1].champsNuls = ['pv']; }], ['liens.idMetacards (pluriel, non lu) de la carte', e => { e.cartes[1].liens = { idMetacards: [7] }; }],
+    ['nomFrSource de la carte', e => { e.cartes[1].nomFrSource = 'cardmarket'; }], ['verifieLe d\'une ligne', e => { e.cartesProduits[0].verifieLe = new Date(); }], ['variantePreuve d\'une ligne', e => { e.cartesProduits[0].variantePreuve = 'preuve'; }],
+    ['detail d\'une ligne', e => { e.cartesProduits[0].detail = 'd'; }], ['collecteLe d\'un set', e => { e.sets[0].collecteLe = new Date(); }]])
+    verifier(`D1 (contraire) : ${nom} — le site ne le lit pas : aucun set touché`, touches(docs0, modif(f)).sets, []);
+// la projection relue après le lot : UNE liste (SITE_LIT) pilote la projection Mongo ET la comparaison — rejouée ici avec la projection réelle de l'API (la même fonction `projeter`), le résultat ne change pas
+{
+    const { projeter } = require('./collecte-cartes/garde-contrat-api');
+    const { PROJECTION_ETAT } = require('./collecte-cartes/garde-lot');
+    const cas = {
+        'tamponNonRepresente seul': [etatTampon, modif(e => Object.assign(e.cartes[1].images[0], { partageeTamponNonSepare: false, tamponNonRepresente: 'League' }))],
+        'variante seule d\'une ligne': [modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].variante = 'prerelease'; })],
+        'noteVariante': [docs0, modif(e => { e.cartes[1].images[0].noteVariante = 'n'; })], 'pv': [docs0, modif(e => { e.cartes[1].pv = 60; })], 'substitut.mention': [modif(e => { e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', mention: 'm' }; }), modif(e => { e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', mention: 'm2' }; })],
+        'liens.idProduct': [docs0, modif(e => { e.cartes[1].liens = { idProduct: [101] }; })], 'bruit non lu': [docs0, modif(e => { e.cartes[1].images[0].sha256 = 'ab'; e.cartes[1].collecteLe = new Date(); })]
+    };
+    const proj = e => ({ cartes: projeter(e.cartes, PROJECTION_ETAT.cartes), cartesProduits: projeter(e.cartesProduits, PROJECTION_ETAT.cartesProduits), sets: e.sets });
+    for (const [nom, [a, b]] of Object.entries(cas))
+        verifier(`D1 : relue par PROJECTION_ETAT (celle de lot-additif.js), la comparaison donne le même verdict que sur les documents entiers — ${nom}`, setsTouches({ avant: proj(a), apres: proj(b) }), setsTouches({ avant: a, apres: b }));
+    // asymétrie réelle d'un lot : l'AVANT est la sauvegarde ENTIÈRE, l'APRÈS la base relue par la projection
+    verifier('D1 : avant = sauvegarde entière, après = projection de la base (la forme réelle d\'un lot) : même verdict, et jamais de faux set sur un lot sans effet visible',
+        [setsTouches({ avant: etatTampon, apres: proj(modif(e => Object.assign(e.cartes[1].images[0], { partageeTamponNonSepare: false, tamponNonRepresente: 'League' }))) }).sets, setsTouches({ avant: docs0, apres: proj(modif(e => { e.cartes[1].images[0].sha256 = 'ab'; e.cartes[1].collecteLe = new Date(); e.cartesProduits[0].verifieLe = new Date(); })) }).sets], [['Set-B'], []]);
+    // chaque champ lu par le site est dans la projection de la base : un champ lu et absent de la projection est une comparaison qui ne voit rien (§41)
+    const { SITE_LIT } = require('./collecte-cartes/garde-lot');
+    verifier('D1 : SITE_LIT est exporté, gelé, et chaque champ qu\'il nomme est dans la projection Mongo de lot-additif.js',
+        [Object.isFrozen(SITE_LIT), [...SITE_LIT.cartes.map(c => PROJECTION_ETAT.cartes[c] === 1), ...SITE_LIT.impressions.map(c => PROJECTION_ETAT.cartes[`impressions.${c}`] === 1), ...SITE_LIT.images.map(c => PROJECTION_ETAT.cartes[`images.${c}`] === 1),
+            ...SITE_LIT.lignes.map(c => PROJECTION_ETAT.cartesProduits[c] === 1)].every(Boolean)], [true, true]);
+}
+// DÉRIVE : la liste recopiée du site se confronte au site lui-même (lib/lireDonnee.ts : SPEC_CARTE, SPEC_IMAGE_CARTE, SPEC_PRODUIT). Le dépôt du site est un dossier voisin : absent, le banc le DIT (il ne se tait pas) sans échouer.
+{
+    const fs = require('fs'), path = require('path');
+    const dossierSite = process.env.SITE_DIR || 'C:/Users/Yung/Desktop/rat-market-site';
+    const f = path.join(dossierSite, 'lib', 'lireDonnee.ts');
+    if (!fs.existsSync(f)) console.log(`⚠️ D1 : ${f} introuvable — la liste SITE_LIT n'a PAS été confrontée au site (non vérifié, pas vérifié)`);
+    else {
+        const src = fs.readFileSync(f, 'utf8').replace(/\r/g, '');
+        const bloc = (debut) => { const i = src.indexOf(debut); if (i < 0) throw new Error(`« ${debut} » introuvable dans lireDonnee.ts : la confrontation ne peut pas conclure`); return src.slice(i, src.indexOf('\n);', i) + 3); };
+        const { SITE_LIT } = require('./collecte-cartes/garde-lot');
+        const racines = (txt) => [...txt.matchAll(/^ {4}([a-zA-Z_]+):/gm)].map(m => m[1]);                                 // les clés de PREMIER niveau (4 espaces d'indentation)
+        const cles = (txt) => [...txt.matchAll(/([a-zA-Z_]+):\s*(?:TEXTE|NOMBRE|BOOLEEN|VIGNETTE|liste\()/g)].map(m => m[1]);   // les clés d'une ligne d'objet à plat
+        const specCarte = bloc('export const SPEC_CARTE'), specImage = bloc('const SPEC_IMAGE_CARTE'), specProduit = bloc('export const SPEC_PRODUIT');
+        const ligneImpressions = (specCarte.split('\n').find(l => /^ {4}impressions:/.test(l)) || '').replace(/^ {4}impressions:\s*liste\(/, '');   // sans la clé « impressions » elle-même
+        const racinesCarte = [...new Set(SITE_LIT.cartes.map(c => c.split('.')[0]))].concat(['_id', 'impressions', 'images']);
+        const racinesLignes = [...new Set(SITE_LIT.lignes.map(c => c.split('.')[0]))];
+        verifier('D1 (dérive) : le gabarit du site a été LU (aucune liste vide : un vide parfait serait un instrument cassé)', [racines(specCarte).length > 10, cles(specImage).length > 10, racines(specProduit).length > 5, cles(ligneImpressions).length >= 5], [true, true, true, true]);
+        verifier('D1 (dérive) : tout champ de carte lu par le site (SPEC_CARTE) est dans SITE_LIT', racines(specCarte).filter(k => !racinesCarte.includes(k)), []);
+        verifier('D1 (dérive) : tout champ d\'impression lu par le site est dans SITE_LIT.impressions', cles(ligneImpressions).filter(k => !SITE_LIT.impressions.includes(k)), []);
+        verifier('D1 (dérive) : tout champ d\'entrée d\'image lu par le site (SPEC_IMAGE_CARTE) est dans SITE_LIT.images', cles(specImage).filter(k => !SITE_LIT.images.includes(k)), []);
+        verifier('D1 (dérive) : tout champ de ligne lu par le site (SPEC_PRODUIT) est dans SITE_LIT.lignes', racines(specProduit).filter(k => !racinesLignes.includes(k)), []);
+    }
+}
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

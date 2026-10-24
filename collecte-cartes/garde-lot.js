@@ -211,12 +211,33 @@ function planVignettes(sauvegardees, actuelles, setsFautifs) {
 // ⚠️ Pas `canon` : la sauvegarde relue en EJSON « relaxed » rend 12 en double quand la base le rend en int32 ; `canon` y verrait
 // une différence de TYPE, donc des sets « touchés » qui ne le sont pas. Ici, une valeur JSON (une Date devient sa chaîne ISO).
 const signature = v => JSON.stringify(trier(v ?? null));
+// 🔑 D1 (2026-10-24) — CE QUE LE SITE LIT, UNE SEULE LISTE. Le 19/10, deux lots ont modifié des champs existants (la `variante` de 58 lignes, `tamponNonRepresente` de 12 entrées d'image, un champ d'une entrée de
+// Frosmoth) ; « 6. sets touchés : 0 », rien n'a été revalidé, il a fallu le faire à la main. La projection comparée ne portait qu'une partie de ce que le site lit : un champ lu par le site et absent d'ici est une
+// page qui reste vieille 30 jours, sans erreur. Cette liste est RECOPIÉE du gabarit de lecture du site (rat-market-site lib/lireDonnee.ts : SPEC_CARTE, SPEC_IMAGE_CARTE, SPEC_PRODUIT, lues le 2026-10-24) et
+// elle pilote DEUX choses, pour qu'elles ne divergent jamais (§21 bis) : la projection Mongo de l'état « après » (PROJECTION_ETAT, plus bas) ET la comparaison (PROJECTION_CARTES / PROJECTION_LIGNES). Le banc
+// (test-garde-lot.js) la confronte au fichier du site quand il existe. Un champ que le site ajoute se reporte ICI, une fois.
+// Ce que le site NE lit PAS reste hors de la liste, et c'est voulu (le quota Vercel paie chaque page revalidée, §63) : sha256/urlOriginal/preuve/attribution/page/fmt/jointeLe d'une entrée d'image,
+// collecteLe/version/champsNuls/bulba/nomFrSource/liens.idMetacards de la carte, verifieLe/detail/variantePreuve d'une ligne.
+// `liens.idProduct` EST lu par le site : un produit joint à une carte revalide donc tous les sets de la carte (coût accepté : une carte de promo réimprimée en porte une vingtaine).
+const SITE_LIT = Object.freeze({
+    cartes: Object.freeze(['categorie', 'nomEn', 'nomJa', 'nomFr', 'illustrateur', 'ndex', 'pv', 'type', 'stade', 'faiblesse', 'resistance', 'retraite', 'attaques', 'liens.idProduct', 'liens.idMetacard', 'sets']),
+    impressions: Object.freeze(['tirage', 'expansion', 'deck', 'numero', 'total', 'rarete', 'illustrateur']),
+    // `partageeHoloNonHolo` : non lu par lireDonnee.ts (« non lu ici »), gardé par prudence — l'avoir en trop coûte une page, l'avoir oublié coûte trente jours
+    images: Object.freeze(['set', 'cleR2', 'w', 'h', 'numero', 'langue', 'languePreuve', 'source', 'mention', 'noteVariante', 'vignette', 'basseDefinition', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo']),
+    // `preuve` : héritée de l'ancienne projection (le site ne la lit pas), gardée pour ne rien retirer à ce que `setsTouches` rendait
+    lignes: Object.freeze(['carteId', 'idProduct', 'idExpansion', 'tirage', 'slug', 'slugSet', 'numeroFiche', 'variante', 'preuve', 'visuelSubstitut.cleR2', 'visuelSubstitut.w', 'visuelSubstitut.h', 'visuelSubstitut.mention'])
+});
+const valeur = (o, chemin) => chemin.split('.').reduce((x, k) => (x === null || x === undefined ? undefined : x[k]), o) ?? null;
 // (2026-10-07, nuit) `categorie` : le site la lit (page de la carte, listes d'espèces) — elle se compare comme le nom
+const CHAMPS_AUTRES = SITE_LIT.cartes.filter(c => !['sets', 'nomEn', 'categorie'].includes(c));
 const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null, categorie: c.categorie ?? null,
-    impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
-    // (2026-10-17, BS-STAFF) le site affiche la mention « tampon non représenté » depuis ces deux champs : les poser ou les retirer change la page du set
-    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null, m.vignette?.cleR2 ?? null, m.partageeTamponNonSepare === true ? (m.tamponNonRepresente ?? true) : null]) });
-const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null, l.visuelSubstitut?.cleR2 ?? null];   // VIGN-SUITE : le substitut sert une image au site ; projection de CHANGEMENT seulement, aucun groupe compté
+    // un `illustrateur` ABSENT n'est pas un `illustrateur: null` (« jamais évalué » / « la source ne tranche pas ») : '∅' les distingue
+    impressions: (c.impressions || []).filter(Boolean).map(i => SITE_LIT.impressions.map(k => (k === 'illustrateur' ? ('illustrateur' in i ? i.illustrateur : '∅') : valeur(i, k)))),
+    // (2026-10-17, BS-STAFF) le site affiche la mention « tampon non représenté » depuis ces champs ; (D1) le libellé seul (drapeau `false`), la variante de l'image, sa langue… se comparent aussi.
+    // Le SET reste en tête de chaque tuple : `setsTouches` l'attribue (m[0]).
+    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, ...SITE_LIT.images.filter(k => k !== 'set').map(k => (k === 'vignette' ? [valeur(m, 'vignette.cleR2'), valeur(m, 'vignette.w'), valeur(m, 'vignette.h')] : valeur(m, k)))]),
+    autres: CHAMPS_AUTRES.map(k => valeur(c, k)) });
+const PROJECTION_LIGNES = l => SITE_LIT.lignes.map(k => valeur(l, k));   // VIGN-SUITE : le substitut sert une image au site ; projection de CHANGEMENT seulement, aucun groupe compté
 // 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
 // la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
 // SITE lit : `PROJECTION_SET` de lib/cartes.ts (rat-market-site), recopiée ici — plus `dateSortieMois`, demandé au site le même
@@ -224,7 +245,8 @@ const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSe
 // (2026-10-07, relecture) recopiée de PROJECTION_SET (rat-market-site lib/cartes.ts, lue le 2026-10-07) : `nomFr` et sa preuve, `serie`,
 // `symbolesIdentification` manquaient — un lot de noms français ne revalidait rien, comme les logos.
 const CHAMPS_SET_LUS = ['code', 'nomJa', 'nomAffichage', 'nomFr', 'nomFrSource', 'nomFrPreuve', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn',
-    'periodeDistribution', 'totalImprime', 'idExpansion', 'symbole', 'serie'];
+    'periodeDistribution', 'totalImprime', 'idExpansion', 'symbole', 'serie',
+    'deck'];   // (D1, 2026-10-24) `deck` : lu par le site depuis le 2026-10-12 (PROJECTION_SET de lib/cartes.ts, lib/impressionDuSet.ts) — un lot qui le posait ne revalidait rien
 // (2026-10-07) le site lit TROIS logos, dans cet ordre : logoCompose, logoFr, logo (lib/visuelSet.ts, CHAMPS_LOGO) — la projection ne
 // regardait que `logo` : un logoCompose posé ou retiré seul ne revalidait rien.
 const sansDate = l => l ? Object.fromEntries(Object.entries(l).filter(([k]) => !['le', 'preuve'].includes(k))) : null;
@@ -255,7 +277,8 @@ function setsTouches({ avant, apres }) {
         // est celui de la PARTIE qui a changé : un nom ou une impression (qui ne porte qu'un NOM d'expansion) → tous les sets de
         // la carte ; une appartenance → le set entré ou sorti ; une image → le set de l'entrée ajoutée, retirée ou remplacée.
         const tous = [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])];
-        if (!pa || !pb || pa.nomEn !== pb.nomEn || pa.categorie !== pb.categorie || signature(pa.impressions) !== signature(pb.impressions)) { for (const s of tous) if (s) touches.add(s); }
+        // (D1) un autre champ que le site lit sur la carte (pv, type, attaques, nomFr, liens…) : la fiche de la carte change dans tous ses sets
+        if (!pa || !pb || pa.nomEn !== pb.nomEn || pa.categorie !== pb.categorie || signature(pa.impressions) !== signature(pb.impressions) || signature(pa.autres) !== signature(pb.autres)) { for (const s of tous) if (s) touches.add(s); }
         else {
             // Ce que CETTE carte attribue — pas la taille de l'ensemble, qu'une autre carte a pu remplir avant elle (le premier
             // correctif comparait la taille globale : 505 sets revalidés pour des images posées dans 3).
@@ -293,9 +316,10 @@ function setsTouches({ avant, apres }) {
 
 // (correction 2, I-1) LA projection de l'état « après » que lot-additif lit dans la base — UNE constante, lue par lot-additif ET par le banc : ce que compterEtat/setsTouches lisent y figure,
 // `liens.idProduct` compris (sans lui, la garde des liens de la table fermée valait toujours 0 en production).
+// (D1) DÉRIVÉE de SITE_LIT : ce que le site lit ET ce que compterEtat compte (`liens.idProduct`, `impressions.*`, `images.*` y sont déjà) — une liste, deux usages, aucune chance de diverger.
 const PROJECTION_ETAT = Object.freeze({
-    cartes: Object.freeze({ sets: 1, nomEn: 1, categorie: 1, 'liens.idProduct': 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.vignette': 1, 'images.partageeHoloNonHolo': 1, 'images.produitsPartages': 1, 'images.partageeTamponNonSepare': 1, 'images.tamponNonRepresente': 1 }),
-    cartesProduits: Object.freeze({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1, 'visuelSubstitut.cleR2': 1 }),
+    cartes: Object.freeze(Object.fromEntries([...SITE_LIT.cartes, ...SITE_LIT.impressions.map(c => `impressions.${c}`), ...SITE_LIT.images.map(c => `images.${c}`)].map(c => [c, 1]))),
+    cartesProduits: Object.freeze(Object.fromEntries(SITE_LIT.lignes.map(c => [c, 1]))),
 });
 
-module.exports = { PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+module.exports = { SITE_LIT, PROJECTION_ETAT, COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
