@@ -26,7 +26,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { champsDeNaissance } = require('./collecte-cartes/set-nomme');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
-const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
+const { epurer, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
 const { effacerRefabricables, restaurerOrdreLiens } = require('./collecte-cartes/preuves-jointure');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
@@ -34,7 +34,7 @@ const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = r
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { lireInterdits } = require('./collecte-cartes/lignes-detachees');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
+const { champsDuRejeu } = require('./collecte-cartes/champs-du-rejeu');
 const { refusDeCollecte } = require('./collecte-cartes/nom-synthetique');
 const { planSansPage } = require('./collecte-cartes/plan-sans-page');
 const { ecrirePageDeCarte } = require('./collecte-cartes/page-de-carte');
@@ -300,20 +300,18 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
     // relisant l'archive épurée (les faits y sont tous), pas en redemandant les pages.
     if (process.argv.includes('--reparser')) {
-        const tous = await M.Carte.find({ sets: slug }).select('_id bulba impressions').lean();
+        const tous = await M.Carte.find({ sets: slug }).select('_id bulba impressions rarete').lean();
         // une carte SANS page archivée (une fiche simple de creer-sets-sans-page.js, 2026-10-04) n'a rien à reparser : elle se compte
         // et se saute — sans cette garde, `c.bulba.cleR2` levait et arrêtait le reparse du set entier (relecture du 2026-10-04)
         const deja = tous.filter(c => c.bulba?.cleR2);
         console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia${tous.length - deja.length ? ` · ${tous.length - deja.length} sans page archivée (fiches simples), sautées` : ''}.`);
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
-            const faits = faitsDeCarte(epure, c.bulba?.titre);
-            compter(faits);
-            const impCible = impressionCible(faits);
-            const { champsNuls, ...champs } = faits;
-            const P = reporterChampsPoses(c.impressions, champs.impressions);   // l'illustrateur par tirage n'est pas au wikitext
-            champs.impressions = P.impressions; D.posesReportes = (D.posesReportes || 0) + P.reportes; D.posesPerdus = (D.posesPerdus || 0) + P.perdus;
-            await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
+            // PHASE 3b : UNE définition de ce que le rejeu écrit (collecte-cartes/champs-du-rejeu.js, lue aussi par controler-reparse.js) — la rareté en base n'est plus écrasée par null
+            const R = champsDuRejeu({ carte: c, epure, impressionCible });   // l'illustrateur par tirage n'est pas au wikitext : reporté
+            compter(R.faits);
+            D.posesReportes = (D.posesReportes || 0) + R.reportes; D.posesPerdus = (D.posesPerdus || 0) + R.perdus;
+            await M.Carte.updateOne({ _id: c._id }, { $set: { ...R.champs, reparseLe: new Date() } });
             textesEpures.set(c._id, epure);
         }
         // ⚠️ SEULEMENT les lignes de CE set (et de ses jumelles occidentales) : une carte partagée

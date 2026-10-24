@@ -9,28 +9,22 @@
 const fs = require('fs');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
-const { faitsDeCarte } = require('./collecte-cartes/wikitext');
-const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
+const { champsDuRejeu } = require('./collecte-cartes/champs-du-rejeu');
 const { ligne: ligneDeTable } = require('./collecte-cartes/table-sets');
 const { canon } = require('./collecte-cartes/garde-contrat-api');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
 const AUTORISES = [/^--sets=[\w.,/-]+$/, /^--sortie=.+\.json$/, /^--eprouve$/];
-// `--eprouve` : EN MÉMOIRE seulement, la rareté de la première carte de chaque set est altérée avant la comparaison — l'instrument doit alors DIRE non (une garde se prouve en la faisant crier, §41).
+// `--eprouve` : EN MÉMOIRE seulement, le nom de la première carte de chaque set est altéré avant la comparaison — l'instrument doit alors DIRE non (une garde se prouve en la faisant crier, §41).
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length || !arg('sets')) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}usage : --sets=<code>[,…] [--sortie=<fichier>.json]`); process.exit(2); }
 const EXCLUS = new Set(['reparseLe']);
 
-/** Les champs que le rejeu écrirait sur une carte — la copie, mot pour mot, des lignes 308-315 de collecteur-texte.js (--reparser). */
-function champsDuRejeu({ carte, epure, L }) {
+/** Les champs que le rejeu écrirait sur une carte — la MÊME fonction que collecteur-texte.js (--reparser) : collecte-cartes/champs-du-rejeu.js (PHASE 3b : plus de copie de la formule, §21 bis). */
+function champsDuRejeuDuSet({ carte, epure, L }) {
     const TIRAGE = L.bulba.tirage || 'jp', nomsCibles = [].concat(L.bulba.expansion);
-    const impressionCible = faits => faits.impressions.find(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));   // collecteur-texte.js l. 121
-    const faits = faitsDeCarte(epure, carte.bulba?.titre);
-    const impCible = impressionCible(faits);
-    const { champsNuls, ...champs } = faits;
-    const P = reporterChampsPoses(carte.impressions, champs.impressions);
-    champs.impressions = P.impressions;
-    return { ...champs, rarete: impCible?.rarete ?? null, champsNuls };
+    const impressionCible = faits => faits.impressions.find(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));   // collecteur-texte.js l. 122
+    return champsDuRejeu({ carte, epure, impressionCible }).champs;
 }
 
 (async () => {
@@ -48,10 +42,12 @@ function champsDuRejeu({ carte, epure, L }) {
             const avecPage = cartes.filter(c => c.bulba?.cleR2);
             const differences = [], parChamp = {}; let identiques = 0, illisibles = 0;
             for (let c of avecPage) {
-                if (process.argv.includes('--eprouve') && c === avecPage[0]) c = { ...c, rarete: '#épreuve-altérée-en-mémoire#' };
+                // PHASE 3b : l'épreuve altère `nomEn` (que le rejeu réécrit TOUJOURS depuis la page) et non plus `rarete` : depuis qu'un rejeu garde la rareté en base quand la page n'en donne pas, une rareté
+                // altérée en mémoire aurait été « gardée » et l'épreuve serait restée muette (exit 0) — une garde qui ne sait plus dire non (§41)
+                if (process.argv.includes('--eprouve') && c === avecPage[0]) c = { ...c, nomEn: '#épreuve-altérée-en-mémoire#' };
                 let epure;
                 try { epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2); } catch (e) { illisibles++; differences.push({ carteId: c._id, nomEn: c.nomEn, champ: '(archive illisible)', stocke: null, rejeu: String(e.message).slice(0, 80) }); continue; }
-                const ecrit = champsDuRejeu({ carte: c, epure, L });
+                const ecrit = champsDuRejeuDuSet({ carte: c, epure, L });
                 const diff = Object.keys(ecrit).filter(k => !EXCLUS.has(k) && canon(ecrit[k]) !== canon(c[k]));
                 if (!diff.length) { identiques++; continue; }
                 for (const k of diff) { parChamp[k] = (parChamp[k] || 0) + 1; differences.push({ carteId: c._id, nomEn: c.nomEn, champ: k, stocke: c[k] === undefined ? '(absent)' : c[k], rejeu: ecrit[k] }); }
