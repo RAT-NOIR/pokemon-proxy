@@ -31,7 +31,6 @@ const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--seulement=.+\.json$/, /^--attendu=
 
 /**
  * Parmi les lignes de joindre() pour une expansion : celles que l'outil RETIENT, et chaque refus nommé (un par produit).
- X
  */
 function trierLignes({ lignes, dejaJoints, concorde }) {
     // une ligne vue deux fois (deux lignes de table verifiees de la meme expansion) n'est UNE ligne qu'une fois : l'_id la designe

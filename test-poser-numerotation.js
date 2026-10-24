@@ -42,7 +42,10 @@ refus('le nom d\'expansion du set est synthétique', monde([ligne(1, 10, { slugS
 refus('une VRAIE carte déclare déjà (tirage, expansion, numéro) : doublon', monde([ligne(1, 10)], [nc(1, '023')], [carte(10), carte(20, { impressions: [IMP('023')] })], { declarants: new Map([['zh-hans|Exp Z|23', new Set([20])]]) }), /déclare déjà/);
 refus('une image du set SANS numéro sur la carte (le set entier basculerait)', monde([ligne(1, 10)], [nc(1, '023')], [carte(10, { images: [{ set: 'SetZ', numero: null }] })]), /image/);
 refus('une image du set à un AUTRE numéro ne retrouverait aucune fiche', monde([ligne(1, 10)], [nc(1, '023')], [carte(10, { images: [{ set: 'SetZ', numero: '77' }] })]), /image/);
-refus('la preuve « setlist+numero » est le travail de poser-impressions-setlist.js', monde([ligne(1, 10, { preuve: 'setlist+numero' })], [nc(1, '023')], [carte(10)]), /setlist\+numero/);
+// la preuve « setlist+numero » (impression chinoise VIRTUELLE) est numérotée par le même geste : le numeroFiche de la ligne est celui de la Setlist, il doit SE CONFONDRE avec le numéro Cardmarket (sinon : contredit)
+P = M.planifier(monde([ligne(1, 10, { preuve: 'setlist+numero', numeroFiche: '23' })], [nc(1, '023')], [carte(10)]));
+verifier('setlist+numero : le numeroFiche (23) est le numéro Cardmarket (023) : l\'impression s\'écrit, le numeroFiche existant n\'est pas réécrit', [P.aPoser.get(10).length, P.numerosFiche.length], [1, 0]);
+refus('setlist+numero dont le numeroFiche de la Setlist n\'est pas le numéro Cardmarket', monde([ligne(1, 10, { preuve: 'setlist+numero', numeroFiche: '90' })], [nc(1, '089')], [carte(10)]), /contredit/);
 // 5. deux cartes différentes au même numéro dans le plan : ambigu, aucune n'est écrite
 P = M.planifier(monde([ligne(1, 10), ligne(2, 11)], [nc(1, '023'), nc(2, '023')], [carte(10), carte(11)]));
 verifier('deux cartes au même numéro dans le plan : AUCUNE n\'est écrite (0 ambigu ≠ 0 faux)', [P.aPoser.size, P.refus.length], [0, 2]);

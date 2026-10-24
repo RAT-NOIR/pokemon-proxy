@@ -12,8 +12,9 @@
 // ÉCRIT PAR CE QU'IL AUTORISE (une carte × tirage × expansion = un GROUPE ; tout le groupe passe ou rien) :
 //   · le numéro vient de Cardmarket (numeros_cartes.numero) ET une seconde source indépendante l'a confirmé : `--seulement` = la liste de scanner-deux-sources.js --plans (Cardmarket + au moins une source
 //     non-Bulbapedia sur (set, numéro, nom)). Sans liste, rien ne s'écrit. La Setlist de Bulbapedia ne compte pas ;
-//   · la preuve « setlist+numero » n'est pas ici (poser-impressions-setlist.js : URL + Setlist) ; la carte n'a AUCUNE impression dans ce set (une impression sans numéro, ou à un autre numéro = fiches mélangées :
-//     poser-impressions-par-numero.js) ; aucune VRAIE carte ne déclare déjà (tirage, expansion, numéro) (le cas 565029 / 196300) ; aucune image de la carte dans ce set sans numéro (le site repasserait le set
+//   · la preuve « setlist+numero » (impression chinoise virtuelle) passe ici aussi, et c'est un SUR-ENSEMBLE de poser-impressions-setlist.js (qui exige un numéro d'URL : 725 lignes sans) : son numeroFiche (celui de la
+//     Setlist) doit être le numéro Cardmarket, sinon « contredit » ; l'impression posée n'a que la marque `numero-cardmarket` ; la carte n'a AUCUNE impression dans ce set (une impression sans numéro, ou à un autre
+//     numéro = fiches mélangées : poser-impressions-par-numero.js) ; aucune VRAIE carte ne déclare déjà (tirage, expansion, numéro) (le cas 565029 / 196300) ; aucune image de la carte dans ce set sans numéro (le site repasserait le set
 //     ENTIER en « une fiche par document ») ni à un autre numéro (elle ne retrouverait aucune fiche) ;
 //   · deux CARTES différentes au même numéro dans le plan : aucune n'est écrite (« 0 ambigu » ne veut pas dire « 0 faux ») ;
 //   · le GROUPE : le site montre l'impression dans TOUT set de la carte au même tirage et au même nom d'expansion ; chaque autre produit de la carte dans ces sets doit avoir un numéro connu que les fiches
@@ -27,7 +28,6 @@ const LOT = require('./collecte-cartes/lot-seulement');
 const { normaliserNumero } = require('./mesurer-fiches-melangees');
 
 const TIRAGES = new Set(['jp', 'intl', 'zh-hans', 'zh-hant', 'id', 'th', 'idth', 'ko']);
-const PREUVE_AUTRE_OUTIL = 'setlist+numero';
 const k = n => cleNumero(String(n ?? ''));
 const vide = n => n == null || String(n).trim() === '';
 
@@ -40,7 +40,6 @@ function planifier({ lignes, NC, cartes, sets, declarants, lignesParCarte }) {
     const refus = [], bons = new Map();     // groupe → { carteId, tirage, expansion, lignes: [{l, numero}], numeros: Map(cle → numero), imps }
     for (const l of lignes) {
         const refuser = motif => refus.push({ idProduct: l.idProduct, motif });
-        if (l.preuve === PREUVE_AUTRE_OUTIL) { refuser(`preuve « ${PREUVE_AUTRE_OUTIL} » : poser-impressions-setlist.js (URL + Setlist), pas cet outil`); continue; }
         const s = sets.get(l.slugSet), c = cartes.get(l.carteId), nc = NC.get(l.idProduct);
         if (!s) { refuser('set absent de la base'); continue; }
         const tirage = s.tirage ?? s.region, exps = [].concat(s.bulba?.expansion ?? []);
@@ -159,7 +158,10 @@ async function principal() {
             const s = sets.get(l.slugSet), c = cartes.get(l.carteId), nc = NC.get(l.idProduct); if (!s || !c || !nc || vide(nc.numero)) continue;
             const exps = [].concat(s.bulba?.expansion ?? []), t = s.tirage ?? s.region;
             if (exps.length !== 1) continue;
-            if ((c.impressions || []).some(i => i && i.tirage === t && i.expansion === exps[0] && k(i.numero) === k(nc.numero))) continue;
+            const impsDuSet = (c.impressions || []).filter(i => i && i.tirage === t && i.expansion === exps[0]);
+            if (impsDuSet.some(i => k(i.numero) === k(nc.numero))) continue;
+            // la ligne est DÉJÀ placée sur une fiche numérotée (son numeroFiche est une impression du set : « SWSH146 » pour le numéro Cardmarket « 146 ») : elle n'est pas « sans numéro »
+            if (!vide(l.numeroFiche) && impsDuSet.some(i => k(i.numero) === k(l.numeroFiche))) continue;
             candidates.push(l);
         }
         console.log(`\n════ DÉNOMINATEUR : ${toutes.length} lignes de jointure · ${candidates.length} candidates (la carte n'a pas l'impression du numéro Cardmarket dans le set de la ligne)${SETS ? ` dans ${[...SETS].join(', ')}` : ''} ════`);
