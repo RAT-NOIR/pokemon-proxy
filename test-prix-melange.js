@@ -81,7 +81,7 @@ const motifs = p => p.sautes.map(s => s.motif);
     await essayer('tampons : league', () => verifier('ultra-ball-league → league', M.tamponsDesStamps(['ultra-ball-league']), ['league']));
     await essayer('tampons : play', () => verifier('play-pokemon', M.tamponsDesStamps(['play-pokemon']), ['play-pokemon']));
     await essayer('tampons : hors liste', () => verifier('set-logo, 1st-edition, worlds-2024 : hors liste fermée', M.tamponsDesStamps(['set-logo', '1st-edition', 'worlds-2024', 'player-rewards-program']), []));
-    await essayer('tampons : liste fermée', () => verifier('la liste fermée', M.TAMPONS_FERMES, ['staff', 'prerelease', 'staff-prerelease', 'play-pokemon', 'league']));
+    await essayer('tampons : liste fermée', () => verifier('la liste fermée', M.TAMPONS_FERMES, ['staff', 'prerelease', 'staff-prerelease', 'play-pokemon', 'league', 'championship', 'autre']));
 
     // ── TCGdex : une variante qui a SON produit n'est pas mélangée ──
     await essayer('variante avec produit propre', () => {
@@ -306,6 +306,73 @@ const motifs = p => p.sautes.map(s => s.motif);
             let msg = null; try { M.lireTemoinsClone(vide, new Set()); } catch (e) { msg = e.message; }
             verifier('un clone vide lève (un zéro n\'est pas un résultat)', /lecture fausse/.test(msg || ''), true);
         } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+    });
+
+    // ── LOT TAMPONS-RELEVE : troisième source (relevé du testeur) et fiches sœurs ──
+    const CSV = 'annonce_vinted;idProduct;stamp;fiche_cardmarket_propre\n"https://x/1";1002;"Staff + Championship";non\n"https://x/2";1001;"Autre";non\n"https://x/3";1008;"Staff";oui\n"https://x/4";1012;"Staff + Prerelease";non\n"https://x/5";1004;"Inconnu";non\n';
+    await essayer('relevé : liste fermée étendue', () => verifier('championship et autre ajoutés', [M.TAMPONS_FERMES.includes('championship'), M.TAMPONS_FERMES.includes('autre'), M.TAMPONS_FERMES.includes('staff')], [true, true, true]));
+    await essayer('relevé : table fermée', () => verifier('la table', M.TAMPONS_RELEVE, { 'Staff': ['staff'], 'Prerelease': ['prerelease'], 'Staff + Prerelease': ['staff', 'prerelease'], 'League': ['league'], 'Championship': ['championship'], 'Staff + Championship': ['staff', 'championship'], 'Staff + Autre': ['staff', 'autre'], 'Autre': ['autre'] }));
+    await essayer('relevé : lecture du CSV', () => {
+        const r = M.temoinsReleve(CSV);
+        verifier('seules les lignes « non » à stamp connu deviennent témoins', r.temoins.map(t => [t.idProduct, t.tampons, t.source]), [[1002, ['staff', 'championship'], 'releve-testeur'], [1001, ['autre'], 'releve-testeur'], [1012, ['staff', 'prerelease'], 'releve-testeur']]);
+        verifier('stamp hors table : écarté, nommé', r.ecartes.map(e => [e.motif, e.idProduct]), [['stamp-hors-table', 1004]]);
+        verifier('dénominateur', [r.lues, r.non], [5, 4]);
+    });
+    await essayer('relevé : entête inconnue', () => { let msg = null; try { M.temoinsReleve('a;b\n1;2\n'); } catch (e) { msg = e.message; } verifier('entête fausse : refus', /entête/.test(msg || ''), true); });
+    await essayer('relevé : sur une paire, les frères ne comptent pas (le testeur a désigné le produit)', () => {
+        const p = plan([{ source: 'releve-testeur', enregistrement: 'releve:1002', idProduct: 1002, tampons: ['staff'], libelle: 'relevé du testeur, 2026-10-18 (Staff)' }]);
+        verifier('marquée malgré le frère', [ids(p), p.fiches[0]?.preuveTexte, p.fiches[0]?.preuves[0]?.mode], [[1002], ['relevé du testeur, 2026-10-18 (Staff)'], 'releve-testeur']);
+    });
+    await essayer('relevé : garde sur ce que la source n\'a pas utilisé', () => {
+        const R = o => ({ source: 'releve-testeur', enregistrement: `releve:${o.idProduct}`, tampons: ['staff'], libelle: 'x', ...o });
+        const p = plan([R({ idProduct: 1011 }), R({ idProduct: 1009 }), R({ idProduct: 424242 }), R({ idProduct: 1012 })]);
+        verifier('ligne séparée, paire Black Star, produit absent, produit sans ligne : tous sautés pour leur motif', [ids(p), motifs(p), p.sansLigne.length], [[], ['deja-separee-par-variante', 'paire-black-star-exclue', 'produit-absent-de-l-export', 'ligne-absente'], 0]);
+        const q = plan([R({ idProduct: 1001 })], { lignes: LIGNES.map(l => l.idProduct === 1001 ? { ...l, prixMelangeTampon: true } : l) });
+        verifier('déjà marquée : ne se réécrit pas', [ids(q), motifs(q)], [[], ['deja-marquee']]);
+        const phrase = 'relevé du testeur, 2026-10-18 (x)';
+        const q2 = plan([R({ idProduct: 1001, libelle: phrase })], { lignes: LIGNES.map(l => l.idProduct === 1001 ? { ...l, prixMelangeTampon: true, marquagePreuve: [phrase] } : l) });
+        verifier('déjà marquée PAR le relevé : reste dans le plan (la revérification après écriture ne perd rien)', [ids(q2), motifs(q2)], [[1001], []]);
+    });
+    await essayer('appliquer : un marquage plus riche déjà posé n\'est pas réécrit', async () => {
+        const f = fausseBase(LIGNES); Object.assign(f.col.get('11|1001'), { prixMelangeTampon: true, tamponsConnus: ['autre', 'staff'], prixMelangeTamponPreuve: ['a', 'b'] });
+        const p = plan([T({ idProduct: 1001 })]); p.fiches[0].preuveTexte = ['a'];
+        const r = await M.appliquer(f.db, p, { ecrire: true, attendu: 1 });
+        verifier('plan inclus dans le marquage : rien réécrit', [f.writes.length, r.deja, r.dejaFait], [0, 1, true]);
+        const g = fausseBase(LIGNES); Object.assign(g.col.get('11|1001'), { prixMelangeTampon: true, tamponsConnus: ['prerelease'], prixMelangeTamponPreuve: ['a'] });
+        const q = plan([T({ idProduct: 1001 })]);
+        const r2 = await M.appliquer(g.db, q, { ecrire: true, attendu: 1 });
+        verifier('plan plus riche : écrit', [g.writes.length, r2.ecrit], [1, 1]);
+    });
+    await essayer('« Stamped Cosmos Holofoil X » : le nom de la carte', () => {
+        const r = M.temoinsPokumon([{ id: 7, nom: 'Stamped Cosmos Holofoil Zygarde', titre: 'x', set: 'Pokemon League Special Print', numero: '72', total: '131', evenements: [1], anglais: true }]);
+        verifier('préfixe d\'impression retiré, tampon league', [r.temoins[0]?.nom, r.temoins[0]?.tampons], ['Zygarde', ['league']]);
+    });
+    await essayer('clone sans expansion : ancrage par le nom EXACT du set', () => {
+        const prods = [P(5001, 'Tropical Wind [Aero Slice]', 700, 6001)], lg = [L(5001, 61, 'DP-Black-Star-Promos', 700, 'DP05', { nomCarte: 'Tropical Wind' })];
+        const t = T({ nom: 'Tropical Wind', numero: 'DP05', expansions: null, total: null, setNom: 'DP Black Star Promos', tampons: ['league'] });
+        const p = M.construirePlan({ temoins: [t], produits: prods, lignes: lg });
+        verifier('set nommé comme un slugSet existant : ancré, marqué', [ids(p), p.fiches[0]?.set], [[5001], 'DP-Black-Star-Promos']);
+        const q = M.construirePlan({ temoins: [{ ...t, setNom: 'Autre Promos' }], produits: prods, lignes: lg });
+        verifier('nom de set sans slugSet égal : toujours sans ancrage', motifs(q), ['temoin-sans-ancrage']);
+    });
+    // « 121 » et « 121a » : une VERSION à produit dédié, pas une réimpression — les 6 paires RÉELLES relevées par la relecture (idProduct du « a », idProduct du numéro normal, nom, set, expansion, numéro, total)
+    const REELLES = [[449138, 297573, 'Choice Band', 'Guardians-Rising', 1800, '121', '145'], [371641, 297580, 'Max Potion', 'Guardians-Rising', 1800, '128', '145'], [450308, 297582, 'Rescue Stretcher', 'Guardians-Rising', 1800, '130', '145'],
+        [448148, 299516, 'Kiawe', 'Burning-Shadows', 1824, '116', '147'], [448158, 355625, 'Metal Frying Pan', 'Forbidden-Light', 1860, '112', '131'], [450048, 365821, 'Net Ball', 'Lost-Thunder', 1900, '187', '214']];
+    for (const [idA, idB, nom, set, exp, n, total] of REELLES) {
+        await essayer(`suffixe réel : ${nom} ${n}a`, () => {
+            const meta = 7000 + idB % 1000, prods = [P(idA, nom, exp, meta), P(idB, nom, exp, meta)];
+            const lg = [L(idA, 81, set, exp, `${n}a`, { nomCarte: nom, impTotal: total }), L(idB, 82, set, exp, n, { nomCarte: nom, impTotal: total })];
+            const t = { source: 'pokumon', enregistrement: `pokumon:${idA}`, nom, numero: `${n}a`, total, tampons: ['staff'], idProduct: null };
+            const p = M.construirePlan({ temoins: [t], produits: prods, lignes: lg });
+            verifier('le produit « a » a son frère au numéro normal : sauté, jamais marqué', [ids(p), motifs(p)], [[], ['plusieurs-produits-pour-la-carte']]);
+            const q = M.construirePlan({ temoins: [{ ...t, numero: n }], produits: prods, lignes: lg });
+            verifier('le numéro normal : le « a » est un frère, sauté aussi', ids(q), []);
+        });
+    }
+    await essayer('suffixe : deux numéros disjoints qui ne diffèrent pas par une lettre restent une réimpression', () => {
+        const prods = [P(8001, 'Super Rod', 100, 700), P(8002, 'Super Rod', 100, 700)];
+        const lg = [L(8001, 91, 'Diamond-Pearl', 100, '188'), L(8002, 91, 'Diamond-Pearl', 100, '276')];
+        verifier('188 contre 276 : marquée', ids(M.construirePlan({ temoins: [T({ nom: 'Super Rod', numero: '188', idProduct: 8001 })], produits: prods, lignes: lg })), [8001]);
     });
 
     console.log(`\n${ok} passés, ${ko} en échec`);

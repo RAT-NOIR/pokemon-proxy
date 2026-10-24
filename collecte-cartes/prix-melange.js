@@ -18,7 +18,13 @@ const path = require('path');
 const { cleNumero, normaliserNom, decomposerNomCardmarket } = require('./jointure');
 const V = require('./variantes-tcgdex');
 
-const TAMPONS_FERMES = Object.freeze(['staff', 'prerelease', 'staff-prerelease', 'play-pokemon', 'league']);
+// 'championship' et 'autre' (décision du testeur, relevé du 2026-10-18, DEMANDE-API-VISUELS.md « ~21:15 UTC ») : 'autre' n'est admis QUE pour une ligne du relevé où le testeur a vu un tampon sans le nommer —
+// un fait constaté, pas une marque. Aucun autre lecteur n'en produit.
+const TAMPONS_FERMES = Object.freeze(['staff', 'prerelease', 'staff-prerelease', 'play-pokemon', 'league', 'championship', 'autre']);
+/** La colonne `stamp` du relevé du testeur -> jetons de `tamponsConnus`. Table FERMÉE : un autre libellé est écarté, nommé, jamais deviné. */
+const TAMPONS_RELEVE = Object.freeze({ 'Staff': ['staff'], 'Prerelease': ['prerelease'], 'Staff + Prerelease': ['staff', 'prerelease'], 'League': ['league'], 'Championship': ['championship'],
+    'Staff + Championship': ['staff', 'championship'], 'Staff + Autre': ['staff', 'autre'], 'Autre': ['autre'] });
+const LIBELLE_RELEVE = 'relevé du testeur, 2026-10-18';
 const CHAMPS = Object.freeze(['prixMelangeTampon', 'tamponsConnus', 'prixMelangeTamponPreuve']);
 // Les promos Black Star que Pokumon numérote avec un préfixe (« SWSH036 », « SVP115 ») : le set Cardmarket est celui de la table (mesuré sur cartes_produits).
 const PROMO_PAR_PREFIXE = Object.freeze({ SWSH: 'SWSH-Black-Star-Promos', SVP: 'SV-Black-Star-Promos', MEP: 'MEP-Black-Star-Promos', SM: 'SM-Black-Star-Promos', XY: 'XY-Black-Star-Promos', BW: 'BW-Black-Star-Promos', DP: 'DP-Black-Star-Promos', HGSS: 'HGSS-Black-Star-Promos' });
@@ -70,9 +76,32 @@ function tamponsPokumon(e) {
 const nomSansTampon = nom => {
     let n = String(nom ?? '').trim();
     n = n.replace(/^(?:[A-Za-z' ]*Championships\s+)?Staff\s+/i, '');
-    for (let i = 0; i < 4; i++) n = n.replace(/^(?:non-?holo|holofoil|reverse holo|cosmos holofoil|starlight holofoil|cracked ice|pokemon league)\s+/i, '');
+    for (let i = 0; i < 4; i++) n = n.replace(/^(?:non-?holo|holofoil|reverse holo|cosmos holofoil|starlight holofoil|cracked ice|pokemon league|stamped)\s+/i, '');
     return n.trim();
 };
+
+/**
+ * Le relevé du testeur (CSV `annonce_vinted;idProduct;stamp;fiche_cardmarket_propre`, vérifié par lui carte en main) : un témoin par ligne « fiche propre = non » dont le `stamp` est dans TAMPONS_RELEVE.
+ * Le témoin est l'idProduct du testeur ; la preuve est sa vérification. Les lignes « oui » ne sont pas des prix mélangés (la partie B les traite). Un stamp hors table est écarté et nommé.
+ */
+function temoinsReleve(texte) {
+    const lignes = String(texte ?? '').split(/\r?\n/).filter(l => l.trim() !== '');
+    const entete = (lignes[0] || '').trim().replace(/^﻿/, '');
+    if (entete !== 'annonce_vinted;idProduct;stamp;fiche_cardmarket_propre') throw new Error(`relevé : entête inattendue « ${entete} » — le fichier n'est pas celui du testeur`);
+    const temoins = [], ecartes = []; let non = 0;
+    for (const l of lignes.slice(1)) {
+        const c = l.split(';').map(x => x.trim().replace(/^"|"$/g, ''));
+        const id = Number(c[1]), stamp = c[2], propre = c[3];
+        if (!Number.isInteger(id) || c.length < 4) throw new Error(`relevé : ligne illisible « ${l.slice(0, 80)} »`);
+        if (propre !== 'non') continue;
+        non++;
+        const tampons = TAMPONS_RELEVE[stamp];
+        const base = { source: 'releve-testeur', enregistrement: `releve:${id}`, idProduct: id };
+        if (!tampons) { ecartes.push({ ...base, motif: 'stamp-hors-table', stamp }); continue; }
+        temoins.push({ ...base, nom: null, numero: null, tampons: [...tampons], libelle: `${LIBELLE_RELEVE} (idProduct ${id}, « ${stamp} »)` });
+    }
+    return { temoins, ecartes, lues: lignes.length - 1, non };
+}
 
 /** Les témoins Pokumon : une entrée anglaise qui nomme un tampon de la liste fermée. @returns {{temoins: object[], ecartes: object[]}} */
 function temoinsPokumon(entrees) {
@@ -125,7 +154,7 @@ function lireTemoinsClone(dossierData, idsExport) {
                 const en = mn && /\ben:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/.exec(mn[1]);
                 const nom = en ? (en[1] ?? en[2]) : null;
                 if (!nom) { sansNom++; continue; }
-                temoins.push({ source: 'tcgdex-clone', enregistrement: `${serie}/${f.replace(/\.ts$/, '')}/${g}`, setId, nom, numero: g.replace(/\.ts$/, ''), total: null, tampons: r.tampons,
+                temoins.push({ source: 'tcgdex-clone', enregistrement: `${serie}/${f.replace(/\.ts$/, '')}/${g}`, setId, setNom: f.replace(/\.ts$/, ''), nom, numero: g.replace(/\.ts$/, ''), total: null, tampons: r.tampons,
                     expansions: exp ? [Number(exp)] : null, idProduct: a.cardmarket });
             }
         }
@@ -149,6 +178,9 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
     const parMeta = new Map();
     for (const p of produits) { if (!p.idMetacard) continue; const k = `${p.idExpansion}|${p.idMetacard}`; (parMeta.get(k) || parMeta.set(k, []).get(k)).push(p); }
     const numerosDe = id => new Set((rangs.get(id) || []).map(l => l.numeroFiche ?? l.impNumero).filter(n => n != null && String(n).trim() !== '').map(n => cleNumero(n)));
+    // « 121 » et « 121A » : même carte, même expansion, une lettre en plus = une VERSION qui a SON produit chez Cardmarket (l'impression spéciale), à côté de la fiche du numéro normal. Ce n'est pas une réimpression au numéro
+    // d'à côté : la fiche « A » est propre (elle ne mélange pas la version normale, qui a la sienne) — et la fiche normale ne mélange pas non plus. Le frère reste un frère : on saute.
+    const sansLettre = n => String(n).replace(/(\d)[A-Z]+$/, '$1');
     // le nom comparé : celui de Cardmarket sans ses crochets, sans la mention « Delta Species » que seule Cardmarket écrit à la suite du δ
     const comparable = s => normaliserNom(String(s ?? '').replace(/\s+delta species$/i, ''));
     const nomCm = p => comparable(decomposerNomCardmarket(p.name).nom);
@@ -156,9 +188,30 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
     const sautes = ecartes.map(e => ({ ...e })), fiches = new Map(), sansLigne = new Map();
     const sauter = (t, motif, plus = {}) => sautes.push({ source: t.source, enregistrement: t.enregistrement, nom: t.nom, numero: t.numero, motif, ...plus });
 
-    for (const t of temoins) {
-        if (!t.tampons?.length) continue;
-        let ids, mode;
+    for (const t0 of temoins) {
+        if (!t0.tampons?.length) continue;
+        let t = t0, ids, mode;
+        if (t.source === 'releve-testeur') {
+            // Le testeur a désigné le produit et vérifié que sa fiche mélange les versions : ni le test des frères ni celui du nom ne s'appliquent (il n'y a pas de nom à comparer). Restent les gardes sur NOTRE ligne.
+            const p = parId.get(t.idProduct), rows = rangs.get(t.idProduct) || [];
+            if (!p) { sauter(t, 'produit-absent-de-l-export', { idProduct: t.idProduct }); continue; }
+            if (exclus.has(t.idProduct)) { sauter(t, 'paire-black-star-exclue', { produits: [t.idProduct] }); continue; }
+            if (!rows.length) { sauter(t, 'ligne-absente', { idProduct: t.idProduct }); continue; }
+            if (rows.some(l => l.variante)) { sauter(t, 'deja-separee-par-variante', { idProduct: t.idProduct }); continue; }
+            // déjà marquée par une AUTRE source : on n'y touche pas ; déjà marquée PAR LE RELEVÉ (sa phrase figure dans la preuve) : le plan la garde, `appliquer` la voit « déjà faite » (la revérification ne perd rien)
+            if (rows.some(l => l.prixMelangeTampon === true && !(l.marquagePreuve || []).includes(t.libelle))) { sauter(t, 'deja-marquee', { idProduct: t.idProduct }); continue; }
+            const preuve = { source: t.source, enregistrement: t.enregistrement, tampons: [...t.tampons].sort(), mode: 'releve-testeur', libelle: t.libelle };
+            const f = fiches.get(p.idProduct) || fiches.set(p.idProduct, { idProduct: p.idProduct, nom: p.name, idExpansion: p.idExpansion, set: rows[0]?.slugSet ?? null, numero: rows[0]?.numeroFiche ?? rows[0]?.impNumero ?? null,
+                rows: rows.map(l => l._id), tampons: new Set(), preuves: [] }).get(p.idProduct);
+            for (const x of t.tampons) f.tampons.add(x);
+            if (!f.preuves.some(q => q.source === preuve.source && q.enregistrement === preuve.enregistrement)) f.preuves.push(preuve);
+            continue;
+        }
+        // un témoin du clone TCGdex dont le set n'a pas d'expansion Cardmarket : le NOM EXACT du set (dossier du clone), avec ses espaces en tirets, doit être un slugSet que nos lignes portent déjà
+        if (!t.expansions?.length && !t.slugSets?.length && t.total == null && t.idProduct == null && t.setNom) {
+            const sl = String(t.setNom).trim().replace(/\s+/g, '-');
+            if (lignes.some(l => l.slugSet === sl)) t = { ...t, slugSets: [sl] };
+        }
         if (t.idProduct != null) {
             const p = parId.get(t.idProduct);
             if (!p) { sauter(t, 'produit-absent-de-l-export', { idProduct: t.idProduct }); continue; }
@@ -188,7 +241,9 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
         const numsP = numerosDe(id);
         const freres = (p.idMetacard ? parMeta.get(`${p.idExpansion}|${p.idMetacard}`) || [] : []).filter(q => q.idProduct !== id).filter(q => {
             const nq = numerosDe(q.idProduct);
-            return !(numsP.size && nq.size && ![...numsP].some(n => nq.has(n)));   // deux numéros connus et disjoints : une réimpression, pas une version de la même carte
+            if (!(numsP.size && nq.size)) return true;
+            if ([...numsP].some(n => nq.has(n))) return true;
+            return [...numsP].some(n => [...nq].some(m => sansLettre(m) === sansLettre(n)));   // deux numéros connus et disjoints : une réimpression, pas une version de la même carte — SAUF s'ils ne diffèrent que par une lettre (version à produit dédié : frère)
         });
         if (!p.idMetacard) { sauter(t, 'metacarte-inconnue', { idProduct: id }); continue; }
         if (freres.length) { sauter(t, 'plusieurs-produits-pour-la-carte', { produits: [id, ...freres.map(q => q.idProduct)] }); continue; }
@@ -199,7 +254,7 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
         for (const x of t.tampons) f.tampons.add(x);
         if (!f.preuves.some(q => q.source === preuve.source && q.enregistrement === preuve.enregistrement)) f.preuves.push(preuve);
     }
-    const fin = m => [...m.values()].map(f => ({ ...f, tampons: [...f.tampons].sort(), preuveTexte: f.preuves.map(q => `${q.source} ${q.enregistrement} : ${q.tampons.join('+')} (${q.mode})`) })).sort((a, b) => a.idProduct - b.idProduct);
+    const fin = m => [...m.values()].map(f => ({ ...f, tampons: [...f.tampons].sort(), preuveTexte: f.preuves.map(q => q.libelle ?? `${q.source} ${q.enregistrement} : ${q.tampons.join('+')} (${q.mode})`) })).sort((a, b) => a.idProduct - b.idProduct);
     const F = fin(fiches), S = fin(sansLigne);
     const compter = (liste, cles) => { const o = {}; for (const f of liste) for (const k of cles(f)) o[k] = (o[k] || 0) + 1; return triees(o); };
     const parMotif = {}; for (const s of sautes) parMotif[s.motif] = (parMotif[s.motif] || 0) + 1;
@@ -210,7 +265,7 @@ function construirePlan({ temoins, produits, lignes, exclus = new Set(), ecartes
 
 /** Les lignes cartes_produits, avec le nom de leur carte et le numéro/total imprimés dans leur set (lecture seule). */
 async function lireLignes(cartesDb) {
-    const rows = await cartesDb.collection('cartes_produits').find({}, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, slugSet: 1, numeroFiche: 1, tirage: 1, variante: 1 } }).toArray();
+    const rows = await cartesDb.collection('cartes_produits').find({}, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, slugSet: 1, numeroFiche: 1, tirage: 1, variante: 1, prixMelangeTampon: 1, prixMelangeTamponPreuve: 1 } }).toArray();
     const cartes = await cartesDb.collection('cartes').find({}, { projection: { nomEn: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1, 'impressions.total': 1 } }).toArray();
     const sets = await cartesDb.collection('sets').find({}, { projection: { nomEn: 1, nomAffichage: 1, 'bulba.expansion': 1 } }).toArray();
     const cMap = new Map(cartes.map(c => [c._id, c])), sMap = new Map(sets.map(s => [s._id, s]));
@@ -222,7 +277,7 @@ async function lireLignes(cartesDb) {
         if (imps.length === 1) imp = imps[0];
         else if (imps.length > 1 && r.numeroFiche != null) { const m = imps.filter(i => cleNumero(i.numero) === cleNumero(r.numeroFiche)); if (m.length === 1) imp = m[0]; }
         return { _id: r._id, carteId: r.carteId, idProduct: r.idProduct, idExpansion: r.idExpansion, slugSet: r.slugSet ?? null, numeroFiche: r.numeroFiche ?? null, tirage: r.tirage ?? null,
-            variante: r.variante ?? null, nomCarte: c?.nomEn ?? null, impNumero: imp?.numero ?? null, impTotal: imp?.total ?? null };
+            variante: r.variante ?? null, prixMelangeTampon: r.prixMelangeTampon ?? null, marquagePreuve: Array.isArray(r.prixMelangeTamponPreuve) ? r.prixMelangeTamponPreuve : null, nomCarte: c?.nomEn ?? null, impNumero: imp?.numero ?? null, impTotal: imp?.total ?? null };
     });
 }
 
@@ -240,7 +295,9 @@ async function appliquer(cartesDb, plan, { ecrire = false, attendu } = {}) {
         const cur = courantes.get(id);
         if (!cur) { manquantes++; if (ecrire) throw new Error(`ligne cartes_produits introuvable : ${id} (produit ${f.idProduct}) — arrêt (rejouer : idempotent)`); continue; }
         if (cur.variante) { sautees++; continue; }
-        if (cur.prixMelangeTampon === true && memes(cur.tamponsConnus, f.tampons) && memes(cur.prixMelangeTamponPreuve, f.preuveTexte)) { deja++; continue; }
+        // additif : un marquage qui contient déjà tout le plan (tampons ET preuves) n'est pas réécrit, même s'il est plus riche (une source lue plus tôt, le relevé du testeur…) — jamais de retour en arrière
+        const inclus = (a, b) => Array.isArray(a) && b.every(x => a.includes(x));
+        if (cur.prixMelangeTampon === true && inclus(cur.tamponsConnus, f.tampons) && inclus(cur.prixMelangeTamponPreuve, f.preuveTexte)) { deja++; continue; }
         aEcrire.push({ id, f });
     }
     const r = { fiches: plan.fiches.length, aEcrire: aEcrire.length, deja, sautees, manquantes, ecrit: 0, dejaFait: !aEcrire.length };
@@ -253,4 +310,4 @@ async function appliquer(cartesDb, plan, { ecrire = false, attendu } = {}) {
     return r;
 }
 
-module.exports = { TAMPONS_FERMES, CHAMPS, PROMO_PAR_PREFIXE, tamponsDesStamps, tamponsDeCarteTcgdex, tamponsPokumon, temoinsPokumon, lireTemoinsClone, construirePlan, lireLignes, appliquer };
+module.exports = { TAMPONS_FERMES, TAMPONS_RELEVE, temoinsReleve, CHAMPS, PROMO_PAR_PREFIXE, tamponsDesStamps, tamponsDeCarteTcgdex, tamponsPokumon, temoinsPokumon, lireTemoinsClone, construirePlan, lireLignes, appliquer };

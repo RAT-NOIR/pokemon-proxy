@@ -16,9 +16,11 @@ const CHEMINS = {
     export: 'C:/Users/Yung/rat-market-travail/catalogue/c-imports-gha/products_singles_6.json',
     clone: 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S4/DATES-CORR-relecture/clone/data',
     pokumon: 'C:/Users/Yung/Desktop/pokemon-proxy/collecte-cartes/rapports/cache-pokumon/index-familles.json',   // le cache de main (non suivi par git) : jamais le réseau
-    paires: 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/CM-PASSIF/ADRESSES-64-PAIRES.json'
+    paires: 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/CM-PASSIF/ADRESSES-64-PAIRES.json',
+    // troisième source : le relevé du testeur (COPIE du fichier du testeur, lue seule)
+    releve: 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/TAMPONS-RELEVE/tampons-scans-2026-10-18.csv'
 };
-const AUTORISES = [/^--ecrire$/, /^--attendu=\d+$/, /^--liste=.+$/, /^--export=.+$/, /^--clone=.+$/, /^--pokumon=.+$/, /^--paires=.+$/];
+const AUTORISES = [/^--ecrire$/, /^--attendu=\d+$/, /^--liste=.+$/, /^--export=.+$/, /^--clone=.+$/, /^--pokumon=.+$/, /^--paires=.+$/, /^--releve=.+$/];
 
 /** Lit les sources locales (rien de réseau) et rend le plan. `cartesDb` : la base `cartes` (lecture seule suffit pour le plan). */
 async function construire({ cartesDb, chemins = CHEMINS, log = console.log }) {
@@ -39,9 +41,14 @@ async function construire({ cartesDb, chemins = CHEMINS, log = console.log }) {
     const poku = M.temoinsPokumon(pk.entrees);
     log(`   index Pokumon (cache du ${pk.le}) : ${pk.entrees.length} entrées → ${poku.temoins.length} à tampon de la liste fermée, ${poku.ecartes.length} écartées`);
     const lignes = await M.lireLignes(cartesDb);
-    log(`   cartes_produits : ${lignes.length} lignes · ${lignes.filter(l => l.variante).length} déjà séparées (variante)`);
-    const plan = M.construirePlan({ temoins: [...clone.temoins, ...poku.temoins], produits, lignes, exclus, ecartes: poku.ecartes });
-    return { plan, clone, poku, produits: produits.length, lignes: lignes.length, exclus: exclus.size };
+    log(`   cartes_produits : ${lignes.length} lignes · ${lignes.filter(l => l.variante).length} déjà séparées (variante) · ${lignes.filter(l => l.prixMelangeTampon === true).length} déjà marquées`);
+    let releve = { temoins: [], ecartes: [], lues: 0, non: 0 };
+    if (chemins.releve) {
+        releve = M.temoinsReleve(fs.readFileSync(chemins.releve, 'utf8'));
+        log(`   relevé du testeur (${chemins.releve}) : ${releve.lues} lignes · ${releve.non} « fiche propre = non » → ${releve.temoins.length} témoins, ${releve.ecartes.length} écartés`);
+    }
+    const plan = M.construirePlan({ temoins: [...releve.temoins, ...clone.temoins, ...poku.temoins], produits, lignes, exclus, ecartes: [...poku.ecartes, ...releve.ecartes] });
+    return { plan, clone, poku, releve, produits: produits.length, lignes: lignes.length, exclus: exclus.size };
 }
 
 async function executer({ cartesDb, ecrire = false, attendu, liste = null, chemins = CHEMINS, log = console.log }) {
@@ -73,12 +80,12 @@ module.exports = { executer, construire, CHEMINS };
 
 if (require.main === module) {
     const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --attendu=<N>, --liste=, --export=, --clone=, --pokumon=, --paires=`); process.exit(2); }
+    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --attendu=<N>, --liste=, --export=, --clone=, --pokumon=, --paires=, --releve=`); process.exit(2); }
     const ecrire = process.argv.includes('--ecrire');
     const val = n => process.argv.find(x => x.startsWith(`--${n}=`))?.slice(n.length + 3);
     const a = val('attendu'), attendu = a !== undefined ? Number(a) : undefined;
     if (ecrire && attendu === undefined) { console.error('❌ --ecrire exige --attendu=<N> (le nombre de fiches lu à la simulation) : rien n\'est écrit'); process.exit(2); }
-    const chemins = { ...CHEMINS, ...Object.fromEntries(['export', 'clone', 'pokumon', 'paires'].filter(n => val(n)).map(n => [n, val(n)])) };
+    const chemins = { ...CHEMINS, ...Object.fromEntries(['export', 'clone', 'pokumon', 'paires', 'releve'].filter(n => val(n)).map(n => [n, val(n)])) };
     (async () => {
         require('dotenv').config();
         const { ouvrirConnexions } = require('./collecte-cartes/garde');
