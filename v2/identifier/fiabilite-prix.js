@@ -17,7 +17,11 @@ const ECART_TENDANCE_MAX = 0.30;
 // RÈGLE 2 (F1-TAMPON, codée ; LOT TAMPONS : étendue à la liste fermée des marques) : UNE marque de la liste lue deux fois à l'identique sur la photo d'une fiche marquée (`tamponLu`) =>
 // `version-tamponnee-prix-sous-estime` (« version tamponnée : le prix Cardmarket sous-estime sa valeur ») est servie À LA PLACE de la règle 3, jamais en plus. Elle est INERTE tant que le catalogue ne marque
 // aucune fiche (prixMelangeTampon) et que la lecture du tampon est éteinte.
-const RESERVES = Object.freeze(['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'version-tamponnee-prix-sous-estime']);
+// `etat-non-estimable` (lot ETAT-FOURCHETTE, décision de l'éditeur du 2026-10-24) : l'état de la carte n'a pas pu être estimé sur les photos (aucun état retenu) ; le prix servi est une FOURCHETTE, jamais un
+// prix sûr. Texte de l'éditeur : « état non estimable sur les photos ». Elle ne dépend PAS du produit mais de la photo : `reservesDe` ne la produit jamais, c'est identifier/fourchette-etat.js qui la pose
+// sur le guide d'un repli (prix-repli.js), après les réserves du produit.
+const ETAT_NON_ESTIMABLE = 'etat-non-estimable';
+const RESERVES = Object.freeze(['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'version-tamponnee-prix-sous-estime', ETAT_NON_ESTIMABLE]);
 
 // Le « De » du guide (`low`) est l'offre la PLUS BASSE, tous états et toutes langues confondus (une carte Poor suffit). Le guide ne porte aucun prix par état : un prix dans l'état retenu
 // n'existe que lu en direct par l'extension (`prixLive`). La seule valeur servie dit donc ce que le « De » est.
@@ -63,4 +67,4 @@ function badgeDe(set) {
 // signification stable (ni reverse, ni holo, ni édition : CLAUDE.md §7) et ne se devine pas. Forme fermée V1…V99 (le catalogue va jusqu'à V18) ; tout le reste est null.
 const versionDe = x => (typeof x === 'string' && /^V[1-9][0-9]?$/.test(x) ? x : null);
 
-module.exports = { ECART_TENDANCE_MAX, RESERVES, BASE_DE, CODES_DE_SERIE, ecartTendance, reservesDe, fiable, badgeDe, versionDe };
+module.exports = { ECART_TENDANCE_MAX, RESERVES, ETAT_NON_ESTIMABLE, BASE_DE, CODES_DE_SERIE, ecartTendance, reservesDe, fiable, badgeDe, versionDe };

@@ -157,6 +157,28 @@ refuse('un identifiant de choix inconnu', c => { c.analyse.cartes[0].question.ch
     refuse('une raison de non-remboursement hors liste (aucun-prix)', c => { c.facturation.raisonNonRembourse = 'aucun-prix'; }, 'ReponseAnalyse', ls);
     refuse('un rembourse en texte', c => { c.facturation.rembourse = 'oui'; }, 'ReponseAnalyse', ls);
 }
+{ // ETAT-FOURCHETTE : l'état n'est pas estimable => une FOURCHETTE, jamais un prix sûr — les fausses publiées le montrent (analyse : borne haute absente ; retour-live : grille lue en direct)
+    const pr = lire('identifiee-prix-repli.json'), c0 = pr.analyse.cartes[0], rf = lire('retour-live-etat-fourchette.json');
+    H.v('ETAT-FOURCHETTE : l\'analyse porte etat.retenu null, la fourchette (basse = « De », haute absente et dite absente), la mention en dernier, rien de fiable', [c0.etat.retenu, c0.prixRepli.fourchette, c0.prixRepli.guide.reserves, c0.prixRepli.guide.fiable, c0.prixRepli.fiable], [null, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] }, ['etat-non-estimable'], false, false]);
+    H.v('ETAT-FOURCHETTE : le retour-live porte la fourchette de la grille lue en direct, sans offre', [rf.prixRepli.cause, rf.prixRepli.fourchette, rf.prixRepli.offre, rf.prixRepli.guide.reserves], ['etat-non-retenu', { basse: { prix: 0.9, source: 'grille-directe' }, haute: { prix: 6, source: 'grille-directe' }, absentes: [] }, null, ['ecart-tendance', 'etat-non-estimable']]);
+    H.v('ETAT-FOURCHETTE : l\'analyse sert aussi le prixGuide de la CARTE sous la mention (jamais un prix sûr sur un état nul), identique à celui du repli', [c0.carte.prixGuide.fiable, c0.carte.prixGuide.reserves, JSON.stringify(c0.carte.prixGuide) === JSON.stringify(c0.prixRepli.guide)], [false, ['etat-non-estimable'], true]);
+    H.v('contrôle : la fausse du retour-live est acceptée', valider(rf, ref('ReponseRetourLive'), doc).ok, true);
+    refuse('une fourchette dont la borne a une source hors liste (la tendance)', c => { c.prixRepli.fourchette.haute.source = 'tendance'; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette dont la borne est à zéro', c => { c.prixRepli.fourchette.basse.prix = 0; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette qui dit un verdict', c => { c.prixRepli.fourchette.verdict = 'correct'; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette sans la liste des bornes absentes', c => { delete c.prixRepli.fourchette.absentes; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette qui se dit fiable', c => { c.prixRepli.fiable = true; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette dans la forme etat-proche', c => { c.prixRepli.repli = 'etat-proche'; c.prixRepli.cause = 'offre-autre-etat'; c.prixRepli.offre = { etat: 'GD', prix: 0.9 }; }, 'ReponseRetourLive', rf);
+    refuse('une fourchette sur une analyse dont la réserve n\'est pas de la liste', c => { c.analyse.cartes[0].prixRepli.guide.reserves = ['etat-inconnu']; }, 'ReponseAnalyse', pr);
+    // tour de correction 2 (N1, N3) : la forme « fourchette » sans guide, et plancherInconnu
+    const sg = lire('retour-live-fourchette-sans-guide.json');
+    H.v('N3 : la fausse sans guide porte repli fourchette, guide et offre nuls, la mention dans reserves, plancherInconnu dit', [sg.prixRepli.repli, sg.prixRepli.guide, sg.prixRepli.offre, sg.prixRepli.reserves, sg.prixRepli.fourchette.plancherInconnu, sg.prixRepli.fourchette.absentes], ['fourchette', null, null, ['etat-non-estimable'], true, ['haute']]);
+    H.v('contrôle : la fausse sans guide est acceptée', valider(sg, ref('ReponseRetourLive'), doc).ok, true);
+    refuse('une fourchette sans guide qui se dit fiable', c => { c.prixRepli.fiable = true; }, 'ReponseRetourLive', sg);
+    refuse('une fourchette sans guide, sans la mention', c => { c.prixRepli.reserves = []; }, 'ReponseRetourLive', sg);
+    refuse('une fourchette sans guide avec un guide', c => { c.prixRepli.guide = { tendance: 1, de: 1, moyenne30: 1, date: '2026-10-12' }; }, 'ReponseRetourLive', sg);
+    refuse('plancherInconnu à false', c => { c.prixRepli.fourchette.plancherInconnu = false; }, 'ReponseRetourLive', sg);
+}
 { // BANC-EXTENSION : `marques` dans la fausse du produit Staff (ce que le serveur sert, toujours), et `grilleLive` dans la requête du retour de l'extension
     const ts = lire('identifiee-tampon-staff.json'), c0 = ts.analyse.cartes[0].carte;
     H.v('TAMPONS : la fausse du produit Staff porte `marques` (liste fermée) = [staff], avec sa variante tampon', [c0.marques, c0.variante], [['staff'], 'tampon']);
@@ -248,10 +270,12 @@ const listes = {
     'réserves d\'un prix (F4-PRIX)': S.PrixGuide.properties.reserves.items.enum, 'base du « De » (F4-PRIX)': S.PrixGuide.properties.deBase.enum,
     'sources du badge du set (F4-PRIX)': S.SetProduit.properties.badgeSource.enum.filter(x => x !== null),
     'raisons de non-remboursement (REPLI-QUOTA)': S.Facturation.properties.raisonNonRembourse.enum.filter(x => x !== null),
-    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const],
+    'mentions du repli du prix (PRIX-LISIBLE)': [S.PrixRepliTendance.properties.repli.const, S.PrixRepliEtatProche.properties.repli.const, S.PrixRepliFourchette.properties.repli.const],
     'causes du repli du prix (PRIX-LISIBLE)': [...S.PrixRepliTendance.properties.cause.enum, S.PrixRepliEtatProche.properties.cause.const],
     'codes de l\'empreinte de l\'extension (MODELE-VISUEL-API)': S.ReponseEmpreinte.properties.code.enum.filter(x => x !== null),
-    'capacités annoncées par /ping (CAPACITES-PING)': S.ReponsePing.properties.capacites.items.enum
+    'capacités annoncées par /ping (CAPACITES-PING)': S.ReponsePing.properties.capacites.items.enum,
+    'sources des bornes de la fourchette (ETAT-FOURCHETTE)': S.BornePrix.properties.source.enum,
+    'bornes absentes de la fourchette (ETAT-FOURCHETTE)': S.PrixFourchette.properties.absentes.items.enum
 };
 for (const [nom, vals] of Object.entries(listes)) H.v(`le document nomme tous les ${nom}`, vals.filter(v => !texte.includes(enc(v))), []);
 for (const mot of ['code-maitre', 'administrateur', 'Idempotency-Key', 'X-Rat-Market', 'rm_session', 'ce que les clients doivent aligner', '90 jours', '24 mois'])

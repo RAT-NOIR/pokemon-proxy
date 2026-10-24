@@ -43,15 +43,20 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
     vrai('  le repli est servi', e.prixRepli !== undefined);
     v('  mention fermée : tendance, cause etat-non-retenu, fiable false', [e.prixRepli.repli, e.prixRepli.cause, e.prixRepli.fiable], ['tendance', 'etat-non-retenu', false]);
     v('  les chiffres du guide réel, tels que le serveur les sert déjà (aucun nouveau calcul)', [e.prixRepli.guide.tendance, e.prixRepli.guide.de, e.prixRepli.guide.moyenne7, e.prixRepli.guide.moyenne30, e.prixRepli.guide.date], [1.49, 0.02, 1.55, 1.26, '2026-10-12']);
-    v('  le guide du repli est celui de la fiche (même objet servi)', e.prixRepli.guide, c.carte.prixGuide);
+    // ETAT-FOURCHETTE : l'état est nul (retenu null) => le guide du repli est celui de la fiche SOUS FOURCHETTE : mêmes chiffres, jamais fiable, la mention `etat-non-estimable` après les réserves de la fiche
+    v('  le guide du repli est celui de la fiche (mêmes chiffres), sous fourchette : jamais fiable, la mention en plus', e.prixRepli.guide, { ...c.carte.prixGuide, fiable: false, reserves: [...c.carte.prixGuide.reserves, 'etat-non-estimable'] });
+    v('  la fiche, elle, garde son guide d\'origine (le repli ne la modifie pas)', [c.carte.prixGuide.fiable, c.carte.prixGuide.reserves], [true, []]);
     v('  aucune offre inventée, aucun verdict', [e.prixRepli.offre, 'verdict' in e.prixRepli, 'verdict' in e], [null, false, false]);
-    v('  la carte d\'origine est intacte (immuable : même prixLive, même carte)', [e.prixLive, e.carte === c.carte, c.prixRepli], [c.prixLive, true, undefined]);
+    v('  ETAT-FOURCHETTE : l\'état est nul, donc le repli porte la fourchette (le détail est dans test-fourchette-etat.js)', e.prixRepli.fourchette, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] });
+    // M1 : la carte servie est une copie dont le seul changement est son prixGuide sous la mention (« jamais un prix sûr ») ; l'originale n'est pas touchée
+    v('  la carte d\'origine est intacte (immuable : même prixLive) ; la carte servie ne diffère que par son prixGuide (sous la mention)', [e.prixLive, e.carte !== c.carte, JSON.stringify({ ...e.carte, prixGuide: null }) === JSON.stringify({ ...c.carte, prixGuide: null }), e.carte.prixGuide.reserves, c.prixRepli], [c.prixLive, true, true, ['etat-non-estimable'], undefined]);
     v('  l\'ordre des clés : celles d\'avant, puis prixRepli', cle(e), cle({ ...c, prixRepli: 1 }));
     // l'analyse ENTIÈRE (ce que la route sert) : la carte de Tauros reçoit son repli, rien d'autre ne bouge ; sans repli à poser, la MÊME référence
     const ana = { ...r.analyse, regleVerdict: null };
     const ar = R.analyseAvecRepli(ana);
     v('analyse : la carte affirmée de Tauros porte le repli, le reste de l\'analyse est intact', [ar.cartes[0].prixRepli.cause, ar.statut, ar.regleVerdict, ar.lot, ar.raison], ['etat-non-retenu', 'identifiee', null, null, null]);
-    const intacte = { ...ana, cartes: [{ ...c, prixLive: { idProduct: 273844, langues: [1], reverseHolo: false, etatVise: 'EX' } }] };
+    // un prix à lire dans l'état : l'état est retenu PARTOUT où la carte le porte (ETAT-FOURCHETTE : deux sources qui se contredisent seraient non estimables)
+    const intacte = { ...ana, cartes: [{ ...c, etat: { ...c.etat, estime: 'EX', confiance: 'haute', retenu: 'EX' }, prixLive: { idProduct: 273844, langues: [1], reverseHolo: false, etatVise: 'EX' } }] };
     v('analyse : rien à poser => la même référence (octet pour octet)', R.analyseAvecRepli(intacte) === intacte, true);
     v('analyse : un lot — chaque carte est jugée seule', R.analyseAvecRepli({ statut: 'lot', cartes: [intacte.cartes[0], c] }).cartes.map(x => Boolean(x.prixRepli)), [false, true]);
     v('analyse : null, sans cartes, ou panne rendus tels quels', [R.analyseAvecRepli(null), R.analyseAvecRepli({ statut: 'x' }).statut], [null, 'x']);
@@ -63,7 +68,7 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
     vrai('câblage : identifier/retour-live.js joint le repli à la réponse', /\.\.\.avecRepli\(repli\)/.test(src('identifier/retour-live.js')));
     // le scanner ne sert jamais le repli (il n'a aucune lecture live) : sansRepli le retire, et rend la MÊME référence quand il n'y en a pas
     const s = R.sansRepli(e);
-    v('scanner : sansRepli retire la clé, le reste est la carte d\'avant', [JSON.stringify(s) === JSON.stringify(c), 'prixRepli' in s], [true, false]);
+    v('scanner : sansRepli retire la clé, le reste est la carte servie (le prixGuide sous la mention : le scanner montre le guide, jamais comme un prix sûr)', [JSON.stringify(s) === JSON.stringify({ ...c, carte: e.carte }), 'prixRepli' in s], [true, false]);
     v('scanner : sans repli, la même référence (octet pour octet)', [R.sansRepli(c) === c, R.sansRepli(null), R.sansRepli('x')], [true, null, 'x']);
 }
 
@@ -114,7 +119,9 @@ v('Tauros : la cause réelle du « prix illisible » (le serveur a dicté etatVi
     v('  etat-proche sans guide : l\'offre suffit à faire une donnée de prix', de('EX', 'PL', { prixGuide: null }).guide, null);
     for (const [nom, retenu, etat] of [['NM lu pour EX (mieux)', 'EX', 'NM'], ['EX lu pour EX (dans l\'état)', 'EX', 'EX'], ['MT lu pour NM', 'NM', 'MT']])
         v(`${nom} : c'est un prix dans l'état, AUCUN repli`, de(retenu, etat), null);
-    v('état retenu inconnu (null) : on ne peut pas dire « plus proche », aucun repli', de(null, 'GD'), null);
+    // ETAT-FOURCHETTE : l'état retenu est nul => on ne peut pas dire « plus proche », mais le prix n'est JAMAIS refusé à cause de l'état : la fourchette (cause etat-non-retenu), pas une offre d'un seul état
+    const sansEtat = de(null, 'GD');
+    v('état retenu inconnu (null) : pas de « plus proche » ; le repli est la fourchette (tendance / etat-non-retenu), sans offre', [sansEtat.repli, sansEtat.cause, sansEtat.offre, sansEtat.fiable, sansEtat.fourchette.absentes], ['tendance', 'etat-non-retenu', null, false, ['haute']]);
     v('état lu hors liste : aucun repli', de('EX', 'MINT'), null);
     v('état lu absent : aucun repli', de('EX', null), null);
     v('origine plancher-toutes-langues : un prix, pas un repli', de('EX', 'GD', { originePrix: 'plancher-toutes-langues' }), null);
@@ -179,7 +186,7 @@ for (const [nom, e] of [['question en attente', { statut: 'a-trancher', idProduc
 {
     const marque = construireProduit(ligne('tauros', { prixMelangeTampon: true }), { langueInterface: 'fr', cfg });
     const rep = R.avecRepliAnalyse({ index: 0, statut: 'identifiee', carte: marque, candidats: [], question: null, raison: null, etat: null, prixLive: { idProduct: 273844, langues: [1], reverseHolo: false, etatVise: null }, zone: null }).prixRepli;
-    v('fiche marquée (prix mélangé) : le repli porte guide.reserves, avec les deux mentions fermées', [rep.guide.fiable, rep.guide.reserves], [false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']]);
+    v('fiche marquée (prix mélangé) : le repli porte guide.reserves, avec les deux mentions fermées (puis, l\'état étant nul, la mention de la fourchette — ETAT-FOURCHETTE)', [rep.guide.fiable, rep.guide.reserves], [false, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'etat-non-estimable']]);
     const arc = R.repliRetourLive({ prixGuide: guideDe('arcanin'), retenu: 'NM', originePrix: 'tendance', prixLive: 7.67, lectureRatee: null });
     v('Arcanin : le repli porte guide.reserves (ecart-tendance)', arc.guide.reserves, ['ecart-tendance']);
 }

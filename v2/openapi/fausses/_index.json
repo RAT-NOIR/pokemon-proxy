@@ -27,7 +27,19 @@
     "route": "POST /api/identifier",
     "statut": 200,
     "schema": "ReponseAnalyse",
-    "description": "Le repli honnête du prix (lot PRIX-LISIBLE) : l'état estimé a une confiance basse, il n'est pas retenu (prixLive.etatVise null) ; la fiche a pourtant un guide — prixRepli (repli tendance, cause etat-non-retenu, fiable false) le sert, sans verdict. Les chiffres sont ceux du guide réel de Tauros (Jungle 47/64) au 2026-10-12 ; l'idProduct est fictif."
+    "description": "Le repli honnête du prix (lot PRIX-LISIBLE) et la FOURCHETTE d'un état non estimable (lot ETAT-FOURCHETTE) : l'état estimé a une confiance basse, il n'est pas retenu (etat.retenu null, prixLive.etatVise null) ; la fiche a pourtant un guide — prixRepli (repli tendance, cause etat-non-retenu, fiable false) le sert, sans verdict, avec la fourchette (borne basse = le « De » du guide, borne haute ABSENTE : le guide n'a aucun prix par état) et la réserve etat-non-estimable sur son guide, qui n'est plus fiable — comme sur le prixGuide de la carte elle-même (un état nul ne sert jamais un prix sûr). Les chiffres sont ceux du guide réel de Tauros (Jungle 47/64) au 2026-10-12 ; l'idProduct est fictif."
+  },
+  "retour-live-etat-fourchette.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "La fourchette côté retour de l'extension (lot ETAT-FOURCHETTE) : l'état retenu de l'analyse est null, l'extension renvoie malgré tout un prix de la grille (prixLive 0,9 en GD) avec sa grilleLive { NM 6 ; GD 0,9 } => jamais le prix d'un seul état : prixRepli (repli tendance, cause etat-non-retenu, fiable false, sans offre) avec la fourchette : haute = le prix le plus haut de la grille (6), basse = le MINIMUM de la grille (0,9) et du « De » du guide (1) = 0,9, source grille-directe ; la réserve etat-non-estimable est posée après ecart-tendance sur le guide. Chiffres du guide réel d'Arcanin [G] Lv.60 (Supreme Victors 15/147) au 2026-10-12 ; la grille est une entrée de banc."
+  },
+  "retour-live-fourchette-sans-guide.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "La fourchette d'un état non estimable sur une fiche SANS guide servable (lot ETAT-FOURCHETTE, tour de correction 2, N3) : l'extension renvoie un prix lu (0,9 en GD, sans grille) => prixRepli de forme fourchette (guide et offre nuls, cause etat-non-retenu, fiable false) : basse = le prix lu, haute absente et dite absente, plancherInconnu true (la basse ne contient pas PO et le guide n'a pas de « De » : ce n'est pas le prix du plus abîmé), la mention dans reserves puisqu'elle ne peut pas voyager sur un guide absent."
   },
   "retour-live-prix-repli.json": {
     "route": "POST /api/retour-live",

@@ -261,7 +261,9 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
 
     // ── 8. LES PRIX MÉLANGÉS (règle 2) : une fiche à produit unique marquée, STAFF lu => la mention de la règle 2 remplace la règle 3 ; le verdict ne change pas
     {
-        const prix = x => x.c0.carte && x.c0.carte.prixGuide && x.c0.carte.prixGuide.reserves;
+        // ETAT-FOURCHETTE (tour 4, correction 1, M1) : la chaîne fabriquée ne retient aucun état ; tout prixGuide servi porte donc, après ses réserves de PRODUIT (celles que ce banc juge), la mention `etat-non-estimable`
+        // (jamais fiable) — elle est vérifiée dans test-fourchette-etat.js ; ici on lit les réserves du produit, sans elle.
+        const prix = x => x.c0.carte && x.c0.carte.prixGuide && x.c0.carte.prixGuide.reserves.filter(r => r !== 'etat-non-estimable');
         Object.assign(modele, { lecture: 'oui', essais: ['oui', 'oui'], panne: false, sansImage: false }); modele.appels.length = 0;
         const refX = await scan(svSans, 'prix-seul'), a = await scan(svOn, 'prix-seul');
         H.v('8a. éteint : la règle 3 (« peut être gonflé »), le modèle jamais appelé', [refX.c0.carte.idProduct, prix(refX)], [PX, ['prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons']]);

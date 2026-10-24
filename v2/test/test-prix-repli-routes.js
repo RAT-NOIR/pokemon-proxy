@@ -88,7 +88,11 @@ async function semer() {
         H.v('A1. état retenu null : le client n\'a « rien à lire » (prixLive.etatVise null) — la cause réelle du « prix illisible »', [c.statut, c.prixLive && c.prixLive.etatVise], ['identifiee', null]);
         H.v('A2. ... et la carte porte le repli : tendance, cause etat-non-retenu, fiable false', [c.prixRepli && c.prixRepli.repli, c.prixRepli && c.prixRepli.cause, c.prixRepli && c.prixRepli.fiable], ['tendance', 'etat-non-retenu', false]);
         H.v('    les chiffres du guide RÉEL de Tauros (1,49 / 0,02 / 1,55 / 1,26 au 2026-10-12), aucune offre, aucun verdict', [c.prixRepli.guide.tendance, c.prixRepli.guide.de, c.prixRepli.guide.moyenne7, c.prixRepli.guide.moyenne30, c.prixRepli.guide.date, c.prixRepli.offre, 'verdict' in c.prixRepli], [1.49, 0.02, 1.55, 1.26, '2026-10-12', null, false]);
-        H.v('    le guide du repli est la fiche servie (carte.prixGuide)', c.prixRepli.guide, c.carte.prixGuide);
+        // ETAT-FOURCHETTE : l'état retenu est null => le guide du repli est celui de la fiche SOUS FOURCHETTE (mêmes chiffres, jamais fiable, la mention en dernier) ; la fiche garde son guide
+        // M1 (tour 4, correction 1) : le prixGuide de la carte servie est, comme celui du repli, SOUS la mention (état nul : jamais un prix sûr) ; mêmes chiffres que le guide réel
+        H.v('    le guide du repli est la fiche servie (carte.prixGuide), les deux sous fourchette : mêmes chiffres, fiable false, réserve etat-non-estimable', [c.prixRepli.guide, c.carte.prixGuide.fiable, c.carte.prixGuide.reserves], [c.carte.prixGuide, false, ['etat-non-estimable']]);
+        H.v('    la fourchette : basse = le « De » du guide réel (0,02), haute ABSENTE et dite absente, aucun verdict', [c.prixRepli.fourchette, 'verdict' in c.prixRepli], [{ basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] }, false]);
+        H.v('    REPLI-QUOTA : la carte à fourchette AFFICHE un prix (la même règle afficheUnPrix)', require('../identifier/prix-repli').afficheUnPrix({ repli: c.prixRepli }), true);
         // la même réponse rejouée : identique (la question est réglée, la carte se refabrique)
         const r2 = await repondre(s.jeton, s.scanId, 'a');
         H.v('A3. rejeu de la réponse : même carte, même repli', r2.json && JSON.stringify(r2.json.carte), JSON.stringify(c));
@@ -209,6 +213,46 @@ async function semer() {
         await raw('journal_scans').insertOne({ _id: sid, userId: `v2:installation:${s.i._id}`, route: 'identifier' });
         const ra = await rl(s.jeton, { scanId: String(sid), carte: 0, lectureRatee: { cause: 'defi', definitive: false } });
         H.v('B12 (témoin) : carte affirmée à l\'analyse (idProduct confirmé, journal sans idProduct) : le repli est servi', [ra.statut, ra.json.prixRepli && ra.json.prixRepli.cause, ra.json.prixRepli && ra.json.prixRepli.guide.tendance], [200, 'lecture-ratee', 1.49]);
+    }
+    {
+        // B13. ETAT-FOURCHETTE — l'état retenu de l'analyse est null : quoi que l'extension envoie, JAMAIS le prix d'un seul état présenté comme sûr ; la fourchette (la MÊME règle que l'analyse) est servie
+        const g = REEL.tauros.guide;
+        const s = await repondu('a', null);
+        const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'gd', originePrix: 'grille', prixLiveCodeLangue: 1, grilleLive: { NM: 1.4, GD: 0.9 } });
+        const p = r.json.prixRepli;
+        H.v('B13a. retenu null, prix de la grille lu en GD avec sa grille { NM 1,4 ; GD 0,9 } : repli tendance / etat-non-retenu, sans offre, fiable false', [r.statut, p && p.repli, p && p.cause, p && p.offre, p && p.fiable], [200, 'tendance', 'etat-non-retenu', null, false]);
+        H.v('    la haute vient de la grille lue en direct (1,4) ; la basse est le MINIMUM de la grille (0,9) et du « De » du guide réel (0,02) : le « De »', p.fourchette, { basse: { prix: 0.02, source: 'guide-de' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [] });
+        H.v('    le guide du repli porte la mention et n\'est pas fiable ; les chiffres sont ceux du guide réel de Tauros', [p.guide.fiable, p.guide.reserves, p.guide.tendance, p.guide.de], [false, ['etat-non-estimable'], g.trend, g.low]);
+        const l = await raw('journal_scans').findOne({ _id: oid(s.scanId) });
+        H.v('    le prix lu est écrit comme avant (0,9 en GD, origine grille) : la fourchette ne touche pas au journal du prix', [l.prixLive, l.prixLiveEtat, l.originePrix], [0.9, 'GD', 'grille']);
+        const t = await repondu('a', null);
+        const rs = await rl(t.jeton, { scanId: t.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', prixLiveCodeLangue: 1 });
+        H.v('B13b. retenu null, prix lu SANS grille : la fourchette retombe sur le guide (basse = « De », haute absente)', [rs.statut, rs.json.prixRepli.fourchette], [200, { basse: { prix: 0.02, source: 'guide-de' }, haute: null, absentes: ['haute'] }]);
+        const u = await repondu('a', null);
+        const ru = await rl(u.jeton, { scanId: u.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', grilleLive: { GD: 0.9 } });
+        H.v('B13c. grille à un seul état : elle ne borne rien (le guide parle)', [ru.statut, ru.json.prixRepli.fourchette.basse], [200, { prix: 0.02, source: 'guide-de' }]);
+        const w = await repondu('a', null);
+        const rt = await rl(w.jeton, { scanId: w.scanId, carte: 0, prixLive: 7.67, originePrix: 'tendance' });
+        H.v('B13d. retenu null, tendance seule : tendance-seule AVEC la fourchette et la mention', [rt.statut, rt.json.prixRepli.cause, rt.json.prixRepli.fourchette.absentes, rt.json.prixRepli.guide.reserves], [200, 'tendance-seule', ['haute'], ['etat-non-estimable']]);
+        const x = await repondu('a', null);
+        await raw('analyses').updateOne({ _id: oid(x.scanId) }, { $set: { 'produits.$[].prixGuide': null } });
+        const rx = await rl(x.jeton, { scanId: x.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', grilleLive: { NM: 1.4, GD: 0.9 } });
+        // TOUR 4 CORRECTION 2 (N3) : état nul, fiche sans guide servable, prix lu : le prix lu est servi AVEC la mention (forme « fourchette », guide null), jamais fiable ; validé contre le schéma par `rl`
+        const px = rx.json.prixRepli;
+        H.v('B13e. retenu null, fiche SANS guide : repli « fourchette » (guide null, sans offre, fiable false, reserves [etat-non-estimable]), bornes = la grille lue, plancher inconnu dit', [rx.statut, px && px.repli, px && px.cause, px && px.fiable, px && px.guide, px && px.offre, px && px.reserves, px && px.fourchette], [200, 'fourchette', 'etat-non-retenu', false, null, null, ['etat-non-estimable'], { basse: { prix: 0.9, source: 'grille-directe' }, haute: { prix: 1.4, source: 'grille-directe' }, absentes: [], plancherInconnu: true }]);
+        const y = await repondu('a', 'EX');
+        const ry = await rl(y.jeton, { scanId: y.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', originePrix: 'grille', grilleLive: { NM: 1.4, GD: 0.9 } });
+        H.v('B13f. témoin : retenu EX, la même offre en GD => etat-proche comme avant, SANS fourchette ni mention', [ry.statut, ry.json.prixRepli.repli, 'fourchette' in ry.json.prixRepli, ry.json.prixRepli.guide.reserves], [200, 'etat-proche', false, []]);
+        const z = await repondu('a', null);
+        const rz = await rl(z.jeton, { scanId: z.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        H.v('B13g. retenu null, lecture ratée définitive : la fourchette est servie ET le scan compte (REPLI-QUOTA : prix-repli, pas remboursé)', [rz.json.prixRepli.fourchette !== undefined, rz.json.facturation && rz.json.facturation.raisonNonRembourse, rz.json.facturation && rz.json.facturation.rembourse], [true, 'prix-repli', false]);
+        // M3 (tour 4, correction 1) : état nul, un prix lu SANS originePrix (extensions anciennes) : jamais le prix d'un seul état sans la mention ni fiable false
+        const m = await repondu('a', null);
+        const rm = await rl(m.jeton, { scanId: m.scanId, carte: 0, prixLive: 0.9, prixLiveEtat: 'GD', prixLiveCodeLangue: 1 });
+        const pm = rm.json.prixRepli;
+        H.v('B13h. état nul, prix lu en GD SANS originePrix : 200, repli à fourchette (etat-non-retenu), mention, fiable false, guide non fiable, sans offre', [rm.statut, pm && pm.repli, pm && pm.cause, pm && pm.fiable, pm && pm.guide.fiable, pm && pm.guide.reserves, pm && pm.offre], [200, 'tendance', 'etat-non-retenu', false, false, ['etat-non-estimable'], null]);
+        const lm = await raw('journal_scans').findOne({ _id: oid(m.scanId) });
+        H.v('    le prix lu est écrit comme avant (0,9 en GD, origine inconnue)', [lm.prixLive, lm.prixLiveEtat, lm.originePrix], [0.9, 'GD', null]);
     }
     H.v(`contrat : ${validees} réponses validées contre leur schéma (ReponseQuestion, ReponseRetourLive, ReponseAnalyse), écarts`, [ecarts, validees > 0], [0, true]);
 

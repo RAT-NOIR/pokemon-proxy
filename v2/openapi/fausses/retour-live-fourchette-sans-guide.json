@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "facturation": null,
+  "offre": {
+    "nom": "gratuit",
+    "restant": 9,
+    "remiseAZero": "2026-10-14T00:00:00+02:00"
+  },
+  "prixRepli": {
+    "repli": "fourchette",
+    "cause": "etat-non-retenu",
+    "fiable": false,
+    "guide": null,
+    "offre": null,
+    "fourchette": {
+      "basse": {
+        "prix": 0.9,
+        "source": "grille-directe"
+      },
+      "haute": null,
+      "absentes": [
+        "haute"
+      ],
+      "plancherInconnu": true
+    },
+    "reserves": [
+      "etat-non-estimable"
+    ]
+  }
+}

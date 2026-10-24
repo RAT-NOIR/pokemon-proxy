@@ -9,7 +9,7 @@ const { v, vrai, bilan } = require('./_harnais');
 const F = require('../identifier/fiabilite-prix');
 
 v('le seuil est une constante nommée, de 30 %', F.ECART_TENDANCE_MAX, 0.30);
-v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'version-tamponnee-prix-sous-estime']);
+v('la liste fermée des réserves', [...F.RESERVES], ['ecart-tendance', 'ecart-non-mesurable', 'prix-indicatif-tampons-melanges', 'peut-etre-gonfle-par-tampons', 'version-tamponnee-prix-sous-estime', 'etat-non-estimable']);   // ETAT-FOURCHETTE : la dernière, posée par prix-repli.js (jamais par reservesDe)
 v('l\'unique base du « De » : tous états', F.BASE_DE, 'tous-etats');
 vrai('les listes sont gelées', Object.isFrozen(F.RESERVES));
 

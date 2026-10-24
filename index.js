@@ -1091,6 +1091,20 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
     }
 }
 
+// ETAT-TITRE (décision de l'éditeur, 2026-10-18, 21:47) : l'état de la carte vient d'un APPEL SÉPARÉ au modèle, sur les PHOTOS SEULES (v2/identifier/etat-photos.js), lancé en même temps que l'identification
+// (qui, elle, reçoit toujours le titre). Les images sont CELLES de l'identification (`photos` : les `data:` des photos reçues ou les URLs de l'annonce) et le signal d'arrêt du scan, quand il existe, les
+// suit : aucun téléchargement. L'appel passe SOUS le plafond de dépense du modèle. Il ne rejette jamais : sa panne rend un état nul. L'état que rend l'identification est ignoré (gardé comme information).
+function estimerEtatSurPhotos(images, signalArret = null) {
+    const E = require('./v2/identifier/etat-photos');
+    return E.estimerEtat({
+        images, signal: signalArret, modele: MODELE_IA,
+        appeler: (corps, config) => appelerModele(E.URL_MODELE, corps, {
+            headers: { "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "HTTP-Referer": "https://render.com", "Content-Type": "application/json" },
+            timeout: 30000, ...config
+        })
+    });
+}
+
 // ============================================================
 // ÉTAPE 1bis — Catalogue LOCAL (importé depuis les exports officiels Cardmarket)
 // Gratuit, instantané, aucun appel réseau. On regroupe par idMetacard : si un
@@ -3038,7 +3052,12 @@ function etatRetenuDuModele(cardInfo) {
     const c = cardInfo || {};
     if (c.etatConfiance !== 'haute' && c.etatConfiance !== 'moyenne') return null;
     const e = String(c.etatEstime || '').toUpperCase();
-    return ORDRE_ETATS.includes(e) ? e : null;
+    if (!ORDRE_ETATS.includes(e)) return null;
+    // ETAT-FOURCHETTE (tour 4, correction 1, I2 ; ruling de l'éditeur) : un second état REFUSÉ (« LP/PL », « EX+ », « MINT »…) est une hésitation que le serveur ne sait pas lire. « Dans le doute, le plus abîmé » ne peut pas s'appliquer :
+    // retomber sur l'état principal servirait un état plus beau que le doute. L'état retenu est donc NUL (donc la fourchette) et le refus est journalisé (`etatSecondRefuse`). Si c'est faux : une fourchette de plus, jamais un prix d'un meilleur état.
+    if (c.etatSecondRefuse === true) return null;
+    // ETAT-TITRE (règle de l'éditeur, tour 2) : si le modèle a nommé un second état plausible (champ fermé, facultatif), on retient le PLUS ABÎMÉ des deux ; sans hésitation, l'état unique. Le second n'est jamais retenu seul.
+    return require('./v2/identifier/etat-photos').retenirEtat(e, c.etatSecond);
 }
 
 // Retrouve les idExpansion Cardmarket correspondant à un set TCGdex.
@@ -3170,6 +3189,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         console.log(`📷 ${photos.length} photo(s) envoyée(s) à l'IA.`);
         const diagnosticIA = {};      // POURQUOI la lecture rend null (FREIN-CONSTATES tour 3, C1) : panne du fournisseur PROUVÉE, coupure de dépense, ou « sans lecture » (photo sans carte…)
+        const etatPromesse = estimerEtatSurPhotos(photos);        // ETAT-TITRE : l'état, sur les photos SEULES, en parallèle de la lecture (qui reçoit le titre) ; ne rejette jamais
         cardInfo = await getCardIdFromAI(photos, title, null, diagnosticIA);
         if (!cardInfo) {
             // Échec DUR : aucune carte identifiée, rien n'a été livré -> on rend le scan. Le motif dit la cause : `ia-echec` SEULEMENT pour une panne du fournisseur prouvée.
@@ -3178,6 +3198,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: motifIA, rembourse: rendu });
             return res.json({ success: false, error: "Analyse IA échouée (voir logs Render pour la cause exacte)" });
         }
+        require('./v2/identifier/etat-photos').fusionner(cardInfo, await require('./v2/identifier/etat-photos').attendre(etatPromesse));      // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information) ; au plus 2 000 ms d'attente après la lecture
 
         // 1. Cache Mongo (sauté si debug=true, pratique pour retester une carte sans attendre 24h)
         let resultat = debug ? null : await lireCache(cardInfo.name, cardInfo.number, cardInfo.language);
@@ -3772,6 +3793,11 @@ async function gererIdentifier(req, res) {
                 etatEstimeIA: c.etatEstime || null,
                 etatConfianceIA: c.etatConfiance || null,
                 defautsVus: Array.isArray(c.defautsVus) ? c.defautsVus : null,
+                // ETAT-TITRE : l'état que la LECTURE (qui reçoit le titre) a rendu, IGNORÉ — une information journalisée, jamais une entrée ("NM|haute")
+                etatIdentification: c.etatIdentification ? `${c.etatIdentification.etatEstime ?? '?'}|${c.etatIdentification.etatConfiance ?? '?'}` : null,
+                etatCause: typeof c.etatCause === 'string' ? c.etatCause : null,           // pourquoi l'état est nul quand l'appel d'état n'a pas rendu : sans-image, depense, arret, panne, illisible, delai
+                etatSecond: typeof c.etatSecond === 'string' ? c.etatSecond : null,           // le second état plausible nommé par le modèle quand il hésite (information : l'état retenu est le plus abîmé des deux)
+                etatSecondRefuse: c.etatSecondRefuse === true,                                // I2 : le modèle a nommé un second état HORS LISTE (« LP/PL », « EX+ »…) : refusé, l'état retenu est nul (etatRetenuDuModele)
                 // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
                 // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
                 // devient mesurable maintenant qu'il est journalisé.
@@ -3807,6 +3833,7 @@ async function gererIdentifier(req, res) {
         // la route sait transformer une lecture incertaine en question : elle accepte la lecture de SECOURS (titre) si le service tombe
         const secoursIA = {};
         const diagnosticIA = {};      // POURQUOI la lecture rend null (FREIN-CONSTATES tour 3, C1)
+        const etatPromesse = estimerEtatSurPhotos(photos, req.signalArret);      // ETAT-TITRE : l'état, sur les photos SEULES (les mêmes que la lecture, le même signal d'arrêt), en parallèle de la lecture qui reçoit le titre ; ne rejette jamais
         cardInfo = await getCardIdFromAI(photos, title, secoursIA, diagnosticIA, req.signalArret);
         // la panne voyage dans `annonce`, donc jusqu'aux DEUX voies du journal (succès et refus)
         annonce.panneIA = secoursIA.panne ?? null;
@@ -3821,7 +3848,7 @@ async function gererIdentifier(req, res) {
         // FONCTION pour la même raison : `msCatalogue` n'est renseignée que ~700 lignes
         // plus bas, et les sorties de refus d'amont doivent quand même porter `msIA` et
         // `nbPhotos`. Un objet figé ici rendrait `msCatalogue` toujours nulle.
-        const champsCout = () => ({ msIA, msCatalogue, nbPhotos: photos.length });
+        const champsCout = () => ({ msIA, msCatalogue, nbPhotos: photos.length, msEtat: cardInfo && Number.isFinite(cardInfo.msEtat) ? cardInfo.msEtat : null });
         if (!cardInfo) {
             const motifIA = motifDuRefusIA(diagnosticIA);        // `ia-echec` SEULEMENT pour une panne du fournisseur prouvée ; sinon `depense-modele-plafond` ou `ia-sans-lecture` (plafonné)
             const rendu = await rembourserScan(req, motifIA);
@@ -3838,6 +3865,10 @@ async function gererIdentifier(req, res) {
             // `rembourse` inutilisable seul : voir la table NATURE_REFUS au-dessus.
             return res.json({ success: false, ...champsDeRefus(motifIA, rendu), error: "Analyse IA échouée" });
         }
+        // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information dans `etatIdentification`) ; sa panne rend un état nul, jamais celui de la lecture
+        // Une fois la lecture rendue, l'état attend AU PLUS 2 000 ms de plus (etat-photos.js : attendre) ; au-delà, état nul de cause « delai ». L'appel n'est jamais repris, sa dépense reste comptée.
+        require('./v2/identifier/etat-photos').fusionner(cardInfo, await require('./v2/identifier/etat-photos').attendre(etatPromesse));
+        console.log(`   👁️ [identifier] état sur les photos seules : ${cardInfo.etatEstime ?? 'aucun'} (confiance ${cardInfo.etatConfiance ?? '?'}, ${cardInfo.msEtat} ms${cardInfo.etatCause ? ', cause ' + cardInfo.etatCause : ''})`);
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
         // qui suit), pour décider plus tard si un cache/cache mémoire (reporté) vaut le

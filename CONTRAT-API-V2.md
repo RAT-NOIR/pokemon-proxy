@@ -127,10 +127,20 @@ Les deux routes du scanner sont **conditionnelles** : elles ne seront livrées q
 - `POST /api/analyser` (héritée) : le texte du vendeur n'entrait déjà dans aucun prix ; ses échos `etatVinted` et `etatCardmarket` restent des échos.
 - Il n'existe pas de route `/api/identifier-lot` : le lot est un crochet interne (`identifierLot`), non branché en production aujourd'hui ; quand il le sera, il transmet `vintedEtat` à la chaîne héritée, qui l'ignore.
 
-**Et le TITRE de l'annonce ? (réponse à l'entrée « lot L3 » de `DEMANDE-SERVEUR-SITE.md`, mesurée sur le code du 2026-10-18.)** On ne peut **pas** écrire aujourd'hui que l'état n'est lu que sur les photos.
-- Le titre (`title`, expurgé par l'extension) part dans **le même appel au modèle** que l'estimation de l'état : `getCardIdFromAI` (`index.js`) envoie un seul message qui porte le prompt, le titre (« Titre de l'annonce (contexte) : … », dernière ligne du prompt) et toutes les photos ; `etatEstime`, `etatConfiance` et `defautsVus` sortent de ce même appel.
-- Le prompt **ne dit pas d'où vient l'état** : son paragraphe « ÉVALUATION DE L'ÉTAT » décrit un barème et parle de faces et de photos (« la PIRE face observée », « si aucune photo du verso n'est fournie »), mais aucune ligne n'interdit au modèle de tirer l'état du titre (« neuf », « excellent état »). Il interdit le titre ailleurs (« la langue se déduit du texte visible sur la carte, pas du titre »), jamais pour l'état.
-- Le prompt n'a **pas** été modifié : le changer demande une mesure payante (appels au modèle). Tant qu'elle n'est pas faite, la formulation vraie est « l'état est estimé par le modèle, à partir des photos et du contexte de l'annonce », pas « à partir des photos seules ». La lecture de secours (modèle en panne) lit le titre pour le nom et le numéro seulement : elle rend `etatEstime: null`.
+**Et le TITRE de l'annonce ? Réponse DÉFINITIVE à l'entrée « lot L3 » de `DEMANDE-SERVEUR-SITE.md` (lot ETAT-TITRE, décision de l'éditeur du 2026-10-18).** On peut écrire, et le site peut reprendre mot pour mot :
+
+> **« L'état de la carte est estimé sur les photos seules : ni le titre de l'annonce, ni l'état déclaré par le vendeur, ni son prix, ni rien d'autre de l'annonce n'est transmis au modèle qui l'estime. »**
+
+- **Comment.** L'état vient d'un **appel au modèle séparé**, qui ne reçoit que les photos (celles de la requête, ou les photos reçues avant le scan quand il y en a ; les mêmes que pour l'identification) et une consigne d'état courte, sans titre ni texte de l'annonce. Il part **en même temps** que l'appel d'identification (qui, lui, reçoit toujours le titre : il en a besoin pour le numéro et la langue), donc le délai d'un scan reste celui du plus lent des deux. Il passe sous le plafond de dépense du modèle comme l'identification.
+- **Ce que rend l'identification sur l'état est ignoré.** `etat.estime`, `etat.confiance`, `etat.defauts` et `etat.retenu` viennent **uniquement** de l'appel d'état. L'état que l'appel d'identification a aussi lu n'entre dans aucune réponse ni aucune décision : il est seulement journalisé, comme information (`etatIdentification`).
+- **Une panne de l'appel d'état** (modèle en panne, plafond de dépense atteint, scan arrêté, réponse illisible, délai dépassé) rend `etat.estime`, `etat.confiance` et `etat.retenu` à `null` (et `etat.defauts` à `[]`) : jamais un état venu d'ailleurs, et l'identification n'échoue pas pour autant. La porte de confiance est inchangée (`haute` ou `moyenne` : avis retenu ; sinon `etat.retenu` est `null`).
+- **Le délai.** L'appel d'état part en même temps que l'identification ; une fois l'identification rendue, l'état attend **au plus 2 000 ms de plus**. Au-delà, l'état est `null` : un appel d'état lent ne retient jamais une identification terminée. L'appel n'est ni repris ni annulé, sa dépense reste comptée. La cause d'un état nul est fermée et journalisée (`etatCause`, jamais dans la réponse) : `sans-image`, `depense`, `arret`, `panne`, `illisible`, `delai`. Banc : `test-etat-photos.js` (horloge factice : à temps, en retard, en erreur) et `test-etat-titre.js` (état bloqué 3 500 ms, réponse sans l'attendre).
+- **La confiance, et « verso non visible ».** La consigne d'état reprend les trois niveaux de confiance de l'identification (« basse » : sleeve, reflets, flou, angle, éclairage ; « moyenne » ; « haute » seulement carte nue, photo nette), avec deux écarts qui ne portent que sur la confiance : l'absence d'une photo du verso ne donne plus « basse » à elle seule. Aucune phrase n'y dit comment juger l'usure, les défauts ou l'état ; le banc le vérifie.
+- **Prudence en cas de doute : l'erreur ne va JAMAIS vers « moins abîmé que la réalité » (règle de l'éditeur).** Surestimer l'état gonfle le prix et fabrique de fausses bonnes affaires. La consigne d'état permet au modèle de nommer, UNIQUEMENT quand il hésite entre deux états, un **second état plausible** (champ facultatif et fermé, la même liste : `NM`, `EX`, `GD`, `LP`, `PL`, `PO`). Le serveur retient alors le **PLUS ABÎMÉ des deux** : `etat.retenu` (donc `prixLive.etatVise`) est cet état, alors que `etat.estime` reste l'avis principal du modèle. Sans hésitation : l'état unique. Confiance « basse » : `etat.retenu` est `null`, second état ou non (la porte de confiance s'applique avant). Un second état **hors liste** (« MINT », « EX+ », « LP/PL »…) est une hésitation que le serveur ne sait pas lire : il est refusé, il ne devient jamais l'état, et **`etat.retenu` est alors `null`** (donc la fourchette, §2 bis (g) ; il en va de même d'un `etatSecond` PRÉSENT qui n'est pas une chaîne — tableau, nombre, objet, booléen —, seuls l'absence, `null`, la chaîne vide et « null / none / aucun » disant « pas de second état ») — jamais l'état principal, qui serait plus beau que le doute (ruling de l'éditeur : si c'est faux, une fourchette de plus, jamais un prix d'un meilleur état) ; le refus est journalisé (`etatSecondRefuse`). Un second état **meilleur** que l'avis principal ne le relève jamais. Le second état n'est pas servi dans la réponse ; il est journalisé (`etatSecond`). Un client lit `etat.retenu` comme l'état à utiliser, jamais `etat.estime` pour le prix. Banc : `test-etat-photos.js` (lecture, refus, `retenirEtat` sur tout le barème) et `test-etat-titre.js` (4 quater : hésitation qui retient le plus abîmé, absence d'hésitation, second hors liste ou collé refusé et état retenu nul, second meilleur, confiance basse ; sur les deux routes).
+- **Le comparateur des mesures n'est pas la réalité.** Les chiffres « plus abîmée / moins abîmée » du rapport du lot comparent l'appel d'état à l'**identification d'aujourd'hui sans titre sur la même photo** ; il n'existe pas de vérité d'état au banc.
+- **Un état non estimable ne refuse JAMAIS le prix : il le sert en FOURCHETTE (lot ETAT-FOURCHETTE, décision de l'éditeur du 2026-10-24).** Quand `etat.retenu` est `null` (confiance « basse », délai dépassé, panne de l'appel d'état), la carte garde son verdict d'identification (l'état ne change pas qui elle est) ; son prix est le repli `prixRepli` avec une `fourchette` (du plus abîmé plausible au meilleur) et la mention fermée `etat-non-estimable` (« état non estimable sur les photos »), jamais un prix sûr. Le détail, les bornes et leurs sources : §2 bis (g).
+- **Le test.** `v2/test/test-etat-titre.js`, par les vraies routes (v2 et héritée) : la même requête avec six titres différents (dont l'absence de titre) rend exactement le même état, le même prix, les mêmes candidats et le même verdict ; la requête envoyée à l'appel d'état est la même, octet pour octet, pour les six titres et ne contient aucun d'eux ; l'identification reçoit toujours le titre. Un faux modèle qui recopie dans son état un mot de ce qu'il reçoit (« neuf », « abîmé »…) fait varier l'état avec le titre sur l'ancienne chaîne, jamais sur celle-ci.
+- La lecture de secours (modèle en panne) lit le titre pour le nom et le numéro seulement : elle rend `etatEstime: null`, et l'appel d'état, lui, ne le lit jamais. Les lignes de journal d'**avant** ce lot portent un état estimé avec le titre : ne pas les mêler dans une mesure.
 - L'extension v2 n'envoie aucun `vintedEtat` (constat du site). L'extension 1.0.x : la route héritée lit `req.body.vintedEtat` s'il est envoyé et le journalise ; ce dépôt ne contient pas le code de la 1.0.5, on ne peut donc pas dire d'ici si elle l'envoie. Sa conséquence est la même dans tous les cas : ignoré.
 
 La réponse a **trois issues par carte**, jamais une quatrième. Une carte identifiée :
@@ -1144,7 +1154,7 @@ La mention `repli` est fermée : **`tendance`** (la tendance et les moyennes du 
 | code | `repli` | texte proposé (à valider par l'éditeur) |
 |---|---|---|
 | `langue-non-lue` | `tendance` | « La langue de la carte n'a pas pu être lue : voici la tendance et les moyennes Cardmarket du jour (tous états, toutes langues), à titre indicatif. » |
-| `etat-non-retenu` | `tendance` | « L'état de la carte n'est pas estimé avec assez de certitude : voici la tendance et les moyennes Cardmarket du jour (tous états), à titre indicatif. » |
+| `etat-non-retenu` | `tendance` | « État non estimable sur les photos : voici une fourchette de prix, avec la tendance et les moyennes Cardmarket du jour (tous états), à titre indicatif. » (ETAT-FOURCHETTE, §2 bis (g) : le repli porte alors `fourchette` et la réserve `etat-non-estimable`) |
 | `lecture-ratee`, `tendance-seule` | `tendance` | « Aucune offre lisible dans l'état : voici la tendance et les moyennes Cardmarket du jour (tous états), pas un prix d'offre. » |
 | `offre-autre-etat` | `etat-proche` | « Aucune offre dans l'état estimé : la moins chère lue est en {offre.etat} ({offre.prix} €). » |
 
@@ -1191,6 +1201,82 @@ Réponse de `POST /api/retour-live` à une lecture ratée définitive dont le re
   "fiable": false,
   "guide": null,
   "offre": { "etat": "GD", "prix": 0.9 }
+}
+```
+
+**(g) L'état n'est pas estimable : une FOURCHETTE, jamais un prix sûr (lot ETAT-FOURCHETTE, décision de l'éditeur du 2026-10-24).** Règle de l'éditeur : « pour un scan sans état, ne refuse jamais le prix : affiche une FOURCHETTE (du plus abîmé plausible au meilleur) avec la mention "état non estimable sur les photos", jamais un prix sûr. » AJOUT FACULTATIF du schéma (`PrixRepli.fourchette`, `PrixFourchette`, `BornePrix`, et une valeur de plus, la dernière, dans la liste fermée `PrixGuide.reserves`).
+- **Quand.** L'état est **non estimable** quand AUCUN état valide n'est retenu : `etat.retenu` `null` (ou hors de la liste `MT` · `NM` · `EX` · `GD` · `LP` · `PL` · `PO`), ou deux données d'état de la carte qui se contredisent (la prudence l'emporte). **UNE seule définition** (`etatNonEstimable`, `v2/identifier/fourchette-etat.js`, importée par `prix-repli.js`) appelée par les deux chemins : la réponse d'identification (`POST /api/identifier`, `POST /api/identifier/reponse` : la carte dont `prixLive.etatVise` est `null`, ou dont la langue n'a pas été lue **et** dont l'état est nul) et le retour en direct (`POST /api/retour-live` : l'état retenu de l'analyse du scan est `null`, **quoi que l'extension envoie** : lecture ratée, tendance, prix de la grille, plancher toutes langues). Un état retenu : rien ne change, octet pour octet.
+- **Quoi.** Le repli `prixRepli` de forme `tendance` (le guide du jour, tous états) porte **en plus** `fourchette { basse, haute, absentes }` et son `guide` est le guide de la fiche **sous fourchette** : mêmes chiffres, `fiable: false` **même quand le guide de la fiche est fiable**, et la réserve `etat-non-estimable` en **dernier** de `guide.reserves` (texte à afficher : **« état non estimable sur les photos »**), après les réserves du produit. Un prix lu au retour en direct alors que l'état est nul n'est **jamais** servi comme le prix d'un seul état : le repli porte la fourchette (cause `etat-non-retenu`, sans `offre`), **quelle que soit l'origine du prix** — grille, plancher toutes langues, mais aussi une origine absente ou inconnue (extensions anciennes qui n'envoient pas `originePrix`) : dès qu'un prix valide est lu et que l'état est nul, c'est la même forme (seule l'origine `grille` apporte sa grille). Sans prix valide ni lecture ratée, rien à servir. **Fiche sans guide servable** (tour de correction 2, N3) : si un prix valide est lu (origine autre que `tendance`, qui n'est pas une offre), il est quand même servi AVEC la mention — forme `repli: "fourchette"` : `guide` et `offre` nuls, `cause: "etat-non-retenu"`, `fiable: false`, `fourchette` bornée par le prix lu (avec son état s'il est connu) et la grille, et `reserves: ["etat-non-estimable"]` (la mention ne pouvant pas voyager sur un guide absent). Une lecture ratée ou une tendance sans guide : rien à servir comme avant.
+- **D'où viennent les bornes, et ce que le serveur n'invente pas.** Chaque borne est `{ prix, source }`, tirée d'une donnée de prix que le serveur sert **déjà** ; une borne qu'aucune donnée ne donne est `null`, et `absentes` dit laquelle (`basse` puis `haute`). Deux sources, fermées : **`grille-directe`** (la grille `grilleLive` que l'extension envoie avec le retour en direct, un prix par état) et **`guide-de`** (le « De » du guide du jour, l'offre la plus basse **tous états et toutes langues**). **L'état n'étant pas estimable, tous les états jusqu'au plus abîmé sont plausibles : une grille, même partielle, ne fixe pas la borne basse seule.** `basse` = le **MINIMUM de tout ce qui est connu**, les prix valides de la grille (même un seul état) ET le « De » du guide, avec la source de ce minimum (à égalité : `grille-directe`) ; une grille `{ NM 5, EX 4 }` et un « De » à 2 donnent `basse` 2, `guide-de`. `haute` = le prix le plus haut de la grille, **à condition qu'elle ait deux états valides au moins** (avec un seul, on ne sait pas si un meilleur état coûte plus). **Un prix sous 0,01 est une valeur invalide** (comme un zéro, un texte ou un état hors liste), écarté : le serveur ne sert jamais une borne hors du schéma (`BornePrix.prix` ≥ 0,01). **Le guide n'a aucun prix par état** : sa tendance et ses moyennes sont des prix tous états, elles ne deviennent **jamais** la borne haute (ce serait déduire le prix du meilleur état de ce qu'on veut prédire). **Conséquence : tant que l'extension n'a lu aucune grille, la borne haute est absente** (`absentes: ["haute"]`) ; le client affiche alors « à partir de {basse} € » avec la tendance et les moyennes du `guide` (« tous états »), jamais une borne haute inventée. Des prix en texte, un état ambigu (deux clés pour le même état, valeurs différentes) : écartés. **`plancherInconnu: true`** (tour de correction 2, N1 ; champ fermé, ABSENT sinon) : quand le guide n'a pas de « De » et que la `basse` ne vient que d'une lecture directe qui ne contient pas l'état le plus abîmé (**PO**), cette `basse` n'est PAS le prix du plus abîmé plausible, seulement le plus bas prix lu : la fourchette le dit par ce champ ; le client l'affiche « à partir de », jamais comme le prix du plus abîmé. Le prix n'est pas refusé. Un point lu en PO, ou un « De » au guide, rend le plancher connu (champ absent).
+- **Jamais un prix sûr.** `prixRepli.fiable` vaut `false`, `guide.fiable` aussi, et **le serveur ne sert aucun verdict** : le client n'en calcule aucun sur une fourchette. **Et c'est tout prix servi d'un scan à état nul, pas seulement le repli** (tour de correction 1, M1) : le `prixGuide` de la carte, celui de ses `impressions` et celui des `candidats` d'une question à trancher passent **sous la même mention** — `fiable: false` et la réserve `etat-non-estimable` en dernier de `reserves`, mêmes chiffres, par la même règle (`etatNonEstimable`). La carte garde son verdict d'identification et sa fiche ; seule la fiabilité de son prix change (l'état de l'annonce n'est pas connu). Un `prixGuide` `null` reste `null`. Le scanner du site, qui sert ces `prixGuide` sans `prixRepli`, montre donc la mention.
+- **Le quota.** Un scan à fourchette **AFFICHE** un prix : il compte dans le quota exactement comme un repli (REPLI-QUOTA, `afficheUnPrix`, inchangée). Sans aucune donnée de prix (aucun guide servi **et** aucun prix lu valide), la clé `prixRepli` est absente comme avant : l'état nul n'y change rien. Le scanner du site ne sert toujours jamais `prixRepli`.
+
+```json schema=PrixRepli
+{
+  "repli": "tendance",
+  "cause": "etat-non-retenu",
+  "fiable": false,
+  "guide": {
+    "tendance": 1.49,
+    "de": 0.02,
+    "deBase": "tous-etats",
+    "moyenne7": 1.55,
+    "moyenne30": 1.26,
+    "date": "2026-10-12",
+    "fiable": false,
+    "reserves": ["etat-non-estimable"]
+  },
+  "offre": null,
+  "fourchette": {
+    "basse": { "prix": 0.02, "source": "guide-de" },
+    "haute": null,
+    "absentes": ["haute"]
+  }
+}
+```
+
+Avec la grille lue en direct (deux états au moins), les deux bornes existent. Ici la grille `{ NM 6, GD 0,9 }` descend sous le « De » du guide (1) : `basse` = 0,9 (`grille-directe`) ; avec un « De » plus bas que la grille, c'est le « De » qui serait la borne basse (`guide-de`) :
+
+```json schema=PrixRepli
+{
+  "repli": "tendance",
+  "cause": "etat-non-retenu",
+  "fiable": false,
+  "guide": {
+    "tendance": 10.18,
+    "de": 1,
+    "deBase": "tous-etats",
+    "moyenne7": 14.59,
+    "moyenne30": 13.15,
+    "date": "2026-10-12",
+    "fiable": false,
+    "reserves": ["ecart-tendance", "etat-non-estimable"]
+  },
+  "offre": null,
+  "fourchette": {
+    "basse": { "prix": 0.9, "source": "grille-directe" },
+    "haute": { "prix": 6, "source": "grille-directe" },
+    "absentes": []
+  }
+}
+```
+
+Fiche sans guide servable, état nul, un prix lu en GD sans grille (tour de correction 2, N3 ; le plancher est inconnu, N1) :
+
+```json schema=PrixRepli
+{
+  "repli": "fourchette",
+  "cause": "etat-non-retenu",
+  "fiable": false,
+  "guide": null,
+  "offre": null,
+  "fourchette": {
+    "basse": { "prix": 0.9, "source": "grille-directe" },
+    "haute": null,
+    "absentes": ["haute"],
+    "plancherInconnu": true
+  },
+  "reserves": ["etat-non-estimable"]
 }
 ```
 

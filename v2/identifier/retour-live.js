@@ -67,7 +67,8 @@ async function repliDuRetour(porteur, scanId, carte, b, lr) {
     if (idProduct === null) return null;
     const produit = Number.isInteger(idProduct) && Array.isArray(an.produits) ? an.produits.find(p => p && p.idProduct === idProduct) : null;
     return repliRetourLive({ prixGuide: produit ? produit.prixGuide : null, retenu: e.etat ? e.etat.retenu : null, lectureRatee: lr || null,
-        originePrix: typeof b.originePrix === 'string' ? b.originePrix.trim().toLowerCase() : null, prixLive: Number(b.prixLive), prixLiveEtat: b.prixLiveEtat });
+        originePrix: typeof b.originePrix === 'string' ? b.originePrix.trim().toLowerCase() : null, prixLive: Number(b.prixLive), prixLiveEtat: b.prixLiveEtat,
+        grilleLive: b.grilleLive });      // ETAT-FOURCHETTE : la grille lue en direct borne la fourchette d'un scan dont l'état n'est pas estimable (prix-repli.js, la seule règle)
 }
 
 function traiterRetourLive(cfg, deps = {}) {
