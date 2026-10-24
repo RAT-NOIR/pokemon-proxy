@@ -18,7 +18,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minutes
 
 (async () => {
-    const { cartes: cx, fermer } = await ouvrirConnexions();
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions();
     const db = cx.db;
     // ⚠️ ON ÉNUMÈRE L'ÉTAT ACTIF, PAS LES ÉTATS TERMINAUX. Écrit d'abord en `$nin: [attente, fini,
     // refuse]`, ce contrôle a crié sur 26 unités `fait` — un état terminal que la liste ignorait.
@@ -50,13 +50,15 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     if (alerte) console.log(`🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()} (constatée ${new Date(alerte.constateLe).toISOString()}) : ${alerte.setsSansVisuelComplet} sets, ${alerte.cartesSansVisuel} cartes sans visuel, rien d'enfilable — ${JSON.stringify(alerte.raisons)}`);
     else if (!attente && !enCours.length) console.log(`⚠️ file vide et AUCUNE alerte écrite : le worker tourne sur un commit sans alimentateur, ou ne tourne pas`);
     // Les imports quotidiens lancés par le worker (collecte-cartes/imports-quotidiens.js) : leur état, et leur alerte s'ils échouent.
-    const imports = await db.collection('collecte_images_etat').find({ _id: /^import-quotidien\// }).toArray();
+    // 🔴 (2026-10-24) DEUX journaux : `collecte_images_etat` de `cartes` (worker Render suspendu, passage local) ET `imports_ci_etat` de la production
+    // `test` (GitHub Actions, depuis le 17/10) — ne lire que le premier affichait « dernier passage 2026-10-17 » (collecte-cartes/journal-imports.js).
+    const J = require('./collecte-cartes/journal-imports');
+    const { imports, alertes, erreurProd } = await J.lireJournauxImports({ cartes: db, prod: prod ? prod.db : null });
     // (relecture) un import en cours depuis moins de 45 min est du travail : la base de production bouge
-    const importEnCours = imports.some(i => i.enCours && Date.now() - new Date(i.dernierEssai) < 45 * 60000);
-    for (const imp of imports)
-        console.log(`import quotidien ${imp._id.slice(17)} : dernier passage ${imp.dernierEssai ? new Date(imp.dernierEssai).toISOString() : '—'} · ${imp.dernierResultat ?? '—'} (code ${imp.dernierCode ?? '—'}) · dernier import ${imp.succesLe ?? 'jamais'}`
-            + (imp.enCours ? (Date.now() - new Date(imp.dernierEssai) > 45 * 60000 ? ' · 🔴 « en cours » depuis plus de 45 min : interrompu (conteneur tué ?)' : ' · EN COURS') : ''));
-    for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/import-/, active: true }).toArray())
+    const importEnCours = J.importEnCours(imports);
+    for (const imp of imports) console.log(J.ligneImport(imp));
+    if (erreurProd) console.log(`⚠️ journal des imports de GitHub Actions NON LU (${erreurProd}) : les lignes « import quotidien » ci-dessus peuvent être périmées`);
+    for (const al of alertes)
         console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : code ${al.code}, essai ${al.essais} — ${String(al.extrait || '').split('\n').filter(Boolean).slice(-1)[0] ?? ''}`);
     // ➕ 2026-10-07 (soir) — les sources officielles TPC (collecteur-images-tpc.js) : un site qui a BLOQUÉ (ou retiré en un lot), et la base
     // au-delà de 400 Mo (consigne de l'éditeur : STOP)
