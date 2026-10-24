@@ -31,5 +31,17 @@ verifier('la preuve et le tirage de la ligne du plan sont portés (les compteurs
 const R2 = appliquerPlans({ cartes, cartesProduits: lignes }, [{ lignes: [{ _id: '99|9', carteId: 99, idProduct: 9, idExpansion: 1 }] }]);
 verifier('une ligne qui vise une carte absente de la base est COMPTÉE (le plan ne correspond pas à l\'état lu)', R2.carteAbsente, 1);
 verifier('deux plans : le second voit les lignes du premier (pas de doublon entre plans)', appliquerPlans({ cartes, cartesProduits: lignes }, [plan, plan]).ajoutees.length, 2);
+// numerosFiche : le numéro posé sur une ligne EXISTANTE dont le numeroFiche est nul ou absent (jamais une valeur remplacée) — poser-numerotation.js
+const lignesNum = [{ _id: '10|1', carteId: 10, idProduct: 1, idExpansion: 100 }, { _id: '10|2', carteId: 10, idProduct: 2, idExpansion: 100, numeroFiche: null }, { _id: '10|3', carteId: 10, idProduct: 3, idExpansion: 100, numeroFiche: '5' }];
+const avantNum = JSON.stringify(lignesNum);
+const R3 = appliquerPlans({ cartes, cartesProduits: lignesNum }, [{ lignes: [], numerosFiche: [{ _id: '10|1', numeroFiche: '7' }, { _id: '10|2', numeroFiche: '8' }, { _id: '10|3', numeroFiche: '9' }, { _id: '10|404', numeroFiche: '1' }] }]);
+verifier('numerosFiche : posé sur une ligne sans numeroFiche (absent ou nul), JAMAIS sur une ligne qui en a un', R3.cartesProduits.map(l => l.numeroFiche ?? null), ['7', '8', '5']);
+verifier('numerosFiche : l\'état lu n\'est pas modifié', JSON.stringify(lignesNum), avantNum);
+verifier('numerosFiche : une ligne introuvable est COMPTÉE', R3.numeroFicheIntrouvable, 1);
+// les produits d'un lot : les lignes AJOUTÉES, plus — pour les outils qui ne touchent que des lignes EXISTANTES — toutes les lignes du plan
+const { produitsDuLot, OUTILS_SUR_LIGNES_EXISTANTES } = require('./collecte-cartes/appliquer-plan');
+verifier('produitsDuLot : un plan de lignes à ajouter ne compte que les lignes ajoutées', [...produitsDuLot([{ outil: 'poser-lignes-rejeu', lignes: [{ _id: 'a', idProduct: 1 }, { _id: 'b', idProduct: 2 }] }], [{ _id: 'a', idProduct: 1 }])], [1]);
+verifier('produitsDuLot : un plan de numérotation compte toutes ses lignes (elles existent déjà)', [...produitsDuLot([{ outil: 'poser-numerotation', lignes: [{ _id: 'a', idProduct: 1 }, { _id: 'b', idProduct: 2 }] }], [])].sort(), [1, 2]);
+verifier('la liste des outils sur lignes existantes est fermée', [...OUTILS_SUR_LIGNES_EXISTANTES].sort(), ['poser-impressions-setlist', 'poser-numerotation']);
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

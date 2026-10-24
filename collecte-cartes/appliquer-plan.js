@@ -39,7 +39,23 @@ function appliquerPlans({ cartes, cartesProduits }, plans) {
             if (!c.impressions.some(i => i.tirage === x.imp.tirage && i.expansion === x.imp.expansion && J.cleNumero(i.numero) === J.cleNumero(x.imp.numero))) c.impressions.push({ tirage: x.imp.tirage, expansion: x.imp.expansion, numero: x.imp.numero, total: x.imp.total ?? null, deck: x.imp.deck ?? null, rarete: x.imp.rarete ?? null });
         }
     }
-    return { cartes: cartesApres, cartesProduits: lignesApres, ajoutees, dejaLa, carteAbsente };
+    // `numerosFiche` (poser-numerotation.js) : le numéro posé sur une ligne EXISTANTE dont le numeroFiche est nul ou absent ; jamais une valeur remplacée (comme `numeroFiche: { $in: [null, ''] }` en base)
+    let numeroFicheIntrouvable = 0;
+    const idxLigne = new Map(lignesApres.map((l, i) => [String(l._id), i]));
+    for (const p of plans) for (const n of p.numerosFiche || []) {
+        const i = idxLigne.get(String(n._id)); if (i === undefined) { numeroFicheIntrouvable++; continue; }
+        const l = lignesApres[i]; if (l.numeroFiche == null || l.numeroFiche === '') lignesApres[i] = { ...l, numeroFiche: n.numeroFiche };
+    }
+    return { cartes: cartesApres, cartesProduits: lignesApres, ajoutees, dejaLa, carteAbsente, numeroFicheIntrouvable };
 }
 
-module.exports = { appliquerPlans };
+// Les outils qui ne posent PAS de ligne : ils posent une impression sur la carte (et un numeroFiche) pour des lignes qui EXISTENT déjà. Les produits de leur lot sont donc toutes les lignes de leur plan.
+const OUTILS_SUR_LIGNES_EXISTANTES = new Set(['poser-impressions-setlist', 'poser-numerotation']);
+/** @returns {Set<number>} les idProduct du lot : les lignes ajoutées + (outils sur lignes existantes) toutes les lignes du plan */
+function produitsDuLot(plans, ajoutees) {
+    const ids = new Set(ajoutees.map(l => l.idProduct));
+    for (const p of plans) if (OUTILS_SUR_LIGNES_EXISTANTES.has(p.outil)) for (const l of p.lignes || []) ids.add(l.idProduct);
+    return ids;
+}
+
+module.exports = { appliquerPlans, produitsDuLot, OUTILS_SUR_LIGNES_EXISTANTES };

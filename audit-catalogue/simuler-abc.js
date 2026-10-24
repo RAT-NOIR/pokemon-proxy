@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { autoriser } = require('../collecte-cartes/garde-ecriture');
-const { appliquerPlans } = require('../collecte-cartes/appliquer-plan');
+const { appliquerPlans, produitsDuLot } = require('../collecte-cartes/appliquer-plan');
 const { chargerApi } = require('./etat-api');
 const { mesurer, comparerEtats, refusDuLot, CLES_RESUME } = require('./compteurs-abc');
 
@@ -39,7 +39,7 @@ const signe = n => (n > 0 ? `+${n}` : String(n));
         appliquees = r;
         return { cartes: r.cartes, cartesProduits: r.cartesProduits };
     } });
-    const idsDuPlan = new Set(appliquees.ajoutees.map(l => l.idProduct));
+    const idsDuPlan = produitsDuLot(plans, appliquees.ajoutees);
     const CE = comparerEtats({ avant: avant.produits, apres: apres.produits, idsDuPlan });
     const ecart = {}; for (const k of CLES_RESUME) ecart[k] = apres.R.resume[k] - avant.R.resume[k];
     const parMotif = {}; for (const e of CE.effetsDeBord) { const k = `${e.fiche ?? '—'} | ${e.visuel ?? '—'} | ${e.motifsFiche.join('+') || '—'}`; parMotif[k] = (parMotif[k] || 0) + 1; }
