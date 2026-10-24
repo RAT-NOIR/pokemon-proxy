@@ -22,21 +22,12 @@ const DEFAUT_SITE_LIB = 'C:/Users/Yung/Desktop/rat-market-site/lib';
 const sans = u => String(u ?? '').replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>');
 
 /** L'état, lu avec l'utilisateur de LECTURE SEULE (jamais l'URI d'écriture) : sets entiers, cartes et lignes avec les projections RÉUNIES du site et de l'API (comme lot-additif.js). */
-async function lireEtat(api) {
+async function lireEtat(api, { clesImages = [] } = {}) {
     const { jugerLecture } = require('./collecte-cartes/base-banc');
     const j = jugerLecture(process.env, 'cartes');
     if (!j.ok) throw new Error(j.raison);
-    const { MongoClient } = require('mongodb');
-    const client = new MongoClient(j.uri);
-    await client.connect();
-    try {
-        const db = client.db('cartes');
-        const [sets, cartes, cartesProduits] = await Promise.all([db.collection('sets').find({}).toArray(),
-            db.collection('cartes').find({}).project({ ...api.projectionsEtat.cartes }).toArray(), db.collection('cartes_produits').find({}).project({ ...api.projectionsEtat.cartesProduits }).toArray()]);
-        for (const [n, l] of [['sets', sets], ['cartes', cartes], ['cartes_produits', cartesProduits]]) if (!l.length) throw new Error(`« ${n} » est VIDE : base fausse`);
-        const imagesRetirees = async cles => (await db.collection('images').find({ cleR2: { $in: cles } }).project({ cleR2: 1, etat: 1 }).toArray());
-        return { sets, cartes, cartesProduits, imagesRetirees };
-    } finally { await client.close(); }
+    // 🔴 le défaut du lot A (24/10/2026) : la relecture des documents `images` se faisait sur un client déjà fermé ; collecte-cartes/phase2-lecture.js lit TOUT avant la fermeture
+    return require('./collecte-cartes/phase2-lecture').lireEtat({ uri: j.uri, dbName: 'cartes', projectionsCartes: api.projectionsEtat.cartes, projectionsLignes: api.projectionsEtat.cartesProduits, clesImages });
 }
 /** La décision de l'API sur un état (documents bruts → enregistrements compacts, comme le chargeur). */
 async function decider(api, { sets, cartes, cartesProduits }) {
@@ -80,6 +71,11 @@ async function main() {
             const r = await P.annulerEmprunt(o.cartes.db, P.operationsAnnulation(P.EMPRUNT), { attendu: ATTENDU });
             console.log(`✅ annulées ${r.modifiees}/${P.EMPRUNT.length}`);
         } finally { await o.fermer(); }
+        // RELECTURE (utilisateur de lecture, lue avant la fermeture de sa connexion) : plus aucune des 3 entrées ne porte le drapeau ni la marque de lot
+        const relu = await lireEtat(api);
+        const restantes = P.EMPRUNT.filter(x => (relu.cartes.find(c => c._id === x.carteId)?.images || []).some(m => m.cleR2 === x.cleR2 && m.set === x.set && (m.imageEmprunteeTirage === true || m.imageEmprunteeLot)));
+        console.log(`RELECTURE : ${restantes.length ? `🔴 ${restantes.length} entrée(s) portent encore le drapeau : ${restantes.map(x => x.idProduct).join(', ')}` : '✅ aucune des 3 entrées ne porte plus le drapeau'}`);
+        if (restantes.length) process.exitCode = 1;
         return;
     }
     // ── 1. Chaque lot, chaque candidat, jugé par planifier (le geste de la table, ou celui que le produit appelle pour le lot C)
@@ -184,7 +180,7 @@ async function main() {
         } finally { await o.fermer(); }
     }
     // ── 5. RELECTURE (utilisateur de lecture) : le lot est dans l'état visé, rien d'autre n'a bougé côté API
-    const relu = await lireEtat(api);
+    const relu = await lireEtat(api, { clesImages: LOT === 'A' ? retenues.map(x => x.cleR2) : [] });
     const apresReel = await decider(api, relu);
     const cmpReel = P.compareEntrees(avant.entrees, apresReel.entrees, retenues.map(x => x.idProduct));
     const entreesRelues = relu.cartes.filter(c => retenues.some(x => x.carteId === c._id)).flatMap(c => c.images || []);
