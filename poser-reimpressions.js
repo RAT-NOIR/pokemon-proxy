@@ -24,6 +24,19 @@ const CODES = arg('codes').split(',').map(s => s.trim()).filter(Boolean);
 const ATTENDUS = Object.fromEntries(arg('attendu').split(',').filter(Boolean).map(x => { const [c, n] = x.split(':'); return [c, Number(n)]; }));
 const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
+// ── (PHASE 3a, D1 du 2026-10-24) la ligne de commande s'écrit par ce qu'elle AUTORISE ; `--ecrire` exige un `--attendu=CODE:N` par code (le nombre FINAL de lignes de ce code) et un attendu faux SORT en code 1 ;
+// `--seulement=<f>.json` : les SEULS idProduct à écrire (ceux que la règle des deux sources a confirmés) ; le reste du plan reste non écrit.
+const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--plan=.+\.json$/, /^--seulement=.+\.json$/, /^--ecrire$/];
+const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — rien n'est écrit`); process.exit(2); }
+if (process.argv.includes('--ecrire')) {
+    const manquants = CODES.filter(c => !Number.isInteger(ATTENDUS[c]));
+    if (manquants.length) { console.error(`❌ --ecrire exige --attendu=CODE:N pour chaque code (manque : ${manquants.join(', ')}) — rien n'est écrit`); process.exit(2); }
+}
+let SEULEMENT = null;
+if (arg('seulement')) { try { SEULEMENT = require('./collecte-cartes/produits-sauf').lireSauf(arg('seulement'), undefined, '--seulement'); } catch (e) { console.error(`❌ ${e.message} — rien n'est écrit`); process.exit(2); } }
+const { verifierPose } = require('./collecte-cartes/verif-pose-lot');
+
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
     if (!CODES.length || CODES.some(c => /^(WCD|PPS)/.test(c))) { console.error('❌ --codes=<codes de set> requis ; WCD et PPS ont leur outil (poser-wcd.js, poser-pps.js)'); process.exit(2); }
@@ -37,7 +50,7 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
     const cartesDe = new Map();
     for (const l of await lireMongo(cx.db.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { idProduct: 1, carteId: 1 } })) (cartesDe.get(l.idProduct) || cartesDe.set(l.idProduct, new Set()).get(l.idProduct)).add(l.carteId);
     const nu = s => normaliserNom(String(s || '').replace(/δ/g, 'delta').replace(/[éè]/g, 'e'));
-    const aEcrire = [];
+    const aEcrire = [], dansLePlan = new Set();
     for (const CODE of CODES) {
         const famille = tous.filter(n => n.codeSet === CODE && n.slug);
         const causes = { resolu: [], nonDecode: [], codeInconnu: [], numeroAbsent: [], origineSansCarte: [], ambigu: [], deja: [], nomDiscordant: [] };
@@ -59,21 +72,37 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
             const c = cartes.get(x.carteId), d = decomposerNomCardmarket(cat.get(x.idProduct)?.name || '');
             console.log(`   ${x.slug} « ${cat.get(x.idProduct)?.name} » → « ${c.nomEn} » [${(c.attaques || []).map(a => a.nom).join(' | ')}] / Cardmarket [${d.attaques.join(' | ')}] · ${(c.impressions || []).filter(i => i.tirage === 'intl').slice(0, 3).map(i => `${i.expansion} ${i.numero}`).join(' ; ')}`);
         }
+        if (SEULEMENT) {
+            const ecartees = causes.resolu.filter(x => !SEULEMENT.has(x.idProduct));
+            causes.resolu = causes.resolu.filter(x => SEULEMENT.has(x.idProduct));
+            console.log(`   --seulement : ${ecartees.length} fiche(s) du plan NON écrites (hors de la liste confirmée) · ${causes.resolu.length} retenues pour ${CODE}`);
+            for (const x of causes.resolu) dansLePlan.add(x.idProduct);
+            for (const x of ecartees) dansLePlan.add(x.idProduct);
+        }
         const attendu = ATTENDUS[CODE];
         if (attendu == null) console.log(`   (attendu non fourni : rien ne s'écrira pour ${CODE} — relire les tirés au sort, puis --attendu=${CODE}:${causes.resolu.length})`);
-        else if (attendu !== causes.resolu.length) console.log(`   🔴 ${causes.resolu.length} résolus contre ${attendu} attendus : RIEN ne s'écrit pour ${CODE}`);
+        else if (attendu !== causes.resolu.length) { console.error(`   🔴 ${causes.resolu.length} résolus contre ${attendu} attendus pour ${CODE} : RIEN ne s'écrit (arrêt)`); if (ecrire) { await fermer(); process.exit(1); } }
         else aEcrire.push(...causes.resolu.map(x => ({ ...x, route: CODE })));
     }
+    if (SEULEMENT) {
+        const horsPlan = [...SEULEMENT].filter(id => !dansLePlan.has(id));
+        if (horsPlan.length) { console.error(`❌ ARRÊT : ${horsPlan.length} idProduct de --seulement ne sont dans le plan d'aucun code (${horsPlan.slice(0, 8).join(', ')}) — le fichier ne correspond pas à l'état de la base, rien n'est écrit`); await fermer(); process.exit(1); }
+    }
     // (PHASE 3a) `--plan=<fichier>.json` : les lignes que ce lancement poserait, en LOCAL (simulation de l'API, planche) ; rien n'est écrit en base
-    if (arg('plan')) require('fs').writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-reimpressions', lignes: aEcrire.map(x => ({ _id: `${x.carteId}|${x.idProduct}`, carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: 'reimpression+origine+numero', slug: x.slug, slugSet: x.slugSet, numeroFiche: null, code: x.route, nomProduit: cat.get(x.idProduct)?.name ?? null })), cartesSets: [] }));
+    if (arg('plan')) require('fs').writeFileSync(arg('plan'), JSON.stringify({ outil: 'poser-reimpressions', lignes: aEcrire.map(x => ({ _id: `${x.carteId}|${x.idProduct}`, carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: 'reimpression+origine+numero', slug: x.slug, slugSet: x.slugSet, numeroFiche: null, code: x.route, nomProduit: cat.get(x.idProduct)?.name ?? null, origine: { code: x.code, numero: x.num } })), cartesSets: [] }));
     if (!ecrire || !aEcrire.length) { console.log(`\n   ${aEcrire.length} fiches à poser${ecrire ? '' : ' — (mesure seule)'}`); await fermer(); return; }
     const PREUVE = 'reimpression+origine+numero';
+    const avant = await cx.db.collection('cartes_produits').countDocuments({ preuve: PREUVE, route: { $in: CODES } });
     const r = await cx.db.collection('cartes_produits').bulkWrite(aEcrire.map(x => ({ updateOne: { filter: { _id: `${x.carteId}|${x.idProduct}` }, update: { $set: {
         carteId: x.carteId, idProduct: x.idProduct, idExpansion: x.idExpansion, tirage: 'intl', preuve: PREUVE, slug: x.slug, slugSet: x.slugSet, origine: { code: x.code, numero: x.num },
         detail: `slug ${x.slug} → tirage d'origine ${x.code} n°${x.num} → produit(s) ${x.cands.join('/')} → une seule carte`, verifieLe: new Date(), route: x.route } }, upsert: true } })), { ordered: false });
     const parCarte = new Map(); for (const x of aEcrire) { const v = parCarte.get(x.carteId) || parCarte.set(x.carteId, { ids: [], metas: new Set() }).get(x.carteId); v.ids.push(x.idProduct); if (x.idMetacard != null) v.metas.add(x.idMetacard); }
-    await cx.db.collection('cartes').bulkWrite([...parCarte].map(([id, v]) => ({ updateOne: { filter: { _id: id }, update: { $addToSet: { 'liens.idProduct': { $each: v.ids }, 'liens.idMetacards': { $each: [...v.metas] } } } } })), { ordered: false });
+    const rc = await cx.db.collection('cartes').bulkWrite([...parCarte].map(([id, v]) => ({ updateOne: { filter: { _id: id }, update: { $addToSet: { 'liens.idProduct': { $each: v.ids }, 'liens.idMetacards': { $each: [...v.metas] } } } } })), { ordered: false });
     const relu = await cx.db.collection('cartes_produits').countDocuments({ preuve: PREUVE, route: { $in: CODES } });
-    console.log(`\n   ✅ ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · RELU « ${PREUVE} » pour ${CODES.join(',')} : ${relu} (attendu ${aEcrire.length})`);
+    console.log(`\n   ${r.upsertedCount} insérées · ${r.modifiedCount} modifiées · RELU « ${PREUVE} » pour ${CODES.join(',')} : ${avant} → ${relu} (${aEcrire.length} posées)`);
+    // (D1) la garde rouge SORT en code 1 (pure, partagée avec poser-wcd.js : collecte-cartes/verif-pose-lot.js)
+    const verdict = verifierPose({ avant, apres: relu, inserees: r.upsertedCount, retrouvees: r.matchedCount, posees: aEcrire.length, cartesAttendues: parCarte.size, cartesRetrouvees: rc.matchedCount });
+    if (!verdict.ok) { console.error(`   🔴 LE COMPTE RÉEL NE COLLE PAS — ${verdict.problemes.join(' ; ')}`); process.exitCode = 1; }
+    else console.log(`   ✅ relu : ${aEcrire.length} lignes posées, ${parCarte.size} cartes à jour`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });

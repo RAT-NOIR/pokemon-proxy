@@ -18,6 +18,7 @@ require('dotenv').config();
 const fs = require('fs');
 const { garderMatiereSpeciale, estMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
 const { decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+const { rejouer } = require('./collecte-cartes/deux-sources');
 
 const AUTORISES = [/^--liste=.+\.json$/, /^--exp=\d+(,\d+)*$/, /^--neufs$/, /^--attendu=\d+$/, /^--plan=.+\.json$/, /^--ecrire$/];
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9δ]+/g, '');
@@ -74,6 +75,12 @@ async function executer({ argv, ouvrir, catalogue, lireListe = f => JSON.parse(f
             const c = cat.get(e.idProduct);
             if (!c) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: 'produit absent du catalogue' }); continue; }
             if (e.numero == null || String(e.numero).trim() === '') { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: 'sans numéro Cardmarket : une fiche simple sans numéro ne se confirme pas' }); continue; }
+            // (D3, 2026-10-24) L'OUTIL REJOUE LA CONFIRMATION, il ne se fie pas au `ok` du fichier : le nom de la liste est celui du catalogue, et les concordantes écrites sont relues
+            // (au moins une ; chaque source admise et non exclue — Bulbapedia comprise ; set et numéro du produit ; nom du produit). Une garde s'écrit par ce qu'elle AUTORISE.
+            const nomCatalogue = decomposerNomCardmarket(c.name).nom;
+            if (e.nom !== nomCatalogue) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `le nom de la liste (« ${e.nom} ») n'est pas celui du catalogue (« ${nomCatalogue} ») : la liste ne décrit pas ce produit` }); continue; }
+            const rej = rejouer({ set: e.set, numero: e.numero, nom: nomCatalogue }, e.concordantes);
+            if (!rej.ok) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `confirmation non rejouée : ${rej.motifs.join(' ; ')}` }); continue; }
             const memeNom = (cartesDuSet.get(e.set) || []).filter(x => !x.ficheSimple && nuNom(x.nomEn) === nuNom(e.nom));
             if (memeNom.length) { refus.push({ idProduct: e.idProduct, nom: e.nom, motif: `une vraie carte de ce nom est déjà dans le set (${memeNom.slice(0, 3).map(x => x._id).join(', ')}) : c'est une jointure qui manque, pas une fiche à poser` }); continue; }
             const k = `${e.set}|${nuNom(e.nom)}|${nuNum(e.numero)}`;
@@ -93,6 +100,8 @@ async function executer({ argv, ouvrir, catalogue, lireListe = f => JSON.parse(f
         const plan = [...groupes.values()];
         const nLignes = plan.reduce((t, g) => t + g.produits.length, 0);
         for (const g of plan) log(`   + ${g.slug} n°${g.numero} « ${g.nom} » → fiche simple ${g.id}${g.existante ? ' (déjà là)' : ''} · ${g.produits.length} produit(s) · sources : cardmarket + ${[...new Set([...g.sources.values()].map(x => x.source))].join(', ')}`);
+        // les refus de CONFIRMATION se disent un à un, en entier (ils sont rares et c'est le motif qui compte) ; les autres se comptent
+        for (const r of refus.filter(r => /^(confirmation non rejouée|le nom de la liste)/.test(r.motif))) log(`   ✗ ${r.idProduct} « ${r.nom} » : ${r.motif}`);
         const parMotif = {}; for (const r of refus) { const m = r.motif.replace(/\(.*\)/, '(…)').replace(/« [^»]*»/, '« … »'); parMotif[m] = (parMotif[m] || 0) + 1; }
         log(`   ${nLignes} lignes sur ${plan.length} fiches simples · refusés ${refus.length}${Object.keys(parMotif).length ? ' : ' + Object.entries(parMotif).sort((a, b) => b[1] - a[1]).map(([m, n]) => `${n} × ${m}`).join(' · ') : ''}${ecrire ? '' : ' — (simulation)'}`);
         const sourceTexte = g => `deux sources concordantes sur (set, n°, nom) : Cardmarket (export, numéro appris) + ${[...g.sources.values()].map(x => `${x.source} ${x.ref ?? ''}`.trim()).join(' ; ')} — règle du testeur, 2026-10-24 (aucune donnée Bulbapedia)`;

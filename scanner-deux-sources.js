@@ -35,7 +35,12 @@ if (!clone.cartes.length) throw new Error('clone vide');
 const parSetNum = new Map();   // `${set}|${numero}` -> relevés
 const ajouter = (set, numero, r) => { if (!set || numero == null || String(numero).trim() === '') return; const k = `${set}|${cleNumero(String(numero))}`; (parSetNum.get(k) || parSetNum.set(k, []).get(k)).push({ ...r, set, numero }); };
 // (PikaQian n'est PAS lu ici : ses images ont été jointes à nos produits par NOTRE chaîne, leur numéro n'est pas indépendant ; ses TUILES sont lues plus bas, calibrées par set)
-const SOURCE_IMAGES = { artofpkm: 'artofpkm', 'tpc-asie': 'tpc-asie', 'pokemon-card-com': 'pokemon-card-com', pokumon: 'pokumon', 'pokemontcg.io': 'pokemontcg.io', tcgdex: 'tcgdex', ctr: 'ctr', pkc: 'pkc', pdt: 'pdt', pokellector: 'pokellector' };
+// 🔴 (D2, 2026-10-24) MESURÉ : sur la collection `images`, le `nomEn` de TOUTES les sources sauf artofpkm est IDENTIQUE au `nomEn` de NOTRE carte joint par `carteId` (tcgdex 21 733/21 733,
+// tpc-asie 1 957/1 957, pikaqian 8 793/8 793, pokumon 605/605…) : c'est le nom de notre carte (venu de Bulbapedia), copié à la jointure — pas celui de la source. Seul artofpkm porte
+// son propre nom (1 020 noms différents du nôtre, dont « Pi » / « Pidgeot »). Un nom copié de la carte confirme la carte par elle-même : il ne compte donc PAS. Les autres sources se lisent
+// là où elles portent LEUR nom : le clone TCGdex, `tpc_fiches` (TPC Asie, pokemon-card.com), les tuiles PikaQian. Pokumon, pokemontcg.io, CardTrader, pkmncards, pokedata, Pokéllector : sans
+// nom propre dans nos copies, elles ne confirment rien (et le disent : « nom absent »).
+const SOURCE_IMAGES = { artofpkm: 'artofpkm' };
 for (const im of images) {
     const s = SOURCE_IMAGES[im.source]; if (!s) continue;
     ajouter(im.set, im.numero, { source: s, nom: im.nomEn ?? (im.titre ? String(im.titre).split(',')[0] : null), ref: `images ${im._id}` });
@@ -53,17 +58,14 @@ const calPq = calibrer(pqR.releves, joints);
 console.log(`PIKAQIAN : ${pqR.releves.length} tuiles lues (${pqR.pages} pages ; sans set dans la table : ${pqR.pagesSansSet.join(', ') || 'aucune'}) · produits joints de comparaison ${joints.length} · sets CALIBRÉS ${calPq.calibres.length} / ${Object.keys(calPq.parSet).length} comparés`);
 for (const s of ['Scarlet-Violet-Simplified-Chinese-Promos']) console.log(`   ${s} : ${JSON.stringify(calPq.parSet[s] || 'aucun produit joint comparé')}`);
 for (const r of pqR.releves) if (calPq.calibres.includes(r.set)) ajouter(r.set, r.numero, { source: 'pikaqian', nom: r.nom, ref: r.ref });
-// TPC : la ligne TPC du set désigne (site, langue, code imprimé). Une fiche JAPONAISE (pokemon-card.com) se lit en anglais par la table « nom japonais → nom anglais » de NOS cartes (exporter-nomja.js),
-// à condition qu'elle ne désigne qu'UN nom anglais ; sinon le nom reste japonais (il ne concordera pas : un trou, jamais une devinette).
-const NOMJA = arg('nomja') ? JSON.parse(fs.readFileSync(arg('nomja'), 'utf8')) : {};
-const { nomCompare } = require('./collecte-cartes/tpc');
-const nomEnDe = (site, nom) => { if (site === 'tpc-asie' || !nom) return nom; const v = NOMJA[nomCompare(nom)]; return Array.isArray(v) && v.length === 1 ? v[0] : nom; };
+// TPC : la ligne TPC du set désigne (site, langue, code imprimé). (D2) Le nom d'une fiche JAPONAISE reste japonais : la table « nom japonais → nom anglais » de nos cartes vient de Bulbapedia (nomJa), elle
+// ne sert PAS ; sans nom lisible ni n° de Pokédex en commun, la fiche ne confirme rien (un trou, jamais une devinette).
 const fichesTpc = tpc.map(f => ({ site: f.site, langue: f.langue, idFiche: f.idFiche, url: f.url, fiche: f.fiche }));
 // les fiches lues EN LIGNE le 2026-10-24 (releve-tpc-en-ligne.js) : celles qui ne sont pas déjà dans le cache s'ajoutent
 if (arg('pcc')) { const J = JSON.parse(fs.readFileSync(arg('pcc'), 'utf8')); const deja = new Set(tpc.map(f => `${f.site}/${f.langue}/${f.idFiche}`)); for (const f of J.fiches) if (!deja.has(`${J.site}/${J.langue}/${f.idFiche}`)) fichesTpc.push({ site: J.site, langue: J.langue, idFiche: f.idFiche, url: f.url, fiche: f }); console.log(`   pokemon-card.com lu en ligne : ${J.fiches.filter(f => !f.cache).length} fiche(s) nouvelle(s) ajoutée(s) au cache local (${J.requetes} requêtes)`); }
 for (const f of fichesTpc) {
     const lignes = TABLE_TPC.filter(l => l.site === (f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com') && l.langue === f.langue && (f.fiche?.denominateur ?? null) != null && String(l.code) === String(f.fiche.denominateur));
-    for (const l of lignes) ajouter(l.slug, f.fiche.numero, { source: f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com', nom: nomEnDe(f.site, f.fiche.nom), dex: f.fiche.dex ? [].concat(f.fiche.dex) : null, ref: f.url ?? `${f.site}/${f.langue}/${f.idFiche}` });
+    for (const l of lignes) ajouter(l.slug, f.fiche.numero, { source: f.site === 'tpc-asie' ? 'tpc-asie' : 'pokemon-card-com', nom: f.fiche.nom, dex: f.fiche.dex ? [].concat(f.fiche.dex) : null, ref: f.url ?? `${f.site}/${f.langue}/${f.idFiche}` });
 }
 // TCGdex (clone) : par idProduct, sinon par (expansion Cardmarket du set TCGdex, numéro local)
 const parId = new Map(); for (const c of clone.cartes) for (const id of c.ids) (parId.get(id) || parId.set(id, []).get(id)).push(c);
@@ -80,6 +82,9 @@ function relevesDe(idProduct, set, numero) {
     for (const r of releveApi[idProduct] || []) rel.push({ ...r, set: r.set ?? set });
     return rel;
 }
+// code d'origine → ses expansions (codes_set) → les slugs de set qui portent ces expansions (numeros_cartes.slugSet) : pour juger une ligne à code d'origine (plan WCD / SEA)
+const expsDuCode = new Map(); for (const c of L('codes_set')) (expsDuCode.get(String(c.codeSet)) || expsDuCode.set(String(c.codeSet), new Set()).get(String(c.codeSet))).add(c.idExpansion);
+const slugsParExp = new Map(); for (const x of nc.values()) if (x.idExpansion != null && x.slugSet && !/^WCD/.test(x.slugSet)) (slugsParExp.get(x.idExpansion) || slugsParExp.set(x.idExpansion, new Set()).get(x.idExpansion)).add(x.slugSet);
 const res = {}; const parSource = {}; let n = 0, ok = 0, okNeufs = 0, neufs = 0;
 for (const e of diag) for (const p of e.produits) {
     n++;
@@ -104,6 +109,22 @@ for (const f of PLANS) {
     const nom = path.basename(f).replace(/\.json$/, '');
     const lignes = P.lignes.map(l => {
         const N = nc.get(l.idProduct); const dn = decomposerNomCardmarket(cat.get(l.idProduct)?.name ?? l.nomProduit ?? '');
+        // (D1, 2026-10-24) UNE LIGNE À CODE D'ORIGINE (WCD, Southeast-Asia-Promos) : Cardmarket dit, dans le slug, « ce produit est <nom> du tirage d'origine <code> n°<numéro> » (UNE source). Il faut une SECONDE source
+        // non-Bulbapedia qui dise que ce tirage d'origine, à ce numéro, porte ce nom : les relevés du set d'origine (artofpkm, TPC, tuiles PikaQian calibrées) et le clone TCGdex (par l'expansion Cardmarket du set d'origine).
+        // La carte désignée dans notre base (qui vient de Bulbapedia) n'est PAS une source.
+        if (l.origine) {
+            const numeroO = l.origine.numero, exps = [...(expsDuCode.get(String(l.origine.code)) || [])];
+            const concord = [], vus = [];
+            for (const exp of exps) for (const slug of slugsParExp.get(exp) || []) {
+                const rel = [...(parSetNum.get(`${slug}|${cleNumero(String(numeroO))}`) || [])];
+                for (const c of parExpNum.get(`${exp}|${cleNumero(String(numeroO))}`) || []) rel.push({ source: 'tcgdex', set: slug, numero: c.localId, nom: c.en, dex: c.dex, ref: c.tcgdexId });
+                vus.push(...rel.map(r => r.source));
+                concord.push(...juger({ set: slug, numero: numeroO, nom: dn.nom }, rel, { dexProduit: DEX[cleDex(dn.nom)] ?? null }).concordantes);
+            }
+            const indepO = [...new Set(concord.map(c => c.source))];
+            return { idProduct: l.idProduct, code: l.code ?? null, set: l.slugSet ?? N?.slugSet ?? null, numeroFiche: `${l.origine.code} n°${numeroO}`, nom: dn.nom, sources: ['cardmarket', ...indepO], ok: indepO.length >= 1,
+                concordantes: concord.map(c => `${c.source}:${c.ref ?? ''} (${c.set} n°${c.numero} « ${c.nom ?? ''} »)`).slice(0, 3), cardmarketNumero: N?.numero ?? null, cmConfirme: true, origine: l.origine, relevesVus: [...new Set(vus)] };
+        }
         const set = l.slugSet ?? N?.slugSet ?? null;
         const numero = l.numeroFiche ?? N?.numero ?? null;
         const rel = relevesDe(l.idProduct, set, numero);

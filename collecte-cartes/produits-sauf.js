@@ -8,11 +8,14 @@
 // jamais à la main au moment du lot.
 const fs = require('fs');
 
-/** @param {string} chemin  @param {(f:string)=>string} [lire] @returns {Set<number>} */
-function lireSauf(chemin, lire = f => fs.readFileSync(f, 'utf8')) {
+/**
+ * @param {string} chemin  @param {(f:string)=>string} [lire]  @param {string} [option] le nom de l'option, dit dans le refus (`--sauf` : à exclure ; `--seulement` : la liste des SEULS à écrire)
+ * @returns {Set<number>}
+ */
+function lireSauf(chemin, lire = f => fs.readFileSync(f, 'utf8'), option = '--sauf') {
     let a;
-    try { a = JSON.parse(lire(chemin)); } catch (e) { throw new Error(`--sauf : fichier illisible (${String(e.message).slice(0, 120)})`); }
-    if (!Array.isArray(a) || !a.length || !a.every(Number.isInteger)) throw new Error('--sauf : le fichier doit être un tableau NON VIDE d\'idProduct entiers (un fichier vide ou mal formé ne protège rien)');
+    try { a = JSON.parse(lire(chemin)); } catch (e) { throw new Error(`${option} : fichier illisible (${String(e.message).slice(0, 120)})`); }
+    if (!Array.isArray(a) || !a.length || !a.every(Number.isInteger)) throw new Error(`${option} : le fichier doit être un tableau NON VIDE d'idProduct entiers (un fichier vide ou mal formé ne protège rien)`);
     return new Set(a);
 }
 

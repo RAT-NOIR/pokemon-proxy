@@ -37,7 +37,7 @@ function fakeDb(init) {
 // ── le monde : le set SetX (expansion 7, zh-hans), une vraie carte « Mon1 », des produits ──
 const SET = { _id: 'SetX', idExpansion: [7], tirage: 'zh-hans', region: 'intl', bulba: { expansion: 'X Promo' } };
 const CARTES = [{ _id: 1001, nomEn: 'Mon1', sets: ['SetX'], impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '5' }] }];
-const CATALOGUE = new Map([[901, { name: 'Alpha [Coup A | Coup B]', idMetacard: 71 }], [902, { name: 'Beta', idMetacard: 72 }], [903, { name: 'Mon1 [X]', idMetacard: 73 }], [904, { name: 'Gamma', idMetacard: 74 }],
+const CATALOGUE = new Map([[901, { name: 'Alpha [Coup A | Coup B]', idMetacard: 71 }], [902, { name: 'Beta', idMetacard: 72 }], [903, { name: 'Mon1 [Coup Z]', idMetacard: 73 }], [904, { name: 'Gamma', idMetacard: 74 }],
     [905, { name: 'Delta', idMetacard: 75 }], [906, { name: 'Alpha [Coup A | Coup B]', idMetacard: 71 }]]);
 const p = (idProduct, nom, numero, extra = {}) => ({ [idProduct]: { exp: 7, set: 'SetX', numero, nom, neuf: true, ok: true, concordantes: [{ source: 'pikaqian', ref: `pikaqian/csv/${idProduct}`, set: 'SetX', numero, nom, par: 'nom' }], refusees: [], sources: ['cardmarket', 'pikaqian'], raison: null, ...extra } });
 const LISTE = () => Object.assign({}, p(901, 'Alpha', '010'), p(902, 'Beta', '011', { ok: false, concordantes: [], sources: ['cardmarket'], raison: 'aucune seconde source ne porte ce produit' }), p(903, 'Mon1', '012'), p(904, 'Gamma', '013'), p(905, 'Delta', '014', { exp: 8 }));
@@ -104,6 +104,27 @@ const BASE = ['--liste=l.json', '--exp=7'];
     verifier('sans --neufs : un produit ancien confirmé (907) est dans le plan (2 lignes)', [/2 lignes sur 2 fiches simples/.test(r.sorties)], [true]);
     r = await lancer(w, [...BASE, '--neufs'], { liste: avecAncien });
     verifier('avec --neufs : le produit ancien n\'est PAS dans le plan (1 ligne), le dénominateur le compte (5 dans l\'expansion → 4 neufs)', [/1 lignes sur 1 fiches simples/.test(r.sorties), /4 dans les expansions 7/.test(r.sorties), instantane(w) === avant], [true, true, true]);
+
+    // ── D3 (2026-10-24) : l'outil REJOUE la confirmation, il ne se fie pas au `ok` du fichier ──
+    const lancerD3 = async (modif, motif, titre) => {
+        const w3 = monde(), av = instantane(w3);
+        const liste = LISTE(); modif(liste[901]);
+        const r3 = await lancer(w3, [...BASE, '--neufs'], { liste });
+        verifier(`D3 : ${titre} → 901 REFUSÉ (« ${motif} »), rien de posé, rien d'écrit`, [r3.code, new RegExp(motif).test(r3.sorties), /0 lignes sur 0 fiches simples/.test(r3.sorties), instantane(w3) === av], [0, true, true, true]);
+    };
+    await lancerD3(e => { e.concordantes = []; }, 'confirmation non rejouée : aucune concordante', 'ok:true mais AUCUNE concordante');
+    await lancerD3(e => { e.concordantes[0].source = 'bulbapedia'; }, 'exclue \\(Bulbapedia\\)', 'une concordante « bulbapedia »');
+    await lancerD3(e => { e.concordantes[0].source = 'setlist'; }, 'exclue \\(Bulbapedia\\)', 'une concordante « setlist »');
+    await lancerD3(e => { e.concordantes[0].source = 'source-inventee'; }, 'hors de la liste admise', 'une source inconnue');
+    await lancerD3(e => { e.concordantes[0].set = 'Autre-Set'; }, 'set différent', 'un set discordant');
+    await lancerD3(e => { e.concordantes[0].numero = '99'; }, 'numéro différent', 'un numéro discordant');
+    await lancerD3(e => { e.concordantes[0].nom = 'Tout Autre'; }, 'nom discordant', 'un nom discordant');
+    await lancerD3(e => { e.nom = 'Zzz'; }, 'n\'est pas celui du catalogue', 'un nom de liste qui n\'est pas celui du catalogue');
+    {
+        const w3 = monde(); const liste = LISTE(); liste[901].concordantes.push({ ...liste[901].concordantes[0], source: 'bulbapedia' });
+        const r3 = await lancer(w3, [...BASE, '--attendu=0'], { liste });
+        verifier('D3 : une seule concordante fautive à côté d\'une saine refuse le produit', [/exclue \(Bulbapedia\)/.test(r3.sorties), posees(w3).length], [true, 0]);
+    }
 
     // ── 🔴 matière spéciale : la table fermée arrête le lot entier ──
     w = monde(); avant = instantane(w);

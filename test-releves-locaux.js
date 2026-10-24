@@ -42,6 +42,24 @@ verifier('juger : le même nom à un AUTRE numéro, ou dans un autre set, ne con
 verifier('juger : une source « bulbapedia » est REFUSÉE par son nom, même si tout concorde', juger(produit, [{ source: 'bulbapedia', set: 'Set-Bon', numero: '3', nom: 'Mon2' }]).ok, false);
 verifier('juger : type-null, pdt, ctr, pkc, pokellector, pokemon-com sont des sources admises ; « setlist » et « bulbapedia-r2 » ne le sont pas', [['type-null', 'pdt', 'ctr', 'pkc', 'pokellector', 'pokemon-com'].every(s => SOURCES_ADMISES.includes(s)), ['setlist', 'bulbapedia-r2', 'bulbapedia'].some(s => SOURCES_ADMISES.includes(s))], [true, false]);
 
+// ── D4 (2026-10-24) : le repli par le Pokédex ne vaut que pour un nom ILLISIBLE (absent ou non latin), jamais pour un nom lisible et discordant ──
+const { rejouer, nomLisible } = require(path.join(DIR, 'collecte-cartes', 'deux-sources.js'));
+const pk = { set: 'Set-Bon', numero: '3', nom: 'Pikachu' };
+const rel = (nom, dex = [25]) => ({ source: 'tpc-asie', set: 'Set-Bon', numero: '003', nom, dex });
+verifier('D4 : un nom LISIBLE et discordant (« Raichu ») malgré le même n° de Pokédex est REFUSÉ (désaccord, pas un repli)', juger(pk, [rel('Raichu')], { dexProduit: [25] }).ok, false);
+verifier('D4 : un nom japonais (illisible) + le même n° de Pokédex est ACCEPTÉ, par le Pokédex', (j => [j.ok, j.concordantes[0]?.par])(juger(pk, [rel('ピカチュウ')], { dexProduit: [25] })), [true, 'pokedex']);
+verifier('D4 : un nom ABSENT + le même n° de Pokédex est ACCEPTÉ ; le mauvais n° de Pokédex est refusé', [juger(pk, [rel(null)], { dexProduit: [25] }).ok, juger(pk, [rel('ピカチュウ', [26])], { dexProduit: [25] }).ok], [true, false]);
+verifier('D4 : nomLisible : latin oui ; japonais, chinois, thaï, vide, null non', [nomLisible('Mew ex'), nomLisible("Pokémon Catcher"), nomLisible('ピカチュウ'), nomLisible('皮卡丘'), nomLisible('พิคาชู'), nomLisible(''), nomLisible(null)], [true, true, false, false, false, false, false]);
+
+// ── D3 : rejouer() relit les concordantes ; sans concordante, ou avec une source exclue/inconnue, un set ou un numéro différent, un nom discordant → refus ──
+const bonne = { source: 'pikaqian', ref: 'r', set: 'Set-Bon', numero: '003', nom: 'Pikachu', par: 'nom' };
+verifier('D3 rejouer : une concordante saine → ok', rejouer(pk, [bonne]).ok, true);
+verifier('D3 rejouer : aucune concordante (liste vide, absente) → refus', [rejouer(pk, []).ok, rejouer(pk, undefined).ok], [false, false]);
+verifier('D3 rejouer : source « bulbapedia » / « setlist » / « bulbapedia-r2 » → refus ; source inconnue → refus', ['bulbapedia', 'setlist', 'bulbapedia-r2', 'inconnue'].map(s => rejouer(pk, [{ ...bonne, source: s }]).ok), [false, false, false, false]);
+verifier('D3 rejouer : set différent, numéro différent, nom discordant → refus', [rejouer(pk, [{ ...bonne, set: 'Autre' }]).ok, rejouer(pk, [{ ...bonne, numero: '4' }]).ok, rejouer(pk, [{ ...bonne, nom: 'Raichu' }]).ok], [false, false, false]);
+verifier('D3 rejouer : une SEULE concordante fautive parmi deux saines refuse tout', rejouer(pk, [bonne, { ...bonne, source: 'bulbapedia' }]).ok, false);
+verifier('D3 rejouer : par « pokedex » ne passe que pour un nom illisible', [rejouer(pk, [{ ...bonne, nom: 'ピカチュウ', par: 'pokedex' }]).ok, rejouer(pk, [{ ...bonne, nom: 'Raichu', par: 'pokedex' }]).ok], [true, false]);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { }
 process.exit(ko ? 1 : 0);

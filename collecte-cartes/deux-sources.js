@@ -16,6 +16,8 @@ const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com',
 /** Les sources EXCLUES, énumérées pour que le refus se nomme : Bulbapedia sous toutes ses formes. */
 const SOURCES_EXCLUES = Object.freeze(['bulbapedia', 'bulbapedia-r2', 'setlist', 'wikitext', 'carte-bulbapedia']);
 
+/** (D4, 2026-10-24) Un nom est LISIBLE s'il est écrit en lettres latines : on peut alors le comparer au nôtre. Absent ou non latin (japonais, chinois, thaï), il ne se compare à rien — seul le n° de Pokédex le fait. */
+const nomLisible = s => { const t = String(s ?? '').normalize('NFKC').trim(); return t !== '' && /^[\x20-\x7EÀ-ɏ♂♀'’é·・\-:.&]+$/.test(t); };
 const nomCle = s => clesNom(String(s ?? ''));
 const memeNom = (a, b) => { const A = nomCle(a); return nomCle(b).some(k => A.includes(k)); };
 
@@ -32,7 +34,8 @@ function juger(produit, relevés, { dexProduit = null } = {}) {
         if (r.set !== produit.set) { refusees.push({ source: r.source, ref: r.ref, raison: `set différent (${r.set})` }); continue; }
         if (produit.numero == null || r.numero == null || cleNumero(String(r.numero)) !== cleNumero(String(produit.numero))) { refusees.push({ source: r.source, ref: r.ref, raison: `numéro différent (${r.numero} / ${produit.numero})` }); continue; }
         const nomOk = r.nom ? memeNom(produit.nom, r.nom) : false;
-        const dexOk = !nomOk && Array.isArray(r.dex) && r.dex.length && Array.isArray(dexProduit) && dexProduit.length && r.dex.some(x => dexProduit.includes(x));
+        // (D4) le repli par le Pokédex ne vaut QUE pour un nom illisible (absent ou non latin) : un nom lisible et discordant est un désaccord, jamais rattrapé par le numéro de Pokédex
+        const dexOk = !nomOk && !nomLisible(r.nom) && Array.isArray(r.dex) && r.dex.length && Array.isArray(dexProduit) && dexProduit.length && r.dex.some(x => dexProduit.includes(x));
         if (!nomOk && !dexOk) { refusees.push({ source: r.source, ref: r.ref, raison: `nom discordant (« ${r.nom ?? '—'} » / « ${produit.nom} »)` }); continue; }
         concordantes.push({ source: r.source, ref: r.ref ?? null, set: r.set, numero: r.numero, nom: r.nom ?? null, par: nomOk ? 'nom' : 'pokedex' });
     }
@@ -42,4 +45,27 @@ function juger(produit, relevés, { dexProduit = null } = {}) {
     return { ok, concordantes, refusees, sources: ok ? ['cardmarket', ...distinctes] : ['cardmarket'], raison: ok ? null : (relevés && relevés.length ? 'aucune source indépendante ne concorde sur le set, le numéro et le nom' : 'aucune seconde source ne porte ce produit') };
 }
 
-module.exports = { juger, SOURCES_ADMISES, SOURCES_EXCLUES, memeNom };
+/**
+ * (D3, 2026-10-24) REJOUER une confirmation sans se fier à un `ok` écrit : un outil d'écriture relit LUI-MÊME les concordantes d'un produit. Écrite par ce qu'elle AUTORISE :
+ * au moins une concordante ; CHAQUE concordante vient d'une source de SOURCES_ADMISES et d'aucune de SOURCES_EXCLUES ; porte le set et le numéro du produit ; et son nom est celui du produit
+ * (ou, pour un nom ILLISIBLE seulement, le même n° de Pokédex : `par === 'pokedex'`). Une seule concordante fautive refuse tout : une liste qui en porte une mauvaise n'est pas fiable.
+ * @returns {{ok: boolean, motifs: string[]}}
+ */
+function rejouer(produit, concordantes) {
+    const motifs = [];
+    if (!Array.isArray(concordantes) || !concordantes.length) return { ok: false, motifs: ['aucune concordante : la seconde source n\'est pas écrite'] };
+    for (const c of concordantes) {
+        const nom = `source « ${c?.source} »`;
+        if (!c || typeof c.source !== 'string') { motifs.push('une concordante sans source'); continue; }
+        if (SOURCES_EXCLUES.includes(c.source)) { motifs.push(`${nom} : exclue (Bulbapedia)`); continue; }
+        if (!SOURCES_ADMISES.includes(c.source)) { motifs.push(`${nom} : hors de la liste admise`); continue; }
+        if (c.set !== produit.set) { motifs.push(`${nom} : set différent (${c.set} / ${produit.set})`); continue; }
+        if (produit.numero == null || c.numero == null || cleNumero(String(c.numero)) !== cleNumero(String(produit.numero))) { motifs.push(`${nom} : numéro différent (${c.numero} / ${produit.numero})`); continue; }
+        const nomOk = c.nom ? memeNom(produit.nom, c.nom) : false;
+        const dexOk = !nomOk && c.par === 'pokedex' && !nomLisible(c.nom);
+        if (!nomOk && !dexOk) motifs.push(`${nom} : nom discordant (« ${c.nom ?? '—'} » / « ${produit.nom} »)`);
+    }
+    return { ok: motifs.length === 0, motifs };
+}
+
+module.exports = { juger, rejouer, SOURCES_ADMISES, SOURCES_EXCLUES, memeNom, nomLisible };
