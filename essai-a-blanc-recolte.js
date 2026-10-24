@@ -10,11 +10,12 @@ const CLI = require('./collecte-cartes/recolte-cli');
 const { fauxModeles } = require('./faux-modeles-cardtrader');
 
 const args = process.argv.slice(2);
-const code = args.find(a => /^--source=(ppr|tcs)$/.test(a))?.slice(9);
-const inconnus = args.filter(a => !/^--source=(ppr|tcs)$/.test(a) && !/^--dossier=.+$/.test(a));
-if (!code || inconnus.length) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs est obligatoire`); process.exit(2); }
-const SRC = code === 'ppr' ? require('./collecte-cartes/pokipair').SRC : require('./collecte-cartes/tcgcsv').SRC;
-const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\RECOLTE';
+const code = args.find(a => /^--source=(ppr|tcs|scx|pmk)$/.test(a))?.slice(9);
+const inconnus = args.filter(a => !/^--source=(ppr|tcs|scx|pmk)$/.test(a) && !/^--dossier=.+$/.test(a) && a !== '--basse-definition');
+if (!code || inconnus.length) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs|scx|pmk est obligatoire`); process.exit(2); }
+const SRC = { ppr: () => require('./collecte-cartes/pokipair').SRC, tcs: () => require('./collecte-cartes/tcgcsv').SRC, scx: () => require('./collecte-cartes/scrydex').SRC, pmk: () => require('./collecte-cartes/packmagik').SRC }[code]();
+const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? `C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\${code === 'scx' || code === 'pmk' ? 'RECOLTE2' : 'RECOLTE'}`;
+const BASSE = args.includes('--basse-definition');
 
 (async () => {
     process.env.R2_BUCKET_IMAGES = process.env.R2_BUCKET_IMAGES || 'essai-a-blanc-sans-bucket';
@@ -42,7 +43,9 @@ const DOSSIER = args.find(a => a.startsWith('--dossier='))?.slice(10) ?? 'C:\\Us
         console.log = (...a) => sortie.push(a.join(' ')); console.error = (...a) => sortie.push(`ERR ${a.join(' ')}`);
         let r;
         try {
-            r = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, attendu: aFaire.length, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) });
+            // `--attendu` = le COMPTE de l'écriture (RECOLTE2 : des unités du plan peuvent être trop petites, cédées après la vraie largeur, ou écartées — le plan ne les voit pas encore)
+            const compte = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, compterSeulement: true, basseDefinition: BASSE });
+            r = await RC.ecrire({ SRC, unites: aFaire, M, dossierCache: F.cache, indexImages, attendu: compte.reel, basseDefinition: BASSE, deposer: async (b, c) => { deposes.push(c); }, vignetter: async () => ({ vg: { entrees: 0, fabriquees: 0, echecs: 0 } }) });
         } finally { console.log = l; console.error = e; }
         for (const s of sortie) console.log(`   | ${s}`);
         const apresCartes = cartes.map(c => etat.carte(c._id));

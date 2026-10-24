@@ -65,6 +65,12 @@ function langueDuVisuel(im) {
     // ➕ 2026-10-24 (RECOLTE) — source « tcs » (miroir de catalogue de marché : Prize Packs et kits Dresseur, sets du tirage occidental) : la langue vient de `langueSource: 'en'`, posée par le seul collecteur, sous un set
     // `intl` ; même règle : la preuve vit dans le module de la source, publique, sans nom de source ni d'hôte.
     if (im.source === 'tcs') return im.langueSource === 'en' ? { langue: 'en', preuve: require('./tcgcsv').LANGUE_PREUVE } : { langue: null, preuve: `source « tcs », langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-24 (RECOLTE2) — source « scx » (pages d'extensions d'un site de cartes, tirage occidental) : la langue vient de `langueSource: 'en'`, posée par le seul collecteur, qui n'admet une page que si son entête
+    // déclare l'anglais (EN) ET si le set est du tirage `intl` ; la preuve vit dans le module de la source, publique, sans nom de source ni d'hôte.
+    if (im.source === 'scx') return im.langueSource === 'en' ? { langue: 'en', preuve: require('./scrydex').LANGUE_PREUVE } : { langue: null, preuve: `source « scx », langue source « ${im.langueSource} » sans règle` };
+    // ➕ 2026-10-24 (RECOLTE2) — source « pmk » (pages de sets chinois d'un site de suivi de cartes) : la langue est celle du TIRAGE du set (`-cn` dans l'adresse de la page, table fermée de collecte-cartes/packmagik.js), portée
+    // par `langueSource: 'zh-hans'` ; même règle que « ppr » : la preuve vit dans le module de la source, publique, sans nom de source ni d'hôte.
+    if (im.source === 'pmk') return im.langueSource === 'zh-hans' ? { langue: 'zh-hans', preuve: require('./packmagik').LANGUE_PREUVE } : { langue: null, preuve: `source « pmk », langue source « ${im.langueSource} » sans règle` };
     // ➕ 2026-10-17 — pokumon.com (lot PK-PP, Prize Packs S1-S4) : la langue est DÉCLARÉE par la taxonomie « language » de l'entrée (English, id 1260), que le collecteur ne lit qu'en la
     // portant sur `langueSource: 'en'` ; 17 images ouvertes à l'œil le 2026-10-17, toutes en anglais (S7/PK-PP/img). Par ce qu'elle autorise : toute autre valeur n'a pas de règle (null).
     if (im.source === 'pokumon') return im.langueSource === 'en'
