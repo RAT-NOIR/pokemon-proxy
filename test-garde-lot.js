@@ -189,8 +189,11 @@ verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches
 const lRefus = copie(etat0); lRefus.sets[0].logoRefus = { motif: 'aucun `setlogo` dans l\'infobox', le: new Date('2026-09-26') };
 verifier('un motif de refus de logo réécrit : rien (le site ne le lit pas)', setsTouches({ avant: docs0, apres: lRefus }).sets, []);
 const d0l = copie(etat0); d0l.sets[0].logo = { cleR2: 'l/a.png', w: 200, h: 80, le: new Date('2026-09-20'), preuve: 'x' };
-const lLogoLe = copie(d0l); lLogoLe.sets[0].logo = { ...lLogoLe.sets[0].logo, le: new Date('2026-09-26'), preuve: 'y' };
-verifier('le même logo réécrit (date, preuve) : rien', setsTouches({ avant: d0l, apres: lLogoLe }).sets, []);
+const lLogoLe = copie(d0l); lLogoLe.sets[0].logo = { ...lLogoLe.sets[0].logo, le: new Date('2026-09-26') };
+verifier('le même logo réécrit (sa date `le` seule) : rien', setsTouches({ avant: d0l, apres: lLogoLe }).sets, []);
+// (tour de correction 1, 2026-10-24) le site LIT `logo.preuve` (IMAGE_SET de lireDonnee.ts : cleR2, w, h, set, region, langue, preuve…) : une preuve changée est un logo qui change à l'écran
+const lLogoPreuve = copie(d0l); lLogoPreuve.sets[0].logo = { ...lLogoPreuve.sets[0].logo, preuve: 'y' };
+verifier('un logo dont la seule `preuve` change : ce set (le site la lit), et sets-info', (r => [r.sets, r.setsInfo])(setsTouches({ avant: d0l, apres: lLogoPreuve })), [['Set-A'], true]);
 const lLogo = copie(d0l); lLogo.sets[0].logo = { ...lLogo.sets[0].logo, cleR2: 'l/b.png' };
 verifier('un logo changé : ce set, et le catalogue', setsTouches({ avant: d0l, apres: lLogo }), { sets: ['Set-A'], catalogue: true, especes: false, setsInfo: true });
 const lMois = copie(etat0); lMois.sets[0].dateSortieMois = { iso: '2014-11', texte: 'November 2014' };
@@ -213,9 +216,14 @@ const lSymb = copie(etat0); lSymb.sets[0].symbolesIdentification = [{ cleR2: 's/
 verifier('un symbole d\'identification posé : ce set et setsInfo', setsTouches({ avant: docs0, apres: lSymb }).setsInfo, true);
 const d0m = copie(etat0); d0m.sets[0].dateSortieMois = { iso: '2014-11', texte: 'November 2014' };
 const lMoisTexte = copie(d0m); lMoisTexte.sets[0].dateSortieMois = { iso: '2014-11', texte: 'Nov. 2014' };
-verifier('le seul texte de dateSortieMois changé (le site ne lit que .iso) : rien', setsTouches({ avant: d0m, apres: lMoisTexte }).sets, []);
-const lComposeLe = copie(d0c2); lComposeLe.sets[0].logoCompose = { ...lComposeLe.sets[0].logoCompose, le: new Date('2026-10-07'), preuve: 'y' };
-verifier('le même logoCompose réécrit (date, preuve) : rien', setsTouches({ avant: d0c2, apres: lComposeLe }).sets, []);
+// (tour de correction 1, 2026-10-24) ce test disait « le site ne lit que .iso : rien ». SPEC_SET (lireDonnee.ts) lit `dateSortieMois: { iso, texte }` : le texte aussi
+verifier('le seul `texte` de dateSortieMois changé (le site lit iso ET texte) : ce set', setsTouches({ avant: d0m, apres: lMoisTexte }).sets, ['Set-A']);
+const lMoisIso = copie(d0m); lMoisIso.sets[0].dateSortieMois = { iso: '2014-12', texte: 'November 2014' };
+verifier('le seul `iso` de dateSortieMois changé : ce set', setsTouches({ avant: d0m, apres: lMoisIso }).sets, ['Set-A']);
+const lComposeLe = copie(d0c2); lComposeLe.sets[0].logoCompose = { ...lComposeLe.sets[0].logoCompose, le: new Date('2026-10-07') };
+verifier('le même logoCompose réécrit (sa date `le` seule) : rien', setsTouches({ avant: d0c2, apres: lComposeLe }).sets, []);
+const lComposePreuve = copie(d0c2); lComposePreuve.sets[0].logoCompose = { ...lComposePreuve.sets[0].logoCompose, preuve: 'y' };
+verifier('un logoCompose dont la seule preuve change : ce set', setsTouches({ avant: d0c2, apres: lComposePreuve }).sets, ['Set-A']);
 
 // ── BS-STAFF (2026-10-17) : « tampon non séparable » — l'image servie aux paires Black Star V1/V2 porte `partageeTamponNonSepare: true`, `produitsPartages` et `tamponNonRepresente`.
 // Un retrait (ou un rejeu qui efface les champs) laisse `images` et les vignettes intacts : seul ce compteur le voit. Le compteur « holo » ne se confond pas avec lui.
@@ -235,7 +243,7 @@ verifier('BS-STAFF (setsTouches) : le retrait du marquage touche aussi le set', 
 { const src = require('fs').readFileSync(require('path').join(__dirname, 'lot-additif.js'), 'utf8');
   const proj = require('./collecte-cartes/garde-lot').PROJECTION_ETAT.cartes;
   // (D3.5, 2026-10-24) la projection de l'état « après » est la constante partagée, réunie à celle de l'API quand elle est chargée (une seule lecture) : `projectionCartes` en dérive, jamais une liste recopiée
-  verifier('lot-additif.js lit les cartes par la projection partagée', [/\.project\(projectionCartes\)/.test(src), /projectionCartes = api \? GC\.unionProjections\(PROJECTION_ETAT\.cartes, api\.PROJECTIONS\.cartes\) : \{ \.\.\.PROJECTION_ETAT\.cartes \}/.test(src)], [true, true]);
+  verifier('lot-additif.js lit les cartes par la projection partagée', [/\.project\(projectionCartes\)/.test(src), /projectionCartes = api \? \{ \.\.\.api\.projectionsEtat\.cartes \} : \{ \.\.\.PROJECTION_ETAT\.cartes \}/.test(src)], [true, true]);
   verifier('BS-STAFF : la projection de lot-additif.js lit les trois champs du marquage', ['images.partageeTamponNonSepare', 'images.produitsPartages', 'images.tamponNonRepresente'].map(c => proj[c] === 1), [true, true, true]); }
 
 // ── D1 (2026-10-24) : le calcul des sets à revalider voit TOUT champ que le site peut lire, dans les trois collections.
@@ -262,6 +270,26 @@ verifier('D1 : une impression — rareté ou total (champs que le site lit) : to
 verifier('D1 : une ligne — slug, tirage, idExpansion, substitut (cleR2, w, h, mention) : son slugSet', [['slug', 's-1'], ['tirage', 'jp'], ['idExpansion', 99]].map(([k, v]) => touches(modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3][k] = v; })).sets)
     .concat(['cleR2', 'w', 'h', 'mention'].map(k => touches(modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', w: 200, h: 280, mention: 'm' }; }), modif(e => { e.cartesProduits[3].slugSet = 'Set-B'; e.cartesProduits[3].visuelSubstitut = { cleR2: 'o', w: 200, h: 280, mention: 'm', [k]: k === 'cleR2' || k === 'mention' ? 'autre' : 999 }; })).sets)), Array(7).fill(['Set-B']));
 verifier('D1 : un document `sets` — le champ `deck` (le site le lit) : ce set, et sets-info', (r => [r.sets, r.setsInfo])(touches(docs0, modif(e => { e.sets[0].deck = 'Pikachu Libre'; }))), [['Set-A'], true]);
+// (tour de correction 1, 2026-10-24) `liens.idProduct` : une jointure pose le lien sur la carte ET la ligne cartes_produits. Si une ligne de CETTE carte change dans le même lot, le changement de `liens` est sa
+// conséquence : seul le `slugSet` de la ligne est touché (sinon une carte de promo réimprimée dans vingt sets en fait revalider vingt pour une fiche). Un `liens` qui change SANS ligne changée pour cette carte
+// n'a pas d'explication : tous les sets de la carte.
+{
+    const avecLiens = () => modif(e => { e.cartes[1].liens = { idProduct: [101], idMetacards: [7] }; });
+    const joint = (e, ligne) => { e.cartes[1].liens = { idProduct: [101, 300], idMetacards: [7, 8] }; if (ligne) e.cartesProduits.push(ligne); return e; };
+    const LIGNE_C = { _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 2, slugSet: 'Set-C' };
+    const r1 = setsTouches({ avant: avecLiens(), apres: joint(avecLiens(), LIGNE_C) });
+    verifier('liens + une ligne ajoutée pour CETTE carte : le slugSet de la ligne seulement (pas les sets de la carte), le catalogue (fiche de plus)', [r1.sets, r1.catalogue, r1.especes], [['Set-C'], true, false]);
+    verifier('liens seul, aucune ligne changée : tous les sets de la carte', setsTouches({ avant: avecLiens(), apres: joint(avecLiens(), null) }).sets, ['Set-A', 'Set-B']);
+    verifier('liens + une ligne ajoutée pour une AUTRE carte : liens non expliqué -> tous les sets de la carte, plus le slugSet de l\'autre ligne',
+        setsTouches({ avant: avecLiens(), apres: joint(avecLiens(), { _id: 'p8', idProduct: 301, idExpansion: 12, carteId: 1, slugSet: 'Set-C' }) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('liens + une ligne RETIRÉE de cette carte (slugSet Set-B) : Set-B seulement, pas les sets de la carte',
+        setsTouches({ avant: modif(x => { x.cartesProduits[3].slugSet = 'Set-B'; x.cartes[1].liens = { idProduct: [101, 200] }; }), apres: modif(x => { x.cartes[1].liens = { idProduct: [101] }; x.cartesProduits.splice(3, 1); }) }).sets, ['Set-B']);
+    verifier('liens + un AUTRE champ de la carte (pv) + une ligne : le pv change tous les sets de la carte',
+        setsTouches({ avant: avecLiens(), apres: (e => { e.cartes[1].pv = 60; return e; })(joint(avecLiens(), LIGNE_C)) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('liens + le NOM de la carte + une ligne : le nom change tous les sets de la carte', setsTouches({ avant: avecLiens(), apres: (e => { e.cartes[1].nomEn = 'Pikachu ex'; return e; })(joint(avecLiens(), LIGNE_C)) }).sets, ['Set-A', 'Set-B', 'Set-C']);
+    verifier('une ligne changée pour la carte SANS changement de liens : le slugSet de la ligne seulement (inchangé)',
+        setsTouches({ avant: docs0, apres: modif(e => { e.cartesProduits[3].variante = 'prerelease'; e.cartesProduits[3].slugSet = 'Set-B'; }) }).sets, ['Set-B']);
+}
 // le contraire : ce que le site NE lit PAS ne revalide rien (sinon le quota Vercel paie des pages inchangées)
 for (const [nom, f] of [
     ['sha256 d\'une entrée d\'image', e => { e.cartes[1].images[0].sha256 = 'ab'; }], ['urlOriginal d\'une entrée', e => { e.cartes[1].images[0].urlOriginal = 'https://x/y'; }], ['preuve d\'une entrée', e => { e.cartes[1].images[0].preuve = 'p'; }],
@@ -292,29 +320,7 @@ for (const [nom, f] of [
         [Object.isFrozen(SITE_LIT), [...SITE_LIT.cartes.map(c => PROJECTION_ETAT.cartes[c] === 1), ...SITE_LIT.impressions.map(c => PROJECTION_ETAT.cartes[`impressions.${c}`] === 1), ...SITE_LIT.images.map(c => PROJECTION_ETAT.cartes[`images.${c}`] === 1),
             ...SITE_LIT.lignes.map(c => PROJECTION_ETAT.cartesProduits[c] === 1)].every(Boolean)], [true, true]);
 }
-// DÉRIVE : la liste recopiée du site se confronte au site lui-même (lib/lireDonnee.ts : SPEC_CARTE, SPEC_IMAGE_CARTE, SPEC_PRODUIT). Le dépôt du site est un dossier voisin : absent, le banc le DIT (il ne se tait pas) sans échouer.
-{
-    const fs = require('fs'), path = require('path');
-    const dossierSite = process.env.SITE_DIR || 'C:/Users/Yung/Desktop/rat-market-site';
-    const f = path.join(dossierSite, 'lib', 'lireDonnee.ts');
-    if (!fs.existsSync(f)) console.log(`⚠️ D1 : ${f} introuvable — la liste SITE_LIT n'a PAS été confrontée au site (non vérifié, pas vérifié)`);
-    else {
-        const src = fs.readFileSync(f, 'utf8').replace(/\r/g, '');
-        const bloc = (debut) => { const i = src.indexOf(debut); if (i < 0) throw new Error(`« ${debut} » introuvable dans lireDonnee.ts : la confrontation ne peut pas conclure`); return src.slice(i, src.indexOf('\n);', i) + 3); };
-        const { SITE_LIT } = require('./collecte-cartes/garde-lot');
-        const racines = (txt) => [...txt.matchAll(/^ {4}([a-zA-Z_]+):/gm)].map(m => m[1]);                                 // les clés de PREMIER niveau (4 espaces d'indentation)
-        const cles = (txt) => [...txt.matchAll(/([a-zA-Z_]+):\s*(?:TEXTE|NOMBRE|BOOLEEN|VIGNETTE|liste\()/g)].map(m => m[1]);   // les clés d'une ligne d'objet à plat
-        const specCarte = bloc('export const SPEC_CARTE'), specImage = bloc('const SPEC_IMAGE_CARTE'), specProduit = bloc('export const SPEC_PRODUIT');
-        const ligneImpressions = (specCarte.split('\n').find(l => /^ {4}impressions:/.test(l)) || '').replace(/^ {4}impressions:\s*liste\(/, '');   // sans la clé « impressions » elle-même
-        const racinesCarte = [...new Set(SITE_LIT.cartes.map(c => c.split('.')[0]))].concat(['_id', 'impressions', 'images']);
-        const racinesLignes = [...new Set(SITE_LIT.lignes.map(c => c.split('.')[0]))];
-        verifier('D1 (dérive) : le gabarit du site a été LU (aucune liste vide : un vide parfait serait un instrument cassé)', [racines(specCarte).length > 10, cles(specImage).length > 10, racines(specProduit).length > 5, cles(ligneImpressions).length >= 5], [true, true, true, true]);
-        verifier('D1 (dérive) : tout champ de carte lu par le site (SPEC_CARTE) est dans SITE_LIT', racines(specCarte).filter(k => !racinesCarte.includes(k)), []);
-        verifier('D1 (dérive) : tout champ d\'impression lu par le site est dans SITE_LIT.impressions', cles(ligneImpressions).filter(k => !SITE_LIT.impressions.includes(k)), []);
-        verifier('D1 (dérive) : tout champ d\'entrée d\'image lu par le site (SPEC_IMAGE_CARTE) est dans SITE_LIT.images', cles(specImage).filter(k => !SITE_LIT.images.includes(k)), []);
-        verifier('D1 (dérive) : tout champ de ligne lu par le site (SPEC_PRODUIT) est dans SITE_LIT.lignes', racines(specProduit).filter(k => !racinesLignes.includes(k)), []);
-    }
-}
+// (tour de correction 1) la confrontation de SITE_LIT au gabarit du site se fait par IMPORT, dans test-garde-site-lu.js (et par lot-additif.js à chaque lot) : plus de regex sur le texte du site ici.
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

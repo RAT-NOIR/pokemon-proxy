@@ -51,8 +51,12 @@ async function chargerApi({ dossier } = {}) {
             compacterSet: source.compacterSet, compacterCarte: source.compacterCarte, compacterLigne: source.compacterLigne, interneur: source.interneur };
         for (const k of ['decider', 'lireEntree', 'estVariante', 'normaliserVariante', 'creerConstructeur', 'compacterSet', 'compacterCarte', 'compacterLigne', 'interneur']) if (typeof api[k] !== 'function') throw new Error(`${k} absent de l'API`);
         for (const k of ['sets', 'cartes', 'cartes_produits']) if (!api.PROJECTIONS?.[k] || !Object.keys(api.PROJECTIONS[k]).length) throw new Error(`PROJECTIONS.${k} absente de l'API`);
+        // (tour de correction 1, point 5) La lecture UNIQUE de l'état « après » (lot-additif.js) réunit les projections du site/des compteurs et celles de l'API. Elle est calculée ICI, au chargement, c'est-à-dire AVANT la
+        // sauvegarde : une projection que l'on ne sait pas réunir (exclusion, forme illisible) refuse le lot (code 6) au lieu de lever après l'écriture, sans restauration.
+        const L = require('./garde-lot');
+        api.projectionsEtat = Object.freeze({ cartes: unionProjections(L.PROJECTION_ETAT.cartes, api.PROJECTIONS.cartes), cartesProduits: unionProjections(L.PROJECTION_ETAT.cartesProduits, api.PROJECTIONS.cartes_produits) });
         return api;
-    } catch (e) { throw refus(e.message); }
+    } catch (e) { throw /^garde contrat API/.test(e.message) ? e : refus(e.message); }
 }
 
 // ── LA PROJECTION : la même que celle de l'API (Mongo : un sous-document est projeté champ par champ, un élément de tableau qui n'est pas un document est écarté).
@@ -110,6 +114,7 @@ const cle = d => canon(d._id);
  * Les slugs des sets que le lot a touchés, comparés sur les documents PROJETÉS (pas sur des compteurs) :
  *  · une carte changée, ajoutée ou retirée → tous ses sets (avant ∪ après) et les sets de ses entrées `images` ;
  *  · une ligne cartes_produits changée → son slugSet (avant ∪ après), et les sets de son idExpansion (decider joint la ligne à un set par l'un ou par l'autre) ;
+ *  · (tour de correction 1) toute ligne d'une carte CHANGÉE, changée ou non → ses sets de la même façon, quel que soit `cartes.sets` ;
  *  · un document `sets` changé → son _id.
  * ⚠️ Ne s'appuie PAS sur `setsTouches` de garde-lot.js : celle-ci ne voit pas un changement de champ dans une entrée existante (lot du 2026-10-19 : « aucun set touché »).
  */
@@ -128,18 +133,44 @@ function setsTouchesContrat({ avant, apres }) {
             for (const d of [a, b]) if (d) fournir(d);
         }
     };
-    comparer('cartes', d => { for (const s of d.sets || []) touches.add(s); for (const m of d.images || []) if (m?.set) touches.add(m.set); });
-    comparer('cartesProduits', l => { if (l.slugSet) touches.add(l.slugSet); for (const s of parExp.get(l.idExpansion) || []) touches.add(s); });
+    const cartesChangees = new Set();
+    comparer('cartes', d => { cartesChangees.add(cle(d)); for (const s of d.sets || []) touches.add(s); for (const m of d.images || []) if (m?.set) touches.add(m.set); });
+    const setsDeLigne = l => { if (l.slugSet) touches.add(l.slugSet); for (const s of parExp.get(l.idExpansion) || []) touches.add(s); };
+    comparer('cartesProduits', setsDeLigne);
+    // (tour de correction 1, point 6) toute LIGNE d'une carte changée est retenue, avec son set, quel que soit `cartes.sets` : le produit d'une carte dont seule la ligne rattache la carte à un set (cartes.sets vide ou
+    // incomplet) serait sinon hors de la fermeture, donc jamais jugé alors que sa fiche vient de changer
+    for (const l of [...avant.cartesProduits, ...apres.cartesProduits]) if (cartesChangees.has(canon(l.carteId))) setsDeLigne(l);
     comparer('sets', s => touches.add(s._id));
     return [...touches].filter(x => typeof x === 'string').sort();
 }
 
 // ── LE CONTRAT
+/**
+ * (tour de correction 1, point 7) La VALEUR fautive d'un refus : un défaut est un motif ET la valeur qui le porte. Un tamponNonRepresente de 78 caractères qui devient un AUTRE texte de 78 caractères a le même
+ * motif et n'est pas le même défaut : le lot l'a réécrit. Le champ se lit dans le motif de lireEntree (« champ "X" … », « vignette … », « lien hors … »…) ; un motif que cette table ne sait pas rattacher compare
+ * l'entrée ENTIÈRE (fail-closed : au pire un défaut inchangé est jugé nouveau, jamais l'inverse). Rend une chaîne canonique.
+ */
+const CHAMPS_DU_MOTIF = Object.freeze([
+    [/^champ "(\w+)"/, m => [m[1]]],
+    [/^(vignette|grande)\b/, m => [m[1]]],
+    [/^marquage de partage sans/, () => ['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'variante']],
+    [/^"produitsPartages" sans marquage/, () => ['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages']],
+    [/^idMetacard\b/, () => ['idMetacard']], [/^lien hors\b/, () => ['lien']], [/^nature de visuel\b/, () => ['visuel']],
+    [/^visuel de substitution sans mention/, () => ['visuel', 'mention']], [/^idProduct non entier/, () => ['idProduct']]
+]);
+function valeurFautive(e, motif) {
+    for (const [re, champs] of CHAMPS_DU_MOTIF) {
+        const m = re.exec(String(motif ?? ''));
+        if (m) return canon(Object.fromEntries(champs(m).map(c => [c, e?.[c]])));
+    }
+    return canon(e);
+}
+
 /** Une entrée de decider → { ok, motif, variantePerdue }. `varianteLigne` : la variante de la ligne cartes_produits du produit. Une variante non nulle sur la ligne alors que l'entrée validée
  * porte `variante: null` est PERDUE EN SILENCE par l'API (hors liste fermée, ou sans preuve) : lireEntree ne la refuse pas, la garde la compte. */
 function jugerEntree(api, e, varianteLigne = null) {
     const r = api.lireEntree(e);
-    if (!r.ok) return { ok: false, motif: r.motif, variantePerdue: false, idProduct: e?.idProduct };
+    if (!r.ok) return { ok: false, motif: r.motif, valeur: valeurFautive(e, r.motif), variantePerdue: false, idProduct: e?.idProduct };
     const perdue = varianteLigne !== null && varianteLigne !== undefined && r.doc.variante === null;
     return { ok: true, motif: perdue ? `variante « ${varianteLigne} » perdue : hors de la liste fermée de l'API (ou sans preuve), l'entrée est servie avec variante null` : null, variantePerdue: perdue, idProduct: e.idProduct };
 }
@@ -250,7 +281,8 @@ function comparerContrat(avantMap, apresMap) {
         const refusAvant = Boolean(b) && !b.ok;
         // D3.3b : « persistant » = le MÊME défaut avant et après. Un produit refusé avant pour un motif A et après pour un motif B est NOUVEAU (le lot a fabriqué un autre défaut : le masquer derrière l'ancien
         // laisserait passer ce que le lot vient d'écrire).
-        if (!a.ok) { (refusAvant && b.motif === a.motif ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets, cartes: a.cartes }); continue; }
+        // (tour de correction 1, point 7) … et la MÊME valeur fautive : un autre texte tout aussi fautif est un défaut que le lot vient d'écrire
+        if (!a.ok) { (refusAvant && b.motif === a.motif && b.valeur === a.valeur ? persistants : nouveaux).push({ idProduct: id, motif: a.motif, sets: a.sets, cartes: a.cartes }); continue; }
         if (refusAvant) resolus.push({ idProduct: id, motif: b.motif });
         // D3.3a : deux entrées aux visuels différents -> le produit perd tout visuel dans l'archive. Nouveau après le lot = bloquant ; déjà contradictoire avant = persistant.
         if (a.contradictoire === true) (Boolean(b) && b.contradictoire === true ? persistants : nouveaux).push({ idProduct: id, motif: MOTIF_CONTRADICTOIRE, sets: a.sets, cartes: a.cartes });
@@ -266,7 +298,12 @@ function comparerContrat(avantMap, apresMap) {
     // (il est déjà compté par la garde des comptes, qui exige son annonce) ; c'est au lecteur de juger. On le montre pour qu'un visuel perdu ne soit jamais silencieux.
     const disparus = [];
     for (const [id, b] of avantMap) if (b.ok && !b.sansEntree && (!apresMap.has(id) || apresMap.get(id).sansEntree)) disparus.push({ idProduct: id, sets: b.sets });
-    return { nouveaux, persistants, resolus, disparus };
+    return { nouveaux: dedoublonner(nouveaux), persistants: dedoublonner(persistants), resolus, disparus };
+}
+/** (tour de correction 1, point 9) Un exemplaire par (idProduct, motif), dans l'ordre : un même défaut compté deux fois n'est pas deux défauts (et s'imprime une fois dans l'arrêt et au journal). */
+function dedoublonner(liste) {
+    const vus = new Set();
+    return liste.filter(x => { const k = `${canon(x.idProduct)}|${x.motif}`; if (vus.has(k)) return false; vus.add(k); return true; });
 }
 
 /** Le verdict. @param avant,apres { sets, cartes, cartesProduits } (documents projetés ou bruts : on projette, idempotent). Toute exception est un refus de conclure. */
@@ -285,11 +322,13 @@ async function verifierContrat({ api, avant, apres }) {
             for (const m of d.images || []) if (m?.set) setsDeCarte.get(d._id).add(m.set);
         }
         const setsFautifs = [...new Set(c.nouveaux.flatMap(n => [...(n.sets || []), ...(n.cartes || []).flatMap(id => [...(setsDeCarte.get(id) || [])])]))].filter(s => slugs.includes(s)).sort();
-        return { slugs, ...c, setsFautifs, entreesAvant: [...mAvant.values()].filter(x => !x.sansEntree).length, entreesApres: [...mApres.values()].filter(x => !x.sansEntree).length };
+        // (tour de correction 1, point 8) la restauration se fait par CARTE fautive : remettre le tableau `images` de toutes les cartes d'un set effacerait ce que le worker a posé sur les autres cartes de ce set
+        const cartesFautives = [...new Set(c.nouveaux.flatMap(n => n.cartes || []))].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+        return { slugs, ...c, setsFautifs, cartesFautives, entreesAvant: [...mAvant.values()].filter(x => !x.sansEntree).length, entreesApres: [...mApres.values()].filter(x => !x.sansEntree).length };
     } catch (e) { throw /^garde contrat API/.test(e.message) ? e : refus(e.stack ? `${e.message}` : e); }
 }
 
 /** La ligne imprimée et journalisée. */
 const ligneContrat = (v) => `contrat API : ${v.slugs.length} set(s) rejoué(s) · refus nouveaux ${v.nouveaux.length} · persistants ${v.persistants.length} · résolus ${v.resolus.length}${v.disparus?.length ? ` · sans entrée après (information, ne bloque pas) ${v.disparus.length} : ${v.disparus.slice(0, 8).map(d => d.idProduct).join(',')}${v.disparus.length > 8 ? ',…' : ''}` : ''}`;
 
-module.exports = { chargerApi, projeter, unionProjections, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };
+module.exports = { chargerApi, projeter, unionProjections, projeterEtat, setsTouchesContrat, contratDesSets, comparerContrat, dedoublonner, jugerEntree, violationsParLigne, verifierContrat, ligneContrat, canon };

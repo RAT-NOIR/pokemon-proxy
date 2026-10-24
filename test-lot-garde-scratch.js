@@ -13,6 +13,8 @@ const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const COLLS = ['cartes', 'cartes_produits', 'sets', 'collecte_images_etat'];
 const effacer = process.argv.find(a => a.startsWith('--effacer='))?.slice(10);
+// `--contrat-api` : TOUS les cas (A à F) tournent aussi avec la garde du contrat de l'API (tour de correction 1, point 4). Les cas G et H, eux, l'utilisent toujours.
+const AVEC_CONTRAT = process.argv.includes('--contrat-api');
 
 async function ouvrir() {
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
@@ -32,6 +34,22 @@ const semer = async db => {
         { _id: '200-2', idProduct: 200, idExpansion: 12, carteId: 2, verifieLe: JOUR }
     ]);
     await db.collection('sets').insertMany([{ _id: 'Set-A', nomAffichage: 'Set A', collecteLe: JOUR }, { _id: 'Set-B', nomAffichage: 'Set B', completImages: { le: JOUR } }]);
+};
+
+// ── LE MONDE DES CAS G ET H (le contrat de l'API) : assez réel pour que la VRAIE decider serve un produit.
+// X-Set n'a aucun visuel propre : le produit 777 se sert de l'image de la même carte dans Zeta-Set (même tirage que X, donc rang 0) ; la carte 600 a son image dans X-Set.
+const SET = (id, exp, tirage, code) => ({ _id: id, idExpansion: [exp], nomAffichage: id, tirage, region: tirage, code, bulba: { expansion: `${id} Expansion` }, collecteLe: JOUR });
+const IMG = (set, cle, extra = {}) => ({ set, cleR2: cle, w: 600, h: 840, numero: '001', source: 'tcgdex', jointeLe: JOUR, ...extra });
+const semerContrat = async db => {
+    await db.collection('sets').insertMany([SET('X-Set', 6100, 'jp', 'XJP'), SET('Zeta-Set', 6101, 'jp', 'ZJP'), SET('Alpha-Set', 6102, 'intl', 'AEN')]);
+    await db.collection('cartes').insertMany([
+        { _id: 500, nomEn: 'Testmon', sets: ['X-Set'], impressions: [{ tirage: 'jp', expansion: 'X-Set Expansion', numero: '001', total: '10', rarete: 'C' }],
+            images: [IMG('Zeta-Set', 'z/img.webp', { vignette: { cleR2: 'v/z.webp', w: 200, h: 280 } }), IMG('Alpha-Set', 'a/img.webp')] },
+        { _id: 600, nomEn: 'Autremon', sets: ['X-Set'], impressions: [{ tirage: 'jp', expansion: 'X-Set Expansion', numero: '002', total: '10', rarete: 'C' }],
+            images: [IMG('X-Set', 'x/600.webp', { numero: '002', vignette: { cleR2: 'v/600.webp', w: 200, h: 280 } })] }]);
+    await db.collection('cartes_produits').insertMany([
+        { _id: '500-777', carteId: 500, idProduct: 777, idExpansion: 6100, numeroFiche: '001', slug: 'Testmon-X001', slugSet: 'X-Set' },
+        { _id: '600-888', carteId: 600, idProduct: 888, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002', slugSet: 'X-Set' }]);
 };
 
 // ── LA COMMANDE DU LOT : ce que le lot (et le worker, en même temps) écrivent
@@ -54,6 +72,13 @@ async function jouer(cas) {
         // pendant ce temps le worker joint une image neuve sur la MÊME carte, dans un autre set : l'arrêt ne doit pas la perdre (relecture)
         await C.updateOne({ _id: 1 }, { $push: { images: { set: 'Set-B', numero: '9', cleR2: 'b/9', jointeLe: new Date() } } });
         await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/Set-B' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
+    } else if (cas === 'contrat-faute') {                  // G : le lot pose un tamponNonRepresente de 78 caractères sur l'image de Zeta (carte 500) ; le worker joint une image à la carte 600 (même set X)
+        await C.updateOne({ _id: 500 }, { $set: { 'images.$[e].partageeTamponNonSepare': false, 'images.$[e].produitsPartages': [777, 778], 'images.$[e].tamponNonRepresente': 'x'.repeat(78) } }, { arrayFilters: [{ 'e.set': 'Zeta-Set' }] });
+        await C.updateOne({ _id: 600 }, { $push: { images: { set: 'Y-Set', numero: '9', cleR2: 'y/9', jointeLe: new Date() } } });
+        await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/Y-Set' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
+    } else if (cas === 'contrat-propre') {                 // H : le lot change le pv d'une carte (rien que l'API lise) et ajoute une ligne neuve pour la carte 600
+        await C.updateOne({ _id: 600 }, { $set: { pv: 60 } });
+        await P.insertOne({ _id: '600-889', carteId: 600, idProduct: 889, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002-V2', slugSet: 'X-Set' });
     } else if (cas === 'additif') {
         await P.insertOne({ _id: '400-1', idProduct: 400, idExpansion: 14, carteId: 1, verifieLe: new Date() });
     } else throw new Error(`cas inconnu : ${cas}`);
@@ -77,11 +102,11 @@ async function main() {
     const annonce = path.join(os.tmpdir(), `annonce-test-lot-${Date.now()}.json`);
     fs.writeFileSync(annonce, JSON.stringify({ 'illustrateurs imp:intl|Set A': 1, 'illustrateurs-nommes imp:intl|Set A': 1 }));
     const lot = (cas, extra = []) => {
-        const r = spawnSync(process.execPath, ['lot-additif.js', '--base=test_scratch', `--journal=${journal}`, '--confirmation=1', `--quoi=banc ${cas}`, '--collections=cartes', ...extra, '--', 'node', 'test-lot-garde-scratch.js', `--effacer=${cas}`], { cwd: __dirname, encoding: 'utf8' });
+        const r = spawnSync(process.execPath, ['lot-additif.js', '--base=test_scratch', `--journal=${journal}`, '--confirmation=1', `--quoi=banc ${cas}`, '--collections=cartes', ...(AVEC_CONTRAT && !extra.includes('--contrat-api') ? ['--contrat-api'] : []), ...extra, '--', 'node', 'test-lot-garde-scratch.js', `--effacer=${cas}`], { cwd: __dirname, encoding: 'utf8' });
         const ligne = fs.readFileSync(journal, 'utf8').trim().split('\n').at(-1);
         return { code: r.status, ligne, sortie: r.stdout + r.stderr };
     };
-    const remettre = async () => { for (const n of COLLS) await db.collection(n).drop().catch(() => { }); await semer(db); await new Promise(r => setTimeout(r, 1100)); };
+    const remettre = async (graine = semer) => { for (const n of COLLS) await db.collection(n).drop().catch(() => { }); await graine(db); await new Promise(r => setTimeout(r, 1100)); };
     try {
         // ── A. le cas du §59, pas annoncé : ARRÊT, l'illustrateur revient, la fiche ajoutée repart, l'image du worker reste
         await remettre();
@@ -126,6 +151,25 @@ async function main() {
         await remettre();
         r = lot('additif');
         verifier('E. additif : le lot passe, la hausse est comptée', [r.code, /hausses fiches \+1/.test(r.ligne)], [0, true]);
+
+        // ── G. LA GARDE DU CONTRAT DE L'API, de bout en bout (tour de correction 1, point 4) : la chaîne réelle de l'API (decider, lireEntree) est importée par lot-additif.js, l'état « après » est lu UNE fois
+        // (projections réunies), et la restauration se fait par CARTE fautive. Un tamponNonRepresente de 78 caractères (l'incident de Frosmoth) arrête le lot et la carte fautive revient ; l'image que le worker
+        // a jointe à une AUTRE carte du même set reste.
+        await remettre(semerContrat);
+        r = lot('contrat-faute', ['--contrat-api']);
+        const c500 = await db.collection('cartes').findOne({ _id: 500 }), c600 = await db.collection('cartes').findOne({ _id: 600 });
+        verifier('G. contrat : un tampon de 78 caractères arrête le lot (code 3, restauration complète)', r.code, 3);
+        verifier('G. la carte fautive est restaurée : l\'image de Zeta n\'a plus ni tampon ni marquage de partage', [c500.images.find(i => i.set === 'Zeta-Set').tamponNonRepresente, c500.images.find(i => i.set === 'Zeta-Set').produitsPartages], [undefined, undefined]);
+        verifier('G. restauration PAR CARTE : l\'image jointe par le worker à la carte 600 (même set X, autre carte) reste', c600.images.map(i => i.cleR2), ['x/600.webp', 'y/9']);
+        verifier('G. le journal nomme le refus du contrat sur le produit 777 et l\'arrêt', [/contrat API 777/.test(r.ligne), /ARRÊT/.test(r.ligne), /refus du contrat API/.test(r.ligne)], [true, true, true]);
+        verifier('G. la sortie dit les étapes du contrat : chaîne importée, et un refus nouveau', [/0 bis\. contrat API : chaîne de l'API importée/.test(r.sortie), /refus nouveaux 1/.test(r.sortie)], [true, true]);
+        if (r.code !== 3) console.log(r.sortie);
+
+        // ── H. un lot propre avec le contrat : il passe, et le contrat est dit respecté
+        await remettre(semerContrat);
+        r = lot('contrat-propre', ['--contrat-api']);
+        verifier('H. contrat : un lot propre passe (code 0), le contrat est dit respecté, aucun refus nouveau', [r.code, /contrat API respecté/.test(r.sortie), /refus nouveaux 0/.test(r.sortie)], [0, true, true]);
+        if (r.code !== 0) console.log(r.sortie);
     } finally {
         for (const n of COLLS) await db.collection(n).drop().catch(() => { });
         await cx.close();

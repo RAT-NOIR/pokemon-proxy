@@ -253,10 +253,83 @@ const TAMPON_78 = 'x'.repeat(78);
     }
     {
         const srcLot = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
-        verifier('D3.5 : lot-additif.js ne relit plus la base une seconde fois pour le contrat (plus de etatContrat), l\'état « après » est lu UNE fois avec les projections réunies',
-            [/async function etatContrat/.test(srcLot), /GC\.unionProjections\(/.test(srcLot), /async function jouerContrat\(api, avantDocs, apresDocs\)/.test(srcLot)], [false, true, true]);
+        // (tour de correction 1, point 5) la réunion des projections est calculée et VALIDÉE par chargerApi, avant la sauvegarde : lot-additif.js ne l'appelle plus (aucune exception possible après l'écriture)
+        verifier('D3.5 : lot-additif.js ne relit plus la base une seconde fois pour le contrat (plus de etatContrat), l\'état « après » est lu UNE fois avec les projections réunies par chargerApi',
+            [/async function etatContrat/.test(srcLot), /GC\.unionProjections\(/.test(srcLot), /api\.projectionsEtat\.cartes/.test(srcLot), /async function jouerContrat\(api, avantDocs, apresDocs\)/.test(srcLot)], [false, false, true, true]);
         verifier('D3.5 : la restauration relit l\'état UNE fois (comparaison des comptes ET contrat sur la même lecture)', [/const apresRelu = await etatDeLaBase\(db, api\)/.test(srcLot), /jouerContrat\(api, docsAvant, apresRelu\.docs\)/.test(srcLot)], [true, true]);
         verifier('D3.5 : l\'en-tête de garde-contrat-api.js porte les chiffres mesurés et leur date', [/2,1 s/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8')), /1 073 Mo/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8')), /2026-10-19/.test(require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8'))], [true, true, true]);
+    }
+
+    // ══ TOUR DE CORRECTION 1 (2026-10-24) ══
+    // ── point 5 : la réunion des projections est validée au CHARGEMENT (avant la sauvegarde)
+    {
+        const L = require('./collecte-cartes/garde-lot');
+        verifier('T1.5 : chargerApi rend les projections réunies, déjà validées (cartes et cartes_produits)',
+            [JSON.stringify(api.projectionsEtat?.cartes) === JSON.stringify(G.unionProjections(L.PROJECTION_ETAT.cartes, api.PROJECTIONS.cartes)), JSON.stringify(api.projectionsEtat?.cartesProduits) === JSON.stringify(G.unionProjections(L.PROJECTION_ETAT.cartesProduits, api.PROJECTIONS.cartes_produits)), Object.isFrozen(api.projectionsEtat)], [true, true, true]);
+        const srcApi = require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8');
+        const corpsCharger = srcApi.slice(srcApi.indexOf('async function chargerApi'), srcApi.indexOf('// ── LA PROJECTION'));
+        verifier('T1.5 : la réunion est calculée DANS chargerApi (une projection invalide y refuse : code 6 avant toute écriture) et un refus déjà formé n\'est pas ré-enveloppé',
+            [/unionProjections\(/.test(corpsCharger), /\^garde contrat API/.test(corpsCharger)], [true, true]);
+    }
+
+    // ── point 6 : toute ligne d'une carte changée est retenue, avec son set, quel que soit `cartes.sets`
+    {
+        const f1 = etat(), f2 = etat();
+        for (const e of [f1, f2]) e.cartesProduits.push({ _id: 'l9', carteId: 245005, idProduct: 9, idExpansion: 9999, slugSet: 'Hors-Set', variante: null });
+        f2.cartes[0].nomEn = 'y';                                              // la CARTE change, sa ligne (inchangée) vit dans un set que ni cartes.sets ni ses images ne nomment
+        verifier('T1.6 : une carte changée -> le slugSet de ses LIGNES est touché, même hors de cartes.sets et de ses images', G.setsTouchesContrat({ avant: f1, apres: f2 }).includes('Hors-Set'), true);
+    }
+    {
+        const e1 = etat(), e2 = etat();
+        for (const e of [e1, e2]) e.cartesProduits.push({ _id: 'l9', carteId: 245005, idProduct: 9, idExpansion: 9999, slugSet: 'Hors-Set', variante: null });
+        e2.cartes[1].nomEn = 'z';                                              // une AUTRE carte change ; la carte 245005 et sa ligne ne bougent pas
+        verifier('T1.6 (l\'autre sens) : une carte inchangée n\'ajoute pas les sets de ses lignes', G.setsTouchesContrat({ avant: e1, apres: e2 }).includes('Hors-Set'), false);
+    }
+    {
+        // la carte 500 n'est membre d'AUCUN set (cartes.sets vide) : seule la ligne la rattache à X-Set. Son image (Zeta) devient fautive.
+        const sansSets = (zeta) => { const e = autreTirage(zeta ? { zeta: zetaFautive } : {}); e.cartes[0].sets = []; return e; };
+        const v6 = await G.verifierContrat({ api, avant: sansSets(false), apres: sansSets(true) });
+        // (decider ne sert un produit que si sa carte est MEMBRE du set : `cartes.sets` vide, il n'y a pas de fiche, donc pas d'entrée — ni avant ni après ; la règle ne fabrique donc pas de refus, elle garantit seulement que le set de la ligne est rejoué)
+        verifier('T1.6 : de bout en bout, le set de la ligne (X-Set) est dans les sets rejoués alors que la carte n\'en est membre ni par `sets` ni par ses images', [v6.slugs.includes('X-Set'), v6.nouveaux.length], [true, 0]);
+    }
+
+    // ── point 7 : « persistant » = le MÊME défaut (motif ET valeur fautive)
+    c = G.comparerContrat(carte(entree({ tamponNonRepresente: 'x'.repeat(78) })), carte(entree({ tamponNonRepresente: 'y'.repeat(78) })));
+    verifier('T1.7 : un tamponNonRepresente fautif (78 car.) qui devient UN AUTRE texte fautif : NOUVEAU', [c.nouveaux.length, c.persistants.length], [1, 0]);
+    c = G.comparerContrat(carte(entree({ tamponNonRepresente: 'x'.repeat(78) })), carte(entree({ tamponNonRepresente: 'x'.repeat(78) })));
+    verifier('T1.7 (l\'autre sens) : le même texte fautif avant et après : persistant', [c.nouveaux.length, c.persistants.length], [0, 1]);
+    c = G.comparerContrat(carte(entree({ tamponNonRepresente: 'x'.repeat(78) })), carte(entree({ tamponNonRepresente: 'x'.repeat(78), mention: 'autre mention' })));
+    verifier('T1.7 : un champ SANS rapport qui change sur le même produit toujours refusé (la mention) : persistant, le lot n\'a pas écrit le défaut', [c.nouveaux.length, c.persistants.length], [0, 1]);
+    c = G.comparerContrat(carte(entree({ partageeTamponNonSepare: 'oui' })), carte(entree({ partageeTamponNonSepare: 'peut-être' })));
+    verifier('T1.7 : tout champ de marquage refusé (partageeTamponNonSepare : « oui » -> « peut-être ») : NOUVEAU', [c.nouveaux.length, c.persistants.length], [1, 0]);
+    c = G.comparerContrat(carte(entree({ produitsPartages: [450593, 1, 2, 3, 4, 5, 6] })), carte(entree({ produitsPartages: [450593, 1, 2, 3, 4, 5, 6, 7] })));
+    verifier('T1.7 : produitsPartages de 7 qui devient 8 : NOUVEAU (la valeur fautive a changé)', [c.nouveaux.length, c.persistants.length], [1, 0]);
+    c = G.comparerContrat(new Map([[1, { ok: false, motif: 'motif inconnu de la table' }]]), new Map([[1, { ok: false, motif: 'motif inconnu de la table' }]]));
+    verifier('T1.7 : jugements sans valeur (cartes fabriquées) : même motif = persistant, comme avant', [c.nouveaux.length, c.persistants.length], [0, 1]);
+    verifier('T1.7 : un motif que la table ne sait pas rattacher à un champ compare l\'entrée ENTIÈRE (fail-closed)',
+        [G.jugerEntree(api, 'abc').valeur === G.jugerEntree(api, 'abc').valeur, G.jugerEntree(api, 'abc').valeur === G.jugerEntree(api, 'abd').valeur, G.jugerEntree(api, 'abc').motif], [true, false, 'entrée illisible']);
+
+    // ── point 8 : la restauration se fait par CARTE fautive
+    {
+        const deuxCartes = (zeta) => {
+            const e = autreTirage(zeta ? { zeta: zetaFautive } : {});
+            e.cartes.push({ _id: 600, nomEn: 'Autremon', sets: ['X-Set'], impressions: [{ tirage: 'jp', expansion: 'X-Set Expansion', numero: '002', total: '10', rarete: 'C' }], images: [IMG('X-Set', 'x/600.webp', { numero: '002', vignette: { cleR2: 'v/600.webp', w: 200, h: 280 } })] });
+            e.cartesProduits.push({ _id: 'l600', carteId: 600, idProduct: 888, idExpansion: 6100, numeroFiche: '002', slug: 'Autremon-X002', slugSet: 'X-Set' });
+            return e;
+        };
+        const v8 = await G.verifierContrat({ api, avant: deuxCartes(false), apres: deuxCartes(true) });
+        verifier('T1.8 : le verdict nomme les CARTES fautives (la carte 500), pas celles qui partagent ses sets (la carte 600)', [v8.nouveaux.map(n => n.idProduct), v8.cartesFautives], [[777], [500]]);
+        const srcLot8 = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
+        verifier('T1.8 : lot-additif.js garde le tableau `images` des cartes qui ne sont pas fautives (restauration par carte), le contrat ne passe plus par les sets',
+            [/cartesFautives\.has\(d\._id\)/.test(srcLot8), /cartesFautives = new Set\(contrat\?\.cartesFautives/.test(srcLot8), /\.\.\.\(contrat\?\.setsFautifs/.test(srcLot8)], [true, true, false]);
+    }
+
+    // ── point 9 : nouveaux dédoublonnés par idProduct + motif
+    {
+        const l = [{ idProduct: 1, motif: 'a' }, { idProduct: 1, motif: 'a' }, { idProduct: 1, motif: 'b' }, { idProduct: 2, motif: 'a' }];
+        verifier('T1.9 : dedoublonner garde un exemplaire par (idProduct, motif), dans l\'ordre', G.dedoublonner(l), [{ idProduct: 1, motif: 'a' }, { idProduct: 1, motif: 'b' }, { idProduct: 2, motif: 'a' }]);
+        const srcApi9 = require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8');
+        verifier('T1.9 : comparerContrat rend ses listes dédoublonnées', /nouveaux: dedoublonner\(nouveaux\), persistants: dedoublonner\(persistants\)/.test(srcApi9), true);
     }
 
     // ── 10. LE CHARGEMENT ÉCHOUE FERMÉ

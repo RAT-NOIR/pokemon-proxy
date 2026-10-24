@@ -35,7 +35,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { SITE_LIT, PROJECTION_ETAT, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que le site lit, confrontée au gabarit du site IMPORTÉ (étape 0 ter)
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
@@ -126,8 +127,9 @@ const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(
 // de l'API, sans chemin parent/enfant ensemble) ; la vue de l'API en est dérivée par `projeter`. Avant, une seconde lecture complète (etatContrat) chargeait une troisième copie de la base (≈ 1 073 Mo de tas mesurés)
 // et lisait les collections à un autre instant que les compteurs (le worker écrit entre les deux).
 async function etatDeLaBase(db, api = null) {
-    const projectionCartes = api ? GC.unionProjections(PROJECTION_ETAT.cartes, api.PROJECTIONS.cartes) : { ...PROJECTION_ETAT.cartes };
-    const projectionLignes = api ? GC.unionProjections(PROJECTION_ETAT.cartesProduits, api.PROJECTIONS.cartes_produits) : { ...PROJECTION_ETAT.cartesProduits };
+    // la réunion est faite (et validée) par chargerApi, AVANT la sauvegarde : ici plus rien ne peut lever après l'écriture
+    const projectionCartes = api ? { ...api.projectionsEtat.cartes } : { ...PROJECTION_ETAT.cartes };
+    const projectionLignes = api ? { ...api.projectionsEtat.cartesProduits } : { ...PROJECTION_ETAT.cartesProduits };
     const [cartes, cartesProduits, sets] = await Promise.all([
         db.collection('cartes').find({}).project(projectionCartes).toArray(),
         db.collection('cartes_produits').find({}).project(projectionLignes).toArray(),
@@ -154,7 +156,7 @@ async function setsDuWorker(db, depuis) {
 async function jouerContrat(api, avantDocs, apresDocs) {
     try {
         const v = await GC.verifierContrat({ api, avant: avantDocs, apres: apresDocs });
-        return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, persistants: v.persistants, v };
+        return { ligne: GC.ligneContrat(v), fautives: v.nouveaux.map(n => `contrat API ${n.idProduct} : ${n.motif}`), setsFautifs: v.setsFautifs, cartesFautives: v.cartesFautives, persistants: v.persistants, v };
     } catch (e) {
         const raison = String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300);
         return { ligne: 'contrat API : 🔴 je ne peux pas conclure', fautives: [`contrat API : je ne peux pas conclure (${raison})`], setsFautifs: [], persistants: [], v: null };
@@ -190,6 +192,14 @@ function journaliser(t, dossier, combien, sortie) {
         try { api = await GC.chargerApi(); } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
         console.log('   0 bis. contrat API : chaîne de l\'API importée (projections, décision, règle du site embarquée, validation d\'entrée)');
     } else console.log('   0 bis. contrat API : non vérifié (base de banc)');
+    // 0 ter. CE QUE LE SITE LIT, AVANT la sauvegarde (tour de correction 1, 2026-10-24) : SITE_LIT (garde-lot.js) décide quels sets un lot fait revalider ; elle est confrontée au gabarit de lecture du site IMPORTÉ
+    // (lib/lireDonnee.ts : SPEC_CARTE, SPEC_PRODUIT, SPEC_SET). Un champ lu par le site et absent de SITE_LIT, un site introuvable, un import qui lève : refus (code 6), rien n'est sauvegardé ni écrit.
+    if (BASE === 'cartes') {
+        try {
+            const vu = await GS.verifierSiteLu({ siteLit: SITE_LIT });
+            console.log(`   0 ter. site lu : SITE_LIT couvre les ${vu.champs} champs que le gabarit de lecture du site (lireDonnee.ts, importé) lit`);
+        } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
+    } else console.log('   0 ter. site lu : non vérifié (base de banc)');
     console.log(`\n══ LOT : ${quoi}\n   1. sauvegarde ${aSauver.join(',')} → ${dossier} (base ${BASE})`);
     const s = spawnSync(process.execPath, ['backup-collections.js', `--base=${BASE}`, `--collections=${aSauver.join(',')}`, `--dossier=${dossier}`], { stdio: 'inherit', cwd: __dirname });
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
@@ -270,11 +280,13 @@ function journaliser(t, dossier, combien, sortie) {
     // ── ARRÊT : restauration depuis la sauvegarde
     const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
     console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
-    // les sets où le contrat est violé se restaurent comme un set dont les images ont baissé : le tableau `images` y est remis (le champ du worker n'y est pas gardé)
-    const imagesFautives = new Set([...cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')), ...(contrat?.setsFautifs || [])]);
+    // une baisse d'images (compteur) est une affaire de SET : le tableau `images` des cartes de ce set est remis (le champ du worker n'y est pas gardé).
+    // (tour de correction 1, point 8) un refus du contrat est une affaire de CARTE : seul le tableau `images` des cartes fautives est remis ; celui des autres cartes de leurs sets garde ce que le worker y a écrit
+    const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
+    const cartesFautives = new Set(contrat?.cartesFautives || []);
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
-        if (coll === 'cartes' && [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set))) return champs.filter(f => f !== 'images');
+        if (coll === 'cartes' && (cartesFautives.has(d._id) || [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set)))) return champs.filter(f => f !== 'images');
         return champs;
     };
     const faits = [];
