@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "mongo": true,
+  "version": "fictif-0.0.0",
+  "versionMinExtension": "2.0.0",
+  "capacites": [
+    "langue-impression",
+    "marques",
+    "prix-incertains",
+    "prix-repli",
+    "achete-avant-jour"
+  ]
+}

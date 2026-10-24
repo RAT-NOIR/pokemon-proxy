@@ -135,6 +135,15 @@ H.vrai('Impression.variante est nullable', nullable('Impression.properties.varia
     for (const [nom, champ] of [['PrixGuide', ['deBase', 'moyenne7', 'fiable', 'reserves']], ['SetProduit', ['badge', 'badgeSource']], ['Produit', ['version']], ['Impression', ['version']]])
         H.v(`${nom} : ${champ.join(', ')} sont des AJOUTS FACULTATIFS (jamais requis : un client d'avant le lot F4-PRIX reste valide)`, champ.filter(c => (aller(S, `${nom}.required`) || []).includes(c)), []);
 }
+// CAPACITES-PING : la liste fermée des capacités a UNE source (v2/capacites.js), le schéma la reprend ensemble pour ensemble, dans le même ordre ; les deux champs ajoutés à /ping sont facultatifs
+{
+    const { CAPACITES } = require('../capacites');
+    H.v('ReponsePing.capacites : schéma = CAPACITES (v2/capacites.js), même ordre', aller(S, 'ReponsePing.properties.capacites.items.enum'), [...CAPACITES]);
+    H.v('ReponsePing.capacites : un tableau de chaînes', [aller(S, 'ReponsePing.properties.capacites.type'), aller(S, 'ReponsePing.properties.capacites.items.type')], ['array', 'string']);
+    H.v('ReponsePing : capacites et versionMinExtension sont facultatifs (un serveur d\'avant, ou une v2 non configurée, ne les sert pas)', ['capacites', 'versionMinExtension'].filter(c => (aller(S, 'ReponsePing.required') || []).includes(c)), []);
+    H.v('ReponsePing : capacites est conditionnelle comme versionMinExtension (x-conditionnel identique)', aller(S, 'ReponsePing.properties.capacites.x-conditionnel'), aller(S, 'ReponsePing.properties.versionMinExtension.x-conditionnel'));
+    H.vrai('ReponsePing : x-conditionnel est posé (v2 configurée)', typeof aller(S, 'ReponsePing.properties.capacites.x-conditionnel') === 'string');
+}
 // B7b.1 tour 1 (M6) : la liste des causes de non-remboursement a UNE source (sources.js), le schéma la reprend ensemble pour ensemble
 const { RAISONS_NON_REMBOURSE } = require('../../sources');
 H.v('Facturation.raisonNonRembourse : schéma = RAISONS_NON_REMBOURSE (sources.js)', diff(liste('Facturation.properties.raisonNonRembourse'), [...RAISONS_NON_REMBOURSE]), { enTrop: [], manquants: [] });
