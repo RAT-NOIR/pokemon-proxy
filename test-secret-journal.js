@@ -15,6 +15,7 @@ if (process.argv[2] === 'enfant') {
 const alea = n => { let s = ''; while (s.length < n) s += crypto.randomBytes(48).toString('base64').replace(/[^A-Za-z0-9]/g, ''); return s.slice(0, n); };
 const SECRETS = {
     STRIPE_WEBHOOK_SECRET: { prefixe: 'whsec_', valeur: null },
+    STRIPE_WEBHOOK_SECRET_ANCIEN: { prefixe: 'whsec_', valeur: null },   // secret de transition (WEBHOOK-MULTI)
     STRIPE_SECRET_KEY: { prefixe: 'sk_live_', valeur: null },
 };
 for (const k of Object.keys(SECRETS)) SECRETS[k].valeur = SECRETS[k].prefixe + alea(40);
@@ -35,6 +36,12 @@ const verifier = (ok, msg) => { console.log(`${ok ? '✅' : '🔴'} ${msg}`); if
 verifier(/\[stripe\]/.test(sortie), 'le démarrage a bien écrit sa ligne [stripe] (le banc mord sur le chemin)');
 verifier(/clé LIVE/.test(sortie), 'le mode (LIVE) se déduit du préfixe fixe');
 verifier(/secret webhook : présent/.test(sortie), 'la présence du secret de webhook est dite');
+verifier(/secret de transition : présent/.test(sortie), 'la présence du secret de transition est dite (posé)');
+
+// Second démarrage SANS le secret de transition : « absent ».
+const envSans = { ...env }; delete envSans.STRIPE_WEBHOOK_SECRET_ANCIEN;
+const r2 = spawnSync(process.execPath, [__filename, 'enfant'], { cwd: __dirname, env: envSans, encoding: 'utf8', timeout: 60000 });
+verifier(/secret de transition : absent/.test(`${r2.stdout || ''}\n${r2.stderr || ''}`), 'son absence est dite (non posé)');
 
 for (const [nom, { prefixe, valeur }] of Object.entries(SECRETS)) {
     const fuites = [];
