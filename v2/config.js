@@ -209,6 +209,9 @@ function lireConfig(env = process.env) {
         // F1-TAMPON puis LOT TAMPONS : lire les MARQUES (liste fermée : Staff, Prerelease, League, enseignes…) sur la carte redressée de l'extension pour trancher une paire SÉPARÉE marque(s) / normale (identifier/lecture-tampon.js). ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. À la mesure du lot TAMPONS : un faux positif réel (rapport) — il le reste.
         // N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (la carte vient de `empreintes[i].carte`), qu'un fournisseur est branché (montage : OPENROUTER_API_KEY) ET que la question est exactement une paire séparée.
         lectureTampon: booleen('V2_LECTURE_TAMPON', env.V2_LECTURE_TAMPON, false),
+        // SUR-PAR-IMAGE : une question dont les candidats ne sont pas le même dessin devient un sûr quand la photo (le vecteur de l'extension) est nettement plus proche d'un seul (identifier/sur-par-image.js, M = SEUILS_G.marge_carte).
+        // ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (le vecteur et l'index en viennent) ; jamais sur un sûr, un refus ni un « je ne sais pas ».
+        surParImage: booleen('V2_SUR_PAR_IMAGE', env.V2_SUR_PAR_IMAGE, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
