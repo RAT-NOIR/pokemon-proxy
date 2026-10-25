@@ -36,7 +36,9 @@ const OCTETS_MAX_PAR_IMAGE = 8 * 1024 * 1024;           // un scan de carte pès
 const CIBLES_PKMCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S7\\PKMCOM-IMPORT\\plan.json';
 // Les 12 trous anglais que la mesure du dépôt PTCG-database (S7\PTCGDB, PTCGDB-MESURE-report.md : « en plus de PKMNCARDS ») a trouvés au-delà des quatre lots ; décision du testeur du 17/10 soir. Les adresses d'image
 // ne viennent JAMAIS de ce dépôt : seul le sitemap en cache fait foi, et chaque produit est apparié set + numéro + nom comme les autres (les douteux sont sautés).
-const CIBLES_AUTRES = Object.freeze([297254, 297255, 297257, 297258, 297282, 297283, 297288, 297289, 582672, 909509, 909510, 909511]);
+const CIBLES_AUTRES = Object.freeze([297254, 297255, 297257, 297258, 297282, 297283, 297288, 297289, 582672, 909509, 909510, 909511,
+    // API-52 L4 (coordinateur, 2026-10-25) : les vrais scans « a » — 449623 Guzma BUS 115a, 311408 Karen XY177a, 449878 et 449883 Lusamine UPR 153a
+    449623, 311408, 449878, 449883]);
 const lireCiblesAutres = () => ({ ids: [...CIBLES_AUTRES], parProduit: new Map() });
 const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemoncom-cache';
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');

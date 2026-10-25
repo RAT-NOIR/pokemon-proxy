@@ -89,6 +89,10 @@ const TABLE = Object.freeze({
     // (correction 1) les sets des 5 remplacements du plan pokemon.com (entrée japonaise refusée au numéro d'un produit anglais)
     // lot « autres » (décision du testeur, 17/10 soir : « type-null : on prend quand même les petits gains ») : les trous anglais que la mesure du dépôt PTCG-database a trouvés EN PLUS des quatre lots
     'cosmic-eclipse': ligne({ lot: 'autres', slugSets: ['Cosmic-Eclipse'], code: 'cec' }),
+    // API-52 L4 (25/10) : les vrais scans « a » (marque « Yellow A ») de 4 produits ; chaque set existe dans les sitemaps des sets, chaque code est lu sur l'adresse réelle du sitemap en cache
+    'burning-shadows': ligne({ lot: 'autres', slugSets: ['Burning-Shadows'], code: 'bus' }),
+    'xy-promos': ligne({ lot: 'autres', slugSets: ['XY-Black-Star-Promos'], code: 'xyp' }),
+    'ultra-prism': ligne({ lot: 'autres', slugSets: ['Ultra-Prism'], code: 'upr' }),
     'shining-legends': ligne({ lot: 'pkmcom', slugSets: ['Shining-Legends'], code: 'slg' }),
     'forbidden-light': ligne({ lot: 'pkmcom', slugSets: ['Forbidden-Light'], code: 'fli' }),
     'lost-origin': ligne({ lot: 'pkmcom', slugSets: ['Lost-Origin'], code: 'lor' })
