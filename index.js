@@ -6859,7 +6859,7 @@ const PACKS = {
         // on peut dire qu'il est là et à quel mode il ressemble.
         const wh = String(process.env.STRIPE_WEBHOOK_SECRET || '');
         const etatWh = !wh ? '❌ ABSENT — aucun paiement ne sera crédité'
-            : (wh.startsWith('whsec_') ? `présent (${wh.slice(0, 11)}…)` : '⚠️ présent mais ne commence pas par whsec_');
+            : (wh.startsWith('whsec_') ? 'présent (préfixe whsec_)' : '⚠️ présent mais ne commence pas par whsec_');
         console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s) · secret webhook : ${etatWh}`);
         if (!wh) {
             console.error(`❌ [stripe] STRIPE_WEBHOOK_SECRET manquant : les clients pourront PAYER sans être crédités.`);
