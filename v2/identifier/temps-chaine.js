@@ -82,7 +82,7 @@ function allegerPrompt(prompt) {
 
 // Les réglages, lus dans l'environnement (jamais dans cfg : index.js est la chaîne héritée et ne reçoit pas cfg). Seule la valeur « 1 » allume.
 function reglages(env = process.env) {
-    return { imagePrioritaireSansCalcul: env.V2_TC_IMAGE_PRIORITAIRE === '1' };
+    return { imagePrioritaireSansCalcul: env.V2_TC_IMAGE_PRIORITAIRE === '1', secondeParallele: env.V2_TC_SECONDE_PARALLELE === '1' };
 }
 
 module.exports = { FILTRE_PARTOUT_ORIGINE, motifNumeroPartout, filtreNumeroPartout, champsImageNonCalcules, allegerPrompt, reglages };
