@@ -101,10 +101,12 @@ const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b)
         H.v('(e) « Charizard VMAX » porte le numéro lu (704) mais son nom est contredit par « Roaring Moon ex » (confiance haute) : il n\'est PAS montré', [r.issue, ids(r).includes(704), ids(r).includes(700)], ['question', false, true]);
         const bas = adapter({ statutHttp: 200, corps: corpsDe(c, { carte: { numero: '704', nomConfiance: 'basse' } }) }, m.ctx);
         H.v('   nom lu en confiance basse : le veto est désarmé (704 reste candidat, il porte le numéro lu)', [bas.issue, ids(bas).includes(704)], ['question', true]);
-        // TOUR 1 (I2) : un seul candidat restant après le filtre => le repli d'avant (jamais une confirmation à 1 candidat dans la voie « plus de 3 jumeaux »)
+        // TOUR 1 (I2) : un seul candidat restant après le filtre => le repli d'avant. LOT DESIGNATION-REGLES (R5, décision de l'éditeur 2026-10-25) : CONFIRMATION_NOMBREUX allumée = la question à UN candidat ; le repli d'avant reste derrière ctx.confirmationNombreux = false.
         const tous = { ...c, produits: [ligneB(700), ligneB(704, 'Charizard VMAX'), ligneB(705, 'Charizard VMAX'), ligneB(706, 'Charizard VMAX'), ligneB(707, 'Charizard VMAX')] };
-        const mt = monde(tous), rt = adapter({ statutHttp: 200, corps: corpsDe(tous) }, mt.ctx);
-        H.v('   (I2) tous les jumeaux contredits, P compatible : UN seul restant => introuvable impression-indeterminee / jumeaux-trop-nombreux, jamais une question à 1 candidat', [rt.issue, rt.analyse.cartes[0].raison, rt.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
+        const mt = monde(tous), rt = adapter({ statutHttp: 200, corps: corpsDe(tous) }, { ...mt.ctx, confirmationNombreux: false });
+        H.v('   (I2) tous les jumeaux contredits, P compatible : UN seul restant, interrupteur éteint => introuvable impression-indeterminee / jumeaux-trop-nombreux (le repli d\'avant)', [rt.issue, rt.analyse.cartes[0].raison, rt.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
+        const rt1 = adapter({ statutHttp: 200, corps: corpsDe(tous) }, mt.ctx);
+        H.v('   (I2 bis, R5) le même cas, CONFIRMATION_NOMBREUX allumée (livré) : la question « est-ce cette carte ? » à UN candidat, P', [rt1.issue, ids(rt1)], ['question', [700]]);
         // TOUR 1 (I1) : P passe AUSSI par le filtre ; plus aucun candidat => introuvable photo-illisible
         const toutContredit = { ...c, produits: [ligneB(700, 'Klink'), ligneB(704, 'Charizard VMAX'), ligneB(705, 'Charizard VMAX'), ligneB(706, 'Charizard VMAX'), ligneB(707, 'Charizard VMAX')] };
         const mc = monde(toutContredit), rc = adapter({ statutHttp: 200, corps: corpsDe(toutContredit, { carte: { nom: 'Lucario', nomBrut: 'Lucario' } }) }, mc.ctx);
