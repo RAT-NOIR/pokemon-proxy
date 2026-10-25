@@ -323,5 +323,9 @@ function planRetrait(cartes) {
     return { cartes: touchees, entrees, cles };
 }
 
-module.exports = { duLot, SOURCE, LOT, HOTE, ROBOTS, PREFIXE_CHEMIN, UA, CADENCE_MS, MENTION, DOSSIER_SITEMAPS, DOSSIER_CACHE, DOSSIER_LOT, LOTS, TABLE, SETS_A_REGARDER, SETS_SANS_NUMERO_DE_SLUG, LARGEUR_ATTENDUE,
+// API-52 L4 : le numéro d'UNE ligne qui n'en porte pas ni slug (449623 Guzma, Burning-Shadows, numeroFiche null, slug null) — « 115a », lu par le testeur sur le produit (relevé API) ; liste FERMÉE d'un produit,
+// jamais déduite du nom. Il ne sert qu'à CHERCHER la page de la source ; set + numéro + nom s'y prouvent comme toujours.
+const NUMEROS_EXPLICITES = Object.freeze({ 449623: '115a' });
+const numeroExplicite = idProduct => (Object.prototype.hasOwnProperty.call(NUMEROS_EXPLICITES, idProduct) ? NUMEROS_EXPLICITES[idProduct] : null);
+module.exports = { NUMEROS_EXPLICITES, numeroExplicite, duLot, SOURCE, LOT, HOTE, ROBOTS, PREFIXE_CHEMIN, UA, CADENCE_MS, MENTION, DOSSIER_SITEMAPS, DOSSIER_CACHE, DOSSIER_LOT, LOTS, TABLE, SETS_A_REGARDER, SETS_SANS_NUMERO_DE_SLUG, LARGEUR_ATTENDUE,
     urlImageValide, urlRobotsValide, adressePermise, lireSitemapTexte, lireSitemaps, decomposer, indexer, nomNorm, estBasse, cleR2, cleNum, idImage, apparier, controlerImage, imagesIdentiques, planRetrait };

@@ -311,7 +311,7 @@ async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles 
     const sets = new Map((await db.collection('sets').find({ _id: { $in: slugSets } }, { projection: { tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s.tirage ?? s.region]));
     const occidentales = lignes.filter(l => (sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId));
     const horsTirage = lignes.filter(l => !((sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId))).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, motif: parId.has(l.carteId) ? 'tirage-non-occidental' : 'carte-absente' }));
-    const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
+    const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? P.numeroExplicite(l.idProduct) ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
     // (BASSE-DEF) la règle commune lit le DOCUMENT `images` de chaque entrée actuelle : ceux des cartes du lot, dans les sets du lot (de préférence « ok »)
     const docsImages = await db.collection('images').find({ carteId: { $in: [...parId.keys()] }, set: { $in: slugSets } }).toArray();
     const documents = documentsDeLaListe([...docsImages.filter(d => d.etat !== 'ok'), ...docsImages.filter(d => d.etat === 'ok')]);

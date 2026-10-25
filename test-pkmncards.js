@@ -202,6 +202,10 @@ ra = appA([trou(449878, 225372, 'Ultra-Prism', '153a', 'Lusamine-V3-CIN153a', 'G
 verifier('autres (API-52) : un nom qui contredit la source (Lusamine/Gladion) -> SAUTÉ', [ra.plan.length, motifs(ra)], [0, ['449878:nom-contredit']]);
 ra = P.apparier({ trous: [trou(449623, 223420, 'Burning-Shadows', null, null, 'Guzma', [servie('Burning-Shadows', '115')])], entrees: idxA, lot: 'autres', documents: new Map() });
 verifier('autres (API-52) : une fiche SANS numéro ni slug n\'est jamais appariée par le nom seul (Guzma, ligne actuelle)', motifs(ra), ['449623:sans-numero']);
+verifier('autres (API-52) : le numéro EXPLICITE d\'une ligne sans numéro (Guzma 449623 = 115a, lu par le testeur) est une liste fermée d\'UN produit ; tout autre produit : null', [P.numeroExplicite(449623), P.numeroExplicite(311408), P.numeroExplicite(null), Object.isFrozen(P.NUMEROS_EXPLICITES), Object.keys(P.NUMEROS_EXPLICITES)], ['115a', null, null, true, ['449623']]);
+ra = appA([trou(449623, 223420, 'Burning-Shadows', P.numeroExplicite(449623), null, 'Guzma', [servie('Burning-Shadows', '115')])]);
+verifier('autres (API-52) : Guzma, une fois son numéro explicite posé, s\'apparie au scan 115a (set + numéro + nom)', [ra.plan.length, ra.plan[0]?.numero, ra.plan[0]?.url.slice(ra.plan[0].url.lastIndexOf('/') + 1)], [1, '115a', 'en_US-SM3-115a-guzma-yaa.jpg']);
+verifier('autres (API-52) : le collecteur lit ce numéro explicite quand la ligne n\'en porte pas (et jamais quand elle en porte un)', /numeroFiche: l\.numeroFiche \?\? P\.numeroExplicite\(l\.idProduct\) \?\? null/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pkmncards.js'), 'utf8')), true);
 ra = P.apparier({ trous: [trou(449623, 223420, 'Burning-Shadows', '115a', 'Guzma-V2-BUS115a', 'Guzma', [servie('Burning-Shadows', '115')])], entrees: idxA, lot: 'kits', documents: new Map() });
 verifier('autres (API-52) : les trois sets ne sont pas offerts aux autres lots', motifs(ra), ['449623:set-hors-table']);
 
