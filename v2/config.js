@@ -214,6 +214,8 @@ function lireConfig(env = process.env) {
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
         // RESOUDRE-CARDMARKET : POST /api/banc/resoudre-cardmarket (adresse Cardmarket collée → idProduct, administrateur seulement). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) SANS rendre la configuration invalide : un drapeau mal écrit ne doit jamais coûter un 503 au service.
+        // DESIGNATION-REGLES (R5) : dans la voie « plus de 3 produits », le SEUL candidat restant est montre en QUESTION a un choix (jamais un sûr, jamais promu par la règle G). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT, toute autre valeur l'éteint sans invalider la configuration.
+        confirmationNombreux: env.V2_CONFIRMATION_NOMBREUX === '1',
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
         // PHOTOS-MULTIPLES (7d) : POST /api/photo (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) et laisse /api/identifier tel qu'il est aujourd'hui, SANS rendre la configuration invalide. Phase 1 : administrateur seulement.
