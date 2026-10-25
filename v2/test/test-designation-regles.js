@@ -4,11 +4,12 @@
 //      un rival de même numéro contredit seulement par le total et le code n'est pas écarté). Mesuré : assouplir R4 par le total ET le code crée 1 sûr FAUX sur les tamponnées.
 //   R2 Drapion VSTAR : non codée (le jumeau PPS3 imprime le MÊME numéro et le même code que l'original ; le catalogue ne porte l'attaque qu'en anglais et en japonais).
 //   R3 Sonia : OPTION `ecarteIncomplet`, ÉTEINTE par défaut — un produit sans numéro, sans total et sans entrée d'archive est ignoré par la désignation.
-//   R5 : le SEUL candidat restant dans la voie « plus de 3 produits » est montré en QUESTION à un choix (CONFIRMATION_NOMBREUX, allumée par décision de l'éditeur), jamais en affirmation.
+//   R5 : le SEUL candidat restant dans la voie « plus de 3 produits » est montré en QUESTION à un choix derrière V2_CONFIRMATION_NOMBREUX (ÉTEINT par défaut, seul « 1 » l'allume), jamais en affirmation, jamais promu par la règle G.
 // Données FABRIQUÉES (aucun identifiant réel, aucun dossier du testeur, aucune base, aucun réseau).
 const { v, vrai, bilan } = require('./_harnais');
 const { lireConfig } = require('../config');
-const { adapter, CONFIRMATION_NOMBREUX } = require('../identifier/adaptateur');
+const { adapter } = require('../identifier/adaptateur');
+const PG = require('../identifier/promotion-g');
 const DES = require('../identifier/designation');
 
 const cfg = lireConfig({});
@@ -81,25 +82,55 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     v('(3) designer : null par défaut, le candidat avec l\'option', [DES.designer(base), (DES.designer({ ...base, assoupli: { ecarteIncomplet: true } }) || {}).id], [null, 5301]);
 }
 
-// ── (4) R5 : plus de 3 produits, UN seul candidat compatible — la question « est-ce cette carte ? » (CONFIRMATION_NOMBREUX allumée), jamais une affirmation
+// ── (3 bis) I2 : la clause « rival HORS question » de l'option R3 (la famille du catalogue entier)
+{
+    const X = ligne(5501, 'Sonia', 'RCL', '192', '192'), B = ligne(5502, 'Sonia', 'RCL', '203', '192'), IDS = [5501, 5502];
+    const corps = corpsDe({ tete: 5501, lecture: { numero: '192', total: '192', setCode: 'RCL' }, vivierIds: IDS, question: IDS, nom: 'Sonia' });
+    const OPT = { designationAssoupli: { ecarteIncomplet: true } };
+    const hors = l => ({ codeNumeroExiste: index(() => [l]) });
+    const inc = ligne(9501, 'Sonia', 'RCL', null, null, null);
+    v('(3 bis) famille : un produit INCOMPLET hors question, option éteinte : refus (inconnu n\'est pas contredit)', jouer(corps, [X, B], IDS, hors(inc)).issue, 'question');
+    v('(3 bis) famille : le même, option allumée : X est désigné', idDe(jouer(corps, [X, B], IDS, { ...hors(inc), ...OPT })), 5501);
+    v('(3 bis) famille : un produit hors question sans numéro MAIS avec un total : refus même option allumée', jouer(corps, [X, B], IDS, { ...hors(ligne(9502, 'Sonia', 'RCL', null, '192', null)), ...OPT }).issue, 'question');
+    v('(3 bis) famille : sans numéro MAIS avec une entrée d\'archive : refus même option allumée', jouer(corps, [X, B], IDS, { ...hors(ligne(9503, 'Sonia', 'RCL', null, null, 'intl')), ...OPT }).issue, 'question');
+    v('(3 bis) famille : un produit hors question au même numéro et au même total : refus même option allumée', jouer(corps, [X, B], IDS, { ...hors(ligne(9504, 'Sonia', 'RCL', '192', '192')), ...OPT }).issue, 'question');
+}
+
+// ── (4) R5 : plus de 3 produits, UN seul candidat compatible — la question « est-ce cette carte ? » derrière V2_CONFIRMATION_NOMBREUX (ÉTEINT par défaut), jamais une affirmation
 {
     const P = ligne(5401, 'Roaring Moon ex [Un | Deux]', 'AAA', '700', '100'), J = [5402, 5403, 5404, 5405].map(id => ligne(id, 'Charizard VMAX [Trois | Quatre]', 'BBB', String(id), '100'));
     const corps = () => corpsDe({ tete: 5401, lecture: { numero: '700', total: '100', setCode: 'AAA' }, vivierIds: [5401, 5402, 5403, 5404, 5405], nom: 'Roaring Moon ex' });
     const TOUS = [5401, 5402, 5403, 5404, 5405], SANS = { designation: { numero: false } };
-    v('(4) CONFIRMATION_NOMBREUX est allumée (décision de l\'éditeur)', CONFIRMATION_NOMBREUX, true);
-    const on = jouer(corps(), [P, ...J], TOUS);
-    v('(4) un seul restant : la question à UN candidat, jamais une affirmation', [on.issue, on.analyse.cartes[0].statut, montres(on), on.analyse.cartes[0].carte], ['question', 'a-trancher', [5401], null]);
+    const cfgOn = lireConfig({ V2_CONFIRMATION_NOMBREUX: '1' });
+    v('(4) le drapeau est ÉTEINT par défaut et seul « 1 » l\'allume', [cfg.confirmationNombreux, cfgOn.confirmationNombreux, lireConfig({ V2_CONFIRMATION_NOMBREUX: 'true' }).confirmationNombreux, lireConfig({ V2_CONFIRMATION_NOMBREUX: ' 1' }).confirmationNombreux], [false, true, false, false]);
+    const defaut = jouer(corps(), [P, ...J], TOUS);
+    v('(4) éteint (défaut) : le contrat d\'avant, introuvable impression-indeterminee / jumeaux-trop-nombreux, sans marqueur', [defaut.issue, defaut.analyse.cartes[0].raison, defaut.motif, defaut.confirmationNombreux], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux', undefined]);
+    const on = jouer(corps(), [P, ...J], TOUS, { cfg: cfgOn });
+    v('(4) allumé par la configuration : la question à UN candidat, jamais une affirmation', [on.issue, on.analyse.cartes[0].statut, montres(on), on.analyse.cartes[0].carte], ['question', 'a-trancher', [5401], null]);
     vrai('(4)     la question est réservée comme toute question (objet question non nul)', Boolean(on.question));
-    const off = jouer(corps(), [P, ...J], TOUS, { confirmationNombreux: false });
-    v('(4) interrupteur éteint (ctx) : le contrat d\'avant, introuvable impression-indeterminee / jumeaux-trop-nombreux', [off.issue, off.analyse.cartes[0].raison, off.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
-    v('(4) « true » seulement allume : une valeur autre éteint', jouer(corps(), [P, ...J], TOUS, { confirmationNombreux: 'oui' }).issue, 'introuvable');
-    const zero = jouer(corps(), [ligne(5401, 'Klink [Un | Deux]', 'AAA', '700', '100'), ...J], TOUS);
-    v('(4) 0 restant : introuvable photo-illisible, comme avant', [zero.issue, zero.analyse.cartes[0].raison], ['introuvable', 'photo-illisible']);
-    const deux = jouer(corps(), [P, ligne(5402, 'Roaring Moon ex [Un | Deux]', 'BBB', '701', '100'), ...J.slice(1)], TOUS, SANS);
-    v('(4) 2 restants : la question à 2, comme avant', [deux.issue, montres(deux)], ['question', [5401, 5402]]);
-    const manque = jouer(corps(), [P, ...J.slice(0, 3)], TOUS);
-    v('(4) une ligne de jumeau MANQUE : le repli impression-indeterminee (un jumeau sans ligne pourrait être la vérité)', [manque.issue, manque.analyse.cartes[0].raison], ['introuvable', 'impression-indeterminee']);
-    const jum = jouer(corps(), [ligne(5401, 'Klink [Un | Deux]', 'AAA', '700', '100'), ligne(5402, 'Roaring Moon ex [Un | Deux]', 'BBB', '701', '100'), ...J.slice(1)], TOUS, SANS);
-    v('(4) P contredit et UN jumeau compatible : la question à ce jumeau', [jum.issue, montres(jum)], ['question', [5402]]);
+    v('(4)     et elle porte le marqueur `confirmationNombreux` (la règle G ne la promeut jamais)', on.confirmationNombreux, true);
+    const parCtx = jouer(corps(), [P, ...J], TOUS, { confirmationNombreux: true });
+    v('(4) ctx.confirmationNombreux = true : la question (bancs, mesure)', parCtx.issue, 'question');
+    v('(4) ctx.confirmationNombreux = false l\'emporte sur la configuration allumée', jouer(corps(), [P, ...J], TOUS, { cfg: cfgOn, confirmationNombreux: false }).issue, 'introuvable');
+    v('(4) « true » seulement allume (ctx) : « oui » éteint', jouer(corps(), [P, ...J], TOUS, { confirmationNombreux: 'oui' }).issue, 'introuvable');
+    const zero = jouer(corps(), [ligne(5401, 'Klink [Un | Deux]', 'AAA', '700', '100'), ...J], TOUS, { cfg: cfgOn });
+    v('(4) allumé, 0 restant : introuvable photo-illisible, comme avant', [zero.issue, zero.analyse.cartes[0].raison], ['introuvable', 'photo-illisible']);
+    const deux = jouer(corps(), [P, ligne(5402, 'Roaring Moon ex [Un | Deux]', 'BBB', '701', '100'), ...J.slice(1)], TOUS, { ...SANS, cfg: cfgOn });
+    v('(4) allumé, 2 restants : la question à 2, comme avant, sans marqueur', [deux.issue, montres(deux), deux.confirmationNombreux], ['question', [5401, 5402], undefined]);
+    const manque = jouer(corps(), [P, ...J.slice(0, 3)], TOUS, { cfg: cfgOn });
+    v('(4) allumé, une ligne de jumeau MANQUE : le repli impression-indeterminee', [manque.issue, manque.analyse.cartes[0].raison], ['introuvable', 'impression-indeterminee']);
+    const jum = jouer(corps(), [ligne(5401, 'Klink [Un | Deux]', 'AAA', '700', '100'), ligne(5402, 'Roaring Moon ex [Un | Deux]', 'BBB', '701', '100'), ...J.slice(1)], TOUS, { ...SANS, cfg: cfgOn });
+    v('(4) allumé, P contredit et UN jumeau compatible : la question à ce jumeau', [jum.issue, montres(jum)], ['question', [5402]]);
+
+    // ── (5) C2 : la question R5 n'est JAMAIS promue en sûr par la règle G (promotion-g.js, défaut fermé)
+    const gAff = { issue: 'affirmee', produit: 5401 }, garde = { jugeable: true, contredit: false, concordante: true, resume: null };
+    const avec = PG.arbitrerAvecPromotion({ issue: 'question', ids: [5401], confirmationNombreux: true }, gAff, { garde });
+    const sans = PG.arbitrerAvecPromotion({ issue: 'question', ids: [5401] }, gAff, { garde });
+    v('(5) témoin : une question ordinaire à un candidat SE PROMEUT quand G affirme et que la garde laisse passer', [sans.action, sans.promotion], ['promouvoir', true]);
+    v('(5) la question marquée R5, G affirmant et la garde passant : JAMAIS promue', [avec.promotion, avec.action === 'promouvoir'], [false, false]);
+    v('(5)     même quand G affirme un AUTRE produit', PG.arbitrerAvecPromotion({ issue: 'question', ids: [5401], confirmationNombreux: true }, { issue: 'affirmee', produit: 5402 }, { garde }).action === 'promouvoir', false);
+    // le marqueur est transmis par la route : la ligne qui construit la chaîne de l'arbitrage le lit sur le résultat de l'adaptateur
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'routes.js'), 'utf8');
+    vrai('(5) routes.js transmet `confirmationNombreux` du résultat à l\'arbitrage de G', src.includes('confirmationNombreux: resultat.confirmationNombreux === true }, d)'));
 }
 bilan();
