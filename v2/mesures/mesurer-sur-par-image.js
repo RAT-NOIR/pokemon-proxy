@@ -58,8 +58,8 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
         const r = SPI.decider({
             ids: x.et.choix, cles, signaux,
             // INTEGRATION-IMAGE : la VRAIE marque — la même fonction que la route (sur-par-image-route.js::emprunteDe, qui lit version.empruntDe de l'archive, format 3). Une archive sans la colonne des emprunts : null, la règle se tait (défaut fermé).
-            // --sans-marque : aucune fonction d'emprunt (la règle se tait sur toute la question). --marque-mention : l'ANCIENNE approximation (« l'entrée porte une mention »), gardée pour comparer.
-            emprunte: process.argv.includes('--sans-marque') ? null : process.argv.includes('--marque-mention') ? (id => { const e = Vx.entree(id); return e ? (e.mention ? true : false) : null; }) : marqueReelle, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1, contexte: ctx,
+            // --sans-marque : aucune fonction d'emprunt (la règle se tait sur toute la question). --marque-mention : l'ANCIENNE approximation (« l'entrée porte une mention »), gardée pour comparer. --tout-verifie : HYPOTHÈSE de mesure seulement (tout emprunt vérifié « juste », sans la ceinture de la mention) pour dire ce que des verdicts rendraient.
+            emprunte: process.argv.includes('--sans-marque') ? null : process.argv.includes('--marque-mention') ? (id => { const e = Vx.entree(id); return e ? (e.mention ? true : false) : null; }) : process.argv.includes('--tout-verifie') ? (id => (Vx.entree(id) ? false : null)) : marqueReelle, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1, contexte: ctx,
             partages: partagesOk ? id => V.partagesDe(id) : () => null, jumeaux: jumeauxOk ? id => { const j = V.jumeauxDe(id); return j ? { conclu: true, ids: [id, ...j.filter(i => i !== id)] } : { conclu: false, ids: [] }; } : null,
             produits, lu: null, marquesLues: null, redressee: p.redressee === true, ...(marge === undefined ? {} : { marge })
         });
