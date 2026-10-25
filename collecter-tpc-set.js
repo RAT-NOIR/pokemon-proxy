@@ -24,10 +24,21 @@ const T = require('./collecte-cartes/tpc');
 const { ligneTpc, listesDe } = require('./collecte-cartes/tpc-sets');
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');
 const C = require('./collecteur-images-tpc');
-const RH = require('./collecte-cartes/reponse-hote');          // la règle COMMUNE de réponse : arrêt durable par hôte (arretHote), lu par garderHote avant toute requête
+const RH = require('./collecte-cartes/reponse-hote');
+const { sansRemplacables, documentsDeLaListe } = require('./collecte-cartes/basse-definition');
+const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';          // la règle COMMUNE de réponse : arrêt durable par hôte (arretHote), lu par garderHote avant toute requête
 
-const SETS_AUTORISES = Object.freeze(['Traditional-Chinese-Products']);
-const SITE = 'tpc-asie';
+const SETS_AUTORISES = Object.freeze(['Traditional-Chinese-Products', 'Beginning-Set']);
+// API-52 L5 (25/10) : le SITE (donc le verrou global, la cadence, robots, le client) se lit de la ligne de collecte-cartes/tpc-sets.js du set — Traditional-Chinese-Products = tpc-asie, Beginning-Set = pokemon-card-com. Jamais figé.
+function siteDuSet(slug, ligneDe = ligneTpc) {
+    if (!SETS_AUTORISES.includes(slug)) throw new Error(`set « ${slug} » : hors de la liste fermée (${SETS_AUTORISES.join(', ')}) — rien n'est demandé`);
+    const sites = Object.keys(T.SITES).filter(s => ligneDe(s, slug));
+    if (sites.length !== 1) throw new Error(`set « ${slug} » : ${sites.length} ligne(s) de table (une seule attendue) — rien n'est demandé`);
+    return sites[0];
+}
+const idVerrouDe = (slug, ligneDe = ligneTpc) => T.SITES[siteDuSet(slug, ligneDe)].verrou;
 const PLAFOND_MAX = 460;                         // 444 au plus d'après le plan (1 robots + 20 listes + 390 fiches + 33 images) + réessais
 const RACINE_CACHE = 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S7/TAIWAN';
 const CACHE_DEFAUT = `${RACINE_CACHE}/cache-products`;
@@ -72,28 +83,28 @@ function lireCompteur(f) {
 }
 
 function cadre({ slug, cacheDir, racineAutorisee, ligneDe = ligneTpc }) {
-    if (!SETS_AUTORISES.includes(slug)) throw new Error(`set « ${slug} » : hors de la liste fermée (${SETS_AUTORISES.join(', ')}) — rien n'est demandé`);
-    const L = ligneDe(SITE, slug);
-    if (!L) throw new Error(`${SITE} / ${slug} absent de collecte-cartes/tpc-sets.js`);
+    const site = siteDuSet(slug, ligneDe);
+    const L = ligneDe(site, slug);
+    if (!L) throw new Error(`${site} / ${slug} absent de collecte-cartes/tpc-sets.js`);
     const dossier = verifierChemin(cacheDir ?? CACHE_DEFAUT, racineAutorisee ?? RACINE_CACHE);
-    return { L, dossier, f: fichiers(dossier), idEtat: `${SITE}/${slug}` };
+    return { L, site, dossier, f: fichiers(dossier), idEtat: `${site}/${slug}` };
 }
 
 /** Le plan depuis le CACHE SEUL : listes et fiches lues dans l'état local, aucun client. */
-async function planDuCache({ reelle, dossier, f, L, slug, idEtat }) {
+async function planDuCache({ reelle, dossier, f, L, slug, idEtat, site }) {
     const local = C.baseLocale(lectureSeule(reelle), f.etat);
     const fiches = [];
     const etat = await local.collection('collecte_images_etat').findOne({ _id: idEtat });
     for (const S of listesDe(L)) {
-        const liste = etat?.listes?.[S.prefixe] ?? null;
+        const liste = (S.prefixe == null ? etat?.liste : etat?.listes?.[S.prefixe]) ?? null;   // une ligne à UNE liste (Beginning-Set) garde `liste`, pas `listes.<préfixe>`
         if (!liste?.ids?.length) continue;
-        fiches.push(...(await C.lireFiches(local, null, SITE, L, liste.ids, { compter: () => { } })).map(x => ({ ...x, prefixe: S.prefixe, listeCode: S.code })));
+        fiches.push(...(await C.lireFiches(local, null, site, L, liste.ids, { compter: () => { } })).map(x => ({ ...x, prefixe: S.prefixe, listeCode: S.code })));
     }
     const P = await C.planifier(local, slug, L, fiches);
     return { P, fiches, local };
 }
 
-const urlImage = (p) => (p.fiche.image ? new URL(p.fiche.image, T.SITES[SITE].hote).href : null);
+const urlImage = (p, site) => (p.fiche.image ? new URL(p.fiche.image, T.SITES[site].hote).href : null);
 
 /**
  * MODE 1 — TÉLÉCHARGER vers le cache disque. @returns {{etat: 'termine'|'plafond-atteint'|'bloque'|'pause'|'interrompu', requetes: number, plafond: number, ...}}
@@ -101,14 +112,14 @@ const urlImage = (p) => (p.fiche.image ? new URL(p.fiche.image, T.SITES[SITE].ho
 async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, verrou, transport, cadenceMs = T.CADENCE_MS, pourBanc = false, dossierPauses, ligneDe = ligneTpc, log = console.log }) {
     if (!Number.isInteger(plafond) || plafond < 1 || plafond > PLAFOND_MAX) throw new Error(`--plafond=${plafond} : un entier de 1 à ${PLAFOND_MAX} est exigé — rien n'est demandé`);
     if (!pourBanc && cadenceMs < T.CADENCE_MS) throw new Error(`cadence de ${cadenceMs} ms : jamais en dessous de ${T.CADENCE_MS} ms — rien n'est demandé`);
-    const { L, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
+    const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
     if (!verrou) throw new Error('un verrou global TPC est exigé (aucune requête sans lui)');
     const lecture = lectureSeule(reelle);
     const set = await lecture.collection('sets').findOne({ _id: slug });
     if (!set) throw new Error(`set ${slug} absent de la base`);
     if ((set.tirage ?? set.region) !== L.tirage) throw new Error(`tirage ${set.tirage ?? set.region} en base, ${L.tirage} dans la table — rien n'est demandé`);
-    const bloquee = await lecture.collection('collecte_images_etat').findOne({ _id: C.idAlerteBloquee(SITE), active: true });
-    if (bloquee) throw new Error(`${SITE} a bloqué (${bloquee.motif}) — aucune requête`);
+    const bloquee = await lecture.collection('collecte_images_etat').findOne({ _id: C.idAlerteBloquee(site), active: true });
+    if (bloquee) throw new Error(`${site} a bloqué (${bloquee.motif}) — aucune requête`);
     const produits = await lecture.collection('cartes_produits').countDocuments({ slugSet: slug });
     if (!produits) throw new Error(`aucun produit joint au set ${slug} — rien à demander`);
     if (!(await C.compterNumerotes(lecture, slug))) throw new Error(`aucune ligne de ${slug} ne porte de numeroFiche : écrire les numeroFiche d'abord — rien n'est demandé`);
@@ -116,17 +127,17 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
     fs.mkdirSync(path.join(dossier, 'images'), { recursive: true });
     const local = C.baseLocale(lecture, f.etat);
     const tenuPar = verrou.prendre ? await verrou.prendre() : null;
-    if (tenuPar) throw new Error(`verrou global ${SITE} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} — on s'arrête, aucune requête`);
+    if (tenuPar) throw new Error(`verrou global ${site} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} — on s'arrête, aucune requête`);
     try {
         // le cumul se lit APRÈS la prise du verrou : un lancement qui attendait un autre ne part pas d'un cumul périmé
         const compteInitial = lireCompteur(f.compteur);
         let aEcrire = 0;
         const surRequete = n => { ecrireJson(f.compteur, { requetes: n, plafond, le: new Date().toISOString() }); if (++aEcrire % 10 === 0) local.ecrireFichier(); };
-        const client = T.fabriquerClientTpc({ site: SITE, verrou, transport, cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
-        const bilan = { etat: 'termine', plafond, compteInitial, listes: null, fiches: 0, prouves: 0, images: { telechargees: 0, enCache: 0, absentes: 0 }, restes: {}, dossierPauses: dossierPauses ?? RH.DOSSIER_PAUSES };
+        const client = T.fabriquerClientTpc({ site, verrou, transport, cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
+        const bilan = { site, etat: 'termine', plafond, compteInitial, listes: null, fiches: 0, prouves: 0, images: { telechargees: 0, enCache: 0, absentes: 0 }, restes: {}, dossierPauses: dossierPauses ?? RH.DOSSIER_PAUSES };
         const compteurs = {}, compter = k => { compteurs[k] = (compteurs[k] || 0) + 1; };
         let lu;
-        try { lu = await C.lireListesEtFiches(local, client, SITE, L, idEtat, compter); }
+        try { lu = await C.lireListesEtFiches(local, client, site, L, idEtat, compter); }
         catch (e) { return conclure(e, bilan, client, local, f, log); }
         if (lu.refus) { bilan.etat = 'refuse-liste'; bilan.motif = lu.refus; return fin(bilan, client, local, f, log); }
         bilan.listes = { lues: lu.liste.ids.length, total: lu.liste.total, complete: lu.liste.complete }; bilan.fiches = lu.fiches.length; bilan.fiches404 = compteurs['fiche-404'] || 0;
@@ -135,7 +146,7 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
         ecrireJson(f.plan, { le: new Date().toISOString(), slug, produits: P.produits, trous: P.trous, plan: P.plan, restes: P.restes });
         const index = lireJson(f.index, {});
         for (const p of P.plan) {
-            const url = urlImage(p);
+            const url = urlImage(p, site);
             if (!url) { compter('fiche-sans-image'); continue; }
             if (index[url]) { bilan.images.enCache++; continue; }
             try {
@@ -160,7 +171,7 @@ function conclure(e, bilan, client, local, f, log) {
         // 401/403/410/429/défi sur une PAGE : le client LÈVE mais ne retient rien d'une relance à l'autre. On retient l'arrêt par la règle COMMUNE (reponse-hote.js `arretHote`, le fichier que
         // `garderHote` lit avant TOUTE requête, pages comme images) — pas un second mécanisme. Un arrêt déjà tenu (`arretDefinitif`) n'est pas réécrit. Si l'écriture échoue, on le dit : l'état reste « bloque ».
         if (!e.arretDefinitif) {
-            try { bilan.arretEcrit = RH.arretHote(new URL(T.SITES[SITE].hote).hostname, e.message, { dossier: bilan.dossierPauses }); }
+            try { bilan.arretEcrit = RH.arretHote(new URL(T.SITES[bilan.site].hote).hostname, e.message, { dossier: bilan.dossierPauses }); }
             catch (er) { bilan.arretEcrit = null; bilan.ecritureArretImpossible = er.message; process.exitCode = 1; }
         }
     }
@@ -179,13 +190,13 @@ function fin(bilan, client, local, f, log) {
 
 /** MODE 2 — la PLANCHE : toutes les images prouvées et en cache, étiquetées. Zéro requête, aucune écriture en base. */
 async function planche({ reelle, slug, cacheDir, racineAutorisee, sortie, ligneDe = ligneTpc, log = console.log }) {
-    const { L, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
-    const { P } = await planDuCache({ reelle, dossier, f, L, slug, idEtat });
+    const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
+    const { P } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
     const index = lireJson(f.index, {});
     const lecture = lectureSeule(reelle);
     const prod = new Map((await lecture.collection('cartes_produits').find({ slugSet: slug }, { projection: { idProduct: 1, slug: 1, numeroFiche: 1 } }).toArray()).map(l => [l.idProduct, l]));
     const L1 = 240, H = 330, B = 66, COL = 5;
-    const items = P.plan.map(p => ({ p, url: urlImage(p) })).filter(x => x.url && index[x.url]?.fichier);
+    const items = P.plan.map(p => ({ p, url: urlImage(p, site) })).filter(x => x.url && index[x.url]?.fichier);
     const etiquettes = items.map(({ p }) => ({ slugCardmarket: prod.get(p.idProduct)?.slug ?? '?', numeroFiche: p.numero, nomNotre: p.nomEn, nomTpc: p.fiche.nom, liste: p.fiche.prefixe ?? p.fiche.listeCode ?? '?' }));
     const echapper = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const tuiles = [];
@@ -199,14 +210,37 @@ async function planche({ reelle, slug, cacheDir, racineAutorisee, sortie, ligneD
     verifierChemin(png, racineAutorisee ?? RACINE_CACHE);
     fs.mkdirSync(path.dirname(png), { recursive: true });
     if (items.length) await sharp({ create: { width: L1 * COL, height: (H + B) * Math.ceil(items.length / COL), channels: 3, background: { r: 255, g: 255, b: 255 } } }).composite(tuiles).png().toFile(png);
-    log(`PLANCHE : ${items.length} image(s) prouvées et en cache sur ${P.plan.length} prouvées → ${items.length ? png : '(aucune image : pas de fichier)'} · requêtes 0`);
-    return { images: items.length, prouves: P.plan.length, sortie: items.length ? png : null, etiquettes };
+    const cartesDuPlan = await lecture.collection('cartes').find({ _id: { $in: [...new Set(items.map(x => x.p.carteId))] } }).toArray();
+    const documents = documentsDeLaListe(await lecture.collection('images').find({ set: slug }).toArray());
+    const annonce = annonceRemplacement({ cartes: cartesDuPlan, documents, unites: items.map(x => x.p), slug, site, langueSource: L.langue });
+    const fAnnonce = path.join(path.dirname(png), 'annonce.json');
+    if (Object.keys(annonce).length) fs.writeFileSync(fAnnonce, JSON.stringify(annonce, null, 1)); else if (fs.existsSync(fAnnonce)) fs.rmSync(fAnnonce);
+    log(`PLANCHE : ${items.length} image(s) prouvées et en cache sur ${P.plan.length} prouvées → ${items.length ? png : '(aucune image : pas de fichier)'} · requêtes 0 · annonce du remplacement : ${JSON.stringify(annonce)}${Object.keys(annonce).length ? ` → ${fAnnonce}` : ''}`);
+    return { images: items.length, prouves: P.plan.length, sortie: items.length ? png : null, etiquettes, annonce };
+}
+
+/**
+ * L'ANNONCE du remplacement de basse définition (API-52 L5) : ce que la garde de lot verrait si, pour chaque unité prouvée, les entrées d'une AUTRE source que `sansRemplacables` (la règle du plan) fait sortir
+ * étaient remplacées par la nôtre (qui reçoit sa vignette après la jointure). Pur ; rend { clé: baisse } à passer à `lot-additif.js --annonce=`, comme les autres lots.
+ */
+function annonceRemplacement({ cartes, documents, unites, slug, site, langueSource }) {
+    const langue = langueDuVisuel({ source: site, langueSource }).langue, langueImage = T.SITES[site].langues[langueSource];
+    const apres = cartes.map(c => {
+        let cc = c; const ajouts = [];
+        for (const u of unites.filter(x => x.carteId === c._id)) {
+            cc = sansRemplacables(cc, { set: slug, numero: u.numero, langue, source: site, documents });
+            ajouts.push({ set: slug, source: site, numero: u.numero, cleR2: `${site}/${slug}/${cleNum(u.numero)}-${u.carteId}-${langueImage}.webp`, w: 734, h: 1024, vignette: { cleR2: 'vignette-a-venir', w: 200, h: 279 } });
+        }
+        return ajouts.length ? { ...cc, images: [...(cc.images || []), ...ajouts] } : c;
+    });
+    const cmp = comparer(compterEtat({ cartes }), compterEtat({ cartes: apres }));
+    return Object.fromEntries(cmp.baisses.filter(b => !b.autorisee).map(b => [b.cle, b.baisse]));
 }
 
 /** Un client « disque » : AUCUNE requête réseau. Les pages et le JSON n'existent pas ici (listes et fiches viennent de l'état local) ; une image se lit dans le cache ou elle manque. */
-function clientDisque(dossier, index) {
+function clientDisque(dossier, index, site = 'tpc-asie') {
     return {
-        site: SITE,
+        site,
         page: async url => { throw new Error(`hors cache : ${url} — ce mode n'envoie aucune requête`); },
         json: async url => { throw new Error(`hors cache : ${url} — ce mode n'envoie aucune requête`); },
         image: async url => { const e = index[url]; if (!e) throw new Error(`hors cache : ${url} — télécharger d'abord`); if (e.absente) return null; return fs.readFileSync(path.join(dossier, 'images', e.fichier)); },
@@ -218,19 +252,19 @@ function clientDisque(dossier, index) {
 /**
  * MODE 3 — ÉCRIRE depuis le cache. `M` : les modèles de la base `cartes` ; `reelle` : sa base native. Rend {code, ...}: 2 = refusé AVANT toute écriture.
  */
-async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, deposer, fabriquerVerrouSet, stopOctets, ligneDe = ligneTpc, log = console.log }) {
+async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, deposer, fabriquerVerrouSet, stopOctets, vignetter = null, ligneDe = ligneTpc, log = console.log }) {
     if (!Number.isInteger(attendu)) throw new Error('--ecrire exige --attendu=<N> (le nombre d\'images prouvées lu à l\'essai) : rien n\'est écrit');
-    const { L, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
-    const { P, local } = await planDuCache({ reelle, dossier, f, L, slug, idEtat });
+    const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
+    const { P, local } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
     const index = lireJson(f.index, {});
-    const seuil = largeurMinDe(SITE);
+    const seuil = largeurMinDe(site);
     const manquantes = [], aJoindre = [];
     for (const p of P.plan) {
-        const url = urlImage(p);
+        const url = urlImage(p, site);
         const e = url ? index[url] : null;
         if (!e) { manquantes.push(p.numero); continue; }
         if (e.absente) continue;
-        const deja = await M.Image.findById(T.idImageTpc(SITE, slug, p.carteId, p.numero, T.SITES[SITE].langues[L.langue])).select('etat').lean();
+        const deja = await M.Image.findById(T.idImageTpc(site, slug, p.carteId, p.numero, T.SITES[site].langues[L.langue])).select('etat').lean();
         if (deja?.etat === 'retire') continue;
         const meta = await sharp(fs.readFileSync(path.join(dossier, 'images', e.fichier))).metadata();
         if (meta.width && meta.width >= seuil) aJoindre.push(p);
@@ -240,14 +274,16 @@ async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, dep
     // la base vue par `collecterSet` : `tpc_fiches` et `collecte_images_etat` restent LOCAUX (le cache disque) ; tout le reste est la vraie base
     const mixte = { collection: local.collection, command: c => reelle.command(c) };
     const Mm = { ...M, Carte: new Proxy(M.Carte, { get: (t, k) => (k === 'db' ? { db: mixte } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }) };
-    const unite = { _id: idEtat, source: SITE, slugSet: slug, code: L.code, langue: L.langue, trous: L.trous };
-    const r = await C.collecterSet(unite, Mm, { verrou: { tenu: true, perdu: false }, client: clientDisque(dossier, index), deposer, ...(fabriquerVerrouSet ? { fabriquerVerrouSet } : {}), ...(stopOctets ? { stopOctets } : {}), ligneDe });
+    const unite = { _id: idEtat, source: site, slugSet: slug, code: L.code, langue: L.langue, trous: L.trous };
+    const r = await C.collecterSet(unite, Mm, { verrou: { tenu: true, perdu: false }, client: clientDisque(dossier, index, site), deposer, ...(fabriquerVerrouSet ? { fabriquerVerrouSet } : {}), ...(stopOctets ? { stopOctets } : {}), ligneDe });
     local.ecrireFichier();
+    // un remplacement de basse définition RÉÉCRIT l'entrée : la nôtre n'a pas de vignette avant ce passage (celle de l'ancienne sortait avec elle) — sans lui, la garde de lot verrait la baisse (§21 bis, vignettes-apres-jointure.js)
+    if (vignetter && r.basseDefRemplacees > 0) r.vignettes = await vignetter(reelle, slug, { bucket: process.env.R2_BUCKET_IMAGES });
     log(`ÉCRITURE : ${r.etat} · joints ${r.joints}/${attendu} · téléchargés ${r.telecharges} · sous le seuil ${r.tropPetits} · garde ${r.garde?.ok ? '✅' : '❌'} · requêtes 0`);
     return { ...r, unite: r.code, code: r.etat === 'verifie' && r.joints === attendu ? 0 : 1 };
 }
 
-module.exports = { SETS_AUTORISES, PLAFOND_MAX, RACINE_CACHE, CACHE_DEFAUT, verifierChemin, lectureSeule, telecharger, planche, ecrire, clientDisque };
+module.exports = { annonceRemplacement, siteDuSet, idVerrouDe, SETS_AUTORISES, PLAFOND_MAX, RACINE_CACHE, CACHE_DEFAUT, verifierChemin, lectureSeule, telecharger, planche, ecrire, clientDisque };
 
 if (require.main === module) {
     const AUTORISES = [/^--set=.+$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--plafond=\d+$/, /^--attendu=\d+$/, /^--cache=.+$/, /^--sortie=.+\.png$/];
@@ -270,7 +306,7 @@ if (require.main === module) {
             if (mode === '--telecharger') {
                 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
                 const M = modeles(cx);
-                const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: T.SITES[SITE].verrou, dureeMs: T.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte: () => { process.exitCode = 1; }, nom: `verrou global ${SITE}` });
+                const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: idVerrouDe(slug), dureeMs: T.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte: () => { process.exitCode = 1; }, nom: `verrou global ${siteDuSet(slug)}` });
                 const b = await telecharger({ reelle: cx.db, slug, cacheDir, plafond: Number(val('plafond')), verrou });
                 process.exitCode = b.etat === 'termine' ? 0 : 1;
             } else if (mode === '--planche') await planche({ reelle: cx.db, slug, cacheDir, sortie: val('sortie') });
@@ -278,7 +314,8 @@ if (require.main === module) {
                 const r2 = require('./collecte-cartes/r2');
                 if (!process.env.R2_BUCKET_IMAGES) throw new Error('R2_BUCKET_IMAGES absent — aucune écriture');
                 await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
-                const r = await ecrire({ M: modeles(cx), reelle: cx.db, slug, cacheDir, attendu: Number(val('attendu')), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t) });
+                const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
+                const r = await ecrire({ M: modeles(cx), reelle: cx.db, slug, cacheDir, attendu: Number(val('attendu')), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure });
                 process.exitCode = r.code;
             }
         } finally { await fermer(); }

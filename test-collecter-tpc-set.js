@@ -96,7 +96,7 @@ const ligneBanc = (site, slug) => { const x = ligneTpc(site, slug); return x && 
     const dl = async (B, racine, plafond, tr, o = {}) => { const q = silencieux(); try { return await L.telecharger({ reelle: B.db, slug: SLUG, cacheDir: racine, racineAutorisee: racine, plafond, verrou: o.verrou || verrou(), transport: tr, cadenceMs: 0, pourBanc: true, dossierPauses: dossierPauses(), ligneDe: ligneBanc }); } finally { q(); } };
 
     // ── 1. la liste fermée et les chemins ──
-    verifier('liste fermée : un seul slug, gelée', [L.SETS_AUTORISES, Object.isFrozen(L.SETS_AUTORISES)], [[SLUG], true]);
+    verifier('liste fermée : Traditional-Chinese-Products et Beginning-Set (API-52 L5), gelée', [L.SETS_AUTORISES, Object.isFrozen(L.SETS_AUTORISES)], [[SLUG, 'Beginning-Set'], true]);
     const B0 = fausseBase(); semer(B0); const tr0 = reseau(); const racine0 = tmp();
     let x = await essayer(() => L.telecharger({ reelle: B0.db, slug: 'M-P-Traditional-Chinese-Promos', cacheDir: racine0, racineAutorisee: racine0, plafond: 10, verrou: verrou(), transport: tr0, cadenceMs: 0, pourBanc: true, ligneDe: ligneBanc }));
     verifier('un set hors liste : refusé, ZÉRO requête, rien d\'écrit', [/hors de la liste fermée/.test(x.e || ''), tr0.appels.length, B0.ecritures.length], [true, 0, 0]);
