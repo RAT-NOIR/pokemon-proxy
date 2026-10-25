@@ -109,11 +109,11 @@ v('numéro sans chiffre : EXACTEMENT le filtre d\'origine', fSans, TC.FILTRE_PAR
 
     // ── 4. les réglages ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('=== 4. réglages ===');
-    v('rien dans l\'environnement : tout éteint', TC.reglages({}), { imagePrioritaireSansCalcul: false });
+    v('rien dans l\'environnement : tout éteint', TC.reglages({}), { imagePrioritaireSansCalcul: false, secondeParallele: false });
     v('"1" allume', TC.reglages({ V2_TC_IMAGE_PRIORITAIRE: '1' }).imagePrioritaireSansCalcul, true);
     v('"true" n\'allume pas (écrit par ce qu\'on AUTORISE)', TC.reglages({ V2_TC_IMAGE_PRIORITAIRE: 'true' }).imagePrioritaireSansCalcul, false);
     v('"oui", "0", " 1" non plus', ['oui', '0', ' 1', ''].map(x => TC.reglages({ V2_TC_IMAGE_PRIORITAIRE: x }).imagePrioritaireSansCalcul), [false, false, false, false]);
-    v('le prompt allégé et le fournisseur par latence ne sont PAS des réglages (rejetés par la mesure)', Object.keys(TC.reglages({ V2_TC_PROMPT_ALLEGE: '1', V2_TC_IA_PROVIDER: 'latency' })), ['imagePrioritaireSansCalcul']);
+    v('le prompt allégé et le fournisseur par latence ne sont PAS des réglages (rejetés par la mesure)', Object.keys(TC.reglages({ V2_TC_PROMPT_ALLEGE: '1', V2_TC_IA_PROVIDER: 'latency' })), ['imagePrioritaireSansCalcul', 'secondeParallele']);
     // index.js ne branche QUE ce qui est retenu : le prompt envoyé est celui de la production, octet pour octet
     {
         const fs2 = require('fs'), path2 = require('path');

@@ -9,6 +9,7 @@
 //   3. elle ne se confirme JAMAIS elle-même : aucun champ absent de la première lecture n'est comblé ni confirmé (deux lectures d'accord du même modèle sur la même photo sont corrélées).
 // 🔑 Écrite par ce qu'elle AUTORISE : un seul chemin mène à « confirme » (voir `decider`). Tout le reste rend la réponse d'AVANT (la question), jamais pire.
 const S = require('../../scoring');
+const TC = require('./temps-chaine');
 
 const JUMEAUX_MAX = 2;                                  // P et ses jumeaux tiennent dans une question : 3 produits au plus (jumeaux.js MAX_PRODUITS)
 const ESSAIS_DEFAUT = 3, ESSAIS_MIN = 2;
@@ -137,25 +138,39 @@ function decider({ p, jumeaux, premiere, seconde } = {}) {
  * Deux essais d'abord, le troisième seulement s'ils divergent. Un champ n'est retenu que si DEUX essais le lisent à l'identique ; sinon null.
  * Ne LÈVE JAMAIS : un échec rend { echec: true } ; chaque appel TENTÉ est compté (compteur.appels, et le compteur global) — c'est le coût, qu'il ait réussi ou non.
  */
-function creerFournisseur({ recadrer, lecteur, maxEssais } = {}) {
+function creerFournisseur({ recadrer, lecteur, maxEssais, parallele } = {}) {
     const essaisMax = bornerEssais(maxEssais);
     return async function seconde({ image, corps, compteur, signal } = {}) {
+        // l'option explicite prime ; sinon le drapeau d'environnement (seul « 1 » allume), relu à chaque lecture
+        const enParallele = parallele === undefined ? TC.reglages(process.env).secondeParallele : parallele === true;
         const c = compteur && typeof compteur === 'object' ? compteur : { appels: 0 };
         const essais = [];
         // TOUR 1 (I-2) : AUCUN téléchargement. L'image est fournie par l'appelant (des octets) ; sans elle, pas de seconde lecture et aucun appel.
         if (!Buffer.isBuffer(image) || !image.length) return { setCode: null, numero: null, total: null, essais, echec: false, sansImage: true, raison: 'aucune image fournie (octets)' };
-        const lire = async bande => {
+        const appeler = async bande => {
             if (signal && signal.aborted) throw Object.assign(new Error('interrompue'), { code: 'INTERROMPUE' });     // TOUR 1 : après le délai, aucun appel de plus ne part
             c.appels = (c.appels || 0) + 1;                                        // l'appel est compté AVANT d'être tenté : un appel qui échoue a coûté quand même (la route additionne au compteur global)
             const r = await lecteur(bande, { signal });
-            if (!r || typeof r !== 'object' || r.illisible) { essais.push({ setCode: null, numero: null, total: null }); return; }     // une réponse illisible est un essai sans champ, jamais un champ
-            essais.push({ setCode: normLu(r.setCode), numero: normLu(r.number ?? r.numero), total: normLu(r.total) });
+            if (!r || typeof r !== 'object' || r.illisible) return { setCode: null, numero: null, total: null };     // une réponse illisible est un essai sans champ, jamais un champ
+            return { setCode: normLu(r.setCode), numero: normLu(r.number ?? r.numero), total: normLu(r.total) };
         };
+        const lire = async bande => { essais.push(await appeler(bande)); };
         try {
             const bandes = await recadrer({ image, corps, signal });
             if (!Array.isArray(bandes) || !bandes.length) return { setCode: null, numero: null, total: null, essais, echec: false, raison: 'aucune bande à lire (pas de recadrage possible)' };
-            await lire(bandes[0]);
-            if (bandes.length > 1) await lire(bandes[1]);
+            if (enParallele && bandes.length > 1) {
+                // LOT TEMPS-CHAINE-2 (V2_TC_SECONDE_PARALLELE) : les DEUX premiers essais partent ensemble ; la DÉCISION est celle du chemin séquentiel ci-dessous, cas par cas :
+                //   · le 1er échoue -> son erreur (le séquentiel n'aurait jamais appelé le 2e : seul écart, un appel compté de plus, jamais davantage) ;
+                //   · le signal est tombé pendant le 1er -> « interrompue » (le séquentiel aurait refusé le 2e) ; · sinon le 2e échoue -> son erreur ; · les essais gardent l'ORDRE des bandes.
+                const [r0, r1] = await Promise.allSettled([appeler(bandes[0]).then(e => ({ e, tombe: Boolean(signal && signal.aborted) })), appeler(bandes[1])]);
+                if (r0.status === 'rejected') throw r0.reason;
+                if (r0.value.tombe) throw Object.assign(new Error('interrompue'), { code: 'INTERROMPUE' });
+                if (r1.status === 'rejected') throw r1.reason;
+                essais.push(r0.value.e, r1.value);
+            } else {
+                await lire(bandes[0]);
+                if (bandes.length > 1) await lire(bandes[1]);
+            }
             const accord = f => essais.length >= 2 && essais[0][f] === essais[1][f];
             if (essais.length === 2 && essaisMax >= 3 && bandes.length > 2 && !(accord('setCode') && accord('numero'))) await lire(bandes[2]);
         } catch (e) {
