@@ -186,7 +186,7 @@ async function telechargerPlan({ plan, fournisseurs, plafond, fichiersDe, telech
         const m = maximumImages({ F, hoteImages: l.def.hoteImages, unites: l.unites, indexImages: indexDe(F), plafondTotal: plafond });
         return { code: l.code, total: m.total, detail: m.detail ?? '' };
     });
-    journal(`MAXIMUM de ce lancement : ${maxima.reduce((n, m) => n + m.total, 0)} requête(s) au plus, cadence ≥ 6 s par hôte · ${maxima.map(m => `${m.code} ${m.total} (${m.detail}${m.total ? '' : ''})`).join(' · ')} · plafond total ${plafond} par dossier de cache`);
+    journal(`MAXIMUM de ce lancement : ${maxima.reduce((n, m) => n + m.total, 0)} requête(s) au plus, cadence ≥ 6 s par hôte · ${maxima.map(m => `${m.code} ${m.total} (${m.detail})`).join(' · ')} · plafond ${typeof plafond === 'function' ? 'de chaque dossier de cache = son contenu + le budget du lancement' : `total ${plafond} par dossier de cache`}`);
     const rapports = [];
     for (const l of lots) {
         if (l.arrete || !l.unites.length) { if (l.arrete) journal(`${l.code} : ⛔ ${l.arrete} — 0 requête`); continue; }
