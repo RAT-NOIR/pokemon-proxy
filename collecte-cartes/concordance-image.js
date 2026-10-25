@@ -82,14 +82,15 @@ const norm = (s) => (s == null || String(s).trim() === '' ? null : String(s).tri
  * MÊME TIRAGE. Le produit fait foi ; le candidat n'est retenu que s'il est d'accord.
  *  - langue : doit être ÉGALE. Un champ ABSENT (côté candidat OU produit) EXCLUT : « je ne sais pas » n'est pas « oui ».
  *  - numéro, code de set : comparés (cleNumero / minuscules) seulement quand les DEUX côtés les portent. Absent d'un côté = ne contredit pas, mais ne compte pas comme un accord (aucun point n'est gagné).
- *  - tampon : quand le produit en porte un, le candidat doit porter le même (absent = exclu). Un candidat tamponné pour un produit sans tampon n'est PAS exclu ici (règle posée par le testeur : « égal quand le produit en porte un »).
+ *  - tampon : ÉGAL des deux côtés (décision du coordinateur, 2026-10-25). Produit tamponné : le candidat doit porter le même, muet = exclu. Produit SANS tampon : un candidat qui DÉCLARE un tampon est exclu ; un candidat muet reste admis (la plupart des sources ne déclarent rien).
+ *  - réserves acceptées : une troisième concordance vient d'une source distincte des deux premières, reliée à l'une des deux seulement ; deux scans conformes de même source ne sont pas indépendants ; un JPEG q90 d'un aplat synthétique donne pHash 4 (« souple »), le banc utilise donc un WebP lossless pour le cas strict.
  */
 function memeTirage(produit, t = {}) {
     const lp = norm(produit?.langue), lc = norm(t.langue);
     if (!lp || !lc || lp !== lc) return false;
     if (produit.numero != null && String(produit.numero).trim() !== '' && t.numero != null && String(t.numero).trim() !== '' && cleNumero(produit.numero) !== cleNumero(t.numero)) return false;
     if (norm(produit.codeSet) && norm(t.codeSet) && norm(produit.codeSet) !== norm(t.codeSet)) return false;
-    if (norm(produit.tampon) && norm(produit.tampon) !== norm(t.tampon)) return false;
+    if (norm(produit.tampon) !== norm(t.tampon)) return false;   // tampon ÉGAL des deux côtés ; muet des deux côtés (null = null) reste admis
     return true;
 }
 async function mesurerParDefaut(a, b) {

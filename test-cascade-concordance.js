@@ -63,6 +63,11 @@ const decider = (candidats, scansConformes, table) => C.deciderVisuel({ produit,
     r = await C.deciderVisuel({ produit: { ...produit, tampon: 'prerelease' }, candidats: [cand('a', 's1', T({ tampon: 'prerelease' })), cand('b', 's2', T({ tampon: null }))], scansConformes: [] }, { comparer: comparerDe({ 'a|b': STRICT }) });
     v('12. produit tamponné : un candidat sans le même tampon est exclu', [r.decision, r.preuve.exclusTirage], ['trou', 1]);
 
+    r = await decider([cand('a', 's1'), cand('b', 's2', T({ tampon: 'prerelease' }))], [], { 'a|b': STRICT });
+    v('12b. produit SANS tampon : un candidat qui DÉCLARE un tampon est exclu', [r.decision, r.motif, r.preuve.exclusTirage], ['trou', 'tirage-different', 1]);
+    r = await decider([cand('a', 's1', T({ tampon: undefined })), cand('b', 's2', T({ tampon: null }))], [], { 'a|b': STRICT });
+    v('12c. produit sans tampon : des candidats qui ne déclarent rien restent admis', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
+
     // ── vraies images : une image IDENTIQUE d'un autre tirage ne passe pas ──
     const l = 300, h = 420, b = Buffer.alloc(l * h * 3, 128);
     let x = 7; const rnd = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
