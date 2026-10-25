@@ -1,5 +1,5 @@
 {
-  "enregistreLe": "2026-10-25T18:03:03.956Z",
+  "enregistreLe": "2026-10-25T18:33:37.913Z",
   "nb": 41,
   "chargesCouvertes": [
     "6a9fcde7e019222f81e4a59c",
@@ -97,7 +97,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T17:48:08.836Z",
+                "updated": "2026-10-24T19:57:35.011Z",
                 "unit": "EUR",
                 "idProduct": 550496,
                 "avg": null,
@@ -163,7 +163,7 @@
         "updated": "2026-09-25T23:45:16.431Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-24T17:48:08.836Z",
+            "updated": "2026-10-24T19:57:35.011Z",
             "unit": "EUR",
             "idProduct": 550496,
             "avg": null,
@@ -260,7 +260,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T17:48:08.842Z",
+                "updated": "2026-10-24T19:57:35.011Z",
                 "unit": "EUR",
                 "idProduct": 719450,
                 "avg": 0.12,
@@ -289,7 +289,7 @@
             "variantId": "3739bbtj3i910y5ynn9xc6ryf",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T17:48:08.842Z",
+                "updated": "2026-10-24T19:57:35.011Z",
                 "unit": "EUR",
                 "idProduct": 837240,
                 "avg": null,
@@ -318,7 +318,7 @@
             "variantId": "2asus05yghmpd1ud1sdmlq3as4e",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T17:48:08.842Z",
+                "updated": "2026-10-24T19:57:35.011Z",
                 "unit": "EUR",
                 "idProduct": 837241,
                 "avg": null,
@@ -381,7 +381,7 @@
         "updated": "2026-09-25T23:45:19.162Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-24T17:48:08.842Z",
+            "updated": "2026-10-24T19:57:35.011Z",
             "unit": "EUR",
             "idProduct": 719450,
             "avg": 0.12,
@@ -2513,6 +2513,782 @@
         }
       }
     },
+    "https://api.tcgdex.net/v2/ja/sets/S12": {
+      "statut": 200,
+      "data": {
+        "cardCount": {
+          "firstEd": 0,
+          "holo": 49,
+          "normal": 76,
+          "official": 98,
+          "reverse": 0,
+          "total": 125
+        },
+        "cards": [
+          {
+            "id": "S12-001",
+            "image": "https://assets.tcgdex.net/ja/S/S12/001",
+            "localId": "001",
+            "name": "ナゾノクサ"
+          },
+          {
+            "id": "S12-002",
+            "image": "https://assets.tcgdex.net/ja/S/S12/002",
+            "localId": "002",
+            "name": "クサイハナ"
+          },
+          {
+            "id": "S12-003",
+            "image": "https://assets.tcgdex.net/ja/S/S12/003",
+            "localId": "003",
+            "name": "キレイハナ"
+          },
+          {
+            "id": "S12-004",
+            "image": "https://assets.tcgdex.net/ja/S/S12/004",
+            "localId": "004",
+            "name": "モンジャラ"
+          },
+          {
+            "id": "S12-005",
+            "image": "https://assets.tcgdex.net/ja/S/S12/005",
+            "localId": "005",
+            "name": "モジャンボ"
+          },
+          {
+            "id": "S12-006",
+            "image": "https://assets.tcgdex.net/ja/S/S12/006",
+            "localId": "006",
+            "name": "イトマル"
+          },
+          {
+            "id": "S12-007",
+            "image": "https://assets.tcgdex.net/ja/S/S12/007",
+            "localId": "007",
+            "name": "アリアドス"
+          },
+          {
+            "id": "S12-008",
+            "image": "https://assets.tcgdex.net/ja/S/S12/008",
+            "localId": "008",
+            "name": "ビリジオン"
+          },
+          {
+            "id": "S12-009",
+            "image": "https://assets.tcgdex.net/ja/S/S12/009",
+            "localId": "009",
+            "name": "ブリガロンV"
+          },
+          {
+            "id": "S12-010",
+            "image": "https://assets.tcgdex.net/ja/S/S12/010",
+            "localId": "010",
+            "name": "ポニータ"
+          },
+          {
+            "id": "S12-011",
+            "image": "https://assets.tcgdex.net/ja/S/S12/011",
+            "localId": "011",
+            "name": "ギャロップ"
+          },
+          {
+            "id": "S12-012",
+            "image": "https://assets.tcgdex.net/ja/S/S12/012",
+            "localId": "012",
+            "name": "ビクティニ"
+          },
+          {
+            "id": "S12-013",
+            "image": "https://assets.tcgdex.net/ja/S/S12/013",
+            "localId": "013",
+            "name": "メラルバ"
+          },
+          {
+            "id": "S12-014",
+            "image": "https://assets.tcgdex.net/ja/S/S12/014",
+            "localId": "014",
+            "name": "ウルガモス"
+          },
+          {
+            "id": "S12-015",
+            "image": "https://assets.tcgdex.net/ja/S/S12/015",
+            "localId": "015",
+            "name": "ニャビー"
+          },
+          {
+            "id": "S12-016",
+            "image": "https://assets.tcgdex.net/ja/S/S12/016",
+            "localId": "016",
+            "name": "ニャヒート"
+          },
+          {
+            "id": "S12-017",
+            "image": "https://assets.tcgdex.net/ja/S/S12/017",
+            "localId": "017",
+            "name": "ガオガエン"
+          },
+          {
+            "id": "S12-018",
+            "image": "https://assets.tcgdex.net/ja/S/S12/018",
+            "localId": "018",
+            "name": "オムスターV"
+          },
+          {
+            "id": "S12-019",
+            "image": "https://assets.tcgdex.net/ja/S/S12/019",
+            "localId": "019",
+            "name": "ユキワラシ"
+          },
+          {
+            "id": "S12-020",
+            "image": "https://assets.tcgdex.net/ja/S/S12/020",
+            "localId": "020",
+            "name": "オニゴーリ"
+          },
+          {
+            "id": "S12-021",
+            "image": "https://assets.tcgdex.net/ja/S/S12/021",
+            "localId": "021",
+            "name": "ユキメノコ"
+          },
+          {
+            "id": "S12-022",
+            "image": "https://assets.tcgdex.net/ja/S/S12/022",
+            "localId": "022",
+            "name": "ジーランス"
+          },
+          {
+            "id": "S12-023",
+            "image": "https://assets.tcgdex.net/ja/S/S12/023",
+            "localId": "023",
+            "name": "ケルディオ"
+          },
+          {
+            "id": "S12-024",
+            "image": "https://assets.tcgdex.net/ja/S/S12/024",
+            "localId": "024",
+            "name": "ピカチュウ"
+          },
+          {
+            "id": "S12-025",
+            "image": "https://assets.tcgdex.net/ja/S/S12/025",
+            "localId": "025",
+            "name": "ライチュウ"
+          },
+          {
+            "id": "S12-026",
+            "image": "https://assets.tcgdex.net/ja/S/S12/026",
+            "localId": "026",
+            "name": "コリンク"
+          },
+          {
+            "id": "S12-027",
+            "image": "https://assets.tcgdex.net/ja/S/S12/027",
+            "localId": "027",
+            "name": "ルクシオ"
+          },
+          {
+            "id": "S12-028",
+            "image": "https://assets.tcgdex.net/ja/S/S12/028",
+            "localId": "028",
+            "name": "レントラー"
+          },
+          {
+            "id": "S12-029",
+            "image": "https://assets.tcgdex.net/ja/S/S12/029",
+            "localId": "029",
+            "name": "マッギョ"
+          },
+          {
+            "id": "S12-030",
+            "image": "https://assets.tcgdex.net/ja/S/S12/030",
+            "localId": "030",
+            "name": "エリキテル"
+          },
+          {
+            "id": "S12-031",
+            "image": "https://assets.tcgdex.net/ja/S/S12/031",
+            "localId": "031",
+            "name": "エレザード"
+          },
+          {
+            "id": "S12-032",
+            "image": "https://assets.tcgdex.net/ja/S/S12/032",
+            "localId": "032",
+            "name": "ゼラオラ"
+          },
+          {
+            "id": "S12-033",
+            "image": "https://assets.tcgdex.net/ja/S/S12/033",
+            "localId": "033",
+            "name": "レジエレキV"
+          },
+          {
+            "id": "S12-034",
+            "image": "https://assets.tcgdex.net/ja/S/S12/034",
+            "localId": "034",
+            "name": "レジエレキVMAX"
+          },
+          {
+            "id": "S12-035",
+            "image": "https://assets.tcgdex.net/ja/S/S12/035",
+            "localId": "035",
+            "name": "アンノーンV"
+          },
+          {
+            "id": "S12-036",
+            "image": "https://assets.tcgdex.net/ja/S/S12/036",
+            "localId": "036",
+            "name": "アンノーンVSTAR"
+          },
+          {
+            "id": "S12-037",
+            "image": "https://assets.tcgdex.net/ja/S/S12/037",
+            "localId": "037",
+            "name": "アサナン"
+          },
+          {
+            "id": "S12-038",
+            "image": "https://assets.tcgdex.net/ja/S/S12/038",
+            "localId": "038",
+            "name": "チャーレム"
+          },
+          {
+            "id": "S12-039",
+            "image": "https://assets.tcgdex.net/ja/S/S12/039",
+            "localId": "039",
+            "name": "シンボラー"
+          },
+          {
+            "id": "S12-040",
+            "image": "https://assets.tcgdex.net/ja/S/S12/040",
+            "localId": "040",
+            "name": "ユニラン"
+          },
+          {
+            "id": "S12-041",
+            "image": "https://assets.tcgdex.net/ja/S/S12/041",
+            "localId": "041",
+            "name": "ダブラン"
+          },
+          {
+            "id": "S12-042",
+            "image": "https://assets.tcgdex.net/ja/S/S12/042",
+            "localId": "042",
+            "name": "ランクルス"
+          },
+          {
+            "id": "S12-043",
+            "image": "https://assets.tcgdex.net/ja/S/S12/043",
+            "localId": "043",
+            "name": "リグレー"
+          },
+          {
+            "id": "S12-044",
+            "image": "https://assets.tcgdex.net/ja/S/S12/044",
+            "localId": "044",
+            "name": "オーベム"
+          },
+          {
+            "id": "S12-045",
+            "image": "https://assets.tcgdex.net/ja/S/S12/045",
+            "localId": "045",
+            "name": "デデンネ"
+          },
+          {
+            "id": "S12-046",
+            "image": "https://assets.tcgdex.net/ja/S/S12/046",
+            "localId": "046",
+            "name": "ヒスイ ウインディV"
+          },
+          {
+            "id": "S12-047",
+            "image": "https://assets.tcgdex.net/ja/S/S12/047",
+            "localId": "047",
+            "name": "ヤジロン"
+          },
+          {
+            "id": "S12-048",
+            "image": "https://assets.tcgdex.net/ja/S/S12/048",
+            "localId": "048",
+            "name": "ネンドール"
+          },
+          {
+            "id": "S12-049",
+            "image": "https://assets.tcgdex.net/ja/S/S12/049",
+            "localId": "049",
+            "name": "アノプス"
+          },
+          {
+            "id": "S12-050",
+            "image": "https://assets.tcgdex.net/ja/S/S12/050",
+            "localId": "050",
+            "name": "アーマルド"
+          },
+          {
+            "id": "S12-051",
+            "image": "https://assets.tcgdex.net/ja/S/S12/051",
+            "localId": "051",
+            "name": "テラキオン"
+          },
+          {
+            "id": "S12-052",
+            "image": "https://assets.tcgdex.net/ja/S/S12/052",
+            "localId": "052",
+            "name": "ヤンチャム"
+          },
+          {
+            "id": "S12-053",
+            "image": "https://assets.tcgdex.net/ja/S/S12/053",
+            "localId": "053",
+            "name": "イワンコ"
+          },
+          {
+            "id": "S12-054",
+            "image": "https://assets.tcgdex.net/ja/S/S12/054",
+            "localId": "054",
+            "name": "ルガルガン"
+          },
+          {
+            "id": "S12-055",
+            "image": "https://assets.tcgdex.net/ja/S/S12/055",
+            "localId": "055",
+            "name": "イシヘンジン"
+          },
+          {
+            "id": "S12-056",
+            "image": "https://assets.tcgdex.net/ja/S/S12/056",
+            "localId": "056",
+            "name": "スカタンクV"
+          },
+          {
+            "id": "S12-057",
+            "image": "https://assets.tcgdex.net/ja/S/S12/057",
+            "localId": "057",
+            "name": "チョロネコ"
+          },
+          {
+            "id": "S12-058",
+            "image": "https://assets.tcgdex.net/ja/S/S12/058",
+            "localId": "058",
+            "name": "レパルダス"
+          },
+          {
+            "id": "S12-059",
+            "image": "https://assets.tcgdex.net/ja/S/S12/059",
+            "localId": "059",
+            "name": "ゴロンダ"
+          },
+          {
+            "id": "S12-060",
+            "image": "https://assets.tcgdex.net/ja/S/S12/060",
+            "localId": "060",
+            "name": "クズモー"
+          },
+          {
+            "id": "S12-061",
+            "image": "https://assets.tcgdex.net/ja/S/S12/061",
+            "localId": "061",
+            "name": "ドラミドロ"
+          },
+          {
+            "id": "S12-062",
+            "image": "https://assets.tcgdex.net/ja/S/S12/062",
+            "localId": "062",
+            "name": "モルペコ"
+          },
+          {
+            "id": "S12-063",
+            "image": "https://assets.tcgdex.net/ja/S/S12/063",
+            "localId": "063",
+            "name": "ガラル ニャース"
+          },
+          {
+            "id": "S12-064",
+            "image": "https://assets.tcgdex.net/ja/S/S12/064",
+            "localId": "064",
+            "name": "ガラル ニャイキング"
+          },
+          {
+            "id": "S12-065",
+            "image": "https://assets.tcgdex.net/ja/S/S12/065",
+            "localId": "065",
+            "name": "ココドラ"
+          },
+          {
+            "id": "S12-066",
+            "image": "https://assets.tcgdex.net/ja/S/S12/066",
+            "localId": "066",
+            "name": "コドラ"
+          },
+          {
+            "id": "S12-067",
+            "image": "https://assets.tcgdex.net/ja/S/S12/067",
+            "localId": "067",
+            "name": "ボスゴドラ"
+          },
+          {
+            "id": "S12-068",
+            "image": "https://assets.tcgdex.net/ja/S/S12/068",
+            "localId": "068",
+            "name": "コバルオン"
+          },
+          {
+            "id": "S12-069",
+            "image": "https://assets.tcgdex.net/ja/S/S12/069",
+            "localId": "069",
+            "name": "トゲデマル"
+          },
+          {
+            "id": "S12-070",
+            "image": "https://assets.tcgdex.net/ja/S/S12/070",
+            "localId": "070",
+            "name": "ミニリュウ"
+          },
+          {
+            "id": "S12-071",
+            "image": "https://assets.tcgdex.net/ja/S/S12/071",
+            "localId": "071",
+            "name": "ハクリュー"
+          },
+          {
+            "id": "S12-072",
+            "image": "https://assets.tcgdex.net/ja/S/S12/072",
+            "localId": "072",
+            "name": "カイリュー"
+          },
+          {
+            "id": "S12-073",
+            "image": "https://assets.tcgdex.net/ja/S/S12/073",
+            "localId": "073",
+            "name": "オンバット"
+          },
+          {
+            "id": "S12-074",
+            "image": "https://assets.tcgdex.net/ja/S/S12/074",
+            "localId": "074",
+            "name": "オンバーン"
+          },
+          {
+            "id": "S12-075",
+            "image": "https://assets.tcgdex.net/ja/S/S12/075",
+            "localId": "075",
+            "name": "ジガルデ"
+          },
+          {
+            "id": "S12-076",
+            "image": "https://assets.tcgdex.net/ja/S/S12/076",
+            "localId": "076",
+            "name": "レジドラゴV"
+          },
+          {
+            "id": "S12-077",
+            "image": "https://assets.tcgdex.net/ja/S/S12/077",
+            "localId": "077",
+            "name": "レジドラゴVSTAR"
+          },
+          {
+            "id": "S12-078",
+            "image": "https://assets.tcgdex.net/ja/S/S12/078",
+            "localId": "078",
+            "name": "ケンタロス"
+          },
+          {
+            "id": "S12-079",
+            "image": "https://assets.tcgdex.net/ja/S/S12/079",
+            "localId": "079",
+            "name": "ルギアV"
+          },
+          {
+            "id": "S12-080",
+            "image": "https://assets.tcgdex.net/ja/S/S12/080",
+            "localId": "080",
+            "name": "ルギアVSTAR"
+          },
+          {
+            "id": "S12-081",
+            "image": "https://assets.tcgdex.net/ja/S/S12/081",
+            "localId": "081",
+            "name": "シェイミ"
+          },
+          {
+            "id": "S12-082",
+            "image": "https://assets.tcgdex.net/ja/S/S12/082",
+            "localId": "082",
+            "name": "アーケン"
+          },
+          {
+            "id": "S12-083",
+            "image": "https://assets.tcgdex.net/ja/S/S12/083",
+            "localId": "083",
+            "name": "アーケオス"
+          },
+          {
+            "id": "S12-084",
+            "image": "https://assets.tcgdex.net/ja/S/S12/084",
+            "localId": "084",
+            "name": "ワシボン"
+          },
+          {
+            "id": "S12-085",
+            "image": "https://assets.tcgdex.net/ja/S/S12/085",
+            "localId": "085",
+            "name": "ヒスイ ウォーグル"
+          },
+          {
+            "id": "S12-086",
+            "image": "https://assets.tcgdex.net/ja/S/S12/086",
+            "localId": "086",
+            "name": "ヤングース"
+          },
+          {
+            "id": "S12-087",
+            "image": "https://assets.tcgdex.net/ja/S/S12/087",
+            "localId": "087",
+            "name": "デカグース"
+          },
+          {
+            "id": "S12-088",
+            "image": "https://assets.tcgdex.net/ja/S/S12/088",
+            "localId": "088",
+            "name": "ヤレユータン"
+          },
+          {
+            "id": "S12-089",
+            "image": "https://assets.tcgdex.net/ja/S/S12/089",
+            "localId": "089",
+            "name": "クワッドストーン"
+          },
+          {
+            "id": "S12-090",
+            "image": "https://assets.tcgdex.net/ja/S/S12/090",
+            "localId": "090",
+            "name": "なぞの化石"
+          },
+          {
+            "id": "S12-091",
+            "image": "https://assets.tcgdex.net/ja/S/S12/091",
+            "localId": "091",
+            "name": "大地の封印石"
+          },
+          {
+            "id": "S12-092",
+            "image": "https://assets.tcgdex.net/ja/S/S12/092",
+            "localId": "092",
+            "name": "森の封印石"
+          },
+          {
+            "id": "S12-093",
+            "image": "https://assets.tcgdex.net/ja/S/S12/093",
+            "localId": "093",
+            "name": "さぎょういん"
+          },
+          {
+            "id": "S12-094",
+            "image": "https://assets.tcgdex.net/ja/S/S12/094",
+            "localId": "094",
+            "name": "ジンダイ"
+          },
+          {
+            "id": "S12-095",
+            "image": "https://assets.tcgdex.net/ja/S/S12/095",
+            "localId": "095",
+            "name": "スズナ"
+          },
+          {
+            "id": "S12-096",
+            "image": "https://assets.tcgdex.net/ja/S/S12/096",
+            "localId": "096",
+            "name": "ワタル"
+          },
+          {
+            "id": "S12-097",
+            "image": "https://assets.tcgdex.net/ja/S/S12/097",
+            "localId": "097",
+            "name": "未開の祭壇"
+          },
+          {
+            "id": "S12-098",
+            "image": "https://assets.tcgdex.net/ja/S/S12/098",
+            "localId": "098",
+            "name": "リゲインエネルギー"
+          },
+          {
+            "id": "S12-099",
+            "image": "https://assets.tcgdex.net/ja/S/S12/099",
+            "localId": "099",
+            "name": "ブリガロンV"
+          },
+          {
+            "id": "S12-100",
+            "image": "https://assets.tcgdex.net/ja/S/S12/100",
+            "localId": "100",
+            "name": "オムスターV"
+          },
+          {
+            "id": "S12-101",
+            "image": "https://assets.tcgdex.net/ja/S/S12/101",
+            "localId": "101",
+            "name": "レジエレキV"
+          },
+          {
+            "id": "S12-102",
+            "image": "https://assets.tcgdex.net/ja/S/S12/102",
+            "localId": "102",
+            "name": "アンノーンV"
+          },
+          {
+            "id": "S12-103",
+            "image": "https://assets.tcgdex.net/ja/S/S12/103",
+            "localId": "103",
+            "name": "アンノーンV"
+          },
+          {
+            "id": "S12-104",
+            "image": "https://assets.tcgdex.net/ja/S/S12/104",
+            "localId": "104",
+            "name": "ヒスイ ウインディV"
+          },
+          {
+            "id": "S12-105",
+            "image": "https://assets.tcgdex.net/ja/S/S12/105",
+            "localId": "105",
+            "name": "スカタンクV"
+          },
+          {
+            "id": "S12-106",
+            "image": "https://assets.tcgdex.net/ja/S/S12/106",
+            "localId": "106",
+            "name": "スカタンクV"
+          },
+          {
+            "id": "S12-107",
+            "image": "https://assets.tcgdex.net/ja/S/S12/107",
+            "localId": "107",
+            "name": "レジドラゴV"
+          },
+          {
+            "id": "S12-108",
+            "image": "https://assets.tcgdex.net/ja/S/S12/108",
+            "localId": "108",
+            "name": "レジドラゴV"
+          },
+          {
+            "id": "S12-109",
+            "image": "https://assets.tcgdex.net/ja/S/S12/109",
+            "localId": "109",
+            "name": "ルギアV"
+          },
+          {
+            "id": "S12-110",
+            "image": "https://assets.tcgdex.net/ja/S/S12/110",
+            "localId": "110",
+            "name": "ルギアV"
+          },
+          {
+            "id": "S12-111",
+            "image": "https://assets.tcgdex.net/ja/S/S12/111",
+            "localId": "111",
+            "name": "さぎょういん"
+          },
+          {
+            "id": "S12-112",
+            "image": "https://assets.tcgdex.net/ja/S/S12/112",
+            "localId": "112",
+            "name": "ジンダイ"
+          },
+          {
+            "id": "S12-113",
+            "image": "https://assets.tcgdex.net/ja/S/S12/113",
+            "localId": "113",
+            "name": "スズナ"
+          },
+          {
+            "id": "S12-114",
+            "image": "https://assets.tcgdex.net/ja/S/S12/114",
+            "localId": "114",
+            "name": "ワタル"
+          },
+          {
+            "id": "S12-115",
+            "image": "https://assets.tcgdex.net/ja/S/S12/115",
+            "localId": "115",
+            "name": "レジエレキVMAX"
+          },
+          {
+            "id": "S12-116",
+            "image": "https://assets.tcgdex.net/ja/S/S12/116",
+            "localId": "116",
+            "name": "アンノーンVSTAR"
+          },
+          {
+            "id": "S12-117",
+            "image": "https://assets.tcgdex.net/ja/S/S12/117",
+            "localId": "117",
+            "name": "レジドラゴVSTAR"
+          },
+          {
+            "id": "S12-118",
+            "image": "https://assets.tcgdex.net/ja/S/S12/118",
+            "localId": "118",
+            "name": "ルギアVSTAR"
+          },
+          {
+            "id": "S12-119",
+            "image": "https://assets.tcgdex.net/ja/S/S12/119",
+            "localId": "119",
+            "name": "さぎょういん"
+          },
+          {
+            "id": "S12-120",
+            "image": "https://assets.tcgdex.net/ja/S/S12/120",
+            "localId": "120",
+            "name": "ジンダイ"
+          },
+          {
+            "id": "S12-121",
+            "image": "https://assets.tcgdex.net/ja/S/S12/121",
+            "localId": "121",
+            "name": "スズナ"
+          },
+          {
+            "id": "S12-122",
+            "image": "https://assets.tcgdex.net/ja/S/S12/122",
+            "localId": "122",
+            "name": "ワタル"
+          },
+          {
+            "id": "S12-123",
+            "image": "https://assets.tcgdex.net/ja/S/S12/123",
+            "localId": "123",
+            "name": "ルギアVSTAR"
+          },
+          {
+            "id": "S12-124",
+            "image": "https://assets.tcgdex.net/ja/S/S12/124",
+            "localId": "124",
+            "name": "葉隠れポンチョ"
+          },
+          {
+            "id": "S12-125",
+            "image": "https://assets.tcgdex.net/ja/S/S12/125",
+            "localId": "125",
+            "name": "大口の沼"
+          }
+        ],
+        "id": "S12",
+        "legal": {
+          "expanded": false,
+          "standard": false
+        },
+        "name": "パラダイムトリガー",
+        "releaseDate": "2022-10-21",
+        "serie": {
+          "id": "S",
+          "name": "剣と盾"
+        }
+      }
+    },
     "https://api.tcgdex.net/v2/ja/sets/SV10": {
       "statut": 200,
       "data": {
@@ -3297,782 +4073,6 @@
         }
       }
     },
-    "https://api.tcgdex.net/v2/ja/sets/S12": {
-      "statut": 200,
-      "data": {
-        "cardCount": {
-          "firstEd": 0,
-          "holo": 49,
-          "normal": 76,
-          "official": 98,
-          "reverse": 0,
-          "total": 125
-        },
-        "cards": [
-          {
-            "id": "S12-001",
-            "image": "https://assets.tcgdex.net/ja/S/S12/001",
-            "localId": "001",
-            "name": "ナゾノクサ"
-          },
-          {
-            "id": "S12-002",
-            "image": "https://assets.tcgdex.net/ja/S/S12/002",
-            "localId": "002",
-            "name": "クサイハナ"
-          },
-          {
-            "id": "S12-003",
-            "image": "https://assets.tcgdex.net/ja/S/S12/003",
-            "localId": "003",
-            "name": "キレイハナ"
-          },
-          {
-            "id": "S12-004",
-            "image": "https://assets.tcgdex.net/ja/S/S12/004",
-            "localId": "004",
-            "name": "モンジャラ"
-          },
-          {
-            "id": "S12-005",
-            "image": "https://assets.tcgdex.net/ja/S/S12/005",
-            "localId": "005",
-            "name": "モジャンボ"
-          },
-          {
-            "id": "S12-006",
-            "image": "https://assets.tcgdex.net/ja/S/S12/006",
-            "localId": "006",
-            "name": "イトマル"
-          },
-          {
-            "id": "S12-007",
-            "image": "https://assets.tcgdex.net/ja/S/S12/007",
-            "localId": "007",
-            "name": "アリアドス"
-          },
-          {
-            "id": "S12-008",
-            "image": "https://assets.tcgdex.net/ja/S/S12/008",
-            "localId": "008",
-            "name": "ビリジオン"
-          },
-          {
-            "id": "S12-009",
-            "image": "https://assets.tcgdex.net/ja/S/S12/009",
-            "localId": "009",
-            "name": "ブリガロンV"
-          },
-          {
-            "id": "S12-010",
-            "image": "https://assets.tcgdex.net/ja/S/S12/010",
-            "localId": "010",
-            "name": "ポニータ"
-          },
-          {
-            "id": "S12-011",
-            "image": "https://assets.tcgdex.net/ja/S/S12/011",
-            "localId": "011",
-            "name": "ギャロップ"
-          },
-          {
-            "id": "S12-012",
-            "image": "https://assets.tcgdex.net/ja/S/S12/012",
-            "localId": "012",
-            "name": "ビクティニ"
-          },
-          {
-            "id": "S12-013",
-            "image": "https://assets.tcgdex.net/ja/S/S12/013",
-            "localId": "013",
-            "name": "メラルバ"
-          },
-          {
-            "id": "S12-014",
-            "image": "https://assets.tcgdex.net/ja/S/S12/014",
-            "localId": "014",
-            "name": "ウルガモス"
-          },
-          {
-            "id": "S12-015",
-            "image": "https://assets.tcgdex.net/ja/S/S12/015",
-            "localId": "015",
-            "name": "ニャビー"
-          },
-          {
-            "id": "S12-016",
-            "image": "https://assets.tcgdex.net/ja/S/S12/016",
-            "localId": "016",
-            "name": "ニャヒート"
-          },
-          {
-            "id": "S12-017",
-            "image": "https://assets.tcgdex.net/ja/S/S12/017",
-            "localId": "017",
-            "name": "ガオガエン"
-          },
-          {
-            "id": "S12-018",
-            "image": "https://assets.tcgdex.net/ja/S/S12/018",
-            "localId": "018",
-            "name": "オムスターV"
-          },
-          {
-            "id": "S12-019",
-            "image": "https://assets.tcgdex.net/ja/S/S12/019",
-            "localId": "019",
-            "name": "ユキワラシ"
-          },
-          {
-            "id": "S12-020",
-            "image": "https://assets.tcgdex.net/ja/S/S12/020",
-            "localId": "020",
-            "name": "オニゴーリ"
-          },
-          {
-            "id": "S12-021",
-            "image": "https://assets.tcgdex.net/ja/S/S12/021",
-            "localId": "021",
-            "name": "ユキメノコ"
-          },
-          {
-            "id": "S12-022",
-            "image": "https://assets.tcgdex.net/ja/S/S12/022",
-            "localId": "022",
-            "name": "ジーランス"
-          },
-          {
-            "id": "S12-023",
-            "image": "https://assets.tcgdex.net/ja/S/S12/023",
-            "localId": "023",
-            "name": "ケルディオ"
-          },
-          {
-            "id": "S12-024",
-            "image": "https://assets.tcgdex.net/ja/S/S12/024",
-            "localId": "024",
-            "name": "ピカチュウ"
-          },
-          {
-            "id": "S12-025",
-            "image": "https://assets.tcgdex.net/ja/S/S12/025",
-            "localId": "025",
-            "name": "ライチュウ"
-          },
-          {
-            "id": "S12-026",
-            "image": "https://assets.tcgdex.net/ja/S/S12/026",
-            "localId": "026",
-            "name": "コリンク"
-          },
-          {
-            "id": "S12-027",
-            "image": "https://assets.tcgdex.net/ja/S/S12/027",
-            "localId": "027",
-            "name": "ルクシオ"
-          },
-          {
-            "id": "S12-028",
-            "image": "https://assets.tcgdex.net/ja/S/S12/028",
-            "localId": "028",
-            "name": "レントラー"
-          },
-          {
-            "id": "S12-029",
-            "image": "https://assets.tcgdex.net/ja/S/S12/029",
-            "localId": "029",
-            "name": "マッギョ"
-          },
-          {
-            "id": "S12-030",
-            "image": "https://assets.tcgdex.net/ja/S/S12/030",
-            "localId": "030",
-            "name": "エリキテル"
-          },
-          {
-            "id": "S12-031",
-            "image": "https://assets.tcgdex.net/ja/S/S12/031",
-            "localId": "031",
-            "name": "エレザード"
-          },
-          {
-            "id": "S12-032",
-            "image": "https://assets.tcgdex.net/ja/S/S12/032",
-            "localId": "032",
-            "name": "ゼラオラ"
-          },
-          {
-            "id": "S12-033",
-            "image": "https://assets.tcgdex.net/ja/S/S12/033",
-            "localId": "033",
-            "name": "レジエレキV"
-          },
-          {
-            "id": "S12-034",
-            "image": "https://assets.tcgdex.net/ja/S/S12/034",
-            "localId": "034",
-            "name": "レジエレキVMAX"
-          },
-          {
-            "id": "S12-035",
-            "image": "https://assets.tcgdex.net/ja/S/S12/035",
-            "localId": "035",
-            "name": "アンノーンV"
-          },
-          {
-            "id": "S12-036",
-            "image": "https://assets.tcgdex.net/ja/S/S12/036",
-            "localId": "036",
-            "name": "アンノーンVSTAR"
-          },
-          {
-            "id": "S12-037",
-            "image": "https://assets.tcgdex.net/ja/S/S12/037",
-            "localId": "037",
-            "name": "アサナン"
-          },
-          {
-            "id": "S12-038",
-            "image": "https://assets.tcgdex.net/ja/S/S12/038",
-            "localId": "038",
-            "name": "チャーレム"
-          },
-          {
-            "id": "S12-039",
-            "image": "https://assets.tcgdex.net/ja/S/S12/039",
-            "localId": "039",
-            "name": "シンボラー"
-          },
-          {
-            "id": "S12-040",
-            "image": "https://assets.tcgdex.net/ja/S/S12/040",
-            "localId": "040",
-            "name": "ユニラン"
-          },
-          {
-            "id": "S12-041",
-            "image": "https://assets.tcgdex.net/ja/S/S12/041",
-            "localId": "041",
-            "name": "ダブラン"
-          },
-          {
-            "id": "S12-042",
-            "image": "https://assets.tcgdex.net/ja/S/S12/042",
-            "localId": "042",
-            "name": "ランクルス"
-          },
-          {
-            "id": "S12-043",
-            "image": "https://assets.tcgdex.net/ja/S/S12/043",
-            "localId": "043",
-            "name": "リグレー"
-          },
-          {
-            "id": "S12-044",
-            "image": "https://assets.tcgdex.net/ja/S/S12/044",
-            "localId": "044",
-            "name": "オーベム"
-          },
-          {
-            "id": "S12-045",
-            "image": "https://assets.tcgdex.net/ja/S/S12/045",
-            "localId": "045",
-            "name": "デデンネ"
-          },
-          {
-            "id": "S12-046",
-            "image": "https://assets.tcgdex.net/ja/S/S12/046",
-            "localId": "046",
-            "name": "ヒスイ ウインディV"
-          },
-          {
-            "id": "S12-047",
-            "image": "https://assets.tcgdex.net/ja/S/S12/047",
-            "localId": "047",
-            "name": "ヤジロン"
-          },
-          {
-            "id": "S12-048",
-            "image": "https://assets.tcgdex.net/ja/S/S12/048",
-            "localId": "048",
-            "name": "ネンドール"
-          },
-          {
-            "id": "S12-049",
-            "image": "https://assets.tcgdex.net/ja/S/S12/049",
-            "localId": "049",
-            "name": "アノプス"
-          },
-          {
-            "id": "S12-050",
-            "image": "https://assets.tcgdex.net/ja/S/S12/050",
-            "localId": "050",
-            "name": "アーマルド"
-          },
-          {
-            "id": "S12-051",
-            "image": "https://assets.tcgdex.net/ja/S/S12/051",
-            "localId": "051",
-            "name": "テラキオン"
-          },
-          {
-            "id": "S12-052",
-            "image": "https://assets.tcgdex.net/ja/S/S12/052",
-            "localId": "052",
-            "name": "ヤンチャム"
-          },
-          {
-            "id": "S12-053",
-            "image": "https://assets.tcgdex.net/ja/S/S12/053",
-            "localId": "053",
-            "name": "イワンコ"
-          },
-          {
-            "id": "S12-054",
-            "image": "https://assets.tcgdex.net/ja/S/S12/054",
-            "localId": "054",
-            "name": "ルガルガン"
-          },
-          {
-            "id": "S12-055",
-            "image": "https://assets.tcgdex.net/ja/S/S12/055",
-            "localId": "055",
-            "name": "イシヘンジン"
-          },
-          {
-            "id": "S12-056",
-            "image": "https://assets.tcgdex.net/ja/S/S12/056",
-            "localId": "056",
-            "name": "スカタンクV"
-          },
-          {
-            "id": "S12-057",
-            "image": "https://assets.tcgdex.net/ja/S/S12/057",
-            "localId": "057",
-            "name": "チョロネコ"
-          },
-          {
-            "id": "S12-058",
-            "image": "https://assets.tcgdex.net/ja/S/S12/058",
-            "localId": "058",
-            "name": "レパルダス"
-          },
-          {
-            "id": "S12-059",
-            "image": "https://assets.tcgdex.net/ja/S/S12/059",
-            "localId": "059",
-            "name": "ゴロンダ"
-          },
-          {
-            "id": "S12-060",
-            "image": "https://assets.tcgdex.net/ja/S/S12/060",
-            "localId": "060",
-            "name": "クズモー"
-          },
-          {
-            "id": "S12-061",
-            "image": "https://assets.tcgdex.net/ja/S/S12/061",
-            "localId": "061",
-            "name": "ドラミドロ"
-          },
-          {
-            "id": "S12-062",
-            "image": "https://assets.tcgdex.net/ja/S/S12/062",
-            "localId": "062",
-            "name": "モルペコ"
-          },
-          {
-            "id": "S12-063",
-            "image": "https://assets.tcgdex.net/ja/S/S12/063",
-            "localId": "063",
-            "name": "ガラル ニャース"
-          },
-          {
-            "id": "S12-064",
-            "image": "https://assets.tcgdex.net/ja/S/S12/064",
-            "localId": "064",
-            "name": "ガラル ニャイキング"
-          },
-          {
-            "id": "S12-065",
-            "image": "https://assets.tcgdex.net/ja/S/S12/065",
-            "localId": "065",
-            "name": "ココドラ"
-          },
-          {
-            "id": "S12-066",
-            "image": "https://assets.tcgdex.net/ja/S/S12/066",
-            "localId": "066",
-            "name": "コドラ"
-          },
-          {
-            "id": "S12-067",
-            "image": "https://assets.tcgdex.net/ja/S/S12/067",
-            "localId": "067",
-            "name": "ボスゴドラ"
-          },
-          {
-            "id": "S12-068",
-            "image": "https://assets.tcgdex.net/ja/S/S12/068",
-            "localId": "068",
-            "name": "コバルオン"
-          },
-          {
-            "id": "S12-069",
-            "image": "https://assets.tcgdex.net/ja/S/S12/069",
-            "localId": "069",
-            "name": "トゲデマル"
-          },
-          {
-            "id": "S12-070",
-            "image": "https://assets.tcgdex.net/ja/S/S12/070",
-            "localId": "070",
-            "name": "ミニリュウ"
-          },
-          {
-            "id": "S12-071",
-            "image": "https://assets.tcgdex.net/ja/S/S12/071",
-            "localId": "071",
-            "name": "ハクリュー"
-          },
-          {
-            "id": "S12-072",
-            "image": "https://assets.tcgdex.net/ja/S/S12/072",
-            "localId": "072",
-            "name": "カイリュー"
-          },
-          {
-            "id": "S12-073",
-            "image": "https://assets.tcgdex.net/ja/S/S12/073",
-            "localId": "073",
-            "name": "オンバット"
-          },
-          {
-            "id": "S12-074",
-            "image": "https://assets.tcgdex.net/ja/S/S12/074",
-            "localId": "074",
-            "name": "オンバーン"
-          },
-          {
-            "id": "S12-075",
-            "image": "https://assets.tcgdex.net/ja/S/S12/075",
-            "localId": "075",
-            "name": "ジガルデ"
-          },
-          {
-            "id": "S12-076",
-            "image": "https://assets.tcgdex.net/ja/S/S12/076",
-            "localId": "076",
-            "name": "レジドラゴV"
-          },
-          {
-            "id": "S12-077",
-            "image": "https://assets.tcgdex.net/ja/S/S12/077",
-            "localId": "077",
-            "name": "レジドラゴVSTAR"
-          },
-          {
-            "id": "S12-078",
-            "image": "https://assets.tcgdex.net/ja/S/S12/078",
-            "localId": "078",
-            "name": "ケンタロス"
-          },
-          {
-            "id": "S12-079",
-            "image": "https://assets.tcgdex.net/ja/S/S12/079",
-            "localId": "079",
-            "name": "ルギアV"
-          },
-          {
-            "id": "S12-080",
-            "image": "https://assets.tcgdex.net/ja/S/S12/080",
-            "localId": "080",
-            "name": "ルギアVSTAR"
-          },
-          {
-            "id": "S12-081",
-            "image": "https://assets.tcgdex.net/ja/S/S12/081",
-            "localId": "081",
-            "name": "シェイミ"
-          },
-          {
-            "id": "S12-082",
-            "image": "https://assets.tcgdex.net/ja/S/S12/082",
-            "localId": "082",
-            "name": "アーケン"
-          },
-          {
-            "id": "S12-083",
-            "image": "https://assets.tcgdex.net/ja/S/S12/083",
-            "localId": "083",
-            "name": "アーケオス"
-          },
-          {
-            "id": "S12-084",
-            "image": "https://assets.tcgdex.net/ja/S/S12/084",
-            "localId": "084",
-            "name": "ワシボン"
-          },
-          {
-            "id": "S12-085",
-            "image": "https://assets.tcgdex.net/ja/S/S12/085",
-            "localId": "085",
-            "name": "ヒスイ ウォーグル"
-          },
-          {
-            "id": "S12-086",
-            "image": "https://assets.tcgdex.net/ja/S/S12/086",
-            "localId": "086",
-            "name": "ヤングース"
-          },
-          {
-            "id": "S12-087",
-            "image": "https://assets.tcgdex.net/ja/S/S12/087",
-            "localId": "087",
-            "name": "デカグース"
-          },
-          {
-            "id": "S12-088",
-            "image": "https://assets.tcgdex.net/ja/S/S12/088",
-            "localId": "088",
-            "name": "ヤレユータン"
-          },
-          {
-            "id": "S12-089",
-            "image": "https://assets.tcgdex.net/ja/S/S12/089",
-            "localId": "089",
-            "name": "クワッドストーン"
-          },
-          {
-            "id": "S12-090",
-            "image": "https://assets.tcgdex.net/ja/S/S12/090",
-            "localId": "090",
-            "name": "なぞの化石"
-          },
-          {
-            "id": "S12-091",
-            "image": "https://assets.tcgdex.net/ja/S/S12/091",
-            "localId": "091",
-            "name": "大地の封印石"
-          },
-          {
-            "id": "S12-092",
-            "image": "https://assets.tcgdex.net/ja/S/S12/092",
-            "localId": "092",
-            "name": "森の封印石"
-          },
-          {
-            "id": "S12-093",
-            "image": "https://assets.tcgdex.net/ja/S/S12/093",
-            "localId": "093",
-            "name": "さぎょういん"
-          },
-          {
-            "id": "S12-094",
-            "image": "https://assets.tcgdex.net/ja/S/S12/094",
-            "localId": "094",
-            "name": "ジンダイ"
-          },
-          {
-            "id": "S12-095",
-            "image": "https://assets.tcgdex.net/ja/S/S12/095",
-            "localId": "095",
-            "name": "スズナ"
-          },
-          {
-            "id": "S12-096",
-            "image": "https://assets.tcgdex.net/ja/S/S12/096",
-            "localId": "096",
-            "name": "ワタル"
-          },
-          {
-            "id": "S12-097",
-            "image": "https://assets.tcgdex.net/ja/S/S12/097",
-            "localId": "097",
-            "name": "未開の祭壇"
-          },
-          {
-            "id": "S12-098",
-            "image": "https://assets.tcgdex.net/ja/S/S12/098",
-            "localId": "098",
-            "name": "リゲインエネルギー"
-          },
-          {
-            "id": "S12-099",
-            "image": "https://assets.tcgdex.net/ja/S/S12/099",
-            "localId": "099",
-            "name": "ブリガロンV"
-          },
-          {
-            "id": "S12-100",
-            "image": "https://assets.tcgdex.net/ja/S/S12/100",
-            "localId": "100",
-            "name": "オムスターV"
-          },
-          {
-            "id": "S12-101",
-            "image": "https://assets.tcgdex.net/ja/S/S12/101",
-            "localId": "101",
-            "name": "レジエレキV"
-          },
-          {
-            "id": "S12-102",
-            "image": "https://assets.tcgdex.net/ja/S/S12/102",
-            "localId": "102",
-            "name": "アンノーンV"
-          },
-          {
-            "id": "S12-103",
-            "image": "https://assets.tcgdex.net/ja/S/S12/103",
-            "localId": "103",
-            "name": "アンノーンV"
-          },
-          {
-            "id": "S12-104",
-            "image": "https://assets.tcgdex.net/ja/S/S12/104",
-            "localId": "104",
-            "name": "ヒスイ ウインディV"
-          },
-          {
-            "id": "S12-105",
-            "image": "https://assets.tcgdex.net/ja/S/S12/105",
-            "localId": "105",
-            "name": "スカタンクV"
-          },
-          {
-            "id": "S12-106",
-            "image": "https://assets.tcgdex.net/ja/S/S12/106",
-            "localId": "106",
-            "name": "スカタンクV"
-          },
-          {
-            "id": "S12-107",
-            "image": "https://assets.tcgdex.net/ja/S/S12/107",
-            "localId": "107",
-            "name": "レジドラゴV"
-          },
-          {
-            "id": "S12-108",
-            "image": "https://assets.tcgdex.net/ja/S/S12/108",
-            "localId": "108",
-            "name": "レジドラゴV"
-          },
-          {
-            "id": "S12-109",
-            "image": "https://assets.tcgdex.net/ja/S/S12/109",
-            "localId": "109",
-            "name": "ルギアV"
-          },
-          {
-            "id": "S12-110",
-            "image": "https://assets.tcgdex.net/ja/S/S12/110",
-            "localId": "110",
-            "name": "ルギアV"
-          },
-          {
-            "id": "S12-111",
-            "image": "https://assets.tcgdex.net/ja/S/S12/111",
-            "localId": "111",
-            "name": "さぎょういん"
-          },
-          {
-            "id": "S12-112",
-            "image": "https://assets.tcgdex.net/ja/S/S12/112",
-            "localId": "112",
-            "name": "ジンダイ"
-          },
-          {
-            "id": "S12-113",
-            "image": "https://assets.tcgdex.net/ja/S/S12/113",
-            "localId": "113",
-            "name": "スズナ"
-          },
-          {
-            "id": "S12-114",
-            "image": "https://assets.tcgdex.net/ja/S/S12/114",
-            "localId": "114",
-            "name": "ワタル"
-          },
-          {
-            "id": "S12-115",
-            "image": "https://assets.tcgdex.net/ja/S/S12/115",
-            "localId": "115",
-            "name": "レジエレキVMAX"
-          },
-          {
-            "id": "S12-116",
-            "image": "https://assets.tcgdex.net/ja/S/S12/116",
-            "localId": "116",
-            "name": "アンノーンVSTAR"
-          },
-          {
-            "id": "S12-117",
-            "image": "https://assets.tcgdex.net/ja/S/S12/117",
-            "localId": "117",
-            "name": "レジドラゴVSTAR"
-          },
-          {
-            "id": "S12-118",
-            "image": "https://assets.tcgdex.net/ja/S/S12/118",
-            "localId": "118",
-            "name": "ルギアVSTAR"
-          },
-          {
-            "id": "S12-119",
-            "image": "https://assets.tcgdex.net/ja/S/S12/119",
-            "localId": "119",
-            "name": "さぎょういん"
-          },
-          {
-            "id": "S12-120",
-            "image": "https://assets.tcgdex.net/ja/S/S12/120",
-            "localId": "120",
-            "name": "ジンダイ"
-          },
-          {
-            "id": "S12-121",
-            "image": "https://assets.tcgdex.net/ja/S/S12/121",
-            "localId": "121",
-            "name": "スズナ"
-          },
-          {
-            "id": "S12-122",
-            "image": "https://assets.tcgdex.net/ja/S/S12/122",
-            "localId": "122",
-            "name": "ワタル"
-          },
-          {
-            "id": "S12-123",
-            "image": "https://assets.tcgdex.net/ja/S/S12/123",
-            "localId": "123",
-            "name": "ルギアVSTAR"
-          },
-          {
-            "id": "S12-124",
-            "image": "https://assets.tcgdex.net/ja/S/S12/124",
-            "localId": "124",
-            "name": "葉隠れポンチョ"
-          },
-          {
-            "id": "S12-125",
-            "image": "https://assets.tcgdex.net/ja/S/S12/125",
-            "localId": "125",
-            "name": "大口の沼"
-          }
-        ],
-        "id": "S12",
-        "legal": {
-          "expanded": false,
-          "standard": false
-        },
-        "name": "パラダイムトリガー",
-        "releaseDate": "2022-10-21",
-        "serie": {
-          "id": "S",
-          "name": "剣と盾"
-        }
-      }
-    },
     "https://api.tcgdex.net/v2/ja/cards/S12-115": {
       "statut": 200,
       "data": {
@@ -4108,7 +4108,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T19:57:35.028Z",
+                "updated": "2026-10-24T19:57:35.011Z",
                 "unit": "EUR",
                 "idProduct": 680849,
                 "avg": 4,
@@ -4166,7 +4166,7 @@
         "updated": "2026-09-25T23:45:34.855Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-24T19:57:35.028Z",
+            "updated": "2026-10-24T19:57:35.011Z",
             "unit": "EUR",
             "idProduct": 680849,
             "avg": 4,
@@ -9845,7 +9845,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T17:48:08.842Z",
+                "updated": "2026-10-24T19:57:35.015Z",
                 "unit": "EUR",
                 "idProduct": 740695,
                 "avg": 0.86,
@@ -9908,7 +9908,7 @@
         "updated": "2026-06-09T12:57:37+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-24T17:48:08.842Z",
+            "updated": "2026-10-24T19:57:35.015Z",
             "unit": "EUR",
             "idProduct": 740695,
             "avg": 0.86,
@@ -10039,7 +10039,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-24T19:57:35.028Z",
+                "updated": "2026-10-24T19:57:35.039Z",
                 "unit": "EUR",
                 "idProduct": 773766,
                 "avg": 0.05,
@@ -10101,7 +10101,7 @@
         "updated": "2026-09-25T23:45:19.954Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-24T19:57:35.028Z",
+            "updated": "2026-10-24T19:57:35.039Z",
             "unit": "EUR",
             "idProduct": 773766,
             "avg": 0.05,
