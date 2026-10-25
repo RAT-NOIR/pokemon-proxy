@@ -184,7 +184,7 @@ async function compterEntrees(db, carteIds, site, slug) {
  * @param {object} o      `verrou` : le verrou global du site, LIÉ au client. Les autres options n'existent que pour le banc
  *                        (test-collecteur-tpc.js) : `client`, `deposer` (R2), `fabriquerVerrouSet`, `stopOctets`.
  */
-async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = ligneTpc, sansRemplacement: sansRemplacementOption = false } = {}) {
+async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = ligneTpc, sansRemplacement: sansRemplacementOption = false, planFiltre = null } = {}) {
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
     const G = releve(unite, ligneDe);
@@ -243,7 +243,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         }
         if (bloque) return await conclureBloque(E, unite, site, bloque, client);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
-        const P = await planifier(db, slug, L, fiches);
+        let P = await planifier(db, slug, L, fiches);
+        if (planFiltre) P = await planFiltre(P);   // API-52 L5b : le lanceur dédié (--seulement) restreint le plan, donc les images demandées et jointes
         const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
         const voies = {}; for (const x of P.plan) voies[x.voie] = (voies[x.voie] || 0) + 1;
         console.log(`\n══ ${unite._id} → ${site} ${L.langue} ${L.code} : liste ${liste.ids.length}/${liste.total ?? '?'}${liste.reprise ? ' (reprise)' : ''}, ${fiches.length} fiches · ${P.trous} trous sur ${P.produits} produits · PROUVÉS ${P.plan.length} ${JSON.stringify(voies)} · restes ${JSON.stringify(motifs)} ══`);
