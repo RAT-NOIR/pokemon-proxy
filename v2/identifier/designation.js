@@ -21,6 +21,12 @@ const { garde, partagesDuFournisseur, idsAffirmes } = require('./jumeaux');
 const LD = require('./langue-decisive');
 
 const REGLES_DESIGNATION = Object.freeze({ numero: true });
+// 🔑 LOT DESIGNATION-REGLES (2026-10-25), R3 (Sonia) : OPTION ÉTEINTE par défaut — `ecarteIncomplet` : un produit SANS numéro, SANS total et SANS entrée d'archive (ligne INCOMPLÈTE du catalogue : rien ne dit ce qu'il imprime) est
+// ignoré par la désignation (rival de la question, jumeau hors question, famille). RISQUE, écrit : si la photo EST ce produit, il est affirmé à tort le candidat voisin ; seul le catalogue le lève (compléter la ligne).
+// Seul `true` allume (ctx.designationAssoupli : bancs, mesure). Jamais allumée par défaut.
+const ASSOUPLIS = Object.freeze({ ecarteIncomplet: false });
+const assouplisDe = d => { const o = d && typeof d === 'object' ? d : {}; return Object.freeze(Object.fromEntries(Object.keys(ASSOUPLIS).map(k => [k, o[k] === true]))); };
+const incomplet = l => Boolean(l) && l.numero == null && l.total == null && l.tirageSource == null;
 // Le champ qui sépare, par règle ; `nomCarte` serait le nom lu en confiance haute.
 const CHAMPS_DE = Object.freeze({ numero: ['numero'] });
 const DURS = Object.freeze(['numero', 'code', 'total', 'langue', 'setTcgdex']);       // un candidat qu'un de ces champs contredit ne satisfait jamais une règle de champ
@@ -36,7 +42,7 @@ function reglesDe(demandees) {
 const actives = regles => Object.keys(REGLES_DESIGNATION).filter(k => regles && regles[k] === true);
 
 // Le candidat que la règle de CHAMP désigne : exactement un satisfait, tous les autres contredisent (a). Même définition que l'étude (reglesChamps), sur les statuts de la production.
-function parChamp(champs, { corps, lu, ids, produits }) {
+function parChamp(champs, { corps, lu, ids, produits, ass }) {
     const formes = formesLuesDe(corps);
     const nomOk = id => (formes.length ? nomCompatible(formes, produits.get(id)) : null);
     const st = id => statuts(lu, produits.get(id));
@@ -45,7 +51,7 @@ function parChamp(champs, { corps, lu, ids, produits }) {
     const satisfait = id => { const s = st(id); return !DURS.some(k => s[k] === 'ko') && champs.every(k => ok(s, id, k)) && nomOk(id) !== false; };
     const X = ids.filter(satisfait);
     if (X.length !== 1) return null;
-    return ids.every(y => y === X[0] || champs.some(k => ko(st(y), y, k))) ? X[0] : null;
+    return ids.every(y => y === X[0] || champs.some(k => ko(st(y), y, k)) || (ass.ecarteIncomplet && incomplet(produits.get(y)))) ? X[0] : null;
 }
 
 /**
@@ -57,8 +63,9 @@ function parChamp(champs, { corps, lu, ids, produits }) {
  * @param catalogueExiste  la fonction de l'index code × numéro (R4), portant `famille(idProduct)` ; absente : toutes les règles se ferment
  * @returns { id, regles: [noms], critere } | null
  */
-function designer({ ids, corps, produits, jumeaux, regles, catalogueExiste, trace } = {}) {
+function designer({ ids, corps, produits, jumeaux, regles, catalogueExiste, trace, assoupli } = {}) {
     try {
+        const ass = assouplisDe(assoupli);
         const noms = actives(regles);
         if (!noms.length) return null;
         if (!Array.isArray(ids) || ids.length < 2 || !ids.every(Number.isInteger) || new Set(ids).size !== ids.length) return null;
@@ -70,7 +77,7 @@ function designer({ ids, corps, produits, jumeaux, regles, catalogueExiste, trac
         const designes = new Map();                                                    // idProduct -> les règles qui le désignent
         for (const nom of noms) {
             const lu = lectureDe(corps);
-            const X = parChamp(CHAMPS_DE[nom], { corps, lu, ids, produits });
+            const X = parChamp(CHAMPS_DE[nom], { corps, lu, ids, produits, ass });
             const t = etape => { if (typeof trace === 'function') trace(nom, etape, X); };   // (mesure seulement : où une règle s'arrête)
             if (X === null) { t('a'); continue; }                                      // (a)
             // (b) la garde contradiction se tait parfois quand l'attaque ou le symbole seuls contredisent sans désigner personne : « un élément lu qui contredit le gagnant bloque toujours » (comme critere-a.conditions)
@@ -78,14 +85,14 @@ function designer({ ids, corps, produits, jumeaux, regles, catalogueExiste, trac
             const g = garde({ jumeaux, produits }, X, true);                           // (c) une SONDE : ni compteur ni journal de la garde des jumeaux
             const groupe = g.action === 'affirmer' ? [] : (g.action === 'question' || g.action === 'nombreux') ? g.ids.filter(i => i !== X) : null;
             if (groupe === null) { refuse('la garde des jumeaux ne conclut pas'); t('c-muette'); continue; }
-            if (groupe.some(j => !ids.includes(j))) { refuse('un jumeau du candidat n\'est pas dans la question'); t('c-jumeau'); continue; }
+            if (groupe.some(j => !ids.includes(j) && !(ass.ecarteIncomplet && incomplet(produits.get(j))))) { refuse('un jumeau du candidat n\'est pas dans la question'); t('c-jumeau'); continue; }
             if (partagesDuFournisseur(jumeaux, X).length || ids.some(y => y !== X && partagesDuFournisseur(jumeaux, y).includes(X))) { refuse('paire partagée'); t('e'); continue; }   // (e)
             const famille = catalogueExiste && catalogueExiste.famille;                // (d)
             if (typeof famille !== 'function') { refuse('index du catalogue absent'); t('d-absent'); continue; }
             const rangee = famille(X);
             if (!Array.isArray(rangee)) { refuse('index du catalogue illisible'); t('d-absent'); continue; }
             const formes = formesLuesDe(corps);
-            const cache = rangee.some(y => y && Number.isInteger(y.idProduct) && y.idProduct !== X && !ids.includes(y.idProduct)
+            const cache = rangee.some(y => y && Number.isInteger(y.idProduct) && y.idProduct !== X && !ids.includes(y.idProduct) && !(ass.ecarteIncomplet && incomplet(y))
                 && !CHAMPS.some(k => statuts(lu, y)[k] === 'ko') && !(formes.length && !nomCompatible(formes, y)));
             if (cache) { refuse('un produit hors question n\'est pas contredit'); t('d'); continue; }
             t('ok');
@@ -151,4 +158,4 @@ function creerIndexFamilles(numeros, produits, lecteur = () => () => null) {    
     };
 }
 
-module.exports = { designer, reglesDe, actives, candidatsAPreparer, creerIndexFamilles, compteurs, REGLES_DESIGNATION, CHAMPS_DE };
+module.exports = { designer, reglesDe, actives, candidatsAPreparer, creerIndexFamilles, compteurs, assouplisDe, ASSOUPLIS, REGLES_DESIGNATION, CHAMPS_DE };
