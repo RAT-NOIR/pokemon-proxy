@@ -6,7 +6,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const H = require('./_harnais');
 const S = require('../mesures/serie-essai');
 
-const SECRET = 'mot-de-passe-de-banc-NE-JAMAIS-AFFICHER-0123456789';          // le mot de passe du compte de mesure
+const SECRET = 'mot-de-passe-de-banc-NE-JAMAIS-AFFICHER-0123456789';          // secret-factice : sentinelle du mot de passe du compte de mesure
 const IDENTIFIANT = 'banc-mesure@rat-market.invalid';
 const JETON_INST = 'jeton-installation-SECRET-aaaa1111', JETON_LIE = 'jeton-lie-SECRET-bbbb2222', COOKIE = 'cookie-session-SECRET-cccc3333', CODE = 'ABC123';
 const TOUS_LES_SECRETS = [SECRET, JETON_INST, JETON_LIE, COOKIE];
