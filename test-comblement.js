@@ -471,7 +471,7 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     // ───────────── la ligne de commande réelle (processus fils, AUCUNE connexion) ─────────────
     const racine = __dirname;
     const envPropre = { ...process.env };
-    for (const k of Object.keys(envPropre)) if (/MONGODB|R2_|LOT_ADDITIF/i.test(k)) delete envPropre[k];
+    for (const k of Object.keys(envPropre)) if (/MONGODB|R2_|LOT_ADDITIF|COMBLEMENT_ENV/i.test(k)) delete envPropre[k];
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'comblement-banc-'));
     const fils = (args, env = envPropre) => spawnSync(process.execPath, [path.join(racine, 'comblement-nocturne.js'), ...args], { cwd: racine, env, encoding: 'utf8', timeout: 60000 });
     let f = fils(['--bidon']);
