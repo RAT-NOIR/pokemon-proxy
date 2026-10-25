@@ -59,4 +59,12 @@ function construire({ detail, sauf, estMatiere }) {
     return { ids, refuses };
 }
 
-module.exports = { lire, lireFichier, restreindre, horsPlan, verifierAttendu, construire };
+/** Les lignes du détail des codes demandés (un lot par code ou par groupe de codes). Un code qu'aucune ligne ne porte LÈVE. */
+function filtrerParCodes(detail, codes) {
+    const presents = new Set(detail.map(d => d.code));
+    const absents = codes.filter(c => !presents.has(c));
+    if (absents.length) throw new Error('filtrerParCodes : aucune ligne du plan ne porte le code ' + absents.join(', ') + ' (codes du plan : ' + [...presents].join(', ') + ')');
+    return detail.filter(d => codes.includes(d.code));
+}
+
+module.exports = { lire, lireFichier, restreindre, horsPlan, verifierAttendu, construire, filtrerParCodes };

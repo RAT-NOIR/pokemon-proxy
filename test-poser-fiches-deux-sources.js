@@ -170,6 +170,13 @@ const BASE = ['--liste=l.json', '--exp=7'];
         const autreExp = { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'Autre Expansion', numero: '9' }] };
         const rD3 = await lancer(monde({ cartes: [...CARTES, autreExp] }), BASE, { liste: Object.assign(LISTE(), p(909, 'Eta', '009')) });
         verifier('   déclarée dans une AUTRE expansion : ne bloque pas non plus', [/2 lignes sur 2 fiches simples/.test(rD3.sorties)], [true]);
+        // 🔴 (relecture du paquet 1, D1) le MÊME NUMÉRO suffit, QUEL QUE SOIT LE NOM : Cardmarket suffixe le nom du produit du sous-titre de la carte (« Battle Compressor Team Flare Gear » n°019 contre la
+        // carte 196300 « Battle Compressor », qui déclare jp / Ultra Sun & Ultra Moon Deck Build Boxes / 019/041). L'égalité des noms échoue ; l'impression déclarée au même numéro, non.
+        CATALOGUE.set(910, { name: 'Eta Team Gear', idMetacard: 80 });
+        const rM = await lancer(monde({ cartes: [...CARTES, { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '009/041' }] }] }), BASE, { liste: Object.assign(LISTE(), p(910, 'Eta Team Gear', '009')) });
+        verifier('   un AUTRE NOM au MÊME numéro (« Eta Team Gear » 009 contre la vraie « Eta » 009/041) : doublon, REFUSÉE et nommée', [/1 lignes sur 1 fiches simples · refusés 4/.test(rM.sorties), /déclare déjà l'impression de ce set au numéro 009/.test(rM.sorties)], [true, true]);
+        const rM2 = await lancer(monde({ cartes: [...CARTES, { ...declarante, impressions: [{ tirage: 'zh-hans', expansion: 'X Promo', numero: '77' }] }] }), BASE, { liste: Object.assign(LISTE(), p(910, 'Eta Team Gear', '009')) });
+        verifier('   le même autre nom à un AUTRE numéro (77) ne bloque pas', [/2 lignes sur 2 fiches simples/.test(rM2.sorties)], [true]);
     }
 
     // ── regroupement : deux produits du même (nom, numéro) font UNE fiche, au plus petit idProduct ──

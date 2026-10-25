@@ -7,8 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
-const DIAG = arg('diag'), CACHE = arg('cache'), SORTIE = arg('sortie'), TCGDEX = arg('tcgdex'), WCD = arg('wcd');
-if (!DIAG || !CACHE || !SORTIE) { console.error('usage : --diag= --cache= --sortie= [--tcgdex=] [--wcd=]'); process.exit(2); }
+const DIAG = arg('diag'), CACHE = arg('cache'), SORTIE = arg('sortie'), TCGDEX = arg('tcgdex'), WCD = arg('wcd'), A_COMPTEUR = Number(arg('attendu'));
+if (!DIAG || !CACHE || !SORTIE || !Number.isInteger(A_COMPTEUR) || A_COMPTEUR <= 0) { console.error('usage : --diag= --cache= --sortie= --attendu=<le compteur A : produits sans ligne, lu de audit-catalogue/compteurs-abc.js> [--tcgdex=] [--wcd=] [--energies=]'); process.exit(2); }
 const L = n => JSON.parse(fs.readFileSync(path.join(CACHE, `${n}.json`), 'utf8'));
 const d = JSON.parse(fs.readFileSync(DIAG, 'utf8'));
 const wcdIds = new Set(WCD ? JSON.parse(fs.readFileSync(WCD, 'utf8')) : []);
@@ -115,10 +115,12 @@ for (const e of d) {
         causes: c, routes: r, cles: ex
     });
 }
-// (PHASE 3a-SUITE) l'attendu est le nombre de produits SANS LIGNE de la liste lue, plus le 3 263 de l'audit du matin : les lots écrits le font baisser
-const ATTENDU = d.reduce((t, e) => t + e.sansLigne, 0);
-console.log(`CLASSÉS : ${tot.n} produits (attendu ${ATTENDU}) dans ${lignes.length} expansions`);
-if (tot.n !== ATTENDU || !ATTENDU) throw new Error('concordance fausse');
+// (PHASE 3a-SUITE) l'attendu est le compteur A, MESURE a part (compteurs-abc.js) : une concordance entre la liste lue et sa propre somme serait une tautologie (§21 n°8). Le 3 263 de l'audit du matin baisse a chaque lot.
+// Trois nombres independants doivent s'accorder : le compteur A, la somme de la liste (diag), et les produits classes ici.
+const ATTENDU = A_COMPTEUR;
+const SOMME_LISTE = d.reduce((t, e) => t + e.sansLigne, 0);
+console.log(`CLASSES : ${tot.n} produits · compteur A ${ATTENDU} · somme de la liste ${SOMME_LISTE} dans ${lignes.length} expansions`);
+if (tot.n !== ATTENDU || SOMME_LISTE !== ATTENDU || !ATTENDU) throw new Error(`concordance fausse : classes ${tot.n}, liste ${SOMME_LISTE}, compteur A ${ATTENDU}`);
 const nv = d.flatMap(e => e.produits.filter(p => p.nouveau).map(p => ({ exp: e.exp, p })));
 fs.mkdirSync(SORTIE, { recursive: true });
 fs.writeFileSync(path.join(SORTIE, 'causes.json'), JSON.stringify({

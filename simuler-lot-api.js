@@ -17,7 +17,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const GC = require('./collecte-cartes/garde-contrat-api');
 const J = require('./collecte-cartes/jointure');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
-const { appliquerPlans } = require('./collecte-cartes/appliquer-plan');
+const { appliquerPlans, OUTILS_SUR_LIGNES_EXISTANTES } = require('./collecte-cartes/appliquer-plan');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
 const AUTORISES = [/^--nom=[\w-]+$/, /^--plans=.+\.json(,.+\.json)*$/, /^--sortie=.+$/, /^--api=.+$/, /^--confirmation=.+\.json$/];
@@ -64,7 +64,8 @@ const cellule = s => String(s ?? '—').replace(/\|/g, '\\|').replace(/\s+/g, ' 
         const mB = await GC.contratDesSets({ api: apiCapture, sets: B.sets, docs: B.cartes, lignes: B.cartesProduits, slugs }); const eB = dernieres || new Map();
         const avecEntree = (m, id) => { const j = m.get(id); return Boolean(j) && !j.sansEntree; };
         // seules les lignes NOUVELLES comptent (une ligne déjà en base est une reprise idempotente : l'outil la rend, l'écriture ne la change pas)
-        const idsAjoutees = new Set(ajoutees.map(a => String(a._id)));
+        // (paquet 2) sauf les outils qui ne posent aucune ligne (impressions, numérotation) : leurs lignes EXISTENT, elles sont toutes celles du lot
+        const idsAjoutees = new Set([...ajoutees.map(a => String(a._id)), ...plans.filter(p => OUTILS_SUR_LIGNES_EXISTANTES.has(p.outil)).flatMap(p => p.lignes.map(l => String(l._id)))]);
         const nouvelles = p => p.lignes.filter(l => idsAjoutees.has(String(l._id)));
         const produitsPlan = [...new Set(plans.flatMap(p => nouvelles(p).map(l => l.idProduct)))];
         const ligneAvant = new Set(cartesProduits.map(l => l.idProduct));

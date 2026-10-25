@@ -41,5 +41,8 @@ verifier('construire : chaque exclu est nommé avec son motif', C.refuses, [{ id
 leve('construire : un détail vide lève (zéro ligne confirmée sur un plan non vide n\'est pas une liste)', () => L.construire({ detail: [], sauf: new Set(), estMatiere: () => false }), /vide/);
 leve('construire : aucune ligne confirmée → lève (la liste serait vide, donc refusée à la lecture)', () => L.construire({ detail: [{ idProduct: 1, ok: false }], sauf: new Set(), estMatiere: () => false }), /aucune/);
 leve('construire : un idProduct en double dans le détail lève (deux lignes d\'un même produit ne font pas une liste)', () => L.construire({ detail: [{ idProduct: 1, ok: true }, { idProduct: 1, ok: true }], sauf: new Set(), estMatiere: () => false }), /double/);
-console.log(`\n${ok} passés, ${ko} en échec`);
+// ── filtrerParCodes : un lot par code ; un code absent du détail LÈVE (une liste vide par faute de frappe n'est pas un lot)
+const det2 = [{ idProduct: 1, ok: true, code: 'A' }, { idProduct: 2, ok: true, code: 'B' }, { idProduct: 3, ok: false, code: 'B' }];
+verifier('filtrerParCodes : seules les lignes des codes demandés', L.filtrerParCodes(det2, ['B']).map(d => d.idProduct), [2, 3]);
+leve('filtrerParCodes : un code qu\'aucune ligne ne porte → lève', () => L.filtrerParCodes(det2, ['B', 'Z']), /Z/);console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
