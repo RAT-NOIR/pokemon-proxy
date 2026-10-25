@@ -30,7 +30,7 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
 
 (async () => {
     // ───────────── motifs fermés et trous nommés (R7) ─────────────
-    const attendusMotifs = ['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible', 'sans-offre', 'sous-le-seuil', 'a-confirmer'];
+    const attendusMotifs = ['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible', 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source'];
     v('motifs fermés : la liste', CO.MOTIFS, attendusMotifs);
     for (const m of [...attendusMotifs, 'source-bloquee:tcs', 'source-bloquee:scx']) vrai(`motif « ${m} » admis`, CO.motifAdmis(m));
     for (const m of ['n-importe-quoi', '', null, undefined, 'source-bloquee:', 'source-bloquee:TCS', 'source-bloquee:a b', 'Aucune-source', 'a-confirmer ']) vrai(`motif ${JSON.stringify(m)} refusé`, !CO.motifAdmis(m));
@@ -125,8 +125,8 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     // un fournisseur qui propose DEUX adresses pour un produit : ambigu, écarté (jamais deviné)
     const dbl = CO.candidatsDuProduit([{ code: 'scx', unite: unite({ url: 'https://x/1.jpg' }) }, { code: 'scx', unite: unite({ url: 'https://x/2.jpg', carteId: 3 }) }, { code: 'ppr', unite: unite({ url: 'https://y/1.jpg' }) }]);
     v('candidatsDuProduit : deux adresses d\'un même fournisseur = ambigu, écarté', [dbl.candidats.map(c => c.code), dbl.ambigus], [['ppr'], ['scx']]);
-    const meme = CO.candidatsDuProduit([{ code: 'scx', unite: unite({ url: 'https://x/1.jpg' }) }, { code: 'scx', unite: unite({ url: 'https://x/1.jpg', carteId: 3 }) }]);
-    v('candidatsDuProduit : la MÊME adresse deux fois n\'est pas ambiguë', [meme.candidats.length, meme.ambigus], [1, []]);
+    const meme = CO.candidatsDuProduit([{ code: 'scx', unite: unite({ url: 'https://x/1.jpg' }) }, { code: 'scx', unite: unite({ url: 'https://x/1.jpg' }) }]);
+    v('candidatsDuProduit : la MÊME adresse sur la MÊME carte deux fois n\'est pas ambiguë', [meme.candidats.length, meme.ambigus], [1, []]);
 
     // ───────────── R4 : classer — 0 / 1 / ≥ 2 sources, sources bloquées ─────────────
     const ordre = ['scx', 'ppr', 'pmk', 'tcs'];
@@ -193,7 +193,7 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     r = await mk({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'trop-petit', w: 120 } }, async ({ candidats }) => ({ decision: 'trou', motif: candidats.length ? 'une-seule-source' : 'aucune-source', preuve: {} }));
     v('juger : une image sous le seuil retire la source -> sous-le-seuil', [r.decision, r.motif], ['trou', 'sous-le-seuil']);
     r = await mk({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'absent' } }, async () => ({ decision: 'trou', motif: 'une-seule-source', preuve: {} }));
-    v('juger : une image absente retire la source -> illisible', [r.decision, r.motif], ['trou', 'illisible']);
+    v('juger : une image absente retire la source -> absente-chez-la-source (I3)', [r.decision, r.motif], ['trou', 'absente-chez-la-source']);
     r = await mk({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'forme-inattendue', w: 300, h: 300 } }, async () => ({ decision: 'trou', motif: 'une-seule-source', preuve: {} }));
     v('juger : forme inattendue -> illisible', r.motif, 'illisible');
     r = await mk({ u1: { statut: 'ok', w: 400 } }, decideEcrire);
@@ -208,6 +208,58 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('juger : tirage du candidat (R2) transmis, codeSet null', vu.candidats.map(c => [c.source, c.tirage.numero, c.tirage.codeSet, c.tirage.langue]), [['scx', '024', null, 'en'], ['ppr', '024', null, 'en']]);
     v('juger : R5, aucun scan conforme (un produit MANQUANT n\'a par définition aucun visuel au même set/numéro/langue)', vu.scansConformes ?? [], []);
     v('juger : le produit transmis est celui du tirage du PRODUIT', vu.produit, produit);
+
+    // B1 : la paire (et la tierce) doit désigner la MÊME carte, le même set, le même numéro
+    const cB = (carteId, code, o = {}) => ({ code, unite: unite({ carteId, url: 'u-' + code, ...o }) });
+    const ecrirePaire = (extra = {}) => async ({ candidats }) => ({ decision: 'ecrire', preuve: { regle: 'strict', paire: ['c0', 'c1'], paireSources: [candidats[0].source, candidats[1].source], ...extra } });
+    const jug = (cs, dec) => CO.jugerProduit({ produit, candidats: cs, defs, jugement: () => ({ statut: 'ok', w: 400 }), octets: () => Buffer.from('x'), decider: dec, ordre });
+    r = await jug([cB(1, 'scx'), cB(2, 'ppr')], ecrirePaire());
+    v('B1 : deux fournisseurs, même produit, CARTES différentes : jamais ecrire', [r.decision, r.motif, r.gagnant], ['a-confirmer', 'a-confirmer', undefined]);
+    vrai('B1 : la cause est dans la preuve', /cartes? différentes?|carte différente/.test(JSON.stringify(r.preuve.cause)));
+    r = await jug([cB(1, 'scx', { slugSet: 'Set-A' }), cB(1, 'ppr', { slugSet: 'Set-B' })], ecrirePaire());
+    v('B1 : même carte, SET différent : a-confirmer', r.decision, 'a-confirmer');
+    r = await jug([cB(1, 'scx', { numero: '024' }), cB(1, 'ppr', { numero: '025' })], ecrirePaire());
+    v('B1 : même carte, NUMÉRO différent : a-confirmer', r.decision, 'a-confirmer');
+    r = await jug([cB(1, 'scx', { numero: '024' }), cB(1, 'ppr', { numero: '24' })], ecrirePaire());
+    v('B1 : « 024 » et « 24 » sont le même numéro (cleNumero) : écrire', r.decision, 'ecrire');
+    r = await jug([cB(1, 'scx'), cB(1, 'ppr'), cB(9, 'pmk')], async () => ({ decision: 'ecrire', preuve: { regle: 'souple+tierce', paire: ['c0', 'c1'], paireSources: ['scx', 'ppr'], tierce: ['c1', 'c2'] } }));
+    v('B1 : la TIERCE d\'une règle souple+tierce sur une autre carte : a-confirmer', r.decision, 'a-confirmer');
+    r = await jug([cB(1, 'scx'), cB(1, 'ppr'), cB(1, 'pmk')], async () => ({ decision: 'ecrire', preuve: { regle: 'souple+tierce', paire: ['c0', 'c1'], paireSources: ['scx', 'ppr'], tierce: ['c1', 'c2'] } }));
+    v('B1 : la tierce sur la même carte : écrire', r.decision, 'ecrire');
+    r = await jug([cB(1, 'scx'), cB(2, 'ppr'), cB(1, 'pmk')], async () => ({ decision: 'ecrire', preuve: { regle: 'strict', paire: ['c0', 'c2'], paireSources: ['scx', 'pmk'] } }));
+    v('B1 : une troisième source sur une autre carte, hors paire : sans effet', r.decision, 'ecrire');
+
+    // I3 : 404 / fausse-absence
+    const jugS = (statuts) => CO.jugerProduit({ produit, candidats: cG.slice(0, 2), defs, jugement: u => statuts[u.url], octets: () => Buffer.from('x'), decider: decideEcrire, ordre });
+    r = await jugS({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'absent' } });
+    v('I3 : un 404 (absent) = absente-chez-la-source', [r.decision, r.motif], ['trou', 'absente-chez-la-source']);
+    r = await jugS({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'fausse-absente' } });
+    v('I3 : une fausse-absente (preuve en attente) = REPORTÉ, ni trou ni visuel', [r.decision, r.motif], ['reporte', undefined]);
+    r = await jugS({ u1: { statut: 'ok', w: 400 }, u2: { statut: 'dos-de-carte' } });
+    v('I3 : un dos de carte reste illisible', r.motif, 'illisible');
+    r = await jugS({ u1: { statut: 'trop-petit', w: 100 }, u2: { statut: 'absent' } });
+    v('I3 : sous-le-seuil garde la priorité sur absente', r.motif, 'sous-le-seuil');
+
+    // M3 : même fournisseur, même URL, deux cartes : ambigu, compté
+    const m3 = CO.candidatsDuProduit([{ code: 'scx', unite: unite({ url: 'https://x/1.jpg', carteId: 1 }) }, { code: 'scx', unite: unite({ url: 'https://x/1.jpg', carteId: 3 }) }, { code: 'ppr', unite: unite({ url: 'https://y/1.jpg' }) }]);
+    v('M3 : même URL mais deux carteId = fournisseur AMBIGU', [m3.candidats.map(c => c.code), m3.ambigus], [['ppr'], ['scx']]);
+    // I2 : un fournisseur muet n'est jamais « aucune source »
+    const sansPlan = (resume, unites, lireReleves = () => ({})) => CO.recolterUnites({ fournisseurs: [{ code: 'scx', def: def('scx', { construirePlan: async () => ({ unites, restes: [], resume }) }) }], db: {}, lireReleves, arret: () => null });
+    await leve('I2 : plan à 0 unité (non bloqué) : arrêt', () => sansPlan({ parSet: [{ etat: 'planifie' }] }, []), /scx.*0 unité/);
+    await leve('I2 : aucun set planifié : arrêt', () => sansPlan({ parSet: [{ etat: 'non-relevee' }, { etat: 'page-absente' }] }, [unite({ produits: [1], url: 'https://scx/1.jpg', carteId: 1 })]), /scx.*planifié/);
+    await leve('I2 : plan sans résumé : je ne sais pas = arrêt', () => sansPlan(undefined, [unite({ produits: [1], url: 'https://scx/1.jpg', carteId: 1 })]), /scx/);
+    await leve('I2 : relevé illisible (la lecture lève) : arrêt', () => sansPlan({ parSet: [{ etat: 'planifie' }] }, [unite({ produits: [1], url: 'https://scx/1.jpg', carteId: 1 })], () => { throw new Error('JSON tronqué'); }), /scx.*JSON tronqué/);
+    const ok2 = await sansPlan({ parGroupe: [{ etat: 'non-releve' }, { etat: 'planifie' }] }, [unite({ produits: [1], url: 'https://scx/1.jpg', carteId: 1 })]);
+    v('I2 : au moins un set / groupe planifié et une unité : passe', ok2[0].unites.length, 1);
+    const bl = await CO.recolterUnites({ fournisseurs: [{ code: 'tcs', def: def('tcs', { construirePlan: async () => ({ unites: [], restes: [], resume: { parGroupe: [] } }) }) }], db: {}, lireReleves: () => { throw new Error('absent'); }, arret: () => ({ motif: 'x' }) });
+    v('I2 : un fournisseur BLOQUÉ n\'est pas jugé muet (0 requête de toute façon)', bl[0].bloquee, true);
+
+    // M1 : une erreur d'accès n'est jamais « STOP absent »
+    const stat = (e) => () => { if (e) throw e; return {}; };
+    v('M1 : existeStrict : présent', CO.existeStrict('/x', stat(null)), true);
+    v('M1 : existeStrict : ENOENT = absent', CO.existeStrict('/x', stat(Object.assign(new Error('n'), { code: 'ENOENT' }))), false);
+    await leve('M1 : existeStrict : EPERM lève', () => CO.existeStrict('/x', stat(Object.assign(new Error('perm'), { code: 'EPERM' }))), /perm/);
+    v('M1 : la garde REFUSE sur une erreur d\'accès', CO.verifierGardes({ dossier: '/d', existe: p => CO.existeStrict(p, stat(Object.assign(new Error('perm'), { code: 'EPERM' }))), lancerFileArret: () => ({ status: 0 }) }).ok, false);
 
     // ── avec la VRAIE règle d'image sur des images fabriquées : tirage différent / même source ──
     const graine = s => { let x = s >>> 0; return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; };
@@ -235,13 +287,14 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
         { idProduct: 103, name: 'P103', langue: 'intl', codeSet: 'PAL', numero: '027', pop: {}, tamponnee: null },
         { idProduct: 104, name: 'P104', langue: 'intl', codeSet: 'PAL', numero: '028', pop: {}, tamponnee: null }
     ];
+    const le0 = new Date('2026-10-26T01:00:00Z');
     const U = (p, code) => unite({ produits: [p], url: `https://${code}/${p}.jpg`, carteId: p });
     const parFournisseur = [
         { code: 'scx', bloquee: false, unites: [U(100, 'scx'), U(101, 'scx'), U(102, 'scx')] },
         { code: 'ppr', bloquee: false, unites: [U(100, 'ppr'), U(101, 'ppr')] },
         { code: 'tcs', bloquee: true, unites: [U(102, 'tcs'), U(103, 'tcs')] }
     ];
-    const pl = CO.planifier({ cibles, parFournisseur, ordre });
+    const pl = CO.planifier({ cibles, parFournisseur, ordre, le: le0 });
     v('planifier : produits à télécharger (≥ 2 sources libres)', pl.produits.map(p => p.idProduct), [100, 101]);
     v('F1 : sans plafond, aucun reporté', pl.reportes, []);
     const motifs = Object.fromEntries(pl.trousDirects.map(t => [t.idProduct, t.motif]));
@@ -250,6 +303,14 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('planifier : comptes 0 / 1 / ≥2 / bloquées', pl.comptes, { aucune: 1, une: 0, deuxPlus: 2, bloquees: 2 });
     v('planifier : une unité d\'une source bloquée n\'est JAMAIS à télécharger', pl.produits.flatMap(p => p.candidats.map(c => c.code)).includes('tcs'), false);
     v('planifier : le candidat porte son unité complète (carteId, slugSet, url)', Object.keys(pl.produits[0].candidats[0].unite).includes('slugSet'), true);
+    const plM = CO.planifier({ cibles: [{ idProduct: 100, name: 'P100', langue: 'intl', codeSet: 'PAL', numero: '024', pop: {}, tamponnee: null }], ordre, parFournisseur: [{ code: 'scx', bloquee: false, unites: [U(100, 'scx'), { ...U(100, 'scx'), carteId: 77 }] }, { code: 'ppr', bloquee: false, unites: [U(100, 'ppr')] }] });
+    v('M3 : compté dans le plan', plM.comptes.avecFournisseurAmbigu, 1);
+
+    // M2 : la preuve d'un trou « aucune-source » dit la portée de l'instrument
+    const tp104 = pl.trousDirects.find(t => t.idProduct === 104);
+    v('M2 : preuve = fournisseurs interrogés + date', [tp104.preuve.interroges, tp104.preuve.dateInterrogation], [ordre, le0.toISOString()]);
+    vrai('M2 : la portée est écrite (unités « ajouter » seulement, pas « aucune image »)', /ajouter/.test(tp104.preuve.portee) && /pas/.test(tp104.preuve.portee));
+
 
     // F1 : le plafond ne compte QUE les produits à ≥ 2 sources ; 0 / 1 source et sans-offre sont nommés en entier
     const beaucoup = [];
@@ -295,9 +356,9 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
 
     // ── recolterUnites : une source bloquée sort SANS aucune requête ; un plan en échec arrête tout ──
     let appels = 0;
-    const unitesPlan = async () => { appels++; return { unites: [U(102, 'tcs')], restes: [] }; };
+    const unitesPlan = async () => { appels++; return { unites: [U(102, 'tcs')], restes: [], resume: { parGroupe: [{ etat: 'planifie' }] } }; };
     const bloquee = { code: 'tcs', def: def('tcs', { construirePlan: unitesPlan }) };
-    const rr = await CO.recolterUnites({ fournisseurs: [bloquee, { code: 'scx', def: def('scx', { construirePlan: async () => ({ unites: [U(100, 'scx'), { ...U(101, 'scx'), decision: { action: 'cede' } }], restes: [] }) }) }], db: {}, lireReleves: () => ({}), arret: h => (/tcs/.test(h) ? { motif: 'x' } : null) });
+    const rr = await CO.recolterUnites({ fournisseurs: [bloquee, { code: 'scx', def: def('scx', { construirePlan: async () => ({ unites: [U(100, 'scx'), { ...U(101, 'scx'), decision: { action: 'cede' } }], restes: [], resume: { parSet: [{ etat: 'planifie' }] } }) }) }], db: {}, lireReleves: () => ({}), arret: h => (/tcs/.test(h) ? { motif: 'x' } : null) });
     v('recolterUnites : source bloquée marquée, ses unités lues (0 requête) mais jamais téléchargeables', rr.map(x => [x.code, x.bloquee, x.unites.length]), [['tcs', true, 1], ['scx', false, 2]]);
     await leve('recolterUnites : le plan d\'un fournisseur échoue : tout s\'arrête (jamais « aucune source »)', () => CO.recolterUnites({ fournisseurs: [{ code: 'scx', def: def('scx', { construirePlan: async () => { throw new Error('boum'); } }) }], db: {}, lireReleves: () => ({}), arret: () => null }), /scx.*boum/);
 
@@ -311,12 +372,23 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
         { idProduct: 107, decision: 'reporte' }
     ];
     const asm = CO.assembler({ verdicts, trousDirects: [CO.construireTrou({ idProduct: 104, motif: 'aucune-source', sources: ordre, preuve: {}, le })], sansOffre: [{ idProduct: 5 }], ordre, le });
-    v('assembler : les gagnants par fournisseur (une unité, dédoublonnée)', Object.fromEntries(Object.entries(asm.gagnants).map(([k, l]) => [k, l.length])), { ppr: 1 });
-    v('assembler : les trous (directs + jugés + a-confirmer + sans-offre), sauf les produits couverts par une unité gagnante', asm.trous.map(t => `${t.idProduct}:${t.motif}`).sort(), ['101:discordance-image', '104:aucune-source', '106:a-confirmer', '5:sans-offre']);
+    v('I1 : l\'unité gagnante partagée avec un produit REFUSÉ (105) n\'est pas écrite', Object.keys(asm.gagnants), []);
+    v('I1 : les trous : 100 passe a-confirmer, 105 GARDE son trou (jamais couvert), 101, 104, 106, sans-offre', asm.trous.map(t => `${t.idProduct}:${t.motif}`).sort(), ['100:a-confirmer', '101:discordance-image', '104:aucune-source', '105:illisible', '106:a-confirmer', '5:sans-offre']);
+    vrai('I1 : la cause est dans la preuve', /unité partagée avec un produit refusé/.test(asm.trous.find(t => t.idProduct === 100).preuve.cause));
     v('assembler : reportés comptés, sans trou', asm.reportes, [107]);
     v('assembler : tous les motifs sont fermés', asm.trous.every(t => CO.motifAdmis(t.motif)), true);
-    const asm2 = CO.assembler({ verdicts: [{ idProduct: 1, decision: 'ecrire', gagnant: { code: 'scx', unite: { ...U(1, 'scx'), produits: [1] } }, preuve: {} }, { idProduct: 2, decision: 'ecrire', gagnant: { code: 'scx', unite: { ...U(1, 'scx'), produits: [1, 2] } }, preuve: {} }], trousDirects: [], sansOffre: [], ordre, le });
-    v('assembler : la même unité gagnante pour deux produits est écrite UNE fois', asm2.gagnants.scx.length, 1);
+    const asm2 = CO.assembler({ verdicts: [{ idProduct: 1, decision: 'ecrire', gagnant: { code: 'scx', unite: { ...U(1, 'scx'), produits: [1] } }, preuve: { paireSources: ['scx', 'ppr'] } }, { idProduct: 2, decision: 'ecrire', gagnant: { code: 'scx', unite: { ...U(1, 'scx'), produits: [1, 2] } }, preuve: { paireSources: ['ppr', 'scx'] } }], trousDirects: [], sansOffre: [], ordre, le });
+    v('assembler : la même unité gagnante pour deux produits (même paire) est écrite UNE fois', asm2.gagnants.scx.length, 1);
+    const ev = (id, produits, paire, code = 'scx') => ({ idProduct: id, decision: 'ecrire', gagnant: { code, unite: { ...U(100, code), produits } }, preuve: { paireSources: paire } });
+    const A = (verdicts) => CO.assembler({ verdicts, trousDirects: [], sansOffre: [], ordre, le });
+    let a3 = A([ev(100, [100, 105], ['scx', 'ppr'])]);
+    v('I1 : un produit de l\'unité HORS population (jamais jugé) : l\'unité n\'est pas écrite, 100 passe a-confirmer', [Object.keys(a3.gagnants), a3.trous.map(t => `${t.idProduct}:${t.motif}`)], [[], ['100:a-confirmer']]);
+    a3 = A([ev(100, [100, 105], ['scx', 'ppr']), ev(105, [100, 105], ['scx', 'pmk'])]);
+    v('I1 : deux produits ecrire mais par des PAIRES différentes : refusée', [Object.keys(a3.gagnants), a3.trous.length], [[], 2]);
+    a3 = A([ev(100, [100, 105], ['scx', 'ppr']), ev(105, [100, 105], ['ppr', 'scx'])]);
+    v('I1 : tous les produits de l\'unité ecrire par la même paire : écrite', [Object.keys(a3.gagnants), a3.trous.length], [['scx'], 0]);
+    a3 = A([ev(100, [100], ['scx', 'ppr']), { idProduct: 101, decision: 'trou', motif: 'discordance-image', preuve: {} }]);
+    v('I1 : un produit voisin refusé qui n\'est PAS dans l\'unité ne bloque rien, et garde son trou', [Object.keys(a3.gagnants), a3.trous.map(t => t.idProduct)], [['scx'], [101]]);
 
     // ───────────── l'écriture : compte d'abord, --attendu faux = rien n'est écrit, trous seulement si tous les visuels sont écrits ─────────────
     const journalEcr = [];

@@ -27,7 +27,7 @@ const jour = (d = new Date()) => d.toISOString().slice(0, 10);
 
 function lancerFileArret() { return spawnSync(process.execPath, [path.join(__dirname, 'file-a-l-arret.js')], { cwd: __dirname, encoding: 'utf8', env: process.env, timeout: 180000 }); }
 function appliquerGardes(dossier) {
-    const g = CO.verifierGardes({ dossier, existe: fs.existsSync, lancerFileArret });
+    const g = CO.verifierGardes({ dossier, existe: CO.existeStrict, lancerFileArret });
     if (!g.ok) { console.error(`❌ ${g.raison}`); process.exitCode = 3; }
     return g.ok;
 }
@@ -73,7 +73,8 @@ async function etapePlan({ dossier, limite, etatNom = null }) {
         const neufs = CO.calculerNeufs(dates, depuis);
         const avecDate = dates.size;
         const pop = CO.choisirPopulation({ etat, guide, numeros, neufs });
-        const parFournisseur = await CO.recolterUnites({ fournisseurs, db: lecture.cartes.db, lireReleves: def => RC.lireJson(fichiersRecolte(def).releves, {}), arret: arretDe, fichiersDe: fichiersRecolte });
+        const parFournisseur = await CO.recolterUnites({ fournisseurs, db: lecture.cartes.db, lireReleves: def => JSON.parse(fs.readFileSync(fichiersRecolte(def).releves, 'utf8')),         // I2 : LÈVE sur un relevé absent ou illisible (RC.lireJson le remplacerait par {})
+             arret: arretDe, fichiersDe: fichiersRecolte });
         const pl = CO.planifier({ cibles: pop.cibles, parFournisseur, ordre, limite });
         const plan = {
             le: new Date().toISOString(), limite, ordre, etat: { fichier: etatFichier.fichier, le: etatFichier.le.toISOString() },
@@ -188,6 +189,7 @@ async function assurerCollectionTrous() {
     } finally { await fermer(); }
 }
 async function nuit({ dossier, aBlanc, limite, budget }) {
+    const debut = new Date();                                  // M4 : « neuf » se mesure depuis le DÉBUT du passage (un produit ajouté pendant le passage reste neuf au suivant)
     const date = jour();
     const av = [];
     let plan = null, rapports = [], decisions = null, ecrit = null, lot = null, trousEcrits = null;
@@ -216,7 +218,7 @@ async function nuit({ dossier, aBlanc, limite, budget }) {
             ecrit = lot === 0 ? `lot-additif.js : succès (${N} visuels, ${M} trous)` : `ÉCHEC : lot-additif.js a rendu le code ${lot}`;
             if (lot !== 0) { process.exitCode = lot ?? 1; throw new Error(ecrit); }
             trousEcrits = RC.lireJson(path.join(dossier, 'rapport-ecriture.json'), null)?.trous ?? null;
-            RC.ecrireJson(path.join(dossier, 'dernier-passage.json'), { le: new Date().toISOString(), visuels: N, trous: M, etat: plan.etat.fichier });
+            RC.ecrireJson(path.join(dossier, 'dernier-passage.json'), { le: debut.toISOString(), visuels: N, trous: M, etat: plan.etat.fichier });
         }
     } catch (e) {
         console.error('❌', e.message); process.exitCode = process.exitCode || 1; av.push(`ÉCHEC : ${e.message}`);

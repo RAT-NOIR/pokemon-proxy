@@ -17,6 +17,8 @@
 //  R7 trous nommés : collection additive `trous_nommes`, motifs FERMÉS (ci-dessous), jamais un motif hors liste.
 //  R8 gardes écrites par ce qu'elles AUTORISENT : STOP absent ET file à l'arrêt (code 0 seulement).
 const path = require('path');
+const fs = require('fs');
+const { cleNumero } = require('./jointure');
 const RC = require('./recolte-commun');
 const CI = require('./concordance-image');
 
@@ -37,7 +39,7 @@ function chargerFournisseurs(chemins = FOURNISSEURS, req = require) {
 
 // ── 1. Les motifs FERMÉS et les trous nommés (R7) ─────────────────────────────────────────────────────────────────────────────
 // Les cinq motifs de la règle d'image sont CEUX de concordance-image.js (jamais recopiés) ; trois s'y ajoutent ici. `source-bloquee:<code>` est la sixième famille (le code est celui d'un fournisseur).
-const MOTIFS = Object.freeze([...CI.MOTIFS_TROU, 'sans-offre', 'sous-le-seuil', 'a-confirmer']);
+const MOTIFS = Object.freeze([...CI.MOTIFS_TROU, 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source']);
 const motifAdmis = m => typeof m === 'string' && (MOTIFS.includes(m) || /^source-bloquee:[a-z0-9]+$/.test(m));
 const INSTRUMENT = 'comblement-nocturne';
 /** Un trou nommé : la preuve « quel instrument, quelles sources, quelle date » (§36). LÈVE sur tout ce qui n'est pas dans la forme. */
@@ -138,12 +140,15 @@ function regrouperUnites(parFournisseur, ids) {
     }
     return g;
 }
+/** Ce qu'une unité désigne chez NOUS : la carte, le set et le numéro (clé de numéro de la production). */
+const identiteUnite = u => `${u.carteId}|${u.slugSet}|${cleNumero(u.numero)}`;
 /** Un fournisseur qui propose DEUX adresses pour le même produit est AMBIGU : il est écarté (jamais deviné) et nommé. */
 function candidatsDuProduit(entrees) {
     const parCode = new Map();
     for (const e of entrees || []) (parCode.get(e.code) || parCode.set(e.code, []).get(e.code)).push(e);
     const candidats = [], ambigus = [];
-    for (const [code, l] of parCode) { if (new Set(l.map(e => e.unite.url)).size > 1) ambigus.push(code); else candidats.push(l[0]); }
+    // M3 : deux adresses, OU la même adresse rattachée à deux cartes / deux sets / deux numéros = ambigu (jamais deviné)
+    for (const [code, l] of parCode) { if (new Set(l.map(e => e.unite.url)).size > 1 || new Set(l.map(e => identiteUnite(e.unite))).size > 1) ambigus.push(code); else candidats.push(l[0]); }
     return { candidats, ambigus };
 }
 /** -> { action: 'telecharger', sources } | { action: 'trou', motif }. Les sources bloquées ne se téléchargent jamais. */
@@ -165,10 +170,11 @@ function planifier({ cibles, parFournisseur, ordre, le = new Date(), limite = PL
     const bloques = new Set(parFournisseur.filter(f => f.bloquee).map(f => f.code));
     const g = regrouperUnites(parFournisseur, new Set(cibles.map(c => c.idProduct)));
     const produits = [], trousDirects = [], reportes = [], comptes = { aucune: 0, une: 0, deuxPlus: 0, bloquees: 0 };
-    let ambigusN = 0;
+    let ambigusN = 0, avecAmbigu = 0;
     for (const c of cibles) {
         const { candidats, ambigus } = candidatsDuProduit(g.get(c.idProduct) || []);
         const cl = classerProduit({ candidats, ambigus }, bloques, ordre);
+        if (ambigus.length) avecAmbigu++;
         if (cl.action === 'telecharger') {
             comptes.deuxPlus++;
             // F1 : le plafond ne compte QUE ces produits (ceux qui coûtent des requêtes), dans l'ordre de popularité ; le surplus est REPORTÉ (ni trou ni visuel)
@@ -177,9 +183,12 @@ function planifier({ cibles, parFournisseur, ordre, le = new Date(), limite = PL
             continue;
         }
         if (cl.motif === 'aucune-source') comptes.aucune++; else if (cl.motif === 'une-seule-source') comptes.une++; else if (cl.motif.startsWith('source-bloquee:')) comptes.bloquees++; else ambigusN++;
-        trousDirects.push(construireTrou({ idProduct: c.idProduct, motif: cl.motif, sources: ordre, le, preuve: { candidats: candidats.map(x => x.code), ambigus, bloquees: [...bloques] } }));
+        trousDirects.push(construireTrou({ idProduct: c.idProduct, motif: cl.motif, sources: ordre, le, preuve: { candidats: candidats.map(x => x.code), ambigus, bloquees: [...bloques], interroges: ordre, dateInterrogation: le.toISOString(),
+            // M2 : le mot ne doit jamais être plus large que l'instrument — « aucune-source » ne dit PAS qu'aucune page n'existe
+            portee: `aucune unité « ajouter » dans les plans de ${ordre.join(', ')} au ${le.toISOString()} (une carte déjà imagée n'est pas une unité à ajouter ; cela ne dit pas qu'aucune page n'existe)` } }));
     }
     if (ambigusN) comptes.ambigus = ambigusN;
+    if (avecAmbigu) comptes.avecFournisseurAmbigu = avecAmbigu;
     return { produits, trousDirects, reportes, comptes };
 }
 
@@ -189,8 +198,19 @@ async function recolterUnites({ fournisseurs, db, lireReleves, arret, fichiersDe
     for (const { code, def } of fournisseurs) {
         const bloquee = Boolean(arret(def.hoteImages));
         let plan;
-        try { plan = await def.construirePlan({ db, releves: lireReleves(def), fichiers: fichiersDe ? fichiersDe(def) : undefined }); }
-        catch (e) { throw new Error(`${code} : plan en échec (${e.message}) — rien ne se conclut sur un fournisseur qui n'a pas répondu`); }
+        try {
+            let releves;
+            // I2 : un relevé absent ou illisible d'un fournisseur NON bloqué arrête le passage (la lecture LÈVE) ; un fournisseur bloqué n'est pas jugé muet (0 requête de toute façon)
+            try { releves = lireReleves(def); } catch (e) { if (!bloquee) throw e; releves = {}; }
+            plan = await def.construirePlan({ db, releves, fichiers: fichiersDe ? fichiersDe(def) : undefined });
+        } catch (e) { throw new Error(`${code} : plan en échec (${e.message}) — rien ne se conclut sur un fournisseur qui n'a pas répondu`); }
+        if (!bloquee) {
+            // I2 : « je ne sais pas » n'est jamais « aucune source » — un fournisseur muet SANS exception (0 unité, aucun set planifié, pas de résumé) arrête tout
+            const groupes = plan.resume?.parSet ?? plan.resume?.parGroupe;
+            if (!Array.isArray(groupes)) throw new Error(`${code} : plan sans résumé de sets (je ne sais pas) — rien ne se conclut`);
+            if (!groupes.some(g => g.etat === 'planifie')) throw new Error(`${code} : aucun set planifié (relevés absents ou pages refusées) — rien ne se conclut sur un fournisseur muet`);
+            if (!plan.unites?.length) throw new Error(`${code} : plan à 0 unité — rien ne se conclut sur un fournisseur muet`);
+        }
         sortie.push({ code, bloquee, unites: plan.unites || [] });
     }
     return sortie;
@@ -248,25 +268,34 @@ function choisirGagnant({ paireSources, candidats, largeurDe, ordre }) {
  *  - `ecrire` sans `paireSources` (règle incomplète) : fermé, `a-confirmer`.
  */
 async function jugerProduit({ produit, candidats, defs, jugement, octets, decider = CI.deciderVisuel, ordre }) {
-    const lus = []; let petits = 0, autres = 0, manquantes = 0;
+    const lus = []; let petits = 0, absentes = 0, autres = 0, manquantes = 0, fausses = 0;
     for (const c of candidats) {
         const j = jugement(c.unite);
         if (!j) { manquantes++; continue; }
+        if (j.statut === 'fausse-absente') { fausses++; continue; }       // I3 : 200 text/html, preuve en attente (24 h) : le produit est REPORTÉ
+        if (j.statut === 'absent') { absentes++; continue; }              // I3 : un 404 est nommé comme tel
         if (j.statut === 'trop-petit') { petits++; continue; }
         if (j.statut !== 'ok') { autres++; continue; }
         const buf = octets(c.code, c.unite);
         if (!buf) { autres++; continue; }
         lus.push({ ...c, buf, w: j.w });
     }
-    if (manquantes) return { decision: 'reporte', preuve: { manquantes } };
-    const retirees = { petits, autres };
-    if (new Set(lus.map(l => l.code)).size < 2) return { decision: 'trou', motif: petits ? 'sous-le-seuil' : 'illisible', preuve: { retirees, lues: lus.map(l => l.code) } };
+    if (manquantes || fausses) return { decision: 'reporte', preuve: { manquantes, fausseAbsence: fausses } };
+    const retirees = { petits, absentes, autres };
+    if (new Set(lus.map(l => l.code)).size < 2) return { decision: 'trou', motif: petits ? 'sous-le-seuil' : absentes ? 'absente-chez-la-source' : 'illisible', preuve: { retirees, lues: lus.map(l => l.code) } };
     // R5 : aucun scan conforme (un produit MANQUANT n'en a, par définition, aucun au même set / numéro / langue)
-    const r = await decider({ produit, candidats: lus.map(l => ({ source: l.code, buf: l.buf, tirage: tirageCandidat(defs.get(l.code), l.unite) })), scansConformes: [] });
+    const tirages = lus.map(l => tirageCandidat(defs.get(l.code), l.unite));
+    const r = await decider({ produit, candidats: lus.map((l, i) => ({ source: l.code, buf: l.buf, tirage: tirages[i] })), scansConformes: [] });
     if (r.decision === 'ecrire') {
         let g;
         try { g = choisirGagnant({ paireSources: r.preuve?.paireSources, candidats: lus, largeurDe: u => lus.find(l => l.unite === u)?.w, ordre }); }
         catch (e) { return { decision: 'a-confirmer', motif: 'a-confirmer', preuve: { ...r.preuve, retirees, erreur: e.message } }; }
+        // B1 : le contrôle d'image prouve que les images sont le même DESSIN, pas que les fournisseurs ont rattaché le produit à la même FICHE. Les unités de la paire (et de la tierce) doivent désigner
+        // le même (carteId, set, numéro) ; sinon rien n'est écrit. Les noms internes « cN » indexent les candidats ADMIS (même filtre que la règle : CI.memeTirage).
+        const admis = lus.filter((l, i) => CI.memeTirage(produit, tirages[i]));
+        const noeuds = [...r.preuve.paireSources.map(code => lus.find(l => l.code === code)), ...(r.preuve.tierce || []).map(n => (/^c(\d+)$/.exec(n) ? admis[Number(/^c(\d+)$/.exec(n)[1])] : null)).filter(Boolean)];
+        const identites = [...new Set(noeuds.map(n => identiteUnite(n.unite)))];
+        if (identites.length > 1) return { decision: 'a-confirmer', motif: 'a-confirmer', preuve: { ...r.preuve, retirees, cause: 'les fournisseurs de la paire désignent des cartes différentes (carteId / set / numéro)', identites } };
         return { decision: 'ecrire', gagnant: g, preuve: { ...r.preuve, retirees } };
     }
     if (r.decision === 'a-confirmer') return { decision: 'a-confirmer', motif: 'a-confirmer', preuve: { ...r.preuve, retirees } };
@@ -278,22 +307,29 @@ async function jugerProduit({ produit, candidats, defs, jugement, octets, decide
  * Un produit couvert par une unité gagnante (même carte, même numéro) n'a PAS de trou.
  */
 function assembler({ verdicts, trousDirects, sansOffre, ordre, le }) {
-    const gagnants = {}, parCle = new Map();
-    for (const v of verdicts) {
-        if (v.decision !== 'ecrire') continue;
-        const u = v.gagnant.unite, cle = `${v.gagnant.code}|${u.carteId}|${u.slugSet}|${u.numero}|${u.url}`;
-        const deja = parCle.get(cle);
-        if (deja) { for (const id of u.produits || []) if (!deja.produits.includes(id)) deja.produits.push(id); continue; }
-        const copie = { ...u, produits: [...(u.produits || [])] };
-        parCle.set(cle, copie);
-        (gagnants[v.gagnant.code] ||= []).push(copie);
+    const cleU = (code, u) => `${code}|${u.carteId}|${u.slugSet}|${u.numero}|${u.url}`;
+    const paireDe = v => JSON.stringify([...(v.preuve?.paireSources || [])].sort());
+    // I1 : une unité gagnante emporte TOUS ses produits ; elle n'est écrite que si chacun est décidé `ecrire` par cette même paire de sources. Sinon elle n'est PAS écrite (le 0 faux n'a pas été appliqué aux autres)
+    const groupes = new Map();
+    for (const v of verdicts) if (v.decision === 'ecrire') { const k = cleU(v.gagnant.code, v.gagnant.unite); (groupes.get(k) || groupes.set(k, []).get(k)).push(v); }
+    const refus = new Map(), gagnants = {};
+    for (const vs of groupes.values()) {
+        const ids = new Set(vs.map(x => x.idProduct));
+        const hors = [...new Set(vs.flatMap(x => x.gagnant.unite.produits || []))].filter(id => !ids.has(id));
+        if (hors.length || new Set(vs.map(paireDe)).size > 1) {
+            const cause = hors.length ? `unité partagée avec un produit refusé ou hors population (${hors.join(', ')}) : le visuel serait posé sur eux sans avoir été jugé pour eux` : 'unité partagée entre des décisions prises par des paires de sources différentes';
+            for (const v of vs) refus.set(v.idProduct, cause);
+            continue;
+        }
+        const u = vs[0].gagnant.unite, copie = { ...u, produits: [...new Set(vs.flatMap(x => x.gagnant.unite.produits || []))] };
+        (gagnants[vs[0].gagnant.code] ||= []).push(copie);
     }
-    const couverts = new Set([...parCle.values()].flatMap(u => u.produits));
-    const trous = [...trousDirects.filter(t => !couverts.has(t.idProduct))];
+    const trous = [...trousDirects];
     const reportes = [];
     for (const v of verdicts) {
         if (v.decision === 'reporte') { reportes.push(v.idProduct); continue; }
-        if (v.decision === 'ecrire' || couverts.has(v.idProduct)) continue;
+        if (v.decision === 'ecrire' && !refus.has(v.idProduct)) continue;
+        if (v.decision === 'ecrire') { trous.push(construireTrou({ idProduct: v.idProduct, motif: 'a-confirmer', sources: ordre, preuve: { ...(v.preuve ?? {}), cause: refus.get(v.idProduct) }, le })); continue; }
         trous.push(construireTrou({ idProduct: v.idProduct, motif: v.motif, sources: ordre, preuve: v.preuve ?? {}, le }));
     }
     for (const p of sansOffre) trous.push(construireTrou({ idProduct: p.idProduct, motif: 'sans-offre', sources: [], preuve: { raison: 'aucune offre en cours au guide : non cherché' }, le }));
@@ -336,6 +372,11 @@ function regenererEtat({ lister, lancer }) {
     const r = lancer();
     if (!r || r.error || r.status !== 0) throw new Error(`le compteur compteurs-abc.js a échoué (${r?.error ? r.error.message : `code ${r?.status ?? 'aucun'}${r?.signal ? `, signal ${r.signal}` : ''}`}) : aucun passage`);
     return choisirNouvelEtat(avant, lister());
+}
+
+/** M1 : « absent » seulement sur ENOENT ; toute autre erreur d'accès LÈVE (et la garde refuse). */
+function existeStrict(p, stat = fs.statSync) {
+    try { stat(p); return true; } catch (e) { if (e && e.code === 'ENOENT') return false; throw e; }
 }
 
 // ── 7. Les gardes avant tout passage (R8), écrites par ce qu'elles AUTORISENT ─────────────────────────────────────────────────
@@ -408,4 +449,4 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
 
 module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, reduireNumero, tirageProduit, tirageCandidat,
     PLAFOND_PAR_DEFAUT, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
-    choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
+    existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
