@@ -296,7 +296,7 @@ async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, dep
     const P = restreindrePlan(Ptout, seulement, lignes);
     const index = lireJson(f.index, {});
     const seuil = largeurMinDe(site);
-    const manquantes = [], aJoindre = [];
+    const manquantes = [], aJoindre = [], sousLeSeuil = [];
     for (const p of P.plan) {
         const url = urlImage(p, site);
         const e = url ? index[url] : null;
@@ -306,9 +306,10 @@ async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, dep
         if (deja?.etat === 'retire') continue;
         const meta = await sharp(fs.readFileSync(path.join(dossier, 'images', e.fichier))).metadata();
         if (meta.width && meta.width >= seuil) aJoindre.push(p);
+        else { sousLeSeuil.push({ numero: p.numero, carteId: p.carteId, idProduct: p.idProduct ?? null, largeur: meta.width ?? null, hauteur: meta.height ?? null, seuil }); log(`⚠️ image écartée, sous le seuil : unité ${p.numero} (carteId ${p.carteId}${p.idProduct != null ? `, produit ${p.idProduct}` : ''}) · ${meta.width ?? '?'}×${meta.height ?? '?'} px · seuil ${seuil} px — non jointe`); }
     }
     if (manquantes.length) { log(`❌ ${manquantes.length} image(s) prouvée(s) hors du cache (${manquantes.slice(0, 8).join(', ')}…) : télécharger d'abord — rien n'est écrit`); return { code: 2, etat: 'refuse-cache-incomplet', manquantes }; }
-    if (attendu !== aJoindre.length) { log(`❌ --attendu=${attendu} mais ${aJoindre.length} image(s) à joindre (prouvées ${P.plan.length}) — rien n'est écrit`); return { code: 2, etat: 'refuse-attendu', attendu, reel: aJoindre.length, prouves: P.plan.length }; }
+    if (attendu !== aJoindre.length) { log(`❌ --attendu=${attendu} mais ${aJoindre.length} image(s) à joindre (prouvées ${P.plan.length}, sous le seuil ${sousLeSeuil.length}) — rien n'est écrit`); return { code: 2, etat: 'refuse-attendu', attendu, reel: aJoindre.length, prouves: P.plan.length, sousLeSeuil }; }
     // la base vue par `collecterSet` : `tpc_fiches` et `collecte_images_etat` restent LOCAUX (le cache disque) ; tout le reste est la vraie base
     const mixte = { collection: local.collection, command: c => reelle.command(c) };
     const Mm = { ...M, Carte: new Proxy(M.Carte, { get: (t, k) => (k === 'db' ? { db: mixte } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }) };

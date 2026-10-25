@@ -235,6 +235,23 @@ const ligneBanc = (site, slug) => { const x = ligneTpc(site, slug); return x && 
     const cd = L.clientDisque(racine, {});
     verifier('client disque : une page ou une image hors cache lève (aucun réseau)', [(await essayer(() => cd.page('/x'))).e?.includes('hors cache'), (await essayer(() => cd.image('https://x/y.png'))).e?.includes('hors cache')], [true, true]);
 
+    // ── 5 bis. une image prouvée SOUS LE SEUIL n'est jamais écartée en silence : une ligne de journal par image, unité + taille + seuil ──
+    {
+        const petit = await sharp({ create: { width: 162, height: 226, channels: 3, background: { r: 10, g: 90, b: 200 } } }).png().toBuffer();
+        const rp = tmp();
+        fs.cpSync(racine, rp, { recursive: true });
+        const imgs = path.join(rp, fs.readdirSync(rp).find(n => fs.existsSync(path.join(rp, n, 'images'))) || '.', 'images');
+        const cible = fs.existsSync(imgs) ? imgs : path.join(rp, 'images');
+        for (const n of fs.readdirSync(cible).filter(n => !/\.json$/i.test(n))) fs.writeFileSync(path.join(cible, n), petit);
+        const lignes = [];
+        const depAvant = depots.length;
+        const Bp = fausseBase(); semer(Bp);   // base neuve : celle du cas précédent a déjà reçu les 2 jointures
+        const rr = await ec(Bp, rp, 2,{ log: m => lignes.push(String(m)) });
+        const ecartees =lignes.filter(l => /sous le seuil/.test(l) && /162×226/.test(l));
+        verifier('image prouvée sous le seuil : refus --attendu, ZÉRO dépôt, annonce « sous le seuil 2 »', [rr.code, rr.etat, rr.reel, rr.sousLeSeuil?.length, depots.length - depAvant, lignes.some(l => /prouvées 2, sous le seuil 2/.test(l))], [2, 'refuse-attendu', 0, 2, 0, true]);
+        verifier('image sous le seuil : UNE ligne de journal par image (numéro, taille 162×226, seuil)', [ecartees.length, ecartees.some(l => /SV-P001/.test(l)), ecartees.some(l => /S-P162/.test(l)), ecartees.every(l => /seuil \d+/.test(l))], [2, true, true, true]);
+    }
+
     // ── 6. la ligne de commande : écrite par ce qu'elle autorise ──
     {
         const { spawnSync } = require('child_process');
