@@ -52,7 +52,7 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const { creerConstructeur } = require('../chargeur/version'); const bm = creerConstructeur({ marquages: true });
         for (const d of VIS) bm.entree(d);
         const brute = bm.finir();                                                  // gelée : on en installe des copies gelées
-        VERSION_SANS = Object.freeze({ ...brute });
+        VERSION_SANS = Object.freeze({ ...brute, empruntDe: undefined });         // INTEGRATION : depuis MARQUE-EMPRUNT le constructeur expose `empruntDe` ; « sans la marque » = SANS la fonction (la version d'un autre producteur), pas une colonne absente
         VERSION_AVEC = Object.freeze({ ...brute, empruntDe: () => false });        // le point de branchement du lot MARQUE-EMPRUNT (aucun emprunt dans cette archive de banc) ; sans lui la règle se tait (banc 3h)
         require('../chargeur/etat').installer(VERSION_AVEC);
     }
