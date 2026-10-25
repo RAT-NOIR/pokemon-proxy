@@ -31,6 +31,16 @@ const DECISIONS = {
         { idProduct: 698734, carteId: 32017, code: 'DP3p', idExpansion: 4311, slugSet: 'Palkia-LVX-Constructed-Standard-Deck', voie: 'impression-du-tirage', tirage: 'jp', expansionImpression: 'Palkia LV.X Constructed Standard Deck', numeroFiche: null, ajoutSet: true },
         { idProduct: 859904, carteId: 328069, code: 'SV-P/TH', idExpansion: 6128, slugSet: 'Scarlet-Violet-Thai-Promos', voie: 'setlist', tirage: 'th', numeroFiche: null, ajoutSet: true },
     ],
+    // API-52 L3 (coordinateur, 2026-10-25) : SEULEMENT les produits dont DEUX sources concordent (Cardmarket + une seconde). Exclus : 571909 Entei (tour 1 : TCGdex basep-34 est « Wizards Black Star Promos 34 », le produit est en Unnumbered-Promos : les deux sources ne concordent pas sur le SET) ; « à instruire : une seule source » : 877355 Jirachi (carte -892515)
+    // et 653505 Sonia (carte 246287), Cardmarket seul. `preuve` est la référence de la décision (jamais écrite sur la ligne : planifier() ne la lit pas). Aucune appartenance de set (ajoutSet false) : les sets sont déjà portés par les cartes.
+    '2026-10-25': [
+        { idProduct: 311408, carteId: 214539, code: 'XYPR', idExpansion: 1612, slugSet: 'XY-Black-Star-Promos', voie: 'impression-numero', tirage: 'intl', prefixeNumero: 'XY', numeroFiche: 'XY177a', ajoutSet: false,
+            preuve: { sources: ['Cardmarket (n°177a, Karen, slug Karen-V2-XYPRXY177a)', 'TCGdex xyp-XY177a (Karen, Supporter), lu le 2026-10-25'], references: ['https://api.tcgdex.net/v2/en/cards/xyp-XY177a', 'page /card/karen-xy-promos-xyp-xy177a/ (sitemap pkmn_card-sitemap11.xml, en cache)'] } },
+        { idProduct: 449878, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', metacarteAbsenteDeLaCarte: true, numeroFiche: '153a', ajoutSet: false,
+            preuve: { sources: ['Cardmarket (n°153a, slug Lusamine-V3-CIN153a)', 'pkmncards en_US-SM5-153a-lusamine (sitemap en cache pkmn_card-sitemap8.xml l.2650-2653, lastmod 2024-03-23)'], references: ['page /card/lusamine-ultra-prism-upr-153a/ (sitemap pkmn_card-sitemap8.xml, en cache)', 'image /wp-content/uploads/en_US-SM5-153a-lusamine_1st-yaa.jpg (même entrée du sitemap)'] } },
+        { idProduct: 449883, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', metacarteAbsenteDeLaCarte: true, numeroFiche: '153a', ajoutSet: false,
+            preuve: { sources: ['Cardmarket (n°153a, slug Lusamine-V4-CIN153a)', 'pkmncards en_US-SM5-153a-lusamine (sitemap en cache pkmn_card-sitemap8.xml l.2650-2653, lastmod 2024-03-23)'], references: ['page /card/lusamine-ultra-prism-upr-153a/ (sitemap pkmn_card-sitemap8.xml, en cache)', 'image /wp-content/uploads/en_US-SM5-153a-lusamine_1st-yaa.jpg (même entrée du sitemap)'] } },
+    ],
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */

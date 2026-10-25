@@ -63,6 +63,10 @@ const TABLE_TPC = Object.freeze([
       mesure: "189 cartes chez TPC Asie id pour SV10s « Booster Pack \"Kehadiran Juara\" », 51 trous sur 51 produits (2026-10-07)" },
     { slug: "XY-Beginning-Set", site: "pokemon-card-com", langue: "ja", code: "HXY", tirage: "jp", trous: 49, cartes: 51,
       mesure: "51 cartes chez pokemon-card.com pour pg=HXY, 49 trous sur 49 produits (2026-10-07)" },
+    // API-52 L5 (2026-10-25) : Oshawott 011/037 (569867, 569868), en basse définition (artofpkm 162 px). MESURÉE sur le clone local PTCG-database (data_jp/HSm : 19 fiches, dont 27049 jpg et 27050 gif au n°011/037,
+    // « ミジュマル », attaques たいあたり | みずでっぽう), zéro requête ; 52 produits en base pour 2 trous. Le total de 19 se confrontera à la liste réelle de pokemon-card.com (pg=HSm) au premier `--plan` en ligne.
+    { slug: "Beginning-Set", site: "pokemon-card-com", langue: "ja", code: "HSm", tirage: "jp", trous: 2, cartes: 19,
+      mesure: "19 cartes (clone local PTCG-database data_jp/HSm, fiches 27049-27050 au n°011/037) pour pg=HSm, 2 trous sur 52 produits (2026-10-25)" },
     { slug: "Beginning-Set-Pikachu", site: "pokemon-card-com", langue: "ja", code: "HSP", tirage: "jp", trous: 42, cartes: 19,
       mesure: "19 cartes chez pokemon-card.com pour pg=HSP, 42 trous sur 42 produits (2026-10-07)" },
     { slug: "Battle-Strength-Decks", site: "pokemon-card-com", langue: "ja", code: "BK", tirage: "jp", trous: 42, cartes: 11,

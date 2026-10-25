@@ -79,6 +79,27 @@ verifier('impression-du-tirage : le produit porte un numéro → refus (ce n\'es
 verifier('une voie inconnue → refus nommé (liste fermée)', (() => { const r = prouver({ entree: { ...E5, voie: 'devine' }, produit: pPal, carte: pal, ...ctx([pal]) }); return [r.ok, /voie/.test(r.refus.join())]; })(), [false, true]);
 verifier('les voies sont une liste fermée de quatre', VOIES, ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage']);
 
+// ── API-52 L3 : deux déclarations FERMÉES, par entrée de décision, jamais par défaut
+// (1) `prefixeNumero` : la carte écrit son numéro AVEC le préfixe du set (« XY177a »), Cardmarket le sien SANS (« 177a ») — comme `prefixe` de la voie « impression-equivalente », le préfixe est DÉCLARÉ.
+const karen = carte(80, 'Karen', [], [imp('intl', 'XY Black Star Promos', 'XY177'), imp('intl', 'Yellow A Alternate cards', 'XY177a')], { liens: { idProduct: [1], idMetacards: [223881] } });
+const pKaren = produit(81, 'Karen', '177a', 223881);
+const EK = { idProduct: 81, carteId: 80, voie: 'impression-numero', tirage: 'intl' };
+verifier('prefixeNumero : sans la déclaration, « 177a » ne désigne pas « XY177a » (refus, rien n\'est deviné)', prouver({ entree: EK, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
+verifier('prefixeNumero : déclaré « XY », « 177a » = « XY177a » et la lettre compte (XY177 ≠ XY177a) → prouvé', [prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: { ...karen, impressions: [imp('intl', 'XY Black Star Promos', 'XY177')] }, ...ctx([karen]) }).ok], [true, false]);
+verifier('prefixeNumero : un mauvais préfixe (« SM ») refuse', prouver({ entree: { ...EK, prefixeNumero: 'SM' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
+verifier('prefixeNumero : une homonyme qui déclare AUSSI XY177a → deux candidates, refus (la concurrence se juge avec le même préfixe)', (() => {
+    const autre = carte(82, 'Karen', [], [imp('intl', 'Yellow A Alternate cards', 'XY177a')], { liens: { idProduct: [2], idMetacards: [223881] } });
+    return prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: karen, ...ctx([karen, autre]) }).ok;
+})(), false);
+// (2) `metacarteAbsenteDeLaCarte` : la carte ne porte AUCUNE métacarte (rien à contredire) ; le témoin parle alors par les deux autres éléments et la seconde source de la décision. Une carte qui en porte une, fausse, refuse toujours.
+const lusa = carte(90, 'Lusamine', [], [imp('intl', 'Yellow A Alternate cards', '153a', '156')], { liens: { idProduct: [1], idMetacards: [] } });
+const pLusa = produit(91, 'Lusamine', '153a', 234656);
+const EL = { idProduct: 91, carteId: 90, voie: 'impression-numero', tirage: 'intl' };
+verifier('metacarteAbsenteDeLaCarte : sans la déclaration, la carte sans métacarte refuse (le témoin ne peut pas parler)', (() => { const r = prouver({ entree: EL, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, /métacarte/.test(r.refus.join())]; })(), [false, true]);
+verifier('metacarteAbsenteDeLaCarte : déclarée et la carte n\'en porte aucune → prouvé, le témoin DIT qu\'il n\'a pas parlé', (() => { const r = prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, r.temoins.some(t => /aucune métacarte/.test(t))]; })(), [true, true]);
+verifier('metacarteAbsenteDeLaCarte : déclarée mais la carte porte UNE AUTRE métacarte → refus (la déclaration ne lève pas une contradiction)', prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: { ...lusa, liens: { idProduct: [1], idMetacards: [999] } }, ...ctx([lusa]) }).ok, false);
+verifier('metacarteAbsenteDeLaCarte : n\'ouvre que la métacarte — un nom ou des attaques faux refusent toujours', prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: produit(91, 'Gladion', '153a', 234656), carte: lusa, ...ctx([lusa]) }).ok, false);
+
 // ═════ TOUR 1 — les trois mutants qui survivaient ═════
 // (a) LE TÉMOIN DU NOM DE PRODUCTION : par construction il ne contredit jamais une carte que la clé vient de désigner (mêmes clés de nom) ; il ne se prouve donc qu'en
 //     l'observant : `prouver` reçoit la fonction (par défaut la fonction de PRODUCTION, vérifiée par identité) et un espion voit ce qu'on lui demande.
@@ -128,6 +149,11 @@ verifier('planifier : un produit qui a DÉJÀ une ligne (autre carte) → refus 
 verifier('planifier : un produit absent du catalogue de l\'expansion → refus', (() => { const p = planifier({ entrees: [{ ...E1, idProduct: 404, idExpansion: 9, slugSet: 'Le-Set', numeroFiche: null }], lecture }); return [p.lignes.length, p.refus.length]; })(), [0, 1]);
 verifier('--attendu : le bon nombre passe, un autre ou l\'absence refuse', [verifierAttendu(p1, 1).ok, verifierAttendu(p1, 2).ok, verifierAttendu(p1, undefined).ok], [true, false, false]);
 verifier('la décision du jour est une liste fermée de 8 produits distincts', (() => { const d = DECISIONS['2026-10-17']; return [d.length, new Set(d.map(x => x.idProduct)).size]; })(), [8, 8]);
+
+// ── API-52 L3 (décision 2026-10-25) : seulement les produits à DEUX sources concordantes ; Jirachi 877355 et Sonia 653505 (Cardmarket seul) en sont EXCLUS
+verifier('décision 2026-10-25 : liste fermée de 3 produits exactement (Karen, 2 Lusamine) ; Jirachi, Sonia (une seule source) et Entei (les deux sources ne concordent pas sur le SET) exclus', (() => { const d = DECISIONS['2026-10-25'] || []; return [d.map(x => [x.idProduct, x.carteId]), new Set(d.map(x => x.idProduct)).size]; })(), [[[311408, 214539], [449878, 225372], [449883, 225372]], 3]);
+verifier('décision 2026-10-25 : chaque entrée porte sa preuve (au moins 2 sources, références) et une voie connue', (() => { const { VOIES } = require('./collecte-cartes/fiches-prouvees'); return (DECISIONS['2026-10-25'] || []).map(x => [Array.isArray(x.preuve?.sources) && x.preuve.sources.length >= 2, Array.isArray(x.preuve?.references) && x.preuve.references.every(r => typeof r === 'string' && r.length > 10), VOIES.includes(x.voie)]); })(), [[true, true, true], [true, true, true], [true, true, true]]);
+verifier('décision 2026-10-25 : les entrées passent le planificateur sans champ inconnu (la preuve ne fuit pas dans la ligne écrite)', (() => { const e = DECISIONS['2026-10-25'] || []; if (!e.length) return 'vide'; const x = e[0]; const lec = { cartes: [{ _id: x.carteId, nomEn: 'K', sets: [], liens: {} }], produits: new Map([[x.idExpansion, [{ idProduct: x.idProduct, name: 'Karen', numero: '177a', idMetacard: 1 }]]]), existants: new Map(), etats: new Map() }; const p = planifier({ entrees: [x], lecture: lec }); return p.lignes.every(l => !('preuve_sources' in l) && l.preuve === 'fiche-prouvee') ? 'ok' : 'fuite'; })(), 'ok');
 
 (async () => {
     const banc = await ouvrirBanc();

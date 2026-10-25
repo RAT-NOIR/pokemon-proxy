@@ -20,6 +20,7 @@ const verifier = (nom, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
     if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
 };
+verifier('API-52 L4 : le lot « autres » compte les 3 produits des scans « a » (311408, 449878, 449883) en plus des 12 d\'avant, sans doublon, liste gelée, SANS Guzma 449623 (tour 1)', [C.CIBLES_AUTRES.length, new Set(C.CIBLES_AUTRES).size, [311408, 449878, 449883].every(i => C.CIBLES_AUTRES.includes(i)), C.CIBLES_AUTRES.includes(449623), Object.isFrozen(C.CIBLES_AUTRES)], [15, 15, true, false, true]);
 const silencieux = () => { const l = console.log, w = console.warn, e = console.error; console.log = console.warn = console.error = () => { }; return () => { console.log = l; console.warn = w; console.error = e; }; };
 
 function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {

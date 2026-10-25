@@ -41,7 +41,17 @@ const MUTANTS = [
     { nom: 'correction 2 : le nomAffichage ne prime plus sur nomEn', fichier: M, de: 'const ids = parAffichage.length ? parAffichage : (etat.setsParNom?.get(o.nomSet) || []);', vers: 'const ids = etat.setsParNom?.get(o.nomSet) || [];' },
     { nom: 'correction 2 : tout set sans substitut dérive de son origine (PP, BA aussi)', fichier: M, de: '!aSubstitut && derivableDeLOrigine(set, idProduct);', vers: '!aSubstitut && true;' },
     // ── PHASE 3b (T4) : Southeast-Asia-Promos borné à 3 produits
-    { nom: 'SEA : la liste fermée admet tout produit du set', fichier: M, de: 'setBorne(s) && SETS_BORNES[s].includes(idProduct);', vers: 'setBorne(s);' },
+    { nom: 'SEA : la liste fermée admet tout produit du set', fichier: M, de: 'SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)) || origineExplicite', vers: 'SETS_BORNES, s)) || origineExplicite' },
+    // ── API-52 L1 : origine explicite
+    { nom: 'L1 : un produit de CLK/CLF hors liste est admis', fichier: M, de: '|| origineExplicite(s, idProduct) !== null;', vers: '|| setExplicite(s);' },
+    { nom: 'L1 : l\'origine explicite se dérive aussi du detail (derivableDeLOrigine)', fichier: M, de: '(Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)));', vers: '(estBorne(s, idProduct)));' },
+    { nom: 'L1 : la carte de la ligne n\'est plus comparée à celle de l\'origine', fichier: M, de: 'if (l.carteId !== o.carteId) return', vers: 'if (false) return' },
+    { nom: 'L1 : plusieurs entrées d\'origine acceptées', fichier: M, de: 'if (trouvees.length !== 1) return { refus: `origine explicite', vers: 'if (trouvees.length < 1) return { refus: `origine explicite' },
+    { nom: 'L1 : la clé d\'origine n\'est plus exigée', fichier: M, de: 'e.set === o.setOrigine && e.cleR2 === o.cleR2 && ', vers: 'e.set === o.setOrigine && ' },
+    { nom: 'L1 : le numéro d\'origine n\'est plus exigé', fichier: M, de: ' && cleNumero(e.numero) === cle);\n    if (trouvees.length !== 1) return { refus: `origine explicite', vers: ');\n    if (trouvees.length !== 1) return { refus: `origine explicite' },
+    { nom: 'L1 : la langue est de nouveau « en » en dur', fichier: M, de: 'langue: g.sub.langue ?? \'en\'', vers: "langue: 'en'" },
+    { nom: 'L1 : un set à origine explicite n\'est plus exigé en base', fichier: M, de: ', ...Object.keys(ORIGINES_EXPLICITES)].filter(s => !ids.has(s))', vers: '].filter(s => !ids.has(s))' },
+    { nom: 'L1 : le frère hors liste ne bloque plus un set à origine explicite', fichier: M, de: 'if (setBorne(g.set)) {', vers: 'if (Object.prototype.hasOwnProperty.call(SETS_BORNES, g.set)) {' },
     { nom: 'SEA : le set entier entre dans le périmètre', fichier: M, de: '...SETS_TRICK_OR_TRADE]);\n\n// PHASE 3b', vers: "...SETS_TRICK_OR_TRADE, 'Southeast-Asia-Promos']);\n\n// PHASE 3b" },
     { nom: 'SEA : la liste fermée porte un 8e produit', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687, 819263, 901075])' },
     { nom: 'SEA : la liste fermée perd un frère', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687])' },
@@ -58,7 +68,7 @@ const MUTANTS = [
     { nom: 'D4.2 : le retrait ne compare plus la sélection du manifeste', fichier: S, de: 'if (ECRIRE && !E.memeSelection(m, SELECTION)) {', vers: 'if (false) {' },
     // (mutant ÉQUIVALENT écarté : `dansLeChamp` sans `!estWCD` — un slug WCD n'est ni dans PERIMETRE ni dans SETS_BORNES ; la garde nommée est une ceinture de plus, testée par estWCD / refusWCD plus haut)
     { nom: 'SEA : une ligne hors liste est comptée hors périmètre au lieu de hors liste', fichier: M, de: 'if (setBorne(set)) plan.horsListe++; else plan.horsPerimetre++;', vers: 'plan.horsPerimetre++;' },
-    { nom: 'SEA : la dérivation depuis l\'origine ne vaut plus pour la liste fermée', fichier: M, de: '(SETS_TRICK_OR_TRADE.includes(s) || estBorne(s, idProduct));', vers: 'SETS_TRICK_OR_TRADE.includes(s);' },
+    { nom: 'SEA : la dérivation depuis l\'origine ne vaut plus pour la liste fermée', fichier: M, de: '(SETS_TRICK_OR_TRADE.includes(s) || (Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)));', vers: 'SETS_TRICK_OR_TRADE.includes(s);' },
     { nom: 'SEA : les produits hors champ ne sont plus nommés', fichier: M, de: '.filter(id => !dansLeChamp(a.set, id))', vers: '.filter(id => false)' },
     { nom: 'SEA : verifierBornes ne lève plus', fichier: M, de: 'if (absents.length) throw new Error(`sets à liste fermée', vers: 'if (false) throw new Error(`sets à liste fermée' },
     { nom: 'SEA : le script ne lit plus les sets à liste fermée', fichier: S, de: "{ _id: { $in: [...E.SETS_LUS] } }", vers: "{ _id: { $in: [...E.PERIMETRE] } }" },

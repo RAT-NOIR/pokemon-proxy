@@ -61,7 +61,7 @@ if (process.argv.includes('--figer')) {
     verifier('le plan de trois lignes existantes (SV-P, MA5, SM-P à numéros préfixés) est identique, octet pour octet, à celui d\'avant le lot', JSON.stringify(rejouerLigneSimple(TP_REJEU)), JSON.stringify(JSON.parse(fs.readFileSync(GOLDEN, 'utf8'))));
     verifier('   la ligne à numéros préfixés : SM001 et SM002 prouvés, « a005 » face à une fiche « 005 » = trou', [rejouerLigneSimple(TP_REJEU).smp.plan.map(x => x.numero), rejouerLigneSimple(TP_REJEU).smp.restes.map(r => `${r.numero}:${r.motif}`)], [['SM001', 'SM002'], ['a005:absente-de-la-source']]);
     const sans = S.TABLE_TPC.filter(l => !l.listes);
-    verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'Tag-Team-Collection', 'Traditional-Chinese-Products'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
+    verifier('les 71 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'Tag-Team-Collection', 'Traditional-Chinese-Products'].includes(l.slug)).length, sans.length >= 71 ? 'ok' : sans.length], [71, 'ok']);
     verifier('listesDe(ligne existante) = UNE liste, sans préfixe, au code et au compte de la ligne',
         S.TABLE_TPC.filter(l => !l.listes).every(l => { const x = S.listesDe(l); return x.length === 1 && x[0].prefixe === null && x[0].code === l.code && x[0].cartes === l.cartes; }), true);
 
