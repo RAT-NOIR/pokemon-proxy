@@ -37,8 +37,8 @@ const CIBLES_PKMCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couvertur
 // Les 12 trous anglais que la mesure du dépôt PTCG-database (S7\PTCGDB, PTCGDB-MESURE-report.md : « en plus de PKMNCARDS ») a trouvés au-delà des quatre lots ; décision du testeur du 17/10 soir. Les adresses d'image
 // ne viennent JAMAIS de ce dépôt : seul le sitemap en cache fait foi, et chaque produit est apparié set + numéro + nom comme les autres (les douteux sont sautés).
 const CIBLES_AUTRES = Object.freeze([297254, 297255, 297257, 297258, 297282, 297283, 297288, 297289, 582672, 909509, 909510, 909511,
-    // API-52 L4 (coordinateur, 2026-10-25) : les vrais scans « a » — 449623 Guzma BUS 115a, 311408 Karen XY177a, 449878 et 449883 Lusamine UPR 153a
-    449623, 311408, 449878, 449883]);
+    // API-52 L4 (coordinateur, 2026-10-25) : les vrais scans « a » — 311408 Karen XY177a (449623 Guzma sorti au tour 1 : tampon Championships seul), 449878 et 449883 Lusamine UPR 153a
+    311408, 449878, 449883]);
 const lireCiblesAutres = () => ({ ids: [...CIBLES_AUTRES], parProduit: new Map() });
 const CACHE_POKEMONCOM = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\pokemoncom-cache';
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
@@ -311,7 +311,7 @@ async function planifierDepuisBase(db, { lot, entrees, refusSite = null, cibles 
     const sets = new Map((await db.collection('sets').find({ _id: { $in: slugSets } }, { projection: { tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s.tirage ?? s.region]));
     const occidentales = lignes.filter(l => (sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId));
     const horsTirage = lignes.filter(l => !((sets.get(l.slugSet) ?? 'intl') === 'intl' && parId.has(l.carteId))).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, motif: parId.has(l.carteId) ? 'tirage-non-occidental' : 'carte-absente' }));
-    const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? P.numeroExplicite(l.idProduct) ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
+    const trous = occidentales.map(l => ({ idProduct: l.idProduct, carteId: l.carteId, slugSet: l.slugSet, numeroFiche: l.numeroFiche ?? null, slugProduit: l.slug ?? null, carte: parId.get(l.carteId) }));
     // (BASSE-DEF) la règle commune lit le DOCUMENT `images` de chaque entrée actuelle : ceux des cartes du lot, dans les sets du lot (de préférence « ok »)
     const docsImages = await db.collection('images').find({ carteId: { $in: [...parId.keys()] }, set: { $in: slugSets } }).toArray();
     const documents = documentsDeLaListe([...docsImages.filter(d => d.etat !== 'ok'), ...docsImages.filter(d => d.etat === 'ok')]);

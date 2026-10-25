@@ -186,29 +186,24 @@ verifier('la ligne 30th Celebration reste lue par le lot pkmcom (lots supplémen
 r = app([trou(582672, 100, 'Cosmic-Eclipse', '143a', 'Togepi-Cleffa-Igglybuff-GX-V2', 'Togepi & Cleffa & Igglybuff-GX')], { lot: 'kits' });
 verifier('un set du lot « autres » n\'est pas offert aux autres lots', motifs(r), ['582672:set-hors-table']);
 
-// 5s. API-52 L4 (25/10) : les vrais scans « a » (marque « Yellow A ») de Guzma BUS 115a, Karen XY177a, Lusamine UPR 153a — adresses du sitemap en cache, set + numéro + nom
-const LOC_A = { guzma: card('guzma-burning-shadows-bus-115a'), karen: card('karen-xy-promos-xyp-xy177a'), lusa: card('lusamine-ultra-prism-upr-153a') };
-const IMG_A = { guzma: UP('en_US-SM3-115a-guzma-yaa.jpg'), karen: UP('en_US-Promo_XY-XY177a-karen-yaa.jpg'), lusa: UP('en_US-SM5-153a-lusamine_1st-yaa.jpg') };
+// 5s. API-52 L4 (25/10, tour 1) : les vrais scans « a » (marque « Yellow A ») de Karen XY177a et Lusamine UPR 153a — adresses du sitemap en cache, set + numéro + nom. Guzma 449623 (BUS 115a) en est SORTI : le scan ne porte que le tampon Championships, le produit est Staff + Championship.
+const LOC_A = { karen: card('karen-xy-promos-xyp-xy177a'), lusa: card('lusamine-ultra-prism-upr-153a') };
+const IMG_A = { karen: UP('en_US-Promo_XY-XY177a-karen-yaa.jpg'), lusa: UP('en_US-SM5-153a-lusamine_1st-yaa.jpg') };
 const idxA = P.indexer(Object.keys(LOC_A).map(k => ({ loc: LOC_A[k], img: IMG_A[k] }))).lues;
 const appA = (trous, o = {}) => P.apparier({ trous, entrees: idxA, lot: 'autres', documents: o.documents ?? docsDe(trous.flatMap(t => t.carte.images || [])) });
 const servie = (set, numero) => ({ set, source: 'tcgdex', numero, cleR2: `t/${set}/${numero}.webp`, langue: 'en', w: 600 });
-let ra = appA([trou(311408, 214539, 'XY-Black-Star-Promos', 'XY177a', 'Karen-V2-XYPRXY177a', 'Karen', [servie('XY-Black-Star-Promos', 'XY177')]), trou(449878, 225372, 'Ultra-Prism', '153a', 'Lusamine-V3-CIN153a', 'Lusamine', [servie('Ultra-Prism', '153')]), trou(449883, 225372, 'Ultra-Prism', '153a', 'Lusamine-V4-CIN153a', 'Lusamine', [servie('Ultra-Prism', '153')]), trou(449623, 223420, 'Burning-Shadows', '115a', 'Guzma-V2-BUS115a', 'Guzma', [servie('Burning-Shadows', '115')])]);
-verifier('autres (API-52) : Karen XY177a, Lusamine 153a (V3 et V4 partagent UNE fiche) et Guzma 115a -> 3 unités, 4 produits, la bonne adresse, set + numéro + nom, tous à REGARDER ou non mais jamais sautés',
+let ra = appA([trou(311408, 214539, 'XY-Black-Star-Promos', 'XY177a', 'Karen-V2-XYPRXY177a', 'Karen', [servie('XY-Black-Star-Promos', 'XY177')]), trou(449878, 225372, 'Ultra-Prism', '153a', 'Lusamine-V3-CIN153a', 'Lusamine', [servie('Ultra-Prism', '153')]), trou(449883, 225372, 'Ultra-Prism', '153a', 'Lusamine-V4-CIN153a', 'Lusamine', [servie('Ultra-Prism', '153')])]);
+verifier('autres (API-52) : Karen XY177a et Lusamine 153a (V3 et V4 partagent UNE fiche) -> 2 unités, 3 produits, la bonne adresse, set + numéro + nom, jamais sautés',
     [ra.plan.map(u => [u.produits, u.url.slice(u.url.lastIndexOf('/') + 1), u.action]).sort((a, b) => a[0][0] - b[0][0]), ra.restes.length],
-    [[[[311408], 'en_US-Promo_XY-XY177a-karen-yaa.jpg', 'ajout'], [[449623], 'en_US-SM3-115a-guzma-yaa.jpg', 'ajout'], [[449878, 449883], 'en_US-SM5-153a-lusamine_1st-yaa.jpg', 'ajout']], 0]);
+    [[[[311408], 'en_US-Promo_XY-XY177a-karen-yaa.jpg', 'ajout'], [[449878, 449883], 'en_US-SM5-153a-lusamine_1st-yaa.jpg', 'ajout']], 0]);
 ra = appA([trou(311408, 214539, 'XY-Black-Star-Promos', '177a', 'Karen-V2-XYPRXY177a', 'Karen', [servie('XY-Black-Star-Promos', 'XY177')])]);
 verifier('autres (API-52) : le n°177a nu (sans le préfixe XY du set) ne désigne PAS l\'entrée XY177a — la clé de numéro garde le préfixe (cleNumero)', ra.plan.length, 0);
 ra = appA([trou(449878, 225372, 'Ultra-Prism', '153a', 'Lusamine-V3-CIN153a', 'Gladion', [servie('Ultra-Prism', '153')])]);
 verifier('autres (API-52) : un nom qui contredit la source (Lusamine/Gladion) -> SAUTÉ', [ra.plan.length, motifs(ra)], [0, ['449878:nom-contredit']]);
-ra = P.apparier({ trous: [trou(449623, 223420, 'Burning-Shadows', null, null, 'Guzma', [servie('Burning-Shadows', '115')])], entrees: idxA, lot: 'autres', documents: new Map() });
-verifier('autres (API-52) : une fiche SANS numéro ni slug n\'est jamais appariée par le nom seul (Guzma, ligne actuelle)', motifs(ra), ['449623:sans-numero']);
-verifier('autres (API-52) : le numéro EXPLICITE d\'une ligne sans numéro (Guzma 449623 = 115a, lu par le testeur) est une liste fermée d\'UN produit ; tout autre produit : null', [P.numeroExplicite(449623), P.numeroExplicite(311408), P.numeroExplicite(null), Object.isFrozen(P.NUMEROS_EXPLICITES), Object.keys(P.NUMEROS_EXPLICITES)], ['115a', null, null, true, ['449623']]);
-ra = appA([trou(449623, 223420, 'Burning-Shadows', P.numeroExplicite(449623), null, 'Guzma', [servie('Burning-Shadows', '115')])]);
-verifier('autres (API-52) : Guzma, une fois son numéro explicite posé, s\'apparie au scan 115a (set + numéro + nom)', [ra.plan.length, ra.plan[0]?.numero, ra.plan[0]?.url.slice(ra.plan[0].url.lastIndexOf('/') + 1)], [1, '115a', 'en_US-SM3-115a-guzma-yaa.jpg']);
-verifier('autres (API-52) : le collecteur lit ce numéro explicite quand la ligne n\'en porte pas (et jamais quand elle en porte un)', /numeroFiche: l\.numeroFiche \?\? P\.numeroExplicite\(l\.idProduct\) \?\? null/.test(fs.readFileSync(path.join(__dirname, 'collecteur-images-pkmncards.js'), 'utf8')), true);
-ra = P.apparier({ trous: [trou(449623, 223420, 'Burning-Shadows', '115a', 'Guzma-V2-BUS115a', 'Guzma', [servie('Burning-Shadows', '115')])], entrees: idxA, lot: 'kits', documents: new Map() });
-verifier('autres (API-52) : les trois sets ne sont pas offerts aux autres lots', motifs(ra), ['449623:set-hors-table']);
-
+ra = P.apparier({ trous: [trou(449623, 223420, 'Burning-Shadows', '115a', 'Guzma-V4-BUS115a', 'Guzma', [servie('Burning-Shadows', '115')])], entrees: P.indexer([{ loc: card('guzma-burning-shadows-bus-115a'), img: UP('en_US-SM3-115a-guzma-yaa.jpg') }]).lues, lot: 'autres', documents: new Map() });
+verifier('autres (API-52, tour 1) : Guzma BUS 115a est SORTI du lot (tampon Championships seul, produit Staff + Championship) : set hors table, aucune unité, aucun numéro explicite', [motifs(ra), ra.plan.length, 'numeroExplicite' in P, 'NUMEROS_EXPLICITES' in P, Object.keys(P.TABLE).includes('burning-shadows')], [['449623:set-hors-table'], 0, false, false, false]);
+ra = P.apparier({ trous: [trou(311408, 214539, 'XY-Black-Star-Promos', 'XY177a', 'Karen-V2-XYPRXY177a', 'Karen', [servie('XY-Black-Star-Promos', 'XY177')])], entrees: idxA, lot: 'kits', documents: new Map() });
+verifier('autres (API-52) : les deux sets restants ne sont pas offerts aux autres lots', motifs(ra), ['311408:set-hors-table']);
 // ── 6. IDENTIFIANTS PUBLICS : le nom de la source n'y est jamais ────────────────────────────────────────────────────────────
 verifier('identifiants : source « pkc », lot « pkc-2026-10 », clé R2 pkc/<set>/<n°>-<carte>-en.webp, _id du document images', [P.SOURCE, P.LOT, P.cleR2('XY-Trainer-Kit', '24', 10), P.idImage('XY-Trainer-Kit', 10, '24'), P.cleNum(null)], ['pkc', 'pkc-2026-10', 'pkc/XY-Trainer-Kit/24-10-en.webp', 'pkc/XY-Trainer-Kit/10/24/en', 'sans-numero']);
 verifier('identifiants : aucun ne contient le nom de la source', [P.SOURCE, P.LOT, P.cleR2('S', '1', 1), P.idImage('S', 1, '1'), P.MENTION].some(s => /pkmn|cards\.com/i.test(s)), false);
