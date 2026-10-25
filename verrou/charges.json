@@ -1,10 +1,10 @@
 {
-  "extraitLe": "2026-10-24T20:10:11.071Z",
+  "extraitLe": "2026-10-25T18:02:59.009Z",
   "extraitDe": "test",
-  "lignesAuJournal": 285,
+  "lignesAuJournal": 289,
   "lignesEligibles": {
-    "avecPhoto": 236,
-    "abouties": 183
+    "avecPhoto": 240,
+    "abouties": 185
   },
   "jeuPhotos": {
     "n": 80,
@@ -172,22 +172,22 @@
       "pourquoi": "toutes les gardes du chantier sont conditionnées à LANGUES_ASIATIQUES : sans elle, une régression occidentale est invisible",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6ad4f0051ad397368c4c6c35",
-        "le": "2026-10-18T16:12:53.896Z",
-        "version": "8f8a456eacab",
-        "idProduct": 606726
+        "_id": "6ade27881a5318f367792baf",
+        "le": "2026-10-25T16:00:08.598Z",
+        "version": "9fe48c42566a",
+        "idProduct": 733750
       },
-      "imageUrl": "https://images1.vinted.net/t/02_025a4_PVjLJheuVXgoxYtALoqU5N86/f800/3f78233e.webp?s=6aaca3f8189236835e92763144743661e8167157",
+      "imageUrl": "https://images1.vinted.net/t/02_007f9_XR1oji1WQwu9S6s8LvPfMwpE/f800/41960f5c.webp?s=9fc74a547c82d56613d8efb94058c464879a4b14",
       "lecture": {
-        "name": "Blissey",
-        "number": "2",
-        "total": "64",
-        "setCode": null,
-        "language": "EN",
-        "rarete": "normale",
-        "nomBrut": "Blissey",
+        "name": "Venusaur ex",
+        "number": "155",
+        "total": "182",
+        "setCode": "MEW",
+        "language": "FR",
+        "rarete": "SIR",
+        "nomBrut": "Méga-Florizarre ex",
         "nomConfiance": "haute",
-        "symboleSet": "couronne",
+        "symboleSet": "illisible",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
