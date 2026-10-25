@@ -165,7 +165,7 @@ async function planifier(db, slug, L, fiches) {
     const temoinNomJa = L.site === 'pokemon-card-com' ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
     // LA VOIE SECONDE nomJa + PV (lot PCC-JP) : pokemon-card.com seulement, pour les produits sans numéro ; ses gardes sont dans tpc.js
     const nomJaPv = L.site === 'pokemon-card-com' ? T.contexteNomJaPv({ lignes, cartes: [...cartes.values()], slug }) : null;
-    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null, temoinNomJa, nomJaPv }) };
+    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null, temoinNomJa, nomJaPv, jumelles: L.fichesJumelles === true }) };
 }
 
 /** La garde de la jointure : les entrées des AUTRES sources, chacune par son empreinte (carte, source, set, numéro, clé) — elles ne

@@ -195,7 +195,7 @@ function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu
  * (carte, numéro) ne font qu'un visuel ; deux fiches au même numéro à la source ne désignent rien.
  * @param {{trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>, fiches: object[], code: string, site: string}} o
  */
-function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa = null, nomJaPv = null }) {
+function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa = null, nomJaPv = null, jumelles = false }) {
     // ce que porte la majorité de la liste (preuveDeCorrespondance, `attendu`) ; une égalité de voix n'élit personne
     const majorite = xs => { const m = new Map(); for (const x of xs) if (x != null) m.set(x, (m.get(x) || 0) + 1); const t = [...m].sort((a, b) => b[1] - a[1]); return t.length && (t.length === 1 || t[0][1] > t[1][1]) ? t[0][0] : null; };
     const attenduDe = fs => ({ denominateur: majorite(fs.map(f => /^\d+$/.test(f.denominateur || '') ? f.denominateur : null)), symbole: majorite(fs.map(f => f.symbole ?? null)) });
@@ -227,15 +227,23 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa 
             if (!pref) { restes.push({ ...base, motif: 'prefixe-absent', detail: `n° ${t.numeroFiche} sans lettre de demi-liste (${P.join('/')}) sur une ligne à plusieurs listes` }); continue; }
             if (!P.includes(pref)) { restes.push({ ...base, motif: 'prefixe-inconnu', detail: `n° ${t.numeroFiche} : « ${pref} » n'est pas une liste de la ligne (${P.join('/')})` }); continue; }
         }
-        const c = parNumero.get(k) || [];
+        let c = parNumero.get(k) || [];
         if (!c.length) { restes.push({ ...base, motif: 'absente-de-la-source' }); continue; }
+        // API-52 L5 : jumelles (opt-in de la ligne de table, ichesJumelles) — la source publie la MÊME carte sous deux fiches (deux decks du même set : 27049 jpg et 27050 gif, Oshawott 011/037) ; elles ne sont
+        // jumelles que si le nom, le numéro, le dénominateur, les PV, la marque et l'illustrateur sont IDENTIQUES et tous présents ; la plus petite fiche sert, les autres sont nommées dans la preuve.
+        let jumellesDe = [];
+        if (jumelles === true && c.length > 1 && !multi) {
+            const sig = f => JSON.stringify([f.nom, f.numero, f.denominateur, f.pv, f.marque, f.illustrateur]);
+            const complet = f => f.nom && f.numero && f.denominateur && f.pv && f.marque && f.illustrateur;
+            if (c.every(complet) && new Set(c.map(sig)).size === 1) { const tri = [...c].sort((a, b) => Number(a.idFiche) - Number(b.idFiche)); c = [tri[0]]; jumellesDe = tri.slice(1).map(f => f.idFiche); }
+        }
         if (c.length > 1) { restes.push({ ...base, motif: 'numero-ambigu-a-la-source', detail: c.map(f => f.idFiche).join(', ') }); continue; }
         // la fiche d'une demi-liste porte son numéro SANS la lettre : pour la preuve, elle prend celle de sa liste (a + 019 = a019) et le code de
         // SA liste ; ce qui est écrit au plan reste la fiche lue, avec son préfixe
         const f = multi ? { ...c[0], numero: `${pref.toLowerCase()}${c[0].numero}` } : c[0];
         const p = preuveDeCorrespondance({ fiche: f, carte: t.carte, numeroFiche: t.numeroFiche, code: multi ? (c[0].listeCode ?? code) : code, site, attendu: multi ? attendu.get(pref) : attendu, temoinNomJa });
         if (!p.ok) { restes.push({ ...base, motif: p.motif, detail: p.detail }); continue; }
-        plan.push({ ...base, fiche: c[0], voie: p.voie, preuve: p.preuve });
+        plan.push({ ...base, fiche: c[0], voie: p.voie, preuve: jumellesDe.length ? ` ; fiche(s) jumelle(s) identique(s) : ${jumellesDe.join(', ')}` : p.preuve });
     }
     if (essais.length) { const s = jugerNomJaPv({ essais, fiches, code, nomJaPv, temoinNomJa }); plan.push(...s.plan); restes.push(...s.restes); }
     return { plan, restes };
