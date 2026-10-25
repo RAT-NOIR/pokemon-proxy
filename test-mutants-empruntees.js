@@ -55,6 +55,15 @@ const MUTANTS = [
     { nom: 'SEA : le set entier entre dans le périmètre', fichier: M, de: '...SETS_TRICK_OR_TRADE]);\n\n// PHASE 3b', vers: "...SETS_TRICK_OR_TRADE, 'Southeast-Asia-Promos']);\n\n// PHASE 3b" },
     { nom: 'SEA : la liste fermée porte un 8e produit', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687, 819263, 901075])' },
     { nom: 'SEA : la liste fermée perd un frère', fichier: M, de: '850142, 833720, 855687, 819263])', vers: '850142, 833720, 855687])' },
+    // ── API-52 L1b : motif « autre tirage »
+    { nom: 'L1b : l\'entrée explicite perd son motif autre-tirage', fichier: M, de: 'if (g.autreTirage) entree.differenceEmprunt = MOTIF_AUTRE_TIRAGE;', vers: '' },
+    { nom: 'L1b : l\'entrée explicite reprend le languePreuve « tampon »', fichier: M, de: 'languePreuve: g.autreTirage ? LANGUE_PREUVE_AUTRE_TIRAGE : LANGUE_PREUVE', vers: 'languePreuve: LANGUE_PREUVE' },
+    { nom: 'L1b : un autre emprunt (SEA…) reçoit aussi le motif autre-tirage', fichier: M, de: 'autreTirage: !!expl', vers: 'autreTirage: true' },
+    { nom: 'L1b : la garde de mention ne dispense plus les autre-tirage', fichier: M, de: '.filter(a => a.entree?.differenceEmprunt !== MOTIF_AUTRE_TIRAGE).flatMap(a => (a.produits || []).filter(id => !mentionDe', vers: '.flatMap(a => (a.produits || []).filter(id => !mentionDe' },
+    { nom: 'L1b : la garde de mention dispense tout le monde', fichier: M, de: '.filter(a => a.entree?.differenceEmprunt !== MOTIF_AUTRE_TIRAGE).flatMap(a => (a.produits || []).filter(id => !mentionDe(a.carteId, a.set, id)))', vers: '.flatMap(a => (a.produits || []).filter(id => false))' },
+    { nom: 'L1b : le script n\'imprime plus la mention en attente', fichier: S, de: 'mention en attente du site (autre tirage)', vers: 'mention ok' },
+    { nom: 'L1b : un 20e produit (606901) entre dans la liste CLK', fichier: M, de: '[12097, \'030\', 744621, 744655, 743194],', vers: '[12097, \'030\', 744621, 744655, 743194], [1, \'031\', 1, 606901, null],' },
+    { nom: 'L1b : le jumeau CLL de VS Seeker est faux (numéro)', fichier: M, de: "[43839, '022', 744613, null, 743185]", vers: "[43839, '023', 744613, null, 743185]" },
     // ── TOUR 1 (24/10) : D4.1 la mention SERVIE, D4.2 --ecrire exige --sets
     { nom: 'D4.1 : la mention « réelle » rejoue l\'ancien appel (sans le set de la fiche)', fichier: M, de: 'reelle: mentionDuVisuelEmprunte(imageServieDe(images, url, set))', vers: 'reelle: mentionDuVisuelEmprunte(imageServieDe(images, url))' },
     { nom: 'D4.1 : un produit sans mention n\'est plus nommé', fichier: M, de: 'filter(id => !mentionDe(a.carteId, a.set, id))', vers: 'filter(id => false)' },

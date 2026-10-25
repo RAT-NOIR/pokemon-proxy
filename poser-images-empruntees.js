@@ -158,6 +158,8 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
         const mentionDe = (carteId, set, id) => { const b = apParProduit.get(`${carteId}|${id}`); if (!b || !b.cleR2) return null; return E.mentionServie({ images: cartesApresMap.get(carteId)?.images, cleR2: b.cleR2, set, imageServieDe: T.imageServieDe, mentionDuVisuelEmprunte: T.mentionDuVisuelEmprunte }).reelle; };
         const sansMention = E.produitsSansMention(plan, mentionDe);
         const nPlan = plan.ajouts.reduce((s, a) => s + a.produits.length, 0);
+        const enAttente = E.produitsMentionEnAttente(plan);
+        console.log(`mention en attente du site (autre tirage) : ${enAttente.length} produits`);
         console.log(`MENTION SERVIE PAR LA FICHE, produits du plan : ${nPlan - sansMention.length}/${nPlan}${sansMention.length ? ` — SANS mention : ${sansMention.join(', ')}` : ''}`);
         if (sansMention.length) { console.error('🔴 ARRÊT : des produits du plan seraient servis SANS la mention (« affichée avec la mention ») — rien n\'est écrit.'); process.exitCode = 1; return; }
 

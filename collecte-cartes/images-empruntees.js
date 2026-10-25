@@ -33,12 +33,22 @@ const SETS_BORNES = Object.freeze({ 'Southeast-Asia-Promos': Object.freeze([9010
 // API-52 L1 (coordinateur, 2026-10-25) : les deux vignettes Masaki fausses (744655 Classic jp Blastoise & Suicune CLK, 743194 Venusaur & Lugia CLF) reçoivent l'image du Dresseur commun à origine EXPLICITE :
 // carte 12097, set Charizard-Ho-Oh (CLL), n°030, artofpkm/677/30.webp (produit 744621). Elle ne se DÉRIVE JAMAIS du `detail` de la ligne (« Bill (Base Set 91) » désignerait le Base Set : faux).
 // LISTE FERMÉE de produits (set → produit → origine) : tout autre produit de ces sets est HORS LISTE, une origine absente ou différente REFUSE. Même entrée que les autres emprunts (aucun champ, aucune mention neufs).
-const ORIGINE_MASAKI = Object.freeze({ carteId: 12097, setOrigine: 'Pokemon-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck', numero: '030', cleR2: 'artofpkm/677/30.webp', produitOrigine: 744621 });
+const SET_CLL = 'Pokemon-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck';
+// API-52 L1b (testeur, 2026-10-25) : TOUS les produits CLF/CLK dont la carte porte un scan du deck CLL (artofpkm/677/<n>) — 19 produits, prouvés en base (ligne cartes_produits → carte X ; X a l'entrée CLL au numéro de son jumeau CLL ;
+// le produit CLL jumeau existe). Le numéro CLL n'est pas celui du produit CLF/CLK (CLL a une carte de plus en tête) : il se lit sur le JUMEAU. [carteId, numéro CLL, produit CLL jumeau, produits CLK, produits CLF]
+const JUMEAUX_CLL = [
+    [24167, '019', 744610, 744643, 743182], [148517, '020', 744611, 744644, 743183], [15638, '021', 744612, 744645, 743184], [43839, '022', 744613, null, 743185], [25165, '023', 744614, 744647, 743186],
+    [15381, '024', 744615, 744648, 743187], [17965, '025', 744616, 744649, 743188], [29870, '028', 744619, 744653, 743191], [248285, '029', 744620, 744654, 743193], [12097, '030', 744621, 744655, 743194],
+];
+const origineCLL = (carteId, numero, produitOrigine) => Object.freeze({ carteId, setOrigine: SET_CLL, numero, cleR2: `artofpkm/677/${Number(numero)}.webp`, produitOrigine });
+const parDeck = col => Object.freeze(Object.fromEntries(JUMEAUX_CLL.filter(j => j[col] != null).map(j => [j[col], origineCLL(j[0], j[1], j[2])])));
 const ORIGINES_EXPLICITES = Object.freeze({
-    'Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck': Object.freeze({ 744655: ORIGINE_MASAKI }),
-    'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck': Object.freeze({ 743194: ORIGINE_MASAKI }),
+    'Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck': parDeck(3),
+    'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck': parDeck(4),
 });
-const setExplicite = s => Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES, s);
+// Le motif de ces entrées : « autre tirage » (code de deck différent), jamais « tampon ». Le site rend, tant qu'il n'a pas ce motif, sa mention d'emprunt ordinaire : l'outil ne s'arrête pas dessus, il le DIT.
+const MOTIF_AUTRE_TIRAGE = 'autre-tirage';
+const LANGUE_PREUVE_AUTRE_TIRAGE = "image d'un autre tirage empruntée (code de deck différent : même Dresseur, scan du deck Classic Charizard & Ho-Oh)";const setExplicite = s => Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES, s);
 const origineExplicite = (s, idProduct) => (setExplicite(s) && Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES[s], idProduct) ? ORIGINES_EXPLICITES[s][idProduct] : null);
 const setBorne = s => Object.prototype.hasOwnProperty.call(SETS_BORNES, s) || setExplicite(s);
 const estBorne = (s, idProduct) => (Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)) || origineExplicite(s, idProduct) !== null;
@@ -158,7 +168,11 @@ function mentionServie({ images, cleR2, set, imageServieDe, mentionDuVisuelEmpru
 
 /** Les produits du plan dont la fiche NE sert PAS l'image avec sa mention (`mentionDe(carteId, set, idProduct)` rend le texte ou rien ; « ne sait pas » = pas de mention). Un lot dont l'ordre est « affichée avec la mention » s'arrête sur cette liste. */
 function produitsSansMention(plan, mentionDe) {
-    return (plan.ajouts || []).flatMap(a => (a.produits || []).filter(id => !mentionDe(a.carteId, a.set, id)));
+    return (plan.ajouts || []).filter(a => a.entree?.differenceEmprunt !== MOTIF_AUTRE_TIRAGE).flatMap(a => (a.produits || []).filter(id => !mentionDe(a.carteId, a.set, id)));
+}
+/** Les produits du plan dont l'entrée est « autre tirage » : leur mention attend le site (il n'a pas encore ce motif) ; l'outil les compte et les IMPRIME, il ne s'arrête pas dessus. */
+function produitsMentionEnAttente(plan) {
+    return (plan.ajouts || []).filter(a => a.entree?.differenceEmprunt === MOTIF_AUTRE_TIRAGE).flatMap(a => [...(a.produits || [])]);
 }
 
 /** La sélection du manifeste (simulée) est-elle celle d'aujourd'hui ? Sans ordre ; un manifeste sans sélection, ou une exécution sans sélection, ne correspondent à rien. */
@@ -203,7 +217,7 @@ function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
         else if (depuisOrigine) { const d = substitutDepuisOrigine(l, c, etat); if (d.refus) { refus(d.refus); continue; } sub = d.sub; }
         const cle = `${l.carteId}|${set}|${numero == null ? '' : cleNumero(numero)}`;
         const g = groupes.get(cle);
-        if (!g) groupes.set(cle, { carteId: l.carteId, set, numero, sub, carte: c, produits: [idProduct], diverge: false });
+        if (!g) groupes.set(cle, { carteId: l.carteId, set, numero, sub, carte: c, produits: [idProduct], diverge: false, autreTirage: !!expl });
         else { g.produits.push(idProduct); if (g.sub.cleR2 !== sub.cleR2 || g.sub.w !== sub.w || g.sub.h !== sub.h) g.diverge = true; }
     }
     for (const g of groupes.values()) {
@@ -218,7 +232,8 @@ function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
         const origine = (g.carte.images || []).find(e => e && e.cleR2 === g.sub.cleR2 && e.vignette && typeof e.vignette === 'object');
         const entree = { set: g.set, numero: g.numero, cleR2: g.sub.cleR2, w: g.sub.w, h: g.sub.h };
         if (origine) entree.vignette = copie(origine.vignette);
-        Object.assign(entree, { langue: g.sub.langue ?? 'en', languePreuve: LANGUE_PREUVE, source: SOURCE, lot: LOT, imageEmprunteeTirage: true });
+        Object.assign(entree, { langue: g.sub.langue ?? 'en', languePreuve: g.autreTirage ? LANGUE_PREUVE_AUTRE_TIRAGE : LANGUE_PREUVE, source: SOURCE, lot: LOT, imageEmprunteeTirage: true });
+        if (g.autreTirage) entree.differenceEmprunt = MOTIF_AUTRE_TIRAGE;
         const tampon = tamponDuSet(g.set);
         if (tampon) entree.tamponNonRepresente = tampon;
         Object.assign(entree, { retirable: true, collecteLe: new Date(maintenant), jointeLe: new Date(maintenant) });
@@ -305,6 +320,6 @@ function garderSousLot(env, ppid) {
     if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="TAMPONNEES : N entrées" --collections=cartes --annonce=<annonce.json> -- node poser-images-empruntees.js --ecrire --attendu=N (rien n\'est écrit)');
 }
 
-module.exports = { ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
+module.exports = { MOTIF_AUTRE_TIRAGE, LANGUE_PREUVE_AUTRE_TIRAGE, produitsMentionEnAttente, ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
     SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi, produitsSansMention, memeSelection,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };
