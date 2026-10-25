@@ -79,6 +79,27 @@ verifier('impression-du-tirage : le produit porte un numéro → refus (ce n\'es
 verifier('une voie inconnue → refus nommé (liste fermée)', (() => { const r = prouver({ entree: { ...E5, voie: 'devine' }, produit: pPal, carte: pal, ...ctx([pal]) }); return [r.ok, /voie/.test(r.refus.join())]; })(), [false, true]);
 verifier('les voies sont une liste fermée de quatre', VOIES, ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage']);
 
+// ── API-52 L3 : deux déclarations FERMÉES, par entrée de décision, jamais par défaut
+// (1) `prefixeNumero` : la carte écrit son numéro AVEC le préfixe du set (« XY177a »), Cardmarket le sien SANS (« 177a ») — comme `prefixe` de la voie « impression-equivalente », le préfixe est DÉCLARÉ.
+const karen = carte(80, 'Karen', [], [imp('intl', 'XY Black Star Promos', 'XY177'), imp('intl', 'Yellow A Alternate cards', 'XY177a')], { liens: { idProduct: [1], idMetacards: [223881] } });
+const pKaren = produit(81, 'Karen', '177a', 223881);
+const EK = { idProduct: 81, carteId: 80, voie: 'impression-numero', tirage: 'intl' };
+verifier('prefixeNumero : sans la déclaration, « 177a » ne désigne pas « XY177a » (refus, rien n\'est deviné)', prouver({ entree: EK, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
+verifier('prefixeNumero : déclaré « XY », « 177a » = « XY177a » et la lettre compte (XY177 ≠ XY177a) → prouvé', [prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: { ...karen, impressions: [imp('intl', 'XY Black Star Promos', 'XY177')] }, ...ctx([karen]) }).ok], [true, false]);
+verifier('prefixeNumero : un mauvais préfixe (« SM ») refuse', prouver({ entree: { ...EK, prefixeNumero: 'SM' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
+verifier('prefixeNumero : une homonyme qui déclare AUSSI XY177a → deux candidates, refus (la concurrence se juge avec le même préfixe)', (() => {
+    const autre = carte(82, 'Karen', [], [imp('intl', 'Yellow A Alternate cards', 'XY177a')], { liens: { idProduct: [2], idMetacards: [223881] } });
+    return prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: karen, ...ctx([karen, autre]) }).ok;
+})(), false);
+// (2) `metacarteAbsenteDeLaCarte` : la carte ne porte AUCUNE métacarte (rien à contredire) ; le témoin parle alors par les deux autres éléments et la seconde source de la décision. Une carte qui en porte une, fausse, refuse toujours.
+const lusa = carte(90, 'Lusamine', [], [imp('intl', 'Yellow A Alternate cards', '153a', '156')], { liens: { idProduct: [1], idMetacards: [] } });
+const pLusa = produit(91, 'Lusamine', '153a', 234656);
+const EL = { idProduct: 91, carteId: 90, voie: 'impression-numero', tirage: 'intl' };
+verifier('metacarteAbsenteDeLaCarte : sans la déclaration, la carte sans métacarte refuse (le témoin ne peut pas parler)', (() => { const r = prouver({ entree: EL, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, /métacarte/.test(r.refus.join())]; })(), [false, true]);
+verifier('metacarteAbsenteDeLaCarte : déclarée et la carte n\'en porte aucune → prouvé, le témoin DIT qu\'il n\'a pas parlé', (() => { const r = prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, r.temoins.some(t => /aucune métacarte/.test(t))]; })(), [true, true]);
+verifier('metacarteAbsenteDeLaCarte : déclarée mais la carte porte UNE AUTRE métacarte → refus (la déclaration ne lève pas une contradiction)', prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: { ...lusa, liens: { idProduct: [1], idMetacards: [999] } }, ...ctx([lusa]) }).ok, false);
+verifier('metacarteAbsenteDeLaCarte : n\'ouvre que la métacarte — un nom ou des attaques faux refusent toujours', prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: produit(91, 'Gladion', '153a', 234656), carte: lusa, ...ctx([lusa]) }).ok, false);
+
 // ═════ TOUR 1 — les trois mutants qui survivaient ═════
 // (a) LE TÉMOIN DU NOM DE PRODUCTION : par construction il ne contredit jamais une carte que la clé vient de désigner (mêmes clés de nom) ; il ne se prouve donc qu'en
 //     l'observant : `prouver` reçoit la fonction (par défaut la fonction de PRODUCTION, vérifiée par identité) et un espion voit ce qu'on lui demande.

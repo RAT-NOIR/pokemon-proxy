@@ -34,13 +34,13 @@ const DECISIONS = {
     // API-52 L3 (coordinateur, 2026-10-25) : SEULEMENT les produits dont DEUX sources concordent (Cardmarket + une seconde). Exclus, « à instruire : une seule source » : 877355 Jirachi (carte -892515)
     // et 653505 Sonia (carte 246287), Cardmarket seul. `preuve` est la référence de la décision (jamais écrite sur la ligne : planifier() ne la lit pas). Aucune appartenance de set (ajoutSet false) : les sets sont déjà portés par les cartes.
     '2026-10-25': [
-        { idProduct: 311408, carteId: 214539, code: 'XYPR', idExpansion: 1612, slugSet: 'XY-Black-Star-Promos', voie: 'impression-numero', tirage: 'intl', numeroFiche: '177a', ajoutSet: false,
+        { idProduct: 311408, carteId: 214539, code: 'XYPR', idExpansion: 1612, slugSet: 'XY-Black-Star-Promos', voie: 'impression-numero', tirage: 'intl', prefixeNumero: 'XY', numeroFiche: 'XY177a', ajoutSet: false,
             preuve: { sources: ['Cardmarket (n°177a, Karen, slug Karen-V2-XYPRXY177a)', 'TCGdex xyp-XY177a (Karen, Supporter), lu le 2026-10-25'], references: ['https://api.tcgdex.net/v2/en/cards/xyp-XY177a', 'https://pkmncards.com/card/karen-xy-promos-xyp-xy177a/'] } },
         { idProduct: 571909, carteId: 39452, code: 'UNP', idExpansion: 4170, slugSet: 'Unnumbered-Promos', voie: 'impression-du-tirage', tirage: 'jp', expansionImpression: 'Unnumbered Promotional cards', numeroFiche: null, ajoutSet: false,
             preuve: { sources: ['Cardmarket (Entei [Bolt | Protective Flame], sans numéro)', 'TCGdex basep-34 (Poké-Power Bolt + attaque Protective Flame = carte 39452 ; la carte 24448 n\'a que Mega Flame), lu le 2026-10-25'], references: ['https://api.tcgdex.net/v2/en/cards/basep-34'] } },
-        { idProduct: 449878, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', numeroFiche: '153a', ajoutSet: false,
+        { idProduct: 449878, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', metacarteAbsenteDeLaCarte: true, numeroFiche: '153a', ajoutSet: false,
             preuve: { sources: ['Cardmarket (n°153a, slug Lusamine-V3-CIN153a)', 'pkmncards en_US-SM5-153a-lusamine (sitemap en cache pkmn_card-sitemap8.xml l.2650-2653, lastmod 2024-03-23)'], references: ['https://pkmncards.com/card/lusamine-ultra-prism-upr-153a/', 'https://pkmncards.com/wp-content/uploads/en_US-SM5-153a-lusamine_1st-yaa.jpg'] } },
-        { idProduct: 449883, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', numeroFiche: '153a', ajoutSet: false,
+        { idProduct: 449883, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', metacarteAbsenteDeLaCarte: true, numeroFiche: '153a', ajoutSet: false,
             preuve: { sources: ['Cardmarket (n°153a, slug Lusamine-V4-CIN153a)', 'pkmncards en_US-SM5-153a-lusamine (sitemap en cache pkmn_card-sitemap8.xml l.2650-2653, lastmod 2024-03-23)'], references: ['https://pkmncards.com/card/lusamine-ultra-prism-upr-153a/', 'https://pkmncards.com/wp-content/uploads/en_US-SM5-153a-lusamine_1st-yaa.jpg'] } },
     ],
 };

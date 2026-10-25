@@ -76,7 +76,10 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     else temoins.push(`nom + attaques : « ${variante.nom} » [${(variante.attaques || []).join(' | ')}] ⊇ attaques de la carte ${JSON.stringify((carte.attaques || []).map(a => a.nom))}${variante.suffixe ? ` (le groupe [${variante.suffixe}] est le suffixe du nom)` : ''}`);
 
     // ② MÉTACARTE (Cardmarket l'a construite, la clé ne l'a pas lue)
-    if (!(carte.liens?.idMetacards || []).includes(produit.idMetacard)) refus.push(`métacarte : celle du produit (${produit.idMetacard}) n'est pas parmi celles de la carte (${JSON.stringify(carte.liens?.idMetacards || [])})`);
+    // API-52 L3 : `metacarteAbsenteDeLaCarte: true` (DÉCLARÉ par la décision) — la carte ne porte AUCUNE métacarte : le témoin n'a rien à contredire, il ne parle pas, et le temoins le DIT. Une carte qui en porte une autre refuse toujours.
+    const metasDeLaCarte = carte.liens?.idMetacards || [];
+    if (entree.metacarteAbsenteDeLaCarte === true && metasDeLaCarte.length === 0) temoins.push(`métacarte : la carte ne porte aucune métacarte (déclaré par la décision) — le témoin n'a pas parlé ; celle du produit est ${produit.idMetacard}`);
+    else if (!metasDeLaCarte.includes(produit.idMetacard)) refus.push(`métacarte : celle du produit (${produit.idMetacard}) n'est pas parmi celles de la carte (${JSON.stringify(carte.liens?.idMetacards || [])})`);
     else temoins.push(`métacarte Cardmarket ${produit.idMetacard} déjà portée par la carte`);
 
     // ③ NIVEAU, quand les deux le portent
@@ -94,7 +97,8 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     // ⑤ LA VOIE : ce que la carte ou la Setlist déclare, indépendamment du nom
     const impressions = c => (c.impressions || []).filter(i => i && i.tirage === entree.tirage);
     const voie = {
-        'impression-numero': c => impressions(c).filter(i => nu(i.numero) !== '' && nu(i.numero) === nu(produit.numero)),
+        // `prefixeNumero` (API-52 L3, DÉCLARÉ par la décision) : la carte écrit « XY177a » là où Cardmarket écrit « 177a » ; le préfixe se déclare, il ne se devine pas, et la lettre finale compte toujours
+        'impression-numero': c => impressions(c).filter(i => nu(i.numero) !== '' && nu(i.numero) === nu(`${entree.prefixeNumero ?? ''}${produit.numero ?? ''}`)),
         'impression-equivalente': c => {
             const m = new RegExp(`^${entree.prefixe ?? 'S'}0*(\\d+)$`, 'i').exec(String(produit.numero ?? '').trim());
             if (!m) return [];
