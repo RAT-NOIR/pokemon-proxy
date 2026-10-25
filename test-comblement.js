@@ -41,16 +41,45 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     const t1 = CO.construireTrou({ idProduct: 5, motif: 'une-seule-source', sources: ['scx', 'ppr'], preuve: { a: 1 }, le: new Date('2026-10-26T00:00:00Z') });
     v('construireTrou : forme', [t1.idProduct, t1.motif, t1.sources, t1.instrument], [5, 'une-seule-source', ['scx', 'ppr'], 'comblement-nocturne']);
 
-    // ── ecrireTrous : une base fausse qui enregistre ; additif seulement (jamais de suppression) ──
+    // ── ecrireTrous : une base fausse qui enregistre ; additif seulement (jamais de suppression) ; F2 : on LIT d'abord, on n'écrit que le nouveau ou le changé ; F4 : les résolus ──
     const ops = [];
-    const fauxDb = { collection: (n) => ({ bulkWrite: async (o, opt) => { ops.push({ n, o, opt }); return { upsertedCount: o.length, modifiedCount: 0 }; } }) };
+    let existants = [];
+    const fauxDb = { collection: (n) => ({ find: () => ({ toArray: async () => existants }), bulkWrite: async (o, opt) => { ops.push({ n, o, opt }); return { upsertedCount: o.length, modifiedCount: 0 }; } }) };
     const le = new Date('2026-10-26T00:00:00Z');
-    await CO.ecrireTrous(fauxDb, [t1, CO.construireTrou({ idProduct: 6, motif: 'sans-offre', sources: [], preuve: {}, le })]);
+    const t6 = CO.construireTrou({ idProduct: 6, motif: 'sans-offre', sources: [], preuve: {}, le });
+    let rap = await CO.ecrireTrous(fauxDb, [t1, t6]);
     v('ecrireTrous : collection trous_nommes', ops.map(o => o.n), ['trous_nommes']);
     const op0 = ops[0].o[0].updateOne;
-    v('ecrireTrous : _id = idProduct, upsert, $set et $setOnInsert(premierLe)', [op0.filter, op0.upsert, Object.keys(op0.update.$set).sort(), Object.keys(op0.update.$setOnInsert)], [{ _id: 5 }, true, ['idProduct', 'instrument', 'le', 'motif', 'preuve', 'sources'], ['premierLe']]);
+    v('ecrireTrous : _id = idProduct, upsert, $set (resolu:false) et $setOnInsert(premierLe)', [op0.filter, op0.upsert, Object.keys(op0.update.$set).sort(), Object.keys(op0.update.$setOnInsert)], [{ _id: 5 }, true, ['idProduct', 'instrument', 'le', 'motif', 'preuve', 'resolu', 'sources'], ['premierLe']]);
     vrai('ecrireTrous : aucune suppression ni remplacement', ops[0].o.every(x => x.updateOne && !x.deleteOne && !x.replaceOne));
+    v('ecrireTrous : rapport, tout est nouveau', rap, { nouveaux: 2, changes: 0, inchanges: 0, resolus: 0, rouverts: 0 });
     ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['ppr', 'scx'] }, { _id: 6, motif: 'aucune-source', sources: [] }, { _id: 7, motif: 'illisible', sources: ['scx'] }];
+    rap = await CO.ecrireTrous(fauxDb, [t1, t6]);
+    v('F2 : motif ET sources (triées) inchangés = pas réécrit ; motif changé = réécrit', [rap.inchanges, rap.changes, rap.nouveaux, ops[0].o.map(x => x.updateOne.filter._id)], [1, 1, 0, [6]]);
+    ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['ppr', 'scx'] }, { _id: 6, motif: 'sans-offre', sources: [] }];
+    rap = await CO.ecrireTrous(fauxDb, [t1, t6]);
+    v('F2 : tout inchangé = AUCUNE écriture', [rap.inchanges, ops.length], [2, 0]);
+    ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['scx'] }, { _id: 6, motif: 'sans-offre', sources: [] }];
+    rap = await CO.ecrireTrous(fauxDb, [t1, t6]);
+    v('F2 : sources changées = réécrit', [rap.changes, ops[0].o.map(x => x.updateOne.filter._id)], [1, [5]]);
+    ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['ppr', 'scx'], resolu: true }, { _id: 6, motif: 'sans-offre', sources: [] }];
+    rap = await CO.ecrireTrous(fauxDb, [t1, t6]);
+    v('F4 : un trou résolu qui redevient manquant : resolu:false (même motif et mêmes sources)', [rap.rouverts, rap.changes, ops[0].o[0].updateOne.update.$set.resolu], [1, 1, false]);
+    ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['ppr', 'scx'] }, { _id: 8, motif: 'illisible', sources: ['scx'] }, { _id: 9, motif: 'illisible', sources: ['scx'] }, { _id: 10, motif: 'illisible', sources: ['scx'] }, { _id: 11, motif: 'illisible', sources: ['scx'], resolu: true }];
+    const clv = new Map([[5, 'MANQUANT'], [8, 'A_COMPARER'], [9, 'MANQUANT'], [11, 'A_COMPARER']]);                     // 10 : absent de l'état
+    rap = await CO.ecrireTrous(fauxDb, [t1], { classeVisuelParId: clv, le });
+    v('F4 : résolus = présent dans l\'état ET plus MANQUANT, pas déjà résolu ; absent de l\'état = on ne sait pas', [rap.resolus, ops[0].o.map(x => [x.updateOne.filter._id, x.updateOne.update.$set])], [1, [[8, { resolu: true, resoluLe: le }]]]);
+    vrai('F4 : jamais de suppression', ops[0].o.every(x => !x.deleteOne));
+    ops.length = 0;
+    existants = [{ _id: 5, motif: 'une-seule-source', sources: ['ppr', 'scx'] }];
+    rap = await CO.ecrireTrous(fauxDb, [t1], { classeVisuelParId: new Map([[5, 'A_COMPARER']]), le });
+    v('F4 : un trou réécrit ce soir (donc manquant) n\'est jamais résolu même si l\'état dit le contraire', rap.resolus, 0);
+    ops.length = 0; existants = [];
     await leve('ecrireTrous : un trou au motif hors liste fabriqué à la main : rien n\'est écrit', () => CO.ecrireTrous(fauxDb, [t1, { ...t1, idProduct: 9, motif: 'bidon' }]), /motif/);
     v('ecrireTrous : refus AVANT toute écriture', ops.length, 0);
 
@@ -133,11 +162,9 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('population : le neuf sans offre est marqué neuf', pop.cibles.find(c => c.idProduct === 6).neuf, true);
     v('population : codeSet et numéro lus de numeros_cartes', [pop.cibles[0].codeSet, pop.cibles[0].numero], ['PAL', '1']);
     v('population : numeros_cartes manquant = null (le tirage exclura)', [pop.cibles[2].codeSet, pop.cibles[2].numero], [null, null]);
-    pop = CO.choisirPopulation({ etat, guide, numeros, neufs: new Set([6]), limite: 2 });
-    v('population : plafond --limite : les 2 plus populaires', [pop.cibles.map(c => c.idProduct), pop.reportes], [[1, 4], 1]);
+    v('F1 : la population ne porte plus de plafond (il compte les produits à ≥ 2 sources)', pop.reportes, undefined);
     pop = CO.choisirPopulation({ etat, guide, numeros, neufs: new Set(), limite: 200 });
     v('population : sans neuf, le produit 6 (sans offre) est un trou sans-offre', pop.sansOffre.map(c => c.idProduct).sort(), [5, 6, 7]);
-    await leve('population : plafond invalide', () => CO.choisirPopulation({ etat, guide, numeros, neufs: new Set(), limite: 0 }), /limite/);
     await leve('population : état vide = instrument cassé (§41)', () => CO.choisirPopulation({ etat: [], guide, numeros, neufs: new Set(), limite: 5 }), /VIDE/);
     await leve('population : aucun MANQUANT dans un état non vide = filtre qui ne mord pas (§41)', () => CO.choisirPopulation({ etat: [{ idProduct: 1, classeVisuel: 'PRESENT', classeFiche: 'FICHE_OK' }], guide, numeros, neufs: new Set(), limite: 5 }), /MANQUANT/);
 
@@ -216,12 +243,36 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     ];
     const pl = CO.planifier({ cibles, parFournisseur, ordre });
     v('planifier : produits à télécharger (≥ 2 sources libres)', pl.produits.map(p => p.idProduct), [100, 101]);
+    v('F1 : sans plafond, aucun reporté', pl.reportes, []);
     const motifs = Object.fromEntries(pl.trousDirects.map(t => [t.idProduct, t.motif]));
     v('planifier : trous directs (102 une seule source libre + bloquée ; 103 bloquée seule ; 104 aucune)', motifs, { 102: 'source-bloquee:tcs', 103: 'source-bloquee:tcs', 104: 'aucune-source' });
     v('planifier : les sources interrogées sont celles du registre (jamais un nom en dur)', pl.trousDirects[0].sources, ordre);
     v('planifier : comptes 0 / 1 / ≥2 / bloquées', pl.comptes, { aucune: 1, une: 0, deuxPlus: 2, bloquees: 2 });
     v('planifier : une unité d\'une source bloquée n\'est JAMAIS à télécharger', pl.produits.flatMap(p => p.candidats.map(c => c.code)).includes('tcs'), false);
     v('planifier : le candidat porte son unité complète (carteId, slugSet, url)', Object.keys(pl.produits[0].candidats[0].unite).includes('slugSet'), true);
+
+    // F1 : le plafond ne compte QUE les produits à ≥ 2 sources ; 0 / 1 source et sans-offre sont nommés en entier
+    const beaucoup = [];
+    for (let i = 0; i < 250; i++) beaucoup.push({ idProduct: 1000 + i, name: 'N' + i, langue: 'intl', codeSet: 'PAL', numero: String(i), pop: {}, tamponnee: null });
+    for (const i of [1, 2, 3]) beaucoup.push({ idProduct: 5000 + i, name: 'D' + i, langue: 'intl', codeSet: 'PAL', numero: String(i), pop: {}, tamponnee: null });
+    const trie = [...beaucoup.slice(0, 100), ...beaucoup.slice(250), ...beaucoup.slice(100, 250)];          // des 2-sources mêlés dans la file par popularité
+    const U2 = (p, code) => unite({ produits: [p], url: `https://${code}/${p}.jpg`, carteId: p });
+    const plL = CO.planifier({ cibles: trie, limite: 2, ordre, parFournisseur: [{ code: 'scx', bloquee: false, unites: [5001, 5002, 5003].map(p => U2(p, 'scx')) }, { code: 'ppr', bloquee: false, unites: [5001, 5002, 5003].map(p => U2(p, 'ppr')) }] });
+    v('F1 : limite 2, 3 produits à 2 sources : les 2 premiers par popularité sont à télécharger', plL.produits.map(p => p.idProduct), [5001, 5002]);
+    v('F1 : le 3e est REPORTÉ (ni trou ni visuel)', plL.reportes, [5003]);
+    v('F1 : les 250 « aucune-source » sont TOUS nommés malgré la limite', [plL.trousDirects.length, plL.trousDirects.every(t => t.motif === 'aucune-source'), plL.comptes.aucune], [250, true, 250]);
+    v('F1 : le reporté n\'a pas de trou', plL.trousDirects.some(t => t.idProduct === 5003), false);
+    await leve('F1 : limite invalide', () => CO.planifier({ cibles: trie, limite: 0, ordre, parFournisseur: [] }), /limite/);
+
+    // F3 : le fichier d'état que le compteur vient d'écrire = celui qui n'existait pas avant
+    v('F3 : le nouvel état = le fichier apparu', CO.choisirNouvelEtat(['etat-abc-2026-10-25-1902.json', 'historique.jsonl'], ['etat-abc-2026-10-25-1902.json', 'etat-abc-2026-10-26-0815.json', 'abc-2026-10-26-0815.json', 'historique.jsonl']), 'etat-abc-2026-10-26-0815.json');
+    await leve('F3 : aucun fichier neuf (le compteur n\'a rien écrit) : refus', () => CO.choisirNouvelEtat(['etat-abc-2026-10-25-1902.json'], ['etat-abc-2026-10-25-1902.json']), /aucun/);
+    v('F3 : deux fichiers neufs = le plus récent par le nom', CO.choisirNouvelEtat([], ['etat-abc-2026-10-26-0815.json', 'etat-abc-2026-10-26-0915.json']), 'etat-abc-2026-10-26-0915.json');
+    const sp = (status) => CO.regenererEtat({ lister: (() => { let n = 0; return () => (n++ ? ['etat-abc-2026-10-26-0815.json'] : []); })(), lancer: () => ({ status }) });
+    v('F3 : le compteur réussit -> son fichier', sp(0), 'etat-abc-2026-10-26-0815.json');
+    await leve('F3 : le compteur échoue (code 1) : arrêt', async () => sp(1), /compteur/);
+    await leve('F3 : le compteur tué (status null) : arrêt', async () => sp(null), /compteur/);
+    await leve('F3 : le compteur rend 0 mais n\'écrit rien : arrêt', () => CO.regenererEtat({ lister: () => ['etat-abc-2026-10-25-1902.json'], lancer: () => ({ status: 0 }) }), /aucun/);
 
     // ── R4 : le téléchargement ne demande QUE les unités des produits à ≥ 2 sources ──
     const lancements = [];
@@ -305,6 +356,7 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     const md = CO.redigerCompteRendu({ date: '2026-10-26', aBlanc: true, etat: { fichier: 'etat-abc-x.json', le: new Date('2026-10-25T19:02:00Z') }, population: { base: 10, cibles: 5, sansOffre: 5, reportes: 0 }, comptesPlan: { aucune: 1 }, trous: [t1], visuels: 2 });
     vrai('compte rendu : dit « À BLANC »', /À BLANC/.test(md));
     vrai('compte rendu : comptes par motif', /une-seule-source/.test(md) && /visuels à écrire : 2/.test(md));
+    vrai('F2/F4 : le compte rendu donne nouveaux / changés / inchangés / résolus', /nouveaux 3 · changés 2 · inchangés \(non réécrits\) 7 · résolus \(le produit n'est plus MANQUANT\) 4/.test(CO.redigerCompteRendu({ date: 'd', aBlanc: false, etat: null, population: { base: 0, cibles: 0, sansOffre: 0, reportes: 0 }, comptesPlan: {}, trousEcrits: { nouveaux: 3, changes: 2, inchanges: 7, resolus: 4, rouverts: 1 } })));
     vrai('compte rendu : hors à blanc, ne dit pas « À BLANC »', !/À BLANC/.test(CO.redigerCompteRendu({ date: 'd', aBlanc: false, etat: null, population: { base: 0, cibles: 0, sansOffre: 0, reportes: 0 }, comptesPlan: {} })));
 
     // ───────────── les gardes avant tout passage ─────────────

@@ -54,14 +54,14 @@ async function lireProduction(prodDb, ids) {
     if (ids.length && !numeros.size) throw new Error(`numeros_cartes : 0 ligne sur ${ids.length} produits — clé fausse ou base vide`);
     return { guide, numeros, dates };
 }
-async function etapePlan({ dossier, limite }) {
+async function etapePlan({ dossier, limite, etatNom = null }) {
     const lecture = await lectureOuRefus();                       // AVANT tout : sans lecture seule, rien ne s'ouvre
     let prod = null;
     try {
         const fournisseurs = CO.chargerFournisseurs();
         const ordre = fournisseurs.map(f => f.code);
         const dossierCompteurs = CO.DOSSIER_COMPTEURS;
-        const etatFichier = CO.dernierEtat(fs.readdirSync(dossierCompteurs));
+        const etatFichier = etatNom ? CO.dernierEtat([etatNom]) : CO.dernierEtat(fs.readdirSync(dossierCompteurs));      // F3 : en --nuit, le fichier que le compteur vient d'écrire
         const etat = JSON.parse(fs.readFileSync(path.join(dossierCompteurs, etatFichier.fichier), 'utf8'));
         const base = etat.filter(p => p.classeVisuel === 'MANQUANT' && p.classeFiche !== 'SANS_LIGNE');
         const { ouvrirConnexions } = require('./collecte-cartes/garde');
@@ -72,12 +72,13 @@ async function etapePlan({ dossier, limite }) {
         const depuis = dernier?.le ? new Date(dernier.le) : null;
         const neufs = CO.calculerNeufs(dates, depuis);
         const avecDate = dates.size;
-        const pop = CO.choisirPopulation({ etat, guide, numeros, neufs, limite });
+        const pop = CO.choisirPopulation({ etat, guide, numeros, neufs });
         const parFournisseur = await CO.recolterUnites({ fournisseurs, db: lecture.cartes.db, lireReleves: def => RC.lireJson(fichiersRecolte(def).releves, {}), arret: arretDe, fichiersDe: fichiersRecolte });
-        const pl = CO.planifier({ cibles: pop.cibles, parFournisseur, ordre });
+        const pl = CO.planifier({ cibles: pop.cibles, parFournisseur, ordre, limite });
         const plan = {
             le: new Date().toISOString(), limite, ordre, etat: { fichier: etatFichier.fichier, le: etatFichier.le.toISOString() },
-            population: { base: pop.base, cibles: pop.cibles.length, sansOffre: pop.sansOffre.length, reportes: pop.reportes },
+            population: { base: pop.base, cibles: pop.cibles.length, sansOffre: pop.sansOffre.length, reportes: pl.reportes.length },
+            reportesPlafond: pl.reportes,
             neufs: { dernierPassage: depuis ? depuis.toISOString() : null, produitsAvecDateAdded: avecDate, neufs: neufs.size, note: depuis ? '' : 'aucun passage précédent : aucun produit n\'est dit neuf' + (avecDate ? '' : ' ; champ dateAdded ABSENT pour toute la population') },
             comptes: pl.comptes,
             fournisseurs: parFournisseur.map(f => ({ code: f.code, bloquee: f.bloquee, unites: f.unites.length, aAjouter: f.unites.filter(u => u.decision?.action === 'ajouter').length })),
@@ -85,7 +86,7 @@ async function etapePlan({ dossier, limite }) {
             produits: pl.produits, trousDirects: pl.trousDirects.map(({ le: _le, ...t }) => t), sansOffre: pop.sansOffre.map(p => p.idProduct)
         };
         RC.ecrireJson(path.join(dossier, 'plan-comblement.json'), plan);
-        note(`PLAN : état ${plan.etat.fichier} · population ${pop.base} · cherchés ${pop.cibles.length} (plafond ${limite}, reportés ${pop.reportes}) · sans offre ${pop.sansOffre.length} · neufs ${neufs.size}`);
+        note(`PLAN : état ${plan.etat.fichier} · population ${pop.base} · cherchés ${pop.cibles.length} (à télécharger ${pl.produits.length}, plafond ${limite} sur les produits à ≥ 2 sources, reportés ${pl.reportes.length}) · sans offre ${pop.sansOffre.length} · neufs ${neufs.size}`);
         note(`   classes : ${JSON.stringify(pl.comptes)} · fournisseurs : ${plan.fournisseurs.map(f => `${f.code}${f.bloquee ? ' ⛔' : ''} ${f.aAjouter}/${f.unites}`).join(' · ')}`);
         if (plan.neufs.note) note(`   neufs : ${plan.neufs.note}`);
         note(`   → ${path.join(dossier, 'plan-comblement.json')}`);
@@ -158,6 +159,9 @@ async function etapeEcrire({ dossier, attendu }) {
         if (Object.keys(D.gagnants).length) await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
         const le = new Date(D.le);
         const trous = D.trous.map(t => CO.construireTrou({ ...t, le }));
+        // F4 : l'état du jour (celui de la décision) dit quels trous existants ne sont plus MANQUANTS
+        const etatDuJour = JSON.parse(fs.readFileSync(path.join(CO.DOSSIER_COMPTEURS, D.etat.fichier), 'utf8'));
+        const classeVisuelParId = new Map(etatDuJour.map(p => [p.idProduct, p.classeVisuel]));
         const r = await CO.executerEcriture({ gagnants: D.gagnants, defs, attendu, trous,
             ecrireFournisseur: (def, unites, opt) => {
                 const Fi = F(def.CODE), indexImages = RC.lireJson(Fi.images, {});
@@ -165,8 +169,8 @@ async function etapeEcrire({ dossier, attendu }) {
                 return RC.ecrire({ SRC: def.SRC, unites, M: modeles(cx), dossierCache: Fi.cache, indexImages, attendu: opt.attendu, deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure,
                     fabriquerVerrouSet: ({ Modele, id }) => fabriquerVerrou({ Modele, id, dureeMs: 10 * 60 * 1000, surInsertion: { debute: new Date(), phase: 'plan' }, nom: `verrou de set ${id}` }) });
             },
-            ecrireTrous: (ts) => CO.ecrireTrous(cx.db, ts) });
-        note(`ÉCRITURE : ${r.etat} · attendu ${r.attendu} · réel ${r.reel} ${JSON.stringify(r.reels)} · visuels écrits ${r.ecrits} · trous nommés écrits ${r.trous} · REQUÊTES 0`);
+            ecrireTrous: async (ts) => { const rt = await CO.ecrireTrous(cx.db, ts, { classeVisuelParId, le: new Date() }); RC.ecrireJson(path.join(dossier, 'rapport-ecriture.json'), { le: new Date().toISOString(), trous: rt }); return rt; } });
+        note(`ÉCRITURE : ${r.etat} · attendu ${r.attendu} · réel ${r.reel} ${JSON.stringify(r.reels)} · visuels écrits ${r.ecrits} · trous nommés ${JSON.stringify(r.trous)} · REQUÊTES 0`);
         process.exitCode = r.code;
         return r;
     } finally { await fermer(); }
@@ -186,9 +190,12 @@ async function assurerCollectionTrous() {
 async function nuit({ dossier, aBlanc, limite, budget }) {
     const date = jour();
     const av = [];
-    let plan = null, rapports = [], decisions = null, ecrit = null, lot = null;
+    let plan = null, rapports = [], decisions = null, ecrit = null, lot = null, trousEcrits = null;
     try {
-        plan = await etapePlan({ dossier, limite });
+        // F3 : l'état est régénéré d'abord (compteur de production en processus fils) ; échec = arrêt, jamais un repli sur un ancien fichier
+        const etatNom = CO.regenererEtat({ lister: () => fs.readdirSync(CO.DOSSIER_COMPTEURS), lancer: () => spawnSync(process.execPath, [path.join('audit-catalogue', 'compteurs-abc.js'), '--note=comblement-nocturne : file a l\'arret verifiee par les gardes'], { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 90 * 60 * 1000 }) });
+        note(`ÉTAT FRAIS : ${etatNom}`);
+        plan = await etapePlan({ dossier, limite, etatNom });
         const vieux = CO.etatTropVieux(new Date(plan.etat.le));
         if (vieux) {
             const m = `l'état A/B/C (${plan.etat.fichier}) a plus de ${CO.ETAT_AGE_MAX_JOURS} jours : ${aBlanc ? 'AVERTISSEMENT (à blanc)' : 'aucune écriture'} — relancer compteurs-abc.js`;
@@ -208,13 +215,14 @@ async function nuit({ dossier, aBlanc, limite, budget }) {
             lot = c.status;
             ecrit = lot === 0 ? `lot-additif.js : succès (${N} visuels, ${M} trous)` : `ÉCHEC : lot-additif.js a rendu le code ${lot}`;
             if (lot !== 0) { process.exitCode = lot ?? 1; throw new Error(ecrit); }
+            trousEcrits = RC.lireJson(path.join(dossier, 'rapport-ecriture.json'), null)?.trous ?? null;
             RC.ecrireJson(path.join(dossier, 'dernier-passage.json'), { le: new Date().toISOString(), visuels: N, trous: M, etat: plan.etat.fichier });
         }
     } catch (e) {
         console.error('❌', e.message); process.exitCode = process.exitCode || 1; av.push(`ÉCHEC : ${e.message}`);
     } finally {
         const md = CO.redigerCompteRendu({ date, aBlanc, etat: plan ? { fichier: plan.etat.fichier, le: new Date(plan.etat.le) } : null, population: plan?.population ?? { base: 0, cibles: 0, sansOffre: 0, reportes: 0 }, comptesPlan: plan?.comptes ?? {},
-            rapportsTelechargement: rapports, bloquees: (plan?.fournisseurs ?? []).filter(f => f.bloquee).map(f => f.code), ecrit, trous: decisions?.trous ?? [], reportes: decisions?.reportes ?? [], visuels: decisions?.total ?? 0, attendu: decisions?.total ?? null, avertissements: av });
+            rapportsTelechargement: rapports, bloquees: (plan?.fournisseurs ?? []).filter(f => f.bloquee).map(f => f.code), ecrit, trous: decisions?.trous ?? [], reportes: decisions?.reportes ?? [], visuels: decisions?.total ?? 0, attendu: decisions?.total ?? null, trousEcrits, avertissements: av });
         fs.mkdirSync(dossier, { recursive: true });
         fs.writeFileSync(path.join(dossier, `nuit-${date}.md`), md, 'utf8');
         note(`COMPTE RENDU → ${path.join(dossier, `nuit-${date}.md`)}`);

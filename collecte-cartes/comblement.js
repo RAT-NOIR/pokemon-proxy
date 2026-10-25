@@ -48,16 +48,45 @@ function construireTrou({ idProduct, motif, sources, preuve = {}, le }) {
     if (!(le instanceof Date) || Number.isNaN(le.getTime())) throw new Error(`trou ${idProduct} : date valide exigée`);
     return { idProduct, motif, sources: [...sources], preuve, le, instrument: INSTRUMENT };
 }
-/** Écrit les trous dans `trous_nommes` (la base `cartes`, par la connexion de ÉCRITURE de lot-additif.js seulement) : upsert par idProduct, `premierLe` posé à l'insertion seulement. ADDITIF : jamais de suppression. */
-async function ecrireTrous(db, trous, { taille = 1000 } = {}) {
-    for (const t of trous) { construireTrou(t); }                // TOUT est validé AVANT la première écriture
-    let n = 0;
-    for (let i = 0; i < trous.length; i += taille) {
-        const ops = trous.slice(i, i + taille).map(t => ({ updateOne: { filter: { _id: t.idProduct }, update: { $set: { idProduct: t.idProduct, motif: t.motif, sources: t.sources, le: t.le, instrument: t.instrument, preuve: t.preuve }, $setOnInsert: { premierLe: t.le } }, upsert: true } }));
-        await db.collection('trous_nommes').bulkWrite(ops, { ordered: false });
-        n += ops.length;
+const memeSources = (a, b) => JSON.stringify([...(a || [])].sort()) === JSON.stringify([...(b || [])].sort());
+const idDe = d => d._id ?? d.idProduct;
+/**
+ * F2 : ce qui s'écrit vraiment. Un trou dont `motif` ET `sources` (triées) sont inchangés n'est PAS réécrit (pas de réécriture quotidienne) ; un trou résolu qui redevient manquant se rouvre (F4).
+ * @returns {{nouveaux: object[], changes: object[], inchanges: object[]}}
+ */
+function comparerTrous(existants, trous) {
+    const parId = new Map(existants.map(d => [idDe(d), d]));
+    const nouveaux = [], changes = [], inchanges = [];
+    for (const t of trous) {
+        const e = parId.get(t.idProduct);
+        if (!e) nouveaux.push(t); else if (e.motif !== t.motif || !memeSources(e.sources, t.sources) || e.resolu === true) changes.push(t); else inchanges.push(t);
     }
-    return n;
+    return { nouveaux, changes, inchanges };
+}
+/**
+ * F4 : les trous existants dont le produit N'EST PLUS « MANQUANT » dans l'état du jour (présent dans l'état, classeVisuel différent) : `resolu: true` + `resoluLe`, jamais supprimés.
+ * Un produit absent de l'état n'est PAS déclaré résolu (je ne sais pas). Un trou réécrit ce soir (le produit est manquant) n'est jamais résolu.
+ */
+function trousResolus(existants, classeVisuelParId, trousDuJour) {
+    const ecrits = new Set(trousDuJour.map(t => t.idProduct));
+    return existants.filter(e => e.resolu !== true && !ecrits.has(idDe(e)) && classeVisuelParId.has(idDe(e)) && classeVisuelParId.get(idDe(e)) !== 'MANQUANT').map(idDe);
+}
+/**
+ * Écrit les trous dans `trous_nommes` (la base `cartes`, par la connexion de ÉCRITURE de lot-additif.js seulement) : LIT d'abord les trous existants, n'écrit que les nouveaux ou changés (`$set` + `$setOnInsert premierLe`),
+ * marque les résolus (`$set resolu/resoluLe`). ADDITIF : jamais de suppression.
+ * @returns {Promise<{nouveaux: number, changes: number, inchanges: number, resolus: number, rouverts: number}>}
+ */
+async function ecrireTrous(db, trous, { taille = 1000, classeVisuelParId = new Map(), le = new Date() } = {}) {
+    for (const t of trous) { construireTrou(t); }                // TOUT est validé AVANT la première écriture
+    const coll = db.collection('trous_nommes');
+    const existants = await coll.find({}, { projection: { motif: 1, sources: 1, resolu: 1 } }).toArray();
+    const { nouveaux, changes, inchanges } = comparerTrous(existants, trous);
+    const resoudre = trousResolus(existants, classeVisuelParId, trous);
+    const rouverts = changes.filter(t => existants.find(e => idDe(e) === t.idProduct)?.resolu === true).length;
+    const ops = [...nouveaux, ...changes].map(t => ({ updateOne: { filter: { _id: t.idProduct }, update: { $set: { idProduct: t.idProduct, motif: t.motif, sources: t.sources, le: t.le, instrument: t.instrument, preuve: t.preuve, resolu: false }, $setOnInsert: { premierLe: t.le } }, upsert: true } }));
+    for (const id of resoudre) ops.push({ updateOne: { filter: { _id: id }, update: { $set: { resolu: true, resoluLe: le } } } });
+    for (let i = 0; i < ops.length; i += taille) await coll.bulkWrite(ops.slice(i, i + taille), { ordered: false });
+    return { nouveaux: nouveaux.length, changes: changes.length, inchanges: inchanges.length, resolus: resoudre.length, rouverts };
 }
 
 // ── 2. Les tirages : celui du PRODUIT (R3) et celui du CANDIDAT (R2) ──────────────────────────────────────────────────────────
@@ -77,11 +106,10 @@ const tirageCandidat = (def, u) => ({ langue: def.SRC.LANGUE, numero: reduireNum
 const PLAFOND_PAR_DEFAUT = 200;
 const P = require('./popularite');
 /**
- * @param {{etat: object[], guide: Map, numeros: Map, neufs: Set<number>, limite?: number}} e
- * @returns {{base: number, cibles: object[], sansOffre: object[], reportes: number}}
+ * @param {{etat: object[], guide: Map, numeros: Map, neufs: Set<number>}} e
+ * @returns {{base: number, cibles: object[], sansOffre: object[]}}
  */
-function choisirPopulation({ etat, guide, numeros, neufs, limite = PLAFOND_PAR_DEFAUT }) {
-    if (!Number.isInteger(limite) || limite < 1) throw new Error(`population : limite entière ≥ 1 exigée (reçu ${limite})`);
+function choisirPopulation({ etat, guide, numeros, neufs }) {
     if (!Array.isArray(etat) || !etat.length) throw new Error('population : l\'état A/B/C est VIDE — un instrument cassé, pas une absence (§41)');
     const manquants = etat.filter(p => p.classeVisuel === 'MANQUANT');
     if (!manquants.length) throw new Error(`population : aucun produit MANQUANT sur ${etat.length} — le filtre ne mord sur rien (§41)`);
@@ -89,8 +117,8 @@ function choisirPopulation({ etat, guide, numeros, neufs, limite = PLAFOND_PAR_D
     const decores = base.map(p => ({ idProduct: p.idProduct, name: p.name ?? null, idExpansion: p.idExpansion ?? null, langue: p.langue ?? null, tamponnee: p.tamponnee ?? null, classeFiche: p.classeFiche,
         pop: P.popDe(guide.get(p.idProduct)), codeSet: numeros.get(p.idProduct)?.codeSet ?? null, numero: numeros.get(p.idProduct)?.numero ?? null, neuf: neufs.has(p.idProduct) }));
     const tries = P.trier(decores);
-    const aChercher = tries.filter(x => x.pop.offres || x.neuf);
-    return { base: base.length, cibles: aChercher.slice(0, limite), sansOffre: tries.filter(x => !(x.pop.offres || x.neuf)), reportes: Math.max(0, aChercher.length - limite) };
+    // F1 : AUCUN plafond ici — toute la population cherchable est classée et nommée à chaque passage (0 requête) ; le plafond ne compte que les produits à ≥ 2 sources (planifier)
+    return { base: base.length, cibles: tries.filter(x => x.pop.offres || x.neuf), sansOffre: tries.filter(x => !(x.pop.offres || x.neuf)) };
 }
 /** Les produits NEUFS : `dateAdded` du catalogue postérieure au dernier passage réussi. Sans passage précédent, personne n'est dit neuf (rien ne se devine). */
 function calculerNeufs(dates, depuis) {
@@ -132,16 +160,19 @@ function classerProduit({ candidats, ambigus = [] }, bloques, ordre) {
  * Le plan, 0 requête : pour chaque produit de la population, ses candidats et sa classe.
  * @returns {{produits: object[], trousDirects: object[], comptes: object}}
  */
-function planifier({ cibles, parFournisseur, ordre, le = new Date() }) {
+function planifier({ cibles, parFournisseur, ordre, le = new Date(), limite = PLAFOND_PAR_DEFAUT }) {
+    if (!Number.isInteger(limite) || limite < 1) throw new Error(`planifier : limite entière ≥ 1 exigée (reçu ${limite})`);
     const bloques = new Set(parFournisseur.filter(f => f.bloquee).map(f => f.code));
     const g = regrouperUnites(parFournisseur, new Set(cibles.map(c => c.idProduct)));
-    const produits = [], trousDirects = [], comptes = { aucune: 0, une: 0, deuxPlus: 0, bloquees: 0 };
+    const produits = [], trousDirects = [], reportes = [], comptes = { aucune: 0, une: 0, deuxPlus: 0, bloquees: 0 };
     let ambigusN = 0;
     for (const c of cibles) {
         const { candidats, ambigus } = candidatsDuProduit(g.get(c.idProduct) || []);
         const cl = classerProduit({ candidats, ambigus }, bloques, ordre);
         if (cl.action === 'telecharger') {
             comptes.deuxPlus++;
+            // F1 : le plafond ne compte QUE ces produits (ceux qui coûtent des requêtes), dans l'ordre de popularité ; le surplus est REPORTÉ (ni trou ni visuel)
+            if (produits.length >= limite) { reportes.push(c.idProduct); continue; }
             produits.push({ idProduct: c.idProduct, name: c.name, produit: tirageProduit(c), sources: cl.sources, candidats: candidats.filter(x => cl.sources.includes(x.code)) });
             continue;
         }
@@ -149,7 +180,7 @@ function planifier({ cibles, parFournisseur, ordre, le = new Date() }) {
         trousDirects.push(construireTrou({ idProduct: c.idProduct, motif: cl.motif, sources: ordre, le, preuve: { candidats: candidats.map(x => x.code), ambigus, bloquees: [...bloques] } }));
     }
     if (ambigusN) comptes.ambigus = ambigusN;
-    return { produits, trousDirects, comptes };
+    return { produits, trousDirects, reportes, comptes };
 }
 
 /** Les unités de chaque fournisseur (plan de SA collecte, 0 requête). Un plan qui échoue ARRÊTE TOUT : un fournisseur muet ne devient jamais « aucune source ». */
@@ -291,6 +322,22 @@ async function executerEcriture({ gagnants, defs, attendu, ecrireFournisseur, ec
     return { code: 0, etat: 'ecrit', attendu, reel: total, reels, ecrits, trous: n };
 }
 
+// ── 6 bis. F3 : l'état A/B/C frais (le compteur de production, en processus fils) ─────────────────────────────────────────────
+/** Le fichier d'état apparu entre deux listages du dossier des compteurs (le plus récent par le nom s'il y en a plusieurs). LÈVE s'il n'en est apparu aucun. */
+function choisirNouvelEtat(avant, apres) {
+    const connus = new Set(avant);
+    const neufs = apres.filter(n => !connus.has(n) && /^etat-abc-\d{4}-\d{2}-\d{2}-\d{4}\.json$/.test(n)).sort();
+    if (!neufs.length) throw new Error('le compteur n\'a écrit aucun fichier etat-abc-*.json neuf : je ne sais pas si l\'état est frais');
+    return neufs[neufs.length - 1];
+}
+/** Lance le compteur (audit-catalogue/compteurs-abc.js, lecture seule de la base, écrit S8\\COMPTEURS) et rend le fichier qu'il vient d'écrire. Échec du compteur = arrêt, jamais un repli sur l'ancien fichier. */
+function regenererEtat({ lister, lancer }) {
+    const avant = lister();
+    const r = lancer();
+    if (!r || r.error || r.status !== 0) throw new Error(`le compteur compteurs-abc.js a échoué (${r?.error ? r.error.message : `code ${r?.status ?? 'aucun'}${r?.signal ? `, signal ${r.signal}` : ''}`}) : aucun passage`);
+    return choisirNouvelEtat(avant, lister());
+}
+
 // ── 7. Les gardes avant tout passage (R8), écrites par ce qu'elles AUTORISENT ─────────────────────────────────────────────────
 const ETAT_AGE_MAX_JOURS = 3;
 /** L'état A/B/C est un instantané : écrire des trous « sans visuel » depuis un instantané ancien serait affirmer ce qu'on n'a pas relu. Date illisible ou absente = trop vieux. */
@@ -343,7 +390,7 @@ function dernierEtat(noms) {
 }
 
 // ── 9. Le compte rendu de la nuit ─────────────────────────────────────────────────────────────────────────────────────────────
-function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rapportsTelechargement = [], bloquees = [], ecrit = null, trous = [], reportes = [], visuels = 0, attendu = null, avertissements = [] }) {
+function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rapportsTelechargement = [], bloquees = [], ecrit = null, trous = [], reportes = [], visuels = 0, attendu = null, trousEcrits = null, avertissements = [] }) {
     const parMotif = trous.reduce((m, t) => (m[t.motif] = (m[t.motif] || 0) + 1, m), {});
     const L = [`# Comblement nocturne — ${date}${aBlanc ? ' — À BLANC (rien n\'est écrit)' : ''}`, ''];
     L.push(`- état A/B/C : ${etat?.fichier ?? '?'} (du ${etat?.le ? etat.le.toISOString() : '?'})`);
@@ -354,10 +401,11 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
     L.push(`- visuels à écrire : ${visuels}${attendu != null ? ` (--attendu=${attendu})` : ''} · trous nommés : ${trous.length} · reportés (images non téléchargées) : ${reportes.length}`);
     L.push(`- par motif : ${JSON.stringify(parMotif)}`);
     if (ecrit) L.push(`- écriture : ${ecrit}`);
+    if (trousEcrits) L.push(`- trous écrits : nouveaux ${trousEcrits.nouveaux} · changés ${trousEcrits.changes} · inchangés (non réécrits) ${trousEcrits.inchanges} · résolus (le produit n'est plus MANQUANT) ${trousEcrits.resolus} · rouverts ${trousEcrits.rouverts}`);
     for (const a of avertissements) L.push(`- ⚠️ ${a}`);
     return `${L.join('\n')}\n`;
 }
 
 module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, reduireNumero, tirageProduit, tirageCandidat,
     PLAFOND_PAR_DEFAUT, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
-    ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
+    choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
