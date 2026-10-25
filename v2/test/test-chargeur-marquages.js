@@ -85,7 +85,8 @@ const refuse = fn => { try { fn(); return null; } catch (e) { return e.name === 
     const S = F.sections(brutF); const sec = nom => S.find(x => x.nom === nom);
     H.vrai('5a. format 2 sans les sections de marquage (en-tête réécrit) : refusé', refuse(() => { const en = F.lireEntete(brutF); en.sections = en.sections.filter(x => !x.nom.startsWith('mar.')); F.deserialiser(F.reecrireEntete(brutF, en)); }) !== null);
     H.vrai('5b. format 1 avec les sections de marquage : refusé', refuse(() => { const en = F.lireEntete(brutF); en.format = 1; F.deserialiser(F.reecrireEntete(brutF, en)); }) !== null);
-    H.vrai('5c. un numéro de format inconnu (3) : refusé', /format/i.test(refuse(() => { const en = F.lireEntete(brutF); en.format = 3; F.deserialiser(F.reecrireEntete(brutF, en)); }) || ''));
+    H.vrai('5c. un numéro de format inconnu (99 ; le 3 est celui de la colonne des emprunts) : refusé', /format/i.test(refuse(() => { const en = F.lireEntete(brutF); en.format = 99; F.deserialiser(F.reecrireEntete(brutF, en)); }) || ''));
+    H.vrai('5c2. le format 3 sans la colonne des emprunts (sections du format 2, en-tête réécrit) : refusé', refuse(() => { const en = F.lireEntete(brutF); en.format = 3; F.deserialiser(F.reecrireEntete(brutF, en)); }) !== null);
     const iFlags = sec('mar.flags'), iPdeb = sec('mar.pdeb'), iPfin = sec('mar.pfin'), iTampon = sec('mar.tampon');
     const rang3001 = Array.from(v.identifiants()).indexOf(3001), rang3000 = Array.from(v.identifiants()).indexOf(3000);
     H.vrai('5d. un drapeau de partage sans liste (RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b2 => { b2.writeInt32LE(1, iFlags.debut + 4 * rang3000); }))) !== null);

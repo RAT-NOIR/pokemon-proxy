@@ -31,6 +31,15 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         if (!lecture.ok) return stop(`--exclure : liste refusée, aucune construction : ${lecture.raison}`);
         exclure = lecture;
     }
+    // MARQUE-EMPRUNT / VERDICTS : le fichier des verdicts de l'audit des emprunts est lu et jugé AVANT toute lecture de source ; illisible ou verdict inconnu : la construction REFUSE (code 1), jamais un repli silencieux
+    let verdicts = null;
+    if (argv.some(x => x === '--verdicts-emprunts' || (x.startsWith('--verdicts-emprunts') && !x.startsWith('--verdicts-emprunts=')))) return stop('--verdicts-emprunts : la forme est --verdicts-emprunts=<fichier.json> (un fichier est requis)');
+    const nomVerdicts = arg('verdicts-emprunts');
+    if (nomVerdicts !== null) {
+        const lecture = require('../chargeur/verdicts-emprunts').lireFichierVerdicts(nomVerdicts);
+        if (!lecture.ok) return stop('--verdicts-emprunts : fichier refusé, aucune construction : ' + lecture.raison);
+        verdicts = lecture;
+    }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
     let ecriture = null;
@@ -53,7 +62,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         } finally { await cx.close(); }
     }
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
+    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
@@ -63,6 +72,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         if (c.exclusSansVisuel.length) console.log(`   exclusions : ${c.exclusSansVisuel.length} produit(s) de la liste étaient déjà sans visuel dans l'archive (liste périmée ou produit hors jeu) : ${c.exclusSansVisuel.map(x => `${x.idProduct} [${x.motif} : ${x.raison}]`).join(' ; ')}`);
         else console.log('   exclusions : tous les produits de la liste avaient un visuel dans l\'archive (aucun déjà sans visuel)');
     }
+    console.log('   emprunts : ' + c.empruntsColonne + ' (colonne) · décidés non vérifiés ' + c.empruntsProduits + ' · verdicts : ' + (verdicts ? 'juste ' + verdicts.comptes.juste + ' (vérifiés ' + c.empruntsVerifies + ', sans emprunt ' + c.verdictsSansEmprunt + ') · exclu ' + verdicts.comptes.exclu + ' (retirés ' + c.empruntsExclusParVerdict + ') · sans verdict ' + verdicts.comptes.sansVerdict : 'aucun fichier (tous les emprunts restent non vérifiés)'));
     // m1 : les compteurs du lot REPLI-REIMPRESSIONS, lisibles dans la sortie (jamais seulement dans un banc)
     if (c.repliRefuse) console.log('   repli : produits sans image d\'un autre tirage ' + c.repliRefuse.total + ' (' + Object.entries(c.repliRefuse.parFamille).map(([k, n]) => k + ' ' + n).join(' · ') + ') · basse définition exclue ' + (c.basseDefinitionExclue || 0)
         + ' · partage incohérent écarté ' + (c.partageIncoherent || 0) + ' · variante sans preuve ' + (c.varianteSansPreuve || 0) + ' · marquages ' + JSON.stringify(c.marquees || null)

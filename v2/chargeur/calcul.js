@@ -9,16 +9,27 @@ const { creerConstructeur } = require('./version');
 // catalogue sans visuel) ; chaque voisin dont un partenaire de partage est exclu l'inscrit dans sa propre liste (`b.partageAvec`), puis `comparerMarques` PROUVE que toute marque d'un produit non exclu est celle de
 // la construction complète : `partagesPerdus` doit valoir 0, sinon la construction est REFUSÉE. Les liens de fiche, les jumeaux, les prix mélangés et la carte du catalogue passent par d'autres rappels du sink et
 // NE BOUGENT PAS ; un voisin qui partageait la même entrée d'image garde la sienne (l'exclusion porte sur l'idProduct). Sans `exclusions`, rien n'est suivi, rien n'est ajouté aux comptes : la sortie est celle d'avant.
-async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null }) {
+async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null, verdictsEmprunts = null }) {
     const X = require('./exclusions');
+    // MARQUE-EMPRUNT / VERDICTS : « exclu » rejoint les exclusions (motif visuel-faux ; un motif explicite de la liste prime) ; « juste » rend l'emprunt VÉRIFIÉ (il ne va pas dans la colonne des emprunts) ; null ou aucune ligne : l'emprunt reste non vérifié
+    const verdicts = verdictsEmprunts instanceof Map ? verdictsEmprunts : null, parVerdict = new Set(), verifies = new Set();
+    if (verdictsEmprunts !== null && verdictsEmprunts !== undefined && !verdicts) throw new Error('verdictsEmprunts : une Map idProduct → verdict est attendue');
+    if (verdicts) {
+        for (const [id, v] of verdicts) if (!Number.isSafeInteger(id) || id <= 0 || (v !== 'juste' && v !== 'exclu' && v !== null)) throw new Error('verdictsEmprunts : ligne illisible pour ' + id);
+        const m = new Map(exclusions || []);
+        for (const [id, v] of verdicts) if (v === 'exclu' && !m.has(id)) { m.set(id, 'visuel-faux'); parVerdict.add(id); }
+        if (m.size) exclusions = m;
+    }
     const suivi = exclusions === null || exclusions === undefined ? null : X.suivre(exclusions);
-    const b = creerConstructeur({ marquages: true });         // REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
-    const complet = suivi ? creerConstructeur({ marquages: true }) : null;
+    const b = creerConstructeur({ marquages: true, emprunts: true });         // MARQUE-EMPRUNT : la colonne des emprunts (format 3) est toujours écrite, vide s'il n'y en a pas ; REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
+    const complet = suivi ? creerConstructeur({ marquages: true, emprunts: true }) : null;
     const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, sink: {
         entree: e => { if (complet) complet.entree(e); return suivi && suivi.retenir(e) ? undefined : b.entree(e); },
         lien: (s, c, i) => { if (complet) complet.lien(s, c, i); return b.lien(s, c, i); },
         jumeau: j => { if (complet) complet.jumeau(j); return b.jumeau(j); },
-        melange: id => { if (complet) complet.melange(id); return b.melange(id); } } });
+        melange: id => { if (complet) complet.melange(id); return b.melange(id); },
+        // MARQUE-EMPRUNT : la marque d'un produit exclu ne va pas dans l'archive (il n'y a plus d'entrée) ; le constructeur complet la garde (comparerMarques)
+        emprunt: id => { if (verdicts && verdicts.get(id) === 'juste') { verifies.add(id); return; } if (complet) complet.emprunt(id); if (!(exclusions && exclusions.has(id))) b.emprunt(id); } } });
     const bilan = suivi ? suivi.bilan() : null;
     let marqueesDeLArchive = null;
     if (bilan) {
@@ -46,6 +57,11 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
     // LOT TAMPONS (B, tour 1) : le dénominateur des prix mélangés, imprimé par le chargeur, et la construction LÈVE si la colonne n'a pas EXACTEMENT les produits marqués de cartes_produits
     const dansColonne = version ? version.comptes.melange : 0, marquesLignes = r.denominateurs.melangeProduits ?? 0;
     if (version && dansColonne !== marquesLignes) throw new Error(`prix mélangés : produits marqués dans cartes_produits ${marquesLignes} ≠ dans la colonne ${dansColonne} — aucune version construite`);
-    return { version, comptes: { ...comptes, melangeProduits: marquesLignes, melangeColonne: dansColonne, marquees: marqueesDeLArchive || r.denominateurs.marquees, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue, partageIncoherent: r.denominateurs.partageIncoherent, varianteSansPreuve: r.denominateurs.varianteSansPreuve, varianteHorsListe: r.denominateurs.varianteHorsListe }, denominateurs: r.denominateurs };
+    // MARQUE-EMPRUNT : le dénominateur de la décision (produits distincts dont l'entrée écrite est empruntée) face à la colonne. Égalité exigée quand rien ne peut légitimement retirer une entrée
+    // (aucune exclusion, aucune entrée refusée, aucun doublon contradictoire) ; sinon la colonne ne peut qu'être plus petite.
+    const empruntsDecides = (r.denominateurs.emprunts ?? 0) - verifies.size, empruntsColonne = version ? (version.comptes.emprunts ?? 0) : 0;
+    const exacte = !bilan && e.refusees === 0 && e.doublonsContradictoires === 0;
+    if (version && (exacte ? empruntsColonne !== empruntsDecides : empruntsColonne > empruntsDecides)) throw new Error(`emprunts : produits empruntés par la décision ${empruntsDecides} ≠ dans la colonne ${empruntsColonne} — aucune version construite`);
+    return { version, comptes: { ...comptes, melangeProduits: marquesLignes, melangeColonne: dansColonne, empruntsProduits: empruntsDecides, empruntsColonne, empruntsVerifies: verifies.size, empruntsExclusParVerdict: bilan ? [...parVerdict].filter(id => !bilan.sansVisuel.some(x => x.idProduct === id)).length : 0, verdictsSansEmprunt: verdicts ? [...verdicts].filter(([id, v]) => v === 'juste' && !verifies.has(id)).length : 0, empruntsParNature: r.denominateurs.empruntsParNature, marquees: marqueesDeLArchive || r.denominateurs.marquees, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue, partageIncoherent: r.denominateurs.partageIncoherent, varianteSansPreuve: r.denominateurs.varianteSansPreuve, varianteHorsListe: r.denominateurs.varianteHorsListe }, denominateurs: r.denominateurs };
 }
 module.exports = { calculer };
