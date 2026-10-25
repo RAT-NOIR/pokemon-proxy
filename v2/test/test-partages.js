@@ -114,16 +114,16 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     const ctxG = G.contexte({ groupe: {}, carte: { v1: [1], v2: [2], v3: [3] }, invisibles: {}, produits: { v1: [[7001, 5.0]], v2: [[7001, 5.0], [7002, 5.0]], v3: [[7003, 5.0]] } });
     const lig = (a, b) => ({ top: [[a, 0.9], [b, 0.3]], essai: 0 });
     const mesures = { comparerPaire: () => [0, 0], scoresZones: () => ({ bas: 1, haut: 1, inliers: 99 }) };
-    const sansPartage = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG });
+    const sansPartage = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG, emprunte: () => false });
     H.v('4a. contrôle : G affirme 7001 quand rien ne le dit partagé', [sansPartage && sansPartage.issue, sansPartage && sansPartage.produit], ['affirmee', 7001]);
-    const avecPartage = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG, partages: id => (id === 7001 ? [7002] : id === 7002 ? [7001] : []) });
+    const avecPartage = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG, emprunte: () => false, partages: id => (id === 7001 ? [7002] : id === 7002 ? [7001] : []) });
     H.v('4b. G affirme 7001 mais 7001 est partagé avec 7002 : une QUESTION entre eux (l\'image ne les départage pas)', [avecPartage.issue, avecPartage.candidats, avecPartage.codeQuestion], ['question', [7001, 7002], 'visuel']);
-    const commune = RG.decisionRegleG({ ligne: lig('v2', 'v3'), nEssais: 1, mesures, contexteG: ctxG, partages: id => (id === 7001 ? [7002] : id === 7002 ? [7001] : []) });
+    const commune = RG.decisionRegleG({ ligne: lig('v2', 'v3'), nEssais: 1, mesures, contexteG: ctxG, emprunte: () => false, partages: id => (id === 7001 ? [7002] : id === 7002 ? [7001] : []) });
     H.v('4c. G donne une réponse commune (même prix) pour 7001 et 7002 : la question du mécanisme existant, les deux produits', [commune.issue, commune.candidats], ['question', [7001, 7002]]);
     const ctxQ = G.contexte({ groupe: {}, carte: { v1: [1], v3: [3] }, invisibles: {}, produits: { v1: [[7001, 5.0], [7005, 9.0]], v3: [[7003, 5.0]] } });
-    const elarg = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxQ, partages: id => (id === 7005 ? [7006] : id === 7006 ? [7005] : []) });
+    const elarg = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxQ, emprunte: () => false, partages: id => (id === 7005 ? [7006] : id === 7006 ? [7005] : []) });
     H.v('4d. G pose une question [7001, 7005] et 7005 a un partenaire (7006) que la question oubliait : il est ajouté (trois candidats)', [elarg.issue, elarg.candidats], ['question', [7001, 7005, 7006]]);
-    const trop = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxQ, partages: id => (id === 7001 ? [7002, 7003] : id === 7005 ? [7006] : []) });
+    const trop = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxQ, emprunte: () => false, partages: id => (id === 7001 ? [7002, 7003] : id === 7005 ? [7006] : []) });
     H.v('4e. quatre produits ou plus : G ne tranche pas (null), la chaîne héritée décide — jamais une question tronquée', trop, null);
     // la version EN PLACE est lue par défaut (comme visuels.js) : sans le paramètre, G voit les partages de l'archive chargée
     etat.installer(v);
@@ -132,7 +132,7 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
         H.v('4f. sans paramètre, G lit la version EN PLACE : 7001 est partagé, donc une question', [enPlace.issue, enPlace.candidats], ['question', [7001, 7002]]);
     } finally { etat.vider(); }
     const sansVersion = RG.decisionRegleG({ ligne: lig('v1', 'v3'), nEssais: 1, mesures, contexteG: ctxG });
-    H.v('4g. aucune version en place : G décide comme avant', [sansVersion.issue, sansVersion.produit], ['affirmee', 7001]);
+    H.v('4g. aucune version en place : tout est inconnu donc emprunté, G se tait (MARQUE-EMPRUNT, I1)', sansVersion, null);
 
     // ── 5. M1 (relecture r1) : le PARTENAIRE d'un produit partagé ne disparaît jamais d'une question
     const b5 = creerConstructeur({ marquages: true });

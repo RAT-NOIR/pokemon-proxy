@@ -56,7 +56,7 @@ function chargerFixtures() {
     };
     let affirmee = null, question = null, n = 0;
     for (const l of F.lignes) {
-        let w; try { w = RG.decisionRegleG({ ligne: l, nEssais: l.nEssais, mesures: mesuresDe(l), contexteG: ctx }, F.seuils); } catch { continue; }
+        let w; try { w = RG.decisionRegleG({ ligne: l, nEssais: l.nEssais, mesures: mesuresDe(l), contexteG: ctx, emprunte: () => false }, F.seuils); } catch { continue; }
         n++;
         if (w && w.issue === 'affirmee' && !affirmee) affirmee = { l, produit: w.produit };
         if (w && w.issue === 'question' && !question) question = { l, candidats: w.candidats };

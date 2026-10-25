@@ -59,6 +59,9 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     // ── le fournisseur
     const aucun = { appels: 0 };
     const index = installerIndex();
+    // MARQUE-EMPRUNT : sans archive en place tout est « inconnu » donc emprunté et G se tait ; le banc installe donc une archive qui déclare ses trois produits propres (colonne des emprunts vide)
+    const versionDuBanc = () => { const { creerConstructeur } = require('../chargeur/version'); const b = creerConstructeur({ emprunts: true }); for (const id of [703, 705, 706]) b.entree({ idProduct: id, vignette: { cle: `v/${id}.webp`, w: 200, h: 279 }, grande: null, visuel: 'du-set', mention: null, idMetacard: 1, numero: '1', rarete: null, total: null, variante: null, setNom: 'S', lien: null }); return b.finir(new Date('2026-10-25T10:00:00.000Z')); };
+    require('../chargeur/etat').installer(versionDuBanc());
     const espionVoisins = index.voisins.bind(index); index.voisins = (...a) => { aucun.appels++; return espionVoisins(...a); };
     const sans = V.creerFournisseurEmpreinte({ cfg: cfgDe() });
     const appel = (f, e) => f({ entree: e, scanId: 's1' });
@@ -89,7 +92,7 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     H.v('4e. UNE seule recherche par requête', aucun.appels, 2);                         // r puis rr
     // la décision de G sur cette ligne, par la fonction de la route : jeu-3 -> 703, sans mesure de pixels
     const RG = require('../identifier/regle-g');
-    const d = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
+    const d = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG, emprunte: () => false }, r.seuils);
     H.v('4f. la règle G affirme 703 (un visuel, un produit) sans qu\'aucune mesure de pixels soit demandée', [d && d.issue, d && d.produit], ['affirmee', 703]);
     // MARQUE-EMPRUNT : le contexte rendu à la route (donc lu par les mesures ET par la décision) est celui de la version en place où 703 est EMPRUNTÉ : un reste de sa carte, plus un produit du visuel
     { const etatVersion = require('../chargeur/etat'), { creerConstructeur } = require('../chargeur/version');
@@ -100,7 +103,7 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
             H.v('4g. MARQUE-EMPRUNT : le contexte rendu n\'est plus celui de l\'index (703 emprunté) : produits du visuel vidés, 703 parmi les restes de sa carte, l\'index intact', [re.ok, re.contexteG === index.contexteG, re.contexteG.produits.get('banc/jeu-3.webp'), re.contexteG.invisibles.get(33), index.contexteG.produits.get('banc/jeu-3.webp')], [true, false, [], [703], [[703, 2]]]);
             const de = RG.decisionRegleG({ ligne: re.ligne, nEssais: re.nEssais, mesures: re.mesures, contexteG: re.contexteG }, re.seuils);
             H.v('4h. … et la décision ne l\'affirme plus (null : la chaîne héritée décide)', de, null);
-        } finally { etatVersion.vider(); } }
+        } finally { etatVersion.installer(versionDuBanc()); } }
 
     // le plus petit index de photo, et UN seul vecteur est jugé
     aucun.appels = 0;
@@ -142,10 +145,10 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     r = await appel(avecPixels, entreeDe([ent(0, ligneDe(5), true)]));
     H.vrai('7a. jeu-5 a un jumeau (jeu-6) : la règle demande la comparaison de la paire PUIS les zones du gagnant ; les mesures reviennent au fournisseur', r.ok === true && scripts.appels.filter(a => a[0] === 'paire').length >= 1 && scripts.appels.some(a => a[0] === 'zones' && a[1] === 'banc/jeu-5.webp'));
     H.v('7b. la photo redressée est la CARTE jointe : 420 × 587 × 3 octets, demandée UNE fois, puis LIBÉRÉE', [scripts.appels.filter(a => a[0] === 'photo').map(a => a.slice(1)), scripts.appels.filter(a => a[0] === 'photo-liberee').length], [[[420, 587, 420 * 587 * 3]], 1]);
-    const d2 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
+    const d2 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG, emprunte: () => false }, r.seuils);
     H.v('7c. la décision de la route, rejouée sur les mesures rendues par le fournisseur (sans nouveau calcul de pixels), affirme 705', [d2 && d2.issue, d2 && d2.produit], ['affirmee', 705]);
     scripts.appels.length = 0;
-    const d3 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
+    const d3 = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG, emprunte: () => false }, r.seuils);
     H.vrai('7d. … et ce rejeu n\'appelle AUCUNE fonction de zones (les mesures sont en cache)', d3 && scripts.appels.length === 0);
     // sans crochet de scans : G se tait quand elle a besoin des zones
     r = await appel(V.creerFournisseurEmpreinte({ cfg: cfgDe(), zones: fauxZones }), entreeDe([ent(0, ligneDe(5), true)]));

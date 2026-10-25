@@ -169,8 +169,8 @@ function assembler(d) {
         /** MARQUE-EMPRUNT : la colonne des emprunts est-elle chargée ? (une archive d'avant le format 3 : non — aucun emprunt ne peut alors être exclu.) */
         colonneEmprunts: Boolean(emp),
         /**
-         * Le visuel de ce produit est-il EMPRUNTÉ à un autre tirage (la décision `choisirVisuel`) ? true / false d'après la colonne ; false pour un produit sans entrée (aucun visuel n'est servi) ;
-         * null sans colonne (archive d'avant) ou pour un identifiant non entier : on ne sait pas — jamais « non emprunté » en silence. Les règles d'image lisent null comme emprunté (identifier/emprunt.js).
+         * Le visuel de ce produit est-il EMPRUNTÉ à un autre tirage (la décision `choisirVisuel`) ? true / false d'après la colonne pour un produit qui a une entrée ;
+         * null sans colonne (archive d'avant), pour un produit SANS entrée (aucun visuel servi) ou pour un identifiant non entier : on ne sait pas — jamais « non emprunté » en silence. Les règles d'image lisent null comme emprunté (identifier/emprunt.js).
          */
         empruntDe(id) {
             if (!emp || !Number.isInteger(id) || chercher(ids, id) < 0) return null;       // pas de colonne, ou produit SANS entrée (aucun visuel servi) : inconnu

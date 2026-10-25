@@ -120,7 +120,9 @@ const D = new Date('2026-10-25T10:00:00.000Z');
     H.v('5g. rien d\'emprunté : le MÊME objet de contexte est rendu (aucune copie inutile)', EMP.contexteSansEmprunts(brutCtx, () => false) === brutCtx, true);
     // la version en place par défaut
     E.vider();
-    H.v('5h. sans version en place ni fonction fournie : aucun amendement (aucun visuel n\'est servi, rien n\'est emprunté), le comportement d\'avant', dec({ v1: [[500, 9.0]] }).issue, 'affirmee');
+    H.v('5h. sans version en place ni fonction fournie : tout est inconnu donc emprunté, G se tait (l\'index d\'empreintes se charge sans l\'archive : rien n\'autorise G à s\'appuyer sur un visuel de nature inconnue)', dec({ v1: [[500, 9.0]] }), null);
+    H.v('5h2. une exception de la lecture de la marque vaut « inconnu » : la règle se tait, ne lève pas', dec({ v1: [[500, 9.0]] }, () => { throw new Error('marque illisible'); }), null);
+    H.v('5h3. le contexte amendé sans version (rien n\'est lisible) retire tous les produits du visuel', EMP.contexteDeLaRegle(ctxG({ v1: [[500, 9.0]] })).produits.get('v1'), []);
     E.installer(a1.finir(D));
     H.v('5i. avec une archive SANS la colonne : tout produit est « inconnu » donc emprunté — la règle se tait', dec({ v1: [[1, 9.0]] }), null);
     const bon = creerConstructeur({ emprunts: true }); bon.entree(brut(1)); bon.entree(brut(2)); bon.emprunt(2); bon.lien('Set-A', '1|001', [1]);

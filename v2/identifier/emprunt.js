@@ -17,11 +17,12 @@ function empruntOuInconnu(version, idProduct) {
  * s'il n'y a rien à retirer, le MÊME objet est rendu. @param empruntDe fonction(idProduct) -> true | false | null (null = emprunté : défaut fermé).
  */
 function contexteSansEmprunts(ctx, empruntDe) {
+    const lire = id => { try { return empruntDe(id); } catch { return null; } };                  // une exception vaut « inconnu » : emprunté, la règle se tait
     const produits = new Map(), ajoutes = new Map();                       // carte (nombre) -> idProduct[] à ajouter aux restes
     let retire = 0;
     for (const [visuel, liste] of ctx.produits) {
         const gardes = [], empruntes = [];
-        for (const p of liste) (empruntDe(p[0]) !== false ? empruntes : gardes).push(p);
+        for (const p of liste) (lire(p[0]) !== false ? empruntes : gardes).push(p);
         if (!empruntes.length) { produits.set(visuel, liste); continue; }
         produits.set(visuel, gardes); retire += empruntes.length;
         for (const carte of ctx.carte.get(visuel) || []) {
@@ -45,13 +46,12 @@ function contexteDeLaVersion(ctx, version) {
 }
 
 /**
- * Le contexte que la règle G doit lire pour une requête : `emprunte` (fonction fournie, les bancs) ; sinon la version EN PLACE ; sans version en place (aucun visuel n'est servi, rien n'est
- * emprunté) le contexte tel quel.
+ * Le contexte que la règle G doit lire pour une requête : `emprunte` (fonction fournie, les bancs) ; sinon la version EN PLACE ; SANS version en place : tout est « inconnu » donc emprunté, G se tait (l'index d'empreintes se charge indépendamment de l'archive : rien n'autorise G à s'appuyer sur un visuel dont on ignore la nature).
  */
 function contexteDeLaRegle(ctx, emprunte) {
     if (typeof emprunte === 'function') return contexteSansEmprunts(ctx, emprunte);
     const version = etat.version();
-    return version ? contexteDeLaVersion(ctx, version) : ctx;
+    return version ? contexteDeLaVersion(ctx, version) : contexteSansEmprunts(ctx, () => null);
 }
 
 module.exports = { empruntOuInconnu, contexteSansEmprunts, contexteDeLaRegle };

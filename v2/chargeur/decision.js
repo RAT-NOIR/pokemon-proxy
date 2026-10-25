@@ -82,7 +82,8 @@ function basseDefinitionDe(im) {
  * Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés, OU si l'image est servie à une paire SÉPARÉE PAR LA VARIANTE
  * (PARTAGES-VARIANTE : false, aucune liste, `variante` prouvée du produit servi — partage-variante.js) ; la basse définition suit l'image.
  */
-function marquagesDe(im, idProduct, variante = null) {    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+function marquagesDe(im, idProduct, variante = null) {
+    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
     const paire = separeeParVariante(im, variante);
     const concerne = liste || paire;
     const bool = x => (typeof x === 'boolean' ? x : null);
