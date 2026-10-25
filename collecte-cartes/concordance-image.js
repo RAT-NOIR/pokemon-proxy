@@ -68,4 +68,77 @@ async function concordent(a, b, seuils = {}) {
     return { concorde: accepte, phash: ph, inliers: inl, raison: `pHash ${ph} (max ${S.phashMax}) ${okPh ? 'ok' : 'non'} ; ORB ${inl} (min ${S.inliersMin}) ${okOrb ? 'ok' : 'non'} ; exigé : ${S.exiger}` };
 }
 
-module.exports = { phash, distanceHamming, orbInliers, concordent, SEUILS, TAILLE_MIN };
+// ============================================================
+// CASCADE DE DÉCISION (testeur, 2026-10-25 21:45) — deciderVisuel : aucune E/S, aucune écriture ; elle DÉCIDE, un autre outil écrit.
+// ============================================================
+// SEUILS NOMMÉS. Source des deux : calibrer-concordance.js, 2026-10-25, graine 20261025, 300 paires inter-sources par classe (voir SEUILS plus haut).
+const SEUIL_STRICT = { phashMax: 2, inliersMin: 40 };   // retenu par la calibration : 0 faux ordinaire, 0 faux « autre illustration », 169/300 vrais perdus
+const SEUIL_SOUPLE = { phashMax: 6, inliersMin: 30 };   // variante souple de la calibration : 93/300 perdus, 0 faux ordinaire, 2 « autre illustration » apparents = erreurs d'étiquette des sources (ERREURS-SOURCES.md) — d'où la TROISIÈME concordance exigée
+const MOTIFS_TROU = Object.freeze(['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible']);
+const { cleNumero } = require('./jointure');            // la clé de numéro de la production, jamais recopiée
+
+const norm = (s) => (s == null || String(s).trim() === '' ? null : String(s).trim().toLowerCase());
+/**
+ * MÊME TIRAGE. Le produit fait foi ; le candidat n'est retenu que s'il est d'accord.
+ *  - langue : doit être ÉGALE. Un champ ABSENT (côté candidat OU produit) EXCLUT : « je ne sais pas » n'est pas « oui ».
+ *  - numéro, code de set : comparés (cleNumero / minuscules) seulement quand les DEUX côtés les portent. Absent d'un côté = ne contredit pas, mais ne compte pas comme un accord (aucun point n'est gagné).
+ *  - tampon : quand le produit en porte un, le candidat doit porter le même (absent = exclu). Un candidat tamponné pour un produit sans tampon n'est PAS exclu ici (règle posée par le testeur : « égal quand le produit en porte un »).
+ */
+function memeTirage(produit, t = {}) {
+    const lp = norm(produit?.langue), lc = norm(t.langue);
+    if (!lp || !lc || lp !== lc) return false;
+    if (produit.numero != null && String(produit.numero).trim() !== '' && t.numero != null && String(t.numero).trim() !== '' && cleNumero(produit.numero) !== cleNumero(t.numero)) return false;
+    if (norm(produit.codeSet) && norm(t.codeSet) && norm(produit.codeSet) !== norm(t.codeSet)) return false;
+    if (norm(produit.tampon) && norm(produit.tampon) !== norm(t.tampon)) return false;
+    return true;
+}
+async function mesurerParDefaut(a, b) {
+    if (a.empreintes?.phash && b.empreintes?.phash && a.empreintes.orb && b.empreintes.orb) {   // empreintes précalculées : { phash, orb: résultat de decrire() }
+        const { cv } = await D.outils();
+        return { phash: distanceHamming(a.empreintes.phash, b.empreintes.phash), inliers: D.inliers(cv, a.empreintes.orb, b.empreintes.orb) };
+    }
+    const m = await concordent(a.buf, b.buf, { phashMax: 64, inliersMin: 0 });
+    return m.concorde === null ? null : { phash: m.phash, inliers: m.inliers };
+}
+const niveau = (m) => (m.phash <= SEUIL_STRICT.phashMax && m.inliers >= SEUIL_STRICT.inliersMin ? 'strict' : (m.phash <= SEUIL_SOUPLE.phashMax && m.inliers >= SEUIL_SOUPLE.inliersMin ? 'souple' : 'non'));
+
+/**
+ * @param {{produit:{langue,codeSet,numero,tampon}, candidats:Array<{source:string, buf?:Buffer, empreintes?:object, tirage:object}>, scansConformes?:Array<{buf?:Buffer, empreintes?:object, source?:string}>}} e
+ * @param {{comparer?: (x,y)=>Promise<{phash:number,inliers:number}|null>}} [opts]  comparer injectable (bancs)
+ * @returns {Promise<{decision:'ecrire'|'a-confirmer'|'trou', motif?:string, preuve:object}>}
+ */
+async function deciderVisuel({ produit, candidats = [], scansConformes = [] }, opts = {}) {
+    const comparer = opts.comparer || mesurerParDefaut;
+    const admis = candidats.filter(c => memeTirage(produit, c.tirage));
+    const exclusTirage = candidats.length - admis.length;
+    const preuve = { exclusTirage, candidats: candidats.length, admis: admis.length, scansConformes: scansConformes.length, paires: [] };
+    // nœuds : candidats admis + vrais scans conformes ; chaque nœud a une SOURCE (un scan conforme compte pour sa propre source)
+    const noeuds = [...admis.map((c, i) => ({ ref: c, source: c.source, conforme: false, nom: `c${i}` })), ...scansConformes.map((s, i) => ({ ref: s, source: `scan-conforme:${s.source ?? i}`, conforme: true, nom: `z${i}` }))];
+    if (!candidats.length) return { decision: 'trou', motif: 'aucune-source', preuve };
+    if (!admis.length || (new Set(admis.map(c => c.source)).size < 2 && !scansConformes.length))
+        return { decision: 'trou', motif: exclusTirage ? 'tirage-different' : 'une-seule-source', preuve };
+    // arêtes : candidat–candidat de sources différentes, candidat–scan conforme (jamais scan–scan)
+    const aretes = []; let illisibles = 0, comparees = 0;
+    for (let i = 0; i < noeuds.length; i++) for (let j = i + 1; j < noeuds.length; j++) {
+        const x = noeuds[i], y = noeuds[j];
+        if (x.conforme && y.conforme) continue;
+        if (x.source === y.source) continue;                               // deux fois la même source n'est pas une concordance indépendante
+        const m = await comparer(x.ref, y.ref); comparees++;
+        if (!m) { illisibles++; continue; }
+        const n = niveau(m); preuve.paires.push({ a: x.nom, b: y.nom, phash: m.phash, inliers: m.inliers, niveau: n });
+        if (n !== 'non') aretes.push({ x, y, n });
+    }
+    // 1. une arête STRICTE (deux sources indépendantes, ou une source et un vrai scan conforme) suffit
+    const stricte = aretes.find(a => a.n === 'strict');
+    if (stricte) return { decision: 'ecrire', preuve: { ...preuve, regle: 'strict', paire: [stricte.x.nom, stricte.y.nom] } };
+    // 2. une arête SOUPLE exige une TROISIÈME concordance (au moins souple) : un nœud d'une troisième source, relié à l'un des deux
+    for (const a of aretes) {
+        const tierce = aretes.find(b => b !== a && [b.x, b.y].some(n => n === a.x || n === a.y)
+            && [b.x, b.y].some(n => n !== a.x && n !== a.y && n.source !== a.x.source && n.source !== a.y.source));
+        if (tierce) return { decision: 'ecrire', preuve: { ...preuve, regle: 'souple+tierce', paire: [a.x.nom, a.y.nom], tierce: [tierce.x.nom, tierce.y.nom] } };
+    }
+    if (aretes.length) return { decision: 'a-confirmer', preuve: { ...preuve, regle: 'souple-seule', paire: [aretes[0].x.nom, aretes[0].y.nom] } };
+    return { decision: 'trou', motif: comparees && illisibles === comparees ? 'illisible' : 'discordance-image', preuve };
+}
+
+module.exports = { phash, distanceHamming, orbInliers, concordent, SEUILS, TAILLE_MIN, deciderVisuel, memeTirage, SEUIL_STRICT, SEUIL_SOUPLE, MOTIFS_TROU };
