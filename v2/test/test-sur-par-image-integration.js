@@ -136,6 +136,14 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const modeleAutre = await jouer(sv, Q, { empreintes: [A.entree(0, 5, true, false)], modeleEmpreinte: { id: A.MODELE.id, sha256: 'd'.repeat(64) } });
         H.v('3g. une AUTRE version du modèle : empreintes ignorées, la question reste', cartesDe(modeleAutre.j).statut, 'a-trancher');
     }
+    {   // (4) la règle G a CHANGÉ le résultat (la chaîne affirme A, G dit P : question [A, P], désaccord journalisé, influence vraie) : SUR-PAR-IMAGE ne passe PAS derrière (relecture 1, I2)
+        const svG = await appFabrique(cfgOn, { voisinsEmpreinte: undefined, zonesEmpreinte: A.fausseZones(), scanEmpreinte: A.scanBanc });
+        const g = await jouer(svG, { mode: 'affirmee', ids: [A.ID_A] }, { empreintes: [A.entree(0, 3, true)], modeleEmpreinte: A.modeleAnnonce() });
+        const an = await analyseDe(g.j);
+        H.v('4a. 🔴 la chaîne affirme A, G (vecteur de P) en fait une question [A, P] : elle RESTE une question — SUR-PAR-IMAGE, qui aurait affirmé P (cosinus 1, voisin n°1), ne passe pas derrière G (ni trace)',
+            [cartesDe(g.j).statut, cartesDe(g.j).candidats.map(c => c.idProduct).sort(), an.empreinteExtension.influence, !!an.desaccordRegleG, 'surParImage' in an], ['a-trancher', [A.ID_A, A.ID_P].sort(), true, true, false]);
+        await svG.fermer();
+    }
     {
         const E = require('../chargeur/etat'); E.vider(); E.installer(VERSION_SANS);
         const sm = await jouer(sv, Q, vec(5));

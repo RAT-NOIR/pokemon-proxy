@@ -84,10 +84,12 @@ const appel = (over = {}) => consulterSurParImage({
     await se_tait('(7) champ `mention` absent de l\'entrée (undefined) : inconnu, défaut fermé', { version: version({ ent: { [A.ID_A]: { mention: undefined } } }) }, 'visuel-suspect');
     await se_tait('(7) un RIVAL (X) est en basse définition : se tait', { version: version({ ent: { [A.ID_X]: { basseDefinition: true } } }) }, 'visuel-suspect');
     await se_tait('(7) archive SANS la colonne des marquages (champ basseDefinition inexistant) : inconnu, défaut fermé', { version: version({ colonneMarquages: false, ent: { [A.ID_A]: { basseDefinition: null }, [A.ID_X]: { basseDefinition: null } } }) }, 'visuel-suspect');
+    await se_tait('(7) 🔴 basseDefinition null (« non mesuré » autant que « non signalé »), colonne présente, sur le MEILLEUR : se tait', { version: version({ ent: { [A.ID_A]: { basseDefinition: null } } }) }, 'visuel-suspect');
+    await se_tait('(7) 🔴 … ou sur un RIVAL : se tait', { version: version({ ent: { [A.ID_X]: { basseDefinition: null } } }) }, 'visuel-suspect');
     {
         affirmes = [];
-        const r = await appel({ version: version({ ent: { [A.ID_A]: { basseDefinition: null }, [A.ID_X]: { basseDefinition: null } } }) });
-        H.v('(7) archive avec la colonne, basseDefinition null (le producteur n\'écrit jamais false : « non signalé ») : le sûr tient', [r.resultat && r.resultat.issue], ['affirmee']);
+        const r = await appel({ version: version({ ent: { [A.ID_A]: { basseDefinition: false }, [A.ID_X]: { basseDefinition: false } } }) });
+        H.v('(7) basseDefinition false (largeur connue ≥ 350 px) des deux côtés : le sûr tient', [r.resultat && r.resultat.issue], ['affirmee']);
     }
     await se_tait('(7) cas Masaki : le fichier de A est AUSSI celui d\'un produit d\'une autre métacarte (P) : se tait', { version: version({ ent: { [A.ID_P]: { vignette: { cle: `v/${A.ID_A}.webp` } } } }) }, 'visuel-suspect');
     await se_tait('(7) … ou sa grande image', { version: version({ ent: { [A.ID_P]: { grande: { cle: 'banc/jeu-5.webp' } } } }) }, 'visuel-suspect');

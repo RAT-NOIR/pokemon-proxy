@@ -28,7 +28,9 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
     // l'exclusion SIMULÉE se comporte comme la vraie (calcul.js) : un produit exclu n'a plus aucune entrée d'archive, donc il ne partage plus aucun fichier non plus
     const Vx = exclusAvant.size ? Object.create(V, { entree: { value: id => (exclusAvant.has(id) ? null : V.entree(id)) }, identifiants: { value: () => V.identifiants().filter(i => !exclusAvant.has(i)) } }) : V;
     const { signauxDe } = require(path.join(racine, 'v2', 'identifier', 'sur-par-image-route.js'));
-    const signaux = signauxDe(Vx);
+    const signauxBruts = signauxDe(Vx);
+    // --null-propre : HYPOTHÈSE de mesure seulement (lire basseDefinition null comme « propre », ce que la production ne fait PLUS) pour dire combien de questions le null fait taire
+    const signaux = process.argv.includes('--null-propre') ? (id => { const s = signauxBruts(id); return s && s.basse === null ? { ...s, basse: false } : s; }) : signauxBruts;
     const nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8')).photos;
     const exclus = new Set((arg('exclure') || '').split(',').filter(Boolean).map(Number));
     const voir = new Set((arg('voir') || '').split(',').filter(Boolean).map(Number));

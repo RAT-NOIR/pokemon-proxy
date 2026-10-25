@@ -48,13 +48,9 @@ function signauxDe(version) {
             }
             if (partage === true) break;
         }
-        // MESURÉ sur l'archive du 25/10 (67 205 produits) : basseDefinition vaut `true` pour 11 124 et `null` pour 56 081, JAMAIS `false` — le producteur n'écrit que « sous 350 px » (decision.js:75). Dans une archive qui PORTE la
-        // colonne des marquages, `null` veut donc dire « non signalé », et seul `true` est suspect ; sans la colonne (archive d'avant), le champ n'existe pas : inconnu, la règle se tait.
-        const basse = e.basseDefinition === true ? true : e.basseDefinition === false ? false : (version.colonneMarquages === true ? false : null);
-        // (l'EMPRUNT n'est plus ici : voir `emprunteDe` ci-dessous, le point de branchement avec le chargeur)
-        // ANCIENNE LECTURE, gardée en ceinture dans emprunteDe : l'entrée porte une MENTION (entree.mention, version.js:158 ; elle vient de cartes_produits.visuelSubstitut.mention, chargeur/source.js:38). Sur l'archive du 26/10 : 4 031 entrées sur 67 208 en portent une,
-        // presque toutes « Visuel de la même carte dans un autre tirage (…) — pas celui de ce set » ; c'est la marque LISIBLE d'un visuel d'un autre tirage (cas Classic : de vrais dessins différents). Toute mention, quel qu'en soit le texte, est
-        // suspecte (défaut fermé) ; `null` = aucune mention ; un champ absent (undefined) = inconnu.
+        // basseDefinition : seul `false` (largeur connue et ≥ 350 px) passe. `null` ne veut PAS dire « non signalé » : decision.js:75 écrit aussi null pour « non mesuré » (relecture 1, I1). Archive du 25/10 : true 11 124, null 56 081, jamais false —
+        // tant que le producteur (lot MARQUE-EMPRUNT) n'écrit pas `false`, la règle se tait sur toute question dont un candidat est `null`.
+        const basse = e.basseDefinition === true ? true : e.basseDefinition === false ? false : null;
         return { basse, partageAutreDessin: partage };
     };
 }
