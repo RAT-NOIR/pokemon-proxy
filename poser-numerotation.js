@@ -125,12 +125,63 @@ function construirePlan(R, codeParProduit, ligneParProduit) {
     return { outil: 'poser-numerotation', lignes, impressions, numerosFiche: R.numerosFiche };
 }
 
-module.exports = { planifier, restreindre, horsPlan, construirePlan };
+/**
+ * La preuve TRAÇABLE de chaque impression (relecture 2, D4) : les idProduct qui la demandent, le numéro, les sources indépendantes qui concordent AVEC leur référence, la liste du lot.
+ * `detail` : les entrées de scanner-deux-sources.js --plans ({ idProduct, ok, sources, concordantes }). LÈVE si un produit du plan n'y est pas, ou n'y est pas confirmé : une impression sans preuve ne s'écrit pas.
+ * @returns {Map<string, string>} clé `${carteId}|${tirage}|${expansion}|${cleNumero}` → texte
+ */
+function preuves(R, detail, nomListe) {
+    const parId = new Map(detail.map(d => [d.idProduct, d]));
+    const sortie = new Map();
+    for (const e of R.groupes.values()) {
+        const parNumero = new Map();
+        for (const { l, numero } of e.lignes) (parNumero.get(k(numero)) || parNumero.set(k(numero), { numero, ids: [] }).get(k(numero))).ids.push(l.idProduct);
+        for (const [cle, v] of parNumero) {
+            const ds = v.ids.map(id => {
+                const d = parId.get(id);
+                if (!d) throw new Error(`preuves : idProduct ${id} absent du détail de confirmation — une impression sans preuve ne s'écrit pas`);
+                if (!d.ok) throw new Error(`preuves : idProduct ${id} non confirmé par deux sources`);
+                return d;
+            });
+            const sources = [...new Set(ds.flatMap(d => d.sources || []))], refs = [...new Set(ds.flatMap(d => d.concordantes || []))];
+            sortie.set(`${e.carteId}|${e.tirage}|${e.expansion}|${cle}`, `Cardmarket idProduct ${v.ids.slice().sort((a, b) => a - b).join(', ')} n°${v.numero} ; confirmé par ${sources.join(' + ')} (${refs.join(' ; ')}) ; liste ${nomListe}`);
+        }
+    }
+    return sortie;
+}
+
+/**
+ * L'ÉCRITURE et sa RELECTURE (testable sur une fausse base, relecture 2 D5) : une impression par (carte, numéro) absent, un numeroFiche nul ou absent seulement ; puis ce qui est en base est relu.
+ * @returns {Promise<number>} 0 si tout est relu, 1 sinon
+ */
+async function ecrireLot({ db, R, preuveDe, nomListe, log = console.log, err = console.error, marque = 'poser-numerotation (2026-10-24)' }) {
+    const avantL = await db.collection('cartes_produits').countDocuments({}), avantC = await db.collection('cartes').countDocuments({});
+    let nc = 0, nl = 0, nImp = 0;
+    for (const [id, imps] of R.aPoser) for (const i of imps) {
+        nImp++;
+        const preuve = preuveDe(id, i); if (!preuve) throw new Error(`ecrireLot : aucune preuve pour l'impression ${id}|${i.numero}`);
+        nc += (await db.collection('cartes').updateOne({ _id: id, impressions: { $not: { $elemMatch: { tirage: i.tirage, expansion: i.expansion, numero: i.numero } } } }, { $push: { impressions: { ...i, preuveNumero: preuve } } })).modifiedCount;
+    }
+    for (const n of R.numerosFiche) nl += (await db.collection('cartes_produits').updateOne({ _id: n._id, numeroFiche: { $in: [null, ''] } }, { $set: { numeroFiche: n.numeroFiche, numeroFicheSource: marque } })).modifiedCount;
+    const apresL = await db.collection('cartes_produits').countDocuments({}), apresC = await db.collection('cartes').countDocuments({});
+    // relecture : ce qui est en base (find, pas le retour de l'écriture)
+    const cartes = R.aPoser.size ? await db.collection('cartes').find({ _id: { $in: [...R.aPoser.keys()] } }).toArray() : [];
+    let relues = 0;
+    for (const [id, imps] of R.aPoser) { const c = cartes.find(x => x._id === id); for (const i of imps) if ((c?.impressions || []).some(x => x.source === 'numero-cardmarket' && x.tirage === i.tirage && x.expansion === i.expansion && x.numero === i.numero && /^Cardmarket idProduct \d/.test(x.preuveNumero || '') && String(x.preuveNumero).endsWith(`liste ${nomListe}`))) relues++; }
+    const lignes = R.numerosFiche.length ? await db.collection('cartes_produits').find({ _id: { $in: R.numerosFiche.map(n => n._id) } }).toArray() : [];
+    const lignesRelues = R.numerosFiche.filter(n => lignes.some(x => x._id === n._id && x.numeroFiche === n.numeroFiche && x.numeroFicheSource === marque)).length;
+    log(`\n   RELECTURE : impressions ${nc}/${nImp} écrites · relues avec leur preuve ${relues} · numeroFiche ${nl}/${R.numerosFiche.length} écrits · relus ${lignesRelues} · cartes_produits ${avantL} → ${apresL} · cartes ${avantC} → ${apresC}`);
+    if (nc !== nImp || relues < nImp || nl !== R.numerosFiche.length || lignesRelues < R.numerosFiche.length || apresL !== avantL || apresC !== avantC) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
+    log('   ✅ écrit et relu');
+    return 0;
+}
+
+module.exports = { planifier, restreindre, horsPlan, construirePlan, preuves, ecrireLot };
 
 async function principal() {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { garderMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
-    const AUTORISES = [/^--ecrire$/, /^--seulement=.+\.json$/, /^--plan=.+\.json$/, /^--attendu=\d+$/, /^--sets=[\w.,-]+$/];
+    const AUTORISES = [/^--ecrire$/, /^--seulement=.+\.json$/, /^--plan=.+\.json$/, /^--attendu=\d+$/, /^--sets=[\w.,-]+$/, /^--confirmation=.+\.json$/];
     const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisé : --ecrire, --seulement=<f>.json, --plan=<f>.json, --attendu=<N>, --sets=<slug>,…`); process.exit(2); }
     const arg = n => process.argv.slice(2).find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -138,7 +189,7 @@ async function principal() {
     const SETS = arg('sets') ? new Set(arg('sets').split(',')) : null;
     let SEULEMENT = null;
     if (arg('seulement')) { try { SEULEMENT = LOT.lireFichier('--seulement', arg('seulement')); } catch (e) { console.error(`❌ ${e.message} — rien n'est écrit`); process.exit(2); } }
-    if (ecrire && (!SEULEMENT || !arg('attendu'))) { console.error('❌ --ecrire exige --seulement=<liste>.json ET --attendu=<N produits> : numéroter une fiche existante est une modification, la liste des produits confirmés par deux sources la borne — rien n\'est écrit'); process.exit(2); }
+    if (ecrire && (!SEULEMENT || !arg('attendu') || !arg('confirmation'))) { console.error('❌ --ecrire exige --seulement=<liste>.json, --attendu=<N produits> ET --confirmation=<deux-sources-…-plans.json> (la preuve de chaque impression : idProduct et sources) : numéroter une fiche existante est une modification, la liste des produits confirmés par deux sources la borne — rien n\'est écrit'); process.exit(2); }
 
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ buckets: [] });
     try {
@@ -184,17 +235,12 @@ async function principal() {
         if (!v.ok) { console.error(`❌ ARRÊT : ${v.motif} — rien n'est écrit`); process.exit(1); }
 
         // ── l'écriture, en AJOUT : une impression par (carte, numéro) absent ; un numeroFiche nul ou absent seulement ──
-        const avantL = await cx.db.collection('cartes_produits').countDocuments({}), avantC = await cx.db.collection('cartes').countDocuments({});
-        const preuve = `liste de lot ${require('path').basename(arg('seulement'))} (Cardmarket + au moins une source indépendante non-Bulbapedia)`;
-        let nc = 0, nl = 0;
-        for (const [id, imps] of R.aPoser) for (const i of imps) nc += (await cx.db.collection('cartes').updateOne({ _id: id, impressions: { $not: { $elemMatch: { tirage: i.tirage, expansion: i.expansion, numero: i.numero } } } }, { $push: { impressions: { ...i, preuveNumero: preuve } } })).modifiedCount;
-        for (const n of R.numerosFiche) nl += (await cx.db.collection('cartes_produits').updateOne({ _id: n._id, numeroFiche: { $in: [null, ''] } }, { $set: { numeroFiche: n.numeroFiche, numeroFicheSource: 'poser-numerotation (2026-10-24)' } })).modifiedCount;
-        const apresL = await cx.db.collection('cartes_produits').countDocuments({}), apresC = await cx.db.collection('cartes').countDocuments({});
-        const relues = await cx.db.collection('cartes').aggregate([{ $match: { _id: { $in: [...R.aPoser.keys()] } } }, { $unwind: '$impressions' }, { $match: { 'impressions.source': 'numero-cardmarket', 'impressions.preuveNumero': preuve } }, { $count: 'n' }]).toArray();
-        const lignesRelues = R.numerosFiche.length ? await cx.db.collection('cartes_produits').countDocuments({ _id: { $in: R.numerosFiche.map(n => n._id) }, numeroFicheSource: 'poser-numerotation (2026-10-24)' }) : 0;
-        console.log(`\n   RELECTURE : impressions ${nc}/${nImp} écrites · relues ${relues[0]?.n ?? 0} · numeroFiche ${nl}/${R.numerosFiche.length} écrits · relus ${lignesRelues} · cartes_produits ${avantL} → ${apresL} · cartes ${avantC} → ${apresC}`);
-        if (nc !== nImp || (relues[0]?.n ?? 0) < nImp || nl !== R.numerosFiche.length || lignesRelues < R.numerosFiche.length || apresL !== avantL || apresC !== avantC) { console.error('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); process.exit(1); }
-        console.log('   ✅ écrit et relu');
+        const nomListe = require('path').basename(arg('seulement'));
+        let detail;
+        try { const j = JSON.parse(fs.readFileSync(arg('confirmation'), 'utf8')); detail = Object.values(j).flatMap(p => p.detail || []); } catch (e) { console.error(`❌ --confirmation illisible (${String(e.message).slice(0, 100)}) — rien n'est écrit`); process.exit(2); }
+        const pr = preuves(R, detail, nomListe);                      // lève si un produit n'a pas de preuve
+        const code = await ecrireLot({ db: cx.db, R, preuveDe: (id, i) => pr.get(`${id}|${i.tirage}|${i.expansion}|${k(i.numero)}`), nomListe });
+        if (code) process.exit(code);
     } finally { await fermer(); }
 }
 if (require.main === module) principal().catch(e => { console.error('❌', e.message); process.exit(1); });

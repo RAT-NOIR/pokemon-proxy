@@ -106,7 +106,7 @@ function construirePlan(R, ligneDeSet, ligneParProduit) {
     return { outil: 'poser-impressions-setlist', lignes, impressions };
 }
 
-module.exports = { planifier, restreindre, horsPlan, construirePlan, numeroDeLUrl };
+module.exports = { planifier, restreindre, horsPlan, construirePlan, numeroDeLUrl, ecrireImpressions };
 
 async function principal() {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
@@ -154,11 +154,24 @@ async function principal() {
     const v = LOT.verifierAttendu({ retenus: nPoser, attendu: Number(arg('attendu')) });
     if (!v.ok) { console.error(`❌ ARRÊT : ${v.motif} — rien n'est écrit`); await fermer(); process.exit(1); }
 
-    let n = 0;
-    for (const [id, imps] of R.aPoser) n += (await cx.db.collection('cartes').updateOne({ _id: id }, { $push: { impressions: { $each: imps } } })).modifiedCount;
-    const relues = await cx.db.collection('cartes').aggregate([{ $match: { _id: { $in: [...R.aPoser.keys()] } } }, { $unwind: '$impressions' }, { $match: { 'impressions.source': 'setlist' } }, { $count: 'n' }]).toArray();
-    console.log(`\n   ✅ cartes écrites : ${n}/${R.aPoser.size} · impressions « setlist » relues sur ces cartes : ${relues[0]?.n ?? 0} (attendu ≥ ${nPoser})`);
+    const code = await ecrireImpressions({ db: cx.db, aPoser: R.aPoser });
     await fermer();
-    if (n !== R.aPoser.size || (relues[0]?.n ?? 0) < nPoser) process.exit(1);
+    if (code) process.exit(code);
+}
+
+/** L'ÉCRITURE et sa RELECTURE (testable sur une fausse base, relecture 2 D5) : une impression à la fois, refusée par le filtre si la carte la porte déjà ; puis ce qui est en base est relu. @returns {Promise<number>} 0 si tout est relu */
+async function ecrireImpressions({ db, aPoser, log = console.log, err = console.error }) {
+    let n = 0, total = 0;
+    for (const [id, imps] of aPoser) for (const i of imps) {
+        total++;
+        n += (await db.collection('cartes').updateOne({ _id: id, impressions: { $not: { $elemMatch: { tirage: i.tirage, expansion: i.expansion, numero: i.numero } } } }, { $push: { impressions: { $each: [i] } } })).modifiedCount;
+    }
+    const cartes = aPoser.size ? await db.collection('cartes').find({ _id: { $in: [...aPoser.keys()] } }).toArray() : [];
+    let relues = 0;
+    for (const [id, imps] of aPoser) { const c = cartes.find(x => x._id === id); for (const i of imps) if ((c?.impressions || []).some(x => x.source === 'setlist' && x.tirage === i.tirage && x.expansion === i.expansion && x.numero === i.numero)) relues++; }
+    log(`\n   RELECTURE : impressions « setlist » écrites ${n}/${total} · relues sur leurs cartes ${relues}/${total}`);
+    if (n !== total || relues < total) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
+    log('   ✅ écrit et relu');
+    return 0;
 }
 if (require.main === module) principal().catch(e => { console.error('❌', e.message); process.exit(1); });

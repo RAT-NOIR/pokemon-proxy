@@ -67,5 +67,63 @@ const plan = M.construirePlan(M.restreindre(P, null), new Map([[1, 'CSZ'], [2, '
 verifier('le plan : une ligne par produit (numeroFiche = le numéro écrit, code, set), les impressions, les numéros de fiche', [plan.lignes.map(l => [l.idProduct, l.numeroFiche, l.code, l.slugSet]), plan.impressions.length, plan.numerosFiche.length], [[[1, '023', 'CSZ', 'SetZ'], [2, '023', 'CSZ', 'SetZ'], [5, '024', 'CSZ', 'SetZ']], 2, 3]);
 verifier('les lignes du plan portent l\'_id des lignes EXISTANTES (jamais ajoutées)', plan.lignes.map(l => l._id), ['10|1', '10|2', '11|5']);
 
-console.log(`\n${ok} passés, ${ko} en échec`);
-process.exit(ko ? 1 : 0);
+// la preuve de chaque impression est TRAÇABLE : les idProduct, le numéro, les sources qui concordent et leur référence (relecture 2, D4)
+const detail = [{ idProduct: 1, ok: true, sources: ['cardmarket', 'pikaqian'], concordantes: ['pikaqian:ref-a'] }, { idProduct: 2, ok: true, sources: ['cardmarket', 'artofpkm'], concordantes: ['artofpkm:ref-b'] }, { idProduct: 5, ok: true, sources: ['cardmarket', 'tcgdex'], concordantes: ['tcgdex:sv1-24'] }];
+const pr = M.preuves(M.restreindre(P, null), detail, 'seulement-M.json');
+const t10 = pr.get('10|zh-hans|Exp Z|23');
+verifier('preuves : une clé par impression, qui nomme les idProduct, le numéro, les sources et leurs références', [pr.size, /idProduct 1, 2/.test(t10), /n°023/.test(t10), /pikaqian/.test(t10), /ref-a/.test(t10), /artofpkm/.test(t10), /seulement-M\.json/.test(t10)], [2, true, true, true, true, true, true]);
+verifier('preuves : un produit sans entrée dans le détail LÈVE (une impression sans preuve ne s\'écrit pas)', (() => { try { M.preuves(M.restreindre(P, null), detail.slice(0, 1), 'x.json'); return 'pas levé'; } catch (e) { return /idProduct 2|idProduct 5/.test(e.message); } })(), true);
+verifier('preuves : un produit non confirmé LÈVE', (() => { try { M.preuves(M.restreindre(P, null), [{ idProduct: 1, ok: false, sources: ['cardmarket'], concordantes: [] }, detail[1], detail[2]], 'x.json'); return 'pas levé'; } catch (e) { return /non confirmé/.test(e.message); } })(), true);
+// ── LE CHEMIN D'ÉCRITURE, sur une FAUSSE base en mémoire (jamais une vraie grappe) — relecture 2, D5
+function fakeDb(init, { perdre = false, perdrePush = false } = {}) {
+    const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, structuredClone(d)]))]));
+    const filtreOk = (d, f) => Object.entries(f).every(([cle, v]) => {
+        if (cle === '_id') return d._id === v;
+        if (cle === 'impressions') { const em = v.$not.$elemMatch; return !(d.impressions || []).some(i => Object.entries(em).every(([a, b]) => i[a] === b)); }
+        if (cle === 'numeroFiche') return v.$in.includes(d.numeroFiche ?? null);
+        throw new Error(`fausse base : filtre non prévu ${cle}`);
+    });
+    return {
+        collection: nom => { const m = cols.get(nom); return {
+            countDocuments: async () => m.size,
+            find: f => ({ toArray: async () => [...m.values()].filter(d => !f._id || (f._id.$in || [f._id]).includes(d._id)).map(d => structuredClone(d)) }),
+            updateOne: async (f, u) => { const d = m.get(f._id); if (!d || !filtreOk(d, f)) return { modifiedCount: 0 }; if (perdre && u.$set) return { modifiedCount: 1 }; if (perdrePush && u.$push) return { modifiedCount: 1 }; if (u.$push) for (const [c, x] of Object.entries(u.$push)) d[c] = [...(d[c] || []), x]; if (u.$set) Object.assign(d, u.$set); return { modifiedCount: 1 }; }
+        }; },
+        brut: nom => [...cols.get(nom).values()].map(d => structuredClone(d))
+    };
+}
+const monde2 = () => fakeDb({ cartes: [{ _id: 10, nomEn: 'C10', impressions: [] }, { _id: 11, nomEn: 'C11', impressions: [] }, { _id: 99, nomEn: 'Autre', impressions: [{ tirage: 'jp', expansion: 'X', numero: '1' }] }],
+    cartes_produits: [{ _id: '10|1', carteId: 10, idProduct: 1, numeroFiche: null }, { _id: '10|2', carteId: 10, idProduct: 2 }, { _id: '11|5', carteId: 11, idProduct: 5, numeroFiche: '' }, { _id: '99|9', carteId: 99, idProduct: 9, numeroFiche: '1' }] });
+const R0 = M.restreindre(P, null), prC = M.preuves(R0, detail, 'seulement-M.json');
+const preuveDe = (id, i) => prC.get(`${id}|${i.tirage}|${i.expansion}|${(String(i.numero)).replace(/^0+/, '')}`);
+(async () => {
+    const sortie = [], erreurs = [];
+    let db = monde2(); const autreAvant = JSON.stringify([db.brut('cartes').find(c => c._id === 99), db.brut('cartes_produits').find(l => l._id === '99|9')]);
+    let code = await M.ecrireLot({ db, R: R0, preuveDe, nomListe: 'seulement-M.json', log: s => sortie.push(s), err: s => erreurs.push(s) });
+    const c10 = db.brut('cartes').find(c => c._id === 10), l1 = db.brut('cartes_produits').find(l => l._id === '10|1');
+    verifier('écriture : exit 0 et relue', [code, sortie.join('').includes('écrit et relu')], [0, true]);
+    verifier('   l\'impression posée porte la marque, le numéro ET sa preuve traçable (idProduct et sources)', [c10.impressions.length, c10.impressions[0].source, c10.impressions[0].numero, /^Cardmarket idProduct 1, 2 n°023 ; confirmé par cardmarket \+ pikaqian \+ artofpkm/.test(c10.impressions[0].preuveNumero)], [1, 'numero-cardmarket', '023', true]);
+    verifier('   les numeroFiche nuls, vides ou absents sont posés (avec leur marque), aucun autre', [l1.numeroFiche, db.brut('cartes_produits').find(l => l._id === '10|2').numeroFiche, db.brut('cartes_produits').find(l => l._id === '11|5').numeroFiche, l1.numeroFicheSource], ['023', '023', '024', 'poser-numerotation (2026-10-24)']);
+    verifier('   additive : une carte et une ligne hors plan sont inchangées, aucun total ne bouge', [JSON.stringify([db.brut('cartes').find(c => c._id === 99), db.brut('cartes_produits').find(l => l._id === '99|9')]) === autreAvant, db.brut('cartes').length, db.brut('cartes_produits').length], [true, 3, 4]);
+    // idempotence : une seconde écriture ne pose rien de plus (le filtre le refuse) → la relecture dit que ce n'est pas ce qui était attendu, RIEN ne bouge
+    const apres = JSON.stringify([db.brut('cartes'), db.brut('cartes_produits')]);
+    erreurs.length = 0; code = await M.ecrireLot({ db, R: R0, preuveDe, nomListe: 'seulement-M.json', log: () => { }, err: s => erreurs.push(s) });
+    verifier('relance : rien ne bouge (aucune impression en double, aucun numeroFiche réécrit) et le code est 1', [code, JSON.stringify([db.brut('cartes'), db.brut('cartes_produits')]) === apres], [1, true]);
+    // une valeur existante n'est JAMAIS remplacée
+    db = fakeDb({ cartes: [{ _id: 10, impressions: [] }, { _id: 11, impressions: [] }], cartes_produits: [{ _id: '10|1', carteId: 10, idProduct: 1, numeroFiche: '77' }, { _id: '10|2', carteId: 10, idProduct: 2, numeroFiche: '023' }, { _id: '11|5', carteId: 11, idProduct: 5, numeroFiche: '024' }] });
+    await M.ecrireLot({ db, R: R0, preuveDe, nomListe: 'x', log: () => { }, err: () => { } });
+    verifier('un numeroFiche déjà posé (77) n\'est jamais remplacé', db.brut('cartes_produits').find(l => l._id === '10|1').numeroFiche, '77');
+    // une écriture qui perd une ligne SANS erreur : la relecture le voit
+    db = fakeDb({ cartes: [{ _id: 10, impressions: [] }, { _id: 11, impressions: [] }], cartes_produits: [{ _id: '10|1', carteId: 10, idProduct: 1, numeroFiche: null }, { _id: '10|2', carteId: 10, idProduct: 2 }, { _id: '11|5', carteId: 11, idProduct: 5, numeroFiche: '' }] }, { perdre: true });
+    erreurs.length = 0; code = await M.ecrireLot({ db, R: R0, preuveDe, nomListe: 'seulement-M.json', log: () => { }, err: s => erreurs.push(s) });
+    verifier('un numeroFiche annoncé écrit mais perdu SANS erreur → code 1 et le dit', [code, erreurs.join('').includes('relecture')], [1, true]);
+    // une impression annoncée écrite mais perdue SANS erreur : la relecture le voit aussi
+    db = fakeDb({ cartes: [{ _id: 10, impressions: [] }, { _id: 11, impressions: [] }], cartes_produits: [{ _id: '10|1', carteId: 10, idProduct: 1, numeroFiche: null }, { _id: '10|2', carteId: 10, idProduct: 2 }, { _id: '11|5', carteId: 11, idProduct: 5, numeroFiche: '' }] }, { perdrePush: true });
+    erreurs.length = 0; code = await M.ecrireLot({ db, R: R0, preuveDe, nomListe: 'seulement-M.json', log: () => { }, err: s => erreurs.push(s) });
+    verifier('une impression annoncée écrite mais perdue SANS erreur → code 1 (relecture des impressions)', [code, erreurs.join('').includes('relecture')], [1, true]);
+    // une impression sans preuve ne s'écrit pas
+    db = monde2();
+    verifier('une impression sans preuve LÈVE avant toute écriture de cette carte', await M.ecrireLot({ db, R: R0, preuveDe: () => null, nomListe: 'x', log: () => { }, err: () => { } }).then(() => 'pas levé', e => /aucune preuve/.test(e.message)), true);
+    console.log(`\n${ok} passés, ${ko} en échec`);
+    process.exit(ko ? 1 : 0);
+})();
