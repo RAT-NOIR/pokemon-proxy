@@ -33,6 +33,11 @@ const MOTIFS_ILLISIBLE = Object.freeze(['numero-illisible', 'ia-sans-lecture']);
 const MOTIFS_ABSENCE = Object.freeze(['carte-introuvable', 'aucun-candidat', 'aucun-prix']);
 const MOTIFS_EGALITE = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
 const CODE_CHINOIS = 6;
+// 🔑 UNE CONSTANTE, pas une variable d'environnement (comme CRITERE_A) : true (décision de l'éditeur, 2026-10-25) = dans la voie « plus de 3 produits », le SEUL candidat restant est montré en question à UN choix ; false = le contrat d'avant
+// 🔑 DRAPEAU V2_CONFIRMATION_NOMBREUX (cfg.confirmationNombreux), ÉTEINT par défaut, seul « 1 » l'allume (lot DESIGNATION-REGLES, R5) : dans la voie « plus de 3 produits », le SEUL candidat restant est montré en question à UN choix.
+// Éteint = le contrat d'avant (« jamais une confirmation à 1 candidat » : introuvable / impression-indeterminee, remboursé sans plafond), octet pour octet. Allumé : une question réservée dont la réponse « aucune » ne se rembourse que dans le plafond
+// des déclarations du jour. 🔴 Cette question n'est JAMAIS promue en sûr (règle G, promotion-g.js) : elle porte confirmationNombreux: true. ctx.confirmationNombreux surcharge le drapeau (bancs, mesure) ; seul  rue allume.
+const confirmationNombreux = ctx => (ctx.confirmationNombreux !== undefined ? ctx.confirmationNombreux === true : Boolean(ctx.cfg && ctx.cfg.confirmationNombreux === true));
 
 class Panne extends Error { constructor(code, diagnostic, motif = null) { super(diagnostic); this.code = code; this.motif = motif; } }
 const panne = (code, diagnostic, motif) => { throw new Panne(code, diagnostic, motif); };
@@ -106,9 +111,12 @@ function apresGarde(g, etat, ctx, corps) {
         // JUMEAUX-QUESTION : plus de 3 produits => une QUESTION à 3 (P d'abord, puis l'ordre nommé de jumeaux-nombreux.js), jamais une affirmation. Une ligne de catalogue manquante : le repli d'avant.
         const trois = choisirTrois({ p: g.ids[0], jumeaux: g.ids.slice(1), partages: g.partages, corps, produits: ctx.produits });     // M1 : P et ses partenaires de partage d'abord ; trop de partenaires : null (introuvable plus bas)
         // TOUR 1 : le filtre de nom vaut pour P aussi. Aucun candidat ne reste => introuvable photo-illisible (la règle du lot CONFIRMATION-SURE : tous contredits, on ne sait pas) ;
-        // UN seul reste, ou une ligne manque => le repli d'avant (jamais une confirmation à 1 candidat dans cette voie) ; 2 ou plus => la question. Seul le repli écrit au journal.
+        // UN seul reste : la question à 1 candidat si V2_CONFIRMATION_NOMBREUX est allumé (R5), sinon le repli d'avant ; une ligne manque => le repli ; 2 ou plus => la question. Seul le repli écrit au journal.
         if (trois && trois.length === 0) return introuvable('photo-illisible');
         if (trois && trois.length >= 2) return question(trois, etat, ctx);
+        // CONFIRMATION-NOMBREUX (lot DESIGNATION-REGLES, R5, décision de l'éditeur 2026-10-25) : le SEUL candidat restant est montré en QUESTION « est-ce cette carte ? » (D1, comme UN-CANDIDAT), jamais en affirmation. Deux cas :
+        // UN seul produit compatible après le filtre de nom (une ligne de jumeau manquante garde le repli : un jumeau sans ligne pourrait être la vérité, et `trois` est alors null).
+        if (trois && trois.length === 1 && confirmationNombreux(ctx)) return { ...question(trois, etat, ctx), confirmationNombreux: true };
         noter('jumeaux-trop-nombreux', g.ids[0], trois ? '(un seul candidat compatible)' : '(lignes de catalogue incomplètes)');
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
     }
@@ -266,7 +274,7 @@ function parDesignation(r, corps, ctx) {
     if (!DES.actives(regles).length) return r;
     try {
         const c = r.analyse.cartes[0];
-        const d = DES.designer({ ids: c.candidats.map(x => x.idProduct), corps, produits: ctx.produits, jumeaux: ctx.jumeaux, regles, catalogueExiste: ctx.codeNumeroExiste });
+        const d = DES.designer({ ids: c.candidats.map(x => x.idProduct), corps, produits: ctx.produits, jumeaux: ctx.jumeaux, regles, catalogueExiste: ctx.codeNumeroExiste, assoupli: ctx.designationAssoupli });
         return d ? affirmer(d.id, c.etat, ctx, corps, d.critere) : r;
     } catch { return r; }
 }
