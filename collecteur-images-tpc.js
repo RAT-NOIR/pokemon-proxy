@@ -258,19 +258,25 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             const _id = T.idImageTpc(site, slug, p.carteId, p.numero, langueImage);
             const url = p.fiche.image ? new URL(p.fiche.image, T.SITES[site].hote).href : null;
             if (!url) { echecs++; compter('fiche-sans-image'); continue; }
-            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal seuilApplique').lean();
+            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal hOriginal seuilApplique telechargeLe collecteLe').lean();
             // un visuel RETIRÉ (retirer-visuels-tpc.js) ne revient jamais par une recollecte : il faudrait une décision
             if (deja?.etat === 'retire') { retires++; continue; }
             if (deja?.sha256 && deja.urlOriginal === url && deja.etat === 'ok') { sautes++; continue; }
             // déjà jugé trop petit à la même adresse : on ne le redemande pas (relecture du 2026-10-07) — SAUF si le seuil a baissé
             // depuis et que la largeur gardée n'interdit plus (`aRejuger`, §23) : alors il repasse par la cadence normale du client
-            if (deja?.etat === 'trop-petit' && deja.urlOriginal === url && !aRejuger(deja, site)) { tropPetits++; continue; }
+            if (deja?.etat === 'trop-petit' && deja.urlOriginal === url && !aRejuger(deja, site)) {
+                tropPetits++;
+                const quand = deja.collecteLe ?? deja.telechargeLe;
+                console.log(`   ⚠️ image déjà écartée${quand ? ` le ${new Date(quand).toISOString()}` : ''}, sous le seuil : unité ${slug} n° ${p.numero} (carteId ${p.carteId}) · ${deja.wOriginal != null ? `${deja.wOriginal}×${deja.hOriginal ?? '?'} px` : 'taille en base inconnue'} · seuil ${deja.seuilApplique ?? largeurMinDe(site)} px — non rejointe, non redemandée`);
+                continue;
+            }
             try {
                 const buffer = await client.image(url);
                 if (!buffer) throw new Error('absent à la source (404)');
                 const meta = await sharp(buffer).metadata();
                 if (!meta.width || meta.width < largeurMinDe(site)) {
                     tropPetits++;
+                    console.log(`   ⚠️ image écartée, sous le seuil : unité ${slug} n° ${p.numero} (carteId ${p.carteId}${p.idProduct != null ? `, produit ${p.idProduct}` : ''}) · ${meta.width ?? '?'}×${meta.height ?? '?'} px · seuil ${largeurMinDe(site)} px — non jointe`);
                     // un visuel DÉJÀ prouvé et servi (« ok ») ne se dégrade pas : l'ancien reste, l'essai est noté à côté (seconde relecture)
                     if (deja?.etat === 'ok') await M.Image.updateOne({ _id }, { $set: { dernierEssai: { le: new Date(), url, resultat: `trop-petit (${meta.width} px)` } } });
                     else await M.Image.updateOne({ _id }, { $set: { source: site, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(site), lot: T.LOT } }, { upsert: true });
