@@ -20,7 +20,7 @@ const lireEnv = (f, nom) => { for (const l of fs.readFileSync(f, 'utf8').split(/
     const src = new MongoClient(uriLecture, { serverSelectionTimeoutMS: 20000 }); await src.connect();
     const catalogue = await src.db('rm_essai').collection('catalogue_produits').find({}, { projection: { idProduct: 1, name: 1, idExpansion: 1, idMetacard: 1 } }).toArray();
     // les noms réellement scannés (mots de départ du trafic de l'essai), pour mesurer ce que le trafic demande
-    const noms = (await src.db('rm_essai').collection('journal_scans').find({ nom: { $type: 'string' } }, { projection: { nom: 1 } }).toArray()).map(x => x.nom);
+    const noms = (await src.db('rm_essai').collection('journal_scans').find(require('../../journal-hors-banc').avecHorsBanc({ nom: { $type: 'string' } }), { projection: { nom: 1 } }).toArray()).map(x => x.nom);
     await src.close();
     console.log(`copie : ${catalogue.length} produits (dénominateur) · ${noms.length} noms scannés du journal`);
     const mots = [...new Set(noms.map(premierMotDe).filter(m => m && m.length >= 3))];

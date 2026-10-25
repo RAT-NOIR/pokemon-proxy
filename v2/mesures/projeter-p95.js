@@ -31,7 +31,7 @@ async function principal() {
     const { MongoClient } = require(path.join(__dirname, '..', '..', 'node_modules', 'mongodb'));
     const c = new MongoClient(uri, { serverSelectionTimeoutMS: 20000 });
     await c.connect();
-    const lignes = (await c.db('rm_essai').collection('journal_scans').find({}, { projection: { msIA: 1, msCatalogue: 1, imageMs: 1, nbPhotos: 1, imageStatut: 1, voieCatalogue: 1 } }).toArray())
+    const lignes = (await c.db('rm_essai').collection('journal_scans').find(require('../../journal-hors-banc').avecHorsBanc({}), { projection: { msIA: 1, msCatalogue: 1, imageMs: 1, nbPhotos: 1, imageStatut: 1, voieCatalogue: 1 } }).toArray())
         .filter(l => [l.msIA, l.msCatalogue, l.imageMs].every(Number.isFinite));
     await c.close();
     const gain = Number(arg('gain-ia', '0')), catApres = arg('cat-apres', null) === null ? null : Number(arg('cat-apres'));

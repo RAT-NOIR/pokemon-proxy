@@ -1059,7 +1059,7 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 `GET /ping` est un sondage de santé (keep-alive) : sans authentification, sans lecture en base de plus, le même temps de réponse. La route est héritée ; la v2 n'y ajoute que deux champs, **sous la même condition** : la v2 est allumée **et** sa configuration est valide. Sinon (serveur d'avant, v2 éteinte, configuration invalide), `/ping` rend ses trois clés d'aujourd'hui et rien d'autre.
 
 ```json schema=ReponsePing
-{ "ok": true, "mongo": true, "version": "fictif-0.0.0", "versionMinExtension": "2.0.0", "capacites": ["langue-impression", "marques", "prix-incertains", "prix-repli", "achete-avant-jour"] }
+{ "ok": true, "mongo": true, "version": "fictif-0.0.0", "versionMinExtension": "2.0.0", "capacites": ["langue-impression", "marques", "prix-incertains", "prix-repli", "achete-avant-jour", "empreinte"] }
 ```
 
 - **`versionMinExtension`** (chaîne) : la plus ancienne version de l'extension que le serveur prend en charge (sinon `426 VERSION`). Un `/ping` 200 avec ce champ = v2 annoncée ; sans, v2 non annoncée.
@@ -1072,6 +1072,7 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 | `prix-incertains` | `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge` et `regleVerdict.ecartTendanceMax` sont servis |
 | `prix-repli` | `carte.prixRepli` est servi **et** la règle REPLI-QUOTA est en place : un scan dont la réponse sert un repli compte dans le quota (`raisonNonRembourse: "prix-repli"`) |
 | `achete-avant-jour` | `facturation.poche` est servi : les analyses achetées sont débitées avant le quota du jour |
+| `empreinte` | le serveur **attend** le vecteur d'empreinte de l'extension (`empreintes` et `modeleEmpreinte` de la requête, `regleVerdict.modeleEmpreinte` de la réponse) et sait s'en servir. **Trois conditions à la fois** : `V2_EMPREINTE_EXTENSION=1` ; la configuration du modèle est valide (identifiant, sha256 des poids, objet R2 du modèle) ; **l'index d'empreintes est chargé en mémoire**. Au démarrage, ou après un chargement en échec, il n'y a pas d'index : le jeton est absent, et l'extension ne calcule ni n'envoie de vecteur (ni ne télécharge le modèle, 118 Mo). Dernier de la liste. |
 
 **Les deux jetons de l'archive suivent l'état du service, à chaque appel.** L'archive des visuels vit en mémoire du processus : un service qui se réveille à froid, ou dont les clés de lecture de l'archive sont fermées, ne la porte pas, et `/ping` ne dit alors ni `langue-impression` ni `marques` ; ils reviennent à l'appel qui suit son chargement, et retombent si elle disparaît. `/ping` lit cet état en mémoire (jamais la base) : une fonction pure de ce qui est chargé. Un client lit donc `capacites` à chaque sondage et ne garde pas un jeton annoncé il y a une heure.
 
@@ -1081,7 +1082,7 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 
 **Ce que fait le client.** Un jeton inconnu est **ignoré**. Un champ `capacites` **absent, ou qui n'est pas un tableau, vaut « on s'en tient aux champs servis »** : la présence des champs dans les réponses reste l'annonce, leur absence l'affichage d'avant. Un jeton absent d'un tableau présent = cette partie n'est pas servie par ce serveur (par exemple un serveur d'avant REPLI-QUOTA ne dit pas `prix-repli`). `capacites` ne remplace pas `versionMinExtension` : l'un dit « la v2 est là et quelle version il faut », l'autre « ce qu'elle sert ».
 
-**Comment le serveur décide.** Une fonction **pure** de la configuration et de l'état chargé en mémoire (aucune lecture en base, aucune exception possible : une archive illisible fait tomber le jeton) : un jeton sort si et seulement s'il est dans la liste fermée **et** si sa condition rend exactement `true` ; une condition absente, qui lève ou qui rend autre chose que le booléen vrai fait tomber le jeton. Aucun des cinq jetons ne dépend d'un drapeau de configuration aujourd'hui (le banc balaie toutes les variables `V2_*` que la configuration lit). Trois sont servis par le code seul ; deux (`langue-impression`, `marques`) dépendent de l'archive des visuels chargée en mémoire, lue par un lecteur injecté (preuve ligne à ligne en tête de `v2/capacites.js`, rejouée par `v2/test/test-capacites-ping.js`). Le jour où une partie sera derrière un drapeau, le jeton suivra ce drapeau, lu dans la même configuration que la route.
+**Comment le serveur décide.** Une fonction **pure** de la configuration et de l'état chargé en mémoire (aucune lecture en base, aucune exception possible : une archive illisible fait tomber le jeton) : un jeton sort si et seulement s'il est dans la liste fermée **et** si sa condition rend exactement `true` ; une condition absente, qui lève ou qui rend autre chose que le booléen vrai fait tomber le jeton. Un seul des six jetons, `empreinte`, dépend d'un drapeau de configuration (`V2_EMPREINTE_EXTENSION`), et jamais de lui seul : il exige aussi l'index d'empreintes chargé (lecteur injecté, comme l'archive) ; le banc balaie toutes les variables `V2_*` que la configuration lit et constate qu'aucune, seule, n'annonce `empreinte`. Trois sont servis par le code seul ; deux (`langue-impression`, `marques`) dépendent de l'archive des visuels chargée en mémoire, lue par un lecteur injecté (preuve ligne à ligne en tête de `v2/capacites.js`, rejouée par `v2/test/test-capacites-ping.js`). Le jour où une partie sera derrière un drapeau, le jeton suivra ce drapeau, lu dans la même configuration que la route.
 
 ---
 
@@ -1781,7 +1782,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 | prix lu | `retour-live`, `retour-live-sans-prix`, `retour-live-repli-non-rembourse` (REPLI-QUOTA : lecture ratée, repli servi, non remboursée) |
 | solde de chaque porteur | `solde-installation-non-liee`, `solde-installation-liee`, `solde-compte-non-verifie`, `solde-abonnement` |
 | comptes | `installation-creee`, `lier`, `code-liaison`, `compte`, `compte-non-verifie` |
-| santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète, archive des visuels chargée — CAPACITES-PING) |
+| santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète, archive des visuels chargée et index d'empreintes chargé — CAPACITES-PING) |
 
 ---
 

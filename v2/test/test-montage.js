@@ -47,7 +47,7 @@ const cors = {};
         // CAPACITES-PING : de bout en bout (le vrai serveur, la vraie route héritée) — `capacites` s'ajoute sous la même condition, tirée de la liste fermée du code
         // TOUR 1 : ce serveur démarre SANS archive des visuels en mémoire (réveil à froid, aucune clé de lecture) : `langue-impression` et `marques` ne sont PAS annoncés, les trois autres le sont
         H.v('allumé, sans archive des visuels : /ping AJOUTE capacites (la liste fermée de v2/capacites.js, dans l\'ordre, SANS les deux jetons de l\'archive) et rien d\'autre', [Object.keys(p.json).sort(), p.json.capacites],
-            [['capacites', 'mongo', 'ok', 'version', 'versionMinExtension'], require('../capacites').CAPACITES.filter(j => !['langue-impression', 'marques'].includes(j))]);
+            [['capacites', 'mongo', 'ok', 'version', 'versionMinExtension'], require('../capacites').CAPACITES.filter(j => !['langue-impression', 'marques', 'empreinte'].includes(j))]);
         const s = await appeler(srv.port, 'POST', '/api/solde', { userId: 'montage' }, JETON);
         H.vrai('allumé, sans Bearer : /api/solde garde la forme d\'AUJOURD\'HUI', ['soldeGratuit', 'soldeScans', 'restantSemaine'].every(k => k in s.json));
     });

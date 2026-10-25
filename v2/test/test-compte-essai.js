@@ -296,6 +296,116 @@ const vue = (base, { statut = statutBon(), hello = { setName: 'essai-rs' } } = {
         H.vrai('11. sans terminal (stdin non interactif), le mot de passe est REFUSÉ, jamais lu en clair', leve && /terminal/i.test(leve.message));
     }
 
+    // ---- 11 bis. --banc : le compte de MESURE (non interactif ; deux identifiants écrits dans un .env FACTICE, jamais le vrai)
+    {
+        const fs = require('fs'), os = require('os'), path = require('path');
+        const dossierEnv = fs.mkdtempSync(path.join(os.tmpdir(), 'compte-essai-env-'));
+        const fichier = path.join(dossierEnv, '.env');
+        const AVANT = ['# environnement factice', 'AUTRE_VARIABLE=garde-moi', 'V2_ESSAI_BANC_IDENTIFIANT=ancien@rat-market.invalid', 'V2_ESSAI_BANC_IDENTIFIANT_X=ne-me-touche-pas', '# V2_ESSAI_BANC_MOT_DE_PASSE=commentaire', 'V2_ESSAI_BANC_MOT_DE_PASSE=ancien-secret', 'V2_ESSAI_BANC_MOT_DE_PASSE=doublon', 'DERNIERE=fin', ''];
+        const ecritEnv = (lignes, fin = '\n') => fs.writeFileSync(fichier, lignes.join(fin));
+        const lit = () => fs.readFileSync(fichier, 'utf8');
+        const valeurEnv = nom => { const m = new RegExp(`^${nom}=(.*)$`, 'm').exec(lit()); return m ? m[1] : null; };
+        const ADR = essai.ADRESSE_BANC, CLE_B = emailCle(ADR);
+        ecritEnv(AVANT);
+        const envAvant = lit();
+        const nbComptes0 = (await compterTout()).comptes;
+
+        // (a) la base : seule rm_essai ; avant toute connexion, avant toute écriture (comptes et .env)
+        for (const argv of [['--base=test', '--banc'], ['--banc'], ['--base=cartes', '--banc'], ['--base=test_scratch', '--banc'], ['--base=rm_essai2', '--banc'], ['--base=RM_ESSAI', '--banc'], ['--base=', '--banc'], ['--banc', '--base=test', '--base=rm_essai'], ['--base=rm_essai', '--base=test', '--banc'], ['--base=rm_essai', '--banc', '--code']]) {
+            const s = saisie([], []); const r = await jouer(argv, s, { fichierEnv: fichier });
+            H.v(`11b-a. --banc refusé avant toute connexion : ${JSON.stringify(argv)}`, [r.code, r.connexions, s.questions.length, lit() === envAvant, (await compterTout()).comptes], [1, 0, 0, true, nbComptes0]);
+        }
+        H.v('11b-a. lireArgs : --banc admis avec la seule base rm_essai', [essai.lireArgs(['--base=rm_essai', '--banc']).banc, essai.lireArgs(['--base=test', '--banc']).ok], [true, false]);
+        {   // un banc ne réécrit JAMAIS le .env réel : sans fichier factice injecté, refus (BANC_ISOLE=1 est posé par le harnais)
+            const s = saisie([], []); const r = await jouer(['--base=rm_essai', '--banc'], s);
+            H.v('11b-a. sans fichier d\'environnement factice injecté : refus, aucun compte créé', [r.code, (await compterTout()).comptes, /factice/.test(r.texte)], [1, nbComptes0, true]);
+        }
+        // (b) --reprendre sans compte : refus
+        { const r = await jouer(['--base=rm_essai', '--banc', '--reprendre'], saisie([], []), { fichierEnv: fichier });
+          H.v('11b-b. --banc --reprendre sans compte existant : refus, rien d\'écrit', [r.code, lit() === envAvant, (await compterTout()).comptes], [1, true, nbComptes0]); }
+
+        // (c) la création
+        raz();
+        const sB = saisie([], []); const rB = await jouer(['--base=rm_essai', '--banc'], sB, { fichierEnv: fichier });
+        const cb = await comptes().findOne({ emailCle: CLE_B });
+        const mdpB = valeurEnv('V2_ESSAI_BANC_MOT_DE_PASSE');
+        H.v('11b-c. création : code 0, AUCUNE question posée (non interactif), aucun code de liaison', [rB.code, sB.questions.length, (await compterTout()).codes_liaison, espions.creerCode.length], [0, 0, 3, 0]);
+        H.vrai('   le compte « banc-mesure » : adresse réservée .invalid, confirmé, administrateur, marqué banc', cb && cb.email === 'banc-mesure@rat-market.invalid' && /\.invalid$/.test(cb.email) && cb.verifie === true && cb.role === 'administrateur' && cb.banc === true);
+        H.vrai('   le document vient de nouveauCompte et du hachage du service (scrypt), rôle posé par poserRole', cb._viaService === true && cb.motDePasse._viaService === true && cb.motDePasse.algo === 'scrypt' && espions.poserRole.length === 1 && espions.poserRole[0][0] === CLE_B);
+        H.vrai('   le mot de passe écrit au .env est GÉNÉRÉ : 32 caractères URL-sûrs, conforme à la politique, et il ouvre le compte', typeof mdpB === 'string' && /^[A-Za-z0-9_-]{32}$/.test(mdpB) && P.politique(mdpB, CLE_B) === null && await P.verifier(mdpB, cb.motDePasse));
+        H.v('   l\'identifiant écrit au .env est l\'adresse du compte', valeurEnv('V2_ESSAI_BANC_IDENTIFIANT'), ADR);
+        const apresC = lit();
+        H.v('11b-d. le .env : SEULES les deux lignes nommées changent (remplacées en place, doublon retiré) ; toute autre ligne identique', apresC.split('\n').filter(l => !/^V2_ESSAI_BANC_(IDENTIFIANT|MOT_DE_PASSE)=/.test(l)).join('\n'), AVANT.filter(l => !/^V2_ESSAI_BANC_(IDENTIFIANT|MOT_DE_PASSE)=/.test(l)).join('\n'));
+        H.vrai('   ... y compris la variable au préfixe voisin et le commentaire qui cite le nom', /^V2_ESSAI_BANC_IDENTIFIANT_X=ne-me-touche-pas$/m.test(apresC) && /^# V2_ESSAI_BANC_MOT_DE_PASSE=commentaire$/m.test(apresC));
+        H.v('   ... chaque nom une seule fois (le doublon est retiré)', [apresC.split('\n').filter(l => l.startsWith('V2_ESSAI_BANC_IDENTIFIANT=')).length, apresC.split('\n').filter(l => l.startsWith('V2_ESSAI_BANC_MOT_DE_PASSE=')).length], [1, 1]);
+        H.vrai('   ... l\'ancien secret a disparu', !apresC.includes('ancien-secret') && !apresC.includes('doublon'));
+        H.v('   ... position conservée : la première ligne du nom est remplacée en place', apresC.split('\n').findIndex(l => l.startsWith('V2_ESSAI_BANC_IDENTIFIANT=')), 2);
+        // (e) le mot de passe n'apparaît dans AUCUNE sortie
+        H.vrai('11b-e. le mot de passe (et son début) n\'apparaît dans aucune sortie (ecrire, stdout, stderr)', !rB.texte.includes(mdpB) && !rB.texte.includes(mdpB.slice(0, 8)) && toutesSorties.every(t => !t.includes(mdpB)));
+        H.vrai('   ... ni dans un document de la base', !JSON.stringify(await Promise.all(['comptes', 'codes_liaison', 'sessions', 'mouvements'].map(n => col(n).find({}).toArray()))).includes(mdpB));
+        H.vrai('   ... et la sortie dit où sont les identifiants sans les montrer', /écrits dans le fichier d'environnement/.test(rB.texte) && !rB.texte.includes(ADR) && rB.texte.includes('V2_ESSAI_BANC_MOT_DE_PASSE'));
+        // (f) existant sans --reprendre : refus, rien ne bouge
+        { const hashAvant = JSON.stringify(cb.motDePasse), env1 = lit(); raz();
+          const r = await jouer(['--base=rm_essai', '--banc'], saisie([], []), { fichierEnv: fichier });
+          const c1 = await comptes().findOne({ emailCle: CLE_B });
+          H.v('11b-f. le compte existe déjà, sans --reprendre : refus, le .env et le hachage ne bougent pas', [r.code, lit() === env1, JSON.stringify(c1.motDePasse) === hashAvant, espions.hacher.length], [1, true, true, 0]);
+          H.vrai('   ... et la sortie dit comment reprendre', r.texte.includes('--banc --reprendre')); }
+        // (g) --reprendre : mot de passe régénéré, generation + 1, .env mis à jour, le reste intact
+        { const env1 = lit(), mdp1 = valeurEnv('V2_ESSAI_BANC_MOT_DE_PASSE'), g1 = (await comptes().findOne({ emailCle: CLE_B })).generation; raz();
+          await comptes().updateOne({ emailCle: CLE_B }, { $unset: { role: '' } });
+          const r = await jouer(['--base=rm_essai', '--banc', '--reprendre'], saisie([], []), { fichierEnv: fichier });
+          const c2 = await comptes().findOne({ emailCle: CLE_B }), mdp2 = valeurEnv('V2_ESSAI_BANC_MOT_DE_PASSE');
+          H.v('11b-g. --banc --reprendre : code 0, mot de passe régénéré (autre valeur), généré, valide pour le compte', [r.code, mdp2 !== mdp1, /^[A-Za-z0-9_-]{32}$/.test(mdp2), await P.verifier(mdp2, c2.motDePasse), await P.verifier(mdp1, c2.motDePasse)], [0, true, true, true, false]);
+          H.v('   ... generation +1 (les sessions d\'avant tombent), rôle rendu, marque banc gardée, un seul compte', [c2.generation, c2.role, c2.banc, (await compterTout()).comptes], [g1 + 1, 'administrateur', true, nbComptes0 + 1]);
+          H.v('   ... le .env : seule la ligne du mot de passe a changé', env1.split('\n').filter((l, i) => l !== apresC.split('\n')[i] || true).map(l => l.replace(/^V2_ESSAI_BANC_MOT_DE_PASSE=.*/, 'V2_ESSAI_BANC_MOT_DE_PASSE=#')).join('\n'), lit().split('\n').map(l => l.replace(/^V2_ESSAI_BANC_MOT_DE_PASSE=.*/, 'V2_ESSAI_BANC_MOT_DE_PASSE=#')).join('\n'));
+          H.vrai('   ... aucune sortie ne contient ni l\'ancien ni le nouveau mot de passe', toutesSorties.every(t => !t.includes(mdp1) && !t.includes(mdp2))); }
+        // (h) un compte de cette adresse SANS la marque banc : refus (on ne reprend pas le compte d'un autre)
+        { await comptes().updateOne({ emailCle: CLE_B }, { $unset: { banc: '' } }); const env1 = lit(); const hash1 = JSON.stringify((await comptes().findOne({ emailCle: CLE_B })).motDePasse);
+          const r = await jouer(['--base=rm_essai', '--banc', '--reprendre'], saisie([], []), { fichierEnv: fichier });
+          H.v('11b-h. --reprendre sur un compte sans marque banc : refus, rien ne bouge', [r.code, lit() === env1, JSON.stringify((await comptes().findOne({ emailCle: CLE_B })).motDePasse) === hash1], [1, true, true]);
+          await comptes().updateOne({ emailCle: CLE_B }, { $set: { banc: true } }); }
+        // (i) ecrireEnv, seul : ajout, fins de ligne, fichier absent, atomicité
+        { const f2 = path.join(dossierEnv, 'autre.env');
+          fs.writeFileSync(f2, 'A=1\r\nB=2'); const r1 = essai.ecrireEnv(f2, { V2_ESSAI_BANC_IDENTIFIANT: 'x@y.invalid', V2_ESSAI_BANC_MOT_DE_PASSE: 'pw' });
+          H.v('11b-i. ecrireEnv : deux noms absents ajoutés en fin, fins de ligne CRLF gardées, autres lignes intactes', [fs.readFileSync(f2, 'utf8'), r1], ['A=1\r\nB=2\r\nV2_ESSAI_BANC_IDENTIFIANT=x@y.invalid\r\nV2_ESSAI_BANC_MOT_DE_PASSE=pw\r\n', { remplacees: 0, ajoutees: 2 }]);
+          fs.writeFileSync(f2, 'V2_ESSAI_BANC_MOT_DE_PASSE=a\nZ=9\n'); const r2 = essai.ecrireEnv(f2, { V2_ESSAI_BANC_IDENTIFIANT: 'i', V2_ESSAI_BANC_MOT_DE_PASSE: 'b' });
+          H.v('   un nom présent remplacé en place, l\'autre ajouté, le fichier finit par une fin de ligne', [fs.readFileSync(f2, 'utf8'), r2], ['V2_ESSAI_BANC_MOT_DE_PASSE=b\nZ=9\nV2_ESSAI_BANC_IDENTIFIANT=i\n', { remplacees: 1, ajoutees: 1 }]);
+          H.vrai('   un fichier absent est REFUSÉ (on ne crée pas l\'environnement d\'un autre)', (() => { try { essai.ecrireEnv(path.join(dossierEnv, 'nexiste-pas.env'), { A: '1' }); return false; } catch (e) { return e.sure === true && !fs.existsSync(path.join(dossierEnv, 'nexiste-pas.env')); } })());
+          H.v('   aucun fichier temporaire ne reste', fs.readdirSync(dossierEnv).filter(n => n.endsWith('.tmp')), []);
+          H.vrai('   genererMotDePasse : 32 caractères URL-sûrs, différents à chaque appel', /^[A-Za-z0-9_-]{32}$/.test(essai.genererMotDePasse()) && essai.genererMotDePasse() !== essai.genererMotDePasse()); }
+        H.v('   le compte de mesure n\'a reçu ni solde ni mouvement', [await col('mouvements').countDocuments({}), (await comptes().findOne({ emailCle: CLE_B })).solde], [0, { accueil: 0, achete: 0 }]);
+        try { fs.rmSync(dossierEnv, { recursive: true, force: true }); } catch { /* temporaire */ }
+    }
+
+    // ---- 11 ter. les scans du compte de mesure sont marqués « banc » au journal et EXCLUS des statistiques d'usage
+    {
+        const mongoose = require('mongoose'), JS = require('../../journal-scans'), HB = require('../../journal-hors-banc'), fs = require('fs'), path = require('path');
+        const banc = await comptes().findOne({ emailCle: emailCle(essai.ADRESSE_BANC) });
+        const normal = await comptes().findOne({ emailCle: CLE });
+        H.v('11t. estBanc : le compte de mesure oui ; un compte ordinaire, une installation, un identifiant illisible, un compte inconnu : non', [await JS.estBanc(`v2:compte:${banc._id}`), await JS.estBanc(`v2:compte:${normal._id}`), await JS.estBanc(`v2:installation:${banc._id}`), await JS.estBanc('v2:compte:pas-un-id'), await JS.estBanc(`v2:compte:${new mongoose.Types.ObjectId()}`), await JS.estBanc(undefined), await JS.estBanc(null)], [true, false, false, false, false, false, false]);
+        H.v('   estBanc ne lève jamais (la lecture du compte échoue : faux)', await JS.estBanc(`v2:compte:${banc._id}`, async () => { throw new Error('boum'); }), false);
+        H.v('   `banc` doit valoir EXACTEMENT true (truthy refusé)', await JS.estBanc(`v2:compte:${banc._id}`, async () => ({ banc: 'oui' })), false);
+        // de bout en bout : la ligne que la chaîne écrit pour un scan, par la VRAIE fonction, dans la VRAIE collection du journal
+        const attendre = async id => { for (let i = 0; i < 100; i++) { const d = await JS.JournalScan.findById(id).lean(); if (d) return d; await new Promise(r => setTimeout(r, 50)); } return null; };
+        const idB = JS.enregistrerScan({ route: 'identifier', userId: `v2:compte:${banc._id}`, nom: 'Statistique banc' });
+        const idN = JS.enregistrerScan({ route: 'identifier', userId: `v2:compte:${normal._id}`, nom: 'Statistique ordinaire' });
+        const idI = JS.enregistrerScan({ route: 'identifier', userId: 'v2:installation:abc', nom: 'Statistique installation' });
+        const [lB, lN, lI] = [await attendre(idB), await attendre(idN), await attendre(idI)];
+        H.v('11t. la ligne du journal d\'un scan « banc » porte banc:true ; celles des autres n\'ont pas le champ', [lB && lB.banc, lN && 'banc' in lN, lI && 'banc' in lI], [true, false, false]);
+        const J = mongoose.connection.db.collection('journal_scans');
+        const vus = async filtre => (await J.find({ ...filtre, nom: { $in: ['Statistique banc', 'Statistique ordinaire', 'Statistique installation'] } }).toArray()).map(d => d.nom).sort();
+        H.v('   la lecture HORS BANC (le filtre des statistiques) exclut le scan « banc » et garde les autres', await vus(HB.FILTRE_HORS_BANC), ['Statistique installation', 'Statistique ordinaire']);
+        H.v('   avecHorsBanc fusionne le filtre dans une requête existante', await vus(HB.avecHorsBanc({ route: 'identifier' })), ['Statistique installation', 'Statistique ordinaire']);
+        H.v('   sans le filtre, le scan « banc » existe bien (le filtre est ce qui l\'exclut)', await vus({}), ['Statistique banc', 'Statistique installation', 'Statistique ordinaire']);
+        H.v('   horsBanc (lignes en mémoire) : seul banc === true est exclu', [{ banc: true }, {}, { banc: false }, { banc: null }, { banc: 'true' }, null].map(HB.horsBanc), [false, true, true, true, true, true]);
+        // les lecteurs d'usage du journal de l'essai passent par le filtre (une lecture qui l'oublie recompte le banc)
+        const racine = path.join(__dirname, '..', '..');
+        for (const f of ['v2/mesures/projeter-p95.js', 'v2/mesures/mesurer-index-premier-mot.js'])
+            H.vrai(`   ${f} lit le journal à travers avecHorsBanc`, /journal_scans'\)\.find\(require\('\.\.\/\.\.\/journal-hors-banc'\)\.avecHorsBanc\(/.test(fs.readFileSync(path.join(racine, f), 'utf8')));
+        H.vrai('   la ligne `analyses` d\'un scan du compte de mesure porte banc:true (route d\'identification)', /porteur\.compte && porteur\.compte\.banc === true \? \{ banc: true \}/.test(fs.readFileSync(path.join(racine, 'v2/identifier/routes.js'), 'utf8')));
+        await J.deleteMany({ nom: { $in: ['Statistique banc', 'Statistique ordinaire', 'Statistique installation'] } });
+    }
+
     // ---- 12. aucune erreur de pilote, aucune URI dans une sortie, quoi qu'il arrive
     H.vrai('12. aucune sortie du banc ne contient de schéma mongodb:// ni le mot de passe', toutesSorties.every(t => !t.includes('mongodb://') && !t.includes(MDP) && !t.includes('Autre-mot-de-passe') && !t.includes('SecretDeLigneDeCommande1')));
     console.log(`   dénominateur : ${toutesSorties.length} exécutions de main() capturées (ecrire + stdout + stderr), ${lignesSaisie.reduce((n, s) => n + s.questions.length, 0)} questions posées`);
