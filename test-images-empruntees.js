@@ -333,14 +333,15 @@ t('SEA borné : la liste fermée est exactement les 3 produits ; le set n\'entre
     assert.deepStrictEqual([...E.SETS_BORNES[SEA]], SEPT);   // décision du testeur du 24/10 : les 3 produits ET leurs 4 frères
     assert.deepStrictEqual(Object.keys(E.SETS_BORNES), [SEA]);
     assert.strictEqual(E.PERIMETRE.length, 9); assert(!E.PERIMETRE.includes(SEA)); assert.strictEqual(E.dansLePerimetre(SEA), false);
-    assert.deepStrictEqual([...E.SETS_LUS], [...E.PERIMETRE, SEA]);
+    assert.deepStrictEqual([...E.SETS_LUS], [...E.PERIMETRE, SEA, ...Object.keys(E.ORIGINES_EXPLICITES)]);   // API-52 L1 : + les 2 sets Classic à origine explicite
     assert.throws(() => E.SETS_BORNES[SEA].push(1)); assert.throws(() => { 'use strict'; E.SETS_BORNES.autre = []; });
     for (const id of SEPT) { assert.strictEqual(E.estBorne(SEA, id), true); assert.strictEqual(E.dansLeChamp(SEA, id), true); assert.strictEqual(E.derivableDeLOrigine(SEA, id), true); }
     assert.strictEqual(E.estBorne(SEA, 901075), false); assert.strictEqual(E.dansLeChamp(SEA, 901075), false);
     assert.strictEqual(E.estBorne('WCD-2009', 901074), false); assert.strictEqual(E.dansLeChamp('WCD-2009', 901074), false);
 });
 t('verifierBornes : un set à liste fermée absent de la base lève et le nomme ; verifierPerimetre reste celui des 9 sets', () => {
-    assert.doesNotThrow(() => E.verifierBornes([...E.PERIMETRE, SEA])); assert.throws(() => E.verifierBornes(E.PERIMETRE), /Southeast-Asia-Promos/); assert.throws(() => E.verifierBornes([]), /introuvable/);
+    const expl = Object.keys(E.ORIGINES_EXPLICITES);
+    assert.doesNotThrow(() => E.verifierBornes([...E.PERIMETRE, SEA, ...expl])); assert.throws(() => E.verifierBornes([...E.PERIMETRE, ...expl]), /Southeast-Asia-Promos/); assert.throws(() => E.verifierBornes([]), /introuvable/);
     assert.doesNotThrow(() => E.verifierPerimetre(E.PERIMETRE));
 });
 t('SEA : les 3 produits de la liste reçoivent une entrée dérivée de leur origine (set d\'origine, numéro d\'origine, « en »), imageEmprunteeTirage, SANS tamponNonRepresente, SANS champ nouveau', () => {
@@ -491,6 +492,67 @@ t('D4.2 script : --ecrire sans --sets explicite -> exit 2 « exige --sets » AVA
     assert(/if \(ECRIRE && !E\.memeSelection\(m, SELECTION\)\) \{[^\n]*process\.exitCode = 1; return;/.test(src));   // le retrait aussi
     assert(/if \(sansMention\.length\) \{[^\n]*process\.exitCode = 1; return;/.test(src));                            // un produit sans mention arrête
     assert(/cleR2: b\.cleR2, set, imageServieDe: T\.imageServieDe, mentionDuVisuelEmprunte: T\.mentionDuVisuelEmprunte \}\)\.reelle/.test(src));   // la mention se rejoue AVEC le set de la fiche
+});
+
+// ── API-52 L1 (25/10) : Masaki CLK/CLF — liste FERMÉE de produits à ORIGINE EXPLICITE (jamais dérivée du detail de la ligne)
+const CLK = 'Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck', CLF = 'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck', CLL = 'Pokemon-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck';
+const oriCLL = (o = {}) => ({ set: CLL, source: 'artofpkm', cleR2: 'artofpkm/677/30.webp', numero: '030', langue: 'ja', w: 1432, h: 2000, vignette: { cleR2: 'vignettes/artofpkm/677/30.webp', w: 200, h: 279 }, ...o });
+const ligneMasaki = (idProduct, slugSet, o = {}) => ({ _id: `12097|${idProduct}`, carteId: 12097, idProduct, slugSet, preuve: 'setlist+numero', numeroFiche: null, detail: 'slug Bill-CLK-030 → « Bill (Base Set 91) »', ...o });
+const etatMasaki = (lignes, images = [oriCLL()], o = {}) => ({ ...etat(lignes, [carte(images, 12097)]), ...o });
+t('L1 : la liste fermée à origine explicite est exactement 744655 (CLK) et 743194 (CLF), origine carte 12097 / CLL / n°030 / artofpkm/677/30.webp (produit 744621)', () => {
+    assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES).sort(), [CLF, CLK].sort());
+    assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLK]), ['744655']); assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLF]), ['743194']);
+    for (const o of [E.ORIGINES_EXPLICITES[CLK][744655], E.ORIGINES_EXPLICITES[CLF][743194]]) assert.deepStrictEqual({ ...o }, { carteId: 12097, setOrigine: CLL, numero: '030', cleR2: 'artofpkm/677/30.webp', produitOrigine: 744621 });
+    assert.throws(() => { 'use strict'; E.ORIGINES_EXPLICITES[CLK][1] = {}; }); assert.throws(() => { 'use strict'; E.ORIGINES_EXPLICITES[CLK][744655].cleR2 = 'x'; });
+    assert.strictEqual(E.PERIMETRE.length, 9); assert.deepStrictEqual(Object.keys(E.SETS_BORNES), [SEA]);
+    assert(E.SETS_LUS.includes(CLK) && E.SETS_LUS.includes(CLF)); assert.strictEqual(E.setBorne(CLK), true);
+    assert.strictEqual(E.estBorne(CLK, 744655), true); assert.strictEqual(E.estBorne(CLK, 743194), false); assert.strictEqual(E.estBorne(CLF, 743194), true); assert.strictEqual(E.estBorne(CLF, 744655), false);
+    assert.strictEqual(E.dansLeChamp(CLK, 744655), true); assert.strictEqual(E.dansLeChamp(CLK, 1), false);
+    assert.strictEqual(E.derivableDeLOrigine(CLK, 744655), false);   // jamais dérivée du detail
+});
+t('L1 : un produit de CLK/CLF reçoit UNE entrée empruntée, depuis l\'origine EXPLICITE (et non « Bill (Base Set 91) » du detail), langue de l\'origine, sans champ neuf', () => {
+    const p = plan(etatMasaki([ligneMasaki(744655, CLK), ligneMasaki(743194, CLF)]));
+    assert.strictEqual(p.refus.length, 0, JSON.stringify(p.refus)); assert.strictEqual(p.ajouts.length, 2);
+    for (const a of p.ajouts) {
+        const e = a.entree;
+        assert.strictEqual(e.cleR2, 'artofpkm/677/30.webp'); assert.strictEqual(e.w, 1432); assert.strictEqual(e.h, 2000); assert.strictEqual(e.langue, 'ja');
+        assert.strictEqual(e.imageEmprunteeTirage, true); assert.strictEqual(e.source, 'emprunt'); assert.strictEqual(e.lot, 'emprunt-2026-10'); assert(!('tamponNonRepresente' in e)); assert.strictEqual(e.numero, null);
+        assert.deepStrictEqual(e.vignette, oriCLL().vignette);
+        assert.deepStrictEqual(Object.keys(e).sort(), Object.keys(plan(etatSEA([ligneSEA(901074)])).ajouts[0].entree).sort());
+    }
+    assert.deepStrictEqual(p.ajouts.map(a => a.set).sort(), [CLF, CLK].sort());
+    assert.strictEqual(E.operationsVersMongo(p).length, 2); assert.strictEqual(p.horsPerimetre, 0);
+});
+t('L1 : origine ABSENTE, DIFFÉRENTE (autre clé, autre set, autre numéro) ou entrée sans taille → refus nommé, aucune entrée', () => {
+    for (const images of [[], [oriCLL({ cleR2: 'artofpkm/677/31.webp' })], [oriCLL({ set: 'Autre' })], [oriCLL({ numero: '031' })], [oriCLL({ w: undefined })], [oriCLL(), oriCLL()], [oriCLL({ langue: null })]]) {
+        const p = plan(etatMasaki([ligneMasaki(744655, CLK)], images));
+        assert.strictEqual(p.ajouts.length, 0, JSON.stringify(images)); assert.strictEqual(p.refus.length, 1); assert(/origine explicite/.test(p.refus[0].raison), p.refus[0].raison);
+    }
+});
+t('L1 : la ligne doit porter la carte de l\'origine (12097) ; une autre carte → refus', () => {
+    const p = plan({ ...etat([ligneMasaki(744655, CLK, { carteId: 5 })], [carte([oriCLL()], 5)]) });
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 1); assert(/12097/.test(p.refus[0].raison), p.refus[0].raison);
+});
+t('L1 : tout autre produit de CLK/CLF est HORS LISTE (compté, jamais écrit) ; un frère de la même carte dans le set → refus (l\'entrée est par carte et par set)', () => {
+    const p = plan(etatMasaki([ligneMasaki(111, CLK, { _id: 'x' }), ligneMasaki(743194, CLK, { _id: 'y' })]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refus.length, 0); assert.strictEqual(p.horsListe, 2);
+    const f = plan(etatMasaki([ligneMasaki(744655, CLK), ligneMasaki(111, CLK, { _id: 'x' })]));
+    assert.strictEqual(f.ajouts.length, 0); assert.strictEqual(f.refus.length, 1); assert.deepStrictEqual(f.refus[0].freres, [111]);
+});
+t('L1 : déjà couvert par une entrée du set → « déjà » ; idempotent ; retrait exact (manifeste) ; WCD toujours refusé', () => {
+    const e = etatMasaki([ligneMasaki(744655, CLK)]); const p = plan(e);
+    assert.strictEqual(p.ajouts.length, 1); const ap = E.appliquer(e, p);
+    assert.strictEqual(E.planifier({ ...e, cartes: ap.cartes }).ajouts.length, 0); assert.strictEqual(E.planifier({ ...e, cartes: ap.cartes }).deja.length, 1);
+    const m = E.manifeste(p); assert.deepStrictEqual(E.retirer({ cartes: ap.cartes }, m).cartes.get(12097), e.cartes.get(12097));
+    assert.strictEqual(plan(etatMasaki([ligneMasaki(744655, 'WCD-2009')])).refusWCD.length, 1);
+});
+t('L1 : verifierBornes exige aussi les sets à origine explicite ; verifierSelection les accepte ; les autres sets de Classic restent hors champ', () => {
+    assert.doesNotThrow(() => E.verifierBornes([SEA, CLK, CLF])); assert.throws(() => E.verifierBornes([SEA, CLK]), /Pokemon-Card-Game-Classic-Venusaur/); assert.throws(() => E.verifierBornes([CLK, CLF]), /Southeast/);
+    assert.doesNotThrow(() => E.verifierSelection([CLK, CLF])); assert.throws(() => E.verifierSelection([CLL]), /hors du champ/);
+});
+t('L1 : produitsHorsChamp nomme un produit de CLK hors liste ; le plan réel n\'en contient jamais', () => {
+    assert.deepStrictEqual(E.produitsHorsChamp({ ajouts: [{ set: CLK, produits: [744655, 5] }] }), [`${CLK}:5`]);
+    assert.deepStrictEqual(E.produitsHorsChamp(plan(etatMasaki([ligneMasaki(744655, CLK), ligneMasaki(5, CLK, { _id: 'z' })]))), []);
 });
 
 t('le script ne contient aucun vrai chemin du testeur dans ce banc et n\'ouvre aucun réseau', () => {
