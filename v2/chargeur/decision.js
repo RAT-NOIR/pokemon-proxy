@@ -50,6 +50,13 @@ const MT = require('../identifier/marques-tampon');
 const EXCLURE_BASSE_DEFINITION = false;
 const familleDuSet = id => { for (const [nom, liste] of Object.entries(FAMILLES_SANS_REPLI)) if (liste.includes(id)) return nom; return null; };
 /**
+ * MARQUE-EMPRUNT — le visuel choisi est-il EMPRUNTÉ à un autre tirage ? C'est la décision de `choisirVisuel` (`visuel`), jamais le texte de la mention : 'autre-tirage', ou un substitut dont le set n'est
+ * pas celui du produit (même prédicat que `refusDeRepli`, qui juge le même fait pour les familles fermées). Un substitut dont le set est inconnu compte comme emprunté (dans le doute, la règle se tait).
+ */
+function estEmprunt({ im, set, visuel }) {
+    return visuel === 'autre-tirage' || (visuel === 'substitut' && (!im || !im.set || !set || im.set !== set._id));
+}
+/**
  * Le visuel choisi doit-il être REFUSÉ ? @returns le nom du compteur (famille, 'staff-prerelease' ou 'image-empruntee'), ou null.
  *  · une image marquée imageEmprunteeTirage (l'image du tirage normal, pour l'AFFICHAGE seulement) n'est JAMAIS servie, famille ou non, du set ou non ;
  *  · un visuel d'un AUTRE tirage (autre-tirage, ou substitut dont le set n'est pas celui du produit) n'est pas servi aux familles ci-dessus ni aux produits dont le nom Cardmarket nomme un tampon.
@@ -63,16 +70,24 @@ function refusDeRepli({ ligne, set, im, visuel }) {
     return JETON_TAMPON_NOM.test(String(ligne.slug ?? '')) ? 'staff-prerelease' : null;
 }
 /**
+ * basseDefinition à TROIS valeurs (la règle d'image exige `=== false`, défaut fermé : un `null` la fait taire) : le drapeau du catalogue s'il est booléen ; sinon la largeur de l'ORIGINAL (`im.w`, la même que
+ * celle de la grande image) comparée au seuil de collecte (collecte-cartes/seuils-images.js::LARGEUR_MIN) — true dessous, false au seuil ou au-dessus ; null SEULEMENT quand la largeur est inconnue.
+ */
+function basseDefinitionDe(im) {
+    if (typeof im.basseDefinition === 'boolean') return im.basseDefinition;
+    if (Number.isInteger(im.w) && im.w > 0) return im.w < require('../../collecte-cartes/seuils-images').LARGEUR_MIN;
+    return null;
+}
+/**
  * Les marquages d'un visuel pour UN produit : ceux de l'image servie, seulement si le produit figure dans sa liste de produits partagés, OU si l'image est servie à une paire SÉPARÉE PAR LA VARIANTE
  * (PARTAGES-VARIANTE : false, aucune liste, `variante` prouvée du produit servi — partage-variante.js) ; la basse définition suit l'image.
  */
-function marquagesDe(im, idProduct, variante = null) {
-    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
+function marquagesDe(im, idProduct, variante = null) {    const liste = Array.isArray(im.produitsPartages) && im.produitsPartages.includes(idProduct);
     const paire = separeeParVariante(im, variante);
     const concerne = liste || paire;
     const bool = x => (typeof x === 'boolean' ? x : null);
     return { partageeHoloNonHolo: concerne ? bool(im.partageeHoloNonHolo) : null, partageeTamponNonSepare: concerne ? bool(im.partageeTamponNonSepare) : null,
-        produitsPartages: liste ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: bool(im.basseDefinition) };
+        produitsPartages: liste ? [...im.produitsPartages] : null, tamponNonRepresente: concerne ? texte(im.tamponNonRepresente) : null, basseDefinition: basseDefinitionDe(im) };
 }
 
 /**
@@ -177,7 +192,10 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // les sets qui RESSEMBLENT à une famille sans figurer dans sa liste fermée : servis comme avant, mais nommés (une liste fermée qui vieillit ne doit pas vieillir en silence)
         familleHorsListe: sets.map(s => s._id).filter(id => RESSEMBLANCES.some(re => re.test(id)) && familleDuSet(id) === null).sort(),
         // les marquages portés par les entrées écrites
-        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 }, melangeProduits: 0 };
+        marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 }, melangeProduits: 0,
+        // MARQUE-EMPRUNT : les produits distincts dont l'entrée écrite porte un visuel emprunté (sommes par nature : les lignes d'un même produit ne comptent qu'une fois)
+        emprunts: 0, empruntsParNature: { 'autre-tirage': 0, substitut: 0 } };
+    const empruntes = new Set();
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
@@ -240,13 +258,18 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (e.partageeHoloNonHolo === true) d.marquees.holo++;
         if (e.partageeTamponNonSepare !== null) d.marquees.tampon++;
         if (e.basseDefinition === true) d.marquees.basse++;
+        // MARQUE-EMPRUNT : posée AVEC l'entrée (le sink la range si l'entrée est admise) ; la nature vient de la décision, pas de la mention
+        if (estEmprunt({ im, set: s, visuel })) {
+            if (!empruntes.has(l.idProduct)) { empruntes.add(l.idProduct); d.emprunts++; d.empruntsParNature[visuel]++; }
+            if (sink && typeof sink.emprunt === 'function') sink.emprunt(l.idProduct);
+        }
         if (sink) sink.entree(e); else entrees.push(e);
         d.ecrites++;
     }
     for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);
     d.melangeProduits = melanges.size;
-    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b) }) };
+    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b) }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
+module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };

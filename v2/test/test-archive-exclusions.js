@@ -133,7 +133,8 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     H.v('3b. sans --exclure : deux constructions du même jeu (date d\'en-tête fixée) donnent les MÊMES octets', fixe(f0.brut).equals(fixe(f0b.brut)), true);
     // 3c (tour 1, I2) : l'identité avec le code d'AVANT le lot. L'empreinte ci-dessous est celle du contenu brut (en-tête à la date fixée 2020-01-01) du jeu fixe ci-dessous, construit sans exclusion par le code de
     // 1a1ab447 (le dernier commit AVANT ce lot) ; calculée une fois sous N24 et N22, identique. Si un autre lot change légitimement le format ou la décision, elle se recalcule sur ce commit-là, sciemment.
-    const EMPREINTE_AVANT_LE_LOT = '2fc1ae9860caf77628fecc6ed77e6fc7ad8853cac4ff537ed552b5a357d6ca39';
+    // MARQUE-EMPRUNT : recalculée sciemment — le seul changement de ce jeu fixe est la colonne des emprunts (format 3, vide ici : aucun emprunt) et son compte emprunts: 0 dans l'en-tête ; les 31 visuels sont les mêmes.
+    const EMPREINTE_AVANT_LE_LOT = '18bedb6934509365b88a239990cdcdb7deb242e5320fea0838bbbbf481e6dbcf';
     const fige = () => {
         const docs = [], lignes = [];
         for (let i = 1; i <= 30; i++) { const num = String(i).padStart(3, '0'); docs.push({ _id: i, nomEn: `Carte ${i}`, sets: ['Set-A'], impressions: [imp(num)], images: [im('Set-A', num, `c${i}`)] }); lignes.push({ idProduct: 1000 + i, carteId: i, idExpansion: 100, numeroFiche: num, slug: `P${i}-SA${i}`, slugSet: 'Set-A' }); }

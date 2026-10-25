@@ -32,7 +32,9 @@ function decisionRegleG(entree, S) {
         for (const id of ids) for (const q of distincts(partagesDe(id))) if (!tous.includes(q)) tous.push(q);
         return tous;
     };
-    const d = G.decider(entree.contexteG, entree.ligne, entree.nEssais, entree.mesures, S || G.SEUILS_G);
+    // MARQUE-EMPRUNT : un produit dont le visuel est emprunté à un autre tirage est un « reste » (sans visuel propre) pour la règle ; `entree.emprunte` (fonction, les bancs) ou la version en place
+    const contexte = require('./emprunt').contexteDeLaRegle(entree.contexteG, entree.emprunte);
+    const d = G.decider(contexte, entree.ligne, entree.nEssais, entree.mesures, S || G.SEUILS_G);
     const detail = typeof d.raison === 'string' ? d.raison : null;
     if (d.affirme === true) {
         if (!Number.isInteger(d.produit)) throw new Error('decisionRegleG : affirmation sans produit entier');

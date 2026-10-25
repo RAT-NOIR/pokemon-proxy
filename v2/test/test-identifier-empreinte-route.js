@@ -50,7 +50,7 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
     await raw('codes_set').insertOne({ idExpansion: 990001, codeSet: 'PBL', apprisLe: new Date() });
     for (const id of [A.ID_A, A.ID_B, A.ID_P]) await semer(id, '001');
     await semer(A.ID_X, '002');                                       // le produit que la chaîne lit mal : numéro 002, la lecture dit 001
-    VB.installer(VIS);
+    VB.installer(VIS, [], { emprunts: true });
 
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources');

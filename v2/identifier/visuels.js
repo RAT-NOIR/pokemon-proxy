@@ -171,7 +171,12 @@ function creerVisuels(opts = {}) {
     function tirage(idProduct) { const v = version(); return v && typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(idProduct) : null; }
     /** LOT TAMPONS (B, tour 1) : ce produit est-il marqué `prixMelangeTampon` (colonne propre de la version en place, sans dépendre d'une entrée) ? true / false ; null sans colonne. */
     function prixMelange(idProduct) { const v = version(); return v && typeof v.prixMelange === 'function' ? v.prixMelange(idProduct) : null; }
-    return { resoudre, impressions, entree, instantane, tirage, prixMelange };
+    /**
+     * MARQUE-EMPRUNT : le visuel de ce produit est-il emprunté à un autre tirage (colonne propre de la version en place) ? true / false ; null = on ne sait pas (archive d'avant la colonne, aucune version,
+     * identifiant non entier) — jamais « non emprunté » en silence. Les règles d'image lisent null comme emprunté : identifier/emprunt.js (`empruntOuInconnu`).
+     */
+    function empruntDe(idProduct) { const v = version(); return v && typeof v.empruntDe === 'function' ? v.empruntDe(idProduct) : null; }
+    return { resoudre, impressions, entree, instantane, tirage, prixMelange, empruntDe };
 }
 
 module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION, prix, dateGuide };

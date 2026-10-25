@@ -82,7 +82,7 @@ function chargerFixtures() {
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     for (const id of new Set([ID_A, ID_B, P, ...Q])) await semerProduit(id);
-    VB.installer(VIS);                                                  // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
+    VB.installer(VIS, [], { emprunts: true });                                                  // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
 
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources');

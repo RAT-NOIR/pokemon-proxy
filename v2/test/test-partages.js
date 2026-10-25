@@ -21,7 +21,7 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage = 'intl') => ({ id
 
 // ── la version fabriquée (puis RELUE par le consommateur : ce que l'API charge)
 function fabriquer({ marquages = true, jumeaux = true } = {}) {
-    const b = creerConstructeur({ marquages });
+    const b = creerConstructeur({ marquages, emprunts: true });           // MARQUE-EMPRUNT : l'archive du banc déclare « aucun visuel emprunté » (sinon la règle G se tait : inconnu = emprunté)
     const m = (partage) => (marquages ? partage : {});
     // 7001/7002 : holo / non-holo, même carte, même créneau (Prize Pack S1)
     b.entree(brut(7001, 900, m({ partageeHoloNonHolo: true, produitsPartages: [7001, 7002] })));

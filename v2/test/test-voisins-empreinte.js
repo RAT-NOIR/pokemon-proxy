@@ -91,6 +91,16 @@ const A_MODELE = () => ({ id: MODELE.id, sha256: MODELE.sha256 });
     const RG = require('../identifier/regle-g');
     const d = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils);
     H.v('4f. la règle G affirme 703 (un visuel, un produit) sans qu\'aucune mesure de pixels soit demandée', [d && d.issue, d && d.produit], ['affirmee', 703]);
+    // MARQUE-EMPRUNT : le contexte rendu à la route (donc lu par les mesures ET par la décision) est celui de la version en place où 703 est EMPRUNTÉ : un reste de sa carte, plus un produit du visuel
+    { const etatVersion = require('../chargeur/etat'), { creerConstructeur } = require('../chargeur/version');
+        const b = creerConstructeur({ emprunts: true }); for (const id of [703, 705, 706]) b.entree({ idProduct: id, vignette: { cle: `v/${id}.webp`, w: 200, h: 279 }, grande: null, visuel: 'du-set', mention: null, idMetacard: 1, numero: '1', rarete: null, total: null, variante: null, setNom: 'S', lien: null }); b.emprunt(703);
+        etatVersion.installer(b.finir(new Date('2026-10-25T10:00:00.000Z')));
+        try {
+            const re = await appel(sans, entreeDe([ent(0, ligneDe(3), false)]));
+            H.v('4g. MARQUE-EMPRUNT : le contexte rendu n\'est plus celui de l\'index (703 emprunté) : produits du visuel vidés, 703 parmi les restes de sa carte, l\'index intact', [re.ok, re.contexteG === index.contexteG, re.contexteG.produits.get('banc/jeu-3.webp'), re.contexteG.invisibles.get(33), index.contexteG.produits.get('banc/jeu-3.webp')], [true, false, [], [703], [[703, 2]]]);
+            const de = RG.decisionRegleG({ ligne: re.ligne, nEssais: re.nEssais, mesures: re.mesures, contexteG: re.contexteG }, re.seuils);
+            H.v('4h. … et la décision ne l\'affirme plus (null : la chaîne héritée décide)', de, null);
+        } finally { etatVersion.vider(); } }
 
     // le plus petit index de photo, et UN seul vecteur est jugé
     aucun.appels = 0;

@@ -115,7 +115,9 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
             const v = E.verifier(e0.vecteur, q => { trouve = courant.index.voisins(q, 10); return trouve.meilleur; });
             if (!v.ok || !trouve) return echec('invalide');
             const ligne = { top: trouve.top, essai: e0.redressee ? 1 : 0 };
-            const ctx = courant.index.contexteG;
+            // MARQUE-EMPRUNT : le contexte lu par la garde des zones (les mesures demandées) ET par la décision est le MÊME : les produits dont le visuel est emprunté y sont des restes (sans visuel propre) ; sinon la règle
+            // demanderait à la décision des mesures que la boucle ci-dessous n'a jamais faites. Version en place ; sans version, le contexte tel quel.
+            const ctx = require('./emprunt').contexteDeLaRegle(courant.index.contexteG);
             // 🔑 LA CARTE : sans carte autorisée (JPEG 420 × 587, <= 200 Ko, celle de la MÊME entrée que le vecteur), la garde des zones ne peut pas conclure : G se tait pour cette photo, même si aucune mesure n'était demandée
             const carte = await CR.valider(e0.carte);
             if (!carte.ok) return { ...echec('muette'), raison: carte.code };
