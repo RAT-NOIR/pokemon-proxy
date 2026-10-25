@@ -138,6 +138,14 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const a = await jouer(sv, { mode: 'affirmee', ids: [A.ID_A] }, 3);
         H.v('4c. archive vérifiée : G n\'est pas muette — la chaîne affirme A, le vecteur désigne P : a-trancher avec désaccord', [statut(a.j), !!(await analyseDe(a.j)).desaccordRegleG], ['a-trancher', true]);
     }
+    // ── (4bis) 🔴 CONSTAT D'INTÉGRATION : un emprunt VÉRIFIÉ (verdict « juste » : colonne des emprunts VIDE) garde la `mention` que la décision d'archive lui a donnée (« visuel d'un autre tirage »). G (qui lit seulement empruntDe)
+    // peut s'en servir ; SUR-PAR-IMAGE, dont la ceinture lit AUSSI la mention, se tait. Le gain des verdicts ne passe donc pas par la règle d'image tant que cette ceinture existe. Ce banc ÉCRIT l'état actuel ; si la décision change, il change.
+    {
+        const MENTION = 'Visuel de la même carte dans un autre tirage';
+        E.installer(archive({ mention: { [A.ID_A]: MENTION, [A.ID_X]: MENTION, [A.ID_P]: MENTION } }));
+        const t = await trois(Q, 5);
+        H.v('4d. emprunts vérifiés (colonne vide) qui gardent leur mention : G affirme A (promotion), SUR-PAR-IMAGE seule se TAIT (ceinture de la mention)', [carteDe(t.g.j), statut(t.s.j), (await analyseDe(t.s.j)).surParImage.motif], [A.ID_A, 'a-trancher', 'visuel-suspect']);
+    }
     // ── (5) vérifié MAIS en basse définition / sans mesure / avec une mention : la règle d'image seule se tait
     for (const [nom, opts] of [['basseDefinition true sur X', { basse: { [A.ID_X]: true } }], ['basseDefinition true sur A', { basse: { [A.ID_A]: true } }], ['basseDefinition non mesurée (null) sur X', { basse: { [A.ID_X]: null } }], ['mention non vide sur A (deux sources en conflit)', { mention: { [A.ID_A]: 'visuel du tirage japonais' } }]]) {
         E.installer(archive(opts));

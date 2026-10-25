@@ -29,6 +29,8 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
     const Vx = exclusAvant.size ? Object.create(V, { entree: { value: id => (exclusAvant.has(id) ? null : V.entree(id)) }, identifiants: { value: () => V.identifiants().filter(i => !exclusAvant.has(i)) } }) : V;
     const { signauxDe } = require(path.join(racine, 'v2', 'identifier', 'sur-par-image-route.js'));
     const signauxBruts = signauxDe(Vx);
+    const marqueReelle = require(path.join(racine, 'v2', 'identifier', 'sur-par-image-route.js')).emprunteDe(Vx) || (() => null);
+    console.log(`marque des emprunts : colonne ${V.colonneEmprunts === true ? 'OUI' : 'NON (archive d\'avant : toute la règle se tait)'}`);
     // --null-propre : HYPOTHÈSE de mesure seulement (lire basseDefinition null comme « propre », ce que la production ne fait PLUS) pour dire combien de questions le null fait taire
     const signaux = process.argv.includes('--null-propre') ? (id => { const s = signauxBruts(id); return s && s.basse === null ? { ...s, basse: false } : s; }) : signauxBruts;
     const nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8')).photos;
@@ -38,7 +40,7 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
     const jumeauxOk = V.colonneJumeaux === true && typeof V.jumeauxDe === 'function', partagesOk = V.colonneMarquages === true && typeof V.partagesDe === 'function';
     console.log(`archive : jumeaux ${jumeauxOk ? 'oui' : 'NON'}, partages ${partagesOk ? 'oui' : 'NON'} ; exclus ${[...exclus].join(',') || 'aucun'} ; marge ${marge === undefined ? SPI.MARGE + ' (code)' : marge}`);
     const qs = lignes.filter(x => x.et.type === 'question' && x.et.choix.length >= 2);
-    const T = {}, motifs = {}, sûrs = [], fauxListe = [];
+    const T = {}, motifs = {}, sûrs = [], fauxListe = [], silencesParCle = {};
     let sansVecteur = 0;
     for (const x of qs) {
         const f = fam(x);
@@ -55,14 +57,14 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
         const produits = new Map(x.et.choix.map(id => [id, { idProduct: id }]));
         const r = SPI.decider({
             ids: x.et.choix, cles, signaux,
-            // APPROXIMATION assumée : la marque structurée d'emprunt (lot MARQUE-EMPRUNT) n'existe pas encore ; on la suppose = « l'entrée porte une mention » (4 031 entrées de l'archive 26, toutes « visuel de la même carte dans un autre tirage »).
-            // --sans-marque : aucune fonction d'emprunt, comme l'archive d'aujourd'hui (la règle se tait sur toute la question).
-            emprunte: process.argv.includes('--sans-marque') ? null : (id => { const e = Vx.entree(id); return e ? (e.mention ? true : false) : null; }), cosinus: c => (cos.has(c) ? cos.get(c) : null), top1, contexte: ctx,
+            // INTEGRATION-IMAGE : la VRAIE marque — la même fonction que la route (sur-par-image-route.js::emprunteDe, qui lit version.empruntDe de l'archive, format 3). Une archive sans la colonne des emprunts : null, la règle se tait (défaut fermé).
+            // --sans-marque : aucune fonction d'emprunt (la règle se tait sur toute la question). --marque-mention : l'ANCIENNE approximation (« l'entrée porte une mention »), gardée pour comparer.
+            emprunte: process.argv.includes('--sans-marque') ? null : process.argv.includes('--marque-mention') ? (id => { const e = Vx.entree(id); return e ? (e.mention ? true : false) : null; }) : marqueReelle, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1, contexte: ctx,
             partages: partagesOk ? id => V.partagesDe(id) : () => null, jumeaux: jumeauxOk ? id => { const j = V.jumeauxDe(id); return j ? { conclu: true, ids: [id, ...j.filter(i => i !== id)] } : { conclu: false, ids: [] }; } : null,
             produits, lu: null, marquesLues: null, redressee: p.redressee === true, ...(marge === undefined ? {} : { marge })
         });
         if (voir.size && x.et.choix.some(i => voir.has(i))) console.log(`   voir ${x.cle} choix ${x.et.choix.join(',')} vérité ${x.verite} -> ${r.sur ? `SÛR ${r.produit}` : `se tait (${r.motif})`}`);
-        if (!r.sur) { motifs[r.motif] = (motifs[r.motif] || 0) + 1; continue; }
+        if (!r.sur) { motifs[r.motif] = (motifs[r.motif] || 0) + 1; silencesParCle[x.cle] = r.motif; continue; }
         if (x.verite == null) T[f].inconnue++; else if (r.produit === x.verite) T[f].juste++; else { T[f].faux++; fauxListe.push({ cle: x.cle, fam: f, choisi: r.produit, verite: x.verite, ecart: r.ecart }); }
         sûrs.push({ cle: x.cle, fam: f, produit: r.produit, verite: x.verite, ecart: r.ecart });
     }
@@ -70,6 +72,7 @@ const secret = () => { const f = necessaire('secret-env'); const m = /^V2_VISUEL
     console.log('par famille :', JSON.stringify(T));
     console.log('motifs du silence :', JSON.stringify(motifs));
     console.log('FAUX :', fauxListe.length ? JSON.stringify(fauxListe) : 'aucun');
+    if (arg('sortie')) fs.writeFileSync(arg('sortie'), JSON.stringify({ par_famille: T, motifs, surs: sûrs, faux: fauxListe, questions: qs.length, silences: silencesParCle }, null, 1));
     if (arg('avecG')) {
         const A = JSON.parse(fs.readFileSync(arg('avecG'), 'utf8'));
         const kG = Object.keys(A.diffs)[0];
