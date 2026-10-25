@@ -6,6 +6,7 @@ const pret = require('./pret');
 const { CHEMINS_HERITES, aiguilleur, estAiguilleur } = require('./heritage');
 const { repondreErreur } = require('./erreurs');
 const { capacitesServies } = require('./capacites');
+const etatEmpreintes = require('./identifier/etat-empreintes');   // l'index d'empreintes EN MÉMOIRE (un pointeur) : le jeton `empreinte` ne sort que s'il est installé
 const etatVisuels = require('./chargeur/etat');   // la version des visuels EN MÉMOIRE (un pointeur) : le seul état que /ping lit pour `langue-impression` et `marques` — jamais la base
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
@@ -139,4 +140,4 @@ function assembler(lots, cfgLots, deps = {}) {
 const depenseModele = { appeler: (post, url, corps, config) => (cfg ? require('./argent/depense-modele').pourConfig(cfg).appeler(post, url, corps, config) : post(url, corps, config)) };
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine). CAPACITES-PING : `capacites` (la liste fermée de capacites.js) s'ajoute à `versionMinExtension` sous la MÊME condition
 // (v2 configurée) ; une fonction pure de la configuration, synchrone, qui ne lève jamais : /ping reste un keep-alive.
-module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension, capacites: capacitesServies(cfg, undefined, etatVisuels.version) } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension, capacites: capacitesServies(cfg, undefined, etatVisuels.version, etatEmpreintes.courante) } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };

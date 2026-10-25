@@ -26,7 +26,7 @@
 // Un jeton dont le code ne pourrait pas être prouvé servi n'entre pas dans CONDITIONS : il n'est jamais annoncé.
 
 /** La liste fermée (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) »), dans l'ordre de la réponse. UN seul endroit : les bancs, le schéma et le contrat la lisent d'ici. */
-const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour']);
+const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte']);
 
 /**
  * L'archive des visuels EN MÉMOIRE est-elle en place, avec au moins un produit ? `version` est ce que rend le lecteur (chargeur/etat.js::version) : un objet gelé, ou null. Écrit par ce qu'il AUTORISE :
@@ -54,7 +54,22 @@ const CONDITIONS = Object.freeze({
     },
     'prix-incertains': () => true,
     'prix-repli': () => true,
-    'achete-avant-jour': () => true
+    'achete-avant-jour': () => true,
+    // 25/10 (DEMANDE-SERVEUR-EXTENSION.md, contrat de l'empreinte, point 8) : « le serveur attend le vecteur de l'extension ». Il ne le dit QUE s'il sait s'en servir, donc les TROIS à la fois :
+    //   (1) le drapeau V2_EMPREINTE_EXTENSION est allumé — `cfg.empreinteExtension === true` (config.js le ramène à false quand la configuration du modèle est mal formée) ;
+    //   (2) la configuration du modèle est COMPLÈTE : identifiant, sha256 des poids, objet R2 du modèle (celui que /api/modele-empreinte/<sha256> présigne) ;
+    //   (3) l'index d'empreintes est CHARGÉ en mémoire (identifier/etat-empreintes.js, lu par le LECTEUR INJECTÉ, jamais la base) : au démarrage, ou après un chargement en échec, il n'y en a pas et la règle G se tait —
+    //       demander un vecteur (et faire télécharger 118 Mo) pour rien serait annoncer ce qu'on ne sert pas.
+    // Un lecteur absent, qui lève, ou qui ne rend pas un index installé ({ index, meta }) : le jeton tombe.
+    'empreinte': (cfg, lireVersion, lireEmpreintes) => {
+        if (cfg.empreinteExtension !== true) return false;
+        const m = cfg.modeleEmpreinte;
+        const texte = x => typeof x === 'string' && x.length > 0;
+        if (m === null || typeof m !== 'object' || !texte(m.id) || !texte(m.sha256) || !texte(m.objetModele)) return false;
+        if (typeof lireEmpreintes !== 'function') return false;
+        const e = lireEmpreintes();
+        return e !== null && typeof e === 'object' && e.index !== null && typeof e.index === 'object' && e.meta !== null && typeof e.meta === 'object';
+    }
 });
 
 /**
@@ -63,19 +78,21 @@ const CONDITIONS = Object.freeze({
  * @param conditions    { jeton: (cfg, lireVersion) => boolean } — seuls les jetons de CAPACITES, et seulement leurs propres entrées, sont lus
  * @param lireVersion   () => la version de l'archive des visuels EN MÉMOIRE, ou null. Interrogé à CHAQUE condition qui le demande (jamais gardé). Absent ou pas une fonction : « aucune archive » — les jetons
  *                      qui dépendent d'elle tombent (ils ne s'annoncent jamais sur une donnée dont on ne sait pas qu'elle est là).
+ * @param lireEmpreintes () => l'index d'empreintes EN PLACE ({ index, meta }, identifier/etat-empreintes.js::courante) ou null ; injecté comme lireVersion (le module reste sans `require`). Absent : « aucun index ».
  * @returns {string[]} un tableau NEUF, dans l'ordre de CAPACITES, sans doublon
  */
-function capacitesServies(cfg, conditions = CONDITIONS, lireVersion = null) {
+function capacitesServies(cfg, conditions = CONDITIONS, lireVersion = null, lireEmpreintes = null) {
     const sortie = [];
     if (cfg === null || typeof cfg !== 'object') return sortie;   // pas de configuration lue : la v2 n'est pas configurée, elle n'annonce rien (même condition que versionMinExtension)
     const table = conditions !== null && typeof conditions === 'object' ? conditions : {};
     const lire = typeof lireVersion === 'function' ? lireVersion : () => null;
+    const lireIndex = typeof lireEmpreintes === 'function' ? lireEmpreintes : () => null;   // interrogé à chaque condition qui le demande, jamais gardé
     for (const jeton of CAPACITES) {
         if (!Object.prototype.hasOwnProperty.call(table, jeton)) continue;
         const condition = table[jeton];
         if (typeof condition !== 'function') continue;
         let vrai = false;
-        try { vrai = condition(cfg, lire) === true; } catch (_) { vrai = false; }
+        try { vrai = condition(cfg, lire, lireIndex) === true; } catch (_) { vrai = false; }
         if (vrai) sortie.push(jeton);
     }
     return sortie;

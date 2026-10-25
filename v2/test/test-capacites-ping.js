@@ -19,11 +19,14 @@ const VB = require('./_visuels-banc');
 const archive = avecColonne => { const b = creerConstructeur(); b.entree(VB.doc(9100001)); if (avecColonne) b.jumeau({ idProduct: 9100001, idMetacard: 990101, idExpansion: 1, numero: '001', tirage: 'jp' }); return b.finir(); };
 const COMPLETE = archive(true), SANS_COLONNE = archive(false);
 const DE_L_ARCHIVE = ['langue-impression', 'marques'];
+const SANS_EMPREINTE = j => j !== 'empreinte';
 
 const ENV = { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' };
 // Le contrat de l'EXTENSION (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) ») : cinq jetons, dans cet ordre. Le dire ici une fois, à la main, est voulu : changer la liste est une décision
 // qui se prend des deux côtés, pas un effet de bord. Tous les AUTRES contrôles lisent la liste exportée par v2/capacites.js.
 const CONTRAT_EXTENSION = ['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour'];
+// 25/10 : le sixième jeton, `empreinte` (DEMANDE-SERVEUR-EXTENSION.md, contrat de l'empreinte, point 8), en fin de liste, annoncé seulement si l'index d'empreintes est CHARGÉ.
+const CONTRAT_LISTE = [...CONTRAT_EXTENSION, 'empreinte'];
 
 let C = null;
 try { C = require('../capacites'); } catch (e) { console.log(`   (v2/capacites.js absent ou illisible : ${e.code || e.message})`); }
@@ -31,7 +34,7 @@ H.vrai('v2/capacites.js existe et exporte CAPACITES et capacitesServies', C !== 
 const LISTE = C && Array.isArray(C.CAPACITES) ? C.CAPACITES : [];
 
 // ── 1. la liste fermée : un seul endroit, figée, sans doublon, celle de l'extension ──
-H.v('la liste fermée est celle du contrat de l\'extension, dans cet ordre', [...LISTE], CONTRAT_EXTENSION);
+H.v('la liste fermée est celle du contrat de l\'extension (cinq jetons) puis `empreinte` en fin de liste', [...LISTE], CONTRAT_LISTE);
 H.vrai('   elle est gelée (un bout de code ne la rallonge pas)', C !== null && Object.isFrozen(C.CAPACITES));
 H.v('   sans doublon', new Set(LISTE).size, LISTE.length);
 H.vrai('   que des jetons minuscules à tirets', LISTE.every(j => /^[a-z]+(-[a-z]+)*$/.test(j)));
@@ -54,9 +57,9 @@ if (C) {
     const piege = { ...tout(), 'inconnu': () => true, 'jeton-de-demain': () => true, constructor: () => true, toString: () => true, hasOwnProperty: () => true, __proto__: { 'heritee': () => true } };
     H.v('un jeton hors liste (même à condition vraie, même hérité) ne sort jamais', C.capacitesServies(cfg, piege), [...LISTE]);
     H.v('aucune condition du tout : aucun jeton', C.capacitesServies(cfg, {}), []);
-    const HORS_ARCHIVE = LISTE.filter(j => !DE_L_ARCHIVE.includes(j));
+    const HORS_ARCHIVE = LISTE.filter(j => !DE_L_ARCHIVE.includes(j) && SANS_EMPREINTE(j));
     H.v('aucun lecteur d\'archive injecté : seuls les jetons du CODE seul sortent (jamais ceux qui dépendent d\'une donnée)', C.capacitesServies(cfg), HORS_ARCHIVE);
-    H.v('   avec une archive complète en mémoire : toute la liste, dans l\'ordre', C.capacitesServies(cfg, undefined, () => COMPLETE), [...LISTE]);
+    H.v('   avec une archive complète en mémoire (sans index d\'empreintes) : toute la liste SAUF `empreinte`, dans l\'ordre', C.capacitesServies(cfg, undefined, () => COMPLETE), LISTE.filter(SANS_EMPREINTE));
     H.vrai('la sortie est un tableau NEUF à chaque appel (la modifier ne change pas le suivant)', (() => { const a = C.capacitesServies(cfg); a.push('x'); a.length = 0; return C.capacitesServies(cfg).length === HORS_ARCHIVE.length; })());
     H.vrai('   un tableau ordinaire, sérialisable', Array.isArray(C.capacitesServies(cfg)) && JSON.stringify(C.capacitesServies(cfg)) === JSON.stringify(HORS_ARCHIVE));
     H.v('une configuration absente : aucune exception, aucun jeton (même avec une archive complète)', (() => { try { return [C.capacitesServies(null, undefined, () => COMPLETE), C.capacitesServies(undefined)]; } catch (e) { return `exception ${e.message}`; } })(), [[], []]);
@@ -111,11 +114,54 @@ if (C) {
     H.vrai(`le balayage lit la source (${luesDansLaSource.size} variables V2_* dans ${SOURCES.join(' et ')}) : un dénominateur non vide`, luesDansLaSource.size >= 80);
     H.v('la liste des essais couvre TOUTES les variables V2_* lues par la configuration (une variable nouvelle fait échouer ce banc : elle appelle un cas)', [...luesDansLaSource].filter(n => !(n in ESSAIS)).sort(), []);
     H.v('   et ne garde aucune variable que la configuration ne lit plus (la liste ne vieillit pas)', Object.keys(ESSAIS).filter(n => !luesDansLaSource.has(n)).sort(), []);
-    const resultats = Object.entries(ESSAIS).map(([nom, val]) => { try { return [nom, C.capacitesServies(lireConfig({ ...ENV, [nom]: val }), undefined, () => COMPLETE).join(',')]; } catch (x) { return [nom, `invalide : ${x.message}`]; } });
+    const resultats = Object.entries(ESSAIS).map(([nom, val]) => { try { return [nom, C.capacitesServies(lireConfig({ ...ENV, [nom]: val }), undefined, () => COMPLETE, () => null).join(',')]; } catch (x) { return [nom, `invalide : ${x.message}`]; } });
     const invalides = resultats.filter(([, s]) => s.startsWith('invalide'));
-    H.v(`aucune des ${resultats.length} variables V2_* ne change la liste servie (archive complète en mémoire)`, resultats.filter(([, s]) => !s.startsWith('invalide') && s !== LISTE.join(',')).map(([n]) => n), []);
+    H.v(`aucune des ${resultats.length} variables V2_* ne change la liste servie (archive complète en mémoire, AUCUN index d'empreintes chargé : un drapeau seul n'annonce jamais \`empreinte\`)`, resultats.filter(([, s]) => !s.startsWith('invalide') && s !== LISTE.filter(SANS_EMPREINTE).join(',')).map(([n]) => n), []);
     console.log(`   (${resultats.length - invalides.length} essais valides ; ${invalides.length} valeurs d'essai refusées par la configuration — le ping y est vide, donc aucun jeton : ${invalides.map(([n]) => n).join(', ') || 'aucune'})`);
     H.vrai('   la plupart des essais sont des configurations VALIDES (le balayage ne se vide pas en essais refusés)', resultats.length - invalides.length >= resultats.length * 0.8);
+}
+
+// ── 2 quater. 25/10 : le jeton `empreinte` — présent SEULEMENT si le drapeau est allumé ET la configuration du modèle valide ET l'index d'empreintes CHARGÉ en mémoire (jamais le seul drapeau) ──
+if (C) {
+    const etatEmp = require('../identifier/etat-empreintes');
+    const SHA = 'cd'.repeat(32);
+    const BON = { V2_EMPREINTE_EXTENSION: '1', V2_MODELE_EMPREINTE_ID: 'p-banc-1', V2_MODELE_EMPREINTE_SHA256: SHA, V2_MODELE_EMPREINTE_OBJET: 'objets/fictif-modele' };
+    const cfgDe = sur => lireConfig({ ...ENV, ...BON, ...sur });
+    const CHARGE = Object.freeze({ index: Object.freeze({}), meta: Object.freeze({ n: 1 }) });
+    const sert = (cfg, lecteur) => { try { return C.capacitesServies(cfg, undefined, () => COMPLETE, lecteur).includes('empreinte'); } catch (e) { return `exception ${e.message}`; } };
+    const silence = f => { const w = console.warn; console.warn = () => { }; try { return f(); } finally { console.warn = w; } };
+    H.vrai('empreinte : la condition du code existe, et le jeton est le DERNIER de la liste fermée', typeof C.CONDITIONS.empreinte === 'function' && LISTE[LISTE.length - 1] === 'empreinte');
+    H.v('empreinte : drapeau allumé + modèle valide + index CHARGÉ : le jeton est annoncé, en fin de liste, et seul', [sert(cfgDe({}), () => CHARGE), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(-1)[0]], [true, 'empreinte']);
+    H.v('   les cinq autres jetons ne changent pas (index chargé ou non)', C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(0, -1), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => null));
+    // une condition après l'autre : chacune seule fait tomber le jeton
+    H.v('empreinte : INDEX non chargé (lecteur rend null) : absent', sert(cfgDe({}), () => null), false);
+    H.v('   index chargé mais drapeau ÉTEINT (0) : absent', sert(cfgDe({ V2_EMPREINTE_EXTENSION: '0' }), () => CHARGE), false);
+    H.v('   drapeau non posé : absent', sert(lireConfig({ ...ENV, V2_MODELE_EMPREINTE_ID: 'p-banc-1', V2_MODELE_EMPREINTE_SHA256: SHA, V2_MODELE_EMPREINTE_OBJET: 'objets/fictif-modele' }), () => CHARGE), false);
+    H.v('   identifiant du modèle absent : absent', sert(cfgDe({ V2_MODELE_EMPREINTE_ID: '' }), () => CHARGE), false);
+    H.v('   sha256 du modèle absent : absent', sert(cfgDe({ V2_MODELE_EMPREINTE_SHA256: '' }), () => CHARGE), false);
+    H.v('   objet du modèle absent : absent', sert(cfgDe({ V2_MODELE_EMPREINTE_OBJET: '' }), () => CHARGE), false);
+    H.v('   sha256 mal formé (la configuration désactive les empreintes) : absent', silence(() => sert(cfgDe({ V2_MODELE_EMPREINTE_SHA256: 'xyz' }), () => CHARGE)), false);
+    H.v('   identifiant mal formé (la configuration désactive les empreintes) : absent', silence(() => sert(cfgDe({ V2_MODELE_EMPREINTE_ID: 'a b' }), () => CHARGE)), false);
+    // le lecteur d'index : tout ce qui n'est pas un index installé tombe
+    for (const [nom, lecteur] of [['rend undefined', () => undefined], ['rend une chaîne', () => 'index'], ['rend true', () => true], ['rend un objet vide', () => ({})], ['rend un index sans meta', () => ({ index: {} })], ['rend une meta sans index', () => ({ meta: {} })], ['LÈVE', () => { throw new Error('boum'); }], ['n\'est pas une fonction', 'index'], ['est absent', undefined]])
+        H.v(`   lecteur d'index qui ${nom} : absent, aucune exception`, sert(cfgDe({}), lecteur), false);
+    H.vrai('   le lecteur est interrogé À CHAQUE APPEL (le chargement et son échec se voient tout de suite)', (() => { let v = null; const l = () => v; const a = sert(cfgDe({}), l); v = CHARGE; const b = sert(cfgDe({}), l); v = null; const c = sert(cfgDe({}), l); return a === false && b === true && c === false; })());
+    H.vrai('   une condition reçoit (cfg, lecteur d\'archive, lecteur d\'index)', (() => { let vu = null; C.capacitesServies(cfgDe({}), { empreinte: (c, l, e) => { vu = [typeof l, typeof e]; return true; } }, () => COMPLETE, () => CHARGE); return vu && vu[0] === 'function' && vu[1] === 'function'; })());
+    // de bout en bout : le VRAI pointeur de l'index (identifier/etat-empreintes.js), le vrai /ping
+    v2.arreter(); etatEmp.vider(); E.installer(COMPLETE);
+    silence(() => v2.monterEnTete(express(), { ...ENV, ...BON }));
+    const jetons = () => v2.ping().capacites;
+    H.v('/ping, drapeau allumé, modèle valide, index PAS chargé (démarrage, ou chargement en échec) : pas de jeton `empreinte`', jetons(), CONTRAT_EXTENSION);
+    etatEmp.installer(CHARGE);
+    H.v('   index chargé : `empreinte` en fin de liste, les cinq autres inchangés', jetons(), CONTRAT_LISTE);
+    H.v('   rien d\'autre ne change dans /ping : les deux mêmes clés, la même version minimale', [Object.keys(v2.ping()), v2.ping().versionMinExtension], [['versionMinExtension', 'capacites'], lireConfig({ ...ENV, ...BON }).versionMinExtension]);
+    etatEmp.vider();
+    H.v('   index vidé (rechargement refusé puis bascule perdue) : le jeton tombe à l\'appel suivant', jetons(), CONTRAT_EXTENSION);
+    v2.arreter(); E.vider();
+    silence(() => v2.monterEnTete(express(), ENV));
+    etatEmp.installer(CHARGE);
+    H.v('   drapeau ÉTEINT (défaut) et un index en mémoire : pas de jeton `empreinte`', v2.ping().capacites, CONTRAT_EXTENSION.filter(j => !DE_L_ARCHIVE.includes(j)));
+    etatEmp.vider(); v2.arreter(); E.vider();
 }
 
 // ── 3. chaque jeton est MÉRITÉ : le code qui le rend vrai est appelé, son effet constaté ──
@@ -167,18 +213,18 @@ if (C) {
     v2.monterEnTete(express(), ENV);
     // TOUR 1 : de bout en bout par la VRAIE version en mémoire (chargeur/etat.js, ce que lit identifier/visuels.js) — pas par un lecteur de banc
     E.vider();
-    H.v('v2 configurée, AUCUNE archive en mémoire (réveil à froid) : seuls les jetons du code seul — ni langue-impression ni marques', v2.ping().capacites, LISTE.filter(j => !DE_L_ARCHIVE.includes(j)));
+    H.v('v2 configurée, AUCUNE archive en mémoire (réveil à froid) : seuls les jetons du code seul — ni langue-impression ni marques', v2.ping().capacites, LISTE.filter(j => !DE_L_ARCHIVE.includes(j) && SANS_EMPREINTE(j)));
     E.installer(SANS_COLONNE);
-    H.v('   archive SANS la colonne des jumeaux : marques oui, langue-impression non', v2.ping().capacites, LISTE.filter(j => j !== 'langue-impression'));
+    H.v('   archive SANS la colonne des jumeaux : marques oui, langue-impression non', v2.ping().capacites, LISTE.filter(j => j !== 'langue-impression' && SANS_EMPREINTE(j)));
     E.installer(COMPLETE);
     const r = v2.ping();
     H.v('v2 configurée : les deux clés, et elles seules', Object.keys(r), ['versionMinExtension', 'capacites']);
     H.vrai('   versionMinExtension est celle de la configuration', r.versionMinExtension === lireConfig(ENV).versionMinExtension);
     const caps = Array.isArray(r.capacites) ? r.capacites : [];
     H.v('   capacites : un tableau, de la liste fermée, sans doublon, dans l\'ordre de la liste', [Array.isArray(r.capacites), caps.length > 0 && caps.every(j => LISTE.includes(j)), new Set(caps).size === caps.length, JSON.stringify(caps) === JSON.stringify(LISTE.filter(j => caps.includes(j)))], [true, true, true, true]);
-    H.v('   archive COMPLÈTE en mémoire : les cinq jetons — dont prix-repli, parce que ce code contient REPLI-QUOTA', r.capacites, CONTRAT_EXTENSION);
+    H.v('   archive COMPLÈTE en mémoire, drapeau des empreintes éteint : les cinq jetons — dont prix-repli, parce que ce code contient REPLI-QUOTA — et pas `empreinte`', r.capacites, CONTRAT_EXTENSION);
     E.vider();
-    H.v('   la bascule se voit à l\'appel suivant (archive retirée : les deux jetons tombent)', v2.ping().capacites, LISTE.filter(j => !DE_L_ARCHIVE.includes(j)));
+    H.v('   la bascule se voit à l\'appel suivant (archive retirée : les deux jetons tombent)', v2.ping().capacites, LISTE.filter(j => !DE_L_ARCHIVE.includes(j) && SANS_EMPREINTE(j)));
     E.installer(COMPLETE);
     H.vrai('   un appel donne un objet neuf (modifier la réponse ne touche pas la suivante)', (() => { const a = v2.ping(); if (Array.isArray(a.capacites)) a.capacites.length = 0; a.versionMinExtension = 'x'; const b = v2.ping(); return Array.isArray(b.capacites) && b.capacites.length === CONTRAT_EXTENSION.length && b.versionMinExtension === r.versionMinExtension; })());
     H.vrai('   /ping reste SYNCHRONE (pas de promesse : aucune lecture en base, aucune attente)', !(v2.ping() instanceof Promise) && typeof v2.ping().then === 'undefined');
