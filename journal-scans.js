@@ -69,6 +69,8 @@ const journalScanSchema = new mongoose.Schema({
 
     route: String,        // 'identifier' (flux réel, extension) | 'analyser' (flux serveur)
     userId: String,
+    // 25/10 : le scan d'un compte de MESURE (`comptes.banc === true`). Posé seulement quand il est vrai ; les statistiques d'usage l'excluent (journal-hors-banc.js).
+    banc: Boolean,
 
     // --- DE QUOI REVÉRIFIER LE SCAN DES MOIS PLUS TARD ---
     // imageUrl  : la PREMIÈRE photo envoyée à l'IA — celle sur laquelle le verdict s'est
@@ -926,6 +928,21 @@ const CodeSetJ = mongoose.models.CodeSet
 // Volontairement STRICT (égalité seule) : la parenté partielle est une tolérance du
 // scoring, pas une vérité — et c'est justement la fiabilité brute du setCode qu'on veut
 // mesurer, pas celle du mécanisme d'appariement.
+/**
+ * Le scan vient-il d'un compte de MESURE ? Écrit par ce qu'il AUTORISE : seul un userId `v2:compte:<ObjectId>` dont le compte porte EXACTEMENT `banc: true` rend vrai ; tout le reste (autre porteur, identifiant illisible,
+ * compte inconnu, lecture en échec) rend faux — une ligne non marquée compte dans l'usage, ce qui est le défaut honnête (jamais une exception : un scan ne perd pas sa ligne pour une marque).
+ * `lire` : (ObjectId) => compte|null, injectable (le banc) ; par défaut la collection `comptes` de la v2 (préfixe de banc compris).
+ */
+async function estBanc(userId, lire = null) {
+    try {
+        const m = /^v2:compte:([0-9a-f]{24})$/.exec(typeof userId === 'string' ? userId : '');
+        if (!m) return false;
+        const id = new mongoose.Types.ObjectId(m[1]);
+        const c = lire ? await lire(id) : await require('./v2/db').col('comptes').findOne({ _id: id }, { projection: { banc: 1 } });
+        return Boolean(c) && c.banc === true;
+    } catch { return false; }
+}
+
 function memeCode(a, b) {
     const n = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const x = n(a), y = n(b);
@@ -1017,11 +1034,13 @@ function enregistrerScan(d = {}) {
             ? prixVinted / prixReference
             : null;
 
+        const banc = await estBanc(d.userId);
         await JournalScan.create({
             _id,
             le: new Date(),
             route: d.route || null,
             userId: d.userId || null,
+            ...(banc ? { banc: true } : {}),
             // Bornées : une URL Vinted fait ~120 caractères, une URL d'image ~200. Le
             // plafond protège d'un corps de requête fabriqué qui gonflerait la collection.
             // Une image envoyée en data-URL (le scanner du site, v2) N'EST JAMAIS journalisée : le journal garde des adresses, pas des photos. L'extension n'envoie que des URL https.
@@ -1369,4 +1388,4 @@ function enregistrerEchec({ _id, route, userId, cardInfo, motifEchec, rembourse,
 // avec l'instrument qu'on cherchait justement à dater. Deux `String(process.env.
 // RENDER_GIT_COMMIT || …).slice(0, 12)` dans deux fichiers créeraient deux versions du
 // même fait, qui divergeraient au premier changement : une seule définition, exportée.
-module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCode, VERSION };
+module.exports = { enregistrerScan, enregistrerEchec, estBanc, JournalScan, RETENTION_JOURS, memeCode, VERSION };
