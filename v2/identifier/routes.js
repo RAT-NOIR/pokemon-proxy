@@ -310,7 +310,7 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
 // @returns { resultat, desaccord, questionNeuve, promotion?, concordante? }
 async function appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits, catalogue, adapterFn, d, arbitre = arbitrer, jumeaux = null }) {
     const c0 = resultat.analyse.cartes[0];
-    const arb = arbitre({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct) }, d);
+    const arb = arbitre({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct), confirmationNombreux: resultat.confirmationNombreux === true }, d);
     if (arb.action === 'garder') return { resultat, desaccord: arb.desaccord, questionNeuve: false };
     if (arb.action === 'promouvoir') {
         // PROMOTION (règle (b) de la mesure combinée) : la chaîne posait une question, G AFFIRME Q et la garde (2) l'a laissé passer. Q est affirmé SANS la garde des jumeaux : G a jugé les jumeaux au niveau du visuel
