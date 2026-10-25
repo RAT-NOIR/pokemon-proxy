@@ -28,6 +28,7 @@ const RH = require('./collecte-cartes/reponse-hote');
 const { sansRemplacables, documentsDeLaListe } = require('./collecte-cartes/basse-definition');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { cleNumero } = require('./collecte-cartes/jointure');
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';          // la règle COMMUNE de réponse : arrêt durable par hôte (arretHote), lu par garderHote avant toute requête
 
 const SETS_AUTORISES = Object.freeze(['Traditional-Chinese-Products', 'Beginning-Set']);
@@ -109,7 +110,7 @@ const urlImage = (p, site) => (p.fiche.image ? new URL(p.fiche.image, T.SITES[si
 /**
  * MODE 1 — TÉLÉCHARGER vers le cache disque. @returns {{etat: 'termine'|'plafond-atteint'|'bloque'|'pause'|'interrompu', requetes: number, plafond: number, ...}}
  */
-async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, verrou, transport, cadenceMs = T.CADENCE_MS, pourBanc = false, dossierPauses, ligneDe = ligneTpc, log = console.log }) {
+async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, verrou, transport, cadenceMs = T.CADENCE_MS, pourBanc = false, dossierPauses, ligneDe = ligneTpc, seulement = null, log = console.log }) {
     if (!Number.isInteger(plafond) || plafond < 1 || plafond > PLAFOND_MAX) throw new Error(`--plafond=${plafond} : un entier de 1 à ${PLAFOND_MAX} est exigé — rien n'est demandé`);
     if (!pourBanc && cadenceMs < T.CADENCE_MS) throw new Error(`cadence de ${cadenceMs} ms : jamais en dessous de ${T.CADENCE_MS} ms — rien n'est demandé`);
     const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
@@ -124,6 +125,8 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
     if (!produits) throw new Error(`aucun produit joint au set ${slug} — rien à demander`);
     if (!(await C.compterNumerotes(lecture, slug))) throw new Error(`aucune ligne de ${slug} ne porte de numeroFiche : écrire les numeroFiche d'abord — rien n'est demandé`);
 
+    const lignes = await lignesDuSet(lecture, slug);
+    verifierSelection(seulement, lignes);
     fs.mkdirSync(path.join(dossier, 'images'), { recursive: true });
     const local = C.baseLocale(lecture, f.etat);
     const tenuPar = verrou.prendre ? await verrou.prendre() : null;
@@ -141,9 +144,9 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
         catch (e) { return conclure(e, bilan, client, local, f, log); }
         if (lu.refus) { bilan.etat = 'refuse-liste'; bilan.motif = lu.refus; return fin(bilan, client, local, f, log); }
         bilan.listes = { lues: lu.liste.ids.length, total: lu.liste.total, complete: lu.liste.complete }; bilan.fiches = lu.fiches.length; bilan.fiches404 = compteurs['fiche-404'] || 0;
-        const P = await C.planifier(local, slug, L, lu.fiches);
+        const P = restreindrePlan(await C.planifier(local, slug, L, lu.fiches), seulement, lignes);
         bilan.prouves = P.plan.length; for (const r of P.restes) bilan.restes[r.motif] = (bilan.restes[r.motif] || 0) + 1;
-        ecrireJson(f.plan, { le: new Date().toISOString(), slug, produits: P.produits, trous: P.trous, plan: P.plan, restes: P.restes });
+        ecrireJson(f.plan, { le: new Date().toISOString(), slug, seulement, produits: P.produits, trous: P.trous, plan: P.plan, restes: P.restes });
         const index = lireJson(f.index, {});
         for (const p of P.plan) {
             const url = urlImage(p, site);
@@ -189,9 +192,11 @@ function fin(bilan, client, local, f, log) {
 }
 
 /** MODE 2 — la PLANCHE : toutes les images prouvées et en cache, étiquetées. Zéro requête, aucune écriture en base. */
-async function planche({ reelle, slug, cacheDir, racineAutorisee, sortie, ligneDe = ligneTpc, log = console.log }) {
+async function planche({ reelle, slug, cacheDir, racineAutorisee, sortie, ligneDe = ligneTpc, seulement = null, log = console.log }) {
     const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
-    const { P } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
+    const { P: Ptout } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
+    const P = restreindrePlan(Ptout, seulement, await lignesDuSet(lectureSeule(reelle), slug));
+    ecrireJson(path.join(dossier, 'planche.json'), { le: new Date().toISOString(), slug, seulement });   // la sélection VUE sur la planche : --ecrire doit être la même
     const index = lireJson(f.index, {});
     const lecture = lectureSeule(reelle);
     const prod = new Map((await lecture.collection('cartes_produits').find({ slugSet: slug }, { projection: { idProduct: 1, slug: 1, numeroFiche: 1 } }).toArray()).map(l => [l.idProduct, l]));
@@ -237,6 +242,33 @@ function annonceRemplacement({ cartes, documents, unites, slug, site, langueSour
     return Object.fromEntries(cmp.baisses.filter(b => !b.autorisee).map(b => [b.cle, b.baisse]));
 }
 
+/**
+ * API-52 L5b : `--seulement=<idProduct,…>` — une liste FERMÉE d'entiers (positifs, sans doublon). Absente : null (tout le plan, comportement d'avant). Toute autre forme LÈVE, avant toute connexion.
+ */
+function parseSeulement(texte) {
+    if (texte === undefined || texte === null) return null;
+    if (!/^[1-9]\d*(,[1-9]\d*)*$/.test(String(texte))) throw new Error(`--seulement=${texte} : une liste d'idProduct entiers positifs séparés par des virgules est exigée`);
+    const ids = String(texte).split(',').map(Number);
+    if (new Set(ids).size !== ids.length) throw new Error(`--seulement=${texte} : un idProduct en double`);
+    return ids;
+}
+const memeSelection = (a, b) => { const x = a == null ? null : [...a].sort((u, v) => u - v), y = b == null ? null : [...b].sort((u, v) => u - v); return JSON.stringify(x) === JSON.stringify(y); };
+/** Vérifie que chaque produit de la sélection est une ligne du set (LÈVE, nommé) — avant toute requête. */
+function verifierSelection(seulement, lignes) {
+    if (seulement == null) return;
+    const inconnus = seulement.filter(i => !lignes.some(l => l.idProduct === i));
+    if (inconnus.length) throw new Error(`--seulement : produit(s) ${inconnus.join(', ')} absent(s) des lignes du set — rien n'est demandé`);
+}
+/** Le plan restreint aux unités (carte, numéro) des produits choisis : deux produits d'une même fiche font UNE unité. Sans sélection : le plan tel quel. */
+function restreindrePlan(P, seulement, lignes) {
+    if (seulement == null) return P;
+    verifierSelection(seulement, lignes);
+    const cles = new Set(lignes.filter(l => seulement.includes(l.idProduct)).map(l => `${l.carteId}|${cleNumero(l.numeroFiche)}`));
+    const dans = x => cles.has(`${x.carteId}|${cleNumero(x.numero)}`);
+    return { ...P, plan: P.plan.filter(dans), restes: P.restes.filter(dans) };
+}
+const lignesDuSet = async (lecture, slug) => lecture.collection('cartes_produits').find({ slugSet: slug }, { projection: { idProduct: 1, carteId: 1, numeroFiche: 1 } }).toArray();
+
 /** Un client « disque » : AUCUNE requête réseau. Les pages et le JSON n'existent pas ici (listes et fiches viennent de l'état local) ; une image se lit dans le cache ou elle manque. */
 function clientDisque(dossier, index, site = 'tpc-asie') {
     return {
@@ -252,10 +284,16 @@ function clientDisque(dossier, index, site = 'tpc-asie') {
 /**
  * MODE 3 — ÉCRIRE depuis le cache. `M` : les modèles de la base `cartes` ; `reelle` : sa base native. Rend {code, ...}: 2 = refusé AVANT toute écriture.
  */
-async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, deposer, fabriquerVerrouSet, stopOctets, vignetter = null, ligneDe = ligneTpc, log = console.log }) {
+async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, deposer, fabriquerVerrouSet, stopOctets, vignetter = null, ligneDe = ligneTpc, seulement = null, log = console.log }) {
     if (!Number.isInteger(attendu)) throw new Error('--ecrire exige --attendu=<N> (le nombre d\'images prouvées lu à l\'essai) : rien n\'est écrit');
     const { L, site, dossier, f, idEtat } = cadre({ slug, cacheDir, racineAutorisee, ligneDe });
-    const { P, local } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
+    // API-52 L5b : la sélection de l'écriture est CELLE DE LA PLANCHE (planche.json), sinon refus avant toute écriture ; sans sélection ni planche mémorisée, comportement d'avant
+    const memo = lireJson(path.join(dossier, 'planche.json'), null);
+    if ((seulement != null || memo?.seulement != null) && (!memo || !memeSelection(memo.seulement ?? null, seulement))) { log(`❌ sélection ${JSON.stringify(seulement)} ≠ celle de la planche ${JSON.stringify(memo ? (memo.seulement ?? null) : 'aucune planche')} — rien n'est écrit`); return { code: 2, etat: 'refuse-selection', seulement, planche: memo?.seulement ?? null }; }
+    const lecturePlan = lectureSeule(reelle), lignes = await lignesDuSet(lecturePlan, slug);
+    verifierSelection(seulement, lignes);
+    const { P: Ptout, local } = await planDuCache({ reelle, dossier, f, L, slug, idEtat, site });
+    const P = restreindrePlan(Ptout, seulement, lignes);
     const index = lireJson(f.index, {});
     const seuil = largeurMinDe(site);
     const manquantes = [], aJoindre = [];
@@ -275,7 +313,7 @@ async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, dep
     const mixte = { collection: local.collection, command: c => reelle.command(c) };
     const Mm = { ...M, Carte: new Proxy(M.Carte, { get: (t, k) => (k === 'db' ? { db: mixte } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }) };
     const unite = { _id: idEtat, source: site, slugSet: slug, code: L.code, langue: L.langue, trous: L.trous };
-    const r = await C.collecterSet(unite, Mm, { verrou: { tenu: true, perdu: false }, client: clientDisque(dossier, index, site), deposer, ...(fabriquerVerrouSet ? { fabriquerVerrouSet } : {}), ...(stopOctets ? { stopOctets } : {}), ligneDe });
+    const r = await C.collecterSet(unite, Mm, { verrou: { tenu: true, perdu: false }, client: clientDisque(dossier, index, site), planFiltre: seulement != null ? async X => restreindrePlan(X, seulement, lignes) : null, deposer, ...(fabriquerVerrouSet ? { fabriquerVerrouSet } : {}), ...(stopOctets ? { stopOctets } : {}), ligneDe });
     local.ecrireFichier();
     // un remplacement de basse définition RÉÉCRIT l'entrée : la nôtre n'a pas de vignette avant ce passage (celle de l'ancienne sortait avec elle) — sans lui, la garde de lot verrait la baisse (§21 bis, vignettes-apres-jointure.js)
     if (vignetter && r.basseDefRemplacees > 0) r.vignettes = await vignetter(reelle, slug, { bucket: process.env.R2_BUCKET_IMAGES });
@@ -283,10 +321,10 @@ async function ecrire({ M, reelle, slug, cacheDir, racineAutorisee, attendu, dep
     return { ...r, unite: r.code, code: r.etat === 'verifie' && r.joints === attendu ? 0 : 1 };
 }
 
-module.exports = { annonceRemplacement, siteDuSet, idVerrouDe, SETS_AUTORISES, PLAFOND_MAX, RACINE_CACHE, CACHE_DEFAUT, verifierChemin, lectureSeule, telecharger, planche, ecrire, clientDisque };
+module.exports = { parseSeulement, restreindrePlan, annonceRemplacement, siteDuSet, idVerrouDe, SETS_AUTORISES, PLAFOND_MAX, RACINE_CACHE, CACHE_DEFAUT, verifierChemin, lectureSeule, telecharger, planche, ecrire, clientDisque };
 
 if (require.main === module) {
-    const AUTORISES = [/^--set=.+$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--plafond=\d+$/, /^--attendu=\d+$/, /^--cache=.+$/, /^--sortie=.+\.png$/];
+    const AUTORISES = [/^--set=.+$/, /^--telecharger$/, /^--planche$/, /^--ecrire$/, /^--plafond=\d+$/, /^--attendu=\d+$/, /^--cache=.+$/, /^--sortie=.+\.png$/, /^--seulement=.*$/];
     const args = process.argv.slice(2);
     const val = n => args.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     const modes = ['--telecharger', '--planche', '--ecrire'].filter(m => args.includes(m));
@@ -295,6 +333,9 @@ if (require.main === module) {
     const erreur = inconnus.length ? `argument inconnu : ${inconnus.join(' ')}` : modes.length !== 1 ? 'un seul mode parmi --telecharger, --planche, --ecrire' : !SETS_AUTORISES.includes(val('set') ?? '') ? `--set=<${SETS_AUTORISES.join('|')}> obligatoire` :
         mode === '--telecharger' && val('plafond') === undefined ? '--telecharger exige --plafond=<N>' : mode !== '--telecharger' && val('plafond') !== undefined ? '--plafond ne va qu\'avec --telecharger' :
             mode === '--ecrire' && val('attendu') === undefined ? '--ecrire exige --attendu=<N>' : mode !== '--ecrire' && val('attendu') !== undefined ? '--attendu ne va qu\'avec --ecrire' : null;
+    let seulementCli = null, erreurSel = null;
+    try { seulementCli = parseSeulement(val('seulement')); } catch (e) { erreurSel = e.message; }
+    if (!erreur && erreurSel) { console.error(`❌ ${erreurSel}. Aucune connexion, aucune requête.`); process.exit(2); }
     if (erreur) { console.error(`❌ ${erreur}. Aucune connexion, aucune requête.`); process.exit(2); }
     (async () => {
         require('dotenv').config();
@@ -307,15 +348,15 @@ if (require.main === module) {
                 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
                 const M = modeles(cx);
                 const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: idVerrouDe(slug), dureeMs: T.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte: () => { process.exitCode = 1; }, nom: `verrou global ${siteDuSet(slug)}` });
-                const b = await telecharger({ reelle: cx.db, slug, cacheDir, plafond: Number(val('plafond')), verrou });
+                const b = await telecharger({ reelle: cx.db, slug, cacheDir, plafond: Number(val('plafond')), verrou, seulement: seulementCli });
                 process.exitCode = b.etat === 'termine' ? 0 : 1;
-            } else if (mode === '--planche') await planche({ reelle: cx.db, slug, cacheDir, sortie: val('sortie') });
+            } else if (mode === '--planche') await planche({ reelle: cx.db, slug, cacheDir, sortie: val('sortie'), seulement: seulementCli });
             else {
                 const r2 = require('./collecte-cartes/r2');
                 if (!process.env.R2_BUCKET_IMAGES) throw new Error('R2_BUCKET_IMAGES absent — aucune écriture');
                 await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
                 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
-                const r = await ecrire({ M: modeles(cx), reelle: cx.db, slug, cacheDir, attendu: Number(val('attendu')), deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure });
+                const r = await ecrire({ M: modeles(cx), reelle: cx.db, slug, cacheDir, attendu: Number(val('attendu')), seulement: seulementCli, deposer: (b, c, d, t) => r2.deposerBinaire(b, c, d, t), vignetter: vignetterApresJointure });
                 process.exitCode = r.code;
             }
         } finally { await fermer(); }
