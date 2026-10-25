@@ -83,6 +83,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
         const depots = [];
         const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou, ...(o.clientOpts || {}) });
         const r = silencieux();
+        if (o.journal) console.log = (...a) => { o.journal.push(a.join(' ')); };   // capte le journal (le reste reste muet)
         try { return { b: await collecterSet(o.unite || uniteDeLaLigne(ligneTpc('tpc-asie', SLUG)), B.M, { verrou, client, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets, ligneDe: o.ligneDe || ligneBanc }), depots }; }
         finally { r(); }
     };
@@ -310,6 +311,19 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     tr = reseau(normal);
     ({ b } = await lancer(B15, tr));
     verifier('trop-petit jugé à 257, 250 px → reste, 0 téléchargement', [B15.col('images').get(ID_7125)?.etat, tr.appels.some(u => u.endsWith('id00007125.png'))], ['trop-petit', false]);
+    // règle du testeur (25/10) : une image écartée sous le seuil est DITE, une ligne par image (unité, taille, seuil) — jamais en silence
+    {
+        const jn = [];
+        const Bj = fausseBase(); semer(Bj);
+        ({ b } = await lancer(Bj, reseau(avecPetite), { journal: jn }));
+        const lj = jn.filter(l => /écartée/.test(l) && /sous le seuil/.test(l));
+        verifier('téléchargée sous le seuil : UNE ligne (unité, carteId, 200×279, seuil 257), comptée comme avant', [lj.length, /001/.test(lj[0] || ''), /carteId 1/.test(lj[0] || ''), /200×279/.test(lj[0] || ''), /seuil 257/.test(lj[0] || ''), b.tropPetits, Bj.col('images').get(ID_7125)?.etat], [1, true, true, true, true, 1, 'trop-petit']);
+        const jn2 = [];
+        const Bk = fausseBase(); semer(Bk); ancien(Bk, 250); Bk.col('images').get(ID_7125).seuilApplique = 257; Bk.col('images').get(ID_7125).hOriginal = 349;
+        ({ b } = await lancer(Bk, reseau(normal), { journal: jn2 }));
+        const lk = jn2.filter(l => /déjà écartée/.test(l));
+        verifier('déjà jugée trop petite : UNE ligne « déjà écartée » (unité, 250×349, seuil 257), 0 changement', [lk.length, /001/.test(lk[0] || ''), /250×349/.test(lk[0] || ''), /seuil 257/.test(lk[0] || ''), b.tropPetits], [1, true, true, true, 1]);
+    }
     // ➕ LES 255 : un trop-petit jugé À 300 (seuilApplique 300), 280 px d'original → REJUGÉ à 257, téléchargé, « ok », marqué basse définition, joint
     const moyen280 = await sharp({ create: { width: 280, height: 391, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
     const B16 = fausseBase(); semer(B16); ancien(B16, 280); B16.col('images').get(ID_7125).seuilApplique = 300;
