@@ -94,13 +94,13 @@ async function executer({ argv, table, ouvrir, produitsDe, lireTexte, lireFichie
         const avantTotal = existantes.length;
         const rejeu = creerRejeu({ cartes, setParId: new Map(sets.map(s => [s._id, s])), etatPages: new Map(etats.map(e => [e._id, e])), lireTexte });
 
-        const aEcrire = [], vus = new Set(), parCode = {};
+        const aEcrire = [], vus = new Set(), parCode = {}, metaDe = new Map();      // idProduct → idMetacard du produit décomposé du catalogue (comme ecrire-jointure.js:38 et poser-par-metacarte.js:83)
         for (const CODE of CODES) {
             // toutes les lignes de table verifiees du code : leurs lignes sont reunies (une ligne vue deux fois n'est qu'une ligne), puis triees UNE fois
             const brutes = [], ligneDe = new Map(), produitDe = new Map();
             for (const L of lignesDe(CODE)) {
                 const produits = await produitsDe(L);
-                for (const p of produits) produitDe.set(p.idProduct, p);
+                for (const p of produits) { produitDe.set(p.idProduct, p); metaDe.set(p.idProduct, p.idMetacard ?? null); }
                 const { Jr } = await rejeu.joindreLigne({ l: L, exp: L.exp, produits, lignesInterdites });
                 for (const l of Jr.lignes) { brutes.push(l); if (!ligneDe.has(l._id)) ligneDe.set(l._id, L); }
             }
@@ -121,14 +121,13 @@ async function executer({ argv, table, ouvrir, produitsDe, lireTexte, lireFichie
         if (hors.length) { err(`❌ ARRÊT : ${hors.length} idProduct de --seulement ne sont proposés par aucun code (${hors.slice(0, 8).join(', ')}) — la liste ne correspond pas à l'état de la base, rien n'est écrit`); return 1; }
         log(`\n   ${aEcrire.length} lignes${ecrire ? '' : ' — (simulation)'}`);
         const fichierPlan = arg('plan');
-        if (fichierPlan) fs.writeFileSync(fichierPlan, JSON.stringify({ outil: 'poser-lignes-rejeu', lignes: aEcrire.map(x => ({ _id: x.l._id, carteId: x.l.carteId, idProduct: x.l.idProduct, idExpansion: x.l.idExpansion, tirage: x.l.tirage, preuve: x.l.preuve, slug: x.l.slug, slugSet: x.l.slugSet, numeroFiche: x.l.numeroFiche, code: x.CODE })), cartesSets: aEcrire.map(x => ({ carteId: x.l.carteId, set: x.L.slugSet || x.L.code })) }));
+        if (fichierPlan) fs.writeFileSync(fichierPlan, JSON.stringify({ outil: 'poser-lignes-rejeu', lignes: aEcrire.map(x => ({ _id: x.l._id, carteId: x.l.carteId, idProduct: x.l.idProduct, idExpansion: x.l.idExpansion, tirage: x.l.tirage, preuve: x.l.preuve, slug: x.l.slug, slugSet: x.l.slugSet, numeroFiche: x.l.numeroFiche, code: x.CODE })), cartesSets: aEcrire.map(x => ({ carteId: x.l.carteId, set: x.L.slugSet || x.L.code })), metacartes: aEcrire.map(x => ({ carteId: x.l.carteId, idProduct: x.l.idProduct, idMetacard: metaDe.get(x.l.idProduct) ?? null })) }));
         try { garderMatiereSpeciale(aEcrire.map(x => x.l.idProduct), 'poser-lignes-rejeu'); } catch (e) { err(e.message); return 1; }
         if (!ecrire || !aEcrire.length) return 0;
 
         // ── l'écriture, en AJOUT PUR ──
-        const metaDe = new Map(); for (const x of aEcrire) metaDe.set(x.l.idProduct, null);
         const parCarte = new Map();
-        for (const x of aEcrire) { const v = parCarte.get(x.l.carteId) || parCarte.set(x.l.carteId, { ids: [], metas: new Set(), sets: new Set() }).get(x.l.carteId); v.ids.push(x.l.idProduct); v.sets.add(x.L.slugSet || x.L.code); }
+        for (const x of aEcrire) { const v = parCarte.get(x.l.carteId) || parCarte.set(x.l.carteId, { ids: [], metas: new Set(), sets: new Set() }).get(x.l.carteId); v.ids.push(x.l.idProduct); if (metaDe.get(x.l.idProduct) != null) v.metas.add(metaDe.get(x.l.idProduct)); v.sets.add(x.L.slugSet || x.L.code); }
         const ops = R.operationsCartes(parCarte); R.garderEcritureSite(ops);
         await db.collection('cartes_produits').bulkWrite(aEcrire.map(x => ({ updateOne: { filter: { _id: x.l._id }, update: { $setOnInsert: x.l }, upsert: true } })), { ordered: false });
         await db.collection('cartes').bulkWrite(ops, { ordered: false });
@@ -140,8 +139,8 @@ async function executer({ argv, table, ouvrir, produitsDe, lireTexte, lireFichie
         const apresTotal = await db.collection('cartes_produits').countDocuments({});
         const cartesRelues = await db.collection('cartes').find({ _id: { $in: [...parCarte.keys()] } }, { projection: { liens: 1, sets: 1 } }).toArray();
         const parId = new Map(cartesRelues.map(c => [c._id, c]));
-        const liensOk = aEcrire.filter(x => (parId.get(x.l.carteId)?.liens?.idProduct || []).includes(x.l.idProduct) && (parId.get(x.l.carteId)?.sets || []).includes(x.L.slugSet || x.L.code)).length;
-        log(`\n   RELECTURE : lignes ${lignesOk}/${ids.length} · cartes avec leur lien et leur set ${liensOk}/${ids.length} · cartes_produits ${avantTotal} → ${apresTotal} (attendu ${avantTotal + ids.length})`);
+        const liensOk = aEcrire.filter(x => (parId.get(x.l.carteId)?.liens?.idProduct || []).includes(x.l.idProduct) && (parId.get(x.l.carteId)?.sets || []).includes(x.L.slugSet || x.L.code) && (metaDe.get(x.l.idProduct) == null || (parId.get(x.l.carteId)?.liens?.idMetacards || []).includes(metaDe.get(x.l.idProduct)))).length;
+        log(`\n   RELECTURE : lignes ${lignesOk}/${ids.length} · cartes avec leur lien, leur métacarte et leur set ${liensOk}/${ids.length} · cartes_produits ${avantTotal} → ${apresTotal} (attendu ${avantTotal + ids.length})`);
         if (lignesOk !== ids.length || liensOk !== ids.length || apresTotal !== avantTotal + ids.length) { err('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); return 1; }
         log('   ✅ écrit et relu');
         return 0;

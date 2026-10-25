@@ -57,6 +57,8 @@ function creerRejeu({ cartes, setParId, etatPages, lireTexte }) {
             const noms = [].concat(l.bulba.expansion);
             const cartesDuSet = cartes.filter(c => (c.impressions || []).some(i => i.tirage === TIRAGE && noms.includes(i.expansion)));
             Jr = planSansPage({ cartesDuSet, produitsLus: produits, L: l, slugCardmarket: l.slugSet || null }).J;
+            // (relecture 2, D3) planSansPage ne connaît pas les lignes détachées : le rejeu les retire ici, comme joindre() le fait pour l'autre branche (un produit retiré redevient un produit sans ligne de ce rejeu)
+            if (lignesInterdites && lignesInterdites.size) Jr = { ...Jr, lignes: Jr.lignes.filter(x => !lignesInterdites.has(`${x.carteId}|${x.idProduct}`)) };
         } else {
             let cartesDuSet = parSlug.get(slug) || [];
             sx = await setlistDe(l, slug);
