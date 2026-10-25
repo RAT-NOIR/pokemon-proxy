@@ -36,7 +36,7 @@ const CODE_CHINOIS = 6;
 // 🔑 UNE CONSTANTE, pas une variable d'environnement (comme CRITERE_A) : true (décision de l'éditeur, 2026-10-25) = dans la voie « plus de 3 produits », le SEUL candidat restant est montré en question à UN choix ; false = le contrat d'avant
 // 🔑 DRAPEAU V2_CONFIRMATION_NOMBREUX (cfg.confirmationNombreux), ÉTEINT par défaut, seul « 1 » l'allume (lot DESIGNATION-REGLES, R5) : dans la voie « plus de 3 produits », le SEUL candidat restant est montré en question à UN choix.
 // Éteint = le contrat d'avant (« jamais une confirmation à 1 candidat » : introuvable / impression-indeterminee, remboursé sans plafond), octet pour octet. Allumé : une question réservée dont la réponse « aucune » ne se rembourse que dans le plafond
-// des déclarations du jour. 🔴 Cette question n'est JAMAIS promue en sûr (règle G, promotion-g.js) : elle porte confirmationNombreux: true. ctx.confirmationNombreux surcharge le drapeau (bancs, mesure) ; seul 	rue allume.
+// des déclarations du jour. 🔴 Cette question n'est JAMAIS promue en sûr (règle G, promotion-g.js) : elle porte confirmationNombreux: true. ctx.confirmationNombreux surcharge le drapeau (bancs, mesure) ; seul  rue allume.
 const confirmationNombreux = ctx => (ctx.confirmationNombreux !== undefined ? ctx.confirmationNombreux === true : Boolean(ctx.cfg && ctx.cfg.confirmationNombreux === true));
 
 class Panne extends Error { constructor(code, diagnostic, motif = null) { super(diagnostic); this.code = code; this.motif = motif; } }

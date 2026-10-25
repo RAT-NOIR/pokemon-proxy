@@ -42,7 +42,7 @@ function arbitrerAvecPromotion(chaine, g, { garde, depuisIntrouvable = false } =
     if (!chaine || chaine.issue === 'affirmee') return { ...base, promotion: false };
     if (!g || g.issue !== 'affirmee' || !Number.isInteger(g.produit)) return { ...base, promotion: false };
     if (chaine.issue !== 'question' && !(chaine.issue === 'introuvable' && depuisIntrouvable === true)) return { ...base, promotion: false };
-    if (chaine.confirmationNombreux === true) return { ...base, promotion: false };      // R5 (DESIGNATION-REGLES) : la question à 1 candidat de la voie « plus de 3 produits » n'est JAMAIS promue en sûr (défaut fermé)
+    if (chaine.confirmationNombreux !== undefined) return { ...base, promotion: false };      // R5 (DESIGNATION-REGLES) : la question à 1 candidat de la voie « plus de 3 produits » n'est JAMAIS promue en sûr : seule l'ABSENCE du marqueur autorise la promotion (défaut fermé, une valeur mal formée refuse)
     const desaccord = retenue => ({ chaine: chaine.issue, regleG: 'affirmee', retenue, produitsChaine: chaine.ids, produitsRegleG: [g.produit] });
     if (!gardeBienFormee(garde)) return { action: 'garder', desaccord: desaccord('garde-muette'), promotion: false };
     if (garde.jugeable !== true) return { action: 'garder', desaccord: desaccord('garde-muette'), promotion: false };          // une garde qui n'a pas pu juger n'autorise rien

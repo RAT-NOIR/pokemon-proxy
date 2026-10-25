@@ -129,8 +129,9 @@ const montres = r => (r.issue === 'question' ? r.analyse.cartes[0].candidats.map
     v('(5) témoin : une question ordinaire à un candidat SE PROMEUT quand G affirme et que la garde laisse passer', [sans.action, sans.promotion], ['promouvoir', true]);
     v('(5) la question marquée R5, G affirmant et la garde passant : JAMAIS promue', [avec.promotion, avec.action === 'promouvoir'], [false, false]);
     v('(5)     même quand G affirme un AUTRE produit', PG.arbitrerAvecPromotion({ issue: 'question', ids: [5401], confirmationNombreux: true }, { issue: 'affirmee', produit: 5402 }, { garde }).action === 'promouvoir', false);
+    for (const m of [false, 'oui', 1, null, 0, {}]) v(`(5) marqueur mal forme ou non vrai (${JSON.stringify(m)}) : la question n'est jamais promue (seule l'ABSENCE du marqueur autorise la promotion)`, PG.arbitrerAvecPromotion({ issue: 'question', ids: [5401], confirmationNombreux: m }, gAff, { garde }).action === 'promouvoir', false);
     // le marqueur est transmis par la route : la ligne qui construit la chaîne de l'arbitrage le lit sur le résultat de l'adaptateur
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'routes.js'), 'utf8');
-    vrai('(5) routes.js transmet `confirmationNombreux` du résultat à l\'arbitrage de G', src.includes('confirmationNombreux: resultat.confirmationNombreux === true }, d)'));
+    vrai('(5) routes.js transmet `confirmationNombreux` du résultat à l\'arbitrage de G', src.includes('confirmationNombreux: resultat.confirmationNombreux }, d)'));
 }
 bilan();
