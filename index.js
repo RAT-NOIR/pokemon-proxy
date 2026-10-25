@@ -5,6 +5,7 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const Stripe = require('stripe');
+const { verifierEvenementStripe, resumeErreurStripe } = require('./stripe-webhook');
 
 // CHEMIN ARGENT : décompte et remboursement d'un scan. Extrait dans son propre module
 // pour qu'il n'existe qu'UNE implémentation, exécutée à l'identique par le serveur et
@@ -6839,8 +6840,9 @@ const PACKS = {
         // on peut dire qu'il est là et à quel mode il ressemble.
         const wh = String(process.env.STRIPE_WEBHOOK_SECRET || '');
         const etatWh = !wh ? '❌ ABSENT — aucun paiement ne sera crédité'
-            : (wh.startsWith('whsec_') ? `présent (${wh.slice(0, 11)}…)` : '⚠️ présent mais ne commence pas par whsec_');
-        console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s) · secret webhook : ${etatWh}`);
+            : (wh.startsWith('whsec_') ? 'présent (préfixe whsec_)' : '⚠️ présent mais ne commence pas par whsec_');
+        const etatTransition = String(process.env.STRIPE_WEBHOOK_SECRET_ANCIEN || '').trim() ? 'présent' : 'absent';
+        console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s) · secret webhook : ${etatWh} · secret de transition : ${etatTransition}`);
         if (!wh) {
             console.error(`❌ [stripe] STRIPE_WEBHOOK_SECRET manquant : les clients pourront PAYER sans être crédités.`);
         }
@@ -6892,7 +6894,7 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
         console.log(`💳 [recharge] session créée pour ${userId} — pack ${req.body.packId} (${pack.scans} scans)`);
         res.json({ url: session.url });
     } catch (e) {
-        console.error("❌ [creer-recharge]", e.message);
+        console.error("❌ [creer-recharge]", resumeErreurStripe(e));
         res.status(500).json({ success: false, error: "Impossible de créer la session de paiement" });
     }
 });
@@ -6921,11 +6923,11 @@ async function metadonneesDuPaiement(objet) {
         const intent = await stripe.paymentIntents.retrieve(pi);
         const parIntent = lire(intent?.metadata);
         if (parIntent) return parIntent;
-    } catch (e) { console.warn(`⚠️ [webhook] PaymentIntent ${pi} illisible : ${e.message}`); }
+    } catch (e) { console.warn(`⚠️ [webhook] PaymentIntent ${pi} illisible : ${resumeErreurStripe(e)}`); }
     try {
         const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
         return lire(sessions?.data?.[0]?.metadata);
-    } catch (e) { console.warn(`⚠️ [webhook] session du PaymentIntent ${pi} illisible : ${e.message}`); }
+    } catch (e) { console.warn(`⚠️ [webhook] session du PaymentIntent ${pi} illisible : ${resumeErreurStripe(e)}`); }
     return null;
 }
 
@@ -6937,7 +6939,7 @@ async function montantDeLaCharge(idCharge) {
     try {
         const ch = await stripe.charges.retrieve(typeof idCharge === 'string' ? idCharge : idCharge.id);
         return Number.isFinite(Number(ch?.amount)) ? Number(ch.amount) : null;
-    } catch (e) { console.warn(`⚠️ [webhook] charge ${idCharge} illisible : ${e.message}`); return null; }
+    } catch (e) { console.warn(`⚠️ [webhook] charge ${idCharge} illisible : ${resumeErreurStripe(e)}`); return null; }
 }
 
 // Webhook Stripe — SEUL endroit où des scans payants sont crédités, et depuis le
@@ -6956,11 +6958,8 @@ async function gererWebhookStripe(req, res) {
     // corps est celui d'un inconnu : on ne le lit même pas.
     let event;
     try {
-        event = stripe.webhooks.constructEvent(
-            req.body,
-            req.headers['stripe-signature'],
-            process.env.STRIPE_WEBHOOK_SECRET
-        );
+        // Une seule définition (stripe-webhook.js) : le secret principal, puis le secret de transition s'il est posé.
+        event = verifierEvenementStripe(stripe, req.body, req.headers['stripe-signature']);
     } catch (e) {
         console.warn(`🚫 [webhook] signature invalide : ${e.message}`);
         return res.status(400).send(`Webhook Error: ${e.message}`);
