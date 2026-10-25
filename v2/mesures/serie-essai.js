@@ -9,6 +9,12 @@
 //     POST /api/compte/code → POST /api/compte/lier (le jeton d'installation lié au compte administrateur). Ses scans sont marqués « banc » au journal du service ;
 //   · un plafond de dépense DUR (--plafond-usd=, obligatoire) tenu dans un carnet sur disque (--carnet=, une ligne JSON par scan, écrite avant le scan suivant) : le total déjà inscrit au carnet COMPTE (le plafond vaut pour la
 //     somme de toutes les séries du même carnet) ; avant chaque scan, si total + coût estimé dépasse le plafond, la série s'ARRÊTE (jamais un scan « qui passe juste ») ;
+//   · MODE DEUX TEMPS (--deuxieme-apres-signal=<fichier> --sortie2=<rapport2.json> [--attente-max-min=120]) : /api/installation est limitée à 2 par IP et par 24 h, donc DEUX séries sur les mêmes lignes (règle d'image seule, puis avec G après un changement de variable
+//     et un redéploiement) se jouent dans UN SEUL processus, avec UNE connexion. Après la série 1 (sortie écrite dans --sortie), le client attend que le fichier EXISTE (vérifié toutes les 30 s, ligne d'état « en attente du signal », sans valeur secrète), refait /ping,
+//     puis rejoue les MÊMES lignes dans le même ordre avec le même jeton, gardé EN MÉMOIRE (jamais écrit : ni disque, ni carnet, ni journal). Le plafond couvre les deux séries au même carnet. Jeton refusé (401) au début de la série 2 : arrêt propre. Série 1 arrêtée : pas de série 2 ;
+//   · le corps de /api/identifier est celui du CONTRAT 2 : `contrat: 2` (sans lui l'aiguilleur renvoie vers la route héritée : 401), title, description, prixVinted, devise, langueInterface ; le banc le juge par `verifierEntree` de la production ;
+//   · GARDE ANTI-VINTED : l'adresse d'image de l'annonce est factice (exigée par la forme) ; un scan ne compte que si `analyse.photoRecue === true`. Sinon (champ absent, faux, pas d'`analyse`) la série S'ARRÊTE à l'instant : le serveur a pu télécharger l'adresse chez Vinted ;
+//   · le carnet porte, en plus de l'estimation, une ligne « résultat » par scan (statut HTTP, analyse présente, photo rattachée), sans coût ;
 //   · une série se rejoue à l'identique : l'échantillon est tiré d'une graine écrite (--graine=) sur les lignes triées par clé, dans cet ordre-là.
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
 //         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
@@ -93,7 +99,9 @@ function ouvrirCarnet(fichier, { plafondUsd, coutEstimeUsd }) {
             const cout = coutEstimeUsd;
             fs.appendFileSync(fichier, JSON.stringify({ ...entree, coutUsd: cout, totalApresUsd: Math.round((total + cout) * 1e6) / 1e6, plafondUsd }) + '\n');
             total += cout;
-        }
+        },
+        /** Une ligne « résultat » (statut HTTP, analyse présente, photo rattachée) : sans coût, elle n'ajoute rien à la dépense. */
+        noter(entree) { fs.appendFileSync(fichier, JSON.stringify(entree) + '\n'); }
     };
 }
 
@@ -195,52 +203,91 @@ async function serie(o, deps = {}) {
     jeton = lie.corps.jetonInstallation;
     log('compte de mesure connecté (installation liée, administrateur)');
 
-    const resultats = [], durees = [], erreurs = [];
-    let arret = null, deSuite = 0, rang = 0;
-    const serieId = crypto.createHash('sha1').update(`${o.graine}|${lignes.map(l => l.cle).join(',')}`).digest('hex').slice(0, 10);
+    const hashSerie = passe => crypto.createHash('sha1').update(`${o.graine}|${lignes.map(l => l.cle).join(',')}${passe > 1 ? `|passe${passe}` : ''}`).digest('hex').slice(0, 10);
     const stamp = (deps.maintenant || Date.now)().toString(36);
-    for (const l of lignes) {
-        rang++;
-        if (!carnet.peutDepenser()) { arret = `plafond atteint (${carnet.total().toFixed(4)} USD déjà inscrits, plafond ${o.plafondUsd}) : arrêt avant le scan ${rang}`; break; }
-        const cp = clePhoto(l.cle), ph = trouverFichier(o.photos, cp), debut = horloge();
-        let issue = null;
-        try {
-            const octets = fs.readFileSync(ph.fichier);
-            const up = await appeler('/api/photo', { method: 'POST', headers: { 'Content-Type': ph.type, 'Content-Length': String(octets.length) }, body: octets });
-            if (up.statut === 429) throw new Arret(`429 sur /api/photo (reessayerDans ${up.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
-            if (up.statut !== 200 || !up.corps || typeof up.corps.photoId !== 'string') throw Object.assign(new Error('photo'), { code: `photo-${up.statut}` });
-            const p = nav[cp];
-            const entree = { photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: p.redressee === true };
-            if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
-            const corps = { versionExtension: ping.corps.versionMinExtension, marche: 'vinted.fr', title: '', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
-            carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
-            const id = await appeler('/api/identifier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${stamp}` }, body: JSON.stringify(corps) });
-            if (id.statut === 429) throw new Arret(`429 sur /api/identifier (reessayerDans ${id.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
-            if (id.statut !== 200 || !id.corps) throw Object.assign(new Error('identifier'), { code: `identifier-${id.statut}` });
-            issue = id.corps;
-        } catch (e) {
-            if (e instanceof Arret) { arret = e.raison; break; }
-            erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
-            deSuite++;
-            if (deSuite >= ERREURS_DE_SUITE_MAX) { arret = `${ERREURS_DE_SUITE_MAX} erreurs de suite : arrêt (dernier code ${erreurs[erreurs.length - 1].code})`; break; }
-            continue;
+    /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
+    const jouer = async (passe, versionMin) => {
+        const resultats = [], durees = [], erreurs = [];
+        let arret = null, deSuite = 0, rang = 0;
+        const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
+        for (const l of lignes) {
+            rang++;
+            if (!carnet.peutDepenser()) { arret = `plafond atteint (${carnet.total().toFixed(4)} USD déjà inscrits, plafond ${o.plafondUsd}) : arrêt avant le scan ${rang}`; break; }
+            const cp = clePhoto(l.cle), ph = trouverFichier(o.photos, cp), debut = horloge();
+            let issue = null;
+            try {
+                const octets = fs.readFileSync(ph.fichier);
+                const up = await appeler('/api/photo', { method: 'POST', headers: { 'Content-Type': ph.type, 'Content-Length': String(octets.length) }, body: octets });
+                if (up.statut === 401) throw new Arret('jeton refusé (401) sur /api/photo : le jeton d\'installation n\'est plus accepté ; série arrêtée');
+                if (up.statut === 429) throw new Arret(`429 sur /api/photo (reessayerDans ${up.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+                if (up.statut !== 200 || !up.corps || typeof up.corps.photoId !== 'string') throw Object.assign(new Error('photo'), { code: `photo-${up.statut}` });
+                const p = nav[cp];
+                const entree = { photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: p.redressee === true };
+                if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
+                // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
+                const corps = { contrat: 2, versionExtension: versionMin, marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
+                carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine, ...(passe > 1 ? { passe } : {}) });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
+                // DÈS QUE LA PHOTO EST DÉPOSÉE, la garde s'écrit par ce qu'elle AUTORISE : un SEUL chemin continue la série — « 200 avec `analyse.photoRecue === true` ». Toute autre issue (statut non 200, 429, corps vide, pas d'`analyse`, photoRecue absent ou faux,
+                // exception, délai, redirection) ARRÊTE la série : on ne peut pas savoir si le serveur est retombé sur l'adresse factice de l'annonce, donc chez Vinted. Jamais de nouvel essai.
+                const incertaine = code => new Arret(`${code} : série arrêtée : issue d'identification incertaine après dépôt de la photo (le serveur a pu retomber sur l'adresse de l'annonce)`);
+                let id;
+                try { id = await appeler('/api/identifier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${etiquetteCle}` }, body: JSON.stringify(corps) }); }
+                catch (e) { throw e instanceof Arret ? e : incertaine(`exception ${(e && (e.code || e.name)) || 'erreur'} sur /api/identifier`); }
+                const analyse = id.corps && typeof id.corps === 'object' && id.corps.analyse && typeof id.corps.analyse === 'object' ? id.corps.analyse : null;
+                carnet.noter({ serie: serieId, rang, cle: l.cle, resultat: { statutHttp: id.statut, analyse: analyse !== null, photoRecue: analyse !== null && analyse.photoRecue === true } });   // ce que la réponse permet de lire ; jamais un coût
+                if (id.statut === 429) throw incertaine(`429 sur /api/identifier (reessayerDans ${id.retryApres ?? '?'})`);
+                if (id.statut !== 200 || !id.corps) throw incertaine(`identifier-${id.statut}`);
+                if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');
+                issue = id.corps;
+            } catch (e) {
+                if (e instanceof Arret) { arret = e.raison; break; }
+                erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
+                deSuite++;
+                if (deSuite >= ERREURS_DE_SUITE_MAX) { arret = `${ERREURS_DE_SUITE_MAX} erreurs de suite : arrêt (dernier code ${erreurs[erreurs.length - 1].code})`; break; }
+                continue;
+            }
+            deSuite = 0;
+            const ms = horloge() - debut; durees.push(ms);
+            const s = sureDe(issue);
+            resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite });
+            log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
+            if (rang < lignes.length && o.pauseS > 0) await pause(o.pauseS * 1000);
         }
-        deSuite = 0;
-        const ms = horloge() - debut; durees.push(ms);
-        const s = sureDe(issue);
-        resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite });
-        log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
-        if (rang < lignes.length && o.pauseS > 0) await pause(o.pauseS * 1000);
-    }
-    const stats = statistiques(durees), comparaison = comparer(resultats);
-    log(`durée par scan : n ${stats.n}, p50 ${stats.p50} ms, p95 ${stats.p95} ms`);
-    log(`comparaison essai / local (mêmes lignes) : ${JSON.stringify(comparaison)}`);
-    if (erreurs.length) log(`erreurs : ${JSON.stringify(erreurs)}`);
-    log(arret ? `ARRÊT : ${arret}` : 'série terminée');
-    log(`dépense inscrite au carnet : ${carnet.total().toFixed(4)} USD sur un plafond de ${o.plafondUsd}`);
-    return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle) };
-}
+        const stats = statistiques(durees), comparaison = comparer(resultats);
+        log(`${passe > 1 ? `[série ${passe}] ` : ''}durée par scan : n ${stats.n}, p50 ${stats.p50} ms, p95 ${stats.p95} ms`);
+        log(`comparaison essai / local (mêmes lignes) : ${JSON.stringify(comparaison)}`);
+        if (erreurs.length) log(`erreurs : ${JSON.stringify(erreurs)}`);
+        log(arret ? `ARRÊT : ${arret}` : 'série terminée');
+        log(`dépense inscrite au carnet : ${carnet.total().toFixed(4)} USD sur un plafond de ${o.plafondUsd}`);
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle) };
+    };
 
+    const r1 = await jouer(1, ping.corps.versionMinExtension);
+    if (!o.deuxiemeApresSignal) return r1;
+
+    // ── MODE DEUX TEMPS : la même connexion (UNE installation, le jeton gardé en mémoire, jamais écrit), les mêmes lignes dans le même ordre, après un signal (un fichier qui apparaît) ──
+    if (typeof o.apresSerie1 === 'function') await o.apresSerie1(r1);
+    const vide = arret => ({ arret, resultats: [], durees: [], stats: statistiques([]), comparaison: comparer([]), erreurs: [], depenseUsd: carnet.total(), serie: hashSerie(2), lignes: lignes.map(l => l.cle) });
+    if (r1.arret) { log(`série 2 non lancée : la série 1 s'est arrêtée (${r1.arret})`); return { ...r1, deuxieme: vide('série 2 non lancée : la série 1 s\'est arrêtée') }; }
+    const existe = deps.existe || (f => fs.existsSync(f));
+    const maxMin = o.attenteMaxMin === undefined ? 120 : o.attenteMaxMin, intervalleS = o.attenteIntervalleS || 30;
+    if (!(typeof maxMin === 'number' && Number.isFinite(maxMin) && maxMin > 0)) throw new Arret('--attente-max-min doit être un nombre > 0');
+    const verifications = Math.max(1, Math.ceil((maxMin * 60) / intervalleS));
+    let signal = false;
+    for (let i = 0; i < verifications; i++) {
+        if (existe(o.deuxiemeApresSignal)) { signal = true; break; }
+        log(`en attente du signal (${Math.round(i * intervalleS / 60 * 10) / 10} min sur ${maxMin} max)`);
+        await pause(intervalleS * 1000);
+    }
+    if (!signal) { log(`ARRÊT série 2 : attente du signal expirée (${maxMin} min)`); return { ...r1, deuxieme: vide(`attente du signal expirée (${maxMin} min) : la série 2 n'est pas lancée`) }; }
+    log('signal reçu : série 2 sur la même connexion');
+    const ping2 = await appeler('/ping', { method: 'GET' }, null);
+    if (ping2.statut !== 200 || !ping2.corps || typeof ping2.corps.versionMinExtension !== 'string') return { ...r1, deuxieme: vide(`/ping inattendu (${ping2.statut}) avant la série 2 : la série 2 n'est pas lancée`) };
+    const capacites2 = Array.isArray(ping2.corps.capacites) ? ping2.corps.capacites : [];
+    log(`/ping (série 2) : versionMinExtension ${ping2.corps.versionMinExtension} ; capacités ${capacites2.join(', ') || '(aucune)'} ; jeton empreinte ${capacites2.includes('empreinte') ? 'PRÉSENT' : 'ABSENT'}`);
+    const r2 = await jouer(2, ping2.corps.versionMinExtension);
+    return { ...r1, deuxieme: { ...r2, capacites: capacites2, jetonEmpreinteAnnonce: capacites2.includes('empreinte') } };
+}
 module.exports = { serie, baseAutorisee, echantillon, aleatoire, quantile, statistiques, lireVariable, lireIdentifiants, ouvrirCarnet, lignesLocales, sureDe, comparer, Arret, HOTE_ESSAI, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, ORIGINE_SITE, MODELE_DEFAUT, COUT_ESTIME_DEFAUT_USD };
 
 if (require.main === module) {
@@ -250,9 +297,14 @@ if (require.main === module) {
         const necessaire = n => { const v = arg(n); if (!v) throw new Arret(`argument --${n}= manquant`); return v; };
         const resultats = JSON.parse(fs.readFileSync(necessaire('resultats'), 'utf8')), nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8'));
         const modele = arg('modele-id') && arg('modele-sha256') ? { id: arg('modele-id'), sha256: arg('modele-sha256') } : MODELE_DEFAUT;
+        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats }, null, 1));
+        const signal = arg('deuxieme-apres-signal');
+        if (signal && !arg('sortie2')) throw new Arret('--deuxieme-apres-signal exige --sortie2= (la sortie de la série 2)');
         const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), n: num('n', NaN), graine: num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
-            fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env });
-        if (arg('sortie')) fs.writeFileSync(arg('sortie'), JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats }, null, 1));
-        process.exit(r.arret ? 1 : 0);
+            fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env,
+            deuxiemeApresSignal: signal || undefined, attenteMaxMin: num('attente-max-min', 120), apresSerie1: async r1 => { if (arg('sortie')) ecrire(arg('sortie'), r1); } });
+        if (arg('sortie') && !signal) ecrire(arg('sortie'), r);
+        if (signal && r.deuxieme) ecrire(arg('sortie2'), r.deuxieme);
+        process.exit(r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0);
     })().catch(e => { console.error(e instanceof Arret ? `ARRÊT : ${e.raison}` : `ERREUR ${e && (e.code || e.name)}`); process.exit(e instanceof Arret ? 2 : 1); });
 }

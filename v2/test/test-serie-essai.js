@@ -26,6 +26,11 @@ const resultats = {
 };
 
 // ── le faux serveur ──
+const { verifierEntree } = require('../identifier/routes');       // la fonction de PRODUCTION, jamais une copie
+const { lireConfig } = require('../config');
+const CFG_ESSAI = { ...lireConfig({}), photosMultiples: true, empreinteExtension: true };   // la configuration de l'essai : photos multiples et empreinte de l'extension allumées
+let entreesAcceptees = [];
+const photoIdN = n => n.toString(16).padStart(32, '0');            // la forme du serveur : 32 caractères hexadécimaux (FORME_PHOTO_ID)
 function fauxServeur(comportement = {}) {
     const appels = [];
     const rep = (statut, corps, entetes = {}) => ({ status: statut, json: async () => corps, headers: { get: n => entetes[String(n).toLowerCase()] ?? null } });
@@ -47,12 +52,21 @@ function fauxServeur(comportement = {}) {
             return ok ? rep(200, { success: true, compte: { verifie: true, administrateur: comportement.pasAdmin ? false : true }, jetonInstallation: JETON_LIE }) : rep(401, { success: false });
         }
         if (u.pathname === '/api/photo' || u.pathname === '/api/identifier') { if ((init.headers || {}).Authorization !== `Bearer ${JETON_LIE}`) return rep(401, { success: false }); }
-        if (u.pathname === '/api/photo') return rep(200, { success: true, photoId: `pid-${appels.filter(x => x.chemin === '/api/photo').length}`, expireDans: 30 });
+        if (u.pathname === '/api/photo') return rep(200, { success: true, photoId: photoIdN(appels.filter(x => x.chemin === '/api/photo').length), expireDans: 30 });
         if (u.pathname === '/api/identifier') {
             const n = appels.filter(x => x.chemin === '/api/identifier').length;
             const cle = comportement.ordre ? comportement.ordre[n - 1] : null;
-            const sur = comportement.essai ? comportement.essai(JSON.parse(corps), n) : null;
-            return rep(200, { success: true, analyse: sur ? { statut: 'identifiee', cartes: [{ index: 0, statut: 'identifiee', carte: { idProduct: sur } }] } : { statut: 'a-trancher', cartes: [{ index: 0, statut: 'question' }] }, cle });
+            const b = JSON.parse(corps);
+            // COMME LA PRODUCTION : sans `contrat: 2` l'aiguilleur renvoie vers la route héritée, qui répond 401 (monter.js:94-100)
+            if (b.contrat !== 2) return rep(401, { success: false });
+            // COMME LA PRODUCTION : le corps est jugé par `verifierEntree` (la fonction de la route, pas une copie), avec la configuration de l'essai
+            const v = verifierEntree(b, CFG_ESSAI);
+            if (v.erreur) return rep(400, { success: false, erreur: v.erreur });
+            entreesAcceptees.push(v.entree);
+            const sur = comportement.essai ? comportement.essai(b, n) : null;
+            const photo = comportement.photoRecue === undefined ? { photosRecues: [0], photoRecue: true } : comportement.photoRecue;     // le contrat : analyse.photosRecues / analyse.photoRecue (CONTRAT-API-V2.md)
+            const analyse = { ...(sur ? { statut: 'identifiee', cartes: [{ index: 0, statut: 'identifiee', carte: { idProduct: sur } }] } : { statut: 'a-trancher', cartes: [{ index: 0, statut: 'question' }] }), ...photo };
+            return rep(200, { success: true, ...(comportement.sansAnalyse ? {} : { analyse }), cle });
         }
         return rep(404, { success: false });
     };
@@ -116,7 +130,7 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
         // ── 3. le plafond et le carnet ──
         { const s = fauxServeur(); const b = base({ n: 6, plafondUsd: 0.035, coutEstimeUsd: 0.01 }); const d = deps(s);
           const r = await essaie(() => S.serie(b, d));
-          const lignesCarnet = fs.readFileSync(b.carnet, 'utf8').trim().split('\n').map(JSON.parse);
+          const lignesCarnet = fs.readFileSync(b.carnet, 'utf8').trim().split('\n').map(JSON.parse).filter(l => l.coutUsd !== undefined);      // les lignes d'ESTIMATION ; les lignes « résultat » (section 9) ne portent pas de coût
           H.v('plafond 0,035 USD à 0,01 le scan : 3 scans, jamais le quatrième', [nid(s), lignesCarnet.length, /plafond atteint/.test(r.ok.arret || '')], [3, 3, true]);
           H.vrai('   la dépense inscrite ne franchit JAMAIS le plafond', r.ok.depenseUsd <= 0.035 && Math.abs(r.ok.depenseUsd - 0.03) < 1e-9);
           H.vrai('   chaque ligne du carnet porte la série, le rang, la clé, le coût et le total après', lignesCarnet.every((l, i) => l.rang === i + 1 && typeof l.cle === 'string' && l.coutUsd === 0.01 && typeof l.totalApresUsd === 'number' && l.plafondUsd === 0.035));
@@ -168,7 +182,7 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
           H.vrai('   /api/photo : les octets bruts de la photo locale, type image/jpeg', Buffer.isBuffer(ph.corps) && /^photo-k\d$/.test(ph.corps.toString()) && ph.entetes['Content-Type'] === 'image/jpeg');
           const c = JSON.parse(id.corps);
           H.v('   /api/identifier : photoIds, une empreinte, le modèle, un marché, la version minimale du ping', [c.photoIds, c.empreintes.length, c.empreintes[0].photo, typeof c.empreintes[0].vecteur, c.empreintes[0].vecteur.length, c.modeleEmpreinte, c.marche, c.versionExtension, c.imageUrls.length],
-              [[{ index: 0, photoId: 'pid-1' }], 1, 0, 'string', 684, S.MODELE_DEFAUT, 'vinted.fr', '2.5.0', 1]);
+              [[{ index: 0, photoId: photoIdN(1) }], 1, 0, 'string', 684, S.MODELE_DEFAUT, 'vinted.fr', '2.5.0', 1]);
           H.vrai('   l\'adresse d\'image exigée par la forme est une adresse Vinted (jamais téléchargée : un photoId est reçu)', /^https:\/\/[a-z0-9.]*vinted\.net\//.test(c.imageUrls[0]));
           H.vrai('   une clé d\'idempotence de la forme du serveur, différente par scan', /^[A-Za-z0-9_-]{8,64}$/.test(id.entetes['Idempotency-Key']) && id.entetes['Idempotency-Key'] !== ids[1].entetes['Idempotency-Key']);
           H.v('   le jeton `empreinte` du ping est rapporté', r.jetonEmpreinteAnnonce, true); }
@@ -212,15 +226,96 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
         { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' ? { status: 302, json: async () => ({}), headers: { get: () => 'https://evil.fr' } } : null) });
           const r = await essaie(() => S.serie(base({ n: 3 }), deps(s)));
           H.v('une redirection : refusée, jamais suivie', [/redirection/.test(r.ok.arret || ''), s.appels.every(a => a.hote === S.HOTE_ESSAI)], [true, true]); }
-        { const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
+        { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 6 }), deps(s)));
-          H.v('trois erreurs de suite : arrêt (pas six scans payés pour rien)', [nid(s), r.ok.erreurs.length, /3 erreurs de suite/.test(r.ok.arret || '')], [3, 3, true]); }
+          H.v('trois dépôts de photo refusés de suite (rien n\'est envoyé à l\'identification) : arrêt à la troisième erreur comptée', [nid(s), s.appels.filter(a => a.chemin === '/api/photo').length, r.ok.erreurs.length, /3 erreurs de suite/.test(r.ok.arret || '')], [0, 3, 3, true]); }
         { const s = fauxServeur({ avant: a => (a.chemin === '/ping' ? { status: 200, json: async () => ({ ok: true }), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 2 }), deps(s)));
           H.v('un /ping sans versionMinExtension (v2 non annoncée) : arrêt avant toute photo', [/\/ping inattendu/.test(r.arret || ''), s.appels.length], [true, 1]); }
-        { const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' && s.appels.filter(x => x.chemin === '/api/identifier').length === 1 ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
+        { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' && s.appels.filter(x => x.chemin === '/api/photo').length === 1 ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 5 }), deps(s)));
-          H.v('une erreur isolée ne coupe pas la série (le compteur de suite repart à zéro)', [r.ok.erreurs.length, r.ok.stats.n, r.ok.arret], [1, 4, null]); }
+          H.v('un dépôt de photo refusé isolé ne coupe pas la série (le compteur de suite repart à zéro)', [r.ok.erreurs.length, r.ok.stats.n, r.ok.arret], [1, 4, null]); }
+        // ── 9. le CONTRAT de la production (la première série réelle s'est arrêtée en `identifier-401` : le faux serveur acceptait n'importe quel corps) ──
+        { entreesAcceptees = []; const s = fauxServeur(); const r = await S.serie(base({ n: 3 }), deps(s));
+          const corpsEnvoyes = s.appels.filter(a => a.chemin === '/api/identifier').map(a => JSON.parse(a.corps));
+          H.v('le corps envoyé porte `contrat: 2` (sinon l\'aiguilleur renvoie vers la route héritée : 401)', corpsEnvoyes.map(c => c.contrat), [2, 2, 2]);
+          H.v('   les trois scans passent ; le faux serveur a jugé chaque corps par `verifierEntree` de la production : acceptés, sans erreur', [r.stats.n, r.erreurs.length, entreesAcceptees.length], [3, 0, 3]);
+          H.vrai('   et l\'entrée acceptée porte les photos reçues et l\'empreinte (les deux drapeaux de l\'essai sont allumés)', entreesAcceptees.every(e => e.photoIds.length === 1 && e.empreintes && e.empreintes.rejet === null && e.empreintes.modele && e.empreintes.entrees.length === 1 && !e.empreintes.entrees[0].invalide));
+          H.vrai('   les champs que la v2 attend : title, description, prixVinted, devise, langueInterface', corpsEnvoyes.every(c => c.title === '' && c.description === '' && c.prixVinted === null && c.devise === null && c.langueInterface === 'fr')); }
+        { const s = fauxServeur(); const r = await essaie(() => S.serie(base({ n: 2 }), deps(s, {})));
+          const sansContrat = await s.fetch('https://' + S.HOTE_ESSAI + '/api/identifier', { method: 'POST', headers: { Authorization: `Bearer ${JETON_LIE}` }, body: JSON.stringify({ imageUrls: ['https://images1.vinted.net/a.jpg'], marche: 'vinted.fr', versionExtension: '2.5.0' }) });
+          H.v('   (vérifié sur le faux serveur lui-même)', sansContrat.status, 401); }
+        // la GARDE anti-Vinted : un scan ne compte que si `analyse.photoRecue === true` ; tout autre cas arrête la série à l'instant
+        for (const [nom, comportement] of [['photoRecue faux', { photoRecue: { photosRecues: [], photoRecue: false } }], ['photoRecue absent', { photoRecue: {} }], ['photoRecue en chaîne "true"', { photoRecue: { photoRecue: 'true' } }], ['réponse sans analyse', { sansAnalyse: true }]]) {
+            const s = fauxServeur(comportement), d = deps(s), b = base({ n: 5 });
+            const r = await essaie(() => S.serie(b, d));
+            H.v(`garde anti-Vinted (${nom}) : la série s'arrête au PREMIER scan, aucun suivant, rien de compté`, [nid(s), r.ok.resultats.length, r.ok.durees.length, /photo non rattachée.*série arrêtée/.test(r.ok.arret || '')], [1, 0, 0, true]);
+            H.vrai(`   (${nom}) le message le dit : le serveur a pu retomber sur l'adresse de l'annonce`, /le serveur a pu retomber sur l'adresse de l'annonce/.test(r.ok.arret || '') && d.logs.some(l => /ARRÊT : photo non rattachée/.test(l)));
+        }
+        // APRÈS LE DÉPÔT de la photo, toute issue d'/api/identifier autre que « 200 avec analyse.photoRecue === true » ARRÊTE la série : un seul appel à /api/identifier part, jamais un second
+        const rep = (statut, corps) => ({ status: statut, json: async () => { if (corps === undefined) throw new Error('pas de corps'); return corps; }, headers: { get: n => (n === 'retry-after' ? '30' : null) } });
+        for (const [nom, motif, avant] of [
+            ['500', /identifier-500/, () => rep(500, { success: false })],
+            ['200 sans corps', /identifier-200/, () => rep(200, undefined)],
+            ['200 sans analyse', /photo non rattachée/, () => rep(200, { success: true })],
+            ['429', /429 sur \/api\/identifier/, () => rep(429, { success: false })],
+            ['exception réseau', /exception .* sur \/api\/identifier/, () => { throw new Error('ECONNRESET'); }],
+            ['délai dépassé', /exception TimeoutError sur \/api\/identifier/, () => { throw Object.assign(new Error('délai'), { name: 'TimeoutError' }); }],
+            ['redirection', /redirection/, () => rep(302, {})]]) {
+            const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' ? avant() : null) }), b = base({ n: 6 });
+            const r = await essaie(() => S.serie(b, deps(s)));
+            H.v(`après dépôt de la photo : ${nom} ⇒ UN seul appel à /api/identifier, série arrêtée, rien de compté`, [nid(s), r.ok.resultats.length, r.ok.erreurs.length, motif.test(r.ok.arret || '')], [1, 0, 0, true]);
+            if (nom !== 'redirection' && nom !== '200 sans analyse') H.vrai(`   (${nom}) le message dit l'issue incertaine après dépôt de la photo`, /série arrêtée : issue d'identification incertaine après dépôt de la photo/.test(r.ok.arret || ''));
+        }
+        { const s = fauxServeur(), r = await S.serie(base({ n: 4 }), deps(s));
+          H.v('garde anti-Vinted : photoRecue vrai partout ⇒ la série va au bout', [r.arret, r.stats.n], [null, 4]); }
+        // le carnet : l'estimation reste inscrite AVANT l'appel ; une ligne « résultat » dit ce que la réponse permet de lire (jamais un coût inventé)
+        { const s = fauxServeur(), b = base({ n: 2 }); await S.serie(b, deps(s));
+          const lignes = fs.readFileSync(b.carnet, 'utf8').trim().split('\n').map(JSON.parse), estim = lignes.filter(l => l.coutUsd !== undefined), res = lignes.filter(l => l.resultat);
+          H.v('carnet : une estimation et une ligne « résultat » par scan', [estim.length, res.length], [2, 2]);
+          H.v('   « résultat » : statut HTTP, analyse présente, photo rattachée — et AUCUN coût', [res[0].resultat, res[0].coutUsd, res[0].rang, res[0].cle], [{ statutHttp: 200, analyse: true, photoRecue: true }, undefined, 1, estim[0].cle]);
+          H.vrai('   la dépense reste la somme des estimations (la ligne « résultat » n\'ajoute rien)', Math.abs(fs.readFileSync(b.carnet, 'utf8').split('\n').filter(x => x.trim()).map(JSON.parse).reduce((t, l) => t + (l.coutUsd || 0), 0) - 0.02) < 1e-9);
+          const s2 = fauxServeur({ sansAnalyse: true }), b2 = base({ n: 2 }); await essaie(() => S.serie(b2, deps(s2)));
+          H.v('   réponse sans analyse : la ligne « résultat » le dit (analyse: false)', JSON.parse(fs.readFileSync(b2.carnet, 'utf8').trim().split('\n')[1]).resultat, { statutHttp: 200, analyse: false, photoRecue: false }); }
+        // ── 10. le MODE DEUX TEMPS : deux séries sur les mêmes lignes, UNE connexion (/api/installation est limitée à 2 par IP et par 24 h), après un signal (un fichier) ──
+        const SIGNAL = 'signal-factice.txt';
+        const chemins = s => s.appels.map(a => `${a.methode} ${a.chemin}`);
+        { const s = fauxServeur(), d = deps(s), ordre = []; let verifs = 0; const pauses = [];
+          d.existe = f => { ordre.push(`existe:${f}`); return ++verifs > 3; };                 // le signal apparaît à la quatrième vérification
+          d.pause = async ms => { pauses.push(ms); };
+          const b = base({ n: 3, plafondUsd: 1, deuxiemeApresSignal: SIGNAL, apresSerie1: async r => { ordre.push(`serie1:${r.stats.n}`); } });
+          const r = await essaie(() => S.serie(b, d));
+          H.v('deux temps : la sortie de la série 1 est remise AVANT la première vérification du signal', ordre.slice(0, 2), ['serie1:3', `existe:${SIGNAL}`]);
+          H.v('   la séquence : UNE installation, UNE connexion, puis 3 scans, un second /ping, 3 scans', chemins(s), ['GET /ping', 'POST /api/installation', 'POST /api/compte/connexion', 'POST /api/compte/code', 'POST /api/compte/lier',
+              ...Array(3).fill(['POST /api/photo', 'POST /api/identifier']).flat(), 'GET /ping', ...Array(3).fill(['POST /api/photo', 'POST /api/identifier']).flat()]);
+          H.v('   les MÊMES lignes dans le MÊME ordre', [r.ok.deuxieme.lignes, r.ok.deuxieme.stats.n], [r.ok.lignes, 3]);
+          H.v('   en attente : 3 pauses de 30 s, une ligne d\'état à chacune', [pauses, d.logs.filter(l => /^en attente du signal/.test(l)).length], [[30000, 30000, 30000], 3]);
+          const ids = s.appels.filter(a => a.chemin === '/api/identifier');
+          H.vrai('   le même jeton lié pour les deux séries ; des clés d\'idempotence toutes différentes', ids.every(a => a.entetes.Authorization === `Bearer ${JETON_LIE}`) && new Set(ids.map(a => a.entetes['Idempotency-Key'])).size === 6);
+          H.vrai('   la série 2 porte un identifiant différent, et le carnet le sait', r.ok.deuxieme.serie !== r.ok.serie && fs.readFileSync(b.carnet, 'utf8').includes(r.ok.deuxieme.serie));
+          const sortie = JSON.stringify(r.ok) + d.logs.join('\n') + fs.readFileSync(b.carnet, 'utf8');
+          H.vrai('   aucun secret (jetons, cookie, mot de passe) dans les journaux, le carnet ou le résultat', TOUS_LES_SECRETS.every(x => !sortie.includes(x))); }
+        { const s = fauxServeur(), d = deps(s); let n = 0; d.existe = () => true;
+          const b = base({ n: 3, plafondUsd: 0.05, coutEstimeUsd: 0.01, deuxiemeApresSignal: SIGNAL });
+          const r = await essaie(() => S.serie(b, d));
+          H.v('deux temps : le plafond couvre les DEUX séries au même carnet (3 + 2 scans à 0,01 sous 0,05)', [r.ok.stats.n, r.ok.deuxieme.stats.n, nid(s), /plafond atteint/.test(r.ok.deuxieme.arret || ''), Math.round(r.ok.deuxieme.depenseUsd * 1e4) / 1e4], [3, 2, 5, true, 0.05]); }
+        { const s = fauxServeur(), d = deps(s), pauses = []; d.existe = () => false; d.pause = async ms => { pauses.push(ms); };
+          const r = await essaie(() => S.serie(base({ n: 2, deuxiemeApresSignal: SIGNAL, attenteMaxMin: 1 }), d));
+          H.v('deux temps : le signal n\'arrive pas ⇒ l\'attente expire (1 min = 2 vérifications de 30 s), la série 2 n\'est pas lancée', [pauses, /attente du signal expirée/.test(r.ok.deuxieme.arret || ''), r.ok.deuxieme.stats.n, nid(s), s.appels.filter(a => a.chemin === '/ping').length], [[30000, 30000], true, 0, 2, 1]);
+          H.v('   la série 1 reste intacte', r.ok.stats.n, 2); }
+        { const s = fauxServeur({ avant: (a, appels) => (a.chemin === '/api/photo' && appels.filter(x => x.chemin === '/ping').length === 2 ? { status: 401, json: async () => ({ success: false }), headers: { get: () => null } } : null) }), d = deps(s); d.existe = () => true;
+          const r = await essaie(() => S.serie(base({ n: 2, deuxiemeApresSignal: SIGNAL }), d));
+          H.v('deux temps : jeton refusé (401) au début de la série 2 ⇒ arrêt propre qui le dit, aucun scan de plus', [/jeton refusé \(401\)/.test(r.ok.deuxieme.arret || ''), nid(s), s.appels.filter(a => a.chemin === '/api/installation').length], [true, 2, 1]); }
+        { const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) }), d = deps(s); let appelee = 0; d.existe = () => { appelee++; return true; };
+          const r = await essaie(() => S.serie(base({ n: 3, deuxiemeApresSignal: SIGNAL }), d));
+          H.v('deux temps : la série 1 s\'est arrêtée ⇒ pas d\'attente, pas de série 2', [appelee, r.ok.deuxieme.stats.n, nid(s), /série 2 non lancée/.test(r.ok.deuxieme.arret || '')], [0, 0, 1, true]); }
+        { const s = fauxServeur(); const r = await S.serie(base({ n: 2 }), deps(s));
+          H.v('sans l\'option : une seule série, pas de second /ping, pas de clé `deuxieme`', [r.deuxieme, s.appels.filter(a => a.chemin === '/ping').length], [undefined, 1]); }
+        for (const [nom, v] of [['zéro', 0], ['négative', -3], ['NaN', NaN]]) {
+            const s = fauxServeur(), d = deps(s); d.existe = () => true;
+            const r = await essaie(() => S.serie(base({ n: 1, deuxiemeApresSignal: SIGNAL, attenteMaxMin: v }), d));
+            H.vrai(`--attente-max-min ${nom} : refusé`, /attente-max-min/.test(r.arret || ''));
+        }
         H.vrai('le fetch global n\'a jamais servi (le banc n\'a fait AUCUN appel réseau)', true);
     } finally { globalThis.fetch = fetchGlobal; try { fs.rmSync(dossier, { recursive: true, force: true }); } catch { /* le dossier temporaire se nettoie seul */ } }
     H.bilan();
