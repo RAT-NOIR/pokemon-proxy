@@ -52,6 +52,12 @@ const lancer = async (code, { parallele, n = 3, max, signal, delai, aborter, del
         const e = await lancer('XXX', { delai: 15 });
         delete process.env.V2_TC_SECONDE_PARALLELE;
         v('le drapeau d\'environnement allume quand l\'option est absente : pic 2', e.pic, 2);
+        for (const val of ['true', 'oui', '0', ' 1', '']) {
+            process.env.V2_TC_SECONDE_PARALLELE = val;
+            const g = await lancer('XXX', { delai: 15 });
+            delete process.env.V2_TC_SECONDE_PARALLELE;
+            v(`environnement « ${val} » : n'allume pas le chemin (pic 1)`, g.pic, 1);
+        }
         const f = await lancer('XXX', { delai: 15, parallele: false });
         v('l\'option explicite prime sur l\'environnement (éteint si parallele:false)', f.pic, 1);
     }

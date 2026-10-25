@@ -9,7 +9,6 @@
 //   3. elle ne se confirme JAMAIS elle-même : aucun champ absent de la première lecture n'est comblé ni confirmé (deux lectures d'accord du même modèle sur la même photo sont corrélées).
 // 🔑 Écrite par ce qu'elle AUTORISE : un seul chemin mène à « confirme » (voir `decider`). Tout le reste rend la réponse d'AVANT (la question), jamais pire.
 const S = require('../../scoring');
-const TC = require('./temps-chaine');
 
 const JUMEAUX_MAX = 2;                                  // P et ses jumeaux tiennent dans une question : 3 produits au plus (jumeaux.js MAX_PRODUITS)
 const ESSAIS_DEFAUT = 3, ESSAIS_MIN = 2;
@@ -141,8 +140,9 @@ function decider({ p, jumeaux, premiere, seconde } = {}) {
 function creerFournisseur({ recadrer, lecteur, maxEssais, parallele } = {}) {
     const essaisMax = bornerEssais(maxEssais);
     return async function seconde({ image, corps, compteur, signal } = {}) {
-        // l'option explicite prime ; sinon le drapeau d'environnement (seul « 1 » allume), relu à chaque lecture
-        const enParallele = parallele === undefined ? TC.reglages(process.env).secondeParallele : parallele === true;
+        // l'option explicite prime ; sinon le drapeau d'environnement (seul « 1 » allume), relu à chaque lecture. Lu ICI et non par temps-chaine.js::reglages (même règle, une ligne) :
+        // ce module n'importe que scoring (test-seconde-lecture-image 5a) ; test-seconde-parallele.js tient les deux lectures d'accord.
+        const enParallele = parallele === undefined ? process.env.V2_TC_SECONDE_PARALLELE === '1' : parallele === true;
         const c = compteur && typeof compteur === 'object' ? compteur : { appels: 0 };
         const essais = [];
         // TOUR 1 (I-2) : AUCUN téléchargement. L'image est fournie par l'appelant (des octets) ; sans elle, pas de seconde lecture et aucun appel.
