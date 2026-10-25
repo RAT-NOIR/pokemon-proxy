@@ -501,7 +501,7 @@ const ligneMasaki = (idProduct, slugSet, o = {}) => ({ _id: `12097|${idProduct}`
 const etatMasaki = (lignes, images = [oriCLL()], o = {}) => ({ ...etat(lignes, [carte(images, 12097)]), ...o });
 t('L1 : la liste fermée à origine explicite est exactement 744655 (CLK) et 743194 (CLF), origine carte 12097 / CLL / n°030 / artofpkm/677/30.webp (produit 744621)', () => {
     assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES).sort(), [CLF, CLK].sort());
-    assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLK]), ['744655']); assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLF]), ['743194']);
+    assert.strictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLK]).length, 9); assert.strictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLF]).length, 10); assert(E.ORIGINES_EXPLICITES[CLK][744655] && E.ORIGINES_EXPLICITES[CLF][743194]);   // L1b : 19 produits, dont les deux Masaki
     for (const o of [E.ORIGINES_EXPLICITES[CLK][744655], E.ORIGINES_EXPLICITES[CLF][743194]]) assert.deepStrictEqual({ ...o }, { carteId: 12097, setOrigine: CLL, numero: '030', cleR2: 'artofpkm/677/30.webp', produitOrigine: 744621 });
     assert.throws(() => { 'use strict'; E.ORIGINES_EXPLICITES[CLK][1] = {}; }); assert.throws(() => { 'use strict'; E.ORIGINES_EXPLICITES[CLK][744655].cleR2 = 'x'; });
     assert.strictEqual(E.PERIMETRE.length, 9); assert.deepStrictEqual(Object.keys(E.SETS_BORNES), [SEA]);
@@ -518,7 +518,7 @@ t('L1 : un produit de CLK/CLF reçoit UNE entrée empruntée, depuis l\'origine 
         assert.strictEqual(e.cleR2, 'artofpkm/677/30.webp'); assert.strictEqual(e.w, 1432); assert.strictEqual(e.h, 2000); assert.strictEqual(e.langue, 'ja');
         assert.strictEqual(e.imageEmprunteeTirage, true); assert.strictEqual(e.source, 'emprunt'); assert.strictEqual(e.lot, 'emprunt-2026-10'); assert(!('tamponNonRepresente' in e)); assert.strictEqual(e.numero, null);
         assert.deepStrictEqual(e.vignette, oriCLL().vignette);
-        assert.deepStrictEqual(Object.keys(e).sort(), Object.keys(plan(etatSEA([ligneSEA(901074)])).ajouts[0].entree).sort());
+        assert.deepStrictEqual(Object.keys(e).sort(), [...Object.keys(plan(etatSEA([ligneSEA(901074)])).ajouts[0].entree), 'differenceEmprunt'].sort());   // L1b : le seul champ de plus est le motif autre-tirage
     }
     assert.deepStrictEqual(p.ajouts.map(a => a.set).sort(), [CLF, CLK].sort());
     assert.strictEqual(E.operationsVersMongo(p).length, 2); assert.strictEqual(p.horsPerimetre, 0);
@@ -555,6 +555,40 @@ t('L1 : produitsHorsChamp nomme un produit de CLK hors liste ; le plan réel n\'
     assert.deepStrictEqual(E.produitsHorsChamp(plan(etatMasaki([ligneMasaki(744655, CLK), ligneMasaki(5, CLK, { _id: 'z' })]))), []);
 });
 
+// ── API-52 L1b (25/10, décision du testeur) : les 19 produits CLF/CLK, motif « autre tirage » (et non « tampon »), liste fermée à origine explicite PAR PRODUIT
+const CLK_IDS = [744643, 744644, 744645, 744647, 744648, 744649, 744653, 744654, 744655], CLF_IDS = [743182, 743183, 743184, 743185, 743186, 743187, 743188, 743191, 743193, 743194];
+const JUMEAUX = { 24167: ['019', 744610], 148517: ['020', 744611], 15638: ['021', 744612], 43839: ['022', 744613], 25165: ['023', 744614], 15381: ['024', 744615], 17965: ['025', 744616], 29870: ['028', 744619], 248285: ['029', 744620], 12097: ['030', 744621] };
+const CARTE_DE = { 744643: 24167, 744644: 148517, 744645: 15638, 744647: 25165, 744648: 15381, 744649: 17965, 744653: 29870, 744654: 248285, 744655: 12097, 743182: 24167, 743183: 148517, 743184: 15638, 743185: 43839, 743186: 25165, 743187: 15381, 743188: 17965, 743191: 29870, 743193: 248285, 743194: 12097 };
+t('L1b : la liste fermée est exactement les 19 produits (9 CLK, 10 CLF) ; chaque origine = carte du produit, CLL, numéro du jumeau CLL, artofpkm/677/<n>.webp, produit CLL jumeau ; 606901 EXP. ALL n\'en est pas', () => {
+    assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLK]).map(Number).sort(), [...CLK_IDS].sort()); assert.deepStrictEqual(Object.keys(E.ORIGINES_EXPLICITES[CLF]).map(Number).sort(), [...CLF_IDS].sort());
+    for (const [set, ids] of [[CLK, CLK_IDS], [CLF, CLF_IDS]]) for (const id of ids) {
+        const [num, jumeau] = JUMEAUX[CARTE_DE[id]];
+        assert.deepStrictEqual({ ...E.ORIGINES_EXPLICITES[set][id] }, { carteId: CARTE_DE[id], setOrigine: CLL, numero: num, cleR2: `artofpkm/677/${Number(num)}.webp`, produitOrigine: jumeau }, String(id));
+    }
+    assert.strictEqual(E.dansLeChamp(CLK, 606901), false); assert.strictEqual(E.dansLeChamp(CLF, 606901), false); assert.strictEqual(E.dansLeChamp(CLK, 744646), false);   // VS Seeker CLK a déjà son entrée : hors liste
+});
+t('L1b : chaque entrée porte differenceEmprunt « autre-tirage », PAS de tamponNonRepresente, et un languePreuve qui dit « autre tirage » sans « tampon »', () => {
+    const p = plan(etatMasaki([ligneMasaki(744655, CLK), ligneMasaki(743194, CLF)]));
+    assert.strictEqual(p.ajouts.length, 2);
+    for (const a of p.ajouts) { const e = a.entree; assert.strictEqual(e.differenceEmprunt, 'autre-tirage'); assert(!('tamponNonRepresente' in e)); assert(/autre tirage/.test(e.languePreuve) && /code de deck différent/.test(e.languePreuve) && !/tampon/i.test(e.languePreuve), e.languePreuve); assert.strictEqual(e.imageEmprunteeTirage, true); assert.strictEqual(e.langue, 'ja'); }
+    assert.strictEqual(E.MOTIF_AUTRE_TIRAGE, 'autre-tirage');
+});
+t('L1b : aucune entrée Prize Pack / Battle Academy / Trick or Trade / Southeast-Asia ne change (ni differenceEmprunt, ni languePreuve)', () => {
+    const p = plan(etat([ligne(10, PP), ligne(11, BA, { _id: '1|11' })])); const s = plan(etatSEA(LES_TROIS.map(id => ligneSEA(id)))); const tt = plan(etatToT([ligneToT(20)]));
+    for (const a of [...p.ajouts, ...s.ajouts, ...tt.ajouts]) { assert(!('differenceEmprunt' in a.entree), a.set); assert.strictEqual(a.entree.languePreuve, 'image du tirage normal empruntée (tampon non représenté)'); }
+});
+t('L1b : la garde de mention ne nomme PAS les entrées autre-tirage ; elle nomme toujours les autres emprunts sans mention ; produitsMentionEnAttente compte les premières', () => {
+    const p = { ajouts: [{ carteId: 1, set: CLK, produits: [744655, 744654], entree: { differenceEmprunt: 'autre-tirage' } }, { carteId: 2, set: SEA, produits: [901074], entree: {} }] };
+    assert.deepStrictEqual(E.produitsSansMention(p, () => null), [901074]);
+    assert.deepStrictEqual(E.produitsSansMention(p, () => 'tampon non représenté'), []);
+    assert.deepStrictEqual(E.produitsMentionEnAttente(p), [744655, 744654]);
+    assert.deepStrictEqual(E.produitsMentionEnAttente({ ajouts: [] }), []);
+});
+t('L1b : le script imprime « mention en attente du site (autre tirage) : N produits » et garde l\'arrêt pour les autres emprunts', () => {
+    const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
+    assert(/mention en attente du site \(autre tirage\) : \$\{enAttente\.length\} produits/.test(src));
+    assert(/if \(sansMention\.length\) \{[^\n]*process\.exitCode = 1; return;/.test(src));
+});
 t('le script ne contient aucun vrai chemin du testeur dans ce banc et n\'ouvre aucun réseau', () => {
     const fs = require('fs');
     const src = fs.readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8') + fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'images-empruntees.js'), 'utf8');
