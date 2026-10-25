@@ -84,6 +84,7 @@ function sceller(e, secret) {
     return Buffer.concat([corps, hmac(secret, corps)]);
 }
 
+const LIGNES = new WeakMap();                                                      // SUR-PAR-IMAGE : clé -> ligne, par index, bâtie à la demande
 class IndexEmpreintes {
     constructor({ cles, m16, contexteG }) {
         this.cles = cles; this.mat16 = m16; this.contexteG = contexteG; this.n = cles.length;
@@ -95,6 +96,24 @@ class IndexEmpreintes {
         const n = this.n, m = this.mat16, s = new Float64Array(n);
         for (let r = 0, b = 0; r < n; r++, b += DIM) { let d = 0; for (let j = 0; j < DIM; j++) d += LUT[m[b + j]] * q[j]; s[r] = d; }
         return s;
+    }
+    /**
+     * SUR-PAR-IMAGE — les cosinus (non arrondis) de q avec les lignes de `cles` : null pour une clé absente de l'index. La carte clé -> ligne est bâtie à la PREMIÈRE demande (jamais pour un index que personne
+     * n'interroge ainsi) et gardée hors de l'objet ; le calcul est celui de _sims (même table fp16, même produit scalaire).
+     */
+    similarites(q, cles) {
+        if (!(q instanceof Float32Array) || q.length !== DIM) throw Object.assign(new Error('vecteur de recherche : 256 flottants attendus'), { code: 'ENTREE_INDEX' });
+        if (!Array.isArray(cles)) throw Object.assign(new Error('clés : un tableau attendu'), { code: 'ENTREE_INDEX' });
+        let lignes = LIGNES.get(this);
+        if (!lignes) { lignes = new Map(); for (let i = 0; i < this.n; i++) lignes.set(this.cles[i], i); LIGNES.set(this, lignes); }
+        const m = this.mat16;
+        return cles.map(c => {
+            const r = typeof c === 'string' ? lignes.get(c) : undefined;
+            if (r === undefined) return null;
+            let d = 0; const b = r * DIM;
+            for (let j = 0; j < DIM; j++) d += LUT[m[b + j]] * q[j];
+            return d;
+        });
     }
     /** Le meilleur cosinus (non arrondi) : la plausibilité du vecteur. */
     meilleurCosinus(q) { const s = this._sims(q); let b = -Infinity; for (let r = 0; r < s.length; r++) if (s[r] > b) b = s[r]; return b; }

@@ -169,6 +169,7 @@ const { col } = require('../db');
 const { choixPour } = require('../choix');
 const SL = require('./seconde-lecture');
 const { consulterLectureTampon } = require('./lecture-tampon-route');       // F1-TAMPON : la décision vit dans son module (aucun appel réseau, aucun téléchargement)
+const { consulterSurParImage } = require('./sur-par-image-route');         // SUR-PAR-IMAGE : la décision vit dans son module (pure sur le vecteur de l'extension, aucun appel réseau)
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
@@ -453,7 +454,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: natureDuMotif(motif) });
@@ -555,6 +556,18 @@ function traiterIdentifier(cfg, deps = {}) {
                             if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
                         }
                     }
+                    // SUR-PAR-IMAGE : une question que rien n'a tranchée, relue par le vecteur de l'extension (derrière V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION). Jamais quand la règle G a déjà changé le résultat ou
+                    // contredit la chaîne (deux sources en conflit ne donnent pas un sûr), jamais sur autre chose qu'une question. La réponse d'avant reste si la preuve n'est pas faite.
+                    if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence)) {
+                        try {
+                            const si = await consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                                marquesLues: traceTampon && Array.isArray(traceTampon.marques) ? traceTampon.marques : null, journal: journalErreur });
+                            if (si) {
+                                traceImage = si.trace;
+                                if (si.resultat) { resultat = si.resultat; empreinteInfo = { public: { utilisee: true, code: null }, influence: true, promotion: false, lectureConcordante: false }; }
+                            }
+                        } catch (e) { journalErreur('sur par l\'image', e); }
+                    }
                 }
                 // CRITERE-A (relecture r1, C1) : une AFFIRMATION qui remplace une question que la CHAÎNE a déjà réservée (voie « candidat unique » : poserQuestion avant l'adaptateur) règle cette réservation
                 // comme une RÉPONSE par ce candidat — le chemin existant du grand livre (`argent.repondreQuestion` : en-attente -> repondue, réserve -> débité) — sinon la réponse dit « débité », le livre
@@ -603,7 +616,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}) };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}) };
             });
             }
         } catch (e) {
@@ -671,6 +684,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(sortie.motif ? { motifJumeaux: sortie.motif } : {}),                    // JUMEAU-V2 : le motif distinct d'un introuvable de la garde (jamais servi au client : le contrat public ne change pas)
                 ...(sortie.secondeLecture ? { secondeLecture: sortie.secondeLecture } : {}),     // SECONDE-LECTURE : ce qu'elle a COÛTÉ (appels) et son issue — interne, jamais servi
                 ...(sortie.lectureTampon ? { lectureTampon: sortie.lectureTampon } : {}),        // F1-TAMPON : idem pour la lecture du tampon
+                ...(sortie.surParImage ? { surParImage: sortie.surParImage } : {}),              // SUR-PAR-IMAGE : l'issue de la règle (sûr, se tait + motif) — interne, jamais servie
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
                 ...(sortie.empreinte ? { empreinteExtension: { utilisee: sortie.empreinte.public.utilisee, code: sortie.empreinte.public.code, influence: sortie.empreinte.influence, promotion: sortie.empreinte.promotion, lectureConcordante: sortie.empreinte.lectureConcordante, modele: cfg.modeleEmpreinte ? cfg.modeleEmpreinte.id : null } } : {}),

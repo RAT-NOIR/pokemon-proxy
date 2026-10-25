@@ -74,7 +74,7 @@ function partages(avant, apres, signes) {
     for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: 990001, codeSet: 'PBL', apprisLe: new Date() });
     for (const id of [A.ID_A, A.ID_B, A.ID_P]) await semer(id, '001');
-    VB.installer(VIS);
+    VB.installer(VIS, [], { emprunts: true });
     await A.preparer();
     A.installerIndex();
 

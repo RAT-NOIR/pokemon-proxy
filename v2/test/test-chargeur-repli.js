@@ -95,7 +95,7 @@ const { lireEntree } = require('../identifier/visuels');
     H.v('3d. tampon non séparé : le tampon que le scan ne montre pas est porté', [e(3101).partageeTamponNonSepare, e(3101).tamponNonRepresente, e(3101).produitsPartages], [true, 'Staff', [3101, 3102]]);
     H.v('3e. paire SÉPARÉE : false est gardé (jamais ramené à null), la liste aussi', [e(3201).partageeTamponNonSepare, e(3201).tamponNonRepresente, e(3202).produitsPartages], [false, 'Play! Pokémon', [3201, 3202]]);
     H.v('3f. la variante est portée avec sa preuve (staff, normale) ; sans variantePreuve (3202 jumbo) : null et comptée (m3) ; inconnue ("zzz") : null', [e(2301).variante, e(2302).variante, e(3101).variante, e(3102).variante, e(3202).variante, d.varianteSansPreuve], ['staff', null, 'normale', 'staff', null, 1]);
-    H.v('3g. un produit ordinaire : cinq champs nuls', [e(1001).partageeHoloNonHolo, e(1001).partageeTamponNonSepare, e(1001).produitsPartages, e(1001).tamponNonRepresente, e(1001).basseDefinition, e(1001).variante], [null, null, null, null, null, null]);
+    H.v('3g. un produit ordinaire : quatre champs nuls, la variante nulle, et basseDefinition FALSE (largeur de l original connue et au-dessus du seuil : MARQUE-EMPRUNT, trois valeurs)', [e(1001).partageeHoloNonHolo, e(1001).partageeTamponNonSepare, e(1001).produitsPartages, e(1001).tamponNonRepresente, e(1001).basseDefinition, e(1001).variante], [null, null, null, null, false, null]);
     H.v('3h. compteurs nommés : 5 produits partagés, dont 2 holo/non-holo (+ 1 hors liste servi sans partage) ; 4 tampons ; 3 basse définition',
         [d.marquees.partages, d.marquees.holo, d.marquees.tampon, d.marquees.basse], [6, 2, 4, 2]);
     const lues = r.entrees.map(x => lireEntree(JSON.parse(JSON.stringify(x))));

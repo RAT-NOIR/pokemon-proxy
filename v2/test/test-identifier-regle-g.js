@@ -10,7 +10,7 @@ const { decisionRegleG, regleGActive } = require('../identifier/regle-g');
 const ctxG = (produits, extra = {}) => G.contexte({ groupe: {}, carte: { v1: [1], v2: [2], v3: [3] }, invisibles: {}, produits, ...extra });
 const ligne = (top, essai = 0) => ({ top, essai });
 const mes = { comparerPaire: () => [0, 1], scoresZones: () => ({ haut: 1, bas: 1, inliers: 100 }) };
-const dec = (produits, top, extra) => decisionRegleG({ ligne: ligne(top), nEssais: 1, mesures: mes, contexteG: ctxG(produits, extra) });
+const dec = (produits, top, extra) => decisionRegleG({ ligne: ligne(top), nEssais: 1, mesures: mes, contexteG: ctxG(produits, extra), emprunte: () => false });
 const leve = f => { try { f(); return false; } catch { return true; } };
 const avant = JSON.stringify(G.SEUILS_G);
 
@@ -92,7 +92,7 @@ let fixturesManquantes = false;       // bilan() remet process.exitCode à 0 qua
                 };
                 let d, w;
                 try { d = G.decider(ctx, l, l.nEssais, mesures, F.seuils); } catch { hors++; continue; }
-                w = decisionRegleG({ ligne: l, nEssais: l.nEssais, mesures, contexteG: ctx }, F.seuils);
+                w = decisionRegleG({ ligne: l, nEssais: l.nEssais, mesures, contexteG: ctx, emprunte: () => false }, F.seuils);
                 n++;
                 // Attendu écrit depuis la sortie de decider seul : affirme -> affirmee ; 2 ou 3 indiscernables ou une question -> question
                 // (mêmes ids, même ordre) ; plus de 3 indiscernables -> introuvable photo-illisible ; sinon null (chaîne héritée).

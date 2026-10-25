@@ -6,8 +6,8 @@ const F = require('../chargeur/format'); const E = require('../chargeur/etat'); 
 
 /** Une entrée comme les bancs la semaient dans l'ancienne collection `visuels` (mêmes champs, mêmes valeurs par défaut). */
 const doc = (id, o = {}) => ({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante: 'normale', setNom: 'Banc Set', lien: null, ...o });
-function construire(entrees, liens = []) {
-    const b = creerConstructeur();
+function construire(entrees, liens = [], opts = {}) {
+    const b = creerConstructeur(opts.emprunts ? { emprunts: true } : {});          // MARQUE-EMPRUNT : { emprunts: true } écrit la colonne (vide : le banc déclare « aucun visuel emprunté ») ; sans, l'archive est « d'avant » (inconnu = emprunté pour les règles d'image)
     for (const e of entrees) b.entree(e);
     for (const [set, cle, ids] of liens) b.lien(set, cle, ids);
     return b.finir();
@@ -22,5 +22,5 @@ function fichier(entrees, liens = []) {
     return p;
 }
 const vider = () => E.vider();
-const installer = (entrees, liens = []) => { const v = construire(entrees, liens); E.installer(v); return v; };
+const installer = (entrees, liens = [], opts = {}) => { const v = construire(entrees, liens, opts); E.installer(v); return v; };
 module.exports = { doc, construire, fichier, installer, vider };

@@ -53,6 +53,28 @@ function lireEnveloppe(corps, nPhotos) {
 }
 
 /**
+ * Les points 2 à 4 ci-dessus, UNE seule fois pour tous ceux qui lisent le vecteur de l'extension (le fournisseur de la règle G, et SUR-PAR-IMAGE) : l'enveloppe, la version du modèle, l'index en place, UN vecteur
+ * (celui de la photo de plus petit index) vérifié, et ses 10 voisins. Aucun calcul de plus, aucune carte : ce que chacun en fait lui revient. Ne lève jamais.
+ * @returns {{ok:true, e0: object, v: {vecteur: Float32Array, meilleurCosinus: number}, trouve: {top: Array, meilleur: number}, courant: object} | {ok:false, code: string}}
+ */
+function preparerVecteur({ entree, voulu, etat }) {
+    try {
+        const env = entree && entree.empreintes;
+        if (!env) return echec('invalide');
+        if (!voulu || !env.modele || env.modele.id !== voulu.id || env.modele.sha256 !== voulu.sha256) return echec('modele-inconnu');
+        if (env.rejet || !Array.isArray(env.entrees) || env.entrees.length === 0) return echec('invalide');
+        const courant = etat.courante();
+        if (!courant || !courant.index || !courant.meta || !courant.meta.modele || courant.meta.modele.id !== voulu.id || courant.meta.modele.sha256 !== voulu.sha256) return echec('indisponible');
+        const e0 = env.entrees.reduce((a, b) => (b.photo < a.photo ? b : a));
+        if (e0.invalide) return echec('invalide');                                          // M4 : l'entrée jugée porte une clé inconnue ⇒ rejetée, la règle G se tait                // UN seul vecteur est jugé : la photo de plus petit index
+        let trouve = null;
+        const v = E.verifier(e0.vecteur, q => { trouve = courant.index.voisins(q, 10); return trouve.meilleur; });
+        if (!v.ok || !trouve) return echec('invalide');
+        return { ok: true, e0, v, trouve, courant };
+    } catch { return echec('indisponible'); }
+}
+
+/**
  * @param {{cfg: object, etat?: object, zones?: object, pixels?: {photo: Function, scan: Function}}} o
  *   cfg.modeleEmpreinte : { id, sha256 } — LA version attendue ; etat : le pointeur de l'index (etat-empreintes.js) ; zones : ratmarket/zones.js (injectable) ;
  *   scan : (cle) → Buffer|null — les scans de l'ARCHIVE (jamais la photo de l'utilisateur) ; la photo redressée est la CARTE que l'extension joint à l'entrée (carte-redressee.js), et elle seule.
@@ -102,20 +124,13 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
 
     return async function voisinsEmpreinte({ entree, scanId } = {}) {
         try {
-            const env = entree && entree.empreintes;
-            if (!env) return echec('invalide');
-            const voulu = attendu();
-            if (!voulu || !env.modele || env.modele.id !== voulu.id || env.modele.sha256 !== voulu.sha256) return echec('modele-inconnu');
-            if (env.rejet || !Array.isArray(env.entrees) || env.entrees.length === 0) return echec('invalide');
-            const courant = etat.courante();
-            if (!courant || !courant.index || !courant.meta || !courant.meta.modele || courant.meta.modele.id !== voulu.id || courant.meta.modele.sha256 !== voulu.sha256) return echec('indisponible');
-            const e0 = env.entrees.reduce((a, b) => (b.photo < a.photo ? b : a));
-            if (e0.invalide) return echec('invalide');                                          // M4 : l'entrée jugée porte une clé inconnue ⇒ rejetée, la règle G se tait                // UN seul vecteur est jugé : la photo de plus petit index
-            let trouve = null;
-            const v = E.verifier(e0.vecteur, q => { trouve = courant.index.voisins(q, 10); return trouve.meilleur; });
-            if (!v.ok || !trouve) return echec('invalide');
+            const p = preparerVecteur({ entree, voulu: attendu(), etat });
+            if (!p.ok) return echec(p.code);
+            const { e0, v, trouve, courant } = p;
             const ligne = { top: trouve.top, essai: e0.redressee ? 1 : 0 };
-            const ctx = courant.index.contexteG;
+            // MARQUE-EMPRUNT : le contexte lu par la garde des zones (les mesures demandées) ET par la décision est le MÊME : les produits dont le visuel est emprunté y sont des restes (sans visuel propre) ; sinon la règle
+            // demanderait à la décision des mesures que la boucle ci-dessous n'a jamais faites. Version en place ; sans version, le contexte tel quel.
+            const ctx = require('./emprunt').contexteDeLaRegle(courant.index.contexteG);
             // 🔑 LA CARTE : sans carte autorisée (JPEG 420 × 587, <= 200 Ko, celle de la MÊME entrée que le vecteur), la garde des zones ne peut pas conclure : G se tait pour cette photo, même si aucune mesure n'était demandée
             const carte = await CR.valider(e0.carte);
             if (!carte.ok) return { ...echec('muette'), raison: carte.code };
@@ -159,4 +174,4 @@ function scanArchivePublic({ hote, fetchFn = (typeof fetch === 'function' ? fetc
     };
 }
 
-module.exports = { lireEnveloppe, creerFournisseurEmpreinte, scanArchivePublic, CODES, ENTREES_MAX, VECTEUR_MAX, BUDGET_MESURES, FILE_MESURES_MAX, DELAI_MESURES_MS, enFile: () => enFileMesures };
+module.exports = { lireEnveloppe, preparerVecteur, creerFournisseurEmpreinte, scanArchivePublic, CODES, ENTREES_MAX, VECTEUR_MAX, BUDGET_MESURES, FILE_MESURES_MAX, DELAI_MESURES_MS, enFile: () => enFileMesures };
