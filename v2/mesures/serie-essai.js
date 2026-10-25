@@ -9,6 +9,9 @@
 //     POST /api/compte/code → POST /api/compte/lier (le jeton d'installation lié au compte administrateur). Ses scans sont marqués « banc » au journal du service ;
 //   · un plafond de dépense DUR (--plafond-usd=, obligatoire) tenu dans un carnet sur disque (--carnet=, une ligne JSON par scan, écrite avant le scan suivant) : le total déjà inscrit au carnet COMPTE (le plafond vaut pour la
 //     somme de toutes les séries du même carnet) ; avant chaque scan, si total + coût estimé dépasse le plafond, la série s'ARRÊTE (jamais un scan « qui passe juste ») ;
+//   · le corps de /api/identifier est celui du CONTRAT 2 : `contrat: 2` (sans lui l'aiguilleur renvoie vers la route héritée : 401), title, description, prixVinted, devise, langueInterface ; le banc le juge par `verifierEntree` de la production ;
+//   · GARDE ANTI-VINTED : l'adresse d'image de l'annonce est factice (exigée par la forme) ; un scan ne compte que si `analyse.photoRecue === true`. Sinon (champ absent, faux, pas d'`analyse`) la série S'ARRÊTE à l'instant : le serveur a pu télécharger l'adresse chez Vinted ;
+//   · le carnet porte, en plus de l'estimation, une ligne « résultat » par scan (statut HTTP, analyse présente, photo rattachée), sans coût ;
 //   · une série se rejoue à l'identique : l'échantillon est tiré d'une graine écrite (--graine=) sur les lignes triées par clé, dans cet ordre-là.
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
 //         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
@@ -93,7 +96,9 @@ function ouvrirCarnet(fichier, { plafondUsd, coutEstimeUsd }) {
             const cout = coutEstimeUsd;
             fs.appendFileSync(fichier, JSON.stringify({ ...entree, coutUsd: cout, totalApresUsd: Math.round((total + cout) * 1e6) / 1e6, plafondUsd }) + '\n');
             total += cout;
-        }
+        },
+        /** Une ligne « résultat » (statut HTTP, analyse présente, photo rattachée) : sans coût, elle n'ajoute rien à la dépense. */
+        noter(entree) { fs.appendFileSync(fichier, JSON.stringify(entree) + '\n'); }
     };
 }
 
@@ -212,11 +217,16 @@ async function serie(o, deps = {}) {
             const p = nav[cp];
             const entree = { photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: p.redressee === true };
             if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
-            const corps = { versionExtension: ping.corps.versionMinExtension, marche: 'vinted.fr', title: '', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
+            // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
+            const corps = { contrat: 2, versionExtension: ping.corps.versionMinExtension, marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
             carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
             const id = await appeler('/api/identifier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${stamp}` }, body: JSON.stringify(corps) });
+            const analyse = id.corps && typeof id.corps === 'object' && id.corps.analyse && typeof id.corps.analyse === 'object' ? id.corps.analyse : null;
+            carnet.noter({ serie: serieId, rang, cle: l.cle, resultat: { statutHttp: id.statut, analyse: analyse !== null, photoRecue: analyse !== null && analyse.photoRecue === true } });   // ce que la réponse permet de lire ; jamais un coût
             if (id.statut === 429) throw new Arret(`429 sur /api/identifier (reessayerDans ${id.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
             if (id.statut !== 200 || !id.corps) throw Object.assign(new Error('identifier'), { code: `identifier-${id.statut}` });
+            // GARDE ANTI-VINTED, écrite par ce qu'elle AUTORISE : un scan ne compte que si le serveur dit avoir REÇU la photo de ce scan. Sinon `imagesDeLaChaine` retombe sur l'adresse factice de l'annonce et la ferait télécharger chez Vinted : jamais.
+            if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');
             issue = id.corps;
         } catch (e) {
             if (e instanceof Arret) { arret = e.raison; break; }
