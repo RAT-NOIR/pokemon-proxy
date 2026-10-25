@@ -15,7 +15,7 @@ function comparerDe(table) { return async (x, y) => { const k = [x.id, y.id].sor
 const produit = { langue: 'fr', codeSet: 'PAL', numero: '012', tampon: null };
 const T = (o = {}) => ({ langue: 'fr', codeSet: 'PAL', numero: '12', tampon: null, ...o });
 const cand = (id, source, tirage = T()) => ({ id, source, tirage });
-const scan = (id) => ({ id, source: `scan-${id}` });
+const scan = (id, tirage = T(), source = `scan-${id}`) => ({ id, source, tirage });
 const decider = (candidats, scansConformes, table) => C.deciderVisuel({ produit, candidats, scansConformes }, { comparer: comparerDe(table) });
 
 (async () => {
@@ -57,7 +57,13 @@ const decider = (candidats, scansConformes, table) => C.deciderVisuel({ produit,
     r = await decider([cand('a', 's1', T({ numero: '012' })), cand('b', 's2', T({ numero: '12' }))], [], { 'a|b': STRICT });
     v('9b. « 012 » et « 12 » concordent après cleNumero', r.decision, 'ecrire');
     r = await decider([cand('a', 's1', T({ numero: null, codeSet: null })), cand('b', 's2', T({ numero: null, codeSet: null }))], [], { 'a|b': STRICT });
-    v('10. numéro et code absents côté candidat : ne contredit pas, compté', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
+    v('10. langue seule, ni numéro ni code : AUCUN accord positif, exclu (la langue est nécessaire, pas suffisante)', [r.decision, r.motif, r.preuve.exclusTirage], ['trou', 'tirage-different', 2]);
+    r = await decider([cand('a', 's1', T({ numero: null })), cand('b', 's2', T({ numero: null }))], [], { 'a|b': STRICT });
+    v('10b. code de set égal, numéro absent : admis (accord positif sur le code)', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
+    r = await decider([cand('a', 's1', T({ codeSet: null })), cand('b', 's2', T({ codeSet: null }))], [], { 'a|b': STRICT });
+    v('10c. numéro égal, code absent : admis (accord positif sur le numéro)', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
+    r = await decider([cand('a', 's1', T({ codeSet: ' pal ' })), cand('b', 's2', T({ numero: null, codeSet: 'Pal' }))], [], { 'a|b': STRICT });
+    v('10d. code de set normalisé (casse, espaces)', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
     r = await decider([cand('a', 's1'), cand('b', 's2', T({ codeSet: 'OBF' }))], [], { 'a|b': STRICT });
     v('11. code de set contredit : exclu', r.preuve.exclusTirage, 1);
     r = await C.deciderVisuel({ produit: { ...produit, tampon: 'prerelease' }, candidats: [cand('a', 's1', T({ tampon: 'prerelease' })), cand('b', 's2', T({ tampon: null }))], scansConformes: [] }, { comparer: comparerDe({ 'a|b': STRICT }) });
@@ -67,6 +73,45 @@ const decider = (candidats, scansConformes, table) => C.deciderVisuel({ produit,
     v('12b. produit SANS tampon : un candidat qui DÉCLARE un tampon est exclu', [r.decision, r.motif, r.preuve.exclusTirage], ['trou', 'tirage-different', 1]);
     r = await decider([cand('a', 's1', T({ tampon: undefined })), cand('b', 's2', T({ tampon: null }))], [], { 'a|b': STRICT });
     v('12c. produit sans tampon : des candidats qui ne déclarent rien restent admis', [r.decision, r.preuve.exclusTirage], ['ecrire', 0]);
+
+    // ── scans conformes : même tirage exigé ──
+    r = await decider([cand('a', 's1')], [scan('z', T({ langue: 'en' }))], { 'a|z': STRICT });
+    v('13a. scan conforme d\'une AUTRE langue, strict avec un candidat : pas d\'écriture', [r.decision, r.preuve.scansExclus], ['trou', 1]);
+    r = await decider([cand('a', 's1')], [scan('z', T({ codeSet: 'OBF' }))], { 'a|z': STRICT });
+    v('13b. scan conforme d\'un AUTRE set : pas d\'écriture', [r.decision, r.preuve.scansExclus], ['trou', 1]);
+    r = await decider([cand('a', 's1')], [scan('z', undefined)].map(s => ({ ...s, tirage: undefined })), { 'a|z': STRICT });
+    v('13c. scan conforme SANS tirage : ignoré et compté', [r.decision, r.preuve.scansExclus], ['trou', 1]);
+    r = await decider([cand('a', 's1')], [scan('z', T({ numero: null, codeSet: null }))], { 'a|z': STRICT });
+    v('13d. scan conforme sans accord positif (langue seule) : ignoré', [r.decision, r.preuve.scansExclus], ['trou', 1]);
+
+    // ── indépendance : source normalisée ──
+    r = await decider([cand('a', 'a'), cand('b', 'A  ')], [], { 'a|b': STRICT });
+    v('14a. « a » et « A  » sont la même source : pas indépendants', [r.decision, r.motif], ['trou', 'une-seule-source']);
+    r = await decider([cand('a', 's1'), cand('b', undefined)], [], { 'a|b': STRICT });
+    v('14b. source absente : candidat inadmissible, compté', [r.decision, r.preuve.sourcesInadmissibles], ['trou', 1]);
+    r = await decider([cand('a', 's1'), cand('b', '   ')], [], { 'a|b': STRICT });
+    v('14c. source vide : candidat inadmissible', [r.decision, r.preuve.sourcesInadmissibles], ['trou', 1]);
+    r = await decider([cand('a', 's1')], [scan('z', T(), 'S1 ')], { 'a|z': STRICT });
+    v('14d. scan conforme de la MÊME source qu\'un candidat : pas indépendant', r.decision, 'trou');
+    r = await decider([cand('a', 's1')], [scan('z', T(), undefined)].map(s => ({ ...s, source: undefined })), { 'a|z': STRICT });
+    v('14e. scan conforme sans source : inadmissible, compté', [r.decision, r.preuve.scansExclus], ['trou', 1]);
+
+    // ── garde des mesures : seul un NOMBRE FINI est une mesure ──
+    const avec = async (m) => C.deciderVisuel({ produit, candidats: [cand('a', 's1'), cand('b', 's2')], scansConformes: [] }, { comparer: async () => m });
+    for (const m of [{ phash: null, inliers: 99 }, { phash: '', inliers: '99' }, { phash: '0', inliers: 99 }, { phash: 0, inliers: '99' }, { phash: NaN, inliers: 99 }, { phash: 0, inliers: Infinity }, {}]) {
+        r = await avec(m);
+        v(`15. mesure ${JSON.stringify(m)} : jamais « ecrire », trou illisible`, [r.decision, r.motif], ['trou', 'illisible']);
+    }
+    r = await avec({ phash: 0, inliers: 99 });
+    v('15b. mesure numérique valide : écrire', r.decision, 'ecrire');
+
+    // ── mutation : le seuil strict (pHash 2) ne doit pas pouvoir monter sans qu'un test échoue ──
+    for (const m of [{ phash: 3, inliers: 45 }, { phash: 6, inliers: 30 }, { phash: 6, inliers: 45 }, { phash: 2, inliers: 39 }]) {
+        r = await avec(m);
+        v(`16. ${JSON.stringify(m)} sans troisième concordance : à confirmer ou trou, jamais écrire`, r.decision !== 'ecrire', true);
+    }
+    r = await avec({ phash: 3, inliers: 45 }); v('16b. (3, 45) : souple seul → a-confirmer', r.decision, 'a-confirmer');
+    r = await avec({ phash: 6, inliers: 30 }); v('16c. (6, 30) : souple seul → a-confirmer', r.decision, 'a-confirmer');
 
     // ── vraies images : une image IDENTIQUE d'un autre tirage ne passe pas ──
     const l = 300, h = 420, b = Buffer.alloc(l * h * 3, 128);

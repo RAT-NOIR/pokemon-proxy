@@ -72,6 +72,8 @@ async function concordent(a, b, seuils = {}) {
 // CASCADE DE DÉCISION (testeur, 2026-10-25 21:45) — deciderVisuel : aucune E/S, aucune écriture ; elle DÉCIDE, un autre outil écrit.
 // ============================================================
 // SEUILS NOMMÉS. Source des deux : calibrer-concordance.js, 2026-10-25, graine 20261025, 300 paires inter-sources par classe (voir SEUILS plus haut).
+// ⚠️ MARGE : le pHash minimum des négatifs durs (« autre illustration ») vaut 2, ÉGAL au seuil : il n'y a aucune marge sous ce seuil. À (pHash 2, ORB 30) la calibration montre déjà un faux (les paires « autre illustration » à pHash 2 et ORB 35 sont des étiquettes fausses, mais l'instrument ne le sait pas).
+// « 0 faux sur 300 » ne borne le taux de faux qu'à ~1 % (règle de trois : 3/300) : ce n'est PAS un taux nul, d'où les DEUX sources et le tirage vérifié avant l'image.
 const SEUIL_STRICT = { phashMax: 2, inliersMin: 40 };   // retenu par la calibration : 0 faux ordinaire, 0 faux « autre illustration », 169/300 vrais perdus
 const SEUIL_SOUPLE = { phashMax: 6, inliersMin: 30 };   // variante souple de la calibration : 93/300 perdus, 0 faux ordinaire, 2 « autre illustration » apparents = erreurs d'étiquette des sources (ERREURS-SOURCES.md) — d'où la TROISIÈME concordance exigée
 const MOTIFS_TROU = Object.freeze(['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible']);
@@ -81,15 +83,18 @@ const norm = (s) => (s == null || String(s).trim() === '' ? null : String(s).tri
 /**
  * MÊME TIRAGE. Le produit fait foi ; le candidat n'est retenu que s'il est d'accord.
  *  - langue : doit être ÉGALE. Un champ ABSENT (côté candidat OU produit) EXCLUT : « je ne sais pas » n'est pas « oui ».
- *  - numéro, code de set : comparés (cleNumero / minuscules) seulement quand les DEUX côtés les portent. Absent d'un côté = ne contredit pas, mais ne compte pas comme un accord (aucun point n'est gagné).
+ *  - numéro, code de set : comparés (cleNumero / minuscules) quand les DEUX côtés les portent ; une contradiction exclut. Absent d'un côté = ne contredit pas, mais ne compte pas comme un accord. Il faut AU MOINS UN accord positif (numéro égal OU code égal) : langue seule = exclu (décision du coordinateur, 2026-10-25).
  *  - tampon : ÉGAL des deux côtés (décision du coordinateur, 2026-10-25). Produit tamponné : le candidat doit porter le même, muet = exclu. Produit SANS tampon : un candidat qui DÉCLARE un tampon est exclu ; un candidat muet reste admis (la plupart des sources ne déclarent rien).
  *  - réserves acceptées : une troisième concordance vient d'une source distincte des deux premières, reliée à l'une des deux seulement ; deux scans conformes de même source ne sont pas indépendants ; un JPEG q90 d'un aplat synthétique donne pHash 4 (« souple »), le banc utilise donc un WebP lossless pour le cas strict.
  */
 function memeTirage(produit, t = {}) {
     const lp = norm(produit?.langue), lc = norm(t.langue);
     if (!lp || !lc || lp !== lc) return false;
-    if (produit.numero != null && String(produit.numero).trim() !== '' && t.numero != null && String(t.numero).trim() !== '' && cleNumero(produit.numero) !== cleNumero(t.numero)) return false;
-    if (norm(produit.codeSet) && norm(t.codeSet) && norm(produit.codeSet) !== norm(t.codeSet)) return false;
+    const aNum = produit.numero != null && String(produit.numero).trim() !== '' && t.numero != null && String(t.numero).trim() !== '';
+    const aCode = norm(produit.codeSet) && norm(t.codeSet);
+    if (aNum && cleNumero(produit.numero) !== cleNumero(t.numero)) return false;
+    if (aCode && norm(produit.codeSet) !== norm(t.codeSet)) return false;
+    if (!aNum && !aCode) return false;   // la langue est NÉCESSAIRE, pas SUFFISANTE : il faut au moins un accord POSITIF (numéro égal par cleNumero, ou code de set égal)
     if (norm(produit.tampon) !== norm(t.tampon)) return false;   // tampon ÉGAL des deux côtés ; muet des deux côtés (null = null) reste admis
     return true;
 }
@@ -110,13 +115,18 @@ const niveau = (m) => (m.phash <= SEUIL_STRICT.phashMax && m.inliers >= SEUIL_ST
  */
 async function deciderVisuel({ produit, candidats = [], scansConformes = [] }, opts = {}) {
     const comparer = opts.comparer || mesurerParDefaut;
-    const admis = candidats.filter(c => memeTirage(produit, c.tirage));
-    const exclusTirage = candidats.length - admis.length;
-    const preuve = { exclusTirage, candidats: candidats.length, admis: admis.length, scansConformes: scansConformes.length, paires: [] };
-    // nœuds : candidats admis + vrais scans conformes ; chaque nœud a une SOURCE (un scan conforme compte pour sa propre source)
-    const noeuds = [...admis.map((c, i) => ({ ref: c, source: c.source, conforme: false, nom: `c${i}` })), ...scansConformes.map((s, i) => ({ ref: s, source: `scan-conforme:${s.source ?? i}`, conforme: true, nom: `z${i}` }))];
+    // SOURCE normalisée (trim + minuscules) : « a » et « A  » sont la même source. Une source vide, absente ou non textuelle rend le candidat / le scan INADMISSIBLE (compté).
+    const src = (s) => (typeof s === 'string' && s.trim() !== '' ? s.trim().toLowerCase() : null);
+    const sansSource = candidats.filter(c => !src(c.source)).length;
+    const admis = candidats.filter(c => src(c.source) && memeTirage(produit, c.tirage));
+    const exclusTirage = candidats.length - sansSource - admis.length;
+    // un scan conforme est soumis à la MÊME règle que les candidats : source lisible, tirage déclaré et accordé avec le produit ; sinon ignoré et compté
+    const scansAdmis = scansConformes.filter(s => src(s.source) && s.tirage && memeTirage(produit, s.tirage));
+    const preuve = { exclusTirage, sourcesInadmissibles: sansSource, candidats: candidats.length, admis: admis.length, scansConformes: scansAdmis.length, scansExclus: scansConformes.length - scansAdmis.length, paires: [] };
+    // nœuds : candidats admis + scans conformes admis ; la source d'un nœud est sa source BRUTE normalisée (un scan de la même source qu'un candidat n'en est pas indépendant)
+    const noeuds = [...admis.map((c, i) => ({ ref: c, source: src(c.source), conforme: false, nom: `c${i}` })), ...scansAdmis.map((s, i) => ({ ref: s, source: src(s.source), conforme: true, nom: `z${i}` }))];
     if (!candidats.length) return { decision: 'trou', motif: 'aucune-source', preuve };
-    if (!admis.length || (new Set(admis.map(c => c.source)).size < 2 && !scansConformes.length))
+    if (!admis.length || (new Set(admis.map(c => src(c.source))).size < 2 && !scansAdmis.length))
         return { decision: 'trou', motif: exclusTirage ? 'tirage-different' : 'une-seule-source', preuve };
     // arêtes : candidat–candidat de sources différentes, candidat–scan conforme (jamais scan–scan)
     const aretes = []; let illisibles = 0, comparees = 0;
@@ -125,7 +135,8 @@ async function deciderVisuel({ produit, candidats = [], scansConformes = [] }, o
         if (x.conforme && y.conforme) continue;
         if (x.source === y.source) continue;                               // deux fois la même source n'est pas une concordance indépendante
         const m = await comparer(x.ref, y.ref); comparees++;
-        if (!m) { illisibles++; continue; }
+        // GARDE DES MESURES : seul un NOMBRE FINI est une mesure (une chaîne, null, NaN, Infinity n'en sont pas) ; sinon « je ne sais pas », jamais « ecrire »
+        if (!m || typeof m.phash !== 'number' || typeof m.inliers !== 'number' || !Number.isFinite(m.phash) || !Number.isFinite(m.inliers)) { illisibles++; continue; }
         const n = niveau(m); preuve.paires.push({ a: x.nom, b: y.nom, phash: m.phash, inliers: m.inliers, niveau: n });
         if (n !== 'non') aretes.push({ x, y, n });
     }
