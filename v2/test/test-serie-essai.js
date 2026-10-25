@@ -226,15 +226,15 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
         { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' ? { status: 302, json: async () => ({}), headers: { get: () => 'https://evil.fr' } } : null) });
           const r = await essaie(() => S.serie(base({ n: 3 }), deps(s)));
           H.v('une redirection : refusée, jamais suivie', [/redirection/.test(r.ok.arret || ''), s.appels.every(a => a.hote === S.HOTE_ESSAI)], [true, true]); }
-        { const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
+        { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 6 }), deps(s)));
-          H.v('trois erreurs de suite : arrêt (pas six scans payés pour rien)', [nid(s), r.ok.erreurs.length, /3 erreurs de suite/.test(r.ok.arret || '')], [3, 3, true]); }
+          H.v('trois dépôts de photo refusés de suite (rien n\'est envoyé à l\'identification) : arrêt à la troisième erreur comptée', [nid(s), s.appels.filter(a => a.chemin === '/api/photo').length, r.ok.erreurs.length, /3 erreurs de suite/.test(r.ok.arret || '')], [0, 3, 3, true]); }
         { const s = fauxServeur({ avant: a => (a.chemin === '/ping' ? { status: 200, json: async () => ({ ok: true }), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 2 }), deps(s)));
           H.v('un /ping sans versionMinExtension (v2 non annoncée) : arrêt avant toute photo', [/\/ping inattendu/.test(r.arret || ''), s.appels.length], [true, 1]); }
-        { const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' && s.appels.filter(x => x.chemin === '/api/identifier').length === 1 ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
+        { const s = fauxServeur({ avant: a => (a.chemin === '/api/photo' && s.appels.filter(x => x.chemin === '/api/photo').length === 1 ? { status: 500, json: async () => ({}), headers: { get: () => null } } : null) });
           const r = await essaie(() => S.serie(base({ n: 5 }), deps(s)));
-          H.v('une erreur isolée ne coupe pas la série (le compteur de suite repart à zéro)', [r.ok.erreurs.length, r.ok.stats.n, r.ok.arret], [1, 4, null]); }
+          H.v('un dépôt de photo refusé isolé ne coupe pas la série (le compteur de suite repart à zéro)', [r.ok.erreurs.length, r.ok.stats.n, r.ok.arret], [1, 4, null]); }
         // ── 9. le CONTRAT de la production (la première série réelle s'est arrêtée en `identifier-401` : le faux serveur acceptait n'importe quel corps) ──
         { entreesAcceptees = []; const s = fauxServeur(); const r = await S.serie(base({ n: 3 }), deps(s));
           const corpsEnvoyes = s.appels.filter(a => a.chemin === '/api/identifier').map(a => JSON.parse(a.corps));
@@ -243,7 +243,6 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
           H.vrai('   et l\'entrée acceptée porte les photos reçues et l\'empreinte (les deux drapeaux de l\'essai sont allumés)', entreesAcceptees.every(e => e.photoIds.length === 1 && e.empreintes && e.empreintes.rejet === null && e.empreintes.modele && e.empreintes.entrees.length === 1 && !e.empreintes.entrees[0].invalide));
           H.vrai('   les champs que la v2 attend : title, description, prixVinted, devise, langueInterface', corpsEnvoyes.every(c => c.title === '' && c.description === '' && c.prixVinted === null && c.devise === null && c.langueInterface === 'fr')); }
         { const s = fauxServeur(); const r = await essaie(() => S.serie(base({ n: 2 }), deps(s, {})));
-          H.vrai('le faux serveur imite la production : un corps sans `contrat: 2` répond 401', true);
           const sansContrat = await s.fetch('https://' + S.HOTE_ESSAI + '/api/identifier', { method: 'POST', headers: { Authorization: `Bearer ${JETON_LIE}` }, body: JSON.stringify({ imageUrls: ['https://images1.vinted.net/a.jpg'], marche: 'vinted.fr', versionExtension: '2.5.0' }) });
           H.v('   (vérifié sur le faux serveur lui-même)', sansContrat.status, 401); }
         // la GARDE anti-Vinted : un scan ne compte que si `analyse.photoRecue === true` ; tout autre cas arrête la série à l'instant
@@ -252,6 +251,21 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
             const r = await essaie(() => S.serie(b, d));
             H.v(`garde anti-Vinted (${nom}) : la série s'arrête au PREMIER scan, aucun suivant, rien de compté`, [nid(s), r.ok.resultats.length, r.ok.durees.length, /photo non rattachée.*série arrêtée/.test(r.ok.arret || '')], [1, 0, 0, true]);
             H.vrai(`   (${nom}) le message le dit : le serveur a pu retomber sur l'adresse de l'annonce`, /le serveur a pu retomber sur l'adresse de l'annonce/.test(r.ok.arret || '') && d.logs.some(l => /ARRÊT : photo non rattachée/.test(l)));
+        }
+        // APRÈS LE DÉPÔT de la photo, toute issue d'/api/identifier autre que « 200 avec analyse.photoRecue === true » ARRÊTE la série : un seul appel à /api/identifier part, jamais un second
+        const rep = (statut, corps) => ({ status: statut, json: async () => { if (corps === undefined) throw new Error('pas de corps'); return corps; }, headers: { get: n => (n === 'retry-after' ? '30' : null) } });
+        for (const [nom, motif, avant] of [
+            ['500', /identifier-500/, () => rep(500, { success: false })],
+            ['200 sans corps', /identifier-200/, () => rep(200, undefined)],
+            ['200 sans analyse', /photo non rattachée/, () => rep(200, { success: true })],
+            ['429', /429 sur \/api\/identifier/, () => rep(429, { success: false })],
+            ['exception réseau', /exception .* sur \/api\/identifier/, () => { throw new Error('ECONNRESET'); }],
+            ['délai dépassé', /exception TimeoutError sur \/api\/identifier/, () => { throw Object.assign(new Error('délai'), { name: 'TimeoutError' }); }],
+            ['redirection', /redirection/, () => rep(302, {})]]) {
+            const s = fauxServeur({ avant: a => (a.chemin === '/api/identifier' ? avant() : null) }), b = base({ n: 6 });
+            const r = await essaie(() => S.serie(b, deps(s)));
+            H.v(`après dépôt de la photo : ${nom} ⇒ UN seul appel à /api/identifier, série arrêtée, rien de compté`, [nid(s), r.ok.resultats.length, r.ok.erreurs.length, motif.test(r.ok.arret || '')], [1, 0, 0, true]);
+            if (nom !== 'redirection' && nom !== '200 sans analyse') H.vrai(`   (${nom}) le message dit l'issue incertaine après dépôt de la photo`, /série arrêtée : issue d'identification incertaine après dépôt de la photo/.test(r.ok.arret || ''));
         }
         { const s = fauxServeur(), r = await S.serie(base({ n: 4 }), deps(s));
           H.v('garde anti-Vinted : photoRecue vrai partout ⇒ la série va au bout', [r.arret, r.stats.n], [null, 4]); }

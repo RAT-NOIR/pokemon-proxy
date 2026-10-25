@@ -220,14 +220,17 @@ async function serie(o, deps = {}) {
             // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
             const corps = { contrat: 2, versionExtension: ping.corps.versionMinExtension, marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
             carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
-            const id = await appeler('/api/identifier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${stamp}` }, body: JSON.stringify(corps) });
+            // DÈS QUE LA PHOTO EST DÉPOSÉE, la garde s'écrit par ce qu'elle AUTORISE : un SEUL chemin continue la série — « 200 avec `analyse.photoRecue === true` ». Toute autre issue (statut non 200, 429, corps vide, pas d'`analyse`, photoRecue absent ou faux,
+            // exception, délai, redirection) ARRÊTE la série : on ne peut pas savoir si le serveur est retombé sur l'adresse factice de l'annonce, donc chez Vinted. Jamais de nouvel essai.
+            const incertaine = code => new Arret(`${code} : série arrêtée : issue d'identification incertaine après dépôt de la photo (le serveur a pu retomber sur l'adresse de l'annonce)`);
+            let id;
+            try { id = await appeler('/api/identifier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${stamp}` }, body: JSON.stringify(corps) }); }
+            catch (e) { throw e instanceof Arret ? e : incertaine(`exception ${(e && (e.code || e.name)) || 'erreur'} sur /api/identifier`); }
             const analyse = id.corps && typeof id.corps === 'object' && id.corps.analyse && typeof id.corps.analyse === 'object' ? id.corps.analyse : null;
             carnet.noter({ serie: serieId, rang, cle: l.cle, resultat: { statutHttp: id.statut, analyse: analyse !== null, photoRecue: analyse !== null && analyse.photoRecue === true } });   // ce que la réponse permet de lire ; jamais un coût
-            if (id.statut === 429) throw new Arret(`429 sur /api/identifier (reessayerDans ${id.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
-            if (id.statut !== 200 || !id.corps) throw Object.assign(new Error('identifier'), { code: `identifier-${id.statut}` });
-            // GARDE ANTI-VINTED, écrite par ce qu'elle AUTORISE : un scan ne compte que si le serveur dit avoir REÇU la photo de ce scan. Sinon `imagesDeLaChaine` retombe sur l'adresse factice de l'annonce et la ferait télécharger chez Vinted : jamais.
-            if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');
-            issue = id.corps;
+            if (id.statut === 429) throw incertaine(`429 sur /api/identifier (reessayerDans ${id.retryApres ?? '?'})`);
+            if (id.statut !== 200 || !id.corps) throw incertaine(`identifier-${id.statut}`);
+            if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');            issue = id.corps;
         } catch (e) {
             if (e instanceof Arret) { arret = e.raison; break; }
             erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
