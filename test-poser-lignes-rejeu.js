@@ -93,6 +93,7 @@ const BASE = ['--codes=A'];
     const l = posees(w)[0], carte = w.db.brut('cartes').find(c => c._id === 1);
     verifier('écriture : exit 0, relue ; UNE ligne (1|101, set+numero, numeroFiche 5, set SetA) ; Raichu (non confirmé) n\'est PAS écrit', [r.code, /écrit et relu/.test(r.sorties), posees(w).length, l?._id, l?.numeroFiche, l?.slugSet, w.db.brut('cartes_produits').some(x => x.idProduct === 102)], [0, true, 1, '1|101', '5', 'SetA', false]);
     verifier('   la carte reçoit le produit EN FIN de liens.idProduct (le repère d\'adresse 900 ne bouge pas) et garde son set', [carte?.liens?.idProduct, carte?.sets, carte?.nomEn], [[900, 101], ['SetA'], 'Pika']);
+    verifier('   la carte reçoit la MÉTACARTE du produit dans liens.idMetacards (comme ecrire-jointure.js:42 et poser-par-metacarte.js:70 ; relecture D1)', carte?.liens?.idMetacards, [601]);
     verifier('   additive : les lignes d\'avant sont inchangées', JSON.stringify(w.db.brut('cartes_produits').filter(x => x._id === '3|104')) === ancien, true);
     const apres = instantane(w);
     r = await lancer(w, [...BASE, '--ecrire', '--seulement=s.json', '--attendu=A:1'], { seulement: [101] });
@@ -117,6 +118,8 @@ const BASE = ['--codes=A'];
     r = await lancer(w, [...BASE, `--plan=${f}`]);
     const P = JSON.parse(fs.readFileSync(f, 'utf8')); fs.unlinkSync(f);
     verifier('--plan : les lignes (preuve, numeroFiche, code) et les sets de cartes que ce lancement poserait ; rien d\'écrit', [P.outil, P.lignes.map(x => [x._id, x.preuve, x.numeroFiche, x.code]), P.cartesSets, posees(w).length], ['poser-lignes-rejeu', [['1|101', 'set+numero', '5', 'A'], ['2|102', 'set+numero', '6', 'A']], [{ carteId: 1, set: 'SetA' }, { carteId: 2, set: 'SetA' }], 0]);
+
+    verifier('--plan : la métacarte que chaque carte recevrait (liens.idMetacards) y est aussi, pour que l\'essai à blanc la montre', P.metacartes, [{ carteId: 1, idProduct: 101, idMetacard: 601 }, { carteId: 2, idProduct: 102, idMetacard: 602 }]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

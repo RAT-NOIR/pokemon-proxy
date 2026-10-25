@@ -21,6 +21,11 @@ const L = { code: 'A', exp: 10, slugSet: 'SetA', bulba: { tirage: 'jp', expansio
     verifier('une ligne DÉTACHÉE (« carte|produit ») n\'est pas proposée', ri.Jr.lignes.map(l => l.idProduct).sort(), [102]);
     const sp = await R.joindreLigne({ l: { code: 'B', exp: 11, slugSet: 'SetB', bulba: { tirage: 'jp', expansion: 'Exp B', sansPage: true } }, produits: [prod(201, 'Mew', '001')] });
     verifier('une ligne « sans page » prend les cartes qui DÉCLARENT l\'impression, même hors cartes.sets', sp.Jr.lignes.map(l => [l.carteId, l.idProduct]), [[3, 201]]);
+    const LSP = { code: 'B', exp: 11, slugSet: 'SetB', bulba: { tirage: 'jp', expansion: 'Exp B', sansPage: true } };
+    const spi = await R.joindreLigne({ l: LSP, produits: [prod(201, 'Mew', '001')], lignesInterdites: new Set(['3|201']) });
+    verifier('une ligne « sans page » DÉTACHÉE (« carte|produit ») n\'est pas proposée non plus (relecture 2, D3)', spi.Jr.lignes.map(l => [l.carteId, l.idProduct]), []);
+    const spa = await R.joindreLigne({ l: LSP, produits: [prod(201, 'Mew', '001')], lignesInterdites: new Set(['9|999']) });
+    verifier('… et une interdite d\'une autre carte ne retire rien', spa.Jr.lignes.map(l => [l.carteId, l.idProduct]), [[3, 201]]);
     verifier('setlistDe : une ligne sans cleR2 n\'a pas de Setlist (et l\'archive n\'est pas lue)', await R.setlistDe(L, 'SetA'), null);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
