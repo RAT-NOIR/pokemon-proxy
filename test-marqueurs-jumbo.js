@@ -40,6 +40,11 @@ const plan = (o = {}) => M.planifier({ etiquettes: [ETQ(1)], lignes: [L(1)], exp
         assert.match(plan({ lignes: [L(1, { marqueurs: [] })] }).refus[0].raison, /déjà/);
         assert.match(plan({ lignes: [L(1, { marqueurs: null })] }).refus[0].raison, /déjà/);
     });
+    await t('(relecture) une étiquette en double ne produit qu\'UNE écriture ; une ligne sans _id est un refus nommé', () => {
+        assert.strictEqual(plan({ etiquettes: [ETQ(1), ETQ(1)] }).ecrire.length, 1);
+        const { _id, ...sansId } = L(1);
+        const p = plan({ lignes: [sansId] }); assert.strictEqual(p.ecrire.length, 0); assert.match(p.refus[0].raison, /_id/);
+    });
     await t('verifierAttendu : obligatoire et égal au plan', () => {
         const p = plan();
         assert.strictEqual(M.verifierAttendu(p, 1).ok, true); assert.strictEqual(M.verifierAttendu(p, 2).ok, false); assert.strictEqual(M.verifierAttendu(p, NaN).ok, false);

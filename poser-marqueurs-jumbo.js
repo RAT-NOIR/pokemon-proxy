@@ -19,13 +19,17 @@ const lit = (ocr, re) => (ocr || []).some(t => re.test(String(t)));
 function planifier({ etiquettes, lignes, exportIds, tcgdexJumbo, releveLe }) {
     const ecrire = [], refus = [], deja = [];
     const parId = new Map(); for (const l of lignes || []) parId.set(l.idProduct, [...(parId.get(l.idProduct) || []), l]);
+    const vus = new Set();
     for (const e of etiquettes || []) {
         if (e.classe !== 'jumbo' || !lit(e.ocr, /oversized card/i)) continue;
         const id = e.idProduct;
+        if (vus.has(id)) continue;   // une étiquette relevée deux fois : une seule écriture
+        vus.add(id);
         if (!exportIds.has(id)) { refus.push({ idProduct: id, raison: 'absent de l\'export Cardmarket du jour' }); continue; }
         const ls = parId.get(id) || [];
         if (ls.length !== 1) { refus.push({ idProduct: id, raison: ls.length ? `${ls.length} lignes cartes_produits — une seule attendue` : 'aucune ligne cartes_produits' }); continue; }
         const l = ls[0];
+        if (l._id === undefined || l._id === null) { refus.push({ idProduct: id, raison: 'ligne cartes_produits sans _id' }); continue; }
         if (l.variante != null && l.variante !== 'jumbo') { refus.push({ idProduct: id, raison: `variante « ${l.variante} » posée sur la ligne : elle contredit l'étiquette « Oversized »` }); continue; }
         const types = ['JUMBO', ...(lit(e.ocr, /not tournament legal/i) ? ['NON_LEGAL'] : [])].sort((a, b) => ORDRE.indexOf(a) - ORDRE.indexOf(b));
         const marqueurs = types.map(type => ({ type, params: {} }));
