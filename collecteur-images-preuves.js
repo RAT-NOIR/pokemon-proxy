@@ -62,10 +62,12 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     const noms = familles ?? listerFamilles(dossier);
     if (!noms.length) throw new Error(`aucune famille avec preuves.json dans ${dossier} — rien à planifier`);
     const etatDe = new Map(etat.map(p => [p.idProduct, p]));
-    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {};
+    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [];
     for (const famille of noms) {
         const { manifeste, validations, empreinte } = lireFamille(dossier, famille);
         empreintes[famille] = empreinte;
+        // tour 1 (6) : le DOSSIER fait foi ; l'écart de nom ne fait pas lever, il est dit (résumé imprimé par la ligne de commande)
+        if (manifeste.ecartDeFamille) avertissements.push(`famille « ${famille} » : le manifeste ${manifeste.familleDeclaree == null ? 'ne se déclare pas' : `se déclare « ${manifeste.familleDeclaree} »`} (le dossier fait foi)`);
         entreesParFamille[famille] = manifeste.entrees.length;
         const r = PV.rapprocher({ entrees: manifeste.entrees, validations });
         for (const x of r.refus) refus.push({ famille, ...x });
@@ -133,7 +135,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     for (const r of refus) { const k = /^(preuve-lue|deux-sources):/.test(r.motif) ? r.motif : r.motif.replace(/:.*$/, ''); refusParMotif[k] = (refusParMotif[k] || 0) + 1; }
     const aAjouter = decidees.filter(u => u.decision.action === 'ajouter');
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, familles: noms, entrees: entreesParFamille, parRegle, unitesProuvees: unitesBrutes.length, decisions, aAjouter: aAjouter.length,
-        dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif };
+        dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif, avertissements };
     return { resume, unites: decidees, restes: refus, empreintes };
 }
 

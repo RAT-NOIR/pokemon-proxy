@@ -21,7 +21,7 @@ const HOTE = require('./recolte-hote');
 const SOURCE = 'prv';
 const LOT = 'prv-2026-10';
 const LANGUE_PREUVE = 'langue lue sur le scan de la carte (preuve validée), propre à chaque visuel';
-const NOMS_INTERDITS = ['pokipair', 'poki', 'tcgcsv', 'scrydex', 'packmagik', 'pokellector', 'pokumon', 'pikaqian', 'cardtrader', 'bulbapedia', 'tcgdex', 'artofpkm', 'pokedata', 'pkmncards', 'cardmarket', 'booster'];
+const NOMS_INTERDITS = ['pokipair', 'poki', 'tcgcsv', 'scrydex', 'packmagik', 'pokellector', 'pokumon', 'pikaqian', 'cardtrader', 'bulbapedia', 'tcgdex', 'artofpkm', 'pokedata', 'pkmncards', 'cardmarket'];
 // `LANGUE` et `TIRAGE` ne servent à rien ici (source `parUnite` : chaque unité porte les siens ; une unité sans langue LÈVE) — ils portent un libellé qui ne peut être pris pour une vraie valeur.
 const SRC = RC.fabriquerSource({ SOURCE, LOT, LANGUE: 'par-unite', LANGUE_PREUVE, TIRAGE: 'par-unite', CHAMP_BILAN: 'bilanLotPrv', nomsInterdits: NOMS_INTERDITS, parUnite: true });
 
@@ -46,6 +46,16 @@ const sha256De = b => crypto.createHash('sha256').update(b).digest('hex');
 /** Les deux derniers segments d'un nom d'hôte : « cdn.exemple.com » et « www.exemple.com » sont le même SITE (deux hôtes d'un même opérateur ne sont pas deux sources indépendantes). */
 const racineDe = h => String(h ?? '').trim().toLowerCase().split('.').slice(-2).join('.');
 const numeroDuProduit = p => { const n = p?.numero == null ? '' : String(p.numero).trim(); return n === '' ? null : n; };
+/** Le nom lu sur le scan est-il celui du produit ? Nom Cardmarket décomposé (avant « [ ») puis `clesNom` de la jointure ; l'un ou l'autre côté vide = non. */
+const memeNomQueLeProduit = (lu, nomProduit) => {
+    if (!texte(lu) || !texte(nomProduit)) return false;
+    const cles = new Set(J.clesNom(J.decomposerNomCardmarket(nomProduit).nom));
+    return J.clesNom(lu).some(k => cles.has(k));
+};
+// Un nom de source ne s'écrit jamais en base, pas même dans une marque lue : comparé sans accents ni casse (« Poképédia » = « pokepedia »).
+const SANS_ACCENTS = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const NOMS_DE_SOURCES = Object.freeze([...NOMS_INTERDITS, 'pokepedia', 'blazingtail', 'breakerz', 'tcgplayer', 'cardmarket']);
+const nommeUneSource = m => NOMS_DE_SOURCES.some(n => SANS_ACCENTS(m).includes(n));
 
 // ── 3. Le manifeste et les validations (P1) ──────────────────────────────────────────────────────────────────────────────────
 /** -> null si l'entrée a la forme du manifeste, sinon la phrase du refus. Rien n'est corrigé. */
@@ -67,13 +77,17 @@ function formeEntree(e) {
     }
     return null;
 }
-/** Le manifeste d'une famille. LÈVE sur ce qui n'a pas sa forme : un fichier faux n'est jamais « lu au mieux ». `famille` : le nom du dossier, que le manifeste doit porter. */
+/**
+ * Le manifeste d'une famille. LÈVE sur ce qui n'a pas sa forme : un fichier faux n'est jamais « lu au mieux ». `famille` : le nom du DOSSIER, qui fait foi (tour 1, point 6) : une famille que le manifeste
+ * déclare autre (ou ne déclare pas) ne fait pas lever — l'écart est rendu (`ecartDeFamille`, `familleDeclaree`) pour être imprimé. Sans nom de dossier, le manifeste doit se nommer.
+ */
 function lireManifeste(obj, famille = null) {
     if (!objet(obj)) throw new Error(`manifeste${famille ? ` ${famille}` : ''} : objet attendu`);
-    if (!texte(obj.famille) || (famille != null && obj.famille !== famille)) throw new Error(`manifeste : la famille « ${obj.famille} » n'est pas celle du dossier (${famille})`);
-    if (!Array.isArray(obj.entrees)) throw new Error(`manifeste ${obj.famille} : « entrees » (tableau) attendu`);
-    if (obj.trous !== undefined && !Array.isArray(obj.trous)) throw new Error(`manifeste ${obj.famille} : « trous » (tableau) attendu`);
-    return { famille: obj.famille, le: obj.le ?? null, entrees: obj.entrees, trous: obj.trous ?? [] };
+    const nom = famille ?? obj.famille;
+    if (!texte(nom)) throw new Error('manifeste : famille absente (ni nom de dossier, ni champ « famille »)');
+    if (!Array.isArray(obj.entrees)) throw new Error(`manifeste ${nom} : « entrees » (tableau) attendu`);
+    if (obj.trous !== undefined && !Array.isArray(obj.trous)) throw new Error(`manifeste ${nom} : « trous » (tableau) attendu`);
+    return { famille: nom, familleDeclaree: obj.famille ?? null, ecartDeFamille: obj.famille !== nom, le: obj.le ?? null, entrees: obj.entrees, trous: obj.trous ?? [] };
 }
 /** Les validations du coordinateur. LÈVE sur la moindre entrée mal formée (un fichier de validations est écrit à la main : on ne devine pas ce qu'il voulait dire). */
 function lireValidations(arr) {
@@ -129,6 +143,7 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
     const motifs = [], lu = entree.lu ?? {};
     const marques = Array.isArray(lu.marques) && lu.marques.length > 0 && lu.marques.every(texte);
     if (!marques) motifs.push('marques-vides');
+    else if (lu.marques.some(nommeUneSource)) motifs.push('marque-nomme-une-source');
     if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');
     else if (lu.langue !== langueProduit) motifs.push('langue-differente');
     const np = numeroDuProduit(produit);
@@ -136,7 +151,11 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         if (n === '' || t === '') motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np)) motifs.push('numero-different');
-    } else if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
+    } else {
+        if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
+        // tour 1 (1) : sans numéro, RIEN d'autre ne relie l'image au produit que son NOM — le nom lu doit être celui du produit (Cardmarket, avant « [ »), par la normalisation de la jointure
+        if (!memeNomQueLeProduit(lu.nom, produit?.nomEn)) motifs.push('nom-different');
+    }
     if (norm(lu.tampon) !== norm(produit?.tamponnee)) motifs.push('tampon-different');
     if (!Array.isArray(entree.contradictions) || entree.contradictions.length > 0) motifs.push('contradictions');
     return { ok: motifs.length === 0, motifs };
@@ -161,9 +180,13 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
     if (!Buffer.isBuffer(octets?.b)) return non('seconde-illisible');
     if (octets.a.equals(octets.b)) return non('memes-octets');
     if (langueProduit == null) return non('langue-du-tirage-inconnue');
+    // tour 1 (3) : la SECONDE image porte sa propre lecture, jugée comme la première (P2) — la concordance d'image ne prouve que le dessin, jamais le tirage
+    if (!objet(s.lu)) return non('seconde-sans-lecture');
+    const l2 = evaluerPreuveLue({ entree: { lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit });
+    if (!l2.ok) return non(`seconde-lecture:${l2.motifs[0]}`);
     const r = await decider({
         produit: { langue: langueProduit, codeSet: null, numero: CO.reduireNumero(produit?.numero), tampon: produit?.tamponnee ?? null },
-        candidats: [{ source: entree.hote, buf: octets.a, tirage: tirageDeLecture(entree.lu) }, { source: s.hote, buf: octets.b, tirage: tirageDeLecture(s.lu ?? entree.lu) }],
+        candidats: [{ source: entree.hote, buf: octets.a, tirage: tirageDeLecture(entree.lu) }, { source: s.hote, buf: octets.b, tirage: tirageDeLecture(s.lu) }],
         scansConformes: []
     });
     if (r?.decision !== 'ecrire') return non(r?.motif ?? r?.decision ?? 'indecidable');
@@ -211,11 +234,24 @@ async function verifierCache({ entree, dossierCache, sansLargeur = false, lireFi
 // ── 7. P5 : les unités ───────────────────────────────────────────────────────────────────────────────────────────────────────
 /** Un visuel vit sur la FICHE (carte, set, numéro de fiche), pas sur le produit. */
 const cleFiche = p => `${p.carteId}|${p.slugSet}|${J.cleNumero(p.numero)}`;
-const varianteNommeeValide = v => objet(v) && texte(v.source) && urlHttps(v.url) && texte(v.dit) && /holo/i.test(v.dit);
+/**
+ * Tour 1 (4) — la forme STRUCTURÉE : `{ source, paire: { normale: <idProduct>, holo: <idProduct> } }` (le texte libre `dit` n'est plus lu). La paire doit désigner EXACTEMENT les produits de la fiche, deux
+ * entiers distincts : c'est la source qui dit quel produit est holo, jamais l'ordre ni le prix. @returns {{normale: number, holo: number}|null}
+ */
+function paireNommee(v, tous) {
+    if (!objet(v) || !texte(v.source) || !objet(v.paire)) return null;
+    const { normale, holo } = v.paire;
+    if (!Number.isInteger(normale) || !Number.isInteger(holo) || normale === holo) return null;
+    if (tous.length !== 2 || !tous.includes(normale) || !tous.includes(holo)) return null;
+    return { normale, holo };
+}
 const MARQUES_MAX = 12;
+/** Les seuls champs lus sur le scan qui s'écrivent (tour 1, point 2) : rien de libre — ni `note`, ni un champ que l'agent aurait ajouté. */
+const CHAMPS_LUS = Object.freeze(['nom', 'numero', 'total', 'langue', 'tampon', 'finition']);
+const luEnumere = lu => Object.fromEntries(CHAMPS_LUS.map(k => [k, typeof lu?.[k] === 'string' || typeof lu?.[k] === 'number' ? lu[k] : null]));
 
 function preuvesDe(a) {
-    const e = a.entree, lu = e.lu, marques = (Array.isArray(lu.marques) ? lu.marques : []).filter(texte).slice(0, MARQUES_MAX);
+    const e = a.entree, lu = luEnumere(e.lu), marques = (Array.isArray(e.lu.marques) ? e.lu.marques : []).filter(texte).slice(0, MARQUES_MAX);
     return { marques, languePreuve: marques.length ? `lue sur le scan : ${marques.join(' ; ')}` : 'lue sur le scan',
         preuveNeutre: e.regle === 'preuve-lue' ? `preuve lue sur le scan : n° ${lu.numero ?? '—'}/${lu.total ?? '—'}, langue ${lu.langue}` : `deux sources indépendantes concordantes à l'image, n° ${lu.numero ?? '—'}, langue ${lu.langue}`,
         // les dates s'écrivent en ISO (texte) : le plan passe par un fichier JSON entre sa construction et l'écriture, une Date n'y survit pas
@@ -244,9 +280,11 @@ function grouperUnites({ acceptees, fiches, famille }) {
             if (tous.length !== 2) { refuser(membres, 'variantes-indiscernables', `${tous.length} produits sur la fiche : seule une paire holo / non holo est prouvable`); continue; }
             if (!tous.every(id => ids.includes(id))) { refuser(membres, 'variantes-indiscernables', 'un produit de la fiche n\'a pas d\'entrée validée'); continue; }
             if (new Set(membres.map(m => m.entree.sha256)).size > 1) { refuser(membres, 'variantes-indiscernables', 'les entrées de la fiche n\'ont pas le même sha256'); continue; }
-            if (!membres.every(m => varianteNommeeValide(m.entree.varianteNommee))) { refuser(membres, 'variantes-indiscernables', 'aucune source ne nomme quel produit est holo (varianteNommee)'); continue; }
+            const paires = membres.map(m => paireNommee(m.entree.varianteNommee, tous));
+            if (paires.some(x => !x)) { refuser(membres, 'variantes-indiscernables', 'aucune source ne nomme quel produit est holo (varianteNommee.paire { normale, holo } = les deux produits de la fiche)'); continue; }
+            if (new Set(paires.map(x => `${x.normale}|${x.holo}`)).size > 1) { refuser(membres, 'variantes-indiscernables', 'les deux entrées ne disent pas la même paire'); continue; }
             if (new Set(membres.map(m => `${m.langue}|${norm(m.produit.tamponnee)}`)).size > 1) { refuser(membres, 'unite-incoherente', 'langue ou tampon différents entre les deux produits d\'une même image'); continue; }
-            partage = { partageeHoloNonHolo: true, produitsPartages: [...ids] };
+            partage = { partageeHoloNonHolo: true, produitsPartages: [...ids], paire: paires[0] };
         } else if (membres.length !== 1 || tous[0] !== ids[0]) { refuser(membres, 'fiche-inconnue', cle); continue; }
         const m = membres[0], e = m.entree, p = m.produit, pr = preuvesDe(m);
         unites.push({
@@ -254,8 +292,9 @@ function grouperUnites({ acceptees, fiches, famille }) {
             langue: m.langue, tampon: p.tamponnee ?? null, tirageAttendu: p.tirage, groupe: famille, idSource: null, carteNom: p.nomEn ?? null, nomSource: e.lu.nom ?? null,
             numeroSource: e.lu.numero != null ? `${e.lu.numero}${e.lu.total != null ? `/${e.lu.total}` : ''}` : null, variante: null,
             languePreuve: pr.languePreuve, preuveNeutre: pr.preuveNeutre,
-            champsEntree: { preuveLue: pr.preuveLue, ...(partage ?? {}) },
-            champsDocument: { preuveLue: pr.preuveLue, ...(partage ?? {}), ...(partage ? { varianteNommee: membres.map(x => ({ idProduct: x.entree.idProduct, ...x.entree.varianteNommee })) } : {}) }
+            // seuls des champs ÉNUMÉRÉS s'écrivent : le marquage de l'API, et la paire structurée (jamais le texte libre ni le nom de la source qui la donne)
+            champsEntree: { preuveLue: pr.preuveLue, ...(partage ? { partageeHoloNonHolo: true, produitsPartages: partage.produitsPartages } : {}) },
+            champsDocument: { preuveLue: pr.preuveLue, ...(partage ? { partageeHoloNonHolo: true, produitsPartages: partage.produitsPartages, paireHoloNonHolo: partage.paire } : {}) }
         });
     }
     return { unites, refus };

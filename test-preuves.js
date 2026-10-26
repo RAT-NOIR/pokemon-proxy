@@ -52,7 +52,12 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     await test('manifeste : la forme (famille, entrées, trous) ; une famille qui ne porte pas le nom du dossier est refusée', () => {
         const m = PV.lireManifeste({ famille: 'MCD', le: '2026-10-26T00:00:00Z', entrees: [entree()], trous: [] }, 'MCD');
         assert.strictEqual(m.entrees.length, 1); assert.strictEqual(m.famille, 'MCD');
-        assert.throws(() => PV.lireManifeste({ famille: 'AUTRE', entrees: [], trous: [] }, 'MCD'), /famille/);
+        // tour 1 (6) : le DOSSIER fait foi ; une famille déclarée autre (ou absente) ne fait pas lever le plan, l'écart est rendu pour être imprimé
+        const autre = PV.lireManifeste({ famille: 'SOURCES (transversal R6)', entrees: [], trous: [] }, 'SOURCES');
+        assert.deepStrictEqual([autre.famille, autre.familleDeclaree, autre.ecartDeFamille], ['SOURCES', 'SOURCES (transversal R6)', true]);
+        assert.strictEqual(PV.lireManifeste({ entrees: [] }, 'X').ecartDeFamille, true);
+        assert.strictEqual(m.ecartDeFamille, false);
+        assert.throws(() => PV.lireManifeste({ entrees: [] }), /famille/);
         assert.throws(() => PV.lireManifeste(null, 'MCD'), /manifeste/);
         assert.throws(() => PV.lireManifeste({ famille: 'MCD', entrees: {}, trous: [] }, 'MCD'), /entrees/);
         assert.throws(() => PV.lireManifeste({ famille: 'MCD', entrees: [], trous: 'x' }, 'MCD'), /trous/);
@@ -132,6 +137,17 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(lue(fr, produit({ idExpansion: 5000 })).motifs.join(), /langue-differente/);
         assert.match(lue(entree(), produit({ idExpansion: 2361 })).motifs.join(), /langue-differente/, 'le produit EST français : un scan anglais n\'est pas son tirage');
     });
+    await test('tour 1 (1) : produit SANS numéro : lu.nom comparé au nom du produit (avant « [ », normalisation de la jointure), sinon nom-different ; avec numéro rien ne change', () => {
+        const sans = produit({ numero: null, nomEn: 'Psyduck [Confusion Wave]' }), base = entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero: null, total: null, nom: 'Psyduck' } });
+        assert.strictEqual(lue(base, sans).ok, true);
+        assert.strictEqual(lue({ ...base, lu: { ...base.lu, nom: ' PSYDUCK ' } }, sans).ok, true, 'casse et espaces ignorés (normaliserNom)');
+        assert.match(lue({ ...base, lu: { ...base.lu, nom: 'Golduck' } }, sans).motifs.join(), /nom-different/);
+        assert.match(lue({ ...base, lu: { ...base.lu, nom: '' } }, sans).motifs.join(), /nom-different/);
+        assert.match(lue({ ...base, lu: { ...base.lu, nom: undefined } }, sans).motifs.join(), /nom-different/);
+        assert.match(lue(base, produit({ numero: null, nomEn: null })).motifs.join(), /nom-different/, 'produit sans nom : rien à comparer = refus');
+        const fr = entree({ lu: { ...entree().lu, nom: 'Psykokwak' } });
+        assert.strictEqual(lue(fr, produit({ nomEn: 'Psyduck [Confusion Wave]' })).ok, true, 'AVEC numéro, le nom (traduit) n\'est pas comparé');
+    });
     await test('P2 : produit SANS numéro : marques non vides ET attendu.numero null, sinon refus ; lu.numero/total ne sont plus exigés', () => {
         const sans = produit({ numero: null }), e = entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero: null, total: null, marques: ['tampon ex'] } });
         assert.strictEqual(lue(e, sans).ok, true);
@@ -141,7 +157,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
 
     // ───────── P3 : la règle deux-sources ─────────
-    const seconde = (o = {}) => ({ url: 'https://cdn.beta.example/b/1.png', hote: 'cdn.beta.example', fichier: 'C:\\x\\b.bin', sha256: H2, w: 400, h: 560, ...o });
+    const seconde = (o = {}) => ({ url: 'https://cdn.beta.example/b/1.png', hote: 'cdn.beta.example', fichier: 'C:\\x\\b.bin', sha256: H2, w: 400, h: 560, lu: { ...entree().lu }, ...o });
     const E2 = (o = {}) => entree({ regle: 'deux-sources', seconde: seconde(), ...o });
     const deux = async (e, octets, decider, p = produit()) => PV.evaluerDeuxSources({ entree: e, produit: p, langueProduit: PV.langueDuProduit(p), octets, decider });
     await test('P3 : la règle d\'image de production décide ; les tirages viennent du manifeste ; le produit fait foi', async () => {
@@ -153,13 +169,24 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(appels[0].candidats.map(c => c.tirage), [{ langue: 'en', numero: '13', codeSet: null, tampon: null }, { langue: 'en', numero: '13', codeSet: null, tampon: null }]);
         assert.deepStrictEqual(appels[0].candidats.map(c => c.source), ['img.alpha.test', 'cdn.beta.example']);
         assert.deepStrictEqual(appels[0].scansConformes, []);
-        const lu2 = E2({ seconde: seconde({ lu: { ...entree().lu, numero: '14' } }) });
+        // tour 1 (3) : la seconde lecture est OBLIGATOIRE et jugée comme la première (P2) ; la règle d'image n'est pas appelée sans elle
+        const avant = appels.length;
+        const m = async s => (await deux(E2({ seconde: seconde(s) }), { a: Buffer.from('A'), b: Buffer.from('B') }, oui)).motif;
+        assert.strictEqual(await m({ lu: undefined }), 'deux-sources:seconde-sans-lecture');
+        assert.strictEqual(await m({ lu: null }), 'deux-sources:seconde-sans-lecture');
+        assert.match(await m({ lu: { ...entree().lu, numero: '14' } }), /^deux-sources:seconde-lecture:numero-different/);
+        assert.match(await m({ lu: { ...entree().lu, langue: 'ja' } }), /seconde-lecture:langue-differente/);
+        assert.match(await m({ lu: { ...entree().lu, tampon: 'Staff' } }), /seconde-lecture:tampon-different/);
+        assert.match(await m({ lu: { ...entree().lu, marques: [] } }), /seconde-lecture:marques-vides/);
+        assert.strictEqual(appels.length, avant, 'jamais appelée sur une seconde lecture qui ne tient pas');
+        const lu2 = E2({ seconde: seconde({ lu: { ...entree().lu, numero: '013' } }) });
         await deux(lu2, { a: Buffer.from('A'), b: Buffer.from('B') }, oui);
-        assert.strictEqual(appels[1].candidats[1].tirage.numero, '14', 'la seconde source porte sa propre lecture si le manifeste la donne');
-        const tamponne = E2({ lu: { ...entree().lu, tampon: 'Staff' } });
+        assert.deepStrictEqual(appels[1].candidats.map(c => c.tirage.numero), ['13', '013'], 'chaque source porte SA lecture');
+        const tamponne = E2({ lu: { ...entree().lu, tampon: 'Staff' }, seconde: seconde({ lu: { ...entree().lu, tampon: 'Staff' } }) });
         await deux(tamponne, { a: Buffer.from('A'), b: Buffer.from('B') }, oui, produit({ tamponnee: 'Staff' }));
         assert.strictEqual(appels[2].produit.tampon, 'Staff', 'le tampon du PRODUIT est transmis à la règle d\'image');
         assert.strictEqual(appels[2].candidats[0].tirage.tampon, 'Staff', 'et celui que dit le manifeste pour la source');
+        assert.strictEqual(appels[2].candidats[1].tirage.tampon, 'Staff');
         const non = await deux(E2(), { a: Buffer.from('A'), b: Buffer.from('B') }, async () => ({ decision: 'trou', motif: 'discordance-image', preuve: {} }));
         assert.deepStrictEqual([non.ok, non.motif], [false, 'deux-sources:discordance-image']);
         const conf = await deux(E2(), { a: Buffer.from('A'), b: Buffer.from('B') }, async () => ({ decision: 'a-confirmer', preuve: {} }));
@@ -174,7 +201,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(await m(E2({ seconde: seconde({ hote: 'cdn.alpha.test' }) })), /meme-site/);
         assert.match(await m(E2({ seconde: seconde({ sha256: H1 }) })), /meme-sha256/);
         assert.match(await m(E2(), { a: Buffer.from('A'), b: Buffer.from('A') }), /memes-octets/);
-        assert.match(await m(E2({ contradictions: ['x'] })), /contradictions/);
+        assert.strictEqual(await m(E2({ contradictions: ['x'] })), 'deux-sources:contradictions');
         assert.match(await m(E2(), { a: Buffer.from('A'), b: null }), /seconde-illisible/);
         assert.strictEqual(n, 0);
     });
@@ -199,8 +226,21 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
 
     // ───────── P5 : les unités ─────────
     const accepte = (e, p, v) => ({ entree: e, validation: v ?? validation({ idProduct: e.idProduct, sha256: e.sha256 }), produit: p, langue: PV.langueDuProduit(p), evaluation: { ok: true, regle: e.regle } });
-    const nommee = (dit = 'V2 = holo') => ({ source: 'boutique-x', url: 'https://boutique.test/p', dit });
+    // tour 1 (4) : la forme STRUCTURÉE que porte le manifeste réel : { source, fichier, dit, paire: { normale, holo } } — plus de regex sur `dit`
+    const nommee = (paire = { normale: 1001, holo: 1002 }, o = {}) => ({ source: 'boutique-x', fichier: 'C:\\x\\11.ts', dit: 'normale = 1001 (V1), holo = 1002 (V2)', paire, ...o });
     const FICHE = (...ids) => new Map([['77|Set-A|13', ids]]);
+    await test('tour 1 (2) : AUCUN texte libre de l\'agent n\'est écrit : une note (et une marque) qui nomme une source n\'apparaît nulle part dans l\'entrée ni le document', async () => {
+        const note = 'Scan Poképédia ; TCGdex et Cardmarket concordent', e = entree({ lu: { ...entree().lu, note, zzz: 'champ libre', finition: 'holo' }, sourcesConsultees: ['pokepedia.fr'], commentaire: 'libre' });
+        const { unites } = PV.grouperUnites({ acceptees: [accepte(e, produit())], fiches: FICHE(1001), famille: 'MCD' });
+        const p = unites[0].champsEntree.preuveLue;
+        assert.deepStrictEqual(Object.keys(p).sort(), ['lu', 'luLe', 'marques', 'regle', 'valideLe']);
+        assert.deepStrictEqual(Object.keys(p.lu).sort(), ['finition', 'langue', 'nom', 'numero', 'tampon', 'total']);
+        const tout = JSON.stringify(unites[0]);
+        for (const mot of ['Poképédia', 'TCGdex', 'Cardmarket', 'champ libre', 'commentaire', 'pokepedia']) assert.ok(!tout.includes(mot), `« ${mot} » ne doit pas figurer dans l'unité`);
+        // une marque qui nomme une source est refusée (ce qu'on écrit ne doit pas la nommer)
+        const nomme = PV.evaluerPreuveLue({ entree: entree({ lu: { ...entree().lu, marques: ['13/40', 'filigrane Poképédia'] } }), produit: produit(), langueProduit: 'en' });
+        assert.match(nomme.motifs.join(), /marque-nomme-une-source/);
+    });
     await test('P5 : un produit seul sur sa fiche = une unité (champs de l\'écriture, adresse neutre, preuve écrite)', () => {
         const { unites, refus } = PV.grouperUnites({ acceptees: [accepte(entree(), produit())], fiches: FICHE(1001), famille: 'MCD' });
         assert.deepStrictEqual(refus, []); assert.strictEqual(unites.length, 1);
@@ -216,26 +256,33 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
     await test('P5 : V1/V2 sur une même fiche : ni l\'un sans l\'autre, ni sans variante nommée holo, ni à sha256 différent', () => {
         const p1 = produit({ idProduct: 1001 }), p2 = produit({ idProduct: 1002 });
-        const e1 = entree({ varianteNommee: nommee('V1 = non holo / V2 = holo') }), e2 = entree({ idProduct: 1002, varianteNommee: nommee() });
+        const e1 = entree({ varianteNommee: nommee() }), e2 = entree({ idProduct: 1002, varianteNommee: nommee() });
         const ok2 = PV.grouperUnites({ acceptees: [accepte(e1, p1), accepte(e2, p2)], fiches: FICHE(1001, 1002), famille: 'F' });
         assert.deepStrictEqual(ok2.refus, []); assert.strictEqual(ok2.unites.length, 1);
         const u = ok2.unites[0];
         assert.deepStrictEqual(u.produits, [1001, 1002]);
         assert.strictEqual(u.champsEntree.partageeHoloNonHolo, true); assert.deepStrictEqual(u.champsEntree.produitsPartages, [1001, 1002]);
         assert.strictEqual(u.champsDocument.partageeHoloNonHolo, true); assert.deepStrictEqual(u.champsDocument.produitsPartages, [1001, 1002]);
+        assert.deepStrictEqual(u.champsDocument.paireHoloNonHolo, { normale: 1001, holo: 1002 }, 'seule la paire structurée est gardée, jamais le texte libre de la source');
+        assert.ok(!JSON.stringify([u.champsEntree, u.champsDocument]).includes('boutique-x'), 'ni la source ni son texte dans ce qui s\'écrit');
         const refuse = (acc, fiche = FICHE(1001, 1002)) => PV.grouperUnites({ acceptees: acc, fiches: fiche, famille: 'F' });
         const seul = refuse([accepte(e1, p1)]);
         assert.strictEqual(seul.unites.length, 0); assert.deepStrictEqual(seul.refus.map(x => [x.idProduct, x.motif]), [[1001, 'variantes-indiscernables']]);
         const sansNom = refuse([accepte(entree(), p1), accepte(entree({ idProduct: 1002 }), p2)]);
         assert.strictEqual(sansNom.unites.length, 0); assert.deepStrictEqual(sansNom.refus.map(x => x.motif), ['variantes-indiscernables', 'variantes-indiscernables']);
-        const pasHolo = refuse([accepte(entree({ varianteNommee: nommee('V2 = plus chere') }), p1), accepte(entree({ idProduct: 1002, varianteNommee: nommee('V2 = plus chere') }), p2)]);
-        assert.strictEqual(pasHolo.unites.length, 0, 'le sens de V1/V2 ne se devine pas : une source doit dire « holo »');
-        const nommeeVide = refuse([accepte(entree({ varianteNommee: { source: '', url: 'https://x.test', dit: 'holo' } }), p1), accepte(entree({ idProduct: 1002, varianteNommee: nommee() }), p2)]);
-        assert.strictEqual(nommeeVide.unites.length, 0);
+        const paires = (pa, o) => refuse([accepte(entree({ varianteNommee: nommee(pa, o) }), p1), accepte(entree({ idProduct: 1002, varianteNommee: nommee(pa, o) }), p2)]);
+        for (const [nom, pa] of [['ids hors de la fiche', { normale: 1001, holo: 1555 }], ['même produit deux fois', { normale: 1001, holo: 1001 }], ['sans holo', { normale: 1001 }], ['sans normale', { holo: 1002 }], ['ids en texte', { normale: '1001', holo: '1002' }], ['paire absente', null], ['paire en liste', [1001, 1002]]])
+            assert.strictEqual(paires(pa).unites.length, 0, `la paire doit désigner EXACTEMENT les produits de la fiche : ${nom}`);
+        assert.strictEqual(paires({ normale: 1002, holo: 1001 }).unites.length, 1, 'le sens est celui de la source (V2 normale, V1 holo si elle le dit), pas un ordre deviné');
+        assert.strictEqual(paires({ normale: 1001, holo: 1002 }, { source: '' }).unites.length, 0, 'une source qui ne se nomme pas ne prouve rien');
+        assert.strictEqual(paires({ normale: 1001, holo: 1002 }, { dit: undefined }).unites.length, 1, 'le texte libre n\'est plus lu');
+        const autrePaire = refuse([accepte(entree({ varianteNommee: nommee() }), p1), accepte(entree({ idProduct: 1002, varianteNommee: nommee({ normale: 1002, holo: 1001 }) }), p2)]);
+        assert.strictEqual(autrePaire.unites.length, 0, 'les deux entrées doivent dire la même chose');
         const autreSha = refuse([accepte(e1, p1), accepte({ ...e2, sha256: H2 }, p2)]);
         assert.strictEqual(autreSha.unites.length, 0); assert.ok(autreSha.refus.every(x => x.motif === 'variantes-indiscernables'));
         const trois = refuse([accepte(e1, p1), accepte(e2, p2), accepte(entree({ idProduct: 1003, varianteNommee: nommee() }), produit({ idProduct: 1003 }))], FICHE(1001, 1002, 1003));
         assert.strictEqual(trois.unites.length, 0, 'seule une PAIRE holo / non holo est prouvable');
+        assert.ok(trois.refus.every(x => /3 produits sur la fiche/.test(x.detail)), 'refusé pour son effectif, pas pour une paire mal nommée');
         const autreFiche = refuse([accepte(e1, p1), accepte(e2, p2)], FICHE(1001, 1002, 1555));
         assert.strictEqual(autreFiche.unites.length, 0, 'un produit de la fiche qui n\'a aucune entrée validée : refus de tous');
     });
@@ -324,7 +371,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             const octets = await png(d.largeur ?? largeur, Math.round((d.largeur ?? largeur) * 1.4)), url = d.url ?? `https://img.alpha.test/a/${d.carteId}.png`;
             const fb = poserAuCache(dossier, url, octets);
             const p = produit({ idProduct: d.idProduct ?? 1000 + d.carteId, carteId: d.carteId, numero: d.numero ?? '13', idExpansion: d.idExpansion ?? 5000, tirage: d.tirage ?? 'intl', tamponnee: d.tamponnee ?? null });
-            const lu = { ...entree().lu, numero: p.numero, langue: d.langue ?? PV.langueDuProduit(p) };
+            const lu = { ...entree().lu, numero: p.numero, langue: d.langue ?? PV.langueDuProduit(p), ...(d.lu ?? {}) };
             const e = entree({ idProduct: p.idProduct, url, sha256: sha(octets), fichier: fb, lu });
             const { unites } = PV.grouperUnites({ acceptees: [accepte(e, p)], fiches: new Map([[`${p.carteId}|${SLUG}|${p.numero}`, [p.idProduct]]]), famille: 'MCD' });
             for (const u of unites) { us.push(u); idx[u.url] = { ...(await RC.juger(PV.SRC, octets)), octets: octets.length, sha256: sha(octets) }; }
@@ -403,6 +450,14 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(require('./collecte-cartes/seuils-images').largeurAdmiseDe('prv'), 200);
         assert.strictEqual(require('./collecte-cartes/seuils-images').largeurMinDe('prv'), 350);
     });
+    await test('tour 1 (2) de bout en bout : la note d\'un agent qui nomme des sources n\'arrive ni sur l\'entrée cartes.images ni sur le document images', async () => {
+        const note = 'Scan Poképédia ; TCGdex et Cardmarket concordent';
+        const m = await monter({ unitesDef: [{ carteId: 100, lu: { note, autre: 'libre' } }], cartes: [vide(100)] });
+        await SILENCE(() => ecrire(m, { attendu: 1 }));
+        const ecrit = JSON.stringify([m.etat.carte(100), m.etat.image(`prv/${SLUG}/100/13/en`)]);
+        assert.ok(ecrit.includes('preuveLue'));
+        for (const mot of ['Poképédia', 'TCGdex', 'Cardmarket', 'note', 'libre']) assert.ok(!ecrit.includes(mot), `« ${mot} » dans la base`);
+    });
     await test('écriture : le tampon du PRODUIT passe sur l\'entrée et le document (un tampon n\'est jamais perdu en route)', async () => {
         const m = await monter({ unitesDef: [{ carteId: 100, tamponnee: 'Staff' }], cartes: [vide(100)] });
         assert.strictEqual(m.us[0].tampon, 'Staff');
@@ -416,8 +471,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     await test('écriture : la paire V1/V2 porte le marquage de l\'API sur l\'entrée ET le document (partageeHoloNonHolo + produitsPartages)', async () => {
         const dossier = tmp(), octets = await png(400, 560), url = 'https://img.alpha.test/a/pair.png', fb = poserAuCache(dossier, url, octets);
         const p1 = produit({ idProduct: 1001, carteId: 100 }), p2 = produit({ idProduct: 1002, carteId: 100 });
-        const mk = (p, dit) => entree({ idProduct: p.idProduct, url, sha256: sha(octets), fichier: fb, varianteNommee: nommee(dit) });
-        const { unites } = PV.grouperUnites({ acceptees: [accepte(mk(p1, 'V2 = holo'), p1), accepte(mk(p2, 'V2 = holo'), p2)], fiches: new Map([[`100|${SLUG}|13`, [1001, 1002]]]), famille: 'F' });
+        const mk = (p) => entree({ idProduct: p.idProduct, url, sha256: sha(octets), fichier: fb, varianteNommee: nommee() });
+        const { unites } = PV.grouperUnites({ acceptees: [accepte(mk(p1), p1), accepte(mk(p2), p2)], fiches: new Map([[`100|${SLUG}|13`, [1001, 1002]]]), famille: 'F' });
         const { M, etat } = fauxModeles({ cartes: [vide(100)], sets: [{ _id: SLUG, tirage: 'intl' }] });
         const idx = { [url]: { ...(await RC.juger(PV.SRC, octets)), octets: octets.length, sha256: sha(octets) } };
         const [r] = await SILENCE(() => RC.ecrire({ SRC: PV.SRC, unites, M, dossierCache: dossier, indexImages: idx, attendu: 1, deposer: async () => {}, vignetter: async () => ({ vg: {} }) }));
@@ -535,6 +590,30 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
 
     const planDe = w => K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+    await test('tour 1 (6) : une famille déclarée autre que le dossier ne fait pas lever le plan : le dossier fait foi, l\'écart est dans le résumé', async () => {
+        const w = await mondeSimple();
+        const f = path.join(w.racine, 'MCD', 'preuves.json'), man = JSON.parse(fs.readFileSync(f, 'utf8'));
+        man.famille = 'MCD (transversal R6)'; fs.writeFileSync(f, JSON.stringify(man));
+        const p = await planDe(w);
+        assert.strictEqual(p.unites.length, 1); assert.deepStrictEqual(p.resume.avertissements, ['famille « MCD » : le manifeste se déclare « MCD (transversal R6) » (le dossier fait foi)']);
+        assert.strictEqual(K.planPerime({ plan: p, dossier: w.racine }), null);
+    });
+    await test('tour 1 (5) : deux produits V1/V2 sur la même fiche en base, chacun validé au même sha256 avec sa paire : UNE unité partagée, marquage de l\'API ; la fiche est lue par (carte, set, numéro)', async () => {
+        const octets = await png(400, 560), url = 'https://img.alpha.test/a/p.png';
+        const pa = { normale: 1001, holo: 1002 };
+        const mk = id => entree({ idProduct: id, url, sha256: sha(octets), varianteNommee: nommee(pa) });
+        const w = monde({ entrees: [mk(1001), mk(1002)], validations: [validation({ sha256: sha(octets) }), validation({ idProduct: 1002, sha256: sha(octets) })],
+            etat: [1001, 1002].map(i => ({ idProduct: i, idExpansion: 5000, langue: 'intl', tamponnee: null, name: 'Bulbasaur' })),
+            lignes: [1001, 1002].map(i => ({ idProduct: i, carteId: 77, slugSet: SLUG, numeroFiche: '13', idExpansion: 5000 })), cartes: [{ _id: 77, nomEn: 'Bulbasaur', images: [] }] });
+        const fb = poserAuCache(w.cache, url, octets);
+        const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8')); for (const e of man.entrees) e.fichier = fb;
+        fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
+        const p = await planDe(w);
+        assert.deepStrictEqual(p.resume.refus, [], JSON.stringify(p.resume.refus));
+        assert.strictEqual(p.unites.length, 1); assert.deepStrictEqual(p.unites[0].produits, [1001, 1002]);
+        assert.strictEqual(p.unites[0].champsEntree.partageeHoloNonHolo, true); assert.deepStrictEqual(p.unites[0].champsEntree.produitsPartages, [1001, 1002]);
+        assert.strictEqual(p.unites[0].decision.action, 'ajouter');
+    });
     await test('plan : le cache est relu — fichier altéré, absent, trop petit : refus nommés, rien dans les unités', async () => {
         const w = await mondeSimple();
         fs.writeFileSync(path.join(w.cache, HOTE.nomCache(w.url)).replace(/\.json$/, '.bin'), await png(400, 560, { r: 9, g: 9, b: 9 }));
@@ -565,7 +644,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             const w = monde({ entrees: [], validations: [validation({ regle: 'deux-sources', sha256: sha(IA) })], etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'intl', tamponnee: null, name: 'Bulbasaur' }],
                 lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: '13', idExpansion: 5000 }], cartes: [{ _id: 77, nomEn: 'Bulbasaur', images: [] }] });
             const fa = poserAuCache(w.cache, urlA, IA), fbPath = poserBLoin(w, poserB);
-            fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify({ famille: 'MCD', le: '2026-10-26T00:00:00Z', trous: [], entrees: [entree({ regle: 'deux-sources', url: urlA, sha256: sha(IA), fichier: fa, seconde: { url: urlB, hote: 'cdn.beta.example', fichier: fbPath, sha256: sha(IA2), w: 300, h: 420 } })] }));
+            fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify({ famille: 'MCD', le: '2026-10-26T00:00:00Z', trous: [], entrees: [entree({ regle: 'deux-sources', url: urlA, sha256: sha(IA), fichier: fa, seconde: { url: urlB, hote: 'cdn.beta.example', fichier: fbPath, sha256: sha(IA2), w: 300, h: 420, lu: { ...entree().lu } } })] }));
             return w;
         };
         const poserBLoin = (w, poser) => (poser ? poserAuCache(w.cache, urlB, IA2) : path.join(w.cache, 'absent.bin'));
