@@ -29,14 +29,26 @@ const st = (l, g, autres) => CI.statutsPourImage(l, g, autres);
     const cas = [[J({ numero: '078' }), ligne()], [J({ langue: 'EN' }), ligne({ tirageSource: 'intl' })], [lu(), ligne()], [lu({ numero: 'XY85', setCode: 'XY' }), ligne({ numero: '86', set: { code: 'XYPR' } })]];
     H.v('0a. 🔑 hors des trois règles, les statuts rendus sont ceux de la production, champ par champ', cas.map(([l, g]) => JSON.stringify(GC.statuts(l, g)) === JSON.stringify(st(l, g, []))), [true, true, true, true]);
     H.v('0b. la liste des champs est celle de la production (rien n\'est retiré du veto)', Object.keys(st(J(), ligne(), [])), Object.keys(GC.statuts(J(), ligne())));
-    H.v('0c. les règles sont nommées et fermées', CI.REGLES, ['attaque-traduite', 'promo-prefixe', 'symbole-isole']);
+    H.v('0c. les règles sont nommées et fermées (le tour 1 a retiré symbole-isole : numéro + total seuls ne suffisent pas)', CI.REGLES, ['attaque-traduite', 'promo-prefixe']);
 }
 // ── (1) attaque-traduite
 {
     const prod = GC.statuts(J(), ligne());
     H.v('1a. (production) l\'attaque lue « Occult Number » face à « Ominous Numbers » : ko — la cause des faux contredits', prod.attaque, 'ko');
-    H.v('1b. carte japonaise, numéro ET total concordent : l\'attaque devient inconnue (?), le reste est inchangé', st(J(), ligne(), []), { ...prod, attaque: '?' });
+    H.v('1b. carte japonaise, numéro, total ET code concordent : l\'attaque devient inconnue (?), le reste est inchangé', st(J(), ligne(), []), { ...prod, attaque: '?' });
     H.v('1c. numéro ET code concordent (total non lu) : inconnue', st(J({ total: null }), ligne(), []).attaque, '?');
+    // TOUR 1 (relecture) : numéro + total sans code lu collisionnent entre sets (sv5K 012/071 pris pour sv5M 012/071) ; le code doit concorder
+    H.v('1p. 🔴 numéro ET total concordent mais le CODE n\'est pas lu : le ko reste (la clé numéro+total collisionne entre sets)', st(J({ setCode: null }), ligne(), []).attaque, 'ko');
+    H.v('1q. 🔴 le code lu CONTREDIT (sv5K lu, sv5M au catalogue) : le ko reste', st(J({ setCode: 'sv5K' }), ligne({ set: { code: 'sv5M' } }), []).attaque, 'ko');
+    H.v('1r. 🔴 langue hors de la liste fermée de la production (« inconnu », « N/A », « English », « ») : le ko reste', ['inconnu', 'N/A', 'English', ' '].map(x => st(J({ langue: x }), ligne(), []).attaque), ['ko', 'ko', 'ko', 'ko']);
+    H.v('1s. les langues de la liste fermée sont connues : ja, JP, fr, DE, zh, ko', ['ja', 'JP', 'fr', 'DE', 'ZH', 'KR'].map(x => st(J({ langue: x }), ligne({ tirageSource: 'jp' }), []).attaque), ['?', '?', '?', '?', '?', '?']);
+    const rival = { idProduct: 9, nomCardmarket: 'Rival [Occult Number | Autre]', tirageSource: 'jp', numero: '002' };
+    H.v('1t. 🔴 un AUTRE candidat a une attaque qui CONCORDE avec la lecture : la lecture le désigne, le ko du désigné reste', st(J(), ligne(), [rival]).attaque, 'ko');
+    H.v('1u. 🔴 un candidat sans ligne au catalogue (null) : jumeau indécidable, le ko reste', [st(J(), ligne(), [null]).attaque, st(J(), ligne(), [undefined]).attaque, st(J(), ligne(), [3]).attaque], ['ko', 'ko', 'ko']);
+    H.v('1v. 🔴 un autre candidat sans numéro, sans nom ou sans tirage : jumeau indécidable, le ko reste', [{ nomCardmarket: 'X [Y]', tirageSource: 'jp' }, { nomCardmarket: 'X [Y]', numero: '002' }, { tirageSource: 'jp', numero: '002' }].map(a => st(J(), ligne(), [a]).attaque), ['ko', 'ko', 'ko']);
+    H.v('1w. 🔴 « 077 » et « 77 » sont le même numéro (comparerNumeros de la production) : le jumeau est reconnu, le ko reste', st(J(), ligne(), [{ nomCardmarket: ligne().nomCardmarket, tirageSource: 'jp', numero: '77' }]).attaque, 'ko');
+    H.v('1x. 🔴 `autres` n\'est pas une liste : indécidable, le ko reste', [st(J(), ligne(), undefined).attaque, st(J(), ligne(), 'x').attaque], ['ko', 'ko']);
+    H.v('1y. 🔴 le désigné lui-même sans nom, sans tirage ou sans numéro : indécidable, le ko reste', [st(J(), ligne({ tirageSource: null }), []).attaque, st(J(), ligne({ numero: null }), []).attaque], ['ko', 'ko']);
     H.v('1d. 🔴 langue lue = EN : l\'attaque est une lecture directe, le ko reste', st(J({ langue: 'EN' }), ligne({ tirageSource: 'intl' }), []).attaque, 'ko');
     H.v('1e. 🔴 langue lue absente : on ne sait pas qu\'elle est traduite, le ko reste', st(J({ langue: null }), ligne({ tirageSource: 'jp' }), []).attaque, 'ko');
     H.v('1f. 🔴 le numéro ne concorde pas (non lu) : le ko reste (une seule donnée rigide ne suffit pas)', st(J({ numero: null }), ligne(), []).attaque, 'ko');
@@ -48,7 +60,7 @@ const st = (l, g, autres) => CI.statutsPourImage(l, g, autres);
     H.v('1k. un candidat de même nom et de même numéro mais d\'un autre tirage n\'est pas un jumeau : inconnue', st(J(), ligne(), [{ ...jumeau, tirageSource: 'intl' }]).attaque, '?');
     H.v('1o. 🔴 un candidat d\'un AUTRE nom (même tirage, même numéro) n\'est pas un jumeau : inconnue', st(J(), ligne(), [{ ...jumeau, nomCardmarket: 'Autre [Gamma]' }]).attaque, '?');
     H.v('1l. une attaque qui CONCORDE reste ok (la règle ne fabrique jamais un ok)', st(J({ attaque: 'Max Shadow' }), ligne(), []).attaque, 'ok');
-    H.v('1m. le français est non anglais aussi : « Poison Whip » face à « Poisonous Whip », numéro et total concordent', st(lu({ numero: 'TG02', total: '30', langue: 'FR', attaque: 'Poison Whip' }), ligne({ numero: 'TG02', total: 'TG30', set: { code: 'LOR' }, tirageSource: 'intl', nomCardmarket: 'Roserade [Poisonous Whip | Assassin\'s Rose]' }), []).attaque, '?');
+    H.v('1m. le français est non anglais aussi : « Poison Whip » face à « Poisonous Whip », numéro, total et code concordent', st(lu({ numero: 'TG02', total: '30', setCode: 'LOR', langue: 'FR', attaque: 'Poison Whip' }), ligne({ numero: 'TG02', total: 'TG30', set: { code: 'LOR' }, tirageSource: 'intl', nomCardmarket: 'Roserade [Poisonous Whip | Assassin\'s Rose]' }), []).attaque, '?');
     H.v('1n. 🔴 aucune des règles n\'efface un autre champ : numéro, total et langue contradictoires restent ko', ['numero', 'total', 'langue'].map(k => st(J({ numero: '999', total: '1', langue: 'FR' }), ligne(), [])[k]), ['ko', 'ko', 'ko']);
 }
 // ── (2) promo-prefixe
@@ -60,26 +72,26 @@ const st = (l, g, autres) => CI.statutsPourImage(l, g, autres);
     H.v('2d. SM46 : la carte imprime le set d\'origine (BUS) sur une promo à étoile, Cardmarket range en SM', promo({ numero: 'SM46', setCode: 'BUS' }, { numero: '46', set: { code: 'SM' } }).code, '?');
     H.v('2e. XY46 imprimé ROS, rangé XYPR', promo({ numero: 'XY46', setCode: 'ROS' }, { numero: '46', set: { code: 'XYPR' } }).code, '?');
     H.v('2k. le code lu EST le préfixe (XY) sans étoile de promo : inconnu aussi', promo({ numero: 'XY85', setCode: 'XY', symboleSet: 'aucun' }, { numero: '85', set: { code: 'XYPR' } }).code, '?');
+    H.v('2l. 🔴 un code catalogue à chiffre (SM1) n\'est pas la famille SM : le code reste ko (le startsWith du tour 0 le laissait passer)', promo({ numero: 'SM46', setCode: 'BUS' }, { numero: '46', set: { code: 'SM1' } }).code, 'ko');
+    H.v('2m. 🔴 un code catalogue qui commence par la famille sans en être un code de promo (XYZ, SMX) : le code reste ko', [promo({ numero: 'XY46', setCode: 'XY' }, { numero: '46', set: { code: 'XYZ' } }).code, promo({ numero: 'SM46', setCode: 'BUS' }, { numero: '46', set: { code: 'SMX' } }).code], ['ko', 'ko']);
     H.v('2f. 🔴 un AUTRE préfixe que la famille du code Cardmarket (SM46 face à XYPR 46) : le code reste ko', promo({ numero: 'SM46', setCode: 'BUS' }, { numero: '46', set: { code: 'XYPR' } }).code, 'ko');
     H.v('2g. 🔴 les chiffres diffèrent (XY85 face à XYPR 86) : le numéro contredit… ou ne concorde pas, et le code reste ko', promo({ numero: 'XY85', setCode: 'XY' }, { numero: '86', set: { code: 'XYPR' } }).code, 'ko');
     H.v('2h. 🔴 sans étoile de promo et un code lu qui n\'est pas le préfixe (BUS) : le code reste ko', promo({ numero: 'SM46', setCode: 'BUS', symboleSet: 'aucun' }, { numero: '46', set: { code: 'SM' } }).code, 'ko');
     H.v('2i. 🔴 le numéro du catalogue porte une lettre (TG13) : la convention ne s\'applique pas', promo({ numero: 'XY13', setCode: 'XY' }, { numero: 'TG13', set: { code: 'XYPR' } }).code, 'ko');
     H.v('2j. 🔴 un numéro lu sans préfixe (85) : rien ne désigne la famille, le code reste ko', promo({ numero: '85', setCode: 'XY' }, { numero: '85', set: { code: 'XYPR' } }).code, 'ko');
 }
-// ── (3) symbole-isole
+// ── (3) le symbole garde son veto (tour 1 : la règle symbole-isole est retirée — Expedition e1 4/165 n'est pas le 151 n°4/165)
 {
     const l = J({ symboleSet: 'e5' }), g = ligne();
     H.v('3a. (production) le symbole e5 lu sur un set s8b : ko', GC.statuts(l, g).symbole, 'ko');
-    H.v('3b. numéro ET total concordent : le symbole isolé devient inconnu', st(l, g, []).symbole, '?');
-    H.v('3c. 🔴 le total n\'est pas lu : le ko reste', st({ ...l, total: null }, g, []).symbole, 'ko');
-    H.v('3d. 🔴 le numéro n\'est pas lu : le ko reste', st({ ...l, numero: null }, g, []).symbole, 'ko');
+    H.v('3b. 🔴 numéro ET total concordent : le symbole reste ko (aucune règle ne le lève)', st(l, g, []).symbole, 'ko');
     H.v('3e. un symbole qui concorde reste ok', st(J({ symboleSet: 'e3', setCode: null }), ligne({ set: { code: 'EC3' }, numero: '077', total: '184' }), []).symbole, 'ok');
 }
 // ── (4) ne lève jamais, rend la production quand il ne sait pas
 {
     H.v('4a. lecture absente : tous inconnus (comme la production)', st(null, ligne(), []), GC.statuts(null, ligne()));
     H.v('4b. ligne absente : tous inconnus', st(J(), null, []), GC.statuts(J(), null));
-    H.v('4c. `autres` absent ou absurde : traité comme aucun autre candidat', [st(J(), ligne(), undefined).attaque, st(J(), ligne(), 'x').attaque, st(J(), ligne(), [null, 3]).attaque], ['?', '?', '?']);
+    H.v('4c. une liste VIDE d\'autres candidats est décidable (aucun jumeau) : inconnue', st(J(), ligne(), []).attaque, '?');
     H.v('4d. une ligne absurde ne lève pas', typeof st(J(), { numero: {}, set: 3, nomCardmarket: 5 }, []), 'object');
     H.v('4e. 🔴 une correction qui lèverait (un autre candidat illisible) rend les statuts de la production, sans lever', (() => { try { return st(J(), ligne(), [{ get nomCardmarket() { throw new Error('x'); } }]).attaque; } catch { return 'leve'; } })(), 'ko');
 }
@@ -94,11 +106,14 @@ const dec = (over = {}, comparateur) => {
         ...(comparateur === undefined ? {} : { comparateur }), ...over
     });
 };
+const produits2 = [[101, ligne({ idProduct: 101 })], [102, ligne({ idProduct: 102, numero: '002', nomCardmarket: 'Autre [Gamma]' })]];
+const troisIds = { ids: [101, 102, 103], cles: new Map([[101, 'k1'], [102, 'k2'], [103, 'k2']]) };
 {
     H.v('5a. sans le drapeau : l\'attaque traduite contredit le désigné (comme avant)', [dec().sur, dec().motif], [false, 'contredit']);
     H.v('5b. drapeau éteint explicitement : de même', dec({}, false).motif, 'contredit');
     H.v('5c. 🔑 drapeau allumé : le sûr tient, c\'est 101', [dec({}, true).sur, dec({}, true).produit], [true, 101]);
     H.v('5d. drapeau allumé, MAIS un jumeau du désigné parmi les candidats : le veto de l\'attaque reste', dec({ produits: new Map([[101, ligne({ idProduct: 101 })], [102, ligne({ idProduct: 102 })]]) }, true).motif, 'contredit');
+    H.v('5d2. 🔴 drapeau allumé, un candidat de la question sans ligne au catalogue : la détection du jumeau est indécidable, le veto reste (aucun filter(Boolean) silencieux)', [dec({ ...troisIds }, true).motif, dec({ ...troisIds, produits: new Map([...produits2, [103, ligne({ idProduct: 103, numero: '003', nomCardmarket: 'Encore [Delta]' })]]) }, true).sur], ['contredit', true]);
     H.v('5e. drapeau allumé, numéro lu qui contredit : le veto reste', dec({ lu: J({ numero: '999' }) }, true).motif, 'contredit');
     H.v('5f. drapeau allumé, langue lue EN face à un tirage jp : le veto de la langue reste', dec({ lu: J({ langue: 'EN' }) }, true).motif, 'contredit');
     H.v('5g. drapeau allumé : toutes les autres conditions tiennent (écart trop faible : se tait)', dec({ cosinus: c => ({ k1: 0.60, k2: 0.58 })[c] }, true).motif, 'ecart');

@@ -98,8 +98,8 @@ function decider(e) {
         if (!(e.produits instanceof Map) || !e.produits.has(meilleur.id)) return se_tait('donnee-manquante');
         const ligne = e.produits.get(meilleur.id);
         if (e.lu) {
-            // SPI-CONTRADICTIONS (V2_SPI_COMPARATEUR, `e.comparateur === true` exactement) : le comparateur juste (comparateur-image.js) à la place de la définition brute de la production ; les autres candidats servent à reconnaître un jumeau
-            const st = e.comparateur === true ? statutsPourImage(e.lu, ligne, ids.filter(i => i !== meilleur.id).map(i => e.produits.get(i)).filter(Boolean)) : statuts(e.lu, ligne);
+            // SPI-CONTRADICTIONS (V2_SPI_COMPARATEUR, `e.comparateur === true` exactement) : le comparateur juste (comparateur-image.js) à la place de la définition brute de la production ; les autres candidats servent à reconnaître un jumeau ou un rival à l'attaque concordante ; une ligne absente reste undefined (détection indécidable : le veto reste)
+            const st = e.comparateur === true ? statutsPourImage(e.lu, ligne, ids.filter(i => i !== meilleur.id).map(i => e.produits.get(i))) : statuts(e.lu, ligne);
             if (CHAMPS.some(k => st[k] === 'ko')) return se_tait('contredit');
         }
         if (Array.isArray(e.marquesLues) && e.marquesLues.length) {
