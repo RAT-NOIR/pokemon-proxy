@@ -47,6 +47,21 @@ const sha256De = b => crypto.createHash('sha256').update(b).digest('hex');
 const racineDe = h => String(h ?? '').trim().toLowerCase().split('.').slice(-2).join('.');
 const numeroDuProduit = p => { const n = p?.numero == null ? '' : String(p.numero).trim(); return n === '' ? null : n; };
 const PREFIXE_ALPHABETIQUE = /^[A-Za-z]+\d/;
+// Tour 3 (1) — `tamponnee` de l'état est le champ `reimpressions` du SET (audit-catalogue/etat-api.js), pas toujours un tampon physique : `pps`, `ba20`… en sont ; `metacarte` (poser-par-metacarte.js) dit
+// seulement que les fiches ont été jointes par la désignation croisée — AUCUN tampon sur la carte. TABLE FERMÉE valeur -> tampon attendu sur le scan (liste lue sur l'état du 2026-10-26) ; une valeur
+// inconnue ne passe jamais (`tampon-inconnu`) : une garde s'écrit par ce qu'elle autorise.
+const TAMPONS_ATTENDUS = Object.freeze({ metacarte: null, wcd: 'wcd', pps: 'pps', ba24: 'ba24', ba22: 'ba22', ba20: 'ba20', sea: 'sea', pr: 'pr', ppp: 'ppp', boo24: 'boo24', boo: 'boo', boo23: 'boo23', pwc: 'pwc' });
+/** @returns {{ok: boolean, valeur: string|null}} ok = false pour une valeur hors de la table (null, undefined et « » = pas de tampon). */
+function tamponAttendu(t) {
+    if (t == null || t === '') return { ok: true, valeur: null };
+    if (typeof t === 'string' && Object.hasOwn(TAMPONS_ATTENDUS, t)) return { ok: true, valeur: TAMPONS_ATTENDUS[t] };
+    return { ok: false, valeur: null };
+}
+/**
+ * Tour 3 (2) — la carte imprime « XY150a », le produit Cardmarket porte « 150a » (la jointure de production essaie les deux écritures). Admis SEULEMENT si (a) le numéro lu sans son préfixe alphabétique égale
+ * (cleNumero) le numéro du produit, qui COMMENCE par un chiffre, et (b) le slug du produit, témoin indépendant, FINIT par le numéro lu avec son préfixe (insensible à la casse).
+ */
+const numeroSansPrefixeAdmis = (n, np, slug) => PREFIXE_ALPHABETIQUE.test(n) && /^\d/.test(np) && texte(slug) && J.cleNumero(n.replace(/^[A-Za-z]+/, '')) === J.cleNumero(np) && slug.trim().toLowerCase().endsWith(n.toLowerCase());
 /** Les seuls sets où une position lue vaut preuve : slugSet `Battle-Academy*` (préfixe) et slugSet contenant `Trainer-Kit`. */
 const setAdmisPourPosition = slug => typeof slug === 'string' && (slug.startsWith('Battle-Academy') || slug.includes('Trainer-Kit'));
 /** Le nom lu sur le scan est-il celui du produit ? Nom Cardmarket décomposé (avant « [ ») puis `clesNom` de la jointure ; l'un ou l'autre côté vide = non. */
@@ -161,13 +176,15 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
-        else if (J.cleNumero(n) !== J.cleNumero(np)) motifs.push('numero-different');
+        else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
         // tour 1 (1) : sans numéro, RIEN d'autre ne relie l'image au produit que son NOM — le nom lu doit être celui du produit (Cardmarket, avant « [ »), par la normalisation de la jointure
         if (!memeNomQueLeProduit(lu.nom, produit?.nomEn)) motifs.push('nom-different');
     }
-    if (norm(lu.tampon) !== norm(produit?.tamponnee)) motifs.push('tampon-different');
+    const ta = tamponAttendu(produit?.tamponnee);
+    if (!ta.ok) motifs.push('tampon-inconnu');
+    else if (norm(lu.tampon) !== norm(ta.valeur)) motifs.push('tampon-different');
     if (!Array.isArray(entree.contradictions) || entree.contradictions.length > 0) motifs.push('contradictions');
     return { ok: motifs.length === 0, motifs };
 }
@@ -191,12 +208,14 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
     if (!Buffer.isBuffer(octets?.b)) return non('seconde-illisible');
     if (octets.a.equals(octets.b)) return non('memes-octets');
     if (langueProduit == null) return non('langue-du-tirage-inconnue');
+    const ta = tamponAttendu(produit?.tamponnee);
+    if (!ta.ok) return non('tampon-inconnu');
     // tour 1 (3) : la SECONDE image porte sa propre lecture, jugée comme la première (P2) — la concordance d'image ne prouve que le dessin, jamais le tirage
     if (!objet(s.lu)) return non('seconde-sans-lecture');
     const l2 = evaluerPreuveLue({ entree: { lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit });
     if (!l2.ok) return non(`seconde-lecture:${l2.motifs[0]}`);
     const r = await decider({
-        produit: { langue: langueProduit, codeSet: null, numero: CO.reduireNumero(produit?.numero), tampon: produit?.tamponnee ?? null },
+        produit: { langue: langueProduit, codeSet: null, numero: CO.reduireNumero(produit?.numero), tampon: ta.valeur },
         candidats: [{ source: entree.hote, buf: octets.a, tirage: tirageDeLecture(entree.lu) }, { source: s.hote, buf: octets.b, tirage: tirageDeLecture(s.lu) }],
         scansConformes: []
     });
@@ -294,13 +313,13 @@ function grouperUnites({ acceptees, fiches, famille }) {
             const paires = membres.map(m => paireNommee(m.entree.varianteNommee, tous));
             if (paires.some(x => !x)) { refuser(membres, 'variantes-indiscernables', 'aucune source ne nomme quel produit est holo (varianteNommee.paire { normale, holo } = les deux produits de la fiche)'); continue; }
             if (new Set(paires.map(x => `${x.normale}|${x.holo}`)).size > 1) { refuser(membres, 'variantes-indiscernables', 'les deux entrées ne disent pas la même paire'); continue; }
-            if (new Set(membres.map(m => `${m.langue}|${norm(m.produit.tamponnee)}`)).size > 1) { refuser(membres, 'unite-incoherente', 'langue ou tampon différents entre les deux produits d\'une même image'); continue; }
+            if (new Set(membres.map(m => `${m.langue}|${norm(tamponAttendu(m.produit.tamponnee).valeur)}`)).size > 1) { refuser(membres, 'unite-incoherente', 'langue ou tampon différents entre les deux produits d\'une même image'); continue; }
             partage = { partageeHoloNonHolo: true, produitsPartages: [...ids], paire: paires[0] };
         } else if (membres.length !== 1 || tous[0] !== ids[0]) { refuser(membres, 'fiche-inconnue', cle); continue; }
         const m = membres[0], e = m.entree, p = m.produit, pr = preuvesDe(m);
         unites.push({
             carteId: p.carteId, slugSet: p.slugSet, numero: numeroDuProduit(p), produits: [...ids], url: e.url, hote: e.hote, fichier: e.fichier, sha256: e.sha256, regle: e.regle,
-            langue: m.langue, tampon: p.tamponnee ?? null, tirageAttendu: p.tirage, groupe: famille, idSource: null, carteNom: p.nomEn ?? null, nomSource: e.lu.nom ?? null,
+            langue: m.langue, tampon: tamponAttendu(p.tamponnee).valeur, tirageAttendu: p.tirage, groupe: famille, idSource: null, carteNom: p.nomEn ?? null, nomSource: e.lu.nom ?? null,
             numeroSource: e.lu.numero != null ? `${e.lu.numero}${e.lu.total != null ? `/${e.lu.total}` : ''}` : null, variante: null,
             languePreuve: pr.languePreuve, preuveNeutre: pr.preuveNeutre,
             // seuls des champs ÉNUMÉRÉS s'écrivent : le marquage de l'API, et la paire structurée (jamais le texte libre ni le nom de la source qui la donne)
@@ -343,4 +362,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

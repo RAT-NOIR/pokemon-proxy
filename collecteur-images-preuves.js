@@ -74,7 +74,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const ids = r.appariees.map(a => a.entree.idProduct);
         const lignesDe = new Map();
         for (const l of ids.length ? await lire.lignes(ids) : []) (lignesDe.get(l.idProduct) || lignesDe.set(l.idProduct, []).get(l.idProduct)).push(l);
-        const numerosDe = new Map((ids.length ? await lire.numeros(ids) : []).map(n => [n.idProduct, n.numero]));
+        const numerosDe = new Map((ids.length ? await lire.numeros(ids) : []).map(n => [n.idProduct, n]));
         const slugs = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(Boolean))];
         const setsDe = new Map((slugs.length ? await lire.sets(slugs) : []).map(s => [s._id, s]));
         const acceptees = [], produits = new Map();
@@ -90,7 +90,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             const set = setsDe.get(L.slugSet);
             if (!set) { non('set-absent', L.slugSet); continue; }
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
-            const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id) ?? null, carteId: L.carteId, slugSet: L.slugSet, nomEn: E.name ?? null };
+            const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null };
             // le cache est RELU, jamais cru (P8)
             const c1 = await PV.verifierCache({ entree: e, dossierCache: cache });
             if (!c1.ok) { non(c1.motif, c1.detail); continue; }
@@ -168,9 +168,9 @@ function lireDepuisLaBase(db, prodDb) {
     const par = async (coll, filtre, projection) => coll.find(filtre, { projection }).toArray();
     const lots = async (ids, f) => { const sortie = []; for (let i = 0; i < ids.length; i += 1000) sortie.push(...await f(ids.slice(i, i + 1000))); return sortie; };
     return {
-        lignes: ids => lots(ids, lot => par(db.collection('cartes_produits'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, idExpansion: 1 })),
+        lignes: ids => lots(ids, lot => par(db.collection('cartes_produits'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, slug: 1, numeroFiche: 1, idExpansion: 1 })),
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
-        numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1 })),
+        numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1 })),
         sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 })
     };
 }

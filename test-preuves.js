@@ -119,10 +119,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(motif(lu({ langue: 'ja' })), /langue-differente/);
         assert.match(motif(lu({ langue: null })), /langue-differente/);
         assert.match(motif(lu({ langue: 'fr' })), /langue-differente/, 'fr n\'est admise que pour les éditions locales énumérées');
-        assert.match(motif(lu({ tampon: 'Staff' })), /tampon-different/, 'tampon lu sur un produit sans tampon');
-        assert.match(motif(entree(), produit({ tamponnee: 'Staff' })), /tampon-different/, 'produit tamponné, scan sans tampon : null ≠ un tampon');
-        assert.match(motif(lu({ tampon: 'Prize Pack' }), produit({ tamponnee: 'Staff' })), /tampon-different/);
-        assert.strictEqual(lue(lu({ tampon: ' staff ' }), produit({ tamponnee: 'Staff' })).ok, true, 'même tampon, casse et espaces ignorés');
+        assert.match(motif(lu({ tampon: 'pps' })), /tampon-different/, 'tampon lu sur un produit sans tampon');
+        assert.match(motif(entree(), produit({ tamponnee: 'pps' })), /tampon-different/, 'produit tamponné, scan sans tampon : null ≠ un tampon');
+        assert.match(motif(lu({ tampon: 'ba20' }), produit({ tamponnee: 'pps' })), /tampon-different/);
+        assert.strictEqual(lue(lu({ tampon: ' PPS ' }), produit({ tamponnee: 'pps' })).ok, true, 'même tampon, casse et espaces ignorés');
         assert.match(motif(lu({ marques: [] })), /marques-vides/);
         assert.match(motif(lu({ marques: undefined })), /marques-vides/);
         assert.match(motif(lu({ marques: [''] })), /marques-vides/);
@@ -156,6 +156,44 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(e, produit({ numero: '' })).ok, true, 'numéro vide = pas de numéro');
     });
 
+    await test('tour 3 (1) : `tamponnee` est le champ « reimpressions » du set — `metacarte` n\'est AUCUN tampon physique (table fermée valeur -> tampon attendu, inconnue = tampon-inconnu)', () => {
+        assert.strictEqual(PV.TAMPONS_ATTENDUS.metacarte, null);
+        assert.ok(Object.isFrozen(PV.TAMPONS_ATTENDUS));
+        for (const v of ['wcd', 'pps', 'ba24', 'ba22', 'ba20', 'sea', 'pr', 'ppp', 'boo24', 'boo', 'boo23', 'pwc']) assert.strictEqual(PV.TAMPONS_ATTENDUS[v], v);
+        const lu = o => entree({ lu: { ...entree().lu, ...o } });
+        // TK2 : produit « metacarte », scan sans tampon -> passe ; un tampon lu sur un produit « metacarte » -> refus
+        assert.strictEqual(lue(entree(), produit({ tamponnee: 'metacarte' })).ok, true);
+        assert.match(lue(lu({ tampon: 'metacarte' }), produit({ tamponnee: 'metacarte' })).motifs.join(), /tampon-different/);
+        assert.match(lue(lu({ tampon: 'pps' }), produit({ tamponnee: 'metacarte' })).motifs.join(), /tampon-different/);
+        // les vrais tampons restent comparés strictement
+        assert.strictEqual(lue(lu({ tampon: 'pps' }), produit({ tamponnee: 'pps' })).ok, true);
+        assert.match(lue(entree(), produit({ tamponnee: 'pps' })).motifs.join(), /tampon-different/);
+        assert.match(lue(lu({ tampon: 'ba22' }), produit({ tamponnee: 'ba20' })).motifs.join(), /tampon-different/);
+        // une valeur inconnue ne passe JAMAIS (ni sans tampon lu, ni avec le même mot)
+        for (const v of ['zzz', 'Metacarte', 'prototype', '__proto__', 'constructor', 42]) {
+            assert.match(lue(entree(), produit({ tamponnee: v })).motifs.join(), /tampon-inconnu/, String(v));
+            assert.match(lue(lu({ tampon: String(v) }), produit({ tamponnee: v })).motifs.join(), /tampon-inconnu/, String(v));
+        }
+        assert.strictEqual(lue(entree(), produit({ tamponnee: null })).ok, true); assert.strictEqual(lue(entree(), produit({ tamponnee: undefined })).ok, true);
+        assert.strictEqual(PV.tamponAttendu('metacarte').valeur, null);
+    });
+    await test('tour 3 (2) : préfixe de promo absent du produit (carte « XY150a », produit « 150a ») — admis SEULEMENT avec le slug du produit qui finit par le numéro lu AVEC son préfixe', () => {
+        const lu = o => entree({ lu: { ...entree().lu, numero: 'XY150a', total: null, ...o } });
+        const P = o => produit({ numero: '150a', slug: 'Pikachu-V1-XYPRXY150a', ...o });
+        assert.strictEqual(lue(lu(), P()).ok, true);
+        assert.strictEqual(lue(lu(), P({ slug: 'Pikachu-V1-XYPRXY150A' })).ok, true, 'casse ignorée');
+        assert.match(lue(lu(), P({ slug: 'Pikachu-V1-XYPR150a' })).motifs.join(), /numero-different/, 'slug sans le préfixe lu');
+        assert.match(lue(lu(), P({ slug: 'Pikachu-XY150a-V2' })).motifs.join(), /numero-different/, 'en FIN de slug');
+        assert.match(lue(lu(), P({ slug: null })).motifs.join(), /numero-different/, 'sans slug : pas de témoin');
+        assert.match(lue(lu(), P({ slug: undefined })).motifs.join(), /numero-different/);
+        assert.match(lue(lu({ numero: 'XY151a' }), P()).motifs.join(), /numero-different/, 'chiffres différents');
+        assert.match(lue(lu({ numero: 'XY150b' }), P({ slug: 'Pikachu-XYPRXY150b' })).motifs.join(), /numero-different/, 'suffixe différent');
+        assert.match(lue(lu(), P({ numero: 'SM150a' })).motifs.join(), /numero-different/, 'le numéro du produit doit COMMENCER par un chiffre');
+        assert.match(lue(lu({ numero: '150a' }), P()).motifs.join(), /numero-ou-total-absent/, 'un numéro lu sans préfixe est numérique : le total reste exigé');
+        assert.strictEqual(lue(lu(), produit({ numero: 'XY150a', slug: 'Autre' })).ok, true, 'numéro égal d\'emblée : le slug ne sert pas');
+        // la position garde sa règle : le repli de préfixe ne s'applique pas
+        assert.match(lue(entree({ lu: { ...entree().lu, numero: '36', total: null, position: 'XY150a' } }), produit({ numero: '150a', slug: 'x-XY150a', slugSet: 'Battle-Academy-2022' })).motifs.join(), /numero-different/);
+    });
     await test('tour 2 (1) : promo sans total — le total n\'est exigé que pour un numéro purement numérique (+ suffixe) ; un numéro à préfixe alphabétique se juge sans total, par cleNumero', () => {
         const promo = (n, o = {}) => entree({ lu: { ...entree().lu, numero: n, total: null, ...o } });
         assert.strictEqual(lue(promo('XY150a'), produit({ numero: 'XY150a' })).ok, true);
@@ -202,17 +240,17 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(await m({ lu: null }), 'deux-sources:seconde-sans-lecture');
         assert.match(await m({ lu: { ...entree().lu, numero: '14' } }), /^deux-sources:seconde-lecture:numero-different/);
         assert.match(await m({ lu: { ...entree().lu, langue: 'ja' } }), /seconde-lecture:langue-differente/);
-        assert.match(await m({ lu: { ...entree().lu, tampon: 'Staff' } }), /seconde-lecture:tampon-different/);
+        assert.match(await m({ lu: { ...entree().lu, tampon: 'pps' } }), /seconde-lecture:tampon-different/);
         assert.match(await m({ lu: { ...entree().lu, marques: [] } }), /seconde-lecture:marques-vides/);
         assert.strictEqual(appels.length, avant, 'jamais appelée sur une seconde lecture qui ne tient pas');
         const lu2 = E2({ seconde: seconde({ lu: { ...entree().lu, numero: '013' } }) });
         await deux(lu2, { a: Buffer.from('A'), b: Buffer.from('B') }, oui);
         assert.deepStrictEqual(appels[1].candidats.map(c => c.tirage.numero), ['13', '013'], 'chaque source porte SA lecture');
-        const tamponne = E2({ lu: { ...entree().lu, tampon: 'Staff' }, seconde: seconde({ lu: { ...entree().lu, tampon: 'Staff' } }) });
-        await deux(tamponne, { a: Buffer.from('A'), b: Buffer.from('B') }, oui, produit({ tamponnee: 'Staff' }));
-        assert.strictEqual(appels[2].produit.tampon, 'Staff', 'le tampon du PRODUIT est transmis à la règle d\'image');
-        assert.strictEqual(appels[2].candidats[0].tirage.tampon, 'Staff', 'et celui que dit le manifeste pour la source');
-        assert.strictEqual(appels[2].candidats[1].tirage.tampon, 'Staff');
+        const tamponne = E2({ lu: { ...entree().lu, tampon: 'pps' }, seconde: seconde({ lu: { ...entree().lu, tampon: 'pps' } }) });
+        await deux(tamponne, { a: Buffer.from('A'), b: Buffer.from('B') }, oui, produit({ tamponnee: 'pps' }));
+        assert.strictEqual(appels[2].produit.tampon, 'pps', 'le tampon du PRODUIT est transmis à la règle d\'image');
+        assert.strictEqual(appels[2].candidats[0].tirage.tampon, 'pps', 'et celui que dit le manifeste pour la source');
+        assert.strictEqual(appels[2].candidats[1].tirage.tampon, 'pps');
         const non = await deux(E2(), { a: Buffer.from('A'), b: Buffer.from('B') }, async () => ({ decision: 'trou', motif: 'discordance-image', preuve: {} }));
         assert.deepStrictEqual([non.ok, non.motif], [false, 'deux-sources:discordance-image']);
         const conf = await deux(E2(), { a: Buffer.from('A'), b: Buffer.from('B') }, async () => ({ decision: 'a-confirmer', preuve: {} }));
@@ -229,7 +267,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(await m(E2(), { a: Buffer.from('A'), b: Buffer.from('A') }), /memes-octets/);
         assert.strictEqual(await m(E2({ contradictions: ['x'] })), 'deux-sources:contradictions');
         assert.match(await m(E2(), { a: Buffer.from('A'), b: null }), /seconde-illisible/);
-        assert.strictEqual(n, 0);
+        assert.strictEqual((await deux(E2(), o, oui, produit({ tamponnee: 'zzz' }))).motif, 'deux-sources:tampon-inconnu');
+        assert.strictEqual((await deux(E2(), o, oui, produit({ tamponnee: 'metacarte' }))).ok, true, 'metacarte = aucun tampon attendu');
+        assert.strictEqual(n, 1, 'la règle d\'image n\'a été appelée que pour le cas metacarte');
     });
     await test('P3 : la chaîne RÉELLE (pHash + ORB) : deux encodages du même dessin = ecrire ; un autre dessin = refus', async () => {
         const IA = await fabrique(7).png().toBuffer(), IA2 = await sharp(IA).webp({ lossless: true }).toBuffer(), IB = await fabrique(99).png().toBuffer();
@@ -255,6 +295,11 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     // tour 1 (4) : la forme STRUCTURÉE que porte le manifeste réel : { source, fichier, dit, paire: { normale, holo } } — plus de regex sur `dit`
     const nommee = (paire = { normale: 1001, holo: 1002 }, o = {}) => ({ source: 'boutique-x', fichier: 'C:\\x\\11.ts', dit: 'normale = 1001 (V1), holo = 1002 (V2)', paire, ...o });
     const FICHE = (...ids) => new Map([['77|Set-A|13', ids]]);
+    await test('tour 3 (1) : le tampon écrit sur l\'unité est le tampon attendu (null pour metacarte)', () => {
+        const U = (tamponnee, lutampon) => PV.grouperUnites({ acceptees: [accepte(entree({ lu: { ...entree().lu, tampon: lutampon } }), produit({ tamponnee }))], fiches: new Map([['77|Set-A|13', [1001]]]), famille: 'F' }).unites[0];
+        assert.strictEqual(U('metacarte', null).tampon, null);
+        assert.strictEqual(U('pps', 'pps').tampon, 'pps');
+    });
     await test('tour 2 (2) : lu.numero (imprimé) et lu.position restent écrits, énumérés, dans preuveLue', () => {
         const BA = produit({ numero: 'C36', slugSet: 'Battle-Academy-2022' });
         const e = entree({ lu: { ...entree().lu, numero: '36', total: null, position: 'C36' } });
@@ -319,8 +364,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(autreFiche.unites.length, 0, 'un produit de la fiche qui n\'a aucune entrée validée : refus de tous');
     });
     await test('P5 : un produit joint à une fiche inconnue des lignes, ou langue/tampon incohérents dans une paire = refus', () => {
-        const p1 = produit({ idProduct: 1001 }), p2 = produit({ idProduct: 1002, tamponnee: 'Staff' });
-        const e1 = entree({ varianteNommee: nommee() }), e2 = entree({ idProduct: 1002, varianteNommee: nommee(), lu: { ...entree().lu, tampon: 'Staff' } });
+        const p1 = produit({ idProduct: 1001 }), p2 = produit({ idProduct: 1002, tamponnee: 'pps' });
+        const e1 = entree({ varianteNommee: nommee() }), e2 = entree({ idProduct: 1002, varianteNommee: nommee(), lu: { ...entree().lu, tampon: 'pps' } });
         const r = PV.grouperUnites({ acceptees: [accepte(e1, p1), accepte(e2, p2)], fiches: FICHE(1001, 1002), famille: 'F' });
         assert.strictEqual(r.unites.length, 0); assert.ok(r.refus.every(x => x.motif === 'unite-incoherente'));
         const orphelin = PV.grouperUnites({ acceptees: [accepte(entree(), produit({ carteId: 5 }))], fiches: FICHE(1001), famille: 'F' });
@@ -491,11 +536,11 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         for (const mot of ['Poképédia', 'TCGdex', 'Cardmarket', 'note', 'libre']) assert.ok(!ecrit.includes(mot), `« ${mot} » dans la base`);
     });
     await test('écriture : le tampon du PRODUIT passe sur l\'entrée et le document (un tampon n\'est jamais perdu en route)', async () => {
-        const m = await monter({ unitesDef: [{ carteId: 100, tamponnee: 'Staff' }], cartes: [vide(100)] });
-        assert.strictEqual(m.us[0].tampon, 'Staff');
+        const m = await monter({ unitesDef: [{ carteId: 100, tamponnee: 'pps' }], cartes: [vide(100)] });
+        assert.strictEqual(m.us[0].tampon, 'pps');
         const [r] = await SILENCE(() => ecrire(m, { attendu: 1 }));
         assert.strictEqual(r.code, 0);
-        assert.strictEqual(m.etat.carte(100).images[0].tampon, 'Staff'); assert.strictEqual(m.etat.image(`prv/${SLUG}/100/13/en`).tampon, 'Staff');
+        assert.strictEqual(m.etat.carte(100).images[0].tampon, 'pps'); assert.strictEqual(m.etat.image(`prv/${SLUG}/100/13/en`).tampon, 'pps');
         const m2 = await monter({ unitesDef: [{ carteId: 100 }], cartes: [vide(100)] });
         await SILENCE(() => ecrire(m2, { attendu: 1 }));
         assert.strictEqual(m2.etat.carte(100).images[0].tampon, undefined, 'produit sans tampon : aucun tampon écrit');
@@ -539,7 +584,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const fauxLire = {
             lignes: async ids => lignes.filter(l => ids.includes(l.idProduct)),
             fiches: async (carteIds, slugs) => lignes.filter(l => carteIds.includes(l.carteId) && slugs.includes(l.slugSet)),
-            numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null })).filter(x => x.numero != null),
+            numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null, slug: produits[i]?.slugNumeros ?? null })).filter(x => x.numero != null),
             sets: async slugs => sets.filter(s => slugs.includes(s._id))
         };
         const imgs = [];
@@ -586,6 +631,16 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const w4 = await mondeSimple({ lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: null, idExpansion: 5000 }] });
         const p4 = await K.construirePlanAvec({ dossier: w4.racine, cache: w4.cache, lire: w4.lire, etat: w4.etat, lecteur: RC.lecteurNatif(w4.db), fichiers: w4.F });
         assert.match(p4.resume.refus[0].motif, /preuve-lue:numero/, 'le produit n\'a pas de numéro de fiche : numéro de numeros_cartes absent aussi -> la preuve doit se passer de numéro (marques + attendu.numero null)');
+    });
+    await test('tour 3 (2) en plan : le numéro ET le slug du produit viennent de numeros_cartes quand la ligne n\'en porte pas (cas réel 311267 : carte « XY150a », produit « 150a »)', async () => {
+        const lg = [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: null, idExpansion: 5000 }];
+        const monter3 = async slugNumeros => { const w = await mondeSimple({ lignes: lg, produits: { 1001: { numeroNumeros: '150a', slugNumeros } } });
+            const f = path.join(w.racine, 'MCD', 'preuves.json'), man = JSON.parse(fs.readFileSync(f, 'utf8')); man.entrees[0].lu = { ...man.entrees[0].lu, numero: 'XY150a', total: null }; fs.writeFileSync(f, JSON.stringify(man)); return w; };
+        const planDe = w => K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+        const bon = await planDe(await monter3('Yveltal-EX-V3-XYPRXY150a'));
+        assert.deepStrictEqual(bon.resume.refus, [], JSON.stringify(bon.resume.refus)); assert.strictEqual(bon.unites.length, 1);
+        const sans = await planDe(await monter3(null));
+        assert.deepStrictEqual(sans.resume.refus.map(r => r.motif), ['preuve-lue:numero-different']);
     });
     await test('plan : le numéro de la fiche manque -> à défaut numeros_cartes.numero (P2)', async () => {
         const w = await mondeSimple({ lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: null, idExpansion: 5000 }], produits: { 1001: { numeroNumeros: '13' } } });
