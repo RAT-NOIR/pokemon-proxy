@@ -9,6 +9,7 @@ if (!global.gc) { const r = spawnSync(process.execPath, ['--expose-gc', __filena
 // `--sans-instrument` ne l'arme pas : seuls RSS, tas et mémoire externe sont relevés (la mémoire WASM et les vivants ne sont plus mesurés). Les pentes de RSS se lisent dans CE mode.
 const V = process.argv.includes('--sans-instrument') ? { octetsWasm: () => 0, vivants: () => ({ n: -1 }) } : require('../test/_embind-vivants').armer();            // AVANT tout require d'opencv
 const sharp = require('sharp');
+require('../reglage-sharp').appliquer(sharp, process.env);                                          // CACHE-ZONES : V2_SHARP_CACHE=false|true|memoire:<Mo> ; RM_CACHE_SCANS / RM_CACHE_PAIRES se lisent dans zones.js
 const Z = require('../../ratmarket/zones');
 const D = require('../../departage-image');
 const N = Number(arg('scans', 500)), SORTIE = arg('sortie', null);

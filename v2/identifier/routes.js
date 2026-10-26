@@ -590,6 +590,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence)) {
                         try {
                             const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                                charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,         // VIVIER-IMAGE : les lignes des produits ajoutés au vivier (éteint : rien n'est passé, rien n'est lu)
                                 marquesLues: traceTampon && Array.isArray(traceTampon.marques) ? traceTampon.marques : null, journal: journalErreur, chrono: T }));
                             if (si) {
                                 traceImage = si.trace;

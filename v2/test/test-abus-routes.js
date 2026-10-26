@@ -830,6 +830,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_SUR_PAR_IMAGE: [c => c.surParImage, false, '2', 'leve'],      // SUR-PAR-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_TE_VOISINS_UNE_FOIS: [c => c.tempsEtapes.voisinsUneFois, false, '2', 'leve'], V2_TE_EMPREINTE_TOT: [c => c.tempsEtapes.empreinteTot, false, '2', 'leve'],      // TEMPS-ETAPES : coupes de temps, éteintes par défaut, tout autre que 0 ou 1 est invalide
             V2_TE_FIN_PARALLELE: [c => c.tempsEtapes.finParallele, false, '2', 'leve'], V2_TE_ORB_UTILE: [c => c.tempsEtapes.orbUtile, false, '2', 'leve'],
+            V2_VIVIER_IMAGE: [c => c.vivierImage, false, '2', 'leve'],      // VIVIER-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_MODELE_EMPREINTE_ID: [c => c.modeleEmpreinte.id, null, 'identifiant invalide', 'ignore'], V2_MODELE_EMPREINTE_SHA256: [c => c.modeleEmpreinte.sha256, null, 'pas-un-sha256', 'ignore'],      // la version du modèle attendue : aucune par défaut (tous les vecteurs sont alors ignorés)
