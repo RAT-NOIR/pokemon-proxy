@@ -153,6 +153,36 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.calibrerNomSeul({ tcg, cm: cm.slice(1) }).retenue, true);
     });
 
+    // ───────── les decks de championnat du monde : (année, numéro d'origine, nom), un joueur par produit du marché ─────────
+    const TW = (productId, name, number) => ({ productId, name, number, groupId: 2282, rarity: 'Rare', imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg` });
+    const CW = (idProduct, name, slug) => ({ idProduct, name, slug, slugSet: 'WCD-2004', codeSet: 'WCD04', idExpansion: 7, numero: null });
+    await test('WCD : une seule carte de chaque côté pour (année, numéro d\'origine, nom) = joint ; plusieurs joueurs au marché, ou plusieurs variantes chez nous = rien, le motif le dit', () => {
+        const tcg = [TW(1, 'Torchic - 2004 (Chris Fulop)', '74/109'), TW(2, 'Dunsparce - 2004 (Joueur A)', '60/100'), TW(3, 'Dunsparce - 2004 (Joueur B)', '60/100'), TW(4, 'Pikachu - 2005 (Joueur C)', '5/10'), TW(5, 'Booster Box', null)];
+        const cm = [CW(11, 'Torchic [Scratch | Ember]', 'Torchic-V1-WCD04RS-74'), CW(12, 'Dunsparce [Strike and Run]', 'Dunsparce-WCD04SS-60'), CW(13, 'Pikachu [Thunder]', 'Pikachu-V1-WCD05XX-5'), CW(14, 'Pikachu [Thunder]', 'Pikachu-V2-WCD05XX-5'), CW(15, 'Absent [x]', 'Absent-WCD04SS-9'), CW(16, 'Sans numero', 'Sans-numero')];
+        const r = JT.joindreWcd({ tcg, cm });
+        assert.deepStrictEqual(r.joints.map(j => [j.idProduct, j.productId, j.niveau]), [[11, 1, 'wcd-annee-numero-nom']]);
+        assert.deepStrictEqual(Object.fromEntries(r.non.map(x => [x.idProduct, x.motif])), { 12: 'joueurs-multiples', 13: 'variantes-indiscernables', 14: 'variantes-indiscernables', 15: 'absent-de-la-source', 16: 'sans-numero' });
+    });
+    await test('WCD dans le plan : le groupe spécial 2282 joint les produits WCD sans visuel (famille WCD, preuve neutre sans nom de joueur) ; deux joueurs ou deux variantes = rien', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const nc = [[1, 'Torchic-WCD04RS-74'], [2, 'Dunsparce-WCD04SS-60'], [3, 'Mew-WCD04RS-9']].map(([idProduct, slug]) => ({ idProduct, idExpansion: 7, slugSet: 'WCD-2004', codeSet: 'WCD04', numero: null, slug }));
+        const cm = D.assemblerCm({ sets: [{ _id: 'WCD-2004', tirage: 'intl' }], nc, cat: [[1, 'Torchic [Scratch]'], [2, 'Dunsparce [Strike]'], [3, 'Mew [x]']].map(([idProduct, name]) => ({ idProduct, name })),
+            cartes: [{ _id: 51, nomEn: 'Torchic', impressions: [], images: [] }, { _id: 52, nomEn: 'Dunsparce', impressions: [], images: [] }, { _id: 53, nomEn: 'Mew', impressions: [], images: [{ set: 'WCD-2004' }] }],
+            cp: [{ idProduct: 1, carteId: 51, slugSet: 'WCD-2004' }, { idProduct: 2, carteId: 52, slugSet: 'WCD-2004' }, { idProduct: 3, carteId: 53, slugSet: 'WCD-2004' }] });
+        const rel = { categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 2282, name: 'World Championship Decks' }], 85: [] },
+            2282: { categoryId: 3, produits: [TW(1, 'Torchic - 2004 (Chris Fulop)', '74/109'), TW(2, 'Dunsparce - 2004 (A)', '60/100'), TW(3, 'Dunsparce - 2004 (B)', '60/100'), TW(4, 'Mew - 2004 (C)', '9/50')] } };
+        const r = JT.planifierCatalogue({ rel, cm });
+        assert.deepStrictEqual(r.unites.map(u => [u.produits[0], u.groupe, u.niveau, u.langue]), [[1, 'WCD', 'wcd-annee-numero-nom', 'en']]);
+        assert.ok(!/Fulop/.test(r.unites[0].preuveNeutre) && /2004/.test(r.unites[0].preuveNeutre));
+        assert.deepStrictEqual(Object.fromEntries(r.nonJoints), { 2: 'joueurs-multiples' }); assert.ok(r.restes.some(x => x.idProduct === 3 && x.motif === 'deja-image'));
+    });
+    await test('WCD : calibration — le numéro d\'origine du marché est relu par la fiche (indépendante de la clé qui a lu le slug)', () => {
+        const tcg = [TW(1, 'Torchic - 2004 (Chris Fulop)', '74/109'), TW(2, 'Mew - 2004 (Joueur B)', '9/50')];
+        const cm = [{ cm: CW(11, 'Torchic [Scratch]', 'Torchic-WCD04RS-74'), fiche: { nomEn: 'Torchic', impressions: [{ numero: '74', total: '109' }] } }, { cm: CW(12, 'Mew [x]', 'Mew-WCD04RS-9'), fiche: { nomEn: 'Mew', impressions: [{ numero: '12', total: '50' }] } }];
+        const r = JT.calibrerWcd({ tcg, cm });
+        assert.deepStrictEqual([r.justes, r.faux, r.muets, r.retenue], [1, 1, 0, false]);
+    });
+
     // ───────── le témoin de la fiche (indépendant de la clé) ─────────
     await test('témoin : le nom ET un numéro imprimé de la fiche concordent = juste ; un autre nom ou un autre numéro = faux ; une fiche sans numéro = non jugeable', () => {
         const fiche = { nomEn: 'Kricketune V', impressions: [{ tirage: 'intl', numero: '006', total: '163' }] };

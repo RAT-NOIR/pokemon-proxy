@@ -271,6 +271,53 @@ function calibrerNomSeul({ tcg, cm }) {
     return { total: cm.length, justes, faux, muets: r.non.length, nonJugeables, fauxDetail, muetsParMotif, retenue: cm.length > 0 && justes > 0 && faux === 0 };
 }
 
+// ── 4 bis. LES DECKS DE CHAMPIONNAT DU MONDE (WCD) ────────────────────────────────────────────────────────────────────────
+// Le marché range TOUS les decks dans un seul groupe, un produit PAR JOUEUR (« Torchic - 2004 (Chris Fulop) », numéro = celui du set d'ORIGINE) ; Cardmarket a un produit par (année, carte) — le code d'origine et le numéro sont
+// dans le SLUG (« …-WCD04RS-74 ») —, avec V1…Vn quand plusieurs decks de l'année la jouent, sans dire lequel. La clé est donc (année, numéro d'origine, nom) ; elle ne joint que si UNE carte de chaque côté.
+const GROUPE_WCD = 2282;
+function lireWcdTcg(p) {
+    const m = /^(.*?)\s+-\s+(\d{4})\s+\(([^)]+)\)\s*$/.exec(String(p?.name ?? ''));
+    const brut = p?.number == null ? null : String(p.number).trim();
+    if (!m || !brut || !aUnChiffre(brut.split('/')[0])) return null;
+    const nomBase = m[1].replace(/\s*\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();       // « Ancient Technical Machine [Rock] » : la forme entre crochets sort du nom des DEUX côtés (le décomposeur Cardmarket la range en attaque)
+    const [partie, tot] = brut.split('/'), fort = J.cleNumero(partie);
+    return { productId: p.productId, groupId: p.groupId ?? null, nomBrut: p.name, nomBase, nomCles: clesDeNom(nomBase), numeroBrut: brut, fort, faible: faibleDe(fort), total: tot && /^\d+$/.test(tot) ? Number(tot) : null, desamb: null, marqueurs: [], url: p.imageUrl ?? null, rarete: p.rarity ?? null, annee: Number(m[2]), joueur: m[3] };
+}
+function lireWcdCm(p) {
+    const s = /WCD(\d{2})[A-Za-z0-9]*-(\d+)$/.exec(String(p?.slug ?? ''));
+    const lu = lireCm(p);
+    return { ...lu, annee: s ? 2000 + Number(s[1]) : null, numeroWcd: s ? J.cleNumero(s[2]) : null };
+}
+/** @returns {{joints: {idProduct, productId, niveau, joueur}[], non: {idProduct, motif}[]}} */
+function joindreWcd({ tcg, cm }) {
+    const T = new Map();
+    for (const t of tcg.map(lireWcdTcg).filter(Boolean)) { const k = `${t.annee}|${t.faible}|${t.nomCles[0]}`; (T.get(k) || T.set(k, []).get(k)).push(t); }
+    const C = new Map(), lus = cm.map(lireWcdCm);
+    for (const c of lus) if (c.annee != null && c.numeroWcd) { const k = `${c.annee}|${faibleDe(c.numeroWcd)}|${c.nomCles[0]}`; (C.get(k) || C.set(k, []).get(k)).push(c); }
+    const joints = [], non = [];
+    for (const c of lus) {
+        if (c.annee == null || !c.numeroWcd) { non.push({ idProduct: c.idProduct, motif: 'sans-numero' }); continue; }
+        const k = `${c.annee}|${faibleDe(c.numeroWcd)}|${c.nomCles[0]}`, ts = T.get(k) || [], cs = C.get(k);
+        if (!ts.length) non.push({ idProduct: c.idProduct, motif: 'absent-de-la-source' });
+        else if (cs.length > 1) non.push({ idProduct: c.idProduct, motif: 'variantes-indiscernables', detail: `${cs.length} produits chez nous, ${ts.length} chez le marché` });
+        else if (ts.length > 1) non.push({ idProduct: c.idProduct, motif: 'joueurs-multiples', detail: `${ts.length} decks (joueurs) jouent cette carte cette année` });
+        else joints.push({ idProduct: c.idProduct, productId: ts[0].productId, niveau: 'wcd-annee-numero-nom', joueur: ts[0].joueur, tcg: ts[0] });
+    }
+    return { joints, non };
+}
+/** La calibration du WCD : le numéro d'origine du MARCHÉ (que le slug n'a pas lu) est relu par la fiche. */
+function calibrerWcd({ tcg, cm }) {
+    const r = joindreWcd({ tcg, cm: cm.map(x => x.cm) });
+    const ficheDe = new Map(cm.map(x => [x.cm.idProduct, x.fiche])), cmDe = new Map(cm.map(x => [x.cm.idProduct, lireCm(x.cm)]));
+    let justes = 0, faux = 0, nonJugeables = 0; const fauxDetail = [], muetsParMotif = {};
+    for (const j of r.joints) {
+        const v = temoinFiche(j.tcg, ficheDe.get(j.idProduct), { cm: cmDe.get(j.idProduct) });
+        if (v.verdict === 'juste' || v.verdict === 'lache') justes++; else if (v.verdict === 'faux') { faux++; fauxDetail.push({ idProduct: j.idProduct, productId: j.productId, cause: v.cause }); } else nonJugeables++;
+    }
+    for (const n of r.non) muetsParMotif[n.motif] = (muetsParMotif[n.motif] || 0) + 1;
+    return { total: cm.length, justes, faux, muets: r.non.length, nonJugeables, fauxDetail, muetsParMotif, retenue: cm.length > 0 && justes > 0 && faux === 0 };
+}
+
 // ── 5. L'UNITÉ DU FORMAT COMMUN ───────────────────────────────────────────────────────────────────────────────────────────
 /**
  * Un produit joint -> l'unité du format commun des fournisseurs (recolte-commun.js : carteId, slugSet, numero, produits, url, idSource, groupe, carteNom, nomSource, numeroSource, preuveNeutre) + la langue (celle de la
@@ -285,7 +332,9 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
     if (!langue) return null;
     return { carteId: l.carteId, slugSet: l.slugSet, numero: l.numeroFiche ?? null, produits: [joint.idProduct], slugProduit: ligne.slug ?? null, url, idSource: String(tcg.productId), groupe, langue, ecrivable: langue === 'en',
         carteNom: ligne.carteNom ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.fort == null ? null : tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
-        preuveNeutre: joint.niveau === 'nom-seul'
+        preuveNeutre: String(joint.niveau).startsWith('wcd')
+            ? `jointure par année ${tcg.annee}, numéro d'origine ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », une seule carte de chaque côté pour cette année (un seul deck la joue)`
+            : joint.niveau === 'nom-seul'
             ? `jointure par le nom seul « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} » (groupe et expansion sans numéro, de tailles voisines), nom unique des deux côtés, aucun marqueur de variante`
             : `jointure par numéro ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} (clé ${joint.niveau ?? 'fort'}) et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », un seul produit de chaque côté, aucun marqueur de variante` };
 }
@@ -322,6 +371,15 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
     const lus = new Map(groupes.map(g => [g.groupId, { categoryId: g.categoryId, name: g.name, produits: g.produits.map(lireTcg) }]));
     const jointure = joindreTable({ table, groupes: lus, cm, accepterSlug });
     const tcgDe = new Map(); for (const g of lus.values()) for (const t of g.produits) tcgDe.set(t.productId, t);
+    // les decks de championnat du monde : un groupe spécial (un produit par joueur), sa propre clé (année, numéro d'origine, nom)
+    const gW = groupes.find(g => g.groupId === GROUPE_WCD);
+    let wcd = null;
+    if (gW) {
+        const cmW = [...cm.produits.values()].filter(p => /^WCD-/.test(p.slugSet ?? ''));
+        wcd = joindreWcd({ tcg: gW.produits, cm: cmW.map(p => ({ idProduct: p.idProduct, name: p.name, slug: p.slug, slugSet: p.slugSet, codeSet: p.codeSet, idExpansion: p.idExpansion, numero: null })) });
+        for (const j of wcd.joints) { jointure.set(j.idProduct, { joint: { idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, categoryId: gW.categoryId, groupId: gW.groupId }, groupId: gW.groupId }); tcgDe.set(j.productId, j.tcg); }
+        for (const n of wcd.non) if (!jointure.get(n.idProduct)?.joint) jointure.set(n.idProduct, { motif: n.motif, groupId: gW.groupId });
+    }
     const unites = [], restes = [];
     for (const [idProduct, j] of jointure) {
         if (!j.joint) continue;
@@ -340,4 +398,4 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
     return { table, jointure, unites, restes, nonJoints, resume: { groupes: groupes.length, parStatutTable: table.resume.parStatut, produitsJoints: [...jointure.values()].filter(x => x.joint).length, unites: unites.length, restesParMotif: parMotif } };
 }
 
-module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, calibrerNomSeul, tailleCompatible, estApparie, uniteDe };
+module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, calibrerNomSeul, tailleCompatible, estApparie, GROUPE_WCD, lireWcdTcg, lireWcdCm, joindreWcd, calibrerWcd, uniteDe };

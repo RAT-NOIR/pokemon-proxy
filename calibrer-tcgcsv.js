@@ -29,6 +29,13 @@ function calibrerNomSeulTout({ table, lus, cm }) {
     return { ...total, retenue: total.justes > 0 && total.faux === 0, fauxDetail };
 }
 /** auxLus : { idProduct: raison } — les aux du témoin que l'OEIL a relus un à un (la jointure est juste, c'est la FICHE ou son nom qui diffère) ; ils sont comptés à part, jamais effacés. */
+/** La calibration des decks de championnat du monde (groupe spécial 2282) : les produits WCD avec une fiche et un visuel jugent la clé (année, numéro d'origine, nom). */
+function calibrerWcdTout({ rel, cm }) {
+    const g = groupesDuReleve(rel).find(x => x.groupId === JT.GROUPE_WCD);
+    if (!g) return { absent: true, retenue: false };
+    const items = [...cm.produits.values()].filter(p => /^WCD-/.test(p.slugSet ?? '')).map(p => ({ cm: { idProduct: p.idProduct, name: p.name, slug: p.slug, slugSet: p.slugSet, codeSet: p.codeSet, idExpansion: p.idExpansion, numero: null }, fiche: p.fiche && p.nImages > 0 ? p.fiche : null }));
+    return JT.calibrerWcd({ tcg: g.produits, cm: items });
+}
 function calibrerTout({ rel, cm, accepterSlug = false, fauxLus = {} }) {
     const groupes = groupesDuReleve(rel), langueDeCategorie = LANGUE_DE_CATEGORIE(rel.categories);
     const table = JT.construireTable({ groupes, expansions: D.expansionsPourTable(cm), langueDeCategorie });
@@ -51,7 +58,8 @@ function calibrerTout({ rel, cm, accepterSlug = false, fauxLus = {} }) {
     }
     const tousJoints = [...jointure.values()].filter(x => x.joint).length;
     const nomSeul = calibrerNomSeulTout({ table, lus, cm });
-    return { table, jointure, lus, nomSeul, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, fauxLusDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
+    const wcd = calibrerWcdTout({ rel, cm });
+    return { table, jointure, lus, nomSeul, wcd, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, fauxLusDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
 }
 
 async function main(args = process.argv.slice(2)) {
@@ -91,8 +99,12 @@ async function main(args = process.argv.slice(2)) {
     const ns = r.nomSeul;
     console.log(`NOM SEUL (numéro caché à la clé, relu par la fiche) : ${ns.lignes} lignes numérotées (${ns.lignesTaillesDifferentes} refusées par la garde de taille) · produits ${ns.produits} · JUSTES ${ns.justes} · FAUX ${ns.faux} · muets ${ns.muets} · non jugeables ${ns.nonJugeables} · ${ns.retenue ? 'RETENU (0 faux)' : 'NON retenu sur les ensembles numérotés'}`);
     fs.writeFileSync(path.join(sortie, 'calibration-nom-seul.json'), JSON.stringify({ le: new Date().toISOString(), ...ns }, null, 1));
+    const w = r.wcd;
+    console.log(`WCD (année + numéro d'origine + nom, une carte de chaque côté) : ${w.absent ? 'groupe 2282 absent' : `produits ${w.total} · JUSTES ${w.justes} · FAUX ${w.faux} · muets ${w.muets} ${JSON.stringify(w.muetsParMotif)} · non jugeables ${w.nonJugeables} · ${w.retenue ? 'RETENU (0 faux)' : 'NON retenu'}`}`);
+    fs.writeFileSync(path.join(sortie, 'calibration-wcd.json'), JSON.stringify({ le: new Date().toISOString(), ...w }, null, 1));
+    for (const f of (w.fauxDetail ?? []).slice(0, 12)) console.log(`   wcd faux : ${f.idProduct} <- ${f.productId} ${f.cause}`);
     for (const f of ns.fauxDetail.slice(0, 12)) console.log(`   nom-seul faux : ${f.nomGroupe} · ${f.idProduct} « ${f.nomCm} » <- ${f.productId} ${f.cause}`);
     for (const f of c.fauxDetail.slice(0, +(arg(args, 'faux') ?? 25))) console.log(`   faux : ${f.idProduct} « ${f.nomCm} » ${f.slugSet} n°${f.numero} <- ${f.productId} « ${f.nomTcg} » ${f.numeroTcg} [${f.niveau}] ${f.cause}`);
 }
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
-module.exports = { calibrerNomSeulTout, calibrerTout, groupesDuReleve, LANGUE_DE_CATEGORIE };
+module.exports = { calibrerWcdTout, calibrerNomSeulTout, calibrerTout, groupesDuReleve, LANGUE_DE_CATEGORIE };
