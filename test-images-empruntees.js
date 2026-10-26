@@ -643,6 +643,18 @@ t('WCD : origine absente, autre clé, autre set, autre numéro, sans langue, ou 
     }
     const c = plan(etat([ligneWCD(WID, { carteId: 5 })], [carte([oriGRI()], 5)])); assert.strictEqual(c.ajouts.length, 0); assert.strictEqual(c.refus.length, 1);
 });
+t('WCD : un visuelSubstitut présent sur la ligne (même incomplet ou d\'une autre image) ne remplace JAMAIS l\'origine listée', () => {
+    for (const vs of [{ cleR2: 'tcgdex/Autre/1.webp', w: 600, h: 825 }, { cleR2: 'tcgdex/Autre/1.webp' }]) {
+        const p = plan(etatWCD([ligneWCD(WID, { visuelSubstitut: vs })]));
+        assert.strictEqual(p.refus.length, 0, JSON.stringify(p.refus)); assert.strictEqual(p.ajouts.length, 1); assert.strictEqual(p.ajouts[0].entree.cleR2, 'tcgdex/Guardians-Rising/115-220753.webp');
+    }
+});
+t('WCD : la garde de forme au chargement lève sur une entrée mal formée (set non WCD, origine WCD, champ manquant, id non numérique)', () => {
+    const bon = { carteId: 1, setOrigine: 'X', numero: '1', cleR2: 'a', produitOrigine: 2 };
+    assert.doesNotThrow(() => E.gelerOriginesWCD({ 'WCD-2018': { 5: bon } }));
+    for (const mal of [{ 'Base-Set': { 5: bon } }, { 'WCD-2018': { 5: { ...bon, setOrigine: 'WCD-2017' } } }, { 'WCD-2018': { 5: { ...bon, cleR2: '' } } }, { 'WCD-2018': { 5: { ...bon, carteId: '1' } } }, { 'WCD-2018': { x: bon } }, { 'WCD-2018': { 5: { ...bon, produitOrigine: undefined } } }])
+        assert.throws(() => E.gelerOriginesWCD(mal), /mal formée/, JSON.stringify(mal));
+});
 t('WCD : une entrée déjà présente dans le set WCD couvre la ligne (« déjà ») ; idempotent ; retrait exact', () => {
     const d = plan(etatWCD([ligneWCD(WID)], [oriGRI(), { set: WS, source: 'ctr', cleR2: 'ctr/WCD-2018/1.webp', numero: null, langue: 'en', w: 200, h: 280 }]));
     assert.strictEqual(d.ajouts.length, 0); assert.strictEqual(d.deja.length, 1);

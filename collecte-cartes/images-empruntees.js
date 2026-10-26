@@ -53,7 +53,14 @@ const LANGUE_PREUVE_AUTRE_TIRAGE = "image d'un autre tirage empruntée (code de 
 // fiche TCGCSV de la même année : nom + n°) ET dont un scan WCD concorde à l'image avec le visuel d'origine (lu par le coordinateur : même illustration, même n°/total imprimé, chaque scan de joueur)
 // reçoit le visuel d'origine, motif « autre tirage » — jamais présenté comme le scan signé. LISTE FERMÉE PAR PRODUIT, construite hors du dépôt (S8\PHASE4\WCD\construire-origines-wcd.js) et relue :
 // collecte-cartes/origines-wcd.json. Tout WCD absent de la liste reste refusé. Le vrai scan signé, s'il passe la cascade, remplace l'emprunt (retrait exact par le manifeste).
-const geler = o => Object.freeze(Object.fromEntries(Object.entries(o).map(([s, ps]) => [s, Object.freeze(Object.fromEntries(Object.entries(ps).map(([id, v]) => [id, Object.freeze({ carteId: v.carteId, setOrigine: v.setOrigine, numero: v.numero, cleR2: v.cleR2, produitOrigine: v.produitOrigine })])))])));
+// Garde de FORME au chargement (relecture du 27/10) : une liste mal formée LÈVE au require, rien ne se planifie sur elle. Écrite par ce qu'elle autorise : set « WCD… », idProduct entier,
+// carteId et produitOrigine entiers > 0, set d'origine non WCD, numéro et cleR2 textes non vides.
+const origineWCDValide = (s, id, v) => /^wcd/i.test(s) && /^\d+$/.test(id) && v && Number.isInteger(v.carteId) && v.carteId > 0 && Number.isInteger(v.produitOrigine) && v.produitOrigine > 0
+    && typeof v.setOrigine === 'string' && v.setOrigine.trim() !== '' && !/^wcd/i.test(v.setOrigine.trim()) && typeof v.numero === 'string' && v.numero.trim() !== '' && typeof v.cleR2 === 'string' && v.cleR2.trim() !== '';
+const geler = o => Object.freeze(Object.fromEntries(Object.entries(o).map(([s, ps]) => [s, Object.freeze(Object.fromEntries(Object.entries(ps).map(([id, v]) => {
+    if (!origineWCDValide(s, id, v)) throw new Error(`origines-wcd.json : entrée mal formée ${s}/${id} — rien n'est chargé`);
+    return [id, Object.freeze({ carteId: v.carteId, setOrigine: v.setOrigine, numero: v.numero, cleR2: v.cleR2, produitOrigine: v.produitOrigine })];
+})))])));
 const ORIGINES_WCD = geler(require('./origines-wcd.json'));
 const LANGUE_PREUVE_WCD = "visuel d'un autre tirage emprunté (carte d'origine du deck de championnat : signature du joueur, dos et code du deck non représentés)";
 const setExplicite = s => Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES, s);
@@ -331,6 +338,6 @@ function garderSousLot(env, ppid) {
     if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="TAMPONNEES : N entrées" --collections=cartes --annonce=<annonce.json> -- node poser-images-empruntees.js --ecrire --attendu=N (rien n\'est écrit)');
 }
 
-module.exports = { MOTIF_AUTRE_TIRAGE, LANGUE_PREUVE_AUTRE_TIRAGE, LANGUE_PREUVE_WCD, ORIGINES_WCD, origineWCD, produitsMentionEnAttente, ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
+module.exports = { MOTIF_AUTRE_TIRAGE, LANGUE_PREUVE_AUTRE_TIRAGE, LANGUE_PREUVE_WCD, ORIGINES_WCD, origineWCD, gelerOriginesWCD: geler, produitsMentionEnAttente, ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
     SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi, produitsSansMention, memeSelection,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };
