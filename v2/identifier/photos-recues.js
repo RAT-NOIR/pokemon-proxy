@@ -31,13 +31,16 @@ function creerPhotosRecues({ horloge = Date.now, serviceMs = SERVICE_S * 1000, s
     }
     /** Retient une photo ; rend son identifiant. `modele` (facultatif) : la version réduite (800 px) que reçoit le modèle ; sans elle, `octets` sert aux deux usages.
      *  Lève { code: 'trop-grosse' } au-delà de 2 Mio (la route l'a déjà refusée avant : ceinture et bretelles). */
-    function deposer(cle, index, octets, modele) {
+    // TEMPS-ETAPES : `durees` (facultatif) = { totalMs, traitementMs } du dépôt (la requête POST /api/photo : lecture du corps + validation + réencodage) ; deux nombres, gardés avec la photo et rendus par `prendre`.
+    function deposer(cle, index, octets, modele, durees = null) {
         if (!Buffer.isBuffer(octets) || octets.length === 0) throw Object.assign(new Error('photo'), { code: 'format' });
         if (octets.length > PHOTO_OCTETS_MAX) throw Object.assign(new Error('photo'), { code: 'trop-grosse' });
         purgerExpirees();
         const photoId = crypto.randomBytes(16).toString('hex');
         let l = parPorteur.get(cle); if (!l) { l = []; parPorteur.set(cle, l); }
-        const p = { photoId, index, octets, modele: Buffer.isBuffer(modele) && modele.length ? modele : null, depotA: horloge(), expireA: horloge() + serviceMs, n: ++ordre, minuteur: null };
+        const nb = x => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+        const p = { photoId, index, octets, modele: Buffer.isBuffer(modele) && modele.length ? modele : null, depotA: horloge(), expireA: horloge() + serviceMs, n: ++ordre, minuteur: null,
+            durees: durees && typeof durees === 'object' ? { totalMs: nb(durees.totalMs), traitementMs: nb(durees.traitementMs) } : null };
         p.minuteur = setTimeout(() => retirer(cle, p), serviceMs); p.minuteur.unref();          // l'échéance exacte : la photo non servie est retirée par elle-même
         l.push(p);
         while (l.length > PHOTOS_MAX || total(l) > OCTETS_MAX) { const vieille = l.shift(); arreterMinuteur(vieille); }          // la plus ancienne de CE porteur est oubliée
@@ -55,7 +58,7 @@ function creerPhotosRecues({ horloge = Date.now, serviceMs = SERVICE_S * 1000, s
         const l = parPorteur.get(cle); if (!l) return null;
         const p = l.find(x => x.photoId === photoId); if (!p) return null;
         retirer(cle, p);
-        return p.expireA > horloge() ? { index: p.index, octets: p.octets, modele: p.modele, depotA: p.depotA } : null;
+        return p.expireA > horloge() ? { index: p.index, octets: p.octets, modele: p.modele, depotA: p.depotA, durees: p.durees } : null;
     }
     function taille(cle) { purgerExpirees(); const l = parPorteur.get(cle) || []; return { photos: l.length, octets: total(l) }; }
     /** Le nombre de photos retenues pour un porteur, SANS purge à l'accès (le banc prouve par là que le minuteur seul suffit). */

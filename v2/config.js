@@ -212,6 +212,10 @@ function lireConfig(env = process.env) {
         // SUR-PAR-IMAGE : une question dont les candidats ne sont pas le même dessin devient un sûr quand la photo (le vecteur de l'extension) est nettement plus proche d'un seul (identifier/sur-par-image.js, M = SEUILS_G.marge_carte).
         // ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (le vecteur et l'index en viennent) ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         surParImage: booleen('V2_SUR_PAR_IMAGE', env.V2_SUR_PAR_IMAGE, false),
+        // TEMPS-ETAPES (identifier/temps-etapes.js) : trois coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
+        // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
+        // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.
+        tempsEtapes: { voisinsUneFois: booleen('V2_TE_VOISINS_UNE_FOIS', env.V2_TE_VOISINS_UNE_FOIS, false), empreinteTot: booleen('V2_TE_EMPREINTE_TOT', env.V2_TE_EMPREINTE_TOT, false), finParallele: booleen('V2_TE_FIN_PARALLELE', env.V2_TE_FIN_PARALLELE, false), orbUtile: booleen('V2_TE_ORB_UTILE', env.V2_TE_ORB_UTILE, false) },
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),

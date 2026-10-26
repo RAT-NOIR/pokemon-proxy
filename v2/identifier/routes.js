@@ -62,10 +62,13 @@ function rattacherPhotos(req, deps = {}, res = null) {
         const demandees = entree && Array.isArray(entree.photoIds) ? entree.photoIds : [];
         const p = req.v2 && req.v2.porteur;
         if (!demandees.length || !p || entree.photosRecues) return;
-        const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [];
+        const m = require('./photos-recues').magasin(deps), cle = `${p.type}:${p.id}`, recues = [], dureesDepot = [];
         let depotMin = Infinity;
-        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) { recues.push({ index: d.index, octets: x.octets, modele: x.modele }); if (Number.isFinite(x.depotA) && x.depotA < depotMin) depotMin = x.depotA; } }
+        for (const d of demandees) { const x = m.prendre(cle, d.photoId); if (x) { recues.push({ index: d.index, octets: x.octets, modele: x.modele }); if (x.durees) dureesDepot.push(x.durees); if (Number.isFinite(x.depotA) && x.depotA < depotMin) depotMin = x.depotA; } }
         if (recues.length) {
+            // TEMPS-ETAPES : la durée du dépôt (POST /api/photo) de la photo la plus longue à déposer ; non énumérable (jamais sérialisée avec l'entrée)
+            const maxDe = k => dureesDepot.map(x => x[k]).filter(Number.isFinite).reduce((a, b) => Math.max(a, b), -1);
+            if (dureesDepot.length) Object.defineProperty(entree, 'photoDureesMs', { value: { totalMs: maxDe('totalMs'), traitementMs: maxDe('traitementMs') }, enumerable: false, configurable: true });
             const PR = require('./photos-recues');
             recues.sort((a, b) => a.index - b.index); entree.photosRecues = recues; entree.imageOctets = recues[0].octets;
             entree.photosRecuesPourCeScan = true;          // N-1 : des photos ont été reçues pour CE scan ; plus aucune étape ne retombe sur les URLs de l'annonce (imagesDeLaChaine, photo-admin), même une fois les octets libérés
@@ -168,6 +171,7 @@ const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('.
 const { col } = require('../db');
 const { choixPour } = require('../choix');
 const SL = require('./seconde-lecture');
+const TE = require('./temps-etapes');             // TEMPS-ETAPES : les durées par étape (analyses.durees) et les quatre coupes de temps (éteintes par défaut)
 const { consulterLectureTampon } = require('./lecture-tampon-route');       // F1-TAMPON : la décision vit dans son module (aucun appel réseau, aucun téléchargement)
 const { consulterSurParImage } = require('./sur-par-image-route');         // SUR-PAR-IMAGE : la décision vit dans son module (pure sur le vecteur de l'extension, aucun appel réseau)
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
@@ -364,12 +368,15 @@ async function appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits
 // plus la promotion d'une question quand G affirme et que la garde (2) laisse passer). 🔴 L'INTROUVABLE de la chaîne n'est JAMAIS promu ici (`depuisIntrouvable` reste faux) : la chaîne l'a déjà REMBOURSÉ, une
 // affirmation après un remboursement serait un scan gratuit (2 des 44 promotions de la mesure) ; et la garde (2) ne peut pas juger un refus, qui ne porte aucune lecture.
 // @returns { resultat, desaccord, questionNeuve, promotion?, empreinte: { public: {utilisee, code}, influence, promotion, lectureConcordante } } — ne lève jamais ; `empreinte.public` est ce que la réponse dit.
-async function consulterEmpreinte({ deps, cfg, fournisseur, entree, scanId, resultat, corpsChaine, produits, catalogue, adapterFn, jumeaux }) {
+// TEMPS-ETAPES : `prechargee` (V2_TE_EMPREINTE_TOT) est la promesse du MÊME fournisseur, lancée dès que la requête a été acceptée (pendant l'attente du modèle) : on attend SON résultat au lieu d'appeler le fournisseur ici.
+// Le fournisseur ne lit que `entree` (jamais la chaîne) : son résultat est le même, parti plus tôt. La borne (`delaiVoisinsMs`) court à partir de CETTE attente, comme avant ; un rejet est jugé ici, comme avant.
+async function consulterEmpreinte({ deps, cfg, fournisseur, entree, scanId, resultat, corpsChaine, produits, catalogue, adapterFn, jumeaux, prechargee = null, chrono = null }) {
     const sans = code => ({ resultat, desaccord: null, questionNeuve: false, empreinte: { public: { utilisee: false, code }, influence: false, promotion: false, lectureConcordante: false } });
     let v;
     try {
         const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
-        v = await avecBorne(() => fournisseur({ entree, scanId: String(scanId) }), ms, 'voisins (empreinte)');
+        const appel = () => (prechargee !== null ? prechargee : chrono ? chrono.mesurer('empreinte', () => fournisseur({ entree, scanId: String(scanId), chrono })) : fournisseur({ entree, scanId: String(scanId) }));
+        v = await avecBorne(appel, ms, 'voisins (empreinte)');
     } catch (e) { journalErreur('empreinte (voisins)', e); return sans('indisponible'); }
     if (!v || v.ok !== true) return sans(v && CODES_EMPREINTE.includes(v.code) ? v.code : 'indisponible');
     let d;
@@ -407,6 +414,7 @@ function traiterIdentifier(cfg, deps = {}) {
             argent = registre.obtenir('argent');
             if (!porteur || !entree || typeof deps.gererIdentifier !== 'function') throw new Error('montage incomplet');
         } catch (e) { journalErreur('montage', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        const T = TE.creerChrono(), te = TE.reglages(cfg);        // TEMPS-ETAPES : le chronomètre de CE scan (nombres seulement, liste fermée d'étapes) et les coupes de temps (V2_TE_*, éteintes par défaut)
         const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
         const offreP = () => offreSur(porteur, argent);
 
@@ -479,7 +487,11 @@ function traiterIdentifier(cfg, deps = {}) {
                 reqH = null;
             }
             // PHOTOS-MULTIPLES (7d) : la requête est ACCEPTÉE (corps validé, plafonds passés, clé d'idempotence prise, débit fait, dépense du modèle permise) : c'est ICI, et pas avant, que les photos sortent du magasin.
-            if (!sortie) rattacherPhotos(req, deps, res);
+            if (!sortie) {
+                rattacherPhotos(req, deps, res);
+                const pd = entree.photoDureesMs;                                  // TEMPS-ETAPES : le dépôt de la photo (la requête qui précède le scan), s'il y en a eu un
+                if (pd) { T.poser('photo', pd.totalMs); T.poser('photoTraitement', pd.traitementMs); }
+            }
             if (modeLot && !sortie) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
                 if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
@@ -490,8 +502,18 @@ function traiterIdentifier(cfg, deps = {}) {
             reqH = {
                 body: { imageUrls: imagesDeLaChaine(entree), title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
                 ip: req.ip, headers: {}, scanIdImpose: scanId,
-                credit: argent.creditPourReq(porteur, credit, { scanId })
+                credit: argent.creditPourReq(porteur, credit, { scanId }),
+                dureesChaine: {}          // TEMPS-ETAPES : la chaîne héritée y note ses durées (lecture, état, catalogue, image) ; rien d'autre n'en est repris
             };
+            // TEMPS-ETAPES (V2_TE_EMPREINTE_TOT) : le fournisseur d'empreinte (recherche des voisins + garde des zones) ne lit que `entree` : il part DÈS MAINTENANT, pendant l'attente du modèle, et la fin de la
+            // chaîne n'attend plus que son résultat. Une seule promesse par requête, jamais sans vecteur. Ce bloc n'est atteint que pour UNE carte (un lot de plusieurs cartes a déjà son résultat plus haut : la règle G ne
+            // s'y applique pas, rien n'est lancé d'avance pour lui) ; un lot qui ne rend qu'UNE carte passe ici, et la règle G s'y applique comme à toute carte. Départ au tour suivant (setImmediate) : la chaîne a eu le temps
+            // d'émettre son appel au modèle avant que la recherche (du calcul) ne prenne le processus. Son rejet éventuel est jugé au moment de l'attente (consulterEmpreinte), jamais ici.
+            let empreintePrechargee = null;
+            if (te.empreinteTot && fournisseurEmpreinte && entree.empreintes) {
+                empreintePrechargee = new Promise(r => setImmediate(r)).then(() => T.mesurer('empreinte', () => fournisseurEmpreinte({ entree, scanId: String(scanId), chrono: T })));
+                empreintePrechargee.catch(() => { });
+            }
             // Ruling n°2 (2026-10-10) : un REFUS de la chaîne par égalité (≥ 2 candidats) devient une QUESTION, réservée comme une ambiguë. La chaîne rembourse un refus
             // d'office ; ce remboursement est donc DIFFÉRÉ (ni fait, ni compté au plafond des pannes). Si l'adaptateur en fait une question, on RÉSERVE le crédit encore
             // pris (plus bas) ; sinon (introuvable, panne) le filet le rend. Le crédit n'est jamais perdu : il est rendu OU réservé.
@@ -504,7 +526,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 const fr = fauxRes();
                 let exception = null;
                 if (entree.arret) reqH.signalArret = entree.arret.signal;           // I-2 : la chaîne reçoit le signal d'arrêt de la borne du scan (annule l'appel au modèle en cours)
-                try { await require('./photos-recues').avecArret(entree.arret && entree.arret.signal, (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr)); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                try { await T.mesurer('chaine', () => require('./photos-recues').avecArret(entree.arret && entree.arret.signal, (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr))); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                for (const k of ['lecture', 'etat', 'catalogue', 'image']) T.poser(k, reqH.dureesChaine ? reqH.dureesChaine[k] : undefined);       // TEMPS-ETAPES : seuls ces quatre noms, et seulement des nombres valides, passent du gestionnaire hérité au journal
                 let resultat, produits = null;
                 if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 else {
@@ -515,26 +538,26 @@ function traiterIdentifier(cfg, deps = {}) {
                     // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
                     // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
                     const version0 = etatChargeur.version();                  // UNE lecture de la version pour toute la requête (m-1) : passée au premier appel ET à preparer
-                    const jumeaux0 = deps.jumeaux || await fournisseurParDefaut(catalogue, version0, idsAffirmes(c));
+                    const jumeaux0 = deps.jumeaux || await T.mesurer('base', () => fournisseurParDefaut(catalogue, version0, idsAffirmes(c)));
                     const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux0), ...idsDeLaGarde(c)];     // GARDE-CONTRADICTION : le vivier lu par la chaîne, pour juger les champs lus contre les autres candidats
-                    try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
+                    try { produits = await T.mesurer('base', () => catalogue.lire(ids)); } catch (e) { journalErreur('catalogue', e); }
                     // LANGUE-DECISIVE (B1, M2) : les jumeaux des candidats que la photo pourrait laisser seuls, et l'index code × numéro du catalogue entier (R4)
                     let jumeaux = jumeaux0, ctxLD = {};
-                    if (produits !== null) { const pr = await preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps }); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
+                    if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD });
                     // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
                     if (resultat.issue === 'question') {
                         const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum, ...ctxLD });
                         let sl = null;
-                        try { sl = await consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer }); } catch (e) { journalErreur('seconde lecture', e); }
+                        try { sl = await T.mesurer('seconde', () => consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer })); } catch (e) { journalErreur('seconde lecture', e); }
                         if (sl) { traceSeconde = sl.trace; if (sl.resultat) resultat = sl.resultat; }
                     }
                     // F1-TAMPON puis LOT TAMPONS : lire les marques (liste fermée) pour trancher une paire séparée ; ou la mention de la règle 2 des prix. Derrière son interrupteur ; la réponse d'avant reste si la preuve n'est pas faite.
                     if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
                         try {
-                            const lt = await consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
-                                affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere), journal: journalErreur });
+                            const lt = await T.mesurer('tampon', () => consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
+                                affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere), journal: journalErreur }));
                             if (lt) { traceTampon = lt.trace; if (lt.resultat) resultat = lt.resultat; }
                         } catch (e) { journalErreur('lecture du tampon', e); }
                     }
@@ -542,10 +565,16 @@ function traiterIdentifier(cfg, deps = {}) {
                     if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
                     // MODELE-VISUEL-API : le vecteur de l'extension, si (et seulement si) V2_EMPREINTE_EXTENSION est allumé ET que la requête en porte ; jamais sur une panne. La voie V2_REGLE_G ci-dessous reste pour les requêtes sans vecteur.
                     if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
-                        const g = await consulterEmpreinte({ deps, cfg, fournisseur: fournisseurEmpreinte, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter, jumeaux });
-                        resultat = g.resultat; desaccordG = g.desaccord; empreinteInfo = g.empreinte;
-                        if (g.questionNeuve) reqH.regleGRaison = 'regle-g';
-                        if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
+                        if (te.orbUtile && resultat.issue === 'introuvable') {
+                            // TEMPS-ETAPES (V2_TE_ORB_UTILE) : la règle G ne peut RIEN changer à un introuvable de la chaîne — arbitrer() rend « garder » quel que soit G, et l'introuvable ne se promeut jamais (depuisIntrouvable: false ;
+                            // l'introuvable est déjà remboursé) : la recherche des voisins et la garde des zones (l'ORB) ne sont pas lancées. Ce que la réponse en dit : G se tait.
+                            empreinteInfo = { public: { utilisee: false, code: 'muette' }, influence: false, promotion: false, lectureConcordante: false };
+                        } else {
+                            const g = await consulterEmpreinte({ deps, cfg, fournisseur: fournisseurEmpreinte, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter, jumeaux, prechargee: empreintePrechargee, chrono: T });
+                            resultat = g.resultat; desaccordG = g.desaccord; empreinteInfo = g.empreinte;
+                            if (g.questionNeuve) reqH.regleGRaison = 'regle-g';
+                            if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
+                        }
                     } else
                     // B1b.7 : la règle G, si (et seulement si) l'interrupteur est allumé ET qu'un fournisseur de voisins est branché ; jamais sur une panne
                     if (resultat.issue !== 'panne' && RG.regleGActive(cfg, deps)) {
@@ -560,8 +589,8 @@ function traiterIdentifier(cfg, deps = {}) {
                     // contredit la chaîne (deux sources en conflit ne donnent pas un sûr), jamais sur autre chose qu'une question. La réponse d'avant reste si la preuve n'est pas faite.
                     if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence)) {
                         try {
-                            const si = await consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
-                                marquesLues: traceTampon && Array.isArray(traceTampon.marques) ? traceTampon.marques : null, journal: journalErreur });
+                            const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                                marquesLues: traceTampon && Array.isArray(traceTampon.marques) ? traceTampon.marques : null, journal: journalErreur, chrono: T }));
                             if (si) {
                                 traceImage = si.trace;
                                 if (si.resultat) { resultat = si.resultat; empreinteInfo = { public: { utilisee: true, code: null }, influence: true, promotion: false, lectureConcordante: false }; }
@@ -642,7 +671,16 @@ function traiterIdentifier(cfg, deps = {}) {
             return repondreErreur(res, 'SERVEUR', undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) });
         }
         // 7. le solde, relu APRÈS les mouvements
-        const solde = await soldeSur(), offre = await offreP();
+        // TEMPS-ETAPES (V2_TE_FIN_PARALLELE) : sur le chemin NORMAL (ni lot refusé, ni panne), le solde, l'offre et la règle de verdict (taux) sont trois LECTURES indépendantes : elles partent ensemble. Elles ne dépendent ni
+        // l'une de l'autre ni d'aucune écriture de la requête (le solde est relu APRÈS les mouvements, qui sont tous faits à ce point). Éteint, ou chemin d'erreur : l'ordre d'avant (solde, offre, puis taux plus bas).
+        let solde, offre, regle = null, regleLue = false;
+        if (te.finParallele && !erreurLot && sortie && sortie.resultat && sortie.resultat.issue !== 'panne') {
+            const [s, o, r] = await T.mesurer('base', () => Promise.all([soldeSur(), offreP(), regleVerdict(entree.devise).then(x => ({ ok: true, x }), e => ({ ok: false, e }))]));
+            solde = s; offre = o; regleLue = true;
+            if (r.ok) regle = r.x; else journalErreur('taux', r.e);
+        } else {
+            solde = await T.mesurer('base', () => soldeSur()); offre = await T.mesurer('base', () => offreP());
+        }
         if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
             await fermer();
             return repondreErreur(res, erreurLot.code, undefined, { facturation: PS.avecPoche(erreurLot.facturation, credit ? credit.poche : null),...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
@@ -654,8 +692,7 @@ function traiterIdentifier(cfg, deps = {}) {
             return repondreErreur(res, resultat.erreur.code, undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
         }
         // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
-        let regle = null;
-        try { regle = await regleVerdict(entree.devise); } catch (e) { journalErreur('taux', e); }
+        if (!regleLue) { try { regle = await T.mesurer('base', () => regleVerdict(entree.devise)); } catch (e) { journalErreur('taux', e); } }
         // MODELE-VISUEL-API : la version du modèle que le serveur attend, et où le télécharger. Servie ICI (et non dans /ping) parce que l'extension lit déjà `regleVerdict` à chaque réponse, qu'elle est versionnée avec le
         // contrat, et que /ping reste un sondage de santé sans configuration. Éteint, ou version non configurée : le champ n'existe pas (la réponse est celle d'avant, octet pour octet).
         const me = cfg.empreinteExtension === true && regle && cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? cfg.modeleEmpreinte : null;
@@ -667,7 +704,9 @@ function traiterIdentifier(cfg, deps = {}) {
         // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
         const analyse = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
         // 9. les écritures annexes : sans effet sur la réponse
-        try {
+        // TEMPS-ETAPES (V2_TE_FIN_PARALLELE) : la ligne `analyses` et l'annonce sont deux écritures INDÉPENDANTES (chacune sous son propre filet, aucune ne lit l'autre) : elles partent ensemble, et la clôture de la marque
+        // (ci-dessous) attend les DEUX, comme avant. Éteint : l'une puis l'autre, l'ordre d'avant.
+        const ecrireAnalyse = async () => { try {
             const maintenant = new Date();
             // B1b.8 : pour un lot, la ligne `analyses` range les cartes dans l'ordre d'ENTRÉE (cartes[carte] = la carte `index` de /reponse), la réponse dans l'ordre des valeurs
             // ETAT-FOURCHETTE (M1) : la ligne `analyses` range les produits TELS QUE LE CATALOGUE LES A RENDUS (resultat.analyse, avant le repli et la mention d'état non estimable) : la mention est une décision de CE scan,
@@ -689,10 +728,13 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
                 ...(sortie.empreinte ? { empreinteExtension: { utilisee: sortie.empreinte.public.utilisee, code: sortie.empreinte.public.code, influence: sortie.empreinte.influence, promotion: sortie.empreinte.promotion, lectureConcordante: sortie.empreinte.lectureConcordante, modele: cfg.modeleEmpreinte ? cfg.modeleEmpreinte.id : null } } : {}),
+                durees: T.exporter(),                                                       // TEMPS-ETAPES : les durées par étape (ms, entiers), additif et interne — jamais servi ; `total` court jusqu'à CETTE écriture
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
-        } catch (e) { journalErreur('analyses', e); }
-        try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); }
+        } catch (e) { journalErreur('analyses', e); } };
+        const ecrireAnnonce = async () => { try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); } };
+        if (te.finParallele) await T.mesurer('base', () => Promise.all([ecrireAnalyse(), ecrireAnnonce()]));
+        else { await T.mesurer('base', ecrireAnalyse); await T.mesurer('base', ecrireAnnonce); }
         // La clôture est la DERNIÈRE opération d'argent de la requête : un arrêt avant elle se rattrape (la marque reste ouverte, la passe rend ou confirme). Au scanner, le remboursement
         // `sans-prix` se fait DANS res.json (scanner/routes.js, habiller) : c'est lui qui clôt, après ce geste ; le battement reste alors vivant jusque-là (etat.differe).
         // Le gestionnaire VIVANT ferme `livre` lui-même, que le client soit encore là ou non : une coupure du client ne rend rien.
