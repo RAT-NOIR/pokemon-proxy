@@ -25,10 +25,10 @@ const matrice = new Float32Array(COS.length * E.DIM);
 const ligneDeCos = (m, i, a) => { for (let j = 0; j < 4; j++) m[i * E.DIM + j] = a * 0.5; m[i * E.DIM + 4 + i] = Math.sqrt(1 - a * a); };
 COS.forEach((a, i) => ligneDeCos(matrice, i, a));
 // produits par visuel : k0 -> 100 · k1 -> 101 · k2 -> 102 · k3 -> 101 (un doublon) et 103 · k4 -> 104 · k5 (le SIXIÈME) -> 105 · k6 -> 106 · k8 -> 200 · k9 -> 201
-const PROD = { 0: [100], 1: [101], 2: [102], 3: [101, 103], 4: [104], 5: [105], 6: [106], 7: [107], 8: [200], 9: [201] };
+const PRODUITS = { 0: [100], 1: [101], 2: [102], 3: [101, 103], 4: [104], 5: [105], 6: [106], 7: [107], 8: [200], 9: [201] };
 const CLE = { 100: 0, 101: 1, 102: 2, 103: 3, 104: 4, 105: 5, 106: 6, 107: 7, 200: 8, 201: 9 };
-const contexte = (groupe = {}) => ({ groupe, carte: Object.fromEntries(cles.map((c, i) => [c, [3000 + i]])), invisibles: {}, produits: Object.fromEntries(cles.map((c, i) => [c, (PROD[i] || []).map(id => [id, 1.0])])) });
-const installer = groupe => { const o = X.ouvrir(X.sceller({ cles, matrice, contexte: contexte(groupe), modele: A.MODELE, chargeLe: '2026-10-26T10:00:00.000Z' }, A.SECRET), A.SECRET, { modeleAttendu: A.MODELE }); etat.installer(Object.freeze({ index: o.index, meta: o.meta })); };
+const contexte = (groupe = {}, PROD = PRODUITS) => ({ groupe, carte: Object.fromEntries(cles.map((c, i) => [c, [3000 + i]])), invisibles: {}, produits: Object.fromEntries(cles.map((c, i) => [c, (PROD[i] || []).map(id => [id, 1.0])])) });
+const installer = (groupe, prod) => { const o = X.ouvrir(X.sceller({ cles, matrice, contexte: contexte(groupe, prod), modele: A.MODELE, chargeLe: '2026-10-26T10:00:00.000Z' }, A.SECRET), A.SECRET, { modeleAttendu: A.MODELE }); etat.installer(Object.freeze({ index: o.index, meta: o.meta })); };
 const entreeAvec = ({ redressee = true } = {}) => { const p = new Float32Array(E.DIM); for (let j = 0; j < 4; j++) p[j] = 0.5; return { empreintes: VE.lireEnveloppe({ modeleEmpreinte: A.modeleAnnonce(), empreintes: [{ photo: 0, vecteur: E.encoderVecteur(p), redressee }] }, 1) }; };
 
 let appelsVersion = 0;
@@ -161,6 +161,57 @@ const appel = (ids, over = {}) => consulterSurParImage({
         const r = await appel([100]);
         H.v('10. 🔴 [A] puis l\'ajouté 101 (même dessin que A à l\'index) : la question reste (meme-dessin), rien n\'est affirmé', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'meme-dessin', 0]);
         installer();
+    }
+    // ── (11) 🔴 GARDE DU GROUPE DE DESSIN : un membre du groupe du désigné hors de la liste jugée (ici k9 -> 201, invisible : ni candidat ni dans le top 5) — le désigné ne s'affirme PAS
+    {
+        installer({ [cles[0]]: 7, [cles[9]]: 7 });
+        remise();
+        const r = await appel([100]);
+        H.v('11a. 🔴 [A] élargi ; k9 (produit 201) est du groupe de dessin de A mais hors de la liste : silence (groupe-incomplet), rien affirmé, catalogue lu', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'groupe-incomplet', 0]);
+        installer({ [cles[0]]: 7, [cles[1]]: 7, [cles[9]]: 7 });
+        installer({ [cles[0]]: 7 });
+        remise();
+        const r2 = await appel([100]);
+        H.v('11b. … un groupe dont TOUS les membres sont dans la liste (ici le seul k0) : A est affirmé', r2.resultat && r2.resultat.analyse.cartes[0].carte.idProduct, 100);
+        installer();
+    }
+    // ── (12) 🔴 L'ÉCART TIENT AUSSI CONTRE top[1] : le 2e visuel de l'index (0,85) n'a AUCUN produit au contexte, donc invisible de la liste — l'écart réel (0,10) < 0,2 : silence
+    {
+        installer({}, { ...PRODUITS, 1: [] });
+        remise();
+        const r = await appel([100]);
+        H.v('12a. 🔴 top[1] sans produit (cosinus 0,60 -> écart 0,35 : tient) : A est affirmé', r && r.resultat && r.resultat.analyse.cartes[0].carte.idProduct, 100);
+        const cl = ['vivier/q0.webp', 'vivier/q1.webp', 'vivier/q2.webp'], m = new Float32Array(3 * E.DIM);
+        [0.95, 0.85, 0.2].forEach((a, i) => ligneDeCos(m, i, a));
+        const ctx = { groupe: {}, carte: { [cl[0]]: [1], [cl[1]]: [2], [cl[2]]: [3] }, invisibles: {}, produits: { [cl[0]]: [[100, 1]], [cl[1]]: [], [cl[2]]: [[201, 1]] } };
+        const o = X.ouvrir(X.sceller({ cles: cl, matrice: m, contexte: ctx, modele: A.MODELE, chargeLe: '2026-10-26T10:00:00.000Z' }, A.SECRET), A.SECRET, { modeleAttendu: A.MODELE });
+        etat.installer(Object.freeze({ index: o.index, meta: o.meta }));
+        const v = version({ entree: id => (id === 100 ? { grande: { cle: cl[0] }, vignette: { cle: 'v/100' }, idMetacard: 5100, basseDefinition: false, mention: null } : id === 201 ? { grande: { cle: cl[2] }, vignette: { cle: 'v/201' }, idMetacard: 5201, basseDefinition: false, mention: null } : null), identifiants: () => [100, 201] });
+        remise();
+        const r2 = await appel([100], { version: v });
+        H.v('12b. 🔴 top[1] (0,85, aucun produit) à 0,10 du désigné : silence (ecart-index), rien affirmé', [r2 && !r2.resultat, r2.trace.motif, affirmes.length], [true, 'ecart-index', 0]);
+        installer();
+    }
+    // ── (13) MINEUR 3 : charger rend autre chose qu'une Map (ou lève) : silence
+    {
+        remise();
+        const r = await appel([100], { charger: async () => [] });
+        H.v('13. le lecteur rend un tableau, pas une Map : silence (vivier-indisponible)', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'vivier-indisponible', 0]);
+    }
+    // ── (14) IMPORTANT 1 : le VRAI fournisseur de jumeaux (fournisseurParDefaut), pas l'injection. Il ne conclut que pour le produit affirmé / le candidat UNIQUE : un désigné AJOUTÉ par le top 5 reste rejeté (jumeaux).
+    //    Les verdicts ne sont PAS élargis aux ajoutés (sans la péremption plusRecentDansMetacarte, ce serait un chemin vers un faux) : en production la règle n'agit que sur les questions à un candidat.
+    {
+        const { fournisseurParDefaut } = require('../identifier/jumeaux');
+        const vJ = version({ colonneJumeaux: true, jumeauxDe: () => [], empreinteJumeaux: () => ({ n: 1, max: 999999 }), metacarteJumeaux: id => 5000 + id });
+        const catJ = { plusRecentDansMetacarte: async () => false };
+        remise();
+        let jum = await fournisseurParDefaut(catJ, vJ, [100]);          // la question n'a qu'UN candidat (100) : c'est lui le « candidat unique », seul vérifié
+        let r = await appel([100], { jumeaux: jum, version: vJ });
+        H.v('14a. vrai fournisseur, candidat unique A désigné : A est affirmé (le fournisseur conclut pour lui)', r && r.resultat && r.resultat.analyse.cartes[0].carte.idProduct, 100);
+        remise();
+        jum = await fournisseurParDefaut(catJ, vJ, [200]);              // candidat unique 200 ; le désigné de l'image (A=100) est un AJOUTÉ
+        r = await appel([200], { jumeaux: jum, version: vJ });
+        H.v('14b. 🔴 vrai fournisseur, le désigné A est un AJOUTÉ par le top 5 : rejeté (jumeaux), rien affirmé', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'jumeaux', 0]);
     }
     H.bilan();
 })().catch(e => { console.error(e); process.exit(1); });

@@ -79,6 +79,28 @@ const critereImage = d => `sur par l'image : ${d.raison}`;
 
 // VIVIER-IMAGE : le nombre de visuels les plus proches dont les produits entrent au vivier (le top 5 de l'empreinte sur l'index ENTIER), et le critère journalisé qui NOMME ce périmètre élargi.
 const K_VIVIER = 5;
+/**
+ * GARDE DU VIVIER ÉLARGI (écrite par ce qu'elle AUTORISE) : la règle ne juge les rivaux du même dessin que parmi la liste ; un visuel du groupe de dessin du désigné peut rester invisible (hors du top 5, ou sans produit au contexte).
+ * Le désigné n'est affirmé que si (a) TOUS les produits de TOUS les membres de son groupe de dessin (ctx.membres) sont dans la liste jugée, et (b) l'écart de cosinus tient aussi contre top[1] de l'index (hors lui-même et son groupe).
+ * Tout ce qui ne se prouve pas (contexte illisible, score absent) : silence. @returns null (autorisé) | le motif du silence
+ */
+function gardeVivier(d, liste, p) {
+    try {
+        const ctx = p.courant.index.contexteG, top = p.trouve.top;
+        const cle = Array.isArray(top) && top.length ? top[0][0] : null;
+        if (!cle || !(ctx.produits instanceof Map) || !(ctx.groupe instanceof Map) || !(ctx.membres instanceof Map)) return 'groupe-incomplet';
+        const g0 = ctx.groupe.has(cle) ? ctx.groupe.get(cle) : undefined;
+        const membres = g0 !== undefined ? (ctx.membres.get(g0) || []) : [];
+        for (const k of membres) {
+            const prods = ctx.produits.get(k);
+            if (!Array.isArray(prods)) return 'groupe-incomplet';
+            for (const pr of prods) if (!Array.isArray(pr) || !liste.includes(pr[0])) return 'groupe-incomplet';
+        }
+        const second = top.find((t, i) => i > 0 && t[0] !== cle && !(g0 !== undefined && ctx.groupe.get(t[0]) === g0));
+        if (second && !(d.cosinus - second[1] >= SPI.MARGE)) return 'ecart-index';
+        return null;
+    } catch { return 'groupe-incomplet'; }
+}
 const critereVivier = (d, v) => critereImage({ raison: `${d.raison} ; vivier élargi : la question plus les produits des ${v.k} visuels les plus proches de la photo à l'index (${v.extras} ajoutés)` });
 /** Les produits des K premiers visuels du top (index entier), dédoublonnés, qui ne sont pas déjà dans `deja`. L'ordre est celui du top puis celui de l'index. [] si le contexte ne sait pas dire les produits. */
 function extrasDuTop(top, contexte, deja, k = K_VIVIER) {
@@ -143,6 +165,7 @@ async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produi
                     prods = new Map(produits); for (const [k, v] of lignes) prods.set(k, v);
                     liste = [...ids, ...extras];
                     d = juger(liste, prods); vivier.charge = true;
+                    if (d.sur) { const m = gardeVivier(d, liste, p); if (m) d = { sur: false, motif: m }; }
                 } else { vivier.charge = false; d = { sur: false, motif: 'vivier-indisponible' }; }
             }
         }

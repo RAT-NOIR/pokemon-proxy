@@ -20,8 +20,13 @@ const MUTANTS = [
     [R, T, 'une question à un seul candidat n\'est jamais relue', 'ids.length < (elargir ? 1 : 2)', 'ids.length < 2'],
     [R, T, 'l\'affirmation du vivier ne passe plus les lignes lues', 'aff = affirmer(d.produit, vivier ? prods : undefined, critere);', 'aff = affirmer(d.produit, undefined, critere);'],
     [R, T, 'le critère journalisé ne nomme plus le périmètre élargi', 'const critere = vivier ? critereVivier(d, vivier) : critereImage(d);', 'const critere = critereImage(d);'],
+    [R, T, 'garde du groupe de dessin et de top[1] retirée', 'if (d.sur) { const m = gardeVivier(d, liste, p); if (m) d = { sur: false, motif: m }; }', ''],
+    [R, T, 'garde : les membres du groupe de dessin ne sont plus exigés dans la liste', "for (const pr of prods) if (!Array.isArray(pr) || !liste.includes(pr[0])) return 'groupe-incomplet';", ''],
+    [R, T, 'garde : l\'écart contre top[1] n\'est plus exigé', "if (second && !(d.cosinus - second[1] >= SPI.MARGE)) return 'ecart-index';", ''],
     [RT, TI, 'la route ne passe plus le lecteur de catalogue au vivier', 'charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,', '']
 ];
+// le cache du moteur de base de banc vient de l'environnement (MONGOMS_DOWNLOAD_DIR) : absent, le script refuse avant toute mutation
+if (!process.env.MONGOMS_DOWNLOAD_DIR) { console.error('❌ ARRÊT : MONGOMS_DOWNLOAD_DIR doit être posé (dossier du cache du moteur de banc)'); process.exit(1); }
 const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 let survivants = 0;
 const avant = {};
@@ -32,7 +37,7 @@ try {
         if (n !== 1) { console.log(`🔴 mutant non applicable (${n} occurrences de « ${de} ») : ${nom}`); survivants++; continue; }
         try {
             fs.writeFileSync(a.chemin, src.replace(de, () => vers));
-            const r = spawnSync(process.execPath, [path.join(racine, banc)], { cwd: racine, encoding: 'utf8', timeout: 240000, env: { ...process.env, MONGOMS_DOWNLOAD_DIR: process.env.MONGOMS_DOWNLOAD_DIR || 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\.banc-local\\cache-mongod' } });
+            const r = spawnSync(process.execPath, [path.join(racine, banc)], { cwd: racine, encoding: 'utf8', timeout: 240000, env: { ...process.env } });
             const tue = r.status !== 0 && /❌/.test(r.stdout || '');                 // tué par une assertion, pas par un plantage sans rapport
             console.log(`${tue ? '✅ tué' : '🔴 SURVIT'} (${path.basename(banc)}) : ${nom}`);
             if (!tue) survivants++;

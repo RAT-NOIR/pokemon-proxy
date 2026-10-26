@@ -119,7 +119,12 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const v = valider(c.j, { $ref: '#/components/schemas/ReponseAnalyse' }, SCHEMA);
         H.vrai('2f. la réponse tient le contrat OpenAPI (aucun champ, aucune valeur neuve)', v.ok);
     }
-    // ── (2bis) VIVIER-IMAGE (V2_VIVIER_IMAGE, en plus des deux autres) : une question à UN candidat (P), que la photo de X désigne — la route passe le lecteur de catalogue, le vivier est élargi, X est affirmé
+    // ── (2ter) MINEUR 3 : le VRAI catalogue.lire (base du banc) rend une Map quand une partie des ids est absente : les présents y sont, les absents non (jamais une exception, jamais un trou comblé)
+    {
+        const { creerCatalogue } = require('../identifier/catalogue');
+        const m = await creerCatalogue({ cfg: cfgOn }).lire([A.ID_X, 999999991]);
+        H.v('2ter. catalogue.lire([X, id absent]) : une Map, X présent, l\'absent absent', [m instanceof Map, m.has(A.ID_X), m.has(999999991)], [true, true, false]);
+    }    // ── (2bis) VIVIER-IMAGE (V2_VIVIER_IMAGE, en plus des deux autres) : une question à UN candidat (P), que la photo de X désigne — la route passe le lecteur de catalogue, le vivier est élargi, X est affirmé
     {
         const P1 = { mode: 'ambigue', ids: [A.ID_P] };
         const sans = await jouer(sv, P1, vec(4));
