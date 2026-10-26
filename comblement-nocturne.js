@@ -191,11 +191,20 @@ async function assurerCollectionTrous() {
         if (!presentes.includes('trous_nommes')) { await cx.db.createCollection('trous_nommes'); note('   collection trous_nommes créée (vide) : la sauvegarde du lot la lit'); }
     } finally { await fermer(); }
 }
+// Tour 3 : le bilan des trous AVANT le lot, en lecture seule, par la fonction même de l'écriture (CO.lireBilanTrous -> bilanTrous)
+async function bilanAvantLot(plan, decisions) {
+    const lecture = await lectureOuRefus();
+    try {
+        const etatDuJour = JSON.parse(fs.readFileSync(path.join(CO.DOSSIER_COMPTEURS, plan.etat.fichier), 'utf8'));
+        const le = new Date(decisions.le);
+        return await CO.lireBilanTrous(lecture.cartes.db, decisions.trous.map(t => CO.construireTrou({ ...t, le })), { classeVisuelParId: new Map(etatDuJour.map(p => [p.idProduct, p.classeVisuel])), visuels: decisions.total });
+    } finally { await lecture.fermer(); }
+}
 async function nuit({ dossier, aBlanc, limite, budget }) {
     const debut = new Date();                                  // M4 : « neuf » se mesure depuis le DÉBUT du passage (un produit ajouté pendant le passage reste neuf au suivant)
     const date = jour();
     const av = [];
-    let plan = null, rapports = [], decisions = null, ecrit = null, lot = null, trousEcrits = null;
+    let plan = null, rapports = [], decisions = null, ecrit = null, lot = null, trousEcrits = null, bilan = null;
     try {
         // F3 : l'état est régénéré d'abord (compteur de production en processus fils) ; échec = arrêt, jamais un repli sur un ancien fichier
         const etatNom = CO.regenererEtat({ lister: () => fs.readdirSync(CO.DOSSIER_COMPTEURS), lancer: () => spawnSync(process.execPath, [path.join('audit-catalogue', 'compteurs-abc.js'), '--note=comblement-nocturne : file a l\'arret verifiee par les gardes'], { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 90 * 60 * 1000 }) });
@@ -212,7 +221,12 @@ async function nuit({ dossier, aBlanc, limite, budget }) {
         decisions = await etapeDecider({ dossier });
         const N = decisions.total, M = decisions.trous.length;
         if (aBlanc) ecrit = 'À BLANC : aucune écriture';
-        else if (!N && !M) ecrit = 'rien à écrire';
+        else if (!N && (bilan = M ? await bilanAvantLot(plan, decisions) : { rien: true, nouveaux: 0, changes: 0, inchanges: 0, resolus: 0, rouverts: 0 }).rien) {
+            // Tour 3 : rien de neuf (0 visuel, trous tous inchangés) : AUCUN lot-additif (une sauvegarde complète de la grappe pour rien) ; le passage a réussi
+            trousEcrits = { nouveaux: 0, changes: 0, inchanges: bilan.inchanges, resolus: 0, rouverts: 0 };
+            ecrit = `rien à écrire : 0 visuel, trous nouveaux ${bilan.nouveaux} · changés ${bilan.changes} · inchangés ${bilan.inchanges} · résolus ${bilan.resolus} · rouverts ${bilan.rouverts} — aucun lot-additif`;
+            RC.ecrireJson(path.join(dossier, 'dernier-passage.json'), { le: debut.toISOString(), visuels: 0, trous: M, etat: plan.etat.fichier, lot: false });
+        }
         else {
             await assurerCollectionTrous();
             const c = spawnSync(process.execPath, ['lot-additif.js', `--quoi=comblement ${date} : ${N} visuels, ${M} trous`, '--collections=cartes,images,sets,collecte_images_etat,trous_nommes', '--', 'node', 'comblement-nocturne.js', '--ecrire', `--attendu=${N}`, `--dossier=${dossier}`],
