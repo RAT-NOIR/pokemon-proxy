@@ -122,8 +122,11 @@ function verifierEntree(corps, cfg) {
     // MODELE-VISUEL-API : `empreintes` / `modeleEmpreinte` ne sont LUS que si V2_EMPREINTE_EXTENSION=1 (éteint : la requête est jugée comme avant, octet pour octet). Une enveloppe fautive ne refuse JAMAIS la requête :
     // l'empreinte est un plus, jamais un passage obligé ; le défaut est dit dans la réponse (`empreinte`, code « invalide »).
     const empreintes = cfg.empreinteExtension === true ? lireEnveloppe(corps, urls.length) : null;
+    // CALCUL-CLIENT : `capacitesClient` n'est LU que si V2_MESURES_CLIENT=1 (éteint : un champ inconnu, ignoré comme aujourd'hui). Il ne refuse jamais la requête : seule la valeur exacte « mesures-1 » dans un tableau compte.
+    const mesuresClient = cfg.mesuresClient === true && Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mesures-1');
     return { entree: {
         ...(photoIds ? { photoIds } : {}),
+        ...(mesuresClient ? { mesuresClient: true } : {}),
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
         vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // REÇU et JOURNALISÉ, jamais utilisé (ETAT-VENDEUR, 2026-10-18) : passé à la chaîne héritée, qui le journalise et ne le lit pour aucune décision ; borné (mineur reporté de B1b.1)
@@ -386,7 +389,12 @@ async function consulterEmpreinte({ deps, cfg, fournisseur, entree, scanId, resu
         };
         v = await avecBorne(appel, ms, 'voisins (empreinte)');
     } catch (e) { journalErreur('empreinte (voisins)', e); return sans('indisponible'); }
-    if (!v || v.ok !== true) return sans(v && CODES_EMPREINTE.includes(v.code) ? v.code : 'indisponible');
+    if (!v || v.ok !== true) {
+        const s = sans(v && CODES_EMPREINTE.includes(v.code) ? v.code : 'indisponible');
+        // CALCUL-CLIENT : la règle attend des mesures que le serveur ne calcule pas (V2_ORB_SERVEUR=0) — ce qu'il faut pour les demander au client ; INTERNE (jamais servi, jamais écrit tel quel)
+        if (v && v.code === 'muette' && v.attente && v.attente.ligne && v.attente.ctx) s.empreinte.attente = v.attente;
+        return s;
+    }
     let d;
     try { d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils); }
     catch (e) { journalErreur('empreinte (règle G)', e); return sans('indisponible'); }
@@ -413,7 +421,7 @@ function traiterIdentifier(cfg, deps = {}) {
     // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place ; les PIXELS sont la carte redressée jointe par l'extension, les scans
     // viennent de NOTRE bucket public de visuels ou de deps.scanEmpreinte en banc). Le serveur ne télécharge jamais la photo.
     const fournisseurEmpreinte = cfg.empreinteExtension === true
-        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, scan: typeof deps.scanEmpreinte === 'function' ? deps.scanEmpreinte : require('./voisins-empreinte').scanArchivePublic({ hote: cfg.images.hotesPublics[0] }), zones: deps.zonesEmpreinte || null, ...(Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? { delaiMs: deps.delaiVoisinsMs } : {}) }))
+        ? (typeof deps.voisinsEmpreinte === 'function' ? deps.voisinsEmpreinte : require('./voisins-empreinte').creerFournisseurEmpreinte({ cfg, scan: typeof deps.scanEmpreinte === 'function' ? deps.scanEmpreinte : require('./voisins-empreinte').scanArchivePublic({ hote: cfg.images.hotesPublics[0] }), zones: deps.zonesEmpreinte || null, orbServeur: cfg.orbServeur !== false, ...(Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? { delaiMs: deps.delaiVoisinsMs } : {}) }))
         : null;
     const interne = async function traiterIdentifierV2(req, res, etat) {
         const porteur = req.v2 && req.v2.porteur, entree = req.entree;
@@ -470,7 +478,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: natureDuMotif(motif) });
@@ -606,6 +614,12 @@ function traiterIdentifier(cfg, deps = {}) {
                             }
                         } catch (e) { journalErreur('sur par l\'image', e); }
                     }
+                    // CALCUL-CLIENT : une QUESTION que la règle G aurait pu trancher avec des mesures que le serveur ne calcule pas (V2_ORB_SERVEUR=0) — on demande ces mesures au client qui l'annonce. Jamais quand G a
+                    // déjà changé le résultat ou contredit la chaîne, jamais sur autre chose qu'une question (le second envoi ne peut que PROMOUVOIR). Un échec ici n'enlève rien : le premier verdict reste, sans complément.
+                    if (resultat.issue === 'question' && cfg.mesuresClient === true && entree.mesuresClient === true && empreinteInfo && empreinteInfo.attente && !desaccordG && !empreinteInfo.influence) {
+                        try { complement = require('./calcul-client-route').preparerComplement({ cfg, scanId, attente: empreinteInfo.attente, corpsChaine: c, resultat, maintenant: typeof deps.maintenant === 'function' ? deps.maintenant() : Date.now() }); }
+                        catch (e) { journalErreur('complément des mesures', e); complement = null; }
+                    }
                 }
                 // CRITERE-A (relecture r1, C1) : une AFFIRMATION qui remplace une question que la CHAÎNE a déjà réservée (voie « candidat unique » : poserQuestion avant l'adaptateur) règle cette réservation
                 // comme une RÉPONSE par ce candidat — le chemin existant du grand livre (`argent.repondreQuestion` : en-attente -> repondue, réserve -> débité) — sinon la réponse dit « débité », le livre
@@ -654,7 +668,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}) };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}),
+                    ...(complement && resultat.issue === 'question' ? { complement } : {}) };     // CALCUL-CLIENT : seulement si la question a TENU jusqu'ici (une question non écrite est devenue une panne : pas de complément)
             });
             }
         } catch (e) {
@@ -737,6 +752,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
                 ...(sortie.empreinte ? { empreinteExtension: { utilisee: sortie.empreinte.public.utilisee, code: sortie.empreinte.public.code, influence: sortie.empreinte.influence, promotion: sortie.empreinte.promotion, lectureConcordante: sortie.empreinte.lectureConcordante, modele: cfg.modeleEmpreinte ? cfg.modeleEmpreinte.id : null } } : {}),
+                ...(sortie.complement ? { complementMesures: sortie.complement.stocke } : {}),     // CALCUL-CLIENT : ce que le second envoi relit (mesures demandées, ligne, références, échéance) — interne, jamais servi
                 durees: T.exporter(),                                                       // TEMPS-ETAPES : les durées par étape (ms, entiers), additif et interne — jamais servi ; `total` court jusqu'à CETTE écriture
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
@@ -757,7 +773,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre),
-            ...(sortie.empreinte ? { empreinte: sortie.empreinte.public } : {}) });          // MODELE-VISUEL-API : seulement quand la requête portait des empreintes et que le drapeau est allumé
+            ...(sortie.empreinte ? { empreinte: sortie.empreinte.public } : {}),          // MODELE-VISUEL-API : seulement quand la requête portait des empreintes et que le drapeau est allumé
+            ...(sortie.complement ? { complement: sortie.complement.public } : {}) });     // CALCUL-CLIENT : seulement drapeau allumé, client qui l'annonce, question que des mesures pourraient trancher
     };
     return async function traiterIdentifierV2(req, res) {
         const etat = { suivi: null, differe: false };
@@ -866,4 +883,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, rattacherPhotos, lirePhotoIds, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, consulterSecondeLecture, validerEntree, rattacherPhotos, lirePhotoIds, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe, carteRepondue };

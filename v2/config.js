@@ -223,6 +223,13 @@ function lireConfig(env = process.env) {
         // le préfixe d'une promo (XY85, SM46) n'est pas un code de set, un symbole e-Reader isolé n'est pas une preuve. Aucun champ n'est retiré du veto.
         // ÉTEINT par défaut (0) : la réponse est celle d'avant, octet pour octet. N'agit que si V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION sont allumés aussi ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         spiComparateur: booleen('V2_SPI_COMPARATEUR', env.V2_SPI_COMPARATEUR, false),
+        // CALCUL-CLIENT (contrat « calcul client », DEMANDE-SERVEUR-EXTENSION.md, 26/10 nuit) : les mesures d'image de la règle G (garde des zones) calculées PAR LE CLIENT.
+        // mesuresClient : la réponse porte un `complement` (les mesures à calculer) quand le client l'annonce (`capacitesClient: ["mesures-1"]`), et POST /api/identifier/mesures existe. ÉTEINT par défaut (0) :
+        //   la route n'existe pas, la réponse est celle d'avant, octet pour octet. N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (le vecteur et l'index en viennent) ET que le serveur ne mesure pas lui-même.
+        // orbServeur : le serveur calcule lui-même la garde des zones (OpenCV.js, sur la carte jointe). ALLUMÉ par défaut (1) : comme avant. À 0, aucune carte n'est décodée et OpenCV.js n'est jamais chargé pour la
+        //   règle G : une mesure demandée fait se taire G (« muette »), sauf que le client peut la fournir par le complément.
+        mesuresClient: booleen('V2_MESURES_CLIENT', env.V2_MESURES_CLIENT, false),
+        orbServeur: booleen('V2_ORB_SERVEUR', env.V2_ORB_SERVEUR, true),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),

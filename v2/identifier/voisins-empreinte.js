@@ -90,7 +90,9 @@ function preparerVecteur({ entree, voulu, etat, memo = false, chrono = null }) {
  *   cfg.modeleEmpreinte : { id, sha256 } — LA version attendue ; etat : le pointeur de l'index (etat-empreintes.js) ; zones : ratmarket/zones.js (injectable) ;
  *   scan : (cle) → Buffer|null — les scans de l'ARCHIVE (jamais la photo de l'utilisateur) ; la photo redressée est la CARTE que l'extension joint à l'entrée (carte-redressee.js), et elle seule.
  */
-function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), zones = null, scan = null, budget = BUDGET_MESURES, fileMax = FILE_MESURES_MAX, delaiMs = DELAI_MESURES_MS } = {}) {
+// CALCUL-CLIENT : `orbServeur` faux (V2_ORB_SERVEUR=0) — le serveur ne mesure AUCUN pixel : ni la carte n'est décodée, ni OpenCV.js chargé. Si la règle peut décider sans mesure, elle décide ; dès qu'elle en demande une,
+// le fournisseur rend « muette » avec `attente` ({ ligne, ctx }) : ce que la route lit pour dire au CLIENT quelles mesures calculer (identifier/calcul-client.js). Rien d'autre ne change.
+function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), zones = null, scan = null, budget = BUDGET_MESURES, fileMax = FILE_MESURES_MAX, delaiMs = DELAI_MESURES_MS, orbServeur = true } = {}) {
     const attendu = () => { const m = cfg && cfg.modeleEmpreinte; return m && typeof m.id === 'string' && m.id && typeof m.sha256 === 'string' && m.sha256 ? { id: m.id, sha256: m.sha256 } : null; };
     const Z = () => zones || require('../../ratmarket/zones');
 
@@ -111,6 +113,7 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
                 try { G.decider(ctx, ligne, 1, mesures, G.SEUILS_G); return { ok: true, mesures: rendu, nMesures }; }
                 catch (err) {
                     if (err !== MANQUE || !manque) return echec('indisponible');            // une faute de la règle ou du contexte : on ne la prend pas pour une mesure
+                    if (orbServeur === false) return { ...echec('muette'), besoinMesures: true };          // CALCUL-CLIENT : la mesure est au client, jamais ici
                     if (typeof scan !== 'function') return echec('muette');
                     if (arret.stop || nMesures >= budget) return echec('indisponible');                    // le délai est passé, ou le budget de mesures de la requête est épuisé : le travail s'arrête
                     if (!enFile) { if (enFileMesures >= fileMax) return echec('indisponible'); enFileMesures++; enFile = true; }   // la file : refus immédiat, sans mesure
@@ -147,11 +150,13 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
             // demanderait à la décision des mesures que la boucle ci-dessous n'a jamais faites. Version en place ; sans version, le contexte tel quel.
             const ctx = require('./emprunt').contexteDeLaRegle(courant.index.contexteG);
             // 🔑 LA CARTE : sans carte autorisée (JPEG 420 × 587, <= 200 Ko, celle de la MÊME entrée que le vecteur), la garde des zones ne peut pas conclure : G se tait pour cette photo, même si aucune mesure n'était demandée
-            const carte = await CR.valider(e0.carte);
-            if (!carte.ok) return { ...echec('muette'), raison: carte.code };
+            // CALCUL-CLIENT : sans ORB serveur, la carte n'est PAS décodée (aucun pixel n'est regardé ici) ; elle reste EXIGÉE (présente), comme avant : sans elle, G se tait
+            if (orbServeur === false && (typeof e0.carte !== 'string' || e0.carte.length === 0)) return { ...echec('muette'), raison: 'absente' };
+            const carte = orbServeur === false ? null : await CR.valider(e0.carte);
+            if (carte && !carte.ok) return { ...echec('muette'), raison: carte.code };
             const arret = { stop: false }; const minuteur = setTimeout(() => { arret.stop = true; }, delaiMs); if (minuteur.unref) minuteur.unref();       // l'indicateur d'arrêt, posé au délai
             let m; try { m = await mesurer({ ligne, ctx, carte, arret, chrono }); } finally { clearTimeout(minuteur); }
-            if (!m.ok) return echec(m.code);
+            if (!m.ok) return m.besoinMesures === true ? { ...echec('muette'), attente: { ligne, ctx } } : echec(m.code);
             return { ok: true, ligne, nEssais: 1, nMesures: m.nMesures, mesures: m.mesures, contexteG: ctx, seuils: G.SEUILS_G, photo: e0.photo, meilleurCosinus: v.meilleurCosinus };
         } catch { return echec('indisponible'); }
     };

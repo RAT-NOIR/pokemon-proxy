@@ -19,14 +19,15 @@ const VB = require('./_visuels-banc');
 const archive = avecColonne => { const b = creerConstructeur(); b.entree(VB.doc(9100001)); if (avecColonne) b.jumeau({ idProduct: 9100001, idMetacard: 990101, idExpansion: 1, numero: '001', tirage: 'jp' }); return b.finir(); };
 const COMPLETE = archive(true), SANS_COLONNE = archive(false);
 const DE_L_ARCHIVE = ['langue-impression', 'marques'];
-const SANS_EMPREINTE = j => j !== 'empreinte';
+const SANS_EMPREINTE = j => j !== 'empreinte' && j !== 'mesures-client';           // CALCUL-CLIENT : `mesures-client` exige le jeton `empreinte` (et deux drapeaux) : sans index chargé, il tombe avec lui
 
 const ENV = { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' };
 // Le contrat de l'EXTENSION (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) ») : cinq jetons, dans cet ordre. Le dire ici une fois, à la main, est voulu : changer la liste est une décision
 // qui se prend des deux côtés, pas un effet de bord. Tous les AUTRES contrôles lisent la liste exportée par v2/capacites.js.
 const CONTRAT_EXTENSION = ['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour'];
 // 25/10 : le sixième jeton, `empreinte` (DEMANDE-SERVEUR-EXTENSION.md, contrat de l'empreinte, point 8), en fin de liste, annoncé seulement si l'index d'empreintes est CHARGÉ.
-const CONTRAT_LISTE = [...CONTRAT_EXTENSION, 'empreinte'];
+// 26/10 (nuit) : le septième, `mesures-client` (contrat « calcul client », point 5), en fin de liste, annoncé seulement si V2_MESURES_CLIENT=1, V2_ORB_SERVEUR=0 ET le jeton `empreinte`.
+const CONTRAT_LISTE = [...CONTRAT_EXTENSION, 'empreinte', 'mesures-client'];
 
 let C = null;
 try { C = require('../capacites'); } catch (e) { console.log(`   (v2/capacites.js absent ou illisible : ${e.code || e.message})`); }
@@ -102,7 +103,7 @@ if (C) {
         V2_URL_VERIFICATION: 'https://exemple.org/verification', V2_URL_REINIT: 'https://exemple.org/reinit', V2_EMPREINTE_JOURS: ENT, V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abcdefghijklmnop',
         V2_VISUELS_HMAC: 'valeur-de-banc', V2_VISUELS_SOURCE: 'calcul', V2_VISUELS_BANC_FICHIER: 'fichier-fictif.rmv', V2_PHOTO_ADMIN_DELAI_S: '5', V2_PHOTO_ADMIN_INTERVALLE_S: '5', V2_PHOTO_ADMIN_MAX_JOUR: '5',
         V2_DESCRIPTION_CONSERVEE: BOOL, V2_DESCRIPTION_AU_MODELE: BOOL, V2_MARCHES: 'vinted.fr', V2_VERSION_MIN_EXTENSION: '2.5.0', V2_REGLE_G: BOOL, V2_SECONDE_LECTURE: BOOL, V2_LECTURE_TAMPON: BOOL, V2_SUR_PAR_IMAGE: BOOL, V2_VIVIER_IMAGE: BOOL, V2_SPI_COMPARATEUR: BOOL,
-        V2_TE_VOISINS_UNE_FOIS: BOOL, V2_TE_EMPREINTE_TOT: BOOL, V2_TE_FIN_PARALLELE: BOOL, V2_TE_ORB_UTILE: BOOL,
+        V2_TE_VOISINS_UNE_FOIS: BOOL, V2_TE_EMPREINTE_TOT: BOOL, V2_TE_FIN_PARALLELE: BOOL, V2_TE_ORB_UTILE: BOOL, V2_MESURES_CLIENT: BOOL, V2_ORB_SERVEUR: BOOL,
         V2_CONFIRMATION_NOMBREUX: BOOL, V2_TAUX_BCE: BOOL, V2_RESOLUTION_CARDMARKET: BOOL, V2_PHOTOS_MULTIPLES: BOOL, V2_PHOTOS_MULTIPLES_TOUS: BOOL, V2_ABONNEMENTS: BOOL,
         // abonnements/config.js (lu par config.js) : des valeurs fictives, jamais une forme de clé
         V2_STRIPE_MODE: 'test', V2_STRIPE_CLE: 'valeur-fictive', V2_STRIPE_WEBHOOK_SECRET: 'valeur-fictive', V2_STRIPE_PRIX_PRO_MOIS: 'prix-fictif-1', V2_STRIPE_PRIX_PRO_AN: 'prix-fictif-2',
@@ -131,7 +132,7 @@ if (C) {
     const CHARGE = Object.freeze({ index: Object.freeze({}), meta: Object.freeze({ n: 1 }) });
     const sert = (cfg, lecteur) => { try { return C.capacitesServies(cfg, undefined, () => COMPLETE, lecteur).includes('empreinte'); } catch (e) { return `exception ${e.message}`; } };
     const silence = f => { const w = console.warn; console.warn = () => { }; try { return f(); } finally { console.warn = w; } };
-    H.vrai('empreinte : la condition du code existe, et le jeton est le DERNIER de la liste fermée', typeof C.CONDITIONS.empreinte === 'function' && LISTE[LISTE.length - 1] === 'empreinte');
+    H.vrai('empreinte : la condition du code existe, et le jeton est l\'AVANT-DERNIER de la liste fermée (le dernier, `mesures-client`, en dépend)', typeof C.CONDITIONS.empreinte === 'function' && LISTE[LISTE.length - 2] === 'empreinte');
     H.v('empreinte : drapeau allumé + modèle valide + index CHARGÉ : le jeton est annoncé, en fin de liste, et seul', [sert(cfgDe({}), () => CHARGE), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(-1)[0]], [true, 'empreinte']);
     H.v('   les cinq autres jetons ne changent pas (index chargé ou non)', C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(0, -1), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => null));
     // une condition après l'autre : chacune seule fait tomber le jeton
@@ -154,7 +155,14 @@ if (C) {
     const jetons = () => v2.ping().capacites;
     H.v('/ping, drapeau allumé, modèle valide, index PAS chargé (démarrage, ou chargement en échec) : pas de jeton `empreinte`', jetons(), CONTRAT_EXTENSION);
     etatEmp.installer(CHARGE);
-    H.v('   index chargé : `empreinte` en fin de liste, les cinq autres inchangés', jetons(), CONTRAT_LISTE);
+    H.v('   index chargé : `empreinte` en fin de liste, les cinq autres inchangés (et pas `mesures-client` : ses drapeaux ne sont pas posés)', jetons(), [...CONTRAT_EXTENSION, 'empreinte']);
+    // CALCUL-CLIENT : `mesures-client` — le jeton `empreinte` ET V2_MESURES_CLIENT=1 ET V2_ORB_SERVEUR=0 ; chacune seule le fait tomber
+    {
+        const cc = sur => C.capacitesServies(lireConfig({ ...ENV, ...BON, V2_MESURES_CLIENT: '1', V2_ORB_SERVEUR: '0', ...sur }), undefined, () => COMPLETE, () => CHARGE);
+        H.v('mesures-client : les quatre conditions : la liste complète, `mesures-client` en DERNIER', cc({}), CONTRAT_LISTE);
+        H.v('   chacune seule le fait tomber (V2_MESURES_CLIENT=0, V2_ORB_SERVEUR=1, drapeau d\'empreinte éteint), et `empreinte` suit ses propres conditions', [cc({ V2_MESURES_CLIENT: '0' }).includes('mesures-client'), cc({ V2_ORB_SERVEUR: '1' }).includes('mesures-client'), cc({ V2_EMPREINTE_EXTENSION: '0' }).includes('mesures-client'), cc({ V2_ORB_SERVEUR: '1' }).includes('empreinte')], [false, false, false, true]);
+        H.v('   index NON chargé : ni `empreinte` ni `mesures-client`', C.capacitesServies(lireConfig({ ...ENV, ...BON, V2_MESURES_CLIENT: '1', V2_ORB_SERVEUR: '0' }), undefined, () => COMPLETE, () => null).filter(j => j === 'empreinte' || j === 'mesures-client'), []);
+    }
     H.v('   rien d\'autre ne change dans /ping : les deux mêmes clés, la même version minimale', [Object.keys(v2.ping()), v2.ping().versionMinExtension], [['versionMinExtension', 'capacites'], lireConfig({ ...ENV, ...BON }).versionMinExtension]);
     etatEmp.vider();
     H.v('   index vidé (rechargement refusé puis bascule perdue) : le jeton tombe à l\'appel suivant', jetons(), CONTRAT_EXTENSION);

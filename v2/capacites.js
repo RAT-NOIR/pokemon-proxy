@@ -26,7 +26,7 @@
 // Un jeton dont le code ne pourrait pas être prouvé servi n'entre pas dans CONDITIONS : il n'est jamais annoncé.
 
 /** La liste fermée (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) »), dans l'ordre de la réponse. UN seul endroit : les bancs, le schéma et le contrat la lisent d'ici. */
-const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte']);
+const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client']);
 
 /**
  * L'archive des visuels EN MÉMOIRE est-elle en place, avec au moins un produit ? `version` est ce que rend le lecteur (chargeur/etat.js::version) : un objet gelé, ou null. Écrit par ce qu'il AUTORISE :
@@ -69,7 +69,10 @@ const CONDITIONS = Object.freeze({
         if (typeof lireEmpreintes !== 'function') return false;
         const e = lireEmpreintes();
         return e !== null && typeof e === 'object' && e.index !== null && typeof e.index === 'object' && e.meta !== null && typeof e.meta === 'object';
-    }
+    },
+    // CALCUL-CLIENT (26/10, contrat « calcul client », point 5) : POST /api/identifier/mesures existe et la réponse peut porter un `complement`. Les QUATRE à la fois : le jeton `empreinte` (sa condition, appelée telle quelle :
+    // sans vecteur ni index, aucune mesure à demander) ; V2_MESURES_CLIENT allumé (`cfg.mesuresClient === true`) ; le serveur ne mesure PAS lui-même (`cfg.orbServeur === false` : sinon il n'émet jamais de complément).
+    'mesures-client': (cfg, lireVersion, lireEmpreintes) => CONDITIONS.empreinte(cfg, lireVersion, lireEmpreintes) === true && cfg.mesuresClient === true && cfg.orbServeur === false
 });
 
 /**

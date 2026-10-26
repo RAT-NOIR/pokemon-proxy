@@ -7,7 +7,7 @@
 // Module sans base ni réseau : contextes et mesures FABRIQUÉS.
 const H = require('./_harnais');
 const G = require('../../ratmarket/decision-g');
-const M = require('../identifier/mesures-client');
+const M = require('../identifier/calcul-client');
 
 const SECRET = 'secret-de-banc-' + 'mesures-client-0123456789';      // secret FABRIQUÉ de banc, en deux morceaux (contrôle d'avant push)
 function graine(s) { let x = s >>> 0; return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; }

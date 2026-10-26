@@ -832,6 +832,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_TE_FIN_PARALLELE: [c => c.tempsEtapes.finParallele, false, '2', 'leve'], V2_TE_ORB_UTILE: [c => c.tempsEtapes.orbUtile, false, '2', 'leve'],
             V2_VIVIER_IMAGE: [c => c.vivierImage, false, '2', 'leve'],      // VIVIER-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_SPI_COMPARATEUR: [c => c.spiComparateur, false, '2', 'leve'],      // SPI-CONTRADICTIONS : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_MESURES_CLIENT: [c => c.mesuresClient, false, '2', 'leve'], V2_ORB_SERVEUR: [c => c.orbServeur, true, '2', 'leve'],      // CALCUL-CLIENT : le complément éteint, l'ORB serveur allumé par défaut ; tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_MODELE_EMPREINTE_ID: [c => c.modeleEmpreinte.id, null, 'identifiant invalide', 'ignore'], V2_MODELE_EMPREINTE_SHA256: [c => c.modeleEmpreinte.sha256, null, 'pas-un-sha256', 'ignore'],      // la version du modèle attendue : aucune par défaut (tous les vecteurs sont alors ignorés)

@@ -104,6 +104,9 @@ module.exports = {
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
         const parPorteurDe = (nom, max) => L.limiteur({ nom, max, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/identifier/reponse', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('reponse', cfg.limites.reponseParPorteurHeure), idempotente('reponse', { obligatoire: false }, cfg), traiterReponse(cfg, deps));
+        // CALCUL-CLIENT : le second envoi (les mesures d'image calculées par le client), SEULEMENT si V2_MESURES_CLIENT=1 ET V2_EMPREINTE_EXTENSION=1 (éteint : la route n'existe pas, 404). Même pile que la réponse à une question
+        // (le même plafond horaire par porteur que /reponse, compteur à part) : il ne débite rien par lui-même ; le jeton signé et la prise atomique rendent un rejeu sûr.
+        if (cfg.mesuresClient === true && cfg.empreinteExtension === true) router.post('/api/identifier/mesures', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('mesures', cfg.limites.reponseParPorteurHeure), idempotente('mesures', { obligatoire: false }, cfg), require('./calcul-client-route').traiterMesures(cfg, deps));
         // Le prix lu en direct : avec Bearer seulement. Même remarque sur la clé (la garde « un second retour est refusé » est déjà un rejeu sûr).
         router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('retour-live', cfg.limites.retourLiveParPorteurHeure), idempotente('retour-live', { obligatoire: false }, cfg), traiterRetourLive(cfg, deps));
         // Le solde : avec Bearer seulement (lecture pure, aucun débit).

@@ -451,6 +451,147 @@
         }
       }
     },
+    "/api/identifier/mesures": {
+      "post": {
+        "operationId": "envoyerMesures",
+        "tags": [
+          "identification"
+        ],
+        "summary": "Le second envoi du contrat « calcul client » : les mesures d'image calculées par le client",
+        "description": "N'EXISTE que si `V2_MESURES_CLIENT=1` et `V2_EMPREINTE_EXTENSION=1` (sinon 404). Un seul envoi par scan. Le serveur vérifie le jeton, la forme exacte, les bornes et la cohérence ; il rejoue la règle G sur ces mesures et ne peut que PROMOUVOIR un candidat de la question (jamais rétrograder, jamais un produit hors de la question). Ne débite rien par lui-même.",
+        "x-conditionnel": "V2_MESURES_CLIENT",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteMesures"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`change: false` (le premier verdict reste) ou `change: true` avec la carte identifiée, la facturation, le solde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseMesures"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE : `corps`, `scan-id`, `jeton`, `opencv`, `resultats`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE : scan d'un autre porteur, ou route éteinte).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT : les mesures de ce scan ont déjà été envoyées.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "CODE_EXPIRE : jeton expiré, étranger au scan, ou mesures non attendues. Le premier verdict reste définitif.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT au-delà du plafond horaire par porteur (celui de /api/identifier/reponse, compteur à part).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "SERVEUR.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/retour-live": {
       "post": {
         "operationId": "retourLive",
@@ -5800,6 +5941,9 @@
           },
           "empreinte": {
             "$ref": "#/components/schemas/ReponseEmpreinte"
+          },
+          "complement": {
+            "$ref": "#/components/schemas/ComplementMesures"
           }
         },
         "required": [
@@ -5810,6 +5954,162 @@
           "facturation",
           "solde",
           "offre"
+        ],
+        "additionalProperties": false
+      },
+      "ComplementMesures": {
+        "type": "object",
+        "x-conditionnel": "V2_MESURES_CLIENT",
+        "description": "AJOUT FACULTATIF (contrat « calcul client ») : présent SEULEMENT quand `V2_MESURES_CLIENT=1`, que la requête annonçait `capacitesClient: [\"mesures-1\"]`, que la carte est une QUESTION et que la règle G pourrait la trancher avec ces mesures. Le client calcule TOUTES les mesures (zones.js, geste pour geste) sur la carte redressée et les références, puis fait UN envoi `POST /api/identifier/mesures` avant `expireDans` secondes. Sans ce champ, le premier verdict est définitif.",
+        "properties": {
+          "jeton": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opaque, signé par le serveur ; lie le scan, l'échéance, la liste exacte des mesures et les références."
+          },
+          "expireDans": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Secondes (120)."
+          },
+          "mesures": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/MesureDemandee"
+            },
+            "description": "L'ensemble FERMÉ de ce que la règle pourrait lire : toutes les paires ordonnées entre le premier voisin et ses concurrents retenus, et la zone clé de chacun. Les résultats s'envoient dans CET ordre."
+          },
+          "references": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Le visuel de l'archive (public), le même que le serveur lirait."
+                },
+                "sha256": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "octets": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "ref",
+                "url",
+                "sha256",
+                "octets"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "jeton",
+          "expireDans",
+          "mesures",
+          "references"
+        ],
+        "additionalProperties": false
+      },
+      "MesureDemandee": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "paire",
+              "zones"
+            ]
+          },
+          "a": {
+            "type": "string"
+          },
+          "b": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false,
+        "description": "`paire` : `a`, `b` (ordonnées : b alignée sur a) ; `zones` : `ref`."
+      },
+      "RequeteMesures": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string"
+          },
+          "jeton": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "opencv": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "La version d'OpenCV.js du client (journalisée)."
+          },
+          "resultats": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "description": "Dans l'ordre de `complement.mesures`. `paire` : { type, a, b, ecart ∈ [−2 ; 2], couverture ∈ [0 ; 1] } ; `zones` : { type, ref, haut, illustration, bandeau, texte, bas ∈ [−1 ; 1], inliers entier ∈ [0 ; 300] }. Aucune autre clé."
+            }
+          }
+        },
+        "required": [
+          "scanId",
+          "jeton",
+          "resultats"
+        ]
+      },
+      "ReponseMesures": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "scanId": {
+            "type": "string"
+          },
+          "change": {
+            "type": "boolean",
+            "description": "`false` : le premier verdict reste (résultats rejetés, règle sans affirmation, candidat hors de la question, réponse déjà donnée…), sans autre champ. `true` : la carte est montée en `identifiee` ; la question réservée est réglée comme une réponse par ce candidat (un seul débit)."
+          },
+          "carte": {
+            "$ref": "#/components/schemas/CarteAnalysee"
+          },
+          "facturation": {
+            "$ref": "#/components/schemas/Facturation"
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          },
+          "offre": {
+            "$ref": "#/components/schemas/Offre"
+          }
+        },
+        "required": [
+          "success",
+          "scanId",
+          "change"
         ],
         "additionalProperties": false
       },
@@ -6521,11 +6821,12 @@
                 "prix-incertains",
                 "prix-repli",
                 "achete-avant-jour",
-                "empreinte"
+                "empreinte",
+                "mesures-client"
               ]
             },
             "x-conditionnel": "RM_API_V2=1",
-            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens et condition : `langue-impression` = `impressions[].langue`, annoncé seulement si l'archive des visuels est chargée en mémoire ET porte la colonne des jumeaux ; `marques` = `Produit.marques` et `Impression.marques`, annoncé seulement si l'archive des visuels est chargée en mémoire ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) — la règle est en place, mais `prixRepli` peut manquer sur une carte dont la fiche n'a aucun prix ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour ; `empreinte` = le serveur attend le vecteur d'empreinte de l'extension, annoncé seulement si `V2_EMPREINTE_EXTENSION=1`, la configuration du modèle est valide ET l'index d'empreintes est chargé en mémoire (jamais le seul drapeau). Les deux jetons de l'archive tombent à chaque réveil à froid du service, tant que l'archive n'est pas rechargée."
+            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens et condition : `langue-impression` = `impressions[].langue`, annoncé seulement si l'archive des visuels est chargée en mémoire ET porte la colonne des jumeaux ; `marques` = `Produit.marques` et `Impression.marques`, annoncé seulement si l'archive des visuels est chargée en mémoire ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) — la règle est en place, mais `prixRepli` peut manquer sur une carte dont la fiche n'a aucun prix ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour ; `empreinte` = le serveur attend le vecteur d'empreinte de l'extension, annoncé seulement si `V2_EMPREINTE_EXTENSION=1`, la configuration du modèle est valide ET l'index d'empreintes est chargé en mémoire (jamais le seul drapeau) ; `mesures-client` (contrat « calcul client ») = la réponse peut porter `complement` et `POST /api/identifier/mesures` existe, annoncé seulement si le jeton `empreinte` l'est ET `V2_MESURES_CLIENT=1` ET `V2_ORB_SERVEUR=0`. Les deux jetons de l'archive tombent à chaque réveil à froid du service, tant que l'archive n'est pas rechargée."
           }
         },
         "required": [
@@ -6649,6 +6950,15 @@
           },
           "modeleEmpreinte": {
             "$ref": "#/components/schemas/ModeleEmpreinte"
+          },
+          "capacitesClient": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "x-conditionnel": "V2_MESURES_CLIENT",
+            "description": "AJOUT FACULTATIF (contrat « calcul client ») : ce que le CLIENT sait calculer. Lu SEULEMENT si `V2_MESURES_CLIENT=1` ; seule la valeur `mesures-1` compte (le client calcule les mesures d'image de la règle G et fera le second envoi `POST /api/identifier/mesures`). Une valeur inconnue est ignorée, jamais un refus."
           }
         },
         "required": [
