@@ -77,7 +77,7 @@ verifier('impression-du-tirage : produit sans numéro, la carte déclare l\'expa
 verifier('impression-du-tirage : DEUX candidates déclarent l\'expansion → refus', prouver({ entree: E5, produit: pPal, carte: pal, ...ctx([pal, { ...palX, impressions: [imp('jp', 'Palkia Deck', null)] }]) }).ok, false);
 verifier('impression-du-tirage : le produit porte un numéro → refus (ce n\'est pas cette voie)', prouver({ entree: E5, produit: { ...pPal, numero: '12' }, carte: pal, ...ctx([pal, palX]) }).ok, false);
 verifier('une voie inconnue → refus nommé (liste fermée)', (() => { const r = prouver({ entree: { ...E5, voie: 'devine' }, produit: pPal, carte: pal, ...ctx([pal]) }); return [r.ok, /voie/.test(r.refus.join())]; })(), [false, true]);
-verifier('les voies sont une liste fermée de quatre', VOIES, ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage']);
+verifier('les voies sont une liste fermée de cinq (la 5e, « deux-sources », est bancée par test-voie-deux-sources.js)', VOIES, ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage', 'deux-sources']);
 
 // ── API-52 L3 : deux déclarations FERMÉES, par entrée de décision, jamais par défaut
 // (1) `prefixeNumero` : la carte écrit son numéro AVEC le préfixe du set (« XY177a »), Cardmarket le sien SANS (« 177a ») — comme `prefixe` de la voie « impression-equivalente », le préfixe est DÉCLARÉ.

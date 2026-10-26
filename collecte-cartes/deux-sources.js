@@ -68,4 +68,17 @@ function rejouer(produit, concordantes) {
     return { ok: motifs.length === 0, motifs };
 }
 
-module.exports = { juger, rejouer, SOURCES_ADMISES, SOURCES_EXCLUES, memeNom, nomLisible };
+/**
+ * (V5, 2026-10-26) Les CONTRADICTIONS d'une liste de refusées : un relevé d'une source admise, au MÊME (set, numéro), dont le nom est LISIBLE (lettres latines) et discorde. `juger` ne le voit pas : `ok` reste vrai
+ * si une autre source concorde (D3 de la relecture du 24/10). Une voie qui écrit une ligne n'écrit pas contre un relevé lisible qui dit autre chose ; un nom illisible (japonais, chinois) ne contredit rien, il ne compare à rien.
+ * Une finition en plus (« Pikachu Pokeball Holo ») est aussi comptée contradiction : refuser plutôt que poser (0 faux).
+ * @returns {object[]} les refusées qui contredisent
+ */
+function contradictions(refusees) {
+    return (refusees || []).filter(r => {
+        const m = /^nom discordant \(« (.*) » \/ « (.*) »\)$/.exec(String(r?.raison ?? ''));
+        return Boolean(m) && nomLisible(m[1]);
+    });
+}
+
+module.exports = { juger, rejouer, contradictions, SOURCES_ADMISES, SOURCES_EXCLUES, memeNom, nomLisible };
