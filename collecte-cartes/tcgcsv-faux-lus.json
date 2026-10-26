@@ -1,0 +1,14 @@
+{
+ "lu_le": "2026-10-26",
+ "lu_par": "agent T4 (implémenteur), lignes lues une à une dans calibration.json ; À CONFIRMER par le relecteur : ce sont des désaccords du TÉMOIN (la fiche), pas de la clé — le nom ET le numéro concordent entre les DEUX places de marché",
+ "lus": {
+  "525175": "Fairy Energy S-P 98 <- « Basic Fairy Energy 098/S-P » : la fiche est l'Énergie générique (des dizaines de numéros d'autres sets, sans le S-P 98) ; nom et numéro concordent entre les deux places de marché",
+  "275022": "Power Charge Expedition 147 <- « Power Charge 147/165 » : les deux places de marché disent « Power Charge » au n° 147 ; notre fiche (Bulbapedia) dit « Energy Charge » — nom de fiche à vérifier (signalé au rapport)",
+  "568258": "Blend Energy WLFM 046/046 : la fiche écrit « Blend Energy WaterLightningFightingMetal », le marché « Blend Energy WLFM » : même carte, deux écritures",
+  "568972": "Blend Energy WLFM 015/015 : même cause",
+  "569124": "Blend Energy WLFM 050/050 : même cause",
+  "570513": "Grass Energy PCG-P 055 <- « Basic Grass Energy 055/PCG-P » : la fiche est l'Énergie générique, nom et numéro concordent entre les deux places de marché",
+  "277485": "Mew δ Delta Species POP5 n° 3 <- « Mew (Delta Species) 003/017 » : la fiche dit « Mew » (nom trop court pour la règle de compatibilité), nom + numéro concordent entre les deux places de marché",
+  "900076": "Legendary Marine Trench Storm Emeralda 071/076 : la fiche dit « Legendary Trench », les deux places de marché « Legendary Marine Trench » au même numéro"
+ }
+}

@@ -229,6 +229,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
     let horsCache = 0, altere = 0, retires = 0, cedees = 0, tropPetits = 0, dejaPosees = 0, ecartees = 0;
     const orphelins = [];
     for (const u of decidees) {
+        if (u.ecrivable === false) { ecartees++; continue; }        // T4 : un visuel dont la langue n'est pas ouverte à l'écriture pour cette source (le japonais du marché) se LIT, il ne s'écrit jamais
         if (u.decision.action === 'cede') { cedees++; continue; }
         if (u.decision.action === 'deja-posee') { dejaPosees++; continue; }        // reprise d'un lot partiel : déjà là, n'entre pas dans `--attendu`
         const url = u.url, ix = indexImages[url];

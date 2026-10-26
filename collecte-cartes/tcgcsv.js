@@ -31,7 +31,9 @@ const HOTE_IMAGES = 'tcgplayer-cdn.tcgplayer.com';
 const CATEGORIES = Object.freeze([3]);
 
 /** La forme FERMÉE des chemins : la liste des groupes d'une catégorie, la liste des produits d'un groupe, les images d'un produit. Jamais `/prices`. */
-const CHEMIN_DONNEES = /^\/(robots\.txt|tcgplayer\/3\/groups|tcgplayer\/3\/\d{1,6}\/products)$/;
+// T4 : le catalogue COMPLET (Pokémon 3 et Pokémon Japon, dont l'identifiant se LIT dans /categories, il ne se devine pas) : la catégorie est un nombre, la liste des catégories admises est portée par l'appelant
+// (urlGroupes / urlProduits). Jamais `/prices` : la forme fermée n'a ni ce mot ni aucun autre segment.
+const CHEMIN_DONNEES = /^\/(robots\.txt|last-updated\.txt|tcgplayer\/categories|tcgplayer\/\d{1,4}\/groups|tcgplayer\/\d{1,4}\/\d{1,7}\/products)$/;
 const CHEMIN_IMAGE = /^\/product\/\d{1,9}_(200w|in_1000x1000)\.jpg$/;
 const hotes = () => ({ [HOTE_DONNEES]: { chemin: CHEMIN_DONNEES, racine: RACINE_DONNEES }, [HOTE_IMAGES]: { chemin: new RegExp(`^(/robots\\.txt|${CHEMIN_IMAGE.source.replace(/^\^/, '').replace(/\$$/, '')})$`), racine: RACINE_IMAGES } });
 function fabriquerClient(o) { return HOTE.fabriquerClient({ racine: RACINE_DONNEES, hotes: hotes(), ...o }); }
@@ -48,12 +50,14 @@ const GROUPES = Object.freeze([
 const groupeDe = id => GROUPES.find(g => g.groupId === id) ?? null;
 
 /** Le miroir de données réduit à ce qu'on lit : AUCUN prix (le miroir n'en porte pas dans cette liste, et on n'ouvre jamais `/prices`), ni texte de carte : { productId, name, imageUrl, groupId, number, rarity }. */
+/** La forme de la réduction : 2 = imageCount gardé (0 = le marché n'a AUCUN fichier pour ce produit ; l'adresse de l'image répondrait 403 et arrêterait l'hôte, §17). Un groupe relevé sous une autre version se redemande. */
+const REDUCTION_VERSION = 2;
 function reduireProduits(texte) {
     const j = JSON.parse(texte);
     if (!j || j.success !== true || !Array.isArray(j.results)) throw new Error('liste de produits illisible (pas {success, results})');
     const val = (p, k) => (p.extendedData || []).find(e => e.name === k)?.value ?? null;
     // idempotente : une liste déjà réduite (`number`, `rarity` à plat) se réduit à elle-même
-    return JSON.stringify({ success: true, totalItems: j.totalItems ?? j.results.length, results: j.results.map(p => ({ productId: p.productId, name: p.name, imageUrl: p.imageUrl ?? null, groupId: p.groupId, number: p.number ?? val(p, 'Number'), rarity: p.rarity ?? val(p, 'Rarity') })) });
+    return JSON.stringify({ success: true, totalItems: j.totalItems ?? j.results.length, results: j.results.map(p => ({ productId: p.productId, name: p.name, imageUrl: p.imageUrl ?? null, groupId: p.groupId, number: p.number ?? val(p, 'Number'), rarity: p.rarity ?? val(p, 'Rarity'), imageCount: Number.isInteger(p.imageCount) ? p.imageCount : null })) });
 }
 /** La garde de LECTURE de la liste des groupes : chaque groupe de la table existe, sous le nom attendu, dans la catégorie. LÈVE sinon (un nom qui change n'est pas le même groupe). */
 function verifierGroupes(texte) {
@@ -70,14 +74,14 @@ const sansFinition = nom => String(nom).replace(/\s*\(Cosmos Holo\)\s*$/i, '');
 function produitPrizePack(p) {
     const m = /^(.+?) - (\d{1,3})\/(\d{1,3})(?: \(Cosmos Holo\))?$/.exec(String(p?.name ?? ''));
     if (!m) return null;
-    return { productId: p.productId, nom: m[1], numero: J.cleNumero(m[2]), total: Number(m[3]), cosmos: /\(Cosmos Holo\)\s*$/i.test(p.name), url: p.imageUrl ?? null, name: p.name };
+    return { productId: p.productId, nom: m[1], numero: J.cleNumero(m[2]), total: Number(m[3]), cosmos: /\(Cosmos Holo\)\s*$/i.test(p.name), url: p.imageUrl ?? null, imageCount: p.imageCount ?? null, name: p.name };
 }
 /** « Hoothoot (1) » + Number « 106/147 » (ou « SM127 ») -> { nom, rang, numero, total } ; un suffixe (demi-deck, #) ou une énergie sans numéro -> null. */
 function produitKit(p) {
     const m = /^(.+?) \((\d{1,3})\)$/.exec(String(p?.name ?? ''));
     const n = /^(?:(\d{1,3})\/(\d{1,3})|([A-Z]{1,4})(\d{1,4}))$/.exec(String(p?.number ?? ''));
     if (!m || !n) return null;
-    return { productId: p.productId, nom: m[1], rang: Number(m[2]), numero: J.cleNumero(n[1] ?? n[4]), total: n[2] ? Number(n[2]) : null, prefixe: n[3] ?? null, url: p.imageUrl ?? null, name: p.name };
+    return { productId: p.productId, nom: m[1], rang: Number(m[2]), numero: J.cleNumero(n[1] ?? n[4]), total: n[2] ? Number(n[2]) : null, prefixe: n[3] ?? null, url: p.imageUrl ?? null, imageCount: p.imageCount ?? null, name: p.name };
 }
 /** Notre slug de kit « Piplup-UPR32 », « Stufful-TK11BUS-110 », « Hau-V1-TK11SUM-120 » -> { nom, numero, variante } ; une énergie sans numéro (« Water-Energy-V1-SUM ») -> null. */
 function slugDeKit(slug, code) {
@@ -127,9 +131,10 @@ function planifierPrizePacks({ lignes, produits }) {
         if (cands.length > 1) { reste(l, 'totaux-multiples', `${cands.length} produits au même nom et numéro`); continue; }
         if (!impressionConfirme(l.carte, num, p.total)) { reste(l, 'total-non-confirme', `le marché dit ${p.numero}/${p.total}, notre carte ne déclare pas ce couple`); continue; }
         if (p.cosmos) { reste(l, 'seule-finition-cosmos', 'le seul produit du marché est la finition Cosmos Holo : notre finition n\'est pas prouvée'); continue; }
+        if (p.imageCount === 0) { reste(l, 'sans-image-chez-la-source', 'le marché n\'a aucun fichier pour ce produit (imageCount 0) : l\'adresse répondrait 403'); continue; }
         const url = urlPleine(p.url);
         if (!url) { reste(l, 'adresse-hors-forme', p.url); continue; }
-        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), groupe: 'PP', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${num}/${p.total}`,
+        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, ecrivable: false, groupe: 'PP', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${num}/${p.total}`,
             preuveNeutre: `série par le set ${l.slugSet}, origine n° ${num}/${p.total}, nom « ${p.nom} » = fiche « ${l.carte.nomEn} », total imprimé confirmé par la fiche, une seule série, un seul produit` });
     }
     const parMotif = {};
@@ -157,9 +162,10 @@ function planifierKit({ lignes, produits, code }) {
         if (cands.length > 1) { reste(l, 'copies-multiples-source', `${cands.length} produits au marché (${cands.map(p => p.name).join(' | ')})`); continue; }
         const p = cands[0];
         if (!impressionConfirme(l.carte, s.numero, p.total, p.prefixe)) { reste(l, 'total-non-confirme', `le marché dit ${p.numero}/${p.total ?? p.prefixe}`); continue; }
+        if (p.imageCount === 0) { reste(l, 'sans-image-chez-la-source', 'le marché n\'a aucun fichier pour ce produit (imageCount 0) : l\'adresse répondrait 403'); continue; }
         const url = urlPleine(p.url);
         if (!url) { reste(l, 'adresse-hors-forme', p.url); continue; }
-        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), groupe: 'TK11', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${s.numero}/${p.total ?? p.prefixe}`,
+        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, ecrivable: false, groupe: 'TK11', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${s.numero}/${p.total ?? p.prefixe}`,
             preuveNeutre: `kit ${code}, origine n° ${s.numero}, nom « ${p.nom} » = fiche « ${l.carte.nomEn} », total imprimé confirmé par la fiche, un seul produit de chaque côté` });
     }
     const parMotif = {};
@@ -167,8 +173,59 @@ function planifierKit({ lignes, produits, code }) {
     return { unites, restes, parMotif, base: { produitsMarche: (produits || []).length, lus: marche.length } };
 }
 
-const urlGroupes = categorie => { if (!CATEGORIES.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/groups`; };
-const urlProduits = (categorie, groupe) => { if (!CATEGORIES.includes(categorie) || !Number.isInteger(groupe) || groupe <= 0) throw new Error(`tcs : groupe ${groupe} de la catégorie ${categorie} refusé`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/${groupe}/products`; };
+const urlGroupes = (categorie, admises = CATEGORIES) => { if (!admises.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/groups`; };
+const urlProduits = (categorie, groupe, admises = CATEGORIES) => {
+    if (!admises.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`);
+    if (!Number.isInteger(groupe) || groupe <= 0) throw new Error(`tcs : groupe ${groupe} de la catégorie ${categorie} refusé`);
+    return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/${groupe}/products`;
+};
+const urlCategories = () => `https://${HOTE_DONNEES}/tcgplayer/categories`;
+const urlDerniereMaj = () => `https://${HOTE_DONNEES}/last-updated.txt`;
 
-module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, SRC, GROUPES, groupeDe, RACINE_DONNEES, RACINE_IMAGES, HOTE_DONNEES, HOTE_IMAGES, CATEGORIES, CHEMIN_DONNEES, CHEMIN_IMAGE, hotes, fabriquerClient, urlGroupes, urlProduits,
-    reduireProduits, verifierGroupes, produitPrizePack, produitKit, slugDeKit, urlPleine, memeNom, impressionConfirme, planifierPrizePacks, planifierKit };
+// ── T4 : LES CATÉGORIES ET LA SYNCHRO QUOTIDIENNE CONDITIONNELLE ──────────────────────────────────────────────────────────────
+const sansAccent = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+/** La liste des catégories -> { pokemon, japon } LUS par leur nom. Pokémon doit être la 3 ; « Pokémon Japon » doit être UNE seule catégorie : zéro ou plusieurs LÈVE (l'identifiant ne se devine pas). */
+function resoudreCategories(texte) {
+    const j = JSON.parse(texte);
+    if (!j || j.success !== true || !Array.isArray(j.results) || !j.results.length) throw new Error('liste des catégories illisible (pas {success, results})');
+    const nommee = (c, re) => re.test(sansAccent(c.name)) || re.test(sansAccent(c.displayName));
+    const pokemon = j.results.filter(c => nommee(c, /^pokemon$/i)), japon = j.results.filter(c => nommee(c, /^pokemon japan(ese)?$/i));
+    if (pokemon.length !== 1 || pokemon[0].categoryId !== 3) throw new Error(`catégorie Pokémon : ${pokemon.length} trouvée(s) (${pokemon.map(c => c.categoryId).join(', ')}), la 3 est attendue — on ne devine pas`);
+    if (japon.length === 0) throw new Error('catégorie Pokémon Japan (Japon) absente de la liste des catégories — on ne devine pas son identifiant');
+    if (japon.length > 1) throw new Error(`catégorie Pokémon Japan : plusieurs candidates ambiguës (${japon.map(c => c.categoryId).join(', ')}) — on ne devine pas`);
+    return { pokemon: pokemon[0].categoryId, japon: japon[0].categoryId };
+}
+const jourUTC = d => d.toISOString().slice(0, 10);
+/**
+ * AVANT toute requête : une synchronisation par jour AU PLUS (jour UTC). Seul un état RÉUSSI ferme le jour (une synchro interrompue se reprend le même jour) ; un « rien de neuf » le ferme aussi
+ * (`verifieLe` est posé à chaque vérification réussie).
+ */
+function synchroDuJour(etat, maintenant = new Date()) {
+    const t = Date.parse(etat?.verifieLe ?? '');
+    if (etat?.reussie === true && Number.isFinite(t) && jourUTC(new Date(t)) === jourUTC(maintenant)) return { action: 'sauter-jour', raison: `déjà vérifié aujourd'hui (${etat.verifieLe}) : une synchronisation par jour au plus` };
+    return { action: 'continuer', raison: etat ? 'nouveau jour ou synchro à reprendre' : 'aucune synchro précédente' };
+}
+/** `last-updated.txt` lu : synchroniser SEULEMENT s'il est strictement plus récent que celui de la dernière synchro RÉUSSIE. Un texte illisible ne conclut pas : refus. */
+function synchroApresLastUpdated(etat, texte) {
+    const lu = Date.parse(String(texte ?? '').trim());
+    if (!Number.isFinite(lu) || !/^\d{4}-\d{2}-\d{2}/.test(String(texte ?? '').trim())) return { action: 'refuser', raison: `last-updated.txt illisible (${JSON.stringify(String(texte ?? '').slice(0, 60))}) : on ne conclut pas` };
+    if (etat?.reussie === true) {
+        const avant = Date.parse(etat.lastUpdated ?? '');
+        if (Number.isFinite(avant) && !(lu > avant)) return { action: 'rien-de-neuf', raison: `last-updated ${String(texte).trim()} n'est pas plus récent que la dernière synchro réussie (${etat.lastUpdated})`, lastUpdated: String(texte).trim() };
+    }
+    return { action: 'synchroniser', raison: etat?.reussie === true ? 'last-updated plus récent' : 'aucune synchro réussie', lastUpdated: String(texte).trim() };
+}
+/** Les groupes à redemander : jamais relevés, ou dont `modifiedOn` (liste des groupes) a changé depuis le relevé. Un groupe inchangé ne se redemande pas. `sansCache` : la réponse du cache est périmée. */
+function groupesARedemander({ listes, rel }) {
+    const sortie = [];
+    for (const [cat, liste] of Object.entries(listes || {})) for (const g of liste) {
+        const r = rel?.[g.groupId];
+        if (!r?.produits && !(r?.absente === true && r.modifiedOn === g.modifiedOn)) sortie.push({ groupId: g.groupId, categoryId: Number(cat), raison: 'jamais-releve', sansCache: false });
+        else if (r.produits && r.v !== REDUCTION_VERSION) sortie.push({ groupId: g.groupId, categoryId: Number(cat), raison: 'schema', sansCache: true });
+        else if (r.modifiedOn !== g.modifiedOn) sortie.push({ groupId: g.groupId, categoryId: Number(cat), raison: 'modifie', sansCache: true });
+    }
+    return sortie.sort((a, b) => a.groupId - b.groupId);
+}
+
+module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, SRC, GROUPES, groupeDe, RACINE_DONNEES, RACINE_IMAGES, HOTE_DONNEES, HOTE_IMAGES, CATEGORIES, CHEMIN_DONNEES, CHEMIN_IMAGE, hotes, fabriquerClient, urlGroupes, urlProduits, urlCategories, urlDerniereMaj, resoudreCategories, synchroDuJour, synchroApresLastUpdated, groupesARedemander,
+    REDUCTION_VERSION, reduireProduits, verifierGroupes, produitPrizePack, produitKit, slugDeKit, urlPleine, memeNom, impressionConfirme, planifierPrizePacks, planifierKit };

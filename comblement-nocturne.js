@@ -73,7 +73,7 @@ async function etapePlan({ dossier, limite, etatNom = null }) {
         const neufs = CO.calculerNeufs(dates, depuis);
         const avecDate = dates.size;
         const pop = CO.choisirPopulation({ etat, guide, numeros, neufs });
-        const parFournisseur = await CO.recolterUnites({ fournisseurs, db: lecture.cartes.db, lireReleves: def => JSON.parse(fs.readFileSync(fichiersRecolte(def).releves, 'utf8')),         // I2 : LÈVE sur un relevé absent ou illisible (RC.lireJson le remplacerait par {})
+        const parFournisseur = await CO.recolterUnites({ fournisseurs, db: lecture.cartes.db, prod: cx.prod.db, lireReleves: def => JSON.parse(fs.readFileSync(fichiersRecolte(def).releves, 'utf8')),         // I2 : LÈVE sur un relevé absent ou illisible (RC.lireJson le remplacerait par {})
              arret: arretDe, fichiersDe: fichiersRecolte });
         const pl = CO.planifier({ cibles: pop.cibles, parFournisseur, ordre, limite });
         const plan = {
@@ -209,6 +209,8 @@ async function nuit({ dossier, aBlanc, limite, budget }) {
         // F3 : l'état est régénéré d'abord (compteur de production en processus fils) ; échec = arrêt, jamais un repli sur un ancien fichier
         const etatNom = CO.regenererEtat({ lister: () => fs.readdirSync(CO.DOSSIER_COMPTEURS), lancer: () => spawnSync(process.execPath, [path.join('audit-catalogue', 'compteurs-abc.js'), '--note=comblement-nocturne : file a l\'arret verifiee par les gardes'], { cwd: __dirname, stdio: 'inherit', env: process.env, timeout: 90 * 60 * 1000 }) });
         note(`ÉTAT FRAIS : ${etatNom}`);
+        // T4 : la synchro quotidienne conditionnelle des fournisseurs qui en ont une (tcs : last-updated.txt), AVANT le plan ; un échec ou un arrêt d'hôte est DIT au compte rendu, il n'arrête pas la nuit
+        for (const s of await CO.synchroniserFournisseurs({ fournisseurs: CO.chargerFournisseurs(), journal: note })) if (s.attention) av.push(`synchro ${s.code} : ${s.etat}${s.motif ? ` (${s.motif})` : ''}`);
         plan = await etapePlan({ dossier, limite, etatNom });
         const vieux = CO.etatTropVieux(new Date(plan.etat.le));
         if (vieux) {
