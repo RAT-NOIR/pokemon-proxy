@@ -31,7 +31,9 @@ const HOTE_IMAGES = 'tcgplayer-cdn.tcgplayer.com';
 const CATEGORIES = Object.freeze([3]);
 
 /** La forme FERMÉE des chemins : la liste des groupes d'une catégorie, la liste des produits d'un groupe, les images d'un produit. Jamais `/prices`. */
-const CHEMIN_DONNEES = /^\/(robots\.txt|tcgplayer\/3\/groups|tcgplayer\/3\/\d{1,6}\/products)$/;
+// T4 : le catalogue COMPLET (Pokémon 3 et Pokémon Japon, dont l'identifiant se LIT dans /categories, il ne se devine pas) : la catégorie est un nombre, la liste des catégories admises est portée par l'appelant
+// (urlGroupes / urlProduits). Jamais `/prices` : la forme fermée n'a ni ce mot ni aucun autre segment.
+const CHEMIN_DONNEES = /^\/(robots\.txt|last-updated\.txt|tcgplayer\/categories|tcgplayer\/\d{1,4}\/groups|tcgplayer\/\d{1,4}\/\d{1,7}\/products)$/;
 const CHEMIN_IMAGE = /^\/product\/\d{1,9}_(200w|in_1000x1000)\.jpg$/;
 const hotes = () => ({ [HOTE_DONNEES]: { chemin: CHEMIN_DONNEES, racine: RACINE_DONNEES }, [HOTE_IMAGES]: { chemin: new RegExp(`^(/robots\\.txt|${CHEMIN_IMAGE.source.replace(/^\^/, '').replace(/\$$/, '')})$`), racine: RACINE_IMAGES } });
 function fabriquerClient(o) { return HOTE.fabriquerClient({ racine: RACINE_DONNEES, hotes: hotes(), ...o }); }
@@ -167,8 +169,58 @@ function planifierKit({ lignes, produits, code }) {
     return { unites, restes, parMotif, base: { produitsMarche: (produits || []).length, lus: marche.length } };
 }
 
-const urlGroupes = categorie => { if (!CATEGORIES.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/groups`; };
-const urlProduits = (categorie, groupe) => { if (!CATEGORIES.includes(categorie) || !Number.isInteger(groupe) || groupe <= 0) throw new Error(`tcs : groupe ${groupe} de la catégorie ${categorie} refusé`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/${groupe}/products`; };
+const urlGroupes = (categorie, admises = CATEGORIES) => { if (!admises.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`); return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/groups`; };
+const urlProduits = (categorie, groupe, admises = CATEGORIES) => {
+    if (!admises.includes(categorie)) throw new Error(`tcs : catégorie ${categorie} hors de la liste fermée`);
+    if (!Number.isInteger(groupe) || groupe <= 0) throw new Error(`tcs : groupe ${groupe} de la catégorie ${categorie} refusé`);
+    return `https://${HOTE_DONNEES}/tcgplayer/${categorie}/${groupe}/products`;
+};
+const urlCategories = () => `https://${HOTE_DONNEES}/tcgplayer/categories`;
+const urlDerniereMaj = () => `https://${HOTE_DONNEES}/last-updated.txt`;
 
-module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, SRC, GROUPES, groupeDe, RACINE_DONNEES, RACINE_IMAGES, HOTE_DONNEES, HOTE_IMAGES, CATEGORIES, CHEMIN_DONNEES, CHEMIN_IMAGE, hotes, fabriquerClient, urlGroupes, urlProduits,
+// ── T4 : LES CATÉGORIES ET LA SYNCHRO QUOTIDIENNE CONDITIONNELLE ──────────────────────────────────────────────────────────────
+const sansAccent = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+/** La liste des catégories -> { pokemon, japon } LUS par leur nom. Pokémon doit être la 3 ; « Pokémon Japon » doit être UNE seule catégorie : zéro ou plusieurs LÈVE (l'identifiant ne se devine pas). */
+function resoudreCategories(texte) {
+    const j = JSON.parse(texte);
+    if (!j || j.success !== true || !Array.isArray(j.results) || !j.results.length) throw new Error('liste des catégories illisible (pas {success, results})');
+    const nommee = (c, re) => re.test(sansAccent(c.name)) || re.test(sansAccent(c.displayName));
+    const pokemon = j.results.filter(c => nommee(c, /^pokemon$/i)), japon = j.results.filter(c => nommee(c, /^pokemon japan(ese)?$/i));
+    if (pokemon.length !== 1 || pokemon[0].categoryId !== 3) throw new Error(`catégorie Pokémon : ${pokemon.length} trouvée(s) (${pokemon.map(c => c.categoryId).join(', ')}), la 3 est attendue — on ne devine pas`);
+    if (japon.length === 0) throw new Error('catégorie Pokémon Japan (Japon) absente de la liste des catégories — on ne devine pas son identifiant');
+    if (japon.length > 1) throw new Error(`catégorie Pokémon Japan : plusieurs candidates ambiguës (${japon.map(c => c.categoryId).join(', ')}) — on ne devine pas`);
+    return { pokemon: pokemon[0].categoryId, japon: japon[0].categoryId };
+}
+const jourUTC = d => d.toISOString().slice(0, 10);
+/**
+ * AVANT toute requête : une synchronisation par jour AU PLUS (jour UTC). Seul un état RÉUSSI ferme le jour (une synchro interrompue se reprend le même jour) ; un « rien de neuf » le ferme aussi
+ * (`verifieLe` est posé à chaque vérification réussie).
+ */
+function synchroDuJour(etat, maintenant = new Date()) {
+    const t = Date.parse(etat?.verifieLe ?? '');
+    if (etat?.reussie === true && Number.isFinite(t) && jourUTC(new Date(t)) === jourUTC(maintenant)) return { action: 'sauter-jour', raison: `déjà vérifié aujourd'hui (${etat.verifieLe}) : une synchronisation par jour au plus` };
+    return { action: 'continuer', raison: etat ? 'nouveau jour ou synchro à reprendre' : 'aucune synchro précédente' };
+}
+/** `last-updated.txt` lu : synchroniser SEULEMENT s'il est strictement plus récent que celui de la dernière synchro RÉUSSIE. Un texte illisible ne conclut pas : refus. */
+function synchroApresLastUpdated(etat, texte) {
+    const lu = Date.parse(String(texte ?? '').trim());
+    if (!Number.isFinite(lu) || !/^\d{4}-\d{2}-\d{2}/.test(String(texte ?? '').trim())) return { action: 'refuser', raison: `last-updated.txt illisible (${JSON.stringify(String(texte ?? '').slice(0, 60))}) : on ne conclut pas` };
+    if (etat?.reussie === true) {
+        const avant = Date.parse(etat.lastUpdated ?? '');
+        if (Number.isFinite(avant) && !(lu > avant)) return { action: 'rien-de-neuf', raison: `last-updated ${String(texte).trim()} n'est pas plus récent que la dernière synchro réussie (${etat.lastUpdated})`, lastUpdated: String(texte).trim() };
+    }
+    return { action: 'synchroniser', raison: etat?.reussie === true ? 'last-updated plus récent' : 'aucune synchro réussie', lastUpdated: String(texte).trim() };
+}
+/** Les groupes à redemander : jamais relevés, ou dont `modifiedOn` (liste des groupes) a changé depuis le relevé. Un groupe inchangé ne se redemande pas. `sansCache` : la réponse du cache est périmée. */
+function groupesARedemander({ listes, rel }) {
+    const sortie = [];
+    for (const [cat, liste] of Object.entries(listes || {})) for (const g of liste) {
+        const r = rel?.[g.groupId];
+        if (!r?.produits && !(r?.absente === true && r.modifiedOn === g.modifiedOn)) sortie.push({ groupId: g.groupId, categoryId: Number(cat), raison: 'jamais-releve', sansCache: false });
+        else if (r.modifiedOn !== g.modifiedOn) sortie.push({ groupId: g.groupId, categoryId: Number(cat), raison: 'modifie', sansCache: true });
+    }
+    return sortie.sort((a, b) => a.groupId - b.groupId);
+}
+
+module.exports = { SOURCE, LOT, LANGUE, LANGUE_PREUVE, SRC, GROUPES, groupeDe, RACINE_DONNEES, RACINE_IMAGES, HOTE_DONNEES, HOTE_IMAGES, CATEGORIES, CHEMIN_DONNEES, CHEMIN_IMAGE, hotes, fabriquerClient, urlGroupes, urlProduits, urlCategories, urlDerniereMaj, resoudreCategories, synchroDuJour, synchroApresLastUpdated, groupesARedemander,
     reduireProduits, verifierGroupes, produitPrizePack, produitKit, slugDeKit, urlPleine, memeNom, impressionConfirme, planifierPrizePacks, planifierKit };

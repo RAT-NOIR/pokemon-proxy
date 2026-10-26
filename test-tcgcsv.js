@@ -42,12 +42,57 @@ const imp = (numero, total) => ({ tirage: 'intl', expansion: 'X', numero: String
         const h = TC.hotes();
         assert.deepStrictEqual(Object.keys(h).sort(), ['tcgcsv.com', 'tcgplayer-cdn.tcgplayer.com']);
         for (const bon of ['/robots.txt', '/tcgplayer/3/groups', '/tcgplayer/3/22880/products']) assert.ok(h['tcgcsv.com'].chemin.test(bon), bon);
-        for (const mauvais of ['/tcgplayer/3/22880/prices', '/tcgplayer/85/groups', '/tcgplayer/3/22880/products/x', '/', '/tcgplayer/3/22880/../85/products']) assert.ok(!h['tcgcsv.com'].chemin.test(mauvais), mauvais);
+        for (const mauvais of ['/tcgplayer/3/22880/prices', '/tcgplayer/3/22880/products/x', '/', '/tcgplayer/3/22880/../85/products']) assert.ok(!h['tcgcsv.com'].chemin.test(mauvais), mauvais);
         for (const bon of ['/robots.txt', '/product/475973_in_1000x1000.jpg', '/product/475973_200w.jpg']) assert.ok(h['tcgplayer-cdn.tcgplayer.com'].chemin.test(bon), bon);
         for (const mauvais of ['/product/475973_400x400.jpg', '/product/x.jpg', '/', '/product/475973_in_1000x1000.jpg?x=1']) assert.ok(!h['tcgplayer-cdn.tcgplayer.com'].chemin.test(mauvais), mauvais);
         assert.throws(() => TC.urlGroupes(85), /hors de la liste/); assert.throws(() => TC.urlProduits(3, -1), /refusé/);
         assert.strictEqual(TC.urlProduits(3, 22880), 'https://tcgcsv.com/tcgplayer/3/22880/products');
         assert.strictEqual(TC.GROUPES.length, 2); assert.strictEqual(TC.groupeDe(22880).famille, 'pp');
+    });
+    // ───────── T4 : le catalogue complet — chemins, catégories, synchro quotidienne conditionnelle ─────────
+    await test('T4 : la table fermée admet last-updated.txt, /categories et les catégories CHIFFRÉES (groupes, produits) ; JAMAIS /prices, jamais un chemin remonté', () => {
+        const d = TC.hotes()['tcgcsv.com'].chemin;
+        for (const bon of ['/last-updated.txt', '/tcgplayer/categories', '/tcgplayer/85/groups', '/tcgplayer/85/23330/products', '/tcgplayer/3/groups']) assert.ok(d.test(bon), bon);
+        for (const mauvais of ['/tcgplayer/3/22880/prices', '/tcgplayer/85/22880/prices', '/tcgplayer/categories/3', '/tcgplayer/3/22880/../85/products', '/last-updated.txt?x=1', '/tcgplayer/x/groups', '/tcgplayer/3/products']) assert.ok(!d.test(mauvais), mauvais);
+        assert.strictEqual(TC.urlCategories(), 'https://tcgcsv.com/tcgplayer/categories'); assert.strictEqual(TC.urlDerniereMaj(), 'https://tcgcsv.com/last-updated.txt');
+        assert.strictEqual(TC.urlGroupes(85, [3, 85]), 'https://tcgcsv.com/tcgplayer/85/groups'); assert.strictEqual(TC.urlProduits(85, 23330, [3, 85]), 'https://tcgcsv.com/tcgplayer/85/23330/products');
+        assert.throws(() => TC.urlGroupes(85), /hors de la liste/); assert.throws(() => TC.urlProduits(85, 23330, [3]), /hors de la liste/); assert.throws(() => TC.urlProduits(3, 5.5), /refusé/);
+    });
+    await test('T4 : les catégories se LISENT (jamais devinées) : Pokémon = 3 par son nom, Pokémon Japon = celle qui porte ce nom ; zéro, deux ou un autre id pour Pokémon LÈVE', () => {
+        const cats = extra => JSON.stringify({ success: true, results: [{ categoryId: 1, name: 'Magic' }, { categoryId: 3, name: 'Pokemon' }, { categoryId: 85, name: 'Pokemon Japan', displayName: 'Pokémon Japan' }, ...extra] });
+        assert.deepStrictEqual(TC.resoudreCategories(cats([])), { pokemon: 3, japon: 85 });
+        assert.deepStrictEqual(TC.resoudreCategories(JSON.stringify({ success: true, results: [{ categoryId: 3, name: 'Pokemon' }, { categoryId: 999, displayName: 'Pokémon Japan', name: 'x' }] })).japon, 999);
+        assert.throws(() => TC.resoudreCategories(cats([{ categoryId: 86, name: 'Pokemon Japan' }])), /plusieurs|ambigu/);
+        assert.throws(() => TC.resoudreCategories(JSON.stringify({ success: true, results: [{ categoryId: 3, name: 'Pokemon' }] })), /Japon|Japan/);
+        assert.throws(() => TC.resoudreCategories(JSON.stringify({ success: true, results: [{ categoryId: 7, name: 'Pokemon' }, { categoryId: 85, name: 'Pokemon Japan' }] })), /3/);
+        assert.throws(() => TC.resoudreCategories('<html>'), /./); assert.throws(() => TC.resoudreCategories(JSON.stringify({ success: false })), /illisible/);
+    });
+    const J1 = new Date('2026-10-26T10:00:00Z');
+    await test('T4 : la synchro du jour — au plus UNE par jour UTC, avant toute requête ; un état partiel ou absent ne ferme pas le jour', () => {
+        assert.strictEqual(TC.synchroDuJour(null, J1).action, 'continuer');
+        assert.strictEqual(TC.synchroDuJour({ reussie: true, verifieLe: '2026-10-26T01:00:00Z', lastUpdated: '2026-10-25T20:08:21+0000' }, J1).action, 'sauter-jour');
+        assert.strictEqual(TC.synchroDuJour({ reussie: true, verifieLe: '2026-10-25T23:59:59Z', lastUpdated: 'x' }, J1).action, 'continuer');
+        assert.strictEqual(TC.synchroDuJour({ reussie: false, verifieLe: '2026-10-26T01:00:00Z' }, J1).action, 'continuer', 'une synchro interrompue se reprend le même jour');
+        assert.strictEqual(TC.synchroDuJour({ reussie: true, verifieLe: 'illisible' }, J1).action, 'continuer');
+    });
+    await test('T4 : last-updated.txt — synchroniser seulement s\'il est PLUS RÉCENT que la dernière synchro réussie ; illisible = ne rien conclure (refus), jamais « synchroniser »', () => {
+        const etat = { reussie: true, lastUpdated: '2026-10-25T20:08:21+0000' };
+        assert.strictEqual(TC.synchroApresLastUpdated(null, '2026-10-26T20:08:21+0000\n').action, 'synchroniser');
+        assert.strictEqual(TC.synchroApresLastUpdated(etat, '2026-10-26T20:08:21+0000').action, 'synchroniser');
+        assert.strictEqual(TC.synchroApresLastUpdated(etat, '2026-10-25T20:08:21+0000').action, 'rien-de-neuf');
+        assert.strictEqual(TC.synchroApresLastUpdated(etat, '2026-10-24T20:08:21+0000').action, 'rien-de-neuf');
+        assert.strictEqual(TC.synchroApresLastUpdated({ reussie: false, lastUpdated: '2026-10-25T20:08:21+0000' }, '2026-10-25T20:08:21+0000').action, 'synchroniser', 'une synchro non réussie se reprend');
+        for (const mauvais of ['', '<html>Just a moment</html>', 'hier', null]) assert.strictEqual(TC.synchroApresLastUpdated(etat, mauvais).action, 'refuser', String(mauvais));
+        assert.strictEqual(TC.synchroApresLastUpdated({ reussie: true, lastUpdated: 'cassé' }, '2026-10-26T20:08:21+0000').action, 'synchroniser', 'un état illisible ne bloque pas une synchro, il la déclenche');
+    });
+    await test('T4 : quels groupes redemander — jamais relevé, ou dont `modifiedOn` a changé ; un groupe inchangé ne se redemande pas', () => {
+        const listes = { 3: [{ groupId: 1, modifiedOn: 'A' }, { groupId: 2, modifiedOn: 'B' }, { groupId: 3, modifiedOn: 'C' }], 85: [{ groupId: 9, modifiedOn: 'Z' }] };
+        const rel = { 1: { produits: [], modifiedOn: 'A' }, 2: { produits: [], modifiedOn: 'vieux' }, 9: { produits: [], modifiedOn: 'Z' } };
+        const q = TC.groupesARedemander({ listes, rel });
+        assert.deepStrictEqual(q.map(x => [x.groupId, x.raison]), [[2, 'modifie'], [3, 'jamais-releve']]);
+        assert.strictEqual(q.find(x => x.groupId === 2).sansCache, true); assert.strictEqual(q.find(x => x.groupId === 3).sansCache, false);
+        assert.deepStrictEqual(TC.groupesARedemander({ listes, rel: { ...rel, 2: { produits: [], modifiedOn: 'B' }, 3: { produits: [], modifiedOn: 'C' } } }), []);
+        assert.strictEqual(TC.groupesARedemander({ listes, rel: {} }).length, 4);
     });
     await test('l\'image pleine : la miniature du miroir devient la taille mesurée le 24/10 (et rien d\'autre ne se devine)', () => {
         assert.strictEqual(TC.urlPleine('https://tcgplayer-cdn.tcgplayer.com/product/475973_200w.jpg'), 'https://tcgplayer-cdn.tcgplayer.com/product/475973_in_1000x1000.jpg');
@@ -165,15 +210,20 @@ const imp = (numero, total) => ({ tirage: 'intl', expansion: 'X', numero: String
     });
 
     // ───────── les IMAGES FERMÉES ─────────
-    await test('images : le robots.txt de l\'hôte en 403 = arrêt DÉFINITIF écrit ; aucune image n\'est demandée ; un client NEUF, même processus ou non, ne part plus', async () => {
+    await test('images (T4, arrêt LEVÉ le 26/10 pour ces seules images) : robots.txt de l\'hôte en 403 = aucune règle, l\'image part ; une IMAGE en 403 = arrêt DÉFINITIF écrit, un client NEUF ne part plus', async () => {
         const pauses = tmp(), appels = [];
-        const mk = () => TC.fabriquerClient({ dossierCache: tmp(), plafond: 20, cadenceMs: 0, pause: async () => {}, dossierPauses: pauses, suivi: RH.suiviHote(), transport: { async get(u) { appels.push(u); return { status: 403, type: 'text/html', texte: 'Forbidden' }; } } });
+        const JPG = Buffer.concat([Buffer.from('ffd8ffe000104a464946', 'hex'), Buffer.alloc(60, 2)]);
+        let imageEn403 = false;
+        const mk = () => TC.fabriquerClient({ dossierCache: tmp(), plafond: 20, cadenceMs: 0, pause: async () => {}, dossierPauses: pauses, suivi: RH.suiviHote(), transport: { async get(u) { appels.push(u); return /robots/.test(u) ? { status: 403, type: 'text/html', texte: 'Forbidden' } : imageEn403 ? { status: 403, type: 'text/html', texte: 'Forbidden' } : { status: 200, type: 'image/jpeg', octets: JPG }; } } });
         const unites = [{ carteId: 1, slugSet: SERIE('One'), numero: null, produits: [1], url: 'https://tcgplayer-cdn.tcgplayer.com/product/475973_in_1000x1000.jpg', groupe: 'PP' }];
+        const r0 = await RC.telecharger({ SRC: TC.SRC, unites, cli: mk(), fichier: path.join(tmp(), 'i0.json'), hoteImages: TC.HOTE_IMAGES });
+        assert.notStrictEqual(r0.etat, 'arret-definitif'); assert.deepStrictEqual(appels, ['https://tcgplayer-cdn.tcgplayer.com/robots.txt', unites[0].url]); assert.deepStrictEqual(fs.readdirSync(pauses), []);
+        imageEn403 = true; appels.length = 0;
         const r = await RC.telecharger({ SRC: TC.SRC, unites, cli: mk(), fichier: path.join(tmp(), 'i.json'), hoteImages: TC.HOTE_IMAGES });
-        assert.strictEqual(r.etat, 'arret-definitif'); assert.deepStrictEqual(appels, ['https://tcgplayer-cdn.tcgplayer.com/robots.txt']);
+        assert.strictEqual(r.etat, 'arret-definitif'); assert.strictEqual(appels.length, 2);
         assert.ok(fs.readdirSync(pauses).some(f => /^ARRET-HOTE-tcgplayer\.com/.test(f)));
         const r2 = await RC.telecharger({ SRC: TC.SRC, unites, cli: mk(), fichier: path.join(tmp(), 'i2.json'), hoteImages: TC.HOTE_IMAGES });
-        assert.strictEqual(r2.etat, 'arret-definitif'); assert.strictEqual(appels.length, 1, 'aucune requête de plus : l\'arrêt écrit tient');
+        assert.strictEqual(r2.etat, 'arret-definitif'); assert.strictEqual(appels.length, 2, 'aucune requête de plus : l\'arrêt écrit tient');
     });
     await test('l\'arrêt des images ne touche PAS les données : la racine du miroir de données est une autre racine', async () => {
         const pauses = tmp();

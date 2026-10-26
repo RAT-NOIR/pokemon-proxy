@@ -26,32 +26,85 @@ const fichiersDe = (dossier, cache) => CLI.fichiersDe(CODE, dossier, cache);
 const client = (F, plafondTotal, o = {}) => TC.fabriquerClient({ dossierCache: F.cache, plafond: HOTE.plafondRestant(F.cache, plafondTotal), journal: F.journal, ...o });
 const arretDe = e => (e.plafond ? 'plafond' : e.arretDefinitif || e.bloque ? 'arret-definitif' : e.pauseHote ? 'pause-hote' : 'interrompu');
 
-// ── 0. LE MAXIMUM du relevé (§38) : robots.txt + la liste des groupes + un fichier par groupe de la table ──────────────────────
-function maximumReleve({ F, releves = {}, plafondTotal }) {
-    const enCache = url => fs.existsSync(path.join(F.cache, HOTE.nomCache(url)));
+// ── 0. LE MAXIMUM du relevé (§38) : robots.txt + last-updated + catégories + 2 listes de groupes + les listes de produits à redemander ──
+// Compté AVANT la première requête. Les listes de groupes ne sont connues qu'après leur lecture : tant qu'aucun relevé précédent ne les porte, les produits sont bornés par le PLAFOND (dit tel quel) ;
+// ensuite par le nombre de groupes connus (au plus tous). Un jour déjà clos (une synchro par jour au plus) = 0 requête.
+function maximumReleve({ F, releves = {}, plafondTotal, synchro = null, now = Date.now }) {
+    const dejaAuCache = HOTE.nbCache(F.cache);
+    if (synchro?.etat && TC.synchroDuJour(synchro.etat, new Date(now())).action === 'sauter-jour') return { total: 0, detail: 'jour déjà clos (une synchronisation par jour au plus) : 0 requête', secondes: 0, plafondTotal, dejaAuCache };
     const robots = HOTE.robotsFrais(F.cache, TC.HOTE_DONNEES) ? 0 : 1;           // D2 : un robots.txt de plus de 24 h se redemande
-    const groupes = enCache(TC.urlGroupes(3)) ? 0 : 1;
-    const produits = TC.GROUPES.filter(g => !releves[g.groupId] && !enCache(TC.urlProduits(3, g.groupId))).length;
-    const total = robots + groupes + produits;
-    return { total, detail: `robots.txt ${robots} + liste des groupes ${groupes} + listes de produits ${produits}`, secondes: total * 6, plafondTotal, dejaAuCache: HOTE.nbCache(F.cache) };
+    const derniere = 1, categories = releves.categories ? 0 : 1, listes = 2;
+    const fixe = robots + derniere + categories + listes;
+    let produits, detailProduits;
+    if (releves.listes) {
+        const connus = Object.values(releves.listes).reduce((n, l) => n + l.length, 0);
+        produits = connus; detailProduits = `listes de produits au plus ${connus} (tous les groupes connus ; en pratique seuls les groupes neufs ou modifiés)`;
+    } else {
+        produits = Math.max(0, plafondTotal - dejaAuCache - fixe); detailProduits = `listes de produits : nombre de groupes inconnu avant la lecture des listes, borné par le plafond (${produits})`;
+    }
+    const total = fixe + produits;
+    return { total, detail: `robots.txt ${robots} + last-updated ${derniere} + catégories ${categories} + listes de groupes ${listes} + ${detailProduits}`, secondes: total * 6, plafondTotal, dejaAuCache };
 }
 
-// ── 1. LE RELEVÉ (JSON seulement) ────────────────────────────────────────────────────────────────────────────────────────────
-async function releve({ cli, fichier }) {
+// ── 1. LE RELEVÉ (JSON seulement) — le catalogue COMPLET (Pokémon et Pokémon Japon), synchronisation quotidienne conditionnelle ──
+/**
+ * @param {{cli: object, fichier: string, synchro?: {fichier: string}|null, now?: Function}} o
+ *   `synchro.fichier` : derniere-synchro.json (une synchro par jour au plus ET seulement si last-updated.txt est plus récent que la dernière RÉUSSIE) ; sans lui, aucune condition (un banc).
+ */
+async function releve({ cli, fichier, synchro = null, now = () => new Date() }) {
     const rel = RC.lireJson(fichier, {});
-    let etat = 'termine', motif = null, transitoires = 0, consecutifs = 0, lues = 0;
+    let etat = 'termine', motif = null, transitoires = 0, consecutifs = 0, lues = 0, ecritsDepuis = 0;
+    const etatSynchro = synchro ? RC.lireJson(synchro.fichier, null) : null;
+    const t0 = now();
+    const bilan = e => ({ etat: e, motif, transitoires, requetes: cli.requetes(), requetesParHote: cli.requetesParHote(), codes: cli.codes(), lues, resume: '' });
+    // 0. une synchronisation par jour au plus : décidé AVANT toute requête
+    if (synchro) { const j = TC.synchroDuJour(etatSynchro, t0); if (j.action === 'sauter-jour') { motif = j.raison; return { ...bilan('deja-synchronise'), resume: j.raison }; } }
+    let lastUpdated = null;
     try {
         await cli.initialiserRobots(TC.HOTE_DONNEES);
-        if (!rel.groupes) {
-            const g = await cli.lire(TC.urlGroupes(3));
-            if (g.status !== 200) throw new Error(`liste des groupes : HTTP ${g.status}`);
-            rel.groupes = { le: g.le, ...TC.verifierGroupes(g.texte) };            // LÈVE si un groupe de la table manque ou a changé de nom
+        if (synchro) {
+            const lu = await cli.lire(TC.urlDerniereMaj(), { sansCache: true });
+            if (lu.status !== 200) throw new Error(`last-updated.txt : HTTP ${lu.status}`);
+            const d = TC.synchroApresLastUpdated(etatSynchro, lu.texte);
+            if (d.action === 'refuser') { etat = 'last-updated-illisible'; motif = d.raison; }
+            else if (d.action === 'rien-de-neuf') {
+                RC.ecrireJson(synchro.fichier, { ...etatSynchro, verifieLe: t0.toISOString() });          // un « rien de neuf » clôt le jour
+                etat = 'rien-de-neuf'; motif = d.raison;
+            } else {
+                lastUpdated = d.lastUpdated;
+                RC.ecrireJson(synchro.fichier, { ...(etatSynchro ?? {}), reussie: false, lastUpdated, debute: t0.toISOString() });
+            }
+            if (etat !== 'termine') { cli.liberer?.(); return { ...bilan(etat), resume: d.raison }; }
+        }
+        // 1. les catégories se LISENT (l'identifiant du Japon ne se devine pas)
+        if (!rel.categories) {
+            const c = await cli.lire(TC.urlCategories());
+            if (c.status !== 200) throw new Error(`liste des catégories : HTTP ${c.status}`);
+            rel.categories = TC.resoudreCategories(c.texte); lues++;
+        }
+        const admises = [rel.categories.pokemon, rel.categories.japon];
+        // 2. les listes de groupes (jamais depuis le cache : `modifiedOn` change)
+        rel.listes = rel.listes ?? {};
+        const nouvelles = {};
+        for (const cat of admises) {
+            const g = await cli.lire(TC.urlGroupes(cat, admises), { sansCache: true });
+            if (g.status !== 200) throw new Error(`liste des groupes (catégorie ${cat}) : HTTP ${g.status}`);
+            const j = JSON.parse(g.texte);
+            if (!j || j.success !== true || !Array.isArray(j.results) || !j.results.length) throw new Error(`liste des groupes (catégorie ${cat}) illisible ou vide`);
+            nouvelles[cat] = j.results.map(x => ({ groupId: x.groupId, name: x.name, abbreviation: x.abbreviation ?? null, publishedOn: x.publishedOn ?? null, modifiedOn: x.modifiedOn ?? null, categoryId: x.categoryId ?? cat, isSupplemental: x.isSupplemental ?? null }));
+            if (cat === rel.categories.pokemon) {
+                try { rel.groupes = { le: g.le, ...TC.verifierGroupes(g.texte) }; }       // la table PP / kit : un groupe renommé n'arrête PAS le catalogue complet, il est écrit et le plan refuse ces groupes
+                catch (e) { rel.groupes = { le: g.le, groupes: j.results.length, erreurVerification: e.message }; }
+            }
             lues++;
         }
-        for (const g of TC.GROUPES) {
-            if (rel[g.groupId]?.produits) continue;
+        rel.listes = nouvelles;
+        // 3. les listes de produits : jamais relevées ou modifiées depuis
+        const par = new Map(Object.values(nouvelles).flat().map(g => [g.groupId, g]));
+        for (const q of TC.groupesARedemander({ listes: nouvelles, rel })) {
+            const g = par.get(q.groupId);
             let r;
-            try { r = await cli.lire(TC.urlProduits(3, g.groupId), { reduire: TC.reduireProduits }); }
+            try { r = await cli.lire(TC.urlProduits(q.categoryId, q.groupId, admises), { reduire: TC.reduireProduits, sansCache: q.sansCache }); }
             catch (e) {
                 if (!e.transitoire) throw e;
                 transitoires++;
@@ -59,18 +112,22 @@ async function releve({ cli, fichier }) {
                 continue;
             }
             consecutifs = 0; lues++;
-            if (r.status !== 200) { rel[g.groupId] = { nom: g.nom, absente: true, le: r.le }; continue; }
+            if (r.status !== 200) { rel[q.groupId] = { nom: g.name, categoryId: q.categoryId, modifiedOn: g.modifiedOn, absente: true, le: r.le }; continue; }
             const j = JSON.parse(TC.reduireProduits(r.texte));          // le cache peut porter la liste entière (une sonde) ou réduite : la même forme dans les deux cas
-            if (!j.results.every(p => p.groupId === g.groupId)) throw new Error(`le groupe ${g.groupId} rend des produits d'un autre groupe — on ne lit pas`);
-            rel[g.groupId] = { nom: g.nom, le: r.le, produits: j.results };
-            RC.ecrireJson(fichier, rel);
+            if (!j.results.every(p => p.groupId === q.groupId)) throw new Error(`le groupe ${q.groupId} rend des produits d'un autre groupe — on ne lit pas`);
+            rel[q.groupId] = { nom: g.name, categoryId: q.categoryId, modifiedOn: g.modifiedOn, le: r.le, produits: j.results };
+            if (++ecritsDepuis % 25 === 0) RC.ecrireJson(fichier, rel);          // le cache garde tout : une coupure ne coûte aucune requête
         }
     } catch (e) { etat = arretDe(e); motif = e.message; }
     RC.ecrireJson(fichier, rel);
     cli.liberer?.();                      // D3 : le verrou de l'hôte est rendu
-    const lus =TC.GROUPES.filter(g => rel[g.groupId]?.produits);
-    return { etat, motif, transitoires, requetes: cli.requetes(), requetesParHote: cli.requetesParHote(), codes: cli.codes(), lues,
-        resume: `groupes lus ${lus.length}/${TC.GROUPES.length} (${lus.map(g => `${g.code} ${rel[g.groupId].produits.length} produits`).join(', ')}) · liste des groupes ${rel.groupes ? 'lue' : 'non lue'}` };
+    const restants = rel.listes ? TC.groupesARedemander({ listes: rel.listes, rel }).length : null;
+    const total = rel.listes ? Object.values(rel.listes).reduce((n, l) => n + l.length, 0) : 0;
+    if (synchro && lastUpdated) {
+        const reussie = etat === 'termine' && restants === 0;
+        RC.ecrireJson(synchro.fichier, { reussie, lastUpdated, ...(reussie ? { syncLe: t0.toISOString(), verifieLe: t0.toISOString() } : { verifieLe: etatSynchro?.verifieLe ?? null, interrompuLe: now().toISOString(), motif }), groupes: total, restants });
+    }
+    return { ...bilan(etat), resume: `groupes ${total - (restants ?? total)}/${total} relevés · catégories ${rel.categories ? JSON.stringify(rel.categories) : 'non lues'} · liste PP/kit ${rel.groupes ? (rel.groupes.erreurVerification ? 'ERREUR' : 'vérifiée') : 'non lue'} · à redemander ${restants ?? '?'}` };
 }
 
 // ── 2. LE PLAN ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -104,7 +161,11 @@ async function construirePlan({ db, releves, dossierArrets = RH.DOSSIER_PAUSES }
     return { resume, unites: decidees, restes };
 }
 
-const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images : FERMÉ)`, clientDe: client, maximumReleve, releve, construirePlan };
+// T4 : l'état de la synchro quotidienne vit à côté du relevé (derniere-synchro.json, dans le dossier de sorties) ; la ligne de commande donne le dossier.
+const fichierSynchro = dossier => path.join(dossier, 'derniere-synchro.json');
+const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images)`, clientDe: client,
+    maximumReleve: o => maximumReleve({ ...o, synchro: o.synchro ?? (o.dossier ? { etat: RC.lireJson(fichierSynchro(o.dossier), null) } : null) }),
+    releve: o => releve({ ...o, synchro: o.synchro ?? (o.dossier ? { fichier: fichierSynchro(o.dossier) } : null) }), construirePlan };
 if (require.main !== module) { module.exports = { maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 CLI.lancer(def);

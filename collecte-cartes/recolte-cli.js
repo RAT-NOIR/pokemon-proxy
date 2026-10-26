@@ -66,11 +66,11 @@ async function lancer(def, args = process.argv.slice(2)) {
 
         if (mode === '--releve') {
             const rel = RC.lireJson(F.releves, {});
-            const m = def.maximumReleve({ F, releves: rel, plafondTotal });
+            const m = def.maximumReleve({ F, releves: rel, plafondTotal, dossier });
             console.log(`MAXIMUM de ce lancement : ${m.total} requête(s) (${m.detail}) · cadence ≥ 6 s ⇒ ${m.secondes} s au plus · plafond total ${plafondTotal} (déjà au cache : ${m.dejaAuCache}) · ${def.hotesLibelle}`);
-            const r = await def.releve({ cli: def.clientDe(F, plafondTotal), fichier: F.releves });
+            const r = await def.releve({ cli: def.clientDe(F, plafondTotal), fichier: F.releves, dossier });
             console.log(`RELEVÉ : ${r.etat} · ${r.requetes} requête(s) ce passage ${JSON.stringify(r.requetesParHote)} codes ${JSON.stringify(r.codes)} · erreurs serveur sautées ${r.transitoires} · ${r.resume}${r.motif ? ` · ${r.motif}` : ''}`);
-            process.exitCode = r.etat === 'termine' || r.etat === 'plafond' ? 0 : 1;
+            process.exitCode = ['termine', 'plafond', 'deja-synchronise', 'rien-de-neuf'].includes(r.etat) ? 0 : 1;
             return;
         }
         if (mode === '--telecharger') {
