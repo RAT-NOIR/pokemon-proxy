@@ -74,6 +74,8 @@ function planifier({ entrees, lecture, le = new Date() }) {
         if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion))) {
             // décision du testeur (26/10) : liste FERMÉE de deux cas où l'absence de marque de set est la réalité du visuel ; tout le reste reste refusé
             generique = casGenerique(carte, lecture.sets?.get(p.set));
+            // une énergie de base générique garde le contrôle faible d'avant (la carte porte CE numéro, dans un set quelconque) : sans lui, 3 énergies sans numéro (279093, 525175, 279094) restent refusées (consigne du testeur)
+            if (generique === 'energie-de-base' && !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle)) { no(`sans-numero : la carte ${e.carteId} (énergie de base) ne porte aucune impression au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
             if (!generique) { no(`carte-sans-impression-du-set : la carte ${e.carteId} ne porte aucune impression de « ${expSet.join(' / ') || 'set sans nom d\'expansion'} » au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
         }
         const autres = temoinDuNom(lecture.cartesDuSet(p.set), p.idExpansion ?? null)(carte, { nom: dn.nom, attaques: dn.attaques });

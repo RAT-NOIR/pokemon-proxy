@@ -43,6 +43,7 @@ muter('generique-liste-des-energies-retiree (tout nom devient une energie de bas
 muter('generique-type-d-energie-etendu (Colorless, spéciales)', { ...OUTIL, transformer: s => remplacer(s, "'Metal', 'Fairy']", "'Metal', 'Fairy', 'Double Colorless']") });
 muter('generique-chinois-sans-test-du-tirage-du-set', { ...OUTIL, transformer: s => remplacer(s, 'TIRAGES_CHINOIS.includes(set.tirage) && ', '') });
 muter('generique-chinois-sans-test-impression-du-tirage', { ...OUTIL, transformer: s => remplacer(s, "!(carte.impressions || []).some(i => i && i.tirage === set.tirage)", 'true') });
+muter('generique-energie-sans-controle-du-numero-porte-par-la-carte', { ...OUTIL, transformer: s => remplacer(s, "if (generique === 'energie-de-base' && !", "if (false && !") });
 muter('generique-tout-refus-I2-devient-generique', { ...OUTIL, transformer: s => remplacer(s, 'if (!generique) { no(`carte-sans-impression-du-set', "if (false) { no(`carte-sans-impression-du-set") });
 muter('generique-confirmation-sans-controle-de-la-marque-et-du-cas', { ...CONF, banc: 'collecte-cartes/test-confirmation.js', transformer: s => entre(s, '// [GENERIQUE-DEBUT]', '// [GENERIQUE-FIN]') });
 const CLASS = { fichier: 'audit-catalogue/classement.js', dossier: 'audit-catalogue', banc: 'audit-catalogue/test-classement.js', env: 'CLASSEMENT_MODULE' };
