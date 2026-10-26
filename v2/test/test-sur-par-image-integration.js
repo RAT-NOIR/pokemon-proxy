@@ -119,6 +119,21 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const v = valider(c.j, { $ref: '#/components/schemas/ReponseAnalyse' }, SCHEMA);
         H.vrai('2f. la réponse tient le contrat OpenAPI (aucun champ, aucune valeur neuve)', v.ok);
     }
+    // ── (2bis) VIVIER-IMAGE (V2_VIVIER_IMAGE, en plus des deux autres) : une question à UN candidat (P), que la photo de X désigne — la route passe le lecteur de catalogue, le vivier est élargi, X est affirmé
+    {
+        const P1 = { mode: 'ambigue', ids: [A.ID_P] };
+        const sans = await jouer(sv, P1, vec(4));
+        const anS = await analyseDe(sans.j);
+        H.v('2g. SANS V2_VIVIER_IMAGE : la question à un candidat [P] reste (a-trancher), la trace est « se tait » sans le moindre champ vivier', [cartesDe(sans.j).statut, 'vivier' in (anS.surParImage || {})], ['a-trancher', false]);
+        const cfgViv = lireConfig({ ...base, V2_SUR_PAR_IMAGE: '1', V2_VIVIER_IMAGE: '1' });
+        const svViv = await appFabrique(cfgViv, {});
+        const c = await jouer(svViv, P1, vec(4));
+        const an = await analyseDe(c.j);
+        H.v('2h. AVEC V2_VIVIER_IMAGE : le vivier est élargi aux produits des 5 visuels les plus proches (X), le catalogue est lu par la route, X est affirmé (identifiee, affirmee { debite: 1 })', [cartesDe(c.j).statut, cartesDe(c.j).carte && cartesDe(c.j).carte.idProduct, c.j.facturation.motif, c.j.facturation.debite], ['identifiee', A.ID_X, 'affirmee', 1]);
+        H.v('2i. la trace journalise le vivier (k, extras, chargé) et la liste jugée', [an.surParImage.issue, an.surParImage.produit, an.surParImage.candidats, an.surParImage.vivier], ['sur', A.ID_X, [A.ID_P, A.ID_X], { k: 5, extras: 1, motifAvant: 'candidats', charge: true }]);
+        H.v('2j. 🔑 la règle d\'avant décide d\'abord : question [A, X], photo de A, drapeau vivier allumé — A est affirmé SANS vivier (aucun champ dans la trace)', [cartesDe((await jouer(svViv, Q, vec(5))).j).carte.idProduct, 'vivier' in (await analyseDe((await jouer(svViv, Q, vec(5))).j)).surParImage], [A.ID_A, false]);
+        await svViv.fermer();
+    }
     // ── (3) ce qui reste une question
     {
         const loin = await jouer(sv, { mode: 'ambigue', ids: [A.ID_A, A.ID_P] }, vec(4));

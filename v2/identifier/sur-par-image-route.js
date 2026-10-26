@@ -77,6 +77,17 @@ function emprunteDe(version) {
 /** Le critère journalisé de l'affirmation : la raison de la règle, qui NOMME son périmètre. */
 const critereImage = d => `sur par l'image : ${d.raison}`;
 
+// VIVIER-IMAGE : le nombre de visuels les plus proches dont les produits entrent au vivier (le top 5 de l'empreinte sur l'index ENTIER), et le critère journalisé qui NOMME ce périmètre élargi.
+const K_VIVIER = 5;
+const critereVivier = (d, v) => critereImage({ raison: `${d.raison} ; vivier élargi : la question plus les produits des ${v.k} visuels les plus proches de la photo à l'index (${v.extras} ajoutés)` });
+/** Les produits des K premiers visuels du top (index entier), dédoublonnés, qui ne sont pas déjà dans `deja`. L'ordre est celui du top puis celui de l'index. [] si le contexte ne sait pas dire les produits. */
+function extrasDuTop(top, contexte, deja, k = K_VIVIER) {
+    const vus = new Set(deja), extras = [];
+    if (!Array.isArray(top) || !contexte || !(contexte.produits instanceof Map)) return extras;
+    for (const t of top.slice(0, k)) for (const pr of (contexte.produits.get(t && t[0]) || [])) { const id = Array.isArray(pr) ? pr[0] : null; if (Number.isInteger(id) && !vus.has(id)) { vus.add(id); extras.push(id); } }
+    return extras;
+}
+
 const idsDeLaQuestion = (resultat, corps) => {
     const c = resultat && resultat.analyse && Array.isArray(resultat.analyse.cartes) && resultat.analyse.cartes.length === 1 ? resultat.analyse.cartes[0] : null;
     if (!c || !Array.isArray(c.candidats)) return null;
@@ -94,33 +105,56 @@ const idsDeLaQuestion = (resultat, corps) => {
  * @param etat      l'index en place (etat-empreintes.js), injectable en banc
  * @returns null (rien d'appelé, rien de noté) | { resultat?, trace } — resultat : l'affirmation, SEULEMENT si la preuve est faite
  */
-async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produits, version, jumeaux, affirmer, marquesLues = null, etat = require('./etat-empreintes'), journal = () => { } }) {
+async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produits, version, jumeaux, affirmer, charger, marquesLues = null, etat = require('./etat-empreintes'), journal = () => { } }) {
     try {
         if (!(cfg && cfg.surParImage === true && cfg.empreinteExtension === true)) return null;      // les DEUX drapeaux
         if (!resultat || resultat.issue !== 'question' || resultat.motif || resultat.contradiction) return null;
+        const elargir = cfg.vivierImage === true;                                                  // VIVIER-IMAGE : le troisième drapeau ; éteint, tout ce qui suit est celui d'avant
         const ids = idsDeLaQuestion(resultat, corpsChaine);
-        if (!ids || ids.length < 2 || !ids.every(Number.isInteger)) return null;
+        if (!ids || ids.length < (elargir ? 1 : 2) || !ids.every(Number.isInteger)) return null;
         if (!version || typeof version.entree !== 'function' || !(produits instanceof Map) || typeof affirmer !== 'function') return null;
         const voulu = cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? { id: cfg.modeleEmpreinte.id, sha256: cfg.modeleEmpreinte.sha256 } : null;
         const p = preparerVecteur({ entree, voulu, etat });
         if (!p.ok) return null;                                                                   // pas de vecteur exploitable : G l'a déjà dit, la question reste
-        const cles = new Map();
-        for (const id of ids) { const e = version.entree(id); if (e && e.grande && typeof e.grande.cle === 'string' && e.grande.cle) cles.set(id, e.grande.cle); }
-        const ordre = [...new Set(cles.values())];
-        const cos = new Map();
-        if (ordre.length) { const r = p.courant.index.similarites(p.v.vecteur, ordre); ordre.forEach((c, i) => cos.set(c, r[i])); }
-        const d = SPI.decider({
-            ids, cles, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1: p.trouve.top.length ? p.trouve.top[0][0] : null, contexte: p.courant.index.contexteG,
-            signaux: signauxDe(version), emprunte: emprunteDe(version), partages: version.colonneMarquages === true && typeof version.partagesDe === 'function' ? id => version.partagesDe(id) : () => null,
-            jumeaux: typeof jumeaux === 'function' ? jumeaux : null, produits, lu: lectureDe(corpsChaine), marquesLues: Array.isArray(marquesLues) ? marquesLues : null, redressee: p.e0.redressee === true
-        });
-        if (!d.sur) return { trace: { issue: 'se-tait', motif: d.motif } };
-        let aff = null;
-        try { aff = affirmer(d.produit, undefined, critereImage(d)); } catch (e) { journal('sur par l\'image (affirmation)', e); }
-        if (aff && aff.issue === 'affirmee' && aff.analyse && aff.analyse.cartes[0].carte && aff.analyse.cartes[0].carte.idProduct === d.produit) {
-            return { resultat: aff, trace: { issue: 'sur', produit: d.produit, ecart: Math.round(d.ecart * 1e4) / 1e4, cosinus: Math.round(d.cosinus * 1e4) / 1e4, candidats: ids } };
+        const juger = (liste, prods) => {
+            const cles = new Map();
+            for (const id of liste) { const e = version.entree(id); if (e && e.grande && typeof e.grande.cle === 'string' && e.grande.cle) cles.set(id, e.grande.cle); }
+            const ordre = [...new Set(cles.values())];
+            const cos = new Map();
+            if (ordre.length) { const r = p.courant.index.similarites(p.v.vecteur, ordre); ordre.forEach((c, i) => cos.set(c, r[i])); }
+            return SPI.decider({
+                ids: liste, cles, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1: p.trouve.top.length ? p.trouve.top[0][0] : null, contexte: p.courant.index.contexteG,
+                signaux: signauxDe(version), emprunte: emprunteDe(version), partages: version.colonneMarquages === true && typeof version.partagesDe === 'function' ? id => version.partagesDe(id) : () => null,
+                jumeaux: typeof jumeaux === 'function' ? jumeaux : null, produits: prods, lu: lectureDe(corpsChaine), marquesLues: Array.isArray(marquesLues) ? marquesLues : null, redressee: p.e0.redressee === true
+            });
+        };
+        // la règle d'avant, d'abord et seule tant qu'elle a deux candidats (une question à un seul n'a jamais été relue par l'image)
+        let d = juger(ids, produits);                                                              // un seul candidat : la règle se tait d'elle-même (« candidats ») ; jamais de sûr sur moins de deux
+        let liste = ids, prods = produits, vivier = null;
+        if (!d.sur && elargir && p.e0.redressee === true) {                                      // une photo non redressée ne conclura de toute façon pas : le catalogue n'est pas lu pour rien
+            // REPLI : les produits des K visuels les plus proches de la photo, dans l'index ENTIER, qui ne sont pas déjà candidats ; leurs lignes de catalogue sont lues, puis les MÊMES conditions jugent l'ensemble
+            const extras = extrasDuTop(p.trouve.top, p.courant.index.contexteG, ids);
+            vivier = { k: K_VIVIER, extras: extras.length, motifAvant: d.motif };
+            if (extras.length) {
+                let lignes = null;
+                const manquants = extras.filter(id => !produits.has(id));
+                if (typeof charger === 'function') { try { lignes = manquants.length ? await charger(manquants) : new Map(); } catch (e) { journal('vivier image (catalogue)', e); } }
+                if (lignes instanceof Map) {
+                    prods = new Map(produits); for (const [k, v] of lignes) prods.set(k, v);
+                    liste = [...ids, ...extras];
+                    d = juger(liste, prods); vivier.charge = true;
+                } else { vivier.charge = false; d = { sur: false, motif: 'vivier-indisponible' }; }
+            }
         }
-        return { trace: { issue: 'non-construite', motif: 'l\'affirmation n\'a pas pu être construite' } };
+        const avecVivier = vivier ? { vivier } : {};
+        if (!d.sur) return { trace: { issue: 'se-tait', motif: d.motif, ...(vivier && vivier.extras && liste.length > ids.length ? { candidats: liste } : {}), ...avecVivier } };
+        let aff = null;
+        const critere = vivier ? critereVivier(d, vivier) : critereImage(d);
+        try { aff = affirmer(d.produit, vivier ? prods : undefined, critere); } catch (e) { journal('sur par l\'image (affirmation)', e); }
+        if (aff && aff.issue === 'affirmee' && aff.analyse && aff.analyse.cartes[0].carte && aff.analyse.cartes[0].carte.idProduct === d.produit) {
+            return { resultat: aff, trace: { issue: 'sur', produit: d.produit, ecart: Math.round(d.ecart * 1e4) / 1e4, cosinus: Math.round(d.cosinus * 1e4) / 1e4, candidats: liste, ...avecVivier } };
+        }
+        return { trace: { issue: 'non-construite', motif: 'l\'affirmation n\'a pas pu être construite', ...avecVivier } };
     } catch (e) { journal('sur par l\'image', e); return null; }                              // une exception n'est jamais une affirmation : la réponse d'avant
 }
 

@@ -828,6 +828,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_LECTURE_TAMPON: [c => c.lectureTampon, false, '2', 'leve'],      // F1-TAMPON : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_SUR_PAR_IMAGE: [c => c.surParImage, false, '2', 'leve'],      // SUR-PAR-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_VIVIER_IMAGE: [c => c.vivierImage, false, '2', 'leve'],      // VIVIER-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_MODELE_EMPREINTE_ID: [c => c.modeleEmpreinte.id, null, 'identifiant invalide', 'ignore'], V2_MODELE_EMPREINTE_SHA256: [c => c.modeleEmpreinte.sha256, null, 'pas-un-sha256', 'ignore'],      // la version du modèle attendue : aucune par défaut (tous les vecteurs sont alors ignorés)
