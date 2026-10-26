@@ -195,7 +195,8 @@ function planRestauration(sauves, actuels, { garder = () => [], surcharge = null
 // est gardé tel quel : l'appelant sort en code d'échec, jamais « RESTAURÉ » en silence.
 // (tour 3, E3) `basseDefinition` n'en fait PAS partie : le worker l'écrit aussi (marqueDe / remplacerBasseDefinition des collecteurs tcgdex et bulba). Dans un set du worker, une entrée de même clé dont ce champ diffère ne se tranche
 // pas (AMBIGUS_WORKER) : indécidable nommé, jamais deviné. Hors de ces sets, il revient comme n'importe quelle écriture du lot (l'entrée entière).
-const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'mention', 'noteVariante', 'imageEmprunteeTirage']);
+// `differenceEmprunt` (2026-10-26) : posé par collecte-cartes/images-empruntees.js avec `imageEmprunteeTirage`, jamais par le worker.
+const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'mention', 'noteVariante', 'imageEmprunteeTirage', 'differenceEmprunt']);
 const AMBIGUS_WORKER = Object.freeze(['basseDefinition']);
 const cleEntree = m => (m && typeof m.set === 'string' && m.set && typeof m.cleR2 === 'string' && m.cleR2 ? `${m.set}|${m.cleR2}` : null);
 // un champ d'entrée d'image tel que la comparaison le lit : la vignette sur sa forme figée (SITE_LIT.formes), le reste tel quel
@@ -293,7 +294,9 @@ const SITE_LIT = Object.freeze({
     cartes: Object.freeze(['categorie', 'nomEn', 'nomJa', 'nomFr', 'illustrateur', 'ndex', 'pv', 'type', 'stade', 'faiblesse', 'resistance', 'retraite', 'attaques', 'liens.idProduct', 'liens.idMetacard', 'sets']),
     impressions: Object.freeze(['tirage', 'expansion', 'deck', 'numero', 'total', 'rarete', 'illustrateur']),
     // `partageeHoloNonHolo` : non lu par lireDonnee.ts (« non lu ici »), gardé par prudence — l'avoir en trop coûte une page, l'avoir oublié coûte trente jours
-    images: Object.freeze(['set', 'cleR2', 'w', 'h', 'numero', 'langue', 'languePreuve', 'source', 'mention', 'noteVariante', 'vignette', 'basseDefinition', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo']),
+    images: Object.freeze(['set', 'cleR2', 'w', 'h', 'numero', 'langue', 'languePreuve', 'source', 'mention', 'noteVariante', 'vignette', 'basseDefinition', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo',
+        // `differenceEmprunt` : lu par le site depuis le 2026-10-25 (lireDonnee.ts SPEC_IMAGE_CARTE), reporté le 2026-10-26 quand l'étape 0 ter a refusé le lot B1
+        'differenceEmprunt']),
     // `preuve` : héritée de l'ancienne projection (le site ne la lit pas), gardée pour ne rien retirer à ce que `setsTouches` rendait
     lignes: Object.freeze(['carteId', 'idProduct', 'idExpansion', 'tirage', 'slug', 'slugSet', 'numeroFiche', 'variante', 'preuve', 'visuelSubstitut.cleR2', 'visuelSubstitut.w', 'visuelSubstitut.h', 'visuelSubstitut.mention']),
     // (tour de correction 1) les champs d'un document `sets` que le site lit (SPEC_SET de lireDonnee.ts), chemins pointés ; un chemin couvre ses sous-champs (`logo` : cleR2, w, h, set, region, langue, preuve, logoGenerique, sha1, vignette).
