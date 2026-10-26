@@ -19,7 +19,8 @@ const A = require('./_empreinte-aide');
 const TE = require('../identifier/temps-etapes');
 const R = path.join(__dirname, '..', '..');
 const IMAGE = require(path.join(R, 'verrou', 'charges.json')).charges.find(c => c.cellule === 'occidentale').imageUrl;
-const ENVB = { ...A.ENV_EMPREINTE, V2_SUR_PAR_IMAGE: '1', V2_DESCRIPTION_CONSERVEE: '1' };
+// TE_VIVIER=1 (test-temps-etapes-route-vivier.js) : toute la batterie rejouée AVEC V2_VIVIER_IMAGE=1 (le vivier élargi de SUR-PAR-IMAGE, qui réutilise les voisins du top 10)
+const ENVB = { ...A.ENV_EMPREINTE, V2_SUR_PAR_IMAGE: '1', V2_DESCRIPTION_CONSERVEE: '1', ...(process.env.TE_VIVIER === '1' ? { V2_VIVIER_IMAGE: '1' } : {}) };
 const DRAPEAUX = { voisins: { V2_TE_VOISINS_UNE_FOIS: '1' }, tot: { V2_TE_EMPREINTE_TOT: '1' }, fin: { V2_TE_FIN_PARALLELE: '1' }, orb: { V2_TE_ORB_UTILE: '1' }, tous: { V2_TE_VOISINS_UNE_FOIS: '1', V2_TE_EMPREINTE_TOT: '1', V2_TE_FIN_PARALLELE: '1', V2_TE_ORB_UTILE: '1' } };
 const cfgDe = (extra = {}) => lireConfig({ ...ENVB, ...extra });
 const cfgOff = cfgDe();
@@ -83,9 +84,10 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
     const lecture = (id, o = {}) => ({ success: true, question: null, carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false, ...o },
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
         candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
+    let chargeEnCours = false;
     let chaine = null, delaiChaine = 0, durees = { lecture: 2050, etat: 40, catalogue: 504, image: 3 };
     const chaineFabriquee = async (req, res) => {
-        if (delaiChaine) await attendre(delaiChaine);
+        if (delaiChaine) { chargeEnCours = true; try { await attendre(delaiChaine); } finally { chargeEnCours = false; } }
         if (req.dureesChaine && durees) Object.assign(req.dureesChaine, durees);
         const { mode, ids } = chaine;
         if (mode === 'exception') throw new Error('panne de la chaîne');
@@ -100,11 +102,13 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
     };
     // un serveur par configuration ; ses zones sont à lui (on compare leurs appels), ses appels au fournisseur sont comptés
     const serveurs = [];
-    async function serveur(cfgApp, { delaiZones = 0, deps = {} } = {}) {
+    async function serveur(cfgApp, { delaiZones = 0, deps = {}, lentSousCharge = 0, delaiMs } = {}) {
         const zones = A.fausseZones();
         if (delaiZones) { const pg = zones.photoGrise; zones.photoGrise = async (...a) => { await attendre(delaiZones); return pg(...a); }; }
+        // CPU SIMULÉ LENT (0,15 vCPU) : tant que la chaîne calcule (`chargeEnCours`), chaque appel aux zones prend `lentSousCharge` ms de plus ; la chaîne finie, les zones sont rapides
+        if (lentSousCharge) for (const k of ['photoGrise', 'comparerPaire', 'scoresZones']) { const f = zones[k]; zones[k] = async (...a) => { if (chargeEnCours) await attendre(lentSousCharge); return f(...a); }; }
         const appelsFournisseur = [];
-        const reel = require('../identifier/voisins-empreinte').creerFournisseurEmpreinte({ cfg: cfgApp, zones, scan: A.scanBanc });
+        const reel = require('../identifier/voisins-empreinte').creerFournisseurEmpreinte({ cfg: cfgApp, zones, scan: A.scanBanc, ...(delaiMs ? { delaiMs } : {}) });
         const espion = async a => { appelsFournisseur.push({ cle: Object.keys(a).sort().join(','), chrono: Boolean(a.chrono) }); return reel(a); };
         const app = express(); app.set('trust proxy', true); app.use(express.json({ limit: '2400kb' }));
         pret.armer(require('../modeles').verifierIndex);
@@ -176,6 +180,7 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
         const o = await jouer(svOff, mk(), req); reference.push(o);
     }
     const ref = Object.fromEntries(SCENARIOS.map(([n], i) => [n, reference[i]]));
+    H.v('B0-. le vivier élargi est allumé exactement quand TE_VIVIER=1 (la batterie « vivier » rejoue la même chose avec V2_VIVIER_IMAGE=1)', cfgOff.vivierImage, process.env.TE_VIVIER === '1');
     H.v('B0a. SUR-PAR-IMAGE consulté (G muette) : DEUX recherches de voisins quand tout est éteint', ref['question [A,B], SANS carte (G se tait, SUR-PAR-IMAGE consulté)'].recherches, 2);
     H.v('B0b. sans vecteur : aucune recherche', ref['affirmée sans vecteur'].recherches, 0);
     H.v('B0c. le fournisseur est appelé UNE fois par requête à vecteur (éteint : à la fin de la chaîne)', ref['question [A,B], G affirme P (promotion, jeu-3)'].appelsFournisseur.length, 1);
@@ -240,6 +245,20 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
         const e4 = console.error; console.error = () => { };
         let l; try { l = await jouer(leve, sc, vec(3)); } finally { console.error = e4; }
         H.vrai('C6. un fournisseur qui LÈVE : « indisponible », la chaîne décide, aucun rejet non géré', l.statut === 200 && l.brut.empreinte.code === 'indisponible' && rejetsNonGeres === 0);
+    }
+
+    // ════════════ (C bis) CPU simulé lent : la précharge ne doit JAMAIS faire passer G « indisponible » à la place de la route normale ════════════
+    console.log('=== C bis. CPU lent simulé : la voie anticipée affamée est relancée par la voie normale ===');
+    {
+        delaiChaine = 300;
+        // zones : +120 ms par appel tant que la chaîne calcule ; budget des mesures 100 ms → la voie anticipée est affamée, la voie normale (chaîne finie) ne l'est pas
+        const off = await serveur(cfgOff, { lentSousCharge: 120, delaiMs: 100 }), tot = await serveur(cfgDe(DRAPEAUX.tot), { lentSousCharge: 120, delaiMs: 100 });
+        const sc = { mode: 'ambigue', ids: [A.ID_A, A.ID_B] }, rq = vec(10, true, C.CARTE);
+        const a = await jouer(off, sc, rq), b = await jouer(tot, sc, rq);
+        delaiChaine = 0;
+        H.v('Cb1. éteint (référence) : G tranche sur la carte (identifiee), empreinte utilisée', [a.corps.analyse.cartes[0].statut, a.brut.empreinte], ['identifiee', { utilisee: true, code: null }]);
+        H.v('Cb2. empreinteTot sous CPU lent : MÊME décision, même réponse (jamais « indisponible » parce que la précharge a été affamée)', [b.corps.analyse.cartes[0].statut, b.brut.empreinte, egal(a.corps, b.corps), egal(a.analyse, b.analyse)], ['identifiee', { utilisee: true, code: null }, true, true]);
+        H.v('Cb3. la voie normale a relancé le fournisseur : deux appels (anticipé affamé, puis normal)', b.appelsFournisseur.length, 2);
     }
 
     // ════════════ (D) finParallele : les lectures annexes partent ensemble, la clôture reste la dernière ════════════

@@ -375,7 +375,15 @@ async function consulterEmpreinte({ deps, cfg, fournisseur, entree, scanId, resu
     let v;
     try {
         const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
-        const appel = () => (prechargee !== null ? prechargee : chrono ? chrono.mesurer('empreinte', () => fournisseur({ entree, scanId: String(scanId), chrono })) : fournisseur({ entree, scanId: String(scanId) }));
+        const normal = () => (chrono ? chrono.mesurer('empreinte', () => fournisseur({ entree, scanId: String(scanId), chrono })) : fournisseur({ entree, scanId: String(scanId) }));
+        // Voie (b) : le délai des mesures (2 s) et la file (3 à la fois) du fournisseur couraient pendant le calcul de la chaîne ; sur 0,15 vCPU la précharge peut en sortir « indisponible » (ou lever) alors que la voie normale,
+        // lancée chaîne finie, aurait conclu. Une issue « indisponible », ou un rejet, de la voie anticipée est donc RELANCÉE par la voie normale : on ne perd jamais un déclassement que G aurait imposé. Toute autre issue
+        // (réussie, « muette », « invalide », « modele-inconnu ») est déterministe : gardée telle quelle.
+        const appel = prechargee === null ? normal : async () => {
+            let r = null;
+            try { r = await prechargee; } catch { r = null; }
+            return r && !(r.ok === false && r.code === 'indisponible') ? r : normal();
+        };
         v = await avecBorne(appel, ms, 'voisins (empreinte)');
     } catch (e) { journalErreur('empreinte (voisins)', e); return sans('indisponible'); }
     if (!v || v.ok !== true) return sans(v && CODES_EMPREINTE.includes(v.code) ? v.code : 'indisponible');
