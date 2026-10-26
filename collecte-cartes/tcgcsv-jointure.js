@@ -282,7 +282,9 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
         unites.push({ ...u, groupeMarche: j.groupId });
     }
     const parMotif = {}; for (const r of restes) parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
-    return { table, jointure, unites, restes, resume: { groupes: groupes.length, parStatutTable: table.resume.parStatut, produitsJoints: [...jointure.values()].filter(x => x.joint).length, unites: unites.length, restesParMotif: parMotif } };
+    // la raison de CHAQUE produit Cardmarket non joint (le plan sur les trous la lit : « non joint » sans cause n'est pas un résultat)
+    const nonJoints = [...jointure].filter(([, j]) => !j.joint).map(([id, j]) => [id, j.motif]);
+    return { table, jointure, unites, restes, nonJoints, resume: { groupes: groupes.length, parStatutTable: table.resume.parStatut, produitsJoints: [...jointure.values()].filter(x => x.joint).length, unites: unites.length, restesParMotif: parMotif } };
 }
 
 module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, uniteDe };

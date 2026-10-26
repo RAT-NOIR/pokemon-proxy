@@ -140,7 +140,7 @@ async function planCatalogue({ db, prod, releves, cm, minCommuns }) {
     if (!donnees && prod) donnees = D.assemblerCm(await D.lireCmDepuisBase({ cartes: { db } }, prod));
     if (!donnees) return { etat: 'cm-absent', raison: 'les produits Cardmarket (numéros, noms : base de production, lecture seule) ne sont pas fournis — la jointure générale ne se devine pas', unites: [] };
     const pc = JT.planifierCatalogue({ rel: releves, cm: donnees, exclureGroupes: new Set(TC.GROUPES.map(g => g.groupId)), ...(minCommuns ? { minCommuns } : {}) });
-    return { etat: 'planifie', ...pc.resume, denominateursCm: donnees.denominateurs, nonAppariees: pc.table.resume.nonAppariees.length, unites: pc.unites, restes: pc.restes };
+    return { etat: 'planifie', ...pc.resume, denominateursCm: donnees.denominateurs, nonAppariees: pc.table.resume.nonAppariees.length, unites: pc.unites, restes: pc.restes, nonJoints: pc.nonJoints };
 }
 async function construirePlan({ db, prod = null, releves, dossierArrets = RH.DOSSIER_PAUSES, cm = null, minCommuns = null }) {
     const arret = RH.hoteArrete(TC.RACINE_IMAGES, dossierArrets);
@@ -178,7 +178,7 @@ async function construirePlan({ db, prod = null, releves, dossierArrets = RH.DOS
         catalogue: { etat: cat.etat, ...(cat.raison ? { raison: cat.raison } : {}), ...(cat.etat === 'planifie' ? { groupes: cat.groupes, parStatutTable: cat.parStatutTable, nonAppariees: cat.nonAppariees, produitsJoints: cat.produitsJoints, unites: cat.unites.length, restesParMotif: cat.restesParMotif, denominateursCm: cat.denominateursCm, nonEcrivables: cat.unites.filter(u => u.ecrivable === false).length } : {}) },
         restesParMotif: restes.reduce((m, r) => (m[r.motif] = (m[r.motif] || 0) + 1, m), {}),
         note: imagesFermees.fermees ? 'IMAGES FERMÉES : ces unités sont ce que la source PROUVERAIT ; aucune image n\'est téléchargeable tant que l\'arrêt durable de l\'hôte des images tient (seul le coordinateur le lève).' : 'images ouvertes' };
-    return { resume, unites: decidees, restes };
+    return { resume, unites: decidees, restes, nonJoints: cat.nonJoints ?? [] };
 }
 
 // ── 3. LE MANIFESTE DE LECTURE (règle « preuve lue, source unique ») ────────────────────────────────────────────────────────

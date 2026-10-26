@@ -56,6 +56,16 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         const r = joindre([T(10, 'Yveltal EX - XY150a', 'XY150a')], [C(1, 'Yveltal EX [Evil Ball]', '150a')]);
         assert.deepStrictEqual(r.joints.map(j => j.niveau), ['faible']);
     });
+    await test('joindre : la clé FAIBLE ne sert PAS dans un groupe où la forte marche (la Trainer Gallery « TG1 » ne se joint jamais au « 1 » du set principal)', () => {
+        // groupe Trainer Gallery : ses cartes TG01… ; notre expansion porte TG01 (fort) ET le « 1 » du set principal (même nom que TG1 : un reprint)
+        const tcg = [T(10, 'Pikachu - TG01/TG30', 'TG01/TG30'), T(11, 'Eevee - TG02/TG30', 'TG02/TG30'), T(12, 'Mew - TG03/TG30', 'TG03/TG30')];
+        const cm = [C(1, 'Pikachu', 'TG01'), C(2, 'Eevee', 'TG02'), C(3, 'Mew', 'TG03'), C(4, 'Charizard', '1'), C(5, 'Eevee', '2')];
+        const r = joindre(tcg, cm);
+        assert.strictEqual(r.faiblePermis, false); assert.deepStrictEqual(r.joints.map(j => j.idProduct).sort(), [1, 2, 3]);
+        const tg = joindre([T(20, 'Charizard - TG01/TG30', 'TG01/TG30'), T(21, 'Eevee - TG02/TG30', 'TG02/TG30')], [C(6, 'Charizard', '1'), C(7, 'Eevee', 'TG02')]);
+        assert.deepStrictEqual(tg.joints.map(j => j.idProduct), [7], 'le « 1 » du set principal ne rejoint pas le TG01 (la forte marche pour Eevee)');
+        assert.strictEqual(tg.non.find(x => x.idProduct === 6).motif, 'absent-de-la-source');
+    });
     await test('joindre : MARQUEUR — (Staff) / (Prerelease) / (Jumbo)… d\'un seul côté = pas de jointure ; le même des deux côtés = joint ; deux marqueurs différents = pas de jointure', () => {
         const tcg = [T(10, 'Pikachu (Staff)', '025/185')];
         const seul = joindre(tcg, [C(1, 'Pikachu', '025')]); assert.deepStrictEqual(seul.joints, []); assert.strictEqual(seul.non[0].motif, 'marqueur-tcg-seul');

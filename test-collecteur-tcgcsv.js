@@ -190,6 +190,7 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.strictEqual(parId.get(13).decision.action, 'cede'); assert.match(parId.get(13).decision.raison, /langue/); assert.strictEqual(parId.get(13).ecrivable, false);
         // les deux groupes de la table gardent leur preuve propre ; le plan à télécharger = à ajouter + non écrivables
         assert.ok(r.resume.parGroupe.some(g => g.code === 'CATALOGUE' && g.etat === 'planifie'));
+        assert.ok(Array.isArray(r.nonJoints) && r.nonJoints.every(x => x.length === 2 && x[1]), 'chaque produit non joint porte sa cause');
         const aTel = K.def.aTelecharger(r).map(u => u.produits[0]).sort();
         assert.deepStrictEqual(aTel, [11, 12, 13, 501, 502, 503].sort());
         const sans = await K.construirePlan({ db: fauxDb(baseDb()), releves: rel, dossierArrets: tmp() });
