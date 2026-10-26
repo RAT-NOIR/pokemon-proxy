@@ -1,6 +1,6 @@
 // node audit-catalogue/test-classement.js — les définitions de l'audit (brief S8/AUDIT) : classe du visuel, état de la comparaison, classe de la fiche.
 // Fonctions PURES : aucune base, aucun fichier. Chaque cas nomme la règle qu'il fixe.
-const C = require('./classement');
+const C = require(process.env.CLASSEMENT_MODULE || './classement');   // la variable ne sert qu'à collecte-cartes/test-mutation-confirmation.js (module muté, jamais en production)
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {

@@ -1,6 +1,6 @@
 // node collecte-cartes/test-confirmation.js — le marqueur additif `confirmation` d'une ligne cartes_produits (B1, 2026-10-26). Fonctions PURES : aucune base, aucun fichier, aucune requête.
 // Chaque cas nomme la règle qu'il fixe. La règle de production relue est collecte-cartes/deux-sources.js (rejouer) : ce module ne recopie rien.
-const C = require('./confirmation');
+const C = require(process.env.CONFIRMATION_MODULE || './confirmation');   // la variable ne sert qu'à test-mutation-confirmation.js (module muté, jamais en production)
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {
