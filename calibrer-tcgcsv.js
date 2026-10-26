@@ -13,17 +13,7 @@ const JT = require('./collecte-cartes/tcgcsv-jointure');
 const D = require('./collecte-cartes/tcgcsv-donnees');
 
 const arg = (args, nom) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
-const LANGUE_DE_CATEGORIE = categories => ({ [categories.pokemon]: 'en', [categories.japon]: 'ja' });
-
-/** Les groupes du relevé -> { groupId, name, categoryId, produits } (ceux dont la liste de produits a été lue). */
-function groupesDuReleve(rel) {
-    const sortie = [];
-    for (const [cat, liste] of Object.entries(rel.listes || {})) for (const g of liste) {
-        const r = rel[g.groupId];
-        if (r?.produits) sortie.push({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation, categoryId: Number(cat), produits: r.produits });
-    }
-    return sortie;
-}
+const groupesDuReleve = JT.groupesDuReleve, LANGUE_DE_CATEGORIE = JT.langueDeCategorieDe;
 function calibrerTout({ rel, cm, accepterSlug = false }) {
     const groupes = groupesDuReleve(rel), langueDeCategorie = LANGUE_DE_CATEGORIE(rel.categories);
     const table = JT.construireTable({ groupes, expansions: D.expansionsPourTable(cm), langueDeCategorie });

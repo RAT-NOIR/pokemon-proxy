@@ -170,6 +170,26 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.joindreTable({ table: t2, groupes: g2, cm }).get(1).motif, 'ambigu-groupes');
     });
 
+    await test('planifierCatalogue : un produit joint SANS visuel dans son set devient une unité (famille, langue de la catégorie) ; déjà imagé, plusieurs lignes, groupe traité à part : comptés, pas d\'unité ; le japonais est une unité non écrivable', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const mkP = (id, name, numero, idExpansion, slugSet) => ({ idProduct: id, name, numero, slug: `${name.replace(/ /g, '-')}-X${numero}`, slugSet, codeSet: 'X', idExpansion });
+        const cm = D.assemblerCm({ sets: [{ _id: 'Set-A', tirage: 'intl' }, { _id: 'Set-J', tirage: 'jp' }],
+            cartes: [{ _id: 7, nomEn: 'Alpha', impressions: [{ numero: '1', total: '3' }], images: [] }, { _id: 8, nomEn: 'Beta', impressions: [{ numero: '2', total: '3' }], images: [{ set: 'Set-A', source: 'x' }] }, { _id: 9, nomEn: 'Gamma', impressions: [], images: [] }, { _id: 10, nomEn: 'Aj', impressions: [{ numero: '1' }], images: [] }],
+            cp: [{ idProduct: 1, carteId: 7, slugSet: 'Set-A', numeroFiche: '1' }, { idProduct: 2, carteId: 8, slugSet: 'Set-A', numeroFiche: '2' }, { idProduct: 3, carteId: 9, slugSet: 'Set-A', numeroFiche: '3' }, { idProduct: 3, carteId: 99, slugSet: 'Set-A', numeroFiche: '3' }, { idProduct: 4, carteId: 10, slugSet: 'Set-J', numeroFiche: '1' }],
+            nc: [mkP(1, 'Alpha', '1', 10, 'Set-A'), mkP(2, 'Beta', '2', 10, 'Set-A'), mkP(3, 'Gamma', '3', 10, 'Set-A'), mkP(4, 'Aj', '1', 20, 'Set-J')], cat: [[1, 'Alpha'], [2, 'Beta'], [3, 'Gamma'], [4, 'Aj']].map(([idProduct, name]) => ({ idProduct, name })) });
+        const rel = { categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 1, name: 'Set A' }], 85: [{ groupId: 2, name: 'Set J' }] },
+            1: { categoryId: 3, produits: [T(101, 'Alpha - 1/3', '1/3', { groupId: 1 }), T(102, 'Beta - 2/3', '2/3', { groupId: 1 }), T(103, 'Gamma - 3/3', '3/3', { groupId: 1 })] }, 2: { categoryId: 85, produits: [T(201, 'Aj - 1/1', '1/1', { groupId: 2 })] } };
+        const r = JT.planifierCatalogue({ rel, cm, minCommuns: 1 });
+        const u = Object.fromEntries(r.unites.map(x => [x.produits[0], x]));
+        assert.deepStrictEqual(Object.keys(u).sort(), ['1', '4']);
+        assert.deepStrictEqual([u[1].langue, u[1].ecrivable, u[1].groupe, u[1].carteId, u[1].idSource], ['en', true, 'OCCIDENTAL', 7, '101']);
+        assert.deepStrictEqual([u[4].langue, u[4].ecrivable, u[4].groupe], ['ja', false, 'JP']);
+        assert.deepStrictEqual(Object.fromEntries(r.restes.map(x => [x.idProduct, x.motif])), { 2: 'deja-image', 3: 'plusieurs-lignes' });
+        const exclu = JT.planifierCatalogue({ rel, cm, minCommuns: 1, exclureGroupes: new Set([1]) });
+        assert.deepStrictEqual(exclu.unites.map(x => x.produits[0]), [4]); assert.ok(exclu.restes.some(x => x.motif === 'groupe-traite-a-part'));
+        assert.strictEqual(JT.familleDe('WCD-2019', 'intl'), 'WCD'); assert.strictEqual(JT.familleDe('Play-Pokemon-Prize-Pack-Series-Two', 'intl'), 'PRIZE'); assert.strictEqual(JT.familleDe('Truc', 'zh-hans'), 'zh-hans');
+    });
+
     // ───────── les données Cardmarket ─────────
     await test('assemblerCm : produits par expansion, tirage lu sur le set, fiche seulement si UNE ligne ; les dénominateurs sont imprimés ; une population vide LÈVE', () => {
         const D = require('./collecte-cartes/tcgcsv-donnees');

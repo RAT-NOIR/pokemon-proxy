@@ -111,7 +111,7 @@ const clesDe = x => { const r = []; if (x.fort == null) return r; for (const n o
  * @param {{groupes: {groupId, name, categoryId, produits}[], expansions: {idExpansion, slugSet, codeSet, tirage, produits: object[]}[], langueDeCategorie: object}} o  `produits` des expansions : lireCm ; des groupes : produits du relevé
  * Statuts : apparie · non-apparie (aucune expansion ne porte assez de ses clés) · tirage-incompatible (la seule expansion qui les porte est d'un autre tirage) · sans-numero.
  */
-function construireTable({ groupes, expansions, langueDeCategorie }) {
+function construireTable({ groupes, expansions, langueDeCategorie, minCommuns = MIN_COMMUNS }) {
     const E = expansions.map(e => ({ ...e, cles: new Set(e.produits.filter(p => p.numeroSource === 'numero').flatMap(clesDe)), langue: LANGUE_DU_TIRAGE[e.tirage] ?? null }));
     const lignes = [];
     for (const g of groupes) {
@@ -120,7 +120,7 @@ function construireTable({ groupes, expansions, langueDeCategorie }) {
         const base = { groupId: g.groupId, name: g.name, categoryId: g.categoryId, produits: g.produits.length, avecNumero: tcg.length };
         if (!tcg.length) { lignes.push({ ...base, statut: 'sans-numero', expansions: [] }); continue; }
         const mesure = e => { const communs = tcg.filter(t => clesDe(t).some(k => e.cles.has(k))); return { e, communs }; };
-        const toutes = E.map(mesure).filter(m => m.communs.length >= MIN_COMMUNS).sort((a, b) => b.communs.length - a.communs.length);
+        const toutes = E.map(mesure).filter(m => m.communs.length >= minCommuns).sort((a, b) => b.communs.length - a.communs.length);
         const compat = toutes.filter(m => m.e.langue && m.e.langue === langueG);
         const retenues = compat.filter(m => m.communs.length / tcg.length >= PART_GROUPE_MIN);
         const union = new Set(retenues.flatMap(m => m.communs.map(t => t.productId)));
@@ -237,4 +237,52 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
         preuveNeutre: `jointure par numéro ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} (clé ${joint.niveau ?? 'fort'}) et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », un seul produit de chaque côté, aucun marqueur de variante` };
 }
 
-module.exports = { MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, uniteDe };
+// ── 6. LE PLAN DU CATALOGUE COMPLET ───────────────────────────────────────────────────────────────────────────────────────
+/** Les groupes du relevé dont la liste de produits a été lue : { groupId, name, abbreviation, categoryId, produits }. */
+function groupesDuReleve(rel) {
+    const sortie = [];
+    for (const [cat, liste] of Object.entries(rel?.listes || {})) for (const g of liste) {
+        const r = rel[g.groupId];
+        if (r?.produits) sortie.push({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation ?? null, categoryId: Number(cat), produits: r.produits });
+    }
+    return sortie;
+}
+const langueDeCategorieDe = categories => ({ [categories.pokemon]: 'en', [categories.japon]: 'ja' });
+/** Le code de famille d'un set (les mêmes familles que la répartition de la phase 4) ; à défaut, le tirage. */
+function familleDe(slugSet, tirage) {
+    const s = String(slugSet ?? '');
+    if (/^McDonalds-Collection/.test(s)) return 'MCD';
+    if (/Trainer-Kit|^My-First-Battle$/.test(s)) return 'KITS';
+    if (/^WCD-/.test(s)) return 'WCD';
+    if (/^Play-Pokemon-Prize-Pack|^Battle-Academy|^Trick-or-Trade|^Best-of-Game/.test(s)) return 'PRIZE';
+    return tirage === 'intl' ? 'OCCIDENTAL' : tirage === 'jp' ? 'JP' : (tirage ?? '?');
+}
+const expansionsDe = cm => [...cm.expansions.values()].map(e => ({ idExpansion: e.idExpansion, slugSet: e.slugSet, codeSet: e.codeSet, tirage: e.tirage, produits: e.produits.map(p => p.lu) }));
+/**
+ * Le plan du catalogue complet : la table (mesurée), la jointure de TOUTE la table, puis les unités des produits joints qui n'ont PAS de visuel dans leur set et dont la fiche est UNE seule carte.
+ * @param {{rel: object, cm: {expansions: Map, produits: Map}, accepterSlug?: boolean, exclureGroupes?: Set<number>, minCommuns?: number}} o
+ * @returns {{table, jointure: Map, unites: object[], restes: {idProduct, motif}[], resume: object}}
+ */
+function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = new Set(), minCommuns = MIN_COMMUNS }) {
+    const groupes = groupesDuReleve(rel), langueDeCategorie = langueDeCategorieDe(rel.categories);
+    const table = construireTable({ groupes, expansions: expansionsDe(cm), langueDeCategorie, minCommuns });
+    const lus = new Map(groupes.map(g => [g.groupId, { categoryId: g.categoryId, name: g.name, produits: g.produits.map(lireTcg) }]));
+    const jointure = joindreTable({ table, groupes: lus, cm, accepterSlug });
+    const tcgDe = new Map(); for (const g of lus.values()) for (const t of g.produits) tcgDe.set(t.productId, t);
+    const unites = [], restes = [];
+    for (const [idProduct, j] of jointure) {
+        if (!j.joint) continue;
+        const p = cm.produits.get(idProduct);
+        if (exclureGroupes.has(j.groupId)) { restes.push({ idProduct, motif: 'groupe-traite-a-part', groupId: j.groupId }); continue; }
+        if (p.lignes.length !== 1) { restes.push({ idProduct, motif: p.lignes.length ? 'plusieurs-lignes' : 'sans-ligne', groupId: j.groupId }); continue; }
+        if (p.images.some(i => i?.set === p.lignes[0].slugSet)) { restes.push({ idProduct, motif: 'deja-image', groupId: j.groupId }); continue; }
+        const exp = cm.expansions.get(p.idExpansion);
+        const u = uniteDe({ joint: j.joint, tcg: tcgDe.get(j.joint.productId), ligne: { idProduct, lignes: p.lignes, carteNom: p.carteNom, slug: p.slug }, cm: p.lu, categoryId: j.joint.categoryId, langueDeCategorie, groupe: familleDe(p.slugSet, exp?.tirage), nomGroupe: lus.get(j.groupId)?.name });
+        if (!u) { restes.push({ idProduct, motif: 'unite-impossible', groupId: j.groupId }); continue; }
+        unites.push({ ...u, groupeMarche: j.groupId });
+    }
+    const parMotif = {}; for (const r of restes) parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
+    return { table, jointure, unites, restes, resume: { groupes: groupes.length, parStatutTable: table.resume.parStatut, produitsJoints: [...jointure.values()].filter(x => x.joint).length, unites: unites.length, restesParMotif: parMotif } };
+}
+
+module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, uniteDe };

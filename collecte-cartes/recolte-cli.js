@@ -20,8 +20,8 @@ const RH = require('./reponse-hote');
 const HOTE = require('./recolte-hote');
 const { largeurMinDe } = require('./seuils-images');
 
-const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--compter$/, /^--ecrire$/, /^--retirer$/, /^--plafond=\d{1,4}$/, /^--attendu=\d{1,5}$/, /^--echantillon=\d{1,3}$/, /^--limite=\d{1,4}$/, /^--dossier=.+$/, /^--cache=.+$/, /^--basse-definition$/];
-const MODES = ['--plan', '--releve', '--telecharger', '--planche', '--compter', '--ecrire', '--retirer'];
+const AUTORISES = [/^--plan$/, /^--releve$/, /^--telecharger$/, /^--planche$/, /^--compter$/, /^--ecrire$/, /^--retirer$/, /^--manifeste$/, /^--plafond=\d{1,4}$/, /^--attendu=\d{1,5}$/, /^--echantillon=\d{1,3}$/, /^--limite=\d{1,4}$/, /^--dossier=.+$/, /^--cache=.+$/, /^--basse-definition$/];
+const MODES = ['--plan', '--releve', '--telecharger', '--planche', '--compter', '--ecrire', '--retirer', '--manifeste'];
 
 /** La grammaire des arguments : null si valide, sinon la phrase du refus (code 2, sans connexion). */
 function verifierArguments(args) {
@@ -62,7 +62,8 @@ async function lancer(def, args = process.argv.slice(2)) {
         const F = fichiersDe(CODE, dossier, val('cache'));
         const plafondTotal = Number(val('plafond') ?? 0);
         const lirePlan = () => { const p = RC.lireJson(F.plan, null); if (!p?.unites) throw new Error(`${F.plan} absent : lancer --plan d'abord`); return p; };
-        const aFaireDe = plan => plan.unites.filter(u => u.decision?.action === 'ajouter');
+        // T4 : un fournisseur peut élargir ce qui se TÉLÉCHARGE (`def.aTelecharger` : les visuels qu'on lit sans pouvoir les écrire) ; l'écriture, elle, refuse ce que RC.ecrire écarte (`ecrivable: false`)
+        const aFaireDe = plan => (def.aTelecharger ? def.aTelecharger(plan) : plan.unites.filter(u => u.decision?.action === 'ajouter'));
 
         if (mode === '--releve') {
             const rel = RC.lireJson(F.releves, {});
@@ -91,16 +92,24 @@ async function lancer(def, args = process.argv.slice(2)) {
         const lectureOuRefus = async quoi => { const l = await ouvrirLecture(); if (!l) throw new Error(`MONGODB_CARTES_LECTURE_URI absente : ${quoi} ne lit que par la connexion de lecture seule — refus, aucune connexion ouverte`); return l; };
         if (mode === '--plan') {
             const lecture = await lectureOuRefus('le plan');
+            // T4 : la jointure du catalogue complet lit aussi la production (numéros, noms de produits) — EN LECTURE SEULE (garde.ouvrirConnexions({ lectureSeule: true }))
+            const cx = def.avecProduction ? await require('./garde').ouvrirConnexions({ production: true, buckets: [], lectureSeule: true }) : null;
             try {
-                const plan = await def.construirePlan({ db: lecture.cartes.db, releves: RC.lireJson(F.releves, {}), fichiers: F });
+                const plan = await def.construirePlan({ db: lecture.cartes.db, prod: cx?.prod?.db ?? null, releves: RC.lireJson(F.releves, {}), fichiers: F });
                 RC.ecrireJson(F.plan, plan);
                 console.log(JSON.stringify(plan.resume, null, 1));
                 console.log(`→ ${F.plan} (${plan.unites.length} unités, ${plan.restes.length} restes)`);
-            } finally { await lecture.fermer(); }
+            } finally { await lecture.fermer(); await cx?.fermer(); }
             return;
         }
         const plan = lirePlan(), aFaire = aFaireDe(plan), indexImages = RC.lireJson(F.images, {});
         const basse = args.includes('--basse-definition');
+        if (mode === '--manifeste') {
+            if (typeof def.manifeste !== 'function') throw new Error(`${CODE} : pas de manifeste de lecture pour cette source`);
+            const r = await def.manifeste({ plan, unites: aFaire, indexImages, dossierCache: F.cache, dossier });
+            console.log(`MANIFESTE : ${r.fichier} · ${r.entrees} entrée(s) à lire (champs « lu » VIDES) · sans image au cache ${r.sansImage} · ${JSON.stringify(r.parGroupe)}`);
+            return;
+        }
         if (mode === '--planche') {
             const r = await RC.planches({ SRC, unites: aFaire, indexImages, dossierCache: F.cache, sortieDossier: dossier, n: Number(val('echantillon') ?? 50), basseDefinition: basse, prefixe: `planche-${CODE}${basse ? '-basse' : ''}` });
             console.log(`PLANCHES : ${r.images} image(s) · ${JSON.stringify(r.parGroupe)} · ${r.planches.join(' ; ')} (à REGARDER avant --ecrire)`);

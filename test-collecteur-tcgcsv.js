@@ -163,6 +163,53 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.strictEqual(resume.imagesFermees.fermees, true); assert.strictEqual(resume.imagesFermees.nature, 'arret-definitif'); assert.match(resume.note, /IMAGES FERMÉES/);
         assert.strictEqual(resume.aAjouter, 3);
     });
+    await test('T4 plan : le catalogue complet s\'ajoute aux deux groupes de la table ; la base de production en lecture seule alimente la jointure ; le japonais est téléchargeable mais JAMAIS écrivable ; sans base de production le plan le DIT', async () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const mkP = (id, name, numero, idExpansion, slugSet) => ({ idProduct: id, name, numero, slug: `${name}-X${numero}`, slugSet, codeSet: 'X', idExpansion });
+        const cm = D.assemblerCm({ sets: [{ _id: 'Set-A', tirage: 'intl' }, { _id: 'Set-J', tirage: 'jp' }],
+            cartes: [{ _id: 21, nomEn: 'Alpha', impressions: [{ numero: '1', total: '2' }], images: [] }, { _id: 22, nomEn: 'Beta', impressions: [{ numero: '2', total: '2' }], images: [] }, { _id: 23, nomEn: 'Jota', impressions: [{ numero: '1', total: '1' }], images: [] }],
+            cp: [{ idProduct: 11, carteId: 21, slugSet: 'Set-A', numeroFiche: '1' }, { idProduct: 12, carteId: 22, slugSet: 'Set-A', numeroFiche: '2' }, { idProduct: 13, carteId: 23, slugSet: 'Set-J', numeroFiche: '1' }],
+            nc: [mkP(11, 'Alpha', '1', 90, 'Set-A'), mkP(12, 'Beta', '2', 90, 'Set-A'), mkP(13, 'Jota', '1', 91, 'Set-J')], cat: [[11, 'Alpha'], [12, 'Beta'], [13, 'Jota']].map(([idProduct, name]) => ({ idProduct, name })) });
+        const rel = { ...relevesOk(), categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 7001, name: 'Set A' }], 85: [{ groupId: 7002, name: 'Set J' }] },
+            7001: { categoryId: 3, produits: [{ productId: 31, name: 'Alpha - 1/2', number: '1/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/31_200w.jpg' }, { productId: 32, name: 'Beta - 2/2', number: '2/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/32_200w.jpg' }] },
+            7002: { categoryId: 85, produits: [{ productId: 41, name: 'Jota - 1/1', number: '1/1', groupId: 7002, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/41_200w.jpg' }] } };
+        const db = baseDb(); db.cartes.push({ _id: 21, nomEn: 'Alpha', impressions: [], images: [] }, { _id: 22, nomEn: 'Beta', impressions: [], images: [] }, { _id: 23, nomEn: 'Jota', impressions: [], images: [] });
+        const r = await K.construirePlan({ db: fauxDb(db), releves: rel, dossierArrets: tmp(), cm, minCommuns: 1 });
+        const cat = r.resume.catalogue; assert.strictEqual(cat.etat, 'planifie'); assert.strictEqual(cat.unites, 3);
+        const parId = new Map(r.unites.filter(u => u.groupe !== 'PP' && u.groupe !== 'TK11').map(u => [u.produits[0], u]));
+        assert.deepStrictEqual([parId.get(11).decision.action, parId.get(12).decision.action], ['ajouter', 'ajouter']);
+        assert.strictEqual(parId.get(13).decision.action, 'cede'); assert.match(parId.get(13).decision.raison, /langue/); assert.strictEqual(parId.get(13).ecrivable, false);
+        // les deux groupes de la table gardent leur preuve propre ; le plan à télécharger = à ajouter + non écrivables
+        assert.ok(r.resume.parGroupe.some(g => g.code === 'CATALOGUE' && g.etat === 'planifie'));
+        const aTel = K.def.aTelecharger(r).map(u => u.produits[0]).sort();
+        assert.deepStrictEqual(aTel, [11, 12, 13, 501, 502, 503].sort());
+        const sans = await K.construirePlan({ db: fauxDb(baseDb()), releves: rel, dossierArrets: tmp() });
+        assert.strictEqual(sans.resume.catalogue.etat, 'cm-absent'); assert.match(sans.resume.catalogue.raison, /production/);
+        const ancien = await K.construirePlan({ db: fauxDb(baseDb()), releves: relevesOk(), dossierArrets: tmp() });
+        assert.strictEqual(ancien.resume.catalogue.etat, 'releve-incomplet');
+    });
+    await test('T4 écriture : une unité `ecrivable: false` (japonais) est ÉCARTÉE par l\'écriture, même téléchargée et jugée ok — l\'--attendu ne la compte pas', async () => {
+        const dossierCache = tmp(), url = 'https://tcgplayer-cdn.tcgplayer.com/product/41_in_1000x1000.jpg';
+        const u = { carteId: 1, slugSet: SERIE('One'), numero: null, produits: [501], url, groupe: 'JP', ecrivable: false };
+        const r = await RC.ecrire({ SRC: TC.SRC, unites: [u, { ...u, ecrivable: true, produits: [502], carteId: 2, url: 'https://tcgplayer-cdn.tcgplayer.com/product/42_in_1000x1000.jpg' }], M: { Carte: { db: { db: fauxDb(baseDb()) } } }, dossierCache, indexImages: {}, compterSeulement: true, lecteur: RC.lecteurNatif(fauxDb(baseDb())) });
+        assert.strictEqual(r.ecartees, 1); assert.strictEqual(r.horsCache, 1, 'la seule autre unité est écrivable mais jamais téléchargée'); assert.strictEqual(r.reel, 0);
+    });
+    await test('T4 manifeste : une entrée par produit joint dont l\'image est au cache (champs « lu » VIDES, format de la phase 4), le japonais compris ; sans image au cache : comptée, pas inventée', async () => {
+        const sharp = require('sharp'), HOTE = require('./collecte-cartes/recolte-hote');
+        const dossierCache = tmp(), dossier = tmp(), url = 'https://tcgplayer-cdn.tcgplayer.com/product/31_in_1000x1000.jpg';
+        const png = await sharp({ create: { width: 300, height: 420, channels: 3, background: '#aaa' } }).png().toBuffer();
+        const f = path.join(dossierCache, HOTE.nomCache(url));
+        fs.writeFileSync(f, JSON.stringify({ url, statut: 'ok', status: 200, sha256: 'ab'.repeat(32), le: '2026-10-26T10:00:00.000Z' })); fs.writeFileSync(f.replace(/\.json$/, '.bin'), png);
+        const u = (id, productId, o = {}) => ({ carteId: id, slugSet: 'Set-A', numero: '1', produits: [id], url: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`, idSource: String(productId), groupe: 'OCCIDENTAL', carteNom: 'Alpha', nomSource: 'Alpha - 1/2', numeroSource: '1/2', slugProduit: 'Alpha-V2-X1', langue: 'en', ecrivable: true, niveau: 'fort', groupeMarche: 7001, ...o });
+        const idx = { [url]: { statut: 'ok', w: 300, h: 420, sha256: 'ab'.repeat(32), octets: png.length } };
+        const r = await K.def.manifeste({ plan: {}, unites: [u(11, 31), u(12, 32)], indexImages: idx, dossierCache, dossier });
+        assert.deepStrictEqual([r.entrees, r.sansImage], [1, 1]);
+        const m = JSON.parse(fs.readFileSync(path.join(dossier, 'preuves.json'), 'utf8'));
+        assert.deepStrictEqual([m.famille, m.entrees.length, m.entrees[0].idProduct, m.entrees[0].regle, m.entrees[0].hote, m.entrees[0].w, m.entrees[0].h], ['TCGCSV', 1, 11, 'preuve-lue', 'tcgplayer-cdn.tcgplayer.com', 300, 420]);
+        assert.deepStrictEqual(m.entrees[0].lu, { nom: '', numero: '', total: '', langue: '', tampon: null, finition: '', marques: [], note: '' });
+        assert.deepStrictEqual([m.entrees[0].attendu.nom, m.entrees[0].attendu.numero, m.entrees[0].attendu.langue, m.entrees[0].attendu.variante, m.entrees[0].luLe], ['Alpha', '1', 'en', 'V2', null]);
+        assert.ok(fs.existsSync(m.entrees[0].fichier) && /\.bin$/.test(m.entrees[0].fichier));
+    });
     await test('plan : un groupe non relevé ne produit rien et le dit ; un set de la table absent de la base est refusé, compté', async () => {
         const r = await K.construirePlan({ db: fauxDb(baseDb()), releves: {}, dossierArrets: tmp() });
         assert.ok(r.resume.parGroupe.every(g => g.etat === 'non-releve')); assert.strictEqual(r.unites.length, 0);

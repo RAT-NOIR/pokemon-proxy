@@ -18,6 +18,8 @@ const RC = require('./collecte-cartes/recolte-commun');
 const HOTE = require('./collecte-cartes/recolte-hote');
 const RH = require('./collecte-cartes/reponse-hote');
 const CLI = require('./collecte-cartes/recolte-cli');
+const JT = require('./collecte-cartes/tcgcsv-jointure');
+const D = require('./collecte-cartes/tcgcsv-donnees');
 
 const DOSSIER = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\RECOLTE';
 const CODE = 'tcs';
@@ -131,7 +133,16 @@ async function releve({ cli, fichier, synchro = null, now = () => new Date() }) 
 }
 
 // ── 2. LE PLAN ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-async function construirePlan({ db, releves, dossierArrets = RH.DOSSIER_PAUSES }) {
+/** Le catalogue COMPLET (T4) : la table mesurée, la jointure, les unités. `cm` (données Cardmarket assemblées) vient de l'appelant, ou de la production en LECTURE SEULE (`prod`) ; sans l'un ni l'autre : dit, pas deviné. */
+async function planCatalogue({ db, prod, releves, cm, minCommuns }) {
+    if (!releves?.listes || !releves?.categories) return { etat: 'releve-incomplet', raison: 'le relevé ne porte ni catégories ni listes de groupes (--releve du catalogue complet pas fait)', unites: [] };
+    let donnees = cm ?? null;
+    if (!donnees && prod) donnees = D.assemblerCm(await D.lireCmDepuisBase({ cartes: { db } }, prod));
+    if (!donnees) return { etat: 'cm-absent', raison: 'les produits Cardmarket (numéros, noms : base de production, lecture seule) ne sont pas fournis — la jointure générale ne se devine pas', unites: [] };
+    const pc = JT.planifierCatalogue({ rel: releves, cm: donnees, exclureGroupes: new Set(TC.GROUPES.map(g => g.groupId)), ...(minCommuns ? { minCommuns } : {}) });
+    return { etat: 'planifie', ...pc.resume, denominateursCm: donnees.denominateurs, nonAppariees: pc.table.resume.nonAppariees.length, unites: pc.unites, restes: pc.restes };
+}
+async function construirePlan({ db, prod = null, releves, dossierArrets = RH.DOSSIER_PAUSES, cm = null, minCommuns = null }) {
     const arret = RH.hoteArrete(TC.RACINE_IMAGES, dossierArrets);
     const parGroupe = [], unites = [], restes = [];
     for (const g of TC.GROUPES) {
@@ -150,22 +161,60 @@ async function construirePlan({ db, releves, dossierArrets = RH.DOSSIER_PAUSES }
         unites.push(...pl.unites);
         for (const x of pl.restes) restes.push({ code: g.code, ...x });
     }
-    const decidees = await RC.decider(SRC, unites, RC.lecteurNatif(db));
+    const cat = await planCatalogue({ db, prod, releves, cm, minCommuns });
+    if (cat.etat === 'planifie') {
+        unites.push(...cat.unites);
+        for (const x of cat.restes) restes.push({ code: 'CATALOGUE', ...x });
+        parGroupe.push({ code: 'CATALOGUE', etat: 'planifie', famille: 'catalogue', unites: cat.unites.length, restes: cat.restesParMotif, base: { groupes: cat.groupes, produitsJoints: cat.produitsJoints } });
+    }
+    const decidees = (await RC.decider(SRC, unites, RC.lecteurNatif(db))).map(u => (u.ecrivable === false
+        // le visuel d'un tirage dont la langue n'est pas ouverte à l'écriture pour cette source (le japonais) : téléchargeable (preuve lue), JAMAIS écrit
+        ? { ...u, decision: { action: 'cede', raison: `langue ${u.langue} : l'écriture n'est pas ouverte pour cette source (seul l'anglais l'est)`, remplace: [] } } : u));
     const decisions = {};
     for (const u of decidees) { const k = `${u.groupe}:${u.decision.action}`; decisions[k] = (decisions[k] || 0) + 1; }
     const aAjouter = decidees.filter(u => u.decision.action === 'ajouter');
     const imagesFermees = arret ? { fermees: true, hote: TC.HOTE_IMAGES, nature: arret.nature ?? null, le: arret.le ?? null, motif: arret.motif ?? null, illisible: !!arret.illisible } : { fermees: false };
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, imagesFermees, parGroupe, unitesProuvees: unites.length, decisions, aAjouter: aAjouter.length, dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length,
+        catalogue: { etat: cat.etat, ...(cat.raison ? { raison: cat.raison } : {}), ...(cat.etat === 'planifie' ? { groupes: cat.groupes, parStatutTable: cat.parStatutTable, nonAppariees: cat.nonAppariees, produitsJoints: cat.produitsJoints, unites: cat.unites.length, restesParMotif: cat.restesParMotif, denominateursCm: cat.denominateursCm, nonEcrivables: cat.unites.filter(u => u.ecrivable === false).length } : {}) },
         restesParMotif: restes.reduce((m, r) => (m[r.motif] = (m[r.motif] || 0) + 1, m), {}),
         note: imagesFermees.fermees ? 'IMAGES FERMÉES : ces unités sont ce que la source PROUVERAIT ; aucune image n\'est téléchargeable tant que l\'arrêt durable de l\'hôte des images tient (seul le coordinateur le lève).' : 'images ouvertes' };
     return { resume, unites: decidees, restes };
 }
 
+// ── 3. LE MANIFESTE DE LECTURE (règle « preuve lue, source unique ») ────────────────────────────────────────────────────────
+/**
+ * Les produits JOINTS dont l'image est au cache -> `preuves.json` au format de la phase 4, champs `lu` VIDES : l'image est LUE ensuite par un humain / un agent qui la regarde (jamais par ce code), puis validée par le
+ * coordinateur. Une image absente du cache n'est ni inventée ni un trou : comptée. Le japonais figure au manifeste (la lecture sert de preuve) alors que l'écriture lui reste fermée.
+ */
+async function manifeste({ unites, indexImages, dossierCache, dossier }) {
+    const entrees = []; let sansImage = 0; const parGroupe = {};
+    const vus = new Set();
+    for (const u of unites) {
+        const ix = indexImages[u.url], c = ix && ['ok', 'trop-petit'].includes(ix.statut) ? HOTE.lireDuCache(dossierCache, u.url) : null;
+        if (!c) { sansImage++; continue; }
+        const id = u.produits[0];
+        if (vus.has(id)) continue;
+        vus.add(id);
+        const fichier = path.join(dossierCache, HOTE.nomCache(u.url)).replace(/\.json$/, '.bin');
+        entrees.push({ idProduct: id, regle: 'preuve-lue', url: u.url, hote: TC.HOTE_IMAGES, fichier, sha256: ix.sha256 ?? c.meta?.sha256 ?? null, w: ix.w ?? null, h: ix.h ?? null, seconde: null,
+            attendu: { nom: u.carteNom ?? null, numero: u.numero ?? null, langue: u.langue ?? SRC.LANGUE, tampon: SRC.tampon(u.slugSet) ?? null, variante: (/-(V\d+)-/i.exec(u.slugProduit ?? '') || [])[1]?.toUpperCase() ?? null },
+            lu: { nom: '', numero: '', total: '', langue: '', tampon: null, finition: '', marques: [], note: '' }, varianteNommee: null, contradictions: [], sourcesConsultees: ['tcgcsv (catalogue du marché TCGplayer)'], luLe: null,
+            jointure: { productId: u.idSource, nomSource: u.nomSource, numeroSource: u.numeroSource, niveau: u.niveau ?? null, groupeMarche: u.groupeMarche ?? null, famille: u.groupe, statutImage: ix.statut } });
+        parGroupe[u.groupe] = (parGroupe[u.groupe] || 0) + 1;
+    }
+    const fichier = path.join(dossier, 'preuves.json');
+    RC.ecrireJson(fichier, { famille: 'TCGCSV', le: new Date().toISOString(), entrees, trous: [] });
+    return { fichier, entrees: entrees.length, sansImage, parGroupe };
+}
+
 // T4 : l'état de la synchro quotidienne vit à côté du relevé (derniere-synchro.json, dans le dossier de sorties) ; la ligne de commande donne le dossier.
 const fichierSynchro = dossier => path.join(dossier, 'derniere-synchro.json');
 const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images)`, clientDe: client,
+    // les unités à télécharger : celles à ajouter ET les visuels non écrivables (japonais) dont la lecture sert de preuve ; jamais les autres
+    avecProduction: true, manifeste,
+    aTelecharger: plan => plan.unites.filter(u => u.decision?.action === 'ajouter' || u.ecrivable === false),
     maximumReleve: o => maximumReleve({ ...o, synchro: o.synchro ?? (o.dossier ? { etat: RC.lireJson(fichierSynchro(o.dossier), null) } : null) }),
     releve: o => releve({ ...o, synchro: o.synchro ?? (o.dossier ? { fichier: fichierSynchro(o.dossier) } : null) }), construirePlan };
-if (require.main !== module) { module.exports = { maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }
+if (require.main !== module) { module.exports = { manifeste, planCatalogue, maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 CLI.lancer(def);
