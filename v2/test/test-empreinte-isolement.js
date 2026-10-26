@@ -38,7 +38,7 @@ const semer = async (id, numero = '001') => {
 };
 const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSON.stringify(j)); void scanId; void solde; void offre; if (x.facturation) delete x.facturation.poche; return x; };
 const empreinteDe = s => require('crypto').createHash('sha1').update(s).digest('hex').slice(0, 12);       // les assertions comparent des empreintes courtes : un échec n'imprime pas des pages de JSON
-const sansPropre = a => { if (!a) return a; const { _id, creeLe, expireLe, porteur, ...x } = JSON.parse(JSON.stringify(a)); void _id; void creeLe; void expireLe; void porteur; return x; };
+const sansPropre = a => { if (!a) return a; const { _id, creeLe, expireLe, porteur, durees, ...x } = JSON.parse(JSON.stringify(a)); void _id; void creeLe; void expireLe; void porteur; void durees; return x; };       // TEMPS-ETAPES : `durees` (les durées du scan, en ms) est propre au scan, comme l'heure
 
 // ── l'inventaire de la base : pour chaque collection, chaque document sous la forme d'une chaîne canonique
 async function photographier() {

@@ -7,6 +7,7 @@
 //   7. une place de lecture : 4 au total, 1 par porteur (429 DEBIT + Retry-After) ; 8. un délai de lecture (15 s : une connexion lente est coupée, banc/lecture-corps.js).
 // Puis le corps : validé par identifier/photo-extension.js::evaluerOctets (la validation de /api/banc/photo, jamais recopiée), PUIS réencodé sans métadonnées (EXIF, XMP, ICC : sharp n'en écrit aucune), orientation appliquée, 1 600 px
 // au plus : c'est CETTE image-là qui est retenue et transmise au modèle. Rien n'est écrit en base, rien au bucket, rien dans un journal ; aucun argent.
+const { performance } = require('perf_hooks');
 const { repondreErreur } = require('../erreurs');
 const PE = require('./photo-extension');
 const { lireCorpsBorne } = require('../banc/lecture-corps');
@@ -45,6 +46,7 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
     let enCours = 0; const porteurs = new Set();
 
     return async function traiterPhotoAvantScanV2(req, res) {
+        const debutDepot = performance.now();                       // TEMPS-ETAPES : la durée du dépôt, de l'arrivée de la requête à la photo rangée (deux nombres gardés avec la photo, jamais journalisés ici)
         const porteur = req.v2 && req.v2.porteur;
         if (!porteur) return repondreErreur(res, 'INDISPONIBLE');
         // un refus ordinaire envoie `Connection: close` : le corps non lu n'est jamais avalé (Node le vide lui-même à la fin de la réponse)
@@ -79,6 +81,7 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
             return repondreErreur(res, e && e.code === 'TROP' ? 'IMAGE' : 'ENTREE', undefined, { detail: e && e.code === 'TROP' ? 'trop-lourde' : 'content-length' }, e && e.code === 'TROP' ? 413 : 400);
         }
         liberer();
+        const debutTraitement = performance.now();
         // la validation (UNE analyse d'image : celle de /api/banc/photo), puis l'épuration des métadonnées, puis le magasin
         const v = await PE.evaluerOctets(octets, { octetsMax, typeAnnonce: type });
         if (!v.octets) {
@@ -98,7 +101,7 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
         }
         if (!propre) return repondreErreur(res, 'IMAGE', 'Image illisible', { detail: 'illisible' }, 422);
         let photoId;
-        try { photoId = magasin(deps).deposer(cle, index, propre.octets, propre.modele); }
+        try { photoId = magasin(deps).deposer(cle, index, propre.octets, propre.modele, { totalMs: performance.now() - debutDepot, traitementMs: performance.now() - debutTraitement }); }
         catch (e) { journal('magasin', e); return repondreErreur(res, 'INDISPONIBLE'); }
         PE.noter('ok');
         return res.status(200).json({ success: true, photoId, expireDans: SERVICE_S });

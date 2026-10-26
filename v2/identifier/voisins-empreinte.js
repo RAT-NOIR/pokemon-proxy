@@ -57,7 +57,12 @@ function lireEnveloppe(corps, nPhotos) {
  * (celui de la photo de plus petit index) vérifié, et ses 10 voisins. Aucun calcul de plus, aucune carte : ce que chacun en fait lui revient. Ne lève jamais.
  * @returns {{ok:true, e0: object, v: {vecteur: Float32Array, meilleurCosinus: number}, trouve: {top: Array, meilleur: number}, courant: object} | {ok:false, code: string}}
  */
-function preparerVecteur({ entree, voulu, etat }) {
+// TEMPS-ETAPES (`memo: true`, derrière V2_TE_VOISINS_UNE_FOIS) : la recherche des 10 voisins (≈ 15 millions de produits scalaires, du CALCUL) est faite UNE fois par requête, pas une fois par lecteur du vecteur (le fournisseur de la
+// règle G, puis SUR-PAR-IMAGE). La mémoire est indexée sur l'objet `entree.empreintes` (propre à la requête) ET sur l'index EN PLACE (un index rechargé entre deux appels invalide la mémoire) ET sur le modèle voulu ; seuls les
+// SUCCÈS sont gardés (un échec est recalculé, il est rare) ; chaque appelant reçoit sa COPIE (voisins, vecteur) : modifier la sienne n'abîme pas celle de l'autre. Les valeurs sont celles que le calcul direct aurait rendues.
+const MEMO_VOISINS = new WeakMap();
+const copieDe = r => ({ ok: true, e0: r.e0, v: { ...r.v, vecteur: Float32Array.from(r.v.vecteur) }, trouve: { top: r.trouve.top.map(l => l.slice()), meilleur: r.trouve.meilleur }, courant: r.courant });
+function preparerVecteur({ entree, voulu, etat, memo = false, chrono = null }) {
     try {
         const env = entree && entree.empreintes;
         if (!env) return echec('invalide');
@@ -67,10 +72,16 @@ function preparerVecteur({ entree, voulu, etat }) {
         if (!courant || !courant.index || !courant.meta || !courant.meta.modele || courant.meta.modele.id !== voulu.id || courant.meta.modele.sha256 !== voulu.sha256) return echec('indisponible');
         const e0 = env.entrees.reduce((a, b) => (b.photo < a.photo ? b : a));
         if (e0.invalide) return echec('invalide');                                          // M4 : l'entrée jugée porte une clé inconnue ⇒ rejetée, la règle G se tait                // UN seul vecteur est jugé : la photo de plus petit index
+        const memoire = memo === true && typeof env === 'object' ? MEMO_VOISINS.get(env) : null;
+        if (memoire && memoire.courant === courant && memoire.e0 === e0 && memoire.id === voulu.id && memoire.sha256 === voulu.sha256) return copieDe(memoire.resultat);
         let trouve = null;
-        const v = E.verifier(e0.vecteur, q => { trouve = courant.index.voisins(q, 10); return trouve.meilleur; });
+        const chercher = () => E.verifier(e0.vecteur, q => { trouve = courant.index.voisins(q, 10); return trouve.meilleur; });
+        const v = chrono ? chrono.mesurerSync('voisins', chercher) : chercher();
         if (!v.ok || !trouve) return echec('invalide');
-        return { ok: true, e0, v, trouve, courant };
+        const resultat = { ok: true, e0, v, trouve, courant };
+        if (memo !== true) return resultat;
+        MEMO_VOISINS.set(env, { courant, e0, id: voulu.id, sha256: voulu.sha256, resultat });
+        return copieDe(resultat);
     } catch { return echec('indisponible'); }
 }
 
@@ -84,8 +95,9 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
     const Z = () => zones || require('../../ratmarket/zones');
 
     // Les mesures que la règle demande, calculées avec les pixels fournis. { ok:true, mesures } | { ok:false, code }
-    async function mesurer({ ligne, ctx, carte, arret }) {
+    async function mesurer({ ligne, ctx, carte, arret, chrono = null }) {
         let nMesures = 0, enFile = false;
+        const chronoEtape = (nom, f) => (chrono ? chrono.mesurer(nom, f) : f());           // TEMPS-ETAPES : la durée de l'étape, notée si un chronomètre est branché (aucun effet sinon)
         const cache = { zones: {}, paires: {} };
         const rendu = { comparerPaire: (a, b) => cache.paires[`${a}|${b}`], scoresZones: c => cache.zones[c] };
         let photo = null;
@@ -102,16 +114,18 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
                     if (typeof scan !== 'function') return echec('muette');
                     if (arret.stop || nMesures >= budget) return echec('indisponible');                    // le délai est passé, ou le budget de mesures de la requête est épuisé : le travail s'arrête
                     if (!enFile) { if (enFileMesures >= fileMax) return echec('indisponible'); enFileMesures++; enFile = true; }   // la file : refus immédiat, sans mesure
-                    if (!photo) photo = await Z().photoGrise(carte.data, carte.width, carte.height);
+                    if (!photo) photo = await chronoEtape('orb', () => Z().photoGrise(carte.data, carte.width, carte.height));
                     if (arret.stop) return echec('indisponible');
                     nMesures++;          // la carte validée : 420 × 587, RGB
-                    const source = async cle => { const octets = await scan(cle); if (!Buffer.isBuffer(octets) || octets.length === 0) throw MANQUE; return { cle, octets }; };
+                    const source = async cle => { const octets = await chronoEtape('scans', () => scan(cle)); if (!Buffer.isBuffer(octets) || octets.length === 0) throw MANQUE; return { cle, octets }; };
                     if (manque[0] === 'paire') {
-                        const r = await Z().comparerPaire(photo, await source(manque[1]), await source(manque[2]));
+                        const sa = await source(manque[1]), sb = await source(manque[2]);
+                        const r = await chronoEtape('orb', () => Z().comparerPaire(photo, sa, sb));
                         if (!Array.isArray(r) || r.length !== 2 || !r.every(Number.isFinite)) return echec('muette');
                         cache.paires[`${manque[1]}|${manque[2]}`] = r;
                     } else {
-                        const r = await Z().scoresZones(photo, await source(manque[1]));
+                        const sa = await source(manque[1]);
+                        const r = await chronoEtape('orb', () => Z().scoresZones(photo, sa));
                         if (!r || ![r.haut, r.bas, r.inliers].every(Number.isFinite)) return echec('muette');
                         cache.zones[manque[1]] = r;
                     }
@@ -122,9 +136,10 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
         finally { if (enFile) enFileMesures--; if (photo && typeof photo.delete === 'function') { try { photo.delete(); } catch { /* déjà libérée */ } } }
     }
 
-    return async function voisinsEmpreinte({ entree, scanId } = {}) {
+    const memo = require('./temps-etapes').reglages(cfg).voisinsUneFois;          // TEMPS-ETAPES : la recherche des voisins une fois par requête (éteint : comme avant)
+    return async function voisinsEmpreinte({ entree, scanId, chrono = null } = {}) {
         try {
-            const p = preparerVecteur({ entree, voulu: attendu(), etat });
+            const p = preparerVecteur({ entree, voulu: attendu(), etat, memo, chrono });
             if (!p.ok) return echec(p.code);
             const { e0, v, trouve, courant } = p;
             const ligne = { top: trouve.top, essai: e0.redressee ? 1 : 0 };
@@ -135,7 +150,7 @@ function creerFournisseurEmpreinte({ cfg, etat = require('./etat-empreintes'), z
             const carte = await CR.valider(e0.carte);
             if (!carte.ok) return { ...echec('muette'), raison: carte.code };
             const arret = { stop: false }; const minuteur = setTimeout(() => { arret.stop = true; }, delaiMs); if (minuteur.unref) minuteur.unref();       // l'indicateur d'arrêt, posé au délai
-            let m; try { m = await mesurer({ ligne, ctx, carte, arret }); } finally { clearTimeout(minuteur); }
+            let m; try { m = await mesurer({ ligne, ctx, carte, arret, chrono }); } finally { clearTimeout(minuteur); }
             if (!m.ok) return echec(m.code);
             return { ok: true, ligne, nEssais: 1, nMesures: m.nMesures, mesures: m.mesures, contexteG: ctx, seuils: G.SEUILS_G, photo: e0.photo, meilleurCosinus: v.meilleurCosinus };
         } catch { return echec('indisponible'); }

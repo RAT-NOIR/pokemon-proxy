@@ -135,7 +135,7 @@ const idsDeLaQuestion = (resultat, corps) => {
  * @param etat      l'index en place (etat-empreintes.js), injectable en banc
  * @returns null (rien d'appelé, rien de noté) | { resultat?, trace } — resultat : l'affirmation, SEULEMENT si la preuve est faite
  */
-async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produits, version, jumeaux, affirmer, charger, marquesLues = null, etat = require('./etat-empreintes'), journal = () => { } }) {
+async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produits, version, jumeaux, affirmer, charger, marquesLues = null, etat = require('./etat-empreintes'), journal = () => { }, chrono = null }) {
     try {
         if (!(cfg && cfg.surParImage === true && cfg.empreinteExtension === true)) return null;      // les DEUX drapeaux
         if (!resultat || resultat.issue !== 'question' || resultat.motif || resultat.contradiction) return null;
@@ -144,7 +144,7 @@ async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produi
         if (!ids || ids.length < (elargir ? 1 : 2) || !ids.every(Number.isInteger)) return null;
         if (!version || typeof version.entree !== 'function' || !(produits instanceof Map) || typeof affirmer !== 'function') return null;
         const voulu = cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? { id: cfg.modeleEmpreinte.id, sha256: cfg.modeleEmpreinte.sha256 } : null;
-        const p = preparerVecteur({ entree, voulu, etat });
+        const p = preparerVecteur({ entree, voulu, etat, memo: require('./temps-etapes').reglages(cfg).voisinsUneFois, chrono });      // TEMPS-ETAPES : la recherche déjà faite pour la règle G n'est pas refaite (éteint : comme avant)
         if (!p.ok) return null;                                                                   // pas de vecteur exploitable : G l'a déjà dit, la question reste
         const juger = (liste, prods) => {
             const cles = new Map();

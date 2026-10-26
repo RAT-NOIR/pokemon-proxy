@@ -828,6 +828,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_SECONDE_LECTURE: [c => c.secondeLecture, false, '2', 'leve'],      // SECONDE-LECTURE : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_LECTURE_TAMPON: [c => c.lectureTampon, false, '2', 'leve'],      // F1-TAMPON : éteinte par défaut, tout autre que 0 ou 1 est invalide
             V2_SUR_PAR_IMAGE: [c => c.surParImage, false, '2', 'leve'],      // SUR-PAR-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_TE_VOISINS_UNE_FOIS: [c => c.tempsEtapes.voisinsUneFois, false, '2', 'leve'], V2_TE_EMPREINTE_TOT: [c => c.tempsEtapes.empreinteTot, false, '2', 'leve'],      // TEMPS-ETAPES : coupes de temps, éteintes par défaut, tout autre que 0 ou 1 est invalide
+            V2_TE_FIN_PARALLELE: [c => c.tempsEtapes.finParallele, false, '2', 'leve'], V2_TE_ORB_UTILE: [c => c.tempsEtapes.orbUtile, false, '2', 'leve'],
             V2_VIVIER_IMAGE: [c => c.vivierImage, false, '2', 'leve'],      // VIVIER-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide

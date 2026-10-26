@@ -3867,7 +3867,10 @@ async function gererIdentifier(req, res) {
         }
         // ETAT-TITRE : l'état des photos remplace celui que la lecture a rendu (ignoré, gardé comme information dans `etatIdentification`) ; sa panne rend un état nul, jamais celui de la lecture
         // Une fois la lecture rendue, l'état attend AU PLUS 2 000 ms de plus (etat-photos.js : attendre) ; au-delà, état nul de cause « delai ». L'appel n'est jamais repris, sa dépense reste comptée.
+        const debutAttenteEtat = Date.now();
         require('./v2/identifier/etat-photos').fusionner(cardInfo, await require('./v2/identifier/etat-photos').attendre(etatPromesse));
+        // TEMPS-ETAPES : la durée de l'appel au modèle et l'attente de l'état, notées pour la route v2 (le champ `dureesChaine` de la requête n'existe que dans la route v2 ; ailleurs ces lignes ne font rien)
+        if (req.dureesChaine) { req.dureesChaine.lecture = msIA; req.dureesChaine.etat = Date.now() - debutAttenteEtat; }
         console.log(`   👁️ [identifier] état sur les photos seules : ${cardInfo.etatEstime ?? 'aucun'} (confiance ${cardInfo.etatConfiance ?? '?'}, ${cardInfo.msEtat} ms${cardInfo.etatCause ? ', cause ' + cardInfo.etatCause : ''})`);
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
@@ -4721,6 +4724,7 @@ async function gererIdentifier(req, res) {
         // Ne pas reformuler, ne pas déplacer au-dessus de cet appel — voir verrou/jalons.js.
         msCatalogue = Date.now() - debutCatalogue;
         console.log(`⏱️ [identifier] catalogue+scoring : ${msCatalogue} ms`);
+        if (req.dureesChaine) req.dureesChaine.catalogue = msCatalogue;                 // TEMPS-ETAPES (voir plus haut)
 
         // ════════════════════════════════════════════════════════════════════
         // LE VIVIER, SUR TOUTE LIGNE DE REFUS — UN SEUL POINT DE CONSTRUCTION
@@ -5406,6 +5410,7 @@ async function gererIdentifier(req, res) {
                     total: cardInfo.total, classement
                 });
             champsImage = avis.champs;
+            if (req.dureesChaine && Number.isFinite(champsImage.imageMs)) req.dureesChaine.image = champsImage.imageMs;      // TEMPS-ETAPES (voir plus haut)
             if ((departageParSymbole || departageParAttaqueFait) && avis.departage) {
                 const prioritaire = departageParSymbole ? 'symbole' : 'attaque';
                 champsImage.imageStatut = `abstention-${prioritaire}-prioritaire`;

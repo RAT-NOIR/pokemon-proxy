@@ -212,6 +212,10 @@ function lireConfig(env = process.env) {
         // SUR-PAR-IMAGE : une question dont les candidats ne sont pas le même dessin devient un sûr quand la photo (le vecteur de l'extension) est nettement plus proche d'un seul (identifier/sur-par-image.js, M = SEUILS_G.marge_carte).
         // ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (le vecteur et l'index en viennent) ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         surParImage: booleen('V2_SUR_PAR_IMAGE', env.V2_SUR_PAR_IMAGE, false),
+        // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
+        // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
+        // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.
+        tempsEtapes: { voisinsUneFois: booleen('V2_TE_VOISINS_UNE_FOIS', env.V2_TE_VOISINS_UNE_FOIS, false), empreinteTot: booleen('V2_TE_EMPREINTE_TOT', env.V2_TE_EMPREINTE_TOT, false), finParallele: booleen('V2_TE_FIN_PARALLELE', env.V2_TE_FIN_PARALLELE, false), orbUtile: booleen('V2_TE_ORB_UTILE', env.V2_TE_ORB_UTILE, false) },
         // VIVIER-IMAGE : SUR-PAR-IMAGE relue sur un VIVIER ÉLARGI aux produits des 5 visuels les plus proches de la photo (index entier), quand la règle d'avant se tait ou n'a qu'un candidat (identifier/sur-par-image-route.js).
         // ÉTEINT par défaut (0) : la réponse est celle d'avant, octet pour octet. N'agit que si V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION sont allumés aussi ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         vivierImage: booleen('V2_VIVIER_IMAGE', env.V2_VIVIER_IMAGE, false),
