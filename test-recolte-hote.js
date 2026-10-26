@@ -242,6 +242,67 @@ const robotsOk = { status: 200, type: 'text/plain', texte: 'User-agent: *\nDisal
         const d2 = JSON.parse(fs.readFileSync(f, 'utf8')); assert.ok(Date.parse(d2.depuis) > Date.parse(d1.depuis), 'battement avancé');
         cli.liberer(); assert.ok(!fs.existsSync(f));
     });
+    // ───────── T4 : robots.txt en 4xx « aucune règle » (RFC 9309) pour UN hôte d'images de la table fermée, jamais ailleurs ─────────
+    const CDN = 'tcgplayer-cdn.tcgplayer.com', IMG = `https://${CDN}/product/475973_in_1000x1000.jpg`;
+    const HOTES_CDN = { [CDN]: { chemin: /^\/(robots\.txt|product\/\d{1,9}_(in_1000x1000|200w)\.jpg|autre\/x\.jpg)$/, racine: 'tcgplayer.com' } };
+    const baseCdn = (o = {}) => ({ racine: 'tcgplayer.com', hotes: HOTES_CDN, dossierCache: tmp(), plafond: 10, cadenceMs: 0, pause: async () => {}, dossierPauses: tmp(), suivi: require('./collecte-cartes/reponse-hote').suiviHote(), ...o });
+    const JPG = Buffer.concat([Buffer.from('ffd8ffe000104a464946', 'hex'), Buffer.alloc(60, 2)]);
+    await test('T4 : robots.txt 403 sur l\'hôte d\'images de la table fermée = aucune règle ; l\'image du chemin admis part, AUCUN arrêt écrit', async () => {
+        const pauses = tmp(), appels = [];
+        const transport = { async get(u) { appels.push(u); return /robots/.test(u) ? { status: 403, type: 'application/xml', texte: '<Error><Code>AccessDenied</Code></Error>' } : { status: 200, type: 'image/jpeg', octets: JPG }; } };
+        const cli = H.fabriquerClient(baseCdn({ transport, dossierPauses: pauses }));
+        const r = await cli.initialiserRobots(CDN);
+        assert.strictEqual(r.statut, 'absent'); assert.strictEqual(r.status, 403);
+        const img = await cli.lireImage(IMG);
+        assert.ok(img.octets && img.octets.length === JPG.length);
+        assert.deepStrictEqual(appels, [`https://${CDN}/robots.txt`, IMG]);
+        assert.deepStrictEqual(fs.readdirSync(pauses), []);
+        assert.strictEqual(cli.robotsDe(CDN).statut, 'absent');
+        // le robots.txt 403 est au cache : un client neuf (même cache) ne le redemande pas, et l'admission vaut encore
+        const cli2 = H.fabriquerClient(baseCdn({ transport, dossierCache: cli.dossierCache(), dossierPauses: pauses }));
+        const r2 = await cli2.initialiserRobots(CDN); assert.strictEqual(r2.statut, 'absent'); assert.strictEqual(appels.filter(u => /robots/.test(u)).length, 1);
+    });
+    await test('T4 : l\'admission ne vaut que pour la forme /product/<id>_(in_1000x1000|200w).jpg ; un autre chemin du même hôte reste refusé après un robots.txt 403', async () => {
+        const appels = [];
+        const transport = { async get(u) { appels.push(u); return /robots/.test(u) ? { status: 403, type: 'text/html', texte: 'Forbidden' } : { status: 200, type: 'image/jpeg', octets: JPG }; } };
+        const cli = H.fabriquerClient(baseCdn({ transport }));
+        await cli.initialiserRobots(CDN);
+        await assert.rejects(() => cli.lireImage(`https://${CDN}/autre/x.jpg`), /robots/);
+        assert.strictEqual(appels.length, 1);
+    });
+    await test('T4 : un AUTRE hôte avec robots.txt 403 reste un arrêt définitif (la table est fermée, elle ne s\'étend pas par un test)', async () => {
+        const pauses = tmp();
+        const hotes = { 'media.autre.test': { chemin: /^\/(robots\.txt|product\/\d{1,9}_200w\.jpg)$/, racine: 'autre.test' } };
+        const cli = H.fabriquerClient(base({ racine: 'autre.test', hotes, dossierPauses: pauses, transport: { async get() { return { status: 403, type: 'text/html', texte: 'Forbidden' }; } } }));
+        const e = await cli.initialiserRobots('media.autre.test').catch(x => x);
+        assert.ok(e && e.arretDefinitif, 'arrêt attendu'); assert.ok(fs.readdirSync(pauses).some(f => /^ARRET-HOTE-autre\.test/.test(f)));
+        assert.ok(!Object.hasOwn(H.ROBOTS_4XX_ADMIS, 'media.autre.test') && Object.keys(H.ROBOTS_4XX_ADMIS).length === 1);
+    });
+    await test('T4 : sur l\'hôte admis, robots.txt 429 ou avec un défi reste un arrêt ; et une IMAGE en 401/403/410/429 ou en défi arrête définitivement', async () => {
+        for (const rep of [{ status: 429, type: 'text/html', texte: 'Too many' }, { status: 403, type: 'text/html', texte: '<title>Just a moment...</title>' }]) {
+            const pauses = tmp();
+            const e = await H.fabriquerClient(baseCdn({ dossierPauses: pauses, transport: { async get() { return rep; } } })).initialiserRobots(CDN).catch(x => x);
+            assert.ok(e && e.arretDefinitif, `arrêt attendu pour ${rep.status}`); assert.ok(fs.readdirSync(pauses).some(f => /^ARRET-HOTE-tcgplayer\.com/.test(f)));
+        }
+        for (const st of [401, 403, 410, 429]) {
+            const pauses = tmp();
+            const cli = H.fabriquerClient(baseCdn({ dossierPauses: pauses, transport: { async get(u) { return /robots/.test(u) ? { status: 404, type: 'text/html', texte: 'nf' } : { status: st, type: 'text/html', texte: 'x' }; } } }));
+            await cli.initialiserRobots(CDN);
+            const e = await cli.lireImage(IMG).catch(x => x);
+            assert.ok(e && e.arretDefinitif, `arrêt attendu pour l'image en ${st}`);
+        }
+    });
+    await test('T4 : lire({ sansCache }) redemande une réponse déjà au cache (last-updated.txt), et réécrit le cache ; sans l\'option le cache sert', async () => {
+        let n = 0; const dossier = tmp();
+        const transport = { async get() { n++; return { status: 200, type: 'text/plain', texte: `v${n}` }; } };
+        const hotes = { 'www.exemple.test': { chemin: /^\/(robots\.txt|last-updated\.txt)$/ } };
+        const cli = H.fabriquerClient(base({ hotes, dossierCache: dossier, transport, robots: { 'www.exemple.test': null } }));
+        const a = await cli.lire('https://www.exemple.test/last-updated.txt'); const b = await cli.lire('https://www.exemple.test/last-updated.txt');
+        assert.strictEqual(b.cache, true); assert.strictEqual(n, 1);
+        const c = await cli.lire('https://www.exemple.test/last-updated.txt', { sansCache: true });
+        assert.strictEqual(c.cache, false); assert.strictEqual(c.texte, 'v2'); assert.strictEqual(n, 2);
+        assert.strictEqual((await cli.lire('https://www.exemple.test/last-updated.txt')).texte, 'v2'); void a;
+    });
     console.log(`${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;
 })();

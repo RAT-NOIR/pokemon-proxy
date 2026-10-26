@@ -44,6 +44,14 @@ const CADENCE_MIN_MS = 5000;
 const MAX_TEXTE = 12 * 1024 * 1024;           // un JSON de groupe pèse 1 à 2 Mo ; au-delà, ce n'est pas ce qu'on attend
 const MAX_IMAGE = 6 * 1024 * 1024;
 
+/**
+ * T4 (décision du testeur, 2026-10-26) — LA TABLE FERMÉE des hôtes d'images dont le robots.txt répond en 4xx : « aucune règle » (RFC 9309, § 2.3.1.3), et SEULEMENT pour la forme de chemin listée.
+ * Un seul hôte : le CDN d'images du marché (le testeur a LEVÉ l'arrêt pour ces images-là). Tout autre hôte garde la règle du dépôt : un 401/403/410/429 sur robots.txt est un ARRÊT définitif.
+ * Ne s'étend pas par un paramètre : ajouter un hôte ici est une décision du testeur, et le banc compte les clés. 429 et tout défi (marqueur, cf-mitigated) restent des arrêts, même ici.
+ */
+const ROBOTS_4XX_ADMIS = Object.freeze({ 'tcgplayer-cdn.tcgplayer.com': /^\/product\/\d{1,9}_(in_1000x1000|200w)\.jpg$/ });
+const admis4xx = hote => Object.hasOwn(ROBOTS_4XX_ADMIS, hote);
+
 const nomCache = url => `${crypto.createHash('sha1').update(url).digest('hex').slice(0, 16)}-${url.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9.-]+/g, '_').slice(0, 80)}.json`;
 const nbCache = d => (fs.existsSync(d) ? fs.readdirSync(d).filter(f => /^[0-9a-f]{16}-.*\.json$/.test(f)).length : 0);
 /** Le plafond restant d'un dossier de cache : le plafond est un TOTAL, les réponses déjà au cache le consomment. */
@@ -102,6 +110,8 @@ function fabriquerClient({ racine, hotes, dossierCache, plafond, transport = tra
         const r = robotsLus.get(u.hostname);
         if (!r) throw new Error(`robots.txt de ${u.hostname} pas encore lu — aucune requête (la garde s'écrit par ce qu'elle autorise)`);
         if (!(now() - r.luLe <= ROBOTS_MAX_MS)) throw new Error(`robots.txt de ${u.hostname} périmé (lu il y a plus de 24 h) — aucune requête : le relire d'abord (initialiserRobots)`);
+        // T4 : un robots.txt en 4xx n'est « aucune règle » que pour la forme de chemin de la table fermée ; tout autre chemin du même hôte est refusé
+        if (r.regle4xx && !(admis4xx(u.hostname) && ROBOTS_4XX_ADMIS[u.hostname].test(u.pathname))) throw new Error(`robots.txt de ${u.hostname} en ${r.regle4xx} : « aucune règle » ne vaut que pour ${ROBOTS_4XX_ADMIS[u.hostname] ?? 'aucun chemin'} — aucune requête (${u.pathname})`);
         if (!T.autoriseParRobots(r.texte, u.pathname + u.search, UA)) throw new Error(`robots.txt interdit ${u.pathname} sur ${u.hostname} — aucune requête`);
     }
     /** D3 : le verrou de l'hôte — pris à la première requête, battement à chaque suivante. LÈVE (aucune requête) si un autre flux le tient. */
@@ -145,18 +155,27 @@ function fabriquerClient({ racine, hotes, dossierCache, plafond, transport = tra
         return Object.assign(new Error(`${racineDe(u.hostname)} BLOQUÉ (${motif}) sur ${url} — ARRÊT définitif de l'hôte${f ? ` (${f})` : ''}`), { bloque: true, arretDefinitif: true, status, hote: u.hostname, fichier: f });
     }
 
-    async function lire(url, { robotsTxt = false, reduire = null } = {}) {
+    async function lire(url, { robotsTxt = false, reduire = null, sansCache = false } = {}) {
         const u = verifier(url);
         const f = fichier(url);
-        if (fs.existsSync(f)) {
+        // T4 : `sansCache` redemande une réponse qui change (last-updated.txt, liste des groupes d'un jour nouveau) ; la réponse neuve réécrit le cache. Le plafond, la cadence et le verrou s'appliquent.
+        if (!sansCache && fs.existsSync(f)) {
             const c = JSON.parse(fs.readFileSync(f, 'utf8'));
             // D2 : un robots.txt de plus de 24 h ne sert plus de reprise : il est redemandé (et réécrit)
             if (!(robotsTxt && !(now() - Date.parse(c.le) <= ROBOTS_MAX_MS))) return { ...c, cache: true };
         }
         garde(u, { robotsTxt });
         const r = await requete(u, url, {});
-        const defi = RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 }));
+        // T4 : robots.txt de l'hôte d'images admis, en 4xx (hors 429) : « aucune règle » — le statut n'est plus un défi par lui-même, mais un marqueur de défi dans le corps ou cf-mitigated l'est toujours
+        const aucuneRegle = robotsTxt && admis4xx(u.hostname) && r.status >= 400 && r.status < 500 && r.status !== 429;
+        const entree = RH.entreeDepuisClient(r, { borne: 5000 });
+        const defi = RH.detecterDefi(aucuneRegle ? { ...entree, statut: 400 } : entree);
         if (defi) throw arreter(u, url, defi, r.status);
+        if (aucuneRegle) {
+            const sortie = { url, status: r.status, type: r.type || '', texte: '', aucuneRegle4xx: true, le: new Date(now()).toISOString() };
+            fs.writeFileSync(f, JSON.stringify(sortie));
+            return { ...sortie, cache: false };
+        }
         if (r.status >= 500 && r.status < 600) throw Object.assign(new Error(`HTTP ${r.status} sur ${url} — erreur serveur transitoire`), { status: r.status, transitoire: true });
         if (r.status !== 200 && r.status !== 404) throw Object.assign(new Error(`HTTP ${r.status} sur ${url} — ${r.status >= 300 && r.status < 400 ? 'redirection non suivie, ' : ''}réponse non prévue, on s'arrête`), { status: r.status });
         const sortie = { url, status: r.status, type: r.type || '', texte: r.status === 200 ? (reduire ? reduire(r.texte) : r.texte) : '', le: new Date(now()).toISOString() };
@@ -170,6 +189,7 @@ function fabriquerClient({ racine, hotes, dossierCache, plafond, transport = tra
         const r = await lire(`https://${hote}/robots.txt`, { robotsTxt: true });
         const luLe = Date.parse(r.le);
         if (r.status === 404) { robotsLus.set(hote, { statut: 'absent', texte: null, luLe }); return { statut: 'absent', status: 404, cache: r.cache }; }
+        if (r.aucuneRegle4xx === true && admis4xx(hote) && r.status >= 400 && r.status < 500 && r.status !== 429) { robotsLus.set(hote, { statut: 'absent', texte: null, luLe, regle4xx: r.status }); return { statut: 'absent', status: r.status, cache: r.cache, regle4xx: true }; }
         if (r.status !== 200) throw new Error(`robots.txt de ${hote} illisible (HTTP ${r.status}) : on ne peut pas conclure`);
         if (/html/i.test(r.type) || !/text\/|^$/i.test(r.type)) throw new Error(`robots.txt de ${hote} : type « ${r.type} » (pas un fichier texte) — on ne peut pas conclure`);
         const d = T.delaiDesRobots(r.texte, UA);
@@ -222,4 +242,4 @@ function robotsFrais(dossier, hote, maintenant = Date.now()) {
     try { return maintenant - Date.parse(JSON.parse(fs.readFileSync(f, 'utf8')).le) <= ROBOTS_MAX_MS; } catch { return false; }
 }
 
-module.exports = { fabriquerClient, lireDuCache, nomCache, nbCache, plafondRestant, robotsFrais, transportFetch, UA, CADENCE_MIN_MS, ROBOTS_MAX_MS, DUREE_VERROU_MS };
+module.exports = { ROBOTS_4XX_ADMIS, fabriquerClient, lireDuCache, nomCache, nbCache, plafondRestant, robotsFrais, transportFetch, UA, CADENCE_MIN_MS, ROBOTS_MAX_MS, DUREE_VERROU_MS };
