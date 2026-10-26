@@ -33,7 +33,18 @@ const PRECISION_BITS = 32 - 8 - 2;
 const ALIGNEMENT = process.env.RM_ALIGNEMENT === 'v1' ? 'v1' : 'stable';
 // LES CACHES BORNÉS (2026-10-07) : un scan (gris, gradient float32, descripteurs) pèse ~1,3 Mo, une paire (masque, gradient) ~1,2 Mo ; le
 // labo en gardait 3 000 et 5 000 — ~10 Go, sur un serveur de 512 Mo. Ici 32 de chaque (~80 Mo au plus), le moins récemment servi part.
-const CACHE_SCANS = 32, CACHE_PAIRES = 32;
+// (CACHE-ZONES, 2026-10-26) RÉGLABLES par RM_CACHE_SCANS / RM_CACHE_PAIRES ; le DÉFAUT reste 32 et 32. Vide, non entier ou < 1 LÈVE au chargement (même forme que RM_IDENTITE_MAX plus bas) :
+// un réglage ignoré en silence est un cache qu'on croit réduit. Le choix d'une valeur se fait sur l'essai (rapport du lot CACHE-ZONES).
+// ⚠️ Les scans : AU MOINS 2. comparerPaire tient DEUX scans à la fois ; avec une borne de 1, le chargement du second évince le premier et libère ses Mat — l'appel plante (« Mat.rows getter on deleted object », mesuré).
+// La borne basse n'est donc pas 1 (comme les paires) mais 2 : un réglage qui casse la chaîne n'est pas un réglage.
+function tailleCache(nom, defaut, min = 1) {
+    const brut = process.env[nom];
+    if (brut == null) return defaut;
+    const n = /^[0-9]+$/.test(brut.trim()) ? Number(brut.trim()) : NaN;
+    if (!Number.isSafeInteger(n) || n < min) throw new Error(`${nom} « ${brut} » : un entier ≥ ${min} attendu`);
+    return n;
+}
+const CACHE_SCANS = tailleCache('RM_CACHE_SCANS', 32, 2), CACHE_PAIRES = tailleCache('RM_CACHE_PAIRES', 32);
 const servir = (m, k) => { const v = m.get(k); m.delete(k); m.set(k, v); return v; };
 /** Libère chaque objet C++ donné (Mat, vecteur, ORB…). Sûr sur null et sur un objet déjà libéré : un `finally` peut l'appeler sur tout ce qu'il a pu créer. */
 function liberer(...objets) { for (const o of objets) { try { if (o && !o.isDeleted()) o.delete(); } catch (_) { /* déjà libéré */ } } }

@@ -1,5 +1,6 @@
 'use strict';
 const express = require('express');
+require('./reglage-sharp').appliquer(require('sharp'), process.env);   // CACHE-ZONES : V2_SHARP_CACHE règle le cache de libvips (non posé : sharp n'est pas touché) ; une valeur illisible LÈVE au chargement
 const { lireConfig } = require('./config');
 const { verifierIndex } = require('./modeles');
 const pret = require('./pret');
