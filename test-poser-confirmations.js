@@ -1,6 +1,6 @@
 // node test-poser-confirmations.js — poser-confirmations.js (B1, 2026-10-26) : le plan est REJOUÉ avec les fonctions de production, l'écriture est additive (un seul champ), sous lot-additif, jamais sans --attendu.
 // Bancs sur FAUX : aucune base, aucune requête. Les écritures sont espionnées ; la simulation n'en fait aucune.
-const P = require('./poser-confirmations');
+const P = require(process.env.POSER_MODULE || './poser-confirmations');   // la variable ne sert qu'à collecte-cartes/test-mutation-confirmation.js
 const { cleNumero } = require('./collecte-cartes/jointure');
 
 let ok = 0, ko = 0;
@@ -11,7 +11,7 @@ const verifier = (nom, obtenu, attendu) => {
 const LE = new Date('2026-10-26T12:00:00Z');
 
 // ── un monde fabriqué : produit 11 « Water Energy » n°103 du set EX-Emerald, joint par set+nom à la carte 7, qui porte le n°103
-const CARTE = { _id: 7, nomEn: 'Water Energy', niveau: null, attaques: [], impressions: [{ numero: '103', tirage: 'intl', expansion: 'EX Emerald' }], sets: ['EX-Emerald'] };
+const CARTE = { _id: 7, nomEn: 'Water Energy', niveau: null, attaques: [], impressions: [{ numero: '103', tirage: 'intl', expansion: 'EX Emerald' }, { numero: '7', tirage: 'intl', expansion: 'Autre Set' }], sets: ['EX-Emerald'] };
 const AUTRE = { _id: 8, nomEn: 'Fire Energy', niveau: null, attaques: [], impressions: [{ numero: '104' }], sets: ['EX-Emerald'] };
 const LIGNE = { _id: '7|11', carteId: 7, idProduct: 11, idExpansion: 1547, preuve: 'set+nom', slugSet: 'EX-Emerald', numeroFiche: null, tirage: 'intl' };
 const PRODUIT = { idProduct: 11, idExpansion: 1547, set: 'EX-Emerald', numero: '103', name: 'Water Energy' };
@@ -19,7 +19,7 @@ const CONC = { source: 'tcgdex', ref: 'ex9-103', set: 'EX-Emerald', numero: '103
 const entree = (o = {}) => ({ idProduct: 11, carteId: 7, concordantes: [CONC], refusees: [], ...o });
 const monde = (o = {}) => ({
     lignes: new Map([[11, [LIGNE]]]), produits: new Map([[11, PRODUIT]]), cartes: new Map([[7, CARTE]]),
-    cartesDuSet: slug => [CARTE, AUTRE].filter(c => c.sets.includes(slug)), ...o });
+    cartesDuSet: slug => [CARTE, AUTRE].filter(c => c.sets.includes(slug)), sets: new Map([['EX-Emerald', { _id: 'EX-Emerald', bulba: { expansion: 'EX Emerald' } }]]), ...o });
 const plan = (e, m) => P.planifier({ entrees: [e], lecture: m || monde(), le: LE });
 const raison = r => r.refus[0]?.raison ?? null;
 
@@ -33,7 +33,7 @@ verifier('le plan nomme la ligne par son _id', p0.ecrire[0]._id, '7|11');
 const refuse = (nom, p, motif) => verifier(`refus : ${nom}`, [p.ecrire.length, p.refus.length, motif.test(raison(p))], [0, 1, true]);
 refuse('le produit n\'a aucune ligne', plan(entree(), monde({ lignes: new Map() })), /aucune ligne/);
 refuse('le produit a deux lignes (deux cartes)', plan(entree(), monde({ lignes: new Map([[11, [LIGNE, { ...LIGNE, _id: '8|11', carteId: 8 }]]]) })), /lignes/);
-refuse('la ligne désigne une autre carte que celle des sources', plan(entree({ carteId: 8 })), /carte/);
+refuse('la ligne désigne une autre carte que celle des sources (la carte 8 existe, identique : seule la comparaison de carteId l\'arrête)', plan(entree({ carteId: 8 }), monde({ cartes: new Map([[7, CARTE], [8, { ...CARTE, _id: 8 }]]), cartesDuSet: () => [CARTE, { ...CARTE, _id: 8 }] })), /carte/);
 refuse('la preuve de la ligne n\'est pas faible (le numéro l\'établit déjà)', plan(entree(), monde({ lignes: new Map([[11, [{ ...LIGNE, preuve: 'set+numero' }]]]) })), /preuve/);
 refuse('une ligne sans preuve écrite : inconnue, pas faible', plan(entree(), monde({ lignes: new Map([[11, [{ ...LIGNE, preuve: undefined }]]]) })), /preuve/);
 refuse('produit absent du catalogue', plan(entree(), monde({ produits: new Map() })), /produit/);
@@ -47,11 +47,23 @@ refuse('un relevé LISIBLE d\'une autre source dit un autre nom au même numéro
 refuse('la carte ne porte pas ce numéro (la ligne ne désigne pas la carte des sources)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '99' }] }]]) })), /numéro/);
 refuse('la carte est absente de la base', plan(entree(), monde({ cartes: new Map() })), /carte/);
 refuse('la carte n\'a pas de nom : le témoin du nom est muet, je ne conclus pas', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: null }]]) })), /témoin/);
-refuse('le témoin du nom désigne une autre carte du set pour ce produit', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Grass Energy' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Grass Energy' }, { _id: 9, nomEn: 'Water Energy', impressions: [], attaques: [], sets: ['EX-Emerald'] }] })), /témoin/);
+refuse('le témoin du nom désigne une autre carte du set pour ce produit', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Grass Energy' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Grass Energy' }, { _id: 9, nomEn: 'Water Energy', impressions: [], attaques: [], sets: ['EX-Emerald'] }] })), /nom de la carte|témoin/);
 // l'équivalence des zéros de tête (cleNumero de production) : « 016 » et « 16 » sont le même numéro
 verifier('cleNumero est celui de production (016 = 16)', cleNumero('016'), cleNumero('16'));
-verifier('la carte porte « 16 », le produit « 016 » : accepté', plan(entree({ concordantes: [{ ...CONC, numero: '16' }] }), monde({ produits: new Map([[11, { ...PRODUIT, numero: '016' }]]), cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '16' }] }]]) })).ecrire.length, 1);
+verifier('la carte porte « 16 », le produit « 016 » : accepté', plan(entree({ concordantes: [{ ...CONC, numero: '16' }] }), monde({ produits: new Map([[11, { ...PRODUIT, numero: '016' }]]), cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '16', expansion: 'EX Emerald' }] }]]) })).ecrire.length, 1);
 
+// ── tour 1 de la relecture : I1 (le NOM de la carte) et I2 (le numéro est celui du SET de la ligne)
+refuse('I1 Scyther/Scizor : la carte de la ligne porte un AUTRE nom que le produit confirmé', plan(entree({ concordantes: [{ ...CONC, nom: 'Scyther' }] }), monde({ produits: new Map([[11, { ...PRODUIT, name: 'Scyther' }]]), cartes: new Map([[7, { ...CARTE, nomEn: 'Scizor' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Scizor' }] })), /nom de la carte/);
+verifier('I1 : « Basic Water Energy » (carte) et « Water Energy » (produit) sont le même nom (clésNom de production)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Basic Water Energy' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Basic Water Energy' }] })).ecrire.length, 1);
+refuse('I2 : la carte porte le numéro, mais dans un AUTRE set (aucune impression du set de la ligne)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '103', expansion: 'Autre Set' }] }]]) })), /carte-sans-impression-du-set/);
+refuse('I2 : la carte a une impression du set, mais à un autre numéro', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '99', expansion: 'EX Emerald' }, { numero: '103', expansion: 'Autre Set' }] }]]) })), /carte-sans-impression-du-set/);
+refuse('I2 : le set de la ligne n\'a pas de nom d\'expansion connu : je ne conclus pas', plan(entree(), monde({ sets: new Map([['EX-Emerald', { _id: 'EX-Emerald' }]]) })), /carte-sans-impression-du-set/);
+refuse('I2 : set absent de la base', plan(entree(), monde({ sets: new Map() })), /carte-sans-impression-du-set/);
+// l'écriture reteste la ligne
+const appelsF = []; 
+(async () => { await P.ecrireConfirmations({ collection: () => ({ updateOne: async (f) => { appelsF.push(f); return { modifiedCount: 1 }; } }) }, p0.ecrire);
+verifier('écriture : le filtre reteste carteId et preuve de la ligne lue', appelsF[0], { _id: '7|11', carteId: 7, preuve: 'set+nom', confirmation: { $exists: false } });
+})();
 // ── déjà confirmée
 const dejaC = P.planifier({ entrees: [entree()], lecture: monde(), le: LE }).ecrire[0].confirmation;
 const lecDeja = monde({ lignes: new Map([[11, [{ ...LIGNE, confirmation: dejaC }]]]) });
@@ -68,7 +80,7 @@ verifier('--attendu égal au plan', P.verifierAttendu(p0, 1).ok, true);
     const appels = [];
     const db = { collection: nom => ({ updateOne: async (f, u, o) => { appels.push({ nom, f, u, o }); return { modifiedCount: 1, matchedCount: 1 }; } }) };
     const r = await P.ecrireConfirmations(db, p0.ecrire);
-    verifier('écriture : un updateOne par ligne, sur cartes_produits, par _id ET seulement si aucune confirmation', [appels.length, appels[0].nom, appels[0].f], [1, 'cartes_produits', { _id: '7|11', confirmation: { $exists: false } }]);
+    verifier('écriture : un updateOne par ligne, sur cartes_produits, par _id ET seulement si aucune confirmation', [appels.length, appels[0].nom, appels[0].f], [1, 'cartes_produits', { _id: '7|11', carteId: 7, preuve: 'set+nom', confirmation: { $exists: false } }]);
     verifier('écriture : un $set de `confirmation` SEUL (aucun autre champ, aucun upsert)', [Object.keys(appels[0].u), Object.keys(appels[0].u.$set), appels[0].o?.upsert === true], [['$set'], ['confirmation'], false]);
     verifier('écriture : compte rendu', r, { posees: 1 });
 
@@ -84,7 +96,7 @@ verifier('--attendu égal au plan', P.verifierAttendu(p0, 1).ok, true);
     const faux = (ecritures) => async () => ({
         cartes: { db: { collection: n => collFaux(n, ecritures) } }, prod: { db: { collection: n => collFaux(n, ecritures) } }, fermer: async () => {} });
     const collFaux = (nom, ecritures) => {
-        const data = { cartes_produits: [LIGNE], catalogue_produits: [{ idProduct: 11, name: 'Water Energy', idExpansion: 1547 }], numeros_cartes: [{ idProduct: 11, slugSet: 'EX-Emerald', numero: '103' }], cartes: [CARTE, AUTRE] }[nom] || [];
+        const data = { cartes_produits: [LIGNE], catalogue_produits: [{ idProduct: 11, name: 'Water Energy', idExpansion: 1547 }], numeros_cartes: [{ idProduct: 11, slugSet: 'EX-Emerald', numero: '103' }], cartes: [CARTE, AUTRE], sets: [{ _id: 'EX-Emerald', bulba: { expansion: 'EX Emerald' } }] }[nom] || [];
         return { collectionName: nom, find: (f, o) => ({ toArray: async () => data.filter(d => !f || !f._id && !f.idProduct && !f.sets || (f.idProduct?.$in || []).includes(d.idProduct) || (f._id?.$in || []).includes(d._id) || (f.sets && (d.sets || []).includes(f.sets))) }),
             countDocuments: async () => data.length, findOne: async () => data[0] || null,
             updateOne: async (...a) => { ecritures.push([nom, ...a]); return { modifiedCount: 1, matchedCount: 1 }; } };

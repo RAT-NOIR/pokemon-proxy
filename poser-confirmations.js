@@ -13,7 +13,7 @@
 // Un seul doute : le produit est REFUSÉ, nommé, et `--attendu` arrête tout. ADDITIF PUR : un `$set` du champ `confirmation` SEUL, sur une ligne qui n'en a pas (`confirmation: { $exists: false }`),
 // jamais `preuve` ni un autre champ, jamais un upsert. Ni le site (SPEC_PRODUIT) ni l'API (PROJECTIONS.cartes_produits) ne lisent ce champ : seul l'audit le lit (audit-catalogue/etat-api.js).
 const { juger } = require('./collecte-cartes/deux-sources');
-const { cleNumero, decomposerNomCardmarket, temoinDuNom } = require('./collecte-cartes/jointure');
+const { cleNumero, decomposerNomCardmarket, temoinDuNom, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { PREUVES_NOM_SEUL } = require('./audit-catalogue/classement');
 const K = require('./collecte-cartes/confirmation');
 
@@ -50,9 +50,14 @@ function planifier({ entrees, lecture, le = new Date() }) {
         // la ligne désigne bien la carte : le numéro (cleNumero) sur la carte, puis le témoin du nom
         const carte = lecture.cartes.get(e.carteId);
         if (!carte) { no(`carte ${e.carteId} absente de la base`); continue; }
-        const cle = cleNumero(produit.numero);
-        if (!(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle)) { no(`la carte ${e.carteId} ne porte aucune impression au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
         if (!carte.nomEn) { no(`carte ${e.carteId} sans nom : le témoin du nom est muet, je ne conclus pas`); continue; }
+        // I1 : le NOM de la carte est celui du produit (clés de nom de production, « Basic Water Energy » = « Water Energy ») : le témoin du nom ne dit que « une autre carte le porte mieux »
+        const kc = clesNom(nomJointDe(carte)), kp = clesNom(dn.nom);
+        if (!kp.some(k => kc.includes(k))) { no(`le nom de la carte ${e.carteId} « ${carte.nomEn} » n'est pas celui du produit « ${dn.nom} » — la ligne ne désigne pas la carte des sources`); continue; }
+        // I2 : le numéro est celui d'une impression de CE set (expansion du set de la ligne) ; une énergie de base générique sans impression dans le set est refusée (aucune règle de production ne la traite)
+        const cle = cleNumero(produit.numero);
+        const expSet = [].concat(lecture.sets?.get(p.set)?.bulba?.expansion ?? []).filter(Boolean);
+        if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion))) { no(`carte-sans-impression-du-set : la carte ${e.carteId} ne porte aucune impression de « ${expSet.join(' / ') || 'set sans nom d\'expansion'} » au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
         const autres = temoinDuNom(lecture.cartesDuSet(p.set), p.idExpansion ?? null)(carte, { nom: dn.nom, attaques: dn.attaques });
         if (autres) { no(`le témoin du nom contredit la carte ${e.carteId} « ${carte.nomEn} » pour « ${dn.nom} » : ${autres.slice(0, 3).map(c => `${c._id} « ${c.nomEn} »`).join(', ')}`); continue; }
         const confirmation = K.construire({ carteId: e.carteId, produit, concordantes: j.concordantes, le });
@@ -64,7 +69,7 @@ function planifier({ entrees, lecture, le = new Date() }) {
             if (meme) deja.push({ _id: ligne._id }); else no(`la ligne porte déjà une confirmation qui ne concorde plus — on n'écrase jamais une valeur (à traiter à la main)`);
             continue;
         }
-        ecrire.push({ _id: ligne._id, carteId: e.carteId, idProduct: e.idProduct, confirmation });
+        ecrire.push({ _id: ligne._id, carteId: e.carteId, idProduct: e.idProduct, preuve: ligne.preuve, confirmation });
     }
     return { ecrire, refus, deja };
 }
@@ -79,7 +84,7 @@ function verifierAttendu(plan, attendu) {
 async function ecrireConfirmations(db, lignes) {
     let posees = 0;
     for (const l of lignes) {
-        const r = await db.collection('cartes_produits').updateOne({ _id: l._id, [K.CHAMP]: { $exists: false } }, { $set: { [K.CHAMP]: l.confirmation } });
+        const r = await db.collection('cartes_produits').updateOne({ _id: l._id, carteId: l.carteId, preuve: l.preuve, [K.CHAMP]: { $exists: false } }, { $set: { [K.CHAMP]: l.confirmation } });
         posees += r.modifiedCount || 0;
     }
     return { posees };
@@ -115,7 +120,10 @@ async function lire({ cartesDb, prodDb, entrees }) {
     const parSet = new Map();
     for (const slug of new Set([...produits.values()].map(p => p.set).filter(Boolean)))
         parSet.set(slug, await lireMongo(cartesDb.collection('cartes'), { sets: slug }, { nom: 'cartes', projection: proj, videAutorise: `le set ${slug} peut n'avoir aucune carte` }));
-    return { lignes, produits, cartes, cartesDuSet: slug => parSet.get(slug) || [], lignesBrutes };
+    const slugs = [...parSet.keys()];
+    const setsLus = slugs.length ? await lireMongo(cartesDb.collection('sets'), { _id: { $in: slugs } }, { nom: 'sets', projection: { 'bulba.expansion': 1 }, videAutorise: 'aucun des sets des produits listés n\'existe : le plan refuse chaque produit, nommé' }) : [];
+    const sets = new Map(setsLus.map(x => [x._id, x]));
+    return { lignes, produits, cartes, sets, cartesDuSet: slug => parSet.get(slug) || [], lignesBrutes };
 }
 
 async function executer({ argv, ouvrirLecture, ouvrirEcriture, lireListe, log = console.log, err = console.error, garde }) {

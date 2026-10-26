@@ -13,7 +13,7 @@ let ok = 0, ko = 0;
 const entre = (src, debut, fin) => { const a = src.indexOf(debut), b = src.indexOf(fin); if (a < 0 || b < a) throw new Error(`marqueurs ${debut}/${fin} introuvables : la mutation ne mord sur rien (§41)`); return src.slice(0, a) + src.slice(b + fin.length); };
 const remplacer = (src, de, par) => { if (!src.includes(de)) throw new Error(`motif introuvable « ${de.slice(0, 60)} » : la mutation ne mord sur rien (§41)`); return src.replace(de, par); };
 // les require relatifs du module muté pointent vers le dépôt
-const absolus = (src, dossier) => src.replace(/require\('\.\/([\w-]+)'\)/g, (_, m) => `require(${JSON.stringify(path.join(RACINE, dossier, m))})`);
+const absolus = (src, dossier) => src.replace(/require\('\.\/([\w\/-]+)'\)/g, (_, m) => `require(${JSON.stringify(path.join(RACINE, dossier, m))})`);
 
 function muter(nom, { fichier, dossier, transformer, banc, env }) {
     const f = path.join(tmp, `${nom}.js`);
@@ -31,6 +31,14 @@ muter('numero-de-la-ligne-non-compare', { ...CONF, transformer: s => remplacer(s
 muter('carte-de-la-ligne-non-comparee', { ...CONF, transformer: s => remplacer(s, 'if (conf.carteId == null || conf.carteId !== ligne.carteId)', 'if (false)') });
 muter('sources-declarees-non-confrontees-aux-concordantes', { ...CONF, transformer: s => remplacer(s, 'if (portees.length !== independantes.length || independantes.some(s => !portees.includes(s)))', 'if (false)') });
 muter('contradictions-toujours-vides', { ...CONF, transformer: s => remplacer(s, 'return (refusees || []).filter(', 'return [] || (refusees || []).filter(') });
+const OUTIL = { fichier: 'poser-confirmations.js', dossier: '', banc: 'test-poser-confirmations.js', env: 'POSER_MODULE' };
+muter('outil-sans-controle-du-nom-de-la-carte (I1)', { ...OUTIL, transformer: s => remplacer(s, 'if (!kp.some(k => kc.includes(k)))', 'if (false)') });
+muter('outil-sans-lien-du-numero-au-set (I2)', { ...OUTIL, transformer: s => remplacer(s, ' && expSet.includes(i.expansion)', '') });
+muter('outil-sans-controle-de-preuve-faible', { ...OUTIL, transformer: s => remplacer(s, 'if (!PREUVES_NOM_SEUL.includes(ligne.preuve))', 'if (false)') });
+muter('outil-sans-controle-de-la-carte-de-la-ligne (double garde : planifier ET confirmationConcorde)', { ...OUTIL, transformer: s => remplacer(remplacer(s, 'if (ligne.carteId !== e.carteId)', 'if (false)'), 'const v = K.confirmationConcorde(confirmation, { ligne, produit });', 'const v = { ok: true };') });
+muter('ecriture-sans-retest-carteId-preuve', { ...OUTIL, transformer: s => remplacer(s, 'carteId: l.carteId, preuve: l.preuve, ', '') });
+muter('slugSet-de-la-ligne-non-compare', { ...CONF, transformer: s => remplacer(s, 'if (ligne.slugSet != null && ligne.slugSet !== valeurs.set)', 'if (false)') });
+muter('numero-de-la-fiche-servie-non-compare', { ...CONF, transformer: s => remplacer(s, 'if (ficheNumero != null &&', 'if (false &&') });
 const CLASS = { fichier: 'audit-catalogue/classement.js', dossier: 'audit-catalogue', banc: 'audit-catalogue/test-classement.js', env: 'CLASSEMENT_MODULE' };
 muter('classement-croit-toute-confirmation-meme-ignoree', { ...CLASS, transformer: s => remplacer(s, 'confirmation.concorde === true', 'true') });
 muter('classement-leve-aussi-les-autres-motifs', { ...CLASS, transformer: s => remplacer(s, "if (sansNumero && setANumeros === true && numeroConnu === true) motifs.push('sans-numero');", "if (sansNumero && setANumeros === true && numeroConnu === true && !confirmee) motifs.push('sans-numero');") });
