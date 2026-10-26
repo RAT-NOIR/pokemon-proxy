@@ -21,7 +21,7 @@ const GROUPES = [
         ['validations contradictoires acceptées', "if (new Set(vs.map(v => `${v.sha256}|${v.regle}`)).size > 1) {", "if (false) {"],
         ['entrée mal formée acceptée', "if (forme) { refus.push(", "if (false) { refus.push("],
         ['preuve-lue : langue non comparée', "else if (lu.langue !== langueProduit) motifs.push('langue-differente');", ""],
-        ['preuve-lue : langue du tirage inconnue acceptée', "if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');\n    else if", "if (false) motifs.push('langue-du-tirage-inconnue');\n    else if"],
+        ['preuve-lue : langue du tirage inconnue acceptée', "if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');", "if (false) motifs.push('langue-du-tirage-inconnue');"],
         ['preuve-lue : numéro lu non comparé', "else if (J.cleNumero(n) !== J.cleNumero(np)) motifs.push('numero-different');", ""],
         ['preuve-lue : total non exigé', "if (n === '' || t === '') motifs.push('numero-ou-total-absent');", "if (n === '') motifs.push('numero-ou-total-absent');"],
         ['preuve-lue : tampon non comparé', "if (norm(lu.tampon) !== norm(produit?.tamponnee)) motifs.push('tampon-different');", ""],
