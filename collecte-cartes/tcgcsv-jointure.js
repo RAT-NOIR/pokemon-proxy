@@ -340,7 +340,8 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
     if (!url || !ligne || !Array.isArray(ligne.lignes) || ligne.lignes.length !== 1) return null;
     const l = ligne.lignes[0], langue = langueDeCategorie?.[categoryId] ?? null;
     if (!langue) return null;
-    return { carteId: l.carteId, slugSet: l.slugSet, numero: l.numeroFiche ?? null, produits: [joint.idProduct], slugProduit: ligne.slug ?? null, url, idSource: String(tcg.productId), groupe, langue, ecrivable: langue === 'en',
+    return { carteId: l.carteId, slugSet: l.slugSet, numero: l.numeroFiche ?? null, produits: [joint.idProduct], slugProduit: ligne.slug ?? null, url, idSource: String(tcg.productId), groupe, langue, ecrivable: false,       // B1 : tcs n'écrit JAMAIS seul (l'hôte d'images est fermé) ; ses images n'entrent que par le manifeste lu ou comme seconde source de la cascade
+       
         carteNom: ligne.carteNom ?? null, imageCount: tcg.imageCount ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.fort == null ? null : tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
         preuveNeutre: String(joint.niveau).startsWith('wcd')
             ? `jointure par année ${tcg.annee}, numéro d'origine ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », une seule carte de chaque côté pour cette année (un seul deck la joue)`
@@ -398,10 +399,13 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
         if (p.lignes.length !== 1) { restes.push({ idProduct, motif: p.lignes.length ? 'plusieurs-lignes' : 'sans-ligne', groupId: j.groupId }); continue; }
         if (p.images.some(i => i?.set === p.lignes[0].slugSet)) { restes.push({ idProduct, motif: 'deja-image', groupId: j.groupId }); continue; }
         if (tcgDe.get(j.joint.productId)?.imageCount === 0) { restes.push({ idProduct, motif: 'sans-image-chez-la-source', groupId: j.groupId }); continue; }       // le marché n'a aucun fichier : l'adresse répondrait 403 (arrêt de l'hôte)
+        // B2 : le TÉMOIN de la fiche (la même fonction que la calibration) : un nom ou un numéro du marché qui contredit NOTRE fiche n'émet aucune unité
+        const tv = temoinFiche(tcgDe.get(j.joint.productId), p.fiche, { cm: p.lu });
+        if (tv.verdict === 'faux') { restes.push({ idProduct, motif: 'contredit-fiche', groupId: j.groupId, detail: tv.cause }); continue; }
         const exp = cm.expansions.get(p.idExpansion);
         const u = uniteDe({ joint: j.joint, tcg: tcgDe.get(j.joint.productId), ligne: { idProduct, lignes: p.lignes, carteNom: p.carteNom, slug: p.slug }, cm: p.lu, categoryId: j.joint.categoryId, langueDeCategorie, groupe: familleDe(p.slugSet, exp?.tirage), nomGroupe: lus.get(j.groupId)?.name });
         if (!u) { restes.push({ idProduct, motif: 'unite-impossible', groupId: j.groupId }); continue; }
-        unites.push({ ...u, groupeMarche: j.groupId });
+        unites.push({ ...u, groupeMarche: j.groupId, temoin: tv.verdict === 'non-jugeable' ? 'non-juge' : 'juge' });
     }
     const parMotif = {}; for (const r of restes) parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
     // la raison de CHAQUE produit Cardmarket non joint (le plan sur les trous la lit : « non joint » sans cause n'est pas un résultat)

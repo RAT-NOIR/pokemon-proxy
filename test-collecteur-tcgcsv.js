@@ -126,6 +126,14 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.strictEqual(r2.etat, 'deja-synchronise'); assert.strictEqual(r2.requetes, 0);
         assert.strictEqual(typeof K.def.synchronise, 'function');
     });
+    await test('M3 une synchro PARTIELLE (erreur serveur sautée, groupes restants) sort partielle, pas termine ; l\'état n\'est pas réussi ; le comblement la signale', async () => {
+        const dossier = tmp(), fichier = path.join(tmp(), 'r.json'), sy = path.join(tmp(), 's.json');
+        const t = { async get(u) { return /\/2208\/products$/.test(u) ? { status: 503, type: 'text/html', texte: 'x' } : transportOk0([]).get(u); } };
+        const r = await K.releve({ cli: mkCli(t, dossier), fichier, synchro: { fichier: sy }, now: J26 });
+        assert.strictEqual(r.etat, 'partielle'); assert.strictEqual(JSON.parse(fs.readFileSync(sy, 'utf8')).reussie, false);
+        const CO = require('./collecte-cartes/comblement');
+        const s = await CO.synchroniserFournisseurs({ fournisseurs: [{ code: 'tcs', def: { synchronise: async () => r } }] }); assert.strictEqual(s[0].attention, true);
+    });
     await test('T4 maximum (§38) : compté AVANT la première requête — fixe (robots, last-updated, catégories, 2 listes) + les produits au plus ; au cache ne compte pas ; le jour clos = 0', () => {
         const dossier = tmp(), F2 = K.fichiersDe(dossier, path.join(dossier, 'c'));
         const m0 = K.maximumReleve({ F: F2, releves: {}, plafondTotal: 300, synchro: null, now: J26 });
@@ -185,6 +193,11 @@ const transportOk = (appels = []) => ({ async get(u) {
             7002: { categoryId: 85, produits: [{ productId: 41, name: 'Jota - 1/1', number: '1/1', groupId: 7002, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/41_200w.jpg', imageCount: 1 }] } };
         const db = baseDb(); db.cartes.push({ _id: 21, nomEn: 'Alpha', impressions: [], images: [] }, { _id: 22, nomEn: 'Beta', impressions: [], images: [] }, { _id: 23, nomEn: 'Jota', impressions: [], images: [] });
         const r = await K.construirePlan({ db: fauxDb(db), releves: rel, dossierArrets: tmp(), cm, minCommuns: 1 });
+        // B1 : tcs n'écrit JAMAIS seul — toute unité est ecrivable:false (PP et TK11 compris), et l'écriture écarte tout
+        assert.ok(r.unites.length >= 5 && r.unites.every(u => u.ecrivable === false), 'toutes les unités tcs sont non écrivables');
+        assert.strictEqual(typeof K.def.ecritureFermee, 'string');
+        const ec = await RC.ecrire({ SRC: TC.SRC, unites: r.unites.filter(u => u.decision.action === 'ajouter'), M: { Carte: { db: { db: fauxDb(db) } } }, dossierCache: tmp(), indexImages: {}, compterSeulement: true, lecteur: RC.lecteurNatif(fauxDb(db)) });
+        assert.deepStrictEqual([ec.reel, ec.ecartees > 0], [0, true]);
         const cat = r.resume.catalogue; assert.strictEqual(cat.etat, 'planifie'); assert.strictEqual(cat.unites, 3);
         const parId = new Map(r.unites.filter(u => u.groupe !== 'PP' && u.groupe !== 'TK11').map(u => [u.produits[0], u]));
         assert.deepStrictEqual([parId.get(11).decision.action, parId.get(12).decision.action], ['ajouter', 'ajouter']);

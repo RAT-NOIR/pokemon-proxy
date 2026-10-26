@@ -282,6 +282,10 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     let recu = null;
     await CO.recolterUnites({ fournisseurs: [{ code: 'tcs', def: def('tcs', { construirePlan: async o => { recu = o; return { unites: [unite({ produits: [1], url: 'https://tcs/1.jpg', carteId: 1 })], restes: [], resume: { parGroupe: [{ etat: 'planifie' }] } }; } }) }], db: { cartes: 1 }, prod: { prod: 1 }, lireReleves: () => ({}), arret: () => null });
     v('T4 : le plan du fournisseur reçoit `prod` (la production en lecture seule)', [recu.db, recu.prod], [{ cartes: 1 }, { prod: 1 }]);
+    // B1 : un fournisseur qui n'écrit pas seul ne peut pas être le gagnant
+    const gc = (ecrivable) => CO.choisirGagnant({ paireSources: ['tcs', 'scx'], candidats: [{ code: 'tcs', unite: { ecrivable: false } }, { code: 'scx', unite: { ecrivable } }], largeurDe: u => (u.ecrivable === false ? 716 : 500), ordre: ['scx', 'tcs'] });
+    v('B1 : le gagnant est la source ÉCRIVABLE même si tcs est plus large', gc(undefined).code, 'scx');
+    await leve('B1 : aucune source écrivable dans la paire : pas de gagnant', async () => gc(false).code, /écrivable/);
     // T4 : la synchro quotidienne conditionnelle d'un fournisseur, avant le plan — un échec n'arrête PAS la nuit (il est dit), un arrêt d'hôte non plus
     const traces = [];
     const sy = await CO.synchroniserFournisseurs({ fournisseurs: [

@@ -135,6 +135,7 @@ async function lancer(def, args = process.argv.slice(2)) {
         }
         // --ecrire : seulement sous lot-additif.js, AUCUNE requête
         require('./images-empruntees').garderSousLot(process.env, process.ppid);
+        if (def.ecritureFermee) { console.log('ÉCRITURE FERMÉE : '+def.ecritureFermee+' · attendu '+val('attendu')+' · écrit 0 · REQUÊTES 0'); return; }
         const { ouvrirConnexions } = require('./garde');
         const { modeles } = require('./schemas');
         const r2 = require('./r2');

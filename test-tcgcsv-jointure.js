@@ -153,6 +153,23 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.deepStrictEqual(r.joints.map(j => [j.idProduct, j.niveau]), [[1, 'nom-seul'], [2, 'nom-seul']]);
         assert.deepStrictEqual(r.non.map(x => x.motif).sort(), ['ambigu-cm', 'ambigu-cm', 'marqueur-tcg-seul'].sort(), 'Bulbasaur x2 chez nous : ambigu ; Potion (Bulbasaur) : marqueur d un seul côté');
     });
+    await test('nom seul — l\'unicité côté MARCHÉ : deux produits du marché au même nom pour un des nôtres = ambigu-tcg, rien de joint', () => {
+        const tcg = ['Ivysaur', 'Ivysaur'].map((n, i) => JT.lireTcg({ productId: 70 + i, name: n, number: null, rarity: 'Promo', imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg' }));
+        const r = JT.joindre({ tcg, cm: [JT.lireCm(C(1, 'Ivysaur', null, { slug: 'Ivysaur-X' }))], nomSeul: true });
+        assert.deepStrictEqual([r.joints.length, r.non.map(x => x.motif)], [0, ['ambigu-tcg']]);
+    });
+    await test('B2 le plan interroge le TÉMOIN de la fiche : un nom du marché qui contredit la fiche n\'émet aucune unité (contredit-fiche, cas réel 275022) ; non jugeable : unité marquée non-juge ; jugé : juge', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const nc = [[275022, 'Power Charge', '147'], [2, 'Autre', '2'], [3, 'Tiers', '3']].map(([idProduct, n, num]) => ({ idProduct, idExpansion: 10, slugSet: 'Set-A', codeSet: 'X', numero: num, slug: n + '-X' + num }));
+        const cm = D.assemblerCm({ sets: [{ _id: 'Set-A', tirage: 'intl' }], nc, cat: nc.map(x => ({ idProduct: x.idProduct, name: x.slug.split('-X')[0] })),
+            cartes: [{ _id: 1, nomEn: 'Energy Charge', impressions: [{ numero: '147', total: '165' }], images: [] }, { _id: 2, nomEn: 'Autre', impressions: [{ numero: '2', total: '3' }], images: [] }, { _id: 3, nomEn: 'Tiers', impressions: [], images: [] }],
+            cp: nc.map((x, i) => ({ idProduct: x.idProduct, carteId: i + 1, slugSet: 'Set-A', numeroFiche: x.numero })) });
+        const P = (id, n, num) => ({ productId: id, name: n + ' - ' + num + '/3', number: num + '/3', groupId: 5, rarity: 'Rare', imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/' + id + '_200w.jpg' });
+        const rel = { categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 5, name: 'G5' }], 85: [] }, 5: { categoryId: 3, produits: [P(901, 'Power Charge', '147'), P(902, 'Autre', '2'), P(903, 'Tiers', '3')] } };
+        const r = JT.planifierCatalogue({ rel, cm, minCommuns: 1 });
+        assert.deepStrictEqual(r.unites.map(u => [u.produits[0], u.temoin]).sort(), [[2, 'juge'], [3, 'non-juge']]);
+        assert.deepStrictEqual(r.restes.map(x => [x.idProduct, x.motif]), [[275022, 'contredit-fiche']]); assert.strictEqual(r.resume.restesParMotif['contredit-fiche'], 1);
+    });
     await test('nom seul — la garde de TAILLE : le groupe et l\'expansion doivent avoir à peu près le même nombre de cartes (0,8 à 1,25) ; sinon rien ne se joint et le motif le dit', () => {
         const D = require('./collecte-cartes/tcgcsv-donnees');
         const cm = D.assemblerCm({ sets: [{ _id: 'E100', tirage: 'intl' }], cartes: [], cp: [], nc: NOMS.map((n, i) => ({ idProduct: 1000 + i, idExpansion: 100, slugSet: 'E100', codeSet: 'X', numero: null, slug: n })), cat: NOMS.map((n, i) => ({ idProduct: 1000 + i, name: n })) });
@@ -243,7 +260,7 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         const cm = JT.lireCm(C(1, 'Pikachu [x]', '025', { slugSet: 'Set-A' }));
         const ligne = { idProduct: 1, lignes: [{ carteId: 7, slugSet: 'Set-A', numeroFiche: '025' }], carteNom: 'Pikachu' };
         const u = JT.uniteDe({ joint: { idProduct: 1, productId: 10, niveau: 'fort' }, tcg: JT.lireTcg(T(10, 'Pikachu - 025/185', '025/185')), ligne, cm, categoryId: 3, langueDeCategorie: { 3: 'en', 85: 'ja' }, groupe: 'DIVERS', nomGroupe: 'Set A' });
-        assert.deepStrictEqual([u.carteId, u.slugSet, u.numero, u.produits, u.idSource, u.groupe, u.langue, u.url, u.numeroSource, u.ecrivable], [7, 'Set-A', '025', [1], '10', 'DIVERS', 'en', 'https://tcgplayer-cdn.tcgplayer.com/product/10_in_1000x1000.jpg', '25/185', true]);
+        assert.deepStrictEqual([u.carteId, u.slugSet, u.numero, u.produits, u.idSource, u.groupe, u.langue, u.url, u.numeroSource, u.ecrivable], [7, 'Set-A', '025', [1], '10', 'DIVERS', 'en', 'https://tcgplayer-cdn.tcgplayer.com/product/10_in_1000x1000.jpg', '25/185', false]);
         assert.ok(!/tcgplayer|tcgcsv/i.test(u.preuveNeutre));
         const j = JT.uniteDe({ joint: { idProduct: 1, productId: 10, niveau: 'fort' }, tcg: JT.lireTcg(T(10, 'Pikachu - 025/185', '025/185')), ligne, cm, categoryId: 85, langueDeCategorie: { 3: 'en', 85: 'ja' }, groupe: 'ASIE-jp', nomGroupe: 'x' });
         assert.deepStrictEqual([j.langue, j.ecrivable], ['ja', false]);
@@ -281,7 +298,7 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         const r = JT.planifierCatalogue({ rel, cm, minCommuns: 1 });
         const u = Object.fromEntries(r.unites.map(x => [x.produits[0], x]));
         assert.deepStrictEqual(Object.keys(u).sort(), ['1', '4']);
-        assert.deepStrictEqual([u[1].langue, u[1].ecrivable, u[1].groupe, u[1].carteId, u[1].idSource], ['en', true, 'OCCIDENTAL', 7, '101']);
+        assert.deepStrictEqual([u[1].langue, u[1].ecrivable, u[1].groupe, u[1].carteId, u[1].idSource], ['en', false, 'OCCIDENTAL', 7, '101']);
         assert.deepStrictEqual([u[4].langue, u[4].ecrivable, u[4].groupe], ['ja', false, 'JP']);
         assert.deepStrictEqual(Object.fromEntries(r.restes.map(x => [x.idProduct, x.motif])), { 2: 'deja-image', 3: 'plusieurs-lignes' });
         const exclu = JT.planifierCatalogue({ rel, cm, minCommuns: 1, exclureGroupes: new Set([1]) });

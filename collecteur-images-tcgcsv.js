@@ -127,6 +127,7 @@ async function releve({ cli, fichier, synchro = null, now = () => new Date() }) 
     const total = rel.listes ? Object.values(rel.listes).reduce((n, l) => n + l.length, 0) : 0;
     if (synchro && lastUpdated) {
         const reussie = etat === 'termine' && restants === 0;
+        if (etat === 'termine' && restants > 0) etat = 'partielle';       // M3 : des groupes restent à relever (erreur serveur sautée) : ni réussie ni « termine »
         RC.ecrireJson(synchro.fichier, { reussie, lastUpdated, ...(reussie ? { syncLe: t0.toISOString(), verifieLe: t0.toISOString() } : { verifieLe: etatSynchro?.verifieLe ?? null, interrompuLe: now().toISOString(), motif }), groupes: total, restants });
     }
     return { ...bilan(etat), resume: `groupes ${total - (restants ?? total)}/${total} relevés · catégories ${rel.categories ? JSON.stringify(rel.categories) : 'non lues'} · liste PP/kit ${rel.groupes ? (rel.groupes.erreurVerification ? 'ERREUR' : 'vérifiée') : 'non lue'} · à redemander ${restants ?? '?'}` };
@@ -167,7 +168,7 @@ async function construirePlan({ db, prod = null, releves, dossierArrets = RH.DOS
         for (const x of cat.restes) restes.push({ code: 'CATALOGUE', ...x });
         parGroupe.push({ code: 'CATALOGUE', etat: 'planifie', famille: 'catalogue', unites: cat.unites.length, restes: cat.restesParMotif, base: { groupes: cat.groupes, produitsJoints: cat.produitsJoints } });
     }
-    const decidees = (await RC.decider(SRC, unites, RC.lecteurNatif(db))).map(u => (u.ecrivable === false
+    const decidees = (await RC.decider(SRC, unites, RC.lecteurNatif(db))).map(u => (u.langue && u.langue !== 'en'
         // le visuel d'un tirage dont la langue n'est pas ouverte à l'écriture pour cette source (le japonais) : téléchargeable (preuve lue), JAMAIS écrit
         ? { ...u, decision: { action: 'cede', raison: `langue ${u.langue} : l'écriture n'est pas ouverte pour cette source (seul l'anglais l'est)`, remplace: [] } } : u));
     const decisions = {};
@@ -219,10 +220,10 @@ async function synchroniser({ dossier = DOSSIER, plafond = 2000, journal = m => 
 }
 const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images)`, clientDe: client,
     // les unités à télécharger : celles à ajouter ET les visuels non écrivables (japonais) dont la lecture sert de preuve ; jamais les autres
-    avecProduction: true, manifeste, synchronise: () => synchroniser(),
+    avecProduction: true, manifeste, ecritureFermee: 'tcs n\'écrit jamais seul (décision du testeur du 26/10 : hôte d\'images fermé) : aucune écriture ; images par le manifeste lu ou comme seconde source de la cascade', synchronise: () => synchroniser(),
     // GARDE ÉCRITE PAR CE QU'ELLE AUTORISE : une adresse n'est demandée que si le marché dit avoir un fichier (imageCount >= 1) ou si l'image est déjà au cache. Un imageCount INCONNU (relevé d'avant la version 2) n'autorise rien :
     // une adresse sans fichier répond 403, et un 403 sur une image arrête l'hôte pour tous (§17).
-    aTelecharger: (plan, { indexImages = {} } = {}) => plan.unites.filter(u => (u.decision?.action === 'ajouter' || u.ecrivable === false) && ((Number.isInteger(u.imageCount) && u.imageCount >= 1) || indexImages[u.url])),
+    aTelecharger: (plan, { indexImages = {} } = {}) => plan.unites.filter(u => (u.decision?.action === 'ajouter' || (u.langue && u.langue !== 'en')) && ((Number.isInteger(u.imageCount) && u.imageCount >= 1) || indexImages[u.url])),
     maximumReleve: o => maximumReleve({ ...o, synchro: o.synchro ?? (o.dossier ? { etat: RC.lireJson(fichierSynchro(o.dossier), null) } : null) }),
     releve: o => releve({ ...o, synchro: o.synchro ?? (o.dossier ? { fichier: fichierSynchro(o.dossier) } : null) }), construirePlan };
 if (require.main !== module) { module.exports = { synchroniser, manifeste, planCatalogue, maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }

@@ -292,6 +292,9 @@ function choisirGagnant({ paireSources, candidats, largeurDe, ordre }) {
         if (!c) throw new Error(`gagnant : la source « ${code} » de la paire n'est pas parmi les candidats`);
         return { ...c, w: Number(largeurDe(c.unite)) || 0 };
     });
+    const ecrivables = deux.filter(d => d.unite?.ecrivable !== false);       // B1 : un fournisseur qui n'écrit pas seul (tcs) ne peut pas être le gagnant
+    if (!ecrivables.length) throw new Error('gagnant : aucune des deux sources de la paire n\'est écrivable');
+    deux.length = 0; deux.push(...ecrivables);
     deux.sort((a, b) => (b.w - a.w) || (ordre.indexOf(a.code) - ordre.indexOf(b.code)));
     return { code: deux[0].code, unite: deux[0].unite, largeur: deux[0].w };
 }

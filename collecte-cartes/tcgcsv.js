@@ -134,7 +134,7 @@ function planifierPrizePacks({ lignes, produits }) {
         if (p.imageCount === 0) { reste(l, 'sans-image-chez-la-source', 'le marché n\'a aucun fichier pour ce produit (imageCount 0) : l\'adresse répondrait 403'); continue; }
         const url = urlPleine(p.url);
         if (!url) { reste(l, 'adresse-hors-forme', p.url); continue; }
-        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, groupe: 'PP', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${num}/${p.total}`,
+        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, ecrivable: false, groupe: 'PP', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${num}/${p.total}`,
             preuveNeutre: `série par le set ${l.slugSet}, origine n° ${num}/${p.total}, nom « ${p.nom} » = fiche « ${l.carte.nomEn} », total imprimé confirmé par la fiche, une seule série, un seul produit` });
     }
     const parMotif = {};
@@ -165,7 +165,7 @@ function planifierKit({ lignes, produits, code }) {
         if (p.imageCount === 0) { reste(l, 'sans-image-chez-la-source', 'le marché n\'a aucun fichier pour ce produit (imageCount 0) : l\'adresse répondrait 403'); continue; }
         const url = urlPleine(p.url);
         if (!url) { reste(l, 'adresse-hors-forme', p.url); continue; }
-        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, groupe: 'TK11', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${s.numero}/${p.total ?? p.prefixe}`,
+        unites.push({ carteId: l.carteId, slugSet: l.slugSet, numero: null, produits: [l.idProduct], slugProduit: l.slug, url, idSource: String(p.productId), imageCount: p.imageCount ?? null, ecrivable: false, groupe: 'TK11', carteNom: l.carte.nomEn, nomSource: p.name, numeroSource: `${s.numero}/${p.total ?? p.prefixe}`,
             preuveNeutre: `kit ${code}, origine n° ${s.numero}, nom « ${p.nom} » = fiche « ${l.carte.nomEn} », total imprimé confirmé par la fiche, un seul produit de chaque côté` });
     }
     const parMotif = {};
