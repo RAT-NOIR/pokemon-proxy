@@ -6,13 +6,16 @@
 // Une désignation par le nom seul serait la clé que le CLAUDE.md refuse ; ici la clé est le NOM + LES ATTAQUES (cle-nom-attaques.js, calibrée) et le
 // TÉMOIN est ce que la clé n'a pas utilisé : la métacarte Cardmarket, le niveau, et — selon la voie — le numéro que la CARTE déclare elle-même, ou la Setlist.
 // ÉCRIT PAR CE QU'ELLE AUTORISE (en tête du CLAUDE.md) : quatre voies nommées, tout le reste est refusé et dit sa cause ; un doute est un refus.
-const { clesNom, nomJointDe, temoinDuNom } = require('./jointure');
+const { clesNom, nomJointDe, temoinDuNom, cleNumero } = require('./jointure');
 const { indexer, candidats } = require('./cle-nom-attaques');
+const { rejouer, contradictions } = require('./deux-sources');
 
 /** Le témoin du nom, celui de la PRODUCTION (jointure.js) — injectable pour l'observer (il ne contredit jamais une carte que la clé vient de désigner : mêmes clés de nom). */
 const TEMOIN_PRODUCTION = temoinDuNom;
 
-const VOIES = ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage'];
+// (V5, 2026-10-26) La 5e voie, « deux-sources » : la seconde source INDÉPENDANTE (deux-sources.js : liste fermée, Bulbapedia exclue) remplace la Setlist. Elle sert là où la Setlist ne peut pas prouver :
+// un numéro hors de la Setlist, ou une Setlist dont les numéros sont ceux d'un AUTRE tirage (SV-P/CS : les titres portent les numéros des promos anglais). La Setlist n'est JAMAIS lue par cette voie.
+const VOIES = ['impression-numero', 'impression-equivalente', 'setlist', 'impression-du-tirage', 'deux-sources'];
 
 /** Numéro comparable : minuscules, zéros de tête ôtés, SUFFIXE GARDÉ (« 143a » n'est pas « 143 »). */
 const nu = n => String(n ?? '').trim().toLowerCase().replace(/^0+(?=\d)/, '');
@@ -40,9 +43,31 @@ function variantesDuProduit(p) {
 /** « Nom (Jeton N) » → { nom, jeton, num } — la forme que lit la règle R (regle-r-fiches.js) pour les titres de la Setlist. */
 const parseTitre = t => { const m = /^(.*) \(([^()]*) ([^\s()]+)\)\s*$/.exec(String(t)); return m ? { nom: m[1], jeton: m[2], num: m[3] } : { nom: String(t), jeton: null, num: null }; };
 
+/** Les numéros (cleNumero) que l'on connaît à une carte : ses impressions. Une fiche simple porte le numéro Cardmarket de son produit comme impression ; le planificateur y ajoute ceux de ses lignes. */
+const numerosImprimes = c => new Set((c.impressions || []).filter(i => i && i.numero != null && String(i.numero).trim() !== '').map(i => cleNumero(String(i.numero))));
+
+/**
+ * (V5) A3 — DÉPARTAGER PAR LE NUMÉRO DE LA FICHE SIMPLE : une fiche simple (ficheSimple posée pour UN produit) qui porte le numéro d'un AUTRE produit — et pas celui-ci — n'est pas candidate.
+ * Écrit par ce qu'il autorise : seule une fiche simple (jamais une vraie carte : un texte réimprimé a plusieurs numéros) est écartée, et seulement si
+ *   · on CONNAÎT au moins un de ses numéros et AUCUN n'est celui du produit (« elle porte le numéro d'un autre produit »), ou
+ *   · (`slugSet` donné) elle est rangée dans des sets qui ne comprennent PAS celui du produit : c'est la carte du produit de SON set, le même numéro n'y est qu'une coïncidence (M-P n°001 ≠ SV-P n°001).
+ * Une fiche simple dont on ne connaît ni numéro ni set reste candidate (un doute est un refus).
+ * @returns {object[]} les candidates qui restent
+ */
+function departagerParLeNumero(cands, numeroProduit, numerosDe = numerosImprimes, slugSet = null) {
+    const n = cleNumero(String(numeroProduit ?? ''));
+    return cands.filter(c => {
+        if (!c.ficheSimple) return true;
+        if (slugSet != null && (c.sets || []).length && !c.sets.includes(slugSet)) return false;
+        const connus = numerosDe(c);
+        return !(connus.size && !connus.has(n));
+    });
+}
+
 /**
  * @param {object} o
- * @param {object} o.entree   { idProduct, carteId, voie, tirage, expansionImpression?, prefixe?, total? }
+ * @param {object} o.entree   { idProduct, carteId, voie, tirage, expansionImpression?, prefixe?, total? } — voie « deux-sources » : + slugSet, secondeSource: { concordantes, refusees }
+ * @param {(c: object) => Set<string>} [o.numerosDe]  voie « deux-sources » : les numéros (cleNumero) connus d'une carte (défaut : ses impressions)
  * @param {object} o.produit  { idProduct, idMetacard, name, nom, attaques, niveau, numero, idExpansion }
  * @param {object} o.carte    document `cartes` (nomEn, niveau, attaques, impressions, liens)
  * @param {object[]} o.cartesDuSet     les cartes du set de la ligne (le témoin du nom de joindre())
@@ -50,7 +75,7 @@ const parseTitre = t => { const m = /^(.*) \(([^()]*) ([^\s()]+)\)\s*$/.exec(Str
  * @param {{pages: object[]}|null} o.etatSetlist  `collecte_etat` du set, pour la voie « setlist »
  * @returns {{ ok: boolean, temoins: string[], refus: string[] }}
  */
-function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [], etatSetlist = null, temoin = TEMOIN_PRODUCTION }) {
+function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [], etatSetlist = null, temoin = TEMOIN_PRODUCTION, numerosDe = numerosImprimes, index: indexDonne = null }) {
     // (`produit` est réassigné par ⓪ : une COPIE avec l'attaque corrigée, jamais le document lu)
     const temoins = [], refus = [];
     if (!VOIES.includes(entree.voie)) return { ok: false, temoins, refus: [`voie « ${entree.voie} » inconnue : la liste des voies est fermée (${VOIES.join(', ')})`] };
@@ -66,7 +91,7 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     if (refus.length) return { ok: false, temoins, refus };
 
     // ① NOM + ATTAQUES (la clé) : la carte est parmi les candidates de l'une des variantes du nom du produit
-    const index = indexer(cartesPourCle);
+    const index = indexDonne || indexer(cartesPourCle);        // `index` : l'index de cartesPourCle, construit UNE fois par un appelant qui juge des centaines de produits (même fonction, même résultat)
     let variante = null, cands = [];
     for (const v of variantesDuProduit(produit)) {
         const c = candidats(index, v, { forme: 'incluses' });
@@ -106,7 +131,29 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
         },
         'impression-du-tirage': c => (String(produit.numero ?? '').trim() === '' ? impressions(c).filter(i => i.expansion === entree.expansionImpression) : []),
     };
-    if (entree.voie === 'setlist') {
+    if (entree.voie === 'deux-sources') {
+        // LA SETLIST N'EST PAS LUE. Cardmarket = une source (le numéro du produit) ; la seconde est indépendante et se REJOUE ici, jamais crue sur un `ok` écrit ailleurs (deux-sources.js::rejouer).
+        const S = entree.secondeSource;
+        const numero = produit.numero == null ? '' : String(produit.numero).trim();
+        if (numero === '') refus.push('deux-sources : le produit n\'a pas de numéro Cardmarket — une seconde source ne confirme rien sans numéro');
+        else if (!S || !Array.isArray(S.concordantes)) refus.push('deux-sources : aucune seconde source écrite sur l\'entrée (secondeSource.concordantes absent)');
+        else {
+            const r = rejouer({ set: entree.slugSet, numero, nom: produit.nom }, S.concordantes);
+            if (!r.ok) refus.push(`deux-sources : la seconde source ne tient pas au rejeu (${r.motifs.join(' ; ')})`);
+            const contre = contradictions(S.refusees, produit.nom);
+            if (contre.length) refus.push(`deux-sources : contradiction — ${contre.slice(0, 2).map(c => `${c.source} ${c.ref ?? ''} : ${c.raison}`).join(' ; ')}`);
+            if (r.ok && !contre.length) temoins.push(`deux sources : Cardmarket (n°${numero}) + ${[...new Set(S.concordantes.map(c => c.source))].join(' + ')} concordent sur le set ${entree.slugSet}, le numéro et le nom (${S.concordantes.map(c => c.ref ?? c.source).slice(0, 3).join(' ; ')}) — la Setlist n'est pas lue`);
+        }
+        if (carte.ficheSimple) refus.push(`deux-sources : la carte ${carte._id} est une fiche simple (posée pour un autre produit)`);
+        if (!(carte.sets || []).includes(entree.slugSet)) refus.push(`deux-sources : la carte ${carte._id} n'est pas dans le set ${entree.slugSet} (cartes.sets)`);
+        if (variante) {
+            const restantes = departagerParLeNumero(cands, numero, numerosDe, entree.slugSet);
+            const autres = restantes.filter(c => c._id !== carte._id);
+            if (!restantes.some(c => c._id === carte._id)) refus.push(`deux-sources : la carte ${carte._id} est écartée par le numéro (fiche simple d'un autre produit)`);
+            else if (autres.length) refus.push(`deux-sources : ${autres.length} autre(s) candidate(s) après le départage par le numéro de la fiche simple (${autres.slice(0, 3).map(c => c._id).join(', ')}) — un doute est un refus`);
+            else temoins.push(cands.length > 1 ? `candidate unique : les ${cands.length - 1} autre(s) carte(s) de ce nom et de ces attaques sont des fiches simples d'AUTRES numéros` : 'candidate unique par nom + attaques');
+        }
+    } else if (entree.voie === 'setlist') {
         const pages = etatSetlist?.pages;
         if (!Array.isArray(pages) || !pages.length) refus.push('Setlist : aucune Setlist lue pour ce set (collecte_etat.pages vide ou absent)');
         else {
@@ -140,4 +187,4 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     return { ok: refus.length === 0, temoins, refus };
 }
 
-module.exports = { prouver, VOIES, TEMOIN_PRODUCTION, variantesDuProduit, parseTitre, nu };
+module.exports = { prouver, VOIES, TEMOIN_PRODUCTION, variantesDuProduit, parseTitre, nu, departagerParLeNumero, numerosImprimes };
