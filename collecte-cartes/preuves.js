@@ -46,6 +46,9 @@ const sha256De = b => crypto.createHash('sha256').update(b).digest('hex');
 /** Les deux derniers segments d'un nom d'hôte : « cdn.exemple.com » et « www.exemple.com » sont le même SITE (deux hôtes d'un même opérateur ne sont pas deux sources indépendantes). */
 const racineDe = h => String(h ?? '').trim().toLowerCase().split('.').slice(-2).join('.');
 const numeroDuProduit = p => { const n = p?.numero == null ? '' : String(p.numero).trim(); return n === '' ? null : n; };
+const PREFIXE_ALPHABETIQUE = /^[A-Za-z]+\d/;
+/** Les seuls sets où une position lue vaut preuve : slugSet `Battle-Academy*` (préfixe) et slugSet contenant `Trainer-Kit`. */
+const setAdmisPourPosition = slug => typeof slug === 'string' && (slug.startsWith('Battle-Academy') || slug.includes('Trainer-Kit'));
 /** Le nom lu sur le scan est-il celui du produit ? Nom Cardmarket décomposé (avant « [ ») puis `clesNom` de la jointure ; l'un ou l'autre côté vide = non. */
 const memeNomQueLeProduit = (lu, nomProduit) => {
     if (!texte(lu) || !texte(nomProduit)) return false;
@@ -147,9 +150,17 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
     if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');
     else if (lu.langue !== langueProduit) motifs.push('langue-differente');
     const np = numeroDuProduit(produit);
-    if (np != null) {
+    if (lu.position != null) {
+        // tour 2 (2) : la POSITION lue sur un symbole (deck, rond Battle Academy, moitié de kit) désigne le produit quand son numéro est une position ; elle remplace le numéro imprimé (qui reste écrit tel quel),
+        // le total n'est pas exigé. Liste FERMÉE de sets : ailleurs une position n'a aucune valeur de preuve.
+        if (!setAdmisPourPosition(produit?.slugSet)) motifs.push('position-hors-liste');
+        else if (!texte(lu.position)) motifs.push('position-vide');
+        else if (np == null) motifs.push('position-sans-numero-produit');
+        else if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) motifs.push('numero-different');
+    } else if (np != null) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
-        if (n === '' || t === '') motifs.push('numero-ou-total-absent');
+        // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
+        if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np)) motifs.push('numero-different');
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
@@ -247,7 +258,7 @@ function paireNommee(v, tous) {
 }
 const MARQUES_MAX = 12;
 /** Les seuls champs lus sur le scan qui s'écrivent (tour 1, point 2) : rien de libre — ni `note`, ni un champ que l'agent aurait ajouté. */
-const CHAMPS_LUS = Object.freeze(['nom', 'numero', 'total', 'langue', 'tampon', 'finition']);
+const CHAMPS_LUS = Object.freeze(['nom', 'numero', 'total', 'langue', 'tampon', 'finition', 'position']);
 const luEnumere = lu => Object.fromEntries(CHAMPS_LUS.map(k => [k, typeof lu?.[k] === 'string' || typeof lu?.[k] === 'number' ? lu[k] : null]));
 
 function preuvesDe(a) {

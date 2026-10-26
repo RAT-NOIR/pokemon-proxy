@@ -156,6 +156,32 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(e, produit({ numero: '' })).ok, true, 'numéro vide = pas de numéro');
     });
 
+    await test('tour 2 (1) : promo sans total — le total n\'est exigé que pour un numéro purement numérique (+ suffixe) ; un numéro à préfixe alphabétique se juge sans total, par cleNumero', () => {
+        const promo = (n, o = {}) => entree({ lu: { ...entree().lu, numero: n, total: null, ...o } });
+        assert.strictEqual(lue(promo('XY150a'), produit({ numero: 'XY150a' })).ok, true);
+        assert.strictEqual(lue(promo('SM30a'), produit({ numero: 'SM030a' })).ok, true, 'cleNumero : zéros ignorés');
+        assert.strictEqual(lue(promo('SM30', { total: '' }), produit({ numero: 'SM30' })).ok, true);
+        assert.match(lue(promo('XY150a'), produit({ numero: 'XY177a' })).motifs.join(), /numero-different/, 'sans total, le numéro est quand même comparé');
+        assert.match(lue(promo('13'), produit()).motifs.join(), /numero-ou-total-absent/, 'numérique sans total : refusé');
+        assert.match(lue(promo('13a'), produit({ numero: '13a' })).motifs.join(), /numero-ou-total-absent/, 'numérique + suffixe sans total : refusé');
+        assert.match(lue(promo(''), produit({ numero: 'XY150a' })).motifs.join(), /numero-ou-total-absent/);
+        assert.match(lue(promo('150a'), produit({ numero: 'XY150a' })).motifs.join(), /numero-ou-total-absent/);
+    });
+    await test('tour 2 (2) : position de deck (lu.position) — comparée au numéro du produit, sans total, seulement pour Battle-Academy* et *Trainer-Kit*, ailleurs position-hors-liste', () => {
+        const pos = (position, o = {}) => entree({ lu: { ...entree().lu, numero: '36', total: null, position, ...o } });
+        const BA = produit({ numero: 'C36', slugSet: 'Battle-Academy-2022' }), TK = produit({ numero: 'N', slugSet: 'XY-Trainer-Kit-Latias-Latios' });
+        assert.strictEqual(lue(pos('C36'), BA).ok, true);
+        assert.strictEqual(lue(pos('c036'), BA).ok, true, 'cleNumero');
+        assert.strictEqual(lue(pos('N'), TK).ok, true);
+        assert.strictEqual(lue(pos('C36', { numero: '999', total: '3' }), BA).ok, true, 'la position remplace le numéro imprimé : il n\'est plus comparé');
+        assert.match(lue(pos('C37'), BA).motifs.join(), /numero-different/, 'position fausse');
+        assert.match(lue(pos('C36'), produit({ numero: 'C36', slugSet: 'Autre-Set' })).motifs.join(), /position-hors-liste/);
+        assert.match(lue(pos('C36'), produit({ numero: 'C36', slugSet: 'Mon-Battle-Academy' })).motifs.join(), /position-hors-liste/, 'préfixe, pas inclusion');
+        assert.match(lue(pos('C36'), produit({ numero: null, slugSet: 'Battle-Academy-2022' })).motifs.join(), /position-sans-numero/);
+        assert.match(lue(pos(''), BA).motifs.join(), /position-vide/, 'une position vide n\'est pas une position');
+        assert.strictEqual(lue(entree(), produit({ slugSet: 'Autre-Set' })).ok, true, 'sans position, aucun effet sur les autres sets');
+    });
+
     // ───────── P3 : la règle deux-sources ─────────
     const seconde = (o = {}) => ({ url: 'https://cdn.beta.example/b/1.png', hote: 'cdn.beta.example', fichier: 'C:\\x\\b.bin', sha256: H2, w: 400, h: 560, lu: { ...entree().lu }, ...o });
     const E2 = (o = {}) => entree({ regle: 'deux-sources', seconde: seconde(), ...o });
@@ -229,12 +255,18 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     // tour 1 (4) : la forme STRUCTURÉE que porte le manifeste réel : { source, fichier, dit, paire: { normale, holo } } — plus de regex sur `dit`
     const nommee = (paire = { normale: 1001, holo: 1002 }, o = {}) => ({ source: 'boutique-x', fichier: 'C:\\x\\11.ts', dit: 'normale = 1001 (V1), holo = 1002 (V2)', paire, ...o });
     const FICHE = (...ids) => new Map([['77|Set-A|13', ids]]);
+    await test('tour 2 (2) : lu.numero (imprimé) et lu.position restent écrits, énumérés, dans preuveLue', () => {
+        const BA = produit({ numero: 'C36', slugSet: 'Battle-Academy-2022' });
+        const e = entree({ lu: { ...entree().lu, numero: '36', total: null, position: 'C36' } });
+        const { unites } = PV.grouperUnites({ acceptees: [accepte(e, BA)], fiches: new Map([[PV.cleFiche(BA), [1001]]]), famille: 'F' });
+        assert.deepStrictEqual([unites[0].champsEntree.preuveLue.lu.numero, unites[0].champsEntree.preuveLue.lu.position], ['36', 'C36']);
+    });
     await test('tour 1 (2) : AUCUN texte libre de l\'agent n\'est écrit : une note (et une marque) qui nomme une source n\'apparaît nulle part dans l\'entrée ni le document', async () => {
         const note = 'Scan Poképédia ; TCGdex et Cardmarket concordent', e = entree({ lu: { ...entree().lu, note, zzz: 'champ libre', finition: 'holo' }, sourcesConsultees: ['pokepedia.fr'], commentaire: 'libre' });
         const { unites } = PV.grouperUnites({ acceptees: [accepte(e, produit())], fiches: FICHE(1001), famille: 'MCD' });
         const p = unites[0].champsEntree.preuveLue;
         assert.deepStrictEqual(Object.keys(p).sort(), ['lu', 'luLe', 'marques', 'regle', 'valideLe']);
-        assert.deepStrictEqual(Object.keys(p.lu).sort(), ['finition', 'langue', 'nom', 'numero', 'tampon', 'total']);
+        assert.deepStrictEqual(Object.keys(p.lu).sort(), ['finition', 'langue', 'nom', 'numero', 'position', 'tampon', 'total']);
         const tout = JSON.stringify(unites[0]);
         for (const mot of ['Poképédia', 'TCGdex', 'Cardmarket', 'champ libre', 'commentaire', 'pokepedia']) assert.ok(!tout.includes(mot), `« ${mot} » ne doit pas figurer dans l'unité`);
         // une marque qui nomme une source est refusée (ce qu'on écrit ne doit pas la nommer)
