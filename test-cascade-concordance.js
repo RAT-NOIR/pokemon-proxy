@@ -124,6 +124,20 @@ const decider = (candidats, scansConformes, table) => C.deciderVisuel({ produit,
     r = await C.deciderVisuel({ produit, candidats: [{ source: 's1', buf: A, tirage: T() }, { source: 's2', buf: A, tirage: T({ langue: 'ja' }) }], scansConformes: [] });
     v('14. vraies images IDENTIQUES, langue différente : exclu, pas d\'écriture', [r.decision, r.motif, r.preuve.exclusTirage], ['trou', 'tirage-different', 1]);
 
+    // ── paireSources (additif, comblement nocturne) : les CODES SOURCE de la paire retenue, jamais les noms internes c0/c1 ──
+    r = await decider([cand('a', 's1'), cand('b', 's2')], [], { 'a|b': STRICT });
+    v('17a. paireSources, règle stricte : les deux sources de la paire', [r.preuve.regle, r.preuve.paireSources], ['strict', ['s1', 's2']]);
+    r = await decider([cand('a', 's1'), cand('b', 's2'), cand('c', 's3')], [], { 'a|c': STRICT });
+    v('17b. paireSources : la paire stricte est (s1, s3), pas (c0, c1) ni les deux premiers candidats', r.preuve.paireSources, ['s1', 's3']);
+    r = await decider([cand('a', 's1'), cand('b', 's2'), cand('c', 's3')], [], { 'a|b': SOUPLE, 'b|c': SOUPLE });
+    v('17c. paireSources, souple + tierce : la paire (pas la tierce)', [r.preuve.regle, r.preuve.paireSources], ['souple+tierce', ['s1', 's2']]);
+    r = await decider([cand('a', 's1'), cand('b', 's2')], [scan('z', T(), 'scan-conforme')], { 'a|z': STRICT });
+    v('17d. paireSources avec un scan conforme : sa source est nommée', r.preuve.paireSources, ['s1', 'scan-conforme']);
+    r = await decider([cand('a', ' S1 '), cand('b', 'S2')], [], { 'a|b': STRICT });
+    v('17e. paireSources : sources normalisées (minuscules, espaces)', r.preuve.paireSources, ['s1', 's2']);
+    r = await decider([cand('a', 's1'), cand('b', 's2')], [], { 'a|b': SOUPLE });
+    v('17f. à confirmer : pas de paireSources (rien n\'est écrit)', [r.decision, r.preuve.paireSources], ['a-confirmer', undefined]);
+
     console.log(`\n${ok} réussis, ${ko} échoués`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('ERREUR', e); process.exit(1); });

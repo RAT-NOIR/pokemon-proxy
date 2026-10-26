@@ -142,12 +142,13 @@ async function deciderVisuel({ produit, candidats = [], scansConformes = [] }, o
     }
     // 1. une arête STRICTE (deux sources indépendantes, ou une source et un vrai scan conforme) suffit
     const stricte = aretes.find(a => a.n === 'strict');
-    if (stricte) return { decision: 'ecrire', preuve: { ...preuve, regle: 'strict', paire: [stricte.x.nom, stricte.y.nom] } };
+    // `paireSources` (ADDITIF, comblement nocturne) : les deux CODES SOURCE de la paire retenue (sources normalisées) ; `paire` ne porte que des noms internes (c0, z0) qui indexent les candidats ADMIS
+    if (stricte) return { decision: 'ecrire', preuve: { ...preuve, regle: 'strict', paire: [stricte.x.nom, stricte.y.nom], paireSources: [stricte.x.source, stricte.y.source] } };
     // 2. une arête SOUPLE exige une TROISIÈME concordance (au moins souple) : un nœud d'une troisième source, relié à l'un des deux
     for (const a of aretes) {
         const tierce = aretes.find(b => b !== a && [b.x, b.y].some(n => n === a.x || n === a.y)
             && [b.x, b.y].some(n => n !== a.x && n !== a.y && n.source !== a.x.source && n.source !== a.y.source));
-        if (tierce) return { decision: 'ecrire', preuve: { ...preuve, regle: 'souple+tierce', paire: [a.x.nom, a.y.nom], tierce: [tierce.x.nom, tierce.y.nom] } };
+        if (tierce) return { decision: 'ecrire', preuve: { ...preuve, regle: 'souple+tierce', paire: [a.x.nom, a.y.nom], paireSources: [a.x.source, a.y.source], tierce: [tierce.x.nom, tierce.y.nom] } };
     }
     if (aretes.length) return { decision: 'a-confirmer', preuve: { ...preuve, regle: 'souple-seule', paire: [aretes[0].x.nom, aretes[0].y.nom] } };
     return { decision: 'trou', motif: comparees && illisibles === comparees ? 'illisible' : 'discordance-image', preuve };
