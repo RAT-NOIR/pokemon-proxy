@@ -10,7 +10,7 @@ const VE = require('../identifier/voisins-empreinte');
 const E = require('../identifier/empreinte-vecteur');
 const X = require('../identifier/index-empreintes');
 const etat = require('../identifier/etat-empreintes');
-const { consulterSurParImage } = require('../identifier/sur-par-image-route');
+const { consulterSurParImage, gardeVivier } = require('../identifier/sur-par-image-route');
 
 const ON = { ...A.ENV_EMPREINTE, V2_SUR_PAR_IMAGE: '1', V2_VIVIER_IMAGE: '1' };
 const cfgViv = lireConfig(ON);
@@ -212,6 +212,26 @@ const appel = (ids, over = {}) => consulterSurParImage({
         jum = await fournisseurParDefaut(catJ, vJ, [200]);              // candidat unique 200 ; le désigné de l'image (A=100) est un AJOUTÉ
         r = await appel([200], { jumeaux: jum, version: vJ });
         H.v('14b. 🔴 vrai fournisseur, le désigné A est un AJOUTÉ par le top 5 : rejeté (jumeaux), rien affirmé', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'jumeaux', 0]);
+    }
+    // ── (16) TOUR 2 : la garde du groupe s'écrit par ce qu'elle AUTORISE — l'ensemble à couvrir est [la clé n°1, ...son groupe] ; chaque produit doit être dans la liste ET avoir une ligne
+    {
+        const pF = ({ produits: pr, groupe = [], membres = [], top = [['c0', 0.95], ['c1', 0.5]] }) => ({ courant: { index: { contexteG: { produits: new Map(Object.entries(pr)), groupe: new Map(groupe), membres: new Map(membres) } } }, trouve: { top } });
+        const d = { cosinus: 0.95 }, liste = [100];
+        const lignes = new Map([[100, 1]]);
+        H.v('16a. 🔴 la clé n°1 SANS groupe porte un second produit (150) hors de la liste : silence (groupe-incomplet)', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1], [150, 1]], c1: [] } }), lignes), 'groupe-incomplet');
+        H.v('16b. … sans groupe et tous ses produits dans la liste, avec une ligne : autorisé', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1]], c1: [] } }), lignes), null);
+        H.v('16c. 🔴 un groupe existe mais ne contient pas la clé n°1 (donnée incohérente) : silence', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1]], c1: [], c9: [] }, groupe: [['c0', 7]], membres: [[7, ['c9']]] }), lignes), 'groupe-incomplet');
+        H.v('16d. 🔴 un groupe dont l\'entrée des membres est absente (groupe connu, membres inconnus) : silence', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1]], c1: [] }, groupe: [['c0', 7]], membres: [] }), lignes), 'groupe-incomplet');
+        H.v('16e. 🔴 un membre du groupe est dans la liste mais SANS ligne dans les produits chargés : silence', gardeVivier(d, [100, 101], pF({ produits: { c0: [[100, 1]], c1: [], c2: [[101, 1]] }, groupe: [['c0', 7], ['c2', 7]], membres: [[7, ['c0', 'c2']]] }), lignes), 'groupe-incomplet');
+        H.v('16f. … le même, avec sa ligne : autorisé', gardeVivier(d, [100, 101], pF({ produits: { c0: [[100, 1]], c1: [], c2: [[101, 1]] }, groupe: [['c0', 7], ['c2', 7]], membres: [[7, ['c0', 'c2']]] }), new Map([[100, 1], [101, 1]])), null);
+        H.v('16g. 🔴 le top n\'a que top[0] : l\'écart ne se contrôle pas, silence explicite (ecart-index)', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1]] }, top: [['c0', 0.95]] }), lignes), 'ecart-index');
+        H.v('16h. 🔴 un produit du groupe sans tableau de produits au contexte : silence', gardeVivier(d, liste, pF({ produits: { c0: [[100, 1]] }, groupe: [['c0', 7], ['c2', 7]], membres: [[7, ['c0', 'c2']]] }), lignes), 'groupe-incomplet');
+        // à travers la route : le catalogue ne rend pas la ligne d'un membre du groupe qui est dans la liste
+        installer({ [cles[0]]: 7, [cles[2]]: 7 });
+        remise();
+        const r = await appel([100], { charger: async ids => new Map(ids.filter(i => i !== 102).map(i => [i, ligne(i)])) });
+        H.v('16i. route : k2 (102) est du groupe de A et dans la liste, mais le catalogue n\'en rend pas la ligne : silence (la règle d\'avant le ferme déjà : meme-dessin), rien affirmé', [r && !r.resultat, r.trace.motif, affirmes.length], [true, 'meme-dessin', 0]);
+        installer();
     }
     H.bilan();
 })().catch(e => { console.error(e); process.exit(1); });

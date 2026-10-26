@@ -84,18 +84,26 @@ const K_VIVIER = 5;
  * Le désigné n'est affirmé que si (a) TOUS les produits de TOUS les membres de son groupe de dessin (ctx.membres) sont dans la liste jugée, et (b) l'écart de cosinus tient aussi contre top[1] de l'index (hors lui-même et son groupe).
  * Tout ce qui ne se prouve pas (contexte illisible, score absent) : silence. @returns null (autorisé) | le motif du silence
  */
-function gardeVivier(d, liste, p) {
+function gardeVivier(d, liste, p, prods) {
     try {
         const ctx = p.courant.index.contexteG, top = p.trouve.top;
         const cle = Array.isArray(top) && top.length ? top[0][0] : null;
-        if (!cle || !(ctx.produits instanceof Map) || !(ctx.groupe instanceof Map) || !(ctx.membres instanceof Map)) return 'groupe-incomplet';
-        const g0 = ctx.groupe.has(cle) ? ctx.groupe.get(cle) : undefined;
-        const membres = g0 !== undefined ? (ctx.membres.get(g0) || []) : [];
-        for (const k of membres) {
-            const prods = ctx.produits.get(k);
-            if (!Array.isArray(prods)) return 'groupe-incomplet';
-            for (const pr of prods) if (!Array.isArray(pr) || !liste.includes(pr[0])) return 'groupe-incomplet';
+        if (!cle || !(ctx.produits instanceof Map) || !(ctx.groupe instanceof Map) || !(ctx.membres instanceof Map) || !(prods instanceof Map)) return 'groupe-incomplet';
+        // l'ensemble à couvrir : la clé n°1 ELLE-MÊME (un produit au même fichier visuel est du même dessin) puis, si elle a un groupe, tous ses membres ; un groupe qui ne la contient pas est une donnée incohérente
+        let ensemble = [cle];
+        if (ctx.groupe.has(cle)) {
+            const membres = ctx.membres.get(ctx.groupe.get(cle));
+            if (!Array.isArray(membres) || !membres.includes(cle)) return 'groupe-incomplet';
+            ensemble = [...new Set([cle, ...membres])];
         }
+        for (const k of ensemble) {
+            const lesProduits = ctx.produits.get(k);
+            if (!Array.isArray(lesProduits)) return 'groupe-incomplet';
+            for (const pr of lesProduits) if (!Array.isArray(pr) || !liste.includes(pr[0]) || !prods.has(pr[0])) return 'groupe-incomplet';      // dans la liste ET une ligne de catalogue
+        }
+        // l'écart contre le 2e visuel de l'index : sans lui (top d'un seul visuel), il ne se contrôle pas : silence explicite
+        if (top.length < 2) return 'ecart-index';
+        const g0 = ctx.groupe.has(cle) ? ctx.groupe.get(cle) : undefined;
         const second = top.find((t, i) => i > 0 && t[0] !== cle && !(g0 !== undefined && ctx.groupe.get(t[0]) === g0));
         if (second && !(d.cosinus - second[1] >= SPI.MARGE)) return 'ecart-index';
         return null;
@@ -165,7 +173,7 @@ async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produi
                     prods = new Map(produits); for (const [k, v] of lignes) prods.set(k, v);
                     liste = [...ids, ...extras];
                     d = juger(liste, prods); vivier.charge = true;
-                    if (d.sur) { const m = gardeVivier(d, liste, p); if (m) d = { sur: false, motif: m }; }
+                    if (d.sur) { const m = gardeVivier(d, liste, p, prods); if (m) d = { sur: false, motif: m }; }
                 } else { vivier.charge = false; d = { sur: false, motif: 'vivier-indisponible' }; }
             }
         }
@@ -181,4 +189,4 @@ async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produi
     } catch (e) { journal('sur par l\'image', e); return null; }                              // une exception n'est jamais une affirmation : la réponse d'avant
 }
 
-module.exports = { consulterSurParImage, critereImage, signauxDe, emprunteDe };
+module.exports = { gardeVivier, consulterSurParImage, critereImage, signauxDe, emprunteDe };

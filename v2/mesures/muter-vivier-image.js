@@ -20,8 +20,12 @@ const MUTANTS = [
     [R, T, 'une question à un seul candidat n\'est jamais relue', 'ids.length < (elargir ? 1 : 2)', 'ids.length < 2'],
     [R, T, 'l\'affirmation du vivier ne passe plus les lignes lues', 'aff = affirmer(d.produit, vivier ? prods : undefined, critere);', 'aff = affirmer(d.produit, undefined, critere);'],
     [R, T, 'le critère journalisé ne nomme plus le périmètre élargi', 'const critere = vivier ? critereVivier(d, vivier) : critereImage(d);', 'const critere = critereImage(d);'],
-    [R, T, 'garde du groupe de dessin et de top[1] retirée', 'if (d.sur) { const m = gardeVivier(d, liste, p); if (m) d = { sur: false, motif: m }; }', ''],
-    [R, T, 'garde : les membres du groupe de dessin ne sont plus exigés dans la liste', "for (const pr of prods) if (!Array.isArray(pr) || !liste.includes(pr[0])) return 'groupe-incomplet';", ''],
+    [R, T, 'garde du groupe de dessin et de top[1] retirée', 'if (d.sur) { const m = gardeVivier(d, liste, p, prods); if (m) d = { sur: false, motif: m }; }', ''],
+    [R, T, 'garde : les produits du groupe ne sont plus exigés dans la liste', "for (const pr of lesProduits) if (!Array.isArray(pr) || !liste.includes(pr[0]) || !prods.has(pr[0])) return 'groupe-incomplet';", ''],
+    [R, T, 'garde : les produits du groupe n\'ont plus besoin d\'une ligne dans les produits chargés', '|| !liste.includes(pr[0]) || !prods.has(pr[0])) return', '|| !liste.includes(pr[0])) return'],
+    [R, T, 'garde : la clé n°1 elle-même n\'est plus à couvrir (ensemble vide sans groupe)', 'let ensemble = [cle];', 'let ensemble = [];'],
+    [R, T, 'garde : un groupe qui ne contient pas la clé n°1 est toléré', '|| !membres.includes(cle)) return', ') return'],
+    [R, T, 'garde : un top d\'un seul visuel autorise (écart non contrôlé)', "if (top.length < 2) return 'ecart-index';", ''],
     [R, T, 'garde : l\'écart contre top[1] n\'est plus exigé', "if (second && !(d.cosinus - second[1] >= SPI.MARGE)) return 'ecart-index';", ''],
     [RT, TI, 'la route ne passe plus le lecteur de catalogue au vivier', 'charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,', '']
 ];
