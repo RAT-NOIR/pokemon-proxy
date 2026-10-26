@@ -219,6 +219,10 @@ function lireConfig(env = process.env) {
         // VIVIER-IMAGE : SUR-PAR-IMAGE relue sur un VIVIER ÉLARGI aux produits des 5 visuels les plus proches de la photo (index entier), quand la règle d'avant se tait ou n'a qu'un candidat (identifier/sur-par-image-route.js).
         // ÉTEINT par défaut (0) : la réponse est celle d'avant, octet pour octet. N'agit que si V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION sont allumés aussi ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         vivierImage: booleen('V2_VIVIER_IMAGE', env.V2_VIVIER_IMAGE, false),
+        // SPI-CONTRADICTIONS : la condition (6) de SUR-PAR-IMAGE (aucun champ lu ne contredit le désigné) compare avec un comparateur JUSTE (identifier/comparateur-image.js) : l'attaque d'une carte non anglaise est un nom anglais deviné,
+        // le préfixe d'une promo (XY85, SM46) n'est pas un code de set, un symbole e-Reader isolé n'est pas une preuve. Aucun champ n'est retiré du veto.
+        // ÉTEINT par défaut (0) : la réponse est celle d'avant, octet pour octet. N'agit que si V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION sont allumés aussi ; jamais sur un sûr, un refus ni un « je ne sais pas ».
+        spiComparateur: booleen('V2_SPI_COMPARATEUR', env.V2_SPI_COMPARATEUR, false),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),
