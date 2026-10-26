@@ -333,14 +333,14 @@ t('SEA borné : la liste fermée est exactement les 3 produits ; le set n\'entre
     assert.deepStrictEqual([...E.SETS_BORNES[SEA]], SEPT);   // décision du testeur du 24/10 : les 3 produits ET leurs 4 frères
     assert.deepStrictEqual(Object.keys(E.SETS_BORNES), [SEA]);
     assert.strictEqual(E.PERIMETRE.length, 9); assert(!E.PERIMETRE.includes(SEA)); assert.strictEqual(E.dansLePerimetre(SEA), false);
-    assert.deepStrictEqual([...E.SETS_LUS], [...E.PERIMETRE, SEA, ...Object.keys(E.ORIGINES_EXPLICITES)]);   // API-52 L1 : + les 2 sets Classic à origine explicite
+    assert.deepStrictEqual([...E.SETS_LUS], [...E.PERIMETRE, SEA, ...Object.keys(E.ORIGINES_EXPLICITES), ...Object.keys(E.ORIGINES_WCD)]);   // API-52 L1 : + les 2 sets Classic à origine explicite ; 27/10 : + les sets WCD de la liste fermée
     assert.throws(() => E.SETS_BORNES[SEA].push(1)); assert.throws(() => { 'use strict'; E.SETS_BORNES.autre = []; });
     for (const id of SEPT) { assert.strictEqual(E.estBorne(SEA, id), true); assert.strictEqual(E.dansLeChamp(SEA, id), true); assert.strictEqual(E.derivableDeLOrigine(SEA, id), true); }
     assert.strictEqual(E.estBorne(SEA, 901075), false); assert.strictEqual(E.dansLeChamp(SEA, 901075), false);
     assert.strictEqual(E.estBorne('WCD-2009', 901074), false); assert.strictEqual(E.dansLeChamp('WCD-2009', 901074), false);
 });
 t('verifierBornes : un set à liste fermée absent de la base lève et le nomme ; verifierPerimetre reste celui des 9 sets', () => {
-    const expl = Object.keys(E.ORIGINES_EXPLICITES);
+    const expl = [...Object.keys(E.ORIGINES_EXPLICITES), ...Object.keys(E.ORIGINES_WCD)];
     assert.doesNotThrow(() => E.verifierBornes([...E.PERIMETRE, SEA, ...expl])); assert.throws(() => E.verifierBornes([...E.PERIMETRE, ...expl]), /Southeast-Asia-Promos/); assert.throws(() => E.verifierBornes([]), /introuvable/);
     assert.doesNotThrow(() => E.verifierPerimetre(E.PERIMETRE));
 });
@@ -547,7 +547,9 @@ t('L1 : déjà couvert par une entrée du set → « déjà » ; idempotent ; re
     assert.strictEqual(plan(etatMasaki([ligneMasaki(744655, 'WCD-2009')])).refusWCD.length, 1);
 });
 t('L1 : verifierBornes exige aussi les sets à origine explicite ; verifierSelection les accepte ; les autres sets de Classic restent hors champ', () => {
-    assert.doesNotThrow(() => E.verifierBornes([SEA, CLK, CLF])); assert.throws(() => E.verifierBornes([SEA, CLK]), /Pokemon-Card-Game-Classic-Venusaur/); assert.throws(() => E.verifierBornes([CLK, CLF]), /Southeast/);
+    const W = Object.keys(E.ORIGINES_WCD);   // 27/10 : les sets WCD de la liste fermée sont exigés aussi
+    assert.doesNotThrow(() => E.verifierBornes([SEA, CLK, CLF, ...W])); assert.throws(() => E.verifierBornes([SEA, CLK, ...W]), /Pokemon-Card-Game-Classic-Venusaur/); assert.throws(() => E.verifierBornes([CLK, CLF, ...W]), /Southeast/);
+    assert.throws(() => E.verifierBornes([SEA, CLK, CLF, ...W.slice(1)]), new RegExp(W[0]));
     assert.doesNotThrow(() => E.verifierSelection([CLK, CLF])); assert.throws(() => E.verifierSelection([CLL]), /hors du champ/);
 });
 t('L1 : produitsHorsChamp nomme un produit de CLK hors liste ; le plan réel n\'en contient jamais', () => {
@@ -594,6 +596,71 @@ t('le script ne contient aucun vrai chemin du testeur dans ce banc et n\'ouvre a
     const src = fs.readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8') + fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'images-empruntees.js'), 'utf8');
     assert(!/Logo FR|apport-manuel|Desktop[\\/]LOGO/.test(src));
     assert(!/require\(['"](axios|https?|node-fetch|undici)['"]\)|\bfetch\(/.test(src));
+});
+
+// ── WCD (décision du testeur, 27/10) : un WCD dont la carte d'ORIGINE est prouvée (deux sources de données + concordance à l'image lue) reçoit le visuel d'origine, motif « autre tirage ».
+// LISTE FERMÉE PAR PRODUIT (collecte-cartes/origines-wcd.json) ; tout autre WCD reste refusé.
+const WS = 'WCD-2018', WID = 863158;   // Drampa-GX WCD 2018 → Guardians Rising n°115
+const oriGRI = (o = {}) => ({ set: 'Guardians-Rising', source: 'tcgdex', cleR2: 'tcgdex/Guardians-Rising/115-220753.webp', numero: '115', langue: 'en', w: 600, h: 825, vignette: { cleR2: 'vignettes/tcgdex/Guardians-Rising/115-220753.webp', w: 200, h: 275 }, ...o });
+const ligneWCD = (idProduct, o = {}) => ({ _id: `220753|${idProduct}`, carteId: 220753, idProduct, slugSet: WS, preuve: 'wcd+origine+numero', numeroFiche: null, detail: 'slug Drampa-GX-WCD18GRI-115 → tirage d\'origine GRI n°115 → produit(s) 297567 → une seule carte', ...o });
+const etatWCD = (lignes, images = [oriGRI()]) => etat(lignes, [carte(images, 220753)]);
+t('WCD : la liste fermée est gelée, non vide, ne porte QUE des sets « WCD… », et chaque origine a exactement ses 5 champs (set d\'origine jamais WCD)', () => {
+    const sets = Object.keys(E.ORIGINES_WCD); assert(sets.length > 0); assert(sets.every(E.estWCD), sets.join());
+    const n = sets.reduce((s, k) => s + Object.keys(E.ORIGINES_WCD[k]).length, 0); assert.strictEqual(n, 37);
+    for (const k of sets) for (const [id, o] of Object.entries(E.ORIGINES_WCD[k])) {
+        assert.deepStrictEqual(Object.keys(o).sort(), ['carteId', 'cleR2', 'numero', 'produitOrigine', 'setOrigine'], id);
+        assert(Number.isInteger(o.carteId) && o.carteId > 0 && Number.isInteger(o.produitOrigine) && typeof o.cleR2 === 'string' && o.cleR2 && typeof o.numero === 'string' && !E.estWCD(o.setOrigine), id);
+    }
+    assert.deepStrictEqual({ ...E.ORIGINES_WCD[WS][WID] }, { carteId: 220753, setOrigine: 'Guardians-Rising', numero: '115', cleR2: 'tcgdex/Guardians-Rising/115-220753.webp', produitOrigine: 297567 });
+    assert.throws(() => { 'use strict'; E.ORIGINES_WCD[WS][1] = {}; }); assert.throws(() => { 'use strict'; E.ORIGINES_WCD[WS][WID].cleR2 = 'x'; }); assert.throws(() => { 'use strict'; E.ORIGINES_WCD.autre = {}; });
+});
+t('WCD : seuls les produits listés entrent dans le champ ; le set reste « WCD » et hors périmètre ; jamais dérivé du detail', () => {
+    assert.strictEqual(E.dansLeChamp(WS, WID), true); assert.strictEqual(E.dansLeChamp(WS, 1), false); assert.strictEqual(E.dansLeChamp('WCD-2009', WID), false);
+    assert.strictEqual(E.estWCD(WS), true); assert.strictEqual(E.dansLePerimetre(WS), false); assert.strictEqual(E.derivableDeLOrigine(WS, WID), false);
+    assert.strictEqual(E.estBorne(WS, WID), true); assert.strictEqual(E.setBorne(WS), true);
+    assert(E.SETS_LUS.includes(WS)); assert.doesNotThrow(() => E.verifierSelection([WS]));
+});
+t('WCD : un produit listé reçoit UNE entrée = le visuel d\'origine, « autre tirage », languePreuve WCD (signature, dos, code non représentés), sans tampon', () => {
+    const p = plan(etatWCD([ligneWCD(WID)]));
+    assert.strictEqual(p.refus.length, 0, JSON.stringify(p.refus)); assert.strictEqual(p.refusWCD.length, 0); assert.strictEqual(p.ajouts.length, 1);
+    const e = p.ajouts[0].entree;
+    assert.strictEqual(e.set, WS); assert.strictEqual(e.numero, null); assert.strictEqual(e.cleR2, 'tcgdex/Guardians-Rising/115-220753.webp'); assert.strictEqual(e.langue, 'en'); assert.strictEqual(e.w, 600);
+    assert.strictEqual(e.differenceEmprunt, 'autre-tirage'); assert.strictEqual(e.imageEmprunteeTirage, true); assert(!('tamponNonRepresente' in e));
+    assert.strictEqual(e.languePreuve, E.LANGUE_PREUVE_WCD); assert(/autre tirage/.test(e.languePreuve) && /signature/.test(e.languePreuve) && !/tampon/i.test(e.languePreuve), e.languePreuve);
+    assert.notStrictEqual(E.LANGUE_PREUVE_WCD, E.LANGUE_PREUVE_AUTRE_TIRAGE);
+    assert.deepStrictEqual(e.vignette, oriGRI().vignette);
+    assert.deepStrictEqual(E.produitsMentionEnAttente(p), [WID]);
+});
+t('WCD : un produit NON listé d\'un set WCD reste refusé (compté) ; un frère non listé de la même carte bloque le groupe', () => {
+    const p = plan(etatWCD([ligneWCD(1, { _id: 'x' })]));
+    assert.strictEqual(p.ajouts.length, 0); assert.strictEqual(p.refusWCD.length, 1);
+    const f = plan(etatWCD([ligneWCD(WID), ligneWCD(1, { _id: 'x' })]));
+    assert.strictEqual(f.ajouts.length, 0); assert.strictEqual(f.refusWCD.length, 1); assert.strictEqual(f.refus.length, 1); assert.deepStrictEqual(f.refus[0].freres, [1]);
+});
+t('WCD : origine absente, autre clé, autre set, autre numéro, sans langue, ou carte différente → refus nommé, rien posé', () => {
+    for (const images of [[], [oriGRI({ cleR2: 'tcgdex/x.webp' })], [oriGRI({ set: 'Autre' })], [oriGRI({ numero: '116' })], [oriGRI({ langue: null })], [oriGRI({ w: undefined })]]) {
+        const p = plan(etatWCD([ligneWCD(WID)], images)); assert.strictEqual(p.ajouts.length, 0, JSON.stringify(images)); assert.strictEqual(p.refus.length, 1);
+    }
+    const c = plan(etat([ligneWCD(WID, { carteId: 5 })], [carte([oriGRI()], 5)])); assert.strictEqual(c.ajouts.length, 0); assert.strictEqual(c.refus.length, 1);
+});
+t('WCD : un visuelSubstitut présent sur la ligne (même incomplet ou d\'une autre image) ne remplace JAMAIS l\'origine listée', () => {
+    for (const vs of [{ cleR2: 'tcgdex/Autre/1.webp', w: 600, h: 825 }, { cleR2: 'tcgdex/Autre/1.webp' }]) {
+        const p = plan(etatWCD([ligneWCD(WID, { visuelSubstitut: vs })]));
+        assert.strictEqual(p.refus.length, 0, JSON.stringify(p.refus)); assert.strictEqual(p.ajouts.length, 1); assert.strictEqual(p.ajouts[0].entree.cleR2, 'tcgdex/Guardians-Rising/115-220753.webp');
+    }
+});
+t('WCD : la garde de forme au chargement lève sur une entrée mal formée (set non WCD, origine WCD, champ manquant, id non numérique)', () => {
+    const bon = { carteId: 1, setOrigine: 'X', numero: '1', cleR2: 'a', produitOrigine: 2 };
+    assert.doesNotThrow(() => E.gelerOriginesWCD({ 'WCD-2018': { 5: bon } }));
+    for (const mal of [{ 'Base-Set': { 5: bon } }, { 'WCD-2018': { 5: { ...bon, setOrigine: 'WCD-2017' } } }, { 'WCD-2018': { 5: { ...bon, cleR2: '' } } }, { 'WCD-2018': { 5: { ...bon, carteId: '1' } } }, { 'WCD-2018': { x: bon } }, { 'WCD-2018': { 5: { ...bon, produitOrigine: undefined } } }])
+        assert.throws(() => E.gelerOriginesWCD(mal), /mal formée/, JSON.stringify(mal));
+});
+t('WCD : une entrée déjà présente dans le set WCD couvre la ligne (« déjà ») ; idempotent ; retrait exact', () => {
+    const d = plan(etatWCD([ligneWCD(WID)], [oriGRI(), { set: WS, source: 'ctr', cleR2: 'ctr/WCD-2018/1.webp', numero: null, langue: 'en', w: 200, h: 280 }]));
+    assert.strictEqual(d.ajouts.length, 0); assert.strictEqual(d.deja.length, 1);
+    const e = etatWCD([ligneWCD(WID)]); const p = plan(e); const ap = E.appliquer(e, p);
+    assert.strictEqual(E.planifier({ ...e, cartes: ap.cartes }).ajouts.length, 0);
+    assert.deepStrictEqual(E.retirer({ cartes: ap.cartes }, E.manifeste(p)).cartes.get(220753), e.cartes.get(220753));
 });
 
 console.log(`\n${n} ok, ${ko} échec(s)`); process.exit(ko ? 1 : 0);

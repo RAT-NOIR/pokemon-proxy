@@ -5,7 +5,8 @@
 //   node lot-additif.js --quoi="TAMPONNEES : …" --collections=cartes [--annonce=<annonce.json>] -- node poser-images-empruntees.js --attendu=<N> --ecrire
 //   node poser-images-empruntees.js --retirer [--ecrire --attendu=<N>]                           (le retrait EXACT, d'après manifeste.json)
 // Écrit : un $push gardé d'UNE entrée dans cartes.images, par (carte, set, numéro). Aucun document `images`, aucune autre collection.
-// La décision (testeur, 2026-10-17 soir) : l'image du tirage normal (cartes_produits.visuelSubstitut) est permise POUR L'AFFICHAGE SEULEMENT, marquée `imageEmprunteeTirage: true`. WCD : jamais.
+// La décision (testeur, 2026-10-17 soir) : l'image du tirage normal (cartes_produits.visuelSubstitut) est permise POUR L'AFFICHAGE SEULEMENT, marquée `imageEmprunteeTirage: true`. WCD : jamais —
+// sauf, depuis le 27/10 (testeur), les produits de la liste fermée collecte-cartes/origines-wcd.json (visuel de la carte d'origine, motif « autre tirage »).
 // La règle du SITE est importée de sa lib (lecture seule), jamais recopiée. Un produit perdu, ou une image déjà servie qui change : ARRÊT.
 const fs = require('fs');
 const path = require('path');
@@ -26,7 +27,8 @@ async function lireEtat(dbCartes) {
     const lignes = await dbCartes.collection('cartes_produits').find({ $or: [{ idExpansion: { $in: exps } }, { slugSet: /^wcd/i }] }, { projection: { ...proj, preuve: 1, origine: 1 } }).toArray();
     const cartesDocs = await dbCartes.collection('cartes').find({ sets: { $in: [...E.SETS_LUS] } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray();
     // les cartes des substituts (la même carte porte l'image d'origine) : déjà dans cartesDocs quand elle est du périmètre ; sinon lues à part
-    const manque = [...new Set(lignes.filter(l => E.dansLePerimetre(l.slugSet) && l.carteId > 0 && l.visuelSubstitut?.cleR2).map(l => l.carteId))].filter(id => !cartesDocs.some(c => c._id === id));
+    // 27/10 : et les cartes des WCD de la liste fermée (une ligne WCD ne pose jamais le set dans cartes.sets : la carte d'origine n'est pas lue par `sets`)
+    const manque = [...new Set(lignes.filter(l => l.carteId > 0 && ((E.dansLePerimetre(l.slugSet) && l.visuelSubstitut?.cleR2) || E.origineWCD(l.slugSet, l.idProduct))).map(l => l.carteId))].filter(id => !cartesDocs.some(c => c._id === id));
     if (manque.length) cartesDocs.push(...await dbCartes.collection('cartes').find({ _id: { $in: manque } }, { projection: { impressions: 1, images: 1, nomEn: 1, sets: 1 } }).toArray());
     // Trick or Trade 2024 : le set d'origine se lit sur la ligne du premier produit d'origine cité, ou sur le nom de set entre parenthèses (égalité exacte avec nomAffichage / nomEn)
     const idsOrigine = [...new Set(lignes.filter(l => E.derivableDeLOrigine(l.slugSet, l.idProduct) && !l.visuelSubstitut?.cleR2).map(l => E.origineDeLaLigne(l).idProduct).filter(x => Number.isInteger(x)))];
