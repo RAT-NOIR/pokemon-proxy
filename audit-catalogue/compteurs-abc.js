@@ -65,6 +65,7 @@ function calculerCompteurs({ produits, lignesSet, denominateur, rang = 20, contr
         // avec la ligne (modifiée depuis) sont IGNORÉES et comptées : un champ écrit n'est jamais lu comme vrai sans être rejoué.
         confirmeesDeuxSources: produits.filter(p => (p.fiche.infos || []).includes('confirmee-deux-sources')).length,
         confirmeesLevees: produits.filter(p => p.fiche.classe === 'FICHE_OK' && (p.fiche.infos || []).includes('confirmee-deux-sources')).length,
+        confirmeesGeneriques: produits.filter(p => (p.fiche.infos || []).includes('confirmee-generique')).length,
         confirmationsIgnorees: produits.filter(p => (p.fiche.infos || []).includes('confirmation-ignoree')).length,
         marquageAConfirmer: 'inexistant',
         note: 'Aucun marquage « à confirmer » ni exclusion de l\'identification n\'existe aujourd\'hui : ces fiches sont SERVIES telles quelles. Ce compteur dit combien devraient être marquées, pas combien le sont.',
@@ -249,6 +250,7 @@ function formater(R, E) {
     out.push(`\n══ B — FICHES DOUTEUSES SERVIES : ${R.B.douteuses} (${pct(R.B.douteuses, N)}) · motifs (non exclusifs) ${JSON.stringify(R.B.motifs)} · par nombre de motifs ${JSON.stringify(R.B.motifsParNombre)}`);
     out.push(`   ⚠️ marquage « à confirmer » : ${R.B.marquageAConfirmer}. ${R.B.note}`);
     out.push(`   B1 : confirmées par deux sources ${R.B.confirmeesDeuxSources} (dont levées ${R.B.confirmeesLevees}, sorties de B) · confirmations ignorées ${R.B.confirmationsIgnorees} (la ligne a changé depuis : jamais lues comme vraies)`);
+    out.push(`   B1 : dont visuel générique sans marque de set ${R.B.confirmeesGeneriques ?? 0} (énergie de base, promo chinoise à jointure virtuelle ; décision du testeur 26/10)`);
     if (R.B.controleTemoin) out.push(`   témoin du nom : sur ${R.B.controleTemoin.essais} fiches fabriquées fausses il en contredit ${R.B.controleTemoin.contredits} ; sur ${R.B.controleTemoin.vraiesTestees} vraies il se tait ${R.B.controleTemoin.silenceSurLaVraie} fois · témoin muet sur ${R.B.temoinMuet} produits (zéro « contredite » n'est une mesure que si le témoin SAIT refuser)`);
     out.push(`\n══ C — VISUELS (dénominateur ${N}) : vrai scan servi ${R.C.vraiScan} (${pct(R.C.vraiScan, N)}) · emprunté ${R.C.emprunte} (${pct(R.C.emprunte, N)}) · basse définition ${R.C.basseDefinition} (${pct(R.C.basseDefinition, N)}) · AUCUN visuel ${R.C.aucunVisuel} (${pct(R.C.aucunVisuel, N)})`);
     out.push(`   emprunté : avec mention ${R.C.empruntesAvecMention} · SANS mention ${R.C.empruntesSansMention} · par nature ${JSON.stringify(R.C.empruntesParNature)}`);

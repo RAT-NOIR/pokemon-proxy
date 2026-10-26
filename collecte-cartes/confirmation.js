@@ -15,12 +15,22 @@ const INSTRUMENT = 'poser-confirmations.js (B1) — rejeu de collecte-cartes/deu
 const CLASSE_CONFIRMEE = 'confirmee-deux-sources';
 const CONFIRMATION_IGNOREE = 'confirmation-ignoree';
 
-const dedoublonner = xs => [...new Set(xs)];
+// Décision du testeur (2026-10-26) : une carte sans aucune marque de set (énergie de base générique, promo chinoise à jointure virtuelle) a réellement ce visuel ; ce n'est pas un faux.
+// LISTE FERMÉE : tout autre cas reste refusé `carte-sans-impression-du-set`.
+const MARQUE_GENERIQUE = 'visuel générique, sans marque de set';
+const CAS_GENERIQUES = ['energie-de-base', 'promo-chinoise-jointure-virtuelle'];
+
+const dedoublonner =xs => [...new Set(xs)];
 
 /** Construit la valeur du champ. `produit` : { set, numero, nom } tels que Cardmarket les dit (slug appris, numéro appris, nom sans crochets). `concordantes` : celles de juger(). */
-function construire({ carteId, produit, concordantes, le, instrument = INSTRUMENT }) {
+function construire({ carteId, produit, concordantes, le, instrument = INSTRUMENT, generique }) {
     const cc = (concordantes || []).map(c => ({ source: c.source, ref: c.ref ?? null, set: c.set, numero: c.numero, nom: c.nom ?? null, par: c.par ?? 'nom' }));
-    return { sources: ['cardmarket', ...dedoublonner(cc.map(c => c.source))], valeurs: { set: produit.set, numero: String(produit.numero), nom: produit.nom }, carteId, concordantes: cc, le, instrument };
+    const conf = { sources: ['cardmarket', ...dedoublonner(cc.map(c => c.source))], valeurs: { set: produit.set, numero: String(produit.numero), nom: produit.nom }, carteId, concordantes: cc, le, instrument };
+    if (generique !== undefined) {
+        if (!CAS_GENERIQUES.includes(generique)) throw new Error(`cas générique inconnu « ${generique} » (liste fermée : ${CAS_GENERIQUES.join(', ')})`);
+        Object.assign(conf, { generique: true, marque: MARQUE_GENERIQUE, cas: generique });
+    }
+    return conf;
 }
 
 /**
@@ -55,6 +65,11 @@ function confirmationConcorde(conf, { ligne, produit, ficheNumero } = {}) {
     if (ligne.slugSet != null && ligne.slugSet !== valeurs.set) return refus(`set de la ligne « ${ligne.slugSet} » ≠ set confirmé « ${valeurs.set} »`);
     if (ficheNumero != null && String(ficheNumero).trim() !== '' && cleNumero(String(ficheNumero)) !== cleNumero(String(valeurs.numero))) return refus(`fiche servie au numéro ${ficheNumero} ≠ numéro confirmé ${valeurs.numero}`);
     // [CONCORDE-FIN]
+    // [GENERIQUE-DEBUT] une confirmation générique n'est valide que si marque et cas sont EXACTEMENT ceux de la liste fermée
+    if (conf.generique !== undefined || conf.marque !== undefined || conf.cas !== undefined) {
+        if (conf.generique !== true || conf.marque !== MARQUE_GENERIQUE || !CAS_GENERIQUES.includes(conf.cas)) return refus('confirmation générique mal formée (marque ou cas hors de la liste fermée)');
+    }
+    // [GENERIQUE-FIN]
     return { ok: true, motifs };
 }
 
@@ -64,7 +79,8 @@ function confirmationConcorde(conf, { ligne, produit, ficheNumero } = {}) {
  */
 function pourClasser(ligne, { produit, ficheNumero } = {}) {
     if (!ligne || ligne[CHAMP] === undefined || ligne[CHAMP] === null) return null;
-    return { concorde: confirmationConcorde(ligne[CHAMP], { ligne, produit, ficheNumero }).ok === true };
+    const concorde = confirmationConcorde(ligne[CHAMP], { ligne, produit, ficheNumero }).ok === true;
+    return { concorde, generique: concorde && ligne[CHAMP].generique === true };
 }
 
 // une finition en plus du même nom (« Water Energy Pokeball Holo ») n'est pas un autre nom (même tolérance que le scan AB : la finition ne se lit pas dans le nom de la carte)
@@ -83,4 +99,4 @@ function contradictions(refusees) {
     });
 }
 
-module.exports = { CHAMP, INSTRUMENT, CLASSE_CONFIRMEE, CONFIRMATION_IGNOREE, construire, confirmationConcorde, pourClasser, contradictions };
+module.exports = { MARQUE_GENERIQUE, CAS_GENERIQUES, CHAMP, INSTRUMENT, CLASSE_CONFIRMEE, CONFIRMATION_IGNOREE, construire, confirmationConcorde, pourClasser, contradictions };

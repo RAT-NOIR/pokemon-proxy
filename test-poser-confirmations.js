@@ -29,6 +29,9 @@ verifier('un produit confirmé, joint par le nom seul, dont la carte porte le nu
 verifier('la confirmation posée : sources, valeurs, carte, instrument, date', { s: p0.ecrire[0].confirmation.sources, v: p0.ecrire[0].confirmation.valeurs, c: p0.ecrire[0].confirmation.carteId, le: p0.ecrire[0].confirmation.le.toISOString(), i: /poser-confirmations/.test(p0.ecrire[0].confirmation.instrument) }, { s: ['cardmarket', 'tcgdex'], v: { set: 'EX-Emerald', numero: '103', nom: 'Water Energy' }, c: 7, le: '2026-10-26T12:00:00.000Z', i: true });
 verifier('le plan nomme la ligne par son _id', p0.ecrire[0]._id, '7|11');
 
+const CP = { ...CARTE, nomEn: 'Pikachu' }, CONCP = { ...CONC, nom: 'Pikachu' };
+const monP = (carte, o = {}) => monde({ produits: new Map([[11, { ...PRODUIT, name: 'Pikachu' }]]), cartes: new Map([[7, carte]]), cartesDuSet: () => [carte], ...o });
+const plP = (carte, o) => plan(entree({ concordantes: [CONCP] }), monP(carte, o));
 // ── les refus (une garde s'écrit par ce qu'elle autorise : chaque cas doit être refusé, nommé)
 const refuse = (nom, p, motif) => verifier(`refus : ${nom}`, [p.ecrire.length, p.refus.length, motif.test(raison(p))], [0, 1, true]);
 refuse('le produit n\'a aucune ligne', plan(entree(), monde({ lignes: new Map() })), /aucune ligne/);
@@ -44,7 +47,7 @@ refuse('le nom du produit a changé depuis le relevé', plan(entree(), monde({ p
 refuse('une seule source indépendante absente : aucune concordante', plan(entree({ concordantes: [] })), /deux sources|concord/);
 refuse('la seule seconde source est Bulbapedia', plan(entree({ concordantes: [{ ...CONC, source: 'bulbapedia' }] })), /deux sources|concord/);
 refuse('un relevé LISIBLE d\'une autre source dit un autre nom au même numéro : contradiction', plan(entree({ refusees: [{ source: 'artofpkm', ref: 'r', raison: 'nom discordant (« Fire Energy » / « Water Energy »)' }] })), /contradi/);
-refuse('la carte ne porte pas ce numéro (la ligne ne désigne pas la carte des sources)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '99' }] }]]) })), /numéro/);
+refuse('la carte ne porte pas ce numéro (la ligne ne désigne pas la carte des sources)', plP({ ...CP, impressions: [{ numero: '99', expansion: 'EX Emerald' }] }), /carte-sans-impression-du-set/);
 refuse('la carte est absente de la base', plan(entree(), monde({ cartes: new Map() })), /carte/);
 refuse('la carte n\'a pas de nom : le témoin du nom est muet, je ne conclus pas', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: null }]]) })), /témoin/);
 refuse('le témoin du nom désigne une autre carte du set pour ce produit', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Grass Energy' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Grass Energy' }, { _id: 9, nomEn: 'Water Energy', impressions: [], attaques: [], sets: ['EX-Emerald'] }] })), /nom de la carte|témoin/);
@@ -55,10 +58,32 @@ verifier('la carte porte « 16 », le produit « 016 » : accepté', plan(entree
 // ── tour 1 de la relecture : I1 (le NOM de la carte) et I2 (le numéro est celui du SET de la ligne)
 refuse('I1 Scyther/Scizor : la carte de la ligne porte un AUTRE nom que le produit confirmé', plan(entree({ concordantes: [{ ...CONC, nom: 'Scyther' }] }), monde({ produits: new Map([[11, { ...PRODUIT, name: 'Scyther' }]]), cartes: new Map([[7, { ...CARTE, nomEn: 'Scizor' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Scizor' }] })), /nom de la carte/);
 verifier('I1 : « Basic Water Energy » (carte) et « Water Energy » (produit) sont le même nom (clésNom de production)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Basic Water Energy' }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Basic Water Energy' }] })).ecrire.length, 1);
-refuse('I2 : la carte porte le numéro, mais dans un AUTRE set (aucune impression du set de la ligne)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '103', expansion: 'Autre Set' }] }]]) })), /carte-sans-impression-du-set/);
-refuse('I2 : la carte a une impression du set, mais à un autre numéro', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '99', expansion: 'EX Emerald' }, { numero: '103', expansion: 'Autre Set' }] }]]) })), /carte-sans-impression-du-set/);
-refuse('I2 : le set de la ligne n\'a pas de nom d\'expansion connu : je ne conclus pas', plan(entree(), monde({ sets: new Map([['EX-Emerald', { _id: 'EX-Emerald' }]]) })), /carte-sans-impression-du-set/);
-refuse('I2 : set absent de la base', plan(entree(), monde({ sets: new Map() })), /carte-sans-impression-du-set/);
+refuse('I2 : la carte porte le numéro, mais dans un AUTRE set (aucune impression du set de la ligne)', plP({ ...CP, impressions: [{ numero: '103', expansion: 'Autre Set' }] }), /carte-sans-impression-du-set/);
+refuse('I2 : la carte a une impression du set, mais à un autre numéro', plP({ ...CP, impressions: [{ numero: '99', expansion: 'EX Emerald' }, { numero: '103', expansion: 'Autre Set' }] }), /carte-sans-impression-du-set/);
+refuse('I2 : le set de la ligne n\'a pas de nom d\'expansion connu : je ne conclus pas', plP(CP, { sets: new Map([['EX-Emerald', { _id: 'EX-Emerald' }]]) }), /carte-sans-impression-du-set/);
+refuse('I2 : set absent de la base', plP(CP, { sets: new Map() }), /carte-sans-impression-du-set/);
+// ── cas génériques fermés (décision du testeur 26/10) : la carte n'a aucune marque de ce set, mais elle EST ce visuel
+const ENERGIE_SANS_SET = monde({ cartes: new Map([[7, { ...CARTE, impressions: [{ numero: '7', expansion: 'Autre Set' }] }]]) });
+const pg = plan(entree(), ENERGIE_SANS_SET);
+verifier('générique (a) énergie de base sans impression du set : 1 confirmation générique', [pg.ecrire.length, pg.refus.length, pg.ecrire[0]?.confirmation.generique, pg.ecrire[0]?.confirmation.cas, pg.ecrire[0]?.confirmation.marque], [1, 0, true, 'energie-de-base', 'visuel générique, sans marque de set']);
+verifier('générique (a) : « Basic Water Energy » accepté aussi', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Basic Water Energy', impressions: [] }]]), cartesDuSet: () => [CARTE] })).ecrire[0]?.confirmation.cas, 'energie-de-base');
+verifier('générique (a) : une énergie qui a l\'impression du set n\'est PAS générique (confirmation ordinaire)', [p0.ecrire[0].confirmation.generique, p0.ecrire[0].confirmation.cas], [undefined, undefined]);
+const SPEC = { _id: 'Pika-P', nomEn: 'Pikachu', niveau: null, attaques: [], impressions: [{ numero: '5', expansion: 'Autre Set', tirage: 'intl' }], sets: ['SV-P-ZH'] };
+const monZh = (tirage, o = {}) => monde({ lignes: new Map([[11, [{ ...LIGNE, slugSet: 'SV-P-ZH', carteId: 'Pika-P' }]]]), produits: new Map([[11, { ...PRODUIT, set: 'SV-P-ZH', name: 'Pikachu' }]]), cartes: new Map([['Pika-P', SPEC]]), cartesDuSet: () => [SPEC], sets: new Map([['SV-P-ZH', { _id: 'SV-P-ZH', tirage, bulba: { expansion: 'SV-P Promotional cards (ATCG)' } }]]), ...o });
+const entZh = entree({ carteId: 'Pika-P', concordantes: [{ ...CONC, set: 'SV-P-ZH', nom: 'Pikachu' }] });
+const pz = plan(entZh, monZh('zh-hans'));
+verifier('générique (b) promo chinoise : set zh-hans, carte sans impression de ce tirage', [pz.ecrire.length, pz.ecrire[0]?.confirmation.cas, pz.refus.length], [1, 'promo-chinoise-jointure-virtuelle', 0]);
+verifier('générique (b) : zh-hant aussi', plan(entZh, monZh('zh-hant')).ecrire[0]?.confirmation.cas, 'promo-chinoise-jointure-virtuelle');
+refuse('générique (b) : set de tirage intl : refusé', plan(entZh, monZh('intl')), /carte-sans-impression-du-set/);
+refuse('générique (b) : set sans tirage lisible : refusé', plan(entZh, monZh(undefined)), /carte-sans-impression-du-set/);
+refuse('générique (b) : la carte a déjà une impression de ce tirage chinois (elle porterait donc une marque ; pas virtuelle) : refusé', plan(entZh, monZh('zh-hans', { cartes: new Map([['Pika-P', { ...SPEC, impressions: [{ numero: '9', expansion: 'X', tirage: 'zh-hans' }] }]]) })), /carte-sans-impression-du-set/);
+refuse('une carte nommée d\'un set intl sans impression du set : reste refusée', plan(entZh, monZh('intl', { sets: new Map([['SV-P-ZH', { _id: 'SV-P-ZH', tirage: 'intl', bulba: { expansion: 'Promo' } }]]) })), /carte-sans-impression-du-set/);
+refuse('une énergie spéciale (« Double Colorless Energy ») sans impression du set : refusée (liste fermée)', plan(entree({ concordantes: [{ ...CONC, nom: 'Double Colorless Energy' }] }), monde({ produits: new Map([[11, { ...PRODUIT, name: 'Double Colorless Energy' }]]), cartes: new Map([[7, { ...CARTE, nomEn: 'Double Colorless Energy', impressions: [] }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Double Colorless Energy' }] })), /carte-sans-impression-du-set/);
+refuse('générique : les autres gardes tiennent (deux sources absentes)', plan(entree({ concordantes: [] }), ENERGIE_SANS_SET), /deux sources|concord/);
+refuse('générique : les autres gardes tiennent (nom de la carte ≠ produit)', plan(entree(), monde({ cartes: new Map([[7, { ...CARTE, nomEn: 'Fire Energy', impressions: [] }]]), cartesDuSet: () => [{ ...CARTE, nomEn: 'Fire Energy' }] })), /nom de la carte/);
+refuse('générique : les autres gardes tiennent (contradiction)', plan(entree({ refusees: [{ source: 'artofpkm', ref: 'r', raison: 'nom discordant (« Fire Energy » / « Water Energy »)' }] }), ENERGIE_SANS_SET), /contradi/);
+refuse('générique : les autres gardes tiennent (deux lignes)', plan(entree(), monde({ cartes: ENERGIE_SANS_SET.cartes, lignes: new Map([[11, [LIGNE, { ...LIGNE, _id: 'x', carteId: 8 }]]]) })), /lignes/);
+refuse('générique : les autres gardes tiennent (preuve non faible)', plan(entree(), monde({ cartes: ENERGIE_SANS_SET.cartes, lignes: new Map([[11, [{ ...LIGNE, preuve: 'set+numero' }]]]) })), /preuve/);
 // l'écriture reteste la ligne
 const appelsF = []; 
 (async () => { await P.ecrireConfirmations({ collection: () => ({ updateOne: async (f) => { appelsF.push(f); return { modifiedCount: 1 }; } }) }, p0.ecrire);

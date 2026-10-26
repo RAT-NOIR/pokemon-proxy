@@ -20,6 +20,19 @@ const K = require('./collecte-cartes/confirmation');
 const stable = v => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) && !(x instanceof Date) ? Object.fromEntries(Object.keys(x).sort().map(c => [c, x[c]])) : x));
 const sansConfirmation = l => { const { [K.CHAMP]: _, ...reste } = l || {}; return reste; };
 
+// LISTE FERMÉE des cas génériques (décision du testeur 26/10), écrite par ce qu'elle AUTORISE.
+const TYPES_ENERGIE = ['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting', 'Darkness', 'Metal', 'Fairy'];
+const ENERGIES_DE_BASE = new Set(TYPES_ENERGIE.flatMap(t => clesNom(`${t} Energy`)));
+const TIRAGES_CHINOIS = ['zh-hans', 'zh-hant'];
+/** @returns {'energie-de-base'|'promo-chinoise-jointure-virtuelle'|null} — appelée seulement quand la carte n'a pas d'impression du set au numéro. */
+function casGenerique(carte, set) {
+    // (a) énergie de base : la carte jointe est « <Type> Energy » (clesNom de production), types énumérés
+    if (clesNom(nomJointDe(carte)).some(k => ENERGIES_DE_BASE.has(k))) return 'energie-de-base';
+    // (b) promo chinoise à jointure VIRTUELLE (§42) : le set est d'un tirage chinois lu en base, et la carte n'a AUCUNE impression de ce tirage (la jointure vit dans cartes_produits)
+    if (set && TIRAGES_CHINOIS.includes(set.tirage) && !(carte.impressions || []).some(i => i && i.tirage === set.tirage)) return 'promo-chinoise-jointure-virtuelle';
+    return null;
+}
+
 /**
  * @param {{ entrees: Array<{idProduct:number, carteId:number, concordantes:object[], refusees?:object[]}>,
  *           lecture: { lignes: Map<number, object[]>, produits: Map<number, {idProduct, idExpansion?, set, numero, name}>, cartes: Map<number, object>, cartesDuSet: (slug:string) => object[] },
@@ -57,10 +70,15 @@ function planifier({ entrees, lecture, le = new Date() }) {
         // I2 : le numéro est celui d'une impression de CE set (expansion du set de la ligne) ; une énergie de base générique sans impression dans le set est refusée (aucune règle de production ne la traite)
         const cle = cleNumero(produit.numero);
         const expSet = [].concat(lecture.sets?.get(p.set)?.bulba?.expansion ?? []).filter(Boolean);
-        if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion))) { no(`carte-sans-impression-du-set : la carte ${e.carteId} ne porte aucune impression de « ${expSet.join(' / ') || 'set sans nom d\'expansion'} » au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
+        let generique;
+        if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion))) {
+            // décision du testeur (26/10) : liste FERMÉE de deux cas où l'absence de marque de set est la réalité du visuel ; tout le reste reste refusé
+            generique = casGenerique(carte, lecture.sets?.get(p.set));
+            if (!generique) { no(`carte-sans-impression-du-set : la carte ${e.carteId} ne porte aucune impression de « ${expSet.join(' / ') || 'set sans nom d\'expansion'} » au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
+        }
         const autres = temoinDuNom(lecture.cartesDuSet(p.set), p.idExpansion ?? null)(carte, { nom: dn.nom, attaques: dn.attaques });
         if (autres) { no(`le témoin du nom contredit la carte ${e.carteId} « ${carte.nomEn} » pour « ${dn.nom} » : ${autres.slice(0, 3).map(c => `${c._id} « ${c.nomEn} »`).join(', ')}`); continue; }
-        const confirmation = K.construire({ carteId: e.carteId, produit, concordantes: j.concordantes, le });
+        const confirmation = K.construire({ carteId: e.carteId, produit, concordantes: j.concordantes, le, ...(generique ? { generique } : {}) });
         // cohérence finale : ce qu'on va écrire est valide contre la ligne telle qu'elle est (la même fonction que l'audit rejouera)
         const v = K.confirmationConcorde(confirmation, { ligne, produit });
         if (!v.ok) { no(`la confirmation construite ne concorde pas avec la ligne : ${v.motifs.join(' ; ')}`); continue; }
@@ -114,14 +132,14 @@ async function lire({ cartesDb, prodDb, entrees }) {
     const nc = await lireMongo(prodDb.collection('numeros_cartes'), { idProduct: { $in: ids } }, { nom: 'numeros_cartes', videAutorise: 'un produit jamais appris n\'a pas de ligne : le plan le refuse, nommé', projection: { _id: 0, idProduct: 1, slugSet: 1, numero: 1 } });
     const ncDe = new Map(nc.map(n => [n.idProduct, n]));
     const produits = new Map(cat.map(c => [c.idProduct, { idProduct: c.idProduct, idExpansion: c.idExpansion, name: c.name, set: ncDe.get(c.idProduct)?.slugSet ?? null, numero: ncDe.get(c.idProduct)?.numero ?? null }]));
-    const proj = { nomEn: 1, niveau: 1, 'attaques.nom': 1, 'impressions.numero': 1, sets: 1 };
+    const proj = { nomEn: 1, niveau: 1, 'attaques.nom': 1, 'impressions.numero': 1, 'impressions.expansion': 1, 'impressions.tirage': 1, sets: 1 };
     const cartesLues = await lireMongo(cartesDb.collection('cartes'), { _id: { $in: carteIds } }, { nom: 'cartes', projection: proj, videAutorise: 'les cartes listées ont pu disparaître : le plan les refuse, nommées' });
     const cartes = new Map(cartesLues.map(c => [c._id, c]));
     const parSet = new Map();
     for (const slug of new Set([...produits.values()].map(p => p.set).filter(Boolean)))
         parSet.set(slug, await lireMongo(cartesDb.collection('cartes'), { sets: slug }, { nom: 'cartes', projection: proj, videAutorise: `le set ${slug} peut n'avoir aucune carte` }));
     const slugs = [...parSet.keys()];
-    const setsLus = slugs.length ? await lireMongo(cartesDb.collection('sets'), { _id: { $in: slugs } }, { nom: 'sets', projection: { 'bulba.expansion': 1 }, videAutorise: 'aucun des sets des produits listés n\'existe : le plan refuse chaque produit, nommé' }) : [];
+    const setsLus = slugs.length ? await lireMongo(cartesDb.collection('sets'), { _id: { $in: slugs } }, { nom: 'sets', projection: { 'bulba.expansion': 1, tirage: 1 }, videAutorise: 'aucun des sets des produits listés n\'existe : le plan refuse chaque produit, nommé' }) : [];
     const sets = new Map(setsLus.map(x => [x._id, x]));
     return { lignes, produits, cartes, sets, cartesDuSet: slug => parSet.get(slug) || [], lignesBrutes };
 }
@@ -171,7 +189,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { planifier, verifierAttendu, ecrireConfirmations, relire, lire, executer };
+module.exports = { casGenerique, planifier, verifierAttendu, ecrireConfirmations, relire, lire, executer };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });

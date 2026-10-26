@@ -76,6 +76,9 @@ verifier('B1 : confirmations ignorées (la ligne a changé depuis), comptées', 
 verifier('B1 : le résumé plat ne change pas de forme (l\'historique garde ses clés)', Object.keys(R3.resume), ['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel', 'empruntNonServi', 'rienNExiste']);
 verifier('B1 : les contrôles somment toujours au dénominateur', R3.controles.sommeFiches, 6);
 verifier('B1 : sans aucun info (les fixtures d\'avant), les compteurs valent 0', [R.B.confirmeesDeuxSources, R.B.confirmeesLevees, R.B.confirmationsIgnorees], [0, 0, 0]);
+const R4 = K.calculerCompteurs({ produits: [P(1, 10, INFO('FICHE_OK', ['confirmee-deux-sources', 'confirmee-generique']), VRAI), P(2, 10, INFO('FICHE_OK', ['confirmee-deux-sources']), VRAI)], lignesSet, denominateur: { catalogue: 2, cartesCode: 0 }, rang: 20 });
+verifier('B1 générique : compteur à part (1 sur 2 confirmées)', [R4.B.confirmeesGeneriques, R4.B.confirmeesDeuxSources, R3.B.confirmeesGeneriques], [1, 2, 0]);
+verifier('B1 générique : la sortie imprimée le dit', /visuel générique sans marque de set 1/.test(K.formater(R4, null)), true);
 verifier('B1 : la sortie imprimée les dit', /confirmées par deux sources 3 \(dont levées 2, sorties de B\) · confirmations ignorées 1 /.test(K.formater(R3, null)), true);
 
 // ── le rang : les N premières seulement

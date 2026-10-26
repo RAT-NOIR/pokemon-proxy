@@ -135,7 +135,7 @@ function classerFiche({ lignes, ficheSite, temoinContredit = false, setANumeros 
     if (sansNumero && setANumeros === true && numeroConnu === true) motifs.push('sans-numero');
     if (temoinContredit) motifs.push('contredite-par-le-nom');
     if (sansNumero && setANumeros) infos.push('sans-numero-set-numerote');
-    if (confirmee && nomSeul) infos.push('confirmee-deux-sources');
+    if (confirmee && nomSeul) { infos.push('confirmee-deux-sources'); if (confirmation.generique === true) infos.push('confirmee-generique'); }
     else if (confirmation !== null && confirmation !== undefined && !confirmee) infos.push('confirmation-ignoree');
     return { classe: motifs.length ? 'FICHE_DOUTEUSE' : 'FICHE_OK', motifs, infos };
 }

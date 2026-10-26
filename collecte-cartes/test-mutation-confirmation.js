@@ -39,6 +39,12 @@ muter('outil-sans-controle-de-la-carte-de-la-ligne (double garde : planifier ET 
 muter('ecriture-sans-retest-carteId-preuve', { ...OUTIL, transformer: s => remplacer(s, 'carteId: l.carteId, preuve: l.preuve, ', '') });
 muter('slugSet-de-la-ligne-non-compare', { ...CONF, transformer: s => remplacer(s, 'if (ligne.slugSet != null && ligne.slugSet !== valeurs.set)', 'if (false)') });
 muter('numero-de-la-fiche-servie-non-compare', { ...CONF, transformer: s => remplacer(s, 'if (ficheNumero != null &&', 'if (false &&') });
+muter('generique-liste-des-energies-retiree (tout nom devient une energie de base)', { ...OUTIL, transformer: s => remplacer(s, 'some(k => ENERGIES_DE_BASE.has(k))', 'some(k => true)') });
+muter('generique-type-d-energie-etendu (Colorless, spéciales)', { ...OUTIL, transformer: s => remplacer(s, "'Metal', 'Fairy']", "'Metal', 'Fairy', 'Double Colorless']") });
+muter('generique-chinois-sans-test-du-tirage-du-set', { ...OUTIL, transformer: s => remplacer(s, 'TIRAGES_CHINOIS.includes(set.tirage) && ', '') });
+muter('generique-chinois-sans-test-impression-du-tirage', { ...OUTIL, transformer: s => remplacer(s, "!(carte.impressions || []).some(i => i && i.tirage === set.tirage)", 'true') });
+muter('generique-tout-refus-I2-devient-generique', { ...OUTIL, transformer: s => remplacer(s, 'if (!generique) { no(`carte-sans-impression-du-set', "if (false) { no(`carte-sans-impression-du-set") });
+muter('generique-confirmation-sans-controle-de-la-marque-et-du-cas', { ...CONF, banc: 'collecte-cartes/test-confirmation.js', transformer: s => entre(s, '// [GENERIQUE-DEBUT]', '// [GENERIQUE-FIN]') });
 const CLASS = { fichier: 'audit-catalogue/classement.js', dossier: 'audit-catalogue', banc: 'audit-catalogue/test-classement.js', env: 'CLASSEMENT_MODULE' };
 muter('classement-croit-toute-confirmation-meme-ignoree', { ...CLASS, transformer: s => remplacer(s, 'confirmation.concorde === true', 'true') });
 muter('classement-leve-aussi-les-autres-motifs', { ...CLASS, transformer: s => remplacer(s, "if (sansNumero && setANumeros === true && numeroConnu === true) motifs.push('sans-numero');", "if (sansNumero && setANumeros === true && numeroConnu === true && !confirmee) motifs.push('sans-numero');") });

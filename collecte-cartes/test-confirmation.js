@@ -48,6 +48,19 @@ verifier('sources déclare une source que les concordantes ne portent pas : igno
 verifier('sources sans Cardmarket : ignorée', concorde({ ...c0, sources: ['tcgdex'] }).ok, false);
 verifier('Cardmarket seul (aucune source indépendante) : ignorée', concorde({ ...c0, sources: ['cardmarket'], concordantes: [] }).ok, false);
 
+// ── B1 générique (décision du testeur 26/10) : la marque « visuel générique, sans marque de set » et la raison fermée
+const g0 = conf({ generique: 'energie-de-base' });
+verifier('générique : generique, marque et cas écrits', { g: g0.generique, m: g0.marque, c: g0.cas }, { g: true, m: 'visuel générique, sans marque de set', c: 'energie-de-base' });
+verifier('non générique : aucun de ces champs', [c0.generique, c0.marque, c0.cas], [undefined, undefined, undefined]);
+verifier('générique intact : valide', concorde(g0).ok, true);
+verifier('générique : cas hors de la liste fermée : ignorée', concorde({ ...g0, cas: 'autre' }).ok, false);
+verifier('générique : marque altérée : ignorée', concorde({ ...g0, marque: 'x' }).ok, false);
+verifier('générique : generique non strictement true : ignorée', concorde({ ...g0, generique: 'oui' }).ok, false);
+verifier('cas promo chinoise : valide', concorde(conf({ generique: 'promo-chinoise-jointure-virtuelle' })).ok, true);
+verifier('construire refuse un cas inconnu', (() => { try { conf({ generique: 'n-importe-quoi' }); return 'pas de levée'; } catch { return 'levée'; } })(), 'levée');
+verifier('pourClasser transmet generique', C.pourClasser({ ...LIGNE, confirmation: g0 }, { produit: PRODUIT }), { concorde: true, generique: true });
+verifier('pourClasser non générique', C.pourClasser({ ...LIGNE, confirmation: c0 }, { produit: PRODUIT }), { concorde: true, generique: false });
+
 // ── jamais d'exception sur un champ mal formé (une garde qui lève sur un cas inattendu n'est pas lue : elle refuse)
 for (const [nom, v] of [['null', null], ['chaîne', 'oui'], ['nombre', 1], ['objet vide', {}], ['tableau', []]])
     verifier(`confirmation mal formée (${nom}) : ignorée, sans exception`, concorde(v).ok, false);
@@ -63,9 +76,9 @@ verifier('contradictions : absent ou vide', [C.contradictions(undefined).length,
 // ── ce que le classement de la fiche reçoit (audit-catalogue/etat-api.js l'appelle sur la ligne de la fiche servie)
 const L2 = { ...LIGNE, confirmation: c0 };
 verifier('pourClasser : une ligne sans champ confirmation : null (rien à lire, rien à compter)', [C.pourClasser(LIGNE, { produit: PRODUIT }), C.pourClasser(undefined, { produit: PRODUIT }), C.pourClasser({ ...LIGNE, confirmation: null }, { produit: PRODUIT })], [null, null, null]);
-verifier('pourClasser : une confirmation qui concorde', C.pourClasser(L2, { produit: PRODUIT, ficheNumero: '103' }), { concorde: true });
-verifier('pourClasser : une confirmation qui ne concorde plus', C.pourClasser({ ...L2, numeroFiche: '9' }, { produit: PRODUIT }), { concorde: false });
-verifier('pourClasser : un produit illisible (set absent) : ne concorde pas, sans exception', C.pourClasser(L2, { produit: { set: null, numero: '103', nom: 'Water Energy' } }), { concorde: false });
+verifier('pourClasser : une confirmation qui concorde', C.pourClasser(L2, { produit: PRODUIT, ficheNumero: '103' }), { concorde: true, generique: false });
+verifier('pourClasser : une confirmation qui ne concorde plus', C.pourClasser({ ...L2, numeroFiche: '9' }, { produit: PRODUIT }), { concorde: false, generique: false });
+verifier('pourClasser : un produit illisible (set absent) : ne concorde pas, sans exception', C.pourClasser(L2, { produit: { set: null, numero: '103', nom: 'Water Energy' } }), { concorde: false, generique: false });
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
