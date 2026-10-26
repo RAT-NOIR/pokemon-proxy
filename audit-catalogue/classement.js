@@ -111,7 +111,7 @@ const MOTIFS_FICHE = Object.freeze(['plusieurs-cartes', 'preuve-nom-seul', 'sans
  *   `temoinContredit` : temoinDuNom (jointure.js) désigne une AUTRE carte du set pour le nom du produit ; `setANumeros` : le set a au moins une fiche numérotée.
  * @returns {{ classe: 'SANS_LIGNE'|'LIGNE_SANS_FICHE'|'FICHE_DOUTEUSE'|'FICHE_OK', motifs: string[] }}
  */
-function classerFiche({ lignes, ficheSite, temoinContredit = false, setANumeros = false, numeroConnu = false }) {
+function classerFiche({ lignes, ficheSite, temoinContredit = false, setANumeros = false, numeroConnu = false, confirmation = null }) {
     if (!lignes || !lignes.length) return { classe: 'SANS_LIGNE', motifs: [], infos: [] };
     const plusieurs = new Set(lignes.map(l => l.carteId)).size > 1;
     // un produit joint à deux cartes n'a aucune fiche chez le site (« un produit servi sur deux fiches n'en désigne aucune ») : sa classe est LIGNE_SANS_FICHE, le motif reste écrit
@@ -121,14 +121,23 @@ function classerFiche({ lignes, ficheSite, temoinContredit = false, setANumeros 
     // le NOM SEUL se juge sur la carte de la fiche : une preuve par le numéro sur CETTE carte sauve la fiche. Une preuve absente est inconnue, pas faible.
     const duneFiche = lignes.filter(l => l.carteId === ficheSite.carteId);
     const preuves = duneFiche.map(l => l.preuve).filter(Boolean);
-    if (preuves.length && preuves.every(p => PREUVES_NOM_SEUL.includes(p))) motifs.push('preuve-nom-seul');
+    // B1 (2026-10-26) : `confirmation` = { concorde } — le verdict de collecte-cartes/confirmation.js::confirmationConcorde sur la ligne de CETTE fiche, rejoué par l'appelant. Une confirmation par deux sources
+    // lève le SEUL motif « preuve-nom-seul » (le nom seul est précisément ce qu'une seconde source indépendante vérifie) ; « plusieurs-cartes », « sans-numero » et « contredite-par-le-nom » restent (une
+    // seconde source ne numérote pas la fiche du site et ne défait pas un produit joint à deux cartes). Une confirmation qui ne concorde plus (`concorde !== true`) est IGNORÉE et nommée dans `infos`.
+    const infos = [];
+    const nomSeul = preuves.length && preuves.every(p => PREUVES_NOM_SEUL.includes(p));
+    const confirmee = confirmation !== null && confirmation !== undefined && confirmation.concorde === true;
+    if (nomSeul && !confirmee) motifs.push('preuve-nom-seul');
     // `sans-numero` RESSERRÉE, décision du coordinateur après la relecture indépendante (M1) : la CONJONCTION « le set a au moins une fiche numérotée » ET « le numéro du produit est connu »
     // (numeros_cartes.numero, ou numeroFiche de la ligne). Sans la première moitié, ~1 216 fiches « n° ? » de sets sans aucune fiche numérotée (Gem Packs, Half Decks) entraient — exactement ce que
     // seuils.md voulait exclure. L'ANCIENNE définition (le set a des fiches numérotées, sans le numéro du produit) reste comptée à part, en INFORMATION : elle ne change ni la classe ni les motifs.
     const sansNumero = ficheSite.numero === null || ficheSite.numero === undefined;
     if (sansNumero && setANumeros === true && numeroConnu === true) motifs.push('sans-numero');
     if (temoinContredit) motifs.push('contredite-par-le-nom');
-    return { classe: motifs.length ? 'FICHE_DOUTEUSE' : 'FICHE_OK', motifs, infos: sansNumero && setANumeros ? ['sans-numero-set-numerote'] : [] };
+    if (sansNumero && setANumeros) infos.push('sans-numero-set-numerote');
+    if (confirmee && nomSeul) infos.push('confirmee-deux-sources');
+    else if (confirmation !== null && confirmation !== undefined && !confirmee) infos.push('confirmation-ignoree');
+    return { classe: motifs.length ? 'FICHE_DOUTEUSE' : 'FICHE_OK', motifs, infos };
 }
 
 // ── ENTRÉES D'UN MÊME PRODUIT (M4) : comme version.js:276-283 — UN produit, UNE entrée. Deux entrées VALIDES aux visuels identiques ⇒ une seule (la dernière, pour le reste) ; aux visuels

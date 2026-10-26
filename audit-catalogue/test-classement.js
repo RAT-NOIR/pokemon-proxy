@@ -55,5 +55,21 @@ verifier('les motifs se cumulent, dans l\'ordre fixe', CF(f({ lignes: [{ carteId
     { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes', 'preuve-nom-seul', 'sans-numero', 'contredite-par-le-nom'] });
 verifier('une ligne sans preuve écrite : la preuve est INCONNUE, pas un nom seul', CF(f({ lignes: [{ carteId: 1 }] })), { classe: 'FICHE_OK', motifs: [] });
 
+// ── B1 : la confirmation par deux sources LÈVE le seul motif « preuve-nom-seul » (jamais les autres), et seulement si elle concorde avec la ligne actuelle
+const nomSeul = { lignes: [{ carteId: 1, preuve: 'set+nom' }] };
+const CFI = a => { const r = brut(a); return { classe: r.classe, motifs: r.motifs, infos: r.infos }; };
+verifier('B1 : nom seul + confirmation concordante : FICHE_OK, nommée', CFI(f({ ...nomSeul, confirmation: { concorde: true } })), { classe: 'FICHE_OK', motifs: [], infos: ['confirmee-deux-sources'] });
+verifier('B1 : nom seul + confirmation qui ne concorde plus : douteuse comme avant, la confirmation ignorée est nommée', CFI(f({ ...nomSeul, confirmation: { concorde: false } })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'], infos: ['confirmation-ignoree'] });
+verifier('B1 : nom seul sans confirmation : inchangé', CFI(f({ ...nomSeul })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'], infos: [] });
+verifier('B1 : nom seul + confirmation null : inchangé', CFI(f({ ...nomSeul, confirmation: null })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'], infos: [] });
+verifier('B1 : confirmée mais sans numéro (numéro du produit connu) : reste douteuse par « sans-numero » seul — la confirmation ne numérote pas la fiche', CFI(f({ ...nomSeul, ficheSite: { carteId: 1, numero: null }, numeroConnu: true, confirmation: { concorde: true } })), { classe: 'FICHE_DOUTEUSE', motifs: ['sans-numero'], infos: ['sans-numero-set-numerote', 'confirmee-deux-sources'] });
+verifier('B1 : confirmée mais contredite par le témoin du nom : reste douteuse', CFI(f({ ...nomSeul, temoinContredit: true, confirmation: { concorde: true } })), { classe: 'FICHE_DOUTEUSE', motifs: ['contredite-par-le-nom'], infos: ['confirmee-deux-sources'] });
+verifier('B1 : confirmée mais produit joint à deux cartes : reste douteuse', CFI(f({ lignes: [{ carteId: 1, preuve: 'set+nom' }, { carteId: 2, preuve: 'set+nom' }], confirmation: { concorde: true } })), { classe: 'FICHE_DOUTEUSE', motifs: ['plusieurs-cartes'], infos: ['confirmee-deux-sources'] });
+verifier('B1 : une preuve par le numéro n\'a rien à lever : la confirmation n\'est pas annoncée', CFI(f({ confirmation: { concorde: true } })), { classe: 'FICHE_OK', motifs: [], infos: [] });
+verifier('B1 : une confirmation qui ne concorde plus sur une fiche sûre est quand même comptée comme ignorée', CFI(f({ confirmation: { concorde: false } })), { classe: 'FICHE_OK', motifs: [], infos: ['confirmation-ignoree'] });
+verifier('B1 : sans fiche du site, la confirmation ne change rien', CFI(f({ ...nomSeul, ficheSite: null, confirmation: { concorde: true } })), { classe: 'LIGNE_SANS_FICHE', motifs: [], infos: [] });
+verifier('B1 : sans ligne, la confirmation ne change rien', CFI({ lignes: [], ficheSite: null, confirmation: { concorde: true } }), { classe: 'SANS_LIGNE', motifs: [], infos: [] });
+verifier('B1 : « concorde » doit être EXACTEMENT true (une valeur truthy quelconque ne lève rien)', CFI(f({ ...nomSeul, confirmation: { concorde: 'oui' } })), { classe: 'FICHE_DOUTEUSE', motifs: ['preuve-nom-seul'], infos: ['confirmation-ignoree'] });
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

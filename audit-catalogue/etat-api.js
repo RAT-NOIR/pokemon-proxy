@@ -15,6 +15,7 @@ const { lireMongo, champSur, apparier } = require('../collecte-cartes/lecture-su
 const { estCarteCode, temoinDuNom, decomposerNomCardmarket } = require('../collecte-cartes/jointure');
 const { chargerApi } = require('../collecte-cartes/garde-contrat-api');
 const C = require('./classement');
+const { pourClasser } = require('../collecte-cartes/confirmation');
 
 const TIRAGE_FAMILLE = Object.freeze({ intl: 'occidental', jp: 'japonais', 'zh-hans': 'chinois', 'zh-hant': 'chinois', id: 'asie-du-sud-est', th: 'asie-du-sud-est', idth: 'asie-du-sud-est' });
 const REGION_CODES = Object.freeze({ occidental: 'intl', japonais: 'jp' });   // codes_set.region → tirage (table-maitresse.mjs:184)
@@ -29,7 +30,7 @@ async function chargerDonnees({ prod, cartes }, api, { injecter = null } = {}) {
     const P = api.PROJECTIONS;
     const setsBruts = await lireMongo(cartes.collection('sets'), {}, { nom: 'sets', projection: { ...P.sets, type: 1, reimpressions: 1, nomEn: 1, nomCardmarket: 1 } });
     let cartesBrutes = await lireMongo(cartes.collection('cartes'), {}, { nom: 'cartes', projection: { ...P.cartes, niveau: 1, 'attaques.nom': 1 } });
-    let lignesBrutes = await lireMongo(cartes.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { ...P.cartes_produits, preuve: 1 } });
+    let lignesBrutes = await lireMongo(cartes.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { ...P.cartes_produits, preuve: 1, confirmation: 1 } });   // B1 : `confirmation` (champ additif) est lu par l'AUDIT seulement ; l'API ne le lit pas (compacterLigne l'ignore)
     // (PHASE 3a-SUITE) `injecter` : l'état d'un lot SIMULÉ — reçoit les documents lus ({ cartes, cartesProduits }) et rend l'état « après » (collecte-cartes/appliquer-plan.js), AVANT la compaction que fait l'API.
     // Rien n'est écrit : c'est le même code de mesure sur un autre état (simuler-abc.js).
     if (injecter) { const apres = injecter({ cartes: cartesBrutes, cartesProduits: lignesBrutes }); cartesBrutes = apres.cartes; lignesBrutes = apres.cartesProduits; }
@@ -40,11 +41,13 @@ async function chargerDonnees({ prod, cartes }, api, { injecter = null } = {}) {
     const sets = setsBruts.map(d => api.compacterSet(d, I));
     const lignes = lignesBrutes.map(d => api.compacterLigne(d, I));
     const preuveDe = new Map(lignesBrutes.map(d => [`${d.carteId}|${d.idProduct}`, d.preuve ?? null]));
+    // B1 : la ligne BRUTE de chaque (carte, produit) — la confirmation est rejouée contre elle (assembler), jamais lue comme un « ok »
+    const ligneBruteDe = new Map(lignesBrutes.map(d => [`${d.carteId}|${d.idProduct}`, { carteId: d.carteId, numeroFiche: d.numeroFiche ?? null, slugSet: d.slugSet ?? null, confirmation: d.confirmation ?? null }]));
     // dénominateurs : une jointure entre deux populations non vides ne peut pas être vide (§41)
     const idsCat = new Set(catalogue.map(p => p.idProduct));
     const app = apparier(lignes.map(l => l.idProduct), idsCat, { gauche: 'cartes_produits', droite: 'catalogue_produits', cle: 'idProduct' });
     console.log(`lectures : catalogue ${catalogue.length} · codes_set ${codes.length} · numeros_cartes ${nc.length} · sets ${sets.length} · cartes ${docs.length} · cartes_produits ${lignes.length} (idProduct retrouvés au catalogue : ${app.trouvees.length}/${new Set(lignes.map(l => l.idProduct)).size}) · ${Math.round((Date.now() - t0) / 1000)} s`);
-    return { catalogue, codes, nc, setsBruts, sets, docs, lignes, temoinCartes, preuveDe };
+    return { catalogue, codes, nc, setsBruts, sets, docs, lignes, temoinCartes, preuveDe, ligneBruteDe };
 }
 
 /** Rejoue `decider` de l'API sur TOUS les sets, en enveloppant (sans les changer) choisirVisuel et fichesDesProduits pour LIRE leurs sorties. */
@@ -110,7 +113,8 @@ function motifManquant({ lignes, traces, carteExiste, entreeRefusee, contradicto
 
 /** Assemble, produit par produit (hors cartes-code), la fiche et le visuel. Rend { produits, horsPerimetre }. */
 function assembler({ api, donnees, rejeu }) {
-    const { catalogue, setsBruts, docs, lignes, temoinCartes, preuveDe, nc } = donnees;
+    const { catalogue, setsBruts, docs, lignes, temoinCartes, preuveDe, nc, ligneBruteDe } = donnees;
+    const slugDeProduit = new Map(nc.map(n => [n.idProduct, n.slugSet ?? null]));
     const { entrees, traces, fichesParSet, tamponProbable } = rejeu;
     const numeroDeProduit = new Map(nc.map(n => [n.idProduct, n.numero]));
     const nonVide = x => x !== null && x !== undefined && String(x).trim() !== '';
@@ -147,7 +151,9 @@ function assembler({ api, donnees, rejeu }) {
             const autres = temoinDe(c.setId, p.idExpansion)(carte, { nom: d.nom, attaques: d.attaques });
             if (autres) temoinContredit = true;
         }
-        const f = C.classerFiche({ lignes: ls.map(l => ({ carteId: l.carteId, preuve: preuveDe.get(`${l.carteId}|${l.idProduct}`) ?? undefined })), ficheSite,
+        // B1 : la confirmation de la ligne de la fiche servie, REJOUÉE contre le produit et la ligne d'aujourd'hui (production : confirmation.js → deux-sources.js::rejouer)
+        const confirmation = ficheSite ? pourClasser(ligneBruteDe?.get(`${ficheSite.carteId}|${p.idProduct}`), { produit: { set: slugDeProduit.get(p.idProduct), numero: numeroDeProduit.get(p.idProduct), nom: d.nom }, ficheNumero: ficheSite.numero }) : null;
+        const f = C.classerFiche({ confirmation, lignes: ls.map(l => ({ carteId: l.carteId, preuve: preuveDe.get(`${l.carteId}|${l.idProduct}`) ?? undefined })), ficheSite,
             temoinContredit, setANumeros: ficheSite ? setANumeros.get(ficheSite.setId) === true : false,
             // le numéro du produit est CONNU : numeros_cartes.numero, ou le numeroFiche d'une de ses lignes (seuils.md : `sans-numero` resserrée)
             numeroConnu: nonVide(numeroDeProduit.get(p.idProduct)) || ls.some(l => nonVide(l.numeroFiche)) });

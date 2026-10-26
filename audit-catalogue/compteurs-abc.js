@@ -60,6 +60,12 @@ function calculerCompteurs({ produits, lignesSet, denominateur, rang = 20, contr
     // ── B : les fiches douteuses SERVIES. Le marquage « à confirmer » et l'exclusion de l'identification n'existent pas encore : on le dit, on ne l'invente pas.
     const dout = de('FICHE_DOUTEUSE');
     const B = { douteuses: dout.length, motifs: compter(dout, p => p.fiche.motifs), motifsParNombre: compter(dout, p => String(p.fiche.motifs.length)),
+        // B1 (2026-10-26) : une ligne portant `confirmation` que la règle de production REJOUE (collecte-cartes/confirmation.js) n'est plus douteuse par « preuve-nom-seul » ; elles sont comptées à part
+        // (`levees` = sorties de B, `confirmeesDeuxSources` = toutes celles dont la confirmation a levé ce motif, y compris celles qui restent douteuses pour un autre), et les confirmations qui ne concordent plus
+        // avec la ligne (modifiée depuis) sont IGNORÉES et comptées : un champ écrit n'est jamais lu comme vrai sans être rejoué.
+        confirmeesDeuxSources: produits.filter(p => (p.fiche.infos || []).includes('confirmee-deux-sources')).length,
+        confirmeesLevees: produits.filter(p => p.fiche.classe === 'FICHE_OK' && (p.fiche.infos || []).includes('confirmee-deux-sources')).length,
+        confirmationsIgnorees: produits.filter(p => (p.fiche.infos || []).includes('confirmation-ignoree')).length,
         marquageAConfirmer: 'inexistant',
         note: 'Aucun marquage « à confirmer » ni exclusion de l\'identification n\'existe aujourd\'hui : ces fiches sont SERVIES telles quelles. Ce compteur dit combien devraient être marquées, pas combien le sont.',
         temoinMuet: produits.filter(p => p.fiche.temoinMuet).length, controleTemoin };
@@ -242,6 +248,7 @@ function formater(R, E) {
     for (const e of R.A.parExpansionLigneSansFiche) out.push(`     ${String(e.idExpansion).padStart(5)} ${String(e.codeSet ?? '—').padEnd(10)} ${String(e.nom ?? '—').slice(0, 34).padEnd(34)} ${String(e.famille).padEnd(16)} ${String(e.ligneSansFiche).padStart(4)} / ${e.produits}`);
     out.push(`\n══ B — FICHES DOUTEUSES SERVIES : ${R.B.douteuses} (${pct(R.B.douteuses, N)}) · motifs (non exclusifs) ${JSON.stringify(R.B.motifs)} · par nombre de motifs ${JSON.stringify(R.B.motifsParNombre)}`);
     out.push(`   ⚠️ marquage « à confirmer » : ${R.B.marquageAConfirmer}. ${R.B.note}`);
+    out.push(`   B1 : confirmées par deux sources ${R.B.confirmeesDeuxSources} (dont levées ${R.B.confirmeesLevees}, sorties de B) · confirmations ignorées ${R.B.confirmationsIgnorees} (la ligne a changé depuis : jamais lues comme vraies)`);
     if (R.B.controleTemoin) out.push(`   témoin du nom : sur ${R.B.controleTemoin.essais} fiches fabriquées fausses il en contredit ${R.B.controleTemoin.contredits} ; sur ${R.B.controleTemoin.vraiesTestees} vraies il se tait ${R.B.controleTemoin.silenceSurLaVraie} fois · témoin muet sur ${R.B.temoinMuet} produits (zéro « contredite » n'est une mesure que si le témoin SAIT refuser)`);
     out.push(`\n══ C — VISUELS (dénominateur ${N}) : vrai scan servi ${R.C.vraiScan} (${pct(R.C.vraiScan, N)}) · emprunté ${R.C.emprunte} (${pct(R.C.emprunte, N)}) · basse définition ${R.C.basseDefinition} (${pct(R.C.basseDefinition, N)}) · AUCUN visuel ${R.C.aucunVisuel} (${pct(R.C.aucunVisuel, N)})`);
     out.push(`   emprunté : avec mention ${R.C.empruntesAvecMention} · SANS mention ${R.C.empruntesSansMention} · par nature ${JSON.stringify(R.C.empruntesParNature)}`);
