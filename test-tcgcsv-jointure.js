@@ -19,13 +19,23 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         const v = JT.lireTcg(T(3, 'Chespin - XY01', 'XY01'));
         assert.deepStrictEqual([v.nomBase, v.fort, v.faible, v.total], ['Chespin', 'XY1', '1', null]);
     });
-    await test('lireTcg : parenthèses non numériques et crochets = MARQUEURS ; « (85) » = désambiguïsation, « (142 Full Art) » = désambiguïsation + marqueur ; un numéro absent = aucune clé', () => {
+    await test('lireTcg : parenthèses non numériques et crochets = MARQUEURS ; « (85) » = désambiguïsation, « (142 Full Art) » = désambiguïsation (Full Art est redondant avec le numéro) ; un numéro absent = aucune clé', () => {
         const a = JT.lireTcg(T(1, 'Dragalge - XY10 (Prerelease) [Staff]', 'XY10'));
         assert.deepStrictEqual([a.nomBase, a.marqueurs, a.fort], ['Dragalge', ['prerelease', 'staff'], 'XY10']);
         const b = JT.lireTcg(T(2, 'Aegislash (85)', '85/146')); assert.deepStrictEqual([b.nomBase, b.desamb, b.marqueurs], ['Aegislash', 85, []]);
-        const c = JT.lireTcg(T(3, 'Blastoise EX (142 Full Art)', '142/146')); assert.deepStrictEqual([c.nomBase, c.desamb, c.marqueurs], ['Blastoise EX', 142, ['full art']]);
+        const c = JT.lireTcg(T(3, 'Blastoise EX (142 Full Art)', '142/146')); assert.deepStrictEqual([c.nomBase, c.desamb, c.marqueurs], ['Blastoise EX', 142, []], 'Full Art : descripteur redondant avec le numéro');
         assert.deepStrictEqual(JT.lireTcg(T(4, 'Ho-Oh ex (Non-Holo)', '017/017')).marqueurs, ['non-holo']);
         const d = JT.lireTcg(T(5, 'Booster Box', null)); assert.deepStrictEqual([d.fort, d.faible, d.total], [null, null, null]);
+    });
+    await test('lireTcg : « (Delta Species) » fait partie du NOM (δ Delta Species chez Cardmarket) ; « Lv.13 » sort du nom (le décomposeur Cardmarket le retire aussi) ; « LV.X » reste ; un descripteur redondant avec le numéro (Secret, Team Plasma…) n\'est pas un marqueur', () => {
+        const d = JT.lireTcg(T(1, 'Pidgeot (Delta Species)', '12/110')); assert.deepStrictEqual([d.marqueurs, d.nomCles.includes(JT.cleNom('Pidgeot δ Delta Species'))], [[], true]);
+        const lv = JT.lireTcg(T(2, 'Paras Lv.16', '5/10')); assert.deepStrictEqual([lv.nomBase, lv.marqueurs], ['Paras', []]);
+        assert.strictEqual(JT.lireTcg(T(3, 'Lucario LV.X', '122/123')).nomBase, 'Lucario LV.X');
+        assert.deepStrictEqual(JT.lireTcg(T(4, 'Pikachu (Secret)', '190/185')).marqueurs, []); assert.deepStrictEqual(JT.lireTcg(T(5, 'Accelgor (Team Plasma)', '8/101')).marqueurs, []);
+        assert.deepStrictEqual(JT.lireTcg(T(6, 'Pikachu (Staff)', '8/101')).marqueurs, ['staff']);
+        // la même carte des deux côtés se joint
+        assert.strictEqual(JT.joindre({ tcg: [JT.lireTcg(T(1, 'Pidgeot (Delta Species)', '12/110'))], cm: [JT.lireCm(C(1, 'Pidgeot δ Delta Species [Delta Reverse | Rotating Claws]', '12'))] }).joints.length, 1);
+        assert.strictEqual(JT.joindre({ tcg: [JT.lireTcg(T(2, 'Paras Lv.16', '5/10'))], cm: [JT.lireCm(C(2, 'Paras Lv.16 [Scratch]', '5'))] }).joints.length, 1);
     });
     await test('cleNom : les accents tombent des DEUX côtés, puis la normalisation de production (Pokémon = Pokemon, Mr. Mime = Mr-Mime, apostrophes)', () => {
         assert.deepStrictEqual(JT.cleNom('Pokémon Breeder'), JT.cleNom('Pokemon Breeder'));

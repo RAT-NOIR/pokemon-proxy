@@ -31,6 +31,9 @@ const estApparie = s => s === 'apparie' || s === 'apparie-nom-seul';
 const tailleCompatible = (nTcg, nCm) => nCm > 0 && nTcg / nCm >= TAILLE_MIN && nTcg / nCm <= TAILLE_MAX;
 const LANGUE_DU_TIRAGE = Object.freeze({ intl: 'en', jp: 'ja' });
 
+/** Les descripteurs que le marché ajoute entre parenthèses ALORS QUE le numéro de la carte est déjà unique dans le groupe (rareté ou série). Liste FERMÉE, mesurée par la calibration ; tout autre marqueur reste un marqueur. */
+const DESCRIPTEURS_REDONDANTS = new Set(['secret', 'team plasma', 'prime', 'full art', 'alternate full art']);
+
 // ── 1. LA LECTURE DES PRODUITS ───────────────────────────────────────────────────────────────────────────────────────────────
 /** Un produit du marché { productId, name, number, groupId, imageUrl, rarity } -> ce que la jointure lit. */
 function lireTcg(p) {
@@ -42,6 +45,13 @@ function lireTcg(p) {
         if (m) { desamb = Number(m[1]); if (m[2]) marqueurs.push(normMarqueur(m[2])); } else { const x = normMarqueur(t); if (x) marqueurs.push(x); }
         return ' ';
     });
+    // « (Delta Species) » est une partie du NOM (Cardmarket : « Pidgeot δ Delta Species ») ; « Lv.13 » n'est pas dans le nom Cardmarket (le décomposeur le retire) ; « LV.X » reste
+    const ds = marqueurs.indexOf('delta species');
+    if (ds >= 0) { marqueurs.splice(ds, 1); s = `${s} δ Delta Species`; }
+    s = s.replace(/\s+Lv\.\s*\d+\s*$/i, '');
+    // un descripteur que le numéro rend redondant n'est pas une variante : (Secret), (Team Plasma), (Prime), (Full Art)… — le numéro unique du groupe les distingue déjà
+    const utiles = marqueurs.filter(m => !DESCRIPTEURS_REDONDANTS.has(m));
+    marqueurs.length = 0; marqueurs.push(...utiles);
     s = s.replace(/\s+/g, ' ').trim();
     const brut = p?.number == null ? null : (String(p.number).trim() || null);
     const [partie, tot] = brut ? brut.split('/') : [null, null];
