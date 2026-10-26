@@ -62,7 +62,22 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     const noms = familles ?? listerFamilles(dossier);
     if (!noms.length) throw new Error(`aucune famille avec preuves.json dans ${dossier} — rien à planifier`);
     const etatDe = new Map(etat.map(p => [p.idProduct, p]));
-    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [];
+    // tour 4 (2) : les produits des sets à position (slugSet `Battle-Academy*`, `*Trainer-Kit*`) — numéro de la ligne, à défaut celui de numeros_cartes ; nom = celui de l'état. Lus une fois, à la demande.
+    let positionsCache = null;
+    const positionsConnues = async () => {
+        if (positionsCache) return positionsCache;
+        const ls = lire.positions ? await lire.positions() : [];
+        const sans = ls.filter(l => l.numeroFiche == null).map(l => l.idProduct);
+        const nums = new Map((sans.length && lire.numeros ? await lire.numeros(sans) : []).map(n => [n.idProduct, n.numero]));
+        return (positionsCache = ls.map(l => ({ idProduct: l.idProduct, numero: l.numeroFiche ?? nums.get(l.idProduct) ?? null, nomEn: etatDe.get(l.idProduct)?.name ?? null, slugSet: l.slugSet })));
+    };
+    const impressionsCache = new Map();
+    const impressionsDe = async carteId => {
+        if (!impressionsCache.has(carteId)) impressionsCache.set(carteId, lire.impressions ? ((await lire.impressions([carteId]))[0]?.impressions ?? []) : []);
+        return impressionsCache.get(carteId);
+    };
+    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [], trousAuto = [];
+    const MOTIFS_ANNEE = ['position-ambigue', 'numero-imprime-hors-carte'];
     for (const famille of noms) {
         const { manifeste, validations, empreinte } = lireFamille(dossier, famille);
         empreintes[famille] = empreinte;
@@ -91,6 +106,11 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if (!set) { non('set-absent', L.slugSet); continue; }
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
             const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null };
+            // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
+            if (PV.setAdmisPourPosition(L.slugSet)) {
+                produit.candidatsPosition = await positionsConnues();
+                produit.impressions = await impressionsDe(L.carteId);
+            }
             // le cache est RELU, jamais cru (P8)
             const c1 = await PV.verifierCache({ entree: e, dossierCache: cache });
             if (!c1.ok) { non(c1.motif, c1.detail); continue; }
@@ -101,7 +121,12 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
                 octets = { a: c1.octets, b: c2.octets };
             }
             const ev = await PV.evaluerEntree({ entree: e, produit, octets });
-            if (!ev.ok) { non(ev.motif, ev.motifs ? ev.motifs.join(', ') : undefined); continue; }
+            if (!ev.ok) {
+                non(ev.motif, ev.motifs ? ev.motifs.join(', ') : undefined);
+                // décision du testeur (tour 4) : une année Battle Academy (ou une moitié de kit) qui ne se prouve pas est un TROU nommé `variantes-indiscernables`, jamais un choix
+                if (ev.motifs?.some(m => MOTIFS_ANNEE.includes(m)) && !ev.motifs.some(m => m.startsWith('nom-'))) trousAuto.push({ famille, idProduct: id, motif: 'variantes-indiscernables', interroges: [e.hote], date: new Date().toISOString(), detail: `année / moitié non prouvée : ${ev.motifs.join(', ')}` });
+                continue;
+            }
             parRegle[e.regle] = (parRegle[e.regle] || 0) + 1;
             produits.set(id, produit);
             jugements[e.url] = c1.jugement;
@@ -136,7 +161,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     const aAjouter = decidees.filter(u => u.decision.action === 'ajouter');
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, familles: noms, entrees: entreesParFamille, parRegle, unitesProuvees: unitesBrutes.length, decisions, aAjouter: aAjouter.length,
         dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif, avertissements };
-    return { resume, unites: decidees, restes: refus, empreintes };
+    return { resume, unites: decidees, restes: refus, empreintes, trousAuto };
 }
 
 /** Le plan est-il encore celui des fichiers d'entrée ? null si oui, sinon la phrase du refus. Un plan sans empreintes est périmé par défaut (une garde s'écrit par ce qu'elle autorise). */
@@ -156,7 +181,9 @@ function trousDuPlan({ plan, dossier }) {
     const recus = new Set((plan.unites ?? []).flatMap(u => u.produits ?? []));
     const trous = [], ecartes = [], vus = new Set();
     for (const famille of Object.keys(plan.empreintes ?? {})) {
-        const r = PV.trousDuManifeste({ trous: lireFamille(dossier, famille).manifeste.trous, recus, famille });
+        const duManifeste = lireFamille(dossier, famille).manifeste.trous;
+        const auto = (plan.trousAuto ?? []).filter(t => t.famille === famille && !duManifeste.some(x => x?.idProduct === t.idProduct)).map(({ famille: _f, ...t }) => t);
+        const r = PV.trousDuManifeste({ trous: [...duManifeste, ...auto], recus, famille });
         for (const t of [...r.trous, ...r.ecartes]) { if (vus.has(t.idProduct)) throw new Error(`trou ${t.idProduct} : présent dans plusieurs familles`); vus.add(t.idProduct); }
         trous.push(...r.trous); ecartes.push(...r.ecartes);
     }
@@ -171,7 +198,10 @@ function lireDepuisLaBase(db, prodDb) {
         lignes: ids => lots(ids, lot => par(db.collection('cartes_produits'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, slug: 1, numeroFiche: 1, idExpansion: 1 })),
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
         numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1 })),
-        sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 })
+        sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 }),
+        // tour 4 (2) : tous les produits des sets à position, et les impressions des cartes (le numéro imprimé lu doit en être une)
+        positions: () => par(db.collection('cartes_produits'), { slugSet: { $regex: '^Battle-Academy|Trainer-Kit' } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
+        impressions: ids => par(db.collection('cartes'), { _id: { $in: ids } }, { impressions: 1 })
     };
 }
 const contexte = { racine: DOSSIER_PHASE4, familles: null };

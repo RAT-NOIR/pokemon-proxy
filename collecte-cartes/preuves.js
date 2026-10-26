@@ -50,7 +50,8 @@ const PREFIXE_ALPHABETIQUE = /^[A-Za-z]+\d/;
 // Tour 3 (1) — `tamponnee` de l'état est le champ `reimpressions` du SET (audit-catalogue/etat-api.js), pas toujours un tampon physique : `pps`, `ba20`… en sont ; `metacarte` (poser-par-metacarte.js) dit
 // seulement que les fiches ont été jointes par la désignation croisée — AUCUN tampon sur la carte. TABLE FERMÉE valeur -> tampon attendu sur le scan (liste lue sur l'état du 2026-10-26) ; une valeur
 // inconnue ne passe jamais (`tampon-inconnu`) : une garde s'écrit par ce qu'elle autorise.
-const TAMPONS_ATTENDUS = Object.freeze({ metacarte: null, wcd: 'wcd', pps: 'pps', ba24: 'ba24', ba22: 'ba22', ba20: 'ba20', sea: 'sea', pr: 'pr', ppp: 'ppp', boo24: 'boo24', boo: 'boo', boo23: 'boo23', pwc: 'pwc' });
+// Tour 4 (2) : le tampon physique de Battle Academy est le MÊME pour 2020, 2022 et 2024 — l'année ne se lit pas sur l'image (elle se prouve autrement : position unique + numéro imprimé de la carte).
+const TAMPONS_ATTENDUS = Object.freeze({ metacarte: null, wcd: 'wcd', pps: 'pps', ba24: 'battle-academy', ba22: 'battle-academy', ba20: 'battle-academy', sea: 'sea', pr: 'pr', ppp: 'ppp', boo24: 'boo24', boo: 'boo', boo23: 'boo23', pwc: 'pwc' });
 /** @returns {{ok: boolean, valeur: string|null}} ok = false pour une valeur hors de la table (null, undefined et « » = pas de tampon). */
 function tamponAttendu(t) {
     if (t == null || t === '') return { ok: true, valeur: null };
@@ -61,15 +62,42 @@ function tamponAttendu(t) {
  * Tour 3 (2) — la carte imprime « XY150a », le produit Cardmarket porte « 150a » (la jointure de production essaie les deux écritures). Admis SEULEMENT si (a) le numéro lu sans son préfixe alphabétique égale
  * (cleNumero) le numéro du produit, qui COMMENCE par un chiffre, et (b) le slug du produit, témoin indépendant, FINIT par le numéro lu avec son préfixe (insensible à la casse).
  */
-const numeroSansPrefixeAdmis = (n, np, slug) => PREFIXE_ALPHABETIQUE.test(n) && /^\d/.test(np) && texte(slug) && J.cleNumero(n.replace(/^[A-Za-z]+/, '')) === J.cleNumero(np) && slug.trim().toLowerCase().endsWith(n.toLowerCase());
+// Tour 4 (4) : avec FRONTIÈRE — le caractère qui précède le numéro lu dans le slug n'est pas un chiffre (« …-1XY150a » ne contient pas « XY150a » ; « …XYPRXY150A » oui : « R » n'est pas un chiffre,
+// et le préfixe lu « XY » est celui que le slug répète).
+const finitParLeNumero = (slug, n) => {
+    const s = slug.trim().toLowerCase(), k = n.toLowerCase();
+    return s.endsWith(k) && !/\d/.test(s.charAt(s.length - k.length - 1));
+};
+const numeroSansPrefixeAdmis = (n, np, slug) => PREFIXE_ALPHABETIQUE.test(n) && /^\d/.test(np) && texte(slug) && J.cleNumero(n.replace(/^[A-Za-z]+/, '')) === J.cleNumero(np) && finitParLeNumero(slug, n);
+/** Tour 4 (3) : le numéro en FIN de slug Cardmarket (« …-PPS8MEG-114 » -> « 114 »), frontière non alphanumérique avant ; null si le slug n'en porte pas (« …-CIN71 » : collé à des lettres, ce n'est pas un numéro). */
+const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.exec(String(slug ?? '').trim()); return m ? m[1] : null; };
+// Tour 4 (5) : la variante nommée d'un produit sans numéro (« Blue Border » / « standard ») se compare à la finition LUE, par table fermée ; une autre valeur de `attendu.variante` (V1, V2…) n'entre pas ici.
+const FINITIONS_ATTENDUES = Object.freeze({ 'blue border': 'blue-border', standard: 'standard' });
 /** Les seuls sets où une position lue vaut preuve : slugSet `Battle-Academy*` (préfixe) et slugSet contenant `Trainer-Kit`. */
 const setAdmisPourPosition = slug => typeof slug === 'string' && (slug.startsWith('Battle-Academy') || slug.includes('Trainer-Kit'));
 /** Le nom lu sur le scan est-il celui du produit ? Nom Cardmarket décomposé (avant « [ ») puis `clesNom` de la jointure ; l'un ou l'autre côté vide = non. */
 const memeNomQueLeProduit = (lu, nomProduit) => {
     if (!texte(lu) || !texte(nomProduit)) return false;
-    const cles = new Set(J.clesNom(J.decomposerNomCardmarket(nomProduit).nom));
-    return J.clesNom(lu).some(k => cles.has(k));
+    // tour 4 (1) : accents tolérés (« Pokégear 3.0 » = « Pokegear 3.0 »)
+    const cles = new Set(J.clesNom(SANS_ACCENTS(J.decomposerNomCardmarket(nomProduit).nom)));
+    return J.clesNom(SANS_ACCENTS(lu)).some(k => cles.has(k));
 };
+/** Tour 4 (1) : le nom lu est exigé PARTOUT. Il ne se compare qu'en anglais (le nom du produit est le nom anglais ; aucun autre chemin — n° de Pokédex… — n'existe aujourd'hui) : une autre langue lue = refus. */
+const motifDeNom = (lu, produit) => (lu.langue !== 'en' ? 'nom-langue-non-anglaise' : (memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different'));
+/**
+ * Tour 4 (2) — l'ANNÉE d'un set Battle Academy (et la moitié d'un Trainer Kit) ne se lit pas sur l'image : DEUX conditions cumulées. (a) le couple (position, nom normalisé) désigne UN SEUL produit parmi tous les
+ * produits des slugSet `Battle-Academy*` / `*Trainer-Kit*` connus de la base — et c'est le produit jugé ; (b) le numéro imprimé lu (et son total, s'il est lu) est une impression de la carte du produit.
+ * @returns {string[]} les motifs de refus (vide = conforme)
+ */
+function motifsDePosition(lu, produit) {
+    const m = [], pos = J.cleNumero(String(lu.position).trim());
+    const memes = Array.isArray(produit?.candidatsPosition) ? produit.candidatsPosition.filter(c => J.cleNumero(c.numero) === pos && memeNomQueLeProduit(lu.nom, c.nomEn)) : [];
+    if (!(memes.length === 1 && memes[0].idProduct === produit.idProduct)) m.push('position-ambigue');
+    const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
+    const imprimee = n !== '' && Array.isArray(produit?.impressions) && produit.impressions.some(i => i?.numero != null && J.cleNumero(i.numero) === J.cleNumero(n) && (t === '' || Number(i.total) === Number(t)));
+    if (!imprimee) m.push('numero-imprime-hors-carte');
+    return m;
+}
 // Un nom de source ne s'écrit jamais en base, pas même dans une marque lue : comparé sans accents ni casse (« Poképédia » = « pokepedia »).
 const SANS_ACCENTS = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const NOMS_DE_SOURCES = Object.freeze([...NOMS_INTERDITS, 'pokepedia', 'blazingtail', 'breakerz', 'tcgplayer', 'cardmarket']);
@@ -172,15 +200,27 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
         else if (!texte(lu.position)) motifs.push('position-vide');
         else if (np == null) motifs.push('position-sans-numero-produit');
         else if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) motifs.push('numero-different');
+        else motifs.push(...motifsDePosition(lu, produit));
+        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position
     } else if (np != null) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
+        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
         // tour 1 (1) : sans numéro, RIEN d'autre ne relie l'image au produit que son NOM — le nom lu doit être celui du produit (Cardmarket, avant « [ »), par la normalisation de la jointure
-        if (!memeNomQueLeProduit(lu.nom, produit?.nomEn)) motifs.push('nom-different');
+        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
+        // tour 4 (3) : et quand le slug du produit porte un numéro en fin (« …-PPS8MEG-114 »), le numéro lu doit être celui-là
+        const sn = numeroFinDeSlug(produit?.slug);
+        if (sn != null && (lu.numero == null || String(lu.numero).trim() === '' || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(sn))) motifs.push('numero-different');
+    }
+    // tour 4 (5) : variante nommée (Blue Border / standard) <-> finition lue
+    const vk = typeof entree.attendu?.variante === 'string' ? entree.attendu.variante.trim().toLowerCase() : null;
+    if (vk && Object.hasOwn(FINITIONS_ATTENDUES, vk)) {
+        if (!texte(lu.finition)) motifs.push('finition-absente');
+        else if (norm(lu.finition) !== FINITIONS_ATTENDUES[vk]) motifs.push('finition-different');
     }
     const ta = tamponAttendu(produit?.tamponnee);
     if (!ta.ok) motifs.push('tampon-inconnu');
@@ -282,7 +322,9 @@ const luEnumere = lu => Object.fromEntries(CHAMPS_LUS.map(k => [k, typeof lu?.[k
 
 function preuvesDe(a) {
     const e = a.entree, lu = luEnumere(e.lu), marques = (Array.isArray(e.lu.marques) ? e.lu.marques : []).filter(texte).slice(0, MARQUES_MAX);
-    return { marques, languePreuve: marques.length ? `lue sur le scan : ${marques.join(' ; ')}` : 'lue sur le scan',
+    // tour 4 (6) : la preuve de langue (publique) n'écrit aucun texte libre — seulement des champs ÉNUMÉRÉS (numéro, total, position, tampon, finition), jamais les marques
+    const champs = [lu.numero != null ? `n° ${lu.numero}${lu.total != null ? `/${lu.total}` : ''}` : null, lu.position != null ? `position ${lu.position}` : null, lu.tampon != null ? `tampon ${lu.tampon}` : null, lu.finition != null ? `finition ${lu.finition}` : null].filter(Boolean);
+    return { marques, languePreuve: champs.length ? `lue sur le scan : ${champs.join(' ; ')}` : 'lue sur le scan',
         preuveNeutre: e.regle === 'preuve-lue' ? `preuve lue sur le scan : n° ${lu.numero ?? '—'}/${lu.total ?? '—'}, langue ${lu.langue}` : `deux sources indépendantes concordantes à l'image, n° ${lu.numero ?? '—'}, langue ${lu.langue}`,
         // les dates s'écrivent en ISO (texte) : le plan passe par un fichier JSON entre sa construction et l'écriture, une Date n'y survit pas
         preuveLue: { regle: e.regle, lu, marques, luLe: dateDe(e.luLe).toISOString(), valideLe: dateDe(a.validation.valideLe).toISOString() } };
@@ -362,4 +404,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

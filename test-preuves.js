@@ -132,8 +132,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
     await test('P2/P4 : édition française (2361) : lu.langue fr passe, en est refusée ; hors 2361/3354 le fr est refusé', () => {
         const fr = entree({ lu: { ...entree().lu, langue: 'fr' } });
-        assert.strictEqual(lue(fr, produit({ idExpansion: 2361 })).ok, true);
-        assert.strictEqual(lue(fr, produit({ idExpansion: 3354 })).ok, true);
+        // tour 4 (1) : la langue du tirage est bonne, mais le nom ne se compare qu'en anglais (aucun autre chemin aujourd'hui) : refus nommé, et SEULEMENT celui-là
+        assert.deepStrictEqual(lue(fr, produit({ idExpansion: 2361 })).motifs, ['nom-langue-non-anglaise']);
+        assert.deepStrictEqual(lue(fr, produit({ idExpansion: 3354 })).motifs, ['nom-langue-non-anglaise']);
         assert.match(lue(fr, produit({ idExpansion: 5000 })).motifs.join(), /langue-differente/);
         assert.match(lue(entree(), produit({ idExpansion: 2361 })).motifs.join(), /langue-differente/, 'le produit EST français : un scan anglais n\'est pas son tirage');
     });
@@ -145,8 +146,17 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(lue({ ...base, lu: { ...base.lu, nom: '' } }, sans).motifs.join(), /nom-different/);
         assert.match(lue({ ...base, lu: { ...base.lu, nom: undefined } }, sans).motifs.join(), /nom-different/);
         assert.match(lue(base, produit({ numero: null, nomEn: null })).motifs.join(), /nom-different/, 'produit sans nom : rien à comparer = refus');
-        const fr = entree({ lu: { ...entree().lu, nom: 'Psykokwak' } });
-        assert.strictEqual(lue(fr, produit({ nomEn: 'Psyduck [Confusion Wave]' })).ok, true, 'AVEC numéro, le nom (traduit) n\'est pas comparé');
+    });
+    await test('tour 4 (1) : le nom est exigé AUSSI avec numéro (accents tolérés) ; autre nom = nom-different', () => {
+        const nom = (n, p = {}) => lue(entree({ lu: { ...entree().lu, nom: n } }), produit({ nomEn: 'Pokégear 3.0', ...p }));
+        assert.strictEqual(nom('Pokegear 3.0').ok, true, 'accent toléré');
+        assert.strictEqual(nom('Pokégear 3.0').ok, true);
+        assert.strictEqual(nom('POKEGEAR 3.0').ok, true);
+        assert.match(nom('Pokegear 2.0').motifs.join(), /nom-different/);
+        assert.match(nom('').motifs.join(), /nom-different/);
+        assert.match(nom(undefined).motifs.join(), /nom-different/);
+        assert.match(nom('Pokegear 3.0', { nomEn: null }).motifs.join(), /nom-different/);
+        assert.match(lue(entree({ lu: { ...entree().lu, nom: 'Bulbasaur ex' } }), produit()).motifs.join(), /nom-different/, 'strict : « Bulbasaur » ≠ « Bulbasaur ex »');
     });
     await test('P2 : produit SANS numéro : marques non vides ET attendu.numero null, sinon refus ; lu.numero/total ne sont plus exigés', () => {
         const sans = produit({ numero: null }), e = entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero: null, total: null, marques: ['tampon ex'] } });
@@ -156,10 +166,46 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(e, produit({ numero: '' })).ok, true, 'numéro vide = pas de numéro');
     });
 
+    await test('tour 4 (3) : produit SANS numéro : lu.numero = le numéro en fin de slug quand il en porte un (frontière non alphanumérique) ; sinon inchangé', () => {
+        const sans = slug => produit({ numero: null, slug });
+        const e = (numero, o = {}) => entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero, total: null, ...o } });
+        assert.strictEqual(lue(e('114'), sans('Boss-s-Orders-Ghetsis-PPS8MEG-114')).ok, true);
+        assert.strictEqual(lue(e('0114'), sans('Boss-s-Orders-Ghetsis-PPS8MEG-114')).ok, true, 'cleNumero');
+        assert.match(lue(e('115'), sans('Boss-s-Orders-Ghetsis-PPS8MEG-114')).motifs.join(), /numero-different/);
+        assert.match(lue(e(null), sans('Boss-s-Orders-Ghetsis-PPS8MEG-114')).motifs.join(), /numero-different/, 'numéro lu absent alors que le slug en porte un');
+        assert.match(lue(e(''), sans('Pikachu-PPS8MEG-114')).motifs.join(), /numero-different/);
+        assert.strictEqual(lue(e('21'), sans('Jigglypuff-CIN71')).ok, true, 'collé à des lettres : ce n\'est pas un numéro de slug, inchangé');
+        assert.strictEqual(lue(e('21'), sans('Pikachu-V2')).ok, true);
+        assert.strictEqual(lue(e(null), sans(null)).ok, true, 'sans slug : inchangé');
+        assert.strictEqual(lue(e('150a'), sans('Pikachu-XYPR-150a')).ok, true);
+        assert.match(lue(e('150'), sans('Pikachu-XYPR-150a')).motifs.join(), /numero-different/, 'suffixe compris');
+    });
+    await test('tour 4 (4) : préfixe de promo : le slug finit par le numéro lu AVEC frontière (le caractère qui précède n\'est pas un chiffre)', () => {
+        const lu = entree({ lu: { ...entree().lu, numero: 'XY150a', total: null } });
+        const P = slug => produit({ numero: '150a', slug });
+        assert.strictEqual(lue(lu, P('Pikachu-V1-XYPRXY150a')).ok, true, 'le banc XYPRXY150A : « R » précède, pas un chiffre');
+        assert.strictEqual(lue(lu, P('Pikachu-V1-XYPR-XY150a')).ok, true);
+        assert.match(lue(lu, P('Pikachu-V1-1XY150a')).motifs.join(), /numero-different/, 'un chiffre précède : pas de frontière');
+        assert.match(lue(lu, P('Pikachu-XY150a-Vxxxxx')).motifs.join(), /numero-different/, 'le numéro doit être en FIN de slug');
+        assert.match(lue(lu, P('XY150a')).ok ? 'ok' : lue(lu, P('XY150a')).motifs.join(), /^ok$/, 'slug réduit au numéro : admis');
+    });
+    await test('tour 4 (5) : variante nommée (Blue Border / standard) <-> finition lue, table fermée ; finition absente = refus ; les autres variantes ne sont pas concernées', () => {
+        const v = (variante, finition) => lue(entree({ attendu: { ...entree().attendu, variante }, lu: { ...entree().lu, finition } }));
+        assert.strictEqual(v('Blue Border', 'blue-border').ok, true);
+        assert.strictEqual(v('blue border', 'Blue-Border').ok, true);
+        assert.strictEqual(v('standard', 'standard').ok, true);
+        assert.match(v('Blue Border', 'standard').motifs.join(), /finition-different/);
+        assert.match(v('standard', 'blue-border').motifs.join(), /finition-different/);
+        assert.match(v('Blue Border', undefined).motifs.join(), /finition-absente/);
+        assert.match(v('standard', '').motifs.join(), /finition-absente/);
+        assert.strictEqual(v('V1', 'normale').ok, true, 'V1/V2 : autre mécanisme (paire nommée)');
+        assert.strictEqual(v(null, undefined).ok, true);
+    });
     await test('tour 3 (1) : `tamponnee` est le champ « reimpressions » du set — `metacarte` n\'est AUCUN tampon physique (table fermée valeur -> tampon attendu, inconnue = tampon-inconnu)', () => {
         assert.strictEqual(PV.TAMPONS_ATTENDUS.metacarte, null);
         assert.ok(Object.isFrozen(PV.TAMPONS_ATTENDUS));
-        for (const v of ['wcd', 'pps', 'ba24', 'ba22', 'ba20', 'sea', 'pr', 'ppp', 'boo24', 'boo', 'boo23', 'pwc']) assert.strictEqual(PV.TAMPONS_ATTENDUS[v], v);
+        for (const v of ['wcd', 'pps', 'sea', 'pr', 'ppp', 'boo24', 'boo', 'boo23', 'pwc']) assert.strictEqual(PV.TAMPONS_ATTENDUS[v], v);
+        for (const v of ['ba20', 'ba22', 'ba24']) assert.strictEqual(PV.TAMPONS_ATTENDUS[v], 'battle-academy', 'tour 4 : le tampon BA est le même pour les trois années');
         const lu = o => entree({ lu: { ...entree().lu, ...o } });
         // TK2 : produit « metacarte », scan sans tampon -> passe ; un tampon lu sur un produit « metacarte » -> refus
         assert.strictEqual(lue(entree(), produit({ tamponnee: 'metacarte' })).ok, true);
@@ -206,12 +252,28 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(lue(promo('150a'), produit({ numero: 'XY150a' })).motifs.join(), /numero-ou-total-absent/);
     });
     await test('tour 2 (2) : position de deck (lu.position) — comparée au numéro du produit, sans total, seulement pour Battle-Academy* et *Trainer-Kit*, ailleurs position-hors-liste', () => {
-        const pos = (position, o = {}) => entree({ lu: { ...entree().lu, numero: '36', total: null, position, ...o } });
-        const BA = produit({ numero: 'C36', slugSet: 'Battle-Academy-2022' }), TK = produit({ numero: 'N', slugSet: 'XY-Trainer-Kit-Latias-Latios' });
+        // tour 4 (2) : le tampon BA est « battle-academy » (l'année ne se lit pas) ; la position doit être UNIQUE (position + nom) parmi les produits des sets BA / kits, et le numéro imprimé une impression de la carte
+        const pos = (position, o = {}) => entree({ lu: { ...entree().lu, numero: '36', total: '236', tampon: 'battle-academy', position, ...o } });
+        const imp = [{ numero: '36', total: '236' }];
+        const cand = (...l) => l.map(([idProduct, numero, nomEn]) => ({ idProduct, numero, nomEn, slugSet: 'Battle-Academy-2022' }));
+        const BA = produit({ numero: 'C36', slugSet: 'Battle-Academy-2022', tamponnee: 'ba22', impressions: imp, candidatsPosition: cand([1001, 'C36', 'Bulbasaur'], [1002, 'C36', 'Ivysaur'], [1003, 'P44', 'Bulbasaur']) });
+        const TK = produit({ numero: 'N', slugSet: 'XY-Trainer-Kit-Latias-Latios', impressions: imp, candidatsPosition: cand([1001, 'N', 'Bulbasaur']) });
         assert.strictEqual(lue(pos('C36'), BA).ok, true);
         assert.strictEqual(lue(pos('c036'), BA).ok, true, 'cleNumero');
-        assert.strictEqual(lue(pos('N'), TK).ok, true);
-        assert.strictEqual(lue(pos('C36', { numero: '999', total: '3' }), BA).ok, true, 'la position remplace le numéro imprimé : il n\'est plus comparé');
+        assert.strictEqual(lue(pos('N', { tampon: null }), TK).ok, true);
+        assert.match(lue(pos('C36', { numero: '999', total: '3' }), BA).motifs.join(), /numero-imprime-hors-carte/, 'le numéro imprimé doit être une impression de la carte');
+        assert.match(lue(pos('C36', { total: '99' }), BA).motifs.join(), /numero-imprime-hors-carte/, 'et son total aussi');
+        assert.match(lue(pos('C36', { numero: null }), BA).motifs.join(), /numero-imprime-hors-carte/);
+        assert.strictEqual(lue(pos('C36', { total: null }), BA).ok, true, 'sans total lu, le numéro suffit');
+        assert.match(lue(pos('C36'), { ...BA, impressions: undefined }).motifs.join(), /numero-imprime-hors-carte/, 'sans les impressions de la carte : refus');
+        assert.match(lue(pos('C36'), { ...BA, candidatsPosition: undefined }).motifs.join(), /position-ambigue/, 'sans les produits du set : refus');
+        assert.match(lue(pos('C36'), { ...BA, candidatsPosition: cand([1001, 'C36', 'Bulbasaur'], [2002, 'C36', 'Bulbasaur']) }).motifs.join(), /position-ambigue/, 'même position et même nom dans un autre set : ambigu');
+        assert.match(lue(pos('C36'), { ...BA, candidatsPosition: cand([2002, 'C36', 'Bulbasaur']) }).motifs.join(), /position-ambigue/, 'l\'unique candidat n\'est pas ce produit');
+        assert.match(lue(pos('C36', { nom: 'Ivysaur' }), BA).motifs.join(), /nom-different|position-ambigue/, 'un autre nom');
+        assert.match(lue(pos('C36', { nom: 'Ivysaur' }), BA).motifs.join(), /nom-different/);
+        assert.match(lue(pos('C36', { langue: 'fr' }), { ...BA, idExpansion: 2361 }).motifs.join(), /nom-langue-non-anglaise/);
+        assert.match(lue(pos('C36', { tampon: null }), BA).motifs.join(), /tampon-different/, 'le tampon BA est « battle-academy » : absent = refus');
+        assert.match(lue(pos('C36', { tampon: 'ba22' }), BA).motifs.join(), /tampon-different/, 'l\'année n\'est pas un tampon lu');
         assert.match(lue(pos('C37'), BA).motifs.join(), /numero-different/, 'position fausse');
         assert.match(lue(pos('C36'), produit({ numero: 'C36', slugSet: 'Autre-Set' })).motifs.join(), /position-hors-liste/);
         assert.match(lue(pos('C36'), produit({ numero: 'C36', slugSet: 'Mon-Battle-Academy' })).motifs.join(), /position-hors-liste/, 'préfixe, pas inclusion');
@@ -327,7 +389,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const p = u.champsEntree.preuveLue;
         assert.deepStrictEqual([p.regle, p.marques, p.luLe, p.valideLe, p.lu.total], ['preuve-lue', ['13/40', 'texte anglais'], '2026-10-26T10:00:00.000Z', '2026-10-26T12:00:00.000Z', '40']);
         assert.deepStrictEqual(u.champsDocument.preuveLue, p);
-        assert.strictEqual(u.languePreuve, 'lue sur le scan : 13/40 ; texte anglais');
+        assert.strictEqual(u.languePreuve, 'lue sur le scan : n° 13/40 ; finition normale', 'tour 4 (6) : des champs énumérés, jamais les marques');
         assert.ok(!/alpha|boutique|hote/i.test(u.languePreuve + u.preuveNeutre), 'aucun nom de source dans le texte écrit');
         assert.strictEqual(u.sha256, H1);
     });
@@ -466,7 +528,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(r.code, 0); assert.strictEqual(r.reel, 1); assert.strictEqual(r.resultats[0].etat, 'verifie');
         const e = m.etat.carte(100).images[0];
         assert.deepStrictEqual([e.source, e.lot, e.retirable, e.langue, e.numero, e.set, e.urlOriginal, e.cleR2], ['prv', 'prv-2026-10', true, 'en', '13', SLUG, m.us[0].url, `prv/${SLUG}/13-100-en.webp`]);
-        assert.strictEqual(e.languePreuve, 'lue sur le scan : 13/40 ; texte anglais');
+        assert.strictEqual(e.languePreuve, 'lue sur le scan : n° 13/40 ; finition normale');
+        assert.ok(!e.languePreuve.includes('anglais'), 'aucune marque (texte libre) dans la preuve de langue');
         assert.strictEqual(e.preuveLue.regle, 'preuve-lue'); assert.deepStrictEqual(e.preuveLue.marques, ['13/40', 'texte anglais']); assert.ok(e.preuveLue.valideLe && e.preuveLue.luLe);
         assert.strictEqual(e.mention, '© Pokémon / The Pokémon Company');
         assert.deepStrictEqual(m.deposes, [`prv/${SLUG}/13-100-en.webp`]);
@@ -576,7 +639,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
 
     // ───────── le plan, sur une FAUSSE base ─────────
     const K = require('./collecteur-images-preuves');
-    function monde({ entrees, validations, produits = {}, etat, lignes, sets = [{ _id: SLUG, tirage: 'intl' }], cartes, famille = 'MCD', trous = [] }) {
+    function monde({ entrees, validations, produits = {}, etat, lignes, sets = [{ _id: SLUG, tirage: 'intl' }], cartes, famille = 'MCD', trous = [], positions = [], impressionsDe = {} }) {
         const racine = tmp(), cache = path.join(racine, 'CACHE');
         fs.mkdirSync(path.join(racine, famille), { recursive: true }); fs.mkdirSync(path.join(racine, 'VALIDATIONS'), { recursive: true }); fs.mkdirSync(cache, { recursive: true });
         fs.writeFileSync(path.join(racine, famille, 'preuves.json'), JSON.stringify({ famille, le: '2026-10-26T00:00:00.000Z', entrees, trous }));
@@ -585,7 +648,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             lignes: async ids => lignes.filter(l => ids.includes(l.idProduct)),
             fiches: async (carteIds, slugs) => lignes.filter(l => carteIds.includes(l.carteId) && slugs.includes(l.slugSet)),
             numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null, slug: produits[i]?.slugNumeros ?? null })).filter(x => x.numero != null),
-            sets: async slugs => sets.filter(s => slugs.includes(s._id))
+            sets: async slugs => sets.filter(s => slugs.includes(s._id)),
+            positions: async () => positions,
+            impressions: async ids => ids.map(i => ({ _id: i, impressions: impressionsDe[i] ?? [] }))
         };
         const imgs = [];
         const db = { collection: n => ({ cartes: { find: q => ({ project: () => ({ toArray: async () => cartes.filter(c => q._id.$in.includes(c._id)) }) }) }, images: { find: q => ({ toArray: async () => imgs.filter(d => q.carteId.$in.includes(d.carteId)) }), findOne: async () => null } })[n] };
@@ -631,6 +696,32 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const w4 = await mondeSimple({ lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: null, idExpansion: 5000 }] });
         const p4 = await K.construirePlanAvec({ dossier: w4.racine, cache: w4.cache, lire: w4.lire, etat: w4.etat, lecteur: RC.lecteurNatif(w4.db), fichiers: w4.F });
         assert.match(p4.resume.refus[0].motif, /preuve-lue:numero/, 'le produit n\'a pas de numéro de fiche : numéro de numeros_cartes absent aussi -> la preuve doit se passer de numéro (marques + attendu.numero null)');
+    });
+    await test('tour 4 (2) en plan : Battle Academy — la position doit être unique parmi TOUS les produits des sets BA de la base, et le numéro imprimé une impression de la carte', async () => {
+        const BAS = 'Battle-Academy-2022';
+        const monter4 = async ({ positions, impressions = [{ numero: '189', total: '236' }], lu = {} }) => {
+            const w = await mondeSimple({ sets: [{ _id: BAS, tirage: 'intl' }], etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'intl', tamponnee: 'ba22', name: 'Bug Catcher' }, { idProduct: 2002, idExpansion: 5000, langue: 'intl', tamponnee: 'ba24', name: 'Bug Catcher' }],
+                lignes: [{ idProduct: 1001, carteId: 77, slugSet: BAS, numeroFiche: 'P44', idExpansion: 5000 }], positions, impressionsDe: { 77: impressions } });
+            const f = path.join(w.racine, 'MCD', 'preuves.json'), man = JSON.parse(fs.readFileSync(f, 'utf8'));
+            man.entrees[0].lu = { nom: 'Bug Catcher', numero: '189', total: '236', langue: 'en', tampon: 'battle-academy', position: 'P44', finition: 'normale', marques: ['silhouette Pikachu', 'rond 44'], ...lu };
+            fs.writeFileSync(f, JSON.stringify(man)); return w;
+        };
+        const planDe = w => K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+        const seul = [{ idProduct: 1001, slugSet: BAS, numeroFiche: 'P44' }, { idProduct: 2002, slugSet: 'Battle-Academy-2024', numeroFiche: 'P45' }];
+        const bon = await planDe(await monter4({ positions: seul }));
+        assert.deepStrictEqual(bon.resume.refus, [], JSON.stringify(bon.resume.refus)); assert.strictEqual(bon.unites.length, 1); assert.strictEqual(bon.unites[0].tampon, 'battle-academy');
+        const ambigu = await planDe(await monter4({ positions: [...seul, { idProduct: 2002, slugSet: 'Battle-Academy-2024', numeroFiche: 'P44' }] }));
+        assert.deepStrictEqual(ambigu.resume.refus.map(r => r.motif), ['preuve-lue:position-ambigue']);
+        const horsCarte = await planDe(await monter4({ positions: seul, impressions: [{ numero: '12', total: '236' }] }));
+        assert.deepStrictEqual(horsCarte.resume.refus.map(r => r.motif), ['preuve-lue:numero-imprime-hors-carte']);
+        // décision du testeur : l'année non prouvée devient un TROU nommé variantes-indiscernables (hôte interrogé + date), pas un refus muet ; un refus d'une autre nature n'en fait pas
+        for (const p of [ambigu, horsCarte]) { assert.deepStrictEqual(p.trousAuto.map(t => [t.idProduct, t.motif]), [[1001, 'variantes-indiscernables']]); assert.deepStrictEqual(p.trousAuto[0].interroges, ['img.alpha.test']); }
+        assert.deepStrictEqual(bon.trousAuto, []);
+        const w = await monter4({ positions: [...seul, { idProduct: 2002, slugSet: 'Battle-Academy-2024', numeroFiche: 'P44' }] });
+        const pl = await planDe(w), tr = K.trousDuPlan({ plan: pl, dossier: w.racine });
+        assert.deepStrictEqual(tr.trous.map(x => [x.idProduct, x.motif, x.sources]), [[1001, 'variantes-indiscernables', ['img.alpha.test']]]);
+        const mauvaisNom = await planDe(await monter4({ positions: seul, lu: { nom: 'Autre carte' } }));
+        assert.deepStrictEqual(mauvaisNom.trousAuto, [], 'un nom différent est un refus, pas un trou d\'année');
     });
     await test('tour 3 (2) en plan : le numéro ET le slug du produit viennent de numeros_cartes quand la ligne n\'en porte pas (cas réel 311267 : carte « XY150a », produit « 150a »)', async () => {
         const lg = [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: null, idExpansion: 5000 }];
