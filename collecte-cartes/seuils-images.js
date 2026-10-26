@@ -81,7 +81,9 @@ const PLANCHER_BASSE_DEFINITION = 200;
 // planche (échantillon de 50), essai à blanc, écriture, revérification. » La source CardTrader entre donc dans la liste FERMÉE, sous le nom que son collecteur ÉCRIT dans `images.source`
 // (`SOURCE` de collecte-cartes/cardtrader.js, 'ctr' : le banc compare les deux ; cardtrader.js charge CE module, il ne peut pas être requis ici). Son seuil reste 350 (`largeurMinDe`) : sous 350
 // et à partir de 200, l'image est admise ET marquée basseDefinition (`marqueDe`), remplaçable dès qu'une source au-dessus du seuil existe ; sous 200, elle est refusée.
-const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com', 'ctr']);
+// ➕ 2026-10-26 (PRV, fournisseur des preuves validées, consigne du coordinateur « < 200 px refus, entre 200 et le seuil la marque basseDefinition exactement comme les autres collecteurs ») : le code neutre `prv`
+// (collecte-cartes/preuves.js SOURCE ; le banc test-preuves.js compare les deux) entre dans la liste FERMÉE. Son seuil reste 350 (`largeurMinDe`) ; sous 350 et à partir de 200 l'image est admise ET marquée.
+const SOURCES_A_PLANCHER = Object.freeze(['pokemon.com', 'ctr', 'prv']);
 // le nom que le collecteur Pokumon ÉCRIT dans `images.source` (collecte-cartes/pokumon.js SOURCE ; le banc le compare) — pokumon.js charge CE module, il ne peut donc pas être requis ici
 const SOURCE_POKUMON = 'pokumon';
 const LIGNES_POKUMON_A_PLANCHER = Object.freeze(['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2']);

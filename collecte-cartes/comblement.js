@@ -39,7 +39,8 @@ function chargerFournisseurs(chemins = FOURNISSEURS, req = require) {
 
 // ── 1. Les motifs FERMÉS et les trous nommés (R7) ─────────────────────────────────────────────────────────────────────────────
 // Les cinq motifs de la règle d'image sont CEUX de concordance-image.js (jamais recopiés) ; trois s'y ajoutent ici. `source-bloquee:<code>` est la sixième famille (le code est celui d'un fournisseur).
-const MOTIFS = Object.freeze([...CI.MOTIFS_TROU, 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source']);
+// `variantes-indiscernables` (phase 4, 26/10) : V1/V2, a/b, holo/normale, tampons — rien ne distingue les variantes à l'image et aucune source ne NOMME laquelle est laquelle (le sens d'un « V1/V2 » ne se devine jamais).
+const MOTIFS = Object.freeze([...CI.MOTIFS_TROU, 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source', 'variantes-indiscernables']);
 const motifAdmis = m => typeof m === 'string' && (MOTIFS.includes(m) || /^source-bloquee:[a-z0-9]+$/.test(m));
 const INSTRUMENT = 'comblement-nocturne';
 /** Un trou nommé : la preuve « quel instrument, quelles sources, quelle date » (§36). LÈVE sur tout ce qui n'est pas dans la forme. */

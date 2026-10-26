@@ -165,7 +165,7 @@ const transportPages = (appels = []) => ({ async get(url) {
     });
     await test('le retrait connaît la source (pmk), sa liste est fermée', () => {
         assert.strictEqual(RETIRER.SOURCES.pmk().SOURCE, 'pmk');
-        assert.deepStrictEqual(Object.keys(RETIRER.SOURCES).sort(), ['pmk', 'ppr', 'scx', 'tcs']);
+        assert.deepStrictEqual(Object.keys(RETIRER.SOURCES).sort(), ['pmk', 'ppr', 'prv', 'scx', 'tcs']);
     });
 
     console.log(`${ok} passés, ${ko} en échec`);

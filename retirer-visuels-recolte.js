@@ -13,10 +13,11 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
-const SOURCES = Object.freeze({ ppr: () => require('./collecte-cartes/pokipair').SRC, tcs: () => require('./collecte-cartes/tcgcsv').SRC, scx: () => require('./collecte-cartes/scrydex').SRC, pmk: () => require('./collecte-cartes/packmagik').SRC });
+const SOURCES = Object.freeze({ ppr: () => require('./collecte-cartes/pokipair').SRC, tcs: () => require('./collecte-cartes/tcgcsv').SRC, scx: () => require('./collecte-cartes/scrydex').SRC, pmk: () => require('./collecte-cartes/packmagik').SRC, prv: () => require('./collecte-cartes/preuves').SRC });
 const DOSSIER_RECOLTE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\RECOLTE', DOSSIER_RECOLTE2 = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\RECOLTE2';
-// l'annonce des baisses s'écrit avec les sorties de la récolte de la source (RECOLTE pour ppr et tcs, RECOLTE2 pour les suivantes)
-const DOSSIERS = Object.freeze({ ppr: DOSSIER_RECOLTE, tcs: DOSSIER_RECOLTE, scx: DOSSIER_RECOLTE2, pmk: DOSSIER_RECOLTE2 });
+const DOSSIER_PRV = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE4\\PRV';
+// l'annonce des baisses s'écrit avec les sorties de la récolte de la source (RECOLTE pour ppr et tcs, RECOLTE2 pour les suivantes, PHASE4\PRV pour les preuves validées)
+const DOSSIERS = Object.freeze({ ppr: DOSSIER_RECOLTE, tcs: DOSSIER_RECOLTE, scx: DOSSIER_RECOLTE2, pmk: DOSSIER_RECOLTE2, prv: DOSSIER_PRV });
 
 const delaSource = (SRC, e) => e?.source === SRC.SOURCE && e.lot === SRC.LOT;
 async function cartesDeLaSource(db, SRC) {
@@ -91,11 +92,11 @@ module.exports = { retirerLot, cartesDeLaSource, planDeRetrait, planLu, aRemettr
 if (require.main !== module) return;
 
 const args = process.argv.slice(2);
-const AUTORISES = [/^--ecrire$/, /^--effacer-r2$/, /^--source=(ppr|tcs|scx|pmk)$/];
+const AUTORISES = [/^--ecrire$/, /^--effacer-r2$/, /^--source=(ppr|tcs|scx|pmk|prv)$/];
 const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
 const code = args.find(a => a.startsWith('--source='))?.slice(9);
 const ecrire = args.includes('--ecrire'), effacerR2 = args.includes('--effacer-r2');
-if (inconnus.length || !code) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs|scx|pmk est obligatoire ; autorisés : --ecrire, --effacer-r2`); process.exitCode = 2; }
+if (inconnus.length || !code) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--source=ppr|tcs|scx|pmk|prv est obligatoire ; autorisés : --ecrire, --effacer-r2`); process.exitCode = 2; }
 else if (effacerR2 && !ecrire) { console.error('❌ --effacer-r2 sans --ecrire n\'a pas de sens'); process.exitCode = 2; }
 
 if (process.exitCode !== 2) (async () => {
