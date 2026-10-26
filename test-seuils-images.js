@@ -143,7 +143,7 @@ if (typeof S.largeurAdmiseDe === 'function') {
 { const PK = require('./collecte-cartes/pokumon');
   const mcd = (S.LIGNES_POKUMON_A_PLANCHER || []);
   verifier('LIGNES_POKUMON_A_PLANCHER = les quatre lignes du ruling, toutes famille « mcd » de LIGNES_AUTRES', [[...mcd].sort(), mcd.map(id => PK.LIGNES_AUTRES.find(l => l.id === id)?.famille)], [['mcd-2014', 'mcd-2015', 'mcd-2017', 'mcd-2018-2'], ['mcd', 'mcd', 'mcd', 'mcd']]);
-  verifier('SOURCES_A_PLANCHER = [pokemon.com, ctr] ; le nom « pokumon » écrit ici est celui que le collecteur ÉCRIT (SOURCE)', [[...(S.SOURCES_A_PLANCHER || [])], S.SOURCE_POKUMON, PK.SOURCE], [['pokemon.com', 'ctr'], 'pokumon', 'pokumon']); }
+  verifier('SOURCES_A_PLANCHER = [pokemon.com, ctr, prv] ; le nom « pokumon » écrit ici est celui que le collecteur ÉCRIT (SOURCE) ; « prv » est le code du fournisseur des preuves validées (collecte-cartes/preuves.js)', [[...(S.SOURCES_A_PLANCHER || [])], S.SOURCE_POKUMON, PK.SOURCE, require('./collecte-cartes/preuves').SOURCE], [['pokemon.com', 'ctr', 'prv'], 'pokumon', 'pokumon', 'prv']); }
 // ➕ 2026-10-18 (CTR-BASSE) — CardTrader : « Les 589 images CardTrader en 255 px : OUI, en basseDefinition: true (au-dessus du plancher de 200 px). » La source est celle que le collecteur ÉCRIT (SOURCE).
 { const CTR = require('./collecte-cartes/cardtrader'), a = S.largeurAdmiseDe;
   verifier('le nom de la source CardTrader écrit dans la liste fermée est celui que le collecteur ÉCRIT (SOURCE)', [CTR.SOURCE, (S.SOURCES_A_PLANCHER || []).includes(CTR.SOURCE)], ['ctr', true]);

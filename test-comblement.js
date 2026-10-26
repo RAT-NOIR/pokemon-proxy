@@ -30,7 +30,7 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
 
 (async () => {
     // ───────────── motifs fermés et trous nommés (R7) ─────────────
-    const attendusMotifs = ['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible', 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source'];
+    const attendusMotifs = ['aucune-source', 'une-seule-source', 'discordance-image', 'tirage-different', 'illisible', 'sans-offre', 'sous-le-seuil', 'a-confirmer', 'absente-chez-la-source', 'variantes-indiscernables'];
     v('motifs fermés : la liste', CO.MOTIFS, attendusMotifs);
     for (const m of [...attendusMotifs, 'source-bloquee:tcs', 'source-bloquee:scx']) vrai(`motif « ${m} » admis`, CO.motifAdmis(m));
     for (const m of ['n-importe-quoi', '', null, undefined, 'source-bloquee:', 'source-bloquee:TCS', 'source-bloquee:a b', 'Aucune-source', 'a-confirmer ']) vrai(`motif ${JSON.stringify(m)} refusé`, !CO.motifAdmis(m));

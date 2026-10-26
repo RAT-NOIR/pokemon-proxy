@@ -39,15 +39,28 @@ const cleNum = n => (n == null || String(n).trim() === '' ? 'sn' : String(n).tri
  * Le descripteur d'une source. Écrit par ce qu'il autorise : tout champ manquant LÈVE (un code, un lot ou une langue absents ne se devinent pas), et le code neutre ne contient pas
  * le nom de la source (la liste des noms interdits est donnée par l'appelant : `nomsInterdits`).
  */
-function fabriquerSource({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, nomsInterdits = [], tampon = () => undefined, refuserOctets = () => null }) {
+// `parUnite` (fournisseur « prv », preuves validées) : la langue, le tampon, le tirage attendu, la preuve de langue et les champs de preuve ne sont PAS ceux de la source mais ceux de CHAQUE unité
+// (une preuve lue sur le scan dit sa langue). Par ce qu'elle AUTORISE : une source par unité ne devine rien — une unité sans langue LÈVE (langueDe), sans tirage attendu son set est refusé (ecrire).
+// Les sources à langue unique (parUnite absent) ne changent pas d'un octet : la langue d'une unité n'y est jamais lue.
+function fabriquerSource({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, nomsInterdits = [], tampon = () => undefined, refuserOctets = () => null, parUnite = false }) {
     if (typeof refuserOctets !== 'function') throw new Error('source : « refuserOctets » doit être une fonction (octets -> motif | null)');
     for (const [k, v] of Object.entries({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN })) if (typeof v !== 'string' || !v) throw new Error(`source : « ${k} » absent`);
     for (const n of nomsInterdits) for (const [k, v] of Object.entries({ SOURCE, LOT, LANGUE_PREUVE, CHAMP_BILAN })) if (new RegExp(n, 'i').test(v)) throw new Error(`source : « ${k} » (${v}) nomme la source (${n}) — le nom de la source n'apparaît jamais en public`);
-    return Object.freeze({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, MENTION, tampon, refuserOctets,
-        cleR2: (slug, numero, carteId) => `${SOURCE}/${slug}/${cleNum(numero)}-${carteId}-${LANGUE}.webp`,
-        idImage: (slug, carteId, numero) => `${SOURCE}/${slug}/${carteId}/${cleNum(numero)}/${LANGUE}`,
+    const langueOu = l => { if (!parUnite) return LANGUE; if (typeof l !== 'string' || !l) throw new Error(`source ${SOURCE} : la langue de l'unité est obligatoire — une source par unité ne devine jamais la langue`); return l; };
+    return Object.freeze({ SOURCE, LOT, LANGUE, LANGUE_PREUVE, TIRAGE, CHAMP_BILAN, MENTION, tampon, refuserOctets, parUnite: Boolean(parUnite),
+        cleR2: (slug, numero, carteId, langue) => `${SOURCE}/${slug}/${cleNum(numero)}-${carteId}-${langueOu(langue)}.webp`,
+        idImage: (slug, carteId, numero, langue) => `${SOURCE}/${slug}/${carteId}/${cleNum(numero)}/${langueOu(langue)}`,
         idEtat: slug => `${SOURCE}/${slug}` });
 }
+/** La langue d'une unité : celle de la source, ou — source `parUnite` — celle que l'unité porte (LÈVE sans elle). */
+function langueDe(SRC, u) {
+    if (!SRC.parUnite) return SRC.LANGUE;
+    if (typeof u?.langue !== 'string' || !u.langue) throw new Error(`source ${SRC.SOURCE} : l'unité (carte ${u?.carteId}, set ${u?.slugSet}, n° ${u?.numero}) n'a pas de langue — une source par unité ne devine jamais la langue`);
+    return u.langue;
+}
+const tamponDe = (SRC, u) => (SRC.parUnite ? (u.tampon || undefined) : SRC.tampon(u.slugSet));
+const languePreuveDe = (SRC, u) => (SRC.parUnite ? (typeof u.languePreuve === 'string' && u.languePreuve ? u.languePreuve : (() => { throw new Error(`source ${SRC.SOURCE} : l'unité (carte ${u?.carteId}) n'a pas de preuve de langue`); })()) : SRC.LANGUE_PREUVE);
+const champsDe = (SRC, u, cle) => (SRC.parUnite && u[cle] && typeof u[cle] === 'object' ? u[cle] : {});
 
 // ── 0. Le contrôle de largeur et le jugement d'une image ─────────────────────────────────────────────────────────────────────
 /** Au seuil de la source -> `ok` ; du plancher admis jusqu'au seuil -> `basse-definition` (seulement si la source figure dans la liste fermée de seuils-images.js) ; sinon `trop-petit`. */
@@ -173,7 +186,7 @@ const lecteurModeles = M => ({
     images: ids => M.Image.find({ carteId: { $in: ids } }).lean(),
     document: id => M.Image.findById(id).select('etat').lean()
 });
-const candidatDe = (SRC, u, entree) => ({ set: u.slugSet, numero: u.numero, langue: SRC.LANGUE, source: SRC.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(SRC.tampon(u.slugSet) ? { tampon: SRC.tampon(u.slugSet) } : {}) });
+const candidatDe = (SRC, u, entree) => ({ set: u.slugSet, numero: u.numero, langue: langueDe(SRC, u), source: SRC.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(tamponDe(SRC, u) ? { tampon: tamponDe(SRC, u) } : {}) });
 
 /** La décision de chaque unité sur l'état de la base (lecture seule) : ajouter | deja-posee | cede (la règle commune : jamais une image correcte remplacée). */
 async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
@@ -184,7 +197,7 @@ async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
     return unites.map(u => {
         const c = cartes.get(u.carteId);
         if (!c) return { ...u, decision: { action: 'cede', raison: 'carte introuvable en base', remplace: [] } };
-        const cle = SRC.cleR2(u.slugSet, u.numero, u.carteId);
+        const cle = SRC.cleR2(u.slugSet, u.numero, u.carteId, langueDe(SRC, u));
         // `largeurDe` : la VRAIE largeur de l'original, quand le téléchargement l'a mesurée ; sinon la largeur nominale du seuil (la jointure arbitre sur la vraie)
         const w = largeurDe ? largeurDe(u) : null, wOriginal = w ?? largeurMinDe(SRC.SOURCE);
         return { ...u, cleR2: cle, decision: CT.decisionEcriture(c.images || [], candidatDe(SRC, u, { cleR2: cle, wOriginal, ...marqueDe({ wOriginal }) }), { documents }) };
@@ -194,16 +207,17 @@ async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
 /** L'entrée `cartes.images` d'une unité. `meta` : { wOriginal, cleR2, sha256, w, h, fmt }. LÈVE sans adresse d'origine (traçabilité commune). */
 // D4 : `collecteLe` (et `telechargeLe` du document) est la date du TÉLÉCHARGEMENT, lue au cache (`meta.le`) ; `jointeLe` est la date de l'écriture. Sans date de téléchargement : la date d'écriture (tracabilite.js).
 function entreeDeCarte(SRC, u, meta, le = new Date(), collecteLe = le) {
-    const tampon = SRC.tampon(u.slugSet);
-    return { set: u.slugSet, source: SRC.SOURCE, lot: SRC.LOT, cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, numero: u.numero ?? null, wOriginal: meta.wOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
-        attribution: SRC.MENTION, mention: SRC.MENTION, langue: SRC.LANGUE, languePreuve: SRC.LANGUE_PREUVE, ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
+    const tampon = tamponDe(SRC, u);
+    // (source `parUnite` : les champs de preuve de l'unité passent EN PREMIER — aucun ne peut écraser un champ de l'écriture)
+    return { ...champsDe(SRC, u, 'champsEntree'), set: u.slugSet, source: SRC.SOURCE, lot: SRC.LOT, cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, numero: u.numero ?? null, wOriginal: meta.wOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
+        attribution: SRC.MENTION, mention: SRC.MENTION, langue: langueDe(SRC, u), languePreuve: languePreuveDe(SRC, u), ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
 }
 /** Le document `images` d'une unité. */
 function documentImage(SRC, u, meta, le = new Date(), collecteLe = le) {
-    const tampon = SRC.tampon(u.slugSet);
-    return { _id: SRC.idImage(u.slugSet, u.carteId, u.numero), source: SRC.SOURCE, lot: SRC.LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, idSource: u.idSource ?? null,
+    const tampon = tamponDe(SRC, u);
+    return { ...champsDe(SRC, u, 'champsDocument'), _id: SRC.idImage(u.slugSet, u.carteId, u.numero, langueDe(SRC, u)), source: SRC.SOURCE, lot: SRC.LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, idSource: u.idSource ?? null,
         cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, wOriginal: meta.wOriginal, hOriginal: meta.hOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
-        langueSource: SRC.LANGUE, langue: SRC.LANGUE, languePreuve: SRC.LANGUE_PREUVE, attribution: SRC.MENTION, mention: SRC.MENTION, ...(tampon ? { tampon } : {}),
+        langueSource: langueDe(SRC, u), langue: langueDe(SRC, u), languePreuve: languePreuveDe(SRC, u), attribution: SRC.MENTION, mention: SRC.MENTION, ...(tampon ? { tampon } : {}),
         ...(u.preuveNeutre ? { preuve: u.preuveNeutre } : {}), telechargeLe: new Date(collecteLe), etat: 'ok', ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
 }
 
@@ -240,7 +254,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
         const c = HOTE.lireDuCache(dossierCache, url);
         if (!c) { horsCache++; continue; }
         if (sha('sha256', c.octets) !== ix.sha256) { altere++; console.error(`❌ cache altéré (sha256) : ${url}`); continue; }
-        const _id = SRC.idImage(u.slugSet, u.carteId, u.numero);
+        const _id = SRC.idImage(u.slugSet, u.carteId, u.numero, langueDe(SRC, u));
         const deja = await lect.document(_id);
         if (deja?.etat === 'retire') { retires++; continue; }
         prets.push({ u, _id, octets: c.octets, ix, collecteLe: c.meta?.le ?? null });
@@ -261,7 +275,9 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
         const refus = (etat, erreur) => { console.error(`❌ ${slug} : ${erreur}.`); resultats.push({ code: slug, etat, erreur }); };
         const set = await M.Set.findById(slug).select('tirage region').lean();
         if (!set) { refus('refuse-set', 'set absent de la base'); continue; }
-        if ((set.tirage ?? set.region) !== SRC.TIRAGE) { refus('refuse-set', `tirage ${set.tirage ?? set.region} en base : la source ne sert que des cartes du tirage ${SRC.TIRAGE}`); continue; }
+        // source `parUnite` : chaque unité dit le tirage qu'elle attend (celui de son produit) ; le set doit être de CE tirage pour toutes — une unité sans tirage attendu refuse le set
+        if (SRC.parUnite) { const faux = unitesDuSet.find(p => (set.tirage ?? set.region) !== p.u.tirageAttendu); if (faux) { refus('refuse-set', `tirage ${set.tirage ?? set.region} en base : l'unité du produit ${faux.u.produits?.[0]} attend le tirage ${faux.u.tirageAttendu ?? 'inconnu'}`); continue; } }
+        else if ((set.tirage ?? set.region) !== SRC.TIRAGE) { refus('refuse-set', `tirage ${set.tirage ?? set.region} en base : la source ne sert que des cartes du tirage ${SRC.TIRAGE}`); continue; }
         const st = await db.command({ dbStats: 1 });
         if (st.dataSize + st.indexSize > stopOctets) { refus('refuse-taille-base', 'base au-delà de 400 Mo'); continue; }
         const idEtat = basseDefinition ? `${SRC.SOURCE}-basse/${slug}` : SRC.idEtat(slug);       // (le lot basse définition a son état et son bilan : il ne recouvre pas ceux du lot des `ok`)
@@ -280,7 +296,7 @@ async function ecrire({ SRC, unites, M, dossierCache, indexImages, attendu = nul
                     const { u, _id, octets, ix } = p;
                     const le = new Date(), collecteLe = p.collecteLe ? new Date(p.collecteLe) : le;          // D4 : la date du téléchargement, lue au cache
                     const webp = await sharp(octets).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
-                    const cle = SRC.cleR2(slug, u.numero, u.carteId);
+                    const cle = SRC.cleR2(slug, u.numero, u.carteId, langueDe(SRC, u));
                     const meta = { cleR2: cle, sha256: sha('sha256', webp.data), w: webp.info.width, h: webp.info.height, fmt: 'webp', wOriginal: ix.w, hOriginal: ix.h };
                     const dejaDoc = await M.Image.findById(_id).select('sha256 etat').lean();
                     if (dejaDoc?.etat === 'ok' && dejaDoc.sha256 === meta.sha256) sautees++;
@@ -359,5 +375,5 @@ function produitsDuSet({ lignes, cartes }) {
     return lignes.map(l => { const c = cartes.get(l.carteId); return { carteId: l.carteId, idProduct: l.idProduct, numeroFiche: l.numeroFiche ?? null, slug: l.slug ?? null, carteNom: c?.nomEn ?? null, carte: c ? { _id: c._id, nomEn: c.nomEn, niveau: c.niveau, attaques: c.attaques, ...(c.impressions ? { impressions: c.impressions } : {}) } : null }; });
 }
 
-module.exports = { lireSet, produitsDuSet, fabriquerSource, controleLargeur, juger, jugementDe, telecharger, planches, choisirEchantillon, decider, lecteurNatif, lecteurModeles, entreeDeCarte, documentImage, candidatDe, ecrire, compterEntrees,
+module.exports = { lireSet, produitsDuSet, fabriquerSource, langueDe, controleLargeur, juger, jugementDe, telecharger, planches, choisirEchantillon, decider, lecteurNatif, lecteurModeles, entreeDeCarte, documentImage, candidatDe, ecrire, compterEntrees,
     verifierChemin, lireJson, ecrireJson, cleNum, MENTION, STOP_OCTETS, RATIO_MIN, RATIO_MAX };
