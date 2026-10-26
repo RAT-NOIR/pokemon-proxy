@@ -6449,6 +6449,11 @@
           },
           "offre": {
             "$ref": "#/components/schemas/Offre"
+          },
+          "installationId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "AJOUT FACULTATIF (demande de l'extension, 26/10) : l'identifiant TECHNIQUE de l'installation qui porte ce jeton (le même que `POST /api/installation` rend à la création), pour une installation créée avant le build qui le garde. Jamais le jeton ; absent si l'installation n'en porte pas un de cette forme."
           }
         },
         "required": [

@@ -284,7 +284,8 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     // solde
     {
         const x = await inst(3);
-        await jouer(U, 'POST /api/solde', 'installation non liée', 200, '/api/solde', { corps: {}, entetes: extH(x.jeton) });
+        const rx = await jouer(U, 'POST /api/solde', 'installation non liée', 200, '/api/solde', { corps: {}, entetes: extH(x.jeton) });
+        if (!rx.json || rx.json.installationId !== x.i._id) mal.push('POST /api/solde [installation non liée] : `installationId` absent ou étranger (SOLDE-INSTALLATION)');
         const c = await compte(); const l = await instLiee(c);
         await jouer(U, 'POST /api/solde', 'installation liée à un compte vérifié', 200, '/api/solde', { corps: {}, entetes: extH(l.jeton) });
         const nv = await compte({ verifie: false, solde: { accueil: 0, achete: 0 } }); const ln = await instLiee(nv);

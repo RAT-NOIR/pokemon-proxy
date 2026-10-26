@@ -712,6 +712,8 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
 }
 ```
 
+**`installationId`** (facultatif, 32 hex minuscules, demande de l'extension du 26/10) : l'identifiant TECHNIQUE de l'installation qui porte le jeton, le même que `POST /api/installation` rend à sa création. Il sert aux installations créées avant le build qui le garde. Ce n'est jamais le jeton, et il n'est servi qu'au porteur de cette installation. Absent : l'extension n'affiche rien.
+
 ### 1.6 Les comptes (site)
 
 ```json schema=RequeteInscription

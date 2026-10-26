@@ -114,7 +114,10 @@ module.exports = {
             let solde, offre;
             try { const argent = registre.obtenir('argent'); solde = await argent.solde(req.v2.porteur); offre = await argent.offre(req.v2.porteur); }
             catch (e) { console.error(`❌ [v2 solde] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE'); }
-            return res.status(200).json({ success: true, solde, offre });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
+            // SOLDE-INSTALLATION (demande de l'extension, 26/10) : l'identifiant TECHNIQUE de l'installation qui porte CE jeton (32 hex, déjà rendu à sa création), pour une installation créée avant le build qui le garde.
+            // Celui du document que le porteur a résolu, jamais un autre ; facultatif (absent si le document n'en porte pas un de cette forme).
+            const inst = req.v2.porteur.installation, installationId = inst && typeof inst._id === 'string' && /^[0-9a-f]{32}$/.test(inst._id) ? inst._id : null;
+            return res.status(200).json({ success: true, solde, offre, ...(installationId ? { installationId } : {}) });      // OFFRE-QUOTA : `offre` à la racine, comme l'extension l'attend (B5) ; ici il est la RAISON d'être de la route, donc une panne de sa lecture est une panne
         });
         // INDEX-EMPREINTES : le fichier du modèle d'empreinte (≈ 113 Mo) pour l'extension, SEULEMENT si V2_EMPREINTE_EXTENSION=1 (éteint : la route n'existe pas, 404). Publique (le sha256 de l'adresse est la seule clé et il est public),
         // donc bornée : un limiteur par IP (V2_MODELE_EMPREINTE_IP_HEURE, défaut 10/h) AVANT le gestionnaire, qui borne aussi les envois simultanés.
