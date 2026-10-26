@@ -23,15 +23,27 @@ const MUTANTS = [
     ['les impressions sont posées même si les lignes ne se relisent pas', V, "if (!(r.lignes === plan.lignes.length && rl.ok && routees === plan.lignes.length)) {", "if (false) {"],
     ['les impressions d\'abord', V, "const r = await ecrireFiches(db, plan.lignes, metaDe, new Map());", "await ecrireLot({ db, R: { aPoser: plan.R.aPoser, numerosFiche: [] }, preuveDe: () => 'x', nomListe, log, err }); const r = await ecrireFiches(db, plan.lignes, metaDe, new Map());"]
 ];
+const C = path.join(__dirname, 'poser-fiches-voie-deux-sources.js');
+// les mutants de l'OUTIL (banc test-poser-fiches-voie-deux-sources.js)
+const MUTANTS_OUTIL = [
+    ['--ecrire accepté hors lot-additif', C, "try { require('./collecte-cartes/phase2-visuels').garderSousLot(", "try { (() => {})("],
+    ['--ecrire sans --seulement/--attendu', C, "if (!arg('seulement') || arg('attendu') === undefined) {", "if (false) {"],
+    ['un argument inconnu passe', C, "if (inconnus.length || !arg('liste') || ecrire === simuler) {", "if (!arg('liste') || ecrire === simuler) {"],
+    ['les deux modes ensemble passent', C, "|| ecrire === simuler) {", "|| (!ecrire && !simuler)) {"],
+    ['un produit non confirmé entre dans le plan', C, "if (!d.ok) { refus.push(", "if (false) { refus.push("],
+    ['--seulement hors liste ne refuse plus', C, "if (absents.length) {", "if (false) {"],
+    ['la liste prête n\'est plus écrite', C, "if (arg('pret')) ecrireFichier(", "if (false) ecrireFichier("]
+];
 let tues = 0, vivants = [];
-for (const [nom, fichier, de, vers] of MUTANTS) {
+const TESTS = { [C]: 'test-poser-fiches-voie-deux-sources.js' };
+for (const [nom, fichier, de, vers] of [...MUTANTS, ...MUTANTS_OUTIL]) {
     const original = fs.readFileSync(fichier, 'utf8');
     if (!original.includes(de)) { console.log(`  ⚠️ ${nom} : motif introuvable (le mutant n'a pas été appliqué)`); vivants.push(nom + ' (motif introuvable)'); continue; }
     try {
         fs.writeFileSync(fichier, original.replace(de, vers));
-        const r = spawnSync(process.execPath, [path.join(__dirname, 'test-voie-deux-sources.js')], { encoding: 'utf8', env: process.env });
+        const r = spawnSync(process.execPath, [path.join(__dirname, TESTS[fichier] || 'test-voie-deux-sources.js')], { encoding: 'utf8', env: process.env });
         if (r.status !== 0) { tues++; console.log(`  ✅ tué : ${nom}`); } else { vivants.push(nom); console.log(`  ❌ VIVANT : ${nom}`); }
     } finally { fs.writeFileSync(fichier, original); }
 }
-console.log(`\n${tues} mutants tués sur ${MUTANTS.length}${vivants.length ? ` · vivants : ${vivants.join(' | ')}` : ''}`);
+console.log(`\n${tues} mutants tués sur ${MUTANTS.length + MUTANTS_OUTIL.length}${vivants.length ? ` · vivants : ${vivants.join(' | ')}` : ''}`);
 process.exitCode = vivants.length ? 1 : 0;
